@@ -14,6 +14,7 @@ import {
   parseNameDoc,
   type Contract,
   type Impl,
+  type MetadataRecord,
   type NativeSymbolDef,
   type RestSpec,
   type VectorSpec,
@@ -30,6 +31,7 @@ export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
   return <const I extends VectorSpec, const O extends VectorSpec, const Rest extends RestSpec = undefined>(
     contract: Contract<I, O, Rest>,
     impl: Impl<I, O, Rest, "scheme">,
+    opts: { metadata?: MetadataRecord } = {},
   ): NativeSymbolDef => {
     const inSchema = normalizeInputVector(contract.input, contract.inputRest);
     const outSchema = normalizeVector(contract.output);
@@ -60,6 +62,8 @@ export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
       provenance,
       cacheClass,
       callbackRoles,
+      // The extension bag — data only; dynamic fields resolve at read time, never at bake.
+      metadata: opts.metadata,
     };
   };
 }

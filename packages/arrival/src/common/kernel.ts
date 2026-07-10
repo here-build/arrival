@@ -13,6 +13,11 @@
 // degradation-domain module (common/degradation.ts) — kernel stays env-agnostic (no runtime
 // dependency; the import erases at compile time), and the shape is defined once, not mirrored.
 import type { DegradedCapability } from "./degradation.js";
+// TYPE-ONLY, same posture: the per-env binding context a capability-lowered pack exposes
+// (`LoweredPack.activation`). capability.ts's own imports from this module are type-only too,
+// so the cycle is purely in type space — zero runtime edge; kernel stays env-agnostic (a pack
+// that carries no activation — every plain kernel pack — simply contributes nothing to the fold).
+import type { Activation } from "./capability.js";
 
 // Errors (teaching, errors-as-doors) live in errors.ts (the single error home); re-exported here
 // so the /env subpath still surfaces the assembly errors to consumers (arrival-chain).
@@ -38,6 +43,11 @@ export interface EnvPack<E = unknown> {
    *  a pack that never sets it (every pure-JS pack, every capability that didn't degrade)
    *  simply contributes nothing. Absent, not an empty array, when nothing degraded. */
   readonly degraded?: readonly DegradedCapability[];
+  /** The per-env binding context a capability-aware `lower()` armed (see
+   *  `LoweredPack.activation`, common/capability.ts) — OPTIONAL and structural: the kernel
+   *  never interprets it, only folds present ones into `AssembledEnv.activations` (the
+   *  phase-2 metadata read channel). Plain kernel packs never set it. */
+  readonly activation?: Activation<any, any>;
   /** Runs once, after all deps, in C3 order. May await import / defineRosetta / ctx.onDispose.
    *  MUST contribute symbols via the env's membrane-wrapping API, never a bare host closure. */
   apply(env: E, ctx: PackContext<E>): void | Promise<void>;
@@ -91,6 +101,12 @@ export interface AssembledEnv<E = unknown> {
    *  when nothing degraded (including every assembly under the default `"forbid"` mode, where
    *  no capability's `Activation.degradation.active` is ever true). */
   readonly degraded: readonly DegradedCapability[];
+  /** Each applied pack's activation (validated config + resource cells + degradation),
+   *  keyed by pack name, apply order — folded from `EnvPack.activation`, uninterpreted
+   *  (the additive posture `degraded` set). THE describe-time read channel
+   *  (exec-phases-and-dynamic-metadata.md §2.4): dynamic metadata fields resolve against
+   *  exactly these objects. Packs that carry no activation contribute nothing. */
+  readonly activations: ReadonlyMap<string, Activation<any, any>>;
   dispose(): Promise<void>;
 }
 
@@ -343,7 +359,14 @@ export async function assembleEnv<E>(base: E, roots: readonly EnvPack<E>[]): Pro
   // Fold each applied pack's own `.degraded` into the assembly-level list, apply order
   // (highest precedence first, matching `order`) — purely structural, kernel never interprets it.
   const degraded = order.flatMap((name) => byName.get(name)!.degraded ?? []);
-  return { env: base, order, degraded, dispose: runDisposers };
+  // Fold each applied pack's activation (when present — capability-lowered packs only), same
+  // order, same uninterpreted posture. The phase-2 metadata read channel (§2.4).
+  const activations = new Map<string, Activation<any, any>>();
+  for (const name of order) {
+    const activation = byName.get(name)!.activation;
+    if (activation !== undefined) activations.set(name, activation);
+  }
+  return { env: base, order, degraded, activations, dispose: runDisposers };
 }
 
 /** A live-env assembler for RUNTIME pack application — the `(require/extension :name)` path. Where

@@ -32,8 +32,8 @@
       "import": "./dist/oracle/index.js"
     },
     "./env": {
-      "types": "./dist/common/kernel.d.ts",
-      "default": "./dist/common/kernel.js"
+      "types": "./dist/env/index.d.ts",
+      "default": "./dist/env/index.js"
     },
     "./capability": {
       "types": "./dist/common/capability.d.ts",

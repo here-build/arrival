@@ -72,3 +72,10 @@ export { withCallbackRoles, declaresAccChain, extractCallbackRoles } from "./sym
 
 // Re-export the generic form for convenience when using metadata.
 export type { RosettaSymbolDef as RosettaSymbolDefWithMeta } from "./symbols/_bake.js";
+
+// The per-FIELD static-or-dynamic metadata vocabulary (exec-phases-and-dynamic-metadata.md
+// Part II): the field union + record type live with the def machinery (`_bake.ts`); the
+// READ-time resolver (`resolveMetadata` — lazily, per read, against the assembly's
+// activation) lives in its own leaf so nothing at bake time can accidentally pull it.
+export type { MetadataField, MetadataRecord } from "./symbols/_bake.js";
+export { resolveMetadata, staticMetadata, type ResolvedMetadata } from "./symbols/metadata.js";

@@ -16,20 +16,27 @@ import { isHostRuntimeBug } from "../errors.js";
 import { Resolver } from "./Resolver.js";
 import { Capabilities } from "./Capabilities.js";
 import { LexicalScope } from "./LexicalScope.js";
-import { assembleEnv } from "../common/kernel.js";
+import { assembleEnv, type AssembledEnv } from "../common/kernel.js";
 import { sealResolutionChain } from "./CompiledResolutionChain.js";
-import { StaticValidationError, validateProgram } from "../static-validation/validate-program.js";
-import { vocabularyFromChain } from "../static-validation/vocabulary.js";
-import type { DegradationMode, DegradedCapability } from "../common/degradation.js";
+import { StaticValidationError } from "../static-validation/validate-program.js";
+import type { DegradationMode } from "../common/degradation.js";
 import type { EnvCapability } from "../common/capability.js";
 import { overridableCapability } from "../env/overridable.js";
 import type { EvalSchemeInto, SchemeEnv } from "../common/scheme-env.js";
 import invariant from "tiny-invariant";
 import { parse as readerParse } from "../reader/parse.js";
-import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
 import { assertShadowCone } from "../values/lineage-shadow.js";
-import { classify, type LineageNode } from "../values/lineage.js";
-import { APair } from "../values/primitives/APair.js";
+import { type LineageNode } from "../values/lineage.js";
+import {
+  ambientBase,
+  classifyProgram,
+  instantiate,
+  makeAssembledAmbient,
+  parseProgram,
+  validateAgainstAmbient,
+  type AssembledAmbient,
+  type ParsedProgram,
+} from "./exec-phases.js";
 import { makeRunContext, type RunContext } from "../values/primitives/RunContext.js";
 import type { RunCache } from "../values/run-cache.js";
 // TYPE-ONLY (erased — no runtime scheme-zod edge from this module): the `exec` exit
@@ -77,6 +84,10 @@ function defaultLexicalRoot(): Environment {
  * are part of — deadlock).
  */
 let _baseAssembled: Promise<void> | undefined;
+/** The realm base's own `AssembledEnv` handle (the user_env BASE_PACKS assembly) — retained
+ *  so `defaultAmbient()` below can carry the HONEST composition record (order/degraded/
+ *  activations) instead of a synthesized facade. Never disposed — realm-scoped by design. */
+let _baseAssembledEnv: AssembledEnv<SchemeEnv> | undefined;
 export function ensureBaseAssembled(): Promise<void> {
   return (_baseAssembled ??= (async () => {
     // Populated entirely by assembled packs below (NATIVE_PACKS + BASE_PACKS).
@@ -88,7 +99,7 @@ export function ensureBaseAssembled(): Promise<void> {
       global_env,
       NATIVE_PACKS.map((pack) => pack.lower()),
     );
-    await assembleEnv(
+    _baseAssembledEnv = await assembleEnv<SchemeEnv>(
       user_env,
       BASE_PACKS.map((pack) => pack.lower({ evalScheme: preludeExec })),
     );
@@ -121,32 +132,74 @@ const preludeExec = (env: SchemeEnv, src: string): Promise<unknown[]> => {
 };
 const capabilityEvalScheme: EvalSchemeInto = preludeExec;
 
+/** Phase-2 assembly options — see {@link assembleAmbient}. */
+export interface AssembleAmbientOptions {
+  /** Capability packs assembled onto the standard base (`user_env → global_env`) —
+   *  same semantics as `ExecOptions.capabilities`. Empty/absent ⇒ a bare (but still
+   *  ownable/disposable) child of the standard base. */
+  capabilities?: readonly EnvCapability[];
+  /** The ONE shared config bag handed to every capability's `lower()` — see
+   *  `ExecOptions.config`. */
+  config?: object;
+  /** Door-set degradation mode for the lowering (see common/degradation.ts). exec's
+   *  `staticValidation: "on"` path assembles with `"doors"`. */
+  degradation?: DegradationMode;
+  /** Default per-run allocation budget POLICY for runs on this ambient —
+   *  `ExecOptions.heapBudget` wins per call. See `AssembledAmbient.heapBudget`. */
+  heapBudget?: number;
+}
+
 /**
- * Build capability base for `exec({ capabilities })`: fresh `user_env` child
- * with the supplied capabilities assembled on top, so they AUGMENT the standard
- * assembled base (`user_env → global_env`) rather than replace it. Fresh child
- * per call keeps the user's capabilities out of shared `user_env` (no cross-call
- * bleed); a caller wanting a persistent capability env builds it once with
- * `assembleEnv` and passes it as `{ env }`.
- *
- * `config` is the ONE shared bag (see ExecOptions.config) handed to every
- * capability's `lower()` — each validates its own slice; `assembleEnv` supplies
- * the bake-scoped prelude overlay, so `preludeOnly` symbols work with no extra wiring.
+ * PHASE 2, public (exec-phases-and-dynamic-metadata.md §3.1; export home = the `/env`
+ * subpath, privatization D1): assemble the ambient once, reuse across N runs —
+ * `exec(code, { ambient })` — and dispose deliberately (`await using` works: the product
+ * is an `AsyncDisposable`). This is `assembleCapabilityBase` made whole: a fresh
+ * `user_env` child with the supplied capabilities assembled on top (AUGMENTING the
+ * standard base, never replacing it; fresh child per assembly = no cross-call bleed),
+ * sealed (ENV T2), and — the fix for dispose-drop site #4 — returning the HANDLE instead
+ * of dropping it: `dispose()` runs the kernel's pack disposers AND every lowered pack's
+ * resource wind-down.
  */
-async function assembleCapabilityBase(
-  capabilities: readonly EnvCapability[],
-  config?: object,
-  degradation?: DegradationMode,
-): Promise<{ base: Environment; degraded: readonly DegradedCapability[] }> {
+export async function assembleAmbient(opts: AssembleAmbientOptions = {}): Promise<AssembledAmbient> {
+  await ensureBaseAssembled();
+  const capabilities = opts.capabilities ?? [];
   const base = user_env.inherit("exec-capabilities");
-  const assembled = await assembleEnv(
-    base,
-    capabilities.map((c) => c.lower({ evalScheme: capabilityEvalScheme, config, degradation })),
+  const lowered = capabilities.map((c) =>
+    c.lower({ evalScheme: capabilityEvalScheme, config: opts.config, degradation: opts.degradation }),
   );
-  // Seal the per-call baked base (ENV T2) — `Capabilities.assembled(base)` below reuses
-  // this artifact (memoized per env), so the run resolves through the frozen chain.
-  sealResolutionChain(base);
-  return { base, degraded: assembled.degraded };
+  const assembled = await assembleEnv<SchemeEnv>(base, lowered);
+  // Seal the per-assembly baked base (ENV T2) — `Capabilities.assembled(base)` (via
+  // `instantiate`) reuses this artifact (memoized per env), so every run on this ambient
+  // resolves through the frozen chain.
+  const chain = sealResolutionChain(base);
+  return makeAssembledAmbient({
+    base,
+    capabilities,
+    assembled,
+    lowered,
+    chain,
+    heapBudget: opts.heapBudget,
+    disposable: true,
+  });
+}
+
+/**
+ * The DEFAULT ambient — the realm-memoized product over the standard assembled base
+ * (`user_env → global_env`), the phase-2 value a bare `exec(code)` resolves through.
+ * NEVER disposed (realm-scoped by design — `disposable: false` makes `dispose()` a
+ * documented no-op), exactly the ownership table's "realm default" row.
+ */
+let _defaultAmbient: AssembledAmbient | undefined;
+function defaultAmbient(): AssembledAmbient {
+  invariant(_baseAssembledEnv !== undefined, "defaultAmbient: bootstrap has not completed");
+  return (_defaultAmbient ??= makeAssembledAmbient({
+    base: user_env,
+    capabilities: [],
+    assembled: _baseAssembledEnv,
+    lowered: [],
+    chain: sealResolutionChain(user_env),
+    disposable: false,
+  }));
 }
 
 export interface ExecOptions {
@@ -209,6 +262,23 @@ export interface ExecOptions {
    * `scope.lookup ?? capabilities.lookup`). Ignored when `env` (glass) is set.
    */
   scope?: LexicalScope;
+  /**
+   * PHASE-2 OVERRIDE (exec-phases §3.3): a pre-assembled ambient — skip assembly
+   * entirely. CALLER-owned: exec will NOT dispose it (the DO-rehydration / MCP-session
+   * warm-reuse idiom — assemble once via {@link assembleAmbient}, run N times, dispose
+   * deliberately / `await using`). Takes precedence over `capabilities`/`config`
+   * (assembly inputs are meaningless when assembly is skipped; `override` still needs a
+   * live overridable capability on the AMBIENT, so pass it to `assembleAmbient` instead).
+   * Ignored when `env` (glass) is set — same posture as every cut refinement.
+   */
+  ambient?: AssembledAmbient;
+  /**
+   * PHASE-1 OVERRIDE (exec-phases §3.3): a pre-parsed program — skip the reader (the
+   * parse-once-run-many idiom, {@link parseProgram}). When set, the `code` argument is
+   * ignored. The program's READER strictness is its own stamped identity fact
+   * (`ParsedProgram.strict`); `ExecOptions.strict` keeps governing the RUN mode.
+   */
+  program?: ParsedProgram;
   /**
    * MODULE-EVAL RESOLVER PASSTHROUGH (COMPLEX tier — consumed by {@link execExpr}
    * only; `exec`/`execState` ignore it). Evaluate through an EXISTING composed
@@ -403,6 +473,16 @@ export interface ExecState {
   readonly scope: LexicalScope;
   /** The per-run hermetic handle (strict / heap meter / signal). */
   readonly runCtx: RunContext;
+  /**
+   * The ambient this run resolved through (phase-2 product) — the session handle a
+   * COMPLEX-tier caller continues on (`execState(code, { ambient, scope })`). Absent on
+   * GLASS runs (`env` set — no product by design, §3.4). CAUTION on `{ capabilities }`
+   * runs: exec OWNED that ambient and disposed it at run end (the §3.3 ownership rule);
+   * the handle stays inspectable (catalog reads spec data; a resource re-spawns on
+   * touch), but reuse-after-dispose is off-contract — a caller wanting warm reuse
+   * assembles once and passes `{ ambient }`.
+   */
+  readonly ambient?: AssembledAmbient;
 }
 
 /**
@@ -414,14 +494,15 @@ export interface ExecState {
  * @param options - Optional environment and dynamic binding options
  * @returns Promise<ExecState> - boxed results + the run's scope/runCtx handles
  */
-export async function execState(
-  code: string | SchemeValue,
-  {
+export async function execState(code: string | SchemeValue, options: ExecOptions = {}): Promise<ExecState> {
+  const {
     env,
     capabilities,
     config,
     override,
     scope,
+    ambient: passedAmbient,
+    program: passedProgram,
     dynamic_env,
     use_dynamic,
     tap,
@@ -435,9 +516,7 @@ export async function execState(
     staticValidation,
     skipBootstrapWait,
     irLineage,
-    irLineageSources,
-  }: ExecOptions = {},
-): Promise<ExecState> {
+  } = options;
   // Default env = env-roots leaf `user_env` (arrival's interaction scope,
   // `global_env.inherit("user-env")`), sourced STATICALLY so this entry never
   // imports the stdlib monolith. Bootstrap gate below drives population:
@@ -458,58 +537,25 @@ export async function execState(
   // await its own promise.
   if (!skipBootstrapWait) await ensureBaseAssembled();
 
-  let parsed: SchemeValue[];
-  if (typeof code === "string") {
-    // Thread strict into the reader so R7RS control rejects loose-mode literals
-    // (#void/#null) at parse time. Default false ⇒ loose parse, unchanged.
-    parsed = await readerParse(code, undefined, strict ?? false);
-  } else if (code instanceof APair) {
-    parsed = [code];
-  } else {
-    parsed = [code];
-  }
+  // ── PHASE 1 — parse (or reuse a pre-parsed `ParsedProgram`). The READER strict mode
+  // is stamped as a program identity fact; the RUN strict mode stays on `runCtx` below —
+  // one option, two declared landings (exec-phases §3.1).
+  const program = passedProgram ?? (await parseProgram(code, { strict }));
 
-  // SHADOW MODE slice 2 — classify@load. Build one static lineage skeleton per
-  // parsed form, BEFORE evaluation. Pure (classify runs no eval); gated entirely
-  // behind the flag so flag-OFF is byte-identical. Classifier is env-derived
-  // (classifierFromEnv reads each op's declared `.provenanceRole` directly off the
-  // env — Q3, PROVENANCE-PLAN.md; no caller-supplied source list any more, see
-  // lineage-classifier-from-env.ts). Skeletons align by index with `parsed`,
-  // consumed at the per-form assert hook below.
-  let shadowSkeletons: LineageNode[] | undefined;
-  if (irLineage) {
-    const classifier = classifierFromEnv(actualEnv);
-    shadowSkeletons = parsed.map((form) => classify(form, classifier));
-  }
-
-  // Evaluate each expression in sequence. Budget spans the WHOLE exec call (all
-  // top-level forms share one deadline) — a sandbox program that splits a hang
-  // across several forms is still bounded. Recompute remaining budget per form
-  // from a single start so we don't reset the clock between forms.
-  // Per-run allocation meter minted HERE, once, on `runCtx` — RunContext is its
-  // ONLY owner (no env-node courier copy: see heapMeter-ownership tranche). Spans
-  // the WHOLE exec like the wall-clock budget; every value built during this run
-  // carries this SAME runCtx (`operand.ctx.heapMeter`), which `to_array`/the
-  // sequence-op dispatch charge against directly — no parent-chain walk, no
-  // install/restore dance.
-  const runCtx = makeRunContext({ strict: strict ?? false, heapBudget, freezeRosettaReturns, signal, cache });
-  // ── THE EXEC SEAM: glass-for-custom-env, cut-for-default, refined by capabilities/scope ──
-  // Custom `env` stays GLASS — resolver wraps it, defines land in it, builtins
-  // resolve up its base-linked chain — byte-identical (zero change for
-  // arrival-chain/inhuman). `env` wins over the cut refinements (capabilities/scope),
-  // which are ignored when set.
-  // No env → THE CUT: a lexical root (`scope.env` for REPL accumulation, else the
-  // realm-cached null-rooted scratch frame) holds user defines; the assembled base
-  // (`actualEnv`, optionally AUGMENTED with `capabilities`) supplies builtins; the
-  // Resolver composes the two. `actualEnv` (the BASE) still drives bootstrap + the
-  // classifier above; only the resolution topology changes.
-  let runResolver: Resolver;
-  if (env !== undefined) {
-    // GLASS — the pass is not offered here (§3.5: no seal ⇒ no claims); the runtime
-    // doors (unbound-variable throw + suggestions, PurityError) remain the backstop.
-    runResolver = new Resolver(actualEnv);
-  } else {
-    const validate = staticValidation === "on";
+  // ── PHASE 2 — the ambient. THE EXEC SEAM: glass-for-custom-env (NO phase product —
+  // §3.4: a glass caller holds a live frame; exec makes no claims about it), cut-for-
+  // default, refined by capabilities/scope/ambient. `env` wins over every cut refinement.
+  // The §3.3 OWNERSHIP RULE (phase 5): `owned` = THIS call assembled it — per-call
+  // `{ capabilities }` assemblies are disposed in the `finally` below (LEDGERED, V-pending
+  // #5 resolved per the doc's own recommendation: a behavior change from leak to teardown —
+  // `onDispose` teardowns + resource wind-downs now fire at run end, every run, including
+  // throw paths; a caller wanting warm reuse across runs uses the designed idiom instead:
+  // `assembleAmbient` once, pass `{ ambient }`, which exec never disposes). The realm
+  // default is never disposed (realm-scoped memo by design); glass has no handle at all.
+  let ambient: AssembledAmbient | undefined;
+  let owned = false;
+  const validating = env === undefined && staticValidation === "on";
+  if (env === undefined) {
     // `override` sugar (ExecOptions.override): append the overridable capability
     // (kernel identity-dedup makes a caller-listed copy harmless) and merge the
     // record into the shared bag's `params` slice, override winning key-wise.
@@ -520,82 +566,130 @@ export async function execState(
       override !== undefined
         ? { ...config, params: { ...(config as { params?: Record<string, unknown> } | undefined)?.params, ...override } }
         : config;
-    // §3.7's caller split: a program-scoped run that opted into the pass also opts its
-    // capability lowering into doors — an absent OPTIONAL enabling key binds a
-    // cause-carrying door for the validator to report ON, instead of withholding.
-    const capabilityAssembly =
-      effectiveCapabilities !== undefined
-        ? await assembleCapabilityBase(effectiveCapabilities, effectiveConfig, validate ? "doors" : undefined)
-        : undefined;
-    const baseEnv = capabilityAssembly?.base ?? actualEnv;
-    const capabilityBase = Capabilities.assembled(baseEnv);
-    const lexicalRoot = scope !== undefined ? scope.env : defaultLexicalRoot();
-    runResolver = new Resolver(lexicalRoot, capabilityBase);
-    if (validate) {
-      // W3 (§3.6): validate AFTER parse, BEFORE the first form evaluates — the
-      // complete list, one throw, zero side effects fired.
-      const vocabulary = vocabularyFromChain(sealResolutionChain(baseEnv), {
-        scopeNames: lexicalRoot.allBoundNames(),
-        scopeLookup: (name) => lexicalRoot.get(name, { throwError: false }),
-        degraded: capabilityAssembly?.degraded,
+    if (passedAmbient !== undefined) {
+      ambient = passedAmbient; // reuse — skip assembly; CALLER-owned (never disposed here)
+    } else if (effectiveCapabilities !== undefined) {
+      // §3.7's caller split: a program-scoped run that opted into the pass also opts its
+      // capability lowering into doors — an absent OPTIONAL enabling key binds a
+      // cause-carrying door for the validator to report ON, instead of withholding.
+      ambient = await assembleAmbient({
+        capabilities: effectiveCapabilities,
+        config: effectiveConfig,
+        degradation: validating ? "doors" : undefined,
       });
-      const diagnostics = validateProgram(parsed, vocabulary);
-      if (diagnostics.some((d) => d.severity === "error")) throw new StaticValidationError(diagnostics);
-    }
-  }
-  // Run's exec frame = resolver's lexical env (glass: actualEnv; cut: lexicalRoot).
-  // Defines land here and evaluator's `ctx.env` is here; heap meter lives on
-  // `runCtx` only (above), not on this frame.
-  const results: SchemeValue[] = [];
-  const start = budgetMs === undefined ? 0 : performance.now();
-  for (let i = 0; i < parsed.length; i++) {
-    const expr = parsed[i];
-    const remaining =
-      budgetMs === undefined ? undefined : budgetMs - (performance.now() - start);
-    // Audit-#42 wrapOperator contract: run() wraps every non-ArrivalError —
-    // including the TypeError wrapOperator throws to name operator + arg types —
-    // in an ArrivalError, masking both the TypeError class and its membrane cause.
-    // Surface the original TypeError so the user-visible error shape survives.
-    let result: SchemeValue;
-    try {
-      // Top-level form evaluates to a value, never a bare expander — seal it.
-      result = expectValue(
-        await run(
-          evaluate(expr, {
-            resolver: runResolver,
-            dynamic_env,
-            use_dynamic,
-            tap,
-            nodeFilter,
-            signal,
-            // Default false ⇒ today's tolerant nil-projection. No consumer reads
-            // ctx.strict yet (scaffolding); car/cdr dispatch reads it later.
-            strict: strict ?? false,
-            // Per-run handle, threaded as data (unread scaffold; N2 reads it).
-            runCtx,
-          }),
-          { signal, budgetMs: remaining },
-        ),
-      );
-    } catch (e) {
-      if (e instanceof ArrivalError && e.cause instanceof TypeError && !isHostRuntimeBug(e.cause))
-        throw e.cause;
-      throw e;
-    }
-    results.push(result);
-
-    // SHADOW MODE slice 3 — the assert. Compare static fullCone against this
-    // form's UNTAPPED eager `result.provenance` (mechanism 1; NO tap installed).
-    // In-scope divergence throws ProvenanceShadowDivergence; a macro-head /
-    // keyword-projection form abstains (returns a skip reason we discard — it is
-    // outside the classifier's model, so shadow does not assert it). Behind the
-    // flag — never runs flag-OFF.
-    if (irLineage && shadowSkeletons) {
-      assertShadowCone(shadowSkeletons[i], expr, result, actualEnv, String(expr));
+      owned = true; // phase 5 fires in the `finally` — dispose-drop site #4, fixed structurally
+    } else {
+      ambient = defaultAmbient(); // the realm-scoped memo — ownership row "never"
     }
   }
 
-  return { values: results, scope: runResolver.scope, runCtx };
+  try {
+    // ── PHASE 3 — instantiate: scope OBTAINED (caller-passed for REPL continuity, else
+    // the realm-cached ACCUMULATING scratch root — REPL semantics preserved exactly);
+    // only `runCtx` is minted fresh (per-run by T0). The meter/budget notes from the
+    // pre-split pipeline hold verbatim: the allocation meter lives on `runCtx` ONLY,
+    // spans the whole exec, and every value built during this run carries it.
+    let runResolver: Resolver;
+    let runCtx: RunContext;
+    if (env !== undefined) {
+      // GLASS — resolver wraps the live env; defines land in it; builtins resolve up its
+      // base-linked chain — byte-identical (zero change for arrival-chain/inhuman). The
+      // validation pass is not offered here (§3.5: no seal ⇒ no claims); the runtime
+      // doors (unbound-variable throw + suggestions, PurityError) remain the backstop.
+      runResolver = new Resolver(actualEnv);
+      runCtx = makeRunContext({ strict: strict ?? false, heapBudget, freezeRosettaReturns, signal, cache });
+    } else {
+      const lexicalScope = scope ?? LexicalScope.for(defaultLexicalRoot());
+      // ── PHASE 2.5 — static validation (W3, §3.6): validate AFTER parse, BEFORE the
+      // first form evaluates — the complete list, one throw, zero side effects fired.
+      if (validating) {
+        const diagnostics = validateAgainstAmbient(program, ambient!, lexicalScope);
+        if (diagnostics.some((d) => d.severity === "error")) throw new StaticValidationError(diagnostics);
+      }
+      const instance = instantiate(ambient!, {
+        scope: lexicalScope,
+        strict,
+        heapBudget,
+        freezeRosettaReturns,
+        signal,
+        cache,
+      });
+      runResolver = instance.resolver;
+      runCtx = instance.runCtx;
+    }
+
+    // ── PHASE 2.5 — SHADOW MODE slice 2, classify@load: one static lineage skeleton per
+    // form, BEFORE evaluation. Pure (classify runs no eval); gated entirely behind the
+    // flag so flag-OFF is byte-identical. Classified against the POST-AUGMENTATION base —
+    // the phase split fixes the §1.1 classifier wrinkle by construction (a
+    // `{ capabilities }` run's capability-declared provenance roles are now visible to
+    // the skeleton; glass keeps classifying against its own live env, as always).
+    const classifierBase = ambient !== undefined ? ambientBase(ambient) : actualEnv;
+    let shadowSkeletons: LineageNode[] | undefined;
+    if (irLineage) {
+      shadowSkeletons = classifyProgram(program, classifierBase);
+    }
+
+    // ── PHASE 4 — execute. Evaluate each form in sequence; budget spans the WHOLE exec
+    // call (all top-level forms share one deadline) — a sandbox program that splits a
+    // hang across several forms is still bounded. Defines land in the resolver's lexical
+    // env; the heap meter lives on `runCtx` only (above), never on the frame.
+    const results: SchemeValue[] = [];
+    const forms = program.forms;
+    const start = budgetMs === undefined ? 0 : performance.now();
+    for (let i = 0; i < forms.length; i++) {
+      const expr = forms[i];
+      const remaining = budgetMs === undefined ? undefined : budgetMs - (performance.now() - start);
+      // Audit-#42 wrapOperator contract: run() wraps every non-ArrivalError —
+      // including the TypeError wrapOperator throws to name operator + arg types —
+      // in an ArrivalError, masking both the TypeError class and its membrane cause.
+      // Surface the original TypeError so the user-visible error shape survives.
+      let result: SchemeValue;
+      try {
+        // Top-level form evaluates to a value, never a bare expander — seal it.
+        result = expectValue(
+          await run(
+            evaluate(expr, {
+              resolver: runResolver,
+              dynamic_env,
+              use_dynamic,
+              tap,
+              nodeFilter,
+              signal,
+              // Default false ⇒ today's tolerant nil-projection. No consumer reads
+              // ctx.strict yet (scaffolding); car/cdr dispatch reads it later.
+              strict: strict ?? false,
+              // Per-run handle, threaded as data (unread scaffold; N2 reads it).
+              runCtx,
+            }),
+            { signal, budgetMs: remaining },
+          ),
+        );
+      } catch (e) {
+        if (e instanceof ArrivalError && e.cause instanceof TypeError && !isHostRuntimeBug(e.cause)) throw e.cause;
+        throw e;
+      }
+      results.push(result);
+
+      // SHADOW MODE slice 3 — the assert. Compare static fullCone against this
+      // form's UNTAPPED eager `result.provenance` (mechanism 1; NO tap installed).
+      // In-scope divergence throws ProvenanceShadowDivergence; a macro-head /
+      // keyword-projection form abstains (returns a skip reason we discard — it is
+      // outside the classifier's model, so shadow does not assert it). Behind the
+      // flag — never runs flag-OFF.
+      if (irLineage && shadowSkeletons) {
+        assertShadowCone(shadowSkeletons[i], expr, result, classifierBase, String(expr));
+      }
+    }
+
+    // ── PHASE 6 — return (the existing two-tier cut; `ambient` is the additive session
+    // handle — absent on glass runs, which have no product by design).
+    return { values: results, scope: runResolver.scope, runCtx, ambient };
+  } finally {
+    // ── PHASE 5 — the pipeline's OWN step (ownership table §3.3): dispose exactly what
+    // THIS call assembled. Fires on success AND throw paths (validation errors included).
+    if (owned) await ambient!.dispose();
+  }
 }
 
 /** A short, safe rendering of an arrived value for the exit-contract door's "got …"

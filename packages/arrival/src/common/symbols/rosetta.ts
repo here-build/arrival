@@ -206,6 +206,11 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       callbackRoles,
       type: contract.type,
       preludeOnly: contract.preludeOnly,
+      // The extension bag (BakeRuntimeOpts.metadata → RosettaSymbolDef.metadata). Stamped
+      // as DATA only — dynamic (fn-valued) fields are NEVER invoked here (bake must not
+      // resolve metadata: resolution is read-time, against the assembly's activation —
+      // see `./metadata.js`'s resolveMetadata + exec-phases-and-dynamic-metadata.md §2.3).
+      metadata: opts.metadata,
     };
   };
 }

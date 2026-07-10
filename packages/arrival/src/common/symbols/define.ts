@@ -135,6 +135,8 @@ export function define(tpl: TemplateStringsArray, ...sub: unknown[]): DefineFact
       type: procedureContract?.type,
       preludeOnly: procedureContract?.preludeOnly,
       validate: opts.validate !== false,
+      // The extension bag — data only; dynamic fields resolve at read time, never at bake.
+      metadata: opts.metadata,
     };
   };
   return impl as DefineFactory;

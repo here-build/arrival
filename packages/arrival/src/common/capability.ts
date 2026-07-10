@@ -50,6 +50,12 @@ export type LoweredPack = EnvPack<SchemeEnv> & {
   windDown(): Promise<void>;
   /** Eagerly re-acquire every resource. */
   resume(signal?: AbortSignal): Promise<void>;
+  /** The per-env binding context this lower() armed (validated config + resource cells +
+   *  degradation) — EXPOSURE, not construction: the binder adapters already close over it.
+   *  The phase-2 read channel (exec-phases-and-dynamic-metadata.md §2.4): `assembleEnv`
+   *  folds these into `AssembledEnv.activations`, and describe-time metadata resolution
+   *  (`resolveMetadata`) reads dynamic fields against exactly this object. */
+  readonly activation: Activation<any, any>;
 };
 
 type ZodMap = Record<string, z.ZodType>;
@@ -259,6 +265,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
 
     return {
       name,
+      activation,
       ...(opts.config === undefined ? {} : { config: opts.config }),
       ...(degraded === undefined ? {} : { degraded: [degraded] }),
       // Deps inherit the SAME raw `config` object (each validates its own slice via its schema; the

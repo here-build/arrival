@@ -12,6 +12,7 @@ import {
   MaybePromise,
   normalizeVector,
   parseNameDoc,
+  type MetadataRecord,
   type SequenceImpl,
   type SequenceSymbolDef,
   type VectorSpec,
@@ -26,6 +27,7 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
   return <const I extends VectorSpec, const O extends VectorSpec>(
     contract: Contract<I, O>,
     impl: SequenceImpl<I, O>,
+    opts: { metadata?: MetadataRecord } = {},
   ): SequenceSymbolDef => {
     const inSchema = normalizeVector(contract.input);
     const outSchema = normalizeVector(contract.output);
@@ -57,6 +59,8 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
       provenance,
       cacheClass,
       callbackRoles,
+      // The extension bag — data only; dynamic fields resolve at read time, never at bake.
+      metadata: opts.metadata,
     };
   };
 }
