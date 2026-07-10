@@ -29,6 +29,7 @@ import * as z from "../scheme-zod.js";
 import { EnvCapability } from "../capability.js";
 
 describe("Contract.inputRest runtime — UNIT (direct def.run): a fixed head + variadic tail", () => {
+  // INVARIANT: a fixed head plus a 0-length variadic tail decodes correctly.
   it("decodes a FIXED head + a 0-length variadic tail", async () => {
     const def = symbol.rosetta`headtail0: report head + tail`(
       { input: [z.string], inputRest: z.number, output: [z.string] },
@@ -38,6 +39,8 @@ describe("Contract.inputRest runtime — UNIT (direct def.run): a fixed head + v
     expect((out as AString)["arrival/toJS"]()).toBe("h:0:");
   });
 
+  // INVARIANT: a fixed head plus a 2-element variadic tail decodes each tail element through
+  // inputRest's own codec.
   it("decodes a FIXED head + a 2-element variadic tail, each element through inputRest's OWN codec", async () => {
     const def = symbol.rosetta`headtail2: report head + tail`(
       { input: [z.string], inputRest: z.number, output: [z.string] },
@@ -52,6 +55,7 @@ describe("Contract.inputRest runtime — UNIT (direct def.run): a fixed head + v
     expect((out as AString)["arrival/toJS"]()).toBe("h:2:1,2");
   });
 
+  // INVARIANT: a 3-element tail proves the split is genuinely variadic, not a fixed 2-slot shape.
   it("a DIFFERENT arity again (3-element tail) — proves the split is genuinely variadic, not a fixed 2-slot", async () => {
     const def = symbol.rosetta`headtail3: report head + tail`(
       { input: [z.string], inputRest: z.number, output: [z.string] },
@@ -86,6 +90,7 @@ describe("Contract.inputRest runtime — INTEGRATION ((tool head r1 r2 …) thro
     );
   });
 
+  // INVARIANT: a real scheme call with a 0-length tail reaches the impl correctly through exec.
   it('(headtail "h") — 0-length tail through a real exec', async () => {
     // execState (COMPLEX tier): calls the `arrival/toJS` protocol method directly —
     // a boxed-state concern (RULINGS.md R1).
@@ -93,6 +98,7 @@ describe("Contract.inputRest runtime — INTEGRATION ((tool head r1 r2 …) thro
     expect((out as AString)["arrival/toJS"]()).toBe("h:0:");
   });
 
+  // INVARIANT: a real scheme call with a 2-element tail reaches the impl correctly through exec.
   it('(headtail "h" 1 2) — 2-element tail through a real exec', async () => {
     const [out] = (await execState(`(headtail "h" 1 2)`, { env })).values;
     expect((out as AString)["arrival/toJS"]()).toBe("h:2:1,2");
@@ -100,6 +106,8 @@ describe("Contract.inputRest runtime — INTEGRATION ((tool head r1 r2 …) thro
 });
 
 describe("Contract.inputRest runtime — bake-time GUARD: inputRest requires a fixed tuple `input`", () => {
+  // INVARIANT: combining inputRest with a non-tuple (bare single-schema) input throws a
+  // contract-authoring error rather than silently ignoring it.
   it("throws when inputRest is combined with a NON-tuple (bare single-schema) input — contract-authoring error, not a silent ignore", () => {
     expect(() => normalizeInputVector(z.array(z.value), z.value)).toThrow(/fixed positional tuple/);
   });
