@@ -11,10 +11,7 @@
 // no deps).
 //
 // Sibling of `BASE_PACKS` (the `.scm`-defined packs assembled onto `user_env`).
-// Together they are the full pack-assembled surface. This roster ABSORBED bridge.ts's
-// `GLOBAL_NATIVE_PACKS` (= NATIVE_PACKS + the exceptions pack) when bridge.ts — the
-// LIPS-era monolith's last husk — was deleted; the split had no remaining reason once
-// the error-object predicates became an ordinary pack file (r7rs/error-objects.ts).
+// Together they are the full pack-assembled surface.
 
 import type { EnvCapability } from "../common/capability.js";
 import bytevectors from "./r7rs/bytevectors.js";
@@ -32,7 +29,7 @@ export const NATIVE_PACKS: readonly EnvCapability[] = [
   bytevectors,
   equality,
   numeric,
-  // Last, preserving the assembly order GLOBAL_NATIVE_PACKS had (it appended the
-  // exceptions pack after every value-domain cluster).
+  // errorObjects goes last — every value-domain cluster (chars/strings/vectors/
+  // bytevectors/equality/numeric) precedes it.
   errorObjects,
 ];

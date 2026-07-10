@@ -1,6 +1,5 @@
-// @here.build/arrival/polyglot-lisp — the Common Lisp dialect pack, split out of
-// the former monolithic `scheme/polyglot` (V, 2026-07-10 — see polyglot.ts's
-// header for the full split rationale and the sibling-pack map).
+// @here.build/arrival/polyglot-lisp — the Common Lisp dialect pack (see
+// polyglot.ts's header for the sibling-pack map).
 //
 // The smallest of the three dialect packs, by design: CL's list-manipulation
 // surface overlaps almost entirely with R7RS/SRFI-1 (map IS mapcar's argument
@@ -15,15 +14,13 @@
 // remove-if / remove-if-not — Common Lisp: filter, with the sense of the
 // predicate flipped / kept.
 //
-// DEPS (§2.1's bake FV locality law): every cross-capability free name in the
-// define bodies below is a declared edge —
+// DEPS: cross-capability free names (the FV-locality rule is stated once in
+// polyglot.ts's header) —
 //   srfi-1   — filter
 //   equality — not
 //   lists    — apply cons map
-// `srfi-1` declares its own `deps: [equality, numeric, binding, exceptions, lists]`
-// (srfi-1.ts) — a DIRECT dependent of `equality`/`lists` listed alongside them
-// below, so C3's "dependents before dependencies WITHIN a deps array too" rule
-// (srfi-235.ts's precedent) puts it FIRST. This pack needs no dep on
+// deps order matches base-packs.ts's C3 tail-block order (dependents before
+// dependencies) — see base-packs.ts's own header. This pack needs no dep on
 // `scheme/polyglot` (core) at all — unlike its Clojure/Racket siblings, nothing
 // here reaches `@`/`@?`/`@keys`/`dict`/`compose` — the cleanest of the three
 // dialect packs to assemble standalone.

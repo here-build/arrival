@@ -39,7 +39,7 @@ export default new EnvCapability("scheme/macros", {
 
       // The def-time Resolver — scope = the define-syntax env (the hygiene identity
       // root), capabilities = the EVALUATOR's threaded base (NOT re-derived from `env`
-      // via chainRoot: under the 3b.3 cut `env` is null-rooted, so chainRoot would
+      // via chainRoot: `env` is null-rooted at expansion time, so chainRoot would
       // return the lexical root, not the base, and `globalRoot` would be wrong). Under
       // glass `defSiteResolver.capabilities` and `new Capabilities(env)` share the same
       // `globalRoot` (global_env), so this is byte-identical.
@@ -83,9 +83,9 @@ export default new EnvCapability("scheme/macros", {
         ) {
           // The use-site Resolver — the EVALUATOR's resolver at expansion time (threaded
           // through Syntax.expand), carrying the run's capability base. NOT a fresh glass
-          // `new Resolver(this)`, which under the 3b.3 cut would re-derive a wrong globalRoot
-          // from the null-rooted `this`. Its env IS `this` (the expansion env), so the
-          // merge-frame plumbing below is unchanged; under glass byte-identical. (D1)
+          // `new Resolver(this)`, which would re-derive a wrong globalRoot from the
+          // null-rooted `this`. Its env IS `this` (the expansion env), so the
+          // merge-frame plumbing below is unchanged; under glass byte-identical.
           const useResolver = useSiteResolver ?? new Resolver(this);
           // The def-time syntax-child Resolver: `defResolver.child("syntax")` ≡ `env.inherit("syntax")`.
           // Its env is the hygiene scope, shared by-ref into the merge return below.
@@ -93,7 +93,7 @@ export default new EnvCapability("scheme/macros", {
           // for macros that define variables used in macro (2 levels nestting): if `this` is itself a
           // merge frame (from an outer expansion), copy its symbol-keyed gensyms up into the parent and
           // unwrap. Routed through the LexicalScope surface (kind/ownSymbolEntries/parent.define) — a
-          // byte-identical pass-through over the env today (P3 3b.2).
+          // byte-identical pass-through over the env today.
           let useScope = useResolver.scope;
           if (useScope.kind === "merge") {
             for (const [sym, value] of useScope.ownSymbolEntries()) {
@@ -128,7 +128,7 @@ export default new EnvCapability("scheme/macros", {
               let expr: unknown = rules.car.cdr.car;
               const bindings = extract_patterns(rule, code, symbols, ellipsis, {
                 // Hygiene-identity handles: use-site Resolver, the captured def Resolver, and its
-                // capabilities (globalRoot = the unshadowed-base identity). See P3 3b.2.
+                // capabilities (globalRoot = the unshadowed-base identity).
                 useResolver,
                 defResolver,
                 capabilities: defResolver.capabilities,

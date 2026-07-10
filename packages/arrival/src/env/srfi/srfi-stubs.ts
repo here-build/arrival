@@ -8,9 +8,9 @@
 // wall into a route back to the real dataflow.
 //
 // Seven families, grouped internally (family 2 — the R7RS §6.13.1 file openers +
-// the CL-ism with-open-file — MOVED in the registry-dissolution sweep: the R7RS
-// verbs to `r7rs/host.ts` beside the §6.13 port doors they belong with, the CL-ism
-// to `env/polyglot-stubs.ts`; each stub beside its family pack):
+// the CL-ism with-open-file — live beside the families they belong with: the
+// R7RS verbs in `r7rs/host.ts` beside the §6.13 port doors, the CL-ism in
+// `env/polyglot-stubs.ts`; each stub beside its family pack):
 //   1. SRFI-69/125 hash tables → dicts are native & immutable ({…} / (dict …)).
 //   3. SRFI-27 random → ambient non-determinism has no place in a pure sandbox.
 //   4. SRFI-14 char-sets → the string library takes a char or one-arg predicate.
@@ -28,10 +28,10 @@
 //     procedures. `symbol.notImplemented` only bakes a callable door, so they are
 //     bound as throwing procedures: a model that CALLS one gets the teaching door;
 //     a bare reference resolves to the throwing closure without firing. Acceptable
-//     — the reach we care about is the call site. (Sub-note: `parseNameDoc` splits
-//     on the first COLON-SPACE (": "), not the first colon — fixed in the law-grid
-//     bug batch precisely because these colon-named doors were truncating to
-//     `char-set`; `def.name` now reports the full `char-set:whitespace`.)
+//     — the reach we care about is the call site. (`parseNameDoc` splits on the
+//     first COLON-SPACE (": "), not the first colon — necessary because these
+//     colon-named doors would otherwise truncate to `char-set`; `def.name`
+//     reports the full `char-set:whitespace`.)
 //
 // No symbol here is stubbed by `r7rs/host.ts`: host.ts doors the R7RS §6.13/§6.14
 // host interface (port primitives, the §6.13.1 file openers, system verbs); this

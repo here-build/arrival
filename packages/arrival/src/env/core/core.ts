@@ -14,36 +14,20 @@
 // sole definition site — the same pattern the SRFI / r7rs / polyglot packs
 // already follow.
 //
-// MIGRATED off the text-blob `prelude` (docs/working-proposals/symbol-define-
-// static-program-validation.md, wave W4): the FULL inventory, done honestly per
-// the task brief's caution against treating a bootstrap pack's keyword table as a
-// migration target —
+// KEYWORD-SYNTAX — the 20 `symbol.keyword` entries in `symbols` below, every
+// `SPECIAL_FORMS` entry (evaluator.ts) made first-class and value-carried — are
+// `KEYWORD_SYNTAX_BASELINE` (`common/symbols/define-bake.ts`) itself: an
+// UNCONDITIONAL allowlist member for every OTHER capability's bake free-variable
+// check, precisely because it lives here. `gensym` is the one native binding.
+// `true`/`false`/`NaN` are the only pure-scheme constants this pack defines — no
+// `define-macro` forms live here.
 //
-//   • KEYWORD-SYNTAX (NOT prelude, NOT a migration target): the 20 `symbol.keyword`
-//     entries in `symbols` below — every `SPECIAL_FORMS` entry (evaluator.ts) made
-//     first-class, value-carried. These are `KEYWORD_SYNTAX_BASELINE`
-//     (`common/symbols/define-bake.ts:91`) itself — the design doc's own §2.1
-//     rev2 fix treats this exact set as an UNCONDITIONAL allowlist member for
-//     every OTHER capability's bake FV law, precisely because it lives here.
-//     Unchanged by this migration; touching it is out of scope by the doc's own
-//     accounting (§4.4's residue table never lists `symbols` entries as dying).
-//   • ALREADY-MIGRATED: `gensym`, a `symbol.native` — not `prelude:` text, no
-//     Pass 1/2 work applies.
-//   • THE ACTUAL PRELUDE (3 surviving forms): the `true`/`false`/`NaN` constants.
-//     NO `define-macro` forms — the doc's "attribute case law" (§3.4's
-//     macroAttribute) does not apply to this pack; every migrated entry below is
-//     `symbol.define`, none `symbol.defineSyntax`.
-//
-// DELETED — `single` (W4-H4 residual, V ruling 2026-07-10: "we need to stay
-// aligned to srfi where we can"): a LIPS-heritage predicate in NO SRFI or R7RS,
-// with an always-`#f` body (`(and (pair? list) (not (cdr list)))` — it predated
-// the nil/false split; `(cdr '(a))` is nil, not `#f`) and zero call sites
-// (grep-verified). Non-standard + silently wrong + unused = deleted, not fixed.
-// Its removal also removed this pack's only dep (`equality`, needed solely by
-// that body's `pair?`/`not`) — `scheme/core` is dep-free again, the clean
-// precedence floor. The DefineLocalityError regression pin that `single`'s
-// migration surfaced lives on, self-contained, in
-// `env/__tests__/core-symbol-define-migration.test.ts`.
+// `scheme/core` has no `deps`: it is dep-free by construction, the clean
+// precedence floor every other base pack composes against. (A `single`
+// predicate once lived here and pulled in `equality` for `pair?`/`not` — a
+// LIPS-heritage, non-SRFI/non-R7RS predicate with an always-`#f` body that
+// predated the nil/false split and had zero call sites; removing it as dead
+// code restored the dep-free floor.)
 
 import { EnvCapability } from "../../common/capability.js";
 import * as z from "../../common/scheme-zod.js";
@@ -62,23 +46,21 @@ export default new EnvCapability("scheme/core", {
     // Kernel KEYWORDS — special forms made first-class (symbol.keyword markers). The
     // evaluator resolves a call head through the env and dispatches SPECIAL_FORMS[name]
     // when it resolves to one of these — so `(define => lambda)` aliases the form and
-    // lexical shadowing un-specials it (the dual of cxr; see values/Keyword.ts). The
-    // genMacroWrapper define/lambda husks in stdlib.ts global_env are deleted in favor
-    // of these. TWO reasons a kernel special form becomes a keyword: (1) first-class
-    // value-carried dispatch — `(define => lambda)` aliases the form, the dual of cxr; and
-    // (2) the HYGIENE engine resolves a renamed template identifier (`if` → `#:if`) by binding
-    // the gensym to the original name's ENV VALUE (syntax-rules.ts rename()) — a name-only
-    // special form has no env value, so a USER syntax-rules macro expanding to it could not
-    // resolve. cond/case/when/unless stay evaluator SPECIAL FORMS (evalCond/… — TCO-correct,
-    // unlike the nested-genRun syntax-rules path), now ALSO keywords so all control forms are
-    // uniformly first-class and reachable from macro templates. let* / letrec / letrec* /
-    // and / or now follow, keyworded for the same hygiene reason: a syntax-rules template
-    // expanding to one of these (e.g. test-numeric-syntax's `(let* (…) …)`) renames the head
-    // to a gensym, and only a keyworded form has an env value for rename() to copy onto it.
-    // define-macro / do / while / try complete the set (bug batch 2 follow-up) — every
-    // SPECIAL_FORMS entry (evaluator.ts) is now a keyword marker, so a hygiene-renamed head
-    // can never miss dispatch for lack of a copyable env value. See
-    // __tests__/do-while-try-define-macro-hygiene.test.ts for the macro-expansion coverage.
+    // lexical shadowing un-specials it (the dual of cxr; see values/Keyword.ts). A
+    // kernel special form becomes a keyword for two reasons: (1) first-class,
+    // value-carried dispatch — `(define => lambda)` aliases the form, the dual of cxr;
+    // and (2) the HYGIENE engine resolves a renamed template identifier (`if` → `#:if`)
+    // by binding the gensym to the original name's ENV VALUE (syntax-rules.ts rename())
+    // — a name-only special form has no env value, so a USER syntax-rules macro
+    // expanding to it could not resolve. cond/case/when/unless stay evaluator SPECIAL
+    // FORMS (evalCond/… — TCO-correct, unlike the nested-genRun syntax-rules path), but
+    // are ALSO keywords so all control forms are uniformly first-class and reachable
+    // from macro templates. let*/letrec/letrec*/and/or are keyworded for the same
+    // hygiene reason: a syntax-rules template expanding to one of these renames the
+    // head to a gensym, and only a keyworded form has an env value for rename() to
+    // copy onto it. define-macro/do/while/try complete the set: every SPECIAL_FORMS
+    // entry (evaluator.ts) is a keyword marker, so a hygiene-renamed head can never
+    // miss dispatch for lack of a copyable env value.
     lambda: symbol.keyword`lambda: create an anonymous procedure`,
     define: symbol.keyword`define: bind a name in the current scope`,
     "define-macro": symbol.keyword`define-macro: define a fexpr-style unhygienic macro`,
@@ -116,15 +98,12 @@ export default new EnvCapability("scheme/core", {
       gensym,
     ),
 
-    // ── §4.2 Pass 1/2 decomposition of the former `prelude` text blob —
-    // 1:1 off the original `(define true #t)` / `(define false #f)` /
-    // `(define NaN +nan.0)`. (`single`, the blob's fourth form, is deleted —
-    // see the file header.) ────────────────────────────────────────────────────
+    // ── Essential constants: true / false / NaN. (`single`, once a fourth
+    // constant here, is deleted — see the file header.) ──────────────────────
 
-    // Essential constants. Both CONSTANT defines (§1.2: a bare ZodType contract,
-    // not a Contract<I,O> record) — `z.boolean` validates the literal ONCE at
-    // bake, then binds the plain value (no call-boundary wrapper; there is no
-    // call boundary).
+    // Both CONSTANT defines (a bare ZodType contract, not a Contract<I,O>
+    // record) — `z.boolean` validates the literal ONCE at bake, then binds the
+    // plain value (no call-boundary wrapper; there is no call boundary).
     true: symbol.define`true: the canonical scheme boolean truth constant`(z.boolean, `#t`),
     false: symbol.define`false: the canonical scheme boolean falsity constant`(z.boolean, `#f`),
     // `+nan.0` is a non-finite R7RS inexact real. `z.number`/`z.inexact` are the

@@ -47,41 +47,28 @@
 // unlike core/polyglot/srfi (assembled once into every env), an overridable pack is assembled
 // FRESH per run with that run's own host-supplied parameter values.
 //
-// MIGRATION NOTE (W4-H2b, docs/working-proposals/symbol-define-static-program-validation.md
-// §1/§2/§4): this pack's `prelude` was ONE `define-macro` form — `define/overridable` itself —
-// and nothing else; it mechanically decomposes 1:1 (`(define-macro (name . args) body…)` →
-// `(lambda args body…)`, §4.2 Pass 1) into the `symbol.defineSyntax` entry below. The `overridable/
-// resolve` rosetta declaration is UNTOUCHED — it was never prelude text, it's a `symbol.rosetta`
-// entry already (the ordinary runtime verb the macro expands into), and `z.value` there is the
-// scheme-zod doc's own named legitimate identity use (the ASymbol-vs-opaque-brand comment on
-// `name`'s param, above) — no Pass 2 (contract authoring) applies to it either way.
+// `macroAttribute: "binder"`, not `"expression"` and not the bare `"opaque"` default — `name`
+// is a FORMALS position, not expression space: it is spliced ONLY into `(define ,name …)`'s
+// binding-name slot, never read back as a value reference anywhere in the expansion. Walking
+// it as ordinary expression space would report the call site's own binding target as
+// `unbound-symbol` on every legal program — `(define/overridable city (s/string) "Berlin")`
+// would flag `city` unbound before it's ever defined. Distinguished from `cut`/`cute`'s
+// `"opaque"` (srfi-26): `<>`/`<...>` are placeholder TOKENS consumed positionally by the
+// macro's own expander and never appear, bound or free, in the expansion's output; `name` here
+// genuinely BINDS — it is exactly the shape `define`'s own name argument is, just
+// macro-mediated. `type`/`default` ARE ordinary expression space (evaluated at the call site,
+// e.g. `(s/string)`, `"Berlin"`) — but there is no per-argument-position binding-aware walker
+// yet, so the whole call is firewalled identically to `"opaque"` today; `"binder"` is the
+// honest classification for when that walker lands, not a behavior change now.
 //
-// `macroAttribute: "binder"` (§3.4's ternary), not `"expression"` and not the bare `"opaque"`
-// default — `name` is a FORMALS position, not expression space: it is spliced ONLY into
-// `(define ,name …)`'s binding-name slot, never read back as a value reference anywhere in the
-// expansion. Walking it as ordinary expression space (`"expression"`) would report the call
-// site's own binding target as `unbound-symbol` on every legal program — `(define/overridable
-// city (s/string) "Berlin")` would flag `city` unbound before it's ever defined, the exact
-// false positive §3.4 exists to close (the doc's own worked case: `receive`'s `q`/`r`, and
-// H1's `and-let*` claws, `let-values`'s `vars`). Distinguished from `cut`/`cute`'s `"opaque"`
-// (srfi-26): `<>`/`<...>` are placeholder TOKENS consumed positionally by the macro's own
-// expander and never appear, bound or free, in the expansion's output; `name` here genuinely
-// BINDS — it is exactly the shape `define`'s own name argument is, just macro-mediated. `type`/
-// `default` ARE ordinary expression space (evaluated at the call site, e.g. `(s/string)`,
-// `"Berlin"`) — but there is no per-argument-position binding-aware walker yet (§3.4's
-// DEFERRED note), so the whole call is firewalled identically to `"opaque"` today; `"binder"`
-// is the honest classification for when that walker lands, not a behavior change now.
-//
-// No `symbol.define` entries exist in this pack (the census: one macro, one already-rosetta
-// verb) — nothing for Pass 2 (real contracts) to touch, and the §2.1 bake FV law never runs
-// here (`define-bake.ts` limits that check to `def.kind === "define"` — a `defineSyntax` body's
-// free names would name the EXPANSION env, out of scope for this wave, same as srfi-8/26/H1's
-// binder/opaque siblings). `deps: [schemaCapability]` (below, unchanged) covers `type`'s s/*
-// call at the macro's OWN call site — this pack's `defineSyntax` body itself references nothing
-// outside `define`/`overridable/resolve`, both resolved without a new edge (`define` is
-// KEYWORD_SYNTAX; `overridable/resolve` is this same capability's own Pass-1-bound sibling,
-// referenced only inside the quasiquote — literal data at macro-definition time, an ordinary
-// same-capability reference once the expansion itself evaluates, §2.3's two-phase order).
+// No `symbol.define` entries exist in this pack (one macro, one already-rosetta verb) — the
+// bake free-variable check only applies to `def.kind === "define"` entries, so it never runs
+// here. `deps: [schemaCapability]` (below) covers `type`'s s/* call at the macro's OWN call
+// site — this pack's `defineSyntax` body itself references nothing outside `define`/
+// `overridable/resolve`, both resolved without a new edge (`define` is KEYWORD_SYNTAX;
+// `overridable/resolve` is this same capability's own sibling, referenced only inside the
+// quasiquote — literal data at macro-definition time, an ordinary same-capability reference
+// once the expansion itself evaluates).
 
 import { z } from "zod";
 
@@ -101,8 +88,8 @@ import { schemaCapability } from "./schema.js";
  *  into the canonical JS tagged-list form (a bare string, or an array the s/* constructors
  *  build) — to the zod schema that validates a JS value against it. Routes through the ONE
  *  canonical lowering (`tagToJsonSchema`) + zod's own JSON-Schema reconstruction — the same
- *  bridge `@here.build/arrival-schema-zod`'s `schemaToZod` uses (arrival-chain re-exports it,
- *  but that's no longer where it's defined) — so this capability can't drift from either the
+ *  bridge `@here.build/arrival-schema-zod`'s `schemaToZod` uses (re-exported by arrival-chain,
+ *  defined in arrival-schema-zod) — so this capability can't drift from either the
  *  wire schema or the s/* authoring surface: EVERY tag the schema DSL can express (object,
  *  array, enum, bare primitive, the `/optional` compositor) is accepted, not just a hand-rolled
  *  scalar subset. A tag `tagToJsonSchema`/`z.fromJSONSchema` can't turn into a real validator
@@ -169,14 +156,13 @@ export const overridableCapability = new EnvCapability("arrival/overridable", {
   symbols: ({ configuration }) => ({
     "overridable/resolve":
       symbol.rosetta`overridable/resolve: resolves a parameter, preferring a host override over the form default (validated against the declared type)`(
-        // `name` stays `sz.value` (the raw ASymbol), NOT `sz.symbol`: the v1→v2 scheme-zod swap
-        // (4ebe73abbe, 2026-07-08) turned `sz.symbol` into a REAL codec that decodes to an
+        // `name` stays `sz.value` (the raw ASymbol), NOT `sz.symbol`: `sz.symbol` decodes to an
         // OPAQUE host JS `symbol` (`Symbol("arrival membrane symbol: <name>")` — see
-        // scheme-zod.ts's own `symbol` primitive) instead of the bare ASymbol identity-pass v1
-        // had. `nameSym.toString()` on that opaque brand prints the whole wrapper description,
-        // not the bare name — this capability genuinely needs the readable name (every error
-        // message names the binding), so it reads the ASymbol directly via `.literal()` (the
-        // same "bare symbol name" accessor the print protocol itself uses).
+        // scheme-zod.ts's own `symbol` primitive), and `nameSym.toString()` on that opaque
+        // brand prints the whole wrapper description, not the bare name. This capability
+        // genuinely needs the readable name (every error message names the binding), so it
+        // reads the ASymbol directly via `.literal()` (the same "bare symbol name" accessor
+        // the print protocol itself uses).
         { input: [sz.value, sz.value, sz.value], output: [sz.value], type: "(name: symbol, type: string|list, default: any): any" },
         (nameSym, typeTag, defaultVal) => {
           const bindingName = (nameSym as ASymbol).literal();

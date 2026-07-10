@@ -9,15 +9,10 @@
 //                            for anyway. A symbol belongs here iff no SRFI number /
 //                            R7RS section covers it.
 //
-// LINEAGE: formerly `env/polyglot-rich-errors/stubs.ts`, half of a sub-capability
-// whose other half was a STATIC well-known-symbol table (`registry.ts`) feeding the
-// unbound-variable error path. That table is DISSOLVED (the Environment-
-// despecialization arc, docs/working-proposals/environment-is-capability-composition.md):
-// teaching about well-known-but-absent names is exactly these declared
-// `symbol.notImplemented` doors resolving through the ordinary chain, and typo
-// suggestions now derive from the chain's ACTUAL vocabulary (src/unbound-variable.ts)
-// — which includes these doors, so declaring a stub makes it typo-suggestible for
-// free. The polyglot IMPLEMENTATION packs (env/polyglot.ts's shared core plus
+// Declaring a stub (rather than leaving the name silently absent) makes it
+// typo-suggestible for free: typo suggestions derive from the chain's ACTUAL
+// vocabulary (src/unbound-variable.ts), which includes these doors. The
+// polyglot IMPLEMENTATION packs (env/polyglot.ts's shared core plus
 // env/polyglot-clojure.ts / -lisp.ts / -racket.ts) hold the actual pure
 // IMPLEMENTATIONS (str/mapcar/get-in/…); this pack holds the cross-dialect
 // omission doors.
@@ -32,17 +27,15 @@
 // This pack is only for the remainder: door the fact, the reason, and (where an
 // honest one exists) the exact bound alternative.
 //
-// DIALECT SECTIONS (V, 2026-07-10, same wave as the implementation packs'
-// clojure/lisp/racket split — polyglot.ts's header has the full rationale): the
-// entries below are GROUPED per-dialect ("gains sections", not a physical file
-// split — JUDGMENT: unlike the implementations, doors carry no `deps`/FV-law
-// weight a split would ever need to isolate — every `symbol.notImplemented` body
-// unconditionally throws, so there is nothing here for the bake FV locality law
-// to check, and splitting would only fragment the REASON constants (HASH_LIBRARY_
-// REASON's Racket/CL spellings share one string; IO_REASON's Lisp/Clojure
-// spellings share another) across files for zero functional gain. This pack
-// remains ONE `EnvCapability` ("scheme/polyglot-stubs"), registered ONCE in
-// base-packs.ts, same as before the split), matching the dialect table:
+// DIALECT SECTIONS (grouped internally, not a physical file split): unlike the
+// implementation packs, doors carry no `deps`/FV-law weight a split would ever
+// need to isolate — every `symbol.notImplemented` body unconditionally throws,
+// so there is nothing here for the bake FV locality law to check, and splitting
+// would only fragment the REASON constants (HASH_LIBRARY_REASON's Racket/CL
+// spellings share one string; IO_REASON's Lisp/Clojure spellings share another)
+// across files for zero functional gain. This pack remains ONE `EnvCapability`
+// ("scheme/polyglot-stubs"), registered ONCE in base-packs.ts, matching the
+// dialect table:
 //   COMMON LISP  — type-of, gethash, getf, setf, defun, loop, nreverse,
 //                  with-open-file, print.
 //   CLOJURE      — println.

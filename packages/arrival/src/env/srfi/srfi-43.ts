@@ -1,32 +1,14 @@
 // SRFI-43 — vector library (pure ops only; arrival vectors are immutable). Scheme-bootstrap
 // capability.
 //
-// MIGRATED off the text-blob `prelude` (docs/working-proposals/symbol-define-static-
-// program-validation.md, wave W4/H2): each op is now an individually-declared
-// `symbol.define`, contract-enforced from day one (§1.2 rev2 ruling) — no more opaque
-// prelude string, no more assembly-order-luck cross-capability references (§2.1's bake
-// FV locality law forces every free name into either this capability's OWN symbol set or
-// a DECLARED `deps` edge).
+// DEPS: every body below calls `vector-length`/`vector-ref` (scheme/vectors),
+// `=`/`+`/`-`/`<`/`>`/`quotient` (scheme/numeric), and `not` (scheme/equality) —
+// the complete cross-capability free-name set, each a declared `deps` edge
+// below. `equality`/`numeric`/`vectors` are NATIVE_PACKS members, never entries
+// of the BASE_PACKS array C3 linearizes over, so no repositioning of
+// base-packs.ts is needed for this pack.
 //
-// THE SAME LUCK CLASS srfi-235 (W4/H1) FOUND, here for free names into NATIVE_PACKS
-// (design doc §2.1's "live catch", §4.1's census): every body below calls `vector-length`/
-// `vector-ref` (scheme/vectors), `=`/`+`/`-`/`<`/`>`/`quotient` (scheme/numeric), and
-// `not` (scheme/equality) — none of them declared. It worked only because
-// `env-roots.ts`'s two-phase bootstrap (NATIVE_PACKS → global_env, THEN BASE_PACKS →
-// user_env) guarantees every R7RS native is already bound by the time any BASE_PACKS
-// prelude runs — a RUNTIME guarantee, not a declared one. The bake FV law
-// (`define-bake.ts`) does not (and, by design, should not — a hermetic/roster/glass
-// assembly that doesn't happen to include NATIVE_PACKS can't silently break) consult
-// that runtime guarantee, so each free name gets the exact treatment srfi-235's
-// `compose`/`not`/`length`/`apply`/`append`/`>=` did: a real `deps` edge below.
-// `deps: [equality, numeric, vectors]` is the complete, empirically-verified set —
-// `pnpm test` is the proof (see `__tests__/srfi-43-symbol-define.test.ts`). No
-// repositioning of `base-packs.ts`'s array is needed: `equality`/`numeric`/`vectors` are
-// NATIVE_PACKS members, never entries of the BASE_PACKS array C3 linearizes over (the
-// same reason srfi-235's own `equality`/`numeric` deps needed no repositioning there —
-// only `polyglot`/`lists`, both BASE_PACKS members, did).
-//
-// Contract choices (§1.2's "REAL contract authored per define, day one"):
+// Contract choices:
 //   - vec slots: `z.vector(z.value)` (representation-blind, matches r7rs/vectors.ts's own
 //     vocabulary for this exact domain).
 //   - kons/pred/cmp slots: `z.lambda` (a callable value; no `type:` harvest override

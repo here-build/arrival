@@ -11,39 +11,29 @@
 // here from the dissolved arrival-extensions pack as the falsy/default-on-empty twins of
 // SRFI-1 `first`, a contract loose `car` cannot supply (it projects to truthy nil).
 //
-// MIGRATED off the text-blob `prelude` (docs/working-proposals/symbol-define-static-
-// program-validation.md, wave W4/H3): each of the 37 former prelude defines is now an
-// individually-declared `symbol.define`, contract-enforced from day one (§1.2 rev2
-// ruling), declaration order 1:1 with the old textual order (§2.3 sequential-RHS).
-//
-// THE SAME LUCK CLASSES srfi-235 (H1) and srfi-43/srfi-189 (H2) found, both at once
-// (§2.1's bake FV locality law): the define bodies below freely reference
+// DEPS: the define bodies below freely reference
 //   • `not`/`equal?`/`eq?`/`pair?`/`null?`  → scheme/equality   (NATIVE_PACKS)
 //   • `<=`/`<`/`>=`/`=`/`+`/`-`/`*`         → scheme/numeric    (NATIVE_PACKS)
-//   • `values`                              → scheme/binding    (BASE_PACKS!)
+//   • `values`                              → scheme/binding    (BASE_PACKS)
 //   • `error`                               → scheme/exceptions (BASE_PACKS)
 //   • `cons`/`reverse`/`append`/`member`/`length`/`map`/`apply` → scheme/lists (BASE_PACKS)
-// none of which were declared — pre-migration they resolved through assembly-order
-// luck (the two-phase bootstrap for the native packs; BASE_PACKS array order for the
-// rest). `deps: [equality, numeric, binding, exceptions, lists]` is the complete,
-// empirically-verified set (`__tests__/srfi-1-symbol-define.test.ts` proves the law
-// passes AND pins a local repro of the pre-fix shape). `binding` is the THIRD
-// BASE_PACKS member to need the C3 tail-block repositioning (after srfi-235's
-// `lists`/`polyglot` and srfi-189's `exceptions`) — see base-packs.ts's header; the
-// deps array order here (`binding` before `exceptions` before `lists`) deliberately
-// matches the tail block's order so the two C3 merge inputs never contradict.
-// `car`/`cdr`/`cadr` need no edge: the cxr synth family is a kernel resolver, in the
-// bake allowlist by construction (define-bake.ts's CXR_RE, machinery fix cdc63c70ec).
+// `deps: [equality, numeric, binding, exceptions, lists]` is the complete set.
+// `binding` is one of the BASE_PACKS members needing C3 tail-block repositioning
+// (alongside `lists`/`polyglot`/`exceptions`) — see base-packs.ts's header; the
+// deps array order here (`binding` before `exceptions` before `lists`) matches
+// the tail block's order so the two C3 merge inputs never contradict.
+// `car`/`cdr`/`cadr` need no edge: the cxr synth family is a kernel resolver, in
+// the bake allowlist by construction (define-bake.ts's CXR_RE).
 //
-// CONTRACT CONVENTIONS (§1.2 "REAL contract authored per define, day one" — the
-// judgment calls, so the next author doesn't re-derive them):
+// CONTRACT CONVENTIONS (the judgment calls, so the next author doesn't re-derive
+// them):
 //   - list slots: `z.union([z.pair, z.nil])` — the SHALLOW pair-or-nil identity union
-//     (this file's own pre-existing `find` convention), NEVER `z.list`: the list codec
-//     WALKS the spine on decode (O(n) per call, §4.5's budget) and throws on circular/
-//     improper input — but `length+` exists to ANSWER circular lists, and SRFI-1
-//     blesses dotted tails for `take`/`drop` ("(take '(1 2 3 . d) 2) ⇒ (1 2)"). The
-//     shallow union is the honest boundary for a family whose bodies own the deep
-//     structure handling.
+//     (this file's own `listAlike`), NEVER `z.list`: the list codec WALKS the spine
+//     on decode (O(n) per call) and throws on circular/improper input — but
+//     `length+` exists to ANSWER circular lists, and SRFI-1 blesses dotted tails
+//     for `take`/`drop` ("(take '(1 2 3 . d) 2) ⇒ (1 2)"). The shallow union is
+//     the honest boundary for a family whose bodies own the deep structure
+//     handling.
 //   - xs slots that tolerate ANY value by spec (take/drop's "lis may be any value",
 //     %list-nth's not-a-pair→error branch, first?/first-or's whole falsy-on-empty
 //     purpose): `z.value` — tolerance IS the declared contract there, not looseness.
@@ -53,37 +43,32 @@
 //     wrapper decode the box AS a 2-array and throw on every call — and `z.value`
 //     rejects it too (`Values` is a non-AValue orphan its `instanceof AValue`
 //     predicate misses despite the SchemeValue union declaring it). `z.values` is the
-//     dedicated orphan schema, added by this migration exactly the way H1's
-//     exceptions pack added `z.error` for the R7RSError orphan.
+//     dedicated orphan schema for exactly this shape.
 //   - fresh-list outputs built via `reverse`/`cons` chains: `z.union([z.pair, z.nil])`.
 //     Tail-returning outputs (drop/drop-while/append-reverse/concatenate — the result
 //     embeds a caller-supplied tail the shallow input contract cannot promise is
 //     proper): `z.value`, documented per site.
 //   - counts/indices: `z.exact` where built purely from exact literals + `+`/`-`
-//     (list-index, length+'s n — the srfi-43 precedent), `z.schemeNumber` where the
-//     value is another verb's output (`count` returns `length`'s result, and length's
-//     own declared output is `z.schemeNumber`).
+//     (list-index, length+'s n), `z.schemeNumber` where the value is another
+//     verb's output (`count` returns `length`'s result, and length's own
+//     declared output is `z.schemeNumber`).
 //   - some/every: `z.boolean` — arrival's historical some/every return #t/#f, NOT
 //     SRFI's last-pred-value (only #f is falsy here — ANil is truthy — so the `and`
 //     chain in %every can only ever egress #t or #f). Deviation preserved 1:1.
 //
-// §4.5 PERF PROTOCOL (the hot-path judgment this pack is the flagship for):
-//   The contract wrapper costs one `z.decode` + one async hop PER CALL THROUGH THE
-//   BOUND SYMBOL. 30 of the 37 defines already recursed via named `let` — their
-//   recursion never re-crosses the boundary, so they pay ONE decode per outer call
-//   (cold; enforcement is effectively free against interpretation cost — measured
-//   (partition odd? (iota 2000)): 381ms prelude-era vs ~equal migrated, see the
-//   migration test's header for the ledger). The SEVEN direct self-recursers of the
-//   prelude era (take, drop, %list-nth, %any-null?, %some, %every, zip) would have
-//   paid decode + async hop PER ELEMENT through their own bound wrapper — for those
-//   the migration normalizes the body to the file's dominant named-let idiom
-//   (equivalence pinned per define in the migration test): recursion stays inside the
-//   closure, enforcement stays ON everywhere, and no §1.2 `validate:false` valve is
-//   needed at all. The one REMAINING per-element boundary crossing is compositional —
-//   %some/%every call the validated `%any-null?` sibling once per element-tuple, and
-//   zip's loop calls validated `some` per element; measured (see the migration test),
-//   that residue is noise against interpretation cost, so the valve stays unused —
-//   evidence-gated, per §4.5, not reached for by default.
+// PERF PROTOCOL (the hot-path judgment this pack is the flagship for): the
+// contract wrapper costs one `z.decode` + one async hop PER CALL THROUGH THE
+// BOUND SYMBOL. Most of this pack's defines recurse via named `let` — their
+// recursion never re-crosses the boundary, so they pay ONE decode per outer call
+// (cold; enforcement is effectively free against interpretation cost). The
+// direct self-recursers (take, drop, %list-nth, %any-null?, %some, %every, zip)
+// are written in that same named-let idiom deliberately: a body that
+// self-recursed through its own bound wrapper would pay a decode + async hop
+// PER ELEMENT instead. The one remaining per-element boundary crossing is
+// compositional — %some/%every call the validated `%any-null?` sibling once per
+// element-tuple, and zip's loop calls validated `some` per element — negligible
+// against interpretation cost, so the `validate:false` valve stays unused,
+// reached for only when evidence demands it.
 import { type MaybePromise, resolveMethod, symbol, withCallbackRoles } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { is_false } from "../../eval/guards.js";
@@ -157,11 +142,11 @@ export default new EnvCapability("scheme/srfi-1", {
         // (list, vector, …) — it dispatches to whatever `arrival/tagless-final/filter` term the
         // `seq` operand implements and returns a value in THAT SAME representation, so there is
         // no single richer scheme-zod collection type honest for every call site.
-        // callbackRoles OVERRIDE (docs/PROVENANCE.md §2, Q4): filter's contract is shape-
-        // identical to map's (fan host, lambda + value in, value out), so extraction's
-        // fan default would say element-transformer — but the pred is a SELECTOR: its
-        // verdict decides membership (the PROVENANCED length-changing verb, §2 R2), the
-        // merged selector+decision role the one-color ruling calls `control`.
+        // callbackRoles OVERRIDE: filter's contract is shape-identical to map's (fan
+        // host, lambda + value in, value out), so extraction's fan default would say
+        // element-transformer — but the pred is a SELECTOR: its verdict decides
+        // membership (a length-changing verb), the merged selector+decision role
+        // this codebase calls `control`.
         { input: [z.lambda, z.value], output: [z.value], provenance: "fan", callbackRoles: ["control"] },
         (args, runCtx) => {
           const [pred, seq] = args;
@@ -179,8 +164,8 @@ export default new EnvCapability("scheme/srfi-1", {
           return m.call(seq, pred, runCtx) as MaybePromise<SchemeValue>;
         },
       ),
-    // The DECLARED acc-chain marker (docs/PROVENANCE.md §2/§3, PROVENANCE-PLAN.md Q4 —
-    // "fold declares acc chain"): reduce's f is the fold-shaped `accumulator` callback,
+    // The DECLARED acc-chain marker ("fold declares acc chain"): reduce's f is the
+    // fold-shaped `accumulator` callback,
     // the source of CHAINED track composition (`egress(Tᵢ) → ingress(Tᵢ₊₁)`, the only
     // sanctioned inter-track edge — the track-separation law's one exception). A tagless
     // def is contract-less (shapeless `z.array(z.value)` in), so declaration is the ONLY
@@ -216,7 +201,7 @@ export default new EnvCapability("scheme/srfi-1", {
       findImpl,
     ),
 
-    // ============ SRFI-1 (list library completion) — former prelude, §4.2 decomposed ============
+    // ============ SRFI-1 (list library completion) ============
 
     "take-while": symbol.define`take-while: longest prefix of xs satisfying pred, as a fresh list`(
       { input: [z.lambda, listAlike], output: [listAlike] },
@@ -239,9 +224,9 @@ export default new EnvCapability("scheme/srfi-1", {
     ),
 
     // xs is z.value by SRFI-1's own spec ("(take '(1 2 3 . d) 2) ⇒ (1 2)"; any value
-    // once n hits 0) — tolerance is the contract. §4.5: prelude-era body self-recursed
-    // through the bound wrapper (per-element decode + async hop); normalized to the
-    // file's dominant named-let idiom, enforcement ON (see the file header).
+    // once n hits 0) — tolerance is the contract. Written in the file's dominant
+    // named-let idiom so self-recursion never re-crosses the contract boundary
+    // (see the file header's PERF PROTOCOL note).
     take: symbol.define`take: the first n elements of xs as a fresh list (dotted tails tolerated per SRFI-1)`(
       { input: [z.value, z.schemeNumber], output: [listAlike] },
       `(lambda (xs n)
@@ -252,7 +237,7 @@ export default new EnvCapability("scheme/srfi-1", {
     ),
 
     // Output z.value: drop returns the n-th cdr of xs ITSELF (SRFI-1: "lis may be any
-    // value"), not a fresh list. §4.5 named-let normalization, as take.
+    // value"), not a fresh list. Named-let idiom, as take (see the file header).
     drop: symbol.define`drop: xs after the first n elements (the n-th cdr — shares structure with xs)`(
       { input: [z.value, z.schemeNumber], output: [z.value] },
       `(lambda (xs n)
@@ -301,10 +286,9 @@ export default new EnvCapability("scheme/srfi-1", {
                  (else (loop (cdr xs))))))`,
     ),
 
-    // z.pair input (SRFI-1: non-empty list required). Prelude-era, (last-pair '())
-    // quietly returned '() through loose-cdr luck; the enforced boundary makes the
-    // out-of-domain call a contract error instead — §4.2's sanctioned error-surface
-    // move (fails at the boundary with a better message, never mid-body).
+    // z.pair input (SRFI-1: non-empty list required) — `(last-pair '())` is an
+    // out-of-domain call that fails at the contract boundary with a clear
+    // message, never mid-body.
     "last-pair": symbol.define`last-pair: the last pair of a non-empty (possibly dotted) list`(
       { input: [z.pair], output: [z.pair] },
       `(lambda (xs)
@@ -319,8 +303,8 @@ export default new EnvCapability("scheme/srfi-1", {
 
     // %list-nth — private walker behind first…tenth: walks k cdrs, reports the
     // accessor's name on underflow. xs is z.value (its not-a-pair→error branch IS the
-    // teaching surface first…tenth rely on). §4.5 named-let normalization (prelude-era
-    // self-recursion paid the boundary per step); enforcement ON.
+    // teaching surface first…tenth rely on). Named-let idiom (see the file header's
+    // PERF PROTOCOL note); enforcement stays on.
     "%list-nth": symbol.define`%list-nth: the k-th element of xs, or (error msg) when xs is too short (private walker for first…tenth)`(
       { input: [z.value, z.schemeNumber, z.string], output: [z.value] },
       `(lambda (xs k msg)
@@ -535,13 +519,13 @@ export default new EnvCapability("scheme/srfi-1", {
     // SRFI-1's `any`, kept under the Ramda-familiar name; both return #t/#f, arrival's
     // historical deviation from SRFI's last-pred-value, preserved 1:1.) %any-null?/
     // %some/%every are private helpers; some must precede zip and list-index, which
-    // call it (backward refs — the §2.3 eager-forward-reference check pins this).
-    // The prelude-era bodies returned the `true`/`false` NAMES (core's constant
-    // defines) — replaced with the #t/#f LITERALS they alias, dissolving what would
-    // otherwise be a `deps: [core]` edge on the C3 precedence FLOOR (core leads
+    // call it (forward references across defines in the same capability are legal —
+    // checked eagerly, not by textual order). Bodies use the #t/#f LITERALS
+    // directly, not core's `true`/`false` constant names — referencing those names
+    // would add a `deps: [core]` edge on the C3 precedence FLOOR (core leads
     // BASE_PACKS; a tail-block repositioning of core is semantically absurd).
-    // §4.5 named-let normalization on all three % helpers (prelude-era self-recursion
-    // paid the boundary per element-tuple); enforcement ON.
+    // Named-let idiom on all three % helpers (see the file header's PERF
+    // PROTOCOL note); enforcement stays on.
     "%any-null?": symbol.define`%any-null?: #t iff any of the parallel lists is exhausted (private helper for %some/%every)`(
       { input: [listAlike], output: [z.boolean] },
       `(lambda (lst)
@@ -587,10 +571,11 @@ export default new EnvCapability("scheme/srfi-1", {
          (%every fn lists))`,
     ),
 
-    // §4.5 named-let normalization (prelude-era body re-entered its own wrapper via
-    // (apply zip …) per element). The loop's (some null? ls) sibling call still
-    // crosses the boundary once per element — measured noise against interpretation
-    // (file header); the valve stays unused.
+    // Named-let idiom (see the file header's PERF PROTOCOL note) — a
+    // self-recursive body would otherwise re-enter its own wrapper via
+    // (apply zip …) per element. The loop's (some null? ls) sibling call still
+    // crosses the boundary once per element — negligible against interpretation
+    // cost; the validate:false valve stays unused.
     zip: symbol.define`zip: transpose parallel lists into a list of tuples; stops at the shortest`(
       { input: [], inputRest: listAlike, output: [listAlike] },
       `(lambda lists

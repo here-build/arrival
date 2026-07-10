@@ -3,37 +3,18 @@
 // SINGLE SOURCE: `base-packs.ts` assembles this pack (via `allSrfi`) and evals it
 // (via initBridge's assembleEnv), so this module is the sole definition site.
 //
-// MIGRATED off the text-blob `prelude` (docs/working-proposals/symbol-define-static-
-// program-validation.md, wave W4/H2b): each SRFI-128 verb is now an individually-
-// declared `symbol.define`, contract-enforced from day one (§1.2 rev2 ruling) — no
-// more opaque prelude string, no more assembly-order-luck cross-capability
-// references (§2.1's bake FV locality law forces every free name into either this
-// capability's OWN symbol set or a DECLARED `deps` edge).
+// DEPS: every body below calls `pair?`/`eq?`/`null?`/`boolean?`/`string?`/`symbol?`/
+// `symbol->string`/`equal?`/`not` (scheme/equality), `number?`/`=`/`<` (scheme/numeric),
+// `char?`/`char<?` (scheme/chars), `string<?` (scheme/strings) — all FOUR NATIVE_PACKS
+// members — AND `list` (scheme/lists), a BASE_PACKS member. `deps: [equality, numeric,
+// chars, strings, lists]` is the complete set, each a declared edge. `car`/`cdr`/`cadr`/
+// `caddr`/`cadddr` need NO edge — the resolver-synth `c[ad]+r` family is recognized
+// directly, unconditionally. No repositioning of base-packs.ts's array is needed:
+// `equality`/`numeric`/`chars`/`strings` are NATIVE_PACKS members (never entries of the
+// BASE_PACKS array C3 linearizes over); `lists` is already positioned in the C3 tail
+// block (see base-packs.ts's own header).
 //
-// THE SAME LUCK CLASS srfi-235 (W4/H1) and srfi-43 (W4/H2) found — here BOTH
-// flavors at once (design doc §2.1's "live catch", §4.1's census): every body below
-// calls `pair?`/`eq?`/`null?`/`boolean?`/`string?`/`symbol?`/`symbol->string`/
-// `equal?`/`not` (scheme/equality), `number?`/`=`/`<` (scheme/numeric), `char?`/
-// `char<?` (scheme/chars), `string<?` (scheme/strings) — all FOUR are NATIVE_PACKS
-// members (srfi-43's luck class: already bound on `global_env` by the two-phase
-// bootstrap, so a standalone `.apply()` with deps unwalked still resolves them) —
-// AND `list` (scheme/lists) — a BASE_PACKS member (srfi-235's luck class: genuinely
-// absent without walking `deps`, since `lists` only assembles onto `user_env` in
-// phase 2). None of the five was declared pre-migration; the bake FV law
-// (`define-bake.ts`) refuses every one of them as an undeclared free reference, so
-// each gets the same fix: a real `deps` edge below. `car`/`cdr`/`cadr`/`caddr`/
-// `cadddr` need NO edge — the resolver-synth `c[ad]+r` family (`define-bake.ts`'s
-// `CXR_RE`) is recognized directly, unconditionally, regardless of luck class.
-// `deps: [equality, numeric, chars, strings, lists]` is the complete,
-// empirically-verified set — `pnpm test` is the proof (see
-// `__tests__/srfi-128-symbol-define.test.ts`). No repositioning of
-// `base-packs.ts`'s array is needed: `equality`/`numeric`/`chars`/`strings` are
-// NATIVE_PACKS members (never entries of the BASE_PACKS array C3 linearizes over —
-// srfi-43's own header names the same fact for its three); `lists` IS a BASE_PACKS
-// member but was already repositioned last by srfi-235's migration (W4/H1) for
-// exactly this reason — unchanged by this note.
-//
-// Contract choices (§1.2's "REAL contract authored per define, day one"):
+// Contract choices:
 //   - `comparator` is modeled precisely, not as opaque `z.value`: SRFI-128's own
 //     representation here is `(list 'comparator type-test equality ordering)` — a
 //     FIXED 4-element proper list (tag symbol + 3 procedures) — so `comparatorSchema
@@ -46,21 +27,20 @@
 //     strict `comparatorSchema` here would make `(comparator? 5)` THROW instead of
 //     answering `#f` — the opposite of a predicate's contract.
 //   - `comparator-hashable?` is not merely `z.boolean` but the literal
-//     `z.booleanFalse`: arrival has no value-hash (unchanged from the pre-migration
-//     header note), so this SRFI-128 slot always answers `#f` — the tightest honest
-//     contract available.
+//     `z.booleanFalse`: arrival has no value-hash, so this SRFI-128 slot always
+//     answers `#f` — the tightest honest contract available.
 //   - the private `%`-prefixed helpers (`%chain-rel`, `%type-rank`, `%default-less`)
-//     get real per-define contracts too (§4.2 Pass 1 is "one symbol.define per
-//     value/procedure define", not "per public API member"). `%chain-rel`'s `rest`
-//     is `z.list()` (a proper, possibly-empty list of arbitrary values — walked via
-//     `car`/`cdr`/`null?`, never indexed), not the shapeless shortcut.
+//     get real per-define contracts too (one `symbol.define` per value/procedure
+//     define, not per public API member). `%chain-rel`'s `rest` is `z.list()` (a
+//     proper, possibly-empty list of arbitrary values — walked via `car`/`cdr`/
+//     `null?`, never indexed), not the shapeless shortcut.
 //   - `=?`/`<?`/`>?`/`<=?`/`>=?` share the `c a b . rest` shape: fixed
 //     `[comparatorSchema, z.value, z.value]` + `inputRest: z.value` (the chain can
 //     hold arbitrarily many further elements of any type — the comparator's own
 //     predicates judge them, not this contract) + `output: [z.boolean]`.
 //   - `%type-rank` returns one of the literal exact integers 0..7 — `z.exact`, not
-//     the looser `z.number`/`z.integer` union (mirrors srfi-43's own precedent for
-//     "these are always exact literal counts").
+//     the looser `z.number`/`z.integer` union (these are always exact literal
+//     counts).
 import { EnvCapability } from "../../common/capability.js";
 import { symbol } from "../../common/symbol.js";
 import * as z from "../../common/scheme-zod.js";
@@ -79,11 +59,11 @@ export default new EnvCapability("scheme/srfi-128", {
   symbols: {
     "make-comparator":
       symbol.define`make-comparator: bundle (type-test equality ordering) into a comparator — a 4th hash arg is accepted for SRFI-128 source-compat but IGNORED (arrival has no value-hash)`(
-        // `ordering` slot is `z.union([z.lambda, z.booleanFalse])`, NOT bare `z.lambda`
-        // (W4-H4 fix): SRFI-128 explicitly permits `ordering = #f` ("a procedure is
-        // provided that signals an error on application"), and the body merely STORES
-        // ordering (never calls it), so `(make-comparator t eq #f)` bound #f fine in the
-        // prelude era — a bare `z.lambda` contract regressed that legal call to a throw.
+        // `ordering` slot is `z.union([z.lambda, z.booleanFalse])`, NOT bare `z.lambda`:
+        // SRFI-128 explicitly permits `ordering = #f` ("a procedure is provided that
+        // signals an error on application"), and the body merely STORES ordering
+        // (never calls it), so a bare `z.lambda` contract would wrongly reject the
+        // legal call `(make-comparator t eq #f)`.
         { input: [z.lambda, z.lambda, z.union([z.lambda, z.booleanFalse])], inputRest: z.value, output: [comparatorSchema] },
         `(lambda (type-test equality ordering . hash)
            (list 'comparator type-test equality ordering))`,

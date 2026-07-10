@@ -1,6 +1,5 @@
-// @here.build/arrival/polyglot-clojure — the Clojure dialect pack, split out of
-// the former monolithic `scheme/polyglot` (V, 2026-07-10 — see polyglot.ts's
-// header for the full split rationale and the sibling-pack map).
+// @here.build/arrival/polyglot-clojure — the Clojure dialect pack (see
+// polyglot.ts's header for the sibling-pack map).
 //
 // Two families:
 //   THREADING — `->`/`->>` (Clojure thread-first/thread-last) and `comp` (Clojure's
@@ -18,20 +17,19 @@
 // (SRFI-235-adjacent, srfi-235.ts) are ALREADY bound elsewhere — deliberately not
 // redefined here.
 //
-// ATTRIBUTE JUDGMENT (§3.4 case law) for `->`/`->>`: every argument position is
-// ORDINARY EXPRESSION SPACE — `x` is an evaluated seed, each form is either a call
-// form (whose elements are expressions the expansion preserves verbatim, merely
+// ATTRIBUTE JUDGMENT for `->`/`->>`: every argument position is ORDINARY
+// EXPRESSION SPACE — `x` is an evaluated seed, each form is either a call form
+// (whose elements are expressions the expansion preserves verbatim, merely
 // splicing the threaded value in) or a bare symbol (a function REFERENCE the
 // expansion applies). Nothing binds (contrast `receive`/`and-let*`'s formals →
 // "binder") and nothing is a positional token consumed by the expander (contrast
 // `cut`'s `<>` → "opaque"). So the validator legitimately WALKS the arguments:
-// `(-> x undefined-fn)` REPORTS unbound-symbol at parse phase — pinned as the
-// FIRST production expression-attribution row (polyglot-symbol-define.test.ts).
-// Keyword accessors in thread position (`(->> p :versions)`) stay clean for free:
-// keyword-shaped names never enter the FV walk by construction (§3.5).
+// `(-> x undefined-fn)` REPORTS unbound-symbol at parse phase. Keyword accessors
+// in thread position (`(->> p :versions)`) stay clean for free: keyword-shaped
+// names never enter the FV walk by construction.
 //
-// DEPS (§2.1's bake FV locality law): every cross-capability free name in the
-// define bodies below is a declared edge —
+// DEPS: cross-capability free names (the FV-locality rule is stated once in
+// polyglot.ts's header) —
 //   scheme/polyglot (core) — @ @keys dict %interleave compose
 //   srfi-1                 — filter reduce
 //   equality               — null? pair? string? repr dict?
@@ -39,19 +37,11 @@
 //   strings                — string-append string-length
 //   vectors                — vector? vector-length vector->list list->vector
 //   lists                  — map apply append cons length
-// `srfi-1` declares its own `deps: [equality, numeric, binding, exceptions, lists]`
-// (srfi-1.ts) and `scheme/polyglot` (core) declares `deps: [equality, lists]`
-// (polyglot.ts) — both are, like this pack, DIRECT dependents of `equality`/
-// `numeric`/`lists` listed alongside them below, so C3's "dependents before
-// dependencies WITHIN a deps array too" rule (srfi-235.ts's precedent) puts core
-// and srfi1 FIRST. `strings`/`vectors` are NATIVE_PACKS-only leaves with no
-// ordering relationship to anything else here — same reasoning srfi-43's
-// `deps: [equality, numeric, vectors]` already established.
+// deps order matches base-packs.ts's C3 tail-block order (dependents before
+// dependencies) — see base-packs.ts's own header.
 // polyglot-racket.ts depends on THIS pack (for `str`, the door messages of
-// dict-set/dict-update, and — semantically, though not statically FV-forced,
-// since `~>`/`~>>` reference `->`/`->>` only as quasiquoted DATA — the runtime
-// binding `~>`/`~>>` expand into); base-packs.ts positions racket before this
-// pack in the C3 tail for exactly that reason.
+// dict-set/dict-update, and the runtime binding `~>`/`~>>` expand into); see
+// polyglot-racket.ts's own header.
 
 import { EnvCapability } from "../common/capability.js";
 import { symbol } from "../common/symbol.js";
@@ -70,15 +60,12 @@ import srfi1 from "./srfi/srfi-1.js";
 const applicable = z.union([z.lambda, z.symbol]);
 
 export default new EnvCapability("scheme/polyglot-clojure", {
-  // See the header's DEPS block. `polyglot` (core) leads: it's the C3 precedence
-  // floor every other entry here composes against (compose/@/@keys/dict/
-  // %interleave), and — like srfi1 — it is itself a direct dependent of
-  // `equality`/`lists`, so it must precede them (dependents-before-dependencies).
+  // deps order matches base-packs.ts's C3 tail-block order (dependents before
+  // dependencies) — see the header's DEPS list and base-packs.ts's own header.
   deps: [polyglot, srfi1, equality, numeric, strings, vectors, lists],
   symbols: {
     // ═══════════════════════════════════════════════════════════════════════════
-    // THREADING MACROS (Clojure -> ->>) — the FIRST production
-    // `macroAttribute: "expression"` declarations (§3.4)
+    // THREADING MACROS (Clojure -> ->>) — `macroAttribute: "expression"`
     // ═══════════════════════════════════════════════════════════════════════════
     "->": symbol.defineSyntax`->: thread x as the FIRST argument through each form (Clojure thread-first) — (-> x (f a) g) => (g (f x a))`(
       `(lambda (x . forms)
@@ -117,8 +104,8 @@ export default new EnvCapability("scheme/polyglot-clojure", {
     // str — Clojure: concatenate the display form of every arg. Strings pass
     // through as-is; everything else prints via `repr` (the external-representation
     // protocol, r7rs/equality.ts) before concatenating with string-append.
-    // Genuinely variadic-any input (§1.2 carve-out: any value has a display form);
-    // the output is unconditionally a string.
+    // Genuinely variadic-any input (any value has a display form); the output
+    // is unconditionally a string.
     str: symbol.define`str: Clojure — concatenate the display form of every arg (strings as-is, everything else via repr)`(
       { input: [], inputRest: z.value, output: [z.string] },
       `(lambda args
@@ -236,8 +223,8 @@ export default new EnvCapability("scheme/polyglot-clojure", {
     // conj — Clojure: add items to a collection in its natural growth position —
     // the front for a list (each successive item conj'd onto the accumulating
     // result, so the LAST item passed ends up FIRST), the end for a vector.
-    // GENUINELY SHAPELESS (§1.2 carve-out): coll is list-or-vector and the result
-    // is in coll's OWN representation — no single richer type is honest.
+    // GENUINELY SHAPELESS: coll is list-or-vector and the result is in coll's
+    // OWN representation — no single richer type is honest.
     conj: symbol.define`conj: Clojure — add items at the collection's natural growth position (front for a list, end for a vector)`(
       { input: [z.value], inputRest: z.value, output: [z.value] },
       `(lambda (coll . items)
@@ -262,14 +249,12 @@ export default new EnvCapability("scheme/polyglot-clojure", {
     // empty? — Clojure: #t iff the list / string / vector / dict has no elements.
     // (`@keys` returns a raw JS array, not a scheme list — `length` accepts it
     // directly as a ".length carrier", r7rs/lists.ts, so no array->list needed here.)
-    // OUTPUT is `z.boolean` (W4-H4 tightening): every cond arm returns a boxed ABool —
-    // the `#t`/`#f` literals and the null?/pair?/dict? verdicts obviously, AND the
-    // `=`-driven string?/vector?/dict? arms too. The prior `z.value` carve-out cited
-    // `=`'s verdict as "a raw JS boolean" z.boolean (instanceof ABool) would reject —
-    // that premise went STALE at the R8 `mintVerdict` unification (`nativeNumericOp`'s
-    // `applyNumeric` boxes every boolean result, r7rs/numeric.ts) and is live-verified
-    // false: `(= 0 0)` and every `=`-arm of `empty?` return ABool. Matches the sibling
-    // `dict-has-key?` (racket), already correctly `z.boolean`.
+    // OUTPUT is `z.boolean`: every cond arm returns a boxed ABool — the `#t`/`#f`
+    // literals and the null?/pair?/dict? verdicts obviously, AND the
+    // `=`-driven string?/vector?/dict? arms too (`nativeNumericOp`'s
+    // `applyNumeric` boxes every boolean result, r7rs/numeric.ts, so `(= 0 0)`
+    // and every `=`-arm of `empty?` return ABool, never a raw JS boolean).
+    // Matches the sibling `dict-has-key?` (racket), also `z.boolean`.
     "empty?": symbol.define`empty?: Clojure — #t iff the list / string / vector / dict has no elements`(
       { input: [z.value], output: [z.boolean] },
       `(lambda (xs)

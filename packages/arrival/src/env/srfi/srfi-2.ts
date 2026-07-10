@@ -3,22 +3,18 @@
 // SINGLE SOURCE: `base-packs.ts` assembles this pack (via `allSrfi`) and evals it
 // (via initBridge's assembleEnv), so this module is the sole definition site.
 //
-// symbol.defineSyntax (docs/working-proposals/symbol-define-static-program-validation.md
-// §1/§3.4/§4, W4 prelude-death migration) — this pack is the design doc's OWN worked
-// BINDER example (§3.4's table): `and-let*`'s claws are FORMALS position, not
-// expression space (`(car claw)` binds a variable, it does not reference one), so
-// `macroAttribute: "binder"` is declared explicitly rather than left at the "opaque"
-// default. Walk POLICY is unchanged either way today (§3.4: binder is firewalled
-// identically to opaque until a binding-aware macro walker lands) — the declaration
-// is the honest classification, not a behavior change.
+// `and-let*`'s claws are FORMALS position, not expression space — `(car claw)`
+// binds a variable, it does not reference one — so this pack declares
+// `macroAttribute: "binder"` explicitly rather than leaving it at the "opaque"
+// default. (Binder is firewalled identically to opaque until a binding-aware
+// macro walker lands — the declaration is the honest classification, not a
+// behavior change.)
 //
-// `define-macro` → `symbol.defineSyntax` does NOT reintroduce the "no define-syntax
-// in the sandbox" problem the old header warned about: that constraint was about the
-// R7RS SCHEME special form `(define-syntax …)` the sandboxed reader/matcher can't
-// parse. `symbol.defineSyntax` is a JS-level declaration kind — the bound `Macro` is
-// wound directly by `bindCapabilityDefines`'s Pass 2 (define-bake.ts), never by
-// evaluating a scheme `define-syntax` form — so it binds identically in the sandboxed
-// env and the main env, same as `define-macro` did.
+// `symbol.defineSyntax` binds a `Macro` directly (bindCapabilityDefines's Pass 2,
+// define-bake.ts) rather than evaluating a scheme `define-syntax` form, so it
+// binds identically in the sandboxed env and the main env — the sandboxed
+// reader/matcher's inability to parse R7RS's own `(define-syntax …)` special
+// form doesn't apply here.
 import { EnvCapability } from "../../common/capability.js";
 import { symbol } from "../../common/symbol.js";
 

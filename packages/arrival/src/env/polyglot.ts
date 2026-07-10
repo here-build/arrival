@@ -1,9 +1,6 @@
 // @here.build/arrival/polyglot — the polyglot SHARED CORE.
 //
-// DIALECT SPLIT EXECUTED (V, 2026-07-10): this pack used to hold the WHOLE
-// cross-dialect idiom family in one file, sectioned per-dialect as a prep step
-// (the 2026-07-10 header note "slated to DECOMPOSE ... in a follow-up wave" —
-// this commit IS that wave). The family is now four sibling packs:
+// The cross-dialect idiom family is four sibling packs:
 //   scheme/polyglot          (THIS file) — the shared core every dialect stands on.
 //   scheme/polyglot-clojure  (polyglot-clojure.ts) — Clojure's threading (->/->>),
 //                              its `comp` alias, and its stdlib completion (str,
@@ -20,7 +17,7 @@
 // WHAT STAYS HERE, AND WHY: the member-access protocol (@/@?/@keys/dict) and the
 // universal composition family (compose/pipe/flow) are not any ONE dialect's
 // idiom — compose/pipe are Racket/CL/Clojure-adjacent alike (only their ALIASES —
-// `comp`, Clojure's spelling — are dialect-specific, and that alias moved to
+// `comp`, Clojure's spelling — are dialect-specific, and that alias lives in
 // polyglot-clojure.ts). `nil` (the LIPS-dialect empty-list alias) stays here too:
 // every dialect pack, and the racket dict family's "missing key" convention,
 // reads it. `%interleave` (the dict/zipmap/alist->dict argument-shape helper)
@@ -51,27 +48,26 @@
 // `symbol.native` — a raw env.set bind (NOT rosetta-wrapped), so the membrane
 // primitive is not routed through the membrane it implements.
 //
-// MIGRATED off the text-blob `prelude` (docs/working-proposals/symbol-define-static-
-// program-validation.md, wave W4/H3): every former prelude define is an individually
-// declared `symbol.define` (contract-enforced from day one, §1.2 rev2 ruling).
-// Declaration order preserves the prelude's textual order among the symbols that
-// remain here (§2.3 sequential-RHS evaluation; `flow` follows `pipe`, the sibling
-// it aliases).
+// FV-LOCALITY RULE (stated once here — every sibling polyglot-*.ts pack points
+// back to this paragraph instead of repeating it): every cross-capability free
+// name a define body reaches must be a declared `deps` edge; the bake step
+// refuses an undeclared free reference. `car`/`cdr` are the one exception — the
+// kernel-level cxr resolver family — never a declared edge (see
+// define-bake.ts's KEYWORD_SYNTAX_BASELINE/CXR_RE note). A pack's `deps` ARRAY
+// ORDER is itself a C3 merge input alongside base-packs.ts's own root-array
+// order — see base-packs.ts's header for the full C3 precedence rule and the
+// current tail order every dialect pack's `deps` array must agree with.
 //
-// DEPS (§2.1's bake FV locality law): every cross-capability free name in the
-// define bodies below is a declared edge. The whole shared core reduces to two:
+// This shrunk core's own DEPS: every cross-capability free name in the define
+// bodies below reduces to two —
 //   equality — null?
 //   lists    — reverse apply cons
-// (`car`/`cdr` are the kernel-level cxr resolver family — never a declared edge,
-// see define-bake.ts's KEYWORD_SYNTAX_BASELINE/CXR_RE note.) Both `equality` and
-// `lists` are BASE_PACKS members with a `deps` array of their own on neither side
-// (leaves), so no C3 ordering constraint holds BETWEEN them — but `lists` itself
-// is a repositioned BASE_PACKS tail member (base-packs.ts's header), and `scheme/
-// polyglot` is ALSO a deps TARGET (`scheme/srfi-235` depends on it for `compose`,
-// unchanged by this split — see srfi-235.ts's own header) and a dependent of every
-// dialect pack (clojure/lisp/racket all declare `deps` reaching back to this
-// core), so base-packs.ts positions it after all three dialect packs and before
-// `lists` — see base-packs.ts's header for the full tail-ordering story.
+// Both are BASE_PACKS members with no `deps` of their own (leaves), so no C3
+// ordering constraint holds BETWEEN them. `scheme/polyglot` is itself a deps
+// TARGET (`scheme/srfi-235` depends on it for `compose`) and a dependent of
+// every dialect pack (clojure/lisp/racket all declare `deps` reaching back to
+// this core) — base-packs.ts positions it after all three dialect packs and
+// before `lists` accordingly.
 //
 // Wiring-only (no resources) → pause-trivial. NOTE: scoped to the self-contained
 // idiom family — cut/cute (which need gensym + JS interop) ship as SRFI-26 instead.
@@ -129,15 +125,14 @@ function normalizeMemberKey(key: unknown): string | null {
 const applicable = z.union([z.lambda, z.symbol]);
 
 export default new EnvCapability("scheme/polyglot", {
-  // See the header's DEPS block: `equality` (null?) and `lists` (reverse/apply/
-  // cons) are the only cross-capability free names this shrunk core's define
-  // bodies reach, post-split.
+  // See the header's DEPS note: `equality` (null?) and `lists` (reverse/apply/
+  // cons) are the only cross-capability free names this core's define bodies
+  // reach.
   deps: [equality, lists],
   // `:`-prefixed symbols are self-evaluating (keyword-tagless-apply.md) — `ASymbol`
   // itself carries `apply` — so this pack contributes no resolvers, only symbols.
-  // A PLAIN record (the pre-migration builder form carried a dead TDZ-deferral
-  // reason and made the pack statically un-enumerable — §2.2 exports would have
-  // hidden `compose` from srfi-235's own FV allowlist).
+  // A PLAIN record — a builder-function form would make the pack statically
+  // un-enumerable, hiding `compose` from srfi-235's own FV allowlist.
   symbols: {
     // ═══════════════════════════════════════════════════════════════════════════
     // MEMBER-ACCESS PROTOCOL (every dialect reads through this)
@@ -190,9 +185,8 @@ export default new EnvCapability("scheme/polyglot", {
     // build an open-key map from interleaved `:key value` pairs. A keyword in arg
     // position self-evaluates to itself (a real ASymbol — keyword-tagless-apply.md),
     // so its key is read the same way a bare quoted symbol's would be: stringify and
-    // strip a leading `:` if present. Relocated VERBATIM from stdlib.ts global_env
-    // (husk dissolution); the serializer prints it back as `(dict …)` and
-    // arrival-chain-view transpiles it to a JS/Python object literal. (Plain
+    // strip a leading `:` if present. The serializer prints it back as `(dict …)`
+    // and arrival-chain-view transpiles it to a JS/Python object literal. (Plain
     // `symbol.native`: dict reads no membrane primitive, so it needs no deferral.)
     dict: symbol.native`dict: an open-key map built from interleaved :key value pairs`(
       // Input stays flat `z.value` — each interleaved position is genuinely either a
@@ -232,7 +226,7 @@ export default new EnvCapability("scheme/polyglot", {
     // models were trained on) also binds the symbol `nil` to it. Because polyglot
     // is a base pack assembled onto user_env, `nil` inherits everywhere (the
     // inference plane is a user_env child, so it gets it for free). '() reads to the
-    // ANil singleton, so this binds exactly that. A CONSTANT define (§1.2): the
+    // ANil singleton, so this binds exactly that. A CONSTANT define: the
     // contract is the single value schema `z.nil`, validated once at bake.
     nil: symbol.define`nil: the LIPS-dialect alias for the empty list '() (the ANil singleton)`(z.nil, `'()`),
 
@@ -266,9 +260,9 @@ export default new EnvCapability("scheme/polyglot", {
                  (if (null? fs) acc (loop (cdr fs) ((car fs) acc)))))))`,
     ),
     // flow — pipe's Ramda/F#-flavored alias. CONSTANT: the RHS is the bare
-    // identifier `pipe` (already bound — sequential-RHS §2.3, declared just
-    // above), so the contract is the single value schema z.lambda (the value IS the
-    // bound pipe procedure).
+    // identifier `pipe` (already bound — declared just above), so the contract
+    // is the single value schema z.lambda (the value IS the bound pipe
+    // procedure).
     flow: symbol.define`flow: an alias of pipe (left-to-right composition) — the Ramda/F# name`(z.lambda, `pipe`),
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -278,10 +272,10 @@ export default new EnvCapability("scheme/polyglot", {
     // ═══════════════════════════════════════════════════════════════════════════
     // %interleave — zip two equal-length lists into a flat (k v k v …) sequence,
     // the shape `dict`/`apply` expect. CONTRACT: `z.value` on both lists AND the
-    // output — deliberate (§1.2 carve-out): the helper self-recurses through its own
-    // contract boundary once per element, so a `z.list()` codec (an O(n) spine
-    // decode) would turn one interleave into O(n²) decode work; `z.value`'s
-    // instanceof check keeps the recursive boundary flat.
+    // output — deliberate: the helper self-recurses through its own contract
+    // boundary once per element, so a `z.list()` codec (an O(n) spine decode)
+    // would turn one interleave into O(n²) decode work; `z.value`'s instanceof
+    // check keeps the recursive boundary flat.
     "%interleave": symbol.define`%interleave: zip ks and vs into a flat (k v k v …) list — the dict/apply argument shape (private helper)`(
       { input: [z.value, z.value], output: [z.value] },
       `(lambda (ks vs)

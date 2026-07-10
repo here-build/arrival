@@ -1,63 +1,31 @@
 // SRFI-189 — Maybe & Either (tagged-list values). Scheme-bootstrap capability.
 //
-// MIGRATED off the text-blob `prelude` (docs/working-proposals/symbol-define-static-
-// program-validation.md, wave W4/H2b): every constructor/predicate/accessor/combinator
-// is now an individually-declared `symbol.define`, contract-enforced from day one
-// (§1.2 rev2 ruling) — no more opaque prelude string, no more assembly-order-luck
-// cross-capability references (§2.1's bake FV locality law forces every free name
-// into either this capability's OWN symbol set or a DECLARED `deps` edge).
-//
-// THE SAME LUCK CLASS srfi-235/srfi-43 (W4/H1-H2) found, here for THREE targets at
-// once (design doc §2.1's "live catch", §4.1's census): every body below reaches for
-// `list`/`car`/`cdr`/`null?` (list construction/access), `pair?`/`eq?` (equality), and
-// `error` (the exception-handling `error` procedure) — none of them declared. It
-// worked only because `env-roots.ts`'s two-phase bootstrap (NATIVE_PACKS → global_env,
-// THEN BASE_PACKS → user_env, in declaration order within each phase) guarantees every
-// one of these is already bound by the time this pack's prelude ran — a RUNTIME
-// guarantee, not a declared one. The bake FV law (`define-bake.ts`) does not (and, by
-// design, should not — a hermetic/roster/glass assembly that doesn't happen to include
-// these deps can't silently break) consult that runtime guarantee, so each free name
-// gets the exact treatment srfi-235's `compose` and srfi-43's `vector-length` did: a
-// real `deps` edge below. `car`/`cdr` are the ONE exception — the resolver-synth `c[ad]
-// +r` family (`define-bake.ts`'s `CXR_RE` allowlist, machinery fix `cdc63c70ec`) needs
-// no dep at all, bare or nested (`(car (cdr m))`).
-//
-// `deps: [equality, exceptions, lists]`:
-//   - `equality` (r7rs/equality.ts, `pair?`/`eq?`) is a NATIVE_PACKS member — never an
-//     entry of the BASE_PACKS array C3 linearizes over, so (per srfi-43's own precedent
-//     comment) NO repositioning of base-packs.ts is needed for this edge.
-//   - `lists` (r7rs/lists.ts, `list`) IS a BASE_PACKS member, but srfi-235's H1
-//     migration already repositioned it near the end of `BASE_PACKS` (a C3 "good
-//     head" requirement — a dependency must rank BELOW every dependent naming it) —
-//     this pack's edge onto it needs no FURTHER repositioning, it rides the
-//     existing fix.
-//   - `exceptions` (r7rs/exceptions.ts, `error`) IS a BASE_PACKS member and was NOT
-//     previously a `deps` target of anything — it sat with the rest of `allR7rs`, BEFORE
-//     `allSrfi` (hence before this pack) in the array, which is exactly the
-//     `polyglot`/`lists` conflict shape srfi-235 hit: a dependency ranked ABOVE its
-//     dependent in the flat roots array contradicts C3's requirement that a dependency
-//     be a "good head" ranked BELOW every capability naming it. Empirically confirmed
-//     (`AssembleLinearizationError` on `initBridge()`) before the base-packs.ts fix
-//     below; repositioning `exceptions` into the tail block (alongside `lists`/
-//     `polyglot`) resolves it, by the identical mechanism.
-//   - The `deps` ARRAY ORDER also matters (mirrors base-packs.ts's own header
-//     comment on this): `c3Linearize` feeds a pack's declared `deps` order in as a
-//     merge input beside the root array's own order — this array is
-//     `[equality, exceptions, lists]` to AGREE with base-packs.ts's tail-block
-//     order (`exceptions` before `lists`), not `[equality, lists, exceptions]` —
-//     the two orderings must agree or C3 has no valid linearization (empirically
-//     confirmed: swapping either one alone reproduces `AssembleLinearizationError`).
+// DEPS: every body below reaches for `list`/`car`/`cdr`/`null?` (list construction/
+// access), `pair?`/`eq?` (equality), and `error` (the exception-handling `error`
+// procedure) — `deps: [equality, exceptions, lists]` below is the complete set,
+// each a declared edge. `car`/`cdr` are the ONE exception: the resolver-synth
+// `c[ad]+r` family needs no dep at all, bare or nested (`(car (cdr m))`).
+//   - `equality` (r7rs/equality.ts, `pair?`/`eq?`) is a NATIVE_PACKS member —
+//     never an entry of the BASE_PACKS array C3 linearizes over, so no
+//     repositioning of base-packs.ts is needed for this edge.
+//   - `lists` (r7rs/lists.ts, `list`) and `exceptions` (r7rs/exceptions.ts,
+//     `error`) ARE BASE_PACKS members, positioned in base-packs.ts's C3 tail
+//     block for exactly this kind of edge (a dependency must rank BELOW every
+//     dependent naming it) — see base-packs.ts's own header.
+//   - The `deps` ARRAY ORDER also matters: `c3Linearize` feeds a pack's declared
+//     `deps` order in as a merge input beside the root array's own order, so
+//     this array is `[equality, exceptions, lists]` to AGREE with base-packs.ts's
+//     tail-block order (`exceptions` before `lists`).
 //
 // Faithfulness note: `error`'s scheme-level `error` procedure (not a bare JS throw)
-// is used deliberately, not merely because it was there before — `maybe-ref`/
-// `either-ref`/`either-swap`'s failure path integrates with `with-exception-handler`'s
-// handler-stack machinery (raise pops/dispatches the current handler; a JS-native
-// throw would bypass that entirely) — see r7rs/exceptions.ts. A program that wraps
-// `(with-exception-handler h (lambda () (maybe-ref (nothing))))` must see its handler
-// invoked exactly as it did pre-migration; a real `deps` edge on `exceptions` (and the
-// base-packs.ts reposition it forces) is the honest way to keep that, not a shortcut.
+// is used deliberately — `maybe-ref`/`either-ref`/`either-swap`'s failure path
+// integrates with `with-exception-handler`'s handler-stack machinery (raise pops/
+// dispatches the current handler; a JS-native throw would bypass that entirely) —
+// see r7rs/exceptions.ts. A program that wraps `(with-exception-handler h (lambda
+// () (maybe-ref (nothing))))` must see its handler invoked exactly as any other
+// raise would; a real `deps` edge on `exceptions` is the honest way to keep that.
 //
-// Contract choices (§1.2's "REAL contract authored per define, day one"):
+// Contract choices:
 //   - Maybe/Either VALUES themselves (the tagged lists `(just x)`/`(nothing)`/
 //     `(left x)`/`(right x)` build and every predicate/accessor/combinator reads) are
 //     `z.value` — scheme-zod.ts has no dedicated "tagged variant" vocabulary item (the
@@ -83,9 +51,9 @@
 //     189's own signature is variadic-rest shaped, matching `error`'s own `inputRest`
 //     convention in r7rs/exceptions.ts).
 //   - Every `f`/callback slot (`maybe-bind`/`maybe-map`/`either-bind`/`either-map`) is
-//     `z.lambda` — a real procedure value, contract-enforced (a non-callable `f`
-//     rejects before the body runs, unlike the pre-migration prelude which would have
-//     thrown a raw scheme apply-error deep inside the call).
+//     `z.lambda` — a real procedure value, contract-enforced: a non-callable `f`
+//     rejects at the contract boundary, not with a raw scheme apply-error deep
+//     inside the call.
 import { EnvCapability } from "../../common/capability.js";
 import { symbol } from "../../common/symbol.js";
 import * as z from "../../common/scheme-zod.js";
@@ -94,18 +62,9 @@ import exceptions from "../r7rs/exceptions.js";
 import lists from "../r7rs/lists.js";
 
 export default new EnvCapability("scheme/srfi-189", {
-  // See the file header: `list` (lists), `pair?`/`eq?` (equality), `error`
-  // (exceptions) are every cross-capability free name this pack's define bodies
-  // reach (`car`/`cdr` are the resolver-synth cxr family — no dep needed). The bake
-  // FV law (§2.1) forces each into a real edge; base-packs.ts repositions
-  // `exceptions` (this migration) alongside `lists`/`polyglot` (srfi-235's H1 fix)
-  // to satisfy C3's "good head" requirement for the two BASE_PACKS-array members.
-  // ORDER MATTERS here too (mirrors base-packs.ts's own header): `c3Linearize`
-  // feeds a pack's OWN `deps` array order in as a merge input alongside the root
-  // array's order — this array must agree with base-packs.ts's tail-block order
-  // (`exceptions, lists, polyglot`), i.e. `exceptions` before `lists`, or the two
-  // orderings contradict each other and C3 has no valid linearization (empirically
-  // confirmed: reversing this array alone reproduces `AssembleLinearizationError`).
+  // See the file header's DEPS note — deps order agrees with base-packs.ts's
+  // tail-block order (exceptions before lists) so the two C3 merge inputs never
+  // contradict.
   deps: [equality, exceptions, lists],
   symbols: {
     // ── constructors ──────────────────────────────────────────────────────────

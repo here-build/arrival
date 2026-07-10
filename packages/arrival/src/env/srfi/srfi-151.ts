@@ -3,7 +3,7 @@
 // SINGLE SOURCE: `base-packs.ts` assembles this pack (via allSrfi) and evals it
 // (via initBridge's assembleEnv), so this module is the sole definition site.
 //
-// SCOPE (honest, grep- AND eval-verified 2026-07): SRFI-151's core bitwise verbs —
+// SCOPE (honest): SRFI-151's core bitwise verbs —
 // `bitwise-and` / `bitwise-ior` / `bitwise-xor` / `bitwise-not` / `arithmetic-shift`
 // — are ALREADY bound in the base `scheme/numeric` pack (env/r7rs/numeric.ts;
 // `arithmetic-shift` already carries the SRFI sign convention, positive count =
