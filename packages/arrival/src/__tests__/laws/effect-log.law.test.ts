@@ -51,7 +51,9 @@ describe("EffectLog — the burst arm at the wrapper (W1)", () => {
     const result = await def.run.call(ctxWithEffects(effects), num(7));
     expect(result).toBeInstanceOf(AVoid); // boxed unspecified — the wrapper's own membrane, not raw JS
     expect(fires()).toBe(0); // deferred, not fired
-    expect(effects.entries).toEqual([{ index: 0, verbName: "effect-log-enqueue", decodedArgs: [7] }]);
+    // toMatchObject (not toEqual): the entry also carries `rawArgs` (§5), an additive
+    // field this law doesn't pin.
+    expect(effects.entries).toMatchObject([{ index: 0, verbName: "effect-log-enqueue", decodedArgs: [7] }]);
   });
 
   it("program order is preserved, including two identical sinks — no dedup (contrast RunCache)", async () => {
@@ -123,7 +125,9 @@ describe("EffectLog — the burst arm at the wrapper (W1)", () => {
     const [result] = await exec("(fire! 1)", { capabilities: [cap], effects });
     expect(result).toBeUndefined(); // exec() unwraps through toJS — void ↔ JS undefined
     expect(fires).toBe(0);
-    expect(effects.entries).toEqual([{ index: 0, verbName: "fire!", decodedArgs: [1] }]);
+    // toMatchObject (not toEqual): the entry also carries `rawArgs` (the pre-decode boxed args,
+    // arrival-provenance-confirmation.md §5) — an additive field this law doesn't pin.
+    expect(effects.entries).toMatchObject([{ index: 0, verbName: "fire!", decodedArgs: [1] }]);
   });
 });
 

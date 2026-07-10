@@ -149,7 +149,11 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
           ? await rawImpl.call(this, ...decodedArgs)
           : await penetrateThroughCache(
               runCache,
-              { symbolName: name, cacheClass, sink: provenance === "sink" },
+              // `rawArgs: args` — the pre-decode call args (arrival-provenance-confirmation.md
+              // §5): carried onto a gathered `EffectEntry` verbatim so a confirmation-manifest
+              // host can compute per-argument lineage and reconstruct this effect's own
+              // re-runnable invocation from the provenance-carrying originals.
+              { symbolName: name, cacheClass, sink: provenance === "sink", rawArgs: args },
               decodedArgs,
               async () => rawImpl.call(this, ...decodedArgs),
               runEffects,

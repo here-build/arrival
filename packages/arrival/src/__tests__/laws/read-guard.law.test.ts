@@ -150,8 +150,10 @@ describe("read-guard wired through exec (W2 glue: the eval-loop region + guard-c
       exec('(write! "x") (read! "x")', { capabilities: [cap], effects, reads: { tracker, writeSetOf } }),
     ).rejects.toThrow(ReadYourDeferredWriteError);
     // The effect was gathered (never fired — the burst arm's own guarantee); the read
-    // that violated is the SAME key, one read after a zero-read enqueue.
-    expect(effects.entries).toEqual([{ index: 0, verbName: "write!", decodedArgs: ["x"], enqueuedAtReadClock: 0 }]);
+    // that violated is the SAME key, one read after a zero-read enqueue. toMatchObject
+    // (not toEqual): the entry also carries `rawArgs` (§5), an additive field this law
+    // doesn't pin.
+    expect(effects.entries).toMatchObject([{ index: 0, verbName: "write!", decodedArgs: ["x"], enqueuedAtReadClock: 0 }]);
   });
 
   it("disjoint reads/writes — a write on one key, a read on another — passes clean", async () => {
@@ -185,7 +187,9 @@ describe("read-guard wired through exec (W2 glue: the eval-loop region + guard-c
     const effects = new MemoryEffectLog();
     await expect(exec('(write! "x") (read! "x")', { capabilities: [cap], effects })).resolves.toBeDefined();
     // The effect still gathered (W1 behavior, untouched); it just carries no read-clock
-    // stamp (no tracker was present at enqueue) and nothing ever checked it.
-    expect(effects.entries).toEqual([{ index: 0, verbName: "write!", decodedArgs: ["x"] }]);
+    // stamp (no tracker was present at enqueue) and nothing ever checked it. toMatchObject
+    // (not toEqual): the entry also carries `rawArgs` (§5), an additive field this law
+    // doesn't pin.
+    expect(effects.entries).toMatchObject([{ index: 0, verbName: "write!", decodedArgs: ["x"] }]);
   });
 });

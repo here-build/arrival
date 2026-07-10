@@ -84,6 +84,21 @@ export {
   type RunCacheEntry,
   type RunCacheClass,
 } from "./values/run-cache.js";
+// The effect log (W1, docs/working-proposals/arrival-plexus-effect-burst.md §2.3) + the read
+// guard (W2, §2.4): `exec(src, { effects, reads })` gathers sink penetrations instead of firing
+// them and (with `reads` armed) checks the read-your-deferred-write invariant. A host building a
+// confirm-manifest (arrival-mcp's confirm-manifest.ts, arrival-provenance-confirmation.md) reads
+// `EffectEntry`/`MemoryEffectLog` off this public surface rather than a deep relative import.
+export { MemoryEffectLog, burst, BurstDrainError, type EffectEntry, type EffectLog, type BurstFailure } from "./values/effect-log.js";
+export {
+  MemoryReadTracker,
+  checkReadWriteGuard,
+  ReadYourDeferredWriteError,
+  type ReadEvent,
+  type ReadTracker,
+  type ReadGuard,
+  type WriteSetResolver,
+} from "./values/read-guard.js";
 // `SchemeValue` — the honest union of every value the interpreter can hold; a cross-package
 // AST-walking consumer (mcp-substrate's statement-facts.ts) names this type in its own
 // signatures when walking a real parsed form, not a plain-object `Node` shape.

@@ -43,6 +43,18 @@ export interface EffectEntry {
    *  clock as `0`, i.e. every read counts — see read-guard.ts). Reads at or below this
    *  clock are the query that motivated this effect; reads above it are post-enqueue. */
   readonly enqueuedAtReadClock?: number;
+  /** The RAW pre-decode args (arrival-provenance-confirmation.md §5) — the interpreter's
+   *  own boxed scheme values (AValue-tagged, provenance intact), exactly as the rosetta
+   *  wrapper held them BEFORE `z.decode` stripped their identity down to plain JS. Kept
+   *  ALONGSIDE `decodedArgs` (never in place of it — `decodedArgs` stays the JS-plain
+   *  face every existing consumer reads) so a confirmation-manifest host can (a) re-derive
+   *  each argument's lineage (a `groundingVerdict`-style walk needs the boxed value, not
+   *  its decoded shadow) and (b) reconstruct THIS effect's own minimal re-runnable
+   *  invocation (`writeForm` over these nodes serializes back to re-parseable Scheme
+   *  source) without touching the interpreter's internals. Absent when the penetration
+   *  carries no `EffectEntry`-shaped raw-args source (never the case for the burst arm
+   *  itself, which always has them in scope — see run-cache.ts's `penetration.rawArgs`). */
+  readonly rawArgs?: readonly unknown[];
 }
 
 /** An ordered, append-only manifest of gathered sink penetrations for ONE run. Never
@@ -53,7 +65,12 @@ export interface EffectLog {
   readonly entries: readonly EffectEntry[];
   /** Append one entry; `index` is minted here (`entries.length` at call time) — the
    *  caller never supplies it, so two enqueues can never collide on index. */
-  enqueue(entry: { verbName: string; decodedArgs: readonly unknown[]; enqueuedAtReadClock?: number }): void;
+  enqueue(entry: {
+    verbName: string;
+    decodedArgs: readonly unknown[];
+    enqueuedAtReadClock?: number;
+    rawArgs?: readonly unknown[];
+  }): void;
 }
 
 /** The in-memory materialization — a plain array, mirroring `MemoryRunCache`'s
@@ -66,12 +83,18 @@ export class MemoryEffectLog implements EffectLog {
     return this._entries;
   }
 
-  enqueue(entry: { verbName: string; decodedArgs: readonly unknown[]; enqueuedAtReadClock?: number }): void {
+  enqueue(entry: {
+    verbName: string;
+    decodedArgs: readonly unknown[];
+    enqueuedAtReadClock?: number;
+    rawArgs?: readonly unknown[];
+  }): void {
     this._entries.push({
       index: this._entries.length,
       verbName: entry.verbName,
       decodedArgs: entry.decodedArgs,
       ...(entry.enqueuedAtReadClock === undefined ? {} : { enqueuedAtReadClock: entry.enqueuedAtReadClock }),
+      ...(entry.rawArgs === undefined ? {} : { rawArgs: entry.rawArgs }),
     });
   }
 }

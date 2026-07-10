@@ -262,16 +262,23 @@ async function sharedFire(
  * i.e. every read counts — see read-guard.ts's doc). This function never CHECKS the
  * guard itself (that's `checkReadWriteGuard`, called by the eval loop after each
  * form) — it only stamps the clock at the one point the clock's value is known.
+ *
+ * `penetration.rawArgs` (arrival-provenance-confirmation.md §5) carries the boxed,
+ * pre-decode args through onto a gathered `EffectEntry` verbatim — read-only here,
+ * never inspected: a confirmation-manifest host (arrival-mcp) needs the provenance-
+ * carrying originals to compute per-argument lineage and to reconstruct the effect's
+ * own minimal re-runnable invocation, neither of which `decodedArgs` (JS-plain,
+ * identity-stripped) can serve alone.
  */
 export async function penetrateThroughCache(
   cache: RunCache | undefined,
-  penetration: { symbolName: string; cacheClass: RunCacheClass | undefined; sink: boolean },
+  penetration: { symbolName: string; cacheClass: RunCacheClass | undefined; sink: boolean; rawArgs?: readonly unknown[] },
   decodedArgs: readonly unknown[],
   fire: () => Promise<unknown>,
   effects?: EffectLog,
   reads?: ReadTracker,
 ): Promise<unknown> {
-  const { symbolName, cacheClass, sink } = penetration;
+  const { symbolName, cacheClass, sink, rawArgs } = penetration;
 
   // THE BURST ARM (W1) — a sink during a PRIME run (no cache, or cache.mode ===
   // "record") gathers instead of firing. `cache?.mode === "replay"` excludes a fold:
@@ -284,6 +291,7 @@ export async function penetrateThroughCache(
       verbName: symbolName,
       decodedArgs,
       ...(reads === undefined ? {} : { enqueuedAtReadClock: reads.log.length }),
+      ...(rawArgs === undefined ? {} : { rawArgs }),
     });
     return undefined;
   }
