@@ -285,24 +285,37 @@ works but carries no contract; prefer the declared form for anything that outliv
 
 ### Passing data across
 
-```typescript
-import { exec, sandboxedEnv, jsToScheme, CONSTANT_CTX } from '@here.build/arrival';
+Data enters as a **declared, typed parameter of the program** — `define/overridable` names it,
+gives it an s/* type and a default, and the host supplies the value through `override`. No
+conversion call, no environment mutation; the value is validated against the declared type and
+boxed at the membrane:
 
-const env = sandboxedEnv.inherit('my-run');
-env.set('users', jsToScheme(CONSTANT_CTX, [
+```typescript
+import { exec } from '@here.build/arrival';
+
+const users = [
   { id: "alice", priority: 15 },
   { id: "bob",   priority: 5  },
-], {}));
+];
 
-const [highPriority] = await exec(
-  `(filter (lambda (u) (> (@ u :priority) 10)) users)`,
-  { env },
+const [, highPriority] = await exec(
+  `(define/overridable users
+     (s/array (s/object (s/field/string "id") (s/field/number "priority")))
+     '())
+   (filter (lambda (u) (> (@ u :priority) 10)) users)`,
+  { override: { users } },
 );
 // [{ id: "alice", priority: 15 }]
 ```
 
-Each `inherit`ed environment is an isolated child scope: its own `set` calls land locally, lookups
-fall through to the base. Nothing leaks between sibling environments.
+The program stays self-describing (it runs on its defaults with no host at all), and a value that
+doesn't match the declared type is rejected with a door naming the binding, the expected shape, and
+who supplied it — the host's override and the author's default validate against the same type.
+
+For run-neutral values wired below the program level there is still the manual membrane path —
+`env.set(name, jsToScheme(CONSTANT_CTX, value, {}))` on an `inherit`ed environment (each child
+scope is isolated; nothing leaks between siblings) — but prefer the declared parameter for
+anything a program consumes by name.
 
 ## API surface
 
@@ -312,8 +325,10 @@ fall through to the base. Nothing leaks between sibling environments.
 - `execState(code, options?) → Promise<ExecState>` — boxed, provenance-bearing `values` plus the
   session `scope` handle for REPL-style continuation (`LexicalScope`).
 - `ExecOptions`: `env` (a live environment), `capabilities` (assembled per call), `config` (the
-  shared configuration bag capabilities read), `scope`, `staticValidation: "on" | "off"`,
-  `signal` / `budgetMs` (killable, bounded evaluation), `tap` (trace recording).
+  shared configuration bag capabilities read), `override` (host values for the program's
+  `define/overridable` parameters — seamless, validated, no `jsToScheme`), `scope`,
+  `staticValidation: "on" | "off"`, `signal` / `budgetMs` (killable, bounded evaluation),
+  `tap` (trace recording).
 - `parse(code)`, `tokenize(source)` — the reader, standalone.
 - `initBridge()` — pre-warm the lazily assembled base (it otherwise assembles on first `exec`).
 

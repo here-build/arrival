@@ -22,6 +22,7 @@ import { StaticValidationError, validateProgram } from "../static-validation/val
 import { vocabularyFromChain } from "../static-validation/vocabulary.js";
 import type { DegradationMode, DegradedCapability } from "../common/degradation.js";
 import type { EnvCapability } from "../common/capability.js";
+import { overridableCapability } from "../env/overridable.js";
 import type { EvalSchemeInto, SchemeEnv } from "../common/scheme-env.js";
 import invariant from "tiny-invariant";
 import { parse as readerParse } from "../reader/parse.js";
@@ -172,6 +173,23 @@ export interface ExecOptions {
    * "each capability validates its own slice of the SHARED opts config").
    */
   config?: object;
+  /**
+   * SEAMLESS PARAMETER INJECTION for `define/overridable` (V, 2026-07-10: "no
+   * jsToScheme at all — it should be seamless"). Sugar over the cut: when set,
+   * `arrival/overridable` is appended to this run's `capabilities` (identity-deduped
+   * by the kernel if already listed) and this record is merged into
+   * `config.params` (override wins key-wise). The program declares the parameter,
+   * its s/* type, and its default; the host supplies the value; `overridable/resolve`
+   * validates WHOEVER supplied it and boxes it at the membrane — no `jsToScheme`,
+   * no `env.set` at the call site:
+   *
+   *     await exec(`(define/overridable users (s/array (s/object …)) (list))
+   *                 (map transform users)`,
+   *                { override: { users: [john, mary] } });
+   *
+   * Ignored when `env` (glass) is set — same posture as `capabilities`/`scope`.
+   */
+  override?: Record<string, unknown>;
   /**
    * THE CUT, scope-refined. Lexical root the run's top-level `define`s land in.
    * Pass a persistent {@link LexicalScope} (`LexicalScope.for(env)`) across calls
@@ -350,6 +368,7 @@ export async function execState(
     env,
     capabilities,
     config,
+    override,
     scope,
     dynamic_env,
     use_dynamic,
@@ -432,12 +451,22 @@ export async function execState(
     runResolver = new Resolver(actualEnv);
   } else {
     const validate = staticValidation === "on";
+    // `override` sugar (ExecOptions.override): append the overridable capability
+    // (kernel identity-dedup makes a caller-listed copy harmless) and merge the
+    // record into the shared bag's `params` slice, override winning key-wise.
+    // Everything downstream sees a plain capabilities+config run.
+    const effectiveCapabilities =
+      override !== undefined ? [...(capabilities ?? []), overridableCapability] : capabilities;
+    const effectiveConfig =
+      override !== undefined
+        ? { ...config, params: { ...(config as { params?: Record<string, unknown> } | undefined)?.params, ...override } }
+        : config;
     // §3.7's caller split: a program-scoped run that opted into the pass also opts its
     // capability lowering into doors — an absent OPTIONAL enabling key binds a
     // cause-carrying door for the validator to report ON, instead of withholding.
     const capabilityAssembly =
-      capabilities !== undefined
-        ? await assembleCapabilityBase(capabilities, config, validate ? "doors" : undefined)
+      effectiveCapabilities !== undefined
+        ? await assembleCapabilityBase(effectiveCapabilities, effectiveConfig, validate ? "doors" : undefined)
         : undefined;
     const baseEnv = capabilityAssembly?.base ?? actualEnv;
     const capabilityBase = Capabilities.assembled(baseEnv);

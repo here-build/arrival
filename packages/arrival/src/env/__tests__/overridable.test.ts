@@ -230,3 +230,64 @@ describe("arrival/overridable — structured s/* forms: enum, object, optional",
     ).rejects.toThrow(/define\/overridable age: expected number, got "thirty" \(from the in-form default\)/);
   });
 });
+
+describe("ExecOptions.override — the seamless door (V 2026-07-10: 'no jsToScheme at all')", () => {
+  // No `capabilities`, no `config`, no `jsToScheme`, no `env.set` — the option
+  // appends arrival/overridable and merges the record into config.params.
+  it("override alone: the host value binds, boxed at the membrane, no ceremony", async () => {
+    const result = await exec(`(define/overridable city (s/string) "Berlin") city`, {
+      override: { city: "Paris" },
+    });
+    expect((result.at(-1) as AString)["arrival/toJS"]()).toBe("Paris");
+  });
+
+  it("structured data crosses seamlessly — the README shape, without jsToScheme", async () => {
+    const users = [
+      { name: "john", priority: 15 },
+      { name: "mary", priority: 5 },
+    ];
+    const result = await exec(
+      `(define/overridable users (s/array (s/object (s/field/string "name") (s/field/number "priority"))) '())
+       (map (lambda (u) (@ u "name")) users)`,
+      { override: { users } },
+    );
+    // The validated array crosses as a VECTOR (arrays ↔ vectors at the membrane),
+    // so map returns a vector — read it back through the standard JS projection.
+    const names = (result.at(-1) as { "arrival/toJS"(): unknown })["arrival/toJS"]();
+    expect(names).toEqual(["john", "mary"]);
+  });
+
+  it("absent key ⇒ the in-form default fires (override is per-name, not all-or-nothing)", async () => {
+    const result = await exec(
+      `(define/overridable city (s/string) "Berlin")
+       (define/overridable country (s/string) "Germany")
+       (list city country)`,
+      { override: { city: "Paris" } },
+    );
+    const list = result.at(-1) as APair<any, any>;
+    expect(list.to_array().map((v) => (v as AString)["arrival/toJS"]())).toEqual(["Paris", "Germany"]);
+  });
+
+  it("override validates against the declared type — same door as the config.params path", async () => {
+    await expect(
+      exec(`(define/overridable age (s/number) 30) age`, { override: { age: "not-a-number" } }),
+    ).rejects.toThrow(
+      /define\/overridable age: expected number, got "not-a-number" \(from an environment override\)/,
+    );
+  });
+
+  it("composes with explicit capabilities + config: override merges into params and wins key-wise", async () => {
+    const result = await exec(
+      `(define/overridable city (s/string) "Berlin")
+       (define/overridable country (s/string) "Germany")
+       (list city country)`,
+      {
+        capabilities, // caller ALSO lists the capability — kernel identity-dedup makes it harmless
+        config: { params: { city: "Madrid", country: "Spain" } },
+        override: { city: "Paris" },
+      },
+    );
+    const list = result.at(-1) as APair<any, any>;
+    expect(list.to_array().map((v) => (v as AString)["arrival/toJS"]())).toEqual(["Paris", "Spain"]);
+  });
+});
