@@ -1,5 +1,6 @@
 import { CLASS } from "../well-known-symbols.js";
-import type { BindingName, Environment, EnvironmentValue } from "../Environment.js";
+import { Environment } from "../Environment.js";
+import type { BindingName, EnvironmentValue } from "../Environment.js";
 
 /**
  * The LEXICAL binding chain — let/lambda/letrec/do/catch frames, the names a
@@ -38,6 +39,22 @@ export class LexicalScope {
       wrappers.set(env, w);
     }
     return w;
+  }
+
+  /**
+   * A fresh, ISOLATED lexical root (a null-rooted frame — no `__parent__`, so no
+   * base-chain walk) for `exec({ scope })`. Closes the one gap the instance
+   * surface's retirement leaves open (arrival-environment-privatization.md §II.1):
+   * before this, the only public way to mint an isolated scope was routing through
+   * `sandboxedEnv.inherit()` — i.e. isolation itself required the instance surface
+   * being retired. Every call mints a NEW root (unlike `.for()`, this is never
+   * memoized — there is no env identity to memoize against; that's the point).
+   * The returned scope's builtins still resolve through the run's capability base
+   * (`scope.lookup ?? capabilities.lookup`, generator-exec.ts) — only the LEXICAL
+   * chain is isolated, exactly like every other `LexicalScope`.
+   */
+  static fresh(name: string | symbol = "session"): LexicalScope {
+    return LexicalScope.for(new Environment(name, {}, null));
   }
 
   constructor(readonly env: Environment) {}

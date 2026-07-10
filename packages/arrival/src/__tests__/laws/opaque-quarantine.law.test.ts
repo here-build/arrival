@@ -59,7 +59,7 @@ async function countOpaqueOverCorpus(corpus: readonly string[]): Promise<number>
   await initBridge();
   let total = 0;
   for (const src of corpus) {
-    const [ast] = await parse(src, inferenceEnv);
+    const [ast] = await parse(src);
     total += countOpaqueNodes(classify(ast, C));
   }
   return total;

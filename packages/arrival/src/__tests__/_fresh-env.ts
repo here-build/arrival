@@ -25,8 +25,13 @@ import type { SchemeEnv } from "../common/scheme-env.js";
 // The evaluator injected into base-pack preludes — mirrors bridge.ts initBridge's
 // evalScheme. `skipBootstrapWait`: these execs ARE the assembly of this env, so they
 // must not await the (shared, already-settled) bootstrap promise.
+//
+// `env as ResolvingEnvironment`, not `Environment`: `exec`'s `env` option types as
+// `SchemeEnv` (V2, arrival-environment-privatization.md §II.3/D2), which the actual
+// runtime value here (a `global_env.inherit(...)` child, ENV T1) satisfies and plain
+// `Environment` does not.
 const evalScheme = (env: unknown, src: unknown): unknown =>
-  exec(src as string, { env: env as Environment, skipBootstrapWait: true });
+  exec(src as string, { env: env as ResolvingEnvironment, skipBootstrapWait: true });
 
 let counter = 0;
 

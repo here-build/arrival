@@ -25,7 +25,7 @@ const C: Classifier = {
 
 async function skeleton(src: string): Promise<LineageNode> {
   await initBridge();
-  const [ast] = await parse(src, inferenceEnv);
+  const [ast] = await parse(src);
   return classify(ast, C); // STATIC — no execution
 }
 

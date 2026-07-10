@@ -17,7 +17,7 @@ import { execExpr, parse } from "../eval/generator-exec.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { schemeToJs } from "../rosetta.js";
 import { WireLocalityError } from "../errors.js";
-import type { EvalContext } from "../eval/evaluator.js";
+import type { SchemeEnv } from "../common/scheme-env.js";
 import type { SchemeValue } from "../values/types.js";
 
 import { buildSlice, writeForm, writeFormWith, defineNameOf, lastTopLevelForm } from "./slice.js";
@@ -61,11 +61,13 @@ export interface UnevalContainer {
  *  selector's step records, and the slice can read the whole lineage). `source` is the original
  *  program text (the v1 program render). */
 export function buildUneval(opts: {
-  // The post-run scope a selector re-evaluates in. Typed via the public `EvalContext` — never the
-  // package-internal `Environment` class. P5 dropped `EvalContext.env`; the frame env is reached
-  // through the resolver (`NonNullable<EvalContext["resolver"]>["env"]` names the same internal
-  // scope-node `parse`/`execExpr` accept, purely through the root-exported `EvalContext`).
-  env: NonNullable<EvalContext["resolver"]>["env"];
+  // The post-run scope a selector re-evaluates in. Typed `SchemeEnv` — the public structural
+  // contract (never the package-internal `Environment` class), and (V2, arrival-environment-
+  // privatization.md §II.3/D2) the same type `ExecOptions.env` now takes, so this passes straight
+  // through to `execExpr(lastForm, { env, tap: trace })` below with no narrowing at the call site.
+  // Every real caller already holds a base-linked env satisfying this (arrival-run's
+  // `buildArrivalEnv` / `sandboxedEnv.inherit(...)`, the README's own "run it backward" example).
+  env: SchemeEnv;
   result: unknown;
   trace: EvalTrace;
   source: string;
@@ -98,7 +100,7 @@ export function buildUneval(opts: {
       // the effective value is produced by the SAME pure evaluator, so it carries provenance and
       // becomes a trace node, exactly like any value the program itself computed.
       env.set("result", result as never);
-      const sel = await parse(selector, env);
+      const sel = await parse(selector);
       const lastForm = sel.at(-1);
       if (lastForm === undefined) throw new Error(`uneval: selector "${selector}" parsed to zero forms`);
       let v: unknown = await execExpr(lastForm, { env, tap: trace });

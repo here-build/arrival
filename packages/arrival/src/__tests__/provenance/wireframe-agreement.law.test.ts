@@ -48,7 +48,7 @@ const BASE = new Set(["+", "-", "*", ">", "positive?", "car", "cons", "list", "l
 const isBaseName = (n: string): boolean => BASE.has(n);
 
 async function wf(code: string) {
-  const forms = await parse(code, inferenceEnv);
+  const forms = await parse(code);
   return buildWireframe(forms, { classifier: CLASSIFIER, isBaseName });
 }
 
@@ -72,7 +72,7 @@ describe("wire-locality (§1 CHOSEN: a wire is a closed arrival lambda) — FLIP
       let wiresChecked = 0;
       for (const g of graphs) {
         for (const w of g.wires) {
-          const [lam] = await parse(w.source, inferenceEnv);
+          const [lam] = await parse(w.source);
           for (const name of freeVars(lam)) {
             expect(p.prelude.names.has(name) || isBaseName(name), `"${name}" leaked from ${w.source}`).toBe(true);
           }
@@ -84,7 +84,7 @@ describe("wire-locality (§1 CHOSEN: a wire is a closed arrival lambda) — FLIP
       // NEGATIVE direction: the check is AT EMISSION — a wire that would capture a
       // port-reaching define as a value is never minted; the door throws while the
       // builder assembles, not in a later audit pass.
-      const violating = await parse("(define (helper x) (src-a x))\n(emit! helper)", inferenceEnv);
+      const violating = await parse("(define (helper x) (src-a x))\n(emit! helper)");
       expect(() => buildWireframe(violating, { classifier: CLASSIFIER, isBaseName })).toThrow(
         WireLocalityError,
       );
@@ -128,7 +128,7 @@ describe("wire-locality (§1 CHOSEN: a wire is a closed arrival lambda) — FLIP
       expect(typeof w.source).toBe("string");
       for (const v of Object.values(w)) expect(typeof v).not.toBe("function");
       // and it re-reads as located Pairs — the homoiconic iso's data half
-      const [lam] = await parse(w.source, inferenceEnv);
+      const [lam] = await parse(w.source);
       expect((lam as { kind?: string }).kind).toBe("pair");
       expect(scopeId(lam)).toContain("@"); // spans intact on the re-read carrier
     },
@@ -143,7 +143,7 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
   const corpusClassifier: Classifier = { roleOf: (op) => CORPUS_ROLES[op] };
   const corpusIsBaseName = (n: string): boolean => CORPUS_BASE_NAMES.has(n);
   async function wfCorpus(code: string) {
-    const forms = await parse(code, inferenceEnv);
+    const forms = await parse(code);
     return buildWireframe(forms, { classifier: corpusClassifier, isBaseName: corpusIsBaseName });
   }
 
@@ -281,7 +281,7 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
       async () => {
         const ROLES_SINK: Record<string, DeclaredRole> = { ...CORPUS_ROLES, "emit!": "sink" };
         const classifierWithSink: Classifier = { roleOf: (op) => ROLES_SINK[op] };
-        const forms = await parse(`(begin (emit! (src-a)) (src-b))`, inferenceEnv);
+        const forms = await parse(`(begin (emit! (src-a)) (src-b))`);
         const program = buildWireframe(forms, { classifier: classifierWithSink, isBaseName: corpusIsBaseName });
         const wireframe = prospectiveSourceCone(program);
 
@@ -312,7 +312,7 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
     it.fails(
       "a `=>` receiver that returns its bound parameter untouched SHOULD wire with a non-empty param list (it depends on the test's value) — it wires as a closed, zero-param lambda",
       async () => {
-        const forms = await parse(`(cond ((src-a) => (lambda (x) x)) (else (fetch-item 0)))`, inferenceEnv);
+        const forms = await parse(`(cond ((src-a) => (lambda (x) x)) (else (fetch-item 0)))`);
         const program = buildWireframe(forms, { classifier: corpusClassifier, isBaseName: corpusIsBaseName });
         const muxNode = program.main.nodes.findIndex((n) => n.kind === "mux");
         const armWire = program.main.wires.find((w) => w.consumer.node === muxNode && w.consumer.slot === "arm0");
@@ -510,7 +510,6 @@ describe("Q7 — program prelude: a pure helper stays a REFERENCE, the positive 
       const forms = await parse(
         `(define (helper x) (+ x 1))
          (define (caller y) (helper y))`,
-        inferenceEnv,
       );
       const membership = classifyProgramPrelude(forms, C);
       expect(membership.pure.has("helper")).toBe(true);

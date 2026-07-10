@@ -27,7 +27,7 @@ import { AJSArray } from "../../../values/primitives/AJSArray.js";
 import { ADict } from "../../../values/primitives/ADict.js";
 import { collapseProvenance } from "../../../provenance-collapse.js";
 import * as z from "../../../common/scheme-zod.js";
-import type { Environment } from "../../../Environment.js";
+import type { ResolvingEnvironment } from "../../../Environment.js";
 import type { SchemeValue } from "../../../values/types.js";
 import type { CarrierRow } from "./carriers.js";
 
@@ -48,7 +48,7 @@ function stampFresh(raw: unknown, id: number): AValue {
 }
 
 export interface LawEnv {
-  readonly env: Environment;
+  readonly env: ResolvingEnvironment;
   /** Ids minted by this env's `src`, in call order — read AFTER the mint3 snippet
    *  (or any further `src` calls) has run. */
   readonly mintedIds: readonly number[];
@@ -93,7 +93,7 @@ export async function withLawEnv(): Promise<LawEnv> {
 }
 
 export interface Minted {
-  readonly env: Environment;
+  readonly env: ResolvingEnvironment;
   readonly value: SchemeValue;
   /** The 3 ids minted by this exact mint3 call, in call/argument order. */
   readonly ids: readonly [number, number, number];
@@ -113,7 +113,7 @@ export async function mint3(carrier: CarrierRow): Promise<Minted> {
 }
 
 export interface MintedPair {
-  readonly env: Environment;
+  readonly env: ResolvingEnvironment;
   readonly a: SchemeValue;
   readonly b: SchemeValue;
   readonly idsA: readonly [number, number, number];

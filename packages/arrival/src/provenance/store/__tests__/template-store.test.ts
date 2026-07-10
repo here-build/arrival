@@ -28,7 +28,7 @@ const CLASSIFIER: Classifier = { roleOf: (op) => ROLES[op] };
 const isBaseName = (n: string): boolean => n === "+";
 
 async function wf(code: string): Promise<WireframeProgram> {
-  const forms = await parse(code, inferenceEnv);
+  const forms = await parse(code);
   return buildWireframe(forms, { classifier: CLASSIFIER, isBaseName });
 }
 

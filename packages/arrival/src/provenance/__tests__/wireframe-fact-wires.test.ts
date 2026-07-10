@@ -44,7 +44,7 @@ const BASE = new Set([
 const isBaseName = (n: string): boolean => BASE.has(n);
 
 async function wf(code: string): Promise<WireframeProgram> {
-  const forms = await parse(code, inferenceEnv);
+  const forms = await parse(code);
   return buildWireframe(forms, { classifier: C, isBaseName });
 }
 

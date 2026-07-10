@@ -143,11 +143,11 @@ describe("NEXT-STEP assumptions (designed; unblock as the slices land)", () => {
       roleOf: (op) => (["map", "filter"].includes(op) ? "fan" : undefined),
     };
     const cone = async (src: string, b: Record<string, readonly number[]>): Promise<number[]> => {
-      const [ast] = await parse(src, inferenceEnv);
+      const [ast] = await parse(src);
       return fullCone(classify(ast, C), b);
     };
     // `if` → a `mux` (not a mis-read application); predicate ∪ taken arm.
-    const [ifAst] = await parse(`(if (< 0 x) v -1)`, inferenceEnv);
+    const [ifAst] = await parse(`(if (< 0 x) v -1)`);
     expect(classify(ifAst, C).kind).toBe("mux");
     expect(await cone(`(if (< 0 x) v -1)`, { x: [7], v: [5] })).toEqual([5, 7]);
     // `let` → transparent: same cone as the inlined form.
@@ -162,7 +162,7 @@ describe("NEXT-STEP assumptions (designed; unblock as the slices land)", () => {
     // application). classify() handles that surface shape rather than requiring a
     // macro-expanded input — so the original "must run on macro-expanded ast"
     // assumption is resolved by surface handling, not by adding an expander.
-    const [ast] = await parse(`(let ((foo v1)) (* v1 foo))`, inferenceEnv);
+    const [ast] = await parse(`(let ((foo v1)) (* v1 foo))`);
     expect((ast as { car?: { valueOf?: () => unknown } })?.car?.valueOf?.()).toBe("let"); // surface form, unexpanded
     expect(fullCone(classify(ast, C), { v1: [100] })).toEqual([100]); // transparent on the surface form
   });

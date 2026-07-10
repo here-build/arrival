@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeAll } from "vitest";
-import type { Environment } from "../Environment.js";
+import type { ResolvingEnvironment } from "../Environment.js";
 import { exec } from "../eval/generator-exec.js";
 import { freshEnv } from "./_fresh-env.js";
 
@@ -13,7 +13,7 @@ import { freshEnv } from "./_fresh-env.js";
  * husk dissolution that is relocating these off global_env.
  */
 describe("dict constructor", () => {
-  let env: Environment;
+  let env: ResolvingEnvironment;
   beforeAll(async () => {
     env = await freshEnv();
   });
@@ -38,7 +38,7 @@ describe("dict constructor", () => {
 // see equality.ts's comment at the binding site. Mirrors readMember's own
 // record-vs-class-instance disambiguation (membrane.ts).
 describe("dict? predicate", () => {
-  let env: Environment;
+  let env: ResolvingEnvironment;
   beforeAll(async () => {
     env = await freshEnv();
   });

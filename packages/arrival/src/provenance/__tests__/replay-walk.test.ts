@@ -37,7 +37,7 @@ const BASE = new Set(["*", "positive?", "if"]);
 const isBaseName = (n: string): boolean => BASE.has(n);
 
 async function wf(code: string) {
-  const forms = await parse(code, inferenceEnv);
+  const forms = await parse(code);
   return buildWireframe(forms, { classifier: CLASSIFIER, isBaseName });
 }
 

@@ -17,7 +17,7 @@
 // (`lastSetupFailure`) so a later step's OWN unexplained throw can be attributed to it
 // (`setup-failed`) instead of a bare, confusing "unbound variable" message.
 import { freshEnv } from "../_fresh-env.js";
-import type { Environment } from "../../Environment.js";
+import type { ResolvingEnvironment } from "../../Environment.js";
 import { assembleEnv } from "../../common/kernel.js";
 import type { SchemeEnv } from "../../common/scheme-env.js";
 import { exec } from "../../eval/generator-exec.js";
@@ -49,7 +49,7 @@ export class CorpusRunner {
   private lastSetupFailure: { line: number; message: string } | undefined;
 
   private constructor(
-    private readonly env: Environment,
+    private readonly env: ResolvingEnvironment,
     private readonly sink: OutcomeSink,
     private readonly manifest: Manifest,
   ) {
@@ -67,7 +67,7 @@ export class CorpusRunner {
     const env = await freshEnv();
     const { capability, sink } = createChibiHarnessV2();
     const evalScheme = (e: unknown, src: unknown): unknown =>
-      exec(src as string, { env: e as Environment, skipBootstrapWait: true });
+      exec(src as string, { env: e as ResolvingEnvironment, skipBootstrapWait: true });
     await assembleEnv(env as unknown as SchemeEnv, [capability.lower({ evalScheme })]);
     return new CorpusRunner(env, sink, manifest);
   }

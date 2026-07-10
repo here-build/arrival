@@ -46,7 +46,7 @@ const C: Classifier = {
 /** fullCone of the STATIC lineage tree for `src` under leaf bindings `b` (no eval). */
 async function staticCone(src: string, b: Record<string, readonly number[]>): Promise<number[]> {
   await initBridge();
-  const [ast] = await parse(src, inferenceEnv);
+  const [ast] = await parse(src);
   return fullCone(classify(ast, C), b);
 }
 
@@ -235,7 +235,7 @@ describe("GATE G2 (static lineage == eager golden on special forms) — W1", () 
   // conservative static cone coincides exactly with the eager taken-arm cone.
   it("A4-mux: `if` classifies to a `mux` whose cone = predicate ∪ arms (predicate NOT dropped)", async () => {
     await initBridge();
-    const [ast] = await parse(`(if (< 0 (* x x)) 99 -1)`, inferenceEnv);
+    const [ast] = await parse(`(if (< 0 (* x x)) 99 -1)`);
     const node = classify(ast, C);
     expect(node.kind).toBe("mux"); // not an application, not a dropped-predicate node
     // Both arms are literals; the cone is the predicate's source ALONE — exactly
@@ -292,7 +292,7 @@ describe("GATE G2 (static lineage == eager golden on special forms) — W1", () 
     await initBridge();
     // `let` is a SPECIAL_FORMS entry, so the parsed AST head is still the literal
     // `let` symbol (no lambda-application desugaring) — and classify() handles it.
-    const [ast] = await parse(`(let ((foo v1)) (* v1 foo))`, inferenceEnv);
+    const [ast] = await parse(`(let ((foo v1)) (* v1 foo))`);
     expect(classify(ast, C).kind).not.toBe("literal"); // recognised + transparent, not mis-read
     expect(await staticCone(`(let ((foo v1)) (* v1 foo))`, { v1: [100] })).toEqual([100]);
   });

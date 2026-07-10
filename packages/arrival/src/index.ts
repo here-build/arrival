@@ -1,16 +1,32 @@
 // These names are re-exported explicitly (not via `export * from "./stdlib.js"`) so every
 // export is visible at the barrel — no opaque star laundering an unknown name set:
 //   • box / patch_value / quote — value-representation leaves (reader/values-repr.ts)
-//   • global_env / env          — the native root + interaction scope (env-roots.ts)
 //   • eof                       — the EOF singleton (values/primitives/EOF.ts)
 // `exec` is exported explicitly below from generator-exec — the canonical stack-safe path.
+//
+// `global_env` / `user_env as env` (env-roots.ts) are NO LONGER barrel-exported (wave V1,
+// docs/working-proposals/arrival-environment-privatization.md §II.3): zero external consumers
+// (census I.1 #1) — the two native/interaction roots stay internal-only. env-roots.ts itself
+// is untouched; only this export retires.
 export { box, patch_value, quote } from "./reader/values-repr.js";
-export { global_env, user_env as env } from "./env-roots.js";
 export { eof } from "./values/primitives/EOF.js";
-// The inference-plane base env — every cross-package consumer inherits from it
-// (`sandboxedEnv.inherit(name)`) and types against it (`ReturnType<typeof sandboxedEnv.inherit>`).
-// `sandboxedEnv` is not a security sandbox — the name predates the Graal sweep that
-// deleted the host-reaching verbs; kept for the one name external code actually uses.
+/**
+ * The inference-plane base env — every cross-package consumer inherits from it
+ * (`sandboxedEnv.inherit(name)`) and types against it (`ReturnType<typeof sandboxedEnv.inherit>`).
+ * `sandboxedEnv` is not a security sandbox — the name predates the Graal sweep that
+ * deleted the host-reaching verbs; kept for the one name external code actually uses.
+ *
+ * @deprecated retiring from the SIMPLE API (arrival-environment-privatization.md §II.3).
+ * The instance surface this exposes (`.inherit` / `.set` / `.defineRosetta`) decomposes
+ * into `exec`/`execState`'s declared doors: host vocabulary → `capabilities`; a program's
+ * declared parameter → `override`; REPL-style define accumulation → `scope`
+ * (`LexicalScope.fresh()`) — see the README's "Passing data across" + "Register your own
+ * tools" sections. A persistent, reassembled env for session/decomposed processing (the
+ * one case those three doors don't cover) is being formalized as an explicit `{ ambient }`
+ * product on the `/env` subpath (exec-phases-and-dynamic-metadata.md) — not landed yet.
+ * Not deleted here (D5: hard-delete is a later, one-atomic-wave cut across all consumers,
+ * not a deprecation window) — `sandboxedEnv` keeps working exactly as today.
+ */
 export { inferenceEnv as sandboxedEnv } from "./inference-env.js";
 // Interop sealing — `@arrival.private` (+ `markInteropBoundary`) marks a class opaque to
 // a Scheme member-read (`(@ x :internal)` → nil). `markSandboxPrivate`/`markAsSandboxBoundary`

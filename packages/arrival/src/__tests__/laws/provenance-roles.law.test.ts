@@ -213,8 +213,8 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       // which is its own separate branch reached only when `roleOf` explicitly
       // answers `"opaque"`.
       const C: Classifier = { roleOf: (op) => (op === "declared-pipe" ? "pipe" : undefined) };
-      const [undeclaredAst] = await parse(`(totally-undeclared-op x)`, inferenceEnv);
-      const [declaredPipeAst] = await parse(`(declared-pipe x)`, inferenceEnv);
+      const [undeclaredAst] = await parse(`(totally-undeclared-op x)`);
+      const [declaredPipeAst] = await parse(`(declared-pipe x)`);
       const undeclaredNode = classify(undeclaredAst, C);
       const declaredNode = classify(declaredPipeAst, C);
       expect(undeclaredNode.kind).not.toBe("opaque");
@@ -306,15 +306,15 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
                 : undefined,
       };
 
-      const [loopAst] = await parse(`(declared-loop x)`, inferenceEnv);
+      const [loopAst] = await parse(`(declared-loop x)`);
       const loopNode = classify(loopAst, C);
       expect(loopNode.kind).toBe("binder");
       if (loopNode.kind === "binder") expect(loopNode.cycles).toBe(true);
 
-      const [sinkAst] = await parse(`(declared-sink x)`, inferenceEnv);
+      const [sinkAst] = await parse(`(declared-sink x)`);
       expect(classify(sinkAst, C).kind).toBe("sink");
 
-      const [transparentAst] = await parse(`(declared-transparent x)`, inferenceEnv);
+      const [transparentAst] = await parse(`(declared-transparent x)`);
       expect(classify(transparentAst, C).kind).toBe("transparent");
 
       // ONE vocabulary, not two: `DeclaredRole` (lineage.ts) and `ProvenanceRole`
@@ -353,9 +353,9 @@ describe("V2 — declaration-driven classifier (§2; PROVENANCE-PLAN.md Q3)", ()
       const C: Classifier = {
         roleOf: (op) => (op === "totally-pure-sounding" ? "source" : op === "clearly-a-mint" ? "pipe" : undefined),
       };
-      const [mintAst] = await parse(`(totally-pure-sounding p)`, inferenceEnv);
+      const [mintAst] = await parse(`(totally-pure-sounding p)`);
       expect(classify(mintAst, C).kind).toBe("source");
-      const [pipeAst] = await parse(`(clearly-a-mint p)`, inferenceEnv);
+      const [pipeAst] = await parse(`(clearly-a-mint p)`);
       expect(classify(pipeAst, C).kind).toBe("pipe");
 
       // The retired seam, structurally: `classifierFromEnv` used to accept a
@@ -376,7 +376,7 @@ describe("V2 — declaration-driven classifier (§2; PROVENANCE-PLAN.md Q3)", ()
       await initBridge();
       const C: Classifier = { roleOf: () => undefined };
 
-      const [namedLetAst] = await parse(`(let loop ((a v1)) a)`, inferenceEnv);
+      const [namedLetAst] = await parse(`(let loop ((a v1)) a)`);
       const namedLet = classify(namedLetAst, C);
       expect(namedLet.kind).toBe("binder");
       if (namedLet.kind === "binder") {
@@ -384,7 +384,7 @@ describe("V2 — declaration-driven classifier (§2; PROVENANCE-PLAN.md Q3)", ()
         expect(namedLet.op).toBe("named-let");
       }
 
-      const [doAst] = await parse(`(do ((i 0 (+ i 1))) ((= i 3) i))`, inferenceEnv);
+      const [doAst] = await parse(`(do ((i 0 (+ i 1))) ((= i 3) i))`);
       const doNode = classify(doAst, C);
       expect(doNode.kind).toBe("binder");
       if (doNode.kind === "binder") {
@@ -569,7 +569,6 @@ describe("V4 — cone-traversal termination over cyclic binder nodes (§1; PROVE
                  (if (> j 3)
                      (outer (+ i 1))
                      (inner (+ j (src)))))))`,
-        inferenceEnv,
       );
       const node = classify(ast, C);
       expect(node.kind).toBe("binder");
@@ -592,7 +591,7 @@ describe("V4 — cone-traversal termination over cyclic binder nodes (§1; PROVE
       "HARD gate before Q11a for exactly this reason)",
     async () => {
       await initBridge();
-      const forms = await parse("(emit! (let loop ((i 0)) (if (> i 3) i (loop (+ i 1)))))", inferenceEnv);
+      const forms = await parse("(emit! (let loop ((i 0)) (if (> i 3) i (loop (+ i 1)))))");
       const C: Classifier = { roleOf: (op) => (op === "emit!" ? "sink" : undefined) };
       const p = buildWireframe(forms, { classifier: C, isBaseName: (n) => ["+", ">"].includes(n) });
       const binder = p.main.nodes.find((n) => n.kind === "binder");
@@ -624,7 +623,6 @@ describe("Q7 — program prelude: PURE-only membership, the REJECTED direction (
         `(define (helper) (fetch-thing "https://example.invalid"))
          (define (caller) (helper))
          (define (uninvolved) 42)`,
-        inferenceEnv,
       );
       const membership = classifyProgramPrelude(forms, C);
 

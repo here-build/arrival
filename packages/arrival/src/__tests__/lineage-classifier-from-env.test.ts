@@ -24,7 +24,7 @@ const env = () => inferenceEnv.inherit(`cfe-${seq++}`);
 const declared = (role: DeclaredRole): ((...args: unknown[]) => unknown) => Object.assign(() => undefined, { provenanceRole: role });
 
 const node = async (src: string, e: ReturnType<typeof env>): Promise<LineageNode> =>
-  classify((await parse(src, e))[0], classifierFromEnv(e));
+  classify((await parse(src))[0], classifierFromEnv(e));
 
 describe("classifierFromEnv — reads the declared `.provenanceRole` off the bound value", () => {
   it("a declared `pipe` propagates; a declared `source` mints, regardless of NAME", async () => {

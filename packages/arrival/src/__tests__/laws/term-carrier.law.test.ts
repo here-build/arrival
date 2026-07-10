@@ -75,7 +75,7 @@ import { TERMS } from "./_tables/terms.js";
 import { CARRIERS, type CarrierRow } from "./_tables/carriers.js";
 import { mint3, mint3Pair, elementBoxes, deepIds, containerProv, toPlain } from "./_tables/fixtures.js";
 import { execState } from "../../eval/generator-exec.js";
-import type { Environment } from "../../Environment.js";
+import type { ResolvingEnvironment } from "../../Environment.js";
 import type { SchemeValue } from "../../values/types.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { AJSArray } from "../../values/primitives/AJSArray.js";
@@ -88,14 +88,14 @@ requireEagerOracle();
 /** Runs `src` against a law env with one container bound as `c`. Boxed-result tier
  *  (execState) — this file asserts box discipline/provenance on the return, a
  *  COMPLEX-tier concern (RULINGS.md R1), not the SIMPLE tier's plain-JS exit. */
-async function run1(env: Environment, c: SchemeValue, src: string): Promise<SchemeValue> {
+async function run1(env: ResolvingEnvironment, c: SchemeValue, src: string): Promise<SchemeValue> {
   const [r] = (await execState(src, { env: env.inherit("call-site", { c }) })).values;
   return r;
 }
 
 /** Runs `src` against a law env with two containers bound as `c1`/`c2`. Boxed-result
  *  tier (execState) — see `run1`. */
-async function run2(env: Environment, c1: SchemeValue, c2: SchemeValue, src: string): Promise<SchemeValue> {
+async function run2(env: ResolvingEnvironment, c1: SchemeValue, c2: SchemeValue, src: string): Promise<SchemeValue> {
   const [r] = (await execState(src, { env: env.inherit("call-site", { c1, c2 }) })).values;
   return r;
 }

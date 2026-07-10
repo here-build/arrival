@@ -58,7 +58,7 @@ const corpusClassifier: Classifier = { roleOf: (op) => CORPUS_ROLES[op] };
 const corpusIsBaseName = (n: string): boolean => CORPUS_BASE_NAMES.has(n);
 
 async function wfCorpus(code: string) {
-  const forms = await parse(code, inferenceEnv);
+  const forms = await parse(code);
   return buildWireframe(forms, { classifier: corpusClassifier, isBaseName: corpusIsBaseName });
 }
 
@@ -148,7 +148,7 @@ describe("wire-γ (§4 CHOSEN: the frame is abstract interpretation, loop-free s
       const graphs: WireframeGraph[] = [program.main, ...[...program.templates.values()].map((t) => t.graph)];
       for (const g of graphs) {
         for (const w of g.wires) {
-          const [lam] = await parse(w.source, inferenceEnv);
+          const [lam] = await parse(w.source);
           for (const name of freeVars(lam)) {
             expect(
               CORPUS_ROLES[name],
@@ -227,7 +227,7 @@ describe("replay-nondeterminism (§4 R1 + §7: frozen-payload replay stable unde
   };
 
   async function wfMutated(code: string) {
-    const forms = await parse(code, inferenceEnv);
+    const forms = await parse(code);
     return buildWireframe(forms, { classifier: MUTATED_ROLES, isBaseName: corpusIsBaseName });
   }
 

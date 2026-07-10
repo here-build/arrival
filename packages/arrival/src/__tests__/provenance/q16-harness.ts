@@ -22,6 +22,7 @@
  */
 import invariant from "tiny-invariant";
 
+import type { ResolvingEnvironment } from "../../Environment.js";
 import { Environment } from "../../Environment.js";
 import { execState } from "../../eval/generator-exec.js";
 import { collapseProvenance } from "../../provenance-collapse.js";
@@ -193,7 +194,7 @@ export function freezeMints(mints: readonly RecordedMint[]): FrozenMints {
  * return the frozen retrospective side.
  */
 export async function recordRun(
-  baseEnv: Environment,
+  baseEnv: ResolvingEnvironment,
   code: string,
   sources: Record<string, RecordingShape>,
 ): Promise<RecordedRun> {

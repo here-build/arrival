@@ -25,7 +25,7 @@ import invariant from "tiny-invariant";
 
 import { exec, execState } from "../eval/generator-exec.js";
 import type { EnvCapability } from "../common/capability.js";
-import type { Environment } from "../Environment.js";
+import type { ResolvingEnvironment } from "../Environment.js";
 import type { SchemeValue } from "../values/types.js";
 import { withSilentRegion } from "../values/primitives/region-scope.js";
 import { hermeticEnv, type IngressBindings } from "./hermetic-env.js";
@@ -119,7 +119,7 @@ function wireApplication(wire: EmittedWire): string {
  *     inherited above it, so wires never see each other's bindings.
  */
 export async function applyWireInEnv(
-  base: Environment,
+  base: ResolvingEnvironment,
   wire: EmittedWire,
   ingress: IngressBindings,
 ): Promise<SchemeValue> {

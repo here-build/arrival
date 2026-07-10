@@ -65,7 +65,7 @@ const BASE = new Set(["car", "length", "list", "*", "+", "begin"]);
 const isBaseName = (n: string): boolean => BASE.has(n);
 
 async function wf(code: string) {
-  const forms = await parse(code, inferenceEnv);
+  const forms = await parse(code);
   return buildWireframe(forms, { classifier: CLASSIFIER, isBaseName });
 }
 
@@ -392,7 +392,7 @@ describe("R2 demand monotonicity (§6 demand lattice: value / count / field-k)",
       { code: "(if p (:foo a) (:foo b))", bindings: { p: [9], a: [1], b: [2] }, step: { field: "zzz" } }, // mux, prunes both arms
     ];
     for (const { code, bindings, step } of FIELD_CORPUS) {
-      const [ast] = await parse(code, inferenceEnv);
+      const [ast] = await parse(code);
       const n = classify(ast, FIELD_CLASSIFIER);
       const whole = new Set(fullCone(n, bindings));
       const field = new Set(fieldCone(n, bindings, step));
@@ -430,7 +430,7 @@ describe("R2 demand monotonicity (§6 demand lattice: value / count / field-k)",
   // addendum). Full corpus in wireframe-fact-wires.test.ts; this row is the gate text
   // itself, asserted directly: "a count-demand cone touches ZERO element wires."
   it("Q8c machinery gate: a count-demand cone touches zero element wires", async () => {
-    const forms = await parse("(emit! (length (map f (fetch-list))) (car (filter g xs)))", inferenceEnv);
+    const forms = await parse("(emit! (length (map f (fetch-list))) (car (filter g xs)))");
     const p = buildWireframe(forms, { classifier: CLASSIFIER, isBaseName });
     const sinkIdx = p.main.nodes.findIndex((n) => n.kind === "sink");
     const elementFanIdx = p.main.nodes.findIndex((n) => n.kind === "fan" && n.lengthPreserving === false);

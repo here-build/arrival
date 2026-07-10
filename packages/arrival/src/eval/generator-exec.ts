@@ -151,8 +151,15 @@ export interface ExecOptions {
    * land in it, builtins resolve up its `__parent__` chain (byte-identical to
    * pre-cut). Takes precedence over `capabilities`/`scope` (the cut refinements);
    * use `env` OR the cut options.
+   *
+   * Typed `SchemeEnv` (V2, arrival-environment-privatization.md §II.3/D2), not the
+   * concrete `Environment` — this frees external glass callers from the
+   * `ReturnType<typeof sandboxedEnv.inherit>` alias; they now type against the already-
+   * exported structural contract. Narrows back to `Environment` honestly (`instanceof`,
+   * the `preludeExec` precedent above) at the one seam below that needs the concrete
+   * frame class.
    */
-  env?: Environment;
+  env?: SchemeEnv;
   /**
    * THE CUT, capability-refined. EnvCapability packs assembled onto the standard
    * base (`user_env → global_env`) for THIS run (inference-plane nil-compat, an
@@ -390,6 +397,12 @@ export async function execState(
   // imports the stdlib monolith. Bootstrap gate below drives population:
   // `ensureBaseAssembled` assembles native packs + the `.scm` base.
   const actualEnv = env ?? user_env;
+  // SchemeEnv → Environment: `user_env` is always concrete, so this only narrows
+  // anything on the GLASS path (`env` set) — but every consumer below (Resolver,
+  // Capabilities.assembled, classifierFromEnv, sealResolutionChain) needs the
+  // concrete frame regardless of path, so the check sits right here, at the seam,
+  // same honest-instanceof posture as `preludeExec` above (not a cast — a runtime fact).
+  invariant(actualEnv instanceof Environment, "exec: glass `env` must be a concrete Environment");
 
   // Lazy self-init the runtime bootstrap (native packs + .scm base), so embedders
   // never trigger it manually. `ensureBaseAssembled` is realm-cached (one
@@ -561,8 +574,9 @@ export async function execState(
  * // Multiple expressions
  * const results = await exec("(define x 10) (+ x 5)");  // results = [undefined, 15]
  *
- * // With custom environment
- * const env = new Environment("my-env", { x: 42 });
+ * // With custom environment — `env` types as `SchemeEnv`, satisfied by
+ * // `ResolvingEnvironment` (not the plain `Environment` glass narrows to internally)
+ * const env = new ResolvingEnvironment("my-env", { x: 42 });
  * const [result] = await exec("x", { env });  // result = 42
  * ```
  */
@@ -576,11 +590,13 @@ export async function exec(code: string | SchemeValue, options: ExecOptions = {}
  * `source` (a filename / module path) is stamped onto every produced location,
  * so frames built from these forms read as `file:line` — used by `(require …)` to
  * attribute a module's throws to its file.
+ *
+ * V1 (arrival-environment-privatization.md §II.3): the inert `_env` parameter this
+ * used to carry (kept for API compat after the reader-extension lookup that consulted
+ * it was removed — parsing has been a pure reader-leaf call for a while) is deleted
+ * outright, not deprecated — it did nothing, so there is nothing to migrate off of.
  */
-export async function parse(code: string, _env?: Environment, source?: string): Promise<SchemeValue[]> {
-  // _env retained for API compat but inert: the reader no longer consults an env
-  // (the reader-extension lookup that used it was removed). Parsing is now a pure
-  // reader-leaf call.
+export async function parse(code: string, source?: string): Promise<SchemeValue[]> {
   return readerParse(code, source);
 }
 
@@ -594,6 +610,8 @@ export async function execExpr(
   { env, dynamic_env, use_dynamic, tap, nodeFilter, signal, budgetMs, heapBudget, skipBootstrapWait }: ExecOptions = {},
 ): Promise<SchemeValue> {
   const actualEnv = env ?? user_env;
+  // Same honest SchemeEnv → Environment narrow as execState's seam above.
+  invariant(actualEnv instanceof Environment, "execExpr: glass `env` must be a concrete Environment");
 
   // See exec(): realm-cached lazy bootstrap, awaited once.
   if (!skipBootstrapWait) await ensureBaseAssembled();

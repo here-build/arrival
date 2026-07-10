@@ -37,7 +37,7 @@ const isBaseName = (n: string): boolean => BASE.has(n);
 const CODE = "(* (fetch-item) 2)";
 
 async function wf() {
-  const forms = await parse(CODE, inferenceEnv);
+  const forms = await parse(CODE);
   return buildWireframe(forms, { classifier: CLASSIFIER, isBaseName });
 }
 

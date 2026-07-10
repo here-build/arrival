@@ -15,10 +15,10 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { exec, execState } from "../eval/generator-exec.js";
 import { freshEnv } from "./_fresh-env.js";
-import type { Environment } from "../Environment.js";
+import type { ResolvingEnvironment } from "../Environment.js";
 import type { APair } from "../values/primitives/APair.js";
 
-let userEnv: Environment;
+let userEnv: ResolvingEnvironment;
 beforeAll(async () => {
   userEnv = await freshEnv();
 });

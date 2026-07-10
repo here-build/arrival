@@ -52,7 +52,7 @@
  *      stable FROM. Refusal-with-route, never a wrong value.
  */
 import { execState } from "../eval/generator-exec.js";
-import { Environment, type EnvironmentValue } from "../Environment.js";
+import type { EnvironmentValue, ResolvingEnvironment } from "../Environment.js";
 import { collapseProvenance } from "../provenance-collapse.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { jsToScheme, schemeToJs } from "../rosetta.js";
@@ -184,7 +184,7 @@ export async function replayGraphEgress(opts: ReplayGraphOptions): Promise<Repla
 
 /** The recursive walk `replayGraphEgress` wraps (shared base env, one silent region). */
 async function replayGraphIn(
-  base: Environment,
+  base: ResolvingEnvironment,
   program: WireframeProgram,
   graph: WireframeGraph,
   frozen: FrozenMints,

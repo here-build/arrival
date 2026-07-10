@@ -35,6 +35,7 @@
  * separately asserting the trade IS visible (a proper superset, not vacuously equal)
  * on the pure-mux rows where the arms deliberately diverge.
  */
+import type { ResolvingEnvironment } from "../../Environment.js";
 import { Environment } from "../../Environment.js";
 import { execState } from "../../eval/generator-exec.js";
 import { collapseProvenance } from "../../provenance-collapse.js";
@@ -119,7 +120,7 @@ export class SourceRegistry {
  *  the last one's value flows to the out-port" convention, builder.ts's
  *  `buildWireframe`). */
 export async function runEagerCone(
-  baseEnv: Environment,
+  baseEnv: ResolvingEnvironment,
   code: string,
   sources: Record<string, SourceShape>,
   registry: SourceRegistry,

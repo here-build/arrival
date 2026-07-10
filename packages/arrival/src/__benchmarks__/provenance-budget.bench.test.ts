@@ -72,7 +72,7 @@ function allocateProgramLiveSet(bytes: number): Uint8Array {
 }
 
 async function wfCorpus(code: string) {
-  const forms = await parse(code, inferenceEnv);
+  const forms = await parse(code);
   return buildWireframe(forms, { classifier: corpusClassifier, isBaseName: corpusIsBaseName });
 }
 

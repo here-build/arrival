@@ -52,7 +52,7 @@ const EPOCH_A = "arrival-provenance-v0";
 const EPOCH_B = "arrival-provenance-v1"; // a LABEL mismatch, per this file's header note
 
 async function wfCorpus(code: string): Promise<WireframeProgram> {
-  const forms = await parse(code, inferenceEnv);
+  const forms = await parse(code);
   return buildWireframe(forms, { classifier: corpusClassifier, isBaseName: corpusIsBaseName });
 }
 

@@ -23,16 +23,16 @@ describe("scopeId", () => {
   });
 
   it("source-carrying located form → head@source:line:col (files don't collide)", async () => {
-    const [inA] = await parse("(foo 1)", undefined, "a.scm");
-    const [inB] = await parse("(foo 1)", undefined, "b.scm");
+    const [inA] = await parse("(foo 1)", "a.scm");
+    const [inB] = await parse("(foo 1)", "b.scm");
     expect(scopeId(inA)).toBe("foo@a.scm:1:0");
     expect(scopeId(inB)).toBe("foo@b.scm:1:0");
     expect(scopeId(inA)).not.toBe(scopeId(inB));
   });
 
   it("same source, same position → same scope (folding within one file is preserved)", async () => {
-    const [x] = await parse("(foo 1)", undefined, "a.scm");
-    const [y] = await parse("(foo 1)", undefined, "a.scm");
+    const [x] = await parse("(foo 1)", "a.scm");
+    const [y] = await parse("(foo 1)", "a.scm");
     expect(scopeId(x)).toBe(scopeId(y));
   });
 });

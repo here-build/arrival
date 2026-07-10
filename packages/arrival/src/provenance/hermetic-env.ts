@@ -40,7 +40,7 @@
  */
 import invariant from "tiny-invariant";
 
-import { Environment, type EnvironmentValue } from "../Environment.js";
+import { Environment, type EnvironmentValue, type ResolvingEnvironment } from "../Environment.js";
 import { user_env } from "../env-roots.js";
 import { assembleEnv, type EnvPack } from "../common/kernel.js";
 import { schemePacks, type EvalSchemeInto, type SchemeEnv } from "../common/scheme-env.js";
@@ -78,7 +78,7 @@ export async function hermeticEnv(
   prelude: string,
   ingress: IngressBindings = {},
   config?: object,
-): Promise<Environment> {
+): Promise<ResolvingEnvironment> {
   await ensureBaseAssembled(); // the standard base (`user_env → global_env`) is live + sealed
   const base = user_env.inherit("provenance-hermetic-replay");
   const loweredBase: EnvPack<SchemeEnv>[] = basePacks.map((c) => c.lower({ evalScheme: replayEvalScheme, config }));
