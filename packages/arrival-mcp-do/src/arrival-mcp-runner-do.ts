@@ -1,66 +1,75 @@
 /**
- * McpSessionDO — ONE Durable Object per MCP session (R4, arrival-mcp rework doc §2.4:
- * "straight to DO, no bridge"). The DO's id derives from `mcp-session-id`
- * (`idFromName` at the worker); the DO hosts:
+ * ArrivalMcpRunnerDO — the GENERALIZED DO-per-session MCP runner shell (R4, arrival-mcp
+ * rework doc §2.4: "straight to DO, no bridge"). Extracted from the two deployments that
+ * built it twice (inhuman's `McpSessionDO`, here.build's `MCPSessionDO`); products extend
+ * this abstract class and supply ONLY their capability plane — no product semantics here
+ * (the `hono-plexus-do` posture).
+ *
+ * The DO's id derives from `mcp-session-id` (`idFromName` at the worker); the DO hosts:
  *
  *   • the streamable-HTTP TRANSPORT (+ its McpServer + tool registration) — LIVE state,
  *     re-derived on wake (a stored handshake meta replays a synthetic `initialize` into
  *     the fresh transport, so a session SURVIVES isolate recycling at the protocol level);
- *   • the WARM PAIR — `DiscoveryTool`'s warm env map lives on the tool instance held here,
- *     so warm reuse works while the DO is resident and folds from storage after eviction;
- *   • the DESCRIBE AMBIENT — the capability is built once per wake with the session user's
- *     `listProjects` closed over for the personalized catalog welcome;
+ *   • the WARM PAIR — a `DiscoveryTool`'s warm env map lives on the tool instance held
+ *     here (via `buildTools`), so warm reuse works while the DO is resident and folds from
+ *     storage after eviction; the describe ambient is likewise built once per wake, per
+ *     session by construction (the R7 assembleAmbient idiom — one capability per DO);
  *   • the session's DURABLE TWIN — `SessionRunState` decomposed over DO storage keys
- *     (`session-run-store.ts`), injected into every call as `ToolCallCtx.store` and
- *     AWAITED before each response (the "durably confirmed" bar; the DO output gate
- *     additionally holds the response until the writes commit);
+ *     (`session-run-store.ts`: meta + log chunks + one key per cache entry), injected into
+ *     every call as `ToolCallCtx.store` and AWAITED before each response (the "durably
+ *     confirmed" bar; the DO output gate additionally holds the response until the writes
+ *     commit);
  *   • the TTL ALARM — one reaper per session; expiry disposes the warm pair and wipes
- *     storage (MCP re-init orphans included).
+ *     storage.
  *
- * HERMETICITY (the row this wave lands): there is NO module-level `sessions` map and NO
- * mutable `currentGw` — per-session state lives in the session's own DO, and the gateway
- * resolves PER CALL from that call's own `{projectId, getGateway}` configuration
- * (`discoveryCapability`'s lazy resource). Authority is re-derived per gateway mint from
- * the database (`db/membership.ts`); the DO merely PINS the session's user (fixation guard
- * — the worker verifies the credential, the DO refuses a different subject on an existing
- * session).
+ * CAPABILITIES ARE NOT DATA (the ephemerality doctrine): a capability closes over live
+ * resources — db pools, gateways, tokens — so the generalized form is a FACTORY HOOK
+ * (`buildTools`), never a serialized value. Everything durable is data; everything live is
+ * re-derivable.
+ *
+ * HERMETICITY: there is NO module-level session map and NO mutable current-gateway —
+ * per-session state lives in the session's own DO, and authority is re-derived per call
+ * from the subclass's own plane. The DO merely PINS the session's principal (fixation
+ * guard — the worker verifies the credential and stamps `x-internal-sub`; the DO refuses a
+ * different subject on an existing session via `sessionPrincipal`).
  *
  * CALL SERIALIZATION: tool calls on one session run ONE AT A TIME (`#enqueue`). A session
- * is one REPL — its statement log is ordered — and serializing here makes the old
- * `currentGw` interleaving (call A's verbs seeing call B's gateway) structurally
- * impossible, along with the fold/dispose interleave two concurrent folds would race.
+ * is one REPL — its statement log is ordered — and serializing here makes gateway
+ * interleaving (call A's verbs seeing call B's plane) structurally impossible, along with
+ * the fold/dispose interleave two concurrent folds would race.
  *
- * §0 (README): this DO adds ZERO privilege — it holds no secret the worker didn't already
- * hold, and every capability still walks a user-grade door (the caller's own membership
- * rows gate every gateway).
+ * §0: this DO adds ZERO privilege — it holds no secret the worker didn't already hold, and
+ * every capability still walks a user-grade door in the subclass's plane.
  */
-import { DiscoveryTool, type McpTool, registerTools } from "@here.build/arrival-mcp";
-import { discoveryCapability, discoveryDescription, inhumanActionTool } from "@here.build/inhuman-mcp";
+import { type McpTool, registerTools } from "@here.build/arrival-mcp";
 import type { AsyncSessionStore } from "@here.build/mcp-substrate";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { DurableObject } from "cloudflare:workers";
 
-import { createPool, drizzleForPool, type Db } from "../db/client.js";
-import { listProjectsFor, projectInScopeFor } from "../db/membership.js";
-import type { Env } from "../env.js";
-import { type GatewayDeps, makeGateway } from "../gateway.js";
 import { createDoSessionRunStore } from "./session-run-store.js";
 
-/** Internal headers the WORKER stamps after `requireAuth` (it overwrites any inbound value,
- *  so they are unspoofable from outside; the DO is unreachable except through the worker). */
+/** Internal header the WORKER stamps after its auth middleware (it overwrites any inbound
+ *  value, so it is unspoofable from outside; the DO is unreachable except through the
+ *  worker). */
 export const INTERNAL_SUB_HEADER = "x-internal-sub";
 
-const SERVER_INFO = { name: "Inhuman MCP", version: "0.0.1" } as const;
-
-/** Session idle TTL before the alarm reaps (ms). Env-tunable via `MCP_SESSION_TTL_MS`. */
+/** Session idle TTL before the alarm reaps (ms), absent an env override. */
 const DEFAULT_TTL_MS = 30 * 60_000;
 
-const META_KEY = "session:meta";
+/** The env slice the shell itself reads — a product Env extends this. */
+export interface ArrivalMcpRunnerEnv {
+  /** Session idle TTL override (ms) for the reaper alarm. Absent ⇒ 30 minutes. */
+  MCP_SESSION_TTL_MS?: string;
+}
 
 /** The durable handshake record — everything needed to re-derive the LIVE transport state
- *  on wake (the synthetic `initialize` replay). */
-interface SessionMeta {
+ *  on wake (the synthetic `initialize` replay).
+ *
+ *  `userSub` is written on every NEW session; a deployment whose pre-extraction metas lack
+ *  it must override `sessionPrincipal` with its own identity source (here.build's
+ *  token-exchange state does exactly that). */
+export interface SessionMeta {
   sessionId: string;
   userSub: string;
   protocolVersion: string;
@@ -79,13 +88,51 @@ export interface SessionTools {
 interface LiveState {
   transport: WebStandardStreamableHTTPServerTransport;
   built: SessionTools;
-  /** Aborted on session close / TTL reap — the gateways' run-abort scope. */
+  /** Aborted on session close / TTL reap — the capability plane's run-abort scope. */
   lifetime: AbortController;
 }
 
 const JSONRPC_HEADERS = { "content-type": "application/json", accept: "application/json, text/event-stream" };
 
-export class McpSessionDO extends DurableObject<Env> {
+export abstract class ArrivalMcpRunnerDO<Env extends ArrivalMcpRunnerEnv> extends DurableObject<Env> {
+  // ── The hooks a deployment supplies (the diff between the two R4 instances) ────────────
+
+  /** MCP `serverInfo` for this deployment's McpServer. */
+  protected abstract readonly serverInfo: { name: string; version: string };
+
+  /** Storage key of the durable handshake meta. Per-deployment (live sessions persist
+   *  under the key their deployment always used — inhuman `session:meta`, here.build
+   *  `mcp:meta`); never change it on a deployed product. */
+  protected abstract readonly metaKey: string;
+
+  /** The capability plane — THE factory hook. Closures over live resources (gateways,
+   *  tokens, pools), built once per wake, disposed on close/reap. `lifetime` aborts on
+   *  session teardown (the run-abort scope for long capabilities). */
+  protected abstract buildTools(sessionId: string, sub: string, lifetime: AbortController): SessionTools;
+
+  /** Fixation guard source: the principal this session is pinned to, or undefined when the
+   *  session has no owner yet. Default pins the subject the handshake meta was initialized
+   *  under; a deployment with its own durable identity (e.g. a token-exchange state)
+   *  overrides. */
+  protected async sessionPrincipal(meta: SessionMeta | undefined): Promise<string | undefined> {
+    return meta?.userSub;
+  }
+
+  /** Extra teardown on session close / TTL reap (runs after live disposal, before the
+   *  storage wipe) — e.g. resetting a subclass's in-memory auth state. */
+  protected async onClose(): Promise<void> {
+    // default: the shell's own teardown is complete
+  }
+
+  /** The alarm fired but no handshake meta exists. Default wipes storage (MCP re-init
+   *  orphans included); a deployment whose storage holds durable state OUTSIDE the MCP
+   *  session lifecycle (here.build's auth state) overrides with a no-op. */
+  protected async onAlarmWithoutMeta(): Promise<void> {
+    await this.ctx.storage.deleteAll();
+  }
+
+  // ── The shell (identical across deployments) ───────────────────────────────────────────
+
   #live?: Promise<LiveState>;
   /** initialize params captured from the FIRST request's body (meta absent), consumed by
    *  `onsessioninitialized` to write the durable handshake meta. */
@@ -103,16 +150,17 @@ export class McpSessionDO extends DurableObject<Env> {
     const sessionId = request.headers.get("mcp-session-id");
     if (!sub || !sessionId) {
       return Response.json(
-        { error: "McpSessionDO must be reached through the worker's auth membrane" },
+        { error: `${this.constructor.name} must be reached through the worker's auth membrane` },
         { status: 500 },
       );
     }
 
-    const meta = await this.ctx.storage.get<SessionMeta>(META_KEY);
+    const meta = await this.ctx.storage.get<SessionMeta>(this.metaKey);
 
     // Fixation guard: a valid credential for user A never rides user B's session id. The
-    // worker verified the token; the DO pins the subject the session was initialized under.
-    if (meta !== undefined && meta.userSub !== sub) {
+    // worker verified the token; the DO pins the subject the session belongs to.
+    const principal = await this.sessionPrincipal(meta);
+    if (principal !== undefined && principal !== sub) {
       return Response.json({ error: "session does not belong to this principal" }, { status: 401 });
     }
 
@@ -127,7 +175,7 @@ export class McpSessionDO extends DurableObject<Env> {
     // Bump the idle TTL on every authenticated touch of an initialized session.
     if (meta !== undefined) {
       meta.lastCallAt = Date.now();
-      await this.ctx.storage.put(META_KEY, meta);
+      await this.ctx.storage.put(this.metaKey, meta);
       await this.ctx.storage.setAlarm(meta.lastCallAt + this.#ttlMs());
     }
 
@@ -138,9 +186,9 @@ export class McpSessionDO extends DurableObject<Env> {
    *  included), no re-arm. Not yet expired (a touch re-armed later than this alarm fired,
    *  or clock skew) ⇒ re-arm for the remainder. */
   async alarm(): Promise<void> {
-    const meta = await this.ctx.storage.get<SessionMeta>(META_KEY);
+    const meta = await this.ctx.storage.get<SessionMeta>(this.metaKey);
     if (meta === undefined) {
-      await this.ctx.storage.deleteAll();
+      await this.onAlarmWithoutMeta();
       return;
     }
     const expiresAt = meta.lastCallAt + this.#ttlMs();
@@ -156,6 +204,7 @@ export class McpSessionDO extends DurableObject<Env> {
       state?.lifetime.abort();
       await state?.built.dispose().catch(() => {});
     }
+    await this.onClose();
     await this.ctx.storage.deleteAlarm();
     await this.ctx.storage.deleteAll();
   }
@@ -168,37 +217,6 @@ export class McpSessionDO extends DurableObject<Env> {
     return this.#live;
   }
 
-  /** The inhuman tool tier. A test harness DO (the workerd e2e) overrides THIS — the shell
-   *  (transport hosting, handshake replay, storage store, TTL, call serialization) is what
-   *  the harness exercises, over a stub capability instead of db-gated gateways. */
-  protected buildTools(sessionId: string, sub: string, lifetime: AbortController): SessionTools {
-    void sessionId;
-    // Authority re-derived PER MINT from the database — no snapshot rides the session.
-    const getGateway = async (projectId: string) => {
-      const inScope = await this.#withDb((db) => projectInScopeFor(db, sub, projectId));
-      if (!inScope) {
-        throw new Error(`inhuman-mcp-worker: project ${projectId} not found or not in scope for this caller`);
-      }
-      const deps: GatewayDeps = { env: this.env, userSub: sub, signal: lifetime.signal };
-      return makeGateway(deps, projectId);
-    };
-    const listProjects = () => this.#withDb((db) => listProjectsFor(db, sub));
-
-    const discovery = new DiscoveryTool(
-      "inhuman-project",
-      // `listProjects` doubles as the describe ambient (the personalized welcome) — closed
-      // over at capability build, per-session by construction (one capability per DO).
-      discoveryCapability({ listProjects }),
-      {
-        description: discoveryDescription,
-        hostConfig: () => ({ getGateway, listProjects }),
-        exposableConfiguration: ["projectId"],
-      },
-    );
-    const action = inhumanActionTool({ getGateway });
-    return { tools: [discovery, action], dispose: () => discovery.dispose() };
-  }
-
   async #buildLive(sessionId: string, sub: string, meta: SessionMeta | undefined): Promise<LiveState> {
     const lifetime = new AbortController();
     const store: AsyncSessionStore = createDoSessionRunStore(this.ctx.storage);
@@ -208,7 +226,7 @@ export class McpSessionDO extends DurableObject<Env> {
 
     const built = this.buildTools(sessionId, sub, lifetime);
 
-    const server = new McpServer(SERVER_INFO, { capabilities: { tools: {} } });
+    const server = new McpServer(this.serverInfo, { capabilities: { tools: {} } });
     registerTools(
       server,
       built.tools.map((t) => this.#serialized(t)),
@@ -221,7 +239,7 @@ export class McpSessionDO extends DurableObject<Env> {
       sessionIdGenerator: () => sessionId,
       onsessioninitialized: async (id) => {
         // A rehydration replay re-fires this callback — never clobber the original meta.
-        const existing = await this.ctx.storage.get<SessionMeta>(META_KEY);
+        const existing = await this.ctx.storage.get<SessionMeta>(this.metaKey);
         if (existing !== undefined) return;
         const now = Date.now();
         const fresh: SessionMeta = {
@@ -232,7 +250,7 @@ export class McpSessionDO extends DurableObject<Env> {
           createdAt: now,
           lastCallAt: now,
         };
-        await this.ctx.storage.put(META_KEY, fresh);
+        await this.ctx.storage.put(this.metaKey, fresh);
         await this.ctx.storage.setAlarm(now + this.#ttlMs());
       },
       onsessionclosed: async () => {
@@ -265,17 +283,6 @@ export class McpSessionDO extends DurableObject<Env> {
       () => undefined,
     );
     return run;
-  }
-
-  /** Request-scoped db: mint a pool, run, end — the same posture as the worker's own
-   *  `dbMiddleware` (no long-lived pool pinned to a hibernatable object). */
-  async #withDb<T>(fn: (db: Db) => Promise<T>): Promise<T> {
-    const pool = createPool(this.env);
-    try {
-      return await fn(drizzleForPool(pool));
-    } finally {
-      await pool.end();
-    }
   }
 }
 

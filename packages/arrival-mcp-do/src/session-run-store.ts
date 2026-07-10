@@ -22,7 +22,11 @@
  * for the whole session, not per-key bookkeeping).
  *
  * Written against a STRUCTURAL slice of `DurableObjectStorage` so plain-node tests can fake
- * it with a Map (the same posture as `pin-store.ts`'s `R2Like` in infer-cache-worker).
+ * it with a Map.
+ *
+ * ONE copy, shared by both products' session DOs through `ArrivalMcpRunnerDO` (this file
+ * used to be deliberately mirrored across the two workers — that duplication collapsed
+ * into this package).
  */
 import {
   decodeSessionRunState,
