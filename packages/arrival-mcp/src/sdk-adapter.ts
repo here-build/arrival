@@ -5,8 +5,9 @@
 // is a plain value (not a subclass), tools are just an array you register — and the SAME describe/call
 // surface backs any transport. The SDK's per-request AbortSignal (`extra.signal` — cancel / timeout /
 // disconnect) is threaded straight into the eval's TICK check; the host supplies the rest of the
-// dispatch ctx (session/user/record). Whatever `call` returns — a DiscoveryTool's `string[]` REPL
-// output or an ActionTool's result object — is lowered by the one `serializeResult` (string→text,
+// dispatch ctx (session/user/record). Whatever `call` returns — a DiscoveryTool's `(string | Blob)[]`
+// REPL output (core texts + R6's per-extra label strings and raw Blobs, §2.6) or an ActionTool's
+// result object — is lowered by the one `serializeResult` (string→text, Blob→image/audio base64,
 // object→JSON, `success:false`→isError), so both tiers register identically.
 //
 // R5 (§2.5): each tools/call is also wired to the per-statement event stream — `ToolCallCtx.onEvent`

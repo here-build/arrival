@@ -33,11 +33,18 @@ export interface McpAnnotation {
    *  resolves to a string. */
   description: string;
   /** Optional LIVE/personalized text, resolved (sync or async) at schema-fetch time —
-   *  the per-session "welcome screen". Closes over context captured in `capability()`
-   *  (it runs before any env/activation exists). A thunk so it fires ONLY for the catalog,
+   *  the per-session "welcome screen". A thunk so it fires ONLY for the catalog,
    *  never on tool execution. Resolves to a string ⇒ that text is shown AND the catalog is
    *  flagged session-generated; resolves to `undefined` ⇒ fall back to `description`,
-   *  NOT flagged dynamic (so a failed live-fetch can return `undefined` honestly). */
+   *  NOT flagged dynamic (so a failed live-fetch can return `undefined` honestly).
+   *
+   *  TWO authoring arms, one read cadence (per read, no memo):
+   *  - LEGACY closure form: closes over context captured in `capability()` (it runs before
+   *    any env/activation exists); ignores `this`. The arm the hermetic doctrine retires.
+   *  - METADATA-declared form (tool``'s `dynamicDescription`, riding the baked def's
+   *    `metadata` bag): reads `this` — the OWNING capability's describe-ambient
+   *    `Activation` (host config + host resources; DiscoveryTool.catalog binds it) —
+   *    the declared channel that survives offload/reassembly. */
   dynamicDescription?: () => MaybePromise<string | undefined>;
   /**
    * Positional input schemas, PARSED post-membrane (on the marshalled args) and pre-call —
@@ -259,15 +266,31 @@ export class McpEnvCapability<
    * still grants live verbs, just undocumented-to-the-catalog (by design).
    */
   allAnnotations(): Record<string, McpAnnotation> {
-    const out: Record<string, McpAnnotation> = {};
+    return Object.fromEntries(this.allAnnotationEntries().map(({ name, annotation }) => [name, annotation]));
+  }
+
+  /**
+   * `allAnnotations` with the OWNING capability carried per entry — the describe-time
+   * metadata read path (exec-phases-and-dynamic-metadata.md §2.4/§2.7) needs the owner
+   * to look up that capability's ACTIVATION (`AssembledEnv.activations` is keyed by pack
+   * = capability name) so a dynamic `dynamicDescription` resolves against the right
+   * `this`. Same walk, same last-write-wins precedence: deps-first, self-last — a nearer
+   * capability's entry (and its owner stamp) replaces a dep's on a name clash.
+   */
+  allAnnotationEntries(): ReadonlyArray<{ owner: string; name: string; annotation: McpAnnotation }> {
+    const out = new Map<string, { owner: string; name: string; annotation: McpAnnotation }>();
     const seen = new Set<EnvCapability>();
     const visit = (cap: EnvCapability): void => {
       if (seen.has(cap)) return;
       seen.add(cap);
       for (const dep of cap.spec.deps ?? []) visit(dep);
-      if (cap instanceof McpEnvCapability) Object.assign(out, cap.annotations);
+      if (cap instanceof McpEnvCapability) {
+        for (const [name, annotation] of Object.entries(cap.annotations)) {
+          out.set(name, { owner: cap.name, name, annotation });
+        }
+      }
     };
     visit(this);
-    return out;
+    return [...out.values()];
   }
 }

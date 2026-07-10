@@ -26,12 +26,14 @@ function demoTool(options: { statementCap?: number } = {}): DiscoveryTool {
   });
 }
 
-/** Run one call collecting the event stream alongside the aggregate. */
+/** Run one call collecting the event stream alongside the aggregate. (R6 widened `call` to
+ *  `(string | Blob)[]` — every program in THIS suite is blob-free, so `out` stays all-string;
+ *  the type rides the widened union.) */
 async function callWithEvents(
   tool: DiscoveryTool,
   expr: string,
   session?: { id: string; state: Record<string, unknown> },
-): Promise<{ out: string[]; events: ReplEvent[] }> {
+): Promise<{ out: (string | Blob)[]; events: ReplEvent[] }> {
   const events: ReplEvent[] = [];
   const sess = session ?? { id: "s1", state: {} };
   const out = await tool.call({ expr }, { session: sess, onEvent: (event) => events.push(event) });
@@ -40,6 +42,13 @@ async function callWithEvents(
 
 const statements = (events: ReplEvent[]): ReplStatementEvent[] =>
   events.filter((e): e is ReplStatementEvent => e.kind === "statement");
+
+/** Assert-and-narrow: a blob-free program's aggregate is all-string (any Blob here is a bug). */
+const textsOf = (out: (string | Blob)[]): string[] =>
+  out.map((element) => {
+    if (typeof element !== "string") throw new Error("unexpected binary element in a blob-free program");
+    return element;
+  });
 
 describe("R5 — event-order law", () => {
   it("topology is strictly FIRST, carries total + exact source slices, and statements fill slots in order", async () => {
@@ -119,16 +128,18 @@ describe("R5 — budget law (parse-first per-form budget; the SUM stays bounded)
 
   it("a single ~30k form is NOT truncated (it fits the whole 40k budget alone)", async () => {
     const { out } = await callWithEvents(demoTool(), bigListForm);
-    expect(out).toHaveLength(1);
-    expect(out[0]!.length).toBeGreaterThanOrEqual(25_000);
+    const texts = textsOf(out);
+    expect(texts).toHaveLength(1);
+    expect(texts[0]!.length).toBeGreaterThanOrEqual(25_000);
   });
 
   it("four ~30k forms each serialize under their FAIR SHARE (≈10k), so the batch SUM is bounded by the 40k output budget", async () => {
     const expr = Array.from({ length: 4 }, () => bigListForm).join("\n");
     const { out } = await callWithEvents(demoTool(), expr);
-    expect(out).toHaveLength(4);
-    for (const element of out) expect(element.length).toBeLessThanOrEqual(12_000); // 40k/4 + shrink-loop slack
-    const sum = out.reduce((n, element) => n + element.length, 0);
+    const texts = textsOf(out);
+    expect(texts).toHaveLength(4);
+    for (const element of texts) expect(element.length).toBeLessThanOrEqual(12_000); // 40k/4 + shrink-loop slack
+    const sum = texts.reduce((n, element) => n + element.length, 0);
     expect(sum).toBeLessThanOrEqual(45_000); // bounded SUM — the §1.2 regression stays closed
   });
 });

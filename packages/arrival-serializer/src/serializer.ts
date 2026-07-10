@@ -33,6 +33,119 @@ let activeCaps: Caps = NO_CAPS;
  *  list still PARSES (the comment is ignored) — it round-trips to the shown sample. */
 const truncatedMarker = (note: string): SExpr => ({ [TRUNCATED_MARKER]: note });
 
+// ── R6 (§2.6): {core, extras} — serializer-side binary-leaf extraction ─────────────────────────
+// The seam lives HERE because this is the one place that walks every output value under the caps
+// machinery: position (the in-text tag) and payload (the collected blob) never desync because one
+// walk produced both. Extraction happens iff the caller used the `serializeWithExtras` entry
+// point; `toSExprString` itself stays byte-identical (the R0 pins prove it).
+
+/** One extracted binary leaf: the id baked into the core text's `#attachment` tag + the blob
+ *  itself. Rendering strategy is DOWNSTREAM-owned (Ruling A Q5) — this contract carries
+ *  everything any strategy needs. */
+export interface SerializedExtra {
+  /** Call-scoped attachment id — `att-N` — the same id inside the core tag. */
+  id: string;
+  blob: Blob;
+}
+
+export interface SerializedOutput {
+  /** The response text itself — s-expr with `#attachment` tags in place of binary leaves. */
+  core: string;
+  /** What downstream must render EXTRA — collected during THIS render, in encounter order. */
+  extras: readonly SerializedExtra[];
+  /** Binary leaves rendered tag-only because the quota was already full — never collected, so
+   *  downstream never spends base64 work on them. CUMULATIVE over the shared `ExtrasState`
+   *  (the per-call total a drained note reports); a per-render delta is `after − before`. */
+  overflow: number;
+}
+
+/** ONE call's shared attachment numbering + quota, threaded across its renders so ids stay
+ *  unique per call and the quota is global to the call (the `AttachmentSink.beginCall(quota)`
+ *  shape, consulted DURING the walk — §2.6's triad-audit fix). */
+export interface ExtrasState {
+  /** Next `att-N` ordinal (1-based). */
+  next: number;
+  /** Quota left — at 0 every further binary leaf renders tag-only and is NOT collected. */
+  remaining: number;
+  /** Leaves rendered tag-only past quota so far. */
+  overflow: number;
+}
+
+export const initialExtrasState = (quota = Infinity): ExtrasState => ({
+  next: 1,
+  remaining: quota,
+  overflow: 0,
+});
+
+/** The size token inside a tag/label — `34kB` class, human-scaled: exact bytes buys the model
+ *  nothing beyond the order of magnitude (the same reasoning as arrival-manifold's hidden stub). */
+export const formatByteSize = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}kB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+};
+
+type ActiveExtrasCollector = {
+  state: ExtrasState;
+  extras: SerializedExtra[];
+  /** Entry snapshot — each shrink-to-fit render pass rewinds to it (see `beginCollectorPass`). */
+  snapshot: ExtrasState;
+};
+let activeCollector: ActiveExtrasCollector | null = null;
+
+/** Rewind the collector for a render pass. `toSExprString`'s shrink-to-fit loop re-renders the
+ *  same value; without the rewind every pass would re-collect the same blobs (duplicate extras)
+ *  and burn quota per pass. Only the FINAL pass's collection stands — which is also the pass
+ *  whose tags are actually in the returned core, so position and payload agree. */
+const beginCollectorPass = (): void => {
+  if (activeCollector === null) return;
+  const { state, snapshot } = activeCollector;
+  state.next = snapshot.next;
+  state.remaining = snapshot.remaining;
+  state.overflow = snapshot.overflow;
+  activeCollector.extras.length = 0;
+};
+
+/** The binary leaf under `obj`, if it is one: a `Blob` itself, or an AValue whose `toJS`
+ *  projection is a Blob (§2.6) — the same `"arrival/toJS"` protocol-key dispatch as the
+ *  empty-provenance branch below, but provenance-blind: the pixels are the leaf either way. */
+const binaryLeafOf = (obj: any): Blob | undefined => {
+  if (obj instanceof Blob) return obj;
+  if (typeof obj["arrival/toJS"] === "function" && typeof obj.kind === "string") {
+    const projected = obj["arrival/toJS"]();
+    if (projected instanceof Blob) return projected;
+  }
+  return undefined;
+};
+
+/** Collect one binary leaf (quota consulted DURING the walk): within quota it joins `extras`
+ *  and renders as `#attachment "att-N (mime, size)"`; past quota it renders tag-only
+ *  (`over-quota` in place of an id — nothing to reference) and is NEVER collected, so no
+ *  base64 work is ever spent downstream on a block that would be dropped. Both tag shapes
+ *  ride TAGGED_MARKER, so the core text still PARSES (same law as the truncation markers). */
+/** The Clojure-style tagged-literal marker object (`context.tagged`'s shape). SExpr's object
+ *  arm indexes by symbol only, so the string `value` field rides a widened structural alias —
+ *  the formatter reads it back at its TAGGED_MARKER branch. */
+const attachmentTag = (text: string): SExpr => {
+  const tagged: { [key: symbol]: unknown; value: string } = { [TAGGED_MARKER]: "attachment", value: text };
+  return tagged;
+};
+
+const collectBinaryLeaf = (collector: ActiveExtrasCollector, blob: Blob): SExpr => {
+  const mime = blob.type || "application/octet-stream";
+  const descriptor = `(${mime}, ${formatByteSize(blob.size)})`;
+  const { state } = collector;
+  if (state.remaining <= 0) {
+    state.overflow += 1;
+    return attachmentTag(`over-quota ${descriptor}`);
+  }
+  const id = `att-${state.next}`;
+  state.next += 1;
+  state.remaining -= 1;
+  collector.extras.push({ id, blob });
+  return attachmentTag(`${id} ${descriptor}`);
+};
+
 /** Render the first `maxItems` of an array, appending a `+N more of TOTAL` marker when
  *  truncated. STREAMING — `slice` then map, so the dropped tail is never rendered. */
 const capItems = <T>(arr: readonly T[], render: (item: T) => SExpr): SExpr[] => {
@@ -309,6 +422,15 @@ function toSExprDispatch(obj: any, visited: Set<any>): SExpr {
   // Set → convert to list
   if (obj instanceof Set) {
     return ["set", ...capItems([...obj], (item) => toSExpr(item, visited))];
+  }
+
+  // R6 (§2.6): binary-leaf extraction — ONLY when the render came through
+  // `serializeWithExtras` (a collector is active); the plain `toSExprString` path never
+  // enters here and stays byte-identical. Sits ABOVE the AValue branches so a Blob-projecting
+  // AValue is intercepted whole; a raw Blob also lands here (nothing above claims it).
+  if (activeCollector !== null && typeof obj === "object") {
+    const blob = binaryLeafOf(obj);
+    if (blob !== undefined) return collectBinaryLeaf(activeCollector, blob);
   }
 
   // AValue with empty provenance carries no lineage to show — serialize its
@@ -661,8 +783,10 @@ export const toSExprString = (obj: any, optsOrIndent: number | SerializeOpts = 0
   const indent = opts.indent ?? 0;
   const format = opts.format ?? ((sexpr: SExpr) => formatSExpr(sexpr, indent));
 
-  // No caps requested → unchanged behaviour.
+  // No caps requested → unchanged behaviour. (`beginCollectorPass` is a no-op unless the render
+  // came through `serializeWithExtras` — the plain path stays byte-identical.)
   if (opts.maxItems == null && opts.maxStringChars == null && opts.maxTotalChars == null) {
+    beginCollectorPass();
     return format(toSExpr(obj));
   }
 
@@ -671,6 +795,7 @@ export const toSExprString = (obj: any, optsOrIndent: number | SerializeOpts = 0
   let maxStringChars = opts.maxStringChars ?? 2_000;
 
   const render = (): string => {
+    beginCollectorPass(); // shrink-to-fit re-renders must not re-collect extras / re-burn quota
     activeCaps = { maxItems, maxStringChars };
     try {
       return format(toSExpr(obj));
@@ -700,6 +825,44 @@ export const toSExprString = (obj: any, optsOrIndent: number | SerializeOpts = 0
   }
   return out;
 };
+
+export type SerializeWithExtrasOpts = SerializeOpts & {
+  /** ONE call's shared attachment numbering/quota, threaded across its renders (ids stay
+   *  unique per call, the quota is global to the call). Fresh + unbounded when omitted. */
+  extrasState?: ExtrasState;
+};
+
+/**
+ * Serialize a value to `{core, extras}` (R6, §2.6) — the additive sibling of `toSExprString`.
+ *
+ * The SAME walk + caps + shrink-to-fit machinery renders `core`, with every binary leaf (a
+ * `Blob`, or an AValue whose `toJS` projection is a Blob) collected into `extras` and rendered
+ * in the text as the tagged literal `#attachment "att-N (mime, size)"` — the core still PARSES
+ * (same law as the truncation markers), and an extracted blob costs the TEXT budget only its
+ * ~40-char tag: the pixels ride separate content blocks downstream, under the sink quota.
+ *
+ * Quota is consulted DURING the walk: once `extrasState.remaining` hits 0, remaining binary
+ * leaves render tag-only (`over-quota`) and are NOT collected — no base64 work is wasted
+ * downstream on blocks that would be dropped; the count rides `overflow` for the drained note.
+ *
+ * KNOWN EDGE (shared with the truncation markers): the pathological floor-still-over-budget
+ * hard-cut at the very end of `toSExprString` slices TEXT and could sever a trailing tag while
+ * its extra stands — downstream then carries an attachment whose tag was cut, which degrades
+ * to a visible label block, never a silent drop.
+ */
+export function serializeWithExtras(value: unknown, opts: SerializeWithExtrasOpts = {}): SerializedOutput {
+  const { extrasState, ...serializeOpts } = opts;
+  const state = extrasState ?? initialExtrasState();
+  const collector: ActiveExtrasCollector = { state, extras: [], snapshot: { ...state } };
+  const previous = activeCollector;
+  activeCollector = collector;
+  try {
+    const core = toSExprString(value, serializeOpts);
+    return { core, extras: collector.extras, overflow: state.overflow };
+  } finally {
+    activeCollector = previous;
+  }
+}
 
 /**
  * Helper to create s-expression definitions

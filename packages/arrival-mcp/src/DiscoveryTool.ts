@@ -25,15 +25,23 @@ import {
   parse,
   sandboxedEnv,
 } from "@here.build/arrival";
-import type { EnvCapability } from "@here.build/arrival/capability";
+import type { Activation, EnvCapability } from "@here.build/arrival/capability";
 import { assembleEnv } from "@here.build/arrival/env";
-import { toSExprString } from "@here.build/arrival-serializer";
+import {
+  type ExtrasState,
+  type SerializedExtra,
+  formatByteSize,
+  initialExtrasState,
+  serializeWithExtras,
+  toSExprString,
+} from "@here.build/arrival-serializer";
 import type { AsyncSessionStore, ContentBlock, ReplEvent, StatementCounters } from "@here.build/mcp-substrate";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { format } from "date-fns";
 import dedent from "dedent";
 import * as z from "zod";
 
+import { lowerBinaryBlob } from "./dispatch.js";
 import type { McpAnnotation, McpCapabilitySpec, McpEnvCapability } from "./McpEnvCapability.js";
 import {
   type LogStatement,
@@ -78,11 +86,21 @@ interface ExecSerializedOptions {
    *  (`runForms`) always passes `perElementBudget(forms.length)`; callers outside it
    *  (`evalScheme`, the fold — whose output is discarded) keep the per-exec default. */
   charBudget?: number;
+  /** R6 (§2.6): the call-level attachment numbering/quota. Present ⇒ values render through
+   *  `serializeWithExtras` (binary leaves extracted into `extras`, ~40-char tags in the core
+   *  text); absent ⇒ plain `toSExprString` — the byte-identical fast path (`evalScheme` and the
+   *  fold — whose output is discarded — both stay here: no extraction work is wasted on them). */
+  extrasState?: ExtrasState;
 }
 
 /** `execSerializedState`'s product: the serialized outputs plus this form's meter reads (§2.7). */
 interface ExecSerializedOutcome {
   out: string[];
+  /** R6: this form's extracted binary leaves, in encounter order (empty without `extrasState`). */
+  extras: readonly SerializedExtra[];
+  /** R6: how many binary leaves THIS form rendered tag-only past quota (never collected, never
+   *  base64-encoded) — the per-statement delta the drained note reports, never silently. */
+  overflowDelta: number;
   /** The run's allocation-meter read (0 when the run carried no meter — never the case on
    *  DiscoveryTool paths, where the heap budget is default-ON). */
   heapUsed: number;
@@ -152,8 +170,25 @@ async function execSerializedState(
   const values = state.values.map((element) => hostFace(element));
   const per = options.charBudget ?? perElementBudget(values.length);
   const meter = state.runCtx.heapMeter;
+  const { extrasState } = options;
+  const extras: SerializedExtra[] = [];
+  let overflowDelta = 0;
+  let out: string[];
+  if (extrasState === undefined) {
+    out = values.map((element) => toSExprString(element, { maxTotalChars: per }));
+  } else {
+    const overflowBefore = extrasState.overflow;
+    out = values.map((element) => {
+      const rendered = serializeWithExtras(element, { maxTotalChars: per, extrasState });
+      extras.push(...rendered.extras);
+      return rendered.core;
+    });
+    overflowDelta = extrasState.overflow - overflowBefore;
+  }
   return {
-    out: values.map((element) => toSExprString(element, { maxTotalChars: per })),
+    out,
+    extras,
+    overflowDelta,
     heapUsed: meter?.used ?? 0,
     heapMax: meter?.max ?? 0,
   };
@@ -293,6 +328,13 @@ export interface DiscoveryToolOptions {
    *  silent truncation. Defaults to {@link defaultStatementCap}. */
   statementCap?: number;
 
+  /** Per-call attachment quota (R6, §2.6 — the `AttachmentSink.beginCall(quota)` shape, consulted
+   *  DURING the serializer walk): at most this many binary leaves are extracted + attached per
+   *  call; further leaves render tag-only in the core text (never collected, never base64-encoded)
+   *  and the overflow count drains into a note — never silently. Defaults to
+   *  {@link defaultAttachmentQuota}. */
+  attachmentQuota?: number;
+
   /**
    * Host-supplied configuration values for the capability's `configuration` schema.
    * These are merged (host wins) with values extracted from the actor-provided `args` when
@@ -337,6 +379,15 @@ export function defaultStatementCap(): number {
   return Number.isFinite(raw) && raw > 0 ? raw : 512;
 }
 
+/** Per-call attachment quota default (R6, §2.6). A FUNCTION (like {@link defaultHeapBudget}) so
+ *  it reads the env var live. The default mirrors arrival-manifold's
+ *  `DEFAULT_PASSTHROUGH_ATTACHMENTS` (3) — the same "first N binary blocks, in encounter order"
+ *  posture on the other MCP surface. `0` is honored (attach nothing, tag everything). */
+export function defaultAttachmentQuota(): number {
+  const raw = Number(process.env.MCP_ATTACHMENT_QUOTA);
+  return Number.isFinite(raw) && raw >= 0 ? raw : 3;
+}
+
 /** A discovery tool bound to one aggregating capability. Construct once per CONNECTION (the host
  *  builds `capability` with its infra armed into the resources); `call` runs once per request. */
 export class DiscoveryTool {
@@ -368,8 +419,14 @@ export class DiscoveryTool {
    *  record mode over the SAME cache — REPL-style, so earlier statements' values stand even if a
    *  later one crashes — and the session's durable twin (log + cache + counters) is persisted
    *  (awaited) before the response. A cancellation propagates; a runtime crash is surfaced as an
-   *  `(error …)` form and stops the rest of the input. */
-  async call(args: DiscoveryArgs, ctx: ToolCallCtx = {}): Promise<string[]> {
+   *  `(error …)` form and stops the rest of the input.
+   *
+   *  R6 (§2.6): with binary leaves in the output, the array interleaves the core strings with
+   *  per-extra label strings + raw Blobs (in statement order) — `serializeResult` lowers each
+   *  element to one content block, so the aggregate ≡ the ordered concat of the statement
+   *  events' FULL block lists. A blob-free program still returns plain `string[]` (the R0
+   *  output-shape pin, byte-identical). */
+  async call(args: DiscoveryArgs, ctx: ToolCallCtx = {}): Promise<(string | Blob)[]> {
     const startTime = Date.now();
     const budgetMs = this.options.budgetMs ?? DEFAULT_BUDGET_MS;
     const heapBudget = this.options.heapBudget ?? defaultHeapBudget();
@@ -443,11 +500,15 @@ export class DiscoveryTool {
     await warm.dispose();
   }
 
-  /** Dispose every warm pair (connection teardown). */
+  /** Dispose every warm pair + the describe ambient (connection teardown). */
   async dispose(): Promise<void> {
     const all = [...this.warm.values()];
     this.warm.clear();
     for (const warm of all) await warm.dispose();
+    // The describe-time ambient (per-connection, memoized on this tool) dies with the tool.
+    const describeCtx = this.describeCtx;
+    this.describeCtx = undefined;
+    await (await describeCtx)?.dispose();
   }
 
   // ── the session machinery: load / fold / run / persist ──────────────────────────────────────
@@ -557,7 +618,16 @@ export class DiscoveryTool {
    *  per-form serialization budget is computed ONCE here from the parsed form count (the
    *  bounded-SUM fix), and each form's heap-meter read accrues into the session's
    *  `heapUsedTotal`. The aggregate `out` is byte-identical with or without a listener — the
-   *  statement events' text content IS `out`, sliced per form (the aggregate law). */
+   *  statement events' FULL content IS `out`, sliced per form (the aggregate law).
+   *
+   *  R6 (§2.6): each form's values render through `serializeWithExtras` under ONE call-level
+   *  `ExtrasState` (ids `att-1…` unique per call; the attachment quota consulted DURING the
+   *  serializer walk). Extracted extras drain per form — the v1 downstream-owned strategy:
+   *  after the core text, per extra a label text block `attachment #N: att-N (mime, size)`
+   *  then its binary block (the ONE `dispatch.ts` base64 lowering, verbatim) — appended to
+   *  that statement's event content AND to the aggregate `out` (label string + raw Blob;
+   *  `serializeResult` lowers the Blob through the same branch, so aggregate ≡ concat holds
+   *  block-for-block). Quota overflow drains a note with the count, never silently. */
   private async runForms(
     expr: string,
     opts: {
@@ -569,17 +639,27 @@ export class DiscoveryTool {
       state?: SessionRunState;
       onEvent?: (event: ReplEvent) => void;
     },
-  ): Promise<{ out: string[]; crashed?: string }> {
+  ): Promise<{ out: (string | Blob)[]; crashed?: string }> {
     const { env, budgetMs, heapBudget, signal, cache, state, onEvent } = opts;
     const cap = this.options.statementCap ?? defaultStatementCap();
-    const out: string[] = [];
+    const attachmentQuota = this.options.attachmentQuota ?? defaultAttachmentQuota();
+    // R6: ONE shared numbering/quota across every form of THIS call (the beginCall(quota) shape).
+    const extrasState = initialExtrasState(attachmentQuota);
+    let attachmentOrdinal = 0;
+    const out: (string | Blob)[] = [];
     let crashed: string | undefined;
 
-    const statement = (index: number, content: string[], counters: StatementCounters, error?: string): void => {
-      // R6 SEAM (images, {core, extras}): the extracted extras land HERE — per-extra label +
-      // binary blocks APPENDED to this `content` list after the core text blocks; the
-      // aggregate law (§2.5) carries the FULL list, text and binary alike.
-      const blocks = content.map((text): ContentBlock => ({ type: "text", text }));
+    const statement = (
+      index: number,
+      texts: readonly string[],
+      extraBlocks: readonly ContentBlock[],
+      counters: StatementCounters,
+      error?: string,
+    ): void => {
+      // R6 (landed): `extraBlocks` are the extracted extras' label/binary blocks, appended
+      // after the core text blocks; the aggregate law (§2.5) carries the FULL list, text and
+      // binary alike.
+      const blocks: ContentBlock[] = [...texts.map((text): ContentBlock => ({ type: "text", text })), ...extraBlocks];
       onEvent?.(
         error === undefined
           ? { kind: "statement", index, content: blocks, counters }
@@ -594,7 +674,8 @@ export class DiscoveryTool {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       crashed = message;
-      out.push(`(error ${JSON.stringify(message)})`);
+      const door = `(error ${JSON.stringify(message)})`;
+      out.push(door);
       if (state !== undefined) state.counters.crashes += 1;
       // Parse-crash convention (repl-event.ts): an EMPTY topology (nothing will execute) + ONE
       // synthetic terminal statement at index 0 carrying the reader door — the aggregate law
@@ -603,7 +684,8 @@ export class DiscoveryTool {
       const elapsedMs = Date.now() - started;
       statement(
         0,
-        out,
+        [door],
+        [],
         { heapUsed: 0, heapMax: heapBudget, elapsedMs, budgetMsRemaining: Math.max(0, budgetMs - elapsedMs) },
         message,
       );
@@ -621,16 +703,16 @@ export class DiscoveryTool {
       const formStarted = Date.now();
       if (state !== undefined && state.log.length >= cap) {
         crashed = `session statement cap reached (${cap})`;
-        out.push(
-          `(error ${JSON.stringify(
-            `${crashed}: this session's statement log is full, so further statements cannot be recorded for replay. ` +
-              `Start a fresh MCP session to continue; fold long accumulations into ONE program (a single top-level form) ` +
-              `instead of many REPL steps.`,
-          )})`,
-        );
+        const door = `(error ${JSON.stringify(
+          `${crashed}: this session's statement log is full, so further statements cannot be recorded for replay. ` +
+            `Start a fresh MCP session to continue; fold long accumulations into ONE program (a single top-level form) ` +
+            `instead of many REPL steps.`,
+        )})`;
+        out.push(door);
         statement(
           index,
-          out.slice(-1),
+          [door],
+          [],
           { heapUsed: 0, heapMax: heapBudget, elapsedMs: 0, budgetMsRemaining: budgetMs },
           crashed,
         );
@@ -638,11 +720,48 @@ export class DiscoveryTool {
       }
       const src = sources[index] as string;
       try {
-        const run = await execSerializedState(form, { env, budgetMs, heapBudget, signal, cache, charBudget });
+        const run = await execSerializedState(form, {
+          env,
+          budgetMs,
+          heapBudget,
+          signal,
+          cache,
+          charBudget,
+          extrasState,
+        });
         out.push(...run.out);
+        // R6 drain — the v1 rendering strategy (downstream-owned, §2.6): per extra, a label
+        // text block then its binary block, appended to THIS statement's content and to the
+        // aggregate. The binary block is only ENCODED when someone listens (the aggregate
+        // carries the raw Blob; `serializeResult` lowers it through the same base64 branch).
+        const extraBlocks: ContentBlock[] = [];
+        for (const extra of run.extras) {
+          attachmentOrdinal += 1;
+          const mime = extra.blob.type || "application/octet-stream";
+          const renderable = mime.startsWith("image/") || mime.startsWith("audio/");
+          const size = formatByteSize(extra.blob.size);
+          const label = renderable
+            ? `attachment #${attachmentOrdinal}: ${extra.id} (${mime}, ${size})`
+            : `attachment #${attachmentOrdinal}: ${extra.id} (${mime}, ${size}) — no MCP block kind renders this mime inline`;
+          out.push(label);
+          extraBlocks.push({ type: "text", text: label });
+          if (renderable) {
+            out.push(extra.blob);
+            if (onEvent !== undefined) extraBlocks.push(await lowerBinaryBlob(extra.blob));
+          }
+        }
+        if (run.overflowDelta > 0) {
+          // Overflow drains a NOTE with the count — never silently (the tag-only leaves are
+          // already visible in the core text as `#attachment "over-quota (…)"`).
+          const note =
+            `#| ${run.overflowDelta} attachment(s) over quota (${attachmentQuota}) — rendered tag-only, ` +
+            `not attached, not encoded. Fetch fewer binary values per call, or raise the tool's attachmentQuota. |#`;
+          out.push(note);
+          extraBlocks.push({ type: "text", text: note });
+        }
         const elapsedMs = Date.now() - formStarted;
         if (state !== undefined) state.counters.heapUsedTotal += run.heapUsed; // §2.7 — monotonic contributions
-        statement(index, run.out, {
+        statement(index, run.out, extraBlocks, {
           heapUsed: run.heapUsed,
           heapMax: run.heapMax,
           elapsedMs,
@@ -653,14 +772,16 @@ export class DiscoveryTool {
       } catch (error) {
         if (signal?.aborted) throw error; // cancellation propagates — not a REPL crash
         crashed = error instanceof Error ? error.message : String(error);
-        out.push(`(error ${JSON.stringify(crashed)})`); // REPL-style: earlier values stand; stop here
+        const door = `(error ${JSON.stringify(crashed)})`; // REPL-style: earlier values stand; stop here
+        out.push(door);
         if (state !== undefined) state.counters.crashes += 1;
         const elapsedMs = Date.now() - formStarted;
         // TERMINAL statement event: the crashed form's meter is unobservable (the exec threw
         // before returning its state) — heapUsed honestly reads 0, never a guess.
         statement(
           index,
-          out.slice(-1),
+          [door],
+          [],
           { heapUsed: 0, heapMax: heapBudget, elapsedMs, budgetMsRemaining: Math.max(0, budgetMs - elapsedMs) },
           crashed,
         );
@@ -692,7 +813,9 @@ export class DiscoveryTool {
 
   // ── env assembly: config from the actor args, resources armed by the capability ──
 
-  private async assemble(cfg: Record<string, unknown>): Promise<{ env: SchemeEnv; dispose: () => Promise<void> }> {
+  private async assemble(
+    cfg: Record<string, unknown>,
+  ): Promise<{ env: SchemeEnv; activations: ReadonlyMap<string, Activation<any, any>>; dispose: () => Promise<void> }> {
     // The base is the constant safe floor (SAFE_BUILTINS) — vocabulary is added ONLY by the
     // capability's deps (the audited grant), never by swapping the base out from under it.
     const base = sandboxedEnv.inherit(this.name, {});
@@ -703,6 +826,9 @@ export class DiscoveryTool {
     const assembled = await assembleEnv(base, [pack]);
     return {
       env: assembled.env as SchemeEnv,
+      // The per-capability activations (kernel fold — exec-phases §2.4): the describe-time
+      // metadata read channel; `catalog()` resolves a dynamic description against these.
+      activations: assembled.activations,
       // INTERIM ownership (R3 — §2.8's first-tranche dispose row): the kernel's pack disposers
       // PLUS the lowered pack's resource wind-down. The full ownership table is R7's.
       dispose: async () => {
@@ -822,15 +948,51 @@ export class DiscoveryTool {
     return names.filter((k): k is string => typeof k === "string").toSorted((a, b) => a.localeCompare(b));
   }
 
+  /** The DESCRIBE ambient (exec-phases §2.7): a HOST-CONFIG-ONLY assembly, built lazily on the
+   *  first catalog read that needs one (some verb declares a `dynamicDescription`), memoized per
+   *  tool (per CONNECTION — the class doc), disposed with the tool. Its activations are the
+   *  channel a metadata-declared dynamic field resolves `this` against.
+   *
+   *  LEDGERED (V-pending decision #6, resolved per the doc's own recommendation): describe
+   *  happens BEFORE any actor args exist — a dynamic description reads HOST infra and HOST
+   *  config ONLY (exactly what the closure form could reach, now through the declared channel).
+   *  Honest fallbacks, never a faked actor-args call: a FUNCTION-form `hostConfig` (needs the
+   *  per-call args) or a config schema requiring actor keys ⇒ NO describe ambient — dynamic
+   *  thunks then run with their legacy receiver (a closure-form thunk ignores `this`; a
+   *  metadata-declared field reading `this.configuration` resolves `undefined` and the static
+   *  description stands, un-flagged). */
+  private describeCtx?: Promise<{ activations: ReadonlyMap<string, Activation<any, any>>; dispose: () => Promise<void> } | undefined>;
+  private describeAmbient(): Promise<{ activations: ReadonlyMap<string, Activation<any, any>>; dispose: () => Promise<void> } | undefined> {
+    return (this.describeCtx ??= (async () => {
+      if (typeof this.options.hostConfig === "function") return undefined;
+      try {
+        const cfg = await this.config({ expr: "" });
+        return await this.assemble(cfg);
+      } catch {
+        return undefined; // actor-key-requiring schema — static catalog, the honest floor
+      }
+    })());
+  }
+
   /** The verb catalog reflected off the capability's dep-closure annotations. A STATIC `inputSchema`
    *  renders a sig; a getter (resource-resolving) is NOT invoked here (no live activation). A
-   *  `dynamicDescription` thunk resolves live (and flags the entry session-generated). */
+   *  `dynamicDescription` thunk resolves live (and flags the entry session-generated) — per read,
+   *  no memo, against the OWNING capability's describe-ambient activation when one is derivable
+   *  (the metadata channel); a closure-form legacy thunk ignores the receiver and behaves as
+   *  before. Resolving `undefined` falls back to the static description, NOT flagged dynamic. */
   private async catalog(): Promise<{ text: string; dynamic: boolean }[]> {
+    const entries = this.capability.allAnnotationEntries();
+    const describeCtx = entries.some(({ annotation }) => annotation.dynamicDescription !== undefined)
+      ? await this.describeAmbient()
+      : undefined;
     return Promise.all(
-      Object.entries(this.capability.allAnnotations()).map(async ([name, a]: [string, McpAnnotation]) => {
+      entries.map(async ({ owner, name, annotation: a }) => {
         const d = Object.getOwnPropertyDescriptor(a, "inputSchema");
         const sig = d && !d.get && Array.isArray(d.value) ? (d.value as z.ZodType[]).map(argTypeName).join(" ") : "";
-        const live = await a.dynamicDescription?.();
+        const thunk = a.dynamicDescription;
+        // `this` = the owner's activation when the describe ambient exists; else the
+        // annotation object (the legacy method-call receiver — byte-compatible).
+        const live = thunk === undefined ? undefined : await thunk.call(describeCtx?.activations.get(owner) ?? a);
         const sigPart = sig ? ` ${sig}` : "";
         return { text: `(${name}${sigPart}) - ${live ?? a.description}`, dynamic: live !== undefined };
       }),

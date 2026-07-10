@@ -1,3 +1,4 @@
+import type { AudioBlock, ImageBlock } from "@here.build/mcp-substrate";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 /** What a value-shape tool's `call` returns before transport lowering: plain text/object/Blob. */
@@ -5,6 +6,21 @@ export type UserlandCallToolResult = File | string | object;
 
 function asArray<T>(value: T | T[]): T[] {
   return Array.isArray(value) ? value : [value];
+}
+
+/** THE base64 lowering — one Blob → its MCP binary content block. `serializeResult`'s
+ *  image/audio branch and R6's per-form extras drain (DiscoveryTool, §2.6) share it verbatim,
+ *  so the aggregate and the statement events lower binary identically. Callers gate on the
+ *  mime family first: only `image/*` / `audio/*` blobs have a block kind to lower into. */
+export async function lowerBinaryBlob(blob: Blob): Promise<ImageBlock | AudioBlock> {
+  let binary = "";
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  for (const byte of bytes) binary += String.fromCodePoint(byte);
+  return {
+    type: blob.type.split("/")[0] as "image" | "audio",
+    data: btoa(binary),
+    mimeType: blob.type,
+  };
 }
 
 /**
@@ -33,16 +49,8 @@ export async function serializeResult(
           case typeof result === "string":
             return { type: "text", text: result };
           case result instanceof Blob && result.type.startsWith("image/"):
-          case result instanceof Blob && result.type.startsWith("audio/"): {
-            let binary = "";
-            const bytes = new Uint8Array(await result.arrayBuffer());
-            for (const byte of bytes) binary += String.fromCodePoint(byte);
-            return {
-              type: result.type.split("/")[0] as "image" | "audio",
-              data: btoa(binary),
-              mimeType: result.type,
-            };
-          }
+          case result instanceof Blob && result.type.startsWith("audio/"):
+            return await lowerBinaryBlob(result);
           default:
             return { type: "text", text: JSON.stringify(result) };
         }

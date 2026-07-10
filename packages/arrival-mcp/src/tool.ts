@@ -1,4 +1,5 @@
 import { z as sz } from "@here.build/arrival";
+import type { Activation } from "@here.build/arrival/capability";
 import { Contract, symbol, VectorSpec } from "@here.build/arrival/symbol";
 import * as z from "zod";
 
@@ -23,7 +24,12 @@ export const tool = (tpl: TemplateStringsArray, ...sub: (string | number)[]) => 
   >(
     contract: Contract<[] /* todo: map S to I */, O, undefined> & {
       shape: S,
-      dynamicDescription?: () => string;
+      /** A DYNAMIC metadata field (exec-phases-and-dynamic-metadata.md §2.7): resolved
+       *  lazily at describe/catalog time against the assembly's activation (`this` —
+       *  host config + host resources; actor args don't exist at describe time), per
+       *  read, no memo. Resolving `undefined` falls back to the static `description`
+       *  and is NOT flagged session-generated (the honest-failure contract). */
+      dynamicDescription?: (this: Activation<any, any>) => string | undefined | Promise<string | undefined>;
     },
     impl: (args: any) => any,
   ) => {
@@ -41,6 +47,11 @@ export const tool = (tpl: TemplateStringsArray, ...sub: (string | number)[]) => 
         metadata: {
           inputSchema: contract.shape,
           description: doc,
+          // Forwarded (previously declared-and-DROPPED — the live consumer gap the
+          // exec-phases design closes): rides the def's metadata bag as a dynamic
+          // field; the annotation lift + the DiscoveryTool catalog resolve it against
+          // the describe-time activation.
+          ...(contract.dynamicDescription === undefined ? {} : { dynamicDescription: contract.dynamicDescription }),
         },
       },
     );
