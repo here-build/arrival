@@ -53,7 +53,7 @@ const BASE = new Set([
 const isBaseName = (n: string): boolean => BASE.has(n);
 
 async function wf(code: string): Promise<WireframeProgram> {
-  const forms = await parse(code, inferenceEnv);
+  const forms = await parse(code);
   return buildWireframe(forms, { classifier: C, isBaseName });
 }
 
@@ -108,7 +108,7 @@ describe("Q8a builder core — selector-cone reachability decides mux fate (§1 
     const p = await wf("(if (> x 0) x (- y x))");
     expect(kinds(p.main)).toEqual(["port"]); // no mux node — collapsed
     const w = wireTo(p.main, "out");
-    expect(w?.params.sort()).toEqual(["x", "y"]); // both arms' ingress, the m3 trade
+    expect(w?.params.toSorted()).toEqual(["x", "y"]); // both arms' ingress, the m3 trade
     expect(w?.source).toContain("(if (> x 0) x (- y x))");
   });
 
@@ -152,7 +152,7 @@ describe("Q8a builder core — selector-cone reachability decides mux fate (§1 
     expect(kinds(p.main).sort()).toEqual(["port", "source"]);
     const w = wireTo(p.main, "out");
     expect(w?.source).toContain("(if (> x 0) in0 y)");
-    expect(w?.params.sort()).toEqual(["in0", "x", "y"]);
+    expect(w?.params.toSorted()).toEqual(["in0", "x", "y"]);
   });
 });
 
@@ -210,7 +210,7 @@ describe("Q8a builder core — fans are region hosts (§3 I5)", () => {
     const fan = p.main.nodes.find((n) => n.kind === "fan");
     if (fan?.kind !== "fan") throw new Error("expected a fan node");
     const egressWire = fan.template?.wires.find((w) => w.consumer.slot === "out");
-    expect(egressWire?.params.sort()).toEqual(["scale", "v"]);
+    expect(egressWire?.params.toSorted()).toEqual(["scale", "v"]);
     // `scale` is a capture: a slot param, NOT an inlined value, NOT a G-node ref
     expect(egressWire?.paramRefs.every((r) => r.kind === "slot")).toBe(true);
   });
@@ -374,7 +374,7 @@ describe("Q8a builder core — dropped top-level forms and program order (§1 D6
 
 describe("Q8a — unevalWire's emission-time door (wire-locality)", () => {
   it("a port-reaching define captured as a VALUE throws WireLocalityError (never a payload, never by-name)", async () => {
-    const forms = await parse("(define (helper x) (src-a x))\n(emit! helper)", inferenceEnv);
+    const forms = await parse("(define (helper x) (src-a x))\n(emit! helper)");
     expect(() => buildWireframe(forms, { classifier: C, isBaseName })).toThrow(WireLocalityError);
   });
 
@@ -385,7 +385,7 @@ describe("Q8a — unevalWire's emission-time door (wire-locality)", () => {
     const graphs: WireframeGraph[] = [p.main, ...[...p.templates.values()].map((t) => t.graph)];
     for (const g of graphs) {
       for (const w of g.wires) {
-        const [lam] = await parse(w.source, inferenceEnv);
+        const [lam] = await parse(w.source);
         for (const name of freeVars(lam)) {
           expect(p.prelude.names.has(name) || isBaseName(name), `"${name}" leaked from ${w.source}`).toBe(true);
         }
@@ -407,7 +407,6 @@ describe("Q8a — freeVars models `try` (evalTry's exact shape; mirrors collect-
   it("catch/finally marker heads never leak into the free-variable set", async () => {
     const [form] = await parse(
       "(try (raise-continuable x) (catch (e) (handle e)) (finally (cleanup)))",
-      inferenceEnv,
     );
     const fv = freeVars(form);
     expect(fv.has("try")).toBe(false); // own head — excluded like every other special form
@@ -416,7 +415,7 @@ describe("Q8a — freeVars models `try` (evalTry's exact shape; mirrors collect-
   });
 
   it("the catch variable binds for its own handler body only — never free, never leaked to `finally`", async () => {
-    const [form] = await parse("(try (raise-continuable x) (catch (e) (handle e)) (finally (handle e)))", inferenceEnv);
+    const [form] = await parse("(try (raise-continuable x) (catch (e) (handle e)) (finally (handle e)))");
     const fv = freeVars(form);
     // `e` inside `catch`'s own handler is BOUND (excluded); `e` inside `finally` is
     // a genuinely free reference (finally does NOT see the catch var) — both facts
@@ -427,14 +426,13 @@ describe("Q8a — freeVars models `try` (evalTry's exact shape; mirrors collect-
   it("the try body, catch handlers, and finally clause all contribute their OWN free variables", async () => {
     const [form] = await parse(
       "(try (raise-continuable x) (catch (e) (handle e)) (finally (cleanup)))",
-      inferenceEnv,
     );
     const fv = freeVars(form);
     expect([...fv].sort()).toEqual(["cleanup", "handle", "raise-continuable", "x"].sort());
   });
 
   it("a `try` with only a body (no catch/finally clauses) still walks the body correctly", async () => {
-    const [form] = await parse("(try (only-body-call x))", inferenceEnv);
+    const [form] = await parse("(try (only-body-call x))");
     const fv = freeVars(form);
     expect([...fv].sort()).toEqual(["only-body-call", "x"].sort());
   });

@@ -33,7 +33,11 @@ describe("boxed vector/bytevector — Scheme→JS serialization (schemeToJs)", (
     const bv = new ABytevector(CONSTANT_CTX, Uint8Array.from([4, 5, 6]));
     const out = schemeToJs(bv);
     expect(out).toBeInstanceOf(Uint8Array);
-    expect([...out]).toEqual([4, 5, 6]);
+    // Cast: `AUnwrap<T>` (values/types.ts) has no `ABytevector` arm — falls through to
+    // `unknown` — even though rosetta.ts's schemeToJsImpl documents "ABytevector → raw
+    // Uint8Array" (a source-type gap, not fixed here per I1 scope: flagged separately).
+    // The `toBeInstanceOf` assertion above is the runtime proof this narrows honestly.
+    expect([...(out as Uint8Array)]).toEqual([4, 5, 6]);
   });
 });
 

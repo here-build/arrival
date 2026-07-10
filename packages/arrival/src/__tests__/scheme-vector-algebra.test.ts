@@ -38,7 +38,7 @@ const numOf = (x: SchemeValue): number => Number(x.valueOf());
 // box, rebuilding a fresh AVector — so both the mapped structure and the source expose a
 // boxed `__vector__`. We compare those boxes element-wise via `structuralEqual`, which
 // routes each element through its own Setoid (AExact ≡ AExact).
-const boxedEq = (a: { __vector__: SchemeValue[] }, b: { __vector__: SchemeValue[] }): boolean =>
+const boxedEq = (a: { __vector__: readonly SchemeValue[] }, b: { __vector__: readonly SchemeValue[] }): boolean =>
   a.__vector__.length === b.__vector__.length && a.__vector__.every((x, i) => structuralEqual(x, b.__vector__[i]));
 
 // Small element domain + edge cases: empty, singletons, collisions.
@@ -105,7 +105,11 @@ describe("SchemeVector Setoid/Semigroup/Functor — boundaries", () => {
 
   it("toJs / TO_JS unwrap to the raw array", () => {
     const a = vec([1, 2, 3]);
-    expect(a["arrival/toJS"]().map(numOf)).toEqual([1, 2, 3]);
+    // `arrival/toJS` returns `readonly unknown[]` (the honest membrane-exit boundary) —
+    // `Number(x)` (param typed `any`) works on either a raw JS number or a still-boxed
+    // AExact (both implement `valueOf()`, which `Number`'s coercion invokes), unlike
+    // `numOf`'s `SchemeValue`-typed param.
+    expect(a["arrival/toJS"]().map(Number)).toEqual([1, 2, 3]);
     expect(Array.isArray(a["arrival/toJS"]())).toBe(true);
   });
 });

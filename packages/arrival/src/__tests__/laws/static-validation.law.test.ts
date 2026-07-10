@@ -98,7 +98,11 @@ function loaderLike(name: string, onProbe: () => void): EnvCapability<any, any> 
       }
       return defs;
     },
-  }) as unknown as EnvCapability<never, never>;
+  });
+  // (no trailing cast needed: `new EnvCapability<any, any>(...)` above already
+  // returns `EnvCapability<any, any>`, matching this function's declared return
+  // type — a stale `as unknown as EnvCapability<never, never>` used to sit here
+  // from before the `<any, any>` widening landed.)
 }
 
 // ============================================================================

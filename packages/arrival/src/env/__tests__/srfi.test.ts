@@ -4,6 +4,7 @@ import { assembleEnv } from "../../common/kernel.js";
 import { type SchemeEnv } from "../../common/scheme-env.js";
 import { describe, expect, it } from "vitest";
 import * as z from "../../common/scheme-zod.js";
+import { ZodTuple, type ZodOptional, type ZodTypeAny } from "zod";
 import type { SequenceSymbolDef } from "../../common/symbol.js";
 
 import {
@@ -158,26 +159,38 @@ function bakedSort(): SequenceSymbolDef {
   return (symbols as Record<string, SequenceSymbolDef>).sort;
 }
 
+/** `.def` (schemas.d.ts's `ZodType` interface) is public on every zod schema, but its
+ *  STATIC type only gains `.items` once TS knows the concrete subtype is a tuple —
+ *  `instanceof ZodTuple` (also a real, public zod v4 export) is the honest narrowing. */
+function tupleItems(schema: ZodTypeAny): readonly ZodTypeAny[] {
+  if (!(schema instanceof ZodTuple)) throw new Error("bakedSort: expected a zod tuple schema");
+  // Cast: bare `instanceof ZodTuple` narrows to the class's DEFAULT generic (core's minimal
+  // `$ZodType`), not `ZodTypeAny` (classic) — even though every item here IS a real classic
+  // schema (srfi95 builds this tuple via z.tuple()'s classic builders throughout).
+  return schema.def.items as readonly ZodTypeAny[];
+}
+
 describe("SRFI-95 sort — contract element precision", () => {
   it("declares the receiver as the representation-blind SCHEME identity (z.value), not host-blind z.unknown()", () => {
-    const items = bakedSort().in.def.items;
+    const items = tupleItems(bakedSort().in);
     // Reference-identity (not just shape) — z.value is the shared module singleton, so this
     // proves the FILE chose it deliberately, not merely "some schema that happens to accept anything".
     expect(items[0]).toBe(z.value);
   });
 
   it("declares the comparator (less?) as a callable predicate schema, not z.unknown()", () => {
-    const items = bakedSort().in.def.items;
+    const items = tupleItems(bakedSort().in);
     const comparator = items[1];
     expect(comparator.type).toBe("optional");
     // AValue.ts's single-source-of-truth member signature is
     // `(comparator?: (a: unknown, b: unknown) => unknown, runCtx?: RunContext): SchemeValue`
     // (deriveSortCompare, op-helpers.ts, matches exactly) — a callable, never bare `unknown`.
-    expect(comparator.unwrap().type).toBe("custom");
+    // Narrow to call `.unwrap()`: the assertion just above is the runtime proof it's optional.
+    expect((comparator as ZodOptional<ZodTypeAny>).unwrap().type).toBe("custom");
   });
 
   it("declares the output as the representation-blind scheme identity (z.value), matching the receiver algebra's declared SchemeValue return", () => {
-    const items = bakedSort().out.def.items;
+    const items = tupleItems(bakedSort().out);
     expect(items[0]).toBe(z.value);
   });
 });

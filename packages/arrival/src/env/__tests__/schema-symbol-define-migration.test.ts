@@ -37,6 +37,7 @@ import { buildDegradationInfo } from "../../common/degradation.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../errors.js";
 import { schemaCapability } from "../schema.js";
 import type { AEntity } from "../../common/symbol.js";
+import type { SymbolDeclaration } from "../../common/capability.js";
 import type { ResolvingEnvironment } from "../../Environment.js";
 
 const capabilities = [schemaCapability];
@@ -46,14 +47,14 @@ const capabilities = [schemaCapability];
 const evalScheme = (env: unknown, src: unknown): unknown =>
   exec(src as string, { env: env as ResolvingEnvironment, skipBootstrapWait: true });
 
-function resolveSymbols(): Record<string, AEntity> {
+function resolveSymbols(): Record<string, SymbolDeclaration> {
   const { symbols } = schemaCapability.spec;
   if (typeof symbols !== "function") return symbols ?? {};
   return symbols({
     configuration: {},
     resources: {},
     degradation: buildDegradationInfo("arrival/schema", "forbid", []),
-  }) as Record<string, AEntity>;
+  }) as Record<string, SymbolDeclaration>;
 }
 
 const S_SYMBOLS = [

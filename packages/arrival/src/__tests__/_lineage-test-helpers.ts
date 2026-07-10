@@ -29,6 +29,7 @@ import { jsToScheme } from "../rosetta.js";
 import { provOf } from "../values/lineage-shadow.js";
 import type { Environment } from "../Environment.js";
 import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../values/op-helpers.js";
+import type { SchemeValue } from "../values/types.js";
 
 /** Stamp a single source-id onto a string input (the per-element id carrier). Codec
  *  encode + withProvenance, not a direct AString construction. */
@@ -64,7 +65,7 @@ export async function runRaw(
   src: string,
   binds: Record<string, unknown> = {},
   setup?: EnvSetup,
-): Promise<unknown> {
+): Promise<SchemeValue | undefined> {
   await initBridge();
   const env = inferenceEnv.inherit(`lin-test-${seq++}`);
   setup?.(env);

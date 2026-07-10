@@ -168,7 +168,10 @@ describe("Wrapper Layer", () => {
     it("refuses re-entry of a wrapper — double-wrapping is impossible", () => {
       const obj = { a: 1 };
       const wrapped = fromJS(obj);
-      // @ts-expect-error type-level: an AValue argument resolves to never
+      // No longer a type error: `wrapped: FromJSResult` (membrane.ts) is a boundary-wide
+      // union (includes Uint8Array/ArrayBuffer/DataView/Function/Promise, none of which
+      // extend AValue), so `[T] extends [AValue]` no longer holds for the WHOLE union —
+      // the runtime door below is still real, just no longer caught statically.
       expect(() => fromJS(wrapped)).toThrow(/already-boxed/);
     });
   });

@@ -33,6 +33,7 @@ import { AExact } from "../../../values/primitives/AExact.js";
 import { AString } from "../../../values/primitives/AString.js";
 import { CONSTANT_CTX } from "../../../values/primitives/RunContext.js";
 import { schemeFalse } from "../../../values/primitives/ABool.js";
+import type { SchemeValue } from "../../../values/types.js";
 
 const symbols = listsPack.spec.symbols as Record<string, AEntity>;
 
@@ -52,7 +53,12 @@ function sequenceDef(name: string) {
 
 const exact = (n: bigint | number): AExact => new AExact(CONSTANT_CTX, typeof n === "bigint" ? n : BigInt(n));
 const str = (s: string): AString => new AString(CONSTANT_CTX, s);
-const properList = (...items: unknown[]) => APair.fromArray(CONSTANT_CTX, items);
+// Adversarial fixture: `properList` deliberately builds pair-chains over non-SchemeValue
+// elements too (raw JS numbers/functions — see call sites below) to probe zod schema
+// REJECTION under this file's own precision fixes. `fromArray`'s `T extends SchemeValue`
+// constraint targets genuine callers; construction itself never dereferences element
+// shape, only the zod schemas under test do — the cast documents that mismatch.
+const properList = (...items: unknown[]) => APair.fromArray(CONSTANT_CTX, items as SchemeValue[]);
 const fn = (..._args: unknown[]): boolean => false;
 
 describe("scheme/lists Contract precision — genuinely REFINED schemas reject wrongly-shaped values (were z.unknown(), now zod-validated)", () => {

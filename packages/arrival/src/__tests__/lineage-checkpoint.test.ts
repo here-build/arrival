@@ -52,8 +52,12 @@ function countNodes(n: LineageNode): number {
       return 1 + countNodes(n.source);
     case "mux":
       return 1 + countNodes(n.selector) + n.arms.reduce((a, arm) => a + countNodes(arm), 0);
+    case "transparent":
+      return 1 + countNodes(n.child);
     case "merge":
     case "opaque":
+    case "sink":
+    case "binder":
       return 1 + n.children.reduce((a, ch) => a + countNodes(ch), 0);
   }
 }
@@ -71,7 +75,7 @@ describe("lineage checkpoint — runtime stamping derives the SAME cone (correct
     const eager = provOf(r);
 
     // Static skeleton (no eval) + leaf provenances read from the env = "runtime stamping".
-    const [ast] = await parse(`(length (list a b c))`, env);
+    const [ast] = await parse(`(length (list a b c))`);
     const skel = classify(ast, C);
     const bindings = { a: provOf(env.get("a")), b: provOf(env.get("b")), c: provOf(env.get("c")) };
 
@@ -117,7 +121,7 @@ describe("lineage checkpoint — the static skeleton is constant in N (eager ret
 
   it("the static lineage skeleton node-count is CONSTANT — independent of N", async () => {
     await initBridge();
-    const [ast] = await parse(`(length (map f xs))`, inferenceEnv);
+    const [ast] = await parse(`(length (map f xs))`);
     const nodes = countNodes(classify(ast, C)); // Pipe(length) -> Fan(f) -> Leaf(xs)
     expect(nodes).toBeLessThanOrEqual(4); // O(AST), constant in N (NOT a total-memory claim — see scope note)
   });

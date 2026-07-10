@@ -36,6 +36,7 @@ import { buildDegradationInfo } from "../../common/degradation.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../errors.js";
 import { overridableCapability } from "../overridable.js";
 import type { AEntity, DefineSyntaxSymbolDef } from "../../common/symbol.js";
+import type { SymbolDeclaration } from "../../common/capability.js";
 import type { ResolvingEnvironment } from "../../Environment.js";
 
 const capabilities = [overridableCapability];
@@ -48,14 +49,14 @@ const evalScheme = (env: unknown, src: unknown): unknown =>
 // Resolves the pack's builder-form `symbols(activation)` the exact same way `lower()` itself
 // does internally (capability.ts:244) — a REAL `Activation` (`buildDegradationInfo` is the same
 // constructor `lower()` calls), not a synthetic cast, so this stays honest through a real type.
-function resolveSymbols(): Record<string, AEntity> {
+function resolveSymbols(): Record<string, SymbolDeclaration> {
   const { symbols } = overridableCapability.spec;
   if (typeof symbols !== "function") return symbols ?? {};
   return symbols({
     configuration: { params: {} },
     resources: {},
     degradation: buildDegradationInfo("arrival/overridable", "forbid", []),
-  }) as Record<string, AEntity>;
+  }) as Record<string, SymbolDeclaration>;
 }
 
 describe("arrival/overridable — structural: no prelude field, define-syntax kind, rosetta untouched", () => {

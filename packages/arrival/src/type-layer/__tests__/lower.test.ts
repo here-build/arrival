@@ -12,6 +12,7 @@ import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
 import { lower } from "../lower.js";
 import { assembleHarvestedPrelude } from "../prelude.js";
+import { theVoid } from "../../values/primitives/AVoid.js";
 
 /** Type-check `source` as one in-memory file; return the diagnostic messages (empty = clean). */
 function compileErrors(source: string): string[] {
@@ -251,7 +252,10 @@ describe("lower — integration: lowered call ∩ harvested prelude", () => {
   );
   const setTimer = symbol.native`set-timer: start a timer`(
     { input: [z.number], output: [z.undefinedResult] },
-    () => undefined,
+    // `symbol.native` runs in SCHEME space — z.undefinedResult decodes to `AVoid`, so the
+    // impl returns the boxed `theVoid` singleton, never a raw JS `undefined` (matches every
+    // production z.undefinedResult native, e.g. env/r7rs/strings.ts's string-for-each).
+    () => theVoid,
   );
   const entries = [
     ["get_route", getRoute],

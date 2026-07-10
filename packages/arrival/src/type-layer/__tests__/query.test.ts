@@ -8,7 +8,6 @@ import { describe, expect, it } from "vitest";
 
 import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
-import { nil } from "../../values/primitives/ANil.js";
 import { assembleHarvestedPrelude } from "../prelude.js";
 import { createQueryLens } from "../query.js";
 
@@ -35,7 +34,9 @@ const setTimer = symbol.rosetta`set-timer: start a timer`(
 );
 const makeRoute = symbol.rosetta`make-route: build a fresh route`(
   { input: [], output: [z.list()] },
-  () => nil,
+  // `symbol.rosetta` runs in JS space (auto-converts on crossing) — the impl returns the
+  // raw JS array shape z.list() decodes to, never the boxed scheme `nil`.
+  () => [],
 );
 //   plan_route   (a: "fast" | "scenic",          — a DIRECT closed string-literal enum slot
 //                 b: ("fast" | "scenic")[],       — an ARRAY-of-enum slot (element is the enum)

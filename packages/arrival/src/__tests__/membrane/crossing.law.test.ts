@@ -396,11 +396,21 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         // crossed AS a scheme value in the first place — schemeToJs's generic fallback
         // just returns it unchanged, matching the "raw" exit form honestly.
         const u8 = new Uint8Array([1, 2, 3]);
-        expect(schemeToJs(fromJS(u8))).toBe(u8);
+        // Cast: `fromJS`'s `FromJSResult` (membrane.ts) is a boundary-wide union
+        // (Uint8Array/ArrayBuffer/DataView/Function/Promise, none SchemeValue) —
+        // `schemeToJs<T extends SchemeValue|null|undefined>` can't infer T from it. The
+        // comment above already establishes the runtime-guaranteed shape: never boxed on
+        // entry, schemeToJs's generic fallback returns it unchanged.
+        expect(schemeToJs(fromJS(u8) as SchemeValue)).toBe(u8);
       });
       it(roundTripTitle, () => {
         const u8 = new Uint8Array([1, 2, 3]);
-        expect(schemeToJs(fromJS(u8))).toBe(u8);
+        // Cast: `fromJS`'s `FromJSResult` (membrane.ts) is a boundary-wide union
+        // (Uint8Array/ArrayBuffer/DataView/Function/Promise, none SchemeValue) —
+        // `schemeToJs<T extends SchemeValue|null|undefined>` can't infer T from it. The
+        // comment above already establishes the runtime-guaranteed shape: never boxed on
+        // entry, schemeToJs's generic fallback returns it unchanged.
+        expect(schemeToJs(fromJS(u8) as SchemeValue)).toBe(u8);
       });
       it(provenanceTitle, () => {
         // FFI-identity named superset (P4): the binary never boxes, so a supplied

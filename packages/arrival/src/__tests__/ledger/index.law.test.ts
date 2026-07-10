@@ -21,7 +21,7 @@
  * are NOT governed by this convention — the walker only scans the sunrise dirs.
  */
 import { describe, it, expect } from "vitest";
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, type Dirent } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -228,7 +228,11 @@ const LEDGER_COMMENT_RE = /^\s*\/\/\s*@ledger:\s*(.+?)\s*$/;
 const testsRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 function collectTestFiles(dir: string): string[] {
-  let entries: ReturnType<typeof readdirSync>;
+  // `readdirSync(dir, { withFileTypes: true })` (no `encoding`) resolves the
+  // `Dirent[]` (i.e. `Dirent<string>`) overload — `ReturnType<typeof readdirSync>`
+  // picks the OTHER (`encoding: "buffer"`) overload's `Dirent<Buffer>[]` instead,
+  // since an overloaded function's `typeof` resolves to its last signature.
+  let entries: Dirent[];
   try {
     entries = readdirSync(dir, { withFileTypes: true });
   } catch {
