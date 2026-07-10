@@ -44,6 +44,8 @@ const source = (impl: () => unknown) =>
 const echo = symbol.rosetta`echo: identity`({ input: [z.value], output: [z.value] }, (v) => v);
 
 describe("attestation registry (attest / isAttested / freshIfSingleton)", () => {
+  /** Exempt singletons (nil, void, interned symbols, #t/#f) are never marked attested;
+   *  attest() is also a no-op on non-AValue inputs (raw strings, undefined) — never throws. */
   it("refuses the exempt singletons: nil, #void, interned symbols, #t/#f flyweights", async () => {
     expect(isAttested(attest(nil))).toBe(false);
     expect(isAttested(attest(theVoid))).toBe(false);
@@ -58,6 +60,9 @@ describe("attestation registry (attest / isAttested / freshIfSingleton)", () => 
     expect(isAttested(attest(undefined))).toBe(false);
   });
 
+  /** freshIfSingleton clones only the #t/#f flyweights; the clone can be attested
+   *  independently while the shared singleton itself never becomes attested. Non-singleton
+   *  values (e.g. numbers) pass through unchanged (same reference, not cloned). */
   it("freshIfSingleton clones ONLY the #t/#f flyweights; the clone attests, the singleton never does", async () => {
     const fresh = freshIfSingleton(schemeTrue);
     expect(fresh).not.toBe(schemeTrue);

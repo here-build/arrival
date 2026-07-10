@@ -221,6 +221,8 @@ describe("v0.1 FINALIZATION GATES (G1–G7)", () => {
     "G6: provenance survives map/filter/length/sort across ALL carriers (Pair / SchemeVector / AJSArray) under --ir-lineage — no coercion silently drops a provenance box; matches the eager golden per carrier",
   );
 
+  // [impl-pinning] pins the CURRENT eager mechanism (grouping-fact stamp survives map,
+  // drops on count/convert), not a behavioral guarantee — the static path may reshape this.
   it("G6-eager-golden(SchemeVector): a length-preserving vector-map PRESERVES the collection-level grouping fact; vector-length/vector->list drop to the bare scalar/Pair exactly as eager does (this map IS the G2 oracle)", async () => {
     await initBridge();
     const mkVec = () => new AVector(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101)], new Set([7]));

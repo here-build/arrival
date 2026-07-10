@@ -22,6 +22,8 @@ const door = async (src: string): Promise<{ purity: boolean; message: string }> 
   throw new Error(`expected a purity door for: ${src}`);
 };
 
+// [impl-pinning] each `it` pins the exact PurityError message wording (`toMatch`), not
+// just "throws" — a rewrite that omits dynamics some other way must still name itself.
 describe("purity doors — dynamics are omitted", () => {
   for (const [name, src] of [
     ["call/cc", "(call/cc (lambda (k) (k 1)))"],
@@ -42,6 +44,7 @@ describe("purity doors — dynamics are omitted", () => {
   }
 });
 
+// [impl-pinning] pins the exact PurityError message wording, same as the dynamics doors above.
 describe("purity doors — writing methods are omitted (entities frozen)", () => {
   for (const [name, src] of [
     ["set-car!", "(set-car! (list 1 2) 9)"],

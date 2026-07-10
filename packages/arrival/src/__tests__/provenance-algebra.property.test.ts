@@ -120,6 +120,8 @@ describe("unionProvenance — reference fast paths", () => {
   // === EMPTY_PROVENANCE` style identity for the bool-boxing decision. The
   // bridge.ts:271 comment ("Empty-provenance short-circuit") names the
   // contract.
+  // [impl-pinning] pins reference identity, not membership — a future rewrite of the
+  // algebra could satisfy every algebraic property above while returning a fresh set here.
   it("empty fast-path: all-empty inputs return EMPTY_PROVENANCE BY REFERENCE", () => {
     fc.assert(
       fc.property(fc.array(fc.boolean(), { minLength: 0, maxLength: 5 }), (bools) => {
@@ -130,6 +132,7 @@ describe("unionProvenance — reference fast paths", () => {
     );
   });
 
+  // [impl-pinning] reference identity again, not membership.
   it("singleton fast-path: single distinct non-empty set returns that ref BY REFERENCE", () => {
     fc.assert(
       fc.property(
@@ -146,6 +149,8 @@ describe("unionProvenance — reference fast paths", () => {
     );
   });
 
+  // [impl-pinning] pins the dedupe-by-reference / allocate-on-merge mechanism, not a
+  // behavioral property — membership is identical either way (see `monotonic` above).
   it("reference-equal sets dedupe; value-equal-but-distinct refs merge into a fresh set", () => {
     fc.assert(
       fc.property(

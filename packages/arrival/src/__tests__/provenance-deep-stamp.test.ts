@@ -144,6 +144,8 @@ describe("SchemeJSObject.get — cached boundary-validated boxing", () => {
     expect(obj.get("nope")).toBe(nil);
   });
 
+  // [impl-pinning] pins the exact mechanism (throw + cached-read stability), not just
+  // "writes don't work" — a rewrite that dropped the cache stability would regress silently.
   it("rejects writes — set is banned (pure-dataflow sandbox), source unchanged", () => {
     const source: { x: unknown } = { x: 1 };
     const obj = new AJSObject(CONSTANT_CTX, source, PROV);

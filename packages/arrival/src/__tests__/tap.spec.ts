@@ -168,6 +168,8 @@ describe("evaluation tap", () => {
     expect(exits(events)).toHaveLength(1);
   });
 
+  // [impl-pinning] pins today's define-macro mechanism (expansion Pairs carry no
+  // __location__, so they never fire) — a macro-expansion redesign could change this.
   it("macro call site is traced; the expansion body is opaque", async () => {
     const { events, tap } = recorder();
     await exec(
