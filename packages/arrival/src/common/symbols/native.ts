@@ -37,8 +37,8 @@ export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
     // reads it off `env.get(op)`, replacing the retired `fanout: true` → `.fanout` duck-read.
     const provenance = contract.provenance ?? "pipe";
     assertProvenanceRoleShape(name, provenance, inSchema, outSchema);
-    // Per-lambda-arm callback roles (PROVENANCE-PLAN.md Q4): shape extraction + the
-    // declared override, drift-door checked — see extractCallbackRoles in _bake.ts.
+    // Per-lambda-arm callback roles: shape extraction + the declared override, drift-door
+    // checked — see extractCallbackRoles in _bake.ts.
     const callbackRoles = extractCallbackRoles(name, provenance, inSchema, outSchema, contract.callbackRoles);
     return {
       kind: "native",

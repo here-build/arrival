@@ -45,8 +45,8 @@ export interface RosettaSpec {
 export interface ResolverSpec {
   readonly id: string;
   resolve(name: string): unknown | undefined;
-  /** DECLARED purity (ENV T2, environment-resolution-chain.md §2 — P16 honesty: the
-   *  alarm catches contradictions, not lies): `true` promises NAME-STABLE results (same
+  /** DECLARED purity (a drift alarm catches CONTRADICTIONS against this declaration,
+   *  never lies outright): `true` promises NAME-STABLE results (same
    *  name ⇒ same value forever), which licenses the compiled resolution chain to
    *  memoize hits through this step — and, iff EVERY resolver in a chain is pure, to
    *  cache misses ("unbound") too. Absent/`false` (the safe default): nothing is cached
@@ -66,9 +66,9 @@ export interface SchemeEnv {
    *  resolvers → capability.ts's apply) and the kernel's bake overlay — assembly-time
    *  producers only. There is deliberately NO `unregisterResolver` on this contract:
    *  resolver REMOVAL is not a pack-facing operation. The kernel's bake-SEAL hook
-   *  (ENV T2, design §1) reaches it structurally (`ResolverHostLike`, kernel.ts) on
-   *  hosts that offer it — `ResolvingEnvironment` does — and falls back to the
-   *  sealed-flag silencer on hosts that don't. */
+   *  reaches it structurally (`ResolverHostLike`, kernel.ts) on hosts that offer it —
+   *  `ResolvingEnvironment` does — and falls back to the sealed-flag silencer on hosts
+   *  that don't. */
   registerResolver(resolver: ResolverSpec): void;
   /** Own bound names of THIS scope layer (string keys + symbols), not chained. The
    *  per-layer primitive `allBoundNames` walks; a consumer wanting only own-scope

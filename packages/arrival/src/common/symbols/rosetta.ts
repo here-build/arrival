@@ -27,7 +27,7 @@ import {
 /** Rosetta host fn in JS-LAND (decoded via the contract codecs). ctx-free for this step.
  *  `Rest` (inferred from `contract.inputRest`, defaulting to `undefined`) is the FIXED-prefix-
  *  plus-rest split — see `Contract`/`Impl` in `_bake.ts`. Absent `inputRest` ⇒ `Rest` stays
- *  `undefined` and `impl`'s signature is byte-identical to before `inputRest` existed. */
+ *  `undefined` and `impl`'s signature is the plain fixed-arity form. */
 export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) {
   const { name, doc } = parseNameDoc(tpl, sub);
   return <const I extends VectorSpec, const O extends VectorSpec, const Rest extends RestSpec = undefined>(
@@ -50,13 +50,11 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       ? (contract.output as readonly unknown[]).map((slot) => z.lookupName(slot) === "value")
       : [];
     // Resolve the declared role (default "source" — see Contract.provenance): "pipe" is a
-    // TRANSFORM (forwards input provenance); "source" (default) MINTS. Migrated from the
-    // retired `pure: true` boolean (PROVENANCE-PLAN.md Q2) — `pure === true` ⇒ "pipe",
-    // undefined/false ⇒ "source", so `forwards` below is BYTE-IDENTICAL to the old `pure`.
+    // TRANSFORM (forwards input provenance); "source" (default) MINTS.
     const provenance = contract.provenance ?? "source";
     assertProvenanceRoleShape(name, provenance, inSchema, outSchema);
-    // Per-lambda-arm callback roles (PROVENANCE-PLAN.md Q4): shape extraction + the
-    // declared override, drift-door checked — see extractCallbackRoles in _bake.ts.
+    // Per-lambda-arm callback roles: shape extraction + the declared override, drift-door
+    // checked — see extractCallbackRoles in _bake.ts.
     const callbackRoles = extractCallbackRoles(name, provenance, inSchema, outSchema, contract.callbackRoles);
     const forwards = provenance === "pipe";
     // Per-invocation validation gate (the design's `exec(src, { typecheck })`). Retained
@@ -74,10 +72,9 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
     // generic conversions and zod doing the (gated) validation, and the SAME ctx-driven
     // provenance mint at the end.
     const run = async function (this: CallCtx, ...args: unknown[]): Promise<unknown> {
-      // R-CTX-3: `this` IS the CallCtx — the type parameter forces it at every call site
-      // (unbound call = compile error); makeCallCtx/testCallCtx never yield nullable
-      // fields, so no runtime door (retired 2026-07-10; the old "direct def.run(...)"
-      // idiom died with the ctx tranches).
+      // `this` IS the CallCtx — the type parameter forces it at every call site (unbound
+      // call = compile error); makeCallCtx/testCallCtx never yield nullable fields, so
+      // there is no runtime door.
       // Collect input provenance from the RAW scheme args BEFORE decode strips the AValue
       // identity (decode unwraps SchemeString/SchemeBool/… to JS primitives). The fallback
       // when no invocation is in ctx (direct-JS calls) is this input union — exactly

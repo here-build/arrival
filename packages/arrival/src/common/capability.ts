@@ -61,7 +61,7 @@ type RefsOf<R extends Record<string, Resource<unknown>>> = { readonly [K in keyo
 export interface Activation<C extends ZodMap, R extends Record<string, Resource<unknown>>> {
   readonly configuration: InferCfg<C>;
   readonly resources: RefsOf<R>;
-  /** Door-set degradation (design doc §3.7, W2) — see `./degradation.js`'s `DegradationInfo`.
+  /** Door-set degradation — see `./degradation.js`'s `DegradationInfo`.
    *  Present on EVERY activation (informational under `"forbid"`, the default — no capability
    *  is affected unless it explicitly consults `.door(...)`); a builder-form `symbols` MAY
    *  destructure it to trade a manual `if (x !== undefined)` withhold for a cause-carrying
@@ -194,9 +194,9 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
   /** Lower to a kernel `EnvPack`. `evalScheme` runs the prelude (required iff a prelude
    *  exists); `config` is validated against the `configuration` schemas.
    *
-   *  `degradation` (design doc §3.7, W2): `"forbid"` (the default — host/provisioning
-   *  posture, byte-identical to pre-W2 behavior) or `"doors"` (program-scoped callers opt
-   *  in). Threaded to every dep's own `lower()` call, same as `evalScheme`/`config` — a
+   *  `degradation`: `"forbid"` (the default — host/provisioning posture) or `"doors"`
+   *  (program-scoped callers opt in). Threaded to every dep's own `lower()` call, same
+   *  as `evalScheme`/`config` — a
    *  degraded dep and a degraded root see the SAME mode. Changes nothing by itself: it only
    *  affects capabilities whose `symbols` builder explicitly consults
    *  `Activation.degradation` (see `./degradation.js`). */
@@ -214,7 +214,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
     const schema = spec.configuration ? z.object(spec.configuration as ZodMap) : z.object({});
     const configuration = schema.parse(opts.config ?? {}) as InferCfg<C>;
 
-    // Door-set degradation (§3.7): computed from the RAW config bag (pre-`schema.parse`,
+    // Door-set degradation: computed from the RAW config bag (pre-`schema.parse`,
     // which already ran above and would have thrown for a present-but-invalid or a
     // genuinely-required-and-absent key — this scan only ever looks at declared-OPTIONAL
     // keys, so it never masks either of those two throw paths). `"forbid"` (unset) makes
@@ -242,10 +242,10 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
     // like `resources`/`configuration` already are. Computing it once, eagerly, lets
     // `degraded` (below) inspect what this lower() actually produced instead of guessing.
     const symbolsRec = typeof spec.symbols === "function" ? spec.symbols(activation) : (spec.symbols ?? {});
-    // Door-set degradation's OWN surfacing (§3.7's "degraded capabilities are ENUMERABLE"
-    // CHOSEN row): scan the computed record for doors this capability minted via
-    // `degradation.door(...)`, folded into the returned pack's `degraded` field —
-    // `assembleEnv` (kernel.ts) aggregates it into `AssembledEnv.degraded`, uninterpreted.
+    // Door-set degradation's OWN surfacing — degraded capabilities are ENUMERABLE: scan
+    // the computed record for doors this capability minted via `degradation.door(...)`,
+    // folded into the returned pack's `degraded` field — `assembleEnv` (kernel.ts)
+    // aggregates it into `AssembledEnv.degraded`, uninterpreted.
     const degraded = collectDegraded(capabilityName, symbolsRec);
 
     // First touch of ANY of this capability's symbols spawns ALL its resources
@@ -281,8 +281,8 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
         await spawned;
       },
       async apply(env: SchemeEnv, ctx?: PackContext<SchemeEnv>) {
-        // preludeOnly routing (design doc §1.3): a baked native/rosetta def marked
-        // `preludeOnly: true` binds onto `ctx.preludeScope` instead of the runtime env — see
+        // preludeOnly routing: a baked native/rosetta def marked `preludeOnly: true`
+        // binds onto `ctx.preludeScope` instead of the runtime env — see
         // `PackContext.preludeScope` in kernel.ts for the full assembly-time-only contract. Same
         // bind form either way (native → raw impl; rosetta → the gated run wrapper); only the
         // TARGET scope differs. Absent `ctx.preludeScope` (a bare direct apply outside any
@@ -290,14 +290,12 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
         const bindTarget = (def: AEntity): PreludeBindTarget =>
           "preludeOnly" in def && def.preludeOnly ? (ctx?.preludeScope ?? env) : env;
         const prefix = spec.symbolPrefix ?? "";
-        // §2.3's two-phase binding: symbol.define/symbol.defineSyntax entries are
-        // collected here (in declaration order — JS object-key insertion order) and
-        // evaluated+bound in Pass 2, AFTER every other kind — never interleaved, so a
-        // define's body may always assume its capability's own native/rosetta/door/…
-        // siblings are already bound. `ownNames` is the §2.3 "letrec* NAME
-        // VISIBILITY" set: every verb this capability's OWN symbolsRec declares
-        // (both phases), which the FV law treats as in-scope for EVERY define
-        // regardless of textual/binding order.
+        // Two-phase binding: symbol.define/symbol.defineSyntax entries are collected
+        // here (in declaration order — JS object-key insertion order) and evaluated+bound
+        // in Pass 2, AFTER every other kind — never interleaved, so a define's body may
+        // always assume its capability's own native/rosetta/door/… siblings are already
+        // bound. `ownNames` is the letrec* NAME VISIBILITY set — see
+        // `BindCapabilityDefinesArgs.ownNames` (define-bake.ts) for the full contract.
         const defineEntries: [string, DefineSymbolDef | DefineSyntaxSymbolDef][] = [];
         const ownNames = new Set<string>();
         for (const [name, def] of Object.entries(symbolsRec)) {
@@ -328,12 +326,11 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                   contract: def,
                   impl: (args, runCtx) => hostImpl.apply(makeCallCtx(runCtx), args) as SchemeValue,
                 });
-                // Stamp the RESOLVED provenance role onto the bound value (docs/PROVENANCE.md
-                // §2, PROVENANCE-PLAN.md Q2) — the lineage classifier reads it OFF THE BOUND
-                // VALUE via `env.get(op)`, replacing the retired `.fanout` boolean this same
-                // seam used to copy. The Q4 twin rides the same seam: the resolved per-lambda-
-                // arm callback roles (element-transformer/control/effect/accumulator), read as
-                // data by the classifier (Q3) and the wireframe builder (Q8a).
+                // Stamp the RESOLVED provenance role onto the bound value — the lineage
+                // classifier reads it OFF THE BOUND VALUE via `env.get(op)`, never a duck-read.
+                // The resolved per-lambda-arm callback roles (element-transformer/control/
+                // effect/accumulator) ride the same seam, read as data by the classifier and
+                // the wireframe builder.
                 (proc as { provenanceRole?: ProvenanceRole }).provenanceRole = def.provenance;
                 if (def.callbackRoles !== undefined) {
                   (proc as { callbackRoles?: CallbackRoles }).callbackRoles = def.callbackRoles;
@@ -345,9 +342,10 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
               case "tagless":
               case "tagless-guard": {
                 // `run` is the complete ctx-aware wrapper. Bind it as a first-class
-                // ANativeProcedure invoked through the `arrival/tagless-final/apply` term
-                // (the B2 binder cut: no bare JS functions in env value space, P1). These
-                // three kinds read ONLY `this.runCtx` — the apply term's threaded runCtx
+                // ANativeProcedure invoked through the `arrival/tagless-final/apply` term —
+                // no bare JS functions in env value space (P1: a value is a term both
+                // interpreters can execute). These three kinds read ONLY `this.runCtx` —
+                // the apply term's threaded runCtx
                 // reconstructs their `this` losslessly (`makeCallCtx(runCtx)`). Resource
                 // pre-spawning gates inside the impl when the capability owns cells.
                 //
@@ -372,10 +370,10 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                   contract: def,
                   impl,
                 });
-                // Stamp the RESOLVED provenance role (all three kinds now carry `.provenance`
+                // Stamp the RESOLVED provenance role (all three kinds carry `.provenance`
                 // on the def itself — sequence()/tagless()/taglessGuard() resolve it at bake
                 // time) onto the bound value, same seam as the native case above — plus the
-                // Q4 callback roles (sequence: bake-extracted; tagless: `withCallbackRoles`-
+                // callback roles (sequence: bake-extracted; tagless: `withCallbackRoles`-
                 // declared, e.g. reduce's acc-chain marker).
                 (proc as { provenanceRole?: ProvenanceRole }).provenanceRole = def.provenance;
                 if (def.callbackRoles !== undefined) {
@@ -385,19 +383,17 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 break;
               }
               case "rosetta": {
-                // Stage-3 conversion per reverse-membrane-for-callables.md §9, RULED option
-                // (c) materialized: the per-call INVOCATION reaches the wrapper from the
-                // evaluator's ambient dynamic call site — evaluator-owned state, installed
-                // at every apply site (`setDynamicCallSite(ctx.currentInvocation)` around
-                // evalPair / applyArrowProc / wrapLambda dispatch) — never smuggled by this
-                // binder. The adapter reconstructs the wrapper's `CallCtx` from
-                // (runCtx, ambient), so a SOURCE rosetta's fresh-point mint
-                // (`pointProvenance` off the invocation) works through the apply term
-                // exactly as it did through the legacy bare-fn path (which received
-                // `makeCallCtx(ctx.runCtx, ctx.currentInvocation)` as `this`). A direct-JS
-                // call with no evaluator frame sees no ambient → the input-union fallback,
-                // byte-identical to legacy. conservation.law's seal-laundering rows gate
-                // this equivalence.
+                // The per-call INVOCATION reaches the wrapper from the evaluator's ambient
+                // dynamic call site — evaluator-owned state, installed at every apply site
+                // (`setDynamicCallSite(ctx.currentInvocation)` around evalPair /
+                // applyArrowProc / wrapLambda dispatch) — never smuggled by this binder. The
+                // adapter reconstructs the wrapper's `CallCtx` from (runCtx, ambient), so a
+                // SOURCE rosetta's fresh-point mint (`pointProvenance` off the invocation)
+                // works through the apply term exactly as it does through the legacy bare-fn
+                // path (which receives `makeCallCtx(ctx.runCtx, ctx.currentInvocation)` as
+                // `this`). A direct-JS call with no evaluator frame sees no ambient → the
+                // input-union fallback, matching the legacy path's own fallback.
+                // conservation.law's seal-laundering rows gate this equivalence.
                 //
                 // Bind via `set`, NOT defineRosetta — that would double-wrap the membrane.
                 const rawRun = def.run as (this: unknown, ...args: unknown[]) => Promise<unknown>;
@@ -419,8 +415,8 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                   // Arity is introspection-only in this cut, same as the sibling kinds.
                   arity: { min: 0, max: null },
                   contract: def,
-                  // Retired the `{ pure: boolean }` shape (PROVENANCE-PLAN.md Q2) — `strategy`
-                  // is opaque (`unknown`, "until stage 3") anyway; carries the resolved role now.
+                  // `strategy` is opaque (`unknown`, "until stage 3") — carries the resolved
+                  // role, not a `{ pure: boolean }` shape.
                   strategy: { provenance: def.provenance },
                   impl,
                 });
@@ -434,17 +430,17 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 break;
               }
               case "door": {
-                // errors-as-doors: an OMITTED verb. Bind an INTROSPECTABLE DoorProcedure
-                // (design doc symbol-define-static-program-validation.md §W0) — the causal-
-                // chain UX's first link. `def.cause` is stamped HERE when a `symbol.
-                // notImplemented` door carries none (the factory can't know its own
+                // errors-as-doors: an OMITTED verb. Bind an INTROSPECTABLE DoorProcedure —
+                // the causal-chain UX's first link. `def.cause` is stamped HERE when a
+                // `symbol.notImplemented` door carries none (the factory can't know its own
                 // capability — see notImplemented.ts): owner = this capability's OWN `name`,
                 // needs = [] (a permanent design omission, never caused by an absent
-                // config/dep — a non-empty `needs` is the door-set-degradation kind, a later
-                // wave). A door that already carries a cause (minted by that later wave)
-                // passes through unchanged. Firing still throws the same teaching
-                // `PurityError` (DoorProcedure's own doc) — `PurityError.feature`/`.owner`
-                // — the routing/telemetry keys, mirroring core.ts's %purity-door → PurityError.
+                // config/dep — a non-empty `needs` is the door-set-degradation kind; see
+                // `DoorCause`'s doc in _bake.ts for the full needs-scope rule). A door that
+                // already carries a cause passes through unchanged. Firing still throws the
+                // same teaching `PurityError` (DoorProcedure's own doc) — `PurityError.
+                // feature`/`.owner` — the routing/telemetry keys, mirroring core.ts's
+                // %purity-door → PurityError.
                 const doorDef: DoorSymbolDef = def.cause
                   ? def
                   : { ...def, cause: { owner: capabilityName, needs: [] } };
@@ -498,17 +494,17 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
             opts.evalScheme !== undefined,
             `capability "${name}" has a prelude but no evalScheme was provided to lower()`,
           );
-          // Bootstrap (§1.3): evaluate against `env` (= R, already re-parented onto the prelude
+          // BOOTSTRAP: evaluate against `env` (= R, already re-parented onto the prelude
           // overlay by the caller) so prelude `define`s land in R — `ctx.preludeEvalScope` is
-          // undefined here. Mid-run (§1.4): evaluate against the caller's discarded CHILD scope
+          // undefined here. MID-RUN: evaluate against the caller's discarded CHILD scope
           // instead, so a prelude `define` is dropped with it rather than leaking to the live env.
           await opts.evalScheme(ctx?.preludeEvalScope ?? env, spec.prelude);
         }
 
-        // Pass 2 (§2.3): symbol.define / symbol.defineSyntax — evaluated + bound
-        // SEQUENTIALLY, in declaration order, against the SAME scope a prelude
-        // evaluates against (`ctx.preludeEvalScope ?? env`), now that every
-        // non-define kind (Pass 1) + the prelude have already landed.
+        // Pass 2: symbol.define / symbol.defineSyntax — evaluated + bound SEQUENTIALLY,
+        // in declaration order, against the SAME scope a prelude evaluates against
+        // (`ctx.preludeEvalScope ?? env`), now that every non-define kind (Pass 1) + the
+        // prelude have already landed.
         if (defineEntries.length > 0) {
           await bindCapabilityDefines({
             capabilityName,
@@ -528,14 +524,14 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
 
   private _exportsPromise?: Promise<ReadonlySet<string>>;
 
-  /** `EnvCapability.exports` (design doc §2.2) — DERIVED, memoized: every
-   *  statically-enumerable name this capability contributes to a shared env —
-   *  prefixed `spec.symbols` keys (a builder-form `symbols` is NOT statically
-   *  enumerable, §2.2 LIMIT — contributes nothing here; a pre-assembly consumer
-   *  needing full fidelity there degrades to assembled-mode, a W3 concern) ∪
-   *  macro-aware `define`/`define-macro`/`define-syntax` names parsed from
-   *  `spec.prelude` (the migration-interim arm, shrinking to nothing as W4 retires
-   *  `prelude` pack by pack). Consumed by `symbol.define`'s bake-time FV law
+  /** `EnvCapability.exports` — DERIVED, memoized: every statically-enumerable name
+   *  this capability contributes to a shared env — prefixed `spec.symbols` keys (a
+   *  builder-form `symbols` is NOT statically enumerable — a LIMIT, contributes
+   *  nothing here; a pre-assembly consumer needing full fidelity there degrades to
+   *  assembled-mode) ∪ macro-aware `define`/`define-macro`/`define-syntax` names
+   *  parsed from `spec.prelude` (the migration-interim arm, shrinking toward nothing
+   *  as capabilities move their `prelude` text blob to declared `symbol.define`s,
+   *  pack by pack). Consumed by `symbol.define`'s bake-time FV law
    *  (`define-bake.ts`'s `bindCapabilityDefines`) to resolve what a CROSS-capability
    *  reference needs. Async (not a real getter — parsing is inherently async) and
    *  memoized per capability INSTANCE, not per `lower()` call: a module-singleton

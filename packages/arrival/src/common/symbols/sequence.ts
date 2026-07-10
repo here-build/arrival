@@ -30,12 +30,11 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
     const outSchema = normalizeVector(contract.output);
     // Resolve the declared role (default "pipe" — see Contract.provenance); capability.ts
     // reads it straight off this def (`def.provenance`) and stamps it onto the bound
-    // ANativeProcedure (`provenanceRole`), replacing the retired `.fanout` marker that used
-    // to ride the `run` fn itself.
+    // ANativeProcedure (`provenanceRole`).
     const provenance = contract.provenance ?? "pipe";
     assertProvenanceRoleShape(name, provenance, inSchema, outSchema);
-    // Per-lambda-arm callback roles (PROVENANCE-PLAN.md Q4): shape extraction + the
-    // declared override, drift-door checked — see extractCallbackRoles in _bake.ts.
+    // Per-lambda-arm callback roles: shape extraction + the declared override, drift-door
+    // checked — see extractCallbackRoles in _bake.ts.
     const callbackRoles = extractCallbackRoles(name, provenance, inSchema, outSchema, contract.callbackRoles);
     return {
       kind: "sequence",

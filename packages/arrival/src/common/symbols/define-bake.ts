@@ -1,10 +1,9 @@
 // define-bake — the BAKE-TIME machinery `symbol.define`/`symbol.defineSyntax` need but
-// cannot run at factory-call time (docs/working-proposals/symbol-define-static-program-
-// validation.md §1/§2, wave W1): body parse + span-location (§1.3), the FV locality law
-// + eager-forward-reference check (§2.1/§2.3), derived-role classification (§1.4), and
-// the actual evaluate-then-bind step (§1.5/§2.3's two-phase, sequential-RHS binding).
-// Invoked from `../capability.ts`'s apply() Pass 2, once phase 1 (every non-define kind)
-// has already bound.
+// cannot run at factory-call time: body parse + span-location, the FV locality law +
+// eager-forward-reference check, derived-role classification, and the actual
+// evaluate-then-bind step (two-phase, sequential-RHS binding — the full contract is below,
+// at `bindCapabilityDefines`). Invoked from `../capability.ts`'s apply() Pass 2, once phase
+// 1 (every non-define kind) has already bound.
 //
 // Kept OUT of `../capability.ts` itself: this pulls in the reader, `values/lineage.ts`'s
 // classifier, `provenance/prelude.ts`'s fixpoint, and the callable-invocation primitives
@@ -51,30 +50,29 @@ export interface CapabilityLike {
   exports(): Promise<ReadonlySet<string>>;
 }
 
-/** The slice of `CapabilitySpec` the `exports` computation (below, §2.2) needs. */
+/** The slice of `CapabilitySpec` the `exports` computation (below) needs. */
 export interface ExportableSpec {
-  readonly symbols?: unknown; // a plain record is statically enumerable; a builder fn is not (§2.2 LIMIT)
+  readonly symbols?: unknown; // a plain record is statically enumerable; a builder fn is not (a LIMIT)
   readonly symbolPrefix?: string;
   readonly prelude?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// §2.1's KEYWORD_SYNTAX baseline — core's keyword-bound names, UNCONDITIONAL
-// (rev2 fix): every `SPECIAL_FORMS` entry (`eval/evaluator.ts`) is ALSO bound as a
-// `symbol.keyword` value in `env/core/core.ts`, so as long as the FV walker's own
-// unmodeled-head gap (`while`/`try`/`define-macro` — `free-vars.ts`'s documented
-// default-arm fallthrough) needs a name in scope, it is one of these 20 — the SAME
-// set `env/core/core.ts`'s `symbols` record declares. Hardcoded here (not derived
-// by walking for a `scheme/core` dep) per the rev2 ruling: "no program can run
-// without them" — assembled mode roots `core` universally regardless of a
-// particular capability's OWN declared `deps`, so gating on dep-declaration would
-// under-allow a define using `if`/`cond`/`let` merely because THIS capability
-// happens not to list `scheme/core` as a dep (most don't; they get it for free
+// The KEYWORD_SYNTAX baseline — core's keyword-bound names, UNCONDITIONAL: every
+// `SPECIAL_FORMS` entry (`eval/evaluator.ts`) is ALSO bound as a `symbol.keyword` value
+// in `env/core/core.ts`, so as long as the FV walker's own unmodeled-head gap
+// (`while`/`try`/`define-macro` — `free-vars.ts`'s documented default-arm fallthrough)
+// needs a name in scope, it is one of these 20 — the SAME set `env/core/core.ts`'s
+// `symbols` record declares. Hardcoded here (not derived by walking for a `scheme/core`
+// dep) because "no program can run without them" — assembled mode roots `core`
+// universally regardless of a particular capability's OWN declared `deps`, so gating on
+// dep-declaration would under-allow a define using `if`/`cond`/`let` merely because THIS
+// capability happens not to list `scheme/core` as a dep (most don't; they get it for free
 // through env-roots' universal rooting).
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────────────
-// §2.3's resolver-synth family — `SPECIAL_FORMS ∪ exports ∪ RESOLVER-SYNTH FAMILY
+// The resolver-synth family — `SPECIAL_FORMS ∪ exports ∪ RESOLVER-SYNTH FAMILY
 // (car/cdr/...)`. `car`/`cdr` (and the whole `c[ad]+r` family) are NOT a
 // capability-declared export anywhere (`env/r7rs/lists.ts`'s own header: "served by
 // a resolver, not this pack") — they're synthesized by a KERNEL-level fallback
@@ -112,18 +110,18 @@ export const KEYWORD_SYNTAX_BASELINE: ReadonlySet<string> = new Set([
 ]);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// §1.3 — parse + span-locate, memoized per def OBJECT (module-level capability
-// constants mean N assemblies parse once; a builder-form capability that mints a
-// fresh def per activation simply never hits the cache, an honest LIMIT — §1.3).
+// Parse + span-locate, memoized per def OBJECT (module-level capability constants mean N
+// assemblies parse once; a builder-form capability that mints a fresh def per activation
+// simply never hits the cache, an honest LIMIT).
 // ─────────────────────────────────────────────────────────────────────────────
 const parseCache = new WeakMap<DefineSymbolDef | DefineSyntaxSymbolDef, SchemeValue>();
 
-/** Parse a define's body (the reader is called with `source = "«capability»#«name»"` —
- *  §1.3 — so every Pair in the body is located, and a declaration-site error names
+/** Parse a define's body (the reader is called with `source = "«capability»#«name»"` so
+ *  every Pair in the body is located, and a declaration-site error names
  *  `scheme/srfi-1#fold-right:3:8` instead of an anonymous blob). Body must parse to
- *  EXACTLY one top-level form (§1.1's "the body is the RHS EXPRESSION, not a whole
- *  define form") — a malformed declaration (0 or 2+ forms) is an authoring bug, not a
- *  runtime condition, so this fails loud via `invariant`. */
+ *  EXACTLY one top-level form ("the body is the RHS EXPRESSION, not a whole define
+ *  form") — a malformed declaration (0 or 2+ forms) is an authoring bug, not a runtime
+ *  condition, so this fails loud via `invariant`. */
 export async function parseDefineBody(
   capabilityName: string,
   def: DefineSymbolDef | DefineSyntaxSymbolDef,
@@ -146,8 +144,8 @@ export async function parseDefineBody(
 // their private helpers are exported across the module boundary).
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Is `body`'s top-level form `(lambda …)`? A lambda RHS late-binds (§2.3) — a
- *  forward reference inside it resolves at CALL time, never at bake. */
+/** Is `body`'s top-level form `(lambda …)`? A lambda RHS late-binds — a forward
+ *  reference inside it resolves at CALL time, never at bake. */
 function isLambdaForm(body: unknown): boolean {
   return body instanceof APair && body.car instanceof ASymbol && body.car.__name__ === "lambda";
 }
@@ -223,13 +221,14 @@ function transitiveDeps(roots: readonly CapabilityLike[]): CapabilityLike[] {
   return out;
 }
 
-/** §2.1's resolver-synth family probe: does some PURE resolver in `deps` (+ the
+/** The resolver-synth family probe: does some PURE resolver in `deps` (+ the
  *  capability's OWN `ownResolvers`) answer `name`? A resolver's `resolve` may throw
  *  on a name it doesn't recognize (the `c[ad]+r` family's own teaching door) — that
- *  is "did not answer" for this probe's purpose, not a bake-time failure. Only
- *  `pure` resolvers license the allowlist (§3.5's "NAME-STABLE… licenses… to
- *  memoize" — the SAME license this probe needs: an impure resolver might answer
- *  differently tomorrow, so it cannot retroactively justify a bake-time pass). */
+ *  is "did not answer" for this probe's purpose, not a bake-time failure. Only `pure`
+ *  resolvers license the allowlist — a `pure: true` declaration promises NAME-STABLE
+ *  results, the SAME license `ResolverSpec.pure`'s own doc grants for chain memoization
+ *  (scheme-env.ts): an impure resolver might answer differently tomorrow, so it cannot
+ *  retroactively justify a bake-time pass. */
 function resolverAnswers(
   name: string,
   deps: readonly CapabilityLike[],
@@ -248,17 +247,16 @@ function resolverAnswers(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// §2.2 — `EnvCapability.exports()` (the interim, prelude-parsing arm).
+// `EnvCapability.exports()` — the interim, prelude-parsing arm.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DEFINE_HEADS = new Set(["define", "define-macro", "define-syntax"]);
 
-/** Top-level `define`/`define-macro`/`define-syntax` names in `source` (§2.2's
- *  `macroAwareDefineNames` — the fix `extractDefines`/`defineNameOf` both need
- *  (they match ONLY the literal `define` head, per the design doc's verified
- *  citations) but applied as a NEW, narrowly-scoped walker here rather than
- *  widening those two studio/provenance-facing functions, which have their own
- *  established consumers and contracts). */
+/** Top-level `define`/`define-macro`/`define-syntax` names in `source` —
+ *  `macroAwareDefineNames` closes a gap `extractDefines`/`defineNameOf` both have
+ *  (they match ONLY the literal `define` head) but applied as a NEW, narrowly-scoped
+ *  walker here rather than widening those two studio/provenance-facing functions,
+ *  which have their own established consumers and contracts. */
 export async function macroAwareDefineNames(source: string): Promise<ReadonlySet<string>> {
   const forms = await readerParse(source);
   const names = new Set<string>();
@@ -286,12 +284,12 @@ function defineHeadNameOf(form: unknown): string | null {
   return null;
 }
 
-/** `EnvCapability.exports` (§2.2): prefixed `spec.symbols` keys (builder-form is not
+/** `EnvCapability.exports`: prefixed `spec.symbols` keys (builder-form is not
  *  statically enumerable — LIMIT, contributes nothing here) ∪ macro-aware define
- *  names parsed from `spec.prelude` (the migration-interim arm; empties out as W4
- *  retires `prelude` pack by pack). Async + memoized by the CALLER (`EnvCapability
- *  .exports()` itself) — parsing is inherently async, so this can never be a real
- *  synchronous getter. */
+ *  names parsed from `spec.prelude` (the migration-interim arm; shrinks toward nothing
+ *  as capabilities move their `prelude` text blob to declared `symbol.define`s, pack
+ *  by pack). Async + memoized by the CALLER (`EnvCapability.exports()` itself) —
+ *  parsing is inherently async, so this can never be a real synchronous getter. */
 export async function computeCapabilityExports(spec: ExportableSpec): Promise<ReadonlySet<string>> {
   const names = new Set<string>();
   const prefix = spec.symbolPrefix ?? "";
@@ -305,7 +303,7 @@ export async function computeCapabilityExports(spec: ExportableSpec): Promise<Re
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The evaluate-then-bind step (§1.5/§2.3). One capability-scoped temp binding per
+// The evaluate-then-bind step. One capability-scoped temp binding per
 // define, through the SAME injected `evalScheme` prelude eval already uses (never
 // a direct `eval/generator-exec.ts` import here — that would both violate
 // `common/scheme-env.ts`'s "the evaluator is INJECTED" boundary AND risk a real
@@ -329,42 +327,37 @@ async function evaluateBody(
   return scope.get(tempName);
 }
 
-// Gap (3), the SECOND half (not named in the header, found empirically while
-// verifying the `buildDefineProcedure` fix above against the WeakMap<RunContext>
-// revert this pack's tests require): threading the caller's real `runCtx` through
-// `call_function` (above) is necessary but not sufficient for a `WeakMap<RunContext,
-// …>`-keyed dynamic-extent slot to survive a `symbol.define`→`symbol.define` call —
-// because `evalLambda`'s runner (evaluator.ts) ALWAYS evaluates a lambda's body
-// against its DEFINITION-TIME `ctx.runCtx`, never the call-time one ("call-time
-// runCtx threading is a later cut", by design, unrelated to this migration). Every
-// `evalScheme` call mints a FRESH `RunContext` (`generator-exec.ts`'s `exec()` →
-// `makeRunContext()`) — so evaluating N sibling `symbol.define` bodies through N
-// SEPARATE `evalScheme` calls (one `evaluateBody` call each) baked N SIBLING
-// ALambdas each closed over a DIFFERENT RunContext identity, permanently unable to
-// share a WeakMap-keyed slot with each other (e.g. `with-exception-handler` and
-// `raise-continuable`, both `scheme/r7rs/exceptions` own defines).
-//
-// Pre-migration this never surfaced: a capability's WHOLE prelude TEXT BLOB was one
-// program, evaluated in ONE `evalScheme` call, so every define it contained shared
-// one bake-time RunContext by construction.
+// THE WeakMap<RunContext> BUG, and why sibling defines batch: threading the caller's
+// real `runCtx` through `call_function` (above) is necessary but not sufficient for a
+// `WeakMap<RunContext, …>`-keyed dynamic-extent slot to survive a `symbol.define`→
+// `symbol.define` call — because `evalLambda`'s runner (evaluator.ts) ALWAYS evaluates a
+// lambda's body against its DEFINITION-TIME `ctx.runCtx`, never the call-time one
+// (call-time runCtx threading is a separate, later concern). Every `evalScheme` call
+// mints a FRESH `RunContext` (`generator-exec.ts`'s `exec()` → `makeRunContext()`) — so
+// evaluating N sibling `symbol.define` bodies through N SEPARATE `evalScheme` calls (one
+// `evaluateBody` call each) bakes N SIBLING ALambdas each closed over a DIFFERENT
+// RunContext identity, permanently unable to share a WeakMap-keyed slot with each other
+// (e.g. `with-exception-handler` and `raise-continuable`, both `scheme/r7rs/exceptions`
+// own defines) — a capability's prelude, evaluated as one whole TEXT BLOB in a single
+// `evalScheme` call, never had this problem: every define it contained shared one
+// bake-time RunContext by construction, and per-define declaration must preserve that.
 //
 // Fix, scoped to LAMBDA-form entries only: batch every lambda-form body's `(define
 // tmp body)` into ONE combined program, evaluated in ONE `evalScheme` call — this
 // restores the shared-identity property for exactly the entries where it matters
 // (a lambda VALUE is what closes over `ctx.runCtx`). This is SAFE precisely because
 // minting a lambda VALUE never touches its BODY — "a forward reference inside it
-// resolves at CALL time" (§2.3's `isLambdaForm` note above) — so batching changes
-// nothing about WHEN a lambda's free variables resolve (still call-time, against
-// whatever the capability's `scope`/`env` looks like by then, fully bound), only
-// WHEN the inert closure itself is minted. A NON-lambda (eager) entry is the
-// opposite: its value IS its evaluation, so an eager RHS referencing an EARLIER
-// sibling's REAL bound name (`srfi-235`'s `always`, whose body is the bare
-// identifier `constantly`, declared just before it) needs that sibling ALREADY
-// bound via `bindTarget` — batching eager entries together (tried first) silently
-// broke this (`Unbound variable 'constantly'`, srfi-235 failed to assemble), so
-// eager entries are deliberately EXCLUDED from this batch and keep the original
-// per-entry evaluate-THEN-bindTarget interleaving (`evaluateBody` above),
-// sequential in declaration order, unchanged.
+// resolves at CALL time" (`isLambdaForm`'s note above) — so batching changes nothing
+// about WHEN a lambda's free variables resolve (still call-time, against whatever the
+// capability's `scope`/`env` looks like by then, fully bound), only WHEN the inert
+// closure itself is minted. A NON-lambda (eager) entry is the opposite: its value IS its
+// evaluation, so an eager RHS referencing an EARLIER sibling's REAL bound name
+// (`srfi-235`'s `always`, whose body is the bare identifier `constantly`, declared just
+// before it) needs that sibling ALREADY bound via `bindTarget` — batching eager entries
+// together breaks exactly this case (`Unbound variable 'constantly'`), so eager entries
+// are deliberately EXCLUDED from this batch and keep the original per-entry
+// evaluate-THEN-bindTarget interleaving (`evaluateBody` above), sequential in
+// declaration order.
 async function evaluateBodies(
   scope: SchemeEnv,
   evalScheme: EvalSchemeInto<SchemeEnv>,
@@ -376,7 +369,7 @@ async function evaluateBodies(
   return tempNames.map((tempName) => scope.get(tempName));
 }
 
-/** The scheme-face validating wrapper (§1.2): `z.decode` against the normalized
+/** The scheme-face validating wrapper: `z.decode` against the normalized
  *  input/output vectors runs PURELY for its throw-on-mismatch side effect — the
  *  decoded value is discarded, and the ORIGINAL scheme args/return flow through
  *  unchanged (the same face `symbol.native` types, "nothing crosses the
@@ -391,19 +384,16 @@ function buildDefineProcedure(verb: string, def: DefineSymbolDef, closureValue: 
     // here too) — tighten from `def.in` when the MCP/type-lens surface consumes it.
     arity: { min: 0, max: null },
     contract: def,
-    // Gap (3) fix, FIRST half (exceptions.ts's header): `ANativeProcedure["arrival/
-    // tagless-final/apply"]` invokes `impl(args, runCtx)` — the CALLER's real
-    // per-call `RunContext`, not `CONSTANT_CTX`. The old single-parameter
-    // `impl: (args) => {…}` silently dropped it, so `call_function(closure, args)`
-    // below re-defaulted to `CONSTANT_CTX` every time. Threading `runCtx` through
-    // honestly here (impl's second parameter → `call_function`'s `{ runCtx }`
-    // option) is necessary but NOT sufficient on its own: `evalLambda`'s runner
-    // (evaluator.ts) evaluates a lambda's BODY against its DEFINITION-TIME
-    // `ctx.runCtx`, not the call-time one handed to its apply term ("call-time
-    // runCtx threading is a later cut", evaluator.ts's own comment) — so this fix
-    // only matters once the closure's OWN definition-time `ctx.runCtx` is itself
-    // consistent across sibling `symbol.define` bodies. See `evaluateBodies`'s
-    // comment (this file, above) for that SECOND half.
+    // `ANativeProcedure["arrival/tagless-final/apply"]` invokes `impl(args, runCtx)` —
+    // the CALLER's real per-call `RunContext`, never `CONSTANT_CTX`. `impl`'s second
+    // parameter must reach `call_function`'s `{ runCtx }` option below, or the call
+    // silently re-defaults to `CONSTANT_CTX`. Threading `runCtx` through honestly here
+    // is necessary but NOT sufficient on its own: `evalLambda`'s runner (evaluator.ts)
+    // evaluates a lambda's BODY against its DEFINITION-TIME `ctx.runCtx`, not the
+    // call-time one handed to its apply term (call-time runCtx threading is a separate,
+    // later concern) — so this only matters once the closure's OWN definition-time
+    // `ctx.runCtx` is itself consistent across sibling `symbol.define` bodies. See
+    // `evaluateBodies`'s comment (this file, above) for that half of the fix.
     impl: (args, runCtx) => {
       if (def.validate) z.decode(def.in, args);
       return (async (): Promise<SchemeValue> => {
@@ -429,8 +419,8 @@ function buildDefineProcedure(verb: string, def: DefineSymbolDef, closureValue: 
 }
 
 /** Wind an evaluated `(lambda (formals expr . body) …)` closure into a `Macro`
- *  fexpr transformer (§1.5: "define-syntax… bound through the same door define-
- *  macro's evaluation takes today"). The transformer receives the UNEVALUATED
+ *  fexpr transformer — define-syntax binds through the same door define-macro's
+ *  evaluation takes. The transformer receives the UNEVALUATED
  *  call-site argument forms (fexpr semantics) and applies the closure to them
  *  through the ordinary callable seam (`call_function` — lexical scoping, the
  *  closure's OWN captured definition-time scope, not the use site's `this=env`). */
@@ -444,9 +434,8 @@ function buildMacro(verb: string, def: DefineSyntaxSymbolDef, closureValue: unkn
     },
     def.doc,
   );
-  // Carry the DECLARED ternary walk attribute onto the bound value — the one channel
-  // the validator's assembled-mode vocabulary can read it back from (§3.4; W1 stored
-  // it on the def, W3 consumes it off the binding).
+  // Carry the DECLARED ternary walk attribute onto the bound value — the one channel a
+  // validator's assembled-mode vocabulary can read it back from.
   macro.macroAttribute = def.macroAttribute;
   return macro;
 }
@@ -459,12 +448,12 @@ function buildMacro(verb: string, def: DefineSyntaxSymbolDef, closureValue: unkn
 export interface BindCapabilityDefinesArgs {
   readonly capabilityName: string;
   /** Every verb (prefixed) this capability's OWN `symbolsRec` declares — phase 1
-   *  (already bound in `env`) AND phase 2 (this call's `entries`) — the §2.3
-   *  "letrec* NAME VISIBILITY" set: every name in K is visible to every OTHER name
-   *  in K for the FV check, regardless of textual/binding order. */
+   *  (already bound in `env`) AND phase 2 (this call's `entries`) — the letrec*
+   *  NAME VISIBILITY set: every name in K is visible to every OTHER name in K for
+   *  the FV check, regardless of textual/binding order. */
   readonly ownNames: ReadonlySet<string>;
   /** The `symbol.define`/`symbol.defineSyntax` entries, `[verb, def]`, in
-   *  DECLARATION order (JS object-key insertion order — §2.3). */
+   *  DECLARATION order (JS object-key insertion order). */
   readonly entries: readonly (readonly [string, DefineSymbolDef | DefineSyntaxSymbolDef])[];
   readonly deps: readonly CapabilityLike[];
   readonly ownResolvers: readonly ResolverSpec[];
@@ -488,18 +477,18 @@ export async function bindCapabilityDefines(args: BindCapabilityDefinesArgs): Pr
   );
   const evalScheme = args.evalScheme;
 
-  // §1.3 — parse once per def (memoized).
+  // Parse once per def (memoized).
   const parsedByDef = new Map<DefineSymbolDef | DefineSyntaxSymbolDef, SchemeValue>();
   for (const [, def] of entries) parsedByDef.set(def, await parseDefineBody(capabilityName, def));
 
-  // §2.1's bake allowlist: SPECIAL_FORMS ∪ KEYWORD_SYNTAX ∪ ownNames(K) ∪ exports(deps).
+  // The bake allowlist: SPECIAL_FORMS ∪ KEYWORD_SYNTAX ∪ ownNames(K) ∪ exports(deps).
   const allowlist = new Set<string>(KEYWORD_SYNTAX_BASELINE);
   for (const n of ownNames) allowlist.add(n);
   for (const dep of transitiveDeps(deps)) for (const n of await dep.exports()) allowlist.add(n);
 
-  // §2.1 FV law + §2.3 eager-forward-reference — `symbol.define` bodies only (a
+  // FV law + eager-forward-reference check — `symbol.define` bodies only (a
   // `symbol.defineSyntax` body's "free variables" would name the EXPANSION env,
-  // §1.1 — categorically out of scope for this wave).
+  // categorically out of scope here).
   const remaining = new Set(entries.map(([verb]) => verb));
   for (const [verb, def] of entries) {
     remaining.delete(verb); // "remaining" now = names declared strictly AFTER this one
@@ -519,8 +508,8 @@ export async function bindCapabilityDefines(args: BindCapabilityDefinesArgs): Pr
     }
   }
 
-  // §1.4 — derived provenance role: `classifyProgramPrelude`'s fixpoint, run over
-  // this capability's OWN `symbol.define` set (verb-named synthetic forms so the
+  // Derived provenance role: `classifyProgramPrelude`'s fixpoint, run over this
+  // capability's OWN `symbol.define` set (verb-named synthetic forms so the
   // fixpoint's reference closure matches real call sites); the env-derived
   // classifier resolves everything OUTSIDE that set (phase 1 + deps, already bound).
   const defineEntries = entries.filter((e): e is readonly [string, DefineSymbolDef] => e[1].kind === "define");
@@ -544,8 +533,8 @@ export async function bindCapabilityDefines(args: BindCapabilityDefinesArgs): Pr
     }
   }
 
-  // §2.3 — evaluate + bind, SEQUENTIALLY, in declaration order (each RHS sees only
-  // what evaluated before it; a lambda body late-binds any forward reference).
+  // Evaluate + bind, SEQUENTIALLY, in declaration order (each RHS sees only what
+  // evaluated before it; a lambda body late-binds any forward reference).
   // Lambda-form entries are pre-evaluated as ONE batch (see `evaluateBodies`'s
   // comment: shares one bake-time RunContext across this capability's own lambda
   // defines) — safe because minting a lambda VALUE never touches its body,

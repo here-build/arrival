@@ -1,21 +1,20 @@
 // symbol.define / symbol.defineSyntax — the SCHEME-BODIED declaration kinds (per-tag
 // factory file assembled into `symbol` by ./index.ts; shared types live in ./_bake.js).
 //
-// docs/working-proposals/symbol-define-static-program-validation.md §1 (wave W1) —
-// prelude death by decomposition: a capability's prelude was "purely series of
-// defines" (V's framing, doc §0); these two factories let each one be declared
-// individually — a REAL contract for `define` (§1.2, enforced from day one), a
-// declared `macroAttribute` for `defineSyntax` (§3.4) — instead of living inside an
-// opaque text blob with no per-define identity or static-analysis surface.
+// Prelude death by decomposition: a capability's prelude used to be "purely a series of
+// defines"; these two factories let each one be declared individually — a REAL contract
+// for `define` (enforced from day one), a declared `macroAttribute` for `defineSyntax` —
+// instead of living inside an opaque text blob with no per-define identity or
+// static-analysis surface.
 //
-// W1 SCOPE — this file owns the STATIC SHAPE only (name/doc parsing, in/out
-// normalization, the callable/constant split, the eager `bodyHash`). What needs the
-// parsed body or the assembly's own env (the §2 FV law, the eager-forward-reference
-// check, the §1.4 derived-role classification, actually EVALUATING the body and
-// binding the validating wrapper) cannot happen at factory-call time — the reader is
-// async and the capability's own scope doesn't exist until `apply()` runs. That bake
-// machinery lives in `./define-bake.js`, invoked from `../capability.ts`'s two-phase
-// apply arm (§2.3).
+// SCOPE — this file owns the STATIC SHAPE only (name/doc parsing, in/out normalization,
+// the callable/constant split, the eager `bodyHash`). What needs the parsed body or the
+// assembly's own env (the free-variable law, the eager-forward-reference check, the
+// derived-role classification, actually EVALUATING the body and binding the validating
+// wrapper) cannot happen at factory-call time — the reader is async and the capability's
+// own scope doesn't exist until `apply()` runs. That bake machinery lives in
+// `./define-bake.js`, invoked from `../capability.ts`'s two-phase apply arm (see
+// define-bake.ts for the full two-phase binding contract).
 
 import { ZodType } from "zod";
 import * as z from "../scheme-zod.js";
@@ -37,7 +36,7 @@ import {
  *  precedent: prefix tag + `|`-joined canonical parts, FNV-1a, zero-padded hex). Neither
  *  is importable across this module boundary (`hashSteps` isn't exported; wireframe/hash
  *  addresses a different domain, a graph not a define's body+contract) — a FOURTH copy of
- *  the codebase's ONE content-hash idiom, not a new one (design doc §1.3's own framing). */
+ *  the codebase's ONE content-hash idiom, not a new one. */
 function fnv1a(prefix: string, canonical: string): string {
   const tagged = `${prefix}|${canonical}`;
   let h = 0x81_1c_9d_c5;
@@ -48,12 +47,12 @@ function fnv1a(prefix: string, canonical: string): string {
   return (h >>> 0).toString(16).padStart(8, "0");
 }
 
-/** Best-effort STABLE TEXT for a contract's shape (§1.3's "body + contract's stable
- *  text" hash input) — zod schema INSTANCES carry no stable serialization, so this
- *  walks to each leaf's REGISTERED name (`z.lookupName`) where one exists, else its
- *  zod constructor tag. Good enough to distinguish "the contract changed" from "only
- *  the body changed" without a full schema-introspection pass (`bodyHash` is a cache
- *  key + a cross-deploy identity input, §5.3 — not a security boundary). */
+/** Best-effort STABLE TEXT for a contract's shape ("body + contract's stable text" is the
+ *  hash input) — zod schema INSTANCES carry no stable serialization, so this walks to
+ *  each leaf's REGISTERED name (`z.lookupName`) where one exists, else its zod
+ *  constructor tag. Good enough to distinguish "the contract changed" from "only the
+ *  body changed" without a full schema-introspection pass (`bodyHash` is a cache key +
+ *  a cross-deploy identity input, not a security boundary). */
 function contractText(c: unknown): string {
   if (c instanceof ZodType)
     return z.lookupName(c) ?? String((c as { constructor?: { name?: string } }).constructor?.name ?? "zod");
@@ -78,11 +77,11 @@ function contractText(c: unknown): string {
   return String(c);
 }
 
-/** The two `symbol.define` overloads (§1.2's discriminator, the SAME sound
+/** The two `symbol.define` overloads (the discriminator is the SAME sound
  *  `instanceof z.ZodType` split `RestSpec` already uses): a `Contract<I,O,Rest>`
  *  record authors a PROCEDURE (contract-enforced callable, bound as a validating
  *  wrapper at bake); a bare `ZodTypeAny` authors a CONSTANT (a single value schema,
- *  validated ONCE at bake, bound as a plain value — no wrapper, §1.2). */
+ *  validated ONCE at bake, bound as a plain value — no wrapper). */
 type DefineFactory = {
   <const I extends VectorSpec, const O extends VectorSpec, const Rest extends RestSpec = undefined>(
     contract: Contract<I, O, Rest>,
@@ -93,7 +92,7 @@ type DefineFactory = {
 };
 
 /** `symbol.define\`name: description\`(contract, bodyString)` — a scheme-bodied
- *  value/procedure declaration (§1.1). `bodyString` is the RHS EXPRESSION (a
+ *  value/procedure declaration. `bodyString` is the RHS EXPRESSION (a
  *  `(lambda …)` for a procedure, a plain expression for a constant) — never a whole
  *  `(define name …)` form, so the name lives in exactly one place (the tagged
  *  template), matching every other kind's `parseNameDoc` convention. */
@@ -105,7 +104,7 @@ export function define(tpl: TemplateStringsArray, ...sub: unknown[]): DefineFact
     opts: BakeRuntimeOpts = {},
   ): DefineSymbolDef => {
     const isConstant = contract instanceof ZodType;
-    // Constants normalize to the 0-ary-procedure convention (§1.5): `in` = the empty
+    // Constants normalize to the 0-ary-procedure convention: `in` = the empty
     // vector, `out` = a 1-tuple wrapping the single value schema — so every OTHER
     // vector-shaped reader (harvest, arity) never special-cases a constant
     // structurally; only `callable` (below) tells capability.ts's bind arm which
@@ -124,7 +123,7 @@ export function define(tpl: TemplateStringsArray, ...sub: unknown[]): DefineFact
       singleOut: isConstant ? true : isSingleOutput(procedureContract!.output),
       body,
       bodyHash,
-      // Placeholder — the RESOLVED role is DERIVED at bake (§1.4), over the whole
+      // Placeholder — the RESOLVED role is DERIVED at bake, over the whole
       // capability's define set, which does not exist until `apply()` runs. Never
       // read before bake: `define-bake.ts` builds a per-assembly DERIVED COPY of
       // this def (`{...def, provenance: derivedRole}`) for whatever gets bound and
@@ -142,9 +141,9 @@ export function define(tpl: TemplateStringsArray, ...sub: unknown[]): DefineFact
 }
 
 /** `symbol.defineSyntax\`name: description\`(bodyString, opts?)` — a scheme-bodied
- *  macro/expander declaration (§1.1's sibling kind). Contract-FREE (a macro has no
- *  call-boundary contract, no provenance role — §1.1); carries the ternary
- *  `macroAttribute` static attribute instead (§3.4). `bodyString` is a scheme LAMBDA
+ *  macro/expander declaration, `symbol.define`'s sibling kind. Contract-FREE (a macro
+ *  has no call-boundary contract, no provenance role); carries the ternary
+ *  `macroAttribute` static attribute instead. `bodyString` is a scheme LAMBDA
  *  expression over the macro's OWN fexpr formals (`(lambda (formals expr . body) …)`
  *  for `receive`) — wound into a `Macro` fexpr transformer at bind time. */
 export function defineSyntax(tpl: TemplateStringsArray, ...sub: unknown[]) {
@@ -155,9 +154,9 @@ export function defineSyntax(tpl: TemplateStringsArray, ...sub: unknown[]) {
     doc,
     body,
     bodyHash: fnv1a("symbol.defineSyntax-v0", `${name}|${body}`),
-    // "opaque" is the DEFAULT (§3.4's table) — under-report, never guess: an
-    // unaudited macro's interior contributes nothing to any FV/arity bucket rather
-    // than risk a false "unbound" on a legal program.
+    // "opaque" is the DEFAULT — under-report, never guess: an unaudited macro's
+    // interior contributes nothing to any FV/arity bucket rather than risk a false
+    // "unbound" on a legal program.
     macroAttribute: opts.macroAttribute ?? "opaque",
   });
 }

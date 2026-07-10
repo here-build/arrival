@@ -249,10 +249,8 @@ export const undefinedResult = named(
  *  scheme-plane construct that never crosses the membrane as a JS shape. Needed
  *  because `Values` is a non-AValue orphan (types.ts's own words) that `value`'s
  *  `instanceof AValue` predicate rejects at runtime despite `SchemeValue` declaring
- *  it — the SAME orphan gap `error` (below) closed for `R7RSError` in W4/H1
- *  (exceptions.ts's header), closed the same additive way: a dedicated named schema,
- *  never a silent widening of `value`'s predicate. First consumer: srfi-1's
- *  span/break/partition `symbol.define` output contracts (W4/H3). */
+ *  it — the same orphan gap `error` (below) closes for `R7RSError` (exceptions.ts's
+ *  header): a dedicated named schema, never a silent widening of `value`'s predicate. */
 export const values = named(
   "values",
   z.custom<Values>((x) => x instanceof Values),
@@ -375,23 +373,18 @@ export const bigint = named(
 
 // --- loose JS-number-land conversions (permissive — arithmetic/math-builtin domain) ---
 //
-// [ADDED 2026-07-09, numeric.ts NCodec dissolution] `number`/`bigint` above are the
-// STRICT rosetta-boundary casts: they DOOR on precision loss (non-integer exact rational,
-// out-of-safe-range integer) and reject IEEE non-finite values (`z.number()` excludes
-// NaN/±Infinity — confirmed zod 4.3.6). Correct for a value crossing the membrane to a JS
-// caller who didn't ask for silent precision loss.
+// `number`/`bigint` above are the STRICT rosetta-boundary casts: they DOOR on precision loss
+// (non-integer exact rational, out-of-safe-range integer) and reject IEEE non-finite values
+// (`z.number()` excludes NaN/±Infinity — confirmed zod 4.3.6). Correct for a value crossing
+// the membrane to a JS caller who didn't ask for silent precision loss.
 //
 // WRONG for `env/r7rs/numeric.ts`'s internal math builtins (`round`/`floor`/`ceiling`/
 // `truncate`/`sqrt`/`sin`/…/`abs`/`zero?`/`positive?`/`negative?`), which need to (a) accept
 // `+nan.0`/`+inf.0`/`-inf.0` — ordinary R7RS inexact reals, tested directly by the R7RS
 // conformance corpus — and (b) LOSSILY convert a non-integer exact rational to a JS float
 // (`(round 7/2)` — input IS a non-integer rational; that's the point), never door on it.
-// Discovered via real conformance regression: routing those ops through strict `number`/
-// `bigint` caused 10 R7RS test failures (6 positive?/negative? on non-finite reals, 4 round
-// on exact rationals).
 //
-// These two codecs are the missing PERMISSIVE half — byte-for-byte the old (pre-dissolution)
-// `Num`/`AnyNum` NCodec behavior from numeric.ts, now named and public.
+// These two codecs are the missing PERMISSIVE half of the numeric vocabulary.
 
 /** Any scheme number ↔ JS `number`, LOSSY (non-integer exact rational divides; out-of-safe-
  *  range exact integers divide too — no invariant, no door) and permissive of non-finite
@@ -446,19 +439,14 @@ export const bytevector = named(
   }),
 );
 
-/** Raw predicate for a callable — callable VALUE (ALambda/ANativeProcedure/
- *  ARosettaProcedure/DoorProcedure, post-B2 shape every builtin binds as) or plain JS
- *  function.
- *  [RETAGGED 2026-07-09] B4 audited with THREE independent live bare-fn producers;
- *  reverse-membrane-for-callables.md §3 "Step 1" (named-let → ALambda) and "Step 2"
- *  (curry → prelude + `procedure-min-arity` native) landed same day, retiring two. One
- *  survivor: `env.defineRosetta`'s legacy form / McpEnvCapability's inline-annotation
- *  authoring shape (gate: McpEnvCapability annotation-lifting, undone — separate migration).
- *  Narrows to ACallable union alone only once that lands.
- *  [W0, 2026-07-10] `DoorProcedure` joins the instanceof arms — a bound door is a first-
- *  class callable value now (`common/capability.ts`'s door bind arm), not a bare closure;
- *  passing one where a `z.lambda` is expected still type-checks and still throws its
- *  teaching `PurityError` the moment it's actually invoked. */
+/** Raw predicate for a callable — callable VALUE (`ALambda`/`ANativeProcedure`/
+ *  `ARosettaProcedure`/`DoorProcedure`, the four members every builtin binds as) or a
+ *  plain JS function. The bare-JS-function arm is a narrow survivor: `env.defineRosetta`'s
+ *  legacy form / McpEnvCapability's inline-annotation authoring shape — everything else
+ *  routes through the four callable kinds. `DoorProcedure` is a first-class callable value
+ *  (`common/capability.ts`'s door bind arm), not a bare closure; passing one where a
+ *  `z.lambda` is expected still type-checks and still throws its teaching `PurityError`
+ *  the moment it's actually invoked. */
 export const lambda = named(
   "lambda",
   z.custom<(...args: unknown[]) => unknown>(
@@ -553,10 +541,9 @@ export function cons<C extends z.ZodTypeAny, D extends z.ZodTypeAny>(carE: C, cd
 
 // `pair` is `cons(value, value)`, not hand-rolled bare instanceof — every OTHER primitive in
 // this vocabulary is a real codec; a bare `z.instanceof(APair)` never decodes, so a rosetta
-// contract typed `z.pair` would still hand its impl, a raw APair (the exact "impl touches
-// interpreter internals" failure the whole codec vocabulary exists to prevent). Scheme face
-// (z.input) is byte-identical to old bare form (still z.instanceof(APair)), so every current
-// native/sequence consumer (25 sites, all scheme-face, verified) unaffected; only a future
+// contract typed `z.pair` would still hand its impl a raw APair (the exact "impl touches
+// interpreter internals" failure the whole codec vocabulary exists to prevent). The scheme
+// face (z.input) stays `z.instanceof(APair)`, so a scheme-face consumer is unaffected; only a
 // rosetta contract's decoded shape changes, from raw APair to a real [car, cdr] tuple.
 export const pair = cons(value, value);
 
@@ -650,12 +637,10 @@ export const box = named(
  * Return-direction ban stays: rosetta result is never a bare JS function (provenance
  * untraceable) — `encode` only legitimate for an argument marshalled inward.
  *
- * `decode` is the TYPED half of reverse-membrane crossing (docs/working-proposals/
- * reverse-membrane-for-callables.md §7c row 7: "z.procedure decode adopts same scope
- * token — one discipline, typed and untyped paths"): reads SAME ambient region scope
- * `rosetta.ts`'s `schemeToJs` reads (`currentRegionScope()`), falls back to shared
- * `DETACHED_SCOPE` when decoded with no crossing live (unit test calling `.parse(...)`
- * directly) — pre-region-discipline behavior, unchanged.
+ * `decode` is the TYPED half of reverse-membrane crossing — one discipline shared with the
+ * untyped path: it reads the SAME ambient region scope `rosetta.ts`'s `schemeToJs` reads
+ * (`currentRegionScope()`), falling back to the shared `DETACHED_SCOPE` when decoded with no
+ * crossing live (e.g. a unit test calling `.parse(...)` directly).
  */
 export function procedure<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(input?: I, output?: O) {
   return named(
@@ -673,13 +658,12 @@ export function procedure<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(input?
           // Wrapper CLOSES OVER `scope` (minted here, at decode time) — never re-reads
           // ambient holder, so a call arriving after the exporting symbol invocation returned
           // still sees the (by then closed) scope it was minted against. `withRegionCall`
-          // owns escape/pending/abort bookkeeping (§7c rules 1/3/4); this closure owns only
-          // marshaling.
+          // owns escape/pending/abort bookkeeping; this closure owns only marshaling.
           const wrapper = (...jsArgs: unknown[]) =>
             withRegionCall(scope, async () => {
               const schemeArgs = input ? jsArgs.map((a) => z.encode(input, a as never)) : jsArgs;
               // Re-entry nests under exporting invocation via SAME ambient mechanism the
-              // untyped path uses — never through callable's `this` (§9's ruling).
+              // untyped path uses — never through callable's `this`.
               // `scope.runCtx` also carries the call itself (strict mode, abort signal) even
               // though per-field zod codecs above stay CONSTANT_CTX by design (unrelated to
               // region discipline — see scheme-zod.ts's own primitive encoders, e.g.
