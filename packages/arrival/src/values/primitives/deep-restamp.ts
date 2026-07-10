@@ -10,7 +10,7 @@
  * reason the term moved onto the classes (the old jsToSchemeImpl arms carried the
  * membrane's only two sanctioned casts because the router couldn't see class internals).
  *
- * Behavior is byte-stable with the dissolved router arms (spec §5.3 Interpretation A):
+ * Behavior is byte-stable with the dissolved router arms:
  *  - same-provenance / empty-provenance children pass through by identity;
  *  - `seen` terminates cyclic spines: a re-encountered node returns AS-IS (the outer
  *    clone already carries the stamp), so shared/diamond substructure past the first

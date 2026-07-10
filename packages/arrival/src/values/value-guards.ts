@@ -40,8 +40,8 @@ export function is_plain_object(object: unknown): object is Record<string, unkno
  * carries non-empty provenance, so `=== nil` would silently report false on
  * those clones and cascade through `length` / `null?` / `car` / `cdr`
  * typechecks. Match by class instead — every Nil clone IS a Nil regardless of
- * which provenance set it's carrying. Spec §5.3 + the doc comment over
- * `restrictControlFlowProvenance` explain the mechanism.
+ * which provenance set it's carrying. The doc comment over
+ * `restrictControlFlowProvenance` explains the mechanism.
  */
 export function is_nil(value: unknown): value is ANil {
   return value instanceof ANil;
@@ -101,9 +101,8 @@ export function is_function(o: unknown): o is Function {
   return typeof o === "function" && "bind" in o && typeof o.bind === "function";
 }
 
-// Callable-as-value guards (stage 0 of the callable-as-value rework; see
-// docs/working-proposals/callable-as-value-run-ctx.md). `instanceof` is evaluated at call
-// time, so importing these value classes into this leaf adds no init-time cycle. The legacy
+// Callable-as-value guards. `instanceof` is evaluated at call time, so importing
+// these value classes into this leaf adds no init-time cycle. The legacy
 // bare-fn `is_callable`/`is_macro` (eval/guards.js) coexist until the migration retires them.
 export function is_lambda(o: unknown): o is ALambda {
   return o instanceof ALambda;

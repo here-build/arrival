@@ -16,15 +16,11 @@ import { warnMembrane } from "../../membrane-warn.js";
  * right AValue subtype for a raw host value (already-AValue input short-circuits). The
  * tag set is JS's fixed `typeof` family + the two null-ish tags — closed, no plugins.
  *
- * History: this was a `registerBoxer` registry that inverted the dependency (each subtype
- * + the membrane self-registered its boxer) so this module imported only `AValue`. Two
- * reasons drove that — (1) the subtypes `extends AValue`, and (2) the object/function
- * boxers lived in membrane.ts (which pulls the evaluator). Both dissolved: the cycles are
- * benign RUNTIME cycles (the setMembraneBridge removal proved hoisted-function call edges
- * close fine — here only `AJSArray` calls `fromJs` back, in a method body), and the
- * object/function boxers are plain value-class construction now that AJSArray/AJSObject
- * are value-primitive files. The one membrane-side arm (`function` → #void warn) uses the
- * leaf `membrane-warn`, so no evaluator is pulled into the value layer. Hence: a switch.
+ * A single switch, not a registry: the subtypes already `extends AValue`, and the
+ * object/function boxers are plain value-class construction (AJSArray/AJSObject are
+ * value-primitive files) — nothing here needs indirection through a self-registering
+ * boxer table. The one membrane-side arm (`function` → #void warn) uses the leaf
+ * `membrane-warn`, so no evaluator is pulled into the value layer.
  */
 export function fromJs(ctx: RunContext, v: unknown, provenance: ReadonlySet<number> = EMPTY_PROVENANCE): AValue {
   // Same-instance fast path: already a Scheme value. Re-stamp only when a distinct,

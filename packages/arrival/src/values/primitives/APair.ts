@@ -487,7 +487,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // R9 lazy egress: the spine snapshots ONCE at proxy creation (an O(n) pointer copy —
   // a linked spine can't be lazily indexed without O(n²)); the ELEMENTS stay lazy,
   // unwrapping through their own `arrival/toJS` on first read. Improper tail folds in
-  // as the last element, per the one-way list→array projection (P9). A cyclic SPINE
+  // as the last element, per the one-way list→array projection. A cyclic SPINE
   // still throws the iterator's taught invariant — an infinite list has no finite
   // array projection; cycles THROUGH elements terminate via the proxy tracker.
   ["arrival/toJS"](): unknown[] {
@@ -501,8 +501,8 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // Setoid (Fantasy Land) — structural car/cdr equality, threading the harness's shared `seen`.
   // NO cycle bookkeeping here: structuralEqual records (this, other) BEFORE dispatching, so a
   // cyclic list (`a.cdr = a`) re-encounters the pair in the harness and short-circuits — this
-  // method just recurses element-wise. A non-Pair `other` is false. (B2: per-type `equal?` moved
-  // onto the term; the abstract AValue Setoid forces it. Mirrors AVector's seen-threaded Setoid.)
+  // method just recurses element-wise. A non-Pair `other` is false. (Per-type `equal?` lives
+  // on the term; the abstract AValue Setoid forces it. Mirrors AVector's seen-threaded Setoid.)
   ["arrival/tagless-final/equals"](other: unknown, seen?: SeenMap): boolean {
     return (
       other instanceof APair && structuralEqual(this.car, other.car, seen) && structuralEqual(this.cdr, other.cdr, seen)
@@ -564,7 +564,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // directly, calls `fn` per element concurrently (scheme lambdas return Promises), then rebuilds
   // a fresh spine via Pair.fromArray(_, false) — same shape as the eager `map` builtin. Results
   // are kept RAW so a SchemeString/SchemeExact element keeps its box (coercion-soundness: "map
-  // preserves every element's box", lineage A13/A18b). Honors the empty-pair sentinel and a
+  // preserves every element's box"). Honors the empty-pair sentinel and a
   // Nil-clone tail, same as the old mapPair.
   ["arrival/tagless-final/map"](
     fn: (x: APairAsListValue<Car, Cdr>) => MaybePromise<SchemeValue>,
@@ -586,7 +586,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     // `this = makeCallCtx(runCtx)` (flat `CallCtx`) — fixes the `this=undefined` crash a bare
     // `fn(x)` caused when the callback (e.g. `cadr`, a rosetta) reads `this.runCtx`.
     const results = elements.map((x) => applyCallback(fn, [x], runCtx));
-    // R2/C2 (docs/test-suite-v2/RULINGS.md R2, naive-but-explicit strategy): map is
+    // RULINGS.md R2 (naive-but-explicit strategy): map is
     // LENGTH-PRESERVING — the container's own grouping/length-fact stamp is PROXIED through
     // unchanged onto the rebuilt spine (`withInputProvenance([this], …)` unions `this`'s own
     // top-level provenance onto the fresh head; a no-op when the input carries no stamp).
@@ -626,7 +626,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     // both invoked with a defined `this`, no bare `pred(x)` crash on a `this.runCtx`-reading callee.
     const verdicts = elements.map((x) => applyCallback(pred, [x], runCtx));
     const kept = (verdict: unknown): boolean => !is_false(verdict) && !(verdict instanceof ANil);
-    // R2/C2 (RULINGS.md R2): filter is LENGTH-CHANGING — the container's own grouping/
+    // RULINGS.md R2: filter is LENGTH-CHANGING — the container's own grouping/
     // length-fact stamp is PROVENANCED, minted fresh as the union of (a) the INPUT
     // container's own top-level stamp and (b) the decision lineage that changed the
     // length — here, the SURVIVING elements' own top-level provenance (the dropped
@@ -671,9 +671,9 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // `arrival/tagless-final/lte` total order, so `(sort '(2 10))` is `(2 10)`, the lte-default
   // bug-fix; comparator ⇒ SRFI-95 `less?`), then re-cons SHALLOW via Pair.fromArray(_, false):
   // element boxes are preserved (only reordered). ES Array.sort is sync + stable; charges heap
-  // before materializing. R2/C2: sort is LENGTH-PRESERVING — the container's own grouping/
+  // before materializing. sort is LENGTH-PRESERVING — the container's own grouping/
   // length-fact stamp is PROXIED through unchanged (`withInputProvenance([this], …)`), same
-  // convention as map above; P8 requires this to agree with AVector's sort (both PROXY).
+  // convention as map above — this must agree with AVector's sort (both PROXY).
   ["arrival/tagless-final/sort"](comparator?: (a: unknown, b: unknown) => unknown, runCtx?: RunContext): AListAlike {
     chargeHeap(runCtx, countPairElements(this));
     const out: SchemeValue[] = [];
@@ -688,8 +688,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     return withInputProvenance([this], APair.fromArray(this.ctx, out, false));
   }
 
-  // Element-count. C4/A13 interim fix (docs/test-suite-v2/RULINGS.md R2,
-  // docs/working-proposals/execution-plan-wireframe.md §7): `length` reads the CONTAINER's
+  // Element-count. Interim fix (RULINGS.md R2): `length` reads the CONTAINER's
   // OWN flat grouping/length-fact stamp (`withInputProvenance([this], count)` unions just
   // `this`'s own top-level provenance) — it no longer deep-walks the spine unioning every
   // element's box. A pure count depends only on cardinality, not on what each element
@@ -724,9 +723,9 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     // append/list's fresh cells are: the sub-spine's own flat stamp was never set when the
     // outer list was constructed (only the OUTER head got `withInputProvenance`'d), so a bare
     // `withInputProvenance([cdr], cdr)` finds nothing to union (cdr's own provenance is empty)
-    // and silently returns the unstamped cell — P10's "rebuild therefore drops" bug. The fix:
+    // and silently returns the unstamped cell — the "rebuild therefore drops" bug. The fix:
     // stamp the returned sub-spine with the DEEP union of what it still reaches (conservation,
-    // R2 naive strategy) — never minted, only the ids already living on its own elements.
+    // naive strategy) — never minted, only the ids already living on its own elements.
     if (cdr instanceof APair) {
       const deep = collapseProvenance(cdr);
       if (deep.size === 0) return cdr;
@@ -817,7 +816,7 @@ export function concatPair<Car extends SchemeValue, Cdr extends AListAlike>(
   }
   // The rebuilt spine's fresh head cell carries NO stamp of its own by construction (same
   // rebuild-drop shape cdr's fix above addresses) — stamp it with the union of BOTH operands'
-  // deep element provenance (P10 conservation; matches cons/list's convention of unioning onto
+  // deep element provenance (conservation; matches cons/list's convention of unioning onto
   // the produced cell, generalized past the one-level union since either operand may itself be
   // an unstamped rebuilt spine).
   if (result instanceof APair) {

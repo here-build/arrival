@@ -10,7 +10,7 @@
  *
  * Membrane (Rosetta concept-translation): JS `undefined` (no value) ↔ void; JS
  * `null` (explicit null) ↔ nil. The two host bottoms map to the two Scheme
- * absences. See docs/working-proposals/arrival-graal-membrane-dissolution.md.
+ * absences.
  *
  * Mode: void EXISTS in both modes — the loose default treats it as an ordinary
  * (truthy) value; strict mode (the R7RS portability control) is where reliance on

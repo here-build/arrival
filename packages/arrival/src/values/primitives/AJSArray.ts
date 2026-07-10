@@ -111,7 +111,7 @@ export class AJSArray extends AValue {
   // ── Vector algebra — DELEGATED to the materialized vector (no duplicated logic) ──
   // Return types MIRROR AVector's concrete returns: honest + precise, never the abstract
   // `AValue` (not assignable to the `SchemeValue` union the base declares). `map` is
-  // box-preserving (DR4 fix, P8 "one algebra, every carrier") — it returns a FRESH AVector,
+  // box-preserving ("one algebra, every carrier") — it returns a FRESH AVector,
   // same as AVector's own map; a borrowed array's map is no longer a foreign-Functor cross-out.
   ["arrival/tagless-final/map"](
     fn: (x: SchemeValue) => SchemeValue | Promise<SchemeValue>,
@@ -163,14 +163,14 @@ export class AJSArray extends AValue {
     return other instanceof AJSArray && other.source === this.source;
   }
 
-  // Element-count read straight off `source` (no materialize). C4/A13 interim fix
-  // (docs/test-suite-v2/RULINGS.md R2): reads the CONTAINER's own flat grouping/length-fact
+  // Element-count read straight off `source` (no materialize). Interim fix
+  // (RULINGS.md R2): reads the CONTAINER's own flat grouping/length-fact
   // stamp (`withInputProvenance([this], count)`), never the elements' union — matches
-  // APair/AVector's `length` (P8, one algebra every carrier). A borrowed array's own
-  // top-level provenance is empty by construction today (the R2 grouping-fact mint for
+  // APair/AVector's `length` (one algebra every carrier). A borrowed array's own
+  // top-level provenance is empty by construction today (the grouping-fact mint for
   // AJSArray/ADict is a separate, already-ticketed gap — term-carrier.law.test.ts's
   // `equalsContainerHasNoGroupingFact`), so this reads as an empty-provenance boxed AExact
-  // until that lands (post-A4, `withInputProvenance` always boxes — never a bare count).
+  // until that lands (`withInputProvenance` always boxes — never a bare count).
   ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
     this.freezeSource();
     return withInputProvenance([this], this.source.length);

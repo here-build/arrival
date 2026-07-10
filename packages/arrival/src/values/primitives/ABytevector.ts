@@ -9,8 +9,6 @@
  * Buffer coercion is co-located in the constructor, so a SchemeBytevector
  * always normalizes to a single Uint8Array payload.
  *
- * Boxing track: docs/package-specific/arrival-scheme/plan-2026-06-10-boxing-track.md (S1).
- *
  * Lineage: R7RS-small §6.9 bytevectors; the Setoid/Ord/Semigroup instances are
  * Fantasy Land (fantasyland/fantasy-land).
  */

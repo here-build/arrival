@@ -15,8 +15,7 @@ import { type InvocationLike } from "../../rosetta.js";
 
 /**
  * The ONE `this` every callable body sees — the dispatch-level receiver AND the
- * per-verb invocation context, fused (docs/working-proposals/callctx-unification.md,
- * docs/working-proposals/rosetta-ctx-single-channel.md R-CTX-1).
+ * per-verb invocation context, fused into one shape.
  * `runCtx` is never optional (the constructor bakes in the `CONSTANT_CTX` default), so a
  * verb never needs its own `?? CONSTANT_CTX` fallback. `invocation` is the per-call-site
  * provenance carrier (genuinely call-varying, unlike `runCtx` — never lives on RunContext).
@@ -47,10 +46,10 @@ export function makeCallCtx(
 }
 
 /**
- * The sanctioned DIRECT-CALL idiom (R-CTX-4,
- * docs/working-proposals/rosetta-ctx-single-channel.md): tests and host code invoking a
+ * The sanctioned DIRECT-CALL idiom: tests and host code invoking a
  * verb impl/wrapper outside a real dispatch (`run.call(testCallCtx(), …args)`) build a
- * REAL `CallCtx` instead of leaning on `this` optionality — the optionality R-CTX-3 kills.
+ * REAL `CallCtx` instead of leaning on `this` optionality — `this` is never optional on a
+ * callable body's signature, so nothing downstream needs a nullable-`this` fallback.
  * A thin wrapper over `makeCallCtx(CONSTANT_CTX, …)`: `CONSTANT_CTX` survives ONLY inside
  * this explicit constructor (or `makeCallCtx()`'s own default), never as an implicit
  * fallback threaded through a verb's `this?.` read. `overrides` lets a call site supply a
@@ -65,9 +64,8 @@ export function testCallCtx(overrides?: {
   return makeCallCtx(overrides?.runCtx ?? CONSTANT_CTX, overrides?.currentInvocation, overrides?.argProvenance);
 }
 
-// `missingCallCtxDoor` (the R-CTX-3 migration door) is DELETED (2026-07-10, V): with the
-// ctx tranches complete, every dispatch path constructs a full CallCtx via makeCallCtx
-// (which never yields nullable fields) and direct calls use testCallCtx() — the null-this
-// case is uninhabited, and `this: CallCtx` on the wrapper signatures makes an unbound call
-// a COMPILE error at every typed call site. A runtime check for a statically-excluded
-// state is the dishonesty (honest-types rule), not the safety.
+// Every dispatch path constructs a full CallCtx via makeCallCtx (which never yields
+// nullable fields), and direct calls use testCallCtx() — the null-`this` case is
+// uninhabited, and `this: CallCtx` on the wrapper signatures makes an unbound call a
+// COMPILE error at every typed call site. A runtime check for a statically-excluded
+// state would be dishonesty (honest-types rule), not safety — so none exists.

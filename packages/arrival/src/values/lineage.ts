@@ -1,6 +1,5 @@
 /**
- * CARRIER CORE — the lineage data model + STATIC chunk classifier. Build-step 1 of
- * docs/working-proposals/confluent-dataflow-graph-ir-2026-06-17.md §5.
+ * CARRIER CORE — the lineage data model + STATIC chunk classifier.
  *
  * Provenance is a static lineage TREE (pipe / merge / fan / mux), minted only at
  * Rosetta crossings, with the SHAPE derivable from the parsed AST BEFORE execution
@@ -32,7 +31,7 @@
  *     runtime stays sequential short-circuit, never parallel-or)
  *   - `lambda` literal → contributes NO provenance at its definition site
  *
- * The `mux` cone is FORWARD-COMPAT ONLY in v0.1: it is the conservative selector ∪
+ * The `mux` cone is FORWARD-COMPAT ONLY: it is the conservative selector ∪
  * arms (the taken arm is unknowable statically); the byte-identical control-flow
  * "why" (predicate-taint, failed-clause non-leak) stays eager-sourced via the
  * evaluator's control-flow wrappers — we owe the *shape*, not a runtime taken-arm
@@ -42,9 +41,10 @@
  * fl-interop tagless algebra, so a Const-applicative reinterpretation (Applicative
  * = static structure, Monad = runtime, Build-Systems-à-la-Carte style) would first
  * need a full surface→tagless compiler duplicating the evaluator's special-form
- * dispatch — strictly more code than matching Pairs directly. Filed as the v0.2
+ * dispatch — strictly more code than matching Pairs directly. Filed as a future
  * follow-up, once per-op ADJOINT rules exist in that algebra (`walk()` is already
- * the backward pass; v0.2 is "populate the adjoint table," not "flip a mode").
+ * the backward pass; the follow-up is "populate the adjoint table," not "flip a
+ * mode").
  */
 import { is_pair } from "./value-guards.js";
 import { ASymbol } from "./primitives/ASymbol.js";
@@ -71,7 +71,7 @@ export function assertNever(x: never): never {
  *
  *  The keyword/positional CONFLATION into one flat union is intentional: the
  *  distinction that MATTERS (keyword wins a chain, positionals are transparent)
- *  is resolved at classify time by D-v02-1 ABSORPTION (keyword-priority) and
+ *  is resolved at classify time by ABSORPTION (keyword-priority) and
  *  surfaced by `stepKey`, not carried in this type. */
 export type PathStep =
   | { readonly field: string } // a named key — (:foo x) / (@ x :foo): step = {field:"foo"}
@@ -89,17 +89,17 @@ export type LineageNode =
   // A WHERE-PROVENANCE lens step: a canonical member-read (`step`) focused on
   // `child`. walk() descends the focused child ONLY — siblings are pruned
   // STRUCTURALLY (never built as branches), so the hole-placement and the
-  // addressing are the same act. The static form of trace.ts's runtime field-point
-  // (v0.2 §"The carrier"). `op` records the surface head for the viz / debug.
+  // addressing are the same act. The static form of trace.ts's runtime field-point.
+  // `op` records the surface head for the viz / debug.
   | { readonly kind: "field"; readonly op: string; readonly step: PathStep; readonly child: LineageNode }
   // map/filter: a uniform per-element pipe template. `lengthPreserving` (map=true,
   // filter=false) gates the count-cone prune — see walk()/countCone. `template`
   // (present iff the fan function is a lambda) carries the per-element body — the
   // z-stack axis preserved PARAMETRIC so a field projected through a fan composes
-  // without unrolling (the fan×lens product, v0.2 §"The viz constraint"). It is a
-  // carrier-/viz-shaping structure, NOT a cone contributor: walk() never descends
-  // it (the source+introduces over-approximation already bounds the per-element
-  // cone), so fullCone/countCone stay byte-identical to a template-less fan.
+  // without unrolling (the fan×lens product). It is a carrier-/viz-shaping
+  // structure, NOT a cone contributor: walk() never descends it (the
+  // source+introduces over-approximation already bounds the per-element cone), so
+  // fullCone/countCone stay byte-identical to a template-less fan.
   | {
       readonly kind: "fan";
       readonly op: string;
@@ -112,42 +112,42 @@ export type LineageNode =
   // static cone is selector ∪ arms (conservative; the taken arm is a runtime fact).
   | { readonly kind: "mux"; readonly op: string; readonly selector: LineageNode; readonly arms: readonly LineageNode[] }
   | { readonly kind: "opaque"; readonly op: string; readonly children: readonly LineageNode[] } // black-box: holistic
-  // GRAPH-LAYER target for docs/PROVENANCE.md §2's declaration-role `sink` lowering
-  // ("a sink is a port with no egress wire"): an effect/output port. `children` are
-  // what fed it — their cone still matters (I1 confinement reads it), but nothing
-  // derives FROM a sink upward, so it contributes no leaf/mint of its own. REACHABLE
-  // as of Q3's declaration-driven classifier (a declared `sink` role lowers here —
+  // GRAPH-LAYER target for the declaration-role `sink` lowering ("a sink is a port
+  // with no egress wire"): an effect/output port. `children` are what fed it —
+  // their cone still matters (I1 confinement reads it), but nothing derives FROM a
+  // sink upward, so it contributes no leaf/mint of its own. Reachable via the
+  // declaration-driven classifier (a declared `sink` role lowers here —
   // classifyWith's role dispatch); no live declaration uses the role yet (_bake.ts),
   // so the arm is exercised by classify() but not yet by any real symbol.
   | { readonly kind: "sink"; readonly op: string; readonly children: readonly LineageNode[] }
-  // GRAPH-LAYER target for §2's `transparent` lowering ("a membrane crossing that
+  // GRAPH-LAYER target for the `transparent` lowering ("a membrane crossing that
   // neither mints nor stamps"): a pure pass-through port. Single-child, cone-
   // identical to `pipe` — kept as its own kind because crossing a membrane is a
   // distinct FACT from a same-world pure op, even though today's cone walk treats it
-  // the same. Same REACHABLE-as-of-Q3 status as `sink` above.
+  // the same. Same reachability status as `sink` above.
   | { readonly kind: "transparent"; readonly op: string; readonly child: LineageNode }
-  // GRAPH-LAYER target for §1's "binders" designated-node category. `cycles` marks
+  // GRAPH-LAYER target for the "binders" designated-node category. `cycles` marks
   // whether THIS binder introduces a back-edge — the declaration-role `loop` lowers
-  // 1:1 to `binder{cycles: true}` (§2), and (Q3) named-let/`do` now build this shape
-  // directly (`classifyLet`'s named-let branch, `classifyDo`) rather than falling to
+  // 1:1 to `binder{cycles: true}`, and named-let/`do` build this shape directly
+  // (`classifyLet`'s named-let branch, `classifyDo`) rather than falling to
   // `opaque`. `cycles: false` stays the future home for a NON-recursive binder shape
   // no form builds yet. `children` covers bindings + body as a flat conservative-
   // barrier array (walk()'s shared merge/opaque/sink/binder case) — real backedge
-  // TOPOLOGY (per-iteration attribution) is Q8a′'s job, not this landing's; this
+  // TOPOLOGY (per-iteration attribution) is future work, not this landing's; this
   // shape is the `cycles` marker the spec names, not yet the graph.
-  | { readonly kind: "binder"; readonly op: string; readonly cycles: boolean; readonly children: readonly LineageNode[] }; // designated binding node; real topology pending Q8a′
+  | { readonly kind: "binder"; readonly op: string; readonly cycles: boolean; readonly children: readonly LineageNode[] }; // designated binding node; real topology pending
 
-/** docs/PROVENANCE.md §2's declared-role vocabulary, restated here as a LOCAL literal
- *  union (not imported from `common/symbols/_bake.ts`'s `ProvenanceRole`) so this module
- *  stays dependency-light (value-guards + primitives only, no `common/` coupling, no
- *  cycle risk) — the two enumerate the SAME spec vocabulary and must stay in lock-step. */
+/** The declared-role vocabulary, restated here as a LOCAL literal union (not imported
+ *  from `common/symbols/_bake.ts`'s `ProvenanceRole`) so this module stays
+ *  dependency-light (value-guards + primitives only, no `common/` coupling, no cycle
+ *  risk) — the two enumerate the SAME spec vocabulary and must stay in lock-step. */
 export type DeclaredRole = "pipe" | "fan" | "source" | "sink" | "transparent" | "loop" | "opaque";
 
 /**
  * Static classification of operators, READ FROM THE DECLARATION — never guessed from
- * the op's name or duck-read off an ad-hoc property (PROVENANCE-PLAN.md Q3;
- * docs/PROVENANCE.md §2 EXCLUDED "heuristic classification (`isRosettaIn`, `.fanout`
- * stamped on bound functions for duck-reading)"). `roleOf` is the ONE read: a
+ * the op's name or duck-read off an ad-hoc property (heuristic classification via
+ * `isRosettaIn`/`.fanout` stamped on bound functions for duck-reading is explicitly
+ * excluded). `roleOf` is the ONE read: a
  * production classifier answers it from the env-bound callable's `.provenanceRole`
  * (`values/lineage-classifier-from-env.ts`) or an equivalent declaration registry —
  * `undefined` means "no declared role" (unbound name, a plain user-defined Scheme
@@ -177,10 +177,9 @@ function opName(x: unknown): string {
  * and the switch in classifyWith in lock-step (a head here without a switch arm
  * over-asserts; a switch arm without an entry here over-skips).
  *
- * `do` joined this set at Q3 (PROVENANCE-PLAN.md; docs/PROVENANCE.md §2's `loop`
- * role): an iterative loop classifies as `binder{cycles:true}` — the same shape a
- * named `let` now gets (see `classifyLet`'s named-let branch) — via `classifyDo`
- * below, replacing the pre-Q3 mis-modeled-by-shape fallthrough. */
+ * `do` is in this set: an iterative loop classifies as `binder{cycles:true}` — the
+ * same shape a named `let` gets (see `classifyLet`'s named-let branch) — via
+ * `classifyDo` below, rather than the mis-modeled-by-shape application fallthrough. */
 export const CLASSIFIED_SPECIAL_FORMS: ReadonlySet<string> = new Set([
   "if",
   "cond",
@@ -235,7 +234,7 @@ function literalIndex(x: unknown): number | null {
  * Recognize a member-read across its SURFACE syntaxes and return the CANONICAL
  * step + the projected argument expression — else null. Mirrors
  * `provenance/trace.ts`'s `accessorField` for the keyword head, generalized to the four accessor
- * shapes consumers pin (v0.2 §"The carrier"):
+ * shapes consumers pin:
  *   - `(:foo x)`        keyword head — a SchemeSymbol `__name__` ":foo" (len>1) → {field:"foo"}
  *   - `(@ x :foo)`      the get term (env/polyglot @) — key is the 2nd operand (`:foo` symbol or "foo" string)
  *   - `(car x)`         pair head → {car:true}
@@ -299,8 +298,8 @@ function lambdaParams(formals: unknown): string[] {
  * classify the body with each param bound to an ELEMENT leaf (`leaf{slot: p}`), so
  * a field projected inside the body nests under the fan (the fan×lens parametric
  * path). Returns undefined for a bare function symbol / non-lambda — those keep the
- * template-less fan, byte-identical to before. The template is a viz-/carrier-
- * shaping structure; walk() never descends it (cone neutrality).
+ * template-less fan. The template is a viz-/carrier-shaping structure; walk() never
+ * descends it (cone neutrality).
  */
 function classifyFanTemplate(fn: unknown, c: Classifier, subst: Subst): LineageNode | undefined {
   if (!(fn instanceof APair) || !isSym(fn.car, "lambda")) return undefined;
@@ -335,8 +334,8 @@ function combine(op: string, nodes: readonly LineageNode[]): LineageNode {
 
 /** Substitution carried through `let`-family transparency: a bound symbol's
  *  leaf-slot resolves to classify(its RHS), making `(let ((x e)) … x …)` equal
- *  the inlined `… e …`. Exported for the wireframe builder (Q8a,
- *  `provenance/wireframe/builder.ts`), which threads its OWN let-walk's
+ *  the inlined `… e …`. Exported for the wireframe builder
+ *  (`provenance/wireframe/builder.ts`), which threads its OWN let-walk's
  *  substitutions into `classify` when asking selector-cone reachability — so
  *  `(let ((y (src))) (if y …))` classifies the selector `y` as the source it is
  *  bound to, exactly the inlined-form equality this map already encodes. */
@@ -350,8 +349,8 @@ const NO_SUBST: Subst = new Map();
  * forms (if, cond, let-family, begin, and, or, lambda) are handled by shape —
  * see the file header.
  *
- * `subst` (optional, Q8a) seeds the let-transparency substitution from OUTSIDE —
- * the wireframe builder classifies a mux SELECTOR in the binding context its own
+ * `subst` (optional) seeds the let-transparency substitution from OUTSIDE — the
+ * wireframe builder classifies a mux SELECTOR in the binding context its own
  * walk accumulated (the same map `classifyLet` builds internally); every existing
  * caller's two-argument shape is unchanged.
  */
@@ -416,20 +415,20 @@ function classifyWith(ast: unknown, c: Classifier, subst: Subst): LineageNode {
   // ── WHERE-PROVENANCE: a member-read, NORMALIZED to a canonical field node ──
   // Recognized across all its surface syntaxes (keyword/`@`/`car`/`vector-ref`);
   // the EMITTED node is uniform regardless (the `uneval` targets minimal scheme,
-  // so the chunk is one canonical primitive shape — v0.2 §"The carrier"). Placed
-  // before the source/fan/opaque cuts so a projection head is never mis-read as a
+  // so the chunk is one canonical primitive shape). Placed before the
+  // source/fan/opaque cuts so a projection head is never mis-read as a
   // pure op. cdr/cadr/rest stay PIPES (a sound over-approximation — consumers only
   // ever pin keyword/car/index fields).
   const projected = memberRead(head, args);
   if (projected !== null) {
     const child = classifyWith(projected.argExpr, c, subst);
-    // D-v02-1 ABSORPTION: a field directly under another field is a deeper pluck within
+    // ABSORPTION: a field directly under another field is a deeper pluck within
     // the SAME producer pin — keep base + ONE step, do NOT compose nested keys into a
     // path. KEYWORD-PRIORITY: the runtime accessor that ROUTES the forward branch
     // (`accessorField`, provenance/trace.ts) recognizes ONLY keyword heads and is
     // BLIND to the positional `car`/`index` steps, so a keyword anywhere in the chain
     // wins over a transparent positional step. This keeps the carrier — now the sole home
-    // of the key — pinning `(:verdict (car x))` → {field:"verdict"} (NOT {car}); the 2b fix.
+    // of the key — pinning `(:verdict (car x))` → {field:"verdict"} (NOT {car}).
     if (child.kind === "field") {
       const innerIsKeyword = "field" in child.step;
       const outerIsKeyword = "field" in projected.step;
@@ -440,11 +439,11 @@ function classifyWith(ast: unknown, c: Classifier, subst: Subst): LineageNode {
     return { kind: "field", op, step: projected.step, child };
   }
 
-  // ── DECLARATION-DRIVEN DISPATCH (Q3, PROVENANCE-PLAN.md; docs/PROVENANCE.md §2's
-  // lowering table) — the ONE read is `c.roleOf(op)`; no name list, no duck-read off
-  // a bound function's ad-hoc property. `undefined` (unbound / a plain user lambda /
-  // an unmodeled special-form head) falls through with `"pipe"` to the same default
-  // as an explicit pipe declaration — see `Classifier`'s doc. ──
+  // ── DECLARATION-DRIVEN DISPATCH — the ONE read is `c.roleOf(op)`; no name list,
+  // no duck-read off a bound function's ad-hoc property. `undefined` (unbound / a
+  // plain user lambda / an unmodeled special-form head) falls through with
+  // `"pipe"` to the same default as an explicit pipe declaration — see
+  // `Classifier`'s doc. ──
   const role = c.roleOf(op);
 
   if (role === "source") return { kind: "source", op }; // provenance is BORN here
@@ -456,12 +455,13 @@ function classifyWith(ast: unknown, c: Classifier, subst: Subst): LineageNode {
     const fn = args[0];
     const fanOp = opName(fn);
     const lengthPreserving = op === "map" || op === "vector-map";
-    // FAN×LENS (v0.2 §"The viz constraint"): when the function is a lambda, classify
-    // its body with each param bound to an ELEMENT leaf, nesting the per-element
-    // template under the fan. A field projected inside the body (`(:bar it)`) then
-    // becomes a field node UNDER the fan template — the z-stack axis stays parametric,
-    // so a field-in-fan composes with a field-over-fan WITHOUT unrolling. A bare
-    // function symbol (`(map infer xs)`) builds NO template — byte-identical to before.
+    // FAN×LENS: when the function is a lambda, classify its body with each param
+    // bound to an ELEMENT leaf, nesting the per-element template under the fan. A
+    // field projected inside the body (`(:bar it)`) then becomes a field node
+    // UNDER the fan template — the z-stack axis stays parametric, so a
+    // field-in-fan composes with a field-over-fan WITHOUT unrolling. A bare
+    // function symbol (`(map infer xs)`) builds NO template — same as a
+    // template-less fan.
     const template = classifyFanTemplate(fn, c, subst);
     return {
       kind: "fan",
@@ -474,7 +474,7 @@ function classifyWith(ast: unknown, c: Classifier, subst: Subst): LineageNode {
   }
 
   if (role === "sink") {
-    // §2: "a sink is a port with no egress wire" — an effect/output port. Its
+    // "a sink is a port with no egress wire" — an effect/output port. Its
     // operands still matter (I1 confinement reads their cone), but nothing derives
     // FROM a sink upward, so it contributes no leaf/mint of its own (mirrors opaque's
     // children-array shape, walk()'s shared barrier treatment).
@@ -483,7 +483,7 @@ function classifyWith(ast: unknown, c: Classifier, subst: Subst): LineageNode {
   }
 
   if (role === "transparent") {
-    // §2: "a membrane crossing that neither mints nor stamps" — cone-identical to a
+    // "a membrane crossing that neither mints nor stamps" — cone-identical to a
     // pipe's single-child forward (walk()'s `transparent`/`pipe` share arm), but a
     // DISTINCT graph fact (a real membrane crossing happened here). Combine operands
     // exactly like a pure op would (the pipe-vs-merge arity cut), then tag the result
@@ -496,7 +496,7 @@ function classifyWith(ast: unknown, c: Classifier, subst: Subst): LineageNode {
     // A declared-loop OP (not yet exercised by any real declaration — see
     // common/symbols/_bake.ts's ProvenanceRole doc; `do`/named-let below are the
     // special-form route to the same graph shape) lowers to the same
-    // `binder{cycles:true}` §2 names for `loop`.
+    // `binder{cycles:true}` shape the declared `loop` role names.
     const children = args.map((a) => classifyWith(a, c, subst)).filter(isProvBearing);
     return { kind: "binder", op, cycles: true, children };
   }
@@ -583,11 +583,10 @@ function classifyCond(rest: unknown, c: Classifier, subst: Subst): LineageNode {
  * substitution mapping each bound symbol to classify(its RHS); the result equals
  * the inlined form. `let*`/`letrec` (sequential=true) thread substitutions
  * left-to-right (later RHSs see earlier bindings). A *named* let is recursive —
- * not transparently inlineable — so (Q3, PROVENANCE-PLAN.md; docs/PROVENANCE.md
- * §2's `loop` role) it classifies as a `binder{cycles:true}` over its RHSs + body,
- * the same shape `classifyDo` builds for `do` — replacing the pre-Q3 `opaque`
- * fallback (a named recursive loop is a recognized STRUCTURE, not a black box;
- * the V2 law row `laws/provenance-roles.law.test.ts` pins this).
+ * not transparently inlineable — so it classifies as a `binder{cycles:true}` over
+ * its RHSs + body, the same shape `classifyDo` builds for `do` (a named recursive
+ * loop is a recognized STRUCTURE, not a black box; `laws/provenance-roles.law.test.ts`
+ * pins this).
  */
 function classifyLet(rest: unknown, c: Classifier, subst: Subst, sequential: boolean): LineageNode {
   if (!(rest instanceof APair)) return { kind: "literal" };
@@ -638,16 +637,16 @@ function letBindingValues(bindings: unknown): unknown[] {
 /**
  * `(do ((var init step) …) (test result…) body…)` — an ITERATIVE loop whose `step`
  * expressions read the PRIOR iteration's bound vars (a genuine back-edge), so it
- * classifies as `binder{cycles:true}` (Q3, PROVENANCE-PLAN.md; docs/PROVENANCE.md
- * §2's `loop` role) — the same shape a named `let` gets. CONSERVATIVE BARRIER, same
- * rationale as named-let/merge/opaque (walk()'s shared barrier case): classify every
- * init/step/test/result/body sub-expression and union them as children — no attempt
- * at per-iteration attribution (real backedge topology is Q8a′'s job, not this).
+ * classifies as `binder{cycles:true}` — the same shape a named `let` gets.
+ * CONSERVATIVE BARRIER, same rationale as named-let/merge/opaque (walk()'s shared
+ * barrier case): classify every init/step/test/result/body sub-expression and
+ * union them as children — no attempt at per-iteration attribution (real backedge
+ * topology is future work, not this).
  *
  * Walks the RAW surface pairs directly (mirrors `letBindingValues`), NOT the
  * evaluator's `normalizeBindings`/`normalizeClause` (evaluator.ts) — those live in
- * the eval layer and additionally accept a bracket-clause surface (R9,
- * `[i 0 (+ i 1)]`) this static walk does not special-case; a bracket-vector test
+ * the eval layer and additionally accept a bracket-clause surface
+ * (`[i 0 (+ i 1)]`) this static walk does not special-case; a bracket-vector test
  * clause or binding list is a known gap (same category as the file header's
  * `case`/`while`/`quasiquote`, untested by any corpus today).
  */
@@ -700,11 +699,11 @@ function classifyBegin(body: unknown, c: Classifier, subst: Subst): LineageNode 
 /** Runtime bindings: a slot/source name → the provenance ids it carries. */
 export type Bindings = Record<string, readonly number[]>;
 
-/** The ONE parameterized backward fold (M1 — folds the former `walk` cone-walk and
+/** The ONE parameterized backward fold (folds the former `walk` cone-walk and
  *  `walkField` demand-walk into a single recursion, per the file's "one interpreter").
  *  Two orthogonal knobs:
  *   - `countOnly` — a cardinality observation prunes the length-preserving fan transform.
- *   - `demand`    — DEMAND-AS-PROJECTION (D-v02-2): only the matching field of the value
+ *   - `demand`    — DEMAND-AS-PROJECTION: only the matching field of the value
  *     is observed; a non-matching `field` node is a pruned sibling. The two never combine
  *     in practice (demand mode runs with countOnly false), but both are carried verbatim. */
 function walk(n: LineageNode, b: Bindings, out: Set<number>, opts: { countOnly?: boolean; demand?: PathStep }): void {
@@ -719,9 +718,9 @@ function walk(n: LineageNode, b: Bindings, out: Set<number>, opts: { countOnly?:
       return;
     case "pipe":
     case "transparent":
-      // `transparent` mints/stamps nothing (§2) — cone-identical to `pipe`'s single-
-      // child forward. REACHABLE as of Q3 (a declared `transparent` role lowers here —
-      // see classifyWith's role dispatch); no declaration uses it yet (_bake.ts), but
+      // `transparent` mints/stamps nothing — cone-identical to `pipe`'s single-
+      // child forward. Reachable via a declared `transparent` role (see
+      // classifyWith's role dispatch); no declaration uses it yet (_bake.ts), but
       // the arm is exercised structurally by classify() now, not merely type-target.
       walk(n.child, b, out, opts); // a pure pipe adds nothing of its own; preserves both knobs
       return;
@@ -735,8 +734,8 @@ function walk(n: LineageNode, b: Bindings, out: Set<number>, opts: { countOnly?:
         return;
       }
       // CONE mode: descend the FOCUSED child only — siblings were pruned STRUCTURALLY
-      // at classify time, so there is no ⊥ to propagate. fullCone stays NEUTRAL vs the
-      // pre-v0.2 pipe classification of a member-read (a field over x yields x's cone).
+      // at classify time, so there is no ⊥ to propagate. fullCone stays NEUTRAL vs a
+      // plain pipe classification of a member-read (a field over x yields x's cone).
       // The where-provenance KEY rides the node for the consumer queries; it does not
       // change the set walk.
       walk(n.child, b, out, opts);
@@ -745,7 +744,7 @@ function walk(n: LineageNode, b: Bindings, out: Set<number>, opts: { countOnly?:
     case "opaque":
     case "sink":
     case "binder":
-      // Both original members are DEMAND BARRIERS — walk each child with the demand
+      // All four are DEMAND BARRIERS — walk each child with the demand
       // DROPPED (full cone), keeping countOnly — for DISTINCT reasons:
       //   - merge: a fan-in to a FRESH value (`(+ a b)`, a constructed dict). A field
       //     demand CANNOT be statically attributed to one child (no genesis labels
@@ -758,20 +757,20 @@ function walk(n: LineageNode, b: Bindings, out: Set<number>, opts: { countOnly?:
       // `sink`/`binder` share the same children-array shape and the same conservative
       // barrier is sound for both: a sink's children are what fed it (barrier, since
       // nothing derives further from a sink anyway); a binder's children are
-      // bindings+body, a flat array with no real backedge topology yet (Q8a′'s job).
+      // bindings+body, a flat array with no real backedge topology yet (future work).
       //
-      // TERMINATION over `binder{cycles:true}` (V4, `laws/provenance-roles.law.test.ts`
-      // — flips at Q8a′, not here): `cycles` is a SEMANTIC marker on the loop's runtime
-      // behavior, not a structural back-reference in this tree. classify() only ever
-      // builds a `LineageNode` by finite structural recursion DOWNWARD over a finite
-      // parsed AST (classifyLet's named-let branch, classifyDo above) — it never
-      // expands a call site into its callee's body, so no `LineageNode` object can
-      // reach itself through `.children`/`.child`. `binder.children` is exactly as
-      // acyclic as `merge.children`/`opaque.children` today; this walk terminates by
-      // the SAME structural induction as every other kind, with no visit-set needed.
-      // A visit-set guard becomes the honest minimal form ONLY once Q8a′ gives a
-      // binder REAL backedge topology (a graph, not a tree) — do not add one here
-      // pre-emptively; it would guard against a cycle this layer cannot produce.
+      // TERMINATION over `binder{cycles:true}` (`laws/provenance-roles.law.test.ts`
+      // pins this): `cycles` is a SEMANTIC marker on the loop's runtime behavior, not
+      // a structural back-reference in this tree. classify() only ever builds a
+      // `LineageNode` by finite structural recursion DOWNWARD over a finite parsed
+      // AST (classifyLet's named-let branch, classifyDo above) — it never expands a
+      // call site into its callee's body, so no `LineageNode` object can reach
+      // itself through `.children`/`.child`. `binder.children` is exactly as acyclic
+      // as `merge.children`/`opaque.children` today; this walk terminates by the
+      // SAME structural induction as every other kind, with no visit-set needed. A
+      // visit-set guard becomes the honest minimal form ONLY once a binder gets REAL
+      // backedge topology (a graph, not a tree) — do not add one here pre-emptively;
+      // it would guard against a cycle this layer cannot produce.
       for (const ch of n.children) walk(ch, b, out, opts.demand ? { countOnly: opts.countOnly } : opts);
       return;
     case "mux":
@@ -822,7 +821,7 @@ export function sameStep(a: PathStep, z: PathStep): boolean {
 }
 
 /**
- * DEMAND-AS-PROJECTION (D-v02-2): the cone needed when only ONE field of the value
+ * DEMAND-AS-PROJECTION: the cone needed when only ONE field of the value
  * is demanded. A field node is followed IFF its step matches the demand; a
  * NON-matching field node is a pruned SIBLING (contributes nothing — the lens
  * complement as set-difference). Every other node propagates the same field
@@ -842,22 +841,22 @@ export function fieldCone(n: LineageNode, b: Bindings, step: PathStep): number[]
  *  A named member (`(:verdict x)` / `(@ x :verdict)` / `(@ x "verdict")`) → its bare
  *  name string, the form the runtime accessor (`accessorField`) recognizes — the
  *  carrier is the SOLE place that key is pinned. POSITIONAL access FORWARDS (no
- *  key): `car` AND `index` both → `null`. Per D-v02-4 (named-pin / positional-
- *  forward) the carrier tracks producer + *named* location, not the specific
- *  access type or exact position — the index stays in the tree (z-stack/fan axis,
- *  read via `.step`) but never becomes a `:fields` key. */
+ *  key): `car` AND `index` both → `null`. By design (named-pin / positional-forward)
+ *  the carrier tracks producer + *named* location, not the specific access type or
+ *  exact position — the index stays in the tree (z-stack/fan axis, read via
+ *  `.step`) but never becomes a `:fields` key. */
 export function stepKey(step: PathStep): string | null {
   if ("field" in step) return step.field;
-  return null; // positional (car / index) — forwarded, no plucked key (D-v02-4)
+  return null; // positional (car / index) — forwarded, no plucked key
 }
 
 /** What a field-projection chain bottoms out at, in the shape the two JOIN consumers
- *  read (v0.2 §"The consumer-equivalence contract"):
+ *  read:
  *   - `base` — the source-leaf ids the value derives from (the producer points). The
- *     carrier's static analogue of the sift seal's `resolveReadIds` (slice.ts:169-181):
+ *     carrier's static analogue of the sift seal's `resolveReadIds` (slice.ts):
  *     walk to the BASE producer, key discarded. Computed as `fullCone` of the field
  *     node's focused CHILD (the source the projection reads).
- *   - `key` — the INNERMOST projected step (D-v02-1 ABSORPTION), surfaced on the dag's
+ *   - `key` — the INNERMOST projected step (ABSORPTION), surfaced on the dag's
  *     point-edge as `FlowGraphEdge.fields`. `classify` already returns the inner field
  *     unchanged for a field-under-field, so a nested `(:a (:b x))` keeps just `:b` —
  *     base + ONE innermost key, no composed path.
@@ -866,7 +865,7 @@ export function stepKey(step: PathStep): string | null {
  *  projected key: `key = null`, `base = fullCone(node)` (the producer set, no pin). */
 export interface FieldResolution {
   readonly base: number[];
-  readonly key: string | null; // named field-name or forwarded; never a positional index (D-v02-4)
+  readonly key: string | null; // named field-name or forwarded; never a positional index
 }
 
 export function fieldResolve(n: LineageNode, b: Bindings): FieldResolution {
@@ -881,16 +880,15 @@ export function fieldResolve(n: LineageNode, b: Bindings): FieldResolution {
 }
 
 /**
- * V3 OPAQUE QUARANTINE — the MACHINERY (PROVENANCE-PLAN.md Q1; PROVENANCE.md §2:
- * "`opaque` as a citizen — it is a quarantined escape hatch; corpus count is a
- * shrink-only drift alarm baselined AFTER W0"). Counts every `opaque` node in a
- * classified tree, exhaustively — a POPULATION count, not a reachability walk
- * (unlike `walk()`/`fullCone`, this visits fan templates and every branch, since the
- * alarm cares how many opaque escape hatches exist, not which are cone-reachable
- * from a given binding). A future corpus-level caller sums this over many
- * `classify()` results to produce the baseline the it.todo alarm row pins — that
- * baseline is a post-Q6 artifact (span propagation changes what is opaque) and is
- * NOT pinned here; this function is only the counted walk itself.
+ * OPAQUE QUARANTINE — the MACHINERY. `opaque` is a citizen, not an error: it is a
+ * quarantined escape hatch, and a corpus count of it is a shrink-only drift alarm.
+ * Counts every `opaque` node in a classified tree, exhaustively — a POPULATION
+ * count, not a reachability walk (unlike `walk()`/`fullCone`, this visits fan
+ * templates and every branch, since the alarm cares how many opaque escape hatches
+ * exist, not which are cone-reachable from a given binding). A future corpus-level
+ * caller sums this over many `classify()` results to produce a baseline — that
+ * baseline shifts as span propagation changes what counts as opaque, and is NOT
+ * pinned here; this function is only the counted walk itself.
  */
 export function countOpaqueNodes(n: LineageNode): number {
   switch (n.kind) {

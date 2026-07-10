@@ -1,7 +1,5 @@
 /**
- * v02-G0 FEASIBILITY SPIKE — the AUTO-BINDING runtime leaf-stamp (design
- * docs/package-specific/arrival-provenance/provenance-static-lineage-v0.2-lens-carrier-2026-06-20.md
- * §"v02-G0 feasibility verdict + design"). ADDITIVE + flag-gated + fully reversible.
+ * The AUTO-BINDING runtime leaf-stamp. ADDITIVE + flag-gated + fully reversible.
  *
  * PROBLEM: a manually-assembled `{ infer: inferIds }` global name→ids map COLLAPSES
  * the distinct invocations of one source name — `(map infer xs)` over 3 elements
@@ -34,8 +32,8 @@ import { deepProvenance } from "./deep-provenance.js";
 import type { Bindings, LineageNode } from "./lineage.js";
 
 /** The free LEAF/SOURCE slots a classified skeleton references — the slots an auto-binding
- *  must resolve. Duplicates lineage-shadow.ts's `collectSlots` (kept here so the spike is
- *  self-contained; M1 will later fold both into `walk`). Descends a `field`'s focused child
+ *  must resolve. Duplicates lineage-shadow.ts's `collectSlots` (kept here so this module
+ *  stays self-contained). Descends a `field`'s focused child
  *  only — siblings were pruned at classify.
  *
  *  DIVERGES from `collectSlots`: the `fan` arm here ALSO descends `n.template` (the
@@ -54,7 +52,7 @@ export function slotsOf(n: LineageNode, out: Set<string> = new Set()): Set<strin
       return out;
     case "pipe":
     case "field":
-    case "transparent": // cone-identical to pipe (§2: neither mints nor stamps) — UNREACHABLE today
+    case "transparent": // cone-identical to pipe (transparent neither mints nor stamps) — UNREACHABLE today
       slotsOf(n.child, out);
       return out;
     case "fan":
@@ -92,7 +90,7 @@ export class AutoBindings {
    *
    *  RETENTION CAVEAT (flag-ON only): holds O(invocations-that-resolved-a-provenanced-
    *  symbol) entries for the whole run — does NOT participate in
-   *  `EvalTrace.#pruneChildProvenance`'s mid-run shedding. Fine for the spike's bounded
+   *  `EvalTrace.#pruneChildProvenance`'s mid-run shedding. Fine for today's bounded
    *  programs; before a real LOOPING run, either pruning should also drop the
    *  `byInvocation` entry for a pruned invocation, or capture should scope to the
    *  queries that will actually read it. */

@@ -1,8 +1,7 @@
 /**
- * Slices 2–3 of wiring the static lineage classifier (W3 — SHADOW MODE; design
- * docs/package-specific/arrival-provenance/provenance-static-lineage-finalization-v0.1-2026-06-19.md
- * §8). Builds a per-form skeleton at load and, behind the `irLineage` flag, ASSERTS
- * that the static `fullCone` reproduces the UNTAPPED eager `result.provenance`.
+ * Wires the static lineage classifier's SHADOW MODE. Builds a per-form skeleton at
+ * load and, behind the `irLineage` flag, ASSERTS that the static `fullCone`
+ * reproduces the UNTAPPED eager `result.provenance`.
  *
  * TWO PROVENANCE MECHANISMS — do not conflate: (1) the per-op EAGER STAMP
  * (`unionProvenance`/`withInputProvenance`) runs UNTAPPED during normal eval and
@@ -10,7 +9,7 @@
  * `computeProvenance` is tapped-only and adds authoritative-forwarding + field-
  * points. `fullCone` (./lineage.ts) is the static analogue of (1) — shadow compares
  * `fullCone(skeleton, bindings)` against the UNTAPPED `provOf(result)`, NEVER
- * `computeProvenance`, with NO tap installed (generalizes `lineage-checkpoint.test.ts:60-69`).
+ * `computeProvenance`, with NO tap installed.
  *
  * KEYING: the correlation key is the program's OUTPUT VALUE — classify the
  * top-level form, compare its `fullCone` to `provOf(result)`. Pair-identity-free
@@ -21,15 +20,15 @@
  * provenance its binding carries — `provOf(env.get(slot))`. Walk the skeleton
  * for its referenced slots and read each from the run env.
  *
- * THE PROVABLE SHADOW CLASS (empirical — see "BOUNDARIES" below): SOURCE-FREE
- * programs over input-leaf bindings, restricted to VALUE-position shapes where
- * the static cone coincides with the eager stamp — literals, pure pipe/merge
- * arithmetic, the string-collapse path, `cons` union, and `if`/`let`/`cond` whose
- * conservative selector∪arms superset happens to equal the taken-arm eager cone.
- * Outside that class `fullCone` legitimately DIVERGES from the eager stamp BY
- * DESIGN (element-projection, cardinality-drop, spine-rebuild, control-flow
- * superset, fan-cardinality over-attribution). Shadow asserts strictly: a
- * divergence outside the two skip categories is a THROW, never a silent pass.
+ * THE PROVABLE SHADOW CLASS (empirically observed): SOURCE-FREE programs over
+ * input-leaf bindings, restricted to VALUE-position shapes where the static cone
+ * coincides with the eager stamp — literals, pure pipe/merge arithmetic, the
+ * string-collapse path, `cons` union, and `if`/`let`/`cond` whose conservative
+ * selector∪arms superset happens to equal the taken-arm eager cone. Outside that
+ * class `fullCone` legitimately DIVERGES from the eager stamp BY DESIGN
+ * (element-projection, cardinality-drop, spine-rebuild, control-flow superset,
+ * fan-cardinality over-attribution). Shadow asserts strictly: a divergence outside
+ * the two skip categories is a THROW, never a silent pass.
  */
 import { is_pair, is_macro_value } from "./value-guards.js";
 import { ASymbol } from "./primitives/ASymbol.js";
@@ -67,7 +66,7 @@ function shadowSkipReason(form: SchemeValue, env: Environment): ShadowSkip | nul
 
   // The special forms classify() models BY SHAPE resolve to `Macro` instances in the
   // env (the evaluator dispatches them from SPECIAL_FORMS, not by expansion), yet
-  // they ARE in scope — `if`/`let`/`cond`/… are the whole point of W1. Recognise
+  // they ARE in scope — `if`/`let`/`cond`/… are exactly the forms this must cover. Recognise
   // them FIRST so the macro skip below does not over-skip them.
   if (CLASSIFIED_SPECIAL_FORMS.has(op)) return null;
 
@@ -94,7 +93,7 @@ function collectSlots(n: LineageNode, out: Set<string>): void {
       out.add(n.op);
       return;
     case "pipe":
-    case "transparent": // cone-identical to pipe (§2: neither mints nor stamps) — UNREACHABLE today
+    case "transparent": // cone-identical to pipe (transparent neither mints nor stamps) — UNREACHABLE today
       collectSlots(n.child, out);
       return;
     case "field":

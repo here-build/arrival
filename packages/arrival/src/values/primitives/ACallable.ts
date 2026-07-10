@@ -1,7 +1,4 @@
-// Callables as values (the callable-as-value rework;
-// see docs/working-proposals/callable-as-value-run-ctx.md).
-//
-// Every arrival callable becomes an AValue with an EXPLICIT `run(args, runCtx)` surface,
+// Every arrival callable is an AValue with an EXPLICIT `run(args, runCtx)` surface,
 // replacing the `this = { ctx }` smuggling convention that crashed at every non-evaluator
 // call site (`APair.map` doing `fn(x)`, the membrane, direct JS). `runCtx` is the ONLY
 // threaded context (strict / heapMeter) — it is run-level and cannot be
@@ -56,8 +53,8 @@ export type CallableImpl = (args: SchemeValue[], runCtx: RunContext) => CallResu
 // is a no-op that preserves reference identity, and equality is reference identity.
 const callableEquals = (self: object, other: unknown): boolean => other === self;
 
-// `arrival/print` display name (reverse-membrane-for-callables.md §5 item 7 — repr parity is
-// what tests trip on first when a producer flips from a bare fn to a callable value). Mirrors
+// `arrival/print` display name — repr parity is what tests trip on first when a
+// producer flips from a bare fn to a callable value. Mirrors
 // print.ts's `functionRepr` symbol-cleanup: a gensym'd `__name__`/`name` prints its readable
 // description, not the raw `Symbol(...)` wrapper.
 function displayName(name: string | symbol): string {
@@ -224,17 +221,14 @@ export class ARosettaProcedure extends AValue {
 }
 
 /** A bound DOOR VALUE (errors-as-doors — `symbol.notImplemented`, `common/capability.ts`'s
- *  door bind arm) — the introspectable replacement for the pre-W0 anonymous throwing
+ *  door bind arm) — the introspectable replacement for the former anonymous throwing
  *  closure (`env.set(verb, () => { throw … })`). Resolves like any other binding — a bare
- *  reference is legal, only APPLICATION throws (`declared-doors.law.test.ts`'s "resolves at
- *  lookup, fires only at apply" pin) — carrying the same teaching `PurityError` a door has
- *  always thrown: BYTE-COMPATIBLE message/owner when the baked `door` carries no `cause`
- *  (pre-W0 shape), and leading with `name @ owner` once one is stamped
- *  (docs/working-proposals/symbol-define-static-program-validation.md §3.1's display
- *  discipline — every identity in a diagnostic resolves to `name @ capability`, never a raw
- *  hash). `.door` is the static introspection surface: the design's W3 validator (and
- *  discovery, and the wireframe) read door-ness + cause off the bound value instead of an
- *  opaque closure.
+ *  reference is legal, only APPLICATION throws — carrying the same teaching `PurityError`
+ *  a door has always thrown: the message includes just `name` when the baked `door`
+ *  carries no `cause`, and leads with `name @ owner` once one is stamped (every identity
+ *  in a diagnostic resolves to `name @ capability`, never a raw hash). `.door` is the
+ *  static introspection surface: the static validator (and discovery, and the
+ *  wireframe) read door-ness + cause off the bound value instead of an opaque closure.
  *
  *  A sibling of ACallable's other concretes — extends `AValue` directly, joins the union
  *  below — rather than a bare JS closure, so it fires through the SAME apply term the
@@ -243,11 +237,11 @@ export class ARosettaProcedure extends AValue {
  *  special-casing at any call site. */
 export class DoorProcedure extends AValue {
   readonly kind = "procedure" as const;
-  /** JS never enforced arity on the pre-W0 closure (an arrow fn declaring 0 params) — a
+  /** JS never enforced arity on the former closure (an arrow fn declaring 0 params) — a
    *  door fires unconditionally regardless of arg count. `{min: 0, max: null}` names that
    *  honestly (unbounded-tolerant) and keeps `ACallable.arity` a total field across every
    *  member of the union (srfi-235.ts's `procedure-min-arity` reads it off ANY callable
-   *  value — BYTE-COMPATIBLE: it read the same `.length === 0` off the old bare closure). */
+   *  value, matching the same `.length === 0` the old bare closure answered). */
   readonly arity: Arity = { min: 0, max: null };
 
   constructor(
@@ -283,7 +277,7 @@ export class DoorProcedure extends AValue {
 
 /** The callable union — of concrete classes, not an abstract parent (better narrowing, clean
  *  `kind` discrimination, and it drops cleanly into the SchemeValue union). `DoorProcedure`
- *  joins it (W0) so `is_callable_value`/`z.lambda`'s raw predicate stay SOUND — a door is a
+ *  joins it so `is_callable_value`/`z.lambda`'s raw predicate stay SOUND — a door is a
  *  genuine callable value (it has an apply term, the "procedure" kind), not a lesser shape. */
 export type ACallable = ALambda | ANativeProcedure | ARosettaProcedure | DoorProcedure;
 

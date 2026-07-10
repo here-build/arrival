@@ -5,18 +5,15 @@
  * remember to re-stamp. On-value means a builtin can only forget to *propagate*
  * (visible: empty result-set), never to *carry*.
  *
- * Propagation algebra: `docs/spec/arrival-chain.md` §5.
- *
  * The JS→Scheme boxing membrane (`fromJs` + the boxer registry) lives in
  * `boxing.ts`, NOT here — see that file for why the registry's writer is kept off
  * this (leakable) class.
  *
- * Lineage (claimed: none — see docs/working-proposals/confluent-dataflow-graph-ir-2026-06-17.md §1,§11):
- * provenance-on-the-value is how-provenance — provenance as an expression/circuit
- * over operators, not a flat trace (Green, Karvounarakis & Tannen, "Provenance
- * Semirings", PODS 2007). Its dual — a demanded slice of the output induces the
- * minimal slice of the input — is Galois slicing (Perera, Acar, Cheney & Levy,
- * "Functional Programs That Explain Their Work", ICFP 2012).
+ * Lineage: provenance-on-the-value is how-provenance — provenance as an
+ * expression/circuit over operators, not a flat trace (Green, Karvounarakis &
+ * Tannen, "Provenance Semirings", PODS 2007). Its dual — a demanded slice of the
+ * output induces the minimal slice of the input — is Galois slicing (Perera,
+ * Acar, Cheney & Levy, "Functional Programs That Explain Their Work", ICFP 2012).
  */
 
 import { INTEROP_BOUNDARY } from "../../interop-access.js";
@@ -93,7 +90,7 @@ export abstract class AValue {
    *  via `withProvenance` (borrowed wrappers stay lazy — entries pick the stamp up on
    *  access). `ctx` is the CROSSING's RunContext (the router's argument, not `this.ctx`) and
    *  `seen` terminates cyclic spines — both exactly the dissolved jsToSchemeImpl arms'
-   *  behavior (spec §5.3 Interpretation A, byte-stable). */
+   *  behavior, byte-stable. */
   ["arrival/withProvenanceDeep"]?(ctx: RunContext, p: ReadonlySet<number>, seen?: WeakSet<object>): SchemeValue;
 
   // ── The tagless-final algebra — declared OPTIONAL on AValue, the single source of truth ──────
@@ -152,7 +149,7 @@ export abstract class AValue {
    *  the same `resolveMethod` path `map`/`car` use. `args` are the scheme-value operands, `runCtx`
    *  is threaded (never via `this` — `this` is the callable value itself, per the receiver
    *  convention), and `canBounce` opts a lambda into the TCO bounce protocol (native/rosetta
-   *  ignore it, only a scheme lambda reads it). See docs/working-proposals/callable-as-value-run-ctx.md. */
+   *  ignore it, only a scheme lambda reads it). */
   ["arrival/tagless-final/apply"]?(
     args: SchemeValue[],
     runCtx: RunContext,
@@ -197,7 +194,8 @@ export abstract class AValue {
   ["arrival/tagless-final/char?"]?(): boolean;
 }
 
-/** Per `docs/spec/arrival-chain.md` §5.1: distinct-by-reference, forward singleton, union ≥2. */
+/** Distinct-by-reference provenance sets: zero inputs → empty, one distinct set →
+ *  forward it unchanged (singleton), two or more distinct sets → union them. */
 export function unionProvenance(args: readonly AValue[]): ReadonlySet<number> {
   const distinct = new Set<ReadonlySet<number>>();
   for (const arg of args) {

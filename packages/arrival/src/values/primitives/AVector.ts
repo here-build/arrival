@@ -5,13 +5,11 @@
  * the payload is never written after construction; every "mutator" instead returns a fresh
  * AVector.
  *
- * DISAMBIGUATION (boxing plan §1): a raw JS `Array` is heavily overloaded — evaluateArgs' args
+ * DISAMBIGUATION: a raw JS `Array` is heavily overloaded — evaluateArgs' args
  * carrier, Values, syntax-rules ellipsis machinery, and JS-array-as-list at the
  * membrane are ALL raw arrays and are NOT vectors. Only vector literals / make-vector / vector
  * builtins mint AVector. Being its own class leaves `Array.isArray` sites unaffected — never
  * widen them to accept it.
- *
- * Boxing track: docs/package-specific/arrival-scheme/plan-2026-06-10-boxing-track.md (S5).
  *
  * Lineage: R7RS-small §6.8 vectors; the Setoid/Semigroup/Functor/Filterable/
  * Foldable instances are Fantasy Land (fantasyland/fantasy-land).
@@ -153,7 +151,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   // Setoid — structural element-wise equality, threading the harness's shared `seen`.
   // structuralEqual records (this, other) BEFORE dispatching, so a mutually-cyclic vector pair
   // re-encounters itself in the harness and short-circuits (fixes a fresh-seen-per-call stack
-  // blow once the harness's inline-Vector special-case was removed, B2). Non-AVector → false.
+  // blow once the harness's inline-Vector special-case was removed). Non-AVector → false.
   ["arrival/tagless-final/equals"](other: unknown, seen?: SeenMap): boolean {
     if (!(other instanceof AVector)) return false;
     const a = this.__vector__;
@@ -200,8 +198,8 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     return `#(${this.__vector__.map((el) => printValue(el)).join(" ")})`;
   }
 
-  // Functor `map` — PRESERVES every mapped element's box, rebuilding a FRESH AVector (DR4 fix:
-  // mirrors APair's box-preserving map, P8 "one algebra, every carrier" — a term's box
+  // Functor `map` — PRESERVES every mapped element's box, rebuilding a FRESH AVector: mirrors
+  // APair's box-preserving map ("one algebra, every carrier" — a term's box
   // discipline cannot vary by carrier). Results are kept RAW (no box-stripping), same
   // convention as APair's map. `fn` is awaited per element. (vector-map, the N-ary builtin, is
   // a separate non-Functor op.)
@@ -219,8 +217,8 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     });
     chargeHeap(runCtx, this.__vector__.length);
     const results = this.__vector__.map((v) => applyCallback(fn, [v], runCtx));
-    // R2/C2 (RULINGS.md R2): map is LENGTH-PRESERVING — PROXY the container's own
-    // grouping/length-fact stamp through unchanged (mirrors APair's map, P8 "one algebra,
+    // RULINGS.md R2: map is LENGTH-PRESERVING — PROXY the container's own
+    // grouping/length-fact stamp through unchanged (mirrors APair's map — "one algebra,
     // every carrier" — the two carriers must agree, not just their element boxes).
     if (results.some(is_promise)) {
       return (promise_all(results) as Promise<SchemeValue[]>).then(
@@ -251,7 +249,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
       const verdict = await applyCallback(pred, [v], runCtx);
       if (!is_false(verdict) && !(verdict instanceof ANil)) out.push(v);
     }
-    // R2/C2: filter is LENGTH-CHANGING — the container's own grouping/length-fact stamp is
+    // filter is LENGTH-CHANGING — the container's own grouping/length-fact stamp is
     // PROVENANCED, minted fresh as the union of (a) the INPUT container's own top-level
     // stamp and (b) the decision lineage that changed the length — here, the SURVIVING
     // elements' own top-level provenance (mirrors APair's filter — naive-but-explicit,
@@ -285,8 +283,8 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   // `lte` total order; comparator ⇒ SRFI-95 `less?`). Element boxes are PRESERVED (only
   // reordered — this is NOT the cross-out map; mirrors the box-preserving filter). Source
   // payload untouched (slice copy), so a frozen literal is safe. ES Array.sort is stable;
-  // charges heap before materializing. R2/C2: sort is LENGTH-PRESERVING — the container's
-  // own grouping/length-fact stamp is PROXIED through unchanged (P8 — must agree with
+  // charges heap before materializing. sort is LENGTH-PRESERVING — the container's
+  // own grouping/length-fact stamp is PROXIED through unchanged (must agree with
   // APair's sort, which proxies identically; the two carriers no longer diverge).
   ["arrival/tagless-final/sort"](
     comparator?: (a: SchemeValue, b: SchemeValue) => unknown,
@@ -298,14 +296,13 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     return withInputProvenance([this], new AVector(this.ctx, out));
   }
 
-  // Element-count. C4/A13 interim fix (docs/test-suite-v2/RULINGS.md R2,
-  // docs/working-proposals/execution-plan-wireframe.md §7): `length` reads the CONTAINER's
+  // Element-count. Interim fix (RULINGS.md R2): `length` reads the CONTAINER's
   // OWN flat grouping/length-fact stamp (`withInputProvenance([this], count)`), never the
   // elements' deep union — a pure count depends only on cardinality, not on what each
   // element became. The container's own stamp is already an accurate synopsis by
   // construction (MINTED at `vector`, PROXIED through map/sort, PROVENANCED fresh by
   // filter — see the term×carrier law table, _tables/terms.ts). Always a fresh boxed
-  // AExact post bare-value purge (A4/P4) — `withInputProvenance` no longer has a raw-scalar
+  // AExact post bare-value purge — `withInputProvenance` no longer has a raw-scalar
   // tolerance. No heap-charge / no strict-gating.
   ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
     return withInputProvenance([this], this.__vector__.length);

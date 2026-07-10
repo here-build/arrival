@@ -2,8 +2,8 @@
  * ADict — the native, immutable open-key map (`{…}` literal / `(dict …)`). Replaces
  * AJSObject in the dict role: AJSObject re-boxes every field it reads through
  * jsToScheme (correct for a genuinely-foreign JS object, wrong for a dict whose
- * entries are already-evaluated SchemeValues with real provenance — see
- * docs/working-proposals/native-dict-provenance.md for the traced bug this retires).
+ * entries are already-evaluated SchemeValues with real provenance — re-boxing them
+ * would silently drop that provenance).
  *
  * Keyed by DictKey OBJECTS (a symbol or string), not folded strings, so a key keeps
  * its own provenance exactly like a value does — `indexByName` is the structural
@@ -12,7 +12,7 @@
  * identity.
  *
  * ALSO the `{…}` reader-literal carrier — the datum face of a dict literal IS an
- * ADict (docs/working-proposals/dict-literal-true-shape.md), the same in-class
+ * ADict, the same in-class
  * pattern AVector uses for `[…]` (`evalElements` + payload-of-forms): a reader-
  * minted node carries `literalForms` (the flat validated form sequence, keys
  * included, unquote-form keys ONLY living here since they have no static entry)
@@ -48,8 +48,8 @@ import { jsToScheme } from "../../rosetta.js";
  *  must not re-cons the spine every iteration). WeakMap, not an instance field: keeps
  *  the cache off the dict's own payload (mirrors AVector's `LOWERED_LITERAL`) and off
  *  the `#`-private-slot tslib helper this workspace's `importHelpers: true` needs.
- *  GC-correct — entry disappears with the node. Moved here verbatim from AJSObject.ts
- *  (the old `loweredLiterals`) per the true-shape migration. */
+ *  GC-correct — entry disappears with the node. Mirrors AJSObject.ts's own lowered-
+ *  literal cache. */
 const LOWERED_LITERAL = new WeakMap<ADict, APair<SchemeValue, SchemeValue>>();
 
 export type DictKey = ASymbol | AString | ACharacter;
@@ -123,9 +123,8 @@ export class ADict extends AValue {
   private readonly indexByName: Readonly<Record<string, DictKey>>;
 
   /** `pairs` must already carry unique fold-names — duplicate resolution is each
-   *  producer's own policy, decided before this constructor runs (see
-   *  native-dict-provenance.md's Error paths), exactly as it trusts `Record`/array
-   *  shape today. */
+   *  producer's own policy, decided before this constructor runs, exactly as it
+   *  trusts `Record`/array shape today. */
   constructor(
     ctx: RunContext,
     pairs: ReadonlyArray<readonly [DictKey, SchemeValue | Promise<SchemeValue>]>,
@@ -208,10 +207,9 @@ export class ADict extends AValue {
   // evaluation BY CONSTRUCTION (the lowering is then evaluated through the ordinary
   // apply path, so membrane marshaling / heap charging / provenance all ride
   // unchanged). A plain, non-literal ADict (`dict`-constructed or quasiquote-folded —
-  // `literalForms` absent) answers null: self-evaluating, no lowering. Moved here
-  // verbatim from AJSObject.ts's `arrival/tagless-final/lower` per the true-shape
-  // migration (docs/working-proposals/dict-literal-true-shape.md) — same WeakMap
-  // cache pattern as AVector's twin.
+  // `literalForms` absent) answers null: self-evaluating, no lowering. Mirrors
+  // AJSObject.ts's own `arrival/tagless-final/lower` — same WeakMap cache pattern
+  // as AVector's twin.
   ["arrival/tagless-final/lower"](): APair<SchemeValue, SchemeValue> | null {
     if (this.literalForms === undefined) return null;
     let lowered = LOWERED_LITERAL.get(this);
