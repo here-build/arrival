@@ -41,6 +41,8 @@ const lookup = (env: Environment, name: string) => env._lookupWithResolvers(name
 
 describe("Environment Module Composition", () => {
   describe("Resolver Yielding", () => {
+    // INVARIANT: multiple registered resolvers are tried in registration order until one
+    // returns a defined value (pins implementation, not behavior)
     it("should try multiple resolvers in order until one returns a value", () => {
       const callOrder: string[] = [];
 
@@ -68,6 +70,8 @@ describe("Environment Module Composition", () => {
       expect(callOrder).toEqual(["resolver-1", "resolver-2"]);
     });
 
+    // INVARIANT: a resolver returning undefined "yields" (search continues); returning
+    // null or any other defined value stops the search (pins implementation, not behavior)
     it("should distinguish between undefined (yield) and null/nil (found)", () => {
       const resolver: ResolverSpec = {
         id: "null-resolver",
@@ -83,6 +87,9 @@ describe("Environment Module Composition", () => {
   });
 
   describe("_lookupWithResolvers", () => {
+    // INVARIANT: resolution order per environment is direct bindings → registered
+    // resolvers → parent environment, checked in that order at each level (pins
+    // implementation, not behavior)
     it("should implement correct per-module resolution order", () => {
       // Bindings are boxed SchemeValues (an env binds AExact, not a raw JS number);
       // the resolver returns below stay raw — _lookupWithResolvers is contract'd to

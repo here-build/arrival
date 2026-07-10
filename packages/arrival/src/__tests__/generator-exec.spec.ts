@@ -28,12 +28,14 @@ async function exec(code: string, options?: ExecOptions): Promise<SchemeValue[]>
 
 describe("generator-exec", () => {
   describe("exec() - basic operations", () => {
+    // INVARIANT: string-source arithmetic evaluates through the full parser+evaluator pipeline
     it("should evaluate simple arithmetic", async () => {
       const [result] = await exec("(+ 1 2 3)");
       expect(result).toBeInstanceOf(AExact);
       expect((result as AExact).num).toBe(6n);
     });
 
+    // INVARIANT: multiple top-level expressions each produce one result, in order
     it("should evaluate multiple expressions and return all results", async () => {
       const results = await exec("1 2 3");
       expect(results).toHaveLength(3);
@@ -42,6 +44,7 @@ describe("generator-exec", () => {
       expect((results[2] as AExact).num).toBe(3n);
     });
 
+    // INVARIANT: define binds a value (returning void) and later top-level forms see the binding
     it("should handle define and use defined values", async () => {
       const results = await exec("(define x 42) (+ x 8)");
       expect(results).toHaveLength(2);
@@ -51,11 +54,13 @@ describe("generator-exec", () => {
       expect((results[1] as AExact).num).toBe(50n);
     });
 
+    // INVARIANT: lambdas parsed from string source evaluate/apply correctly
     it("should evaluate lambdas", async () => {
       const [result] = await exec("((lambda (x) (+ x 1)) 5)");
       expect((result as AExact).num).toBe(6n);
     });
 
+    // INVARIANT: nested arithmetic expressions compose correctly from string source
     it("should handle nested expressions", async () => {
       const [result] = await exec("(+ (* 2 3) (- 10 4))");
       // 2*3 + (10-4) = 6 + 6 = 12
@@ -64,6 +69,7 @@ describe("generator-exec", () => {
   });
 
   describe("exec() - special forms", () => {
+    // INVARIANT: if from string source selects the correct branch for both #t and #f
     it("should handle if expressions", async () => {
       const [result1] = await exec("(if #t 1 2)");
       expect((result1 as AExact).num).toBe(1n);
@@ -72,17 +78,20 @@ describe("generator-exec", () => {
       expect((result2 as AExact).num).toBe(2n);
     });
 
+    // INVARIANT: let bindings from string source resolve correctly
     it("should handle let bindings", async () => {
       const [result] = await exec("(let ((x 3) (y 4)) (+ x y))");
       expect((result as AExact).num).toBe(7n);
     });
 
+    // INVARIANT: let* sequential bindings from string source resolve correctly
     it("should handle let* bindings", async () => {
       const [result] = await exec("(let* ((x 3) (y (+ x 1))) (+ x y))");
       // x=3, y=4, x+y=7
       expect((result as AExact).num).toBe(7n);
     });
 
+    // INVARIANT: letrec supports recursive definition (factorial) from string source
     it("should handle letrec for recursion", async () => {
       const [result] = await exec(`
         (letrec ((fact (lambda (n)
@@ -94,11 +103,13 @@ describe("generator-exec", () => {
       expect((result as AExact).num).toBe(120n);
     });
 
+    // INVARIANT: begin sequencing from string source returns the last value
     it("should handle begin", async () => {
       const [result] = await exec("(begin 1 2 3)");
       expect((result as AExact).num).toBe(3n);
     });
 
+    // INVARIANT: and/or short-circuit and value semantics hold from string source
     it("should handle and/or", async () => {
       const [and1] = await exec("(and #t #t)");
       expect((and1 as ABool).valueOf()).toBe(true);
@@ -113,6 +124,7 @@ describe("generator-exec", () => {
       expect((or2 as ABool).valueOf()).toBe(false);
     });
 
+    // INVARIANT: cond with else from string source selects the matching clause
     it("should handle cond", async () => {
       const [result] = await exec(`
         (cond
@@ -123,6 +135,7 @@ describe("generator-exec", () => {
       expect((result as AExact).num).toBe(2n);
     });
 
+    // INVARIANT: case dispatch from string source selects the matching clause
     it("should handle case", async () => {
       const [result] = await exec(`
         (case 2
@@ -136,11 +149,13 @@ describe("generator-exec", () => {
   });
 
   describe("exec() - data structures", () => {
+    // INVARIANT: quote from string source produces pair structure, not evaluated
     it("should handle quote", async () => {
       const [result] = await exec("'(1 2 3)");
       expect(result).toBeInstanceOf(APair);
     });
 
+    // INVARIANT: quasiquote+unquote inside a let produces the correctly spliced list
     it("should handle quasiquote with unquote", async () => {
       const [result] = await exec("(let ((x 42)) `(a ,x c))");
       expect(result).toBeInstanceOf(APair);
@@ -149,6 +164,7 @@ describe("generator-exec", () => {
       expect(list.cdr.car.num).toBe(42n);
     });
 
+    // INVARIANT: cons/car/cdr operate correctly on quoted list data from string source
     it("should handle cons/car/cdr", async () => {
       const [carResult] = await exec("(car '(1 2 3))");
       expect((carResult as AExact).num).toBe(1n);
@@ -159,6 +175,7 @@ describe("generator-exec", () => {
   });
 
   describe("exec() - named let", () => {
+    // INVARIANT: named let performs iterative accumulation (factorial via loop) correctly
     it("should handle named let for iteration", async () => {
       const [result] = await exec(`
         (let loop ((n 5) (acc 1))
@@ -171,6 +188,8 @@ describe("generator-exec", () => {
   });
 
   describe("exec() - macros", () => {
+    // INVARIANT: a define-macro definition and its use can appear in the same source text
+    // and expand correctly
     it("should handle define-macro", async () => {
       const [result] = await exec(`
         (begin
@@ -183,6 +202,7 @@ describe("generator-exec", () => {
   });
 
   describe("exec() - do loop", () => {
+    // INVARIANT: a do loop accumulates a running sum correctly across iterations
     it("should handle do loop", async () => {
       const [result] = await exec(`
         (do ((i 0 (+ i 1))
@@ -195,12 +215,14 @@ describe("generator-exec", () => {
   });
 
   describe("parse()", () => {
+    // INVARIANT: parse() returns parsed forms without evaluating them
     it("should parse code without evaluating", async () => {
       const parsed = await parse("(+ 1 2)");
       expect(parsed).toHaveLength(1);
       expect(parsed[0]).toBeInstanceOf(APair);
     });
 
+    // INVARIANT: parse() returns one entry per top-level form
     it("should parse multiple expressions", async () => {
       const parsed = await parse("1 2 3");
       expect(parsed).toHaveLength(3);
@@ -208,6 +230,7 @@ describe("generator-exec", () => {
   });
 
   describe("execExpr()", () => {
+    // INVARIANT: execExpr evaluates a single already-parsed expression
     it("should evaluate a single parsed expression", async () => {
       const [parsed] = await parse("(+ 1 2)");
       const result = await execExpr(parsed);
@@ -216,10 +239,12 @@ describe("generator-exec", () => {
   });
 
   describe("error handling", () => {
+    // INVARIANT: referencing an unbound variable throws an "Unbound variable" error
     it("should throw on unbound variable", async () => {
       await expect(exec("undefined-variable")).rejects.toThrow(/Unbound variable/);
     });
 
+    // INVARIANT: unterminated/malformed source throws a parse error
     it("should throw on syntax error", async () => {
       await expect(exec("(+ 1")).rejects.toThrow();
     });
@@ -243,6 +268,7 @@ describe("generator-exec", () => {
   });
 
   describe("try/catch/finally", () => {
+    // INVARIANT: try returns the body's value when no exception is raised
     it("should handle try with successful body", async () => {
       const [result] = await exec(`
         (try
@@ -252,6 +278,8 @@ describe("generator-exec", () => {
       expect((result as AExact).num).toBe(42n);
     });
 
+    // INVARIANT: a raised exception inside try's body is caught by its catch clause,
+    // whose value is returned
     it("should catch exceptions in body", async () => {
       const [result] = await exec(`
         (try
@@ -279,6 +307,7 @@ describe("generator-exec", () => {
     // technique arrival's chibi-harness uses): each clause calls a bound `log` function,
     // so the order lives in JS, not in a mutated guest binding (set! is doored under the
     // purity invariant). Pure dataflow from the guest — it just calls a function.
+    // INVARIANT: try's finally clause runs after a successful body, after the body
     it("should run finally clause after success", async () => {
       const log: string[] = [];
       const env = await freshEnv();
@@ -296,6 +325,8 @@ describe("generator-exec", () => {
       expect(log).toEqual(["body", "finally"]);
     });
 
+    // INVARIANT: try's finally clause runs after catch handles a raised exception,
+    // in body→catch→finally order
     it("should run finally clause after catch", async () => {
       const log: string[] = [];
       const env = await freshEnv();
@@ -316,6 +347,8 @@ describe("generator-exec", () => {
   });
 
   describe("guard (R7RS exception handling)", () => {
+    // INVARIANT: guard's matching clause (#t) catches a raised exception and returns
+    // the clause's value
     it("should handle guard with matching clause", async () => {
       const [result] = await exec(`
         (guard (exn
@@ -325,6 +358,7 @@ describe("generator-exec", () => {
       expect((result as AExact).num).toBe(42n);
     });
 
+    // INVARIANT: guard returns the body's value unchanged when no exception is raised
     it("should return body value when no exception", async () => {
       const [result] = await exec(`
         (guard (exn
