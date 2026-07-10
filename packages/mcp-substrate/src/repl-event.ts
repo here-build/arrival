@@ -1,0 +1,92 @@
+/**
+ * ReplEvent — the per-statement REPL event stream (R5,
+ * docs/working-proposals/arrival-mcp-rework-over-phases.md §2.5).
+ *
+ * SDK-free, beside {@link ContentBlock}: the union mirrors nothing from
+ * `@modelcontextprotocol/sdk` — a transport adapter (arrival-mcp's sdk-adapter)
+ * lowers these onto its own notification frames at its own boundary.
+ *
+ * The stream is WIREFRAME-THEN-RECORD (the same two-layer shape as the provenance
+ * design, at REPL altitude): parse-first means every form and its exact source span
+ * is known before anything executes, so ONE topology event — the future trace, an
+ * n-slot skeleton with sources visible — is emitted before index 0 ever runs, and
+ * statement events fill the slots as they land. Clients render pending slots
+ * immediately; perceived latency collapses before any output exists.
+ *
+ * THE EVENT-ORDER LAW (pinned in arrival-mcp's r5 law suite):
+ *   topology FIRST (always, exactly once) → (validation, when the R8 pre-flight is
+ *   enabled) → statement events strictly ordered by `index` — and TERMINAL-ON-ERROR:
+ *   a statement event carrying `error` is the LAST event of the call.
+ *
+ * THE AGGREGATE LAW (§2.5, sharpened): the final CallToolResult ≡ the ordered
+ * concatenation of the statement events' FULL `ContentBlock` lists — text AND
+ * binary blocks. A client that ignores notifications sees the complete result;
+ * streaming is additive observation, never the only carrier.
+ *
+ * SAME-PRINCIPAL (§2.5's exposure note, recorded): every event echoes program
+ * source and results the SAME client sent, on that call's OWN response stream —
+ * events are same-principal, per-session; no new exposure surface exists here.
+ *
+ * PARSE-CRASH CONVENTION: a reader error has no forms, so the topology event is
+ * EMPTY (`total: 0, forms: []`) and ONE synthetic terminal statement event at
+ * `index: 0` carries the `(error …)` door — the aggregate law still holds
+ * mechanically (that door is the call's whole output).
+ */
+
+import type { Diagnostic } from "@here.build/arrival";
+
+import type { ContentBlock } from "./content-block.js";
+
+/**
+ * Per-form execution counters (§2.7), riding every statement event. At HEAD each
+ * top-level form runs under its own fresh runCtx, so `heapUsed` is that form's
+ * meter read (once, at the end) and `budgetMsRemaining` is what was left of THAT
+ * form's own wall-clock budget — when exec-phases' one-ExecInstance-per-call lands
+ * (R7) these become two reads off one meter, counters unchanged on the wire.
+ */
+export interface StatementCounters {
+  /** This form's allocation-meter read (cells). A crashed form's allocations are
+   *  unobservable at HEAD (the exec throws before returning its state) — it reads 0. */
+  heapUsed: number;
+  /** The allocation bound — 100M class, ALWAYS set now (heap default ON, Q6). */
+  heapMax: number;
+  elapsedMs: number;
+  /** What remained of this form's wall-clock budget at the meter read (clamped ≥ 0). */
+  budgetMsRemaining?: number;
+}
+
+/** The future trace — emitted FIRST, before index 0 ever runs. `forms` carries the
+ *  exact LOCATION slices of the program's top-level forms (the reader's spans, so
+ *  multi-form slices are exact), `total` their count. */
+export type ReplTopologyEvent = {
+  kind: "topology";
+  /** `forms.length` — the statement-event count a fully-successful call will emit. */
+  total: number;
+  /** The skeleton: one slot per top-level form, exact original source per slice. */
+  forms: readonly { index: number; source: string }[];
+};
+
+/** RESERVED (R8): the phase-2.5 static-validation pre-flight — the COMPLETE
+ *  `Diagnostic[]` streams here after topology, before index 0; an error-tier list
+ *  stops the call with zero side effects fired. Defined now so the event-order law
+ *  is stated once and R8 never retrofits it; nothing emits this arm yet. */
+export type ReplValidationEvent = {
+  kind: "validation";
+  diagnostics: readonly Diagnostic[];
+};
+
+/** One executed top-level form — fills the skeleton slot `index`. */
+export type ReplStatementEvent = {
+  kind: "statement";
+  /** The topology slot this record fills. */
+  index: number;
+  /** The form's FULL output blocks — core text now; R6's extracted extras (per-extra
+   *  label + binary blocks) APPEND here, and the aggregate law carries them along. */
+  content: readonly ContentBlock[];
+  counters: StatementCounters;
+  /** REPL-crash text (the same text inside the `(error …)` door in `content`).
+   *  TERMINAL: no event follows a statement event carrying this. */
+  error?: string;
+};
+
+export type ReplEvent = ReplTopologyEvent | ReplValidationEvent | ReplStatementEvent;

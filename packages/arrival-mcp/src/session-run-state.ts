@@ -61,7 +61,8 @@ export interface SessionCounters {
   cacheMisses: number;
   /** Replay-mode `sink` tombstone skips. */
   effectsSkipped: number;
-  /** Reserved at 0 until R5 wires the per-form heap-meter reads (§2.7). */
+  /** Cumulative per-form heap-meter reads (`runCtx.heapMeter.used`, wired by R5 — new input
+   *  AND fold re-runs; a crashed form contributes 0, its meter being unobservable). */
   heapUsedTotal: number;
   elapsedMsTotal: number;
   /** How many times this session was cold-folded (log re-run over cache). */

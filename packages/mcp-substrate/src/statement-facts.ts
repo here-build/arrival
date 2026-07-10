@@ -56,7 +56,7 @@ const EMPTY_FACTS: StatementFacts = {
 // boolean, a procedure — is a LEAF. `()` is `ANil`, the real nil singleton, NOT the old plain-
 // tree's `{list: []}` — it is structural (nothing to walk, but not an "atom" for the bracket-
 // binding shape discriminator below either).
-type Structural = APair | AVector | ADict | ANil;
+type Structural = APair<any, any> | AVector | ADict | ANil;
 const isStructural = (n: SchemeValue | undefined): n is Structural =>
   n instanceof APair || n instanceof AVector || n instanceof ADict || n instanceof ANil;
 
@@ -99,7 +99,7 @@ function spineItems(node: SchemeValue | undefined): { items: SchemeValue[]; tail
  *  `__vector__` payload directly; a real cons spine (`(...)` paren list, or `ANil` for an empty
  *  slot) walks via {@link spineItems}; anything else (malformed input) is `[]`. */
 function bindingElements(node: SchemeValue | undefined): SchemeValue[] {
-  if (node instanceof AVector) return node.__vector__;
+  if (node instanceof AVector) return [...node.__vector__]; // copy: the payload is readonly upstream now
   if (node instanceof APair || node instanceof ANil) return spineItems(node).items;
   return [];
 }

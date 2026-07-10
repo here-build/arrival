@@ -1,7 +1,9 @@
 import { port, type Resource } from "@here.build/arrival/resources";
+import type { ReplEvent } from "@here.build/mcp-substrate";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import { describe, expect, it } from "vitest";
 import * as z from "zod";
 
@@ -9,7 +11,7 @@ import { ActionTool } from "../ActionTool.js";
 import { DiscoveryTool } from "../DiscoveryTool.js";
 import { McpEnvCapability } from "../McpEnvCapability.js";
 import { str } from "../refs.js";
-import { type McpTool, registerTools } from "../sdk-adapter.js";
+import { ARRIVAL_EVENT_METHOD, type McpTool, registerTools } from "../sdk-adapter.js";
 
 const greeter = (cfg: { who: string }): Resource<{ hello: () => string }> => ({
   kind: "greeter",
@@ -103,6 +105,74 @@ describe("registerTools (official @modelcontextprotocol/sdk round-trip)", () => 
     const res = await client.callTool({ name: "demo", arguments: { expr: "(this-verb-does-not-exist)", who: "ada" } });
     // A statement crash is normal REPL output (a door), not a hard isError — earlier statements stand.
     expect((res.content as { type: string; text: string }[])[0]!.text).toMatch(/^\(error /);
+    await client.close();
+  });
+});
+
+describe("R5 — the dual notification channel over the official SDK (§2.5)", () => {
+  it("rich tier: every ReplEvent rides notifications/arrival/event, in event order, BEFORE the final result lands", async () => {
+    const client = await connectedClient([demoTool()]);
+    const events: ReplEvent[] = [];
+    client.fallbackNotificationHandler = async (notification) => {
+      if (notification.method === ARRIVAL_EVENT_METHOD) events.push(notification.params as ReplEvent);
+    };
+    const res = await client.callTool({ name: "demo", arguments: { expr: "(+ 1 1)\n(greet)", who: "ada" } });
+    // all frames preceded the response frame (the adapter awaits its send queue pre-lowering)
+    expect(events.map((e) => e.kind)).toEqual(["topology", "statement", "statement"]);
+    const topology = events[0] as Extract<ReplEvent, { kind: "topology" }>;
+    expect(topology.total).toBe(2);
+    expect(topology.forms.map((f) => f.source)).toEqual(["(+ 1 1)", "(greet)"]);
+    // aggregate law over the wire: content texts ≡ concat of statement events' content texts
+    const statementTexts = events
+      .filter((e): e is Extract<ReplEvent, { kind: "statement" }> => e.kind === "statement")
+      .flatMap((e) => e.content.map((b) => (b.type === "text" ? b.text : "")));
+    expect((res.content as { type: string; text: string }[]).map((b) => b.text)).toEqual(statementTexts);
+    await client.close();
+  });
+
+  it("progress tier: with a progressToken, topology ⇒ 0/total and each statement ⇒ index+1/total with the core text as message", async () => {
+    const client = await connectedClient([demoTool()]);
+    const progress: { progress: number; total?: number; message?: string }[] = [];
+    await client.callTool(
+      { name: "demo", arguments: { expr: "(+ 1 1)\n(greet)", who: "ada" } },
+      CallToolResultSchema,
+      { onprogress: (p) => progress.push(p) }, // the SDK mints _meta.progressToken for this call
+    );
+    expect(progress.map((p) => [p.progress, p.total])).toEqual([
+      [0, 2], // topology — the "it's coming" signal
+      [1, 2],
+      [2, 2],
+    ]);
+    expect(progress[1]!.message).toBe("2");
+    expect(progress[2]!.message).toBe('"hi ada"');
+    await client.close();
+  });
+
+  it("without a progressToken the rich tier still flows and the aggregate is unchanged (additive observation)", async () => {
+    const client = await connectedClient([demoTool()]);
+    let richCount = 0;
+    client.fallbackNotificationHandler = async (notification) => {
+      if (notification.method === ARRIVAL_EVENT_METHOD) richCount += 1;
+    };
+    const res = await client.callTool({ name: "demo", arguments: { expr: "(greet)", who: "ada" } });
+    expect(richCount).toBe(2); // topology + one statement
+    expect((res.content as { type: string; text: string }[])[0]!.text).toContain("hi ada");
+    await client.close();
+  });
+
+  it("a host-resolved onEvent (from resolveCtx) still observes every event — fan-out, never replacement", async () => {
+    const hostEvents: ReplEvent[] = [];
+    const server = new McpServer({ name: "test", version: "0.0.0" }, { capabilities: { tools: {} } });
+    registerTools(server, [demoTool()], () => ({
+      session: { id: "s1", state: {} },
+      onEvent: (event) => hostEvents.push(event),
+    }));
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+    const client = new Client({ name: "tester", version: "0" }, { capabilities: {} });
+    await client.connect(clientTransport);
+    await client.callTool({ name: "demo", arguments: { expr: "(+ 1 1)", who: "ada" } });
+    expect(hostEvents.map((e) => e.kind)).toEqual(["topology", "statement"]);
     await client.close();
   });
 });

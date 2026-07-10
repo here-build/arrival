@@ -20,14 +20,15 @@ import {
   type SchemeEnv,
   type SchemeValue,
   APair,
-  exec,
+  execState,
+  is_callable_value,
   parse,
   sandboxedEnv,
 } from "@here.build/arrival";
 import type { EnvCapability } from "@here.build/arrival/capability";
 import { assembleEnv } from "@here.build/arrival/env";
 import { toSExprString } from "@here.build/arrival-serializer";
-import type { AsyncSessionStore } from "@here.build/mcp-substrate";
+import type { AsyncSessionStore, ContentBlock, ReplEvent, StatementCounters } from "@here.build/mcp-substrate";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { format } from "date-fns";
 import dedent from "dedent";
@@ -70,29 +71,99 @@ interface ExecSerializedOptions {
   /** THE RUN CACHE (R2, `ExecOptions.cache`) — record mode on live input, replay mode on fold.
    *  Undefined ⇒ no interception (sessionless calls — byte-identical fast path). */
   cache?: RunCache;
+  /** Per-form serialization budget, computed ONCE per call from the PARSED form count —
+   *  §2.5's parse-first budget fix (closes §1.2's SUM regression: the per-exec
+   *  `perElementBudget(results.length)` default sees one form per exec in the REPL split, so
+   *  every form got the near-full budget and the batch SUM was unbounded). The REPL loop
+   *  (`runForms`) always passes `perElementBudget(forms.length)`; callers outside it
+   *  (`evalScheme`, the fold — whose output is discarded) keep the per-exec default. */
+  charBudget?: number;
+}
+
+/** `execSerializedState`'s product: the serialized outputs plus this form's meter reads (§2.7). */
+interface ExecSerializedOutcome {
+  out: string[];
+  /** The run's allocation-meter read (0 when the run carried no meter — never the case on
+   *  DiscoveryTool paths, where the heap budget is default-ON). */
+  heapUsed: number;
+  heapMax: number;
+}
+
+/** The callable face for serialization (see `hostFace`): any `typeof === "function"` value
+ *  renders as `<function>` in the serializer, byte-identical to membrane `toJS`'s
+ *  `callableToHostFn` wrapper on this serialize-only path. Never invoked, never escapes. */
+function schemeCallableFace(): never {
+  throw new Error("schemeCallableFace: a serialization-only face — never invocable");
+}
+
+/** A multiple-values result (`(values …)`) — sits OUTSIDE the AValue hierarchy, detected
+ *  structurally the way membrane `toJS`'s `instanceof Values` arm does by class. */
+function isValuesTuple(value: unknown): value is { __values__: SchemeValue[] } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "__values__" in value &&
+    Array.isArray((value as { __values__?: unknown }).__values__)
+  );
+}
+
+/**
+ * Scheme→JS exit for serialization — mirrors the simple-tier `exec` unwrap (membrane `toJS`)
+ * over the arrival PROTOCOL key (`"arrival/toJS"` — the same cross-package convention
+ * arrival-serializer itself dispatches on), because R5 lands no core exports and `toJS` is
+ * not on the public surface. Three arms, same order as membrane.toJS:
+ *   • multiple values exit as a JS ARRAY of unwrapped elements;
+ *   • a callable exits as a host FUNCTION face (serializer: `<function>` — byte-identical);
+ *   • everything else dispatches its own `arrival/toJS` term (containers egress as the same
+ *     lazy proxies `exec` returns); a raw crosser with no protocol key passes through — it
+ *     is already JS.
+ */
+function hostFace(value: SchemeValue): unknown {
+  if (isValuesTuple(value)) return value.__values__.map((element) => hostFace(element));
+  if (is_callable_value(value)) return schemeCallableFace;
+  const exit = (value as { "arrival/toJS"?: () => unknown })["arrival/toJS"];
+  return typeof exit === "function" ? exit.call(value) : value;
 }
 
 /**
  * Execute scheme source (or an already-parsed form) and serialize each top-level form's value
- * under the MCP output budget. `exec` already returns one `SchemeValue` per top-level form, and
- * the caller's REPL split (one already-parsed form per call) means there's nothing to coalesce:
- * serialize the results directly. No `(list …)` wrap-and-unwrap — that round-trip predated the
- * REPL split.
+ * under the MCP output budget, returning the run's heap-meter reads alongside (R5, §2.7 — the
+ * COMPLEX-tier `execState` is used precisely so the per-form `runCtx.heapMeter` is readable
+ * once at the end; values exit through `hostFace`, the same membrane crossing `exec` performs).
+ * `execState` already returns one `SchemeValue` per top-level form, and the caller's REPL split
+ * (one already-parsed form per call) means there's nothing to coalesce: serialize the results
+ * directly. No `(list …)` wrap-and-unwrap — that round-trip predated the REPL split.
  */
-async function execSerialized(expr: string | SchemeValue, options: ExecSerializedOptions = {}): Promise<string[]> {
+async function execSerializedState(
+  expr: string | SchemeValue,
+  options: ExecSerializedOptions = {},
+): Promise<ExecSerializedOutcome> {
   const env =
     options.env !== undefined && "__env__" in options.env
       ? options.env
       : sandboxedEnv.inherit("sandbox", options.env as never);
-  const results = await exec(expr, {
+  const state = await execState(expr, {
     env: env as never,
     budgetMs: options.budgetMs,
     heapBudget: options.heapBudget,
     signal: options.signal,
     cache: options.cache,
   });
-  const per = perElementBudget(results.length);
-  return results.map((element) => toSExprString(element, { maxTotalChars: per }));
+  const values = state.values.map((element) => hostFace(element));
+  const per = options.charBudget ?? perElementBudget(values.length);
+  const meter = state.runCtx.heapMeter;
+  return {
+    out: values.map((element) => toSExprString(element, { maxTotalChars: per })),
+    heapUsed: meter?.used ?? 0,
+    heapMax: meter?.max ?? 0,
+  };
+}
+
+/** The serialize-only view of {@link execSerializedState} — the shape `evalScheme` consumes
+ *  (no meter read wanted there; the fold and the REPL loop use the state variant). */
+async function execSerialized(expr: string | SchemeValue, options: ExecSerializedOptions = {}): Promise<string[]> {
+  const { out } = await execSerializedState(expr, options);
+  return out;
 }
 
 /** One positional zod arg rendered as a Scheme-doc type token for the catalog. */
@@ -184,6 +255,14 @@ export interface ToolCallCtx {
   signal?: AbortSignal;
   /** Fire-and-forget interaction sink — never blocks the response. */
   record?: (interaction: InteractionLog) => void;
+  /** The per-statement event stream (R5, §2.5 — `ReplEvent` in mcp-substrate). DISPATCH-TIME,
+   *  exactly where `record` sits — ABOVE the eval membrane, so a run can never reach or forge
+   *  its own event channel. Receives the wireframe-then-record order: ONE topology event (the
+   *  future trace, before index 0 ever runs), then one statement event per executed top-level
+   *  form — strictly ordered, terminal-on-error. Events are SAME-PRINCIPAL (they echo program
+   *  source/results the same client sent, on that call's own response stream) and ADDITIVE
+   *  observation: the aggregate `call` result is byte-identical with or without a listener. */
+  onEvent?: (event: ReplEvent) => void;
 }
 
 /** What a single tool call records (a structural subset of the store's InteractionRecord). */
@@ -302,7 +381,13 @@ export class DiscoveryTool {
     if (session === undefined) {
       const assembled = await this.assemble(cfg);
       try {
-        const run = await this.runForms(args.expr, { env: assembled.env, budgetMs, heapBudget, signal });
+        const run = await this.runForms(args.expr, {
+          env: assembled.env,
+          budgetMs,
+          heapBudget,
+          signal,
+          onEvent: ctx.onEvent,
+        });
         this.log(ctx, args, startTime, run.crashed ? { success: false, errorMessage: run.crashed } : { success: true });
         return run.out;
       } finally {
@@ -332,6 +417,7 @@ export class DiscoveryTool {
       signal,
       cache: new SessionRunCache("record", entries, state.counters),
       state,
+      onEvent: ctx.onEvent,
     });
 
     // Stamp the CURRENT identity (the cache just recorded under it), serialize the cache
@@ -443,7 +529,8 @@ export class DiscoveryTool {
       const kept: LogStatement[] = [];
       for (const stmt of state.log) {
         try {
-          await execSerialized(stmt.src, { env: assembled.env, ...opts, cache: foldCache });
+          const run = await execSerializedState(stmt.src, { env: assembled.env, ...opts, cache: foldCache });
+          state.counters.heapUsedTotal += run.heapUsed; // fold re-runs burn heap too — cumulative honesty (§2.7)
           kept.push(stmt);
         } catch (error) {
           if (opts.signal?.aborted) throw error; // cancellation, not a poisoned statement
@@ -462,7 +549,15 @@ export class DiscoveryTool {
   /** Parse + execute `expr` form-by-form (REPL semantics: earlier values stand, a crash stops the
    *  rest). With a session `state`, every executed top-level statement — defines AND bare
    *  expressions — is appended to the log in program order (§2.2), under the statement-count cap
-   *  (a TEACHING error at the cap, never silent truncation). */
+   *  (a TEACHING error at the cap, never silent truncation).
+   *
+   *  R5 (§2.5/§2.7): with an `onEvent` listener, the run streams wireframe-then-record — ONE
+   *  topology event (the future trace: all forms' exact LOCATION slices, before index 0 runs),
+   *  then one statement event per form {content blocks, counters, error? terminal}. The
+   *  per-form serialization budget is computed ONCE here from the parsed form count (the
+   *  bounded-SUM fix), and each form's heap-meter read accrues into the session's
+   *  `heapUsedTotal`. The aggregate `out` is byte-identical with or without a listener — the
+   *  statement events' text content IS `out`, sliced per form (the aggregate law). */
   private async runForms(
     expr: string,
     opts: {
@@ -472,12 +567,27 @@ export class DiscoveryTool {
       signal?: AbortSignal;
       cache?: RunCache;
       state?: SessionRunState;
+      onEvent?: (event: ReplEvent) => void;
     },
   ): Promise<{ out: string[]; crashed?: string }> {
-    const { env, budgetMs, heapBudget, signal, cache, state } = opts;
+    const { env, budgetMs, heapBudget, signal, cache, state, onEvent } = opts;
     const cap = this.options.statementCap ?? defaultStatementCap();
     const out: string[] = [];
     let crashed: string | undefined;
+
+    const statement = (index: number, content: string[], counters: StatementCounters, error?: string): void => {
+      // R6 SEAM (images, {core, extras}): the extracted extras land HERE — per-extra label +
+      // binary blocks APPENDED to this `content` list after the core text blocks; the
+      // aggregate law (§2.5) carries the FULL list, text and binary alike.
+      const blocks = content.map((text): ContentBlock => ({ type: "text", text }));
+      onEvent?.(
+        error === undefined
+          ? { kind: "statement", index, content: blocks, counters }
+          : { kind: "statement", index, content: blocks, counters, error },
+      );
+    };
+
+    const started = Date.now();
     let forms: SchemeValue[];
     try {
       forms = await parse(expr);
@@ -486,9 +596,29 @@ export class DiscoveryTool {
       crashed = message;
       out.push(`(error ${JSON.stringify(message)})`);
       if (state !== undefined) state.counters.crashes += 1;
-      forms = [];
+      // Parse-crash convention (repl-event.ts): an EMPTY topology (nothing will execute) + ONE
+      // synthetic terminal statement at index 0 carrying the reader door — the aggregate law
+      // holds mechanically (that door is the whole output).
+      onEvent?.({ kind: "topology", total: 0, forms: [] });
+      const elapsedMs = Date.now() - started;
+      statement(
+        0,
+        out,
+        { heapUsed: 0, heapMax: heapBudget, elapsedMs, budgetMsRemaining: Math.max(0, budgetMs - elapsedMs) },
+        message,
+      );
+      return { out, crashed };
     }
+    // The future trace — emitted BEFORE index 0 ever runs (§2.5). Slices are the reader's exact
+    // LOCATION spans (sourceTextFor), computed once and reused for the log append below.
+    const sources = forms.map((form, index) => sourceTextFor(form, index, forms, expr));
+    onEvent?.({ kind: "topology", total: forms.length, forms: sources.map((source, index) => ({ index, source })) });
+    // Parse-first budget fix (§2.5, closes §1.2 item 2): `total` is known at parse time, so the
+    // per-element budget is computed ONCE up front and each form serializes under its fair
+    // share at emit time — the SUM across the batch stays bounded by MCP_OUTPUT_BUDGET.
+    const charBudget = perElementBudget(forms.length);
     for (const [index, form] of forms.entries()) {
+      const formStarted = Date.now();
       if (state !== undefined && state.log.length >= cap) {
         crashed = `session statement cap reached (${cap})`;
         out.push(
@@ -498,16 +628,42 @@ export class DiscoveryTool {
               `instead of many REPL steps.`,
           )})`,
         );
+        statement(
+          index,
+          out.slice(-1),
+          { heapUsed: 0, heapMax: heapBudget, elapsedMs: 0, budgetMsRemaining: budgetMs },
+          crashed,
+        );
         break;
       }
-      const src = sourceTextFor(form, index, forms, expr);
+      const src = sources[index] as string;
       try {
-        out.push(...(await execSerialized(form, { env, budgetMs, heapBudget, signal, cache })));
+        const run = await execSerializedState(form, { env, budgetMs, heapBudget, signal, cache, charBudget });
+        out.push(...run.out);
+        const elapsedMs = Date.now() - formStarted;
+        if (state !== undefined) state.counters.heapUsedTotal += run.heapUsed; // §2.7 — monotonic contributions
+        statement(index, run.out, {
+          heapUsed: run.heapUsed,
+          heapMax: run.heapMax,
+          elapsedMs,
+          // Each form's exec carries its OWN wall-clock budget at HEAD (R7's one-ExecInstance
+          // collapse makes this per-call); this is what remained of THIS form's budget.
+          budgetMsRemaining: Math.max(0, budgetMs - elapsedMs),
+        });
       } catch (error) {
         if (signal?.aborted) throw error; // cancellation propagates — not a REPL crash
         crashed = error instanceof Error ? error.message : String(error);
         out.push(`(error ${JSON.stringify(crashed)})`); // REPL-style: earlier values stand; stop here
         if (state !== undefined) state.counters.crashes += 1;
+        const elapsedMs = Date.now() - formStarted;
+        // TERMINAL statement event: the crashed form's meter is unobservable (the exec threw
+        // before returning its state) — heapUsed honestly reads 0, never a guess.
+        statement(
+          index,
+          out.slice(-1),
+          { heapUsed: 0, heapMax: heapBudget, elapsedMs, budgetMsRemaining: Math.max(0, budgetMs - elapsedMs) },
+          crashed,
+        );
         break;
       }
       if (state !== undefined) {
