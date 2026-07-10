@@ -29,6 +29,10 @@
     "./analysis": {
       "types": "./dist/analysis.d.ts",
       "import": "./dist/analysis.js"
+    },
+    "./verdict": {
+      "types": "./dist/verdict.d.ts",
+      "import": "./dist/verdict.js"
     }
   },
   "main": "./dist/index.js",
@@ -45,8 +49,8 @@
     "!**/*.stories.*"
   ],
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test": "vitest run",
