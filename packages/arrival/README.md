@@ -1,6 +1,9 @@
 # @here.build/arrival
 
-**The first ever language built for AI, finally built for AI**
+**The first ever language built for AI, finally built for AI.**
+
+(Yes, that's the joke: Lisp was born in 1958 *for* AI research — the first language built for
+AI. arrival is a Lisp finally built for AI *as the user*: the agent writes the programs.)
 
 Arrival is a programming medium, not a tool. The grain, stated by subtraction: take an ordinary
 small Scheme and remove its ability to hide where a value came from. What's left is a language in
@@ -524,6 +527,27 @@ Early-stage and moving fast. We're interested in:
 ## License
 
 **[FSL-1.1-MIT](./LICENSE.md)** — Functional Source License 1.1, MIT Future License. Each version converts to MIT two years after its release date. Until conversion, the license permits everything *except* Competing Use (making the Software available in a commercial product or service that substitutes for the Software or offers substantially similar functionality). Internal use, non-commercial education and research, and professional services built on top of the Software are always permitted.
+
+**What Competing Use means here, in plain words** (a clarification of intent, not a legal
+instrument — the license text governs): the one reserved lane is **providing services around
+custom AI-participating workflows in a self-service way** — a product whose *customers* build
+their own pipelines on arrival (a hosted pipeline-builder). That is the product we are building
+ourselves. Everything else is yours, explicitly:
+
+- **Your own agentic pipelines** — personal, team, or company-internal, at any scale, including
+  an internal platform where your own engineers build pipelines: **fair use, always.**
+- **Agency / consulting work** — building bespoke pipelines *for* clients is professional
+  services, always permitted.
+- **Agents as users** — an agent building pipelines (via MCP or otherwise) acts on behalf of
+  its operator; its operator's pipelines are personal use.
+
+The test in one question: **who types the pipeline?** You or your engineers (for yourselves or
+a client) — fair. Your customers, into your product — the reserved lane, for now.
+
+Two standing commitments: clarifications of this boundary only ever *widen* fair use, never
+narrow it retroactively — gray area? Ask, answers are public and bind us. And the reservation
+is a head start, not a moat: every release MITs on its own two-year clock, and we are open to
+conversations about converting the project to full MIT sooner.
 
 arrival grew out of [LIPS.js](https://github.com/jcubic/lips) by Jakub T. Jankiewicz (MIT licensed), and its copyright notices are preserved in the source where shared code — the reader and tokenizer — remains. The interpreter itself is a ground-up rewrite: the tagless-final term algebra, the trampoline-generator kernel, the rosetta membrane, the capability environment, and the provenance substrate share no code with LIPS.
 
