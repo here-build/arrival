@@ -129,15 +129,23 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       //    role. A replay-hit serves the DECODED-FACE value in `result`'s place; steps 3–4
       //    (provenance mint + encode + attestation) then run over it exactly as over a fresh
       //    impl return — values are never restored around the membrane, only through it.
+      //
+      //    THE BURST ARM (W1, values/effect-log.ts, arrival-plexus-effect-burst.md §2.3)
+      //    rides the SAME chokepoint via `this.runCtx.effects` — a sibling per-run handle,
+      //    not a `cache` field, so a burst run needs no `RunCache` to gather sink effects.
+      //    Its fast-path bypass ALSO checks `runEffects`: a run with an effect log but no
+      //    cache must still reach `penetrateThroughCache` (the burst arm lives inside it).
       const runCache = this.runCtx.cache;
+      const runEffects = this.runCtx.effects;
       const result =
-        runCache === undefined
+        runCache === undefined && runEffects === undefined
           ? await rawImpl.call(this, ...decodedArgs)
           : await penetrateThroughCache(
               runCache,
               { symbolName: name, cacheClass, sink: provenance === "sink" },
               decodedArgs,
               async () => rawImpl.call(this, ...decodedArgs),
+              runEffects,
             );
 
       // 3. PROVENANCE — the SAME spine as createRosettaWrapper. A "source"-role rosetta

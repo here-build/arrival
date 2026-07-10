@@ -39,6 +39,7 @@ import {
 } from "./exec-phases.js";
 import { makeRunContext, type RunContext } from "../values/primitives/RunContext.js";
 import type { RunCache } from "../values/run-cache.js";
+import type { EffectLog } from "../values/effect-log.js";
 // TYPE-ONLY (erased — no runtime scheme-zod edge from this module): the `exec` exit
 // contract's schema type + its output-face projection (the output-bearing overload).
 import type { output as ZodOutputOf, ZodType } from "../common/scheme-zod.js";
@@ -344,6 +345,19 @@ export interface ExecOptions {
    */
   cache?: RunCache;
   /**
+   * THE EFFECT LOG (values/effect-log.ts — W1, docs/working-proposals/
+   * arrival-plexus-effect-burst.md §2.3). When set, rides `makeRunContext` onto the
+   * run's `RunContext.effects`, and every baked rosetta `sink` penetration — during a
+   * PRIME run, i.e. `cache` absent or `cache.mode !== "replay"` — enqueues onto it and
+   * returns `undefined` immediately instead of firing. A SIBLING of `cache`, not a
+   * field on it: pass `effects` alone to gather sinks with no `RunCache` at all, or
+   * alongside `cache` to gather sinks while a `view`/`pure` cache still serves reads.
+   * `undefined` (the default) ⇒ no burst arm — byte-identical to today (a sink fires
+   * immediately). Draining the log (the actual burst — plexus region, atomicity,
+   * conflict handling) is HOST territory (W3+); this option only wires the gather.
+   */
+  effects?: EffectLog;
+  /**
    * THE EXIT CONTRACT (B2, arrival-type-hardening-ladder.md §1.2 — RULED: "generic
    * per-form tuple + zod `output` contract"). When supplied, the LAST form's result is
    * validated against this schema at the exit boundary — AFTER the `toJS` unwrap, so
@@ -511,6 +525,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     budgetMs,
     heapBudget,
     cache,
+    effects,
     strict,
     freezeRosettaReturns,
     staticValidation,
@@ -597,7 +612,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
       // validation pass is not offered here (§3.5: no seal ⇒ no claims); the runtime
       // doors (unbound-variable throw + suggestions, PurityError) remain the backstop.
       runResolver = new Resolver(actualEnv);
-      runCtx = makeRunContext({ strict: strict ?? false, heapBudget, freezeRosettaReturns, signal, cache });
+      runCtx = makeRunContext({ strict: strict ?? false, heapBudget, freezeRosettaReturns, signal, cache, effects });
     } else {
       const lexicalScope = scope ?? LexicalScope.for(defaultLexicalRoot());
       // ── PHASE 2.5 — static validation (W3, §3.6): validate AFTER parse, BEFORE the
@@ -613,6 +628,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
         freezeRosettaReturns,
         signal,
         cache,
+        effects,
       });
       runResolver = instance.resolver;
       runCtx = instance.runCtx;
@@ -809,7 +825,20 @@ export async function parse(code: string, source?: string): Promise<SchemeValue[
  */
 export async function execExpr(
   expr: SchemeValue,
-  { env, resolver, dynamic_env, use_dynamic, tap, nodeFilter, signal, budgetMs, heapBudget, cache, skipBootstrapWait }: ExecOptions = {},
+  {
+    env,
+    resolver,
+    dynamic_env,
+    use_dynamic,
+    tap,
+    nodeFilter,
+    signal,
+    budgetMs,
+    heapBudget,
+    cache,
+    effects,
+    skipBootstrapWait,
+  }: ExecOptions = {},
 ): Promise<SchemeValue> {
   const actualEnv = env ?? user_env;
   // Same honest SchemeEnv → Environment narrow as execState's seam above.
@@ -835,7 +864,7 @@ export async function execExpr(
   // every require'd module. `heapBudget` bounds THIS expression's allocations
   // (a per-form meter; a cumulative multi-form bound needs a shared RunContext,
   // which no caller can inject yet — the ledgered runProgram gap).
-  const runCtx = makeRunContext({ signal, heapBudget, cache });
+  const runCtx = makeRunContext({ signal, heapBudget, cache, effects });
 
   try {
     // Top-level form evaluates to a value, never a bare expander — seal it.

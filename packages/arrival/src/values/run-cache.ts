@@ -45,7 +45,20 @@
  * no TTL. `RunCache` is the RUN-level entity only; the cache-validity identity
  * `{v, semanticsEpoch, roster, configDigest}` is checked by the session layer BEFORE
  * a cache is handed to a run (mismatch ⇒ drop the cache, keep the log).
+ *
+ * ── The burst arm (W1, arrival-plexus-effect-burst.md §2.3) ───────────────────
+ * `penetrateThroughCache` also takes an optional `EffectLog` (values/effect-log.ts —
+ * an ORDERED, non-deduplicating sibling of this file's content-keyed `Map`). When
+ * present, a `sink` penetration during a PRIME run — `cache` absent, or `cache.mode`
+ * is `"record"`, never `"replay"` — enqueues `{verbName, decodedArgs}` onto the log
+ * and returns `undefined` immediately instead of firing: the third mode of this
+ * interception, alongside the plain-fire and record/replay-tombstone arms below.
+ * Replay mode is untouched — a fold re-encounters the tombstone-skip path exactly as
+ * it does without an effect log, because an effect log has no business existing
+ * during a fold (a fold is re-execution over settled history, not a gather).
  */
+
+import type { EffectLog } from "./effect-log.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. The entity (§2.2's normative shapes, verbatim)
@@ -217,7 +230,12 @@ async function sharedFire(
  * impl fire, in place of the bare fire. Implements the mode law (file header) for the
  * penetration `(symbolName, decodedArgs)`:
  *
- *  - `cache === undefined` → plain fire (no run cache on this run).
+ *  - `sink` + `effects` present + NOT replaying (§2.3, W1's burst arm): enqueue
+ *    `{verbName: symbolName, decodedArgs}` onto the log, return `undefined` — the
+ *    impl never fires. Checked BEFORE the `cache === undefined` shortcut below, so a
+ *    burst run needs no `RunCache` at all to gather effects.
+ *  - `cache === undefined` (and no burst arm taken) → plain fire (no run cache on
+ *    this run).
  *  - `sink` (lineage role — survives Ruling A): record = fire + tombstone; replay =
  *    tombstone hit skips (returns `undefined` — the void the sink's shape-gated
  *    contract already promised), miss fires + writes. No promise sharing, ever. A
@@ -231,15 +249,32 @@ async function sharedFire(
  *    never reads or writes serialized entries. A key failure (a `pure` contract may
  *    carry `z.value`/`z.lambda` — ungated by design) falls back to an unshared fire.
  *  - unclassified non-sink: plain fire — never touches the cache.
+ *
+ * `effects` is a sibling parameter, not a `cache` field: a burst run may gather
+ * effects with no `RunCache` at all, or gather effects alongside a `view`/`pure`
+ * cache — the two entities have independent lifecycles (§2.3).
  */
 export async function penetrateThroughCache(
   cache: RunCache | undefined,
   penetration: { symbolName: string; cacheClass: RunCacheClass | undefined; sink: boolean },
   decodedArgs: readonly unknown[],
   fire: () => Promise<unknown>,
+  effects?: EffectLog,
 ): Promise<unknown> {
-  if (cache === undefined) return fire();
   const { symbolName, cacheClass, sink } = penetration;
+
+  // THE BURST ARM (W1) — a sink during a PRIME run (no cache, or cache.mode ===
+  // "record") gathers instead of firing. `cache?.mode === "replay"` excludes a fold:
+  // a fold re-runs the recorded log and must hit the tombstone-skip path below,
+  // never gather a second time. Sound by the void-family bake gate
+  // (assertProvenanceRoleShape, _bake.ts): the program cannot observe that firing
+  // was deferred because it structurally cannot read what a sink returns.
+  if (sink && effects !== undefined && cache?.mode !== "replay") {
+    effects.enqueue({ verbName: symbolName, decodedArgs });
+    return undefined;
+  }
+
+  if (cache === undefined) return fire();
 
   if (sink) {
     let key: string;

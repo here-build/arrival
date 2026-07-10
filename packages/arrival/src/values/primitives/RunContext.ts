@@ -24,6 +24,7 @@
  */
 
 import type { RunCache } from "../run-cache.js";
+import type { EffectLog } from "../effect-log.js";
 
 /** Per-run allocation meter — the memory analogue of the wall-clock budget. The
  *  reference is fixed for the run; `used` is incremented in place as cells materialize. */
@@ -59,6 +60,15 @@ export interface RunContext {
    *  hermetic seam `signal`/`heapMeter` ride — and gates record/replay per the stamped cache
    *  class. Constant for the run, like everything on this handle. */
   readonly cache: RunCache | undefined;
+  /** The run's gathered-effect manifest (values/effect-log.ts — W1, arrival-plexus-
+   *  effect-burst.md §2.3), if any; `undefined` ⇒ no burst arm (the default — a sink
+   *  fires immediately, today's behavior). The baked rosetta `run` wrapper reads it
+   *  HERE (`this.runCtx.effects`) — the same per-run hermetic seam `cache`/`signal`
+   *  ride — and, for a `sink` penetration during a PRIME run (not a cache replay),
+   *  enqueues instead of firing. Sibling of `cache`, not part of it: a burst run may
+   *  carry both (an `effects` log alongside a `view`/`pure` cache) or `effects` alone
+   *  (no cache at all). Constant for the run, like everything on this handle. */
+  readonly effects: EffectLog | undefined;
 }
 
 /** Mint a fresh per-run context for one `exec()`. The single place a RunContext is born. */
@@ -69,6 +79,7 @@ export function makeRunContext(
     freezeRosettaReturns?: boolean;
     signal?: AbortSignal;
     cache?: RunCache;
+    effects?: EffectLog;
   } = {},
 ): RunContext {
   return {
@@ -77,6 +88,7 @@ export function makeRunContext(
     freezeRosettaReturns: opts.freezeRosettaReturns ?? true,
     signal: opts.signal,
     cache: opts.cache,
+    effects: opts.effects,
   };
 }
 
@@ -93,4 +105,5 @@ export const CONSTANT_CTX: RunContext = Object.freeze({
   freezeRosettaReturns: true,
   signal: undefined,
   cache: undefined,
+  effects: undefined,
 });
