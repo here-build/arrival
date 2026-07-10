@@ -246,12 +246,24 @@ describe("ROW 6 — chibi conformance cross-check: the 4 mutator doors are cover
   });
 });
 
-describe("ROW 7 — base-packs.ts positioning: lists stays LAST (C3-safe for the srfi-235 deps edge)", () => {
-  it("lists is present in BASE_PACKS exactly once, at the second-to-last position (before polyglot)", () => {
+describe("ROW 7 — base-packs.ts positioning: lists stays LAST (C3-safe for every deps edge naming it)", () => {
+  // RE-PINNED with polyglot's own W4/H3 migration (deliberately, in the same
+  // commit — the posture-changes-with-the-posture rule): polyglot now declares
+  // deps of its own (incl. `lists` and `srfi-1`), so it moved UP to LEAD the C3
+  // tail block and `lists` is now LAST outright — still after every consumer,
+  // which is the load-bearing fact this row exists to pin. See base-packs.ts's
+  // header for the full tail-order story.
+  it("lists is present in BASE_PACKS exactly once, at the LAST position — after every deps-declaring consumer (polyglot leads the tail)", () => {
     const names = BASE_PACKS.map((pack) => pack.name);
     const listsIndex = names.indexOf("scheme/lists");
     expect(listsIndex).toBeGreaterThan(-1);
-    expect(listsIndex).toBe(names.length - 2);
-    expect(names[names.length - 1]).toBe("scheme/polyglot");
+    expect(listsIndex).toBe(names.length - 1);
+    // polyglot precedes lists (it depends on it now) — and srfi-1 sits between
+    // (polyglot → srfi-1 → … → lists is the declared dep chain's tail order).
+    const polyglotIndex = names.indexOf("scheme/polyglot");
+    const srfi1Index = names.indexOf("scheme/srfi-1");
+    expect(polyglotIndex).toBeGreaterThan(-1);
+    expect(polyglotIndex).toBeLessThan(srfi1Index);
+    expect(srfi1Index).toBeLessThan(listsIndex);
   });
 });

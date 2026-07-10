@@ -16,6 +16,7 @@ import { AValue } from "../values/primitives/AValue.js";
 import { ADict, isDictShaped, type DictKey } from "../values/primitives/ADict.js";
 import { AJSObject } from "../values/primitives/AJSObject.js";
 import { AJSArray } from "../values/primitives/AJSArray.js";
+import { Values } from "../values/primitives/Values.js";
 import { R7RSError } from "../errors.js";
 import {
   ALambda,
@@ -241,6 +242,20 @@ export const undefinedResult = named(
     decode: () => undefined,
     encode: () => new AVoid(CONSTANT_CTX),
   }),
+);
+
+/** A `(values a b …)` multiple-values carrier (≥2 values — `Values.from` unwraps 0/1).
+ *  A PLAIN predicate schema like `value` itself, not a codec: multi-values are a
+ *  scheme-plane construct that never crosses the membrane as a JS shape. Needed
+ *  because `Values` is a non-AValue orphan (types.ts's own words) that `value`'s
+ *  `instanceof AValue` predicate rejects at runtime despite `SchemeValue` declaring
+ *  it — the SAME orphan gap `error` (below) closed for `R7RSError` in W4/H1
+ *  (exceptions.ts's header), closed the same additive way: a dedicated named schema,
+ *  never a silent widening of `value`'s predicate. First consumer: srfi-1's
+ *  span/break/partition `symbol.define` output contracts (W4/H3). */
+export const values = named(
+  "values",
+  z.custom<Values>((x) => x instanceof Values),
 );
 
 export const error = named(

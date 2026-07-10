@@ -34,7 +34,14 @@ describe("@here.build/arrival/polyglot", () => {
 
   it("exports a well-formed SchemePackSpec", () => {
     expect(polyglot.name).toBe("scheme/polyglot");
-    expect(polyglot.spec.prelude).toContain("define-macro (->");
+    // W4/H3 migration: the prelude text blob is DEAD — the threading macros are
+    // individually-declared `symbol.defineSyntax` entries now (this is the ONE
+    // representation-pinning assertion in this suite, updated WITH the
+    // representation, deliberately, in the same commit — every behavior row in
+    // this file runs unmodified).
+    expect(polyglot.spec.prelude).toBeUndefined();
+    const symbols = polyglot.spec.symbols as Record<string, { kind?: string }>;
+    expect(symbols["->"]?.kind).toBe("define-syntax");
   });
 });
 

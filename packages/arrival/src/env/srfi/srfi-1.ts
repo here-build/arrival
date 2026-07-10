@@ -10,6 +10,80 @@
 // list-index, unfold) plus the safe list-head accessors first?/first-or — relocated
 // here from the dissolved arrival-extensions pack as the falsy/default-on-empty twins of
 // SRFI-1 `first`, a contract loose `car` cannot supply (it projects to truthy nil).
+//
+// MIGRATED off the text-blob `prelude` (docs/working-proposals/symbol-define-static-
+// program-validation.md, wave W4/H3): each of the 37 former prelude defines is now an
+// individually-declared `symbol.define`, contract-enforced from day one (§1.2 rev2
+// ruling), declaration order 1:1 with the old textual order (§2.3 sequential-RHS).
+//
+// THE SAME LUCK CLASSES srfi-235 (H1) and srfi-43/srfi-189 (H2) found, both at once
+// (§2.1's bake FV locality law): the define bodies below freely reference
+//   • `not`/`equal?`/`eq?`/`pair?`/`null?`  → scheme/equality   (NATIVE_PACKS)
+//   • `<=`/`<`/`>=`/`=`/`+`/`-`/`*`         → scheme/numeric    (NATIVE_PACKS)
+//   • `values`                              → scheme/binding    (BASE_PACKS!)
+//   • `error`                               → scheme/exceptions (BASE_PACKS)
+//   • `cons`/`reverse`/`append`/`member`/`length`/`map`/`apply` → scheme/lists (BASE_PACKS)
+// none of which were declared — pre-migration they resolved through assembly-order
+// luck (the two-phase bootstrap for the native packs; BASE_PACKS array order for the
+// rest). `deps: [equality, numeric, binding, exceptions, lists]` is the complete,
+// empirically-verified set (`__tests__/srfi-1-symbol-define.test.ts` proves the law
+// passes AND pins a local repro of the pre-fix shape). `binding` is the THIRD
+// BASE_PACKS member to need the C3 tail-block repositioning (after srfi-235's
+// `lists`/`polyglot` and srfi-189's `exceptions`) — see base-packs.ts's header; the
+// deps array order here (`binding` before `exceptions` before `lists`) deliberately
+// matches the tail block's order so the two C3 merge inputs never contradict.
+// `car`/`cdr`/`cadr` need no edge: the cxr synth family is a kernel resolver, in the
+// bake allowlist by construction (define-bake.ts's CXR_RE, machinery fix cdc63c70ec).
+//
+// CONTRACT CONVENTIONS (§1.2 "REAL contract authored per define, day one" — the
+// judgment calls, so the next author doesn't re-derive them):
+//   - list slots: `z.union([z.pair, z.nil])` — the SHALLOW pair-or-nil identity union
+//     (this file's own pre-existing `find` convention), NEVER `z.list`: the list codec
+//     WALKS the spine on decode (O(n) per call, §4.5's budget) and throws on circular/
+//     improper input — but `length+` exists to ANSWER circular lists, and SRFI-1
+//     blesses dotted tails for `take`/`drop` ("(take '(1 2 3 . d) 2) ⇒ (1 2)"). The
+//     shallow union is the honest boundary for a family whose bodies own the deep
+//     structure handling.
+//   - xs slots that tolerate ANY value by spec (take/drop's "lis may be any value",
+//     %list-nth's not-a-pair→error branch, first?/first-or's whole falsy-on-empty
+//     purpose): `z.value` — tolerance IS the declared contract there, not looseness.
+//   - multi-value outputs (span/break/partition — `(values a b)`): `output: [z.values]`.
+//     A multi-value return is ONE `Values` box at this seam (binding.ts's own `values`
+//     native returns `Values.from(args)`); declaring `output: [A, B]` would make the
+//     wrapper decode the box AS a 2-array and throw on every call — and `z.value`
+//     rejects it too (`Values` is a non-AValue orphan its `instanceof AValue`
+//     predicate misses despite the SchemeValue union declaring it). `z.values` is the
+//     dedicated orphan schema, added by this migration exactly the way H1's
+//     exceptions pack added `z.error` for the R7RSError orphan.
+//   - fresh-list outputs built via `reverse`/`cons` chains: `z.union([z.pair, z.nil])`.
+//     Tail-returning outputs (drop/drop-while/append-reverse/concatenate — the result
+//     embeds a caller-supplied tail the shallow input contract cannot promise is
+//     proper): `z.value`, documented per site.
+//   - counts/indices: `z.exact` where built purely from exact literals + `+`/`-`
+//     (list-index, length+'s n — the srfi-43 precedent), `z.schemeNumber` where the
+//     value is another verb's output (`count` returns `length`'s result, and length's
+//     own declared output is `z.schemeNumber`).
+//   - some/every: `z.boolean` — arrival's historical some/every return #t/#f, NOT
+//     SRFI's last-pred-value (only #f is falsy here — ANil is truthy — so the `and`
+//     chain in %every can only ever egress #t or #f). Deviation preserved 1:1.
+//
+// §4.5 PERF PROTOCOL (the hot-path judgment this pack is the flagship for):
+//   The contract wrapper costs one `z.decode` + one async hop PER CALL THROUGH THE
+//   BOUND SYMBOL. 30 of the 37 defines already recursed via named `let` — their
+//   recursion never re-crosses the boundary, so they pay ONE decode per outer call
+//   (cold; enforcement is effectively free against interpretation cost — measured
+//   (partition odd? (iota 2000)): 381ms prelude-era vs ~equal migrated, see the
+//   migration test's header for the ledger). The SEVEN direct self-recursers of the
+//   prelude era (take, drop, %list-nth, %any-null?, %some, %every, zip) would have
+//   paid decode + async hop PER ELEMENT through their own bound wrapper — for those
+//   the migration normalizes the body to the file's dominant named-let idiom
+//   (equivalence pinned per define in the migration test): recursion stays inside the
+//   closure, enforcement stays ON everywhere, and no §1.2 `validate:false` valve is
+//   needed at all. The one REMAINING per-element boundary crossing is compositional —
+//   %some/%every call the validated `%any-null?` sibling once per element-tuple, and
+//   zip's loop calls validated `some` per element; measured (see the migration test),
+//   that residue is noise against interpretation cost, so the valve stays unused —
+//   evidence-gated, per §4.5, not reached for by default.
 import { type MaybePromise, resolveMethod, symbol, withCallbackRoles } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { is_false } from "../../eval/guards.js";
@@ -21,6 +95,15 @@ import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import * as z from "../../common/scheme-zod.js";
 import { tf } from "../../values/tagless-final.js";
 import type { AList, AListAlike, SchemeValue } from "../../values/types.js";
+import binding from "../r7rs/binding.js";
+import equality from "../r7rs/equality.js";
+import exceptions from "../r7rs/exceptions.js";
+import lists from "../r7rs/lists.js";
+import numeric from "../r7rs/numeric.js";
+
+// The shallow pair-or-nil list identity (see CONTRACT CONVENTIONS above) — one shared
+// instance so the harvest prints one name and the decode path is one union.
+const listAlike = z.union([z.pair, z.nil]);
 
 // reduce — SRFI-1's higher-order list fold, a pure `symbol.tagless` dispatcher: no impl,
 // forwards to the receiver's own `arrival/tagless-final/reduce` term (APair/AVector left-fold;
@@ -29,7 +112,7 @@ import type { AList, AListAlike, SchemeValue } from "../../values/types.js";
 // list/vector/nil as the receiver and passes [f, ridentity] through. The element-first fold
 // convention (`fn(element, acc)`, NOT the FL acc-first) lives ON the terms.
 //
-// find — SRFI-1 first-match search: a JS `symbol.native` (not a scheme prelude define like
+// find — SRFI-1 first-match search: a JS `symbol.native` (not a scheme `symbol.define` like
 // `find-tail`) because it recurses over the predicate and unwraps an async generator-lambda
 // result. Procedure-only matcher (no host RegExp).
 //
@@ -55,6 +138,10 @@ function findImpl(arg: (...args: unknown[]) => unknown, list: AListAlike): Schem
 }
 
 export default new EnvCapability("scheme/srfi-1", {
+  // See the file header: the complete cross-capability free-name set of the define
+  // bodies below, order-matched to base-packs.ts's C3 tail block (binding, exceptions,
+  // lists — the three BASE_PACKS members) so the two merge inputs never contradict.
+  deps: [equality, numeric, binding, exceptions, lists],
   symbols: {
     // input is a plain FIXED 2-tuple (pred, seq) — NOT z.tuple([z.value], z.value)'s
     // unbounded rest (filter's impl is strictly binary: `const [pred, seq] = args`, always
@@ -104,7 +191,7 @@ export default new EnvCapability("scheme/srfi-1", {
     ),
     // fold — SRFI-1's bare LEFT fold is deliberately NOT bound under this name: `reduce`
     // (above) IS the left fold here, same fn(element, acc) convention with an explicit
-    // seed, and `fold-right` (prelude below) covers the right-associative shape. A
+    // seed, and `fold-right` (symbol.define below) covers the right-associative shape. A
     // teaching door beside its family (errors-as-doors), not a silent absence — formerly
     // the one "famous-but-absent" row of the dissolved polyglot-rich-errors registry,
     // now DECLARED capability data resolving through the ordinary chain (which also
@@ -128,241 +215,409 @@ export default new EnvCapability("scheme/srfi-1", {
       },
       findImpl,
     ),
+
+    // ============ SRFI-1 (list library completion) — former prelude, §4.2 decomposed ============
+
+    "take-while": symbol.define`take-while: longest prefix of xs satisfying pred, as a fresh list`(
+      { input: [z.lambda, listAlike], output: [listAlike] },
+      `(lambda (pred xs)
+         (let loop ((xs xs) (acc '()))
+           (if (and (pair? xs) (pred (car xs)))
+               (loop (cdr xs) (cons (car xs) acc))
+               (reverse acc))))`,
+    ),
+
+    // Output is z.value, not listAlike: the result is a TAIL of xs — proper only if xs
+    // was, which the shallow input union cannot promise (CONTRACT CONVENTIONS).
+    "drop-while": symbol.define`drop-while: xs with the take-while prefix removed (a shared tail of xs)`(
+      { input: [z.lambda, listAlike], output: [z.value] },
+      `(lambda (pred xs)
+         (let loop ((xs xs))
+           (if (and (pair? xs) (pred (car xs)))
+               (loop (cdr xs))
+               xs)))`,
+    ),
+
+    // xs is z.value by SRFI-1's own spec ("(take '(1 2 3 . d) 2) ⇒ (1 2)"; any value
+    // once n hits 0) — tolerance is the contract. §4.5: prelude-era body self-recursed
+    // through the bound wrapper (per-element decode + async hop); normalized to the
+    // file's dominant named-let idiom, enforcement ON (see the file header).
+    take: symbol.define`take: the first n elements of xs as a fresh list (dotted tails tolerated per SRFI-1)`(
+      { input: [z.value, z.schemeNumber], output: [listAlike] },
+      `(lambda (xs n)
+         (let loop ((xs xs) (n n))
+           (if (or (<= n 0) (not (pair? xs)))
+               '()
+               (cons (car xs) (loop (cdr xs) (- n 1))))))`,
+    ),
+
+    // Output z.value: drop returns the n-th cdr of xs ITSELF (SRFI-1: "lis may be any
+    // value"), not a fresh list. §4.5 named-let normalization, as take.
+    drop: symbol.define`drop: xs after the first n elements (the n-th cdr — shares structure with xs)`(
+      { input: [z.value, z.schemeNumber], output: [z.value] },
+      `(lambda (xs n)
+         (let loop ((xs xs) (n n))
+           (if (or (<= n 0) (not (pair? xs)))
+               xs
+               (loop (cdr xs) (- n 1)))))`,
+    ),
+
+    // Multi-value output — ONE Values box at the seam (CONTRACT CONVENTIONS above).
+    // `values` is scheme/binding's — the dep edge that forced base-packs' third
+    // tail-block repositioning.
+    span: symbol.define`span: (values (take-while pred xs) (drop-while pred xs)) in one pass`(
+      { input: [z.lambda, listAlike], output: [z.values] },
+      `(lambda (pred xs)
+         (let loop ((xs xs) (acc '()))
+           (if (and (pair? xs) (pred (car xs)))
+               (loop (cdr xs) (cons (car xs) acc))
+               (values (reverse acc) xs))))`,
+    ),
+
+    break: symbol.define`break: span on the negation of pred — (values prefix-failing-pred rest)`(
+      { input: [z.lambda, listAlike], output: [z.values] },
+      `(lambda (pred xs)
+         (let loop ((xs xs) (acc '()))
+           (if (and (pair? xs) (not (pred (car xs))))
+               (loop (cdr xs) (cons (car xs) acc))
+               (values (reverse acc) xs))))`,
+    ),
+
+    partition: symbol.define`partition: (values yes no) splitting xs by pred, order-preserving`(
+      { input: [z.lambda, listAlike], output: [z.values] },
+      `(lambda (pred xs)
+         (let loop ((xs xs) (yes '()) (no '()))
+           (cond ((null? xs) (values (reverse yes) (reverse no)))
+                 ((pred (car xs)) (loop (cdr xs) (cons (car xs) yes) no))
+                 (else (loop (cdr xs) yes (cons (car xs) no))))))`,
+    ),
+
+    "find-tail": symbol.define`find-tail: first tail of xs whose car satisfies pred, else #f`(
+      { input: [z.lambda, listAlike], output: [z.union([z.pair, z.booleanFalse])] },
+      `(lambda (pred xs)
+         (let loop ((xs xs))
+           (cond ((null? xs) #f)
+                 ((pred (car xs)) xs)
+                 (else (loop (cdr xs))))))`,
+    ),
+
+    // z.pair input (SRFI-1: non-empty list required). Prelude-era, (last-pair '())
+    // quietly returned '() through loose-cdr luck; the enforced boundary makes the
+    // out-of-domain call a contract error instead — §4.2's sanctioned error-surface
+    // move (fails at the boundary with a better message, never mid-body).
+    "last-pair": symbol.define`last-pair: the last pair of a non-empty (possibly dotted) list`(
+      { input: [z.pair], output: [z.pair] },
+      `(lambda (xs)
+         (let loop ((xs xs))
+           (if (pair? (cdr xs)) (loop (cdr xs)) xs)))`,
+    ),
+
+    last: symbol.define`last: the last element of a non-empty proper list`(
+      { input: [z.pair], output: [z.value] },
+      `(lambda (xs) (car (last-pair xs)))`,
+    ),
+
+    // %list-nth — private walker behind first…tenth: walks k cdrs, reports the
+    // accessor's name on underflow. xs is z.value (its not-a-pair→error branch IS the
+    // teaching surface first…tenth rely on). §4.5 named-let normalization (prelude-era
+    // self-recursion paid the boundary per step); enforcement ON.
+    "%list-nth": symbol.define`%list-nth: the k-th element of xs, or (error msg) when xs is too short (private walker for first…tenth)`(
+      { input: [z.value, z.schemeNumber, z.string], output: [z.value] },
+      `(lambda (xs k msg)
+         (let loop ((xs xs) (k k))
+           (cond ((not (pair? xs)) (error msg))
+                 ((= k 0) (car xs))
+                 (else (loop (cdr xs) (- k 1))))))`,
+    ),
+
+    // first … tenth — SRFI-1 positional accessors: the nth element of a proper list.
+    // A list too short for the requested position is an error (mirroring srfi-189's
+    // `(error …)` style in this pack). The element is returned AS-IS — accessors don't
+    // stamp provenance (cf. `find`, which returns its match unchanged). Input is
+    // listAlike (not z.pair): '() must REACH %list-nth so the teaching message
+    // ("first: list has no elements") stays the error surface, not a zod boundary.
+    first: symbol.define`first: the 1st element of a proper list (errors if too short)`(
+      { input: [listAlike], output: [z.value] },
+      `(lambda (xs) (%list-nth xs 0 "first: list has no elements"))`,
+    ),
+    second: symbol.define`second: the 2nd element of a proper list (errors if too short)`(
+      { input: [listAlike], output: [z.value] },
+      `(lambda (xs) (%list-nth xs 1 "second: list has fewer than 2 elements"))`,
+    ),
+    third: symbol.define`third: the 3rd element of a proper list (errors if too short)`(
+      { input: [listAlike], output: [z.value] },
+      `(lambda (xs) (%list-nth xs 2 "third: list has fewer than 3 elements"))`,
+    ),
+    fourth: symbol.define`fourth: the 4th element of a proper list (errors if too short)`(
+      { input: [listAlike], output: [z.value] },
+      `(lambda (xs) (%list-nth xs 3 "fourth: list has fewer than 4 elements"))`,
+    ),
+    fifth: symbol.define`fifth: the 5th element of a proper list (errors if too short)`(
+      { input: [listAlike], output: [z.value] },
+      `(lambda (xs) (%list-nth xs 4 "fifth: list has fewer than 5 elements"))`,
+    ),
+    sixth: symbol.define`sixth: the 6th element of a proper list (errors if too short)`(
+      { input: [listAlike], output: [z.value] },
+      `(lambda (xs) (%list-nth xs 5 "sixth: list has fewer than 6 elements"))`,
+    ),
+    seventh: symbol.define`seventh: the 7th element of a proper list (errors if too short)`(
+      { input: [listAlike], output: [z.value] },
+      `(lambda (xs) (%list-nth xs 6 "seventh: list has fewer than 7 elements"))`,
+    ),
+    eighth: symbol.define`eighth: the 8th element of a proper list (errors if too short)`(
+      { input: [listAlike], output: [z.value] },
+      `(lambda (xs) (%list-nth xs 7 "eighth: list has fewer than 8 elements"))`,
+    ),
+    ninth: symbol.define`ninth: the 9th element of a proper list (errors if too short)`(
+      { input: [listAlike], output: [z.value] },
+      `(lambda (xs) (%list-nth xs 8 "ninth: list has fewer than 9 elements"))`,
+    ),
+    tenth: symbol.define`tenth: the 10th element of a proper list (errors if too short)`(
+      { input: [listAlike], output: [z.value] },
+      `(lambda (xs) (%list-nth xs 9 "tenth: list has fewer than 10 elements"))`,
+    ),
+
+    "list-tabulate": symbol.define`list-tabulate: (list (f 0) (f 1) … (f (- n 1)))`(
+      { input: [z.schemeNumber, z.lambda], output: [listAlike] },
+      `(lambda (n f)
+         (let loop ((i (- n 1)) (acc '()))
+           (if (< i 0) acc (loop (- i 1) (cons (f i) acc)))))`,
+    ),
+
+    "fold-right": symbol.define`fold-right: right-associative fold — (f x0 (f x1 … (f xn knil)))`(
+      { input: [z.lambda, z.value, listAlike], output: [z.value] },
+      `(lambda (f knil xs)
+         (let loop ((xs xs))
+           (if (null? xs) knil (f (car xs) (loop (cdr xs))))))`,
+    ),
+
+    "reduce-right": symbol.define`reduce-right: fold-right with the last element as the seed; ridentity if empty`(
+      { input: [z.lambda, z.value, listAlike], output: [z.value] },
+      `(lambda (f ridentity xs)
+         (if (null? xs)
+             ridentity
+             (let loop ((xs xs))
+               (if (null? (cdr xs))
+                   (car xs)
+                   (f (car xs) (loop (cdr xs)))))))`,
+    ),
+
+    // Output z.value: append's R7RS contract lets the LAST list be improper (the
+    // result then embeds that tail) — the shallow input union can't rule it out.
+    concatenate: symbol.define`concatenate: append a list of lists into one list`(
+      { input: [listAlike], output: [z.value] },
+      `(lambda (lists) (apply append lists))`,
+    ),
+
+    // Output z.value: the result is (reverse rev) grafted onto the caller's tail —
+    // tail-typed, and SRFI-1 allows any tail object.
+    "append-reverse": symbol.define`append-reverse: (append (reverse rev) tail), accumulator-friendly`(
+      { input: [listAlike, z.value], output: [z.value] },
+      `(lambda (rev tail)
+         (let loop ((rev rev) (tail tail))
+           (if (null? rev) tail (loop (cdr rev) (cons (car rev) tail)))))`,
+    ),
+
+    delete: symbol.define`delete: remove all elements equal? to x from xs, as a fresh list`(
+      { input: [z.value, listAlike], output: [listAlike] },
+      `(lambda (x xs)
+         (let loop ((xs xs) (acc '()))
+           (cond ((null? xs) (reverse acc))
+                 ((equal? x (car xs)) (loop (cdr xs) acc))
+                 (else (loop (cdr xs) (cons (car xs) acc))))))`,
+    ),
+
+    // remove — SRFI-1: keep the elements that do NOT satisfy pred (the predicate twin of
+    // delete). The base sandbox carries no external collection library, so this is the sole
+    // remove binding; the inference plane copies it by name (bridge.ts). Contract mirrors
+    // `filter`'s representation-BLIND shape (z.value seq/out), NOT listAlike: the body
+    // delegates to filter's term dispatch, so remove inherits filter's polymorphism over
+    // the receiver's own representation — narrowing here would break what delegation buys.
+    remove: symbol.define`remove: keep the elements NOT satisfying pred (predicate twin of delete; delegates to filter's term dispatch)`(
+      { input: [z.lambda, z.value], output: [z.value] },
+      `(lambda (pred xs)
+         (filter (lambda (x) (not (pred x))) xs))`,
+    ),
+
+    // first? / first-or — safe list-head accessors: the head, or a falsy / default sentinel
+    // on empty.
+    //
+    // NOT redundant with loose `car`, though both dodge the (car '()) crash: loose car on an
+    // empty list projects to nil — an ANil OBJECT, which is Scheme-TRUTHY — so a guard like
+    // (let ((p (car xs))) (if p …)) takes the present-branch on empty and then crashes on the
+    // field access. first? returns #f (FALSY), so the same guard correctly skips. That falsy-
+    // on-empty contract is the load-bearing semantics, and car cannot supply it — these are
+    // the safe twins of SRFI-1 `first`, not crash-avoidance vestiges. (first-or is the
+    // defaulted twin; it earns the same one-line home rather than a wrong (or (car xs) default)
+    // derivation, which would mask a genuinely-falsy first element.) xs is z.value — TOTAL
+    // tolerance (any non-pair → the sentinel) is the whole point, so it is the contract.
+    "first?": symbol.define`first?: the head of xs, or #f (falsy!) when xs is not a pair — the safe guard twin of first`(
+      { input: [z.value], output: [z.value] },
+      `(lambda (xs) (if (pair? xs) (car xs) #f))`,
+    ),
+    "first-or": symbol.define`first-or: the head of xs, or default when xs is not a pair — the defaulted twin of first?`(
+      { input: [z.value, z.value], output: [z.value] },
+      `(lambda (xs default) (if (pair? xs) (car xs) default))`,
+    ),
+
+    // The shallow listAlike input is LOAD-BEARING here: z.list's spine-walking decode
+    // would throw on exactly the circular lists this verb exists to answer.
+    "length+": symbol.define`length+: list length, or #f for a circular list (Floyd cycle detection)`(
+      { input: [listAlike], output: [z.union([z.exact, z.booleanFalse])] },
+      `(lambda (xs)
+         (let loop ((slow xs) (fast xs) (n 0))
+           (cond ((null? fast) n)
+                 ((not (pair? fast)) n)
+                 ((null? (cdr fast)) (+ n 1))
+                 ((not (pair? (cdr fast))) (+ n 1))
+                 (else
+                   (let ((slow2 (cdr slow)) (fast2 (cdr (cdr fast))))
+                     (if (eq? slow2 fast2) #f (loop slow2 fast2 (+ n 2))))))))`,
+    ),
+
+    // ============ SRFI-1 (the missing third + parallel-list utilities) ============
+    // Relocated here from the legacy core bootstrap so the whole SRFI-1 surface is
+    // observable in one module. These retire the hand-rolled dedupe/member?/index-map
+    // helpers that were reinvented across the pipeline.
+
+    // (iota count [start step]) — start/step genuinely optional ⇒ inputRest. Elements
+    // are (+ start (* i step)) — inexact whenever start/step are ⇒ the honest element
+    // is a number, but the LIST shape is guaranteed fresh-proper.
+    iota: symbol.define`iota: (iota count [start step]) — a list of count numbers from start by step`(
+      { input: [z.schemeNumber], inputRest: z.schemeNumber, output: [listAlike] },
+      `(lambda (count . rest)
+         (let ((start (if (null? rest) 0 (car rest)))
+               (step (if (or (null? rest) (null? (cdr rest))) 1 (cadr rest))))
+           (let loop ((i 0) (acc '()))
+             (if (>= i count) (reverse acc)
+                 (loop (+ i 1) (cons (+ start (* i step)) acc))))))`,
+    ),
+
+    // range — arrival's [0, stop) integer list: exactly (iota stop). The single-arg form
+    // is the only one used in practice (every spec site calls (range n)).
+    range: symbol.define`range: arrival's [0, stop) integer list — exactly (iota stop)`(
+      { input: [z.schemeNumber], output: [listAlike] },
+      `(lambda (stop) (iota stop))`,
+    ),
+
+    "delete-duplicates": symbol.define`delete-duplicates: order-preserving dedup by equal? (retires the hand-rolled O(n²) dedupe)`(
+      { input: [listAlike], output: [listAlike] },
+      `(lambda (xs)
+         (let loop ((xs xs) (seen '()) (acc '()))
+           (if (null? xs) (reverse acc)
+               (if (member (car xs) seen)
+                   (loop (cdr xs) seen acc)
+                   (loop (cdr xs) (cons (car xs) seen) (cons (car xs) acc))))))`,
+    ),
+
+    "filter-map": symbol.define`filter-map: map then drop the falsy results, in one pass the model can't mismatch`(
+      { input: [z.lambda], inputRest: listAlike, output: [listAlike] },
+      `(lambda (fn . lists)
+         (filter (lambda (x) x) (apply map fn lists)))`,
+    ),
+
+    // Output z.schemeNumber, not z.exact: the value IS `length`'s return, and length's
+    // own declared output is z.schemeNumber — match the verb we delegate to.
+    count: symbol.define`count: how many element-tuples across the parallel lists satisfy pred`(
+      { input: [z.lambda], inputRest: listAlike, output: [z.schemeNumber] },
+      `(lambda (pred . lists)
+         (length (filter (lambda (b) b) (apply map pred lists))))`,
+    ),
+
+    // Output z.value, as concatenate: the appended results may embed an improper tail.
+    "append-map": symbol.define`append-map: map then append the result lists`(
+      { input: [z.lambda], inputRest: listAlike, output: [z.value] },
+      `(lambda (fn . lists)
+         (apply append (apply map fn lists)))`,
+    ),
+
+    // some / every — existence and universal quantifiers over parallel lists. (some is
+    // SRFI-1's `any`, kept under the Ramda-familiar name; both return #t/#f, arrival's
+    // historical deviation from SRFI's last-pred-value, preserved 1:1.) %any-null?/
+    // %some/%every are private helpers; some must precede zip and list-index, which
+    // call it (backward refs — the §2.3 eager-forward-reference check pins this).
+    // The prelude-era bodies returned the `true`/`false` NAMES (core's constant
+    // defines) — replaced with the #t/#f LITERALS they alias, dissolving what would
+    // otherwise be a `deps: [core]` edge on the C3 precedence FLOOR (core leads
+    // BASE_PACKS; a tail-block repositioning of core is semantically absurd).
+    // §4.5 named-let normalization on all three % helpers (prelude-era self-recursion
+    // paid the boundary per element-tuple); enforcement ON.
+    "%any-null?": symbol.define`%any-null?: #t iff any of the parallel lists is exhausted (private helper for %some/%every)`(
+      { input: [listAlike], output: [z.boolean] },
+      `(lambda (lst)
+         (let loop ((lst lst))
+           (if (null? lst)
+               #f
+               (if (null? (car lst))
+                   #t
+                   (loop (cdr lst))))))`,
+    ),
+
+    "%some": symbol.define`%some: #t iff fn holds for some element-tuple of the parallel lists (private helper for some)`(
+      { input: [z.lambda, listAlike], output: [z.boolean] },
+      `(lambda (fn lists)
+         (let loop ((lists lists))
+           (if (or (null? lists) (%any-null? lists))
+               #f
+               (if (apply fn (map car lists))
+                   #t
+                   (loop (map cdr lists))))))`,
+    ),
+
+    some: symbol.define`some: #t iff pred holds for some element-tuple across the parallel lists (SRFI-1 any, Ramda-familiar name, #t/#f result)`(
+      { input: [z.lambda], inputRest: listAlike, output: [z.boolean] },
+      `(lambda (fn . lists)
+         (%some fn lists))`,
+    ),
+
+    "%every": symbol.define`%every: #t iff fn holds for every element-tuple of the parallel lists (private helper for every)`(
+      { input: [z.lambda, listAlike], output: [z.boolean] },
+      `(lambda (fn lists)
+         (let loop ((lists lists))
+           (if (or (null? lists) (%any-null? lists))
+               #t
+               (if (apply fn (map car lists))
+                   (loop (map cdr lists))
+                   #f))))`,
+    ),
+
+    every: symbol.define`every: #t iff pred holds for every element-tuple across the parallel lists (#t/#f result; vacuously #t on empty)`(
+      { input: [z.lambda], inputRest: listAlike, output: [z.boolean] },
+      `(lambda (fn . lists)
+         (%every fn lists))`,
+    ),
+
+    // §4.5 named-let normalization (prelude-era body re-entered its own wrapper via
+    // (apply zip …) per element). The loop's (some null? ls) sibling call still
+    // crosses the boundary once per element — measured noise against interpretation
+    // (file header); the valve stays unused.
+    zip: symbol.define`zip: transpose parallel lists into a list of tuples; stops at the shortest`(
+      { input: [], inputRest: listAlike, output: [listAlike] },
+      `(lambda lists
+         (let loop ((ls lists))
+           (if (or (null? ls) (some null? ls))
+               '()
+               (cons (map car ls) (loop (map cdr ls))))))`,
+    ),
+
+    "list-index": symbol.define`list-index: index of the first element-tuple satisfying pred, or #f`(
+      { input: [z.lambda], inputRest: listAlike, output: [z.union([z.exact, z.booleanFalse])] },
+      `(lambda (pred . lists)
+         (let loop ((i 0) (ls lists))
+           (if (some null? ls) #f
+               (if (apply pred (map car ls)) i
+                   (loop (+ i 1) (map cdr ls))))))`,
+    ),
+
+    // NOT SRFI-1's four-procedure unfold — arrival's historical shape (fn returns
+    // (head . next) or #f to stop), preserved 1:1.
+    unfold: symbol.define`unfold: build a list by iterating fn from init; fn returns (head . next) or #f to stop`(
+      { input: [z.lambda, z.value], output: [listAlike] },
+      `(lambda (fn init)
+         (let iter ((pair (fn init)) (result '()))
+           (if (not pair)
+               (reverse result)
+               (iter (fn (cdr pair)) (cons (car pair) result)))))`,
+    ),
   },
-  prelude: `
-;; ============ SRFI-1 (list library completion) ============
-;; take-while — longest prefix of xs satisfying pred.
-(define (take-while pred xs)
-  (let loop ((xs xs) (acc '()))
-    (if (and (pair? xs) (pred (car xs)))
-        (loop (cdr xs) (cons (car xs) acc))
-        (reverse acc))))
-
-;; drop-while — xs with the take-while prefix removed.
-(define (drop-while pred xs)
-  (let loop ((xs xs))
-    (if (and (pair? xs) (pred (car xs)))
-        (loop (cdr xs))
-        xs)))
-
-;; take — the first n elements of xs as a fresh list.
-(define (take xs n)
-  (if (or (<= n 0) (not (pair? xs)))
-      '()
-      (cons (car xs) (take (cdr xs) (- n 1)))))
-
-;; drop — the sublist of xs after the first n elements.
-(define (drop xs n)
-  (if (or (<= n 0) (not (pair? xs)))
-      xs
-      (drop (cdr xs) (- n 1))))
-
-;; span — (values (take-while pred xs) (drop-while pred xs)).
-(define (span pred xs)
-  (let loop ((xs xs) (acc '()))
-    (if (and (pair? xs) (pred (car xs)))
-        (loop (cdr xs) (cons (car xs) acc))
-        (values (reverse acc) xs))))
-
-;; break — span on the negation of pred.
-(define (break pred xs)
-  (let loop ((xs xs) (acc '()))
-    (if (and (pair? xs) (not (pred (car xs))))
-        (loop (cdr xs) (cons (car xs) acc))
-        (values (reverse acc) xs))))
-
-;; partition — (values yes no) splitting xs by pred.
-(define (partition pred xs)
-  (let loop ((xs xs) (yes '()) (no '()))
-    (cond ((null? xs) (values (reverse yes) (reverse no)))
-          ((pred (car xs)) (loop (cdr xs) (cons (car xs) yes) no))
-          (else (loop (cdr xs) yes (cons (car xs) no))))))
-
-;; find-tail — first tail of xs whose car satisfies pred, else #f.
-(define (find-tail pred xs)
-  (let loop ((xs xs))
-    (cond ((null? xs) #f)
-          ((pred (car xs)) xs)
-          (else (loop (cdr xs))))))
-
-;; last-pair — the last pair of a non-empty list.
-(define (last-pair xs)
-  (let loop ((xs xs))
-    (if (pair? (cdr xs)) (loop (cdr xs)) xs)))
-
-;; last — the last element of a non-empty list.
-(define (last xs) (car (last-pair xs)))
-
-;; first … tenth — SRFI-1 positional accessors: the nth element of a proper list.
-;; A list too short for the requested position is an error (mirroring srfi-189's
-;; \`(error …)\` style in this pack). The element is returned AS-IS — accessors don't
-;; stamp provenance (cf. \`find\`, which returns its match unchanged). \`%list-nth\` walks
-;; k cdrs and reports the accessor's name on underflow. (\`last\`/\`last-pair\` already
-;; live above; only the ordinal head accessors are added.)
-(define (%list-nth xs k msg)
-  (cond ((not (pair? xs)) (error msg))
-        ((= k 0) (car xs))
-        (else (%list-nth (cdr xs) (- k 1) msg))))
-(define (first   xs) (%list-nth xs 0 "first: list has no elements"))
-(define (second  xs) (%list-nth xs 1 "second: list has fewer than 2 elements"))
-(define (third   xs) (%list-nth xs 2 "third: list has fewer than 3 elements"))
-(define (fourth  xs) (%list-nth xs 3 "fourth: list has fewer than 4 elements"))
-(define (fifth   xs) (%list-nth xs 4 "fifth: list has fewer than 5 elements"))
-(define (sixth   xs) (%list-nth xs 5 "sixth: list has fewer than 6 elements"))
-(define (seventh xs) (%list-nth xs 6 "seventh: list has fewer than 7 elements"))
-(define (eighth  xs) (%list-nth xs 7 "eighth: list has fewer than 8 elements"))
-(define (ninth   xs) (%list-nth xs 8 "ninth: list has fewer than 9 elements"))
-(define (tenth   xs) (%list-nth xs 9 "tenth: list has fewer than 10 elements"))
-
-;; list-tabulate — (list (f 0) (f 1) ... (f (- n 1))).
-(define (list-tabulate n f)
-  (let loop ((i (- n 1)) (acc '()))
-    (if (< i 0) acc (loop (- i 1) (cons (f i) acc)))))
-
-;; fold-right — right-associative fold: (f x0 (f x1 ... (f xn knil))).
-(define (fold-right f knil xs)
-  (let loop ((xs xs))
-    (if (null? xs) knil (f (car xs) (loop (cdr xs))))))
-
-;; reduce-right — fold-right with the last element as the seed; ridentity if empty.
-(define (reduce-right f ridentity xs)
-  (if (null? xs)
-      ridentity
-      (let loop ((xs xs))
-        (if (null? (cdr xs))
-            (car xs)
-            (f (car xs) (loop (cdr xs)))))))
-
-;; concatenate — append a list of lists.
-(define (concatenate lists) (apply append lists))
-
-;; append-reverse — (append (reverse rev) tail), accumulator-friendly.
-(define (append-reverse rev tail)
-  (let loop ((rev rev) (tail tail))
-    (if (null? rev) tail (loop (cdr rev) (cons (car rev) tail)))))
-
-;; delete — remove all elements equal? to x from xs.
-(define (delete x xs)
-  (let loop ((xs xs) (acc '()))
-    (cond ((null? xs) (reverse acc))
-          ((equal? x (car xs)) (loop (cdr xs) acc))
-          (else (loop (cdr xs) (cons (car xs) acc))))))
-
-;; remove — SRFI-1: keep the elements that do NOT satisfy pred (the predicate twin of
-;; delete). The base sandbox carries no external collection library, so this is the sole
-;; remove binding; the inference plane copies it by name (bridge.ts).
-(define (remove pred xs)
-  (filter (lambda (x) (not (pred x))) xs))
-
-;; first? / first-or — safe list-head accessors: the head, or a falsy / default sentinel
-;; on empty.
-;;
-;; NOT redundant with loose \`car\`, though both dodge the (car '()) crash: loose car on an
-;; empty list projects to nil — an ANil OBJECT, which is Scheme-TRUTHY — so a guard like
-;; (let ((p (car xs))) (if p …)) takes the present-branch on empty and then crashes on the
-;; field access. first? returns #f (FALSY), so the same guard correctly skips. That falsy-
-;; on-empty contract is the load-bearing semantics, and car cannot supply it — these are
-;; the safe twins of SRFI-1 \`first\`, not crash-avoidance vestiges. (first-or is the
-;; defaulted twin; it earns the same one-line home rather than a wrong (or (car xs) default)
-;; derivation, which would mask a genuinely-falsy first element.)
-(define (first? xs) (if (pair? xs) (car xs) #f))
-(define (first-or xs default) (if (pair? xs) (car xs) default))
-
-;; length+ — list length, or #f for a circular list (Floyd cycle detection).
-(define (length+ xs)
-  (let loop ((slow xs) (fast xs) (n 0))
-    (cond ((null? fast) n)
-          ((not (pair? fast)) n)
-          ((null? (cdr fast)) (+ n 1))
-          ((not (pair? (cdr fast))) (+ n 1))
-          (else
-            (let ((slow2 (cdr slow)) (fast2 (cdr (cdr fast))))
-              (if (eq? slow2 fast2) #f (loop slow2 fast2 (+ n 2))))))))
-
-;; ============ SRFI-1 (the missing third + parallel-list utilities) ============
-;; Relocated here from the legacy core bootstrap so the whole SRFI-1 surface is observable in
-;; one module. These retire the hand-rolled dedupe/member?/index-map helpers that
-;; were reinvented across the pipeline.
-
-;; iota — (iota count [start step]); a list of count integers from start by step.
-(define (iota count . rest)
-  (let ((start (if (null? rest) 0 (car rest)))
-        (step (if (or (null? rest) (null? (cdr rest))) 1 (cadr rest))))
-    (let loop ((i 0) (acc '()))
-      (if (>= i count) (reverse acc)
-          (loop (+ i 1) (cons (+ start (* i step)) acc))))))
-
-;; range — arrival's [0, stop) integer list: exactly (iota stop). The single-arg form is
-;; the only one used in practice (every spec site calls (range n)).
-(define (range stop) (iota stop))
-
-;; delete-duplicates — order-preserving dedup by equal?. Retires the O(n²) hand-rolled
-;; dedupe reinvented across the pipeline.
-(define (delete-duplicates xs)
-  (let loop ((xs xs) (seen '()) (acc '()))
-    (if (null? xs) (reverse acc)
-        (if (member (car xs) seen)
-            (loop (cdr xs) seen acc)
-            (loop (cdr xs) (cons (car xs) seen) (cons (car xs) acc))))))
-
-;; filter-map — map then drop the falsy results, in one pass the model can't mismatch.
-(define (filter-map fn . lists)
-  (filter (lambda (x) x) (apply map fn lists)))
-
-;; count — how many element-tuples satisfy pred.
-(define (count pred . lists)
-  (length (filter (lambda (b) b) (apply map pred lists))))
-
-;; append-map — map then append the result lists.
-(define (append-map fn . lists)
-  (apply append (apply map fn lists)))
-
-;; some / every — existence and universal quantifiers over parallel lists. (some is
-;; SRFI-1's \`any\`, kept under the Ramda-familiar name.) %any-null?/%some/%every are
-;; private helpers; some must precede zip and list-index, which call it.
-(define (%any-null? lst)
-  (if (null? lst)
-      false
-      (if (null? (car lst))
-          true
-          (%any-null? (cdr lst)))))
-
-(define (%some fn lists)
-  (if (or (null? lists) (%any-null? lists))
-      false
-      (if (apply fn (map car lists))
-          true
-          (%some fn (map cdr lists)))))
-
-(define (some fn . lists)
-  (%some fn lists))
-
-(define (%every fn lists)
-  (if (or (null? lists) (%any-null? lists))
-      true
-      (and (apply fn (map car lists)) (%every fn (map cdr lists)))))
-
-(define (every fn . lists)
-  (%every fn lists))
-
-;; zip — transpose parallel lists into a list of tuples; stops at the shortest.
-(define (zip . lists)
-  (if (or (null? lists) (some null? lists))
-      '()
-      (cons (map car lists) (apply zip (map cdr lists)))))
-
-;; list-index — index of the first element-tuple satisfying pred, or #f.
-(define (list-index pred . lists)
-  (let loop ((i 0) (ls lists))
-    (if (some null? ls) #f
-        (if (apply pred (map car ls)) i
-            (loop (+ i 1) (map cdr ls))))))
-
-;; unfold — build a list by iterating fn from init; fn returns (head . next) or #f to stop.
-(define (unfold fn init)
-  (let iter ((pair (fn init)) (result '()))
-    (if (not pair)
-        (reverse result)
-        (iter (fn (cdr pair)) (cons (car pair) result)))))
-`,
 });

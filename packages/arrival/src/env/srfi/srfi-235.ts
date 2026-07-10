@@ -65,12 +65,18 @@ export default new EnvCapability("scheme/srfi-235", {
   // `append` (lists), `>=` (numeric) are every cross-capability free name this
   // pack's define bodies reach — the bake FV law (§2.1) forces each into a real edge.
   //
-  // ORDER MATTERS here beyond readability: `base-packs.ts` positions `lists` before
-  // `polyglot` (see its header comment) — a C3 requirement once ANY member declares
-  // `deps` naming a fellow BASE_PACKS member, because the array's own order doubles
-  // as a merge-input precedence list. `equality`/`numeric` (NATIVE_PACKS-only, never
-  // in BASE_PACKS' array) carry no such constraint.
-  deps: [equality, numeric, lists, polyglot],
+  // ORDER MATTERS here beyond readability: this array is a C3 merge input, so its
+  // relative order among fellow BASE_PACKS members must agree with base-packs.ts's
+  // tail block. Since polyglot's own W4/H3 migration (it declares deps of its own,
+  // incl. `lists`), the tail runs [polyglot, …, lists] — so `polyglot` is listed
+  // BEFORE `lists` here (the pre-H3 `[…, lists, polyglot]` order was a merge input
+  // contradicting that tail; flipped in the same commit that moved polyglot — see
+  // base-packs.ts's header). And `polyglot` must LEAD the whole array: it declares
+  // deps of its own (incl. `equality`/`numeric`, W4-H3), and a dependent's
+  // linearization always heads with itself — `[equality, numeric, polyglot, …]`
+  // contradicts L(polyglot) and deadlocks the C3 merge (the dependents-before-
+  // dependencies rule, same as the tail block's; see polyglot.ts's deps note).
+  deps: [polyglot, equality, numeric, lists],
   symbols: {
     // complement — the boolean negation of fn. (compose not fn): `not` (native, is_false)
     // handles a boxed SchemeBool, and the evaluator unwraps an async generator-lambda
