@@ -1,0 +1,49 @@
+{
+  "name": "@here.build/arrival-cli",
+  "version": "0.1.0",
+  "description": "The arrival command — run programs, REPL, and static-check from the terminal. `arrival run file.scm` (whole-program diagnostics, then execute with (require …) rooted at the file's dir), `arrival repl` (persistent-scope session, teaching-door errors), `arrival check file.scm` (the eslint-style pass, no execution).",
+  "keywords": [
+    "arrival",
+    "scheme",
+    "cli",
+    "repl"
+  ],
+  "license": "FSL-1.1-MIT",
+  "author": "here.build",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/here-build/foundation.git",
+    "directory": "arrival/arrival-cli"
+  },
+  "type": "module",
+  "bin": {
+    "arrival": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "src",
+    "!**/__tests__",
+    "!**/__research__",
+    "!**/__benchmarks__",
+    "!**/__custdev__",
+    "!**/__visual__",
+    "!**/*.test.*",
+    "!**/*.stories.*"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@here.build/arrival": "workspace:^",
+    "@here.build/arrival-scheme-env-loader": "workspace:^",
+    "@here.build/arrival-serializer": "workspace:^"
+  },
+  "devDependencies": {
+    "@here.build/tsconfig": "workspace:^",
+    "@types/node": "24.0.0",
+    "typescript": "6.0.2",
+    "vitest": "4.1.0"
+  }
+}
