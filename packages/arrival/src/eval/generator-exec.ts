@@ -254,10 +254,17 @@ export interface ExecOptions {
    * present to validate), so an absent OPTIONAL enabling config key surfaces as a
    * parse-phase causal-chain diagnostic instead of a mid-run unbound throw.
    *
-   * STAGED DEFAULT — `"off"` this wave: the spec's target default is on-with-opt-out,
-   * but the suite still pins the RUNTIME unbound-variable surface (the typo-suggestion
-   * laws, purity-door rows) through default-path exec; the default flips with W4's
-   * migration, not before. GLASS (`env`) runs never validate regardless — a live,
+   * DEFAULT — `"off"` (opt-in), RESOLVED at W4-H4 (not a staging compromise). The
+   * `exec` PRIMITIVE stays opt-in because it is the low-level building block that the
+   * door/purity/typo LAW suites and internal provisioning evals use to exercise
+   * RUNTIME behavior — a global default flip here conflates that primitive with the
+   * program-scoped production ENTRY points and (measured, W4-H4) turns ~313 law/behavior
+   * assertions across 14 suites into parse-phase throws, several of them deliberate
+   * runtime invariants (door-fires-at-apply, typo-at-runtime), not stale pins. §3.7's
+   * caller split is the actual posture: strictness is CALLER-scoped — the production
+   * entry points (DiscoveryTool.call, runProgram) opt IN by passing `"on"` (the "doors
+   * as the real production entry" line), which is their remaining W3 wiring, NOT a flip
+   * of this primitive's default. GLASS (`env`) runs never validate regardless — a live,
    * embedder-mutable frame chain has no seal, so the pass makes no claims there
    * (§3.5); the runtime doors remain the backstop.
    *

@@ -118,7 +118,12 @@ export default new EnvCapability("scheme/srfi-235", {
     // the output stays the honest shapeless `z.value` (a SRFI-235-adjacent polyglot alias,
     // not a fixed-shape procedure — §1.2's "some polyglot aliases ARE genuinely shapeless").
     curry: symbol.define`curry: arrival's arity-aware partial application (combinator kin, not SRFI-235 itself)`(
-      { input: [z.lambda], inputRest: z.value, output: [z.value] },
+      // OUTPUT is `z.union([z.value, z.values])`: on the arity-met path curry tail-returns
+      // `(apply fn args)`, and `fn` is ANY procedure — including a multi-value one like
+      // `(curry values 1 2)` — whose `Values` box `z.value` rejects at the decode boundary
+      // (the srfi-1 span/break/partition precedent; scheme-zod's `values` doc). The lambda-
+      // continuation path returns an ordinary procedure, already covered by `z.value`.
+      { input: [z.lambda], inputRest: z.value, output: [z.union([z.value, z.values])] },
       `(lambda (fn . args)
          (if (>= (length args) (procedure-min-arity fn))
              (apply fn args)

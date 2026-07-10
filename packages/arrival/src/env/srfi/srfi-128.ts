@@ -79,7 +79,12 @@ export default new EnvCapability("scheme/srfi-128", {
   symbols: {
     "make-comparator":
       symbol.define`make-comparator: bundle (type-test equality ordering) into a comparator — a 4th hash arg is accepted for SRFI-128 source-compat but IGNORED (arrival has no value-hash)`(
-        { input: [z.lambda, z.lambda, z.lambda], inputRest: z.value, output: [comparatorSchema] },
+        // `ordering` slot is `z.union([z.lambda, z.booleanFalse])`, NOT bare `z.lambda`
+        // (W4-H4 fix): SRFI-128 explicitly permits `ordering = #f` ("a procedure is
+        // provided that signals an error on application"), and the body merely STORES
+        // ordering (never calls it), so `(make-comparator t eq #f)` bound #f fine in the
+        // prelude era — a bare `z.lambda` contract regressed that legal call to a throw.
+        { input: [z.lambda, z.lambda, z.union([z.lambda, z.booleanFalse])], inputRest: z.value, output: [comparatorSchema] },
         `(lambda (type-test equality ordering . hash)
            (list 'comparator type-test equality ordering))`,
       ),

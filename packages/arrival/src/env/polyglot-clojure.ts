@@ -262,14 +262,16 @@ export default new EnvCapability("scheme/polyglot-clojure", {
     // empty? — Clojure: #t iff the list / string / vector / dict has no elements.
     // (`@keys` returns a raw JS array, not a scheme list — `length` accepts it
     // directly as a ".length carrier", r7rs/lists.ts, so no array->list needed here.)
-    // OUTPUT is `z.value`, not `z.boolean` (§1.2 carve-out, representation honesty):
-    // the cond arms return MIXED boolean representations — `#t`/`#f` literals and
-    // null?/pair?/dict? verdicts are boxed ABool, but `=`'s verdict is a raw JS
-    // boolean — and `z.boolean`'s codec is `instanceof ABool` only. Both are
-    // scheme-truthy/falsy alike (`if` doesn't care) — the pre-migration suite pins
-    // exactly this via `(if (empty? …) …)` normalization.
+    // OUTPUT is `z.boolean` (W4-H4 tightening): every cond arm returns a boxed ABool —
+    // the `#t`/`#f` literals and the null?/pair?/dict? verdicts obviously, AND the
+    // `=`-driven string?/vector?/dict? arms too. The prior `z.value` carve-out cited
+    // `=`'s verdict as "a raw JS boolean" z.boolean (instanceof ABool) would reject —
+    // that premise went STALE at the R8 `mintVerdict` unification (`nativeNumericOp`'s
+    // `applyNumeric` boxes every boolean result, r7rs/numeric.ts) and is live-verified
+    // false: `(= 0 0)` and every `=`-arm of `empty?` return ABool. Matches the sibling
+    // `dict-has-key?` (racket), already correctly `z.boolean`.
     "empty?": symbol.define`empty?: Clojure — #t iff the list / string / vector / dict has no elements`(
-      { input: [z.value], output: [z.value] },
+      { input: [z.value], output: [z.boolean] },
       `(lambda (xs)
          (cond
            ((null? xs) #t)

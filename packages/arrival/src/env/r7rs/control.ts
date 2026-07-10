@@ -41,12 +41,12 @@
 // — this pack owns exactly arrival's SUPPORTED-vs-omitted split of §6.10, not
 // the whole section: the nine names below are the omitted subset, full stop.
 //
-// KNOWN GAP, noted not fixed (out of this migration's scope — adding a door is
-// expansion, not decomposition): `chibi/registries.ts` excludes `promise?` under
-// the same §4.2.5 "delayed evaluation" feature text as `delay`/`force`/
-// `make-promise`/`delay-force` below, but `promise?` is not declared as a door
-// anywhere in the tree (grep-verified) — it is a plain unbound name today, not a
-// teaching door. Flagged for a future pass, not this one.
+// CLOSED (W4-H4, 2026-07-10): `chibi/registries.ts` excludes `promise?` under the
+// same §4.2.5 "delayed evaluation" feature text as `delay`/`force`/`make-promise`/
+// `delay-force` below. Before this pass it was a plain unbound name (grep-verified),
+// not a teaching door — an asymmetry with the rest of the §4.2.5 family. Now declared
+// as a `notImplemented` door alongside them: with every promise-constructing verb
+// doored, no promise value can exist, so the predicate has nothing to recognize.
 
 import { EnvCapability } from "../../common/capability.js";
 import { symbol } from "../../common/symbol.js";
@@ -67,5 +67,6 @@ export default new EnvCapability("scheme/r7rs/control", {
     "force": symbol.notImplemented`force: delayed evaluation is omitted from arrival by design — it defers a value's identity to force-time and the dynamic extent alive then, not to where it was constructed; compute the value where you need it`,
     "make-promise": symbol.notImplemented`make-promise: delayed evaluation is omitted from arrival by design — it defers a value's identity to force-time and the dynamic extent alive then, not to where it was constructed; compute the value where you need it`,
     "delay-force": symbol.notImplemented`delay-force: delayed evaluation is omitted from arrival by design — it defers a value's identity to force-time and the dynamic extent alive then, not to where it was constructed; compute the value where you need it`,
+    "promise?": symbol.notImplemented`promise?: delayed evaluation is omitted from arrival by design — with delay/force/make-promise/delay-force all doored (§4.2.5), no promise value can exist to test; there is nothing for this predicate to recognize`,
   },
 });

@@ -12,7 +12,7 @@
 // (contract authoring) both have NOTHING to run over. What DOES apply, one row
 // each, mirroring the wave's per-pack template narrowed to what's actually here:
 //
-//   ROW 1 — structural: no prelude field; all 9 symbols are kind "door"; a door
+//   ROW 1 — structural: no prelude field; all 10 symbols are kind "door"; a door
 //     carries no contract surface (§1.1/§1.2 apply only to `symbol.define`).
 //   ROW 2 — bake / cause stamping: `.lower({})` succeeds with zero deps (this
 //     pack references nothing outside itself); every bound value is a
@@ -28,7 +28,7 @@
 //     `kind === "define"` bodies, and this pack has none — `lower({})` cannot
 //     throw `DefineLocalityError`/`DefineForwardReferenceError`/
 //     `ProvenanceRoleShapeError` because nothing here is FV-walked at all.
-//     `exports()` (§2.2) still derives the correct 9-name surface purely from
+//     `exports()` (§2.2) still derives the correct 10-name surface purely from
 //     `spec.symbols` keys (the `macroAwareDefineNames(spec.prelude)` half of the
 //     union is vacuous — no prelude to parse).
 //   ROW 5 — the §6.10 boundary check the task names explicitly: `map`/`for-each`
@@ -37,8 +37,9 @@
 //     pre-existing) contracts. `call-with-values`/`values` (also §6.10) live in
 //     `r7rs/binding.ts`. This pack owns exactly the SUBSET of §6.10/§4.2.5/§4.2.6
 //     arrival omits by design (call/cc, dynamic-wind, make-parameter,
-//     parameterize, delay, force, make-promise, delay-force) — nine names, no
-//     more, no less.
+//     parameterize, delay, force, make-promise, delay-force, promise?) — ten
+//     names, no more, no less (promise? doored W4-H4: with every promise
+//     constructor doored, no promise value exists for it to recognize).
 //   ROW 6 — chibi conformance cross-check: every door this pack declares is
 //     covered by a `registries.ts` Exclusion `anyOf` rule (two of which cite
 //     "r7rs/control.ts's notImplemented doors" by name in their `feature` text) —
@@ -68,6 +69,7 @@ const DOOR_NAMES = [
   "force",
   "make-promise",
   "delay-force",
+  "promise?",
 ] as const;
 
 function doorDef(name: string): DoorSymbolDef {
@@ -82,7 +84,7 @@ describe("ROW 1 — structural: no prelude, every symbol is a contract-free door
     expect(controlPack.spec.prelude).toBeUndefined();
   });
 
-  it("the capability's symbol population is EXACTLY the nine documented omissions", () => {
+  it("the capability's symbol population is EXACTLY the ten documented omissions", () => {
     expect(Object.keys(symbols).sort()).toEqual([...DOOR_NAMES].sort());
   });
 
