@@ -13,10 +13,11 @@
 // (odd whole-list count, wrong per-element arity, non-symbol/destructuring name slot,
 // whole-list on `do`) keep dooring — those keep door-assertions, with updated texts.
 //
-// Spec: docs/reference/bracket-bindings.md. Requirements:
-// docs/working-proposals/arrival-bracket-bindings-requirements.md (R1-R8). Executable
-// spec: spec/corpus/bracket-bindings-{read,eval}.jsonl (via spec-corpus.test.ts) — this
-// file is the narrative/behavioral companion, not a duplicate of the corpus.
+// Spec: the bracket-binding section header in src/eval/evaluator.ts (normalizeBindings).
+// Requirements: docs/working-proposals/arrival-bracket-bindings-requirements.md (R1-R8).
+// Executable spec: spec/corpus/bracket-bindings-{read,eval}.jsonl (via
+// spec-corpus.test.ts) — this file is the narrative/behavioral companion, not a
+// duplicate of the corpus.
 import { describe, expect, it } from "vitest";
 import { exec } from "../eval/generator-exec.js";
 

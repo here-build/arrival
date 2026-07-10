@@ -115,7 +115,8 @@ Each table = one section; rows = symbols **introduced** there. Columns: **symbol
 > `letrec*`, named `let`, and `do` (4.2.4) additionally accepts a vector datum
 > (`(let [a 1 b 2] …)`, `(let* ([a 1] [b 2]) …)`), a form-contract-level superset that lowers
 > byte-identically to the parenthesized image. The reader is unchanged (`[…]` is a vector
-> everywhere). See `docs/reference/bracket-bindings.md`.
+> everywhere). Spec: the bracket-binding section header in `src/eval/evaluator.ts`
+> (`normalizeBindings` / `normalizeClause`).
 
 ### 4.2.3 Sequencing
 

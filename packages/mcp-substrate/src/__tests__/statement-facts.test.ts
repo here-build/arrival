@@ -1,6 +1,7 @@
 // statement-facts.test — pins `analyzeStatement`'s exact output for every field, incl. the
 // false-positive fixes a real parse gives for free (a trigger word inside a string literal or a
-// comment) and the bracket-binding surfaces (docs/reference/bracket-bindings.md). The
+// comment) and the bracket-binding surfaces (spec: arrival's `src/eval/evaluator.ts`
+// bracket-binding section). The
 // `localBindings` cases mirror scope-confusion.test.ts's `describe("scanLocalBindings
 // (scope-scan.ts)"...)` block byte-for-byte (that block is this module's ground truth for
 // what scope-scan.ts currently derives) plus the bracket-binding additions this task asked for.
@@ -191,7 +192,7 @@ describe("analyzeStatement — localBindings: parity with scanLocalBindings (sco
   });
 });
 
-describe("analyzeStatement — localBindings: bracket-binding forms (docs/reference/bracket-bindings.md)", () => {
+describe("analyzeStatement — localBindings: bracket-binding forms", () => {
   describe("R2a whole-list (Clojure surface): a flat bracket vector directly in the bindings slot", () => {
     it("let: [a 1 b 2]", async () => {
       const f = await facts("(let [a 1 b 2] (+ a b))");

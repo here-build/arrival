@@ -3,7 +3,8 @@
 Language-portable conformance suite for the arrival reader/evaluator grammar extensions —
 the `{…}` dict / `[…]` vector collection literals and their position-scoped comma rule
 (spec: `docs/working-proposals/arrival-curly-vector-literals.md`), the let-family
-**bracket bindings** superset (spec: `docs/reference/bracket-bindings.md`; requirements:
+**bracket bindings** superset (spec: the bracket-binding section header in
+`src/eval/evaluator.ts`, `normalizeBindings`; requirements:
 `docs/working-proposals/arrival-bracket-bindings-requirements.md`, R1–R8), and its R9
 addendum, **bracket clause positions** for `cond`/`case`/`do`'s test clause (same
 requirements doc, R9). A future Python/Rust port of the reader runs this same corpus; only
@@ -68,7 +69,7 @@ teach; the corpus matches ONLY the class. These become the spec's error contract
 | `E-UNTERMINATED` | EOF inside an open string/list/literal |
 | `E-BRACKET-MISMATCH` | close delimiter does not pair its opener (`(a]`) |
 | `E-BRACKET-UNEXPECTED` | close delimiter with nothing open (`]`) |
-| `E-LET-BRACKET-BINDINGS-LIST` | a let-family whole-list bracket bindings form is malformed: odd element count, or the whole-list form on `do` (spec: `docs/reference/bracket-bindings.md` R4) |
+| `E-LET-BRACKET-BINDINGS-LIST` | a let-family whole-list bracket bindings form is malformed: odd element count, or the whole-list form on `do` (R4 — see the bracket-binding section in `src/eval/evaluator.ts`) |
 | `E-LET-BRACKET-BINDING` | a per-element bracket binding is malformed: wrong length (≠2; ≠2–3 for `do`), or a non-symbol (incl. a destructuring vector) in the binding-name slot |
 | `E-COND-BRACKET-CLAUSE` | a `cond`/`case`/`do`-test bracket clause is empty (`[]` — R9, `docs/working-proposals/arrival-bracket-bindings-requirements.md`) |
 | `E-CASE-BRACKET-DATUM-LIST` | a `case` clause's datum-list head is itself a bracket vector — the datum list is data and is never bracket-converted, even inside a bracketed clause (R9) |

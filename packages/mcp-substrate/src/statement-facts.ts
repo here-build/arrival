@@ -150,7 +150,8 @@ function collectParamNames(paramsNode: SchemeValue | undefined, acc: WalkAccumul
 }
 
 /** Collect a let-family form's BINDINGS-SLOT names — both bracket-binding surfaces
- *  (docs/reference/bracket-bindings.md) fall out of ONE shape test on the slot's FIRST element,
+ *  (spec: arrival's `src/eval/evaluator.ts` bracket-binding section, `normalizeBindings`)
+ *  fall out of ONE shape test on the slot's FIRST element,
  *  with no need to distinguish `[` from `(` (both real surfaces flow through
  *  {@link bindingElements} uniformly):
  *    - the FIRST element is ATOMISH (not structural — a bare symbol `[a 1 b 2]`, or the

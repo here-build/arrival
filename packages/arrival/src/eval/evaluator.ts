@@ -1535,13 +1535,23 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 // ============================================================================
 
 // ── let-family bracket-binding consumption ──────────────────────────────────
+// A named, compile-erased superset of the let-family: the bindings slot of
+// `let`, `let*`, `letrec`, `letrec*`, named `let`, and `do` additionally
+// accepts a vector datum — `(let [a 1 b 2] …)`, `(let* ([a 1] [b 2]) …)`.
+// It completes the reader's own grain: `[…]` is already a first-class vector
+// datum in EVERY position (the collection-literal extension), and the
+// let-family was the one place that datum was inertly rejected.
+//
 // Arrival's reader never erases bracket kind — it survives as the produced
 // node's CLASS: `[…]` mints an `AVector` with `evalElements === true` (the
 // reader-literal marker — Parser.ts, on `[`); `(…)` mints an `APair`; `#(…)`
 // mints an `AVector` with `evalElements === false`. So `evalElements ===
 // true` at a binding-position node IS the R2 detection — no reader/lexer
-// change (R1). Supersedes the original bracket-let door for well-formed
-// shapes; the door survives for malformed ones (R4).
+// change (R1). The widening lives entirely in the form CONTRACT, never in
+// the grammar: `quote` and macros see a plain vector datum, so a quoted let
+// form's bindings slot is inert data, and a bracket literal in an init value
+// or body position stays data. Supersedes the original bracket-let door for
+// well-formed shapes; the door survives for malformed ones (R4).
 //
 // Consumption is a PURE SYNTACTIC REWRITE (R3): `normalizeBindings` runs once,
 // before the existing per-binding walk, and produces the SAME cons-list-of-
@@ -1562,9 +1572,28 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 //     free: a paren-pair element passes through with its own identity
 //     untouched, so a bindings list may freely mix (a 1) and [b 2] elements.
 //
-// `evalElements === false` (`#(…)`) is NEVER touched (R5) — it isn't an
-// AVector this code recognizes as bindings syntax, so it falls straight
-// through to the generic `invariant(is_pair(binding), …)` below, unchanged.
+// R6 — non-intersection (why no context-dependent meaning exists): each
+// bracket surface has exactly ONE legal reading among the parent dialects,
+// and Arrival's meaning equals that unique reading. No shape exists whose
+// Scheme meaning and Clojure/Racket meaning both exist and disagree:
+//
+//   surface           R7RS        Racket   Clojure   Arrival
+//   (let ((s v)) …)   legal       legal    —         untouched
+//   (let ([s v]) …)   malformed   legal    —         = Racket (R2b)
+//   (let [s v …] …)   malformed   —        legal     = Clojure (R2a)
+//
+// Where R7RS would call a shape malformed, Arrival gives it the single
+// well-defined dialect meaning — which is, by R3, byte-identical to a form
+// R7RS DOES accept. The union of the three readings is a FUNCTION: one input
+// shape → one meaning, with no branch on surrounding context.
+//
+// R5 scope bound: ONLY the six forms' bindings slots, plus the R9 clause
+// positions of cond/case/do (`normalizeClause` below). Never lambda formals,
+// `when`/`unless` (no clause structure exists to consume), head position, or
+// any data position. `evalElements === false` (`#(…)`) is NEVER touched —
+// it isn't an AVector this code recognizes as bindings syntax, so it falls
+// straight through to the generic `invariant(is_pair(binding), …)` below,
+// unchanged.
 //
 // R4 malformed shapes keep the TWO original door codes — their meanings
 // narrow to genuine malformations now that well-formed shapes consume
@@ -1573,6 +1602,10 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 //     OR the whole-list form used on `do` (unchanged from the original door).
 //   - E-LET-BRACKET-BINDING: a per-element vector of the wrong length, or a
 //     non-symbol (including a destructuring vector) in the binding-name slot.
+//
+// Executable spec: spec/corpus/bracket-bindings-{read,eval}.jsonl and
+// bracket-clauses-{read,eval}.jsonl (run by spec-corpus.test.ts); error
+// taxonomy in spec/corpus/README.md.
 
 /** `do` doesn't accept the whole-list form (R2a exclusion) — its 3-element
  *  steps make pairwise grouping ambiguous. UNCHANGED from the original door;
@@ -2156,6 +2189,11 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
 // `#(…)` (`evalElements === false`) and non-vector clauses pass straight
 // through (R5 — never consumed); the existing `is_pair(clause)` invariants
 // below are the right door for anything else malformed.
+//
+// Non-intersection (the R6 argument, clause edition): bracket clauses are a
+// purely Racket surface — Clojure's `cond` is flat (no clause grouping), so
+// no dialect conflict exists, and Racket's reading already equals the
+// rewrite.
 function normalizeClause(clause: SchemeValue, form: string): SchemeValue {
   if (!(clause instanceof AVector) || !clause.evalElements) return clause;
   const els = clause.__vector__;
