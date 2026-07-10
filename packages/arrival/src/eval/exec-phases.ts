@@ -44,6 +44,7 @@ import { classify, type LineageNode } from "../values/lineage.js";
 import { makeRunContext, type RunContext } from "../values/primitives/RunContext.js";
 import type { RunCache } from "../values/run-cache.js";
 import type { EffectLog } from "../values/effect-log.js";
+import type { ReadGuard } from "../values/read-guard.js";
 import type { SchemeValue } from "../values/types.js";
 import { parse as readerParse } from "../reader/parse.js";
 
@@ -383,6 +384,7 @@ export function instantiate(
     signal?: AbortSignal;
     cache?: RunCache;
     effects?: EffectLog;
+    reads?: ReadGuard;
   },
 ): ExecInstance {
   const runCtx = makeRunContext({
@@ -392,6 +394,7 @@ export function instantiate(
     signal: opts.signal,
     cache: opts.cache,
     effects: opts.effects,
+    reads: opts.reads,
   });
   const resolver = new Resolver(opts.scope.env, Capabilities.assembled(ambientBase(ambient)));
   return { ambient, scope: resolver.scope, runCtx, resolver };

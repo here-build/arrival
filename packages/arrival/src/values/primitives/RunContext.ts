@@ -25,6 +25,7 @@
 
 import type { RunCache } from "../run-cache.js";
 import type { EffectLog } from "../effect-log.js";
+import type { ReadGuard } from "../read-guard.js";
 
 /** Per-run allocation meter — the memory analogue of the wall-clock budget. The
  *  reference is fixed for the run; `used` is incremented in place as cells materialize. */
@@ -69,6 +70,15 @@ export interface RunContext {
    *  carry both (an `effects` log alongside a `view`/`pure` cache) or `effects` alone
    *  (no cache at all). Constant for the run, like everything on this handle. */
   readonly effects: EffectLog | undefined;
+  /** The run's read-tracking + deferral-guard seam (values/read-guard.ts — W2, arrival-
+   *  plexus-effect-burst.md §2.4), if any; `undefined` ⇒ no tracking, no guard — byte-
+   *  identical to today. When present, the eval loop wraps each top-level form's
+   *  evaluation in `reads.tracker.region(...)` and, for a PRIME run gathering effects
+   *  (mirroring the burst arm's own `cache?.mode !== "replay"` gate), checks
+   *  `checkReadWriteGuard` after each form. Sibling of `cache`/`effects`, not a field on
+   *  either: a run may track reads with no effect log at all (inert), gather effects
+   *  with no tracker (no guard, no crash — an opt-out, not a lie), or carry both. */
+  readonly reads: ReadGuard | undefined;
 }
 
 /** Mint a fresh per-run context for one `exec()`. The single place a RunContext is born. */
@@ -80,6 +90,7 @@ export function makeRunContext(
     signal?: AbortSignal;
     cache?: RunCache;
     effects?: EffectLog;
+    reads?: ReadGuard;
   } = {},
 ): RunContext {
   return {
@@ -89,6 +100,7 @@ export function makeRunContext(
     signal: opts.signal,
     cache: opts.cache,
     effects: opts.effects,
+    reads: opts.reads,
   };
 }
 
@@ -106,4 +118,5 @@ export const CONSTANT_CTX: RunContext = Object.freeze({
   signal: undefined,
   cache: undefined,
   effects: undefined,
+  reads: undefined,
 });

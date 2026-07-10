@@ -40,6 +40,8 @@ import {
 import { makeRunContext, type RunContext } from "../values/primitives/RunContext.js";
 import type { RunCache } from "../values/run-cache.js";
 import type { EffectLog } from "../values/effect-log.js";
+import type { ReadGuard } from "../values/read-guard.js";
+import { checkReadWriteGuard } from "../values/read-guard.js";
 // TYPE-ONLY (erased — no runtime scheme-zod edge from this module): the `exec` exit
 // contract's schema type + its output-face projection (the output-bearing overload).
 import type { output as ZodOutputOf, ZodType } from "../common/scheme-zod.js";
@@ -358,6 +360,23 @@ export interface ExecOptions {
    */
   effects?: EffectLog;
   /**
+   * THE READ GUARD (W2, values/read-guard.ts, docs/working-proposals/
+   * arrival-plexus-effect-burst.md §2.4). When set, rides `makeRunContext` onto the
+   * run's `RunContext.reads`, and the per-form loop below wraps each top-level form's
+   * evaluation in `reads.tracker.region(...)` — so the host's tracking substrate (a
+   * mobx tracking context over plexus reads, armed by the host; arrival core never
+   * depends on mobx/plexus directly) can observe reads for that form's duration. After
+   * each form, for a PRIME run gathering effects (mirroring the burst arm's own
+   * `cache?.mode !== "replay"` gate — a fold never gathers, so it never needs a guard),
+   * `checkReadWriteGuard` runs over the effect log's current entries against the
+   * reads observed so far: a read that lands on a target a PRIOR gathered effect will
+   * write throws `ReadYourDeferredWriteError` (the teaching door — see read-guard.ts).
+   * `undefined` (the default) ⇒ no tracking, no guard — byte-identical to today. A
+   * `reads` with no `writeSetOf` armed (host tracks reads but can't predict write
+   * footprints yet) never crashes — the guard degrades to a no-op, not a false claim.
+   */
+  reads?: ReadGuard;
+  /**
    * THE EXIT CONTRACT (B2, arrival-type-hardening-ladder.md §1.2 — RULED: "generic
    * per-form tuple + zod `output` contract"). When supplied, the LAST form's result is
    * validated against this schema at the exit boundary — AFTER the `toJS` unwrap, so
@@ -526,6 +545,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     heapBudget,
     cache,
     effects,
+    reads,
     strict,
     freezeRosettaReturns,
     staticValidation,
@@ -612,7 +632,15 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
       // validation pass is not offered here (§3.5: no seal ⇒ no claims); the runtime
       // doors (unbound-variable throw + suggestions, PurityError) remain the backstop.
       runResolver = new Resolver(actualEnv);
-      runCtx = makeRunContext({ strict: strict ?? false, heapBudget, freezeRosettaReturns, signal, cache, effects });
+      runCtx = makeRunContext({
+        strict: strict ?? false,
+        heapBudget,
+        freezeRosettaReturns,
+        signal,
+        cache,
+        effects,
+        reads,
+      });
     } else {
       const lexicalScope = scope ?? LexicalScope.for(defaultLexicalRoot());
       // ── PHASE 2.5 — static validation (W3, §3.6): validate AFTER parse, BEFORE the
@@ -629,6 +657,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
         signal,
         cache,
         effects,
+        reads,
       });
       runResolver = instance.resolver;
       runCtx = instance.runCtx;
@@ -661,31 +690,48 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
       // in an ArrivalError, masking both the TypeError class and its membrane cause.
       // Surface the original TypeError so the user-visible error shape survives.
       let result: SchemeValue;
+      // THE READ-TRACKING REGION (W2, values/read-guard.ts, §2.4): one top-level form is
+      // the region unit. `runForm` is the plain (untracked) evaluation; when `runCtx.reads`
+      // is armed, the host's tracker wraps it for the call's duration so its tracking
+      // substrate (mobx over plexus, host-side) observes this form's reads. Absent ⇒
+      // `runForm()` runs directly, byte-identical to pre-W2.
+      const runForm = () =>
+        run(
+          evaluate(expr, {
+            resolver: runResolver,
+            dynamic_env,
+            use_dynamic,
+            tap,
+            nodeFilter,
+            signal,
+            // Default false ⇒ today's tolerant nil-projection. No consumer reads
+            // ctx.strict yet (scaffolding); car/cdr dispatch reads it later.
+            strict: strict ?? false,
+            // Per-run handle, threaded as data (unread scaffold; N2 reads it).
+            runCtx,
+          }),
+          { signal, budgetMs: remaining },
+        );
       try {
         // Top-level form evaluates to a value, never a bare expander — seal it.
-        result = expectValue(
-          await run(
-            evaluate(expr, {
-              resolver: runResolver,
-              dynamic_env,
-              use_dynamic,
-              tap,
-              nodeFilter,
-              signal,
-              // Default false ⇒ today's tolerant nil-projection. No consumer reads
-              // ctx.strict yet (scaffolding); car/cdr dispatch reads it later.
-              strict: strict ?? false,
-              // Per-run handle, threaded as data (unread scaffold; N2 reads it).
-              runCtx,
-            }),
-            { signal, budgetMs: remaining },
-          ),
-        );
+        result = expectValue(await (runCtx.reads ? runCtx.reads.tracker.region(runForm) : runForm()));
       } catch (e) {
         if (e instanceof ArrivalError && e.cause instanceof TypeError && !isHostRuntimeBug(e.cause)) throw e.cause;
         throw e;
       }
       results.push(result);
+
+      // THE GUARD CHECK (W2, §2.4): after each form, for a PRIME run gathering effects —
+      // mirroring the burst arm's own `cache?.mode !== "replay"` gate (run-cache.ts) so a
+      // fold (which never gathers) never trips it — check whether any read observed so
+      // far lands on a target a PRIOR gathered effect will write. Throws
+      // `ReadYourDeferredWriteError` (the teaching door) on the first violation; a clean
+      // run (or a run missing either `reads` or `effects`, or `writeSetOf` unarmed) is a
+      // no-op. Guard region = EXECUTION only (Part V.1's ruling) — never re-checked at
+      // the (post-burst) serializer walk, which this loop does not perform.
+      if (runCtx.reads !== undefined && runCtx.effects !== undefined && runCtx.cache?.mode !== "replay") {
+        checkReadWriteGuard(runCtx.effects.entries, runCtx.reads.tracker.log, runCtx.reads.writeSetOf);
+      }
 
       // SHADOW MODE slice 3 — the assert. Compare static fullCone against this
       // form's UNTAPPED eager `result.provenance` (mechanism 1; NO tap installed).
@@ -837,6 +883,7 @@ export async function execExpr(
     heapBudget,
     cache,
     effects,
+    reads,
     skipBootstrapWait,
   }: ExecOptions = {},
 ): Promise<SchemeValue> {
@@ -864,7 +911,13 @@ export async function execExpr(
   // every require'd module. `heapBudget` bounds THIS expression's allocations
   // (a per-form meter; a cumulative multi-form bound needs a shared RunContext,
   // which no caller can inject yet — the ledgered runProgram gap).
-  const runCtx = makeRunContext({ signal, heapBudget, cache, effects });
+  // `reads` rides the handle for consistency with `cache`/`effects` (a required module's
+  // rosetta penetrations still stamp `enqueuedAtReadClock` through the SAME chokepoint —
+  // see run-cache.ts), but this single-form entry does not itself wrap a region or run
+  // the guard check: it has no per-form LOOP to hang either on (unlike execState's), and
+  // its callers (require, prelude eval) are sub-program plumbing, not the top-level prime
+  // run the guard targets. A caller wiring a real burst run through execState gets both.
+  const runCtx = makeRunContext({ signal, heapBudget, cache, effects, reads });
 
   try {
     // Top-level form evaluates to a value, never a bare expander — seal it.

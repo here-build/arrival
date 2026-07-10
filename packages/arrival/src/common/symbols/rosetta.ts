@@ -135,8 +135,15 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       //    not a `cache` field, so a burst run needs no `RunCache` to gather sink effects.
       //    Its fast-path bypass ALSO checks `runEffects`: a run with an effect log but no
       //    cache must still reach `penetrateThroughCache` (the burst arm lives inside it).
+      //    THE READ-CLOCK STAMP (W2, values/read-guard.ts, arrival-plexus-effect-burst.md
+      //    §2.4) rides the SAME chokepoint via `this.runCtx.reads` — read-only here (the
+      //    guard CHECK itself runs in the eval loop, after each form): when a burst
+      //    gathers this penetration, `reads.tracker` stamps the entry's
+      //    `enqueuedAtReadClock`. A run with no `reads` seam is unaffected — the fast
+      //    path below only gates on `cache`/`effects`, matching pre-W2 behavior exactly.
       const runCache = this.runCtx.cache;
       const runEffects = this.runCtx.effects;
+      const runReads = this.runCtx.reads;
       const result =
         runCache === undefined && runEffects === undefined
           ? await rawImpl.call(this, ...decodedArgs)
@@ -146,6 +153,7 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
               decodedArgs,
               async () => rawImpl.call(this, ...decodedArgs),
               runEffects,
+              runReads?.tracker,
             );
 
       // 3. PROVENANCE — the SAME spine as createRosettaWrapper. A "source"-role rosetta

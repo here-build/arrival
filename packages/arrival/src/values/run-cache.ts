@@ -59,6 +59,7 @@
  */
 
 import type { EffectLog } from "./effect-log.js";
+import type { ReadTracker } from "./read-guard.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. The entity (§2.2's normative shapes, verbatim)
@@ -253,6 +254,14 @@ async function sharedFire(
  * `effects` is a sibling parameter, not a `cache` field: a burst run may gather
  * effects with no `RunCache` at all, or gather effects alongside a `view`/`pure`
  * cache — the two entities have independent lifecycles (§2.3).
+ *
+ * `reads` (W2, values/read-guard.ts) is a THIRD sibling parameter, read-only at this
+ * chokepoint: when present, a gathered effect's `enqueuedAtReadClock` is stamped from
+ * `reads.log.length` at enqueue time — the read-clock guard's own comparison point
+ * (§2.4). Absent ⇒ the entry carries no clock (the guard then treats it as `0`,
+ * i.e. every read counts — see read-guard.ts's doc). This function never CHECKS the
+ * guard itself (that's `checkReadWriteGuard`, called by the eval loop after each
+ * form) — it only stamps the clock at the one point the clock's value is known.
  */
 export async function penetrateThroughCache(
   cache: RunCache | undefined,
@@ -260,6 +269,7 @@ export async function penetrateThroughCache(
   decodedArgs: readonly unknown[],
   fire: () => Promise<unknown>,
   effects?: EffectLog,
+  reads?: ReadTracker,
 ): Promise<unknown> {
   const { symbolName, cacheClass, sink } = penetration;
 
@@ -270,7 +280,11 @@ export async function penetrateThroughCache(
   // (assertProvenanceRoleShape, _bake.ts): the program cannot observe that firing
   // was deferred because it structurally cannot read what a sink returns.
   if (sink && effects !== undefined && cache?.mode !== "replay") {
-    effects.enqueue({ verbName: symbolName, decodedArgs });
+    effects.enqueue({
+      verbName: symbolName,
+      decodedArgs,
+      ...(reads === undefined ? {} : { enqueuedAtReadClock: reads.log.length }),
+    });
     return undefined;
   }
 

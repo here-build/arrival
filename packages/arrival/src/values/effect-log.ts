@@ -5,9 +5,10 @@
  * plain append-only sequence: two identical sink calls are two entries, always — the
  * mode law's "two effects, always" (run-cache.ts's header) holds for the burst arm
  * exactly as it holds for the tombstone arm. This file owns the log entity and the
- * drain (`burst`); it does NOT own the read-clock guard (W2) or the conflict
- * re-execution comparator (W4) — this log only remembers WHAT was gathered and in
- * WHAT order, nothing about whether it is safe to replay against a moved world.
+ * drain (`burst`); it does NOT own the read-clock guard ITSELF (W2, values/
+ * read-guard.ts) or the conflict re-execution comparator (W4) — this log only
+ * remembers WHAT was gathered, in WHAT order, and (as of W2) the read-clock each entry
+ * was gathered at, nothing about whether it is safe to replay against a moved world.
  *
  * ── Where it intercepts ───────────────────────────────────────────────────────
  * Same chokepoint as `RunCache`: `penetrateThroughCache`, between arg decode and
@@ -36,6 +37,12 @@ export interface EffectEntry {
   readonly index: number;
   readonly verbName: string;
   readonly decodedArgs: readonly unknown[];
+  /** The read-clock at enqueue (W2, values/read-guard.ts, §2.3's normative field) —
+   *  stamped by `penetrateThroughCache` when the run carries a `reads` tracker; absent
+   *  when it doesn't (no tracker ⇒ nothing to stamp, and the guard treats a missing
+   *  clock as `0`, i.e. every read counts — see read-guard.ts). Reads at or below this
+   *  clock are the query that motivated this effect; reads above it are post-enqueue. */
+  readonly enqueuedAtReadClock?: number;
 }
 
 /** An ordered, append-only manifest of gathered sink penetrations for ONE run. Never
@@ -46,7 +53,7 @@ export interface EffectLog {
   readonly entries: readonly EffectEntry[];
   /** Append one entry; `index` is minted here (`entries.length` at call time) — the
    *  caller never supplies it, so two enqueues can never collide on index. */
-  enqueue(entry: { verbName: string; decodedArgs: readonly unknown[] }): void;
+  enqueue(entry: { verbName: string; decodedArgs: readonly unknown[]; enqueuedAtReadClock?: number }): void;
 }
 
 /** The in-memory materialization — a plain array, mirroring `MemoryRunCache`'s
@@ -59,8 +66,13 @@ export class MemoryEffectLog implements EffectLog {
     return this._entries;
   }
 
-  enqueue(entry: { verbName: string; decodedArgs: readonly unknown[] }): void {
-    this._entries.push({ index: this._entries.length, verbName: entry.verbName, decodedArgs: entry.decodedArgs });
+  enqueue(entry: { verbName: string; decodedArgs: readonly unknown[]; enqueuedAtReadClock?: number }): void {
+    this._entries.push({
+      index: this._entries.length,
+      verbName: entry.verbName,
+      decodedArgs: entry.decodedArgs,
+      ...(entry.enqueuedAtReadClock === undefined ? {} : { enqueuedAtReadClock: entry.enqueuedAtReadClock }),
+    });
   }
 }
 
