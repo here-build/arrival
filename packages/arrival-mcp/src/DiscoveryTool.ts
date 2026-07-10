@@ -16,15 +16,20 @@
 //   • describe-time → infra closed over when the host built the capability (the welcome).
 
 import {
+  type EffectEntry,
+  type EffectLog,
+  type EvalTap,
   type RunCache,
   type RunCacheEntry,
   type SchemeValue,
   APair,
   LexicalScope,
+  MemoryEffectLog,
   execState,
   is_callable_value,
   parse,
 } from "@here.build/arrival";
+import { EvalTrace } from "@here.build/arrival/provenance";
 import type { EnvCapability } from "@here.build/arrival/capability";
 import { type AssembledAmbient, assembleAmbient } from "@here.build/arrival/env";
 import {
@@ -41,6 +46,8 @@ import { format } from "date-fns";
 import dedent from "dedent";
 import * as z from "zod";
 
+import { type ConfirmManifest, buildConfirmManifest, buildInvocationSource, isConfirmManifest } from "./confirm-manifest.js";
+import { type RigAlteredCheck, noRigAlteredCheck } from "./confirm-burst.js";
 import { lowerBinaryBlob } from "./dispatch.js";
 import { MCPError } from "./errors.js";
 import type { McpAnnotation, McpCapabilitySpec, McpEnvCapability } from "./McpEnvCapability.js";
@@ -96,6 +103,18 @@ interface ExecSerializedOptions {
    *  text); absent ⇒ plain `toSExprString` — the byte-identical fast path (the fold — whose
    *  output is discarded — stays here: no extraction work is wasted on it). */
   extrasState?: ExtrasState;
+  /** THE EFFECT LOG (arrival-provenance-confirmation.md, values/effect-log.ts W1). Present ⇒
+   *  every `sink`-classed penetration this form makes GATHERS onto the log instead of firing
+   *  (`exec`'s own `effects` option, threaded verbatim) — the confirmation design's
+   *  queries-then-effects-burst model. Absent (the fold path, sessionless calls) ⇒ sinks fire
+   *  immediately, byte-identical to pre-confirmation behavior. */
+  effects?: EffectLog;
+  /** Lineage capture (default-on, §7.6's disable knob is the CALLER omitting this) — the
+   *  `EvalTrace` a confirm-manifest's per-argument `groundingVerdict` annotation reads. Reused
+   *  across every form of ONE call (the manifest's `forms` span the whole call, not one
+   *  statement) so a later effect's arguments can trace back through an earlier statement's
+   *  reads. */
+  tap?: EvalTap;
 }
 
 /** The standard base's full symbol vocabulary (sorted), advertised in the tool schema in place
@@ -185,6 +204,8 @@ async function execSerializedState(
     heapBudget: options.heapBudget,
     signal: options.signal,
     cache: options.cache,
+    effects: options.effects,
+    tap: options.tap,
   });
   const values = state.values.map((element) => hostFace(element));
   const per = options.charBudget ?? perElementBudget(values.length);
@@ -375,6 +396,27 @@ export interface DiscoveryToolOptions {
    * Specify a subset to hide host-only configuration (e.g. `getGateway`) from the client.
    */
   exposableConfiguration?: readonly string[];
+
+  /**
+   * Per-argument lineage annotation on a held confirm-manifest (arrival-provenance-
+   * confirmation.md §7.6 — RULED default-on with a disable knob). Default `true`: every
+   * session call installs an `EvalTrace` tap so a manifest (built only when the call
+   * gathers a risky effect) can annotate each row's arguments with a `groundingVerdict`.
+   * Set `false` for a small-context/degraded deployment that wants zero tracing tax —
+   * a manifest still builds (digest, decoded args, `invocationSource`), just without
+   * `argLineage`. Degraded confirmation POSTURES beyond this (always-confirm,
+   * pause-to-confirm) are OUT of scope for this design — a future family alongside the
+   * lineage knob, per the ruling's own note.
+   */
+  lineage?: boolean;
+
+  /**
+   * The per-effect rig-altered invariant seam (arrival-provenance-confirmation.md item 3,
+   * Part V.3/W4 of the effect-burst doc). Defaults to {@link noRigAlteredCheck} — an HONEST
+   * no-op (every row reports unaltered) because no host-generic re-derivation channel exists
+   * yet (that needs W3's live plexus burst executor). A host with one wires its own check.
+   */
+  rigAlteredCheck?: RigAlteredCheck;
 }
 
 type DiscoveryArgs = { expr: string; intent?: string } & Record<string, unknown>;
@@ -544,11 +586,33 @@ export class DiscoveryTool {
     };
     const state = await this.loadState(session, ctx.store, identity);
 
+    // FILL-OR-KILL (arrival-provenance-confirmation.md §7.3): a session with a pending
+    // manifest that runs a NEW program — this call, whatever it turns out to do — kills the
+    // old order unconditionally. "The manifest is an order; it fills now or dies; nothing
+    // rests on the book." The only path that ever ACTS on a pending manifest is
+    // `confirmBurst`, a separate method entirely — `call` always starts fresh.
+    state.pendingManifest = undefined;
+
     const warm = this.warm.get(session.id);
     const { ambient, scope, entries } =
       warm !== undefined && warm.digest === identity.configDigest
         ? { ambient: warm.ambient, scope: warm.scope, entries: new Map(Object.entries(state.cache)) }
         : await this.foldIntoFreshAmbient(session.id, state, identity, cfg, { budgetMs, heapBudget, signal });
+
+    // Snapshot BEFORE running — the fill-or-kill revert point if this call ends up holding
+    // (§7.2/§7.3): a held manifest's statements/cache mutations must never commit ("nothing
+    // rests on the book"), so a hold reverts `state.log`/`entries` back to exactly this.
+    const preLogLen = state.log.length;
+    const preEntries = new Map(entries);
+    const preCounters = { ...state.counters };
+
+    // THE EFFECT LOG (W1) + lineage tap (§7.6, default-on): every sink this call's forms
+    // touch GATHERS here instead of firing — the gather-then-decide model the hold rule
+    // needs. `lineageOn` governs ONLY whether a trace is installed to annotate a held
+    // manifest's arguments; it never affects whether effects gather (that's structural).
+    const effectLog = new MemoryEffectLog();
+    const lineageOn = this.options.lineage !== false;
+    const trace = lineageOn ? new EvalTrace() : undefined;
 
     const run = await this.runForms(args.expr, {
       ambient,
@@ -559,7 +623,61 @@ export class DiscoveryTool {
       cache: new SessionRunCache("record", entries, state.counters),
       state,
       onEvent: ctx.onEvent,
+      effects: effectLog,
+      tap: trace,
     });
+
+    // THE HOLD RULE (§7.2): any risky row present ⇒ the ENTIRE burst holds as a proposal —
+    // no split-commit, atomicity is the product claim. Risky-free programs burst immediately
+    // right here, before persisting — zero tax on the common case (same response shape, same
+    // persisted log/cache the pre-confirmation code produced).
+    if (effectLog.entries.length > 0) {
+      const riskyEntries = effectLog.entries.filter((e) => this.isRisky(e.verbName));
+      if (riskyEntries.length === 0) {
+        const burstError = await this.burstGatheredEffects(
+          effectLog.entries,
+          { ambient, scope, budgetMs, heapBudget, signal },
+          entries,
+          state.counters,
+        );
+        if (burstError !== undefined) {
+          run.out.push(`(error ${JSON.stringify(burstError)})`);
+          run.crashed = burstError;
+          state.counters.crashes += 1;
+        }
+      } else {
+        // HOLD: revert to the pre-call snapshot (fill-or-kill — this call's statements and
+        // cache mutations never commit) and return the manifest INSTEAD of `run.out` — the
+        // whole burst is a proposal now, not a completed response.
+        state.log = state.log.slice(0, preLogLen);
+        entries.clear();
+        for (const [k, v] of preEntries) entries.set(k, v);
+        state.counters = preCounters; // fill-or-kill: this call's counter deltas never happened either
+        const manifest = buildConfirmManifest({
+          sessionId: session.id,
+          statementIndex: preLogLen,
+          entries: effectLog.entries,
+          isRisky: (v) => this.isRisky(v),
+          lineage: trace === undefined ? undefined : { trace, source: args.expr },
+        });
+        state.pendingManifest = manifest;
+        state.semanticsEpoch = identity.semanticsEpoch;
+        state.roster = identity.roster;
+        state.configDigest = identity.configDigest;
+        state.cache = Object.fromEntries(entries);
+        state.lastCallAt = Date.now();
+        await this.persist(session, ctx.store, state);
+        this.log(ctx, args, startTime, { success: true });
+        return [
+          `This run gathered ${riskyEntries.length} risky effect(s) among ${effectLog.entries.length} total — the ` +
+            "WHOLE burst holds pending confirmation (fill-or-kill: nothing has been committed). Review the manifest " +
+            "below, then call confirm-burst with { digest, approvedEffectIndexes: [...] } to fire the approved subset " +
+            "in original order. Declining, or running a new program in this session, discards this manifest — its " +
+            "effects leave no trace and must be re-issued.",
+          JSON.stringify(manifest, null, 2),
+        ];
+      }
+    }
 
     // Stamp the CURRENT identity (the cache just recorded under it), serialize the cache
     // (settled entries only — pendings never reach the entry map), and persist BEFORE responding.
@@ -573,6 +691,186 @@ export class DiscoveryTool {
 
     this.log(ctx, args, startTime, run.crashed ? { success: false, errorMessage: run.crashed } : { success: true });
     return run.out;
+  }
+
+  /** Is `verbName` a `tool.risky` verb? The catalog's own annotation reflection
+   *  (`allAnnotations`, McpEnvCapability.ts) is the ONE lookup point — no second
+   *  registry (§7.5: riskiness rides the same static factory-declared metadata channel
+   *  `isTool`/`description` already use). */
+  private isRisky(verbName: string): boolean {
+    return this.capability.allAnnotations()[verbName]?.risky === true;
+  }
+
+  /** Fire every gathered (non-risky) effect for real, in program order, right after
+   *  gathering — the immediate-burst arm of the hold rule (§7.2). Each entry's own
+   *  minimal re-runnable invocation (`buildInvocationSource`, built from the RAW
+   *  pre-decode args `EffectEntry.rawArgs` carries) is evaluated through the SAME
+   *  ambient/scope/cache this call already established, so the sink fires through the
+   *  ordinary `penetrateThroughCache` record-mode arm (tombstone written normally — a
+   *  later fold skips it exactly as if it had fired inline). Returns an error message on
+   *  the first entry that throws (stopping there, mirroring `runForms`'s own
+   *  stop-on-first-crash REPL posture); `undefined` on a clean drain. */
+  private async burstGatheredEffects(
+    gathered: readonly EffectEntry[],
+    opts: { ambient: AssembledAmbient; scope: LexicalScope; budgetMs: number; heapBudget: number; signal?: AbortSignal },
+    entries: Map<string, RunCacheEntry>,
+    counters: SessionRunState["counters"],
+  ): Promise<string | undefined> {
+    const cache = new SessionRunCache("record", entries, counters);
+    for (const entry of gathered) {
+      if (entry.rawArgs === undefined) {
+        return `confirm-burst: effect ${entry.index} (${entry.verbName}) was gathered with no raw-argument capture — cannot reconstruct its invocation to fire it.`;
+      }
+      const source = buildInvocationSource(entry.verbName, entry.rawArgs);
+      try {
+        await execState(source, {
+          ambient: opts.ambient,
+          scope: opts.scope,
+          budgetMs: opts.budgetMs,
+          heapBudget: opts.heapBudget,
+          cache,
+          signal: opts.signal,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return `effect ${entry.index} (${entry.verbName}) threw while bursting: ${message}`;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * confirm-burst (arrival-provenance-confirmation.md, tool 2 of the confirmation design;
+   * see confirm-burst.ts's `ConfirmBurstTool` — a thin MCP-tool-shaped wrapper over THIS
+   * method, so confirmation reuses the same warm ambient / session state `call` itself
+   * holds, rather than a second implementation).
+   *
+   * Requires a session — a pending manifest lives in `SessionRunState`, so there is
+   * nothing to confirm sessionlessly. A wrong or absent digest is a "which manifest?"
+   * teaching door (§7.1: the digest answers manifest IDENTITY only). The approved subset
+   * fires in ORIGINAL program order (§5); each row goes through the rig-altered seam
+   * ({@link DiscoveryToolOptions.rigAlteredCheck}, default {@link noRigAlteredCheck}) —
+   * a row it flags doors THAT row alone, siblings still fire. Declined rows leave no
+   * durable trace (fill-or-kill, §7.3): only re-issuing the original program re-offers
+   * them.
+   */
+  async confirmBurst(
+    args: { digest: string; approvedEffectIndexes: readonly number[] },
+    ctx: ToolCallCtx = {},
+  ): Promise<(string | Blob)[]> {
+    const startTime = Date.now();
+    const budgetMs = this.options.budgetMs ?? DEFAULT_BUDGET_MS;
+    const heapBudget = this.options.heapBudget ?? defaultHeapBudget();
+    const { session } = ctx;
+    if (session === undefined) {
+      throw new MCPError(
+        "validation",
+        `${this.name}.confirmBurst: requires a session — a pending manifest lives in session state, so there is ` +
+          "nothing to confirm without one. Pass the SAME { id, state } the discovery call that returned the manifest used.",
+        { phase: "dispatch", target: this.name },
+      );
+    }
+    assertSessionShape(`${this.name}.confirmBurst`, session);
+
+    const throwawayIdentity: SessionRunIdentity = { v: 2, semanticsEpoch: SESSION_SEMANTICS_EPOCH, roster: [], configDigest: "" };
+    const state = await this.loadState(session, ctx.store, throwawayIdentity);
+    const manifest = state.pendingManifest;
+    if (manifest === undefined || !isConfirmManifest(manifest) || manifest.digest !== args.digest) {
+      throw new MCPError(
+        "validation",
+        manifest === undefined
+          ? `${this.name}.confirmBurst: no manifest is pending for this session — nothing to confirm. A manifest ` +
+            "is produced only when a discovery-tool call gathers a risky effect; re-issue that program."
+          : `${this.name}.confirmBurst: digest "${args.digest}" does not match the pending manifest (digest ` +
+            `"${manifest.digest}"). Which manifest? Re-read the discovery-tool response that held this run and ` +
+            "pass its digest back verbatim — or re-issue the program if you intend a fresh one.",
+        { phase: "validation", target: this.name },
+      );
+    }
+
+    const validIndexes = new Set(manifest.rows.map((r) => r.effectIndex));
+    const unknown = args.approvedEffectIndexes.filter((i) => !validIndexes.has(i));
+    if (unknown.length > 0) {
+      throw new MCPError(
+        "validation",
+        `${this.name}.confirmBurst: approvedEffectIndexes ${JSON.stringify(unknown)} are not in the pending ` +
+          `manifest (valid: ${JSON.stringify([...validIndexes].toSorted((a, b) => a - b))}).`,
+        { phase: "validation", target: this.name },
+      );
+    }
+
+    const approved = new Set(args.approvedEffectIndexes);
+    const orderedRows = manifest.rows.filter((r) => approved.has(r.effectIndex)).toSorted((a, b) => a.effectIndex - b.effectIndex);
+    const rigCheck = this.options.rigAlteredCheck ?? noRigAlteredCheck;
+
+    // Rehydrate the SAME warm ambient `call` would (identity taken from the STATE itself —
+    // confirm-burst carries no actor config to recompute one from; the session's own
+    // recorded identity is exactly the world the manifest was built against).
+    const identity: SessionRunIdentity = {
+      v: 2,
+      semanticsEpoch: state.semanticsEpoch,
+      roster: state.roster,
+      configDigest: state.configDigest,
+    };
+    const warm = this.warm.get(session.id);
+    const { ambient, scope, entries } =
+      warm !== undefined && warm.digest === identity.configDigest
+        ? { ambient: warm.ambient, scope: warm.scope, entries: new Map(Object.entries(state.cache)) }
+        : await this.foldIntoFreshAmbient(session.id, state, identity, await this.config({ expr: "" }), {
+            budgetMs,
+            heapBudget,
+            signal: ctx.signal,
+          });
+
+    const cache = new SessionRunCache("record", entries, state.counters);
+    let fired = 0;
+    const doors: string[] = [];
+    for (const row of orderedRows) {
+      const rig = await rigCheck(row);
+      if (rig.altered) {
+        doors.push(
+          `effect ${row.effectIndex} (${row.verb}): rig altered — the world moved under this specific effect` +
+            (rig.detail ? ` (${rig.detail})` : "") +
+            "; declined (fill-or-kill — re-issue the original program to re-offer it).",
+        );
+        continue;
+      }
+      if (row.invocationSource === undefined) {
+        doors.push(`effect ${row.effectIndex} (${row.verb}): no reconstructable invocation — declined.`);
+        continue;
+      }
+      try {
+        await execState(row.invocationSource, { ambient, scope, budgetMs, heapBudget, cache, signal: ctx.signal });
+        state.log.push({ src: row.invocationSource });
+        state.counters.statements += 1;
+        fired += 1;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        doors.push(`effect ${row.effectIndex} (${row.verb}) threw while bursting: ${message}`);
+      }
+    }
+
+    const declinedCount = manifest.rows.length - fired;
+    state.pendingManifest = undefined;
+    state.semanticsEpoch = identity.semanticsEpoch;
+    state.roster = identity.roster;
+    state.configDigest = identity.configDigest;
+    state.cache = Object.fromEntries(entries);
+    state.lastCallAt = Date.now();
+    state.counters.elapsedMsTotal += Date.now() - startTime;
+    await this.persist(session, ctx.store, state);
+
+    this.log(
+      ctx,
+      { expr: "", digest: args.digest, approvedEffectIndexes: args.approvedEffectIndexes },
+      startTime,
+      { success: doors.length === 0 },
+    );
+
+    const summary =
+      `confirm-burst: ${fired}/${manifest.rows.length} effect(s) fired in original order; ${declinedCount} declined ` +
+      "effect(s) left no durable trace (re-run the original program to re-offer them).";
+    return doors.length === 0 ? [summary] : [summary, ...doors];
   }
 
   /** Dispose one session's warm ambient (the host's session-close hook — `onsessionclosed`/
@@ -728,9 +1026,11 @@ export class DiscoveryTool {
       cache?: RunCache;
       state?: SessionRunState;
       onEvent?: (event: ReplEvent) => void;
+      effects?: EffectLog;
+      tap?: EvalTap;
     },
   ): Promise<{ out: (string | Blob)[]; crashed?: string }> {
-    const { ambient, scope, budgetMs, heapBudget, signal, cache, state, onEvent } = opts;
+    const { ambient, scope, budgetMs, heapBudget, signal, cache, state, onEvent, effects, tap } = opts;
     const cap = this.options.statementCap ?? defaultStatementCap();
     const attachmentQuota = this.options.attachmentQuota ?? defaultAttachmentQuota();
     // R6: ONE shared numbering/quota across every form of THIS call (the beginCall(quota) shape).
@@ -819,6 +1119,8 @@ export class DiscoveryTool {
           cache,
           charBudget,
           extrasState,
+          effects,
+          tap,
         });
         out.push(...run.out);
         // R6 drain — the v1 rendering strategy (downstream-owned, §2.6): per extra, a label

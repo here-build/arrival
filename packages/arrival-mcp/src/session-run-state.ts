@@ -14,6 +14,8 @@
 
 import { canonicalJson, type RunCache, type RunCacheEntry } from "@here.build/arrival";
 
+import { isConfirmManifest, type ConfirmManifest } from "./confirm-manifest.js";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Identity
 // ─────────────────────────────────────────────────────────────────────────────
@@ -91,6 +93,12 @@ export interface SessionRunState {
   counters: SessionCounters;
   createdAt: number;
   lastCallAt: number;
+  /** The held confirm-manifest (arrival-provenance-confirmation.md), if a prior call
+   *  gathered a risky effect and returned it instead of bursting (§7.2's hold rule).
+   *  FILL-OR-KILL (§7.3): a NEW program call kills any manifest already pending
+   *  (DiscoveryTool.call clears this before running) — "the manifest is an order; it
+   *  fills now or dies." Absent when there is nothing held. */
+  pendingManifest?: ConfirmManifest;
 }
 
 export function freshCounters(): SessionCounters {
@@ -169,7 +177,8 @@ export function isSessionRunState(v: unknown): v is SessionRunState {
     Object.values(v.cache).every((e) => isCacheEntry(e)) &&
     isCounters(v.counters) &&
     typeof v.createdAt === "number" &&
-    typeof v.lastCallAt === "number"
+    typeof v.lastCallAt === "number" &&
+    (v.pendingManifest === undefined || isConfirmManifest(v.pendingManifest))
   );
 }
 

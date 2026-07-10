@@ -75,6 +75,13 @@ export interface McpAnnotation {
    *  metadata channel `description`/`dynamicDescription` already ride. Absent (or a plain
    *  `description`-only verb) ⇒ a DECLARED ACTION — bound + catalogued, but not its own tool. */
   isTool?: true;
+  /** STATIC danger classification (arrival-provenance-confirmation.md §7.5 — "danger is an
+   *  attribute of the action, not the arguments set"). Written ONLY by `tool.risky`
+   *  (arrival-mcp/src/tool.ts), never by a caller argument or a runtime condition. Lifted here
+   *  (added to {@link MCP_ANNOTATION_KEYS}) so `allAnnotations()` — already the catalog's one
+   *  reflection point — is also the confirm-manifest builder's one lookup point for "does this
+   *  verb name require the hold rule": no second registry, no second convention. */
+  risky?: true;
 }
 
 /** The annotation property names the BASE lifts off an inline symbol def. A subclass widens
@@ -85,6 +92,7 @@ export const MCP_ANNOTATION_KEYS: readonly string[] = [
   "inputSchema",
   "aliases",
   "isTool",
+  "risky",
 ];
 
 /** The object form of a `SymbolDeclaration` (the rosetta-config member with an `fn`). */
