@@ -33,6 +33,10 @@ import { is_applyable, is_callable_value, is_lambda } from "../values/value-guar
 import { applyCallback, ALambda, type CallResult } from "../values/primitives/ACallable.js";
 import { makeCallCtx } from "../common/symbols/_bake.js";
 import type { InvocationLike } from "../rosetta.js";
+// Runtime edge for the bare-fn boxing seam below — cycle-benign: rosetta.ts never
+// imports the evaluator (its evaluator-adjacent needs ride leaf modules).
+import { jsToScheme } from "../rosetta.js";
+import { maybeThen } from "../utils/promises.js";
 import {
   currentDynamicCallSite,
   setDynamicCallSite,
@@ -2138,11 +2142,15 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
   // builtin (see the `Reflect.apply(fn, makeCallCtx(...), …)` call in evalPair). A native
   // impl reads `this.runCtx`; a genuinely undefined `this` crashed the `=>` arm
   // (`(cond (test => cadr))`) before this shape existed.
-  let result: SchemeValue | SchemeBounceMarker | Promise<SchemeValue> = Reflect.apply(
-    proc,
-    makeCallCtx(ctx.runCtx, ctx.currentInvocation as InvocationLike | undefined),
-    [arg],
-  );
+  let result: SchemeValue | SchemeBounceMarker | Promise<SchemeValue> = maybeThen(
+    Reflect.apply(
+      proc,
+      makeCallCtx(ctx.runCtx, ctx.currentInvocation as InvocationLike | undefined),
+      [arg],
+    ),
+    // Same bare-fn boxing seam as the main apply arm — see its comment.
+    (v) => jsToScheme(ctx.runCtx ?? CONSTANT_CTX, v, {}),
+  ) as SchemeValue | SchemeBounceMarker | Promise<SchemeValue>;
   invariant(!is_bounce_marker(result), "=> builtin returned a bounce sentinel");
   if (is_promise(result)) {
     result = yield result;
@@ -3091,11 +3099,19 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
           ? (fn[tf("apply")](wrappedArgs, ctx.runCtx ?? CONSTANT_CTX, canBounce) as SchemeValue)
           : // The outer gate (is_function || is_callable_value || is_applyable) already
             // guarantees one of the three; the ternary above excludes the latter two, so
-            // only the plain-JS-function case remains here.
-            (Reflect.apply(
-              fn as (...args: unknown[]) => unknown,
-              makeCallCtx(ctx.runCtx, ctx.currentInvocation as InvocationLike | undefined),
-              wrappedArgs,
+            // only the plain-JS-function case remains here. The RESULT boxes through the
+            // membrane (settled, sync-stays-sync): the bare-fn survivor path (registry
+            // packs / legacy env.set of raw fns) is the last exit whose raw scalar
+            // returns could land unboxed in value space and die at exec's R1 strict
+            // exit — jsToScheme is identity on already-boxed values, so wrappers that
+            // box for themselves (legacy defineRosetta) pay one instanceof.
+            (maybeThen(
+              Reflect.apply(
+                fn as (...args: unknown[]) => unknown,
+                makeCallCtx(ctx.runCtx, ctx.currentInvocation as InvocationLike | undefined),
+                wrappedArgs,
+              ),
+              (v) => jsToScheme(ctx.runCtx ?? CONSTANT_CTX, v, {}),
             ) as SchemeValue);
     } finally {
       setDynamicCallSite(__savedDynamicCallSite);

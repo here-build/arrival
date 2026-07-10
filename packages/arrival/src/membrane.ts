@@ -245,6 +245,7 @@ export function toJS(value: SchemeValue) {
   // R1 strict-exit invariant below — an R1 gap found by mcp-substrate's
   // render-observation suite the day after the flip.
   if (value instanceof Values) return value.__values__.map((v) => toJS(v));
+  if (!isSchemeValue(value)) console.error("[DEBUG toJS REJECT]", typeof value, (value as object)?.constructor?.name, String(value).slice(0,100));
   invariant(
     isSchemeValue(value),
     "toJS: received a non-scheme value — toJS is the Scheme→JS membrane exit; a raw JS value is already JS. Pass it through directly.",

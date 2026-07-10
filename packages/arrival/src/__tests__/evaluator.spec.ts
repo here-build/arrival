@@ -187,8 +187,11 @@ describe("Generator Evaluator with Real LIPS Types", () => {
 
       const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "async-add"), new AExact(CONSTANT_CTX, 10n), new AExact(CONSTANT_CTX, 20n)], false);
       const result = await exec(code, { env });
-      // Result passes through fromJS which keeps numbers as-is
-      expect(result).toBe(30);
+      // The bare-fn boxing seam (evaluator main apply arm) boxes the raw return — the
+      // pre-seam raw-30 passthrough was the R1 leak, not the contract. This spec's
+      // `exec` is the evaluator-internal raw-tier wrapper (no toJS exit), so the
+      // assertion reads the BOX honestly.
+      expect((result as AExact)["arrival/toJS"]()).toBe(30);
     });
   });
 
@@ -456,8 +459,9 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         // With membrane, JS functions receive JS values (not SchemeExact)
         env.set("double", (x: number) => x * 2);
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "cond"), APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "+"), new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)], false), new ASymbol(CONSTANT_CTX, "=>"), new ASymbol(CONSTANT_CTX, "double")], false)], false);
-        // Result passes through fromJS which keeps numbers as-is
-        expect(await exec(code, { env })).toBe(6);
+        // The bare-fn boxing seam boxes the => builtin's raw return; this spec's
+        // raw-tier exec surfaces the box — unwrap to assert the value.
+        expect(((await exec(code, { env })) as AExact)["arrival/toJS"]()).toBe(6);
       });
     });
 
