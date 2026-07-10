@@ -1,17 +1,16 @@
 /**
- * store/tiering.ts — Q14 (docs/PROVENANCE-PLAN.md; docs/PROVENANCE.md §5 "payload
- * tiering", round 2 A1 / round 3 m6). Depends on Q10 ONLY (`interfaces.ts` +
- * `fakes.ts`) — built and gated against `PayloadStoreFake`'s synthetic payloads;
- * full production wiring (real emission driving `ringPut`/`flush`, and a live
- * γ-replay or memo-hit computing the `replayed`/`replayed-cached` envelope arms)
- * lands at Q16/Q17.
+ * store/tiering.ts — payload tiering. Built and gated against
+ * `PayloadStoreFake`'s synthetic payloads; full production wiring (real
+ * emission driving `ringPut`/`flush`, and a live γ-replay or memo-hit
+ * computing the `replayed`/`replayed-cached` envelope arms) is a later
+ * concern.
  *
  * ── The state machine ──────────────────────────────────────────────────────────
  * `PayloadTier` (`ring | do | pending | r2 | stub`, interfaces.ts) is the STORAGE
  * tier. `do`/`pending`/`r2`/`stub` and the NAMED `pending → r2` settlement transition
- * (m6) are already `PayloadStore`'s contract (Q10, `fakes.ts`) — this module does not
+ * are already `PayloadStore`'s contract (`fakes.ts`) — this module does not
  * re-implement that leg, it delegates. This module's OWN job is the ONE tier
- * `PayloadStore` doesn't model: `ring` (§5 A1 point 1, "in-memory ring, hot, bounded" —
+ * `PayloadStore` doesn't model: `ring` ("in-memory ring, hot, bounded" —
  * a layer ABOVE the DO/R2 store), plus the read-side envelope every tier feeds.
  *
  *   ring --flush(fits size cap)-------> do   --evict--> stub
@@ -21,34 +20,33 @@
  *
  * Every transition moves strictly toward `stub`, WRONG-STATE-IMPOSSIBLE BY
  * CONSTRUCTION rather than by runtime check: there is no "un-evict"/"un-flush" method
- * on this class or on `PayloadStore` (§5 A1 EXCLUDED: "silent degradation"; §7 tier-
- * honesty: "a payload's tier only ever moves toward stub, never silently reports a
- * tier it no longer occupies").
+ * on this class or on `PayloadStore` — silent degradation is excluded by design;
+ * tier-honesty: "a payload's tier only ever moves toward stub, never silently
+ * reports a tier it no longer occupies."
  *
  * ── The answer envelope ────────────────────────────────────────────────────────
- * §5 A1 / §7: "an answer states its evidence tier from the enum `replayed |
- * replayed-cached | recorded | stub`." This node owns the `recorded`/`stub` arms
- * ONLY (PROVENANCE-PLAN.md Q14's gate: "tier state-machine rows + tier-honesty stubs
- * half-green — recorded/stub arms; replayed arms flip in Q17"):
+ * "An answer states its evidence tier from the enum `replayed |
+ * replayed-cached | recorded | stub`." This module owns the `recorded`/`stub` arms
+ * ONLY:
  *   - any storage tier where a VALUE is present (`ring`/`do`/`pending`/`r2`) answers
  *     `recorded` — we have the payload, whether or not it is durably in R2 yet;
  *   - `stub` (value evicted) answers `stub` — "value evicted, lineage intact."
- * Q17's fuller envelope (`replay-memo.ts`) SUPERSEDES a `recorded` answer with
+ * The fuller envelope (`replay-memo.ts`) SUPERSEDES a `recorded` answer with
  * `replayed`/`replayed-cached` when a live replay or memo hit served the read instead
  * of a raw payload fetch — this module never claims either of those two arms itself
  * (tier-honesty applied to this module's own boundary: never a tier it didn't itself
  * compute).
  *
- * `PayloadEvidenceEnvelope` is deliberately the shape Q17's fuller query envelope
- * will WRAP, not duplicate — Q17 adds the walk/memo machinery around a read that
- * still bottoms out here for its `recorded`/`stub` arms.
+ * `PayloadEvidenceEnvelope` is deliberately the shape the fuller query envelope
+ * will WRAP, not duplicate — that layer adds the walk/memo machinery around a
+ * read that still bottoms out here for its `recorded`/`stub` arms.
  */
 import type { PayloadHash } from "./ids.js";
 import type { Payload, PayloadStore, PayloadTier, EvidenceTier, RetentionClass } from "./interfaces.js";
 import type { TierGate } from "../../values/egress-proxy.js";
 
 /** One ring-resident payload — this module's own bookkeeping, never durable until
- *  `flush`. `stubbed` distinguishes a pre-flush FORCED eviction (§5 A1 tier 4 applied
+ *  `flush`. `stubbed` distinguishes a pre-flush FORCED eviction (applied
  *  to a payload that never reached the store) from the ordinary ring-resident case;
  *  once `stubbed`, the slot is functionally a `stub` record forever (no un-evict). */
 interface RingSlot {
@@ -58,7 +56,7 @@ interface RingSlot {
   stubbed: boolean;
 }
 
-/** §5 A1 / §7: map a STORAGE tier to the EVIDENCE tier a `recorded`/`stub`-arm answer
+/** Map a STORAGE tier to the EVIDENCE tier a `recorded`/`stub`-arm answer
  *  carries. Exhaustive switch (house style — `records.ts`'s `assertNeverRecord`) so a
  *  future `PayloadTier` member is a compile error here, not a silently-wrong mapping. */
 export function evidenceTierOf(storageTier: PayloadTier): EvidenceTier {
@@ -77,11 +75,11 @@ export function evidenceTierOf(storageTier: PayloadTier): EvidenceTier {
   }
 }
 
-/** The payload-side read result: the answer's `EvidenceTier` (Q17 will wrap this in
- *  the fuller query envelope), the underlying STORAGE tier that produced it (honest
+/** The payload-side read result: the answer's `EvidenceTier` (the fuller query
+ *  envelope will wrap this), the underlying STORAGE tier that produced it (honest
  *  extra detail — reporting more than tier-honesty requires is never a violation of
- *  it), and the value/stampIds/retention triple that survives every tier per §5 A1 /
- *  this node's privacy-LIMIT plumbing. */
+ *  it), and the value/stampIds/retention triple that survives every tier per
+ *  this module's privacy-LIMIT plumbing. */
 export interface PayloadEvidenceEnvelope {
   readonly tier: EvidenceTier;
   readonly storageTier: PayloadTier;
@@ -102,8 +100,8 @@ export class PayloadNotRingResident extends Error {
 
 /**
  * The tier-1 (`ring`) owner, wrapping a `PayloadStore` (tiers 2-4: `do`/`pending`/
- * `r2`/`stub`) for everything past the ring. Built and gated (this node) against
- * `PayloadStoreFake` with synthetic payloads — a real adapter (Q19) satisfies the
+ * `r2`/`stub`) for everything past the ring. Built and gated against
+ * `PayloadStoreFake` with synthetic payloads — a real adapter satisfies the
  * same `PayloadStore` contract, so this class is unchanged at integration time.
  */
 export class PayloadTierMachine {
@@ -111,7 +109,7 @@ export class PayloadTierMachine {
 
   constructor(private readonly store: PayloadStore) {}
 
-  /** §5 A1 tier 1: land a payload ring-resident — hot, not yet durable. Idempotent
+  /** Land a payload ring-resident — hot, not yet durable. Idempotent
    *  upsert by hash (same contract shape as `PayloadStore.put`) as long as the hash
    *  isn't ALREADY flushed (once flushed, the store — not this ring — is the tier's
    *  source of truth; re-`ringPut`ing a flushed hash would silently resurrect a
@@ -125,7 +123,7 @@ export class PayloadTierMachine {
     });
   }
 
-  /** §5 A1 tiers 1→2/3: flush a ring-resident payload to the durable store —
+  /** Flush a ring-resident payload to the durable store —
    *  delegates entirely to `PayloadStore.put` (small-vs-oversize routing to
    *  `do`/`pending` is THAT contract's job, never duplicated here). The ring no
    *  longer holds this hash afterward: the store becomes the tier's source of truth,
@@ -140,7 +138,7 @@ export class PayloadTierMachine {
     this.ring.delete(hash);
   }
 
-  /** §5 m6: settle a `pending` (oversize, awaiting-R2) payload — pure delegation,
+  /** Settle a `pending` (oversize, awaiting-R2) payload — pure delegation,
    *  this machine adds no policy beyond `PayloadStore.settle`'s own contract
    *  ("settled" → `r2`; "failed" → `stub` under tier honesty). Only meaningful once a
    *  payload has been `flush`ed past the ring (a ring-resident payload was never
@@ -151,7 +149,7 @@ export class PayloadTierMachine {
   }
 
   /** Force-evict from ANY tier, including pre-flush ring-resident (never durable —
-   *  §5 A1 tier 4 applied a layer up from `PayloadStore.evict`). A ring-resident
+   *  applied a layer up from `PayloadStore.evict`). A ring-resident
    *  eviction degrades LOCALLY (the store never saw this hash — nothing to tell it);
    *  a flushed hash delegates to `PayloadStore.evict`. Either way: "value dropped,
    *  identity + stamps retained." */
@@ -175,7 +173,7 @@ export class PayloadTierMachine {
     return (await this.store.get(hash)).tier;
   }
 
-  /** §5 A1 / §7: the full payload-side read — tier-honest by construction, since it
+  /** The full payload-side read — tier-honest by construction, since it
    *  is the SAME switch (`evidenceTierOf`) every tier, ring included, is computed
    *  through. */
   async read(hash: PayloadHash): Promise<PayloadEvidenceEnvelope> {
@@ -220,7 +218,7 @@ export class PayloadTierMachine {
 }
 
 /**
- * Q14's egress-proxy integration (docs/PROVENANCE-PLAN.md Q14's NOTE): builds the
+ * The egress-proxy integration: builds the
  * `TierGate` `egress-proxy.ts`'s `egressContainerProxy` consumes, from a pre-resolved
  * `PayloadTierMachine.snapshot` and a caller-supplied `keyToHash` — the proxy's
  * `EgressReader` keys are container-shape keys (array indices / object property
@@ -228,8 +226,7 @@ export class PayloadTierMachine {
  * payload hash (`keyToHash` returns `undefined`) always passes through ungated —
  * this machine has no opinion on non-payload-backed elements. When every tracked
  * hash's envelope reports `tier !== "stub"` (e.g. every payload is ring-resident),
- * `allows` is `true` for every key — the gate is a pure pass-through, matching the
- * task's byte-stability requirement.
+ * `allows` is `true` for every key — the gate is a pure pass-through, byte-stable.
  */
 export function tierGateFromSnapshot(
   keyToHash: (key: string) => PayloadHash | undefined,
@@ -245,8 +242,8 @@ export function tierGateFromSnapshot(
     stubbedValue(key: string): unknown {
       const hash = keyToHash(key);
       const entry = hash === undefined ? undefined : snapshot.get(hash);
-      // §5 A1 tier 4's phrase, made machine-readable: identity (the hash) + stamps
-      // survive; the value itself does not.
+      // "Value dropped, identity + stamps retained," made machine-readable:
+      // identity (the hash) + stamps survive; the value itself does not.
       return { "provenance/tier": "stub" as const, payloadHash: hash, stampIds: entry?.stampIds ?? [] };
     },
   };

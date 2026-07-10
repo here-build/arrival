@@ -1,21 +1,21 @@
 /**
- * store/flush.ts — Q13: §5 C3's flush policy ("the in-memory ring flushes to DO
+ * store/flush.ts — the flush policy ("the in-memory ring flushes to DO
  * storage AT PORTS — every await is a port — durability boundaries coincide with
  * meaning boundaries... with a size/time backstop and a forced flush on the
  * pre-hibernation hook. Port completion BARRIERS on the durable write — this is
  * exactly what DO output gates provide natively; a failed write kills the request
  * and the idempotent record ids make the retry's re-emission safe").
  *
- * INTERFACE-LEVEL, fake-backed (PROVENANCE-PLAN.md's harness decision — "the DO
- * surface is built interface-first... a thin workerd suite validates the real adapter
- * against the fakes' contract" — that adapter is Q19's, not this node's). `ProvenanceRing`
+ * INTERFACE-LEVEL, fake-backed — "the DO surface is built interface-first...
+ * a thin workerd suite validates the real adapter against the fakes' contract"
+ * (that adapter is a later concern, never this file's). `ProvenanceRing`
  * wraps a `ProvenanceStore` and proves the CONTRACT this file's header quotes:
  *   - buffered `append`s are NOT durable until `flush` (or a backstop/pre-hibernation
  *     flush) runs;
  *   - `flush`/`atPort` AWAIT the underlying `store.append` calls — the barrier;
  *   - a failed underlying write leaves the buffer INTACT (never silently dropped) so
  *     a retried `flush` re-emits safely, relying on `ProvenanceStore.append`'s own
- *     idempotent-upsert contract (§5 C2/D1) for records that landed before the
+ *     idempotent-upsert contract for records that landed before the
  *     failure;
  *   - a size backstop (`maxRecords`) and a deterministic virtual-clock time backstop
  *     (`tick`/`flushAged`, the SAME no-real-timers idiom `PayloadStoreFake.step` uses)
@@ -25,11 +25,12 @@
  *
  * Deliberately NOT wired into `store/emit.ts`'s `emit*` functions: those already
  * `await store.append` directly, one record per call — already durable-write-
- * barriered at the SINGLE-RECORD grain (§5 C3's alignment holds trivially there).
+ * barriered at the SINGLE-RECORD grain (the alignment holds trivially there).
  * This ring exists for BATCHING multiple records across one PURE STRETCH between
- * ports into one flush — real wiring into the wireframe-walking driver is Q15/Q16's
- * job (the driver that decides where "a port" is at the evaluator level), not this
- * node's; this file lands the mechanism and proves its contract against the fakes.
+ * ports into one flush — real wiring into the wireframe-walking driver is a later
+ * concern (the driver that decides where "a port" is at the evaluator level), never
+ * this file's; this file lands the mechanism and proves its contract against the
+ * fakes.
  */
 import type { ProvenanceStore } from "./interfaces.js";
 import type { RegionId } from "./ids.js";
@@ -95,11 +96,11 @@ export class ProvenanceRing {
     return (this.buffers.get(regionId) ?? []).map((b) => b.record);
   }
 
-  /** §5 C3's durable-write barrier: AWAIT every buffered record's `store.append` for
+  /** The durable-write barrier: AWAIT every buffered record's `store.append` for
    *  `regionId`, in buffered (emission) order, THEN drain the buffer — draining only
    *  after every write succeeds, so a write failure partway through leaves the WHOLE
    *  buffer intact (never a partial drain): the records that DID land before the
-   *  throw are already durable (idempotent upsert, §5 C2/D1) and a retried `flush`
+   *  throw are already durable (idempotent upsert) and a retried `flush`
    *  simply re-appends everything, landing the already-durable ones as no-op
    *  overwrites and the rest for the first time — "a failed write kills the request...
    *  the idempotent record ids make the retry's re-emission safe," exactly. */
@@ -136,7 +137,7 @@ export class ProvenanceRing {
     }
   }
 
-  /** §5 C3's port-completion barrier, as a wrapper: run `fn` (the port's own work),
+  /** The port-completion barrier, as a wrapper: run `fn` (the port's own work),
    *  then AWAIT a flush of `regionId`'s buffer BEFORE this function's own promise
    *  settles — "a port's completion does not report until its records are durable."
    *  A `fn` that throws skips the flush entirely (the port itself failed; there is no
@@ -154,7 +155,7 @@ export class ProvenanceRing {
    *  buffered records, awaited, sequentially (never abandon a later region's flush
    *  because an earlier one is still pending — hibernation must not begin with any
    *  region left dirty). A region whose flush fails here throws, same as `flush`
-   *  itself — a real DO adapter (Q19) decides how to surface that to the runtime;
+   *  itself — a real DO adapter decides how to surface that to the runtime;
    *  this interface only guarantees the attempt is made and failures are never
    *  swallowed. */
   async preHibernate(): Promise<void> {

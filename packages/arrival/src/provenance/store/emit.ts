@@ -1,40 +1,30 @@
 /**
- * store/emit.ts — Q11a: the retrospective-stream EMISSION CORE (docs/PROVENANCE.md §5;
- * docs/PROVENANCE-PLAN.md Q11a "record emission core, flag-gated sidecar"). Pure
- * functions that build ONE `ProvenanceRecord` and append it through the `ProvenanceStore`/
- * `PayloadStore` ports (Q10) — the "deciding WHEN to mint one of these" half `records.ts`'s
- * own header explicitly named as NOT that file's job.
+ * store/emit.ts — the retrospective-stream EMISSION CORE. Pure functions that
+ * build ONE `ProvenanceRecord` and append it through the `ProvenanceStore`/
+ * `PayloadStore` ports — the "deciding WHEN to mint one of these" half
+ * `records.ts`'s own header explicitly names as NOT that file's job.
  *
- * FLAG-GATED SIDECAR (task-mandated shape): `isEmissionEnabled()` gates every `emit*`
- * function's body, checked FIRST, before any hashing/store/payload work — default FALSE.
- * "Sunset byte-identical when off" is therefore a one-line argument per function: the
- * flag read is the only thing that runs, nothing is allocated, nothing awaited, no store
- * method is ever called.
+ * FLAG-GATED SIDECAR: `isEmissionEnabled()` gates every `emit*` function's
+ * body, checked FIRST, before any hashing/store/payload work — default FALSE.
+ * "Sunset byte-identical when off" is therefore a one-line argument per
+ * function: the flag read is the only thing that runs, nothing is allocated,
+ * nothing awaited, no store method is ever called. Flag OFF costs a boolean
+ * check only.
  *
- * Territory: mint / mux-decision / fan-instantiation / ingress-binding were Q11a's
- * kinds. `emitTrackOpen`/`emitTrackClose`/`emitHostSchedule` are Q11b's addition —
- * PURE builders, same flag-gated shape as their Q11a siblings; the DECIDING-WHEN
- * (which B3 counter mutation triggers a call, which comparator invocation accumulates
- * a triple) is `src/values/primitives/region-scope.ts`'s job, per the Q11b split
- * (that file serializes with Q13/Q15, this one doesn't).
+ * Territory: mint / mux-decision / fan-instantiation / ingress-binding, plus
+ * `emitTrackOpen`/`emitTrackClose`/`emitHostSchedule` — PURE builders, all the
+ * same flag-gated shape. The DECIDING-WHEN (which counter mutation triggers a
+ * call, which comparator invocation accumulates a triple) is
+ * `src/values/primitives/region-scope.ts`'s job, never this file's.
  *
- * MEASURED OVERHEAD (Q11a's own risk note: "measure in-step, budget ~µs/record") —
- * `__benchmarks__/provenance-emit.bench.test.ts`, in-process against the store fakes
- * (a LOWER bound on real DO-storage latency, not an upper one): `emitMint` flag OFF
- * ≈4.3µs/record (async-call overhead only — no store/payload work runs); `emitMint`
- * flag ON ≈5.2µs/record (hash + payload put + seq alloc + append); the three
- * payload-free kinds flag ON ≈0.5–1.0µs/record (`emitMuxDecision`/
- * `emitFanInstantiation`/`emitIngressBinding` — no payload hashing/put). All comfortably
- * inside the plan's µs/record budget.
- *
- * Idempotence (§5 C2/D1, the W3 law): every `emit*` function derives its record's
- * identity ENTIRELY from the caller-supplied `RecordId` (never from `seq`, which a fresh
+ * Idempotence: every `emit*` function derives its record's identity ENTIRELY
+ * from the caller-supplied `RecordId` (never from `seq`, which a fresh
  * `allocateSeq` call mints every time, even on a retry) — `ProvenanceStoreFake.append`
  * upserts by `recordIdKey(record.id)`, so two `emit*` calls carrying the SAME `RecordId`
  * for the SAME logical event land as ONE record in `readStream`'s output, exactly once,
  * regardless of how many times (or under what fault injection) the caller retries. This
  * file adds no de-duplication machinery of its own — the store's upsert contract IS the
- * mechanism, per §5 C2/D1: "persistence is IDEMPOTENT UPSERT keyed by record id."
+ * mechanism: persistence is IDEMPOTENT UPSERT keyed by record id.
  */
 import type { PayloadHash, RecordId, RegionId, RegionSeq } from "./ids.js";
 import type {
@@ -50,19 +40,18 @@ import type {
 import type { Payload, PayloadStore, ProvenanceStore } from "./interfaces.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The flag — default OFF, per the task brief ("DEFAULT OFF — sunset byte-identical
-// when off"). Q20 eventually governs the SEPARATE eager-oracle flag
-// (`values/op-helpers.ts`'s `isEagerProvenanceOracleEnabled`) — this is a DIFFERENT
-// flag, for a DIFFERENT mechanism (the retrospective STREAM, not the eager stamp
+// The flag — default OFF, sunset byte-identical when off. This is a SEPARATE flag
+// from the eager-oracle flag (`values/op-helpers.ts`'s `isEagerProvenanceOracleEnabled`)
+// — a DIFFERENT mechanism (the retrospective STREAM, not the eager stamp
 // accumulation), never read or written by this file's own logic.
 // ─────────────────────────────────────────────────────────────────────────────
 
 let emissionEnabled = false;
 
-/** Is the Q11a retrospective-stream emission sidecar live? False by default — nothing
+/** Is the retrospective-stream emission sidecar live? False by default — nothing
  *  in production calls an `emit*` function or touches a `ProvenanceStore`/`PayloadStore`
- *  until a caller flips this AND wires a real store (the wireframe-walking driver,
- *  Q15/Q16). Test-only today, exactly like Q9's `isEagerProvenanceOracleEnabled`. */
+ *  until a caller flips this AND wires a real store (the wireframe-walking driver).
+ *  Test-only today, exactly like the eager-oracle flag's sibling. */
 export function isEmissionEnabled(): boolean {
   return emissionEnabled;
 }
@@ -73,19 +62,20 @@ export function setEmissionEnabled(enabled: boolean): void {
   emissionEnabled = enabled;
 }
 
-/** §5 C6's stream-header placeholder value: the semantics-epoch this wave mints when no
- *  richer interpreter-version source exists yet. Q18 ("offload protocol") is the node
- *  that makes epoch comparison load-bearing (worker-side refusal / sampled verification
- *  on mismatch) — Q11a's job is only to land a real, stable value the header can carry,
- *  following the FNV-hash versioning convention this codebase already uses
- *  (`wireframe/hash.ts`'s `template-v0`/`site-v0` prefixes): bump the trailing digit,
- *  never the shape, when the interpreter's replay-relevant semantics actually change. */
+/** The stream-header placeholder value: the semantics-epoch minted when no richer
+ *  interpreter-version source exists yet. The offload protocol is what makes epoch
+ *  comparison load-bearing (worker-side refusal / sampled verification on
+ *  mismatch) — this file's job is only to land a real, stable value the header
+ *  can carry, following the FNV-hash versioning convention this codebase already
+ *  uses (`wireframe/hash.ts`'s `template-v0`/`site-v0` prefixes): bump the
+ *  trailing digit, never the shape, when the interpreter's replay-relevant
+ *  semantics actually change. */
 export const DEFAULT_SEMANTICS_EPOCH = "arrival-provenance-v0";
 
 /** FNV-1a over a JSON-peeled payload — the SAME algorithm `wireframe/hash.ts`'s private
  *  `fnv1a` uses (one content-hash idiom across the codebase), a separate small copy on
  *  purpose: that one hashes a `WireframeGraph`'s canonical TEXT (a prospective-layer
- *  concern), this one hashes a retrospective PAYLOAD (value + stamp ids, §5 D2) — this
+ *  concern), this one hashes a retrospective PAYLOAD (value + stamp ids) — this
  *  store leaf has no reason to depend on the wireframe layer for four lines of math.
  *  `stampIds` are folded in (not just `value`) so two mints with identical VALUES but
  *  different provenance lineage never collide on payload identity. */
@@ -109,12 +99,12 @@ function hashPayload(value: unknown, stampIds: readonly number[]): PayloadHash {
   return `payload-v0:${(h >>> 0).toString(16).padStart(8, "0")}`;
 }
 
-/** §5 C6: write the region's stream header, ONCE — idempotent-by-absence, never
+/** Write the region's stream header, ONCE — idempotent-by-absence, never
  *  overwrites an already-written header (a region's semantics epoch is fixed at
- *  region-open per spec; a second call under a DIFFERENT epoch string is a caller bug
- *  this function refuses to paper over, not something Q11a resolves — Q13 owns the real
- *  region-open lifecycle this rides on top of). No-ops under the flag like every other
- *  function here. */
+ *  region-open; a second call under a DIFFERENT epoch string is a caller bug this
+ *  function refuses to paper over — it rides on top of the real region-open
+ *  lifecycle, never owns it). No-ops under the flag like every other function
+ *  here. */
 export async function ensureStreamHeader(
   store: ProvenanceStore,
   regionId: RegionId,
@@ -125,7 +115,7 @@ export async function ensureStreamHeader(
   if (existing === undefined) await store.putHeader(regionId, { semanticsEpoch });
 }
 
-/** §5 A6 row 1 + §5 D2: a MINT — the one kind carrying a payload ("every payload is
+/** A MINT — the one kind carrying a payload ("every payload is
  *  distinct information," never aggregates). Persists the payload (value + stamp ids)
  *  THEN appends the record referencing its hash — payload lands before the record that
  *  points to it, so a reader never observes a record whose payload hash resolves to
@@ -150,7 +140,7 @@ export async function emitMint(opts: {
   return record;
 }
 
-/** §5 A6 row 2 + §1 A2: a mux DECISION — port-coupled muxes only (a pure-selector mux
+/** A mux DECISION — port-coupled muxes only (a pure-selector mux
  *  collapses into its wire and is never recorded; see `records.ts`'s `MuxDecisionRecord`
  *  doc). `arm` is the taken arm's 0-based, wireframe-arm-order index. */
 export async function emitMuxDecision(opts: {
@@ -167,10 +157,10 @@ export async function emitMuxDecision(opts: {
   return record;
 }
 
-/** §5 A6 row 3: a FAN INSTANTIATION — one fan instance came into being at `id`'s
+/** A FAN INSTANTIATION — one fan instance came into being at `id`'s
  *  trailing ordinal. No payload of its own; presence (aggregated: count) is the whole
- *  fact — see `records.ts`'s `AggregationRun` for the path-scoped RLE folding a later
- *  node (Q12) performs OVER a run of these, never this function's own concern. */
+ *  fact — see `records.ts`'s `AggregationRun` for the path-scoped RLE folding
+ *  performed OVER a run of these, never this function's own concern. */
 export async function emitFanInstantiation(opts: {
   readonly store: ProvenanceStore;
   readonly regionId: RegionId;
@@ -184,7 +174,7 @@ export async function emitFanInstantiation(opts: {
   return record;
 }
 
-/** §5 A6 row 4: an INGRESS BINDING — a binder's ingress bound at this ordinal, over
+/** An INGRESS BINDING — a binder's ingress bound at this ordinal, over
  *  STABLE wiring (the structural wiring fact; a per-iteration VALUE that itself varies
  *  is a `MintRecord` at whatever port produced it, never this kind — see `records.ts`'s
  *  `IngressBindingRecord` doc). */
@@ -201,12 +191,12 @@ export async function emitIngressBinding(opts: {
   return record;
 }
 
-/** §5 A6 row 5 (open half) + Q11b: a TRACK OPENED — one re-entrant (scheme→JS) call
- *  started under a `RegionScope` (`region-scope.ts`'s B3 counters: `pending++`).
- *  Aggregates (counter deltas, per the applicability table) — this function mints one
- *  RAW record per call; folding a run of these into an `AggregationRun` is Q12's job,
- *  never this one's. No payload: presence at `id.ordinalPath`'s trailing ordinal is
- *  the whole fact. */
+/** A TRACK OPENED — one re-entrant (scheme→JS) call started under a
+ *  `RegionScope` (`region-scope.ts`'s pending-counter: `pending++`). Aggregates
+ *  (counter deltas, per the applicability table) — this function mints one RAW
+ *  record per call; folding a run of these into an `AggregationRun` is never
+ *  this function's own job. No payload: presence at `id.ordinalPath`'s trailing
+ *  ordinal is the whole fact. */
 export async function emitTrackOpen(opts: {
   readonly store: ProvenanceStore;
   readonly regionId: RegionId;
@@ -220,9 +210,9 @@ export async function emitTrackOpen(opts: {
   return record;
 }
 
-/** §5 A6 row 5 (close half) + §3 I4 + Q11b: the SAME track's completion — `settled` is
- *  the promise-pending distinction (§4 R1: "a promise egress keeps its track PENDING
- *  until settled"). `region-scope.ts`'s `withRegionCall` only ever reaches its
+/** The SAME track's completion — `settled` is the promise-pending distinction
+ *  ("a promise egress keeps its track PENDING until settled"). `region-scope.ts`'s
+ *  `withRegionCall` only ever reaches its
  *  `finally` (where this fires) AFTER the call has settled one way or another, so
  *  production callers always pass `settled: true` here — `settled: false` stays
  *  representable for tests exercising the record SHAPE the incomplete door's
@@ -242,7 +232,7 @@ export async function emitTrackClose(opts: {
   return record;
 }
 
-/** §5 A6 row 6 + §5 D5 + Q11b: an order-dependent selector host's FULL comparator
+/** An order-dependent selector host's FULL comparator
  *  schedule (e.g. one `sort` call's every `less?` verdict) — "the sequence IS the
  *  record," never aggregated, never split across multiple `HostScheduleRecord`s for
  *  one host invocation. Callers accumulate triples over the host's run (see

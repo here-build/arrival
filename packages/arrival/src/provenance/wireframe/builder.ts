@@ -1,48 +1,48 @@
 /**
- * Q8a (PROVENANCE-PLAN.md wave 5) — THE WIREFRAME BUILDER CORE. `classify()`
- * generalized whole-program (execution-plan-wireframe.md §2, AS AMENDED by
- * docs/PROVENANCE.md §1): build the PROSPECTIVE template graph over a program's
- * top-level defines + main expression.
+ * THE WIREFRAME BUILDER CORE. `classify()` generalized whole-program: build the
+ * PROSPECTIVE template graph over a program's top-level defines + main
+ * expression.
  *
  * THE CUT-AND-CLOSE ALGORITHM. Walk each surface expression; every DESIGNATED
- * subterm (§1: a membrane-crossing port, a PORT-COUPLED mux, a fan instantiation
+ * subterm (a membrane-crossing port, a PORT-COUPLED mux, a fan instantiation
  * point, a binder, a call to a port-reaching define) becomes a NODE; the maximal
  * pure residue around the cuts is ONE WIRE — `unevalWire` closes it into a
  * lambda-lifted arrival lambda whose params are exactly its ingress (cut node
- * egresses + env-supplied slots), with wire-locality enforced at emission. This is
- * §1's collapse rule operationally: "maximal pure connected subgraphs fold to one
- * wire. Ports break segments by definition, so a wire body structurally contains
- * no source, sink, or port-coupled mux — wire purity is by construction."
+ * egresses + env-supplied slots), with wire-locality enforced at emission. This
+ * is the collapse rule operationally: maximal pure connected subgraphs fold to
+ * one wire. Ports break segments by definition, so a wire body structurally
+ * contains no source, sink, or port-coupled mux — wire purity is by
+ * construction.
  *
- * SELECTOR-CONE REACHABILITY IS OWNED HERE (plan Q8a amendment 1): Q3's classifier
- * supplies DECLARATIONS only; whether a mux stays a node is builder analysis. A mux
- * is port-coupled iff its selector's backward cone reaches a port. Computed as
- * `reachesPort(classify(selector, reachClassifier, subst))` where
+ * SELECTOR-CONE REACHABILITY IS OWNED HERE: the declaration-driven classifier
+ * supplies DECLARATIONS only; whether a mux stays a node is builder analysis. A
+ * mux is port-coupled iff its selector's backward cone reaches a port. Computed
+ * as `reachesPort(classify(selector, reachClassifier, subst))` where
  *   - `subst` is the builder's own let-walk substitution (the same map
- *     `classifyLet` builds internally, threaded in via classify's Q8a param) — so
- *     `(let ((y (src))) (if y …))` couples through the binding;
+ *     `classifyLet` builds internally, threaded in via classify's own param) —
+ *     so `(let ((y (src))) (if y …))` couples through the binding;
  *   - `classify`'s `field` arm descends the FOCUSED child only (siblings pruned
  *     structurally) — `walk()`'s field-arm demand pattern, EXTENDED to selector
- *     reachability rather than rebuilt (amendment 1's instruction): a selector
- *     `(:flag (src))` couples, `(:flag cfg)` over a plain slot does not;
+ *     reachability rather than rebuilt: a selector `(:flag (src))` couples,
+ *     `(:flag cfg)` over a plain slot does not;
  *   - `reachClassifier` additionally lowers PORT-REACHING DEFINE names to `opaque`
  *     (reachesPort's conservative arm), closing the transitive gap the prelude
  *     partition's fixpoint closed one layer down: `(if (helper x) …)` couples when
  *     `helper` wraps a fetch.
- * A pure-selector mux collapses INTO its wire (§1 A2): its decision is a
- * deterministic function of frozen ingress, rederived by γ — the wire's params are
- * its full FV set, BOTH arms' ingress included (the m3 precision trade; do not
- * "fix" by re-recording).
+ * A pure-selector mux collapses INTO its wire: its decision is a deterministic
+ * function of frozen ingress, rederived by γ — the wire's params are its full FV
+ * set, BOTH arms' ingress included (a deliberate precision trade; do not "fix" by
+ * re-recording).
  *
- * I5 EXTERIOR COLLAPSE (§3): a fan is a REGION HOST and presents as ONE node from
- * the enclosing graph; the callback body's own wireframe is the region's private
+ * I5 EXTERIOR COLLAPSE: a fan is a REGION HOST and presents as ONE node from the
+ * enclosing graph; the callback body's own wireframe is the region's private
  * `template` interior (replayed on demand), never spliced into G. No region
- * field-ports exist (I5 LIMIT: field-demand at a region boundary answers by
- * REPLAY, not by records).
+ * field-ports exist (LIMIT: field-demand at a region boundary answers by REPLAY,
+ * not by records).
  *
- * LOOP WIREFRAMING (Q8a′, PROVENANCE-PLAN.md wave 6; `wireframe/loops.ts`):
+ * LOOP WIREFRAMING (`wireframe/loops.ts`):
  *   - binder{cycles} nodes (named-let / do) get a REAL private interior — the
- *     loop body's own `GraphBuilder` (Q8a's I5 pattern), never spliced into the
+ *     loop body's own `GraphBuilder` (the I5 pattern), never spliced into the
  *     enclosing graph. A call to the loop's own name (named-let) or the step
  *     expressions (`do`) are the BACKEDGE (a `recur` node) — they feed the
  *     NEXT iteration's `params`, never a value escaping the loop; the binder
@@ -50,42 +50,39 @@
  *     loop body wireframes through the interior exactly like any other cut.
  *     `buildNamedLetBinder`/`buildDoBinder`/`addRecur` below; `wireframe/
  *     loops.ts` supplies `do`'s pure binding-shape parser + a visited-set-
- *     guarded reachability walk (V4's termination discipline). A declared-
+ *     guarded reachability walk (the termination discipline). A declared-
  *     `loop`-role op with no known recursive shape (dead code today) gets an
  *     empty interior — no recursive structure to invent.
  *   - A local closure (`letrec`-bound lambda) wrapping a port under-designates a
  *     mux whose selector calls it (classify never expands call sites into callee
  *     bodies): the port itself is still cut to a node, so replay stays sound (the
- *     abstract cone includes its ingress); designation precision re-audits at Q9's
- *     agreement corpus.
+ *     abstract cone includes its ingress); designation precision re-audits
+ *     against the agreement corpus.
  *   - A sink cut in non-tail `begin` position leaves the wire a sequencing
- *     reference to the sink node (D6 territory) — tolerated, not modeled.
- *   - Hash/path keying is Q8b.
+ *     reference to the sink node — tolerated, not modeled.
  *
- * STRUCT-FACT WIRES (Q8c, PROVENANCE-PLAN.md wave 7; docs/PROVENANCE.md §2 R2 + A5,
- * §6 demand lattice): `factTagOf` below tags an `emitWire` output whose ENTIRE closed
- * body is a single structural-fact read — `(length p)` / `(vector-length p)` /
- * `(string-length p)`, unshadowed, never a wireframe-material call, resolving to the
- * hermetic BASE primitive — mirroring the values-layer TERM name (P8: ONE term,
- * `arrival/tagless-final/length`, for all three surface spellings) rather than a
- * per-surface-verb vocabulary. Per A5: "struct-fact wires are value wires carrying a
- * fact TAG, not a second edge species" — NO new node kind, NO new wire species; the
- * tag lives on `Wire.fact` (types.ts) and is additive (an untagged wire is byte-
- * identical to before this landing). The count-demand CONSUMER of the tag —
- * `reachableNodesForDemand`'s `"count"` grade, routing through fact wires only and
- * never an element wire — lives in `wireframe/loops.ts`.
+ * STRUCT-FACT WIRES: `factTagOf` below tags an `emitWire` output whose ENTIRE
+ * closed body is a single structural-fact read — `(length p)` / `(vector-length
+ * p)` / `(string-length p)`, unshadowed, never a wireframe-material call,
+ * resolving to the hermetic BASE primitive — mirroring the values-layer TERM
+ * name (ONE term, `arrival/tagless-final/length`, for all three surface
+ * spellings) rather than a per-surface-verb vocabulary. Struct-fact wires are
+ * value wires carrying a fact TAG, not a second edge species — NO new node
+ * kind, NO new wire species; the tag lives on `Wire.fact` (types.ts) and is
+ * additive (an untagged wire is byte-identical). The count-demand CONSUMER of
+ * the tag — `reachableNodesForDemand`'s `"count"` grade, routing through fact
+ * wires only and never an element wire — lives in `wireframe/loops.ts`.
  *
- * BARE DECLARED-ROLE REFERENCES (Q9 finding 5, V's ruling 2026-07-10): "we need to
- * provenance rosetta-to-rosetta; we actually do not care on reassignments here."
- * `walkForCuts` designates a node for a declared-role name (source/sink/fan/loop)
- * occurring as a bare VALUE, not just at an application head — closing the A21 HOF
- * hole's SILENT half (`(define (call-source f) (f)) (call-source fetch-item)`:
- * `fetch-item` now cuts to a `source` node at the argument occurrence, so the
- * prospective cone sees it even though the call that actually fires it, `(f)`, is
- * hidden behind a parameter string-based dispatch can't follow). Ruled OUT of
- * scope, deliberately unaddressed: chasing an ALIAS to its later call site (a
- * let-bound name later applied, `(let ((g fetch-item)) (g))`'s `(g)`) — only the
- * direct occurrence gets a node, never a tracked binding.
+ * BARE DECLARED-ROLE REFERENCES: `walkForCuts` designates a node for a
+ * declared-role name (source/sink/fan/loop) occurring as a bare VALUE, not just
+ * at an application head — closing a HOF hole's SILENT half
+ * (`(define (call-source f) (f)) (call-source fetch-item)`: `fetch-item` now
+ * cuts to a `source` node at the argument occurrence, so the prospective cone
+ * sees it even though the call that actually fires it, `(f)`, is hidden behind
+ * a parameter string-based dispatch can't follow). LIMIT, deliberately
+ * unaddressed: chasing an ALIAS to its later call site (a let-bound name later
+ * applied, `(let ((g fetch-item)) (g))`'s `(g)`) — only the direct occurrence
+ * gets a node, never a tracked binding.
  */
 import type { SchemeValue } from "../../values/types.js";
 import { APair } from "../../values/primitives/APair.js";
@@ -109,20 +106,20 @@ import type {
   WireframeProgram,
 } from "./types.js";
 
-/** Q8c (§2 R2 + A5) — the DECLARED-TERM vocabulary of surface ops whose contract reads
+/** The DECLARED-TERM vocabulary of surface ops whose contract reads
  *  ONLY a container's structural fact, never its element union. Mirrors
  *  `values/__tests__/laws/_tables/terms.ts`'s `arrival/tagless-final/length` verbs
- *  EXACTLY (`length`/`vector-length`/`string-length` — ONE term, P8) — every spelling
+ *  EXACTLY (`length`/`vector-length`/`string-length` — ONE term) — every spelling
  *  here tags the SAME `verb: "length"` (`factTagOf` below), never a per-spelling tag. */
 const FACT_VERBS: ReadonlySet<string> = new Set(["length", "vector-length", "string-length"]);
 
 export interface WireframeBuildOptions {
-  /** Q3's declaration-driven classifier — the ONE role read (`.provenanceRole`). */
+  /** The declaration-driven classifier — the ONE role read (`.provenanceRole`). */
   readonly classifier: Classifier;
   /** Is this name resolvable in the hermetic BASE env (natives, macros, base
    *  packs)? Production derives it from the sealed base chain; tests use a set. */
   readonly isBaseName: (name: string) => boolean;
-  /** Q4's contract-extracted callback roles for a host verb, when available —
+  /** Contract-extracted callback roles for a host verb, when available —
    *  stamped onto fan nodes as data (never consulted for designation here). */
   readonly callbackRolesOf?: (op: string) => CallbackRoles | undefined;
 }
@@ -145,8 +142,8 @@ interface WalkEnv {
   readonly subst: Subst;
   readonly frames: readonly WireFrame[];
   /** The CURRENT (innermost) loop's recur name, when walking inside a binder's
-   *  `interior` graph; `undefined` outside any loop body (Q8a′, §1: "loop
-   *  variables wired from the body's recur-position egress"). A call to this
+   *  `interior` graph; `undefined` outside any loop body (loop variables wire
+   *  from the body's recur-position egress). A call to this
    *  name is the BACKEDGE — intercepted in `walkForCuts` before the normal
    *  materialNames/role dispatch, never falling through as an ordinary
    *  application. Does NOT cross an I5 region boundary (a fan's own `template`
@@ -246,7 +243,7 @@ class GraphBuilder {
   }
 
   /** Wireframe the graph's VALUE expression: an out-port node + the egress wire.
-   *  A form that IS entirely a sink keeps `egress` null (§2: a sink is a port with
+   *  A form that IS entirely a sink keeps `egress` null (a sink is a port with
    *  no egress wire — nothing flows onward). */
   emitEgress(expr: unknown, env: WalkEnv): void {
     this.walkForCuts(expr, env);
@@ -272,7 +269,7 @@ class GraphBuilder {
     this.wires.push({ ...emitted, consumer, ...(fact !== undefined ? { fact } : {}) });
   }
 
-  /** Q8c (§2 A5) — tag a wire whose ENTIRE closed body is a single structural-fact
+  /** Tag a wire whose ENTIRE closed body is a single structural-fact
    *  read: `(length p)` / `(vector-length p)` / `(string-length p)`. Guards, in the
    *  same teaching order `unevalWire`'s free-variable partition uses:
    *   - `env.subst.has(op)` — a LOCAL binding shadows the name (a let/lambda param
@@ -294,7 +291,7 @@ class GraphBuilder {
     return { kind: "fact", verb: "length" };
   }
 
-  /** Selector-cone reachability (Q8a amendment 1) — see the file header. */
+  /** Selector-cone reachability — see the file header. */
   private selectorReachesPort(selector: unknown, env: WalkEnv): boolean {
     return reachesPort(classify(selector as SchemeValue, this.bctx.reachClassifier, env.subst));
   }
@@ -306,24 +303,22 @@ class GraphBuilder {
    *  enclosing `emitWire` to close. */
   private walkForCuts(expr: unknown, env: WalkEnv): void {
     if (this.cuts.has(expr)) return;
-    // Q9 finding 5 (V's ruling, 2026-07-10 — "we need to provenance rosetta-to-
-    // rosetta; we actually do not care on reassignments here"): a DECLARED-ROLE
-    // name (source/sink/fan/loop — a rosetta whose `.provenanceRole` is a PORT
-    // role, not pipe/undefined) occurring as a bare VALUE — not applied at THIS
-    // occurrence — is a rosetta-to-rosetta flow (e.g. `(call-source fetch-item)`,
-    // where `fetch-item` fires later, inside `call-source`'s own body, through a
-    // parameter string-based dispatch can't see through). DESIGNATE it: cut a node
-    // for the occurrence itself, mirroring the node an application of the same
-    // name would build (`buildArgNode`'s `role` arm below), but with no ingress
-    // operands — there is no call HERE, the callable is a value at this site.
-    // source/sink get their own faithful kind (source is what the cone-collector
-    // in w1-harness.ts's `graphSourceNames` actually reads); fan/loop fall back to
-    // `opaque` (no call site here to derive a template/interior shape from — the
-    // ledger's own phrasing: "even a conservative opaque/quarantine one").
-    // DELIBERATELY LOCAL — this fires on the occurrence, never chases a binding:
+    // A DECLARED-ROLE name (source/sink/fan/loop — a rosetta whose
+    // `.provenanceRole` is a PORT role, not pipe/undefined) occurring as a bare
+    // VALUE — not applied at THIS occurrence — is a rosetta-to-rosetta flow
+    // (e.g. `(call-source fetch-item)`, where `fetch-item` fires later, inside
+    // `call-source`'s own body, through a parameter string-based dispatch can't
+    // see through). DESIGNATE it: cut a node for the occurrence itself,
+    // mirroring the node an application of the same name would build
+    // (`buildArgNode`'s `role` arm below), but with no ingress operands — there
+    // is no call HERE, the callable is a value at this site. source/sink get
+    // their own faithful kind (source is what the cone-collector in
+    // w1-harness.ts's `graphSourceNames` actually reads); fan/loop fall back to
+    // `opaque` (no call site here to derive a template/interior shape from —
+    // even a conservative opaque/quarantine designation is enough).
+    // LIMIT, DELIBERATE — this fires on the occurrence, never chases a binding:
     // a let-alias's OWN later call site (`(let ((g fetch-item)) (g))`'s `(g)`)
-    // stays exactly as under-designated as before (out of scope per the ruling —
-    // "do not chase aliases"); only the direct reference gets a node, wherever
+    // stays under-designated; only the direct reference gets a node, wherever
     // walkForCuts naturally reaches one (a let RHS, an if/cond arm, a call
     // argument — no new machinery, no alias tracking).
     if (expr instanceof ASymbol) {
@@ -365,7 +360,7 @@ class GraphBuilder {
               this.cuts.set(expr, this.buildMux(expr, rest, form, env));
               return;
             }
-            // Pure-selector mux — collapses INTO the wire (§1 A2); keep walking for
+            // Pure-selector mux — collapses INTO the wire; keep walking for
             // designated subterms in selector/arms (they cut out of the wire).
             this.walkForCuts(test, env);
             for (const arm of chainOf(rest.cdr)) this.walkForCuts(arm, env);
@@ -396,7 +391,7 @@ class GraphBuilder {
             this.walkLet(expr, form as "let" | "let*" | "letrec" | "letrec*", env);
             return;
           case "do":
-            // Iterative loop — designated binder{cycles}, Q8a′: a real backedge-
+            // Iterative loop — designated binder{cycles}: a real backedge-
             // wired interior (the step expressions are the backedge).
             this.cuts.set(expr, this.buildDoBinder(expr, env));
             return;
@@ -445,7 +440,7 @@ class GraphBuilder {
 
     const op = opName(head);
     if (!env.subst.has(op)) {
-      // Q8a′ — a call to the ENCLOSING loop's own recur name: the BACKEDGE, never
+      // A call to the ENCLOSING loop's own recur name: the BACKEDGE, never
       // a port-reaching define/role dispatch. Checked first (shadowing is already
       // handled by the `env.subst.has(op)` guard above).
       if (env.recur !== undefined && op === env.recur.name) {
@@ -453,7 +448,7 @@ class GraphBuilder {
         return;
       }
       // A call to a port-reaching top-level define — its call sites reference its
-      // template subgraph (§1).
+      // template subgraph.
       if (this.bctx.materialNames.has(op)) {
         this.cuts.set(expr, this.buildArgNode({ kind: "template-ref", name: op, span: scopeId(expr) }, expr, env));
         return;
@@ -519,12 +514,12 @@ class GraphBuilder {
   /** let-family: TRANSPARENT to designation (mirrors `classifyLet`) — walk RHSs,
    *  thread the substitution per kind, extend the frame stack for the body. A named
    *  let is a recursive binder → designated, with a REAL backedge-wired interior
-   *  (Q8a′, `buildNamedLetBinder`). */
+   *  (`buildNamedLetBinder`). */
   private walkLet(expr: APair<SchemeValue, SchemeValue>, kind: "let" | "let*" | "letrec" | "letrec*", env: WalkEnv): void {
     const rest = expr.cdr;
     if (!(rest instanceof APair)) return;
     if (rest.car instanceof ASymbol) {
-      // named let — binder{cycles:true}, Q8a′: a real backedge-wired interior.
+      // named let — binder{cycles:true}: a real backedge-wired interior.
       this.cuts.set(expr, this.buildNamedLetBinder(expr, rest, env));
       return;
     }
@@ -647,11 +642,11 @@ class GraphBuilder {
     return id;
   }
 
-  /** Named let → `binder{cycles}` with a REAL interior (Q8a′, §1: "loop
-   *  variables wired from the body's recur-position egress back to the
-   *  binder's params"). `(let loop ((v init)…) body…)`: the body wireframes
-   *  as the loop's own PRIVATE graph (Q8a's I5 pattern — its own
-   *  `GraphBuilder`, never spliced into `this`), `v…` bound as per-iteration
+  /** Named let → `binder{cycles}` with a REAL interior (loop variables wire
+   *  from the body's recur-position egress back to the binder's params).
+   *  `(let loop ((v init)…) body…)`: the body wireframes as the loop's own
+   *  PRIVATE graph (the I5 pattern — its own `GraphBuilder`, never spliced
+   *  into `this`), `v…` bound as per-iteration
    *  LEAF slots (extending the OUTER subst, exactly like `buildFan`'s
    *  `intSubst` — a captured outer binding must stay visible for selector-
    *  cone reachability, e.g. a captured threshold that's itself a source);
@@ -689,23 +684,22 @@ class GraphBuilder {
     return id;
   }
 
-  /** `do` → `binder{cycles}` with a REAL interior (Q8a′). `(do ((var init
+  /** `do` → `binder{cycles}` with a REAL interior. `(do ((var init
    *  step?)…) (test result…) body…)`: `var…` bound as per-iteration LEAF
    *  slots (extending the outer subst, same rationale as named-let above);
-   *  `body…` walks value-dropped (side effects only — its ports still land,
-   *  §1 D6-style); `test` likewise value-dropped: its ports still land (I1
-   *  confinement reads their cone regardless), though no wire consumes a
-   *  VALUE from it — `do` isn't shaped as an `if`, so no mux models the
-   *  continue/stop choice here. Accepted precision LIMIT, not a correctness
-   *  gap: the plan's hard-gate concern is a template referent existing
+   *  `body…` walks value-dropped (side effects only — its ports still land);
+   *  `test` likewise value-dropped: its ports still land regardless, though
+   *  no wire consumes a VALUE from it — `do` isn't shaped as an `if`, so no
+   *  mux models the continue/stop choice here. Accepted precision LIMIT, not
+   *  a correctness gap: the hard-gate concern is a template referent existing
    *  before emission, not the continue/stop decision's runtime-recordability
-   *  (that is exactly the kind of precision Q9's agreement corpus re-audits).
+   *  (that precision re-audits against the agreement corpus).
    *  The step expressions are the BACKEDGE (one `recur` node — R7RS: an
    *  omitted step defaults to the var's own current binding, carried over
    *  unchanged; `parseDoBindings` already encodes that default). `result…`
    *  is the TERMINAL egress — the value(s) when the loop stops.
    *
-   *  Q9 finding 4 fix: `result…`'s occurrences of a loop variable name the
+   *  `result…`'s occurrences of a loop variable name the
    *  SAME identifier the step clause rebinds every iteration — R7RS reads
    *  `result…` in a scope where the vars are bound to their LATEST value,
    *  i.e. whatever the backedge (the `recur` node below) fed them. Named-let
@@ -764,7 +758,7 @@ class GraphBuilder {
     return id;
   }
 
-  /** The loop's BACKEDGE (Q8a′): a `recur` node whose ingress wires
+  /** The loop's BACKEDGE: a `recur` node whose ingress wires
    *  (`arg0..argN`, positional with the ENCLOSING binder's `params`) are the
    *  next-iteration values — never `this.egress` (a recur never escapes the
    *  loop). `do`'s recur has no syntactic call site (unlike named-let's
@@ -793,8 +787,8 @@ function defineShape(form: APair<SchemeValue, SchemeValue>): { params: string[];
 }
 
 /**
- * Build the whole-program prospective layer (§1): partition top-level defines via
- * Q7's prelude classifier, wireframe each PORT-REACHING define into a named
+ * Build the whole-program prospective layer: partition top-level defines via
+ * the prelude classifier, wireframe each PORT-REACHING define into a named
  * template, and wireframe the main (non-define) forms — the last one's value flows
  * to the out-port; earlier ones walk value-dropped (their ports still land).
  */

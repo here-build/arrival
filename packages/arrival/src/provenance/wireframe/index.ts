@@ -1,10 +1,10 @@
-// `provenance/wireframe` — the PROSPECTIVE layer's builder core (Q8a). The template
+// `provenance/wireframe` — the PROSPECTIVE layer's builder core. The template
 // graph over a program's top-level defines + main expression: designated nodes per
-// docs/PROVENANCE.md §1's vocabulary, wires as closed arrival lambdas emitted by
-// `provenance/uneval.ts`'s `unevalWire`. Hash/path keying lands beside this at Q8b;
-// loop interiors (binder backedges) land at Q8a′ (`loops.ts`); struct-fact wires +
-// the count-demand router land at Q8c (`builder.ts`'s `factTagOf`, `loops.ts`'s
-// `reachableNodesForDemand`).
+// the model's vocabulary, wires as closed arrival lambdas emitted by
+// `provenance/uneval.ts`'s `unevalWire`. Hash/path keying lives beside this
+// (`hash.ts`); loop interiors (binder backedges) live in `loops.ts`; struct-fact
+// wires + the count-demand router live in `builder.ts`'s `factTagOf` and
+// `loops.ts`'s `reachableNodesForDemand`.
 export type {
   DefineTemplate,
   EmittedWire,
@@ -21,11 +21,10 @@ export type {
 } from "./types.js";
 export { freeVars, type FreeVarsOptions } from "./free-vars.js";
 export { buildWireframe, type WireframeBuildOptions } from "./builder.js";
-// Q8b — hash/path keying (docs/PROVENANCE.md §5 D3; docs/PROVENANCE-PLAN.md Q8b).
+// Hash/path keying.
 export { hashGraph, siteHash, rootOrdinalPath, siteOf, MAIN_PROGRAM_SITE } from "./hash.js";
-// Q8a′ — loop wireframing (docs/PROVENANCE.md §1/§2 `loop`; PROVENANCE-PLAN.md Q8a′).
-// Q8c — the demand-graded variant (`reachableNodesForDemand`/`DemandGrade`) rides
-// alongside it (same file, same V4 discipline).
+// Loop wireframing. The demand-graded variant (`reachableNodesForDemand`/
+// `DemandGrade`) rides alongside it (same file, same visited-set discipline).
 export {
   parseDoBindings,
   parseDoClause,

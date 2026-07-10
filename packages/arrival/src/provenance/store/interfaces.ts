@@ -1,34 +1,33 @@
 /**
  * store/interfaces.ts — the two storage PORTS the DO surface is built interface-first
- * against (PROVENANCE-PLAN.md's harness decision, docs/PROVENANCE.md §5): `ProvenanceStore`
- * (DO-storage-shaped: append/read/upsert/seq/header) and `PayloadStore` (R2-shaped:
- * put/get by hash, async settle, tiered degradation). Law and unit tests run against
- * `fakes.ts`'s in-memory implementations with fault injection — default CI, no cloud.
- * A workerd adapter proving these same contracts against real DO/R2 is Q19's concern,
- * not this node's.
+ * against: `ProvenanceStore` (DO-storage-shaped: append/read/upsert/seq/header) and
+ * `PayloadStore` (R2-shaped: put/get by hash, async settle, tiered degradation).
+ * Law and unit tests run against `fakes.ts`'s in-memory implementations with fault
+ * injection — default CI, no cloud. A workerd adapter proving these same contracts
+ * against real DO/R2 is a later concern, never this file's.
  */
 import type { OrdinalPath, PayloadHash, RegionId, RegionSeq, SiteHash, TemplateHash } from "./ids.js";
 import type { AggregationRun, ProvenanceRecord } from "./records.js";
 import type { WireframeGraph } from "../wireframe/types.js";
 
-/** §5 C6: "the stream header records the interpreter version (semantics epoch)."
- *  One header per region's stream, written once at region-open; Q18's offload
+/** "The stream header records the interpreter version (semantics epoch)."
+ *  One header per region's stream, written once at region-open; the offload
  *  protocol reads it to refuse (or sampled-verify) a stale replay request. */
 export interface StreamHeader {
   readonly semanticsEpoch: string;
 }
 
-/** §5 A1 EXCLUDED / round-2 E2's privacy LIMIT: "persisted payloads persist SECRETS
- *  (API responses, user data) — the tiering policy doubles as a privacy/retention
- *  surface; flagged for product review." Q14 plumbs the FLAG end-to-end (write →
- *  every read, every tier including `stub` — same contract shape as `stampIds`);
- *  what a `"sensitive"` tag actually DOES (shorter TTL, R2 opt-out, redaction) is
- *  deliberately out of scope here, per the doc's own framing ("flagged for product
- *  review", not "policy specified"). `"standard"` is the default a `put` without an
- *  explicit tag settles to (`fakes.ts`). */
+/** A privacy LIMIT: "persisted payloads persist SECRETS (API responses, user
+ *  data) — the tiering policy doubles as a privacy/retention surface; flagged
+ *  for product review." This plumbs the FLAG end-to-end (write → every read,
+ *  every tier including `stub` — same contract shape as `stampIds`); what a
+ *  `"sensitive"` tag actually DOES (shorter TTL, R2 opt-out, redaction) is
+ *  deliberately out of scope here — flagged for product review, not policy
+ *  specified. `"standard"` is the default a `put` without an explicit tag
+ *  settles to (`fakes.ts`). */
 export type RetentionClass = "standard" | "sensitive";
 
-/** §5 D2: "a persisted payload is the VALUE plus its STAMP IDS" — the write/read
+/** "A persisted payload is the VALUE plus its STAMP IDS" — the write/read
  *  round-trip unit containment laws at replay need (the stamp ids are the eager-
  *  oracle's numeric ids, `AValue.provenance`'s TEST-ONLY today, `op-helpers.ts`).
  *  `retention` is OPTIONAL on write (a caller with no opinion omits it — see
@@ -40,22 +39,22 @@ export interface Payload {
   readonly retention?: RetentionClass;
 }
 
-/** §5 A1's four-stage tiering pipeline: `ring` (in-memory, hot, bounded) → `do` (DO
+/** The four-stage tiering pipeline: `ring` (in-memory, hot, bounded) → `do` (DO
  *  storage, fits the per-value size cap) → `pending`/`r2` (oversize, async R2
- *  settlement per m6's named `pending → R2-ref` transition) → `stub` (evicted; value
+ *  settlement via the named `pending → R2-ref` transition) → `stub` (evicted; value
  *  dropped, identity + stamps retained). */
 export type PayloadTier = "ring" | "do" | "pending" | "r2" | "stub";
 
-/** §6/§5 A1's answer-envelope evidence tier — reproduced here (read-only reference)
+/** The answer-envelope evidence tier — reproduced here (read-only reference)
  *  because `PayloadTier` state feeds it directly; the OWNING definition (the full
  *  answer envelope, `replayed`/`replayed-cached` distinguishing live-γ from memo-hit)
- *  is Q14/Q17's (`store/tiering.ts`, `replay-memo.ts`) — this store never computes it. */
+ *  lives in `store/tiering.ts`/`replay-memo.ts` — this store never computes it. */
 export type EvidenceTier = "replayed" | "replayed-cached" | "recorded" | "stub";
 
-/** A `PayloadStore.get` snapshot. §5 A1 tier 4: "value dropped, identity + stamps
+/** A `PayloadStore.get` snapshot. "Value dropped, identity + stamps
  *  retained" — `value` is `undefined` at `stub` (and nowhere else); `stampIds`
  *  survives every tier including `stub` (small, identity-bearing, never evicted).
- *  `retention` survives every tier the same way (this node's privacy-LIMIT plumbing —
+ *  `retention` survives every tier the same way (privacy-LIMIT plumbing —
  *  see `RetentionClass`'s doc; the tag is identity-adjacent metadata, not the secret
  *  payload itself, so there is no tier-honesty reason to ever drop it). */
 export interface PayloadRecord {
@@ -70,14 +69,14 @@ export interface PayloadRecord {
  *  records within that region's lifetime across reopens — this store does not
  *  interpret it, only stores/returns it verbatim as part of each record's id. */
 export interface ProvenanceStore {
-  /** §5 C2/D1: idempotent UPSERT keyed by `record.id` — "CF request retries and
+  /** Idempotent UPSERT keyed by `record.id` — "CF request retries and
    *  multi-request programs re-emit safely"; two `append`s with the same id are one
    *  record (the second overwrites, assumed-identical content), never a duplicate.
-   *  §5 C3: a failed write must abort the request (the fake's write-failure knob
+   *  A failed write must abort the request (the fake's write-failure knob
    *  models this) — the caller relies on `append` throwing, never silently dropping. */
   append(regionId: RegionId, record: ProvenanceRecord): Promise<void>;
 
-  /** §5 D4: "per-region monotonic sequence" — allocate the next `seq` for a record
+  /** "Per-region monotonic sequence" — allocate the next `seq` for a record
    *  about to be appended to `regionId`. Monotonic for the region's WHOLE lifetime
    *  (never resets on reopen — `RegionEpoch` disambiguates reopens, not this counter).
    *  Callers must allocate once per logical record and reuse that `seq` across a
@@ -85,20 +84,20 @@ export interface ProvenanceStore {
    *  not "the same seq comes back if you call this twice." */
   allocateSeq(regionId: RegionId): Promise<RegionSeq>;
 
-  /** §5 D4: the region's total order, EMISSION order (settlement order for async) —
-   *  returned sorted by `seq` ascending. §5 C1: this is what fold-as-recovery
+  /** The region's total order, EMISSION order (settlement order for async) —
+   *  returned sorted by `seq` ascending. This is what fold-as-recovery
    *  replays after a DO wake/eviction to reconstruct region state; "the stream IS
    *  the durable region state," never a derived cache. */
   readStream(regionId: RegionId): Promise<readonly ProvenanceRecord[]>;
 
-  /** §5 C6: read the region's stream header (`undefined` before it has been written). */
+  /** Read the region's stream header (`undefined` before it has been written). */
   getHeader(regionId: RegionId): Promise<StreamHeader | undefined>;
 
-  /** §5 C6: write the region's stream header — called once, at region-open. */
+  /** Write the region's stream header — called once, at region-open. */
   putHeader(regionId: RegionId, header: StreamHeader): Promise<void>;
 }
 
-/** §5 round-3 m4 / Q12 — the write-side AGGREGATION HOOK's storage-side contract.
+/** The write-side AGGREGATION HOOK's storage-side contract.
  *  ADDITIVE companion to `ProvenanceStore`, never a replacement: aggregation sits
  *  BEHIND `ProvenanceStore`, not in the emitters (`store/emit.ts`'s `emit*`
  *  functions are unchanged by this port's existence — they still call
@@ -109,7 +108,7 @@ export interface ProvenanceStore {
  *  four aggregatable kinds — fan-instantiation/ingress-binding/track-open/
  *  track-close — buffered in memory and materialized here ONLY when a run
  *  closes, never one write per instance). This keeps `ProvenanceStore.append`/
- *  `readStream`'s EXISTING contract byte-for-byte stable — Q13's fold-as-recovery
+ *  `readStream`'s EXISTING contract byte-for-byte stable — fold-as-recovery
  *  over `readStream` needs no changes; a reader that wants the compacted view
  *  reads `readRuns` ADDITIONALLY, never instead. See `aggregate.ts`'s module doc
  *  for the full routing diagram and the losslessness law (`unfoldRun`) that
@@ -117,8 +116,8 @@ export interface ProvenanceStore {
 export interface RunStore {
   /** Persist one finalized run — called by the write-side hook when a run
    *  CLOSES (a non-matching next record arrives at that exact key, or an
-   *  explicit `flush`/`flushAll` call, e.g. at a port boundary per §5 C3's
-   *  "flush AT PORTS"). Idempotent by the run's own key (kind, templateHash,
+   *  explicit `flush`/`flushAll` call, e.g. at a port boundary — "flush AT
+   *  PORTS"). Idempotent by the run's own key (kind, templateHash,
    *  regionEpoch, parentOrdinalPath, start) — same upsert-by-key contract shape
    *  as `ProvenanceStore.append`; a run re-`putRun`'d under the identical key
    *  overwrites (assumed a wider/more-complete re-close of the same run, never
@@ -130,45 +129,45 @@ export interface RunStore {
    *  raw records for an aggregatable kind, folded to `O(1)+count` per run.
    *  `unfoldRun` (`aggregate.ts`) is the losslessness law's witness between the
    *  two views. No ordering guarantee beyond "some order" — counter folds are
-   *  order-insensitive by construction (§5 D4), unlike `readStream`'s emission
+   *  order-insensitive by construction, unlike `readStream`'s emission
    *  order, which callers that need ordering (host-schedule, mints) still get
    *  from `readStream` itself. */
   readRuns(regionId: RegionId): Promise<readonly AggregationRun[]>;
 }
 
-/** R2-shaped port, content-addressed by `PayloadHash`. §5 A1's tiering state machine
- *  lives behind this contract; `tiering.ts`'s (Q14) fuller policy/envelope wraps it,
+/** R2-shaped port, content-addressed by `PayloadHash`. The tiering state machine
+ *  lives behind this contract; `tiering.ts`'s fuller policy/envelope wraps it,
  *  never replaces it. */
 export interface PayloadStore {
-  /** §5 A1 tiers 1-2: persist a payload. Idempotent by hash — same hash assumed same
+  /** Persist a payload. Idempotent by hash — same hash assumed same
    *  content, a re-`put` is a no-op-shaped overwrite, never a duplicate. Lands at tier
    *  `do` if the value fits the store's size cap, `pending` (awaiting R2 settlement)
    *  if oversize — the size cap itself is a fake-only fault-injection knob (`fakes.ts`);
-   *  a real adapter's cap is DO storage's own per-value limit (§5 A1 point 2).
-   *  `payload.retention` (Q14's privacy-LIMIT plumbing) flows through unchanged to
+   *  a real adapter's cap is DO storage's own per-value limit.
+   *  `payload.retention` (privacy-LIMIT plumbing) flows through unchanged to
    *  every subsequent `get`, defaulting to `"standard"` when omitted. */
   put(hash: PayloadHash, payload: Payload): Promise<void>;
 
-  /** §5 A1: "drill-in degrades PER TIER, deterministically, and NEVER silently" — read
+  /** "Drill-in degrades PER TIER, deterministically, and NEVER silently" — read
    *  back whatever tier the payload currently lives at. Throws if `hash` was never
    *  `put` (never returns a fabricated `stub` for an unknown hash — that would conflate
    *  "we don't have this" with "we had this and evicted it"). `retention` survives at
    *  every tier including `stub` (same as `stampIds`). */
   get(hash: PayloadHash): Promise<PayloadRecord>;
 
-  /** §5 m6: settle a `pending` (oversize, awaiting-R2) payload — idempotent upsert to
+  /** Settle a `pending` (oversize, awaiting-R2) payload — idempotent upsert to
    *  `r2` on `"settled"`, or degrade to `stub` on `"failed"` ("on R2 failure the
    *  payload degrades to stub under tier honesty"). No-op-shaped if already settled
    *  to the SAME outcome; throws if called on a payload that was never `pending`. */
   settle(hash: PayloadHash, outcome: "settled" | "failed"): Promise<void>;
 
-  /** §5 A1 tier 4: force-evict to hash-only stub from ANY tier — "value dropped,
+  /** Force-evict to hash-only stub from ANY tier — "value dropped,
    *  identity + stamps retained." Models both real eviction policy (memory pressure)
    *  and the fault-injection "forced eviction" knob the law tests drive. */
   evict(hash: PayloadHash): Promise<void>;
 }
 
-/** §5 C4: "the template store is shared and immutable: wire templates + prelude live
+/** "The template store is shared and immutable: wire templates + prelude live
  *  in a cross-DO store (KV/R2) keyed by template-hash." One `StoredTemplate` per
  *  `WireframeGraph` the wireframe builder emits (`WireframeProgram.main`, one per
  *  `DefineTemplate`, or a fan node's private `template` interior) — `templateHash` is
@@ -180,12 +179,11 @@ export interface StoredTemplate {
   readonly graph: WireframeGraph;
 }
 
-/** Q8b's TEMPLATE STORE port — the DO-storage-shaped seam `hashGraph`/`siteHash`
- *  (`wireframe/hash.ts`) feed. Docs/PROVENANCE-PLAN.md Q8b's AMENDMENT (elk-render
- *  research, `docs/working-proposals/inhuman-elk-over-provenance.md`): "records key on
- *  template-hash + ordinal-path, the plane keys on site-hash... the template-store
- *  interface must expose ordinal-path → site-hash resolution (a DERIVABLE index, not
- *  new stored state)." `registerSite`/`resolveSite` are that reverse index: DERIVABLE
+/** The TEMPLATE STORE port — the DO-storage-shaped seam `hashGraph`/`siteHash`
+ *  (`wireframe/hash.ts`) feed: "records key on template-hash + ordinal-path,
+ *  the plane keys on site-hash... the template-store interface must expose
+ *  ordinal-path → site-hash resolution (a DERIVABLE index, not new stored
+ *  state)." `registerSite`/`resolveSite` are that reverse index: DERIVABLE
  *  because a `siteHash` is a pure function of (`templateHash`, instantiation span) —
  *  this store never invents one, it only remembers what a caller (the wireframe
  *  builder, which still holds live spans before `hashGraph` strips them) already
@@ -204,7 +202,7 @@ export interface TemplateStore {
   /** Register ONE occurrence's reverse-index row: this `(templateHash, ordinalPath)`
    *  coordinate renders at this `SiteHash`. Called once per static site the builder
    *  discovers — potentially MANY per `templateHash` (dedup means one template may be
-   *  instantiated at several sites; §5 D3: "the same expression at two program sites
+   *  instantiated at several sites; "the same expression at two program sites
    *  shares storage"... "the two sites render as two wires"). Idempotent — the same
    *  triple re-registered is a no-op; a DIFFERENT site registered under an
    *  already-registered `(hash, path)` pair overwrites (last-registered wins, mirroring

@@ -1,14 +1,12 @@
 /**
- * store/aggregate.ts — Q12: path-scoped RLE aggregation over the four §5 A6
- * kinds the applicability table marks aggregatable (docs/PROVENANCE.md §5, round
- * 2 A6 + round 3 m4; docs/PROVENANCE-PLAN.md Q12). This is the entropy-coding
- * argument (§ Appendix A.1 "loop records (no RLE)... fixed by aggregation") made
- * concrete: a stable-wiring loop's T instances carry the SAME structural fact T
- * times — presence at ordinal 0, 1, 2, …, T-1 — which is O(1)+count information
- * (a run: where it starts, how many), not T records each independently seq'd
- * and stored.
+ * store/aggregate.ts — path-scoped RLE aggregation over the record kinds the
+ * applicability table marks aggregatable. This is the entropy-coding argument
+ * made concrete: a stable-wiring loop's T instances carry the SAME structural
+ * fact T times — presence at ordinal 0, 1, 2, …, T-1 — which is O(1)+count
+ * information (a run: where it starts, how many), not T records each
+ * independently seq'd and stored.
  *
- * THE NEVER-LIST (§5 A6, restated because it is the load-bearing boundary this
+ * THE NEVER-LIST (restated here because it is the load-bearing boundary this
  * whole file exists to respect): mint (every payload is distinct information),
  * mux-decision (port-coupled only, each decision is information a pure
  * re-derivation cannot recover — that is WHY it is port-coupled), host-schedule
@@ -20,26 +18,24 @@
  * e.g. `AggregatingProvenanceStore.append` below, which receives every kind and
  * must ROUTE, not assume).
  *
- * RUN REPRESENTATION: reused, not redefined — `AggregationRun` (`records.ts`,
- * already landed at Q11a/Q11b as the forward-declared shape this node fills in)
+ * RUN REPRESENTATION: reused, not redefined — `AggregationRun` (`records.ts`)
  * is `(kind, templateHash, regionEpoch, parentOrdinalPath, start, count)`,
- * PATH-SCOPED per round-3 m4: `parentOrdinalPath` is the enclosing fan/loop's
- * path (never the run's own trailing ordinals, which `start..start+count-1`
- * supply), so inner-loop ordinals that restart per outer element never merge
- * into their outer sibling's run — see `foldRuns`'s key below, which folds
+ * PATH-SCOPED: `parentOrdinalPath` is the enclosing fan/loop's path (never the
+ * run's own trailing ordinals, which `start..start+count-1` supply), so
+ * inner-loop ordinals that restart per outer element never merge into their
+ * outer sibling's run — see `foldRuns`'s key below, which folds
  * `parentOrdinalPath` (not the record's own full `ordinalPath`) as part of the
  * grouping key for exactly this reason.
  *
- * THE WRITE-SIDE HOOK — exactly where it sits (the task's own framing: "decide
- * and document exactly where"): BEHIND `ProvenanceStore`, never in the emitters.
- * `store/emit.ts`'s `emit*` functions are UNCHANGED by this node — they still
- * call `store.append(regionId, record)` exactly once per logical event, exactly
- * as Q11a/Q11b left them. The hook is `AggregatingProvenanceStore`, a decorator
- * implementing the SAME `ProvenanceStore` interface (zero change to that
- * interface's `append`/`readStream` contract — Q13's fold-as-recovery keeps
- * working over `readStream` untouched) plus one ADDITIVE companion port,
- * `RunStore` (`interfaces.ts`), that receives compacted runs instead of raw
- * records for the four aggregatable kinds:
+ * THE WRITE-SIDE HOOK sits BEHIND `ProvenanceStore`, never in the emitters.
+ * `store/emit.ts`'s `emit*` functions are UNCHANGED by this — they still
+ * call `store.append(regionId, record)` exactly once per logical event. The
+ * hook is `AggregatingProvenanceStore`, a decorator implementing the SAME
+ * `ProvenanceStore` interface (zero change to that interface's
+ * `append`/`readStream` contract — fold-as-recovery keeps working over
+ * `readStream` untouched) plus one ADDITIVE companion port, `RunStore`
+ * (`interfaces.ts`), that receives compacted runs instead of raw records for
+ * the four aggregatable kinds:
  *
  *   emit*()  →  store.append(regionId, record)  →  AggregatingProvenanceStore
  *                                                       │
@@ -57,8 +53,7 @@
  *                                                  boundary: non-contiguous
  *                                                  next ordinal, a different
  *                                                  key, or an explicit call —
- *                                                  Q13 wires the real trigger,
- *                                                  §5 C3's "flush AT PORTS")
+ *                                                  a port boundary flushes)
  *                                                       │
  *                                                       ▼
  *                                              runs.putRun(regionId, run)
@@ -68,18 +63,17 @@
  * This is why the gate is provable without touching the evaluator: drive N
  * aggregatable appends through `AggregatingProvenanceStore` against a spy base
  * store and assert the base store's `append` was called ZERO times for that
- * kind while `RunStore.putRun` was called exactly ONCE with `count === N` —
- * `__tests__/aggregate.test.ts`'s "pure loop = O(1)+count observed" block.
+ * kind while `RunStore.putRun` was called exactly ONCE with `count === N`.
  *
  * LOSSLESSNESS (fold∘unfold = id on reads): an `AggregationRun` deliberately
- * drops each instance's own `seq` — §5 D4's "counter folds are order-insensitive
- * by construction" is exactly why this is sound for the four aggregatable kinds
- * (fan-instantiation/ingress-binding/track-open/track-close all reduce to a
- * PRESENCE-or-COUNT fact, never an order-sensitive one; an order-sensitive host
- * cites a `HostScheduleRecord` instead, which is why THAT kind is on the never-
- * list). "The same reads" is therefore precisely: the SET of `(kind, id)` pairs
- * (and, for track-close, `settled`) the run's instances answer to — `unfoldRun`
- * reconstructs exactly that set from `(start, count)`, never the discarded seqs.
+ * drops each instance's own `seq` — counter folds are order-insensitive by
+ * construction for the four aggregatable kinds (fan-instantiation/ingress-
+ * binding/track-open/track-close all reduce to a PRESENCE-or-COUNT fact, never
+ * an order-sensitive one; an order-sensitive host cites a `HostScheduleRecord`
+ * instead, which is why THAT kind is on the never-list). "The same reads" is
+ * therefore precisely: the SET of `(kind, id)` pairs (and, for track-close,
+ * `settled`) the run's instances answer to — `unfoldRun` reconstructs exactly
+ * that set from `(start, count)`, never the discarded seqs.
  */
 import type {
   AggregatableRecordKind,
@@ -105,11 +99,11 @@ import type { ProvenanceStore, RunStore } from "./interfaces.js";
 // The never-list boundary — type door + runtime door
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** The four §5 A6 kinds marked aggregatable, narrowed to their own record
- *  shapes. Deliberately excludes `MintRecord`/`MuxDecisionRecord`/
- *  `HostScheduleRecord` — the TYPE half of the never-list door: `foldRuns`
- *  below is typed over this union, so passing a mint/mux-decision/host-schedule
- *  record to it is a compile error, not a runtime check. */
+/** The four kinds marked aggregatable, narrowed to their own record shapes.
+ *  Deliberately excludes `MintRecord`/`MuxDecisionRecord`/`HostScheduleRecord`
+ *  — the TYPE half of the never-list door: `foldRuns` below is typed over
+ *  this union, so passing a mint/mux-decision/host-schedule record to it is a
+ *  compile error, not a runtime check. */
 export type AggregatableRecord = FanInstantiationRecord | IngressBindingRecord | TrackOpenRecord | TrackCloseRecord;
 
 const AGGREGATABLE_KINDS: ReadonlySet<AggregatableRecordKind> = new Set([
@@ -156,8 +150,8 @@ export function assertAggregatable(record: ProvenanceRecord): asserts record is 
 // fold — raw contiguous-run records → AggregationRun[]
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Grouping key a run is scoped by — round-3 m4: "a run is (parent ordinal-path,
- *  start, count)" at one `(kind, templateHash, regionEpoch)` site. Exported so a
+/** Grouping key a run is scoped by: a run is `(parent ordinal-path, start,
+ *  count)` at one `(kind, templateHash, regionEpoch)` site. Exported so a
  *  caller (the write-side hook, or a test) can compute/compare keys without
  *  reimplementing the string-encoding. */
 export interface RunKey {
@@ -185,8 +179,8 @@ function runKeyOf(record: AggregatableRecord): RunKey {
 /** `foldRuns`'s result: the compacted runs it could form, PLUS whatever it could
  *  not fold — never a silent drop. Two reasons a record lands in `unaggregated`
  *  even though its KIND passed the type door:
- *  1. a `track-close` with `settled: false` — §3 I4's incomplete-door
- *     precondition made representable (`records.ts`'s `TrackCloseRecord` doc:
+ *  1. a `track-close` with `settled: false` — the incomplete-door precondition
+ *     made representable (`records.ts`'s `TrackCloseRecord` doc:
  *     "`settled` is false only for the async case... caught by the incomplete
  *     door BEFORE this record would ever be emitted... in production"). There is
  *     no `settled` field on `AggregationRun` — folding one in would misrepresent
@@ -223,16 +217,16 @@ function closeRun(open: OpenRun): AggregationRun {
   };
 }
 
-/** Folds a SEQUENCE of aggregatable records (any emission order — round 3 m4's
- *  runs are formed over already-grouped-by-key input in the write-side hook, but
- *  this pure function makes no ordering assumption beyond "records for the same
+/** Folds a SEQUENCE of aggregatable records (any emission order — runs are
+ *  formed over already-grouped-by-key input in the write-side hook, but this
+ *  pure function makes no ordering assumption beyond "records for the same
  *  key that are meant to chain arrive adjacent in the input" — the write-side
  *  hook guarantees that by construction, per-key, since it folds ON APPEND, one
  *  record at a time, in emission order) into maximal contiguous runs. A run
  *  extends only when kind + templateHash + regionEpoch + parentOrdinalPath all
  *  match AND the next record's trailing ordinal is EXACTLY the open run's
- *  `start + count` (§ round-3 m4: contiguous trailing ordinals, never a gap-
- *  spanning run). Anything that cannot extend an open run starts a fresh
+ *  `start + count` (contiguous trailing ordinals, never a gap-spanning run).
+ *  Anything that cannot extend an open run starts a fresh
  *  run-of-one — every eligible record ends up IN some run (count ≥ 1); nothing
  *  aggregatable-by-kind is ever silently dropped, only `settled: false`
  *  track-close records are excluded (see `FoldResult`'s doc). */
@@ -308,8 +302,8 @@ export interface UnfoldedFact {
 /** The losslessness law's other half: expand a run back into the `count` facts
  *  it stands for, one per ordinal in `[start, start + count)`. `unfoldRun(run)`
  *  answers the SAME membership/count reads the original raw records would —
- *  proven by `foldRuns` + `unfoldRun` round-tripping the ordinal SET (order-
- *  insensitive, per §5 D4) in `__tests__/aggregate.test.ts` and the law file. */
+ *  `foldRuns` + `unfoldRun` round-trip the ordinal SET, which is order-
+ *  insensitive by construction for these kinds (see the module doc). */
 export function unfoldRun(run: AggregationRun): readonly UnfoldedFact[] {
   const facts: UnfoldedFact[] = [];
   for (let i = 0; i < run.count; i++) {
@@ -339,8 +333,8 @@ export function unfoldRun(run: AggregationRun): readonly UnfoldedFact[] {
  *  (kind/templateHash/regionEpoch/parentOrdinalPath), an unsettled track-close
  *  (never bufferable — written straight through to `base.append`, since it is
  *  not representable as a run at all), or an explicit `flush`/`flushAll` call
- *  (Q13's real trigger: "flush AT PORTS," §5 C3 — this class exposes the
- *  primitive, Q13's `region-scope.ts` wires the port-completion call site). */
+ *  ("flush AT PORTS" — this class exposes the primitive; `region-scope.ts`
+ *  wires the port-completion call site). */
 export class AggregatingProvenanceStore implements ProvenanceStore {
   private readonly openByRegion = new Map<RegionId, Map<string, OpenRun>>();
 
@@ -369,7 +363,7 @@ export class AggregatingProvenanceStore implements ProvenanceStore {
   async append(regionId: RegionId, record: ProvenanceRecord): Promise<void> {
     if (!isAggregatableKind(record.kind)) {
       // The never-list — mint/mux-decision/host-schedule pass straight through,
-      // unchanged, exactly once per call, same as before this node existed.
+      // unchanged, exactly once per call.
       await this.base.append(regionId, record);
       return;
     }
@@ -413,7 +407,7 @@ export class AggregatingProvenanceStore implements ProvenanceStore {
     });
   }
 
-  /** Materialize every currently-open run for `regionId` — Q13's port-flush
+  /** Materialize every currently-open run for `regionId` — the port-flush
    *  policy calls this at each port boundary; law tests call it directly to
    *  observe the compacted result without needing a real port to complete. */
   async flush(regionId: RegionId): Promise<void> {
@@ -422,18 +416,18 @@ export class AggregatingProvenanceStore implements ProvenanceStore {
     for (const keyStr of keys) await this.closeOpenRun(regionId, keyStr);
   }
 
-  /** Flush every region this instance has ever buffered for — the pre-
-   *  hibernation-hook shape (§5 C3's "forced flush on the pre-hibernation
-   *  hook"); Q13 wires the real hook, this exposes the primitive. */
+  /** Flush every region this instance has ever buffered for — the
+   *  pre-hibernation-hook shape ("forced flush on the pre-hibernation hook");
+   *  this exposes the primitive, the real hook calls it. */
   async flushAll(): Promise<void> {
     for (const regionId of this.openByRegion.keys()) await this.flush(regionId);
   }
 
   // Everything else is a pure pass-through — aggregation is exclusively an
   // `append`-side concern; `readStream` keeps `ProvenanceStore`'s EXISTING
-  // contract byte-for-byte stable (see module doc: Q13's fold-as-recovery over
-  // `readStream` is untouched by this node). A caller that wants the compacted
-  // view reads `RunStore.readRuns` additionally, never instead.
+  // contract byte-for-byte stable (fold-as-recovery over `readStream` is
+  // untouched by this). A caller that wants the compacted view reads
+  // `RunStore.readRuns` additionally, never instead.
   async allocateSeq(regionId: RegionId) {
     return this.base.allocateSeq(regionId);
   }

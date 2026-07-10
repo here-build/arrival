@@ -1,9 +1,9 @@
 /**
- * store/fakes.ts — in-memory `ProvenanceStore`/`PayloadStore` implementations, per
- * PROVENANCE-PLAN.md's harness decision: "law and unit tests run against in-memory
- * fakes implementing the same interfaces with fault injection (write failure, forced
- * eviction..., delayed R2 settle) — default CI, no cloud, no browser." A workerd
- * suite validating a real adapter against this same contract is a later node's job.
+ * store/fakes.ts — in-memory `ProvenanceStore`/`PayloadStore` implementations:
+ * "law and unit tests run against in-memory fakes implementing the same
+ * interfaces with fault injection (write failure, forced eviction..., delayed
+ * R2 settle) — default CI, no cloud, no browser." A workerd suite validating a
+ * real adapter against this same contract is a later concern.
  *
  * DETERMINISTIC BY CONSTRUCTION: no `setTimeout`/real timers anywhere. Delayed R2
  * settlement is modeled with an injected virtual clock (`PayloadStoreFake.step`) —
@@ -40,7 +40,7 @@ function freshSlot(): RegionSlot {
   return { header: undefined, nextSeq: 1, records: new Map() };
 }
 
-/** §5 C3: "a failed write kills the request." Thrown by `append` while the fake's
+/** "A failed write kills the request." Thrown by `append` while the fake's
  *  write-failure knob is armed — the one door this fake needs, since production
  *  behavior on write failure is "throw, caller aborts the request." */
 export class ProvenanceWriteFailure extends Error {
@@ -67,8 +67,8 @@ export class ProvenanceStoreFake implements ProvenanceStore {
     return s;
   }
 
-  /** Fault-injection knob (item 2, "write-failure on demand"): while armed, every
-   *  `append` throws `ProvenanceWriteFailure` instead of writing — models §5 C3's
+  /** Fault-injection knob ("write-failure on demand"): while armed, every
+   *  `append` throws `ProvenanceWriteFailure` instead of writing — models
    *  "a failed write kills the request." */
   setWriteFailure(on: boolean): void {
     this.writeFailure = on;
@@ -76,7 +76,7 @@ export class ProvenanceStoreFake implements ProvenanceStore {
 
   async append(regionId: RegionId, record: ProvenanceRecord): Promise<void> {
     if (this.writeFailure) throw new ProvenanceWriteFailure(regionId);
-    // §5 C2/D1: idempotent upsert keyed by record id — a retry with the same id
+    // Idempotent upsert keyed by record id — a retry with the same id
     // overwrites in place, never duplicates in `readStream`'s output.
     this.slot(regionId).records.set(recordIdKey(record.id), record);
   }
@@ -102,7 +102,7 @@ export class ProvenanceStoreFake implements ProvenanceStore {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RunStore fake (Q12)
+// RunStore fake
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Upsert key for one `AggregationRun` — `interfaces.ts`'s `RunStore.putRun` doc:
@@ -141,17 +141,18 @@ export class RunStoreFake implements RunStore {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Default DO per-value size cap this fake enforces before routing a `put` to the
- *  `pending` (oversize-awaiting-R2) tier instead of `do` — §5 A1 point 2: "bounded
- *  by per-value size limits... verify current SQLite-DO row caps at implementation."
- *  128KB-CLASS placeholder per the task brief; a real adapter's cap is whatever DO
- *  actually enforces, configurable here so law tests can probe both sides of it. */
+ *  `pending` (oversize-awaiting-R2) tier instead of `do` — "bounded by
+ *  per-value size limits... verify current SQLite-DO row caps at
+ *  implementation." 128KB-CLASS placeholder; a real adapter's cap is whatever
+ *  DO actually enforces, configurable here so law tests can probe both sides
+ *  of it. */
 const DEFAULT_VALUE_SIZE_CAP_BYTES = 128 * 1024;
 
 interface PayloadSlot {
   tier: PayloadTier;
   value: unknown;
   stampIds: readonly number[];
-  /** Q14 privacy-LIMIT plumbing — set once at `put`, survives every subsequent tier
+  /** Privacy-LIMIT plumbing — set once at `put`, survives every subsequent tier
    *  transition (including `evict`/`applySettle`'s degrade-to-`stub`) unchanged. */
   retention: RetentionClass;
   /** Set while `tier === "pending"` and a `settle` call is scheduled but not yet
@@ -213,7 +214,7 @@ export class PayloadStoreFake implements PayloadStore {
 
   /** Fault-injection knob: the size threshold (bytes, `estimateSizeBytes`) above
    *  which `put` routes to `pending` instead of `do` — lets a law test probe the
-   *  §5 A1 "oversize payloads... R2 by hash reference" leg with small fixtures. */
+   *  "oversize payloads... R2 by hash reference" leg with small fixtures. */
   setValueSizeCapBytes(bytes: number): void {
     this.valueSizeCapBytes = bytes;
   }
@@ -240,7 +241,7 @@ export class PayloadStoreFake implements PayloadStore {
     if (outcome === "settled") {
       slot.tier = "r2";
     } else {
-      // §5 m6: "on R2 failure the payload degrades to stub under tier honesty."
+      // "On R2 failure the payload degrades to stub under tier honesty."
       slot.tier = "stub";
       slot.value = undefined;
     }
@@ -254,7 +255,7 @@ export class PayloadStoreFake implements PayloadStore {
       tier: oversize ? "pending" : "do",
       value: payload.value,
       stampIds: payload.stampIds,
-      // Q14: "standard" is the default a `put` without an explicit tag settles to
+      // "standard" is the default a `put` without an explicit tag settles to
       // (interfaces.ts's `RetentionClass` doc).
       retention: payload.retention ?? "standard",
       scheduled: undefined,
@@ -291,7 +292,7 @@ export class PayloadStoreFake implements PayloadStore {
   async evict(hash: PayloadHash): Promise<void> {
     const slot = this.payloads.get(hash);
     if (slot === undefined) throw new PayloadNotFound(hash);
-    // §5 A1 tier 4: "value dropped, identity + stamps retained" — forced eviction
+    // "Value dropped, identity + stamps retained" — forced eviction
     // wins over any in-flight scheduled settle (it is, after all, forced).
     slot.tier = "stub";
     slot.value = undefined;
@@ -306,7 +307,7 @@ export class PayloadStoreFake implements PayloadStore {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TemplateStore fake (Q8b)
+// TemplateStore fake
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Thrown by `getTemplate` for a hash this store never saw — `PayloadNotFound`'s
@@ -319,16 +320,16 @@ export class TemplateNotFound extends Error {
 }
 
 /** In-memory `TemplateStore`: a `Map<TemplateHash, WireframeGraph>` for the shared
- *  template pool (§5 C4), plus a nested `Map<TemplateHash, Map<pathKey, SiteHash>>`
- *  for the Q8b-amendment reverse index — DERIVABLE data (a caller-computed record,
+ *  template pool, plus a nested `Map<TemplateHash, Map<pathKey, SiteHash>>`
+ *  for the reverse index — DERIVABLE data (a caller-computed record,
  *  never invented by this store), kept as an ordinary in-memory map since a fake
- *  needs no persistence story beyond "the harness decision"'s default-CI shape. */
+ *  needs no persistence story beyond the default-CI shape. */
 export class TemplateStoreFake implements TemplateStore {
   private readonly templates = new Map<TemplateHash, WireframeGraph>();
   private readonly siteIndex = new Map<TemplateHash, Map<string, SiteHash>>();
 
   async putTemplate(entry: StoredTemplate): Promise<void> {
-    // §5 C4: idempotent upsert by hash — same contract shape as PayloadStore.put.
+    // Idempotent upsert by hash — same contract shape as PayloadStore.put.
     this.templates.set(entry.templateHash, entry.graph);
   }
 

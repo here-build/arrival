@@ -1,6 +1,6 @@
 /**
- * Q8a — binding-aware FREE-VARIABLE computation over surface reader forms. The
- * wire-locality law (docs/PROVENANCE.md §7) is `FV(wire body) ⊆ params ∪
+ * Binding-aware FREE-VARIABLE computation over surface reader forms. The
+ * wire-locality law is `FV(wire body) ⊆ params ∪
  * prelude-names`, checked AT EMISSION — so emission needs a real FV, not
  * `slice.ts`'s deliberately-coarse `referencedSymbols` (which counts BOUND locals
  * and quoted data too; fine for reference-closure, wrong for a locality law: an
