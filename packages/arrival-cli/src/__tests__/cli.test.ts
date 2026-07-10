@@ -52,6 +52,12 @@ describe("arrival run", () => {
     expect(code).toBe(1);
     expect(stderr).toContain("cannot read");
   });
+
+  it("extra positional files: hard usage error (never silently ignored), exit 2", () => {
+    const { code, stderr } = arrival(["run", fixture("ok.scm"), fixture("ok.scm")]);
+    expect(code).toBe(2);
+    expect(stderr).toContain("exactly ONE");
+  });
 });
 
 describe("arrival check", () => {
@@ -66,6 +72,27 @@ describe("arrival check", () => {
     expect(code).toBe(1);
     expect(stdout).toContain("frobnicate");
     expect(stdout).toMatch(/error/i);
+  });
+
+  it("multiple files: EVERY file is checked, per-file output, exit 0 only when all pass", () => {
+    const { code, stdout } = arrival(["check", fixture("ok.scm"), fixture("ok.scm")]);
+    expect(code).toBe(0);
+    expect(stdout.match(/: ok/g)).toHaveLength(2);
+  });
+
+  it("multiple files: a failure in a LATER file is reported and fails the run (the silent-drop bug)", () => {
+    const { code, stdout } = arrival(["check", fixture("ok.scm"), fixture("unbound.scm")]);
+    expect(code).toBe(1);
+    expect(stdout).toContain("ok.scm: ok"); // the first file was checked and reported
+    expect(stdout).toContain("unbound.scm:"); // the second file was NOT silently dropped
+    expect(stdout).toContain("frobnicate");
+  });
+
+  it("multiple files: a failure in an EARLIER file doesn't stop later files (complete list, worst exit)", () => {
+    const { code, stdout } = arrival(["check", fixture("unbound.scm"), fixture("ok.scm")]);
+    expect(code).toBe(1);
+    expect(stdout).toContain("frobnicate");
+    expect(stdout).toContain("ok.scm: ok");
   });
 });
 

@@ -39,8 +39,12 @@ import {
 const USAGE = `usage: arrival <command>
 
   arrival run <file.scm>    validate, then execute (require-root = the file's dir)
+                            prints each non-define top-level form's value; there is
+                            no display/format — the door will remind you
   arrival repl              interactive session (persistent defines, Ctrl-D exits)
-  arrival check <file.scm>  static diagnostics only — nothing is evaluated
+  arrival check <file.scm> [more.scm …]
+                            static diagnostics only — nothing is evaluated;
+                            every file is checked, exit 1 if any has errors
 
 options:
   --with <module>           arm a capability module (repeatable) — an npm package,
@@ -127,6 +131,7 @@ async function checkFile(file: string, armed?: ArmedCapabilities): Promise<numbe
       return 0;
     }
     if (e instanceof StaticValidationError) {
+      console.log(`${file}:`); // per-file attribution — `check` accepts many files
       for (const d of e.diagnostics) console.log(formatDiagnostic(d));
       const errors = e.diagnostics.filter((d) => d.severity === "error").length;
       console.log(`${e.diagnostics.length} problem${e.diagnostics.length === 1 ? "" : "s"} (${errors} error${errors === 1 ? "" : "s"})`);
@@ -151,16 +156,38 @@ async function main(argv: string[]): Promise<number> {
     process.stdout.write(USAGE);
     return 0;
   }
-  const [command, file] = positionals;
+  const [command, ...files] = positionals;
   switch (command) {
-    case "run":
-    case "check": {
+    case "run": {
+      const [file, ...extra] = files;
       if (file === undefined) {
-        process.stderr.write(`arrival ${command}: missing <file.scm>\n${USAGE}`);
+        process.stderr.write(`arrival run: missing <file.scm>\n${USAGE}`);
+        return 2;
+      }
+      if (extra.length > 0) {
+        // Never silently drop a positional: a green run that "looked like" it ran the whole
+        // list is the false positive `check` used to ship. One program per invocation —
+        // compose multi-file programs with (require …) instead.
+        process.stderr.write(
+          `arrival run: takes exactly ONE <file.scm> — also got ${extra.join(", ")}.\n` +
+            `Run each program in its own invocation, or fold them into one entry file with (require …).\n`,
+        );
         return 2;
       }
       const armed = await armCapabilities(values.with ?? [], values.config, process.cwd());
-      return command === "run" ? runFile(file, armed) : checkFile(file, armed);
+      return runFile(file, armed);
+    }
+    case "check": {
+      if (files.length === 0) {
+        process.stderr.write(`arrival check: missing <file.scm>\n${USAGE}`);
+        return 2;
+      }
+      const armed = await armCapabilities(values.with ?? [], values.config, process.cwd());
+      // EVERY file is checked (no fail-fast — CI wants the complete list), exit is the worst
+      // per-file outcome: any error-tier diagnostic anywhere ⇒ 1.
+      let worst = 0;
+      for (const file of files) worst = Math.max(worst, await checkFile(file, armed));
+      return worst;
     }
     case "repl": {
       const armed = await armCapabilities(values.with ?? [], values.config, process.cwd());
