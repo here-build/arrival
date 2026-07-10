@@ -48,7 +48,7 @@
 // `deps` array orders [… binding, exceptions, lists] to match this block, so the
 // two C3 merge inputs (roots order, deps order) never contradict.
 // `scheme/polyglot` (wave W4/H3, same wave — its own migration) became a DEPENDENT
-// itself, the FIFTH restructuring: its migrated define bodies declare
+// itself, the FIFTH restructuring: its migrated define bodies declared
 // `deps: [srfi1, equality, numeric, strings, vectors, exceptions, lists]` (see
 // polyglot.ts's header for the name-by-name census; `srfi1` LEADS that array
 // because a dependent's linearization heads with itself — polyglot.ts's deps
@@ -58,31 +58,76 @@
 // ARE members, and ALL previously preceded polyglot — the identical C3 conflict.
 // Resolution: `polyglot` moves UP to LEAD the tail block, `srfi1` is pulled out
 // of `...allSrfi`'s spread to follow it, and `binding`/`exceptions`/`lists` trail
-// in sibling-established order. Two coordinated pin/order updates land in the
-// same commit: `scheme/srfi-235`'s deps order becomes `[polyglot, equality,
+// in sibling-established order. Two coordinated pin/order updates landed in the
+// same commit: `scheme/srfi-235`'s deps order became `[polyglot, equality,
 // numeric, lists]` (its old `[…, lists, polyglot]` order was a merge input
 // contradicting the new tail — and polyglot must LEAD outright, since
 // L(polyglot) now heads itself before the natives it shares with srfi-235), and
-// lists' migration-test ROW 7 re-pins the tail
+// lists' migration-test ROW 7 re-pinned the tail
 // (`lists` is now LAST outright; `polyglot` leads the tail rather than closing
 // it). Behaviorally inert as ever (everything cross-capability is late-bound at
-// CALL time) but C3-consistent for every `deps` edge declared today.
+// CALL time) but C3-consistent for every `deps` edge declared then.
 //
-// The resulting tail order [polyglot, srfi1, binding, exceptions, lists]:
-//   polyglot   — depended on by srfi-235; depends on srfi1/exceptions/lists.
-//   srfi1      — depended on by polyglot; depends on binding/exceptions/lists.
+// `scheme/polyglot` DIALECT SPLIT (V, 2026-07-10) is the SIXTH restructuring, and
+// the largest: the FIFTH restructuring's giant `deps: [srfi1, equality, numeric,
+// strings, vectors, exceptions, lists]` was the whole polyglot family's combined
+// reach — LIPS-dialect `nil` and the Racket/CL/Clojure idiom census — bundled into
+// one pack because it hadn't yet been decomposed. It now has: `scheme/polyglot`
+// (this file's `polyglot` import) SHRINKS to the shared core — `@`/`@?`/`@keys`/
+// `dict`, `nil`, `compose`/`pipe`/`flow`, `%interleave` — and its own `deps`
+// shrinks in step to `[equality, lists]` (polyglot.ts's header). Three new
+// dialect packs pick up everything else: `scheme/polyglot-clojure`
+// (polyglot-clojure.ts — `->`/`->>`/`comp`, and the Clojure stdlib completion:
+// str/get-in/assoc-in/…/empty?), `scheme/polyglot-lisp` (polyglot-lisp.ts —
+// mapcar/remove-if/remove-if-not), `scheme/polyglot-racket` (polyglot-racket.ts —
+// `~>`/`~>>` aliasing Clojure's threading, the dict-library accessor family, and
+// Guile's `assoc-ref`).
+//
+// Each dialect pack is, like the old monolith, BOTH a deps target (`scheme/
+// polyglot` — unchanged, `compose` still lives there — remains srfi-235's dep,
+// verified unaffected by this split) and a dependent (of the shared core, of
+// `srfi-1`, of assorted R7RS natives). Two of the three ALSO depend on each
+// other: `scheme/polyglot-racket`'s `~>`/`~>>` expand to Clojure's `->`/`->>`
+// (quasiquoted DATA, so the static FV walker doesn't force the edge — but the
+// runtime expansion is a dead Unbound-variable trap without it, so the edge is
+// declared anyway; polyglot-racket.ts's header has the honest judgment call),
+// and racket's dict-set/dict-update door messages + %dict-guard (relocated INTO
+// polyglot-racket.ts, per its header's judgment — its only consumers are that
+// pack's own dict-* family) call Clojure's `str`. So `scheme/polyglot-racket`
+// depends on `scheme/polyglot-clojure`, which depends on `scheme/polyglot`
+// (core) + `scheme/srfi-1` + assorted R7RS natives, which is exactly the same
+// "dependents before dependencies WITHIN a deps array too" shape srfi-235.ts
+// already established — each dialect pack's own header carries the full
+// name-by-name census and ordering derivation.
+//
+// The resulting tail order [racket, clojure, lisp, polyglot, srfi1, binding,
+// exceptions, lists]:
+//   racket     — depends on clojure/polyglot/equality/numeric/vectors/lists/
+//                exceptions; depended on by nothing else in this set.
+//   clojure    — depended on by racket; depends on polyglot/srfi1/equality/
+//                numeric/strings/vectors/lists.
+//   lisp       — depends on srfi1/equality/lists; no ordering relationship of
+//                its own to racket/clojure/polyglot (an independent branch —
+//                its position among them is the zero-collateral choice).
+//   polyglot   — depended on by srfi-235, clojure, racket; depends on equality/
+//                lists (shrunk from the pre-split census — see polyglot.ts).
+//   srfi1      — depended on by polyglot(pre-split)/clojure/lisp; depends on
+//                binding/exceptions/lists.
 //   binding    — depended on by srfi-1; no ordering relationship of its own to
 //                exceptions/lists (leading them is the zero-collateral choice).
-//   exceptions — depended on by srfi-189, srfi-1, polyglot; leads lists (srfi-189's
+//   exceptions — depended on by srfi-189, srfi-1, racket; leads lists (srfi-189's
 //                and srfi-1's deps orders both say so).
-//   lists      — depended on by srfi-235, srfi-128, srfi-189, srfi-1, polyglot:
-//                LAST, after every consumer.
+//   lists      — depended on by srfi-235, srfi-128, srfi-189, srfi-1, polyglot,
+//                clojure, lisp, racket: LAST, after every consumer.
 
 import type { EnvCapability } from "../common/capability.js";
 import core from "./core/core.js";
 import polyglotStubs from "./polyglot-stubs.js";
 import macros from "./macros.js";
 import polyglot from "./polyglot.js";
+import polyglotClojure from "./polyglot-clojure.js";
+import polyglotLisp from "./polyglot-lisp.js";
+import polyglotRacket from "./polyglot-racket.js";
 import { allR7rs, binding, exceptions, lists } from "./r7rs/index.js";
 import { allSrfi, srfi1 } from "./srfi/index.js";
 
@@ -104,6 +149,9 @@ export const BASE_PACKS: readonly EnvCapability[] = [
   polyglotStubs,
   // The C3 tail block — dependents first, dependencies after; see the header for
   // why POSITION (not just presence) is load-bearing once a member declares `deps`.
+  polyglotRacket,
+  polyglotClojure,
+  polyglotLisp,
   polyglot,
   srfi1,
   binding,
