@@ -1,9 +1,10 @@
 # @here.build/arrival
 
-**The first ever language built for AI, finally built for AI.**
+**The first ever language built for AI, finally built for AI.** Pun intended.[^1]
 
-(Yes, that's the joke: Lisp was born in 1958 *for* AI research — the first language built for
-AI. arrival is a Lisp finally built for AI *as the user*: the agent writes the programs.)
+[^1]: Lisp was born in 1958 for AI research — the first language built *for* AI. arrival is a
+    Lisp finally built for AI *as the user*: the agent writes the programs. [Elegant weapons,
+    for a more civilized age.](https://xkcd.com/297/)
 
 Arrival is a programming medium, not a tool. The grain, stated by subtraction: take an ordinary
 small Scheme and remove its ability to hide where a value came from. What's left is a language in
