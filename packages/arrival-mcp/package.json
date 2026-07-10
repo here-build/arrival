@@ -52,6 +52,7 @@
   "dependencies": {
     "@here.build/arrival": "workspace:^",
     "@here.build/arrival-serializer": "workspace:^",
+    "@here.build/mcp-substrate": "workspace:^",
     "@modelcontextprotocol/sdk": "1.26.0",
     "date-fns": "4.1.0",
     "dedent": "1.7.2",

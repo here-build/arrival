@@ -1,143 +1,150 @@
-// R0 pins (docs/working-proposals/arrival-mcp-rework-over-phases.md, Part IV — R0):
+// R0 pins, FLIPPED to the R3 mechanism (docs/working-proposals/arrival-mcp-rework-over-phases.md,
+// Part IV — R0 → R3). The original file characterized the `__repl__`/`__cache__` overlay; R3
+// dissolved that overlay (D3), so these pins now gate what their own headers said they would
+// become:
 //
-//   (a) "`__repl__` → the SEEDED define entries of `log` (equivalence over the defines it held —
-//        the v2 log is a superset, §2.2)" — `__repl__` holds ONLY define-statement source text,
-//        never bare expressions; the v2 `SessionRunState.log` seeds its define entries from
-//        exactly that set (§2.2: "`__repl__` … SEEDS the define entries of `log` on migration —
-//        the v2 log is a SUPERSET of it, not a rename").
+//   (a) "`__repl__` → the SEEDED define entries of `log`": the v2 `SessionRunState.log` holds ALL
+//        top-level statements (defines AND bare expressions, §2.2 — the sink tombstone-skip is
+//        unreachable if only defines replay), and a legacy `__repl__` history seeds the log's
+//        define entries on first touch (the v2 log is a SUPERSET, not a rename).
 //
-//   (b) The SEMANTIC pin that replaces rev 1's retired `__cache__` byte-compat pin: "fold(log,
+//   (b) The SEMANTIC pin that replaced rev 1's retired `__cache__` byte-compat pin: "fold(log,
 //        cache) reproduces the same bindings the overlay restore produced for every wire-safe
-//        define in the existing suite." Per the task's own framing this is written as a
-//        CHARACTERIZATION test against TODAY's mechanism (there is no `RunCache`/fold yet — that
-//        is R2/R3) — it becomes the equivalence gate R3 must clear once it swaps `__cache__`
-//        overlay-restore for real fold-over-cache execution.
+//        define in the existing suite." Fold is forced by a FRESH DiscoveryTool instance over the
+//        same session bag (a fresh warm map = process eviction in miniature).
 //
-// All defines used here are SINGLE top-level forms per call, deliberately avoiding the
-// multi-statement source-slicing quirk pinned+flagged in `r0-pins.discovery-replay.test.ts`
-// ("R0 FINDING" block) — that quirk is a separate, orthogonal characterization; conflating it
-// here would make this file's pins fragile to an unrelated fix.
+// The boundary condition at the bottom is the original file's third pin, kept and sharpened: an
+// UNCLASSIFIED impure verb legitimately diverges on cold fold (regenerateable is the RULED-safe
+// default, §2.3); its `view`-classed twin does not (the penetration answers from the run cache) —
+// the membrane-level cache is exactly what makes pin (b) hold for penetrating defines.
 
+import { symbol } from "@here.build/arrival";
+import * as sz from "@here.build/arrival/scheme-zod";
 import { describe, expect, it } from "vitest";
 
 import { DiscoveryTool } from "../DiscoveryTool.js";
 import { McpEnvCapability } from "../McpEnvCapability.js";
+import { type SessionRunState, isSessionRunState } from "../session-run-state.js";
 
-describe("R0 pin — __repl__ holds only define-statement source (the v2 log's seed set)", () => {
-  it("a bare expression never enters __repl__/history", async () => {
-    const cap = new McpEnvCapability("demo-caps", { symbols: {}, annotations: {} });
-    const tool = new DiscoveryTool("demo", cap, { description: "demo tool" });
+function demoTool(): DiscoveryTool {
+  return new DiscoveryTool("demo", new McpEnvCapability("demo-caps", { symbols: {}, annotations: {} }), {
+    description: "demo tool",
+  });
+}
+
+function runState(session: { state: Record<string, unknown> }): SessionRunState {
+  const state = session.state.__run__;
+  if (!isSessionRunState(state)) throw new Error("no v2 SessionRunState in the session bag");
+  return state;
+}
+
+describe("R3 pin — the v2 log holds ALL top-level statements, in program order (§2.2)", () => {
+  it("a bare expression enters the log (no definedName); a define enters with its definedName", async () => {
+    const tool = demoTool();
     const session = { id: "s1", state: {} as Record<string, unknown> };
     await tool.call({ expr: "(+ 1 1)" }, { session });
-    expect(session.state.__repl__).toEqual([]);
-  });
-
-  it("a define enters __repl__ verbatim (single-statement call); a following bare expr does not", async () => {
-    const cap = new McpEnvCapability("demo-caps", { symbols: {}, annotations: {} });
-    const tool = new DiscoveryTool("demo", cap, { description: "demo tool" });
-    const session = { id: "s1", state: {} as Record<string, unknown> };
     await tool.call({ expr: "(define n 5)" }, { session });
     await tool.call({ expr: "(+ n n)" }, { session });
-    expect(session.state.__repl__).toEqual(["(define n 5)"]);
+    expect(runState(session).log).toEqual([
+      { src: "(+ 1 1)" },
+      { src: "(define n 5)", definedName: "n" },
+      { src: "(+ n n)" },
+    ]);
   });
 
-  it("every entry of __repl__ matches the define-statement shape (a v2 log seed is well-formed by construction)", async () => {
-    const cap = new McpEnvCapability("demo-caps", { symbols: {}, annotations: {} });
-    const tool = new DiscoveryTool("demo", cap, { description: "demo tool" });
+  it("every define entry carries its bound name — the log is fold-addressable by construction", async () => {
+    const tool = demoTool();
     const session = { id: "s1", state: {} as Record<string, unknown> };
     await tool.call({ expr: "(define a 1)" }, { session });
     await tool.call({ expr: "(define b (+ a 1))" }, { session });
-    await tool.call({ expr: "(* a b)" }, { session }); // bare — must not appear below
-    const history = session.state.__repl__ as string[];
-    expect(history).toEqual(["(define a 1)", "(define b (+ a 1))"]);
-    for (const entry of history) expect(entry).toMatch(/^\(define\s/);
+    const defines = runState(session).log.filter((s) => s.definedName !== undefined);
+    expect(defines).toEqual([
+      { src: "(define a 1)", definedName: "a" },
+      { src: "(define b (+ a 1))", definedName: "b" },
+    ]);
+  });
+
+  it("migration: a legacy __repl__ history SEEDS the define entries of the v2 log — and the bindings fold back", async () => {
+    const tool = demoTool();
+    // A pre-R3 session bag: only the legacy define history, no v2 state.
+    const session = {
+      id: "legacy",
+      state: { __repl__: ["(define x 1)", "(define y (+ x 1))"] } as Record<string, unknown>,
+    };
+    const out = await tool.call({ expr: "(list x y)" }, { session });
+    expect(out).toEqual(["(list 1 2)"]); // the seeded log folded into real bindings
+    expect(runState(session).log.slice(0, 2)).toEqual([
+      { src: "(define x 1)", definedName: "x" },
+      { src: "(define y (+ x 1))", definedName: "y" },
+    ]);
   });
 });
 
-describe("R0 semantic pin — fold(log, cache-to-be) must reproduce today's overlay-restore bindings", () => {
-  it("golden pin: today's overlay-restore mechanism produces these exact bindings for a chain of pure wire-safe defines", async () => {
+describe("R3 semantic pin — fold(log, cache) reproduces the overlay-restore bindings", () => {
+  it("golden pin: the exact readback the overlay mechanism produced for a chain of pure wire-safe defines", async () => {
     // Pure/deterministic defines — no membrane penetration, so the pin is stable under either
-    // restore-from-cache OR honest re-execution (both reach the same value by construction). This
-    // is the reference R3's fold must hit.
-    const cap = new McpEnvCapability("demo-caps", { symbols: {}, annotations: {} });
-    const tool = new DiscoveryTool("demo", cap, { description: "demo tool" });
+    // the retired restore-from-overlay OR honest re-execution (both reach the same value by
+    // construction). Pinned output text is byte-identical to the pre-R3 golden pin.
+    const tool = demoTool();
     const session = { id: "s1", state: {} as Record<string, unknown> };
     await tool.call({ expr: "(define x 1)" }, { session });
-    await tool.call({ expr: "(define y \"hello\")" }, { session });
+    await tool.call({ expr: '(define y "hello")' }, { session });
     await tool.call({ expr: "(define z (list 1 2 3))" }, { session });
     await tool.call({ expr: "(define w (dict :a 1 :b 2))" }, { session });
 
     const out = await tool.call({ expr: "(list x y z w)" }, { session });
-    // NOTE (pinned, not asserted as ideal): a restored string binding serializes as a BARE token
-    // (`hello`, no quotes) — same as a freshly-evaluated string literal at HEAD (verified: a bare
-    // `"world"` expression serializes the same bare way). Pinning the ACTUAL output, not the
-    // naively-expected quoted form.
+    // NOTE (pinned, not asserted as ideal): a string binding serializes as a BARE token
+    // (`hello`, no quotes) — same as a freshly-evaluated string literal at HEAD.
     expect(out).toEqual(["(list\n  1\n  hello\n  (list 1 2 3)\n  (dict :a 1 :b 2))"]);
   });
 
-  it("equivalence: honest re-execution of the SAME define history (cache cleared) reproduces the SAME readback as overlay-restore — for pure wire-safe defines", async () => {
-    const cap = new McpEnvCapability("demo-caps", { symbols: {}, annotations: {} });
-    const tool = new DiscoveryTool("demo", cap, { description: "demo tool" });
+  it("equivalence: a COLD FOLD (fresh tool instance, same session bag) reproduces the same readback as the warm path", async () => {
+    const warmTool = demoTool();
+    const session = { id: "s1", state: {} as Record<string, unknown> };
+    await warmTool.call({ expr: "(define x 1)" }, { session });
+    await warmTool.call({ expr: '(define y "hello")' }, { session });
+    await warmTool.call({ expr: "(define z (list 1 2 3))" }, { session });
+    const warmReadback = await warmTool.call({ expr: "(list x y z)" }, { session });
 
-    // Path 1 — TODAY's overlay-restore mechanism: build up history+cache the normal way, then
-    // fold on a later call restores `x`/`y`/`z` from `state.__cache__` (jsToScheme(JSON.parse(…))),
-    // never re-running their statements.
-    const restoreSession = { id: "restore", state: {} as Record<string, unknown> };
-    await tool.call({ expr: "(define x 1)" }, { session: restoreSession });
-    await tool.call({ expr: "(define y \"hello\")" }, { session: restoreSession });
-    await tool.call({ expr: "(define z (list 1 2 3))" }, { session: restoreSession });
-    const restoreReadback = await tool.call({ expr: "(list x y z)" }, { session: restoreSession });
-
-    // Path 2 — honest re-execution: the SAME history, but with `__cache__` cleared, so
-    // DiscoveryTool's fold loop takes the `execSerialized` (re-run) branch for every entry instead
-    // of the `env.set(name, jsToScheme(…))` (restore) branch — this is fold-over-the-statement-log
-    // in miniature, the mechanism R2/R3 generalizes into fold-over-cache. Because these three
-    // defines are PURE (no membrane penetration), naive re-execution reproduces identical bindings.
-    const rerunSession = {
-      id: "rerun",
-      state: {
-        __repl__: [...(restoreSession.state.__repl__ as string[])],
-        __cache__: {}, // force the re-run branch for every history entry
-      } as Record<string, unknown>,
-    };
-    const rerunReadback = await tool.call({ expr: "(list x y z)" }, { session: rerunSession });
-
-    expect(rerunReadback).toEqual(restoreReadback);
+    // A FRESH instance has an empty warm map — its first call on this session must fold:
+    // re-run the log over the cache. Pure defines re-run honestly and land on the same values.
+    const coldTool = demoTool();
+    const coldReadback = await coldTool.call({ expr: "(list x y z)" }, { session });
+    expect(coldReadback).toEqual(warmReadback);
+    expect(runState(session).counters.rehydrations).toBe(1); // the fold is observable
   });
 
-  it("boundary condition (documented, not a contradiction): a PENETRATING wire-safe define does NOT survive naive re-execution unchanged — this is exactly why R2/R3 needs a membrane-level (view) cache rather than statement re-run", async () => {
-    // `tick` is wire-safe (its result, an integer, is JSON-round-trippable) but IMPURE (a shared
-    // counter). Overlay-restore (today) reproduces the ORIGINAL value forever, because it never
-    // re-fires the verb. A naive "always re-execute the statement" fold — the thing this file's
-    // PREVIOUS test showed agrees for pure defines — genuinely diverges here, because
-    // re-executing `(tick)` advances the counter. The doc's semantic pin ("fold reproduces the
-    // same bindings … for every wire-safe define") holds once fold answers from a real
-    // `view`/`pure`-classed MEMBRANE cache (R2) — never from naive statement re-execution. This
-    // test pins that naive re-execution is NOT the mechanism that gate can be built on.
-    let calls = 0;
+  it("boundary, sharpened: an UNCLASSIFIED impure verb diverges on cold fold (regenerateable — the ruled-safe default); its `view` twin does not", async () => {
+    // `tick` is wire-safe (an integer) but IMPURE (a shared counter). Unclassified ⇒ fold re-runs
+    // it (§2.3: undeclared = regenerateable) and the binding advances — the RULED behavior, where
+    // the retired overlay silently pinned the original value. `tick-view` declares `view` ⇒ the
+    // penetration is answered from the run cache on fold and the binding is stable across
+    // rehydrations — the membrane-level mechanism pin (b) rests on.
+    let plainCalls = 0;
+    let viewCalls = 0;
     const cap = new McpEnvCapability("tick-caps", {
-      symbols: { tick: { fn: () => ++calls } },
-      annotations: { tick: { description: "increments + returns a counter" } },
+      symbols: {
+        tick: { fn: () => ++plainCalls },
+        "tick-view": symbol.rosetta`tick-view: a boundary snapshot`(
+          { input: [], output: [sz.number], cacheClass: "view" },
+          () => ++viewCalls,
+        ),
+      },
+      annotations: {
+        tick: { description: "unclassified impure counter" },
+        "tick-view": { description: "view-classed counter" },
+      },
     });
-    const tool = new DiscoveryTool("tick", cap, { description: "tick tool" });
+    const session = { id: "s1", state: {} as Record<string, unknown> };
+    const warmTool = new DiscoveryTool("tick", cap, { description: "tick tool" });
+    await warmTool.call({ expr: "(define a (tick))" }, { session }); // plainCalls=1, a=1
+    await warmTool.call({ expr: "(define v (tick-view))" }, { session }); // viewCalls=1, v=1
+    expect(await warmTool.call({ expr: "(list a v)" }, { session })).toEqual(["(list 1 1)"]);
 
-    const restoreSession = { id: "restore", state: {} as Record<string, unknown> };
-    await tool.call({ expr: "(define a (tick))" }, { session: restoreSession }); // calls=1, a=1
-    const restoreReadback = await tool.call({ expr: "a" }, { session: restoreSession });
-    expect(restoreReadback).toEqual(["1"]); // overlay-restore: unchanged forever
-    expect(calls).toBe(1); // never re-fired
-
-    const rerunSession = {
-      id: "rerun",
-      state: {
-        __repl__: [...(restoreSession.state.__repl__ as string[])],
-        __cache__: {}, // force naive re-execution of `(define a (tick))` on fold
-      } as Record<string, unknown>,
-    };
-    const rerunReadback = await tool.call({ expr: "a" }, { session: rerunSession });
-    expect(calls).toBe(2); // naive re-run DID re-fire the penetration
-    expect(rerunReadback).toEqual(["2"]); // and DIVERGED from the overlay-restored "1"
-
-    expect(rerunReadback).not.toEqual(restoreReadback);
+    const coldTool = new DiscoveryTool("tick", cap, { description: "tick tool" });
+    const coldReadback = await coldTool.call({ expr: "(list a v)" }, { session });
+    expect(plainCalls).toBe(2); // unclassified: the fold re-fired it — a=2 now (divergence, by design)
+    expect(viewCalls).toBe(1); // view: answered from the cache — NEVER re-fired
+    expect(coldReadback).toEqual(["(list 2 1)"]);
   });
 });

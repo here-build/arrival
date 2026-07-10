@@ -11,6 +11,9 @@ export * from "./McpEnvCapability.js";
 // Value-shaped discovery tool: `new DiscoveryTool(name, capability, {description})` — the
 // subclass-free shell that derives schema + catalog + eval from the one aggregating capability.
 export * from "./DiscoveryTool.js";
+// SessionRunState v2 — the session's durable twin (statement log + first-class run cache),
+// encode/decode, the cache-validity identity, and the interim config digest (R3).
+export * from "./session-run-state.js";
 // Value-shaped mutation tool: `new ActionTool(name, {description, context, clusters})` — the
 // subclass-free, FieldSpec-typed, receiver-dispatched, clustered batch tier. Absorbed the interim
 // `kernel.defineActionTool`; `defineCluster` + the refs/primitives back its action declarations.

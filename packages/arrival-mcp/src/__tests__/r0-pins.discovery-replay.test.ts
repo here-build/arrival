@@ -1,24 +1,36 @@
-// R0 pin (docs/working-proposals/arrival-mcp-rework-over-phases.md, Part IV — R0):
-// "Replay semantics at statement level (re-run / poison-drop / crash-stops-batch with earlier
-// values standing)". This file characterizes DiscoveryTool.call's ACTUAL statement-level replay
-// mechanism as it behaves on HEAD (the working tree, including the uncommitted reader-split diff
-// the design doc treats as HEAD throughout — `parse` + `sourceTextFor` LOCATION slicing).
+// R0 pins, FLIPPED to the R3 mechanism (docs/working-proposals/arrival-mcp-rework-over-phases.md,
+// Part IV — R0 → R3). The original file characterized HEAD's statement-level overlay replay
+// ("the ground truth R3's `fold = re-run log over cache` must reproduce for every class below").
+// R3 landed; each pin now asserts the class's RULED replacement, per the original pin's own
+// documented intent:
 //
-// These are the ground truth R3's `fold = re-run log over cache` must reproduce for every class
-// below (§2.2/§R3 of the doc: "fold correctness inherits the poison rule").
+//   • wire-safe define, same config     → WARM-PAIR reuse (no fold at all): the penetration
+//     fires exactly once across N calls — same observable as the retired overlay restore.
+//   • closure define                    → warm: never re-run; cold fold (fresh instance = eviction
+//     in miniature): re-run, penetration-free for the define itself.
+//   • replay-time crash                 → the poison rule, now DROP-with-counter (the doc's §2.2/
+//     R3 "fold correctness inherits the poison rule" — the original file's IMPORTANT FINDING
+//     showed HEAD only *tolerated* poison; R3 lands the aspirational drop).
+//   • crash-stops-batch + crashed-statement-never-logged → unchanged semantics, asserted against
+//     the v2 log.
 //
-// A companion behavioral suite already exists at `DiscoveryTool.test.ts` (wire-safe restore,
-// closure re-run, REPL-partial-success). This file does not duplicate those — it adds the rows
-// R0 asks for that the existing suite does not cover: poison persistence across MULTIPLE calls,
-// and referencing a poisoned binding.
+// A cold fold is forced with a FRESH DiscoveryTool instance over the same session bag — a fresh
+// warm map is process eviction in miniature (stdio restart / DO wake, §2.4).
 
 import { describe, expect, it, vi } from "vitest";
 
 import { DiscoveryTool } from "../DiscoveryTool.js";
 import { McpEnvCapability } from "../McpEnvCapability.js";
+import { type SessionRunState, isSessionRunState } from "../session-run-state.js";
 
-describe("R0 pin — wire-safe define restores from cache without re-firing its penetration", () => {
-  it("a wire-safe define's verb fires exactly once across N subsequent calls; the value read back is stable", async () => {
+function runState(session: { state: Record<string, unknown> }): SessionRunState {
+  const state = session.state.__run__;
+  if (!isSessionRunState(state)) throw new Error("no v2 SessionRunState in the session bag");
+  return state;
+}
+
+describe("R3 pin — warm-pair reuse: a define's penetration fires exactly once across N same-config calls", () => {
+  it("the verb fires once; the warm env carries the binding — no fold, no re-fire, stable readback", async () => {
     let calls = 0;
     const cap = new McpEnvCapability("tick-caps", {
       symbols: { tick: { fn: () => ++calls } },
@@ -30,85 +42,80 @@ describe("R0 pin — wire-safe define restores from cache without re-firing its 
     await tool.call({ expr: "(define a (tick))" }, { session }); // tick fires → 1
     expect(calls).toBe(1);
 
-    // Three more calls, none referencing `a` in their own input — each one folds history first.
+    // Three more calls with the SAME config digest — each reuses the warm pair (zero fold cost).
     await tool.call({ expr: "(+ 1 1)" }, { session });
     await tool.call({ expr: "(+ 2 2)" }, { session });
     await tool.call({ expr: "(+ 3 3)" }, { session });
-    expect(calls).toBe(1); // still 1 — the restore path never re-fires the penetration
+    expect(calls).toBe(1); // warm reuse never re-fires the penetration
 
     expect(await tool.call({ expr: "a" }, { session })).toEqual(["1"]);
     expect(calls).toBe(1);
   });
 });
 
-describe("R0 pin — a closure define re-runs on replay (penetration-free) every call", () => {
-  it("the DEFINING verb (which builds the closure) fires again on every subsequent call's fold", async () => {
+// a lambda value — unclassified, so its define statement re-runs on fold (the ruled-safe
+// regenerateable default); while the pair is warm nothing re-runs at all.
+const identityClosure = (x: unknown): unknown => x;
+
+describe("R3 pin — a closure define: warm calls never re-run it; a cold fold re-runs it (regenerateable)", () => {
+  it("the DEFINING verb builds once while warm, and once more per cold fold", async () => {
     let builds = 0;
     const cap = new McpEnvCapability("mk-caps", {
       symbols: {
         mk: {
           fn() {
             builds++;
-            // a lambda value — schemeToJs peels it to a JS function, not JSON round-trippable,
-            // so DiscoveryTool never caches it and always re-runs the define on fold.
-            return (x: unknown) => x;
+            return identityClosure;
           },
         },
       },
       annotations: { mk: { description: "returns a closure" } },
     });
-    const tool = new DiscoveryTool("mk", cap, { description: "mk tool" });
     const session = { id: "s1", state: {} as Record<string, unknown> };
 
-    await tool.call({ expr: "(define f (mk))" }, { session });
+    const warmTool = new DiscoveryTool("mk", cap, { description: "mk tool" });
+    await warmTool.call({ expr: "(define f (mk))" }, { session });
     expect(builds).toBe(1);
+    await warmTool.call({ expr: "(+ 1 1)" }, { session });
+    expect(builds).toBe(1); // warm reuse — the retired per-call fold is gone
 
-    await tool.call({ expr: "(+ 1 1)" }, { session });
-    expect(builds).toBe(2); // re-built on this call's fold
-
-    await tool.call({ expr: "(+ 2 2)" }, { session });
-    expect(builds).toBe(3); // and again
+    const coldTool = new DiscoveryTool("mk", cap, { description: "mk tool" });
+    await coldTool.call({ expr: "(+ 2 2)" }, { session }); // the fold re-ran the define…
+    expect(builds).toBe(2); // …exactly once — the closure binding is re-derived, never restored
   });
 });
 
-describe("R0 pin — poison behavior on a replay-time crash (TODAY's actual mechanism)", () => {
-  // IMPORTANT FINDING: the source comment above `DiscoveryTool.call` (and the R0 doc's own prose)
-  // describes this as "dropped from history / not allowed to poison the session." The ACTUAL code
-  // (the fold loop at DiscoveryTool.ts, the `for (const src of history)` loop) does NOT remove a
-  // crashing entry from `history`/`state.__repl__`. It is caught, silently skipped for THIS call,
-  // and left in place — so it is re-attempted (and re-fails, re-silently) on every future call.
-  // This pin characterizes the REAL behavior (poison-TOLERATE, not poison-DROP) so R3's fold is
-  // measured against what HEAD actually does, not against the aspirational comment.
-  it("a replay-time crash does not stop the batch — later history entries and the new input still run", async () => {
+describe("R3 pin — the poison rule: a fold-time crash DROPS the statement (with a counter), never poisons the session", () => {
+  it("a fold-time crash does not stop the fold — later log entries and the new input still run", async () => {
     let calls = 0;
     const cap = new McpEnvCapability("flaky-caps", {
       symbols: {
         flaky: {
           fn() {
             calls++;
-            if (calls === 1) return () => 1; // not JSON round-trippable → forces re-run on replay
+            if (calls === 1) return () => 1; // a closure → the define re-runs on fold
             throw new Error("boom on replay");
           },
         },
       },
       annotations: { flaky: { description: "returns a closure once, then throws" } },
     });
-    const tool = new DiscoveryTool("flaky", cap, { description: "flaky tool" });
     const session = { id: "s1", state: {} as Record<string, unknown> };
 
-    await tool.call({ expr: "(define a (flaky))" }, { session }); // calls=1, ok
-    // This call's fold re-runs `a`'s define → flaky throws (calls=2) → caught, swallowed.
-    // The rest of the call (a fresh define `b`) still executes normally. NOTE: a `(define …)`
-    // form's OWN printed value is `"undefined"` (define returns void) — this is pinned
-    // separately below; the meaningful assertion here is that `b` is genuinely bound.
-    const out = await tool.call({ expr: "(define b 42)" }, { session });
-    expect(calls).toBe(2);
-    expect(out).toEqual(["undefined"]); // `(define …)`'s own statement value — the batch was NOT stopped
+    const warmTool = new DiscoveryTool("flaky", cap, { description: "flaky tool" });
+    await warmTool.call({ expr: "(define a (flaky))" }, { session }); // calls=1, ok
 
-    expect(await tool.call({ expr: "b" }, { session })).toEqual(["42"]);
+    // A fresh instance folds: `a`'s define re-runs → flaky throws (calls=2) → DROPPED, counted.
+    // The new input still executes normally.
+    const coldTool = new DiscoveryTool("flaky", cap, { description: "flaky tool" });
+    const out = await coldTool.call({ expr: "(define b 42)" }, { session });
+    expect(calls).toBe(2);
+    expect(out).toEqual(["undefined"]); // `(define …)`'s own statement value — the fold did NOT stop the call
+
+    expect(await coldTool.call({ expr: "b" }, { session })).toEqual(["42"]);
   });
 
-  it("the crashing statement is NOT dropped from history — it persists and is retried (and re-fails) on every later call", async () => {
+  it("the crashing statement IS dropped from the log — retried never, counted once", async () => {
     let calls = 0;
     const cap = new McpEnvCapability("flaky2-caps", {
       symbols: {
@@ -122,26 +129,29 @@ describe("R0 pin — poison behavior on a replay-time crash (TODAY's actual mech
       },
       annotations: { flaky2: { description: "returns a closure once, then throws" } },
     });
-    const tool = new DiscoveryTool("flaky2", cap, { description: "flaky2 tool" });
     const session = { id: "s1", state: {} as Record<string, unknown> };
 
-    await tool.call({ expr: "(define a (flaky2))" }, { session }); // calls=1
-    await tool.call({ expr: "(define b 1)" }, { session }); // fold re-attempts a → calls=2, throws, swallowed
-    await tool.call({ expr: "(define c 2)" }, { session }); // fold re-attempts a AGAIN → calls=3, throws, swallowed
+    const toolA = new DiscoveryTool("flaky2", cap, { description: "flaky2 tool" });
+    await toolA.call({ expr: "(define a (flaky2))" }, { session }); // calls=1
 
-    // `a`'s define source is still present in the history array — never removed.
-    const history = session.state.__repl__ as string[];
-    expect(history).toContain("(define a (flaky2))");
-    expect(calls).toBe(3); // re-attempted on every call, not just once
+    const toolB = new DiscoveryTool("flaky2", cap, { description: "flaky2 tool" });
+    await toolB.call({ expr: "(define b 1)" }, { session }); // fold re-attempts a → calls=2, throws → DROPPED
+    const toolC = new DiscoveryTool("flaky2", cap, { description: "flaky2 tool" });
+    await toolC.call({ expr: "(define c 2)" }, { session }); // fold replays only b — a is GONE
 
-    // The failed statement's name is genuinely unbound in the env of a later call.
-    const out = await tool.call({ expr: "a" }, { session });
+    expect(calls).toBe(2); // dropped after ONE failed re-run, never retried again
+    const state = runState(session);
+    expect(state.log.map((s) => s.src)).not.toContain("(define a (flaky2))");
+    expect(state.counters.droppedOnReplay).toBe(1);
+
+    // The dropped statement's name is genuinely unbound in a later call's env.
+    const out = await toolC.call({ expr: "a" }, { session });
     expect(out).toEqual(['(error "Unbound variable `a\'")']);
-    expect(calls).toBe(4); // yet ANOTHER attempt on this call's own fold
+    expect(calls).toBe(2); // and STILL never re-attempted
   });
 });
 
-describe("R0 pin — crash-stops-batch: earlier statements in the SAME call stand, later ones never run", () => {
+describe("R3 pin — crash-stops-batch: earlier statements in the SAME call stand, later ones never run", () => {
   it("a mid-batch crash halts further NEW-input forms; earlier ones already produced their output", async () => {
     const cap = new McpEnvCapability("demo-caps", { symbols: {}, annotations: {} });
     const tool = new DiscoveryTool("demo", cap, { description: "demo tool" });
@@ -155,39 +165,21 @@ describe("R0 pin — crash-stops-batch: earlier statements in the SAME call stan
     expect(out[2]).toMatch(/^\(error /);
   });
 
-  it("a crashed SOLE statement in the NEW input is not added to history — it never becomes replay-eligible", async () => {
+  it("a crashed SOLE statement in the NEW input never enters the log — it never becomes replay-eligible", async () => {
     const cap = new McpEnvCapability("demo-caps", { symbols: {}, annotations: {} });
     const tool = new DiscoveryTool("demo", cap, { description: "demo tool" });
     const session = { id: "s1", state: {} as Record<string, unknown> };
     await tool.call({ expr: "(define bad (this-verb-does-not-exist))" }, { session });
-    // `bad`'s define crashed mid-statement — `defineName` never got a chance to push it to history
-    // (the crash happens inside `execSerialized`, before the push-to-history line runs).
-    expect(session.state.__repl__).toEqual([]);
+    // The statement is appended AFTER successful execution — a crash means it never lands.
+    expect(runState(session).log).toEqual([]);
+    expect(runState(session).counters.crashes).toBe(1);
   });
 });
 
-// ── R0 FINDING, FIXED (was: not asserted as "correct", pinned as what HEAD actually did) ────────
-//
-// `sourceTextFor`/`nextLocatedOffset` slice a form's history/cache-key text using
-// `APair.getLocation()` from `@here.build/arrival`'s `parse`. This USED TO be broken at the root:
-// `Lexer.peek()` (`foundations/arrival/arrival/src/reader/Lexer.ts`) only snapshotted its
-// `__token__` metadata (the field `Parser._getLocation()` reads back) the FIRST time it ever saw a
-// freshly-scanned token, then never again — so after the first top-level form, `__token__` stayed
-// frozen at whatever token last happened to be re-peeked twice in a row (in practice, the last
-// list element read via `read_list` + `_read_object`'s double-peek), and every LATER top-level
-// form's own `getLocation().offset` read back that STALE position instead of its own true start.
-// E.g. for `"(define ok 1)\n(define bad 2)"`, form[1]'s reported offset used to be 11 (the digit
-// `1` inside form[0]'s own source) instead of 14 (form[1]'s true start).
-//
-// Fixed by making `Lexer.peek()`'s "freshly found a new token" branch snapshot `__token__`
-// UNCONDITIONALLY (matching the already-cached-token branch's own semantics) instead of only the
-// very first time. Now every top-level form's location is correct, so `sourceTextFor` slices the
-// right span for every define in a multi-statement batch — ALL defines survive into history and
-// restore on the next call, matching the design doc's own premise (§1.2: "already parses with the
-// REAL reader … slices each form's exact source via LOCATION spans") and the OLD `splitTopLevel`
-// mechanism it replaced.
-describe("R0 FINDING, fixed — a multi-statement batch's defines ALL survive into history", () => {
-  it("two defines in ONE call: BOTH survive to the next call, each with its own exact source", async () => {
+// ── The R0 FINDING block survives translated: multi-statement batches log EVERY form with its
+// exact source slice (the Lexer.peek() location fix), and all of them survive a cold fold. ──────
+describe("R3 pin — a multi-statement batch's statements ALL enter the log with exact source slices", () => {
+  it("two defines in ONE call: both logged with their own exact source, both fold on a cold instance", async () => {
     const cap = new McpEnvCapability("demo-caps", { symbols: {}, annotations: {} });
     const tool = new DiscoveryTool("demo", cap, { description: "demo tool" });
     const session = { id: "s1", state: {} as Record<string, unknown> };
@@ -195,33 +187,32 @@ describe("R0 FINDING, fixed — a multi-statement batch's defines ALL survive in
     const out = await tool.call({ expr: "(define x 1)\n(define y 2)" }, { session });
     expect(out).toEqual(["undefined", "undefined"]); // BOTH defines ran fine within this call…
 
-    // …and BOTH made it into history, each with its own exact (untruncated) source + cache key.
-    expect(session.state.__repl__).toEqual(["(define x 1)", "(define y 2)"]);
-    expect(session.state.__cache__).toEqual({ "(define x 1)": "1", "(define y 2)": "2" });
+    // …and BOTH made it into the log, each with its own exact (untruncated) source.
+    expect(runState(session).log).toEqual([
+      { src: "(define x 1)", definedName: "x" },
+      { src: "(define y 2)", definedName: "y" },
+    ]);
 
-    // On the NEXT call, both `x` and `y` replay from cache — no data loss.
-    const readback = await tool.call({ expr: "(list x y)" }, { session });
-    expect(readback).toEqual(["(list 1 2)"]);
+    // A COLD instance folds the log — no data loss.
+    const coldTool = new DiscoveryTool("demo", cap, { description: "demo tool" });
+    expect(await coldTool.call({ expr: "(list x y)" }, { session })).toEqual(["(list 1 2)"]);
   });
 
-  it("a single define alone in a call is NOT affected — its full source survives verbatim", async () => {
+  it("a single define alone in a call — its full source survives verbatim", async () => {
     const cap = new McpEnvCapability("demo-caps", { symbols: {}, annotations: {} });
     const tool = new DiscoveryTool("demo", cap, { description: "demo tool" });
     const session = { id: "s1", state: {} as Record<string, unknown> };
     await tool.call({ expr: "(define ok 1)" }, { session });
-    expect(session.state.__repl__).toEqual(["(define ok 1)"]); // last (only) form ⇒ end = source.length
+    expect(runState(session).log).toEqual([{ src: "(define ok 1)", definedName: "ok" }]);
   });
 });
 
-describe("R0 pin — dispatch-time record still fires on a crashed call (success:false, errorMessage set)", () => {
+describe("R3 pin — dispatch-time record still fires on a crashed call (success:false, errorMessage set)", () => {
   it("records failure with the crash message even though partial output was produced", async () => {
     const cap = new McpEnvCapability("demo-caps", { symbols: {}, annotations: {} });
     const tool = new DiscoveryTool("demo", cap, { description: "demo tool" });
     const record = vi.fn();
-    await tool.call(
-      { expr: "(+ 1 1)\n(this-verb-does-not-exist)" },
-      { session: { id: "s1", state: {} }, record },
-    );
+    await tool.call({ expr: "(+ 1 1)\n(this-verb-does-not-exist)" }, { session: { id: "s1", state: {} }, record });
     expect(record).toHaveBeenCalledOnce();
     expect(record.mock.calls[0]![0]).toMatchObject({ success: false });
     expect((record.mock.calls[0]![0] as { errorMessage?: string }).errorMessage).toBeDefined();

@@ -15,24 +15,38 @@
 //   • describe-time → infra closed over when the host built the capability (the welcome).
 
 import {
+  type RunCache,
+  type RunCacheEntry,
   type SchemeEnv,
   type SchemeValue,
   APair,
-  CONSTANT_CTX,
   exec,
-  jsToScheme,
   parse,
   sandboxedEnv,
-  schemeToJs,
 } from "@here.build/arrival";
+import type { EnvCapability } from "@here.build/arrival/capability";
 import { assembleEnv } from "@here.build/arrival/env";
 import { toSExprString } from "@here.build/arrival-serializer";
+import type { AsyncSessionStore } from "@here.build/mcp-substrate";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { format } from "date-fns";
 import dedent from "dedent";
 import * as z from "zod";
 
 import type { McpAnnotation, McpCapabilitySpec, McpEnvCapability } from "./McpEnvCapability.js";
+import {
+  type LogStatement,
+  type SessionRunIdentity,
+  type SessionRunState,
+  SESSION_SEMANTICS_EPOCH,
+  SessionRunCache,
+  cacheValidFor,
+  decodeSessionRunState,
+  encodeSessionRunState,
+  freshSessionRunState,
+  isSessionRunState,
+  sessionConfigDigest,
+} from "./session-run-state.js";
 
 // ── execSerialized: run scheme, serialize each top-level form's value (inlined from the
 // former @here.build/arrival umbrella — its only consumer was this tool). ──
@@ -53,6 +67,9 @@ interface ExecSerializedOptions {
    *  primitive's own default; callers of this function always pass one, see `call` below). */
   heapBudget?: number;
   signal?: AbortSignal;
+  /** THE RUN CACHE (R2, `ExecOptions.cache`) — record mode on live input, replay mode on fold.
+   *  Undefined ⇒ no interception (sessionless calls — byte-identical fast path). */
+  cache?: RunCache;
 }
 
 /**
@@ -72,6 +89,7 @@ async function execSerialized(expr: string | SchemeValue, options: ExecSerialize
     budgetMs: options.budgetMs,
     heapBudget: options.heapBudget,
     signal: options.signal,
+    cache: options.cache,
   });
   const per = perElementBudget(results.length);
   return results.map((element) => toSExprString(element, { maxTotalChars: per }));
@@ -95,14 +113,15 @@ function argTypeName(item: z.ZodType): string {
   return `value${opt}${desc}`;
 }
 
-// ── REPL replay: structural cache per top-level statement ──────────────────────────────────────
-// A REPL session re-establishes its bindings each call (the env is per-call). Rather than re-running
-// every prior statement (which would re-fire its membrane penetrations), each statement is cached by
-// its canonical SOURCE: a `(define …)` whose value is wire-safe is RESTORED from cache (its statement
-// is never re-run, so the penetration never re-fires); a closure/uncacheable define is re-run, which
-// is penetration-free because defining a lambda doesn't evaluate its body. The wire-safe membrane is
-// what makes this sound — every penetrating statement yields a cacheable value, every uncacheable one
-// is a closure. No verb-wrap, no interpreter tap: the statement source IS the structural key.
+// ── REPL sessions: statement log + first-class run cache (R3, §2.2/§2.4) ───────────────────────
+// A session's durable twin is `(log, cache)`. Live, the warm `(env)` pair is memoized on the
+// call's config digest — same digest ⇒ reuse (zero fold cost); changed ⇒ dispose the old env,
+// assemble fresh, drop the cache (configDigest is part of the cache-validity identity), and FOLD:
+// re-run the log over the cache in replay mode, where every declared `view` penetration is
+// answered from the cache instead of re-fired, every `sink` tombstone skips, and `pure`/undeclared
+// statements re-run under their stable-behavior promise. The old statement-level `__cache__`
+// overlay (`jsonRoundTrippable` + `env.set` restore) is DISSOLVED (D3): a wire-safe define replays
+// as re-execution over cached penetrations, arriving at the same value through the honest path.
 
 const DEFINE_NAME = /^\(define\s+(?:\(\s*)?([^\s()]+)/;
 
@@ -147,34 +166,18 @@ function sourceTextFor(form: SchemeValue, index: number, forms: readonly SchemeV
   return toSExprString(form);
 }
 
-/** Can this JS value (already `schemeToJs`-peeled) round-trip through JSON faithfully? True for
- *  primitives, plain arrays/objects of the same; FALSE for functions/symbols/bigint and non-plain
- *  objects (bytevectors, class instances) — those statements re-run rather than restore. */
-function jsonRoundTrippable(v: unknown, seen = new Set<unknown>()): boolean {
-  if (v === null) return true;
-  switch (typeof v) {
-    case "number":
-    case "string":
-    case "boolean":
-      return true;
-    case "object": {
-      if (seen.has(v)) return false;
-      seen.add(v);
-      if (Array.isArray(v)) return v.every((x) => jsonRoundTrippable(x, seen));
-      const proto = Object.getPrototypeOf(v);
-      if (proto !== Object.prototype && proto !== null) return false; // bytevector / class instance
-      return Object.values(v as Record<string, unknown>).every((x) => jsonRoundTrippable(x, seen));
-    }
-    default:
-      return false; // function / symbol / bigint / undefined
-  }
-}
-
 /** The dispatch-time context the host threads per call — ABOVE the eval membrane, so a run can't
  *  reach session identity or another call's state (the invariant the run isolation rests on). */
 export interface ToolCallCtx {
-  /** The MCP session: its id + replay/state bag (`state.__repl__` is the honest-replay history). */
+  /** The MCP session: its id + state bag. With no injected `store`, the session's durable twin
+   *  (`SessionRunState`) lives at `state.__run__` as ONE in-memory object (stdio mode — today's
+   *  zero-config behavior); a legacy `state.__repl__` history seeds the v2 log on first touch. */
   session?: { id: string; state: Record<string, unknown> };
+  /** Injected session persistence ("map but async"). When present, `SessionRunState` is
+   *  encoded/decoded through it (keyed by the session id) and every write is AWAITED before the
+   *  call responds — the "durably confirmed, not merely applied" bar. Absent ⇒ in-memory default
+   *  (the session bag), zero-config. The mcp-worker DO wiring over DO storage is R4's. */
+  store?: AsyncSessionStore;
   /** The authenticated principal (verified claims, never the request body) — stamped on the record. */
   user?: { sub: string; teamIds?: readonly string[] };
   /** Caller cancellation, fanned into the eval (TICK-checked) + any host requests it spawns. */
@@ -205,6 +208,11 @@ export interface DiscoveryToolOptions {
   /** Per-run allocation bound (the memory analogue of `budgetMs` — catches the native-collection-op
    *  runaway the TICK-cadence wall-clock can't preempt). Defaults to {@link defaultHeapBudget}. */
   heapBudget?: number;
+
+  /** Per-session statement-count cap (Part III LIMIT — rehydration is O(n) in log size, bounded
+   *  honestly). Hitting it is a TEACHING error directing the client to a fresh session, never a
+   *  silent truncation. Defaults to {@link defaultStatementCap}. */
+  statementCap?: number;
 
   /**
    * Host-supplied configuration values for the capability's `configuration` schema.
@@ -243,9 +251,21 @@ export function defaultHeapBudget(): number {
   return Number.isFinite(raw) && raw > 0 ? raw : 100_000_000;
 }
 
+/** Per-session statement-count cap default (Part III LIMIT). A FUNCTION (like
+ *  {@link defaultHeapBudget}) so it reads the env var live and tests can flip it per case. */
+export function defaultStatementCap(): number {
+  const raw = Number(process.env.MCP_SESSION_STATEMENT_CAP);
+  return Number.isFinite(raw) && raw > 0 ? raw : 512;
+}
+
 /** A discovery tool bound to one aggregating capability. Construct once per CONNECTION (the host
  *  builds `capability` with its infra armed into the resources); `call` runs once per request. */
 export class DiscoveryTool {
+  /** Warm pairs, memoized on the call's config digest (§2.4's one warm-reuse rule): same digest
+   *  ⇒ reuse the live env (zero fold cost); changed ⇒ dispose the old, assemble fresh, fold.
+   *  Keyed by session id — per-session state lives with the session, never module-level. */
+  private readonly warm = new Map<string, { digest: string; env: SchemeEnv; dispose: () => Promise<void> }>();
+
   constructor(
     readonly name: string,
     private readonly capability: McpEnvCapability,
@@ -262,92 +282,278 @@ export class DiscoveryTool {
     };
   }
 
-  /** Evaluate `args.expr` in the env assembled from the capability, under the dispatch-time ctx.
-   *  Re-establishes the session's prior bindings (structural cache), runs the new input statement
-   *  by statement — REPL-style, so earlier statements' values stand even if a later one crashes —
-   *  and threads `ctx.signal` + a wall-clock budget into every eval. A cancellation propagates; a
-   *  runtime crash is surfaced as an `(error …)` form and stops the rest of the input. */
+  /** Evaluate `args.expr` under the dispatch-time ctx — §2.1's per-call walk. Warm scope for
+   *  this call's config digest? use it. Otherwise fold = re-run the session's statement log over
+   *  its run cache (replay mode — a declared `view` penetration answers from the cache, a `sink`
+   *  tombstone skips, everything else re-runs). New input then executes statement-by-statement in
+   *  record mode over the SAME cache — REPL-style, so earlier statements' values stand even if a
+   *  later one crashes — and the session's durable twin (log + cache + counters) is persisted
+   *  (awaited) before the response. A cancellation propagates; a runtime crash is surfaced as an
+   *  `(error …)` form and stops the rest of the input. */
   async call(args: DiscoveryArgs, ctx: ToolCallCtx = {}): Promise<string[]> {
     const startTime = Date.now();
     const budgetMs = this.options.budgetMs ?? DEFAULT_BUDGET_MS;
     const heapBudget = this.options.heapBudget ?? defaultHeapBudget();
-    const { signal } = ctx;
-    const env = await this.environment(args);
-    const state = ctx.session?.state ?? {};
-    const history = (state.__repl__ as string[] | undefined) ?? [];
-    const cache = (state.__cache__ as Record<string, string> | undefined) ?? {};
+    const { signal, session } = ctx;
+    const cfg = await this.config(args);
 
-    // Re-establish prior bindings: restore a wire-safe define from the structural cache (NOT re-run →
-    // its membrane penetration never re-fires); re-run a closure/uncacheable define (penetration-free,
-    // since defining a lambda doesn't evaluate its body). A re-run that no longer reproduces is dropped
-    // rather than allowed to poison the session. History holds only define statements.
-    for (const src of history) {
-      const name = defineName(src);
-      if (cache[src] !== undefined && name) {
-        env.set(name, jsToScheme(CONSTANT_CTX, JSON.parse(cache[src])));
-        continue;
-      }
+    // ── sessionless: per-call env, disposed in `finally` (§2.8's interim dispose row) — no log,
+    // no cache, nothing durable. The exec path carries no cache: byte-identical fast path.
+    if (session === undefined) {
+      const assembled = await this.assemble(cfg);
       try {
-        await execSerialized(src, { env, budgetMs, heapBudget, signal });
-      } catch (error) {
-        if (signal?.aborted) throw error; // cancellation, not a dead binding
+        const run = await this.runForms(args.expr, { env: assembled.env, budgetMs, heapBudget, signal });
+        this.log(ctx, args, startTime, run.crashed ? { success: false, errorMessage: run.crashed } : { success: true });
+        return run.out;
+      } finally {
+        await assembled.dispose();
       }
     }
 
-    // Run the new input statement-by-statement; cache each wire-safe define's value by its source.
+    // ── the session path: load the durable twin, warm-or-fold, run, persist. ──
+    const identity: SessionRunIdentity = {
+      v: 2,
+      semanticsEpoch: SESSION_SEMANTICS_EPOCH,
+      roster: this.roster(),
+      configDigest: sessionConfigDigest(cfg),
+    };
+    const state = await this.loadState(session, ctx.store, identity);
+
+    const warm = this.warm.get(session.id);
+    const { env, entries } =
+      warm !== undefined && warm.digest === identity.configDigest
+        ? { env: warm.env, entries: new Map(Object.entries(state.cache)) }
+        : await this.foldIntoFreshEnv(session.id, state, identity, cfg, { budgetMs, heapBudget, signal });
+
+    const run = await this.runForms(args.expr, {
+      env,
+      budgetMs,
+      heapBudget,
+      signal,
+      cache: new SessionRunCache("record", entries, state.counters),
+      state,
+    });
+
+    // Stamp the CURRENT identity (the cache just recorded under it), serialize the cache
+    // (settled entries only — pendings never reach the entry map), and persist BEFORE responding.
+    state.semanticsEpoch = identity.semanticsEpoch;
+    state.roster = identity.roster;
+    state.configDigest = identity.configDigest;
+    state.cache = Object.fromEntries(entries);
+    state.lastCallAt = Date.now();
+    state.counters.elapsedMsTotal += Date.now() - startTime;
+    await this.persist(session, ctx.store, state);
+
+    this.log(ctx, args, startTime, run.crashed ? { success: false, errorMessage: run.crashed } : { success: true });
+    return run.out;
+  }
+
+  /** Dispose one session's warm env (the host's session-close hook — `onsessionclosed`/DELETE;
+   *  the deployment wiring is R4's). Idempotent; a session with no warm pair is a no-op. */
+  async closeSession(sessionId: string): Promise<void> {
+    const warm = this.warm.get(sessionId);
+    if (warm === undefined) return;
+    this.warm.delete(sessionId);
+    await warm.dispose();
+  }
+
+  /** Dispose every warm pair (connection teardown). */
+  async dispose(): Promise<void> {
+    const all = [...this.warm.values()];
+    this.warm.clear();
+    for (const warm of all) await warm.dispose();
+  }
+
+  // ── the session machinery: load / fold / run / persist ──────────────────────────────────────
+
+  /** Load the session's durable twin: the injected store's blob (decoded), or the in-memory
+   *  object in the session bag, or — v2 absent — a fresh state whose log is SEEDED from the
+   *  legacy `__repl__` define history (§2.2: the v2 log is a superset of it; the `__cache__`
+   *  value overlay is DISSOLVED, not migrated — D3). */
+  private async loadState(
+    session: { id: string; state: Record<string, unknown> },
+    store: AsyncSessionStore | undefined,
+    identity: SessionRunIdentity,
+  ): Promise<SessionRunState> {
+    if (store === undefined) {
+      const bag = session.state.__run__;
+      if (isSessionRunState(bag)) return bag;
+    } else {
+      const blob = await store.get(session.id);
+      if (blob !== undefined) {
+        const decoded = decodeSessionRunState(blob);
+        if (decoded !== undefined) return decoded;
+      }
+    }
+    const fresh = freshSessionRunState(identity);
+    const history = session.state.__repl__;
+    if (Array.isArray(history)) {
+      fresh.log = history
+        .filter((src): src is string => typeof src === "string")
+        .map((src) => {
+          const name = defineName(src);
+          return name === undefined ? { src } : { src, definedName: name };
+        });
+    }
+    return fresh;
+  }
+
+  /** Persist the durable twin — store blob (encoded + AWAITED before the response) or the
+   *  in-memory session bag (stdio: the blob is one object; nothing serializes). */
+  private async persist(
+    session: { id: string; state: Record<string, unknown> },
+    store: AsyncSessionStore | undefined,
+    state: SessionRunState,
+  ): Promise<void> {
+    if (store !== undefined) {
+      await store.set(session.id, encodeSessionRunState(state));
+      return;
+    }
+    session.state.__run__ = state;
+  }
+
+  /** The cold path: dispose the stale warm pair (config-digest change), assemble fresh, validate
+   *  the cache identity (mismatch ⇒ drop the cache, KEEP the log, re-record — self-heal), then
+   *  FOLD: re-run the log over the cache. Fold inherits the poison rule at statement level — a
+   *  statement whose re-run crashes is DROPPED from the log (with a counter increment) rather
+   *  than allowed to poison the session; cancellation propagates instead. Returns the warm env
+   *  plus the live entry map the new input's record-mode cache shares. The assembled env's
+   *  ownership transfers to the warm map only on success — a fold crash disposes it in `finally`
+   *  (§2.8's interim bar row). */
+  private async foldIntoFreshEnv(
+    sessionId: string,
+    state: SessionRunState,
+    identity: SessionRunIdentity,
+    cfg: Record<string, unknown>,
+    opts: { budgetMs: number; heapBudget: number; signal?: AbortSignal },
+  ): Promise<{ env: SchemeEnv; entries: Map<string, RunCacheEntry> }> {
+    const prior = this.warm.get(sessionId);
+    if (prior !== undefined) {
+      this.warm.delete(sessionId);
+      await prior.dispose();
+    }
+    const assembled = await this.assemble(cfg);
+    let owned = false;
+    try {
+      const cacheValid = cacheValidFor(state, identity);
+      if (cacheValid === false) state.cache = {}; // drop the cache, keep the log — re-record (self-heal)
+      const entries = new Map(Object.entries(state.cache));
+      if (state.log.length > 0) state.counters.rehydrations += 1;
+      const foldCache = new SessionRunCache(cacheValid ? "replay" : "record", entries, state.counters);
+      const kept: LogStatement[] = [];
+      for (const stmt of state.log) {
+        try {
+          await execSerialized(stmt.src, { env: assembled.env, ...opts, cache: foldCache });
+          kept.push(stmt);
+        } catch (error) {
+          if (opts.signal?.aborted) throw error; // cancellation, not a poisoned statement
+          state.counters.droppedOnReplay += 1; // the poison rule: drop, count, continue
+        }
+      }
+      state.log = kept;
+      this.warm.set(sessionId, { digest: identity.configDigest, env: assembled.env, dispose: assembled.dispose });
+      owned = true;
+      return { env: assembled.env, entries };
+    } finally {
+      if (!owned) await assembled.dispose();
+    }
+  }
+
+  /** Parse + execute `expr` form-by-form (REPL semantics: earlier values stand, a crash stops the
+   *  rest). With a session `state`, every executed top-level statement — defines AND bare
+   *  expressions — is appended to the log in program order (§2.2), under the statement-count cap
+   *  (a TEACHING error at the cap, never silent truncation). */
+  private async runForms(
+    expr: string,
+    opts: {
+      env: SchemeEnv;
+      budgetMs: number;
+      heapBudget: number;
+      signal?: AbortSignal;
+      cache?: RunCache;
+      state?: SessionRunState;
+    },
+  ): Promise<{ out: string[]; crashed?: string }> {
+    const { env, budgetMs, heapBudget, signal, cache, state } = opts;
+    const cap = this.options.statementCap ?? defaultStatementCap();
     const out: string[] = [];
     let crashed: string | undefined;
     let forms: SchemeValue[];
     try {
-      forms = await parse(args.expr);
+      forms = await parse(expr);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       crashed = message;
       out.push(`(error ${JSON.stringify(message)})`);
+      if (state !== undefined) state.counters.crashes += 1;
       forms = [];
     }
     for (const [index, form] of forms.entries()) {
-      const src = sourceTextFor(form, index, forms, args.expr);
+      if (state !== undefined && state.log.length >= cap) {
+        crashed = `session statement cap reached (${cap})`;
+        out.push(
+          `(error ${JSON.stringify(
+            `${crashed}: this session's statement log is full, so further statements cannot be recorded for replay. ` +
+              `Start a fresh MCP session to continue; fold long accumulations into ONE program (a single top-level form) ` +
+              `instead of many REPL steps.`,
+          )})`,
+        );
+        break;
+      }
+      const src = sourceTextFor(form, index, forms, expr);
       try {
-        out.push(...(await execSerialized(form, { env, budgetMs, heapBudget, signal })));
+        out.push(...(await execSerialized(form, { env, budgetMs, heapBudget, signal, cache })));
       } catch (error) {
         if (signal?.aborted) throw error; // cancellation propagates — not a REPL crash
         crashed = error instanceof Error ? error.message : String(error);
         out.push(`(error ${JSON.stringify(crashed)})`); // REPL-style: earlier values stand; stop here
+        if (state !== undefined) state.counters.crashes += 1;
         break;
       }
-      const name = defineName(src);
-      if (!name) continue; // bare expression — output only, nothing to replay
-      if (!history.includes(src)) history.push(src);
-      // `env.get` is typed `unknown` on the public `SchemeEnv` surface (its concrete return type
-      // is internal-only), but the runtime fact here is solid: `name` was just bound by the
-      // `(define …)` this loop iteration ran seconds ago via `execSerialized`, so this is a real
-      // `SchemeValue`, not an arbitrary unknown. Narrowed by cast, not `as any` — the same "one
-      // sanctioned narrowing" idiom `schemeToJs`'s own doc comment documents for this exact
-      // membrane boundary.
-      const js = schemeToJs(env.get(name) as SchemeValue);
-      if (jsonRoundTrippable(js)) cache[src] = JSON.stringify(js);
+      if (state !== undefined) {
+        const name = defineName(src);
+        state.log.push(name === undefined ? { src } : { src, definedName: name });
+        state.counters.statements += 1;
+      }
     }
-    state.__repl__ = history;
-    state.__cache__ = cache;
+    return crashed === undefined ? { out } : { out, crashed };
+  }
 
-    this.log(ctx, args, startTime, crashed ? { success: false, errorMessage: crashed } : { success: true });
-    return out;
+  /** Capability names across the dep closure, sorted — the roster (§2.4: advisory for grants,
+   *  authoritative as a cache-validity component). */
+  private roster(): readonly string[] {
+    const names = new Set<string>();
+    const seen = new Set<EnvCapability>();
+    const visit = (cap: EnvCapability): void => {
+      if (seen.has(cap)) return;
+      seen.add(cap);
+      for (const dep of cap.spec.deps ?? []) visit(dep);
+      names.add(cap.name);
+    };
+    visit(this.capability);
+    return [...names].toSorted((a, b) => a.localeCompare(b));
   }
 
   // ── env assembly: config from the actor args, resources armed by the capability ──
 
-  private async environment(args: DiscoveryArgs): Promise<SchemeEnv> {
+  private async assemble(cfg: Record<string, unknown>): Promise<{ env: SchemeEnv; dispose: () => Promise<void> }> {
     // The base is the constant safe floor (SAFE_BUILTINS) — vocabulary is added ONLY by the
     // capability's deps (the audited grant), never by swapping the base out from under it.
     const base = sandboxedEnv.inherit(this.name, {});
-    const cfg = await this.config(args);
-    return assembleEnv(base, [
-      this.capability.lower({
-        config: cfg,
-        evalScheme: (e, src) => execSerialized(src, { env: e }),
-      }),
-    ]).then(({ env }) => env as SchemeEnv);
+    const pack = this.capability.lower({
+      config: cfg,
+      evalScheme: (e, src) => execSerialized(src, { env: e }),
+    });
+    const assembled = await assembleEnv(base, [pack]);
+    return {
+      env: assembled.env as SchemeEnv,
+      // INTERIM ownership (R3 — §2.8's first-tranche dispose row): the kernel's pack disposers
+      // PLUS the lowered pack's resource wind-down. The full ownership table is R7's.
+      dispose: async () => {
+        await assembled.dispose();
+        await pack.windDown();
+      },
+    };
   }
 
   /** The capability's `configuration` fields. Actor values come from call args for the
