@@ -127,7 +127,7 @@ export function isAggregatableKind(kind: ProvenanceRecord["kind"]): kind is Aggr
 export class NeverAggregatable extends Error {
   constructor(kind: string) {
     super(
-      `store/aggregate.ts: "${kind}" records are NEVER aggregatable (§5 A6) — every ` +
+      `store/aggregate.ts: "${kind}" records are NEVER aggregatable — every ` +
         `mint/mux-decision/host-schedule record IS the information a pure re-derivation ` +
         "cannot recover (a mint's payload, a port-coupled mux's taken arm, a comparator " +
         "schedule's full sequence); folding one into an RLE run would silently discard it. " +

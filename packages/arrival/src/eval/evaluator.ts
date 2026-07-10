@@ -905,8 +905,8 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
       // HERE — a rosetta tool call to a stuck upstream — cannot reach the TICK
       // abort check below, because nothing ticks while parked. Without the race an
       // abort would not unstick the run until the host promise settled on its own,
-      // however long that took. With no signal the await is byte-identical to
-      // before (no wrapper promise, no listener). A raced abort rejects with the
+      // however long that took. With no signal there is no wrapper
+      // promise and no listener — a plain await. A raced abort rejects with the
       // abort reason and flows through the SAME failAndWrap path as a host-promise
       // rejection, so the run unwinds identically to the TICK-boundary abort.
       if (is_promise(value)) {

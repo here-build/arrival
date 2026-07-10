@@ -41,10 +41,9 @@
  * fl-interop tagless algebra, so a Const-applicative reinterpretation (Applicative
  * = static structure, Monad = runtime, Build-Systems-à-la-Carte style) would first
  * need a full surface→tagless compiler duplicating the evaluator's special-form
- * dispatch — strictly more code than matching Pairs directly. Filed as a future
- * follow-up, once per-op ADJOINT rules exist in that algebra (`walk()` is already
- * the backward pass; the follow-up is "populate the adjoint table," not "flip a
- * mode").
+ * dispatch — strictly more code than matching Pairs directly. That trade flips only
+ * once per-op ADJOINT rules exist in that algebra: `walk()` is already the backward
+ * pass, so the missing piece is the adjoint table, not a mode.
  */
 import { is_pair } from "./value-guards.js";
 import { ASymbol } from "./primitives/ASymbol.js";

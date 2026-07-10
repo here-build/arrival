@@ -279,7 +279,7 @@ export class PayloadStoreFake implements PayloadStore {
     if (slot.tier !== "pending") {
       throw new Error(
         `PayloadStoreFake.settle: hash ${JSON.stringify(hash)} is at tier "${slot.tier}", not "pending" — ` +
-          "settle only applies to the oversize-awaiting-R2 leg (§5 m6).",
+          "settle only applies to the oversize-awaiting-R2 leg.",
       );
     }
     if (this.settleDelayTicks <= 0) {

@@ -68,9 +68,9 @@ import { foldRegionStream, nextTrackOrdinal } from "../../provenance/store/fold.
  * not go through `callableToHostFn`/`withRegionCall`, so no `RegionScope` is open
  * around a real sort's comparator calls yet, and `Array.prototype.sort`'s comparator
  * signature carries no element ordinals to attribute a triple to in the first place.
- * This file lands the MACHINERY (`recordHostScheduleVerdict`, the accumulator, the
- * close-time flush) — wiring a real host's comparator loop into it is
- * `op-helpers.ts` territory, explicitly out of bounds here.
+ * The machinery here (`recordHostScheduleVerdict`, the accumulator, the close-time
+ * flush) is complete; the missing piece is `op-helpers.ts`-side — routing a real
+ * host comparator loop through `withRegionCall` so a scope is open around it.
  */
 
 /** This scope's designated-node coordinate for track-open/close/host-schedule

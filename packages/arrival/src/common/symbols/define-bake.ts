@@ -527,7 +527,7 @@ export async function bindCapabilityDefines(args: BindCapabilityDefinesArgs): Pr
       throw new ProvenanceRoleShapeError(
         def.name,
         def.declaredProvenance,
-        `derived (§1.4's capability-set fixpoint over "${capabilityName}"'s own symbol.define set) as ` +
+        `derived (the capability-set fixpoint over "${capabilityName}"'s own symbol.define set) as ` +
           `"${derived}" — ${membership.reasons.get(verb) ?? "its body is fixpoint-closed (reaches no port, directly or transitively)"}`,
       );
     }

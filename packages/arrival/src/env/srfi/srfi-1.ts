@@ -193,7 +193,7 @@ export default new EnvCapability("scheme/srfi-1", {
         // representation-agnostic like filter/sort — the predicate is a one-arg callable, and the
         // result is the matched car or nil (any value).
         type: "(pred: (x: unknown) => unknown, list: List<unknown>) => unknown",
-        // callbackRoles DECLARED (Q4): the host is a pipe (not fan) with value egress, so
+        // callbackRoles DECLARED: the host is a pipe (not fan) with value egress, so
         // shape underdetermines the pred's role. It is `control` — a boolean-returning
         // selector deciding WHICH element egresses (the merged selector+decision role).
         callbackRoles: ["control"],

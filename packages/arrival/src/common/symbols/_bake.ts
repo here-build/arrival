@@ -1,6 +1,6 @@
 // _bake: shared machinery behind arrival.symbol* EnvCapability — contract/decoded-type
 // layer, the baked AEntity union + members, shared types + helpers the per-tag factory files
-// (./native.ts, ./rosetta.ts, …) build their AEntity from directly (no separate bake* ctor — §4).
+// (./native.ts, ./rosetta.ts, …) build their AEntity from directly (no separate bake* ctor).
 // Factories live one-per-file, re-assembled into `symbol` namespace by ./index.ts. Stable entry
 // ../symbol.js re-exports both these types and `export * as symbol from "./index.js"`. Cut is acyclic:
 // factories import from here; nothing imports back up through the namespace.
@@ -12,7 +12,7 @@
 //   const symbol = { native, rosetta, tagless, notImplemented, … }
 //
 // ─────────────────────────────────────────────────────────────────────────────
-// THE RUNTIME MODEL (confirmed against live interpreter — src/rosetta.ts createRosettaWrapper,
+// THE RUNTIME MODEL (the implementing sites: src/rosetta.ts createRosettaWrapper,
 // src/common/capability.ts ANativeProcedure/ARosettaProcedure binder):
 //
 //   symbol.native    schemas SCHEME-IDENTITY; impl over SCHEME VALUES (Pair, SchemeString, …).
