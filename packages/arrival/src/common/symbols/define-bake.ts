@@ -72,6 +72,22 @@ export interface ExportableSpec {
 // happens not to list `scheme/core` as a dep (most don't; they get it for free
 // through env-roots' universal rooting).
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §2.3's resolver-synth family — `SPECIAL_FORMS ∪ exports ∪ RESOLVER-SYNTH FAMILY
+// (car/cdr/...)`. `car`/`cdr` (and the whole `c[ad]+r` family) are NOT a
+// capability-declared export anywhere (`env/r7rs/lists.ts`'s own header: "served by
+// a resolver, not this pack") — they're synthesized by a KERNEL-level fallback
+// (`eval/Resolver.ts`'s `cxrUnfold`), consulted only AFTER an ordinary env-lookup
+// miss, ABOVE any capability's own resolvers. No `ResolverSpec` anywhere registers
+// this family, so `resolverAnswers`'s pure-resolver probe (below) can never see it —
+// it must be recognized DIRECTLY, the same way `static-validation/vocabulary.ts`
+// (`CXR_RE`) and `eval/Resolver.ts` (`CXR_RE`) already do. Local copy of the SAME
+// regex, per the local-copy convention both of those files document (re-derived,
+// not imported — see vocabulary.ts's own comment on why).
+// ─────────────────────────────────────────────────────────────────────────────
+const CXR_RE = /^c[ad]+r$/;
+
 export const KEYWORD_SYNTAX_BASELINE: ReadonlySet<string> = new Set([
   "lambda",
   "define",
@@ -313,6 +329,53 @@ async function evaluateBody(
   return scope.get(tempName);
 }
 
+// Gap (3), the SECOND half (not named in the header, found empirically while
+// verifying the `buildDefineProcedure` fix above against the WeakMap<RunContext>
+// revert this pack's tests require): threading the caller's real `runCtx` through
+// `call_function` (above) is necessary but not sufficient for a `WeakMap<RunContext,
+// …>`-keyed dynamic-extent slot to survive a `symbol.define`→`symbol.define` call —
+// because `evalLambda`'s runner (evaluator.ts) ALWAYS evaluates a lambda's body
+// against its DEFINITION-TIME `ctx.runCtx`, never the call-time one ("call-time
+// runCtx threading is a later cut", by design, unrelated to this migration). Every
+// `evalScheme` call mints a FRESH `RunContext` (`generator-exec.ts`'s `exec()` →
+// `makeRunContext()`) — so evaluating N sibling `symbol.define` bodies through N
+// SEPARATE `evalScheme` calls (one `evaluateBody` call each) baked N SIBLING
+// ALambdas each closed over a DIFFERENT RunContext identity, permanently unable to
+// share a WeakMap-keyed slot with each other (e.g. `with-exception-handler` and
+// `raise-continuable`, both `scheme/r7rs/exceptions` own defines).
+//
+// Pre-migration this never surfaced: a capability's WHOLE prelude TEXT BLOB was one
+// program, evaluated in ONE `evalScheme` call, so every define it contained shared
+// one bake-time RunContext by construction.
+//
+// Fix, scoped to LAMBDA-form entries only: batch every lambda-form body's `(define
+// tmp body)` into ONE combined program, evaluated in ONE `evalScheme` call — this
+// restores the shared-identity property for exactly the entries where it matters
+// (a lambda VALUE is what closes over `ctx.runCtx`). This is SAFE precisely because
+// minting a lambda VALUE never touches its BODY — "a forward reference inside it
+// resolves at CALL time" (§2.3's `isLambdaForm` note above) — so batching changes
+// nothing about WHEN a lambda's free variables resolve (still call-time, against
+// whatever the capability's `scope`/`env` looks like by then, fully bound), only
+// WHEN the inert closure itself is minted. A NON-lambda (eager) entry is the
+// opposite: its value IS its evaluation, so an eager RHS referencing an EARLIER
+// sibling's REAL bound name (`srfi-235`'s `always`, whose body is the bare
+// identifier `constantly`, declared just before it) needs that sibling ALREADY
+// bound via `bindTarget` — batching eager entries together (tried first) silently
+// broke this (`Unbound variable 'constantly'`, srfi-235 failed to assemble), so
+// eager entries are deliberately EXCLUDED from this batch and keep the original
+// per-entry evaluate-THEN-bindTarget interleaving (`evaluateBody` above),
+// sequential in declaration order, unchanged.
+async function evaluateBodies(
+  scope: SchemeEnv,
+  evalScheme: EvalSchemeInto<SchemeEnv>,
+  bodyStrings: readonly string[],
+): Promise<unknown[]> {
+  const tempNames = bodyStrings.map(() => `%%arrival-define-tmp%%${tempCounter++}`);
+  const combinedSource = bodyStrings.map((body, i) => `(define ${tempNames[i]} ${body})`).join("\n");
+  await evalScheme(scope, combinedSource);
+  return tempNames.map((tempName) => scope.get(tempName));
+}
+
 /** The scheme-face validating wrapper (§1.2): `z.decode` against the normalized
  *  input/output vectors runs PURELY for its throw-on-mismatch side effect — the
  *  decoded value is discarded, and the ORIGINAL scheme args/return flow through
@@ -328,7 +391,20 @@ function buildDefineProcedure(verb: string, def: DefineSymbolDef, closureValue: 
     // here too) — tighten from `def.in` when the MCP/type-lens surface consumes it.
     arity: { min: 0, max: null },
     contract: def,
-    impl: (args) => {
+    // Gap (3) fix, FIRST half (exceptions.ts's header): `ANativeProcedure["arrival/
+    // tagless-final/apply"]` invokes `impl(args, runCtx)` — the CALLER's real
+    // per-call `RunContext`, not `CONSTANT_CTX`. The old single-parameter
+    // `impl: (args) => {…}` silently dropped it, so `call_function(closure, args)`
+    // below re-defaulted to `CONSTANT_CTX` every time. Threading `runCtx` through
+    // honestly here (impl's second parameter → `call_function`'s `{ runCtx }`
+    // option) is necessary but NOT sufficient on its own: `evalLambda`'s runner
+    // (evaluator.ts) evaluates a lambda's BODY against its DEFINITION-TIME
+    // `ctx.runCtx`, not the call-time one handed to its apply term ("call-time
+    // runCtx threading is a later cut", evaluator.ts's own comment) — so this fix
+    // only matters once the closure's OWN definition-time `ctx.runCtx` is itself
+    // consistent across sibling `symbol.define` bodies. See `evaluateBodies`'s
+    // comment (this file, above) for that SECOND half.
+    impl: (args, runCtx) => {
       if (def.validate) z.decode(def.in, args);
       return (async (): Promise<SchemeValue> => {
         // `unknown`, not `SchemeValue`, until validated below: the multi-value arm
@@ -339,7 +415,9 @@ function buildDefineProcedure(verb: string, def: DefineSymbolDef, closureValue: 
         // real Promise at runtime — `env/r7rs/lists.ts`'s callers rely on exactly
         // that) — `Promise.resolve(...)` makes the awaited expression honestly
         // Thenable either way, settled or already a value.
-        const result: unknown = await Promise.resolve(call_function(closure, args as SchemeValue[]));
+        const result: unknown = await Promise.resolve(
+          call_function(closure, args as SchemeValue[], { runCtx }),
+        );
         if (def.validate) {
           const resultVector: readonly unknown[] = def.singleOut ? [result] : (result as readonly unknown[]);
           z.decode(def.out, resultVector);
@@ -430,6 +508,7 @@ export async function bindCapabilityDefines(args: BindCapabilityDefinesArgs): Pr
     const free = freeVars(body);
     for (const name of free) {
       if (allowlist.has(name)) continue;
+      if (CXR_RE.test(name)) continue; // resolver-synth family — see CXR_RE's comment above
       if (resolverAnswers(name, deps, ownResolvers)) continue;
       throw new DefineLocalityError(name, def.name, capabilityName);
     }
@@ -467,8 +546,26 @@ export async function bindCapabilityDefines(args: BindCapabilityDefinesArgs): Pr
 
   // §2.3 — evaluate + bind, SEQUENTIALLY, in declaration order (each RHS sees only
   // what evaluated before it; a lambda body late-binds any forward reference).
-  for (const [verb, def] of entries) {
-    const value = await evaluateBody(scope, evalScheme, def.body);
+  // Lambda-form entries are pre-evaluated as ONE batch (see `evaluateBodies`'s
+  // comment: shares one bake-time RunContext across this capability's own lambda
+  // defines) — safe because minting a lambda VALUE never touches its body,
+  // regardless of relative declaration order. Eager (non-lambda) entries are
+  // resolved lazily below, one `evaluateBody` call each, interleaved with
+  // `bindTarget` exactly as before (an eager RHS may need an EARLIER sibling's
+  // real bound name already in `scope`).
+  const lambdaValueByDef = new Map<DefineSymbolDef | DefineSyntaxSymbolDef, unknown>();
+  {
+    const lambdaEntries = entries.filter(([, def]) => isLambdaForm(parsedByDef.get(def)!));
+    const lambdaValues = await evaluateBodies(
+      scope,
+      evalScheme,
+      lambdaEntries.map(([, def]) => def.body),
+    );
+    for (let i = 0; i < lambdaEntries.length; i++) lambdaValueByDef.set(lambdaEntries[i][1], lambdaValues[i]);
+  }
+  for (let i = 0; i < entries.length; i++) {
+    const [verb, def] = entries[i];
+    const value = lambdaValueByDef.has(def) ? lambdaValueByDef.get(def) : await evaluateBody(scope, evalScheme, def.body);
     if (def.kind === "define-syntax") {
       bindTarget(def).set(verb, buildMacro(verb, def, value));
       continue;

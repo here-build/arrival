@@ -223,6 +223,37 @@ export function freeVars(form: unknown, opts: FreeVarsOptions = {}): Set<string>
             }
             break; // malformed — fall through to application walk
           }
+          case "try": {
+            // (try body (catch (var) handler…) [(finally expr…)]) — evalTry's exact
+            // shape (evaluator.ts); mirrors `static-validation/collect-references.ts`'s
+            // "try" arm 1:1 (the local-copy convention both files document — each
+            // walker re-derives its own copy of the evaluator's shape rather than
+            // sharing one). ONE body form, then clauses. `catch`/`finally` markers are
+            // structural literals (`evalTry` recognizes them BY NAME on the raw parsed
+            // form, exactly like `cond`'s `else`/`=>`) — never variables, so unlike the
+            // unmodeled-head default-arm fallthrough this file used to take for `try`,
+            // they must never be added to the free set. The catch VARIABLE binds for
+            // its own handlers only. Unrecognized clauses are ignored by the evaluator —
+            // skipped here too (walking them would claim crash sites the runtime never
+            // runs).
+            if (!isPair(n.cdr)) return;
+            walk(n.cdr.car, bound);
+            for (const clause of chainOf(n.cdr.cdr)) {
+              if (!isPair(clause) || !isSymbol(clause.car)) continue;
+              const marker = nameOf(clause.car);
+              if (marker === "catch") {
+                const rest = clause.cdr;
+                if (!isPair(rest)) continue;
+                const varSpec = rest.car; // (var)
+                const varName = isPair(varSpec) && isSymbol(varSpec.car) ? nameOf(varSpec.car) : null;
+                const inner = varName === null ? bound : new Set([...bound, varName]);
+                walkBody(rest.cdr, inner);
+              } else if (marker === "finally") {
+                walkBody(clause.cdr, bound);
+              }
+            }
+            return;
+          }
           case "cond": {
             for (const clause of chainOf(n.cdr)) {
               if (!isPair(clause)) continue;

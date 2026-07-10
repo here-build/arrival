@@ -17,61 +17,53 @@
 // docs/working-proposals/symbol-define-static-program-validation.md §4 (W4) —
 // `symbol.define`/`symbol.defineSyntax` decomposition of this pack's former
 // `prelude` text blob. THREE landed-machinery gaps surfaced migrating THIS pack
-// specifically (all verified against HEAD, none fixed here — this file's
-// territory is this pack alone; `define-bake.ts`/`free-vars.ts` are read-only
-// consumed machinery):
+// specifically — all three are FIXED now (PRE-H2 machinery fix wave), upstream in
+// `define-bake.ts`/`free-vars.ts`, not in this file:
 //
-//   (1) `car`/`cdr` (and the whole `c[ad]+r` family) are NOT a capability-declared
-//       export anywhere — `env/r7rs/lists.ts`'s own header says so explicitly
-//       ("served by a resolver, not this pack") — they're synthesized by a
-//       KERNEL-level fallback (`eval/Resolver.ts`'s `cxrUnfold`, consulted only
-//       AFTER an ordinary env-lookup miss, never registered as a per-capability
-//       `ResolverSpec`). `static-validation/vocabulary.ts` (W3) already re-derives
-//       the same `CXR_RE` regex to special-case this for the VALIDATOR; the W1 bake
-//       law in `define-bake.ts` (`resolverAnswers`) has NO equivalent — it only
-//       probes `deps`' own declared `spec.resolvers`, and no capability anywhere
-//       registers one for cxr. A `symbol.define` body referencing bare `car`/`cdr`
-//       throws `DefineLocalityError` at bake, unconditionally, today.
-//   (2) `free-vars.ts` does not model the `try` special form at all (confirmed:
-//       no `case "try"` in its switch) — `try` itself only resolves because it is
-//       ALSO a `KEYWORD_SYNTAX_BASELINE` entry, but a `try`'s `(catch (var) …)` /
-//       `(finally …)` sub-clauses are walked as ORDINARY APPLICATIONS (the
-//       `default: break` arm), so their `catch`/`finally` head symbols leak into
-//       the free-variable set — and neither is bound anywhere (core.ts's keyword
-//       list stops at `try` itself; `catch`/`finally` are pure syntactic markers
-//       `evalTry` recognizes by NAME on the raw parsed form, mirroring how `else`/
-//       `=>` are recognized in `cond` — but `cond`'s `else`/`=>` names ARE
-//       special-cased out of `freeVars`'s walk (see its `case "cond"` arm); `try`
-//       has no equivalent arm at all, so no such exclusion exists for it).
-//   (3) `define-bake.ts`'s `buildDefineProcedure` does not thread the CALLER's
-//       `RunContext` into the scheme body it evaluates: its `impl: (args) => {…}`
-//       declares only ONE parameter, but `ANativeProcedure["arrival/tagless-final/
-//       apply"]` invokes it as `impl(args, runCtx)` — the real per-call `runCtx` is
-//       silently unbound inside the closure, and the subsequent `call_function
-//       (closure, args)` call passes NO third argument. Verified empirically (a
+//   (1) FIXED — `car`/`cdr` (and the whole `c[ad]+r` family) are NOT a
+//       capability-declared export anywhere — `env/r7rs/lists.ts`'s own header
+//       says so explicitly ("served by a resolver, not this pack") — they're
+//       synthesized by a KERNEL-level fallback (`eval/Resolver.ts`'s `cxrUnfold`,
+//       consulted only AFTER an ordinary env-lookup miss, never registered as a
+//       per-capability `ResolverSpec`). `define-bake.ts` now recognizes the same
+//       `CXR_RE` pattern directly in its bake FV allowlist (a local copy of the
+//       same regex `static-validation/vocabulary.ts` and `eval/Resolver.ts`
+//       already carry, per their documented local-copy convention) — a
+//       `symbol.define` body referencing bare `car`/`cadr`/etc. bakes clean.
+//   (2) FIXED — `free-vars.ts` now models the `try` special form (a `case "try"`
+//       arm mirroring `static-validation/collect-references.ts`'s "try" arm 1:1):
+//       the body walks in the outer scope, `catch`'s bound var scopes its handler
+//       body, and both the `catch`/`finally` clause-marker heads are recognized as
+//       structural literals — never added to the free-variable set (previously
+//       they fell through the unmodeled-head default-arm application walk and
+//       leaked in as unresolvable names).
+//   (3) FIXED — `define-bake.ts`'s `buildDefineProcedure` now threads the
+//       CALLER's `RunContext` into the scheme body it evaluates: `impl` declares
+//       its second parameter (`runCtx`, matching `ANativeProcedure["arrival/
+//       tagless-final/apply"]`'s `impl(args, runCtx)` invocation) and forwards it
+//       into `call_function(closure, args, { runCtx })`. Verified empirically (a
 //       tagged-WeakMap probe, removed before landing this file): a `symbol.define`
 //       → `symbol.define` call boundary (e.g. `with-exception-handler`'s thunk
-//       calling `raise-continuable`) observes TWO DIFFERENT `RunContext`-shaped
-//       objects on either side of the crossing (neither the frozen `CONSTANT_CTX`
-//       singleton — some other per-call identity is in play, not fully traced).
-//       Consequence: a `WeakMap<RunContext, …>` keyed dynamic-extent slot — the
-//       PRE-migration `raise`/`raise-continuable`/`with-exception-handler` used
-//       exactly this, unchanged, and it worked, because prelude-evaluated code
-//       never crossed a `call_function`/`ANativeProcedure` re-entry boundary —
-//       cannot survive a `symbol.define`-to-`symbol.define` call, even within ONE
-//       `exec()`. This affects every pack with per-run dynamic-extent state
-//       touched across a `symbol.define` boundary, not just this one — filed for
-//       the wave orchestrator, not fixed here.
+//       calling `raise-continuable`) used to observe TWO DIFFERENT `RunContext`-
+//       shaped objects on either side of the crossing (neither the frozen
+//       `CONSTANT_CTX` singleton). With the thread fixed, both sides see the SAME
+//       `RunContext` — restoring the precondition a `WeakMap<RunContext, …>`-keyed
+//       dynamic-extent slot needs. This affected every pack with per-run
+//       dynamic-extent state touched across a `symbol.define` boundary, not just
+//       this one.
 //
-// WORKAROUND (this pack only): every `symbol.define` body below is written using
-// ONLY this capability's OWN machinery natives + `KEYWORD_SYNTAX_BASELINE` names —
-// zero external `deps`, zero scheme-level `try`/`catch`/`finally`, zero bare
-// `car`/`cdr`/`cons`/`apply` (closes gaps (1)/(2)). The handler stack itself drops
-// its `RunContext` keying for a single module-level mutable slot (closes gap (3) —
-// see the LIMIT note at its declaration below). Once all three gaps close
-// upstream, the natives can fold back into plain `car`/`cdr`/`cons`/`try`/`catch`/
-// `finally` in the bodies and the stack can go back to being `RunContext`-keyed —
-// noted so a future pass can simplify, not because today's shape is wrong.
+// WORKAROUND STATUS (this pack only): gap (3)'s fix means the handler stack's
+// `RunContext` keying below is now REVERTED to the textbook-correct
+// `WeakMap<RunContext, …>` (see its declaration below) — no longer the
+// module-level mutable slot this comment used to describe. Gaps (1)/(2)'s pack-
+// authoring workaround is left AS-IS on purpose (a separate, optional cleanup, not
+// a correctness fix): every `symbol.define` body below still avoids bare
+// `car`/`cdr`/`cons`/`apply` and scheme-level `try`/`catch`/`finally`, routing
+// through this capability's OWN machinery natives (`%handler-car`, `%with-restore`,
+// etc.) instead. Now that gaps (1)/(2) are closed upstream, those bodies COULD fold
+// back into plain `car`/`cdr`/`cons`/`try`/`catch`/`finally` — noted for a future
+// pass, not done here (out of this fix wave's scope; the natives are correct and
+// tested as they stand).
 import { EnvCapability } from "../../common/capability.js";
 import { symbol } from "../../common/symbol.js";
 import * as z from "../../common/scheme-zod.js";
@@ -80,35 +72,28 @@ import { AString } from "../../values/primitives/AString.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import { APair } from "../../values/primitives/APair.js";
 import { applyCallback, type CallResult } from "../../values/primitives/ACallable.js";
+import type { RunContext } from "../../values/primitives/RunContext.js";
 import type { SchemeValue } from "../../values/types.js";
 import { schemeBool as bool } from "../../values/op-helpers.js";
 import { to_array } from "../pack-helpers.js";
 import invariant from "tiny-invariant";
 
-// Per-run isolation — INTENDED design, currently DOWNGRADED (gap (3) above): the
-// handler stack must be fresh per top-level `exec()` call but shared across every
-// nested scope/lambda/let WITHIN that call. Textbook-correct is a
-// `WeakMap<RunContext, stack>` (`RunContext` minted once per `exec()`, threaded by
-// reference through every nested frame) — exactly what the PRE-migration
-// prelude-evaluated forms used, verified working, because prelude code never
-// crossed a `call_function`/`ANativeProcedure` re-entry boundary. Now that
-// `raise`/`raise-continuable`/`with-exception-handler` are `symbol.define` bodies,
-// EVERY interaction between them crosses that boundary, and gap (3) means the
-// `RunContext` on either side of the crossing is not reliably the same object —
-// so a `WeakMap<RunContext, …>` silently "forgets" a handler `with-exception-
-// handler` just installed the moment `raise-continuable` reads it back.
-//
-// WORKAROUND: a single module-level mutable slot, no `RunContext` key. LIMIT this
-// concedes, honestly: concurrent `exec()` calls sharing one isolate (the base
-// packs lower ONCE onto a shared `user_env` singleton — see `env-roots.ts`) could
-// observe each other's handler stack if BOTH are mid-flight inside a
-// `with-exception-handler` dynamic extent at the same JS tick. `exec()`'s driving
-// loop completes one top-level form before dispatching the next (verified against
-// `execState`), so this is a narrow window — it only matters for genuinely
-// concurrent, unrelated programs racing inside the SAME process on the SAME
-// shared base env. Revert to the `WeakMap<RunContext, …>` this comment describes
-// the moment `buildDefineProcedure` threads `runCtx` correctly (gap (3)).
-let currentHandlerStack: unknown = nil;
+// Per-run isolation — REVERTED to the textbook-correct shape (gap (3), now fixed
+// upstream in `define-bake.ts`'s `buildDefineProcedure`): the handler stack must
+// be fresh per top-level `exec()` call but shared across every nested
+// scope/lambda/let WITHIN that call. `WeakMap<RunContext, stack>` (`RunContext`
+// minted once per `exec()`, threaded by reference through every nested frame) is
+// exactly what the PRE-migration prelude-evaluated forms used, and what this pack
+// used itself before gap (3) forced the module-level-slot workaround: with
+// `buildDefineProcedure` now threading the caller's real `runCtx` all the way
+// through `call_function`, a `symbol.define`→`symbol.define` call boundary (e.g.
+// `with-exception-handler`'s thunk calling `raise-continuable`) observes the SAME
+// `RunContext` on both sides, so the WeakMap no longer "forgets" a handler the
+// moment it crosses that boundary. This closes the LIMIT the module-level slot
+// conceded (concurrent `exec()` calls sharing one isolate could observe each
+// other's handler stack) — each run's stack is now keyed to its own `RunContext`
+// identity, isolated by construction, no shared-isolate caveat needed.
+const handlersByRun = new WeakMap<RunContext, SchemeValue>();
 
 // R7RS raise/raise-continuable/error carry ARBITRARY data (§6.11: "obj may be any
 // object") — critically INCLUDING the R7RSError condition objects `error`/
@@ -146,15 +131,20 @@ export default new EnvCapability("scheme/r7rs/exceptions", {
       // of the stack) — scheme-zod has no dedicated "list of procedures" vocabulary item, so
       // `z.value` (representation-blind scheme-value identity) is the honest ceiling here.
       { input: [], output: [z.value] },
-      (): SchemeValue => currentHandlerStack as SchemeValue,
+      // Non-arrow: `this.runCtx` is the CallCtx receiver `symbol.native` dispatches
+      // with (the same convention `%push-handler` below already uses) — the WeakMap
+      // key. Absent entry ⇒ this run has never pushed a handler yet ⇒ empty stack.
+      function (): SchemeValue {
+        return (handlersByRun.get(this.runCtx) ?? nil) as SchemeValue;
+      },
     ),
     "%set-handlers!": symbol.native`%set-handlers!: replace the exception-handler stack (machinery)`(
       // Input is the same list shape `%current-handlers` reads (see above). Output is
       // ALWAYS `nil` (the impl's own `return nil`) — `z.nil` is the exact honest type here,
       // not merely a wide one.
       { input: [z.value], output: [z.nil] },
-      (handlers) => {
-        currentHandlerStack = handlers;
+      function (handlers) {
+        handlersByRun.set(this.runCtx, handlers as SchemeValue);
         return nil;
       },
     ),

@@ -393,3 +393,49 @@ describe("Q8a — unevalWire's emission-time door (wire-locality)", () => {
     }
   });
 });
+
+// PRE-H2 machinery fix wave — gap (2): `free-vars.ts` had no `case "try"` in its
+// switch, so a `try`'s `(catch (var) …)` / `(finally …)` sub-clauses fell through
+// the unmodeled-head default-arm application walk — their `catch`/`finally` marker
+// heads leaked into the free-variable set (neither is bound anywhere; `try` itself
+// only escaped by ALSO being a `KEYWORD_SYNTAX_BASELINE` entry). The fix adds a
+// `case "try"` mirroring `static-validation/collect-references.ts`'s own "try" arm
+// 1:1: the body walks in the outer scope, `catch`'s bound var scopes its handler
+// body only, and the `catch`/`finally` markers themselves are structural literals,
+// never free variables.
+describe("Q8a — freeVars models `try` (evalTry's exact shape; mirrors collect-references.ts's arm)", () => {
+  it("catch/finally marker heads never leak into the free-variable set", async () => {
+    const [form] = await parse(
+      "(try (raise-continuable x) (catch (e) (handle e)) (finally (cleanup)))",
+      inferenceEnv,
+    );
+    const fv = freeVars(form);
+    expect(fv.has("try")).toBe(false); // own head — excluded like every other special form
+    expect(fv.has("catch")).toBe(false); // structural marker, not a variable
+    expect(fv.has("finally")).toBe(false); // structural marker, not a variable
+  });
+
+  it("the catch variable binds for its own handler body only — never free, never leaked to `finally`", async () => {
+    const [form] = await parse("(try (raise-continuable x) (catch (e) (handle e)) (finally (handle e)))", inferenceEnv);
+    const fv = freeVars(form);
+    // `e` inside `catch`'s own handler is BOUND (excluded); `e` inside `finally` is
+    // a genuinely free reference (finally does NOT see the catch var) — both facts
+    // collapse onto the SAME name here, so assert via the exact expected set instead.
+    expect([...fv].sort()).toEqual(["e", "handle", "raise-continuable", "x"].sort());
+  });
+
+  it("the try body, catch handlers, and finally clause all contribute their OWN free variables", async () => {
+    const [form] = await parse(
+      "(try (raise-continuable x) (catch (e) (handle e)) (finally (cleanup)))",
+      inferenceEnv,
+    );
+    const fv = freeVars(form);
+    expect([...fv].sort()).toEqual(["cleanup", "handle", "raise-continuable", "x"].sort());
+  });
+
+  it("a `try` with only a body (no catch/finally clauses) still walks the body correctly", async () => {
+    const [form] = await parse("(try (only-body-call x))", inferenceEnv);
+    const fv = freeVars(form);
+    expect([...fv].sort()).toEqual(["only-body-call", "x"].sort());
+  });
+});

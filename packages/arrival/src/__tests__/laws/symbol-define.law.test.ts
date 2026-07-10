@@ -134,6 +134,44 @@ describe("symbol.define — the §2.1 bake FV locality law (the drift door)", ()
     const cap = new EnvCapability("test/define-keyword-baseline", { symbols: { "control-flow": controlFlow } });
     await expect(cap.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
   });
+
+  // PRE-H2 machinery fix wave — gap (1): `car`/`cdr` (the whole `c[ad]+r` family) are
+  // NOT a capability-declared export anywhere (`env/r7rs/lists.ts`'s header: "served
+  // by a resolver, not this pack") — synthesized by a KERNEL-level fallback
+  // (`eval/Resolver.ts`'s `cxrUnfold`), never registered as a per-capability
+  // `ResolverSpec`, so `resolverAnswers`'s pure-resolver probe can never see it. The
+  // fix recognizes the same `CXR_RE` pattern directly in the bake allowlist (a local
+  // copy of the regex `static-validation/vocabulary.ts` and `eval/Resolver.ts`
+  // already carry). Before the fix, EVERY row below threw `DefineLocalityError`
+  // unconditionally.
+  it("a body referencing bare car/cdr (the resolver-synth cxr family) bakes clean — no ResolverSpec, no deps declared", async () => {
+    const env = await freshEnv();
+    const firstOfPair = symbol.define`first-of-pair: bare car, no deps`(
+      { input: [z.value], output: [z.value] },
+      `(lambda (p) (car p))`,
+    );
+    const cap = new EnvCapability("test/define-cxr-car", { symbols: { "first-of-pair": firstOfPair } });
+    await expect(cap.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
+  });
+
+  it("a body referencing a longer cxr-family name (bare cadr) also bakes clean", async () => {
+    const env = await freshEnv();
+    const secondOfPair = symbol.define`second-of-pair: bare cadr, no deps`(
+      { input: [z.value], output: [z.value] },
+      `(lambda (p) (cadr p))`,
+    );
+    const cap = new EnvCapability("test/define-cxr-cadr", { symbols: { "second-of-pair": secondOfPair } });
+    await expect(cap.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
+  });
+
+  it("a name that merely LOOKS cxr-shaped but isn't a real c[ad]+r spelling still drift-doors", async () => {
+    const env = await freshEnv();
+    // "cars" fails CXR_RE (trailing non-a/d before the final r) — must NOT be
+    // over-forgiven by the new allowlist branch.
+    const bad = symbol.define`bad-cxr-lookalike: "cars" is not a real cxr name`(z.value, `cars`);
+    const cap = new EnvCapability("test/define-cxr-lookalike", { symbols: { "bad-cxr-lookalike": bad } });
+    await expect(cap.lower({ evalScheme }).apply(env, undefined as never)).rejects.toThrow(DefineLocalityError);
+  });
 });
 
 describe("symbol.define — §2.3's eager-forward-reference door", () => {
