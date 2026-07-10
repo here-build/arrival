@@ -46,6 +46,42 @@
 // NOT in BASE_PACKS: this is config-bearing (params differ per run), lowered per-consumer —
 // unlike core/polyglot/srfi (assembled once into every env), an overridable pack is assembled
 // FRESH per run with that run's own host-supplied parameter values.
+//
+// MIGRATION NOTE (W4-H2b, docs/working-proposals/symbol-define-static-program-validation.md
+// §1/§2/§4): this pack's `prelude` was ONE `define-macro` form — `define/overridable` itself —
+// and nothing else; it mechanically decomposes 1:1 (`(define-macro (name . args) body…)` →
+// `(lambda args body…)`, §4.2 Pass 1) into the `symbol.defineSyntax` entry below. The `overridable/
+// resolve` rosetta declaration is UNTOUCHED — it was never prelude text, it's a `symbol.rosetta`
+// entry already (the ordinary runtime verb the macro expands into), and `z.value` there is the
+// scheme-zod doc's own named legitimate identity use (the ASymbol-vs-opaque-brand comment on
+// `name`'s param, above) — no Pass 2 (contract authoring) applies to it either way.
+//
+// `macroAttribute: "binder"` (§3.4's ternary), not `"expression"` and not the bare `"opaque"`
+// default — `name` is a FORMALS position, not expression space: it is spliced ONLY into
+// `(define ,name …)`'s binding-name slot, never read back as a value reference anywhere in the
+// expansion. Walking it as ordinary expression space (`"expression"`) would report the call
+// site's own binding target as `unbound-symbol` on every legal program — `(define/overridable
+// city (s/string) "Berlin")` would flag `city` unbound before it's ever defined, the exact
+// false positive §3.4 exists to close (the doc's own worked case: `receive`'s `q`/`r`, and
+// H1's `and-let*` claws, `let-values`'s `vars`). Distinguished from `cut`/`cute`'s `"opaque"`
+// (srfi-26): `<>`/`<...>` are placeholder TOKENS consumed positionally by the macro's own
+// expander and never appear, bound or free, in the expansion's output; `name` here genuinely
+// BINDS — it is exactly the shape `define`'s own name argument is, just macro-mediated. `type`/
+// `default` ARE ordinary expression space (evaluated at the call site, e.g. `(s/string)`,
+// `"Berlin"`) — but there is no per-argument-position binding-aware walker yet (§3.4's
+// DEFERRED note), so the whole call is firewalled identically to `"opaque"` today; `"binder"`
+// is the honest classification for when that walker lands, not a behavior change now.
+//
+// No `symbol.define` entries exist in this pack (the census: one macro, one already-rosetta
+// verb) — nothing for Pass 2 (real contracts) to touch, and the §2.1 bake FV law never runs
+// here (`define-bake.ts` limits that check to `def.kind === "define"` — a `defineSyntax` body's
+// free names would name the EXPANSION env, out of scope for this wave, same as srfi-8/26/H1's
+// binder/opaque siblings). `deps: [schemaCapability]` (below, unchanged) covers `type`'s s/*
+// call at the macro's OWN call site — this pack's `defineSyntax` body itself references nothing
+// outside `define`/`overridable/resolve`, both resolved without a new edge (`define` is
+// KEYWORD_SYNTAX; `overridable/resolve` is this same capability's own Pass-1-bound sibling,
+// referenced only inside the quasiquote — literal data at macro-definition time, an ordinary
+// same-capability reference once the expansion itself evaluates, §2.3's two-phase order).
 
 import { z } from "zod";
 
@@ -164,9 +200,11 @@ export const overridableCapability = new EnvCapability("arrival/overridable", {
           return jsToScheme(CONSTANT_CTX, outcome.data);
         },
       ),
+    "define/overridable":
+      symbol.defineSyntax`define/overridable: like plain \`define\`, but the environment MAY override the value — a host-supplied param (via configuration.params) wins over the in-form default, and BOTH validate against the declared type — (define/overridable name type default)`(
+        `(lambda (name type default)
+           \`(define ,name (overridable/resolve ',name ,type ,default)))`,
+        { macroAttribute: "binder" },
+      ),
   }),
-  prelude: `
-    (define-macro (define/overridable name type default)
-      \`(define ,name (overridable/resolve ',name ,type ,default)))
-  `,
 });

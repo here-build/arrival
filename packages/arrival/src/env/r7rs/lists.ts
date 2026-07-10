@@ -13,6 +13,23 @@
  * representation-blind (`z.value`), and the optional user comparator is the
  * types-only `z.custom` binary predicate.
  */
+//
+// MIGRATION NOTE (W4-H2, docs/working-proposals/symbol-define-static-program-
+// validation.md §4.2): verified — this pack never carried a `prelude` field (the
+// census's "23 production preludes", §4.1, does not include it; grep-verified:
+// `grep -rln "prelude:" src/env/` does not return this file). Its 23 symbols are
+// ALREADY the target shape §1.2/§4.2's Pass 2 exists to reach for a migrated pack —
+// 18 `symbol.native` + 1 `symbol.sequence` (`map`), every one contract-authored
+// per-define (never the shapeless `z.array(z.value)` default except where the op
+// is genuinely variadic-any, per §1.2's own carve-out — `list`/`append`) — plus 4
+// `symbol.notImplemented` purity doors (`set-car!`/`set-cdr!`/`append!`/
+// `list-set!`). Pass 1 (mechanical decomposition) has nothing to run over: zero
+// `symbol.define`, zero `symbol.defineSyntax`. §2.1's bake FV law is therefore
+// structurally inert here — nothing in this pack is FV-walked, so no `deps` edge
+// is ever required OF this pack (it is instead a `deps` TARGET: `scheme/srfi-235`
+// declares `deps: [… , lists]`, W4-H1 — base-packs.ts repositions `lists`/
+// `polyglot` last in `BASE_PACKS` for exactly that C3 reason; unchanged by this
+// note). Pinned by `__tests__/lists-symbol-define-migration.test.ts`.
 
 // Installs the global \`TypeError.invariant\` assertion helper used by the
 // list-bounds and circular-list guards below (side-effect import).

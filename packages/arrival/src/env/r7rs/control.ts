@@ -20,6 +20,33 @@
 //
 // SINGLE SOURCE: `r7rs/index.ts` adds this to `allR7rs`, so `base-packs.ts`
 // assembles it into the base env — the doors are live in every assembled env.
+//
+// MIGRATION NOTE (W4-H2, docs/working-proposals/symbol-define-static-program-
+// validation.md §4.2): verified — this pack never carried a `prelude` field (the
+// census's "23 production preludes", §4.1, does not include it). Its entire
+// symbol population is `symbol.notImplemented` doors — zero `symbol.define`,
+// zero `symbol.defineSyntax`. Pass 1 (mechanical decomposition) and Pass 2
+// (contract authoring, enforced day one per V's ruling, §1.2) both have nothing
+// to run over: a door is contract-free by construction (§1.1), so there is no
+// migration here in the byte sense, only VERIFICATION that this reality holds —
+// pinned by `__tests__/control-symbol-define-migration.test.ts`. The pre-H2
+// machinery fixes (runCtx threading, cxr bake FV allowlist, the `try` FV arm —
+// exceptions.ts's header) are all `symbol.define`-body concerns and do not touch
+// this file, which has no such bodies to affect.
+//
+// §6.10 boundary, checked explicitly for this wave: R7RS §6.10 "control features"
+// also names `map`/`for-each`/`string-map`/`vector-map`/`string-for-each`/
+// `vector-for-each` (implemented, `symbol.native`, `r7rs/lists.ts`) and
+// `values`/`call-with-values` (implemented, `symbol.native`, `r7rs/binding.ts`)
+// — this pack owns exactly arrival's SUPPORTED-vs-omitted split of §6.10, not
+// the whole section: the nine names below are the omitted subset, full stop.
+//
+// KNOWN GAP, noted not fixed (out of this migration's scope — adding a door is
+// expansion, not decomposition): `chibi/registries.ts` excludes `promise?` under
+// the same §4.2.5 "delayed evaluation" feature text as `delay`/`force`/
+// `make-promise`/`delay-force` below, but `promise?` is not declared as a door
+// anywhere in the tree (grep-verified) — it is a plain unbound name today, not a
+// teaching door. Flagged for a future pass, not this one.
 
 import { EnvCapability } from "../../common/capability.js";
 import { symbol } from "../../common/symbol.js";
