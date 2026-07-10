@@ -11,14 +11,14 @@
 // consulted, and the editor shows `unknown` with no error and no crash —
 // exactly the "requireIsHostMember= false" symptom we chased.
 //
-// This suite builds the roster the way studio does, from the REAL env, so a
+// This suite builds the roster the way studio does, from the REAL session, so a
 // regression in the derivation chain (defineRequireRosetta drops `type`,
-// assembleHostPrelude drops a member, buildArrivalEnv stops registering it)
+// assembleHostPrelude drops a member, buildArrivalSession stops stamping it)
 // turns this red instead of silently degrading the editor.
 //
 // Per `.claude/rules/tests.md` this is a `__tests__/` verdict (boolean pass/fail).
 
-import { buildArrivalEnv, loaderFromResolver, resolveRequireType, rosettaTypesOf } from "@here.build/arrival-chain";
+import { buildArrivalSession, loaderFromResolver, resolveRequireType, rosettaTypesOf } from "@here.build/arrival-chain";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { assembleHostPrelude } from "../host-prelude.js";
@@ -29,15 +29,17 @@ const FILES: Record<string, string> = {
   "personas.json": `[{"name":"Ada","age":36}]`,
 };
 
-// Stubs: this env never executes requires (the lens only reads its roster).
-const stubInfer = (async () => [""]) as unknown as Parameters<typeof buildArrivalEnv>[0]["infer"];
+// Stubs: this session never executes requires (the lens only reads its roster).
+const stubInfer = (async () => [""]) as unknown as Parameters<typeof buildArrivalSession>[0]["infer"];
 const stubLoader = loaderFromResolver((p) => FILES[p] ?? null);
 
-/** The runtime env — its rosetta-type registry (`rosettaTypesOf(env)`) is the SINGLE SOURCE OF TRUTH that
- *  studio derives the lens roster from. Built async (eval has no sync path). */
-let env: Awaited<ReturnType<typeof buildArrivalEnv>>;
+/** The runtime session — the rosetta-type registry keyed on its SCOPE frame
+ *  (`rosettaTypesOf(session.scope.env)`, where `buildArrivalSession` stamps `require`) is the
+ *  SINGLE SOURCE OF TRUTH studio derives the lens roster from. Built async (eval has no sync path). */
+let env: Awaited<ReturnType<typeof buildArrivalSession>>["scope"]["env"];
 beforeAll(async () => {
-  env = await buildArrivalEnv({ name: "regression", infer: stubInfer, loader: stubLoader });
+  const session = await buildArrivalSession({ name: "regression", infer: stubInfer, loader: stubLoader });
+  env = session.scope.env;
 });
 
 // The seam studio synthesizes host-side: route a file's source through the

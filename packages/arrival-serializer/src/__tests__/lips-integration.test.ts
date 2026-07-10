@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { toSExprString } from "../serializer";
 // Import what we can from lips
-import { exec, AExact, schemeToJs, AString, ASymbol, ANil, APair, sandboxedEnv } from "@here.build/arrival";
+import { exec, AExact, schemeToJs, AString, ASymbol, ANil, APair, LexicalScope } from "@here.build/arrival";
 // Import custom matchers
 import "@here.build/arrival";
 
@@ -203,11 +203,7 @@ describe("exec with proper environment", () => {
   });
 
   it("should have access to Ramda functions", async () => {
-    const result = (
-      await exec("(map (lambda (x) (+ x 1)) (list 1 2 3))", {
-        env: sandboxedEnv
-      })
-    )[0];
+    const result = (await exec("(map (lambda (x) (+ x 1)) (list 1 2 3))"))[0];
     expect(result).toBeInstanceOf(APair);
 
     // Convert to JS values for easier testing
@@ -217,19 +213,18 @@ describe("exec with proper environment", () => {
 
   it("should have access to functional composition", async () => {
     const result = schemeToJs(
-      await exec("((compose (lambda (x) (+ x 1)) (lambda (x) (+ x 1))) 5)", {
-        env: sandboxedEnv
-      }),
+      await exec("((compose (lambda (x) (+ x 1)) (lambda (x) (+ x 1))) 5)"),
       { forceBigInt: true }
     )[0];
     expect(result).toBe(7n);
   });
 
   it("should support environment variables", async () => {
+    const scope = LexicalScope.fresh("test");
+    scope.env.set("x", 10);
+    scope.env.set("y", 20);
     const result = schemeToJs(
-      await exec("(+ x y)", {
-        env: sandboxedEnv.inherit("test", { x: 10, y: 20 })
-      }),
+      await exec("(+ x y)", { scope }),
       { forceBigInt: true }
     )[0];
     expect(result).toBe(30n);

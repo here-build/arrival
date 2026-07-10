@@ -4,7 +4,9 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
  */
 
 import { describe, expect, it } from "vitest";
-import { exec, execState, jsToScheme, schemeToJs, sandboxedEnv } from "../index.js";
+import { exec, execState, jsToScheme, schemeToJs } from "../index.js";
+// In-package test: internal-module access (the barrel export retired — privatization V5).
+import { inferenceEnv as sandboxedEnv } from "../inference-env.js";
 
 describe("Quick Start Examples", () => {
   it("Basic execution example", async () => {

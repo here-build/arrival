@@ -15,7 +15,9 @@
 
 import { describe, expect, it } from "vitest";
 
-import { exec, sandboxedEnv } from "../../index.js";
+import { exec } from "../../index.js";
+// In-package test: internal-module access (the barrel export retired — privatization V5).
+import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
 import { assembleEnv, type EnvPack } from "../kernel.js";
 import { EnvCapability } from "../capability.js";
 import { symbol } from "../symbol.js";

@@ -346,6 +346,14 @@ export function classifyProgram(program: ParsedProgram, baseEnv: Environment): L
   return program.forms.map((form) => classify(form, classifier));
 }
 
+/** The ambient-native classifier door (privatization V4): `classifierFromEnv` over an
+ *  ambient's post-augmentation base, without exposing the base frame. External consumers
+ *  that classified against a held instance env (`classifierFromEnv(sandboxedEnv, …)`)
+ *  assemble/hold an ambient and read the classifier here. */
+export function classifierFromAmbient(ambient: AssembledAmbient): ReturnType<typeof classifierFromEnv> {
+  return classifierFromEnv(ambientBase(ambient));
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Phase 3 — ExecInstance
 // ─────────────────────────────────────────────────────────────────────────────

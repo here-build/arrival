@@ -484,15 +484,16 @@ From here: tools — `EnvCapability` + `symbol.rosetta` (first section); data �
 `/scheme-zod`, `/schema-tag`, `/provenance`, `/srfi`, `/capability`, `/env`, `/resources`,
 `/scheme-env`, `/attestation`, `/overridable`, `/schema`.
 
-**Lower-level membrane API** — the pre-capability instance surface, for decomposed-processing
-cases the three declared doors (`capabilities` / `override` / `scope`) don't cover: a custom
-provenance stamp on ingress, or a persistent env assembled once and reused across many runs.
-`sandboxedEnv.inherit(name)` + `env.set(name, jsToScheme(ctx, value, {}, provenance?))`, passed to
-`exec`/`execState` as glass (`{ env }`). `@deprecated` on the simple API (still exported, still
-fully functional); a first-class "assemble once, reuse across runs" product is being formalized on
-the `/env` subpath (`docs/working-proposals/exec-phases-and-dynamic-metadata.md`, monorepo). One
-naming honesty note: `sandboxedEnv` is the inference-plane base environment — the name predates
-the sweep that deleted the host-reaching verbs, and it is not, by itself, a security boundary.
+**Decomposed processing** — for cases the three declared doors (`capabilities` / `override` /
+`scope`) don't cover, the `/env` subpath carries the explicit phase products: `assembleAmbient`
+assembles a capability base once (an `AssembledAmbient`, caller-owned, `AsyncDisposable`) and
+`exec`/`execState(code, { ambient, scope })` reuses it across many runs — the "assemble once, run
+N times, dispose deliberately" idiom. `LexicalScope.fresh()` mints the session's mutable frame;
+its `.env` satisfies the structural `SchemeEnv` write contract, so a session owner can still
+register pack vocabulary against the frame it holds (`scope.env.set(name, jsToScheme(ctx, value,
+{}, provenance?))` covers a custom provenance stamp on ingress). The pre-capability instance
+surface (`sandboxedEnv` and the barrel env instances) is retired — the barrel exports zero
+Environment instances; glass `{ env }` remains only for embedder-held frames.
 
 ## Security Status
 

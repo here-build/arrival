@@ -26,6 +26,8 @@ describe("freshEnv (capability-assembled test env)", () => {
     expect(await run("(find odd? (list 2 4 5))")).toBe(5); // stdlib INLINE
   });
 
+  // INVARIANT: each freshEnv() call is isolated — a definition made in one fresh env
+  // is invisible in a second fresh env.
   it("isolates definitions per call (fresh layer each time)", async () => {
     const a = await freshEnv();
     await exec("(define probe 42)", { env: a });

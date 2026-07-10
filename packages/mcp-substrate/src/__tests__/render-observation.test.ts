@@ -12,20 +12,27 @@
 // NOT re-parse (`exec("'hi'")` threw `expecting datum after '''`). See the positive
 // test below.
 
-import { exec, execState, sandboxedEnv } from "@here.build/arrival";
-import { describe, expect, it } from "vitest";
+import { exec, execState, LexicalScope } from "@here.build/arrival";
+import { assembleAmbient, type AssembledAmbient } from "@here.build/arrival/env";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { DEFAULT_OBSERVATION_MAX_TOTAL_CHARS, renderObservation } from "../render-observation.js";
 
-// `exec`'s `env` option is typed against arrival's concrete (intentionally UNEXPORTED)
-// `Environment` class; `sandboxedEnv.inherit(...)` returns the public structural
-// `SchemeEnv` contract it implements — same widen-then-narrow cast manifold-tool.ts
-// itself needs at the one package-boundary crossing (see its ExecEnv comment).
-type ExecEnv = NonNullable<Parameters<typeof exec>[1]>["env"];
-const run = (env: unknown, expr: string) => exec(expr, { env: env as ExecEnv });
+// ONE bare ambient (no capabilities, no tools) shared across every test in this file — it is
+// stateless and immutable, so sharing it costs nothing; only the SCOPE (where a test's own
+// defines would land) needs to be fresh per test, for isolation between cases.
+let ambient: AssembledAmbient;
+beforeAll(async () => {
+  ambient = await assembleAmbient({});
+});
+afterAll(async () => {
+  await ambient.dispose();
+});
 
-function freshEnv(): unknown {
-  return sandboxedEnv.inherit("render-observation-test", {});
+const run = (scope: LexicalScope, expr: string) => exec(expr, { ambient, scope });
+
+function freshEnv(): LexicalScope {
+  return LexicalScope.fresh("render-observation-test");
 }
 
 describe("renderObservation — plain JS values", () => {
@@ -79,7 +86,7 @@ describe("renderObservation — real arrival exec() results", () => {
     // The Values BOX is a tooling read — R1's two-tier rule routes it to execState
     // (exec's plain-JS exit unwraps multiple values to a JS ARRAY by convention —
     // the arrival membrane's Values arm — so values-ness is only observable boxed).
-    const state = await execState("(partition odd? '(1 2 3 4))", { env: env as ExecEnv });
+    const state = await execState("(partition odd? '(1 2 3 4))", { ambient, scope: env });
     expect(renderObservation(state.values[0])).toBe("(values\n  [1 3]\n  [2 4])");
   });
 });

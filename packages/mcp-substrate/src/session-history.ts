@@ -1,8 +1,8 @@
 // session-history — replayable record of successful top-level `(define ...)` statements.
 //
-// The live `SchemeEnv` provides cross-call persistence for a single world. This module
-// exists for resumability: a history of source text can be replayed into a fresh environment
-// (new process, resumed session, etc.).
+// The persistent (ambient, scope) pair provides cross-call persistence for a single world. This
+// module exists for resumability: a history of source text can be replayed against a fresh
+// world's (ambient, scope) pair (new process, resumed session, etc.).
 //
 // Tool-valued defines are skipped on replay (to avoid re-invoking side-effecting tools).
 // Callers are expected to advise the user when a reconstruction may be incomplete because
@@ -11,10 +11,8 @@
 // This module is a sibling to the type-hints context ring. They observe the same events
 // but project different data (original source here vs. degraded `declare const ...` there).
 
-import { exec, type SchemeEnv } from "@here.build/arrival";
-
-/** `exec`'s `env` option uses arrival's internal `Environment`; `SchemeEnv` is the public view. */
-type ExecEnv = NonNullable<Parameters<typeof exec>[1]>["env"];
+import { exec, type LexicalScope } from "@here.build/arrival";
+import type { AssembledAmbient } from "@here.build/arrival/env";
 
 /** Detects a qualified tool name (`server/tool`) anywhere in a form.
  *
@@ -181,17 +179,19 @@ export function createLocalBindingTracker(): LocalBindingTracker {
   };
 }
 
-/** Reconstructs session state into `env` by replaying a history's non-tool-valued defines,
- *  in order. `env` is typically a FRESH env for the same toolset (e.g. a new
- *  `buildManifoldEnv` call) — replay only rebinds names into it, it never builds tools or
- *  touches the env otherwise. A tool-valued entry is skipped, never executed (it would
- *  re-invoke the tool) and its name is reported in `skipped` so a caller can warn that the
- *  reconstruction is not a complete replica of the original session. A statement that itself
- *  errors on replay (see `ReplayResult.failed`'s ordering caveat) is caught, never thrown —
- *  replay is best-effort and always finishes, reporting exactly what did/didn't land. */
+/** Reconstructs session state into `scope` (resolving builtins/tools through `ambient`) by
+ *  replaying a history's non-tool-valued defines, in order. `ambient`/`scope` are typically a
+ *  FRESH world's pair for the same toolset (e.g. a new `buildManifoldEnv` call) — replay only
+ *  rebinds names into `scope`, it never builds tools or touches `ambient` otherwise. A
+ *  tool-valued entry is skipped, never executed (it would re-invoke the tool) and its name is
+ *  reported in `skipped` so a caller can warn that the reconstruction is not a complete replica
+ *  of the original session. A statement that itself errors on replay (see `ReplayResult.failed`'s
+ *  ordering caveat) is caught, never thrown — replay is best-effort and always finishes,
+ *  reporting exactly what did/didn't land. */
 export async function replaySessionHistory(
   entries: readonly SessionHistoryEntry[],
-  env: SchemeEnv,
+  ambient: AssembledAmbient,
+  scope: LexicalScope,
 ): Promise<ReplayResult> {
   const applied: string[] = [];
   const skipped: string[] = [];
@@ -202,7 +202,7 @@ export async function replaySessionHistory(
       continue;
     }
     try {
-      await exec(entry.source, { env: env as unknown as ExecEnv });
+      await exec(entry.source, { ambient, scope });
       applied.push(entry.name);
     } catch {
       failed.push(entry.name);

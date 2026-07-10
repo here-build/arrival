@@ -28,7 +28,7 @@ import { repl } from "./repl.js";
 import {
   budgets,
   formatDiagnostic,
-  loaderEnv,
+  loaderSession,
   printError,
   printValue,
   REQUIRE_SKIP_NOTE,
@@ -59,11 +59,16 @@ async function runFile(file: string): Promise<number> {
   try {
     let values: unknown[];
     if (usesRequire(source)) {
-      // GLASS: the loader-armed env, jailed to the file's dir. No seal ⇒ no static
-      // pass (see session.ts header) — runtime doors are the backstop, stated out loud.
+      // The loader-armed ambient, jailed to the file's dir. Static validation still
+      // can't see require-spilled bindings (see session.ts header) — runtime doors
+      // remain the backstop, stated out loud.
       process.stderr.write(`${REQUIRE_SKIP_NOTE}\n`);
-      const env = await loaderEnv(path.dirname(path.resolve(file)), `arrival-run:${path.basename(file)}`);
-      values = await exec(source, { env, ...budgets() });
+      const { ambient, scope } = await loaderSession(path.dirname(path.resolve(file)), `arrival-run:${path.basename(file)}`);
+      try {
+        values = await exec(source, { ambient, scope, ...budgets() });
+      } finally {
+        await ambient.dispose();
+      }
     } else {
       // THE CUT: default base, whole-program diagnostics before the first form fires.
       values = await exec(source, { ...budgets(), staticValidation: "on" });

@@ -10,24 +10,16 @@
 // is untouched; only this export retires.
 export { box, patch_value, quote } from "./reader/values-repr.js";
 export { eof } from "./values/primitives/EOF.js";
-/**
- * The inference-plane base env — every cross-package consumer inherits from it
- * (`sandboxedEnv.inherit(name)`) and types against it (`ReturnType<typeof sandboxedEnv.inherit>`).
- * `sandboxedEnv` is not a security sandbox — the name predates the Graal sweep that
- * deleted the host-reaching verbs; kept for the one name external code actually uses.
- *
- * @deprecated retiring from the SIMPLE API (arrival-environment-privatization.md §II.3).
- * The instance surface this exposes (`.inherit` / `.set` / `.defineRosetta`) decomposes
- * into `exec`/`execState`'s declared doors: host vocabulary → `capabilities`; a program's
- * declared parameter → `override`; REPL-style define accumulation → `scope`
- * (`LexicalScope.fresh()`) — see the README's "Passing data across" + "Register your own
- * tools" sections. A persistent, reassembled env for session/decomposed processing (the
- * one case those three doors don't cover) is being formalized as an explicit `{ ambient }`
- * product on the `/env` subpath (exec-phases-and-dynamic-metadata.md) — not landed yet.
- * Not deleted here (D5: hard-delete is a later, one-atomic-wave cut across all consumers,
- * not a deprecation window) — `sandboxedEnv` keeps working exactly as today.
- */
-export { inferenceEnv as sandboxedEnv } from "./inference-env.js";
+// `sandboxedEnv` (the inference-plane base env, env-roots' third root) is NO LONGER
+// barrel-exported — the V5 atomic cut (arrival-environment-privatization.md §II.3, D5:
+// hard delete, all consumers migrated in the same wave). The instance surface it exposed
+// (`.inherit` / `.set` / `.defineRosetta`) decomposes into the declared doors:
+//   • host vocabulary            → `exec({ capabilities })` / `assembleAmbient` (`/env`)
+//   • a program's declared param → `define/overridable` + `exec({ override })`
+//   • define accumulation        → `exec({ scope })` + `LexicalScope.fresh()`
+//   • session/decomposed reuse   → `assembleAmbient` + `exec({ ambient, scope })`
+// inference-env.ts itself is untouched (the identity boundary holds internally); only
+// the public export retired. The barrel now contains ZERO Environment instances.
 // Interop sealing — `@arrival.private` (+ `markInteropBoundary`) marks a class opaque to
 // a Scheme member-read (`(@ x :internal)` → nil). `markSandboxPrivate`/`markAsSandboxBoundary`
 // are deprecated aliases kept for cross-package consumers (arrival-chain).
@@ -160,7 +152,10 @@ export {
 
 // The lexical-binding scope handle, public for `exec({ scope })` — a caller holds a
 // `LexicalScope.for(env)` across calls for REPL-style multi-step define accumulation.
-export { LexicalScope } from "./eval/LexicalScope.js";
+// `SessionScope` is the refinement `LexicalScope.fresh()` mints (root frame carries the
+// structural `SchemeEnv` write contract) — session products name it (arrival-run's
+// `ArrivalSession.scope`, chain-env's `ChainEnv`).
+export { LexicalScope, type SessionScope } from "./eval/LexicalScope.js";
 
 // The EnvCapability DECLARATION API — root-surfaced so a consumer declares a typed
 // capability from ONE module specifier instead of fanning across `/capability` + `/env`

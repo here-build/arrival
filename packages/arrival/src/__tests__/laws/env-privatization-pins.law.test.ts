@@ -1,16 +1,19 @@
 /**
- * LAW (V0) — docs/working-proposals/arrival-environment-privatization.md, wave V0:
- * "pins (no behavior)". Three pins the V1/V2 mechanical cuts lean on:
+ * LAW (V0→V5) — docs/working-proposals/arrival-environment-privatization.md.
+ * Pinned surface, updated at the V5 atomic cut (D5 hard delete executed):
  *
  *   1. Barrel surface pin — `global_env`/`env` are GONE (V1's zero-consumer cut);
- *      `sandboxedEnv` stays (deprecated in V1's JSDoc, hard-delete is D5's LATER wave);
- *      `LexicalScope.fresh` exists (V1's one new API).
+ *      `sandboxedEnv` is GONE (V5's atomic cut — every external consumer migrated to
+ *      `capabilities`/`override`/`scope`/`assembleAmbient` in the same wave);
+ *      `LexicalScope.fresh` exists (V1's one new API); `SessionScope` names the
+ *      refinement it mints (root frame carries the structural SchemeEnv contract —
+ *      the V4 session products type against it). The barrel exports ZERO Environment
+ *      instances; `rosettaTypesOf` deliberately SURVIVES this cut (WO-1 territory —
+ *      rosetta-registry-dissolution.md owns its death, keyed now on scope frames).
  *   2. Glass byte-identity — a custom `{ env }` run still resolves/defines exactly as
- *      before the `ExecOptions.env: SchemeEnv` retype (D2): the retype is a TYPE-level
- *      change only (frees external glass callers from the private
- *      `ReturnType<typeof sandboxedEnv.inherit>` alias onto the public `SchemeEnv`
- *      contract) — the runtime walk (`new Resolver(actualEnv)`, defines land directly
- *      in the glass env) is untouched.
+ *      before the `ExecOptions.env: SchemeEnv` retype (D2): glass remains a designed
+ *      mode for embedder-held frames (in-package: the inference-env internal module;
+ *      externally an env can no longer be MINTED, only held over from an owned frame).
  *   3. override+scope value-injection parity — the census's own migration-target claim
  *      (§II.1's table: `env.set(name, jsToScheme(ctx, dataValue))` → `override`) is
  *      pinned as an actual equality: both paths must produce identical values AND
@@ -34,13 +37,20 @@ describe("V0 pin — barrel surface", () => {
     expect(names).not.toContain("env");
   });
 
-  it("sandboxedEnv stays barrel-exported (D5: hard-delete is a LATER, one-atomic-wave cut — not this round)", () => {
-    expect(arrival.sandboxedEnv).toBeDefined();
-    expect(typeof arrival.sandboxedEnv.inherit).toBe("function");
+  it("sandboxedEnv is no longer barrel-exported (V5 atomic cut, D5 hard delete)", () => {
+    expect(Object.keys(arrival)).not.toContain("sandboxedEnv");
   });
 
-  it("LexicalScope.fresh exists (V1's one new public API, D6)", () => {
+  it("rosettaTypesOf SURVIVES the cut (WO-1 owns its death, not this wave)", () => {
+    expect(typeof arrival.rosettaTypesOf).toBe("function");
+  });
+
+  it("LexicalScope.fresh exists (V1's one new public API, D6) and mints a SchemeEnv-contract root frame (V4)", () => {
     expect(typeof arrival.LexicalScope.fresh).toBe("function");
+    const scope = arrival.LexicalScope.fresh("pin-fresh");
+    // The V4 refinement: the fresh root frame carries the structural pack-write contract
+    // (registerResolver is the discriminating member — a plain lexical frame lacks it).
+    expect(typeof (scope.env as { registerResolver?: unknown }).registerResolver).toBe("function");
   });
 
   it("the full exported-name set is otherwise unchanged by this round (pin — update deliberately, on purpose, never by accident)", () => {

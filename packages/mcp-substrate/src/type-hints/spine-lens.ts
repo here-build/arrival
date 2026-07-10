@@ -7,11 +7,11 @@
 // call (NOT per `diagnose()` call — the harvested prelude is built ONCE and captured):
 //
 //   1. Recover the bound tools' JSON Schemas from the `BoundTool` registry (bound-tool.ts) —
-//      arrival-manifold's original MVP recovery mechanism (an env-keyed WeakMap ride-on-env
-//      handle, `bind.ts`'s `toolSchemasForEnv`) collapses here into a plain, already-frozen
-//      `ReadonlyMap<string, BoundTool>` the caller passes directly: no env, no WeakMap, no
-//      "does this env carry the handle" construction-time check — every `BoundTool` already
-//      carries its own `qualifiedName`/`schema`/`outputSchema`.
+//      arrival-manifold's original MVP recovery mechanism (an ambient-keyed WeakMap ride-on-
+//      ambient handle, `bind.ts`'s `toolSchemasForAmbient`) collapses here into a plain,
+//      already-frozen `ReadonlyMap<string, BoundTool>` the caller passes directly: no ambient,
+//      no WeakMap, no "does this ambient carry the handle" construction-time check — every
+//      `BoundTool` already carries its own `qualifiedName`/`schema`/`outputSchema`.
 //   2. Harvest those schemas into an ambient TS prelude via `assembleManifoldPrelude`
 //      (json-schema-to-ts.ts) — the tool's ACTUAL declared shape, not the zod-erased
 //      `SymbolDef` harvest bind.ts binds into the env (every property there decodes through

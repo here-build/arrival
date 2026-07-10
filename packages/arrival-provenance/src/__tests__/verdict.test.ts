@@ -20,12 +20,10 @@ import {
   AString,
   CONSTANT_CTX,
   deepProvenance,
-  execGeneratorExpr,
+  execState,
   initBridge,
+  LexicalScope,
   nil,
-  parseGenerator,
-  sandboxedEnv,
-  type SchemeValue,
 } from "@here.build/arrival";
 import { attestDeep } from "@here.build/arrival/attestation";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -36,18 +34,19 @@ import { TRUTH_ORACLE_DISCLAIMER, groundingVerdict, verdictLeafValues } from "..
 let seq = 0;
 
 /** Run `source` under a fresh traced env with one deterministic Rosetta-IN source,
- *  `(evidence-read q)` → `"SRC:q"`. Returns the same `{ result, trace, source, forms }`
- *  bag `groundingVerdict` (and `buildUneval`) consume. */
+ *  `(evidence-read q)` → `"SRC:q"`. Returns the `{ result, trace, source }` bag
+ *  `groundingVerdict` (and `buildUneval`) consume — `forms` stays unset, so the
+ *  reverse-chain's output form derives from the trace itself (`lastTopLevelForm`),
+ *  not a second, identity-mismatched parse of `source`. */
 async function run(source: string) {
   await initBridge();
-  const env = sandboxedEnv.inherit(`verdict-test-${seq++}`);
-  env.defineRosetta("evidence-read", { fn: (q: string) => `SRC:${q}` });
+  const scope = LexicalScope.fresh(`verdict-test-${seq++}`);
+  scope.env.defineRosetta("evidence-read", { fn: (q: string) => `SRC:${q}` });
   const trace = new EvalTrace();
-  const forms = await parseGenerator(source, env);
-  let result: SchemeValue | undefined;
-  for (const form of forms) result = await execGeneratorExpr(form, { env, tap: trace });
+  const { values } = await execState(source, { scope, tap: trace });
+  const result = values.at(-1);
   if (result === undefined) throw new Error("fixture ran zero forms");
-  return { result, trace, source, forms };
+  return { result, trace, source };
 }
 
 beforeAll(async () => {

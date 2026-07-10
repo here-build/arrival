@@ -24,7 +24,6 @@ import {
   execState,
   is_callable_value,
   parse,
-  sandboxedEnv,
 } from "@here.build/arrival";
 import type { EnvCapability } from "@here.build/arrival/capability";
 import { type AssembledAmbient, assembleAmbient } from "@here.build/arrival/env";
@@ -96,6 +95,23 @@ interface ExecSerializedOptions {
    *  text); absent ⇒ plain `toSExprString` — the byte-identical fast path (the fold — whose
    *  output is discarded — stays here: no extraction work is wasted on it). */
   extrasState?: ExtrasState;
+}
+
+/** The standard base's full symbol vocabulary (sorted), advertised in the tool schema in place
+ *  of a hardcoded builtin constant — so the docs stay FAITHFUL to the base every eval ambient
+ *  augments. Realm-memoized (the base is realm-scoped); read off a throwaway BARE ambient's
+ *  sealed chain (`names()`), the privatization-era replacement for the retired
+ *  instance-env `allBoundNames()` chain walk. */
+let baseEnvSymbolsMemo: Promise<readonly string[]> | undefined;
+function baseEnvSymbols(): Promise<readonly string[]> {
+  return (baseEnvSymbolsMemo ??= (async () => {
+    const ambient = await assembleAmbient({});
+    try {
+      return [...ambient.names()].filter((k): k is string => typeof k === "string").toSorted((a, b) => a.localeCompare(b));
+    } finally {
+      await ambient.dispose();
+    }
+  })());
 }
 
 /** `execSerializedState`'s product: the serialized outputs plus this form's meter reads (§2.7). */
@@ -891,7 +907,7 @@ export class DiscoveryTool {
         .string()
         .describe("What you're exploring and why. Shown to collaborating users in the studio UI.")
         .optional(),
-      expr: z.string().describe(this.exprDescription(verbs, dynamic, aiName)),
+      expr: z.string().describe(this.exprDescription(verbs, dynamic, aiName, await baseEnvSymbols())),
       ...(exposedConfig as z.ZodRawShape),
     });
     const { $schema: _drop, ...jsonSchema } = z.toJSONSchema(input);
@@ -903,8 +919,8 @@ export class DiscoveryTool {
    *  batch-query contract, the domain verbs, and — when any verb is live — the personalized,
    *  timestamped welcome-screen note. Ported from the original DiscoveryToolInteraction.getToolSchema
    *  so the migration to the value shape preserves it exactly. */
-  private exprDescription(verbs: { text: string }[], dynamic: boolean, aiName: string): string {
-    const baseSymbols = this.baseEnvSymbols().join(", ");
+  private exprDescription(verbs: { text: string }[], dynamic: boolean, aiName: string, baseNames: readonly string[]): string {
+    const baseSymbols = baseNames.join(", ");
     const preamble = dedent`
       Expr is an input for Scheme (Lisp dialect) REPL that will be executed in sandboxed environment.
       This sandbox is providing access to the actual system state snapshot at the moment of request.
@@ -940,15 +956,6 @@ export class DiscoveryTool {
       Consider it as a dashboard or welcome screen for this MCP application.
     `;
     return `${base}\n${liveNote}`;
-  }
-
-  /** The base env's full symbol set (chain-walked, sorted) — advertised in the schema in place of a
-   *  hardcoded builtin constant, so the docs are FAITHFUL to the real env `environment()` assembles. */
-  private baseEnvSymbols(): string[] {
-    // The scope-node owns its chain-walk (`allBoundNames`); we keep only the
-    // string-name filter + sort the schema advertises. No `__parent__`/`list` poking.
-    const names = sandboxedEnv.inherit(this.name, {}).allBoundNames();
-    return names.filter((k): k is string => typeof k === "string").toSorted((a, b) => a.localeCompare(b));
   }
 
   /** The DESCRIBE ambient (exec-phases §2.7): a HOST-CONFIG-ONLY `AssembledAmbient` (the

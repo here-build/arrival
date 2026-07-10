@@ -1,5 +1,5 @@
 import { CLASS } from "../well-known-symbols.js";
-import { Environment } from "../Environment.js";
+import { Environment, ResolvingEnvironment } from "../Environment.js";
 import type { BindingName, EnvironmentValue } from "../Environment.js";
 
 /**
@@ -28,17 +28,19 @@ const MERGE_SCOPE: symbol = Symbol.for("merge"); // ≡ Syntax.__merge_env__ (re
  */
 const wrappers = new WeakMap<Environment, LexicalScope>();
 
-export class LexicalScope {
+export class LexicalScope<E extends Environment = Environment> {
   static [CLASS] = "lexical-scope";
 
   /** The memoized wrapper for `env` (see {@link wrappers}). */
-  static for(env: Environment): LexicalScope {
+  static for<E extends Environment>(env: E): LexicalScope<E> {
     let w = wrappers.get(env);
     if (w === undefined) {
       w = new LexicalScope(env);
       wrappers.set(env, w);
     }
-    return w;
+    // Sound by construction: the memoized wrapper was minted from THIS exact env, so its
+    // `.env` IS `env` (the WeakMap erases the generic; identity restores it). Not `any`.
+    return w as LexicalScope<E>;
   }
 
   /**
@@ -52,12 +54,19 @@ export class LexicalScope {
    * The returned scope's builtins still resolve through the run's capability base
    * (`scope.lookup ?? capabilities.lookup`, generator-exec.ts) — only the LEXICAL
    * chain is isolated, exactly like every other `LexicalScope`.
+   *
+   * The root frame is a {@link ResolvingEnvironment} — the machinery-target frame class —
+   * so `scope.env` carries the full structural `SchemeEnv` write contract: a SESSION owner
+   * (a chain extension registrar, the runtime `(require/extension …)` assembler) registers
+   * packs against the scope frame it holds, exactly as it did against the pre-privatization
+   * instance env. A plain lexical frame would silently drop that contract (V4's chain-env
+   * migration is the consumer that proved it load-bearing).
    */
-  static fresh(name: string | symbol = "session"): LexicalScope {
-    return LexicalScope.for(new Environment(name, {}, null));
+  static fresh(name: string | symbol = "session"): SessionScope {
+    return LexicalScope.for(new ResolvingEnvironment(name, {}, null));
   }
 
-  constructor(readonly env: Environment) {}
+  constructor(readonly env: E) {}
 
   /**
    * The semantic role of this frame. Today only "merge" is consulted (the
@@ -115,3 +124,9 @@ export class LexicalScope {
     return `#<lexical-scope:${String(this.env.__name__)}>`;
   }
 }
+
+/** The scope type {@link LexicalScope.fresh} mints — a `LexicalScope` whose root frame is a
+ *  `ResolvingEnvironment`, i.e. whose `.env` satisfies the structural `SchemeEnv` pack-write
+ *  contract. Named so session products (`ArrivalSession` in arrival-run, chain-env's `ChainEnv`)
+ *  can state the refinement without reaching for the internal class name. */
+export type SessionScope = LexicalScope<ResolvingEnvironment>;

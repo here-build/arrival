@@ -54,7 +54,9 @@ import { missingOptionalKeys } from "../../common/degradation.js";
 import { symbol } from "../../common/symbol.js";
 import { DoorProcedure } from "../../values/primitives/ACallable.js";
 import { PurityError } from "../../errors.js";
-import { nil, sandboxedEnv } from "../../index.js";
+import { nil } from "../../index.js";
+// In-package test: internal-module access (the barrel export retired — privatization V5).
+import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
 import type { ResolverSpec, RosettaSpec, SchemeEnv } from "../../common/scheme-env.js";
 
 /** A minimal recording SchemeEnv — same shape as door-cause.test.ts's, local here so this

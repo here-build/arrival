@@ -69,7 +69,6 @@ exports[`V0 pin — barrel surface > the full exported-name set is otherwise unc
   "rosettaTypesOf",
   "runCacheKey",
   "sameStep",
-  "sandboxedEnv",
   "schemeFalse",
   "schemeToJs",
   "schemeTrue",

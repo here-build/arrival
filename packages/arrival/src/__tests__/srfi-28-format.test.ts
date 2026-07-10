@@ -15,7 +15,9 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { exec, execState, sandboxedEnv } from "../index.js";
+import { exec, execState } from "../index.js";
+// In-package test: internal-module access (the barrel export retired — privatization V5).
+import { inferenceEnv as sandboxedEnv } from "../inference-env.js";
 import { assembleEnv } from "../common/kernel.js";
 import { type SchemeEnv } from "../common/scheme-env.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";

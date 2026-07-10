@@ -40,6 +40,7 @@ export {
   parseProgram,
   validateAgainstAmbient,
   classifyProgram,
+  classifierFromAmbient,
   type ParsedProgram,
   type AssembledAmbient,
   type ExecInstance,

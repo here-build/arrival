@@ -1,14 +1,16 @@
 // runner — the central stateful orchestrator for the doors teaching system.
 //
 // `createDoorsRunner(options)` returns a `DoorsRunner` with a `run(input)` method that executes
-// Scheme expressions against a live `SchemeEnv`, enriches errors with structured teaching doors,
-// tracks session history, applies futility detection, and (optionally) delivers type hints.
+// Scheme expressions against an assembled ambient + persistent lexical scope, enriches errors
+// with structured teaching doors, tracks session history, applies futility detection, and
+// (optionally) delivers type hints.
 //
 // The runner owns cross-call state (via injected `session` and `tracker`) so that per-process
 // teaching state survives world rebuilds (e.g. tools/listChanged). It is env-lifecycle-agnostic
 // and model-agnostic.
 
-import { APair, exec, parse, theVoid, tokenize, type SchemeEnv, type SchemeValue } from "@here.build/arrival";
+import { APair, exec, parse, theVoid, tokenize, type LexicalScope, type SchemeValue } from "@here.build/arrival";
+import type { AssembledAmbient } from "@here.build/arrival/env";
 import { toSExprString } from "@here.build/arrival-serializer";
 
 import type { AttachmentSink } from "./attachment-sink.js";
@@ -40,10 +42,6 @@ import type { ToolJsonSchema } from "./tool-schema.js";
 import { createContextRing, type SerializableContextRing } from "./type-hints/context-ring.js";
 import { deliverTypeHints } from "./type-hints/deliver.js";
 import type { TypeHintLens, TypeHintsMode } from "./type-hints/types.js";
-
-/** `exec`'s `env` option is typed against arrival's concrete (intentionally unexported)
- * `Environment` class. `SchemeEnv` is the public structural contract it implements. */
-type ExecEnv = NonNullable<Parameters<typeof exec>[1]>["env"];
 
 /** Extra grace period for the outer timeout race. Used only when evaluation is parked inside
  * a host await (e.g. a stuck upstream tool) that the in-band budget check cannot reach. */
@@ -148,7 +146,13 @@ function isLibraryEnriched(raw: string, name: string): boolean {
 
 export interface RunInput {
   expr: string;
-  env: SchemeEnv;
+  /** The assembled capability base (stdlib + every bound tool) this call resolves
+   *  builtins/tools through — caller-owned, never disposed here. */
+  ambient: AssembledAmbient;
+  /** The persistent lexical root this call's top-level `define`s land in. Pass the SAME
+   *  scope object across calls for REPL-style multi-statement accumulation (a session
+   *  owner mints one via `LexicalScope.fresh()` and holds it for the world's lifetime). */
+  scope: LexicalScope;
   tools: ReadonlyMap<string, BoundTool>;
   /** Per-call override, already clamped to [calibration.responseSizeMinChars,
    *  calibration.responseSizeMaxChars] by the caller. */
@@ -336,7 +340,8 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
         if (remaining <= 0) return timeoutResult();
         try {
           const running = exec(form, {
-            env: input.env as unknown as ExecEnv,
+            ambient: input.ambient,
+            scope: input.scope,
             budgetMs: remaining,
             heapBudget: calibration.heapBudgetPerForm,
             signal: controller.signal,

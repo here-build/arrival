@@ -31,8 +31,9 @@
 //      at all. This test pins the NOW-correct behavior and guards against regressing back to
 //      text-based execution.
 
-import { sandboxedEnv, type SchemeEnv } from "@here.build/arrival";
-import { describe, expect, it } from "vitest";
+import { LexicalScope } from "@here.build/arrival";
+import { assembleAmbient, type AssembledAmbient } from "@here.build/arrival/env";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { AttachmentSink } from "../attachment-sink.js";
 import type { BoundTool } from "../bound-tool.js";
@@ -56,12 +57,21 @@ function makeRunner(): ReturnType<typeof createDoorsRunner> {
   });
 }
 
-/** A fresh, isolated real R7RS env for one test — `sandboxedEnv.inherit(...)`'s return type is
- *  the internal (unexported) concrete `Environment` class, which satisfies `SchemeEnv`
- *  STRUCTURALLY but can't be named across the package boundary (the same `unknown`-then-cast
- *  pattern render-observation.test.ts's own `freshEnv()` already uses in this package). */
-function freshEnv(name: string): unknown {
-  return sandboxedEnv.inherit(name, {});
+// ONE bare ambient (no capabilities, no tools) shared across every test in this file — it is
+// stateless and immutable, so sharing it costs nothing; only the SCOPE (where a test's own
+// `(define ...)`s would land) needs to be fresh per test, for isolation between cases.
+let ambient: AssembledAmbient;
+beforeAll(async () => {
+  ambient = await assembleAmbient({});
+});
+afterAll(async () => {
+  await ambient.dispose();
+});
+
+/** A fresh, isolated lexical scope for one test — mints a null-rooted `LexicalScope` (its
+ *  builtins still resolve through the shared `ambient` above). */
+function freshScope(name: string): LexicalScope {
+  return LexicalScope.fresh(name);
 }
 
 const noTools = new Map<string, BoundTool>();
@@ -69,10 +79,11 @@ const noTools = new Map<string, BoundTool>();
 describe("createDoorsRunner(...).run(...) — end-to-end regression, real reader + real exec", () => {
   it("the exact MCP-Atlas crash shape (char=? against a quote-character literal) runs without throwing", async () => {
     const runner = makeRunner();
-    const env = freshEnv("runner-crash-regression") as SchemeEnv;
+    const scope = freshScope("runner-crash-regression");
     const result = await runner.run({
       expr: String.raw`(char=? #\" (car (string->list ",")))`,
-      env,
+      ambient,
+      scope,
       tools: noTools,
     });
     // This is the actual production crash: the statement-facts analysis step used to throw on
@@ -84,7 +95,7 @@ describe("createDoorsRunner(...).run(...) — end-to-end regression, real reader
 
   it("the fuller CSV-parser shape from the original crash report runs cleanly end to end", async () => {
     const runner = makeRunner();
-    const env = freshEnv("runner-crash-regression-csv") as SchemeEnv;
+    const scope = freshScope("runner-crash-regression-csv");
     const result = await runner.run({
       expr: String.raw`(define (split-csv-row row)
   (let loop ((chars (string->list row)) (current '()) (fields '()))
@@ -98,7 +109,8 @@ describe("createDoorsRunner(...).run(...) — end-to-end regression, real reader
       (else
        (loop (cdr chars) (cons (car chars) current) fields)))))
 (split-csv-row "a,\"b\",c")`,
-      env,
+      ambient,
+      scope,
       tools: noTools,
     });
     expect(result.isError).not.toBe(true);
@@ -106,10 +118,11 @@ describe("createDoorsRunner(...).run(...) — end-to-end regression, real reader
 
   it("R7RS `#;` datum comment: the commented-out form is never executed", async () => {
     const runner = makeRunner();
-    const env = freshEnv("runner-hash-semicolon") as SchemeEnv;
+    const scope = freshScope("runner-hash-semicolon");
     const result = await runner.run({
       expr: "(define x 1) #;(set! x 999) x",
-      env,
+      ambient,
+      scope,
       tools: noTools,
     });
     expect(result.isError).not.toBe(true);
@@ -124,10 +137,11 @@ describe("createDoorsRunner(...).run(...) — end-to-end regression, real reader
     // but splitTopLevel's TEXT split would still count 3 statements if it were (wrongly) used as
     // the execution source. Using `define`s so each statement's effect is independently visible.
     const runner = makeRunner();
-    const env = freshEnv("runner-hash-semicolon-alignment") as SchemeEnv;
+    const scope = freshScope("runner-hash-semicolon-alignment");
     const result = await runner.run({
       expr: "(define a 10) #;(define bogus 999) (define c (+ a 5)) c",
-      env,
+      ambient,
+      scope,
       tools: noTools,
     });
     expect(result.isError).not.toBe(true);
@@ -144,10 +158,11 @@ describe("createDoorsRunner(...).run(...) — the import-form door (doors.ts's i
 
   it("`(scheme base)` alone: the door teaches (stdlib already in scope / drop the form), and the rest of the program still computes", async () => {
     const runner = makeRunner();
-    const env = freshEnv("runner-import-form-scheme-head") as SchemeEnv;
+    const scope = freshScope("runner-import-form-scheme-head");
     const result = await runner.run({
       expr: "(scheme base) (+ 1 2)",
-      env,
+      ambient,
+      scope,
       tools: noTools,
     });
     const rendered = result.content.map((b) => (b.type === "text" ? b.text : "")).join("\n");
@@ -159,10 +174,11 @@ describe("createDoorsRunner(...).run(...) — the import-form door (doors.ts's i
 
   it("`(import (scheme base))`: the outer `import` head also gets the door", async () => {
     const runner = makeRunner();
-    const env = freshEnv("runner-import-form-import-head") as SchemeEnv;
+    const scope = freshScope("runner-import-form-import-head");
     const result = await runner.run({
       expr: "(import (scheme base))",
-      env,
+      ambient,
+      scope,
       tools: noTools,
     });
     const rendered = result.content.map((b) => (b.type === "text" ? b.text : "")).join("\n");
@@ -173,10 +189,11 @@ describe("createDoorsRunner(...).run(...) — the import-form door (doors.ts's i
 
   it("an unrelated unbound variable never gets the import-form door", async () => {
     const runner = makeRunner();
-    const env = freshEnv("runner-import-form-unrelated") as SchemeEnv;
+    const scope = freshScope("runner-import-form-unrelated");
     const result = await runner.run({
       expr: "(frobnicate 1 2)",
-      env,
+      ambient,
+      scope,
       tools: noTools,
     });
     const rendered = result.content.map((b) => (b.type === "text" ? b.text : "")).join("\n");
@@ -187,10 +204,10 @@ describe("createDoorsRunner(...).run(...) — the import-form door (doors.ts's i
 
   it("an 11-repeat run teaches the lesson VERBOSE once, then collapses to terse (no 11 verbose repeats)", async () => {
     const runner = makeRunner();
-    const env = freshEnv("runner-import-form-repeats") as SchemeEnv;
+    const scope = freshScope("runner-import-form-repeats");
     const renders: string[] = [];
     for (let i = 0; i < 11; i++) {
-      const result = await runner.run({ expr: "(scheme base)", env, tools: noTools });
+      const result = await runner.run({ expr: "(scheme base)", ambient, scope, tools: noTools });
       renders.push(result.content.map((b) => (b.type === "text" ? b.text : "")).join("\n"));
     }
     expect(renders[0]).toContain("standard library is already fully bound");

@@ -1,35 +1,35 @@
 /**
  * The ONE run posture every CLI verb shares: the entry-point budgets (100M heap /
  * 300s wall, env-tunable — the same knobs `arrival-run` reads), the loader-armed
- * GLASS env for require-using programs (the `buildArrivalEnv` idiom: base +
- * `arrivalLoaderCapability` assembled once, jailed to a root dir), and the two
- * output surfaces — values through arrival-serializer (budgeted), errors as their
- * teaching-door TEXT (never a stack trace; the doors ARE the UX).
+ * AMBIENT for require-using programs (the CUT, capability-refined: `arrivalLoaderCapability`
+ * assembled once via {@link assembleAmbient}, jailed to a root dir, paired with a
+ * {@link LexicalScope.fresh} session scope), and the two output surfaces — values through
+ * arrival-serializer (budgeted), errors as their teaching-door TEXT (never a stack trace;
+ * the doors ARE the UX).
  *
- * TWO PATHS, by the program's own shape (the same split `exec` documents as
- * glass-vs-cut): a require-FREE program runs the CUT (default base, static
- * validation available); a require-USING program runs GLASS (assembled env,
- * `__parent__`-chained builtins — the path the loader's production consumers
- * use. The cut-path bug that originally FORCED this split is fixed: a required
- * module's forms now evaluate through the requiring run's COMPOSED resolver
- * (`execExpr({ resolver })` — arrival's src/loader/), so cut-mode `(require …)`
- * sees the stdlib too. The split stays for the OTHER asymmetries: glass has no
- * seal, so no static pass — the runtime doors are the backstop there, stated out
- * loud — and the once-assembled glass env keeps defines + the require cache
- * alive for the whole session.)
+ * TWO PATHS, by the program's own shape: a require-FREE program runs the bare CUT
+ * (default base, static validation available); a require-USING program runs the CUT
+ * with the loader capability's ambient + a session scope (the path the loader's
+ * production consumers use) — a required module's forms evaluate through the
+ * requiring run's COMPOSED resolver (`execExpr({ resolver })` — arrival's
+ * src/loader/), so `(require …)` sees the stdlib too. The split stays because the
+ * static pass cannot see require-spilled bindings (module-graph awareness is an LSP
+ * problem, not v1's — see {@link usesRequire}), not because of any seal asymmetry —
+ * and because the once-assembled ambient + scope keep defines + the require cache
+ * alive for the whole session.
  */
 import fs from "node:fs/promises";
 import path from "node:path";
 
 import {
-  assembleEnv,
-  exec,
-  sandboxedEnv,
+  LexicalScope,
   StaticValidationError,
   tokenize,
   type Diagnostic,
   type ExecOptions,
+  type SessionScope,
 } from "@here.build/arrival";
+import { assembleAmbient, type AssembledAmbient } from "@here.build/arrival/env";
 import { arrivalLoaderCapability } from "@here.build/arrival/loader";
 import { toSExprString } from "@here.build/arrival-serializer";
 
@@ -50,27 +50,35 @@ export function budgets(): Pick<ExecOptions, "budgetMs" | "heapBudget"> {
   return { budgetMs: wallDefault(), heapBudget: heapDefault() };
 }
 
+/** The two session handles a loader-armed run continues on: a caller-owned
+ *  {@link AssembledAmbient} (dispose it when the session ends) and the
+ *  {@link SessionScope} its top-level `define`s land in. */
+export interface LoaderSession {
+  readonly ambient: AssembledAmbient;
+  readonly scope: SessionScope;
+}
+
 /**
- * The loader-armed GLASS env, rooted at `root` (the entry file's dir for `run`,
+ * The loader-armed session, rooted at `root` (the entry file's dir for `run`,
  * cwd for the repl). The capability derives its own `Loader` from the raw fs
  * slice; `dirname: ""` makes `root` the jail root — the loader's own path
  * normalization refuses `..` escapes, and every resolved path is jail-relative,
- * re-anchored here via `path.resolve(root, p)`. Assembled ONCE per session:
- * defines land in the env (glass accumulation) and the require cache lives for
- * the env's lifetime.
+ * re-anchored here via `path.resolve(root, p)`. The kernel wires the canonical
+ * prelude `evalScheme` internally — no closure to supply here. Assembled ONCE
+ * per session: `scope` accumulates defines across calls (`execState(src, {
+ * ambient, scope })`, the REPL continuation idiom) and the require cache lives
+ * for the ambient's lifetime — dispose it when the session (run/repl) ends.
  */
-export async function loaderEnv(root: string, name: string): Promise<NonNullable<ExecOptions["env"]>> {
-  const base = sandboxedEnv.inherit(name);
-  const { env } = await assembleEnv(base, [
-    arrivalLoaderCapability.lower({
-      config: {
-        fs: { readFile: (p: string) => fs.readFile(path.resolve(root, p), "utf8") },
-        dirname: "",
-      },
-      evalScheme: (env, src) => exec(src, { env: env as never }),
-    }),
-  ]);
-  return env;
+export async function loaderSession(root: string, name: string): Promise<LoaderSession> {
+  const ambient = await assembleAmbient({
+    capabilities: [arrivalLoaderCapability],
+    config: {
+      fs: { readFile: (p: string) => fs.readFile(path.resolve(root, p), "utf8") },
+      dirname: "",
+    },
+  });
+  const scope = LexicalScope.fresh(name);
+  return { ambient, scope };
 }
 
 /**

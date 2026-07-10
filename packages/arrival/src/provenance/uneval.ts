@@ -13,11 +13,12 @@
 // real SLICE (via `buildSlice`): only the top-level forms the effective value depends on, plus
 // the selector. Intra-form minimal slicing (sub-form re-synthesis) is the deferred increment.
 
-import { execExpr, parse } from "../eval/generator-exec.js";
+import { execState, parse } from "../eval/generator-exec.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { schemeToJs } from "../rosetta.js";
 import { WireLocalityError } from "../errors.js";
-import type { SchemeEnv } from "../common/scheme-env.js";
+import type { LexicalScope } from "../eval/LexicalScope.js";
+import type { AssembledAmbient } from "../eval/exec-phases.js";
 import type { SchemeValue } from "../values/types.js";
 
 import { buildSlice, writeForm, writeFormWith, defineNameOf, lastTopLevelForm } from "./slice.js";
@@ -56,24 +57,25 @@ export interface UnevalContainer {
 }
 
 /** Build the `{result, meta, uneval}` container from a finished traced run. `result` is the run's
- *  final value as a raw AValue (provenance intact — NOT schemeToJs-peeled); `env` is the post-run
- *  scope (so the selector evaluates with `result` bound); `trace` is the run's EvalTrace (so the
- *  selector's step records, and the slice can read the whole lineage). `source` is the original
- *  program text (the v1 program render). */
+ *  final value as a raw AValue (provenance intact — NOT schemeToJs-peeled); `scope` is the post-run
+ *  lexical scope (so the selector evaluates with the run's defines visible and `result` bound);
+ *  `ambient` is the run's capability base (so the selector's heads — `car`, program verbs — resolve
+ *  through the SAME composed resolution the run used; absent ⇒ the realm-default base); `trace` is
+ *  the run's EvalTrace (so the selector's step records, and the slice can read the whole lineage).
+ *  `source` is the original program text (the v1 program render). */
 export function buildUneval(opts: {
-  // The post-run scope a selector re-evaluates in. Typed `SchemeEnv` — the public structural
-  // contract (never the package-internal `Environment` class), and (V2, arrival-environment-
-  // privatization.md §II.3/D2) the same type `ExecOptions.env` now takes, so this passes straight
-  // through to `execExpr(lastForm, { env, tap: trace })` below with no narrowing at the call site.
-  // Every real caller already holds a base-linked env satisfying this (arrival-run's
-  // `buildArrivalEnv` / `sandboxedEnv.inherit(...)`, the README's own "run it backward" example).
-  env: SchemeEnv;
+  // The post-run continuation pair (arrival-environment-privatization V4): the instance-env
+  // option this took pre-cut (`env: SchemeEnv`, a glass frame) is retired with the barrel's
+  // instance surface — a finished run's continuation handles are exactly `ExecState.scope` +
+  // `ExecState.ambient` / `RunHandle.scope` + `RunHandle.ambient`, so the container takes those.
+  scope: LexicalScope;
+  ambient?: AssembledAmbient;
   result: unknown;
   trace: EvalTrace;
   source: string;
   forms: readonly unknown[];
 }): UnevalContainer {
-  const { env, result, trace, forms } = opts;
+  const { scope, ambient, result, trace, forms } = opts;
   // The run's OUTPUT expression (the last top-level form) is what produces `result`. The slice is
   // anchored on the symbols IT references, so the derivation of `result` is reproduced in full;
   // we then bind `result` to it and append the selector — the selector picks the effective value
@@ -89,8 +91,8 @@ export function buildUneval(opts: {
 
   return {
     // `result`/`v` (below) are declared `unknown` at this public boundary (this file's own
-    // `env.set("result", result as never)` already casts the same value to bind it into the
-    // interpreter's env — it must genuinely be a SchemeValue to be usable there), so the
+    // `scope.define("result", result as never)` already casts the same value to bind it into
+    // the interpreter's scope — it must genuinely be a SchemeValue to be usable there), so the
     // schemeToJs cast here documents the same pre-existing contract rather than widening
     // schemeToJs's own honest input bound.
     result: schemeToJs(result as SchemeValue | undefined, {}),
@@ -99,11 +101,12 @@ export function buildUneval(opts: {
       // Bind the run's output as `result`, then evaluate the selector as ONE more tapped step —
       // the effective value is produced by the SAME pure evaluator, so it carries provenance and
       // becomes a trace node, exactly like any value the program itself computed.
-      env.set("result", result as never);
+      scope.define("result", result as never);
       const sel = await parse(selector);
       const lastForm = sel.at(-1);
       if (lastForm === undefined) throw new Error(`uneval: selector "${selector}" parsed to zero forms`);
-      let v: unknown = await execExpr(lastForm, { env, tap: trace });
+      const state = await execState(lastForm, { ambient, scope, tap: trace });
+      let v: unknown = state.values.at(-1);
       if (v != null && typeof (v as { then?: unknown }).then === "function") v = await (v as Promise<unknown>);
       const provenance = v instanceof AValue ? [...v.provenance] : [];
       // The SLICE: the reachable derivation of the run's output (static backward reference-closure

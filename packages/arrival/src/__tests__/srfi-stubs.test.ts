@@ -13,7 +13,9 @@
 // in ArrivalError but preserves the message and chains the PurityError as `.cause`.
 
 import { describe, expect, it } from "vitest";
-import { exec, sandboxedEnv } from "../index.js";
+import { exec } from "../index.js";
+// In-package test: internal-module access (the barrel export retired — privatization V5).
+import { inferenceEnv as sandboxedEnv } from "../inference-env.js";
 import { assembleEnv } from "../common/kernel.js";
 import { type SchemeEnv } from "../common/scheme-env.js";
 import { PurityError } from "../errors.js";

@@ -2,7 +2,7 @@ import type { ToolJsonSchema, ToolSignature } from "./tool-schema.js";
 
 /** Collapses the binder's current 5 qualifiedName-keyed structures (`signatures[]`,
  *  `signatureByName`, `toolParts`, `bypassResolution` (keyed by bare-name forms — does NOT
- *  subsume), `toolSchemasByEnv`) into ONE registry entry per tool. `signature()` is lazy — the
+ *  subsume), `toolSchemasByAmbient`) into ONE registry entry per tool. `signature()` is lazy — the
  *  binder computes it its own way (kwargs `:key value` text today; a positional binder renders
  *  differently later) and the runner never needs to know how. */
 export interface BoundTool {

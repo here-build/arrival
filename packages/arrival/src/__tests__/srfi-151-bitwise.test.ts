@@ -12,7 +12,9 @@
  * registered globally this round); the base bitwise verbs arrive by inheritance.
  */
 
-import { exec, sandboxedEnv } from "../index.js";
+import { exec } from "../index.js";
+// In-package test: internal-module access (the barrel export retired — privatization V5).
+import { inferenceEnv as sandboxedEnv } from "../inference-env.js";
 import { assembleEnv } from "../common/kernel.js";
 import { type SchemeEnv } from "../common/scheme-env.js";
 import { describe, expect, it } from "vitest";
