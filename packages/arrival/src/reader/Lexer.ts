@@ -282,15 +282,21 @@ export class Lexer {
     const found = this.next_token();
     if (found) {
       this._token = this.__input__.substring(this._i, this._next!);
-      if (!this.__token__) {
-        // handle case when accessing __token__ from the syntax extension
-        // (e.g. string interpolation) as the first expression in a REPL
-        Object.defineProperty(this, "__token__", {
-          value: this.token(true),
-          configurable: true,
-          enumerable: true,
-        });
-      }
+      // ALWAYS snapshot — every freshly-scanned token becomes the new "current token" a
+      // parser extension (or `Parser._getLocation()`) reads back via `__token__`. The old
+      // `if (!this.__token__)` guard only snapshotted the FIRST token this Lexer instance
+      // ever produced, then never again: `__token__` went stale the moment a second
+      // top-level form's opening token was scanned WITHOUT an intervening double-peek to
+      // refresh it (the accidental refresh path is the `this._token` branch above, which a
+      // parser callsite doesn't always hit before reading the location). Concretely, for
+      // `"(define ok 1)\n(define bad 2)"`, form[1]'s reported offset came back as 11 — the
+      // position of the "1" INSIDE form[0] — instead of 14, form[1]'s true start; the fix
+      // is this unconditional snapshot, matching the cached-token branch's own semantics.
+      Object.defineProperty(this, "__token__", {
+        value: this.token(true),
+        configurable: true,
+        enumerable: true,
+      });
       return this.token(meta);
     }
     return eof;

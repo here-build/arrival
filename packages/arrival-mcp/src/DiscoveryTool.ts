@@ -319,7 +319,13 @@ export class DiscoveryTool {
       const name = defineName(src);
       if (!name) continue; // bare expression — output only, nothing to replay
       if (!history.includes(src)) history.push(src);
-      const js = schemeToJs(env.get(name));
+      // `env.get` is typed `unknown` on the public `SchemeEnv` surface (its concrete return type
+      // is internal-only), but the runtime fact here is solid: `name` was just bound by the
+      // `(define …)` this loop iteration ran seconds ago via `execSerialized`, so this is a real
+      // `SchemeValue`, not an arbitrary unknown. Narrowed by cast, not `as any` — the same "one
+      // sanctioned narrowing" idiom `schemeToJs`'s own doc comment documents for this exact
+      // membrane boundary.
+      const js = schemeToJs(env.get(name) as SchemeValue);
       if (jsonRoundTrippable(js)) cache[src] = JSON.stringify(js);
     }
     state.__repl__ = history;

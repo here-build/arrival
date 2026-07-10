@@ -166,34 +166,28 @@ describe("R0 pin — crash-stops-batch: earlier statements in the SAME call stan
   });
 });
 
-// ── R0 FINDING (not asserted as "correct", pinned as what HEAD actually does) ──────────────────
+// ── R0 FINDING, FIXED (was: not asserted as "correct", pinned as what HEAD actually did) ────────
 //
-// `sourceTextFor`/`nextLocatedOffset` (the uncommitted reader-split diff this doc's Part I §1.2
-// treats as HEAD) slice a form's history/cache-key text using `APair.getLocation()` from
-// `@here.build/arrival`'s `parse`. Probing the RAW locations `parse` returns for a multi-top-level-
-// form source shows form[0]'s location is correct (offset 0), but every LATER top-level form's
-// OWN reported `getLocation().offset` points to a position INSIDE the PRECEDING form's text (not
-// its own start) — e.g. for `"(define ok 1)\n(define bad 2)"`, form[1]'s reported offset is 11
-// (the position of the digit `1` inside form[0]'s own source), not 14 (form[1]'s true start).
+// `sourceTextFor`/`nextLocatedOffset` slice a form's history/cache-key text using
+// `APair.getLocation()` from `@here.build/arrival`'s `parse`. This USED TO be broken at the root:
+// `Lexer.peek()` (`foundations/arrival/arrival/src/reader/Lexer.ts`) only snapshotted its
+// `__token__` metadata (the field `Parser._getLocation()` reads back) the FIRST time it ever saw a
+// freshly-scanned token, then never again — so after the first top-level form, `__token__` stayed
+// frozen at whatever token last happened to be re-peeked twice in a row (in practice, the last
+// list element read via `read_list` + `_read_object`'s double-peek), and every LATER top-level
+// form's own `getLocation().offset` read back that STALE position instead of its own true start.
+// E.g. for `"(define ok 1)\n(define bad 2)"`, form[1]'s reported offset used to be 11 (the digit
+// `1` inside form[0]'s own source) instead of 14 (form[1]'s true start).
 //
-// Two visible consequences on DiscoveryTool's REPL-history mechanism, pinned below:
-//   1. A multi-statement batch's FIRST define gets a TRUNCATED history/cache-key text (sliced up
-//      to the second form's wrong offset, landing mid-token).
-//   2. Every define AFTER the first in the SAME batch computes a garbled `sourceTextFor` result
-//      (sliced from ITS OWN wrong start) that no longer matches `DEFINE_NAME`'s `^\(define …`
-//      anchor — so `defineName` returns `undefined` for it, and it is silently treated as a bare
-//      expression: NEVER pushed to history, NEVER cached. Its binding is correctly live for the
-//      REST of the CURRENT call (execution runs the parsed FORM object, not the sliced string),
-//      but is LOST on every subsequent call (the fold loop only re-establishes what's in history).
-//
-// This is a genuine data-loss bug relative to the design doc's own premise (§1.2: "already parses
-// with the REAL reader … slices each form's exact source via LOCATION spans") and relative to the
-// OLD `splitTopLevel` mechanism it replaced (token-offset-based, not `getLocation()`-based) — worth
-// a follow-up fix before R3 (which depends on "the log holds ALL top-level statements", R3's own
-// wording) locks this mechanism in as the log's source. Pinned here so it is visible and so a fix
-// shows up as an intentional, expected diff rather than a silent behavior change.
-describe("R0 FINDING (pinned, not endorsed) — a multi-statement batch loses non-first defines from history", () => {
-  it("two defines in ONE call: only the first survives to the next call; the second is silently lost", async () => {
+// Fixed by making `Lexer.peek()`'s "freshly found a new token" branch snapshot `__token__`
+// UNCONDITIONALLY (matching the already-cached-token branch's own semantics) instead of only the
+// very first time. Now every top-level form's location is correct, so `sourceTextFor` slices the
+// right span for every define in a multi-statement batch — ALL defines survive into history and
+// restore on the next call, matching the design doc's own premise (§1.2: "already parses with the
+// REAL reader … slices each form's exact source via LOCATION spans") and the OLD `splitTopLevel`
+// mechanism it replaced.
+describe("R0 FINDING, fixed — a multi-statement batch's defines ALL survive into history", () => {
+  it("two defines in ONE call: BOTH survive to the next call, each with its own exact source", async () => {
     const cap = new McpEnvCapability("demo-caps", { symbols: {}, annotations: {} });
     const tool = new DiscoveryTool("demo", cap, { description: "demo tool" });
     const session = { id: "s1", state: {} as Record<string, unknown> };
@@ -201,14 +195,13 @@ describe("R0 FINDING (pinned, not endorsed) — a multi-statement batch loses no
     const out = await tool.call({ expr: "(define x 1)\n(define y 2)" }, { session });
     expect(out).toEqual(["undefined", "undefined"]); // BOTH defines ran fine within this call…
 
-    // …but only `x` made it into history (truncated), and its cache key is truncated too.
-    expect(session.state.__repl__).toEqual(["(define x"]);
-    expect(session.state.__cache__).toEqual({ "(define x": "1" });
+    // …and BOTH made it into history, each with its own exact (untruncated) source + cache key.
+    expect(session.state.__repl__).toEqual(["(define x 1)", "(define y 2)"]);
+    expect(session.state.__cache__).toEqual({ "(define x 1)": "1", "(define y 2)": "2" });
 
-    // On the NEXT call, `x` replays (from its truncated-but-self-consistent cache key) but `y` is
-    // genuinely gone — an honest characterization, not a design goal.
+    // On the NEXT call, both `x` and `y` replay from cache — no data loss.
     const readback = await tool.call({ expr: "(list x y)" }, { session });
-    expect(readback).toEqual(['(error "Unbound variable `y\'")']);
+    expect(readback).toEqual(["(list 1 2)"]);
   });
 
   it("a single define alone in a call is NOT affected — its full source survives verbatim", async () => {
