@@ -42,6 +42,7 @@ import dedent from "dedent";
 import * as z from "zod";
 
 import { lowerBinaryBlob } from "./dispatch.js";
+import { MCPError } from "./errors.js";
 import type { McpAnnotation, McpCapabilitySpec, McpEnvCapability } from "./McpEnvCapability.js";
 import {
   type LogStatement,
@@ -378,6 +379,45 @@ export interface DiscoveryToolOptions {
 
 type DiscoveryArgs = { expr: string; intent?: string } & Record<string, unknown>;
 
+/** One-word type tag for the session door's "what arrived instead" line. */
+function describeSessionValue(v: unknown): string {
+  if (v === null) return "null";
+  if (typeof v === "string") return `the string ${JSON.stringify(v)}`;
+  if (typeof v !== "object") return typeof v;
+  const s = v as { id?: unknown; state?: unknown };
+  if (typeof s.id !== "string") return "an object with no string `id`";
+  return "an object with `id` but no `state` object";
+}
+
+/** The session shape `call` requires, checked AT the boundary (errors-as-doors): a wrong
+ *  shape used to surface as `TypeError: Cannot read properties of undefined (reading
+ *  '__run__')` deep inside `loadState` — a misleading stack the first-day integrator
+ *  debugs as transport/registration. The door states the expected shape and the cure. */
+function assertSessionShape(
+  tool: string,
+  session: unknown,
+): asserts session is { id: string; state: Record<string, unknown> } {
+  const s = session as { id?: unknown; state?: unknown };
+  if (
+    typeof session === "object" &&
+    session !== null &&
+    typeof s.id === "string" &&
+    typeof s.state === "object" &&
+    s.state !== null
+  ) {
+    return;
+  }
+  throw new MCPError(
+    "validation",
+    `${tool}: ctx.session must be { id: string, state: {} } — got ${describeSessionValue(session)}. ` +
+      `The session's run log lives at session.state.__run__ (this tool reads and writes it), so \`state\` ` +
+      `must be a plain object you keep across calls: pass { id: "your-session-id", state: {} } on the first ` +
+      `call and the SAME object on every later call for REPL continuity. Omit \`session\` entirely for a ` +
+      `stateless one-shot call.`,
+    { phase: "dispatch", target: tool },
+  );
+}
+
 /** Default wall-clock eval budget — the interpreter TICK-checks it (the SDK gives the SERVER no
  *  handler timeout; this is the server-side bound). */
 export const DEFAULT_BUDGET_MS = 5000;
@@ -470,6 +510,7 @@ export class DiscoveryTool {
     const budgetMs = this.options.budgetMs ?? DEFAULT_BUDGET_MS;
     const heapBudget = this.options.heapBudget ?? defaultHeapBudget();
     const { signal, session } = ctx;
+    if (session !== undefined) assertSessionShape(this.name, session);
     const cfg = await this.config(args);
 
     // ── sessionless: per-call ambient, disposed in `finally` (§2.8's dispose row — the R7

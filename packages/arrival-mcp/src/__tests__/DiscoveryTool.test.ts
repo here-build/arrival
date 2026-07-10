@@ -53,6 +53,20 @@ describe("DiscoveryTool (value-shaped, capability-derived)", () => {
     await expect(tool.call({ expr: "(greet)", who: "ada" }, { signal: AbortSignal.abort() })).rejects.toThrow();
   });
 
+  it("a malformed session is a teaching door naming the expected shape, never a deep TypeError", async () => {
+    const tool = new DiscoveryTool("demo", demoCapability(), { description: "demo tool" });
+    // The two naive guesses custdev personas actually shipped: a bare id string, and an
+    // id-only object (no `state`). Both used to crash inside loadState with
+    // `Cannot read properties of undefined (reading '__run__')`.
+    for (const bad of ["s1", { id: "s1" }, { id: "s1", actions: [] }]) {
+      // The runtime-shape probe IS the test subject — the type error is the customer's bug re-enacted.
+      // @ts-expect-error — deliberately wrong session shape
+      await expect(tool.call({ expr: "1", who: "ada" }, { session: bad })).rejects.toThrow(
+        /session must be \{ id: string, state: \{\} \}/,
+      );
+    }
+  });
+
   it("session state carries honest replay across calls (a define survives to the next call)", async () => {
     const tool = new DiscoveryTool("demo", demoCapability(), { description: "demo tool" });
     const session = { id: "s1", state: {} as Record<string, unknown> };
