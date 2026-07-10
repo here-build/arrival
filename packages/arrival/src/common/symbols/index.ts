@@ -17,3 +17,4 @@ export { notImplemented } from "./notImplemented.js";
 export { keyword } from "./keyword.js";
 export { macro } from "./macro.js";
 export { define, defineSyntax } from "./define.js";
+export { alias } from "./alias.js";

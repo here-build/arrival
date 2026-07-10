@@ -19,6 +19,7 @@ import { type Ref, type Resource, ResourceCell, spinUpAll, windDownAll } from ".
 import type { EvalSchemeInto, ResolverSpec, RosettaSpec, SchemeEnv } from "./scheme-env.js";
 import type { AEntity, DefineSymbolDef, DefineSyntaxSymbolDef, DoorSymbolDef } from "./symbol.js";
 import { bindCapabilityDefines, computeCapabilityExports } from "./symbols/define-bake.js";
+import type { AliasSymbolDef } from "./symbols/alias.js";
 import { Keyword } from "../values/Keyword.js";
 import {
   ANativeProcedure,
@@ -100,8 +101,17 @@ type Fn = (...args: any[]) => unknown;
  *
  *  Named `SymbolDeclaration`, not `SymbolDef`, to stay distinct from `symbol.js`'s `AEntity` —
  *  the wider authoring shape vs. the narrower baked/discriminated result (`AEntity` is one arm
- *  of this union, not a synonym for it). */
-export type SymbolDeclaration = AEntity | Fn | (Omit<RosettaSpec, "fn"> & { fn: Fn }) | { value: unknown };
+ *  of this union, not a synonym for it).
+ *
+ *  `AliasSymbolDef` (`symbol.alias`) is a FOURTH arm, distinct from `AEntity`: it never binds
+ *  directly (see the apply-loop resolution below) — it only ever stands in for a sibling
+ *  entry's already-baked def. */
+export type SymbolDeclaration =
+  | AEntity
+  | Fn
+  | (Omit<RosettaSpec, "fn"> & { fn: Fn })
+  | { value: unknown }
+  | AliasSymbolDef;
 
 /** A baked symbol.* def carries a literal `kind` discriminant — the cut that separates the
  *  target form from every legacy shape. */
@@ -125,6 +135,13 @@ const isValueDef = (m: SymbolDeclaration): m is { value: unknown } =>
   typeof m === "object" && m !== null && "value" in m;
 const isSymbolSpec = (m: SymbolDeclaration): m is Omit<RosettaSpec, "fn"> & { fn: Fn } =>
   typeof m === "object" && m !== null && "fn" in m;
+
+/** `symbol.alias`'s marker — see `alias.ts`'s header for the full dissolution-semantics
+ *  contract. Checked BEFORE `isBakedDef` in the apply loop (its `kind` — `"alias"` — is
+ *  deliberately outside `AEntity`'s discriminant set, so `isBakedDef` alone would never
+ *  recognize it and it would fall through to the legacy `{ fn }`-guessing arm instead). */
+const isAliasDef = (m: SymbolDeclaration): m is AliasSymbolDef =>
+  typeof m === "object" && m !== null && (m as { kind?: unknown }).kind === "alias";
 
 /** A `symbols` record, or a BUILDER computing it from the activation (per-env config).
  *  The builder form is how a config-bearing capability closes host resolvers into its baked
@@ -305,9 +322,37 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
         // `BindCapabilityDefinesArgs.ownNames` (define-bake.ts) for the full contract.
         const defineEntries: [string, DefineSymbolDef | DefineSyntaxSymbolDef][] = [];
         const ownNames = new Set<string>();
-        for (const [name, def] of Object.entries(symbolsRec)) {
+        for (const [name, rawDef] of Object.entries(symbolsRec)) {
           const verb = prefix + name;
           ownNames.add(verb);
+
+          // symbol.alias dissolution: substitute the TARGET's already-baked def in place of
+          // the marker, then fall through the SAME per-kind dispatch below — the alias binds
+          // byte-identically to its target under its own name (`verb`), never a wrapper.
+          // `symbolsRec` is already fully built (see alias.ts's header) so a sibling lookup
+          // here — regardless of iteration order — is sound; a target absent from THIS
+          // capability's own record, or itself an alias (no chains), is a declaration bug and
+          // doors loudly rather than silently binding nothing.
+          let def: SymbolDeclaration = rawDef;
+          if (isAliasDef(rawDef)) {
+            const targetDef = symbolsRec[rawDef.target];
+            if (targetDef === undefined) {
+              throw new Error(
+                `capability "${capabilityName}": symbol.alias\`${rawDef.target}\` (bound as "${name}") has no ` +
+                  `target — "${rawDef.target}" is not declared in this capability's own \`symbols\` record. An ` +
+                  `alias can only dissolve to a SIBLING symbol declared in the SAME capability; declare ` +
+                  `"${rawDef.target}" first, or fix the alias's target name.`,
+              );
+            }
+            if (isAliasDef(targetDef)) {
+              throw new Error(
+                `capability "${capabilityName}": symbol.alias\`${rawDef.target}\` (bound as "${name}") targets ` +
+                  `another alias ("${rawDef.target}") — alias chains are not supported; alias directly to the ` +
+                  `real symbol.`,
+              );
+            }
+            def = targetDef;
+          }
 
           if (isBakedDef(def) && (def.kind === "define" || def.kind === "define-syntax")) {
             defineEntries.push([verb, def]);

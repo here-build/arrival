@@ -60,13 +60,32 @@ export interface McpAnnotation {
   inputSchema?: readonly z.ZodType[];
   /** Extra names this symbol is ALSO bound under (same fn + same `inputSchema` parsing). Aliases
    *  are runtime bindings only — they never enter the catalog (`allAnnotations` keys by the primary
-   *  name), so they're undocumented shorthands an actor can call but the verb list won't advertise. */
+   *  name), so they're undocumented shorthands an actor can call but the verb list won't advertise.
+   *
+   *  Distinct from `symbol.alias` (`@here.build/arrival/symbol`): that factory dissolves into a
+   *  SECOND, uncatalogued key in the `symbols` record itself (core-level, capability-agnostic).
+   *  This field stays for verbs that want an EXTRA name that still shares the primary's own
+   *  catalog identity (same annotation object, same description) — a different shape than
+   *  dissolution's "invisible duplicate." */
   aliases?: readonly string[];
+  /** STATIC exposure flag (arrival-mcp-extended-capability.md §2.5) — `true` iff this verb is
+   *  ALSO its own structured MCP tool (once a runner derives `tools/list` from the catalog),
+   *  never just an fn-truthy value: `tools/list` membership must be stable data. Written by
+   *  `tool.view`/`tool.pure`/`tool.effect`/`tool.risky` (arrival-mcp/src/tool.ts) via the same
+   *  metadata channel `description`/`dynamicDescription` already ride. Absent (or a plain
+   *  `description`-only verb) ⇒ a DECLARED ACTION — bound + catalogued, but not its own tool. */
+  isTool?: true;
 }
 
 /** The annotation property names the BASE lifts off an inline symbol def. A subclass widens
  *  this (via the constructor's third arg) to lift extra, domain-specific catalog fields. */
-export const MCP_ANNOTATION_KEYS: readonly string[] = ["description", "dynamicDescription", "inputSchema", "aliases"];
+export const MCP_ANNOTATION_KEYS: readonly string[] = [
+  "description",
+  "dynamicDescription",
+  "inputSchema",
+  "aliases",
+  "isTool",
+];
 
 /** The object form of a `SymbolDeclaration` (the rosetta-config member with an `fn`). */
 type ObjectSymbolDef = Extract<SymbolDeclaration, { fn: unknown }>;
@@ -93,6 +112,19 @@ export interface McpCapabilitySpec<
    *  `inputSchema` getter's `this` is the `Activation` at call time (bound via `Reflect.get`),
    *  but TS can't type accessor `this` — so getter bodies assert the activation shape. */
   annotations?: Record<string, McpAnnotation>;
+  /** The CAPABILITY's own human-channel description (arrival-mcp-extended-capability.md §2.2
+   *  CAP_DESCRIPTION) — the FUSION this class exists for: a self-contained declaration carries
+   *  its own top-level `Tool.description` instead of a runner-side `DiscoveryToolOptions.description`
+   *  side bag. Static text, always present when this field is set; shown unless `dynamicDescription`
+   *  resolves to a string. */
+  description?: string;
+  /** CAP_DYNAMIC_DESCRIPTION — the capability-level dual of a verb's `dynamicDescription`: a
+   *  per-connection "welcome screen" for the discovery tool ITSELF, resolved lazily at
+   *  describe/catalog time against this capability's own describe-ambient `Activation`, per
+   *  read, no memo. Resolving `undefined` falls back to the static `description` above, NOT
+   *  flagged session-generated — the same A2 honest-fallback contract every per-verb dynamic
+   *  field already obeys (see `./metadata.js`'s `resolveMetadata` at the core-package altitude). */
+  dynamicDescription?: (this: Activation<C, R>) => MaybePromise<string | undefined>;
 }
 
 /** Resolve a verb's `inputSchema` (invoking its getter with `this`=activation, so resources
@@ -209,6 +241,11 @@ export class McpEnvCapability<
   C extends Record<string, z.ZodType> = any,
   R extends Record<string, Resource<unknown>> = any,
 > extends EnvCapability<C, R> {
+  /** CAP_DESCRIPTION — see `McpCapabilitySpec.description`. */
+  readonly description?: string;
+  /** CAP_DYNAMIC_DESCRIPTION — see `McpCapabilitySpec.dynamicDescription`. */
+  readonly dynamicDescription?: (this: Activation<C, R>) => MaybePromise<string | undefined>;
+
   /**
    * @param annotationKeys which property names to lift off the inline symbol defs. Defaults to
    *   the base MCP fields; a domain subclass passes a WIDER set to also lift its catalog fields.
@@ -246,6 +283,29 @@ export class McpEnvCapability<
       symbols: lifted.symbols === undefined ? undefined : withArgParsing(lifted.symbols, lifted.annotations),
       annotations: lifted.annotations,
     } as McpCapabilitySpec<C, R> as CapabilitySpec<C, R>);
+    this.description = spec.description;
+    this.dynamicDescription = spec.dynamicDescription;
+  }
+
+  /** Resolve THIS capability's own human-channel (CAP_DESCRIPTION/CAP_DYNAMIC_DESCRIPTION)
+   *  description — dynamic arm first (against `activation` when supplied), honest fallback
+   *  to the static sibling on `undefined` resolution (the A2 contract, one altitude up from
+   *  the per-verb read `./metadata.js`'s `resolveMetadata` already implements). `activation`
+   *  omitted ⇒ the dynamic arm runs with `this` = the capability itself — the same
+   *  receiver-free posture the legacy per-verb closure form takes when no describe ambient is
+   *  derivable (a function-form `hostConfig` / an actor-required config key). */
+  async resolveDescription(activation?: Activation<C, R>): Promise<string | undefined> {
+    if (this.dynamicDescription !== undefined) {
+      // `Reflect.apply`'s `thisArgument` is honestly `any` (unlike `.call`, which — under
+      // `strictBindCallApply` — would demand a real `Activation<C,R>` even for the
+      // receiver-free fallback) — the SAME escape `parseArgs`'s `Reflect.get` below uses for
+      // the identical "this=activation-or-legacy-receiver" shape, never a cast.
+      const live = (await Reflect.apply(this.dynamicDescription, activation ?? this, [])) as
+        | string
+        | undefined;
+      if (live !== undefined) return live;
+    }
+    return this.description;
   }
 
   /** The MCP annotations for THIS capability's own verbs (not its deps) — inline-lifted and

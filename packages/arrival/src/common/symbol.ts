@@ -79,3 +79,8 @@ export type { RosettaSymbolDef as RosettaSymbolDefWithMeta } from "./symbols/_ba
 // activation) lives in its own leaf so nothing at bake time can accidentally pull it.
 export type { MetadataField, MetadataRecord } from "./symbols/_bake.js";
 export { resolveMetadata, staticMetadata, type ResolvedMetadata } from "./symbols/metadata.js";
+
+// `symbol.alias` — dissolution-semantics duplicate binding. The marker type is surfaced here
+// (not just consumed internally by `capability.ts`) so a capability author can name it when
+// widening a `SymbolDeclaration`-adjacent type of their own.
+export type { AliasSymbolDef } from "./symbols/alias.js";

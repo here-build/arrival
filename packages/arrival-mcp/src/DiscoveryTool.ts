@@ -326,8 +326,15 @@ export interface InteractionLog {
 
 export interface DiscoveryToolOptions {
   /** The tool's stable identity prose (the MCP `description`). Per-session/personalized text is the
-   *  verbs' `dynamicDescription` (it rides the catalog), so this is static. */
-  description: string;
+   *  verbs' `dynamicDescription` (it rides the catalog), so this is static.
+   *
+   *  OPTIONAL as of the fusion (arrival-mcp-extended-capability.md §2.1/§2.10): the CAPABILITY
+   *  itself is the self-contained home now (`McpEnvCapability`'s `description`/`dynamicDescription`
+   *  — CAP_DESCRIPTION/CAP_DYNAMIC_DESCRIPTION) — "no side bag handed to the runner." Set here
+   *  ONLY as a LEGACY, migration-time override: when present it WINS over the capability's own
+   *  description (the same host-wins posture `config()`'s merge already takes); omitted ⇒
+   *  `describe()` resolves the capability's own channel-1 description instead. */
+  description?: string;
   /** Wall-clock eval budget (the interpreter TICK-checks it). Defaults to {@link DEFAULT_BUDGET_MS}. */
   budgetMs?: number;
 
@@ -422,10 +429,26 @@ export class DiscoveryTool {
   async describe(clientInfo?: Record<string, unknown>): Promise<Tool> {
     return {
       name: this.name,
-      description: this.options.description,
+      description: await this.resolveToolDescription(),
       inputSchema: await this.inputSchema(clientInfo),
       annotations: { readOnlyHint: true },
     };
+  }
+
+  /** Channel-1 (human) description — the LEGACY host override (`options.description`) wins
+   *  when supplied (migration-only, §2.10); otherwise the capability's OWN `description`/
+   *  `dynamicDescription` (§2.2 CAP_DESCRIPTION/CAP_DYNAMIC_DESCRIPTION) is the self-contained
+   *  home. The dynamic arm resolves against the SAME describe ambient the per-verb catalog
+   *  channel already builds (§2.7/§2.8 of exec-phases-and-dynamic-metadata.md) — built lazily
+   *  ONLY when the capability actually declares a dynamic arm, so a purely-static capability
+   *  never pays the assembly cost. Resolving `undefined` (no capability description at all)
+   *  falls back to the empty string, never a thrown error — a missing `Tool.description` is a
+   *  host-authoring gap, not a runtime condition this method should crash over. */
+  private async resolveToolDescription(): Promise<string> {
+    if (this.options.description !== undefined) return this.options.description;
+    const ambient = this.capability.dynamicDescription === undefined ? undefined : await this.describeAmbient();
+    const live = await this.capability.resolveDescription(ambient?.activations.get(this.capability.name));
+    return live ?? "";
   }
 
   /** Evaluate `args.expr` under the dispatch-time ctx — §2.1's per-call walk. Warm scope for
@@ -1005,7 +1028,12 @@ export class DiscoveryTool {
         // annotation object (the legacy method-call receiver — byte-compatible).
         const live = thunk === undefined ? undefined : await thunk.call(describeCtx?.activations.get(owner) ?? a);
         const sigPart = sig ? ` ${sig}` : "";
-        return { text: `(${name}${sigPart}) - ${live ?? a.description}`, dynamic: live !== undefined };
+        // §2.5's exposure taxonomy, channel-2 rendering: an `isTool` verb is catalogued here
+        // AND (once a runner derives `tools/list` from it) its own top-level MCP tool — the
+        // REPL can compose it where a bare `tools/call` can't, so it stays advertised in both
+        // places rather than one replacing the other.
+        const exposedNote = a.isTool ? " [also a top-level tool]" : "";
+        return { text: `(${name}${sigPart}) - ${live ?? a.description}${exposedNote}`, dynamic: live !== undefined };
       }),
     );
   }
