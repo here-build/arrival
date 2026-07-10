@@ -1,8 +1,8 @@
 // @here.build/arrival/core — the irreducible scheme core pack.
 //
 // The base-most scheme defs that every other pack expands against: the essential
-// constants, the kernel keywords, `gensym`, and the `single` helper. Pure scheme
-// (the four `symbol.define` entries below) + native (`gensym`) + keyword markers
+// constants, the kernel keywords, and `gensym`. Pure scheme (the three
+// `symbol.define` constants below) + native (`gensym`) + keyword markers
 // (the 20 special-form aliases) — the precedence floor of the base stdlib, so
 // every other base pack (polyglot / r7rs / srfi / …) depends on it.
 //
@@ -29,61 +29,30 @@
 //     accounting (§4.4's residue table never lists `symbols` entries as dying).
 //   • ALREADY-MIGRATED: `gensym`, a `symbol.native` — not `prelude:` text, no
 //     Pass 1/2 work applies.
-//   • THE ACTUAL PRELUDE (4 forms, ~960 lines of the doc's 23-pack census'
-//     smallest contributor): `true`/`false`/`NaN` (constants) + `single` (one
-//     procedure). NO `define-macro` forms — the doc's "attribute case law"
-//     (§3.4's macroAttribute) does not apply to this pack; every migrated entry
-//     below is `symbol.define`, none `symbol.defineSyntax`.
+//   • THE ACTUAL PRELUDE (3 surviving forms): the `true`/`false`/`NaN` constants.
+//     NO `define-macro` forms — the doc's "attribute case law" (§3.4's
+//     macroAttribute) does not apply to this pack; every migrated entry below is
+//     `symbol.define`, none `symbol.defineSyntax`.
 //
-// THE LIVE CATCH (design doc §2.1's "live catch" class, srfi-43/-235/-189's
-// precedent — same bug, found here for the first time in the pack every other
-// pack's FV law treats as its OWN unconditional baseline): `single`'s body calls
-// `pair?` and `not` — both `scheme/r7rs/equality` exports (`cdr` is the
-// resolver-synth `c[ad]+r` family, covered by `define-bake.ts`'s `CXR_RE`
-// allowlist branch with NO dep needed). This worked, pre-migration, purely
-// because `env-roots.ts`'s two-phase bootstrap (NATIVE_PACKS → global_env, THEN
-// BASE_PACKS → user_env) guarantees `scheme/equality` is already bound by the
-// time ANY BASE_PACKS prelude runs — equality.ts's OWN `not` doc says so
-// explicitly ("This native pack binds onto global_env BEFORE the scheme/core
-// prelude that calls `not` at macro-define time"). A RUNTIME guarantee, not a
-// declared one — the bake FV law doesn't (and shouldn't) consult it, so `single`
-// needed the same fix as every other live catch: `deps: [equality]` below. Named
-// loud per the task brief: `scheme/core` is the one capability every base pack
-// depends ON — it declaring a dep of its OWN might look backwards, but `equality`
-// is a NATIVE_PACKS member (assembled in bootstrap phase 1, `global_env`), never
-// a BASE_PACKS array entry (phase 2, `user_env`) — so this is NOT a cycle and
-// needs NO `base-packs.ts` repositioning (identical reasoning to srfi-43/-235/
-// -189's own `deps: [equality, …]`, `env/srfi/srfi-43.ts`'s header). `core`
-// stays the BASE_PACKS precedence floor; its ONE dependency reaches down into
-// the OTHER phase, not sideways into a BASE_PACKS sibling.
-//
-// A SECOND finding, preserved not fixed (§4.2's "semantic equivalence, not
-// byte-identity" gate — this migration ports behavior exactly, it does not
-// repair it): `single`'s body, `(and (pair? list) (not (cdr list)))`, is
-// LIVE-VERIFIED (a direct `exec` probe against the pre-migration pack) to
-// return `#f` for EVERY input, including a genuine one-element list — R7RS
-// `not` is `#f`-only-falsy (equality.ts's own doc, same comment cited above:
-// "only #f is falsy... nil no longer reach[es] here"), so `(cdr '(a))` — the
-// nil terminator, NOT `#f` — makes `(not (cdr '(a)))` evaluate to `#f`, not
-// `#t`. `single` predates that nil/false split (LIPS heritage, where the two
-// were conflated) and was never updated; it has zero call sites anywhere else
-// in the codebase (grep-verified) and ships as public vocabulary, not internal
-// plumbing. Migrated AS-IS — its contract (`z.value → z.boolean`) validates the
-// (always-`#f`) return honestly; fixing the logic is a separate, deliberate
-// change this migration does not make.
+// DELETED — `single` (W4-H4 residual, V ruling 2026-07-10: "we need to stay
+// aligned to srfi where we can"): a LIPS-heritage predicate in NO SRFI or R7RS,
+// with an always-`#f` body (`(and (pair? list) (not (cdr list)))` — it predated
+// the nil/false split; `(cdr '(a))` is nil, not `#f`) and zero call sites
+// (grep-verified). Non-standard + silently wrong + unused = deleted, not fixed.
+// Its removal also removed this pack's only dep (`equality`, needed solely by
+// that body's `pair?`/`not`) — `scheme/core` is dep-free again, the clean
+// precedence floor. The DefineLocalityError regression pin that `single`'s
+// migration surfaced lives on, self-contained, in
+// `env/__tests__/core-symbol-define-migration.test.ts`.
 
 import { EnvCapability } from "../../common/capability.js";
 import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
 import { gensym } from "../../reader/values-repr.js";
-import equality from "../r7rs/equality.js";
 
-/** The irreducible scheme core pack: constants, kernel keywords, gensym, `single`.
- *  Module-singleton capability; the precedence floor every base pack deps. Its OWN
- *  one dep (`equality`, below) reaches into bootstrap phase 1 (NATIVE_PACKS), never
- *  sideways into a BASE_PACKS sibling — see the file header's "live catch". */
+/** The irreducible scheme core pack: constants, kernel keywords, gensym.
+ *  Module-singleton capability; the dep-free precedence floor every base pack deps. */
 export default new EnvCapability("scheme/core", {
-  deps: [equality],
   // `gensym` resolves at macro-EXPANSION time, so binding it on this precedence-floor pack
   // (assembled first among the base packs) reaches every consumer — including user/test
   // scheme that calls `(gensym …)` for hygiene names, and the inference-plane `cut`/`cute`
@@ -147,11 +116,10 @@ export default new EnvCapability("scheme/core", {
       gensym,
     ),
 
-    // ── §4.2 Pass 1/2 decomposition of the former `prelude` text blob — 4 forms,
+    // ── §4.2 Pass 1/2 decomposition of the former `prelude` text blob —
     // 1:1 off the original `(define true #t)` / `(define false #f)` /
-    // `(define NaN +nan.0)` / `(define (single list) …)`. See the file header for
-    // the `equality` dep this decomposition surfaced and the pre-existing `single`
-    // bug it preserves rather than fixes. ──────────────────────────────────────
+    // `(define NaN +nan.0)`. (`single`, the blob's fourth form, is deleted —
+    // see the file header.) ────────────────────────────────────────────────────
 
     // Essential constants. Both CONSTANT defines (§1.2: a bare ZodType contract,
     // not a Contract<I,O> record) — `z.boolean` validates the literal ONCE at
@@ -170,19 +138,6 @@ export default new EnvCapability("scheme/core", {
     NaN: symbol.define`NaN: the canonical scheme not-a-number constant (+nan.0), a non-finite inexact real`(
       z.looseNumber,
       `+nan.0`,
-    ),
-
-    // Helper for macro-authoring bodies. `list` is genuinely any scheme value —
-    // `pair?` (r7rs/equality, a declared dep) answers gracefully for a non-pair,
-    // so `z.value` (representation-blind) is the honest input, matching
-    // `pair?`/`null?`'s own type-predicate convention (equality.ts). Output is
-    // always a real ABool (the whole body is an `and` of two boolean-returning
-    // calls) — `z.boolean`. `cdr` needs no declared dep: the resolver-synth
-    // `c[ad]+r` family (define-bake.ts's `CXR_RE`) covers it; `pair?`/`not` DO
-    // need `equality` (the file header's live catch).
-    single: symbol.define`single: #t iff list is a pair whose cdr is itself #f (helper for macro-authoring bodies — see the file header: this predates the nil/false split and is always #f on a real one-element list, preserved as-is, not fixed)`(
-      { input: [z.value], output: [z.boolean] },
-      `(lambda (list) (and (pair? list) (not (cdr list))))`,
     ),
   },
 });
