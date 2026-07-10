@@ -9,7 +9,6 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 
 /** Prefix expands to a single quoted/wrapped datum (`'x` → `(quote x)`). */
 export const LITERAL = Symbol.for("literal");
-export const SPLICE = Symbol.for("splice");
 export const SYMBOL = Symbol.for("symbol");
 export function names() {
   return Object.keys(__list__);
@@ -40,6 +39,6 @@ export const __builtins__ = Object.freeze(defined_specials.map((arr) => arr[0]))
 // Pure, frozen data literal: maps each [seq, symbol, type] to a { seq, symbol, type }
 // entry, built at module-eval (no mutation, no side-effect) before any reader runs.
 // `names()` / `get()` / `type()` read it unchanged.
-export const __list__ = Object.freeze(
+const __list__ = Object.freeze(
   Object.fromEntries(defined_specials.map(([seq, symbol, type]) => [seq, { seq, symbol, type }])),
 );

@@ -108,12 +108,6 @@ export function is_function(o: unknown): o is Function {
 export function is_lambda(o: unknown): o is ALambda {
   return o instanceof ALambda;
 }
-export function is_native_procedure(o: unknown): o is ANativeProcedure {
-  return o instanceof ANativeProcedure;
-}
-export function is_rosetta_procedure(o: unknown): o is ARosettaProcedure {
-  return o instanceof ARosettaProcedure;
-}
 /** A host-JS primitive callable — native (contour) OR rosetta (membrane). */
 export function is_procedure(o: unknown): o is ANativeProcedure | ARosettaProcedure {
   return o instanceof ANativeProcedure || o instanceof ARosettaProcedure;

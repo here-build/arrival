@@ -51,7 +51,6 @@ export type AKind =
   | "js-array"
   | "vector"
   | "bytevector"
-  | "halfbaked"
   | "void"
   | "keyword"
   | "dict";

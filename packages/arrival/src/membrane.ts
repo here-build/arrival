@@ -29,7 +29,6 @@ import { ABool } from "./values/primitives/ABool.js";
 import { ABytevector } from "./values/primitives/ABytevector.js";
 import { AVector } from "./values/primitives/AVector.js";
 import { Environment as SchemeEnvironment } from "./Environment.js";
-import { SchemePromise } from "./eval/evaluator.js";
 import { LambdaContext } from "./eval/LambdaContext.js";
 import { AString } from "./values/primitives/AString.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
@@ -97,7 +96,6 @@ export type BoxedSchemeValue =
   | AExact
   | AInexact
   | ABool
-  | SchemePromise
   | Macro
   | Syntax
   | LambdaContext
@@ -119,7 +117,7 @@ export type BoxedSchemeValue =
  * These carriers are NOT value-intent, so they stay out of `SchemeValue`
  * (values/types.ts) — this boundary type is the seam that holds them.
  */
-export type FromJSResult = BoxedSchemeValue | Uint8Array | ArrayBuffer | DataView | Promise<unknown>;
+type FromJSResult = BoxedSchemeValue | Uint8Array | ArrayBuffer | DataView | Promise<unknown>;
 
 /**
  * Check if a value is already a Scheme value (prevents double-wrapping).
@@ -140,7 +138,6 @@ export function isSchemeValue(value: unknown): value is BoxedSchemeValue {
     // The few non-AValue control forms that legitimately cross as
     // "already scheme, don't re-wrap" (BoxedSchemeValue is a superset of
     // SchemeValue precisely for these — see the type's doc comment above).
-    case value instanceof SchemePromise:
     case value instanceof Macro:
     case value instanceof Syntax:
     case value instanceof LambdaContext:

@@ -81,7 +81,7 @@ export class CompiledResolver {
 }
 
 /** One chain step: a merged frozen map, or an interleaved resolver probe. */
-export type ResolutionStep = ReadonlyMap<string | symbol, EnvironmentValue> | CompiledResolver;
+type ResolutionStep = ReadonlyMap<string | symbol, EnvironmentValue> | CompiledResolver;
 
 export class CompiledResolutionChain {
   /** Maps pre-merged at seal, resolvers in their C3-position (design §2). */

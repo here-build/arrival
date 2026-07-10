@@ -267,7 +267,7 @@ export class InteropAccessError extends Error {
 }
 
 // -------------------------------------------------------------------------
-// :: R7RS error types (Section 6.11) + the RaisedException carrier.
+// :: R7RS error types (Section 6.11).
 // -------------------------------------------------------------------------
 
 /** R7RS error object — errors created by the `error` procedure. */
@@ -290,18 +290,6 @@ export class R7RSReadError extends R7RSError {
 
 export class R7RSFileError extends R7RSError {
   readonly name = "R7RSFileError";
-}
-
-/** Raised exception wrapper — carries non-Error exceptions through JS try/catch. */
-export class RaisedException extends Error {
-  readonly name = "RaisedException";
-
-  constructor(
-    public readonly value: unknown,
-    public readonly continuable: boolean = false,
-  ) {
-    super(value instanceof Error ? value.message : String(value));
-  }
 }
 
 // -------------------------------------------------------------------------

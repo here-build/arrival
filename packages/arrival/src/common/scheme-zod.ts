@@ -81,7 +81,7 @@ export {
   toJSONSchema,
   fromJSONSchema,
 } from "zod";
-export type { input, output, infer, ZodType, ZodTypeAny, ZodObject, ZodCustom, ZodRawShape } from "zod";
+export type { input, output, infer, ZodType, ZodTypeAny, ZodCustom, ZodRawShape } from "zod";
 
 // ---------------------------------------------------------------------------
 // :: Name registry — one `named()` + `WeakMap` chokepoint (called at every export site)

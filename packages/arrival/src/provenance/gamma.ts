@@ -138,14 +138,3 @@ export async function applyWireInEnv(
   return boxed;
 }
 
-/** `hermeticApply`'s boxed sibling: same env assembly, same silent region, but the
- *  egress keeps its box (and therefore its stamp set) — the shape the I1/I3 replay
- *  laws compare cones over. Peeling the result of this function with `schemeToJs`
- *  yields the same comparison surface `hermeticApply` returns via exec's `toJS`. */
-export async function hermeticApplyBoxed(opts: HermeticApplyOptions): Promise<SchemeValue> {
-  const { wire, ingress, basePacks, prelude, config } = opts;
-  return withSilentRegion(async () => {
-    const base = await hermeticEnv(basePacks, prelude, {}, config);
-    return applyWireInEnv(base, wire, ingress);
-  });
-}

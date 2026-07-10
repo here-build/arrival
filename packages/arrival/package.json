@@ -111,11 +111,9 @@
     "workerd": "vitest run --config vitest.workerd.config.ts"
   },
   "dependencies": {
-    "@here.build/arrival-env": "workspace:^",
     "@here.build/arrival-sugarcoat": "workspace:^",
     "@here.build/error-invariant": "workspace:^",
     "@here.build/collections": "workspace:^",
-    "fantasy-land": "5.0.1",
     "fold-case": "1.0.0",
     "tiny-invariant": "1.3.3",
     "unicode-properties": "1.4.1",

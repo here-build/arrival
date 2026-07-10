@@ -91,9 +91,6 @@ export interface Statechart {
   layerCount: number;
 }
 
-const isPair = (v: unknown): v is APair<SchemeValue, SchemeValue> =>
-  v !== null && typeof v === "object" && "car" in v && "cdr" in v;
-
 /** Leading symbol of a form, e.g. `(infer/chat …)` → `"infer/chat"`. Falls back
  *  to `"?"` for shapes without a symbol head (rare for tracked infer nodes). */
 function leadingSymbol(node: APair<SchemeValue, SchemeValue>): string {

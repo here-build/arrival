@@ -1,0 +1,340 @@
+/**
+ * static-validation.law.test.ts — THE STATIC VALIDATION PASS (W3 of docs/working-
+ * proposals/symbol-define-static-program-validation.md §3). Pins the law rows the
+ * wave's own spec names:
+ *
+ *  LAW 1 (FLAGSHIP, end-to-end): a program using `(require …)` under a doors-degraded,
+ *    loader-less assembly yields ONE diagnostic — cause = the missing `fs` key, EVERY
+ *    reference site listed (cascade fusion: one cure, N sites, never N diagnostics),
+ *    the teaching text derived from the graph path (reference → door → owner →
+ *    missing key), thrown at parse phase with ZERO side effects fired.
+ *
+ *  LAW 2 (suggestion soundness, §3.3a — the prior-art CHOSEN row): "did you mean X"
+ *    only offers names that would themselves VALIDATE — a door is NEVER suggested,
+ *    even when it is the closest miss.
+ *
+ *  LAW 3 (all-at-once, eslint discipline): a program with 3 distinct problems yields
+ *    3 diagnostics in ONE pass — never crash-on-first.
+ *
+ *  LAW 4 (macro firewall, §3.4 — no false positives): binder-macro formals
+ *    (`receive`, `let-values`) and placeholder tokens (`cut`'s `<>`) do NOT report;
+ *    the ternary is live — an `"expression"`-attributed macro's arguments DO walk.
+ *
+ *  LAW 5 (SPECIAL_FORMS no-FP, §2.1/§3.5): `while`/`try` programs are clean — the
+ *    KEYWORD_SYNTAX baseline + the try/catch scope arm.
+ *
+ *  LAW 6 (internal defines, §3.5's W3 prerequisite — option (i) IMPLEMENTED): body-
+ *    sequence letrec* scoping; `(define (a) (b)) (define (b) …)` sibling references
+ *    are bound in both directions, at top level and inside bodies. No warning
+ *    demotion was needed.
+ *
+ *  LAW 7 (error-tier soundness statement, §3.5 — pinned): the error tier is SOUND
+ *    modulo the EXCLUDED reachability strictness — a dead-branch reference REPORTS by
+ *    design (documented divergence, opt-out on the knob); an impure resolver anywhere
+ *    degrades unbound-symbol to `warning` (never a false ERROR); glass (`{env}`) runs
+ *    are never validated (no seal ⇒ no claims).
+ */
+import { describe, expect, it } from "vitest";
+import { z } from "zod";
+import * as sz from "../../common/scheme-zod.js";
+import { EnvCapability, type SymbolDeclaration } from "../../common/capability.js";
+import { symbol } from "../../common/symbol.js";
+import { exec, parse } from "../../eval/generator-exec.js";
+import { CompiledResolutionChain, CompiledResolver } from "../../eval/CompiledResolutionChain.js";
+import { DoorProcedure } from "../../values/primitives/ACallable.js";
+import { Keyword } from "../../values/Keyword.js";
+import { Macro } from "../../eval/Macro.js";
+import { nil } from "../../index.js";
+import { StaticValidationError, validateProgram } from "../../static-validation/validate-program.js";
+import { vocabularyFromChain } from "../../static-validation/vocabulary.js";
+import { freshEnv } from "../_fresh-env.js";
+import type { EnvironmentValue } from "../../Environment.js";
+import type { DoorSymbolDef } from "../../common/symbols/_bake.js";
+
+// ── Fixture helpers ────────────────────────────────────────────────────────────────
+
+/** A one-flat-map sealed chain — the CompiledResolutionChain's own degenerate form,
+ *  hand-built so a law row controls the vocabulary EXACTLY. */
+const chainOf = (entries: Record<string, EnvironmentValue>, extraSteps: CompiledResolver[] = []) =>
+  new CompiledResolutionChain([new Map<string | symbol, EnvironmentValue>(Object.entries(entries)), ...extraSteps]);
+
+const door = (name: string, reason: string, cause?: DoorSymbolDef["cause"]): DoorProcedure =>
+  new DoorProcedure({ kind: "door", name, reason, ...(cause !== undefined ? { cause } : {}) });
+
+/** A loader-shaped fixture (mirrors `arrival/loader`'s `fs` posture the way
+ *  degradation.law.test.ts's fixture does — no cross-package dep on the real loader):
+ *  satisfied `fs` binds no-op natives; absent `fs` under `degradation: "doors"` mints
+ *  cause-carrying doors for the SAME two verbs, both citing `fs`. */
+// Widened to `EnvCapability<any, any>` — the same declared-type idiom
+// degradation.law.test.ts uses: the constructor infers <never, never> from a
+// resource-less spec, which fails variance into ExecOptions.capabilities.
+function loaderLike(name: string, onProbe: () => void): EnvCapability<any, any> {
+  return new EnvCapability<any, any>(name, {
+    configuration: {
+      fs: z.custom<{ readFile: (p: string) => Promise<string> }>((v) => v !== null && typeof v === "object").optional(),
+    },
+    symbols: ({ configuration, degradation }) => {
+      const defs: Record<string, SymbolDeclaration> = {
+        "probe!": symbol.native`probe!: JS-side effect counter`({ input: [], output: [sz.value] }, () => {
+          onProbe();
+          return nil;
+        }),
+      };
+      if (configuration.fs !== undefined) {
+        defs["require"] = symbol.native`require: no-op (satisfied fixture)`({ input: [sz.value], output: [sz.value] }, () => nil);
+        defs["require/extension"] = symbol.native`require/extension: no-op (satisfied fixture)`(
+          { input: [sz.value], output: [sz.value] },
+          () => nil,
+        );
+      } else if (degradation.active) {
+        defs["require"] = degradation.door("require", ["fs"], "loads a file via a filesystem this assembly was not given");
+        defs["require/extension"] = degradation.door(
+          "require/extension",
+          ["fs"],
+          "registers a loader extension via the same absent filesystem",
+        );
+      }
+      return defs;
+    },
+  }) as unknown as EnvCapability<never, never>;
+}
+
+// ============================================================================
+// LAW 1 — the flagship, end-to-end through exec
+// ============================================================================
+
+describe("LAW 1 — flagship: (require …) under a doors-degraded loader-less assembly", () => {
+  const program = ['(probe!)', '(require "a.scm")', '(require "b.scm")', '(require/extension ".toml")'].join("\n");
+
+  it("throws ONE StaticValidationError at parse phase: one cure (fs), ALL sites, zero side effects", async () => {
+    let hits = 0;
+    const cap = loaderLike("test/sv-loader", () => hits++);
+    let caught: unknown;
+    try {
+      await exec(program, { capabilities: [cap], config: {}, staticValidation: "on" });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(StaticValidationError);
+    const err = caught as StaticValidationError;
+
+    // Cascade fusion: ONE missing grant (`fs`) explains all three references —
+    // ONE diagnostic, THREE sites, program order. Never three diagnostics.
+    expect(err.diagnostics).toHaveLength(1);
+    const [d] = err.diagnostics;
+    expect(d.code).toBe("missing-configuration");
+    expect(d.severity).toBe("error");
+    expect(d.sites.map((s) => s.symbol)).toEqual(["require", "require", "require/extension"]);
+
+    // The causal chain, structured: door → owner → missing key (W0's DoorCause,
+    // minted by W2's degradation).
+    expect(d.cause).toEqual({ owner: "test/sv-loader", needs: [{ kind: "configuration", key: "fs" }] });
+
+    // ZERO side effects fired — (probe!) on line 1 never ran (contrast the pre-W3
+    // before: the program runs until the callback, side effects already out).
+    expect(hits).toBe(0);
+  });
+
+  it("a SATISFIED config validates clean and evaluates (the positive control)", async () => {
+    let hits = 0;
+    const cap = loaderLike("test/sv-loader-satisfied", () => hits++);
+    await exec(program, { capabilities: [cap], config: { fs: { readFile: async () => "" } }, staticValidation: "on" });
+    expect(hits).toBe(1);
+  });
+
+  it("the teaching text is derived from the graph path — the §5.1 flagship message, pinned", async () => {
+    // Direct-vocabulary variant with the spec's own hint, so the FULL §5.1 message
+    // shape (key + hint + name @ capability + sites + cure) is pinned byte-exactly.
+    const vocab = vocabularyFromChain(
+      chainOf({
+        "run-prompt": nil,
+        require: door("require", "loads a file", {
+          owner: "arrival/loader",
+          needs: [{ kind: "configuration", key: "fs", hint: "a filesystem" }],
+        }),
+      }),
+    );
+    const forms = await parse('(run-prompt "summarize" (lambda () (require "file.scm")))');
+    const diagnostics = validateProgram(forms, vocab);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0].message).toBe(
+      "Configuration key `fs` (a filesystem) was not provided in the exec configuration. " +
+        "It disables `require @ arrival/loader` (referenced at 1:35) — this program would crash there. " +
+        "Provide `fs` to enable it.",
+    );
+  });
+});
+
+// ============================================================================
+// LAW 2 — suggestion soundness (§3.3a): a door is NEVER offered as a typo fix
+// ============================================================================
+
+describe("LAW 2 — suggestions come from the SATISFIED vocabulary subset only", () => {
+  it("suggests the value `map`, never the equally-close door `mapp`", async () => {
+    const vocab = vocabularyFromChain(chainOf({ map: nil, mapp: door("mapp", "not implemented here") }));
+    const [d] = validateProgram(await parse("(mapq 1)"), vocab);
+    expect(d.code).toBe("unbound-symbol");
+    expect(d.suggestions).toEqual(["map"]); // `mapp` is distance 1 too — excluded, door
+  });
+
+  it("offers NO suggestion when the only close miss is a door", async () => {
+    const vocab = vocabularyFromChain(chainOf({ mapp: door("mapp", "not implemented here") }));
+    const [d] = validateProgram(await parse("(napp 1)"), vocab);
+    expect(d.code).toBe("unbound-symbol");
+    expect(d.suggestions).toBeUndefined(); // silence beats a suggestion that re-errors
+  });
+});
+
+// ============================================================================
+// LAW 3 — all-at-once: the eslint discipline
+// ============================================================================
+
+describe("LAW 3 — a program with 3 distinct problems yields 3 diagnostics in ONE pass", () => {
+  it("collects unbound + door + unbound, in program order", async () => {
+    const vocab = vocabularyFromChain(
+      chainOf({
+        list: nil,
+        require: door("require", "loads a file", {
+          owner: "arrival/loader",
+          needs: [{ kind: "configuration", key: "fs" }],
+        }),
+      }),
+    );
+    const forms = await parse(['(list undefined-a)', '(require "x")', '(undefined-b)'].join("\n"));
+    const diagnostics = validateProgram(forms, vocab);
+    expect(diagnostics.map((d) => d.code)).toEqual(["unbound-symbol", "missing-configuration", "unbound-symbol"]);
+    expect(diagnostics.map((d) => d.sites[0].symbol)).toEqual(["undefined-a", "require", "undefined-b"]);
+  });
+});
+
+// ============================================================================
+// LAW 4 — the §3.4 macro firewall (no-FP) + the live ternary
+// ============================================================================
+
+describe("LAW 4 — macro firewall: binder formals and placeholder tokens never report", () => {
+  it("`receive` formals (srfi-8, a binder macro) do not report — and the program runs", async () => {
+    const [result] = await exec("(receive (q r) (values 1 2) (list q r))", { staticValidation: "on" });
+    expect(result).toEqual([1, 2]);
+  });
+
+  it("`let-values` claw names do not report", async () => {
+    const [result] = await exec("(let-values (((a b) (values 3 4))) (list a b))", { staticValidation: "on" });
+    expect(result).toEqual([3, 4]);
+  });
+
+  it("`cut`'s `<>` placeholder does not report (opaque interior)", async () => {
+    await expect(exec("((cut cons <> 1) 0)", { staticValidation: "on" })).resolves.toBeDefined();
+  });
+
+  it("the ternary is LIVE: an `\"expression\"`-attributed defineSyntax macro's arguments DO walk", async () => {
+    // Capabilities lower through exec's OWN injected evalScheme (assembleCapabilityBase)
+    // — no fixture-side evalScheme needed, unlike suites that call `.apply()` directly.
+    const firstOf = symbol.defineSyntax`first-of: expands to its first argument form`("(lambda (a b) a)", {
+      macroAttribute: "expression",
+    });
+    const firstOfOpaque = symbol.defineSyntax`first-of-opaque: same expander, default attribute`("(lambda (a b) a)");
+    const cap = new EnvCapability("test/sv-ternary", { symbols: { "first-of": firstOf, "first-of-opaque": firstOfOpaque } });
+
+    // "expression": the unbound second argument REPORTS at parse phase.
+    await expect(exec("(first-of 1 never-bound-arg)", { capabilities: [cap], staticValidation: "on" })).rejects.toThrow(
+      StaticValidationError,
+    );
+    // "opaque" (the default): the same interior is firewalled — validates clean, runs.
+    const [result] = await exec("(first-of-opaque 1 never-bound-arg)", { capabilities: [cap], staticValidation: "on" });
+    expect(result).toBe(1);
+  });
+});
+
+// ============================================================================
+// LAW 5 — SPECIAL_FORMS / keyword-syntax no-FP
+// ============================================================================
+
+describe("LAW 5 — while/try programs validate clean (KEYWORD_SYNTAX baseline + try scope arm)", () => {
+  it("`while` (an unmodeled-by-freeVars head) is keyword syntax, not an unbound symbol", async () => {
+    await expect(exec("(while #f #f)", { staticValidation: "on" })).resolves.toBeDefined();
+  });
+
+  it("`try`/`catch` markers are structural; the catch VARIABLE binds for its handlers", async () => {
+    const [result] = await exec("(try (+ 1 2) (catch (e) e))", { staticValidation: "on" });
+    expect(result).toBe(3);
+  });
+
+  it("`define-macro` at program level: the name is swept, the body is expansion space, the use site is firewalled", async () => {
+    const results = await exec("(define-macro (my-id x) x) (my-id 5)", { staticValidation: "on" });
+    expect(results[results.length - 1]).toBe(5);
+  });
+});
+
+// ============================================================================
+// LAW 6 — internal-define letrec* scoping (§3.5 prerequisite, option (i))
+// ============================================================================
+
+describe("LAW 6 — internal define sequences have letrec* name visibility", () => {
+  it("a forward sibling reference inside a lambda body does not report — and runs", async () => {
+    const results = await exec("(define (f) (define (a) (b)) (define (b) 1) (a)) (f)", { staticValidation: "on" });
+    expect(results[results.length - 1]).toBe(1);
+  });
+
+  it("the same shape at TOP level (the macro-aware first sweep) is clean too", async () => {
+    const results = await exec("(define (top-a) (top-b)) (define (top-b) 41) (top-a)", { staticValidation: "on" });
+    expect(results[results.length - 1]).toBe(41);
+  });
+});
+
+// ============================================================================
+// LAW 7 — the error-tier soundness statement, pinned
+// ============================================================================
+
+describe("LAW 7 — error-tier soundness: strict on dead branches (by design), warning under impurity, silent on glass", () => {
+  it("a dead-branch reference REPORTS — the documented reachability divergence (§6.6)", async () => {
+    await expect(exec("(if #f (never-defined-fn-xyz) 42)", { staticValidation: "on" })).rejects.toThrow(
+      StaticValidationError,
+    );
+  });
+
+  it("the SAME program runs under the default (validation off) — the divergence is opt-in this wave", async () => {
+    const [result] = await exec("(if #f (never-defined-fn-xyz) 42)");
+    expect(result).toBe(42);
+  });
+
+  it("unbound-symbol is ERROR under a pure chain, WARNING when any resolver step is impure", async () => {
+    const pure = vocabularyFromChain(chainOf({}));
+    const forms = await parse("(totally-unknown)");
+    expect(validateProgram(forms, pure)[0].severity).toBe("error");
+
+    const impure = vocabularyFromChain(chainOf({}, [new CompiledResolver("test/dynamic", () => undefined, false)]));
+    expect(impure.hasImpureResolver).toBe(true);
+    const [d] = validateProgram(await parse("(totally-unknown)"), impure);
+    expect(d.severity).toBe("warning");
+    expect(d.message).toContain("may still answer it at runtime");
+  });
+
+  it("GLASS ({env}) runs are never validated — no seal, no claims (§3.5)", async () => {
+    const env = await freshEnv();
+    const [result] = await exec("(if #f (never-defined-glass-name) 42)", { env, staticValidation: "on" });
+    expect(result).toBe(42);
+  });
+
+  it("keyword entries and cxr synth names resolve statically (no FP on `caddr`)", async () => {
+    const [result] = await exec("(caddr (list 1 2 3))", { staticValidation: "on" });
+    expect(result).toBe(3);
+  });
+
+  it("a hand-built chain lacking core still gets the KEYWORD_SYNTAX baseline (a `while` head never reports)", async () => {
+    const vocab = vocabularyFromChain(chainOf({}));
+    const diagnostics = validateProgram(await parse("(while #f #f)"), vocab);
+    expect(diagnostics).toEqual([]);
+    // …and a Keyword VALUE classifies as keyword, not a plain value:
+    const withKw = vocabularyFromChain(chainOf({ "my-form": new Keyword("my-form") }));
+    expect(withKw.lookupStatic("my-form")).toEqual({ kind: "keyword" });
+  });
+
+  it("an unaudited Macro binding reads as opaque; a stamped attribute reads back (§3.4 channel)", () => {
+    const plain = new Macro("plain", () => nil);
+    const stamped = new Macro("stamped", () => nil);
+    stamped.macroAttribute = "expression";
+    const vocab = vocabularyFromChain(chainOf({ plain, stamped }));
+    expect(vocab.lookupStatic("plain")).toEqual({ kind: "macro", macroAttribute: "opaque" });
+    expect(vocab.lookupStatic("stamped")).toEqual({ kind: "macro", macroAttribute: "expression" });
+  });
+});

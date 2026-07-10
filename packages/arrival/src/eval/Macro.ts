@@ -33,6 +33,12 @@ export class Macro {
   __fn__: Function;
   __doc__?: string;
   __defmacro__?: boolean;
+  /** The §3.4 ternary static walk attribute (symbol-define-static-program-validation.md)
+   *  — stamped by `symbol.defineSyntax`'s bind arm (common/symbols/define-bake.ts) from
+   *  the DECLARED `DefineSyntaxSymbolDef.macroAttribute`. `undefined` (every prelude-era
+   *  macro, every JS-authored transformer) reads as `"opaque"` — the safe under-report
+   *  default the validator's firewall assumes (static-validation/vocabulary.ts). */
+  macroAttribute?: "opaque" | "expression" | "binder";
 
   constructor(name: string, fn: Function, doc?: string, dump?: boolean) {
     if (doc) {

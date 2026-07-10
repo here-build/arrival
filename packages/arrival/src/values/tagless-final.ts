@@ -17,7 +17,7 @@ import type { AValue } from "./primitives/AValue.js";
 
 /** The ONE spelling of the tagless-final method-name prefix. Every consumer imports THIS. */
 const TAGLESS_PREFIX = "arrival/tagless-final/";
-export type TaglessPrefix = typeof TAGLESS_PREFIX;
+type TaglessPrefix = typeof TAGLESS_PREFIX;
 
 /** Strip the tagless prefix off a key: `"arrival/tagless-final/map"` → `"map"`, else `never`
  *  (non-tagless string keys and every symbol key fall away). */

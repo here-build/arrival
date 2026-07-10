@@ -4,40 +4,8 @@
 // the Lexer/Parser/Formatter consult them at read time, before the evaluator ever
 // sees a form — so they live in the reader, not in eval/guards.ts (which carries
 // the evaluator's Environment/Macro world). Moved out of eval/guards.ts.
-import {
-  char_re,
-  complex_re,
-  directives,
-  float_re,
-  int_re,
-  rational_re,
-} from "../values/primitives.js";
+import { directives } from "../values/primitives.js";
 import * as specials from "./specials.js";
-
-// A token that is neither a bracket nor a registered reader-macro prefix — i.e. it
-// can stand on its own as an atom. Internal helper for `is_symbol_string`.
-function is_atom_string(str: string): boolean {
-  return !(["(", ")", "[", "]"].includes(str) || specials.names().includes(str));
-}
-
-// A token that reads as a plain symbol: an atom that is not a quoted string, a
-// number (int/float/complex/rational), a character literal, or one of the bare
-// boolean/nil literals.
-export function is_symbol_string(str: unknown): str is string {
-  if (typeof str !== "string") return false;
-  return (
-    is_atom_string(str) &&
-    !(
-      /^"[\s\S]*"$/.test(str) ||
-      str.match(int_re) ||
-      float_re.test(str) ||
-      str.match(complex_re) ||
-      str.match(rational_re) ||
-      char_re.test(str) ||
-      ["#t", "#f", "nil"].includes(str)
-    )
-  );
-}
 
 // A registered reader-macro prefix (`'`, `` ` ``, `,`, `,@`, `#(`, `#u8(`).
 export function is_special(token: unknown): boolean {

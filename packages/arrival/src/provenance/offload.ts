@@ -247,7 +247,7 @@ export interface DrillInExecutor {
   drillIn(request: DrillInRequest): Promise<DrillInResponse>;
 }
 
-export interface SameProcessExecutorOptions {
+interface SameProcessExecutorOptions {
   /** The ONE program version this executor serves (§5 C4's deploy story) — every
    *  `templateHash` a request addresses must resolve to a graph reachable from here
    *  (`program.main`, a `program.templates` entry, or a fan/binder's private

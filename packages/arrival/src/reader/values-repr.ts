@@ -19,14 +19,13 @@ import type { SchemeValue } from "../values/types.js";
 import { is_nil, is_pair } from "../values/value-guards.js";
 import { ABool } from "../values/primitives/ABool.js";
 import { ANil } from "../values/primitives/ANil.js";
-import { BoxedSchemeValue } from "../membrane.js";
 import { APair } from "../values/primitives/APair.js";
 
 // The symbol-NAME surface these helpers operate on: the pre-boxing JS layer —
 // exactly what ASymbol's constructor accepts as a name (`SchemeSymbolName`) — NOT
 // a boxed SchemeValue. `gensym`/`is_gensym` take a raw name (string/symbol/number),
 // an ASymbol wrapper, or null — never a boxed SchemeValue directly.
-export type SymbolName = string | symbol | number;
+type SymbolName = string | symbol | number;
 
 /** Non-enumerable, non-writable Symbol-keyed slot — used for metadata that must
  *  not surface in enumeration or be clobbered (e.g. a gensym's `__literal__` name,

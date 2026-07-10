@@ -113,10 +113,7 @@ export { ensureBaseAssembled as initBridge } from "./eval/generator-exec.js";
 // Generator-based evaluator: flat trampoline for stack safety and performance.
 export {
   evaluate as evaluateGenerator,
-  exec as execGenerator,
   ArrivalError,
-  SchemePromise,
-  is_scheme_promise,
   currentRunEnv,
   type EvalContext,
   type EvalGenerator,
@@ -171,6 +168,25 @@ export { tokenize } from "./reader/tokenize.js";
 // ({env, dynamic_env, use_dynamic} shared, + signal/budgetMs/tap), so bare-`exec`
 // callers gain a killable, bounded evaluator.
 export { exec, parse, execState, type ExecState } from "./eval/generator-exec.js";
+
+// The STATIC VALIDATION PASS (W3, docs/working-proposals/symbol-define-static-program-
+// validation.md §3) — the compiler's front door: parsed forms × a sealed-chain
+// vocabulary → the COMPLETE eslint-style Diagnostic list (never crash-on-first).
+// `exec({ staticValidation: "on" })` is the wired consumer; DiscoveryTool/MCP
+// structured diagnostics and the codemirror LSP squiggles are NOTED consumers of the
+// same surface (their waves); mercury's roster mode constructs its own vocabulary
+// from `EnvCapability.exports()` when that wave lands.
+export {
+  validateProgram,
+  StaticValidationError,
+  type Diagnostic,
+  type SiteRef,
+} from "./static-validation/validate-program.js";
+export {
+  vocabularyFromChain,
+  type ProgramVocabulary,
+  type VocabularyEntry,
+} from "./static-validation/vocabulary.js";
 
 // Static lineage carrier — the STATIC analogue of the runtime provenance trace:
 // `classify` builds a per-form lineage skeleton from the parsed AST (no eval); the

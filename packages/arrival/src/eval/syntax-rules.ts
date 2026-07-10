@@ -1,10 +1,10 @@
 // ----------------------------------------------------------------------
-// The macro engine — syntax-rules pattern matching + template expansion, and
-// the `macroexpand` traversal. Evaluate-free (it rewrites code, it does not run
-// it) and carries no module-level global_env edge — lambda/define resolve from
-// the runtime env, and the global-env identity check is threaded through
-// extract_patterns' `scope` argument by the syntax-rules caller. The 5 exported
-// functions are consumed by the `syntax-rules` / `macroexpand` builtins in env/macros.ts.
+// The macro engine — syntax-rules pattern matching + template expansion.
+// Evaluate-free (it rewrites code, it does not run it) and carries no
+// module-level global_env edge — lambda/define resolve from the runtime env,
+// and the global-env identity check is threaded through extract_patterns'
+// `scope` argument by the syntax-rules caller. The 3 exported functions are
+// consumed by the `syntax-rules` builtin in env/macros.ts.
 //
 // Attribution: derived from LIPS Scheme (Jakub T. Jankiewicz) — see LICENSE.
 //
@@ -14,7 +14,6 @@
 // ----------------------------------------------------------------------
 import invariant from "tiny-invariant";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { Environment } from "../Environment.js";
 import type { Resolver } from "./Resolver.js";
 import type { Capabilities } from "./Capabilities.js";
 import { AString } from "../values/primitives/AString.js";
@@ -22,15 +21,11 @@ import { ASymbol } from "../values/primitives/ASymbol.js";
 import { Macro } from "./Macro.js";
 import { APair, __tieKnot, concatPair } from "../values/primitives/APair.js";
 import { Syntax } from "./Syntax.js";
-import { isNumeric } from "../values/numbers.js";
-import { DATA } from "../well-known-symbols.js";
 import { eqv } from "../values/structural-equal.js";
 import { AListAlike, type SchemeValue } from "../values/types.js";
 import { ANil, nil } from "../values/primitives/ANil.js";
 import { type } from "../utils/typecheck.js";
 import { gensym, hidden_prop, is_atom, is_gensym, quote } from "../reader/values-repr.js";
-
-type SchemeFunction = (...args: any[]) => any;
 
 function same_atom(a, b) {
   if (type(a) !== type(b)) {
@@ -99,186 +94,6 @@ function carrySpanSpine<T extends SchemeValue>(fresh: T, template: SchemeValue):
     node = node.cdr;
   }
   return fresh;
-}
-
-// ----------------------------------------------------------------------
-// ----------------------------------------------------------------------
-const recur_guard = -10_000;
-
-export function macro_expand(): SchemeFunction {
-  return async function (this: Environment, code: SchemeValue, args: SchemeValue) {
-    const env = (args["env"] = this);
-    // `bindings` / `names` hold IDENTIFIER NAMES (the `.valueOf()` of bound symbols —
-    // `string | symbol`), consulted by `is_macro` via `bindings.includes(name)`. They are
-    // not SchemeValues; the pre-union `= any` alias had masked that.
-    let bindings: (string | symbol)[] = [];
-    const let_macros = new Set(["let", "let*", "letrec"]);
-    // lambda/define resolved from the runtime env (whose root is global_env) so
-    // the engine carries no module-level global_env edge.
-    const lambda = env.get("lambda");
-    const define = env.get("define");
-
-    function is_let_macro(symbol: ASymbol) {
-      const name = symbol.valueOf();
-      return typeof name === "string" && let_macros.has(name);
-    }
-
-    function is_procedure(value: unknown, node: APair<any, any>) {
-      return value === define && node.cdr instanceof APair && node.cdr.car instanceof APair;
-    }
-
-    function is_lambda(value: unknown) {
-      return value === lambda;
-    }
-
-    function proc_bindings(node: unknown) {
-      const names: (string | symbol)[] = [];
-      while (true) {
-        if (node instanceof ANil) {
-          break;
-        } else {
-          if (node instanceof ASymbol) {
-            names.push(node.valueOf());
-            break;
-          }
-          invariant(node instanceof APair, `macroexpand: proc_bindings expected pair got ${type(node)}`);
-          invariant(
-            node.car instanceof ASymbol,
-            `macroexpand: proc_bindings name expected symbol got ${type(node.car)}`,
-          );
-          names.push(node.car.valueOf());
-          node = node.cdr;
-        }
-      }
-      return [...bindings, ...names];
-    }
-
-    function let_binding(node: SchemeValue): (string | symbol)[] {
-      invariant(node instanceof APair, `macroexpand: let bindings expected pair got ${type(node)}`);
-      return [
-        ...bindings,
-        ...node.to_array(false).map(function (node: unknown) {
-          invariant(node instanceof APair, `macroexpand: Invalid let binding expectig pair got ${type(node)}`);
-          invariant(node.car instanceof ASymbol, `macroexpand: let binding name expected symbol got ${type(node.car)}`);
-          return node.car.valueOf();
-        }),
-      ];
-    }
-
-    // A type guard (not just a boolean): narrows `value` to `Macro | Syntax` so the
-    // expander dispatches on the class — Syntax.expand vs Macro.invoke — with no cast.
-    function is_macro(name: string | symbol, value: unknown): value is Macro | Syntax {
-      // Syntax no longer extends Macro — list both (a Syntax carries __defmacro__ too).
-      // `=== true` because Macro.__defmacro__ is optional (boolean | undefined); a type
-      // predicate must yield a strict boolean.
-      return (
-        (value instanceof Macro || value instanceof Syntax) && value.__defmacro__ === true && !bindings.includes(name)
-      );
-    }
-
-    async function expand_let_binding(node: unknown, n?: number): Promise<SchemeValue> {
-      if (node instanceof ANil) {
-        return nil;
-      }
-      invariant(node instanceof APair, `macroexpand: let binding list expected pair got ${type(node)}`);
-      const pair = node.car;
-      invariant(pair instanceof APair, `macroexpand: let binding expected pair got ${type(pair)}`);
-      return carrySpan(
-        new APair(
-          CONSTANT_CTX,
-          carrySpan(new APair(CONSTANT_CTX, pair.car, await traverse(pair.cdr, n ?? -1, env)), pair),
-          await expand_let_binding(node.cdr),
-        ),
-        node,
-      );
-    }
-
-    async function traverse(node: unknown, n: number, env: Environment): Promise<SchemeValue> {
-      if (node instanceof APair && node.car instanceof ASymbol) {
-        if (node[DATA]) {
-          return node;
-        }
-        const name = node.car.valueOf();
-        const value = env.get(node.car, { throwError: false });
-        const is_let = is_let_macro(node.car);
-
-        const is_binding = is_let || is_procedure(value, node) || is_lambda(value);
-
-        const nodeCdr = node.cdr;
-        if (is_binding && nodeCdr instanceof APair && nodeCdr.car instanceof APair) {
-          let second;
-          if (is_let) {
-            bindings = let_binding(nodeCdr.car);
-            second = await expand_let_binding(nodeCdr.car, n);
-          } else {
-            bindings = proc_bindings(nodeCdr.car);
-            second = nodeCdr.car;
-          }
-          return carrySpan(
-            new APair(CONSTANT_CTX, node.car, carrySpan(new APair(CONSTANT_CTX, second, await traverse(nodeCdr.cdr, n, env)), nodeCdr)),
-            node,
-          );
-        } else if (is_macro(name, value)) {
-          // Split by the transformer's HONEST return shape (no flag toggles it):
-          // Syntax.expand -> { expr, scope }, re-expanded in its hygiene scope;
-          // Macro.invoke -> a replacement FORM, re-expanded in the use env.
-          let result: SchemeValue;
-          if (value instanceof Syntax) {
-            const { expr, scope } = await value.expand(node, { ...args, env });
-            if (expr instanceof APair) {
-              if ((n !== -1 && n <= 1) || n < recur_guard) {
-                return expr;
-              }
-              if (n !== -1) {
-                n = n - 1;
-              }
-              return traverse(expr, n, scope);
-            }
-            result = expr;
-          } else {
-            result = await value.invoke(nodeCdr, { ...args, env }, true);
-          }
-          if (result instanceof ASymbol) {
-            return quote(result);
-          }
-          if (result instanceof APair) {
-            if ((n !== -1 && n <= 1) || n < recur_guard) {
-              return result;
-            }
-            if (n !== -1) {
-              n = n - 1;
-            }
-            return traverse(result, n, env);
-          }
-          if (is_atom(result)) {
-            return result;
-          }
-        }
-      }
-      // TODO: CYCLE DETECT
-      // traverse is only ever called on a pair (every recursive call is `is_pair`-gated,
-      // and the entry points pass forms); an atom reaching here is a structural bug.
-      invariant(node instanceof APair, `macroexpand: traverse expected pair got ${type(node)}`);
-      let car = node.car;
-      if (car instanceof APair) {
-        car = await traverse(car, n, env);
-      }
-      let cdr = node.cdr;
-      if (cdr instanceof APair) {
-        cdr = await traverse(cdr, n, env);
-      }
-      return carrySpan(new APair(CONSTANT_CTX, car, cdr), node instanceof APair ? node : nil);
-    }
-
-    invariant(code instanceof APair, `macroexpand: expected a form got ${type(code)}`);
-    const depth = code.cdr instanceof APair && isNumeric(code.cdr.car) ? Number(code.cdr.car.valueOf()) : -1;
-    const expanded = await traverse(code, depth, env);
-    invariant(expanded instanceof APair, `macroexpand: expansion did not yield a form`);
-    // `quote` only marks pairs/symbols as data (a no-op passthrough for any other datum),
-    // so narrow the head to the two shapes it acts on; an atom head returns unchanged.
-    const head = expanded.car;
-    return head instanceof APair || head instanceof ASymbol ? quote(head) : head;
-  };
 }
 
 // ----------------------------------------------------------------------

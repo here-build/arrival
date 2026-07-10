@@ -63,7 +63,7 @@ export type SlotArrayKind = "list" | "vector" | "scalar";
  *                   admissible value); `null` otherwise. Mutually exclusive with `enum`.
  * Both `null` on any uncertainty (no call, unknown callee, an `any`/`unknown` domain).
  */
-export interface SlotElementType {
+interface SlotElementType {
   readonly isStringy: boolean | null;
   readonly enum: readonly string[] | null;
 }

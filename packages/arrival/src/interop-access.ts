@@ -312,7 +312,7 @@ export const arrival = { private: markInteropPrivate };
 // property value to spoof the NOT_FOUND signal.
 export const NOT_FOUND = Symbol("scheme:not-found");
 
-export type AccessResult<T> = T | typeof NOT_FOUND;
+type AccessResult<T> = T | typeof NOT_FOUND;
 
 // ============================================================================
 // Core Access Functions

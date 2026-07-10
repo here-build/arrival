@@ -112,27 +112,8 @@ export function isEagerAccumulationActive(): boolean {
 // allocates 200MB UTF-16 in ~1ms and succeeds, `(make-vector 1e8)` spins >10s on 100M
 // slots — one sandbox call drives host memory pressure. Length checked O(1) pre-alloc.
 //
-// Default 2^24: worst case (~32MB UTF-16 / one 16M-slot array) is recoverable. Host-
-// overridable via `setAllocationLimit` for tighter sandbox or trusted batch.
-let allocationLimit = 1 << 24; // 16,777,216
-
-/** Per-call allocation cap for size-parameterized constructors. */
-export function getAllocationLimit(): number {
-  return allocationLimit;
-}
-
-/**
- * Override per-call allocation cap (`make-string`/`make-vector` length).
- * `Infinity` disables (trusted contexts only). Negative/NaN rejected — cap must
- * be a meaningful upper bound.
- */
-export function setAllocationLimit(limit: number): void {
-  invariant(
-    typeof limit === "number" && !Number.isNaN(limit) && limit >= 0,
-    `setAllocationLimit: expected a non-negative number, got ${limit}`,
-  );
-  allocationLimit = limit;
-}
+// Default 2^24: worst case (~32MB UTF-16 / one 16M-slot array) is recoverable.
+const allocationLimit = 1 << 24; // 16,777,216
 
 /**
  * Throw Scheme-surfaceable error (O(1), pre-allocation) when len exceeds cap or

@@ -48,7 +48,7 @@ export function provOf(v: unknown): number[] {
 
 /** Why a top-level form is OUTSIDE shadow's provable set (recorded, not asserted).
  *  `null` ⇒ the form is in-scope and the cone must match. */
-export type ShadowSkip =
+type ShadowSkip =
   | { readonly kind: "macro-head"; readonly op: string } // head resolves to is_macro — no static node (macros aren't classified)
   | { readonly kind: "keyword-projection"; readonly op: string }; // (:field …) where-provenance — no static node (v0.2/B2)
 
@@ -56,7 +56,7 @@ export type ShadowSkip =
  *  models applications/special-forms, not macro expansions) and a `(:field …)`
  *  keyword projection (where-provenance has no static node — out of scope). Both
  *  are recognised from the SURFACE head, before any expansion. */
-export function shadowSkipReason(form: SchemeValue, env: Environment): ShadowSkip | null {
+function shadowSkipReason(form: SchemeValue, env: Environment): ShadowSkip | null {
   if (!(form instanceof APair)) return null; // atoms (a literal / a bare symbol) are trivially classifiable
   const head = form.car;
   if (!(head instanceof ASymbol)) return null; // computed operator — fall through (classify stringifies it)

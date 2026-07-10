@@ -60,7 +60,7 @@ export interface ReplayWalkStep {
   readonly value: unknown;
 }
 
-export interface ReplayWalkOptions {
+interface ReplayWalkOptions {
   readonly program: WireframeProgram;
   /** Which graph to walk — defaults to `program.main`, mirroring
    *  `ReplayGraphOptions.graph` (replay.ts) exactly. */

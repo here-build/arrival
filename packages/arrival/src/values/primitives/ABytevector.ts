@@ -24,7 +24,7 @@ import { withInputProvenance } from "../op-helpers.js";
  * Anything that can seed a bytevector. Coerced to a Uint8Array payload in the
  * constructor (the old `asBytevector` coercion surface, now co-located here).
  */
-export type BytevectorSource =
+type BytevectorSource =
   | Uint8Array
   | ArrayBuffer
   | DataView

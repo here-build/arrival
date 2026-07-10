@@ -18,6 +18,9 @@ import { Capabilities } from "./Capabilities.js";
 import { LexicalScope } from "./LexicalScope.js";
 import { assembleEnv } from "../common/kernel.js";
 import { sealResolutionChain } from "./CompiledResolutionChain.js";
+import { StaticValidationError, validateProgram } from "../static-validation/validate-program.js";
+import { vocabularyFromChain } from "../static-validation/vocabulary.js";
+import type { DegradationMode, DegradedCapability } from "../common/degradation.js";
 import type { EnvCapability } from "../common/capability.js";
 import type { EvalSchemeInto, SchemeEnv } from "../common/scheme-env.js";
 import invariant from "tiny-invariant";
@@ -125,16 +128,20 @@ const capabilityEvalScheme: EvalSchemeInto = preludeExec;
  * capability's `lower()` — each validates its own slice; `assembleEnv` supplies
  * the bake-scoped prelude overlay, so `preludeOnly` symbols work with no extra wiring.
  */
-async function assembleCapabilityBase(capabilities: readonly EnvCapability[], config?: object): Promise<Environment> {
+async function assembleCapabilityBase(
+  capabilities: readonly EnvCapability[],
+  config?: object,
+  degradation?: DegradationMode,
+): Promise<{ base: Environment; degraded: readonly DegradedCapability[] }> {
   const base = user_env.inherit("exec-capabilities");
-  await assembleEnv(
+  const assembled = await assembleEnv(
     base,
-    capabilities.map((c) => c.lower({ evalScheme: capabilityEvalScheme, config })),
+    capabilities.map((c) => c.lower({ evalScheme: capabilityEvalScheme, config, degradation })),
   );
   // Seal the per-call baked base (ENV T2) — `Capabilities.assembled(base)` below reuses
   // this artifact (memoized per env), so the run resolves through the frozen chain.
   sealResolutionChain(base);
-  return base;
+  return { base, degraded: assembled.degraded };
 }
 
 export interface ExecOptions {
@@ -237,6 +244,29 @@ export interface ExecOptions {
    */
   freezeRosettaReturns?: boolean;
   /**
+   * THE STATIC VALIDATION PASS (W3, symbol-define-static-program-validation.md §3.6).
+   * `"on"` runs `validateProgram` over the parsed forms — against the run's SEALED
+   * chain + session scope — after parse, before the first form evaluates; error-tier
+   * diagnostics throw ONE `StaticValidationError` carrying the COMPLETE list (V's
+   * "never crash-on-first" as an API shape), with ZERO side effects fired. `"on"`
+   * also opts this run's capability lowering into `degradation: "doors"` (§3.7's
+   * caller split — doors become the effective posture exactly where a program is
+   * present to validate), so an absent OPTIONAL enabling config key surfaces as a
+   * parse-phase causal-chain diagnostic instead of a mid-run unbound throw.
+   *
+   * STAGED DEFAULT — `"off"` this wave: the spec's target default is on-with-opt-out,
+   * but the suite still pins the RUNTIME unbound-variable surface (the typo-suggestion
+   * laws, purity-door rows) through default-path exec; the default flips with W4's
+   * migration, not before. GLASS (`env`) runs never validate regardless — a live,
+   * embedder-mutable frame chain has no seal, so the pass makes no claims there
+   * (§3.5); the runtime doors remain the backstop.
+   *
+   * STRICTNESS CAVEAT (§6.6, documented divergence): dead-branch references —
+   * `(if #f (missing) 42)` — REPORT under `"on"` although they run today; dead
+   * references are drift, and this knob is the opt-out.
+   */
+  staticValidation?: "on" | "off";
+  /**
    * Internal: set by the bootstrap's own prelude evals (`ensureBaseAssembled`'s
    * evalScheme) to bypass the bootstrap gate below — awaiting
    * `ensureBaseAssembled` there would deadlock (the prelude eval IS part of the
@@ -323,6 +353,7 @@ export async function execState(
     heapBudget,
     strict,
     freezeRosettaReturns,
+    staticValidation,
     skipBootstrapWait,
     irLineage,
     irLineageSources,
@@ -389,14 +420,33 @@ export async function execState(
   // classifier above; only the resolution topology changes.
   let runResolver: Resolver;
   if (env !== undefined) {
+    // GLASS — the pass is not offered here (§3.5: no seal ⇒ no claims); the runtime
+    // doors (unbound-variable throw + suggestions, PurityError) remain the backstop.
     runResolver = new Resolver(actualEnv);
   } else {
-    const capabilityBase =
+    const validate = staticValidation === "on";
+    // §3.7's caller split: a program-scoped run that opted into the pass also opts its
+    // capability lowering into doors — an absent OPTIONAL enabling key binds a
+    // cause-carrying door for the validator to report ON, instead of withholding.
+    const capabilityAssembly =
       capabilities !== undefined
-        ? Capabilities.assembled(await assembleCapabilityBase(capabilities, config))
-        : Capabilities.assembled(actualEnv);
+        ? await assembleCapabilityBase(capabilities, config, validate ? "doors" : undefined)
+        : undefined;
+    const baseEnv = capabilityAssembly?.base ?? actualEnv;
+    const capabilityBase = Capabilities.assembled(baseEnv);
     const lexicalRoot = scope !== undefined ? scope.env : defaultLexicalRoot();
     runResolver = new Resolver(lexicalRoot, capabilityBase);
+    if (validate) {
+      // W3 (§3.6): validate AFTER parse, BEFORE the first form evaluates — the
+      // complete list, one throw, zero side effects fired.
+      const vocabulary = vocabularyFromChain(sealResolutionChain(baseEnv), {
+        scopeNames: lexicalRoot.allBoundNames(),
+        scopeLookup: (name) => lexicalRoot.get(name, { throwError: false }),
+        degraded: capabilityAssembly?.degraded,
+      });
+      const diagnostics = validateProgram(parsed, vocabulary);
+      if (diagnostics.some((d) => d.severity === "error")) throw new StaticValidationError(diagnostics);
+    }
   }
   // Run's exec frame = resolver's lexical env (glass: actualEnv; cut: lexicalRoot).
   // Defines land here and evaluator's `ctx.env` is here; heap meter lives on

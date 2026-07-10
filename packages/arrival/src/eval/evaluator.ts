@@ -27,7 +27,7 @@ import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.j
 import { AValue, unionProvenance } from "../values/primitives/AValue.js";
 import { Environment, type EnvironmentValue } from "../Environment.js";
 import { unboundVariableError } from "../unbound-variable.js";
-import { ArrivalError, EvalError, isHostRuntimeBug, type SourceLocation } from "../errors.js";
+import { ArrivalError, EvalError, isHostRuntimeBug, R7RSError, type SourceLocation } from "../errors.js";
 import { is_callable, is_false, is_function, is_macro, is_promise } from "./guards.js";
 import { is_applyable, is_callable_value, is_lambda } from "../values/value-guards.js";
 import { applyCallback, ALambda, type CallResult } from "../values/primitives/ACallable.js";
@@ -224,7 +224,7 @@ export interface EvalContext {
 }
 
 /** Options for the trampoline runner (`run`). */
-export interface RunOptions {
+interface RunOptions {
   /**
    * Execution-budget signal. See `EvalContext.signal` for the war story.
    * Threaded as a runner option (not via the generator) because the
@@ -422,7 +422,6 @@ export type EvalGenerator = Generator<unknown, SchemeValue, SchemeValue>;
  * seals it back with `expectValue` (a run/top-level result is never a bare
  * expander — that would be a structural error).
  */
-export type EvaluateGenerator = Generator<unknown, SchemeValue | Macro | Syntax, SchemeValue>;
 
 /** Symbol to mark a yield as "need to check time" vs "await this promise" */
 const TICK = Symbol("tick");
@@ -596,40 +595,6 @@ export function expectValue(result: SchemeValue | Macro | Syntax): SchemeValue {
     throw new Error("evaluate produced a macro/syntax where a value was required");
   }
   return result;
-}
-
-/**
- * Scheme promise (delay/force) - NOT a JS Promise!
- * This represents a lazily evaluated expression.
- */
-export class SchemePromise {
-  // Unforced placeholder. `_value` is only read after `_forced` flips true (force()
-  // sets both together), so theVoid here is a pure pre-force sentinel — never the
-  // observable result of a forced promise. `undefined` is not a SchemeValue.
-  private _value: SchemeValue = theVoid;
-  private readonly _thunk: () => SchemeValue;
-
-  constructor(thunk: () => SchemeValue) {
-    this._thunk = thunk;
-  }
-
-  private _forced = false;
-
-  get forced(): boolean {
-    return this._forced;
-  }
-
-  force(): SchemeValue {
-    if (!this._forced) {
-      this._value = this._thunk();
-      this._forced = true;
-    }
-    return this._value;
-  }
-}
-
-export function is_scheme_promise(o: unknown): o is SchemePromise {
-  return o instanceof SchemePromise;
 }
 
 // ============================================================================
@@ -2691,15 +2656,6 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
         // `.fileName` are OWN properties the membrane's fast path hands across). Every
         // path re-presents to an `R7RSError` carrying only the message — the one Error
         // subtype the SchemeValue union admits as a value.
-        //
-        // `R7RSError` is loaded via dynamic import here — historically to dodge the
-        // now-deleted bridge.ts's eager `set_interaction_env` at module init, which
-        // broke the SchemePromise circular-init ordering. `../errors.js` is already a
-        // static top-of-module import in this file today (ArrivalError/EvalError/
-        // isHostRuntimeBug above), so that specific hazard no longer applies — this
-        // dynamic import may now be vestigial. By the time a `try` body has thrown,
-        // every module is initialized, so it resolves synchronously either way.
-        const { R7RSError } = await import("../errors.js");
         errorValue = caught instanceof R7RSError ? caught : new R7RSError(caught.message);
         // Even a freshly-minted R7RSError carries an OWN `.stack` (V8 sets it on
         // construction) plus any inherited `.cause`/`.fileName`. The membrane's
@@ -2826,7 +2782,10 @@ const SPECIAL_FORMS: Record<string, (rest: SchemeValue, ctx: EvalContext) => Eva
  * - { call: generator, frame?: StackFrame } for recursive evaluation (FLAT - no stack growth!)
  * - Promises when JS returns them (for interop)
  */
-export function* evaluate(code: SchemeValue, ctx: EvalContext): EvaluateGenerator {
+export function* evaluate(
+  code: SchemeValue,
+  ctx: EvalContext,
+): Generator<unknown, SchemeValue | Macro | Syntax, SchemeValue> {
   // Periodic tick for event loop breathing
   yield TICK;
 
@@ -3265,29 +3224,6 @@ function* evaluateArgs(rest: SchemeValue, ctx: EvalContext): Generator<unknown, 
   invariant(node instanceof ANil || node === null, "Syntax Error: improper list in function call");
 
   return args;
-}
-
-// ============================================================================
-// High-level API
-// ============================================================================
-
-/**
- * Execute Scheme code and return the result. The low-level evaluator entry (the
- * production seam is generator-exec's `exec`, which assembles the capability base).
- * COMPLEX tier (two-tier-exec-api §3, internal) — returns one boxed SchemeValue,
- * never unwrapped.
- *
- * Bootstrap bridge: `EvalContext.resolver` is the single binding channel, but this
- * entry stays ergonomic for embedders/low-level tests that hand a bare `env` — when
- * `resolver` is absent it synthesizes a GLASS `Resolver` over that env (the same
- * glass bridge generator-exec uses for a custom env), byte-identical to the removed
- * `ctxResolver` env-fallback. With `resolver` already set, `env` is ignored.
- */
-export function exec(code: SchemeValue, ctx: EvalContext & { env?: Environment }): Promise<SchemeValue> {
-  const resolver = ctx.resolver ?? (ctx.env ? new Resolver(ctx.env) : undefined);
-  invariant(resolver, "exec: ctx must carry a resolver or a bootstrap env");
-  // A top-level form evaluates to a value, never a bare expander — seal it.
-  return run(evaluate(code, { ...ctx, resolver }), { signal: ctx.signal }).then(expectValue);
 }
 
 export { ArrivalError } from "../errors.js";

@@ -30,7 +30,7 @@ import { AInexact } from "./primitives/AInexact.js";
  * omitted feature and explains the real-only alternative, rather than silently
  * misparsing or returning a wrong value. Matches arrival's %purity-door discipline.
  */
-export const COMPLEX_DOOR_MESSAGE =
+const COMPLEX_DOOR_MESSAGE =
   "complex numbers are not supported in arrival — inexact reals only; pass real/imag as separate values";
 
 export function complexDoor(): never {
@@ -187,14 +187,6 @@ export function parseNumber(str: string): ANumeric {
   return exact;
 }
 
-export function isSchemeNumeric(value: unknown): value is ANumeric {
-  return value instanceof AExact || value instanceof AInexact;
-}
-
-/** Unlike `isSchemeNumeric`, also admits a raw (unboxed) JS number/bigint. */
-export function isNumeric(value: unknown): value is ANumeric | number | bigint {
-  return isSchemeNumeric(value) || typeof value === "number" || typeof value === "bigint";
-}
 
 // ============================================================================
 // Type Checking Functions

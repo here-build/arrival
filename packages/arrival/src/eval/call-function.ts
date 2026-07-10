@@ -47,7 +47,7 @@ export function call_function(
 
 // Collapse a tree that may contain Promises into a single Promise; if the tree
 // holds none, return the argument untouched (the common no-await fast path).
-export function resolve_promises(arg: SchemeValue): SchemeValue {
+function resolve_promises(arg: SchemeValue): SchemeValue {
   const promises: Promise<unknown>[] = [];
   traverse(arg);
   if (promises.length > 0) {

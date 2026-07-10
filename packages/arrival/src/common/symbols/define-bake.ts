@@ -72,7 +72,7 @@ export interface ExportableSpec {
 // happens not to list `scheme/core` as a dep (most don't; they get it for free
 // through env-roots' universal rooting).
 // ─────────────────────────────────────────────────────────────────────────────
-const KEYWORD_SYNTAX_BASELINE: ReadonlySet<string> = new Set([
+export const KEYWORD_SYNTAX_BASELINE: ReadonlySet<string> = new Set([
   "lambda",
   "define",
   "define-macro",
@@ -358,7 +358,7 @@ function buildDefineProcedure(verb: string, def: DefineSymbolDef, closureValue: 
  *  closure's OWN captured definition-time scope, not the use site's `this=env`). */
 function buildMacro(verb: string, def: DefineSyntaxSymbolDef, closureValue: unknown): Macro {
   const closure = closureValue as ACallable;
-  return new Macro(
+  const macro = new Macro(
     verb,
     function (this: unknown, code: unknown, evalArgs: MacroInvokeContext): Promise<SchemeValue> {
       const argForms = formsOf(code);
@@ -366,6 +366,11 @@ function buildMacro(verb: string, def: DefineSyntaxSymbolDef, closureValue: unkn
     },
     def.doc,
   );
+  // Carry the DECLARED ternary walk attribute onto the bound value — the one channel
+  // the validator's assembled-mode vocabulary can read it back from (§3.4; W1 stored
+  // it on the def, W3 consumes it off the binding).
+  macro.macroAttribute = def.macroAttribute;
+  return macro;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

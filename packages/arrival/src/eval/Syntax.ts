@@ -12,7 +12,7 @@ type SyntaxLike = Syntax | Function;
  * a value. This shape is determined by the CLASS (always, for `Syntax`), not by
  * any flag: `env/macros.ts` returns it unconditionally (`void macro_expand`).
  */
-export interface MacroExpansion {
+interface MacroExpansion {
   expr: SchemeValue;
   scope: Environment;
 }

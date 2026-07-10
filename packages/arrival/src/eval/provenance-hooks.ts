@@ -66,47 +66,14 @@ export interface EmissionSink {
 let _coordinate: RecordCoordinate | undefined;
 let _sink: EmissionSink | undefined;
 
-/** Read the ambient coordinate — `undefined` for every call today outside a test that
- *  installed one (nothing in production wires this yet; that's Q15/Q16's job). */
-export function currentRecordCoordinate(): RecordCoordinate | undefined {
-  return _coordinate;
-}
-
-/** Read the ambient sink (store/payloads/regionId a coordinate's emissions target). */
-export function currentEmissionSink(): EmissionSink | undefined {
-  return _sink;
-}
-
-/** Install BOTH the coordinate and its sink for the duration of a SYNCHRONOUS `fn` —
- *  save/restore, the same idiom `dynamic-call-site.ts`'s `withDynamicCallSite` uses.
- *  Single-threaded JS makes the module holder safe; a nested install restores its
- *  parent's pair on exit, so once Q15/Q16 nest real regions here, an inner drill-in
- *  never bleeds its coordinate into the outer caller's continuation.
- *
- *  SYNC ONLY: `fn` must not itself await before the crossing(s) it's meant to cover —
- *  `finally` restores the ambient pair the instant `fn` RETURNS, not once a returned
- *  Promise SETTLES (matching `withDynamicCallSite`'s own contract). Wrapping a whole
- *  async interpreter run (as this node's own integration test does) needs
- *  {@link withRecordCoordinateAsync} instead. */
-export function withRecordCoordinate<T>(coordinate: RecordCoordinate, sink: EmissionSink, fn: () => T): T {
-  const savedCoordinate = _coordinate;
-  const savedSink = _sink;
-  _coordinate = coordinate;
-  _sink = sink;
-  try {
-    return fn();
-  } finally {
-    _coordinate = savedCoordinate;
-    _sink = savedSink;
-  }
-}
-
-/** The async-safe sibling of {@link withRecordCoordinate}: restores the ambient pair
- *  only once `fn`'s returned Promise SETTLES, so every crossing that happens anywhere
+/** Install BOTH the coordinate and its sink for the duration of `fn` — save/restore,
+ *  the same idiom `dynamic-call-site.ts`'s `withDynamicCallSite` uses. Single-threaded
+ *  JS makes the module holder safe; a nested install restores its parent's pair on
+ *  exit, so once Q15/Q16 nest real regions here, an inner drill-in never bleeds its
+ *  coordinate into the outer caller's continuation. Restores the ambient pair only
+ *  once `fn`'s returned Promise SETTLES, so every crossing that happens anywhere
  *  during a multi-tick run (a whole `execState` call, say) still observes the
- *  installed coordinate/sink. Kept as a SEPARATE function rather than overloading
- *  the sync one so a caller's choice of "restore on return" vs "restore on settle" is
- *  explicit at the call site, never inferred from what `fn` happens to return. */
+ *  installed coordinate/sink. */
 export async function withRecordCoordinateAsync<T>(
   coordinate: RecordCoordinate,
   sink: EmissionSink,
@@ -158,7 +125,7 @@ export function notePotentialRosettaExit(inv: Invocation, result: SchemeValue | 
   // ambient from `_coordinate`/`_sink` below (owned by `values/primitives/region-
   // scope.ts`, imported directly rather than duplicated — see that file's own "Q15:
   // silent-region mode" section for why the direction is cycle-free and why this is
-  // the leak-proof placement: a nested `withRecordCoordinate` install deep inside a
+  // the leak-proof placement: a nested `withRecordCoordinateAsync` install deep inside a
   // silent region's dynamic extent still finds `isSilentRegion()` true, because
   // nothing but the enclosing `withSilentRegion` call ever touches it).
   if (isSilentRegion()) return;

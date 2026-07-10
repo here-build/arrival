@@ -276,7 +276,7 @@ export async function reconstructRegionScope(opts: {
 }
 
 /** Rule 1's door (errors-as-doors: names the mechanism, then the fix). */
-export function regionEscapeDoor(): Error {
+function regionEscapeDoor(): Error {
   return new Error(
     "reverse lambda escaped its invocation — callbacks are region-bound to the calling symbol; " +
       "a wrapper handed to host JS may only be invoked WHILE the symbol call that exported it is " +
@@ -349,24 +349,12 @@ export async function withRegionCall<T>(scope: RegionScope, fn: () => Promise<T>
 let _trackCoordinate: TrackCoordinate | undefined;
 let _trackSink: TrackEmissionSink | undefined;
 
-/** Read the ambient track coordinate — exposed mainly for tests; production code has
- *  no reason to read this directly (it's captured into the scope at open time). */
-export function currentTrackCoordinate(): TrackCoordinate | undefined {
-  return _trackCoordinate;
-}
-
-/** Read the ambient track sink — see {@link currentTrackCoordinate}. */
-export function currentTrackEmissionSink(): TrackEmissionSink | undefined {
-  return _trackSink;
-}
-
 /** Install a `TrackCoordinate`/`TrackEmissionSink` pair for the duration of a
- *  SYNCHRONOUS `fn` — save/restore, the same idiom {@link withRegionScope} and
- *  `eval/provenance-hooks.ts`'s `withRecordCoordinate` both use. `openRegionScope` is
- *  itself always synchronous at every real call site (`rosetta.ts`'s
+ *  SYNCHRONOUS `fn` — save/restore, the same idiom {@link withRegionScope} uses.
+ *  `openRegionScope` is itself always synchronous at every real call site (`rosetta.ts`'s
  *  `createRosettaWrapper` calls it before its first `await`), so a sync-only installer
  *  is sufficient — there is no async sibling to this function, unlike
- *  `withRecordCoordinate`/`withRecordCoordinateAsync`'s pair. */
+ *  `eval/provenance-hooks.ts`'s `withRecordCoordinateAsync`. */
 export function withTrackCoordinate<T>(coordinate: TrackCoordinate, sink: TrackEmissionSink, fn: () => T): T {
   const savedCoordinate = _trackCoordinate;
   const savedSink = _trackSink;
@@ -395,7 +383,7 @@ export function withTrackCoordinate<T>(coordinate: TrackCoordinate, sink: TrackE
 // DELIBERATELY a SEPARATE ambient from `_trackCoordinate`/`_trackSink` (never a field
 // folded onto `TrackCoordinate`/`RecordCoordinate`, and never carried on `RegionScope`
 // itself): a coordinate is a per-PORT address that gets SWAPPED by a nested
-// `withTrackCoordinate`/`withRecordCoordinate` install — γ replaying a nested wire, or
+// `withTrackCoordinate`/`withRecordCoordinateAsync` install — γ replaying a nested wire, or
 // any drill-in that installs its own coordinate deep inside a silent region's dynamic
 // extent. If silence rode ON the coordinate, that swap would silently DROP it, and a
 // mint minted under the nested coordinate could emit again the instant inner code

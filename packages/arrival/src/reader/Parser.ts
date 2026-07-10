@@ -46,25 +46,7 @@ import invariant from "tiny-invariant";
 // instead of a Scheme `ParseError`. O(1) check — `_state.parentheses` IS the live
 // descent depth. Cap sits below the most fragile consumer's overflow floor (a
 // recursive evaluator overflows ~3,500) and far above any real s-expression depth.
-let maxNestingDepth = 2_000;
-
-/** Current parser nesting-depth cap (open delimiters before a ParseError). */
-export function getMaxNestingDepth(): number {
-  return maxNestingDepth;
-}
-
-/**
- * Override the parser nesting-depth cap. `Infinity` disables it (trusted input
- * only — re-exposes the native-stack-overflow vector). Must be a positive
- * number.
- */
-export function setMaxNestingDepth(depth: number): void {
-  invariant(
-    typeof depth === "number" && !Number.isNaN(depth) && depth > 0,
-    `setMaxNestingDepth: expected a positive number, got ${depth}`,
-  );
-  maxNestingDepth = depth;
-}
+const maxNestingDepth = 2_000;
 
 export interface TokenMeta {
   token: string;

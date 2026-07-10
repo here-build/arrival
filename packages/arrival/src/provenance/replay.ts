@@ -332,7 +332,7 @@ async function replayGraphIn(
 // the program source itself).
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface PlaybackReplayOptions {
+interface PlaybackReplayOptions {
   /** The FULL program source (defines included) — §4: "re-run the ENTIRE program". */
   readonly source: string;
   /** Recorded penetrations per op, in stream order — the "cached membrane
@@ -405,7 +405,7 @@ export interface EffectStretch {
   readonly eventParam: string;
 }
 
-export interface ReplayBetweenRecordsOptions {
+interface ReplayBetweenRecordsOptions {
   readonly store: ProvenanceStore;
   readonly payloads: PayloadStore;
   readonly regionId: RegionId;

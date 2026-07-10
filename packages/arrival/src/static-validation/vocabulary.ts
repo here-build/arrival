@@ -1,0 +1,139 @@
+// vocabulary — `ProgramVocabulary`, the roster surface `validateProgram` judges
+// references against (docs/working-proposals/symbol-define-static-program-validation.md
+// §3.2, wave W3). ASSEMBLED-mode constructor only in this wave: built from a SEALED
+// `CompiledResolutionChain` (+ the run's session scope). Roster mode (mercury front-end,
+// codemirror LSP, doc-gen — pre-assembly, over `EnvCapability.exports()`) is a NOTED
+// consumer of the same interface, constructed in its own wave.
+//
+// What immutability buys (§3.5): against a sealed chain, `names` is complete for
+// enumerable bindings and frozen for the assembly's lifetime — "unbound" judged at parse
+// phase cannot be invalidated by evaluation. The three deliberate augmentations:
+//
+//   • KEYWORD_SYNTAX baseline (§2.1 rev2 fix) — core's keyword-bound special-form names
+//     are an UNCONDITIONAL baseline, never roster-optional: assembled realms root core
+//     universally, but a hand-assembled test env may not, and `while`/`try`/
+//     `define-macro` heads falling out of the modeled walk must never report unbound on
+//     a pure program.
+//   • RESOLVER-SYNTH family (§3.5) — `c[ad]+r` names are synthesized structurally by
+//     the Resolver ABOVE the chain (eval/Resolver.ts cxrUnfold), absent from every
+//     enumerable vocabulary by construction; recognized by the same regex.
+//   • PURE-only resolver probes (§3.5) — a chain resolver step is consulted for a
+//     candidate name iff it declared `pure: true` (name-stable results — the same
+//     license the chain's own memo rides). An IMPURE step anywhere flips
+//     `hasImpureResolver`, degrading every unbound-symbol diagnostic error → warning
+//     ("may be answered dynamically") — honesty over strictness, per-chain, visible.
+
+import { CompiledResolver, type CompiledResolutionChain } from "../eval/CompiledResolutionChain.js";
+import { DoorProcedure } from "../values/primitives/ACallable.js";
+import { Keyword } from "../values/Keyword.js";
+import { Macro } from "../eval/Macro.js";
+import { is_macro_value } from "../values/value-guards.js";
+import { KEYWORD_SYNTAX_BASELINE } from "../common/symbols/define-bake.js";
+import type { DoorSymbolDef } from "../common/symbols/_bake.js";
+import type { DegradedCapability } from "../common/degradation.js";
+import type { MacroWalkAttribute } from "./collect-references.js";
+
+/** What a name statically resolves to — the discrimination every §3.3 bucket keys on. */
+export type VocabularyEntry =
+  | { readonly kind: "value" }
+  | { readonly kind: "keyword" } // §2.1's KEYWORD_SYNTAX — core's symbol.keyword entries
+  | { readonly kind: "macro"; readonly macroAttribute: MacroWalkAttribute } // §3.4 ternary
+  | { readonly kind: "door"; readonly door: DoorSymbolDef }; // carries DoorCause when minted/stamped
+
+/** The §3.2 vocabulary interface the graph builder consumes. */
+export interface ProgramVocabulary {
+  /** Enumerable bindings (resolver-synthesized names deliberately absent — probed,
+   *  not enumerated). The suggestion candidate pool, pre-soundness-filter. */
+  readonly names: ReadonlySet<string | symbol>;
+  lookupStatic(name: string): VocabularyEntry | undefined;
+  /** §3.5 soundness switch: some chain resolver step is NOT `pure` — every
+   *  `unbound-symbol` degrades error → warning ("may be answered dynamically"). */
+  readonly hasImpureResolver: boolean;
+  /** §3.7's enumerable degraded list, when the assembling caller carried it through —
+   *  informational corroboration; the causal chain itself rides each door's `cause`. */
+  readonly degraded: readonly DegradedCapability[];
+}
+
+/** The Resolver's structural cxr synth family (eval/Resolver.ts CXR_RE — the same
+ *  kernel-structural fact, re-stated per the local-copy convention). */
+const CXR_RE = /^c[ad]+r$/;
+
+/** Classify a resolved binding VALUE into its static vocabulary entry. */
+function classifyBoundValue(value: unknown): VocabularyEntry {
+  if (value instanceof DoorProcedure) return { kind: "door", door: value.door };
+  if (value instanceof Keyword) return { kind: "keyword" };
+  if (value instanceof Macro) return { kind: "macro", macroAttribute: value.macroAttribute ?? "opaque" };
+  // Brand-recognized macro shapes that don't extend Macro (Syntax / syntax-parameter):
+  // no declared attribute channel — "opaque", the safe under-report default (§3.4).
+  if (is_macro_value(value)) return { kind: "macro", macroAttribute: "opaque" };
+  return { kind: "value" };
+}
+
+export interface AssembledVocabularyOptions {
+  /** The run's session-scope names (REPL accumulation frame / `LexicalScope`) —
+   *  legitimately bound for THIS call (§3.2's assembled-mode constructor). */
+  readonly scopeNames?: Iterable<string | symbol>;
+  /** Settled scope value read (e.g. `(n) => scopeEnv.get(n, {throwError: false})`) so a
+   *  scope-bound macro/door classifies correctly; scope wins over the chain (lexical
+   *  precedence). Absent ⇒ scope names classify as plain values. */
+  readonly scopeLookup?: (name: string) => unknown;
+  /** `AssembledEnv.degraded`, when the caller assembled with `degradation: "doors"`. */
+  readonly degraded?: readonly DegradedCapability[];
+}
+
+/**
+ * The ASSEMBLED-mode `ProgramVocabulary` (§3.2): a sealed chain + the run's session
+ * scope. Lookups are memoized per vocabulary object — a program referencing `map`
+ * 40 times costs one classification.
+ */
+export function vocabularyFromChain(
+  chain: CompiledResolutionChain,
+  opts: AssembledVocabularyOptions = {},
+): ProgramVocabulary {
+  const scopeNames = new Set<string | symbol>(opts.scopeNames ?? []);
+  const names = new Set<string | symbol>(chain.names);
+  for (const n of scopeNames) names.add(n);
+  for (const k of KEYWORD_SYNTAX_BASELINE) names.add(k);
+
+  const hasImpureResolver = chain.steps.some((s) => s instanceof CompiledResolver && !s.pure);
+
+  /** §3.5's pure-only chain walk: frozen maps always; resolver steps iff `pure`.
+   *  A pure resolver throwing on an unrecognized name is "did not answer" (the
+   *  `c[ad]+r` family's own teaching door), never a validation failure. */
+  const pureLookup = (name: string): unknown => {
+    for (const step of chain.steps) {
+      if (step instanceof CompiledResolver) {
+        if (!step.pure) continue;
+        try {
+          const hit = step.probe(name);
+          if (hit !== undefined) return hit;
+        } catch {
+          // did not answer — see doc above.
+        }
+      } else {
+        const hit = step.get(name);
+        if (hit !== undefined) return hit;
+      }
+    }
+    return undefined;
+  };
+
+  const memo = new Map<string, VocabularyEntry | undefined>();
+  const lookupStatic = (name: string): VocabularyEntry | undefined => {
+    if (memo.has(name)) return memo.get(name);
+    let entry: VocabularyEntry | undefined;
+    if (scopeNames.has(name)) {
+      const scoped = opts.scopeLookup?.(name);
+      entry = scoped === undefined ? { kind: "value" } : classifyBoundValue(scoped);
+    } else {
+      const hit = pureLookup(name);
+      if (hit !== undefined) entry = classifyBoundValue(hit);
+      else if (KEYWORD_SYNTAX_BASELINE.has(name)) entry = { kind: "keyword" };
+      else if (CXR_RE.test(name)) entry = { kind: "value" };
+    }
+    memo.set(name, entry);
+    return entry;
+  };
+
+  return { names, lookupStatic, hasImpureResolver, degraded: opts.degraded ?? [] };
+}

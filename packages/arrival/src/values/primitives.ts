@@ -2,12 +2,6 @@ import { characters } from "./primitives/ACharacter.js";
 import { theVoid } from "./primitives/AVoid.js";
 import { nil } from "./primitives/ANil.js";
 
-export const p_o = /^[[(]$/;
-export const p_e = /^[\])]$/;
-export const not_p = /[^()[\]]/;
-export const non_def = /^(?!.*\b(?:[()[\]]|define(?:-macro)?|let(?:\*|rec|-env|-syntax)?|lambda|syntax-rules)\b).*$/;
-export const let_re = /^(?:#:)?(let(?:\*|rec|-env|-syntax)?)$/;
-export const string_re = /"(?:\\[\s\S]|[^"])*"?/g;
 export const pre_num_parse_re = /((?:#[xodbie]){0,2})(.*)/i; // TODO: float complex
 // functions generate regexes to match number rational, integer, complex, complex+rational
 function num_mnemicic_re(mnemonic) {
@@ -27,40 +21,11 @@ export function gen_integer_re(mnemonic, range) {
   return `${num_mnemicic_re(mnemonic)}[+-]?${range}+`;
 }
 
-export function make_complex_match_re(mnemonic, range) {
-  // complex need special treatment of 10e+1i when it's hex or decimal
-  const neg = mnemonic === "x" ? `(?!\\+|${range})` : `(?!\\.|${range})`;
-  let fl = "";
-  if (mnemonic === "") {
-    fl = String.raw`(?:[-+]?(?:[0-9]+(?:[eE][-+]?[0-9]+)|(?:\.[0-9]+|[0-9]+\.[0-9]+(?![0-9]))(?:[eE][-+]?[0-9]+)?))`;
-  }
-  return new RegExp(
-    `^((?:(?:${fl}|[-+]?inf.0|[-+]?nan.0|[+-]?${range}+/${range}+(?!${range})|[+-]?${range}+)${neg})?)(${fl}|[-+]?inf.0|[-+]?nan.0|[+-]?${range}+/${range}+|[+-]?${range}+|[+-])i$`,
-    "i",
-  );
-} // TODO: extend to ([+-]1/2|float)([+-]1/2|float)
+// TODO: extend to ([+-]1/2|float)([+-]1/2|float)
 const float_stre = String.raw`(?:[-+]?(?:[0-9]+(?:[eE][-+]?[0-9]+)|(?:\.[0-9]+|[0-9]+\.[0-9]+)(?:[eE][-+]?[0-9]+)?)|[0-9]+\.)`;
 export const complex_float_stre = `(?:#[ie])?(?:[+-]?(?:[0-9][0-9_]*/[0-9][0-9_]*|nan.0|inf.0|${float_stre}|[+-]?[0-9]+))?(?:${float_stre}|[+-](?:[0-9]+/[0-9]+|[0-9]+|nan.0|inf.0)?)i`;
 export const float_re = new RegExp(`^(#[ie])?${float_stre}$`, "i");
-export const complex_list_re = (function () {
-  const result = {};
-  for (const [radix, mnemonic, range] of [
-    [10, "", "[0-9]"],
-    [16, "x", "[0-9a-fA-F]"],
-    [8, "o", "[0-7]"],
-    [2, "b", "[01]"],
-  ]) {
-    result[radix] = make_complex_match_re(mnemonic, range);
-  }
-  return result;
-})();
 export const glob = Symbol.for("*");
-// match keyword if it's normal token or gensym (prefixed with #:)
-export function keywords_re(...args) {
-  return new RegExp(`^(?:#:)?(?:${args.join("|")})$`);
-} // rules for breaking S-Expressions into lines
-export const syntax_rules = keywords_re("syntax-rules");
-export const def_lambda_re = keywords_re("define", "lambda", "define-macro", "syntax-rules");
 // -------------------------------------------------------------------------
 const character_symbols = Object.keys(characters).join("|");
 const char_sre_re = `#\\\\(?:x[0-9a-f]+|${character_symbols}|[\\s\\S])`;

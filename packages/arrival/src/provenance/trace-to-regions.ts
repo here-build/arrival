@@ -30,7 +30,7 @@ import type { SchemeValue } from "../values/types.js";
 /** A producer crossing a region's boundary — the region-model's first-class PORT
  *  (provenance-region-model-plan-2026-06-02.md, Stage 2). Keyed by producer's STRUCTURAL
  *  scope-id, NOT per-value: a N-times body emits ONE port per structural producer. */
-export interface RegionPort {
+interface RegionPort {
   /** Producer's structural scope-id (`head@line:col`) crossing the boundary. */
   producer: string;
   /** Consumer's named input slot the value flowed into (a `.prompt` kwarg) — off the
@@ -358,7 +358,7 @@ const outcomeOf = (inv: PlainInv, testNode: unknown, valueById: (id: number) => 
  *  forms (`cond`/`case`). Rendered as the REALIZED fact for the arm that ran (polarised
  *  by the recovered outcome — `a > b` on the true arm, `a ≤ b` on the false one), with
  *  static operands carrying their runtime values inline. */
-export const conditionOf = (
+const conditionOf = (
   inv: PlainInv,
   valueById: (id: number) => unknown,
   wired: ReadonlySet<string>,
@@ -538,7 +538,7 @@ export const routeOf = (inv: PlainInv): object => (inv.children.length > 0 ? inv
  *  (a loop iteration whose successor exists; a resolved map application); the hook may
  *  only cache when `freezable`. MUST be transparent — return a value deep-equal to
  *  `compute()` — so parity holds whether it caches or not. */
-export type IterationCache = (key: number, freezable: boolean, compute: () => Region[]) => Region[];
+type IterationCache = (key: number, freezable: boolean, compute: () => Region[]) => Region[];
 
 /** Everything `regionsAt` needs that is NOT the invocation itself — global signal sets
  *  + value/point accessors + per-walk collectors. Built fresh per from-scratch build;
@@ -1076,7 +1076,7 @@ export function attributeFieldEdges(edges: RegionEdge[], ctx: FinalizeCtx): Regi
 }
 
 /** The OUTPUT_ID sentinel — the program's statement-output terminal node id. */
-export const OUTPUT_ID = -1;
+const OUTPUT_ID = -1;
 
 /** Append the program's STATEMENT-OUTPUT terminal node + its immediate-producer edges,
  *  when there's a graph to terminate and the final top-level form produced a value.
@@ -1169,7 +1169,7 @@ export function derivePorts(roots: Region[], edges: RegionEdge[]): void {
 /** Union the static + dynamic recursive-function heads / loop-body scopes (the two
  *  readers `traceToForest` uses). Pure over the invocation list; the fold extends the
  *  same sets incrementally. */
-export function recursionSignals(invocations: PlainInv[]): { recursiveHeads: Set<string>; loopBodies: Set<object> } {
+function recursionSignals(invocations: PlainInv[]): { recursiveHeads: Set<string>; loopBodies: Set<object> } {
   const recursiveHeads = staticRecursiveHeads(invocations);
   for (const inv of invocations) {
     if (STRUCTURAL_FORMS.has(headOf(inv))) continue;
@@ -1210,7 +1210,7 @@ export function branchLiveness(invocations: PlainInv[]): {
  * pure helpers above to maintain this output incrementally. Kept structurally identical
  * to the original single-function build so the deep-equal parity test holds.
  */
-export function buildRegions(snap: PlainTrace, trace: EvalTrace): RegionGraph {
+function buildRegions(snap: PlainTrace, trace: EvalTrace): RegionGraph {
   const points = snap.invocations.filter((i) => i.isProvenancePoint);
   const pointIds = new Set(points.map((p) => p.id));
 

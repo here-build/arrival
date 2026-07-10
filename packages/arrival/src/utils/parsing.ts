@@ -23,7 +23,7 @@ import { ACharacter } from "../values/primitives/ACharacter.js";
 import type { SchemeValue } from "../values/types.js";
 
 // Radix-aware bigint parser — the only consumer is the exact/rational/float parsers below.
-export function parseBigInt(str: string, radix: number = 10): bigint {
+function parseBigInt(str: string, radix: number = 10): bigint {
   str = str.trim();
   const negative = str.startsWith("-");
   if (negative || str.startsWith("+")) {
@@ -40,7 +40,7 @@ export function parseBigInt(str: string, radix: number = 10): bigint {
 }
 
 // ref: https://github.com/bestiejs/punycode.js/blob/master/punycode.js
-export function ucs2decode(string: string): number[] {
+function ucs2decode(string: string): number[] {
   const output: number[] = [];
   let counter = 0;
   const length = string.length;
@@ -64,7 +64,7 @@ export function ucs2decode(string: string): number[] {
   return output;
 }
 
-export function num_pre_parse(arg: string): {
+function num_pre_parse(arg: string): {
   radix?: number;
   inexact?: boolean;
   exact?: boolean;
@@ -120,7 +120,7 @@ export function parse_integer(arg: string, radix = 10): AExact | AInexact {
   return new AExact(CONSTANT_CTX, parseBigInt(parse.number!, r));
 }
 
-export function parse_character(arg: string): ACharacter {
+function parse_character(arg: string): ACharacter {
   let m = arg.match(/#\\x([0-9a-f]+)$/i);
   let char: string | undefined;
   if (m) {
@@ -136,7 +136,7 @@ export function parse_character(arg: string): ACharacter {
   return new ACharacter(CONSTANT_CTX, char);
 }
 
-export function parse_big_int(str: string): {
+function parse_big_int(str: string): {
   exponent: number | undefined;
   mantisa: bigint | undefined;
 } {
@@ -157,7 +157,7 @@ export function parse_big_int(str: string): {
   return { exponent, mantisa };
 }
 
-export function string_to_float(str: string): number {
+function string_to_float(str: string): number {
   return Number.parseFloat(str);
 }
 
@@ -215,7 +215,7 @@ export function parse_complex(_arg: string, _radix = 10): AExact | AInexact {
   return complexDoor();
 }
 
-export function parse_string(string: string): AString {
+function parse_string(string: string): AString {
   // handle non JSON escapes and skip unicode escape \u (even partial)
   string = string
     .replaceAll(/\\x([0-9a-f]+);/gi, function (_, hex) {
@@ -316,7 +316,7 @@ function splitBarSegments(token: string): { text: string; quoted: boolean }[] {
   return segments;
 }
 
-export function parse_symbol(arg: string): ASymbol {
+function parse_symbol(arg: string): ASymbol {
   if (!arg.includes("|")) {
     return new ASymbol(CONSTANT_CTX, arg);
   }

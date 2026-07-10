@@ -42,7 +42,7 @@ export interface RawMappedDiagnostic {
   readonly signatureText?: string; // for arity (2554/2555), pre-rendered to scheme by the adapter
 }
 
-export interface DiagnoseUnit {
+interface DiagnoseUnit {
   /** Offset where the current program begins in the lowered-unit scheme space (= joined
    *  context scheme length; 0 when `contextDefines` is empty). */
   readonly programStartOffset: number;

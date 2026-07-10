@@ -10,8 +10,7 @@ import type { SchemeValue } from "../values/types.js";
 // fresh one via `Parser.parse(arg)`.
 type ParseInput = string | AString | Parser;
 
-// `_parse` is the async datum generator; `parse` collects it into an array.
-export async function* _parse(arg: ParseInput, source?: string, strict = false) {
+export const parse = async (arg: ParseInput, source?: string, strict = false): Promise<SchemeValue[]> => {
   let parser;
   if (arg instanceof Parser) {
     parser = arg;
@@ -19,6 +18,7 @@ export async function* _parse(arg: ParseInput, source?: string, strict = false) 
     parser = new Parser({ source, strict });
     parser.parse(arg);
   }
+  const result: SchemeValue[] = [];
   let prev;
   while (true) {
     const expr = await parser.read_object();
@@ -29,14 +29,7 @@ export async function* _parse(arg: ParseInput, source?: string, strict = false) 
       break;
     }
     prev = expr;
-    yield expr;
-  }
-}
-
-export const parse = async (arg: ParseInput, source?: string, strict = false): Promise<SchemeValue[]> => {
-  const result: SchemeValue[] = [];
-  for await (const item of _parse(arg, source, strict)) {
-    result.push(item);
+    result.push(expr);
   }
   return result;
 };
