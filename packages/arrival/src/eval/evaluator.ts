@@ -43,7 +43,7 @@ import {
   withDynamicCallSite,
   type Invocation,
 } from "./dynamic-call-site.js";
-// Q11a (docs/PROVENANCE-PLAN.md) — the retrospective-stream emission hook. Flag-gated
+// The retrospective-stream emission hook. Flag-gated
 // OFF by default; see provenance-hooks.ts's header for the full port-site rationale.
 import { notePotentialRosettaExit } from "./provenance-hooks.js";
 // The shared scheme-visible type-namer — the same helper syntax-rules.ts already
@@ -267,15 +267,11 @@ interface RunOptions {
 // Single-threaded JS makes a module-level holder safe; we save/restore around
 // each apply to handle nesting.
 
-// `_canBounce` module holder is RETIRED (reverse-membrane-for-callables.md §5 item 3,
-// step 1): every bare-fn LAMBDA producer is gone (named-let's loopFn is now a real
-// ALambda — see evalLet below), so the flag's only in-callee reader was named-let's
-// closure reading the module global directly. `canBounce` now travels the same way
-// evalLambda's runner always received it: as the third argument on the
-// `arrival/tagless-final/apply` term (evaluatePair mints it as a per-call local right
-// before the apply — see `canBounce` there — no ambient state, no save/restore).
+// `canBounce` travels as the third argument on the `arrival/tagless-final/apply`
+// term (evaluatePair mints it as a per-call local right before the apply — see
+// `canBounce` there) — no ambient module state, no save/restore.
 //
-// The protocol itself is unchanged: a Scheme lambda invoked in tail position from
+// The protocol: a Scheme lambda invoked in tail position from
 // inside an active trampoline hands back a Bounce token (see `makeBounce`/`is_bounce`)
 // instead of spawning a fresh `run(...)` Promise, so the outer trampoline drives the
 // body generator without growing the host call stack. HOFs that call back into a
@@ -319,10 +315,9 @@ export const currentRunEnv = (): Environment | undefined => _currentRunEnv;
  * restored the holder. Without per-call re-install, the lambda body for
  * iteration ≥1 would inherit the WRONG dynamic parent.
  *
- * Since reverse-membrane-for-callables.md §3 step 1 (named-let → ALambda), every
- * lambda-shaped argument reaching here is a real `ALambda` value — the legacy
+ * Every lambda-shaped argument reaching here is a real `ALambda` value — the legacy
  * bare-fn `wrapLambda` arm (re-wrapping a `[LAMBDA]`-branded plain function) is
- * gone along with its last producer.
+ * gone along with its last producer (named-let's loopFn, now a real ALambda).
  */
 function wrapLambdaArgs(args: SchemeValue[], dynSite: Invocation | undefined): SchemeValue[] {
   let out: SchemeValue[] | null = null;
@@ -336,10 +331,9 @@ function wrapLambdaArgs(args: SchemeValue[], dynSite: Invocation | undefined): S
   return out ?? args;
 }
 
-// `isStrictDescendant`/`withDynamicCallSite` now live in `./dynamic-call-site.js`
+// `isStrictDescendant`/`withDynamicCallSite` live in `./dynamic-call-site.js`
 // (imported above) — used locally by `wrapLambdaValue` below. The
-// reverse-membrane crossing (`rosetta.ts`/`scheme-zod.ts`, per
-// docs/working-proposals/reverse-membrane-for-callables.md §7b/§9) imports
+// reverse-membrane crossing (`rosetta.ts`/`scheme-zod.ts`) imports
 // `withDynamicCallSite` straight from that leaf too, rather than through this
 // module — no re-export needed here.
 
@@ -364,11 +358,11 @@ function wrapLambdaValue(lambda: ALambda, dynSite: Invocation | undefined): ALam
 /**
  * A bare JS function value that can still legitimately reach the evaluator's
  * define-naming step — NOT a lambda brand anymore (the `[LAMBDA]` producer, named-let's
- * loopFn, was retired by reverse-membrane-for-callables.md §3 step 1; every scheme-authored
- * lambda is a real `ALambda` value now). The residual producer is the legacy
- * `env.defineRosetta` authoring arm (capability.ts), quarantined per the B4 audit — it still
- * binds a bare host function into value space, and `(define name <expr>)` evaluating to one
- * of those still wants its `__name__`/`__params__` stamped for debugging.
+ * loopFn, is gone; every scheme-authored lambda is a real `ALambda` value now). The
+ * residual producer is the legacy `env.defineRosetta` authoring arm (capability.ts),
+ * quarantined — it still binds a bare host function into value space, and
+ * `(define name <expr>)` evaluating to one of those still wants its
+ * `__name__`/`__params__` stamped for debugging.
  */
 interface NameableFunction {
   __name__?: string;
@@ -1337,7 +1331,7 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
   }
 
   // Build result list, threading the (possibly improper) tail through so
-  // `(a . ,x)` keeps x as the final cdr rather than nil-terminating (Q9).
+  // `(a . ,x)` keeps x as the final cdr rather than nil-terminating.
   // Pair.fromArray always nil-terminates, so fold manually onto `tail`.
   let result: SchemeValue = tail;
   for (let i = results.length; i--; ) {
@@ -1393,12 +1387,12 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
 // `set!` — OMITTED by the purity invariant; doored in r7rs/binding (removed from
 // the special-form table so env lookup reaches the door, exactly like delay /
-// parameterize). Lexical variable rebinding is the last binding-mutation vestige:
-// arrival is pure dataflow (every value carries the lineage of WHERE it was bound),
-// so re-binding a name severs that lineage. It was a LIPS-fork carry-over, not an
-// earned form. With it gone, the `Environment.ref`/`Resolver.env.ref` mutation-
-// targeting walk has no evaluator caller (it survives only for hygiene's
-// `Capabilities.refFrame` IDENTITY probe, which is not a mutation path).
+// parameterize). Lexical variable rebinding is fundamentally incompatible with
+// arrival's pure-dataflow model: every value carries the lineage of WHERE it was
+// bound, so re-binding a name would sever that lineage. The `Environment.ref`/
+// `Resolver.env.ref` mutation-targeting walk has no evaluator caller — it survives
+// only for hygiene's `Capabilities.refFrame` IDENTITY probe, which is not a
+// mutation path.
 
 /** `(lambda args body)` — closes over the definition-time env; body starts in tail position (R7RS §3.5). */
 function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
@@ -1529,10 +1523,8 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 // reader-literal marker — Parser.ts, on `[`); `(…)` mints an `APair`; `#(…)`
 // mints an `AVector` with `evalElements === false`. So `evalElements ===
 // true` at a binding-position node IS the R2 detection — no reader/lexer
-// change (R1). Supersedes the bracket-let DOOR (`5259a9398a`) for
-// well-formed shapes; the door survives for malformed ones (R4).
-// Spec: docs/reference/bracket-bindings.md. Requirements:
-// docs/working-proposals/arrival-bracket-bindings-requirements.md (R1-R8).
+// change (R1). Supersedes the original bracket-let door for well-formed
+// shapes; the door survives for malformed ones (R4).
 //
 // Consumption is a PURE SYNTACTIC REWRITE (R3): `normalizeBindings` runs once,
 // before the existing per-binding walk, and produces the SAME cons-list-of-
@@ -1557,17 +1549,17 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 // AVector this code recognizes as bindings syntax, so it falls straight
 // through to the generic `invariant(is_pair(binding), …)` below, unchanged.
 //
-// R4 malformed shapes keep the TWO already-committed door codes
-// (`5259a9398a`) — their meanings narrow to genuine malformations now that
-// well-formed shapes consume instead of dooring:
+// R4 malformed shapes keep the TWO original door codes — their meanings
+// narrow to genuine malformations now that well-formed shapes consume
+// instead of dooring:
 //   - E-LET-BRACKET-BINDINGS-LIST: odd element count in a whole-list vector,
 //     OR the whole-list form used on `do` (unchanged from the original door).
 //   - E-LET-BRACKET-BINDING: a per-element vector of the wrong length, or a
 //     non-symbol (including a destructuring vector) in the binding-name slot.
 
 /** `do` doesn't accept the whole-list form (R2a exclusion) — its 3-element
- *  steps make pairwise grouping ambiguous. UNCHANGED from the original door
- *  (`5259a9398a`); the other five forms consume this shape instead. */
+ *  steps make pairwise grouping ambiguous. UNCHANGED from the original door;
+ *  the other five forms consume this shape instead. */
 function bracketBindingsListError(bindings: AVector, form: string): Error {
   const els = bindings.__vector__;
   const rendered = els.map(String).join(" ");
@@ -1783,9 +1775,9 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     // `signal` is forwarded on that fallback path for the same reason; the
     // bounce path inherits the outer ctx's signal directly.
     //
-    // Mirrors evalLambda's runner exactly (reverse-membrane-for-callables.md §3
-    // step 1): named-let is sugar for a letrec-bound lambda, so its loop
-    // binding is a real ALambda now, not a bare `[LAMBDA]`-branded JS function.
+    // Mirrors evalLambda's runner exactly: named-let is sugar for a letrec-bound
+    // lambda, so its loop binding is a real ALambda, not a bare `[LAMBDA]`-branded
+    // JS function.
     const runner = (values: SchemeValue[], _runCtx: RunContext, canBounce: boolean): CallResult => {
       const loopResolver = letResolver.child("named-let", "named-let");
 
@@ -2075,8 +2067,8 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
   // A callable VALUE dispatches through its apply term. An ALambda in tail position hands back a
   // Bounce so a self-recursive `=>` collapses on the trampoline (TCO); an ANativeProcedure/
   // ARosettaProcedure returns a value/promise (canBounce ignored). Every scheme-authored lambda
-  // (including named-let's loop binding, since reverse-membrane-for-callables.md §3 step 1) is a
-  // callable VALUE now — the legacy `[LAMBDA]`-branded bare-fn arm this helper once needed is gone.
+  // (including named-let's loop binding) is a callable VALUE — the legacy `[LAMBDA]`-branded
+  // bare-fn arm this helper once needed is gone.
   if (is_callable_value(proc)) {
     const dynSite = ctx.currentInvocation;
     const __savedDynamicCallSite = currentDynamicCallSite();
@@ -2939,27 +2931,21 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
   // Special-form dispatch. VALUE-FIRST for keywords: a head resolving to a Keyword marker
   // dispatches the kernel handler by the marker's NAME, so special-ness travels with the
   // VALUE — aliasable via `(define => lambda)`. EVERY entry in SPECIAL_FORMS is now a
-  // `symbol.keyword` binding (core.ts) — the let*/letrec/letrec*/and/or hygiene batch plus
-  // its define-macro/do/while/try follow-up completed the set — so this is no longer a
-  // migration-in-progress fallback for un-keyworded forms. It stays for two INDEPENDENT,
-  // VERIFIED-LIVE reasons (instrumented + run against the full suite + 651-row chibi
-  // conformance corpus; zero incidental fallback hits, two real ones):
+  // `symbol.keyword` binding (core.ts), so this string-keyed fallback is not a
+  // migration-in-progress path for un-keyworded forms. It stays for two INDEPENDENT reasons:
   //   1. BOOTSTRAP ORDERING — a capability's OWN `prelude` scheme (e.g. core.ts's
   //      `(define true #t) …`) evaluates before that capability's OWN `symbols` keyword
   //      bindings are resolvable through this resolver (phase-gated prelude scope, see
   //      kernel.ts's `assembleEnv`), so `define`'s very first uses — bootstrapping `true`/
   //      `false`/`NaN`/`single` in core.ts, and equivalently for every other BASE_PACKS
-  //      prelude — hit this string-keyed fallback with `resolved === undefined`. Confirmed
-  //      empirically: a temporary trace fired repeatedly during realm bootstrap even though
-  //      `define` IS keyword-bound, because the keyword isn't visible yet at that instant.
+  //      prelude — hit this string-keyed fallback with `resolved === undefined`, even though
+  //      `define` IS keyword-bound: the keyword just isn't visible yet at that instant.
   //   2. LEXICAL SHADOWING — `(let ((if 5)) (if))` resolves `if` to the shadowing value (an
   //      AExact, not a Keyword), and this fallback still matches "if" BY NAME and dispatches
-  //      `evalIf` regardless — the documented, not-yet-fixed gap kernel-keyword-dispatch.
-  //      test.ts calls out ("lexical shadowing of a keyword is NOT yet covered"). Confirmed
-  //      empirically the same way. Removing the fallback would flip this to (correct, R7RS-
-  //      faithful) un-specialing — a real behavior change, not covered by any test today —
-  //      so it is left alone here; fixing it is the deferred "macro-cut pass" this comment
-  //      block already named before this fix, now precisely scoped to shadowing only.
+  //      `evalIf` regardless — a documented gap (kernel-keyword-dispatch.test.ts calls out
+  //      "lexical shadowing of a keyword is NOT yet covered"). Removing the fallback would
+  //      flip this to (correct, R7RS-faithful) un-specialing — a real behavior change not
+  //      covered by any test — so it stays until that gap is closed.
   // Resolve via the RAW binding key (`first.__name__`) — the SAME key env_get uses — so a
   // hygiene-renamed gensym head resolves identically. A gensym's __name__ is a JS symbol
   // whose string DESCRIPTION (what symbol_name returns) differs from the symbol key the
@@ -3026,13 +3012,10 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
     // a microtask still sees the right parent.
     //
     // canBounce: opt fn into the bounce protocol if it's a Scheme lambda (an ALambda —
-    // includes named-let's loop binding, reverse-membrane-for-callables.md §3 step 1).
-    // Threaded as the apply term's third argument; the lambda's runner reads it and
-    // returns a Bounce token instead of spawning a fresh `run(...)`. This used to be a
-    // save/restored MODULE-LEVEL flag (`_canBounce`) because named-let's loopFn read it
-    // as an ambient JS closure variable — now that every lambda receives `canBounce` as
-    // an explicit runner argument, it's a plain per-call local; nothing reads it
-    // ambiently, so there is nothing to save or restore. JS HOFs that call back into a
+    // includes named-let's loop binding). Threaded as the apply term's third argument;
+    // the lambda's runner reads it and returns a Bounce token instead of spawning a
+    // fresh `run(...)`. It's a plain per-call local — nothing reads it ambiently, so
+    // there is nothing to save or restore. JS HOFs that call back into a
     // lambda go through `applyCallback` instead, which always passes canBounce=false.
     const dynSite = ctx.currentInvocation;
     const __savedDynamicCallSite = currentDynamicCallSite();
@@ -3097,7 +3080,7 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
       return yield { call: result.generator, frame, tail: true };
     }
 
-    // Q11a (docs/PROVENANCE-PLAN.md) — the retrospective-stream emission hook, flag-
+    // The retrospective-stream emission hook, flag-
     // gated OFF by default (see provenance-hooks.ts's header for why this is the port
     // site: no rosetta brand exists to switch on here, so the hook itself re-checks
     // `ctx.currentInvocation.isProvenancePoint` — the eager oracle's own mint signal —

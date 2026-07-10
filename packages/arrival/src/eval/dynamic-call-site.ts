@@ -4,9 +4,8 @@
  * without creating a cycle.
  *
  * Why this had to move: the reverse-membrane crossing (`rosetta.ts`'s
- * `schemeToJs` ACallable branch, `scheme-zod.ts`'s `z.procedure().decode` — see
- * docs/working-proposals/reverse-membrane-for-callables.md §7b/§9) needs to
- * install a dynamic call site around a re-entrant scheme call, so a lambda
+ * `schemeToJs` ACallable branch, `scheme-zod.ts`'s `z.procedure().decode`)
+ * needs to install a dynamic call site around a re-entrant scheme call, so a lambda
  * invoked back from host JS nests its trace under the symbol invocation that
  * exported it instead of the lambda's definition-time lexical one. But
  * `eval/evaluator.ts` already imports `Environment.ts`, which imports

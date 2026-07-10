@@ -1,12 +1,12 @@
 /**
- * eval/provenance-hooks.ts — Q11a's EVALUATOR-SIDE hook (docs/PROVENANCE-PLAN.md Q11a:
- * "src/eval/* emission hooks... find the port sites (membrane penetrations: rosetta
- * invocation exits, source-roled mints)"). Owns the ambient "current record coordinate"
- * a caller installs so a real membrane crossing inside `evaluator.ts`'s generic apply
- * can key an emission against it, plus the ONE call `evaluator.ts` makes at that
- * crossing. Modeled on `dynamic-call-site.ts`'s module-holder + save/restore idiom
- * (same file's own header explains why an ambient holder, not an explicit `ctx` field,
- * is this codebase's house pattern for this class of cross-cutting concern).
+ * eval/provenance-hooks.ts — the EVALUATOR-SIDE emission hook: finds the port sites
+ * (membrane penetrations — rosetta invocation exits, source-roled mints) inside
+ * `src/eval/*`. Owns the ambient "current record coordinate" a caller installs so a
+ * real membrane crossing inside `evaluator.ts`'s generic apply can key an emission
+ * against it, plus the ONE call `evaluator.ts` makes at that crossing. Modeled on
+ * `dynamic-call-site.ts`'s module-holder + save/restore idiom (same file's own header
+ * explains why an ambient holder, not an explicit `ctx` field, is this codebase's
+ * house pattern for this class of cross-cutting concern).
  *
  * ── Why NOT auto-detect "this call is a rosetta" structurally ──────────────────────
  * `Environment.defineRosetta` (`Environment.ts`) binds a bare async JS function
@@ -16,15 +16,15 @@
  * (`evaluatePair` in `evaluator.ts`) cannot ask "is this callable a rosetta" by class
  * or brand — every callable reaches that site looking the same (a bare fn).
  *
- * What IS observable, without touching `rosetta.ts` or `op-helpers.ts` (both out of
- * this node's territory): `rosetta.ts`'s own mint path unconditionally flips
+ * What IS observable, without touching `rosetta.ts` or `op-helpers.ts` (both outside
+ * this module's scope): `rosetta.ts`'s own mint path unconditionally flips
  * `inv.isProvenancePoint` on `ctx.currentInvocation` the instant a rosetta call settles
  * (`mintsPoint && inv && typeof inv.id === "number"` — see `rosetta.ts`'s
- * `createRosettaWrapper`). `w1-harness.ts` (Q9) documents this exact mechanism already:
- * "a direct execState run has no live currentInvocation to auto-mint against — see
- * rosetta.ts's mintsPoint && inv guard." This hook reuses that EXISTING signal after
- * the fact — it adds no new brand, and does not change WHEN or WHETHER the flip itself
- * happens; it only asks, post-settlement, "did that call just become a mint point."
+ * `createRosettaWrapper`). This hook reuses that EXISTING signal after the fact — it
+ * adds no new brand, and does not change WHEN or WHETHER the flip itself happens; it
+ * only asks, post-settlement, "did that call just become a mint point." (A direct
+ * `execState` run has no live `currentInvocation` to auto-mint against in the first
+ * place — see `rosetta.ts`'s `mintsPoint && inv` guard.)
  *
  * ── Why detached, not inline ─────────────────────────────────────────────────────
  * `notePotentialRosettaExit` NEVER wraps, replaces, or awaits the value/Promise the
@@ -43,10 +43,10 @@ import { isSilentRegion } from "../values/primitives/region-scope.js";
 import { schemeToJs } from "../rosetta.js";
 import type { SchemeValue } from "../values/types.js";
 
-/** One port's static address (§5 C2/D1) — everything an emission needs BESIDES which
- *  store/region to write to (that's `EmissionSink`, below). The wireframe-walking
- *  driver (Q15/Q16) is the eventual real installer, advancing this per designated node
- *  as it walks a `WireframeGraph`; Q11a's own tests install one by hand around a short
+/** One port's static address — everything an emission needs BESIDES which
+ *  store/region to write to (that's `EmissionSink`, below). A wireframe-walking
+ *  driver is the eventual real installer, advancing this per designated node
+ *  as it walks a `WireframeGraph`; tests install one by hand around a short
  *  run (see `src/eval/__tests__/provenance-hooks.test.ts`). */
 export interface RecordCoordinate {
   readonly templateHash: TemplateHash;
@@ -69,7 +69,7 @@ let _sink: EmissionSink | undefined;
 /** Install BOTH the coordinate and its sink for the duration of `fn` — save/restore,
  *  the same idiom `dynamic-call-site.ts`'s `withDynamicCallSite` uses. Single-threaded
  *  JS makes the module holder safe; a nested install restores its parent's pair on
- *  exit, so once Q15/Q16 nest real regions here, an inner drill-in never bleeds its
+ *  exit, so a future nested-region installer's inner drill-in never bleeds its
  *  coordinate into the outer caller's continuation. Restores the ambient pair only
  *  once `fn`'s returned Promise SETTLES, so every crossing that happens anywhere
  *  during a multi-tick run (a whole `execState` call, say) still observes the
@@ -100,7 +100,7 @@ interface ProvenancePointInvocation {
   readonly isProvenancePoint?: boolean;
 }
 
-/** Peel a settled call result into a mint's payload shape (value + stamp ids, §5 D2).
+/** Peel a settled call result into a mint's payload shape (value + stamp ids).
  *  `schemeToJs` is the SAME "peel to plain JS" convention `provenance/uneval.ts` uses
  *  for its own `result`/`uneval(...).value` fields — one peeling idiom, not a second. */
 function payloadOf(value: SchemeValue): { readonly value: unknown; readonly stampIds: readonly number[] } {
@@ -120,14 +120,13 @@ function payloadOf(value: SchemeValue): { readonly value: unknown; readonly stam
  */
 export function notePotentialRosettaExit(inv: Invocation, result: SchemeValue | Promise<SchemeValue>): void {
   if (!isEmissionEnabled()) return;
-  // Q15 (docs/PROVENANCE.md §4 CHOSEN, round 2 A4): a silent region (γ, or a glass
-  // whole-program replay) suppresses this mint too — `isSilentRegion` is a SEPARATE
-  // ambient from `_coordinate`/`_sink` below (owned by `values/primitives/region-
-  // scope.ts`, imported directly rather than duplicated — see that file's own "Q15:
-  // silent-region mode" section for why the direction is cycle-free and why this is
-  // the leak-proof placement: a nested `withRecordCoordinateAsync` install deep inside a
-  // silent region's dynamic extent still finds `isSilentRegion()` true, because
-  // nothing but the enclosing `withSilentRegion` call ever touches it).
+  // A silent region (γ, or a glass whole-program replay) suppresses this mint too —
+  // `isSilentRegion` is a SEPARATE ambient from `_coordinate`/`_sink` below (owned by
+  // `values/primitives/region-scope.ts`, imported directly rather than duplicated —
+  // see that file's own silent-region-mode section for why the direction is cycle-free
+  // and why this is the leak-proof placement: a nested `withRecordCoordinateAsync`
+  // install deep inside a silent region's dynamic extent still finds `isSilentRegion()`
+  // true, because nothing but the enclosing `withSilentRegion` call ever touches it).
   if (isSilentRegion()) return;
   const coordinate = _coordinate;
   const sink = _sink;
@@ -146,7 +145,7 @@ export function notePotentialRosettaExit(inv: Invocation, result: SchemeValue | 
     // before its wrapper's returned Promise resolves, so it is always current here.
     if (point.isProvenancePoint !== true) return; // not a mint point — no record
     const { value: peeled, stampIds } = payloadOf(value);
-    // Fire-and-forget by design (a "flag-gated SIDECAR" per the task brief): production
+    // Fire-and-forget by design (a flag-gated SIDECAR): production
     // correctness never depends on this write landing. The direct `emitMint` API
     // (called straight, awaited, by a caller that wants the durability guarantee) is
     // the correct seam for anything that must observe a write failure — this detached

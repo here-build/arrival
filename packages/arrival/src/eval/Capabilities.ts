@@ -11,10 +11,10 @@ import { type CompiledResolutionChain, sealResolutionChain } from "./CompiledRes
  *
  * GLASS mode: the lexical chain and the capability base are the SAME
  * `__parent__`-linked env, so this wraps it and keeps the LIVE walk (glass envs
- * don't bake — embedder-controlled mutability is a feature, design §3).
- * ASSEMBLED mode (ENV T2, environment-resolution-chain.md §§1–2): the base is
- * a SEALED artifact — a {@link CompiledResolutionChain} — and `lookup` consults
- * it instead of walking the env chain (zero live resolvers ⇒ ONE flat `Map.get`).
+ * don't bake — embedder-controlled mutability is a feature).
+ * ASSEMBLED mode: the base is a SEALED artifact — a {@link CompiledResolutionChain} —
+ * and `lookup` consults it instead of walking the env chain (zero live resolvers ⇒
+ * ONE flat `Map.get`).
  * Either way the hygiene engine consults `globalRoot` (the unshadowed-builtin
  * identity, a STABLE singleton so `=== globalRoot` survives a topology change)
  * and `refFrame` (does the base OWN this name).
@@ -24,15 +24,13 @@ export class Capabilities {
 
   /**
    * ASSEMBLED mode only — the sealed ambient artifact this base resolves through.
-   * `undefined` ⇒ GLASS (live walk). ENV T3 (environment-resolution-chain.md §2
-   * "hygiene sentinel", LANDED): this artifact IS `globalRoot`/`refFrame`'s
-   * ASSEMBLED-mode return value now — the "Frame vs BakedBase" type split's one
-   * consequential frontier. `CompiledResolutionChain` **is** BakedBase (design's
-   * options doc, Option A): sealed at bake, no `set`, no write surface — the
-   * write-window is a TYPE fact (BakedBase's type has no mutator), not a
-   * convention. Same one-identity-per-baked-base guarantee as before (pinned by
-   * capabilities-assembled.test.ts), now STRONGER: the sentinel IS the artifact
-   * object itself, not a leaf env that merely stands in for it.
+   * `undefined` ⇒ GLASS (live walk). This artifact IS `globalRoot`/`refFrame`'s
+   * ASSEMBLED-mode return value — the "Frame vs BakedBase" type split's one
+   * consequential frontier. `CompiledResolutionChain` **is** BakedBase: sealed at
+   * bake, no `set`, no write surface — the write-window is a TYPE fact (BakedBase's
+   * type has no mutator), not a convention. One identity per baked base: the
+   * sentinel IS the artifact object itself, not a leaf env that merely stands in
+   * for it.
    */
   private readonly chain: CompiledResolutionChain | undefined;
 
@@ -93,9 +91,8 @@ export class Capabilities {
 
   /**
    * The stable "unshadowed base builtin" sentinel hygiene compares `=== globalRoot`.
-   * ASSEMBLED (ENV T3, LANDED): the sealed `CompiledResolutionChain` itself — the
-   * BakedBase artifact — ONE identity per baked base, no structural chain-walk
-   * needed (stronger than the prior base-leaf-env sentinel it replaces). GLASS: the
+   * ASSEMBLED: the sealed `CompiledResolutionChain` itself — the BakedBase artifact —
+   * ONE identity per baked base, no structural chain-walk needed. GLASS: the
    * structural chain root (`global_env`), unaffected — glass envs don't bake.
    */
   get globalRoot(): Environment | CompiledResolutionChain {
@@ -103,8 +100,8 @@ export class Capabilities {
   }
 
   /**
-   * The base's claim on `name`, as the `globalRoot` sentinel (or `undefined`). ASSEMBLED
-   * (ENV T3, LANDED): ONE sealed-chain probe (merged maps + resolver steps — a
+   * The base's claim on `name`, as the `globalRoot` sentinel (or `undefined`). ASSEMBLED:
+   * ONE sealed-chain probe (merged maps + resolver steps — a
    * resolver-answered name counts as base-owned, exactly like the live
    * `_lookupWithResolvers` probe it replaces); a hit returns the CHAIN OBJECT itself
    * (the same one `globalRoot` returns), so a native owned on the base leaf (`cons` on

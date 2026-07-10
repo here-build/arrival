@@ -52,8 +52,8 @@ function cxrUnfold(name: string): ANativeProcedure | undefined {
   const cached = cxrCache.get(name);
   if (cached !== undefined) return cached;
   const steps = [...name.slice(1, -1)].reverse(); // innermost (rightmost) letter applied first
-  // The reverse-membrane pilot (reverse-membrane-for-callables.md §6): the synthesized
-  // accessor is an ANativeProcedure, never a bare fn returned into value space. Every
+  // The synthesized accessor is an ANativeProcedure, never a bare fn returned into
+  // value space. Every
   // invocation route (evaluator call-head, `call_function`'s callable-value branch, HOFs
   // via `applyCallback`) dispatches the apply term with an EXPLICIT runCtx — the old
   // `this?.runCtx ?? CONSTANT_CTX` apology (a HOF calling with `this === undefined`
@@ -89,12 +89,11 @@ function cxrUnfold(name: string): ANativeProcedure | undefined {
  * composition (no env binding, no resolver — the family IS car/cdr composition over
  * the unified tagless-final algebra). Else throw Unbound.
  *
- * Dotted-path resolution (`foo.bar.baz` sugar → member-walk) was RULED OUT (V,
- * 2026-07-09): it was the legacy side-door that bypassed BOTH the membrane face and
- * the provenance field-step classification. `@`/`:key` are THE member-access surface.
- * A dotted identifier now resolves as an ordinary (unbound) symbol — the normal
- * unbound-variable door. (`ASymbol.object`, the gensym property-path carrier the
- * dropped branch also read, had zero producers monorepo-wide.)
+ * Dotted-path resolution (`foo.bar.baz` sugar → member-walk) is deliberately not
+ * supported: it would be a side-door bypassing BOTH the membrane face and the
+ * provenance field-step classification. `@`/`:key` are THE member-access surface.
+ * A dotted identifier resolves as an ordinary (unbound) symbol — the normal
+ * unbound-variable door.
  */
 function resolveSynth(
   name: string | symbol,
@@ -114,7 +113,7 @@ function resolveSynth(
 /**
  * Look up a symbol in the environment without requiring lips runtime.
  * This uses _lookupWithResolvers directly to avoid patch_value.
- * For keyword symbols (:name), self-evaluates — see keyword-tagless-apply.md.
+ * For keyword symbols (:name), self-evaluates.
  * The single-env glass form; {@link Resolver.resolve} is the composed (cut) form.
  */
 export function env_get(env: Environment, sym: ASymbol): EnvironmentValue | undefined {
@@ -194,7 +193,7 @@ export class Resolver {
    */
   resolve(sym: ASymbol): EnvironmentValue | undefined {
     const name = sym.__name__;
-    // A keyword (`:name`) is self-evaluating — see keyword-tagless-apply.md. No lexical
+    // A keyword (`:name`) is self-evaluating. No lexical
     // or capability lookup at all; this is the one call site every symbol-position
     // evaluation funnels through (plain-symbol AND call-head fast path both call
     // `resolve()`), so this single branch covers both.
@@ -237,7 +236,7 @@ export class Resolver {
    * then the capability base. Returns a stable {@link LexicalScope} for a lexical owner
    * (so `=== defResolver.scope` compares the captured def frame), the
    * {@link Capabilities.globalRoot} sentinel for an unshadowed builtin (so `===
-   * globalRoot`) — GLASS: a live `Environment`; ASSEMBLED (ENV T3, LANDED): the sealed
+   * globalRoot`) — GLASS: a live `Environment`; ASSEMBLED: the sealed
    * `CompiledResolutionChain` (BakedBase) itself — or `undefined` if unbound. Own
    * bindings only — no resolvers, no synth — exactly like the old `Environment.ref`
    * walk it replaces. NOT a value read and NOT a mutation path.
@@ -258,7 +257,7 @@ export class Resolver {
   }
 
   /** Bind a name in the innermost frame (let/lambda/letrec/define). ≡ `env.set`. Storage-membrane
-   *  face (T0b): `EnvironmentValue` ONLY — a caller with a raw number/bigint boxes at ITS OWN
+   *  face: `EnvironmentValue` ONLY — a caller with a raw number/bigint boxes at ITS OWN
    *  boundary (fromJS/jsToScheme) before calling this, same door as `Environment.set`. */
   define(name: BindingName, value: EnvironmentValue): void {
     this.env.set(name, value);

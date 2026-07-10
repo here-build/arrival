@@ -1,23 +1,19 @@
 /**
- * CompiledResolutionChain — the SEALED, ambient form of a baked capability base
- * (ENV T2, docs/working-proposals/environment-resolution-chain.md §§1–2).
+ * CompiledResolutionChain — the SEALED, ambient form of a baked capability base.
  *
- * ENV T3 (environment-decomposition-options.md, Option A, LANDED): this class **is**
- * "BakedBase" — the immutable, no-write-surface product of a bake the design's option
- * space names. No separate `BakedBase` wrapper type was introduced: this artifact
- * already had zero mutators (frozen maps + resolver steps, `lookup`/`toString` only),
- * so the type-level distinction from the mutable `Environment` (lexical) frame it seals
- * FROM was already real — T3's landing is `Capabilities.globalRoot`/`refFrame` (assembled
- * mode) returning THIS object as the hygiene sentinel, instead of the base-leaf env that
- * used to stand in for it (see Capabilities.ts).
+ * This class **is** "BakedBase" — the immutable, no-write-surface product of a bake.
+ * No separate `BakedBase` wrapper type exists: this artifact has zero mutators
+ * (frozen maps + resolver steps, `lookup`/`toString` only), so the type-level
+ * distinction from the mutable `Environment` (lexical) frame it seals FROM is real —
+ * `Capabilities.globalRoot`/`refFrame` (assembled mode) return THIS object as the
+ * hygiene sentinel (see Capabilities.ts).
  *
-
  * Assembly (the BAKE) writes onto a live env chain: packs bind natives in C3 order,
  * preludes evaluate against the chain-so-far, `preludeOnly` bindings ride the kernel's
  * bake-scoped overlay (dropped at seal — kernel.ts). At the SEAL, this module compiles
  * that chain into a frozen artifact:
  *
- *   Today's per-layer semantics is own-bindings → own-resolvers (registration order) →
+ *   Per-layer semantics is own-bindings → own-resolvers (registration order) →
  *   parent — a PRECEDENCE CONTRACT (Environment.ts). Flattening the layer chain yields
  *   `[map_L0, r_L0…, map_L1, r_L1…, …]`; because the bake froze every map, adjacent maps
  *   with no resolver between them MERGE at seal into one flat Map (child-wins union) —
@@ -30,29 +26,28 @@
  *   per-layer `Object.hasOwn` walk + resolver loop + recursion it replaces.
  *
  * WRITE-WINDOW: the artifact has no write surface — post-seal writes to the underlying
- * env are outside the contract (the design's ruling, §1). REPL accumulation rides the
- * mutable session frame ABOVE the chain (generator-exec's `defaultLexicalRoot`), never
- * the ambient artifact. GLASS callers (custom `{ env }`) keep the live env walk by
- * definition — glass envs don't bake; this module never sees them.
+ * env are outside the contract. REPL accumulation rides the mutable session frame
+ * ABOVE the chain (generator-exec's `defaultLexicalRoot`), never the ambient artifact.
+ * GLASS callers (custom `{ env }`) keep the live env walk by definition — glass envs
+ * don't bake; this module never sees them.
  *
- * CONTENT ADDRESS (§1): `hash` is a deterministic composition of the merged vocabulary
+ * CONTENT ADDRESS: `hash` is a deterministic composition of the merged vocabulary
  * (sorted names) + resolver ids/purity in step position — the coarse program+epoch
  * identity the PROVENANCE track's "baked-env hash" slot consumes. Binding-VALUE hashing
- * (natives are JS-backed) is DEFERRED per the design's open question 1 (needs V's ruling
- * on cross-deploy chain reuse); two deploys with the same vocabulary shape currently
- * share a hash.
+ * (natives are JS-backed) is DEFERRED — cross-deploy chain reuse needs a ruling first;
+ * two deploys with the same vocabulary shape currently share a hash.
  */
 import { type Environment, type EnvironmentValue, ResolvingEnvironment } from "../Environment.js";
 
 /**
- * A resolver step in the compiled chain — the genuine runtime middleware contract
- * (design §2). `pure` is a DECLARED flag (P16 honesty — the alarm catches
- * contradictions, not lies): `pure: true` promises name-stable results (same name ⇒
- * same value forever), which licenses memoization through this step; default `false`
- * (safe — a dynamic middleware may start answering tomorrow).
+ * A resolver step in the compiled chain — the genuine runtime middleware contract.
+ * `pure` is a DECLARED flag (P16 honesty — the alarm catches contradictions, not
+ * lies): `pure: true` promises name-stable results (same name ⇒ same value forever),
+ * which licenses memoization through this step; default `false` (safe — a dynamic
+ * middleware may start answering tomorrow).
  */
 export class CompiledResolver {
-  /** Promotion memo for PURE hits (design §2b) — consulted before THIS STEP, never
+  /** Promotion memo for PURE hits — consulted before THIS STEP, never
    *  before the whole chain: an EARLIER impure resolver may start answering a name
    *  tomorrow and must keep winning, so the memo may only shortcut the step it
    *  promotes for. Sound because every step BEFORE this one is a frozen map or its
@@ -84,7 +79,7 @@ export class CompiledResolver {
 type ResolutionStep = ReadonlyMap<string | symbol, EnvironmentValue> | CompiledResolver;
 
 export class CompiledResolutionChain {
-  /** Maps pre-merged at seal, resolvers in their C3-position (design §2). */
+  /** Maps pre-merged at seal, resolvers in their C3-position. */
   readonly steps: readonly ResolutionStep[];
   /** Content address (see the module header — vocabulary-shape identity, value hashing deferred). */
   readonly hash: string;
@@ -95,7 +90,7 @@ export class CompiledResolutionChain {
   /** Set iff the chain is the degenerate zero-resolver form — `lookup` = one `Map.get`. */
   private readonly flat: ReadonlyMap<string | symbol, EnvironmentValue> | undefined;
   /** Negative miss-cache (memoizing "unbound") — sound iff EVERY resolver is pure,
-   *  computed once at seal (design §2c): one impure resolver disables it globally (a
+   *  computed once at seal: one impure resolver disables it globally (a
    *  dynamic middleware may start answering tomorrow). Omitted in the zero-resolver
    *  form (a flat-map miss is already one `Map.get`). Lives ON the chain (realm-shared,
    *  GC'd with it), never on frames. */
@@ -123,7 +118,7 @@ export class CompiledResolutionChain {
   }
 
   /** The composed base lookup — `undefined` on a miss, no synth (the keyword/cxr synth
-   *  layer stays in Resolver.resolve, ABOVE this — design §2 "synth stays in Resolver"). */
+   *  layer stays in Resolver.resolve, ABOVE this). */
   lookup(name: string | symbol): EnvironmentValue | undefined {
     const flat = this.flat;
     if (flat !== undefined) return flat.get(name); // the degenerate fast path: ONE Map.get
@@ -187,7 +182,7 @@ export function compileResolutionChain(base: Environment): CompiledResolutionCha
   const flushMerged = (): void => {
     if (pending.length === 0) return;
     const merged = new Map<string | symbol, EnvironmentValue>();
-    // Deepest layer first so a CLOSER layer's entry overwrites — child-wins union (§2).
+    // Deepest layer first so a CLOSER layer's entry overwrites — child-wins union.
     for (let i = pending.length - 1; i >= 0; i--) {
       const record = pending[i].__env__;
       for (const key of Object.keys(record)) merged.set(key, record[key]);

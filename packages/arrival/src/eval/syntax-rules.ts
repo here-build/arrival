@@ -43,7 +43,6 @@ function same_atom(a, b) {
   }
   // Numbers / chars / booleans / nil: atom-grade (eqv?) equality, which lives
   // entirely in the value kernel (instanceof + .equals/__char__/.value).
-  // See plan-2026-06-10-algebras-in-entities.md.
   return eqv(a, b);
 }
 
@@ -67,9 +66,9 @@ function concatPairLoose(a: SchemeValue, b: SchemeValue): SchemeValue {
   return result;
 }
 
-/** W0 span propagation (PROVENANCE.md §7 span-totality; plan Q6). Expansion-
+/** Span propagation for macro expansion. Expansion-
  *  constructed Pairs carry the TEMPLATE's span: same template node → same span on
- *  every instantiation — exactly the template/instance keying the wireframe (Q8a)
+ *  every instantiation — exactly the template/instance keying the wireframe
  *  needs, and drill-in points at the form as WRITTEN (in the macro). Pattern-variable
  *  substitutions are call-site Pairs by reference and keep their own call-site spans
  *  untouched. Upgrade path (deferred): an expansion-chain slot recording the call
@@ -178,17 +177,16 @@ export function extract_patterns(
         return !ref || ref === defResolver.scope || ref === capabilities.globalRoot;
       }
     }
-    // KNOWN LIMITATION (boxing track S9, deferred — docs/plan-2026-06-10-boxing-track.md
-    // R8): vector PATTERNS in syntax-rules reach this array branch. Since the
-    // boxing track, a `#(...)` literal parses to a boxed SchemeVector, NOT a raw
-    // array — so `Array.isArray` is false for it and a vector-pattern macro fails
-    // to match (loud "no matching syntax in macro (#<SchemeVector>)", not silent
-    // corruption). Boxing orphans this path. The fix (unwrap SchemeVector →
-    // raw array here AND re-box at the template-output sites, which are deeply
-    // interleaved with the ellipsis machinery) is high-risk in this fragile
-    // matcher and the feature is untested/unused (no chibi/lang vector-pattern
-    // test), so it is deferred to a focused session with vector-pattern tests
-    // written first. Lists are Pairs (unaffected); only vector patterns regress.
+    // KNOWN LIMITATION: vector PATTERNS in syntax-rules reach this array branch, but
+    // a `#(...)` literal parses to a boxed SchemeVector, NOT a raw array — so
+    // `Array.isArray` is false for it and a vector-pattern macro fails to match
+    // (loud "no matching syntax in macro (#<SchemeVector>)", not silent corruption).
+    // Boxing orphans this path. The fix (unwrap SchemeVector → raw array here AND
+    // re-box at the template-output sites, which are deeply interleaved with the
+    // ellipsis machinery) is high-risk in this fragile matcher and the feature is
+    // untested/unused (no chibi/lang vector-pattern test), so it is deferred to a
+    // focused session with vector-pattern tests written first. Lists are Pairs
+    // (unaffected); only vector patterns regress.
     if (Array.isArray(pattern) && Array.isArray(code)) {
       if (pattern.length === 0 && code.length === 0) {
         return true;
@@ -346,12 +344,11 @@ export function extract_patterns(
             pattern.cdr instanceof APair &&
             ASymbol.is(pattern.cdr.car, ellipsis_symbol)
           ) {
-            // empty ellipsis with rest  (a b ... . d) #290
+            // empty ellipsis with rest  (a b ... . d)
             bindings["..."].symbols[name] = null;
             return traverse(pattern.cdr.cdr, code, state);
           } else {
             return false;
-            //bindings['...'].symbols[name] = code;
           }
         }
         return true;
@@ -413,7 +410,6 @@ export function extract_patterns(
         bindings.symbols[car] = code.car;
         bindings.symbols[cdr] = nil;
         return true;
-        //return is_pair(code.cdr) && code.cdr.length() > 1;
       }
       if (
         code.cdr instanceof ANil && // last item in in call using in recursive calls on
@@ -560,7 +556,7 @@ export function transform_syntax({
       if (name in bindings.symbols) {
         return bindings.symbols[name] as SchemeValue; // plain cell — never an array/null (ellipsis-only)
       } else if (typeof name === "string" && /\./.test(name)) {
-        // calling method on pattern symbol #83
+        // calling method on pattern symbol
         const parts = name.split(".");
         const first = parts[0];
         if (first in bindings.symbols) {
@@ -635,7 +631,6 @@ export function transform_syntax({
       const name = expr.valueOf();
       const bound = bindings[name];
       if (is_gensym(expr) && !bound) {
-        // name = expr.literal();
       }
       if (bound) {
         if (bound instanceof APair) {
@@ -782,7 +777,6 @@ export function transform_syntax({
           }
           let new_expr = first;
           if (is_spread) {
-            // TODO: array
             new_expr = carrySpan(new APair(CONSTANT_CTX, first, new APair(CONSTANT_CTX, second, nil)), expr);
           }
           let result: SchemeValue;
