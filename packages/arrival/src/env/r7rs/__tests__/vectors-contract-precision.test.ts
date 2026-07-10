@@ -38,18 +38,24 @@ const realVector = new AVector(CONSTANT_CTX, []);
 const idx = new AExact(CONSTANT_CTX, 0n);
 
 describe("scheme/vectors Contract precision — the real exported ops reject wrongly-typed args (z.svector-backed fixes)", () => {
+  // INVARIANT: vector-append's elements must be vector-protocol objects, rejecting a
+  // non-vector
   it("vector-append: elements must be vector-protocol objects — a non-vector used to slip through the old z.array(z.unknown())", () => {
     const def = nativeDef("vector-append");
     expect(def.in.safeParse([realVector, realVector]).success).toBe(true);
     expect(def.in.safeParse(["not-a-vector"]).success).toBe(false);
   });
 
+  // INVARIANT: vector-ref's vec argument must be a vector-protocol object, rejecting a
+  // non-vector
   it("vector-ref: the vec arg (position 0) must be a vector-protocol object — a non-vector used to slip through the old z.unknown()", () => {
     const def = nativeDef("vector-ref");
     expect(def.in.safeParse([realVector, idx]).success).toBe(true);
     expect(def.in.safeParse(["not-a-vector", idx]).success).toBe(false);
   });
 
+  // INVARIANT: vector-map's rest (vector) elements must be vector-protocol objects,
+  // genuinely variadic over 2+ vectors
   it("vector-map: rest (vector) elements must be vector-protocol objects — a non-vector used to slip through the old combined z.tuple([head], z.unknown())", () => {
     const def = nativeDef("vector-map");
     expect(def.in.safeParse([fn, realVector]).success).toBe(true);
@@ -57,6 +63,7 @@ describe("scheme/vectors Contract precision — the real exported ops reject wro
     expect(def.in.safeParse([fn, "not-a-vector"]).success).toBe(false);
   });
 
+  // INVARIANT: vector-for-each shares vector-map's rest-precision fix
   it("vector-for-each: same rest-precision fix as vector-map", () => {
     const def = nativeDef("vector-for-each");
     expect(def.in.safeParse([fn, realVector]).success).toBe(true);
@@ -67,16 +74,20 @@ describe("scheme/vectors Contract precision — the real exported ops reject wro
 describe("scheme/vectors Contract precision — sanity: the six fixed ops still accept well-formed calls", () => {
   // Not a RED/GREEN precision proof (z.value has no predicate — see the file header) — just
   // confirming the schema tightening didn't accidentally reject a legitimate call shape.
+  // INVARIANT: vector still accepts a flat list of scheme values (static-only precision gain)
   it("vector: accepts a flat list of scheme values", () => {
     const def = nativeDef("vector");
     expect(def.in.safeParse([idx, realVector]).success).toBe(true);
   });
 
+  // INVARIANT: vector-ref's output stays representation-blind by design
   it("vector-ref: output accepts any scheme value (representation-blind by design)", () => {
     const def = nativeDef("vector-ref");
     expect(def.out.safeParse([idx]).success).toBe(true);
   });
 
+  // INVARIANT: vector->list's input stays gated on z.svector while its output stays
+  // representation-blind
   it("vector->list: input still gated on z.svector (unchanged); output accepts any scheme value", () => {
     const def = nativeDef("vector->list");
     expect(def.in.safeParse([realVector]).success).toBe(true);
@@ -92,11 +103,15 @@ describe("scheme/vectors Contract.type overrides — the harvest signature for t
   // image z.svector harvests as everywhere else in this file — cf. vector-append), and the
   // vector / void return. `Contract.type` restores the real shape (callable → `(...args:
   // unknown[]) => unknown`; a void HOF return → bare `void`).
+  // INVARIANT: vector-map's harvested signature is proc-first over a vector rest,
+  // returning a new vector (pins implementation, not behavior)
   it("vector-map: proc-first over a vector rest → a new vector", () => {
     expect(signatureOf(nativeDef("vector-map"))).toBe(
       "(proc: (...args: unknown[]) => unknown, ...vectors: readonly unknown[][]) => readonly unknown[]",
     );
   });
+  // INVARIANT: vector-for-each's harvested signature is proc-first over a vector rest,
+  // returning void (pins implementation, not behavior)
   it("vector-for-each: proc-first over a vector rest, for effect → void", () => {
     expect(signatureOf(nativeDef("vector-for-each"))).toBe(
       "(proc: (...args: unknown[]) => unknown, ...vectors: readonly unknown[][]) => void",

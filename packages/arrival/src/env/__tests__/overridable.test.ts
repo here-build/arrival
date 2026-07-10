@@ -33,6 +33,7 @@ async function exec(code: string, options?: ExecOptions) {
 }
 
 describe("arrival/overridable — plain define plus validation, through the consumer door", () => {
+  // INVARIANT: a host-supplied override wins over the in-form default
   it("a host-supplied override wins over the in-form default, and validates", async () => {
     const result = await exec(`(define/overridable city (s/string) "Berlin") city`, {
       capabilities,
@@ -41,6 +42,7 @@ describe("arrival/overridable — plain define plus validation, through the cons
     expect((result.at(-1) as AString)["arrival/toJS"]()).toBe("Paris");
   });
 
+  // INVARIANT: absent params fall back to the in-form default
   it("default fallback: absent params ⇒ the in-form default fires (and validates)", async () => {
     const result = await exec(`(define/overridable city (s/string) "Berlin") city`, {
       capabilities,
@@ -49,6 +51,7 @@ describe("arrival/overridable — plain define plus validation, through the cons
     expect((result.at(-1) as AString)["arrival/toJS"]()).toBe("Berlin");
   });
 
+  // INVARIANT: omitting config entirely still resolves defaults (params defaults to {})
   it("config-less lower succeeds (`params` defaults to {}) — every in-form default fires", async () => {
     const result = await exec(`(define/overridable city (s/string) "Berlin") city`, {
       capabilities,
@@ -57,6 +60,7 @@ describe("arrival/overridable — plain define plus validation, through the cons
     expect((result.at(-1) as AString)["arrival/toJS"]()).toBe("Berlin");
   });
 
+  // INVARIANT: multiple overridable bindings in one program resolve independently
   it("multiple inputs in one program resolve independently (override + default mixed)", async () => {
     const result = await exec(
       `(define/overridable city (s/string) "Berlin")
@@ -68,6 +72,8 @@ describe("arrival/overridable — plain define plus validation, through the cons
     expect(list.to_array().map((v) => (v as AString)["arrival/toJS"]())).toEqual(["Paris", "France"]);
   });
 
+  // INVARIANT: a bad override throws naming the binding, declared type, and source
+  // (pins implementation, not behavior)
   it("a bad OVERRIDE throws legibly, naming the binding, the declared type, and the source", async () => {
     await expect(
       exec(`(define/overridable age (s/number) 30) age`, {
@@ -79,6 +85,8 @@ describe("arrival/overridable — plain define plus validation, through the cons
     );
   });
 
+  // INVARIANT: a bad default throws exactly as loud as a bad override
+  // (pins implementation, not behavior)
   it("a bad DEFAULT throws exactly as loud as a bad override — validated the same", async () => {
     await expect(
       exec(`(define/overridable age (s/number) "thirty") age`, {
@@ -88,6 +96,7 @@ describe("arrival/overridable — plain define plus validation, through the cons
     ).rejects.toThrow(/define\/overridable age: expected number, got "thirty" \(from the in-form default\)/);
   });
 
+  // INVARIANT: an unrecognized type tag doors naming the binding (pins implementation, not behavior)
   it("an unrecognized type tag DOORS with the binding name, not a silent passthrough", async () => {
     await expect(
       exec(`(define/overridable age "not-a-real-type" 30) age`, {
@@ -124,6 +133,7 @@ describe("arrival/overridable — plain define plus validation, through the cons
     ).rejects.toThrow(/define\/overridable x: unrecognized type tag/);
   });
 
+  // INVARIANT: an /optional-suffixed tag is tolerated and still validates
   it("an `/optional`-suffixed tag is tolerated (the suffix is inert here) — validation still applies", async () => {
     const result = await exec(`(define/overridable size (s/optional (s/number)) 10) size`, {
       capabilities,
@@ -132,6 +142,7 @@ describe("arrival/overridable — plain define plus validation, through the cons
     expect((result.at(-1) as AExact)["arrival/toJS"]()).toBe(10);
   });
 
+  // INVARIANT: overridable/resolve is callable directly as an ordinary runtime verb
   it("`overridable/resolve` is a real RUNTIME verb — callable directly by user code, no sealing", async () => {
     const result = await exec(`(overridable/resolve 'city (s/string) "Berlin")`, {
       capabilities,
@@ -148,6 +159,7 @@ describe("arrival/overridable — plain define plus validation, through the cons
 // (declared on `overridableCapability` itself) means `(s/enum …)`/`(s/object …)` resolve here
 // with no extra wiring at the test's own capability list.
 describe("arrival/overridable — structured s/* forms: enum, object, optional", () => {
+  // INVARIANT: (s/enum ...) validates an override against its declared value set
   it("(s/enum ...) as a type tag validates an override against the enum's values", async () => {
     const result = await exec(
       `(define/overridable tier (s/enum "free" "pro") "free") tier`,
@@ -156,6 +168,7 @@ describe("arrival/overridable — structured s/* forms: enum, object, optional",
     expect((result.at(-1) as AString)["arrival/toJS"]()).toBe("pro");
   });
 
+  // INVARIANT: (s/enum ...) rejects a value outside the declared set (pins implementation, not behavior)
   it("(s/enum ...) rejects a value outside the declared set — legible, names the binding", async () => {
     await expect(
       exec(`(define/overridable tier (s/enum "free" "pro") "free") tier`, {
@@ -165,6 +178,7 @@ describe("arrival/overridable — structured s/* forms: enum, object, optional",
     ).rejects.toThrow(/define\/overridable tier: expected one of \["free","pro"\], got "enterprise"/);
   });
 
+  // INVARIANT: (s/object ...) validates a structured override field-by-field
   it("(s/object ...) as a type tag validates a structured override field-by-field", async () => {
     const result = await exec(
       `(define/overridable profile
@@ -179,6 +193,8 @@ describe("arrival/overridable — structured s/* forms: enum, object, optional",
     expect((result.at(-1) as AString)["arrival/toJS"]()).toBe("Maya");
   });
 
+  // INVARIANT: (s/object ...) rejects an override missing a required field
+  // (pins implementation, not behavior)
   it("(s/object ...) rejects an override missing a required field", async () => {
     await expect(
       exec(
@@ -191,6 +207,7 @@ describe("arrival/overridable — structured s/* forms: enum, object, optional",
     ).rejects.toThrow(/define\/overridable profile: expected/);
   });
 
+  // INVARIANT: a nested (s/optional ...) field inside (s/object ...) is genuinely optional
   it("a nested (s/optional ...) field inside (s/object ...) is genuinely optional", async () => {
     const withBio = await exec(
       `(define/overridable profile

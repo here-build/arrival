@@ -26,19 +26,23 @@ import { symbol, type DecodedReturn } from "../../common/symbol.js";
 import type { SchemeValue } from "../../values/types.js";
 
 describe("scheme/polyglot Contract precision — representative fixes decode precisely", () => {
+  // INVARIANT: @ (readMember)'s contract decodes to SchemeValue, not unknown
   test("@ (readMember): out z.value — decodes to SchemeValue, not unknown (matches readMember's own (obj, key) => SchemeValue)", () => {
     expectTypeOf<DecodedReturn<[typeof z.value]>>().toEqualTypeOf<SchemeValue>();
   });
 
+  // INVARIANT: @? (hasMember)'s contract decodes to boolean, not unknown
   test("@? (hasMember): out z.boolean — decodes to boolean, not unknown (matches hasMember's own (obj, key) => boolean)", () => {
     expectTypeOf<DecodedReturn<[typeof z.boolean]>>().toEqualTypeOf<boolean>();
   });
 
+  // INVARIANT: @keys (memberKeys)'s contract decodes to string[], not unknown
   test("@keys (memberKeys): out z.array(z.string) — decodes to string[], not unknown (matches memberKeys's own (obj) => string[])", () => {
     type KeysOutput = ReturnType<typeof z.array<typeof z.string>>;
     expectTypeOf<DecodedReturn<[KeysOutput]>>().toEqualTypeOf<string[]>();
   });
 
+  // INVARIANT: dict's contract decodes to Record<string, unknown>, not unknown
   test("dict: out z.record(z.string, z.custom<unknown>()) — decodes to Record<string, unknown>, not unknown", () => {
     type DictOutput = ReturnType<typeof z.record<typeof z.string, z.ZodCustom<unknown>>>;
     expectTypeOf<DecodedReturn<[DictOutput]>>().toEqualTypeOf<Record<string, unknown>>();
@@ -50,6 +54,8 @@ describe("scheme/polyglot Contract precision — wrong-typed impls must NOT comp
   // exactly mirroring symbol.test-d.ts's own established convention.
   const RUN = false as boolean;
 
+  // INVARIANT: a non-boolean impl must not compile against a z.boolean output contract
+  // (pins implementation, not behavior)
   test("@?-shaped: a non-boolean return must NOT compile against z.boolean output", () => {
     if (RUN) {
       symbol.native`hasmember-proof: proof`(
@@ -61,6 +67,8 @@ describe("scheme/polyglot Contract precision — wrong-typed impls must NOT comp
     expectTypeOf<true>().toEqualTypeOf<true>();
   });
 
+  // INVARIANT: a non-string-array impl must not compile against a z.array(z.string) output contract
+  // (pins implementation, not behavior)
   test("@keys-shaped: a non-string-array return must NOT compile against z.array(z.string) output", () => {
     if (RUN) {
       symbol.native`memberkeys-proof: proof`(
@@ -72,6 +80,8 @@ describe("scheme/polyglot Contract precision — wrong-typed impls must NOT comp
     expectTypeOf<true>().toEqualTypeOf<true>();
   });
 
+  // INVARIANT: an array-returning impl must not compile against a record output contract
+  // (pins implementation, not behavior)
   test("dict-shaped: an array return must NOT compile against the record output", () => {
     if (RUN) {
       symbol.native`dict-proof: proof`(
@@ -83,6 +93,8 @@ describe("scheme/polyglot Contract precision — wrong-typed impls must NOT comp
     expectTypeOf<true>().toEqualTypeOf<true>();
   });
 
+  // INVARIANT: a non-SchemeValue-returning impl must not compile against a z.value output contract
+  // (pins implementation, not behavior)
   test("@-shaped (documentation only — see the honest accounting above): a non-SchemeValue return must NOT compile against z.value output", () => {
     if (RUN) {
       symbol.native`readmember-proof: proof`(

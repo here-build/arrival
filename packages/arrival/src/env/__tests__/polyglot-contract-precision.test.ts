@@ -46,6 +46,7 @@ function nativeDef(name: string) {
 }
 
 describe("scheme/polyglot Contract precision — the real exported ops reject wrongly-typed output (were z.unknown(), now precise)", () => {
+  // INVARIANT: @? (hasMember) output accepts only a real boolean
   it("@? (hasMember): output is now the z.boolean codec — accepts a real boolean, rejects a non-boolean", () => {
     const def = nativeDef("@?");
     expect(def.out.safeEncode([true]).success).toBe(true);
@@ -54,6 +55,7 @@ describe("scheme/polyglot Contract precision — the real exported ops reject wr
     expect(def.out.safeEncode([42]).success).toBe(false);
   });
 
+  // INVARIANT: @keys (memberKeys) output accepts only a string array
   it("@keys (memberKeys): output is now z.array(z.string) — accepts a string array, rejects a non-string element", () => {
     const def = nativeDef("@keys");
     expect(def.out.safeEncode([["a", "b", "c"]]).success).toBe(true);
@@ -62,6 +64,7 @@ describe("scheme/polyglot Contract precision — the real exported ops reject wr
     expect(def.out.safeEncode([["a", 2]]).success).toBe(false);
   });
 
+  // INVARIANT: dict output accepts only an ADict, rejecting a plain object/array/scalar
   it("dict: output is an ADict-accepting schema (native-dict-provenance.md) — accepts an ADict, rejects a plain object", () => {
     const def = nativeDef("dict");
     // v2 `dict()` is the open-record codec whose SCHEME face is `ADict | dict-shaped-AJSObject`.

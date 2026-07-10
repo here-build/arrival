@@ -62,6 +62,8 @@ const properList = (...items: unknown[]) => APair.fromArray(CONSTANT_CTX, items 
 const fn = (..._args: unknown[]): boolean => false;
 
 describe("scheme/lists Contract precision — genuinely REFINED schemas reject wrongly-shaped values (were z.unknown(), now zod-validated)", () => {
+  // INVARIANT: make-list's output must be a proper list (pair or nil); fill stays
+  // representation-blind, k must be a scheme number
   it("make-list: output is now z.union([z.pair, z.nil]) (a proper list) — a raw non-list value used to slip through the old z.unknown()", () => {
     const def = nativeDef("make-list");
     expect(def.out.safeParse([nil]).success).toBe(true);
@@ -78,6 +80,8 @@ describe("scheme/lists Contract precision — genuinely REFINED schemas reject w
     expect(def.in.safeParse(["not-a-scheme-number"]).success).toBe(false); // k must be schemeNumber
   });
 
+  // INVARIANT: nth's index must be a real scheme number; obj deliberately stays
+  // representation-blind (array|pair polymorphism)
   it("nth: index is now z.schemeNumber — a raw JS number/string used to slip through the old z.unknown()", () => {
     const def = nativeDef("nth");
     expect(def.in.safeParse([exact(0), properList(1, 2, 3)]).success).toBe(true);
@@ -134,6 +138,8 @@ describe("scheme/lists Contract precision — STATIC-only fixes (documented, not
   // actually true under isSchemeValue (verified against v1's own union-of-boxed-types `value`
   // too — see git history). What the fix DID change is the STATIC decoded type (unknown →
   // SchemeValue); the runtime domain was always "any BOXED scheme value," not "any raw value."
+  // INVARIANT: cons's car/cdr accept any scheme value at runtime unchanged — the fix is
+  // static-only
   it("cons: car/cdr accept any BOXED scheme value; a raw non-scheme value is genuinely rejected (z.value = isSchemeValue, a real refinement) — the fix is the STATIC decoded type (unknown → SchemeValue), not a runtime behavior change", () => {
     const def = nativeDef("cons");
     expect(def.in.safeParse([exact(1), exact(2)]).success).toBe(true);
@@ -141,6 +147,8 @@ describe("scheme/lists Contract precision — STATIC-only fixes (documented, not
     expect(def.out.safeParse([new APair(CONSTANT_CTX, exact(1), nil)]).success).toBe(true);
   });
 
+  // INVARIANT: map's head gained a real callable (z.lambda) refinement creating a genuine
+  // arity floor, rest/output stay permissive
   it("map (sequence): rest/output are z.value-flavored (no refinement) — still permissive at runtime for the rest+output; the fix is the head/rest SPLIT + precise decoded types (see lists.test-d.ts). The HEAD did later gain a real z.lambda refinement (the uniform-vocabulary migration), so — unlike when this test was authored — it now DOES create a genuine arity floor.", () => {
     const def = sequenceDef("map");
     expect(def.in.safeParse([fn, properList(1, 2, 3)]).success).toBe(true);
@@ -152,6 +160,8 @@ describe("scheme/lists Contract precision — STATIC-only fixes (documented, not
     expect(def.in.safeParse([]).success).toBe(false);
   });
 
+  // INVARIANT: list-tail / list-ref's output stays representation-blind since a
+  // sublist/element can be any scheme value
   it("list-tail / list-ref: output is z.value (no refinement) — a sublist/element can legitimately be ANY scheme value (an improper-list tail, or a car that's a bare number), so z.value (not a pair|nil union) is the honest ceiling", () => {
     const tailDef = nativeDef("list-tail");
     expect(tailDef.out.safeParse([properList(1, 2)]).success).toBe(true);
@@ -161,10 +171,13 @@ describe("scheme/lists Contract precision — STATIC-only fixes (documented, not
     expect(refDef.out.safeParse([exact(42)]).success).toBe(true); // an element is any scheme value
   });
 
+  // INVARIANT: list-set! has been doored this session — no longer a native op at all
+  // (pins implementation, not behavior)
   it("list-set!: doored this session (mutation violates value provenance) — no longer a native def to probe", () => {
     expect(symbols["list-set!"].kind).toBe("door");
   });
 
+  // INVARIANT: list-copy's input/output were already fully precise before this audit
   it("list-copy: input/output already z.value both sides — confirmed already precise, no change needed (output can legitimately be a non-list improper tail)", () => {
     const def = nativeDef("list-copy");
     expect(def.in.safeParse([properList(1, 2)]).success).toBe(true);
@@ -178,6 +191,8 @@ describe("scheme/lists Contract precision — STATIC-only fixes (documented, not
   // host-blind — eq?'s raw `===` compare still works fine at RUNTIME against an unboxed operand
   // (native ops never validate), but the ZOD SCHEMA (a harvest-quality artifact) now honestly
   // narrows to "any boxed scheme value," matching every other slot this migration touched.
+  // INVARIANT: memq/assq's search key stays deliberately representation-blind (eq?'s raw
+  // identity compare)
   it("memq/assq: the search key (obj) is z.value — a raw non-scheme value is genuinely rejected by the schema (though eq?'s runtime `===` never actually checks it)", () => {
     expect(nativeDef("memq").in.safeParse([exact(1), properList(1, 2)]).success).toBe(true);
     expect(nativeDef("memq").in.safeParse(["anything-at-all", properList(1, 2)]).success).toBe(false);
@@ -194,6 +209,8 @@ describe("scheme/lists Contract precision — STATIC-only fixes (documented, not
   // union `[z.value, z.booleanFalse]` is a genuine strict door end to end: no arm admits an
   // unboxed scalar. No throw needed at this boundary — zod's own `safeParse` rejection IS
   // the strict door (P5); nothing here was "permissive" for a bare-value-purge fix to close.
+  // INVARIANT: memv/assq/assv/member/assoc's output models "match or the boxed #f
+  // sentinel", requiring a real boxed schemeFalse on the false arm
   it("memv/assq/assv/member/assoc: output is z.union([z.value, z.booleanFalse]) — a genuine strict door: a real match (boxed) or the boxed #f sentinel, nothing raw admitted by either arm", () => {
     for (const name of ["memv", "assq", "assv", "member", "assoc"]) {
       const def = nativeDef(name);
@@ -207,6 +224,8 @@ describe("scheme/lists Contract precision — STATIC-only fixes (documented, not
     }
   });
 
+  // INVARIANT: memq's output is tighter than its siblings — genuinely rejects raw JS false
+  // and any non-pair value
   it("memq: output is z.union([z.pair, z.booleanFalse]) — tighter than its 5 siblings above (its success path always returns the live APair cell it matched on, never a bare value), so it genuinely rejects both a raw JS `false` and an arbitrary non-pair value", () => {
     const def = nativeDef("memq");
     expect(def.out.safeParse([properList(1, 2)]).success).toBe(true);
@@ -224,6 +243,8 @@ describe("scheme/lists Contract precision — STATIC-only fixes (documented, not
   // retires when B4 (legacy bare-fn arm retirement) lands, not here — A4 and B4 are
   // independent DAG tracks (docs/REWORK-DAG.md). This test itself never observed the raw
   // arm at runtime (both assertions use boxed `exact(1)` operands) — static-only, as titled.
+  // INVARIANT: member/assoc accept any scheme value for obj; compare's declared return
+  // type is unknown, not boolean
   it("member/assoc: obj accepts any scheme value (was z.unknown(), now z.value — static-only); compare predicate's return type is now `unknown` not `boolean` (matches the file's is_false-guarded actual usage, and srfi-1.ts filter's established convention)", () => {
     for (const name of ["member", "assoc"]) {
       const def = nativeDef(name);
@@ -234,12 +255,15 @@ describe("scheme/lists Contract precision — STATIC-only fixes (documented, not
 });
 
 describe("scheme/lists Contract precision — regression guard: unaffected/already-precise siblings stay untouched", () => {
+  // INVARIANT: list stays fully variadic over scheme values, unchanged
   it("list: already z.array(z.value)/[z.value] — untouched by this pass (already precise before this audit)", () => {
     const def = nativeDef("list");
     expect(def.in.safeParse([exact(1), exact(2), exact(3)]).success).toBe(true);
     expect(def.in.safeParse([]).success).toBe(true); // 0-arg list is legal
   });
 
+  // INVARIANT: append/reverse untouched — reverse genuinely rejects a raw JS array;
+  // append/list remain fully variadic
   it("append/reverse: untouched — already at their honest precision ceiling (append/list are legitimately fully-variadic-over-SchemeValue; reverse's own impl has NO array branch — pair|nil only)", () => {
     // NOTE: no bound scheme symbol named `clone` exists in this pack — `.clone()` is an
     // internal APair JS method, not an exported op (`list-copy`, tested separately above, is
@@ -252,6 +276,8 @@ describe("scheme/lists Contract precision — regression guard: unaffected/alrea
     expect(nativeDef("reverse").in.safeParse([properList(1, 2, 3)]).success).toBe(true);
   });
 
+  // INVARIANT: apply/for-each already migrated to inputRest; apply's head is now a real
+  // z.lambda creating a genuine arity floor
   it("apply / for-each: already migrated to inputRest this session — untouched, glanced at only as the migration's own reference examples", () => {
     const applyDef = nativeDef("apply");
     // apply's HEAD is now z.lambda (a real callable predicate, added by the uniform-vocabulary
@@ -276,6 +302,9 @@ describe("scheme/lists Contract precision — blanket sweep: genuinely-variadic-
   // the random-JS-garbage probe below via z.value's own refinement. The empty stragglers list is
   // the honest acceptance bar now (mirrors numeric-contract-precision.test.ts's own bar) — no op
   // in this pack is BOTH-SIDES fully unconstrained against real zod validation anymore.
+  // INVARIANT: every native/sequence op in the lists pack is precise except the two
+  // deliberately fully-polymorphic constructors (list, append) (pins implementation, not
+  // behavior)
   it("EVERY native/sequence op's Contract is precise — no straggler with BOTH sides still fully unconstrained against raw JS garbage (z.value's isSchemeValue refinement is real, not a permissive no-op)", () => {
     const stragglers: string[] = [];
     for (const [name, def] of Object.entries(symbols)) {
@@ -289,6 +318,8 @@ describe("scheme/lists Contract precision — blanket sweep: genuinely-variadic-
     expect(stragglers.sort()).toEqual([]);
   });
 
+  // INVARIANT: the lists pack exports exactly 23 symbols (deliberate drift alarm — forces
+  // a reviewer to touch this test when a symbol is added/removed)
   it("sanity: the pack exports exactly 23 symbols (the scope this review must cover)", () => {
     expect(Object.keys(symbols)).toHaveLength(23);
   });
@@ -312,19 +343,27 @@ describe("scheme/lists Contract.type overrides — the harvest signature (signat
   // `unknown` — map dispatches to Pair/Nil/Vector terms, so narrowing to a List would be false,
   // exactly sort's own documented reasoning; a genuinely list-only receiver is `Cons<unknown> |
   // null`, the same image the file's own non-degraded list ops harvest as).
+  // INVARIANT: map's harvested signature is fn-first over a representation-agnostic
+  // sequence rest, generic over fn's return (pins implementation, not behavior)
   it("map (sequence): fn-first + representation-agnostic sequence rest, GENERIC over fn's return (a later fix narrowed this further than the plain unknown-collapse the other four ops in this block still carry)", () => {
     expect(signatureOf(sequenceDef("map"))).toBe("<R>(fn: (...args: unknown[]) => R, ...lists: unknown[]) => R[]");
   });
+  // INVARIANT: for-each's harvested signature is fn-first over a list-only rest,
+  // returning void (pins implementation, not behavior)
   it("for-each: fn-first over list-only rest (its schema is z.union([pair,nil]), unlike map) → void", () => {
     expect(signatureOf(nativeDef("for-each"))).toBe(
       "(fn: (...args: unknown[]) => unknown, ...lists: (Cons<unknown> | null)[]) => void",
     );
   });
+  // INVARIANT: member's harvested signature is obj+list+optional compare returning the
+  // matched sublist or #f (pins implementation, not behavior)
   it("member: obj + list + optional binary compare → matched sublist or #f (restores what the degraded `(...args: unknown[]) => unknown` lost)", () => {
     expect(signatureOf(nativeDef("member"))).toBe(
       "(obj: unknown, list: Cons<unknown> | null, compare?: (a: unknown, b: unknown) => unknown) => unknown | false",
     );
   });
+  // INVARIANT: assoc's harvested signature is obj+alist+optional compare returning the
+  // matched entry or #f (pins implementation, not behavior)
   it("assoc: obj + alist + optional binary compare → matched entry or #f", () => {
     expect(signatureOf(nativeDef("assoc"))).toBe(
       "(obj: unknown, alist: Cons<unknown> | null, compare?: (a: unknown, b: unknown) => unknown) => unknown | false",

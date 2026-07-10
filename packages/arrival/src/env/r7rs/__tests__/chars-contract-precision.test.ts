@@ -49,24 +49,29 @@ const COMPARISON_OPS = [
 ] as const;
 
 describe("scheme/chars Contract precision — the 10 comparison ops reject a wrongly-typed element (were z.unknown(), now z.schemeChar)", () => {
+  // INVARIANT: char=? accepts real ACharacter args and rejects raw JS strings
   it("char=?: accepts real characters, rejects raw JS strings", () => {
     const def = nativeDef("char=?");
     expect(def.in.safeParse([ch("a"), ch("a")]).success).toBe(true);
     expect(def.in.safeParse(["a", "a"]).success).toBe(false);
   });
 
+  // INVARIANT: char<? accepts real characters and rejects raw JS strings
   it("char<?: accepts real characters, rejects raw JS strings (deriveOrd-driven impl — the schema narrowing is orthogonal to the shared helper)", () => {
     const def = nativeDef("char<?");
     expect(def.in.safeParse([ch("a"), ch("b")]).success).toBe(true);
     expect(def.in.safeParse(["a", "b"]).success).toBe(false);
   });
 
+  // INVARIANT: char-ci<? accepts real characters and rejects raw JS strings
   it("char-ci<?: accepts real characters, rejects raw JS strings", () => {
     const def = nativeDef("char-ci<?");
     expect(def.in.safeParse([ch("a"), ch("B")]).success).toBe(true);
     expect(def.in.safeParse(["a", "B"]).success).toBe(false);
   });
 
+  // INVARIANT: every one of the 10 char comparison ops accepts 0/1/n real-character arrays
+  // and rejects a same-length raw-string array
   it("every comparison op: 0/1-arg trivial-true arities still parse, a real-character array of any length parses, a raw-string array of the SAME length no longer does", () => {
     for (const name of COMPARISON_OPS) {
       const def = nativeDef(name);
@@ -79,6 +84,8 @@ describe("scheme/chars Contract precision — the 10 comparison ops reject a wro
     }
   });
 
+  // INVARIANT: every native op in the chars pack rejects an arbitrary-shape raw-JS-garbage
+  // array — no stragglers
   it("EVERY native op in the pack now rejects an arbitrary-shape raw-JS-garbage array (the blanket straggler sweep — mirrors numeric-contract-precision.test.ts)", () => {
     const garbage = ["not-a-char", 123, null, {}];
     const stragglers: string[] = [];
@@ -89,6 +96,8 @@ describe("scheme/chars Contract precision — the 10 comparison ops reject a wro
     expect(stragglers).toEqual([]);
   });
 
+  // INVARIANT: the chars pack exports exactly 22 symbols (deliberate drift alarm — forces
+  // a reviewer to touch this test when a symbol is added/removed)
   it("sanity: the pack exports exactly 22 symbols (21 contract-bearing natives + char? tagless-guard) — the scope this fix must cover", () => {
     expect(Object.keys(symbols)).toHaveLength(22);
   });

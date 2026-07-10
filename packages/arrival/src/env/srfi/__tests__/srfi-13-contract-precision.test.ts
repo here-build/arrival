@@ -27,20 +27,30 @@ function def(name: string): AEntity {
 }
 
 describe("scheme/srfi-13 Contract harvest precision — author-asserted `type:` recovers the List-of-string domain z.value erases", () => {
+  // INVARIANT: string-join's harvested signature is (list: List<string>, delimiter?: string)
+  // => string via override (pins implementation, not behavior)
   it("string-join: List<string> input (was z.value → unknown) + string output (was the redundant string | string)", () => {
     expect(signatureOf(def("string-join"))).toBe("(list: List<string>, delimiter?: string) => string");
   });
 
+  // INVARIANT: string-tokenize's harvested signature returns List<string> via override
+  // (pins implementation, not behavior)
   it("string-tokenize: List<string> output (was z.value → unknown — it returns a proper list of token strings)", () => {
     expect(signatureOf(def("string-tokenize"))).toBe("(str: string, criterion?: unknown) => List<string>");
   });
 
+  // INVARIANT: string-split's harvested signature returns List<string> via override
+  // (pins implementation, not behavior)
   it("string-split: List<string> output (was z.value → unknown) + string delimiter (was the redundant string | string)", () => {
     expect(signatureOf(def("string-split"))).toBe("(str: string, delimiter: string) => List<string>");
   });
 });
 
 describe("scheme/srfi-13 Contract harvest precision — already-precise ops stay zod-derived (regression guard: no redundant override)", () => {
+  // INVARIANT: string-null?/string-prefix?/string-take/string-reverse keep their exact
+  // zod-computed signatures with no redundant override (pins implementation, not behavior)
+  // INVARIANT: string-index/string-count deliberately keep criterion as unknown since the
+  // membrane accepts either a char or a one-arg predicate (pins implementation, not behavior)
   it("string-null? / string-prefix? / string-take / bit-count-style ops keep their exact zod-computed signatures", () => {
     // A precise scalar-in/scalar-out op needs NO override — adding one would be a duplicate source of
     // truth (the very drift risk this pass avoids). These read straight off the zod schema.

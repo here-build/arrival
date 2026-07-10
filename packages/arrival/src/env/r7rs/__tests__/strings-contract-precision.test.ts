@@ -81,12 +81,15 @@ const COMPARISON_OPS = [
 ] as const;
 
 describe("scheme/strings Contract precision — 2026-07-05 audit: 8 fixes on the REAL exported ops", () => {
+  // INVARIANT: string accepts real ACharacter elements, rejecting raw JS strings
   it("string: accepts real characters, rejects raw JS strings as elements (was z.array(z.unknown()))", () => {
     const def = nativeDef("string");
     expect(def.in.safeParse([ch("a"), ch("b")]).success).toBe(true);
     expect(def.in.safeParse(["a", "b"]).success).toBe(false);
   });
 
+  // INVARIANT: every one of the 10 string comparison ops accepts real-AString arrays of any
+  // arity and rejects a same-length raw-string array
   it("every comparison op: real strings of any arity parse, a same-length raw-string array no longer does", () => {
     for (const name of COMPARISON_OPS) {
       const def = nativeDef(name);
@@ -97,12 +100,14 @@ describe("scheme/strings Contract precision — 2026-07-05 audit: 8 fixes on the
     }
   });
 
+  // INVARIANT: string-append accepts real AString elements, rejecting raw JS strings
   it("string-append: accepts real strings, rejects raw JS strings as elements (was z.array(z.unknown()))", () => {
     const def = nativeDef("string-append");
     expect(def.in.safeParse([str("a"), str("b")]).success).toBe(true);
     expect(def.in.safeParse(["a", "b"]).success).toBe(false);
   });
 
+  // INVARIANT: string->list's output must be a proper list, rejecting a raw string
   it("string->list: output must be a proper list (Pair|Nil) — a raw string no longer satisfies it (was [z.unknown()])", () => {
     const def = nativeDef("string->list");
     expect(def.out.safeParse([properList()]).success).toBe(true);
@@ -110,6 +115,7 @@ describe("scheme/strings Contract precision — 2026-07-05 audit: 8 fixes on the
     expect(def.out.safeParse(["not-a-list"]).success).toBe(false);
   });
 
+  // INVARIANT: list->string's input must be a proper list, rejecting a raw string
   it("list->string: input must be a proper list (Pair|Nil) — a raw string no longer satisfies it (was [z.unknown()])", () => {
     const def = nativeDef("list->string");
     expect(def.in.safeParse([properList()]).success).toBe(true);
@@ -117,6 +123,7 @@ describe("scheme/strings Contract precision — 2026-07-05 audit: 8 fixes on the
     expect(def.in.safeParse(["not-a-list"]).success).toBe(false);
   });
 
+  // INVARIANT: join's second argument must be a proper list, rejecting a raw string
   it("join: 2nd arg must be a proper list (Pair|Nil) — a raw string no longer satisfies it (was z.value)", () => {
     const def = nativeDef("join");
     expect(def.in.safeParse([str(", "), properList()]).success).toBe(true);
@@ -124,6 +131,8 @@ describe("scheme/strings Contract precision — 2026-07-05 audit: 8 fixes on the
     expect(def.in.safeParse([str(", "), "not-a-list"]).success).toBe(false);
   });
 
+  // INVARIANT: concat (migrated to symbol.rosetta) accepts real AString elements,
+  // rejecting raw JS strings
   it("concat: accepts real strings, rejects raw JS strings as elements (was z.array(z.value)) — since migrated to symbol.rosetta", () => {
     const def = rosettaDef("concat");
     expect(def.in.safeParse([str("a"), str("b")]).success).toBe(true);
@@ -135,6 +144,8 @@ describe("scheme/strings Contract precision — 2026-07-05 audit: 8 fixes on the
   // DIFFERENT capability — this item was a stale/misfiled reference in the original audit
   // header (item #8), not a fix that ever landed here. Dropped rather than faked.
 
+  // INVARIANT: no native op in the strings pack accepts an arbitrary-shape raw-JS-garbage
+  // array — no stragglers
   it("blanket sweep: no native op in the pack accepts an arbitrary-shape raw-JS-garbage array on .in (mirrors numeric-/chars-contract-precision.test.ts)", () => {
     const garbage = ["not-a-value", 123, null, {}];
     const stragglers: string[] = [];
@@ -145,10 +156,14 @@ describe("scheme/strings Contract precision — 2026-07-05 audit: 8 fixes on the
     expect(stragglers).toEqual([]);
   });
 
+  // INVARIANT: the strings pack exports exactly 32 symbols (deliberate drift alarm —
+  // forces a reviewer to touch this test when a symbol is added/removed)
   it("sanity: the pack exports exactly 32 symbols — the scope this fix must cover", () => {
     expect(Object.keys(symbols)).toHaveLength(32);
   });
 
+  // INVARIANT: string-map/string-for-each's earlier inputRest fix remains intact —
+  // regression pin
   it("regression pin: string-map/string-for-each's earlier inputRest fix is untouched by this round", () => {
     const mapDef = nativeDef("string-map");
     expect(mapDef.in.safeParse([(): void => {}, str("abc")]).success).toBe(true);
@@ -163,11 +178,15 @@ describe("scheme/strings Contract.type overrides — the harvest signature for t
   // from z.schemeString), and the string / void return. `Contract.type` restores the real shape
   // (same convention as the sibling srfi curry/find overrides: callable → `(...args: unknown[]) =>
   // unknown`, a void HOF return → bare `void` as in env/core/core.ts's own hand-written type).
+  // INVARIANT: string-map's harvested signature is proc-first over a string rest,
+  // returning string (pins implementation, not behavior)
   it("string-map: proc-first over a string rest → string", () => {
     expect(signatureOf(nativeDef("string-map"))).toBe(
       "(proc: (...args: unknown[]) => unknown, ...strings: string[]) => string",
     );
   });
+  // INVARIANT: string-for-each's harvested signature is proc-first over a string rest,
+  // returning void (pins implementation, not behavior)
   it("string-for-each: proc-first over a string rest, for effect → void", () => {
     expect(signatureOf(nativeDef("string-for-each"))).toBe(
       "(proc: (...args: unknown[]) => unknown, ...strings: string[]) => void",

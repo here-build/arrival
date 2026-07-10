@@ -5,7 +5,9 @@
 // — see polyglot.ts's header for the full split rationale. This file keeps only
 // what stays in the shared core: @/@?/@keys/dict, nil, compose/pipe/flow,
 // %interleave.
-import { execState, sandboxedEnv, type ExecOptions } from "../../index.js";
+import { execState, type ExecOptions } from "../../index.js";
+// In-package test: internal-module access (the barrel export retired — privatization V5).
+import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
 import { assembleEnv } from "../../common/kernel.js";
 import { type SchemeEnv } from "../../common/scheme-env.js";
 import { describe, expect, it } from "vitest";
@@ -22,6 +24,9 @@ async function exec(code: string, options?: ExecOptions) {
 }
 
 describe("@here.build/arrival/polyglot (shared core)", () => {
+  // INVARIANT: the polyglot capability installs @/@?/@keys/dict and compose/pipe/flow, and
+  // they thread correctly (the -> / ~> threading-macro half of this invariant moved to the
+  // per-dialect test files in the 2026-07-10 dialect split — no longer exercised here)
   it("installs @/@?/@keys/dict and compose/pipe run correctly standalone", async () => {
     const env = sandboxedEnv.inherit("polyglot-core-test");
     const evalScheme = (e: SchemeEnv, src: string) => exec(src, { env: e as never });
@@ -43,6 +48,10 @@ describe("@here.build/arrival/polyglot (shared core)", () => {
     expect(await str('(@keys (dict :a 1))')).toBe("a");
   });
 
+  // INVARIANT (partial — retired the "-> macro in prelude" half of the original claim: the
+  // W4/H3 migration dropped the text-blob prelude entirely for individually-declared
+  // symbol.define/symbol.native entries): polyglot exports a well-formed SchemePackSpec
+  // named "scheme/polyglot" (pins implementation, not behavior)
   it("exports a well-formed SchemePackSpec — the shrunk core, post-split", () => {
     expect(polyglot.name).toBe("scheme/polyglot");
     expect(polyglot.spec.prelude).toBeUndefined();

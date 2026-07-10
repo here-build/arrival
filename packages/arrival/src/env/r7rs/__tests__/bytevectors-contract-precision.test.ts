@@ -32,6 +32,8 @@ const exact = (n: number): AExact => new AExact(CONSTANT_CTX, BigInt(n));
 const bv = (bytes: number[]): ABytevector => new ABytevector(CONSTANT_CTX, Uint8Array.from(bytes));
 
 describe("scheme/bytevectors Contract precision — the real exported ops reject wrongly-typed args (were z.array(z.unknown()), now precise)", () => {
+  // INVARIANT: bytevector requires every argument to be a scheme number, rejecting
+  // non-number/raw-JS-number args; 0-arg call stays legal
   it("bytevector: every arg must be a scheme number — a raw JS number or a non-number used to slip through the old z.array(z.unknown())", () => {
     const def = nativeDef("bytevector");
     expect(def.in.safeParse([exact(1), exact(2), exact(255)]).success).toBe(true);
@@ -40,6 +42,8 @@ describe("scheme/bytevectors Contract precision — the real exported ops reject
     expect(def.in.safeParse([1, 2]).success).toBe(false); // raw JS numbers, not boxed AExact/AInexact
   });
 
+  // INVARIANT: bytevector-append requires every argument to be a real ABytevector
+  // instance, rejecting raw Uint8Array; 0-arg call stays legal
   it("bytevector-append: every arg must be a bytevector (z.sbytevector) — a non-bytevector used to slip through the old z.array(z.unknown())", () => {
     const def = nativeDef("bytevector-append");
     expect(def.in.safeParse([bv([1, 2]), bv([3])]).success).toBe(true);
@@ -67,6 +71,8 @@ describe("scheme/bytevectors Contract precision — the real exported ops reject
     expect(def.in.safeParse([Uint8Array.from([1])]).success).toBe(false);
   });
 
+  // INVARIANT: every native op in the bytevectors pack has migrated off the fully-degraded
+  // contract shape — no stragglers
   it("EVERY bytevectors native op's Contract is precise — no straggler with BOTH sides still fully unconstrained", () => {
     // Mirrors numeric-contract-precision.test.ts's blanket sweep: the OLD bug was a degraded
     // `z.array(z.unknown())` input with an otherwise-precise output — checking BOTH sides matters
@@ -85,6 +91,8 @@ describe("scheme/bytevectors Contract precision — the real exported ops reject
     expect(stragglers).toEqual([]);
   });
 
+  // INVARIANT: utf8->string / string->utf8 remain precise on their own domains as
+  // unaffected siblings
   it("utf8->string / string->utf8: unaffected siblings stay precise (regression guard, not part of this fix)", () => {
     const toStr = nativeDef("utf8->string");
     expect(toStr.in.safeParse([bv([104, 105])]).success).toBe(true);
@@ -95,6 +103,8 @@ describe("scheme/bytevectors Contract precision — the real exported ops reject
     expect(toUtf8.in.safeParse(["raw-js-string"]).success).toBe(false);
   });
 
+  // INVARIANT: the bytevectors pack exports exactly 11 symbols (deliberate drift alarm —
+  // forces a reviewer to touch this test when a symbol is added/removed)
   it("sanity: the pack exports exactly 11 symbols (the scope this fix must cover)", () => {
     expect(Object.keys(symbols)).toHaveLength(11);
   });

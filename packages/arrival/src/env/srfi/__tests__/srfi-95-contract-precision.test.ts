@@ -22,6 +22,9 @@ function def(name: string): AEntity {
 }
 
 describe("scheme/srfi-95 Contract harvest precision — author-asserted `type:` replaces the z.custom degrade path", () => {
+  // INVARIANT: sort's harvested signature recovers arity and the optional binary
+  // comparator while keeping seq/return representation-blind via override (pins
+  // implementation, not behavior)
   it("sort: recovers arity + the optional binary comparator, keeping the receiver/return representation-blind (unknown)", () => {
     expect(signatureOf(def("sort"))).toBe("(seq: unknown, less?: (a: unknown, b: unknown) => unknown) => unknown");
   });

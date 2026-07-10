@@ -1,5 +1,7 @@
 // Unified SRFI palette — assemble each capability onto a real env and run one verb.
-import { exec, execState, sandboxedEnv, schemeToJs } from "../../index.js";
+import { exec, execState, schemeToJs } from "../../index.js";
+// In-package test: internal-module access (the barrel export retired — privatization V5).
+import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
 import { assembleEnv } from "../../common/kernel.js";
 import { type SchemeEnv } from "../../common/scheme-env.js";
 import { describe, expect, it } from "vitest";
@@ -30,6 +32,8 @@ async function withCap(cap: { lower: (o: { evalScheme: typeof evalScheme }) => u
   return async (src: string) => Number((await exec(src, { env }))[0]);
 }
 
+// INVARIANT: each of SRFI-1/13/43/189/128/26/8/2/235 assembles onto an env and its
+// representative verb runs correctly
 describe("@here.build/arrival/srfi", () => {
   it("SRFI-1 list library", async () => {
     const num = await withCap(srfi1, "s1");
@@ -70,6 +74,8 @@ describe("@here.build/arrival/srfi", () => {
     expect(await num("((always 7) 1 2 3)")).toBe(7);
   });
 
+  // INVARIANT: allSrfi exposes the whole set of 13 capabilities, including
+  // srfi-1/13/95/235 (pins implementation, not behavior)
   // [STALE-LABEL] fix (2026-07-08 test-invariant-atlas sweep, [P16]
   // docs/test-invariant-atlas/verdicts/env.md): this count pin used to carry no rationale,
   // unlike every sibling pack-count pin in this scope (11/22/23/32/81 all carry a "the
@@ -98,6 +104,8 @@ describe("@here.build/arrival/srfi-1 — positional accessors", () => {
     return { num, raw };
   }
 
+  // INVARIANT: first…tenth pick the nth element of a proper list, including the
+  // exact-length boundary
   it("first … tenth pick the nth element of a proper list", async () => {
     const { num } = await accEnv();
     const xs = "(list 10 20 30 40 50 60 70 80 90 100)";
@@ -114,6 +122,8 @@ describe("@here.build/arrival/srfi-1 — positional accessors", () => {
     expect(await num(`(tenth ${xs})`)).toBe(100);
   });
 
+  // INVARIANT: first…tenth error when the list is too short for the requested position
+  // (pins implementation, not behavior)
   it("errors when the list is too short for the requested position", async () => {
     const { raw } = await accEnv();
     await expect(raw("(third (list 1 2))")).rejects.toThrow(/third: list has fewer than 3/);
@@ -121,12 +131,14 @@ describe("@here.build/arrival/srfi-1 — positional accessors", () => {
     await expect(raw("(first '())")).rejects.toThrow(/first: list has no elements/);
   });
 
+  // INVARIANT: first…tenth return the element as-is, preserving nested structure
   it("returns the element AS-IS (nested structure preserved, no re-stamp)", async () => {
     const { num } = await accEnv();
     // second element is itself a list; taking its car proves it was returned intact.
     expect(await num("(car (second (list 1 (list 7 8) 3)))")).toBe(7);
   });
 
+  // INVARIANT: last / last-pair work correctly on a 1-element list
   it("last / last-pair on a 1-element list", async () => {
     const { num } = await accEnv();
     expect(await num("(last (list 42))")).toBe(42);
@@ -135,6 +147,7 @@ describe("@here.build/arrival/srfi-1 — positional accessors", () => {
     expect(await num("(if (null? (cdr (last-pair (list 42)))) 1 0)")).toBe(1);
   });
 
+  // INVARIANT: last / last-pair follow SRFI-1 semantics on an improper (dotted) list
   it("last / last-pair on an improper (dotted) list — SRFI-1 semantics", async () => {
     const { num } = await accEnv();
     // last-pair of (1 2 . 3) is (2 . 3); last is its car.
@@ -171,6 +184,8 @@ function tupleItems(schema: ZodTypeAny): readonly ZodTypeAny[] {
 }
 
 describe("SRFI-95 sort — contract element precision", () => {
+  // INVARIANT: sort's receiver is declared as the representation-blind scheme identity
+  // (z.value) (pins implementation, not behavior)
   it("declares the receiver as the representation-blind SCHEME identity (z.value), not host-blind z.unknown()", () => {
     const items = tupleItems(bakedSort().in);
     // Reference-identity (not just shape) — z.value is the shared module singleton, so this
@@ -178,6 +193,8 @@ describe("SRFI-95 sort — contract element precision", () => {
     expect(items[0]).toBe(z.value);
   });
 
+  // INVARIANT: sort's comparator is declared as an optional callable predicate schema, not
+  // unknown (pins implementation, not behavior)
   it("declares the comparator (less?) as a callable predicate schema, not z.unknown()", () => {
     const items = tupleItems(bakedSort().in);
     const comparator = items[1];
@@ -189,6 +206,8 @@ describe("SRFI-95 sort — contract element precision", () => {
     expect((comparator as ZodOptional<ZodTypeAny>).unwrap().type).toBe("custom");
   });
 
+  // INVARIANT: sort's output is declared as the representation-blind scheme identity
+  // (z.value) (pins implementation, not behavior)
   it("declares the output as the representation-blind scheme identity (z.value), matching the receiver algebra's declared SchemeValue return", () => {
     const items = tupleItems(bakedSort().out);
     expect(items[0]).toBe(z.value);
@@ -203,12 +222,15 @@ describe("SRFI-95 sort — end-to-end behavior (previously uncovered via the bui
     return async (src: string) => (await execState(src, { env })).values;
   }
 
+  // INVARIANT: sort with no comparator sorts a list by the elements' own total order,
+  // container-preserving
   it("sorts a list by the elements' own total order (no comparator) — list in, list out", async () => {
     const raw = await sortEnv();
     const [result] = await raw("(sort (list 3 1 2))");
     expect(schemeToJs(result, {})).toEqual([1, 2, 3]);
   });
 
+  // INVARIANT: sort with no comparator sorts a vector, container-preserving
   it("sorts a vector, container-preserving — vector in, vector out", async () => {
     const raw = await sortEnv();
     const [result] = await raw("(sort (vector 3 1 2))");
@@ -224,6 +246,8 @@ describe("SRFI-95 sort — end-to-end behavior (previously uncovered via the bui
   // Asserts the IDEAL SRFI-95 behavior so this auto-promotes to a hard failure (prompting `it()`)
   // the day someone fixes the comparator call site — mirrors src/__tests__/js-interop.test.ts's
   // established it.fails convention for a documented, characterized gap.
+  // INVARIANT: sort does not honor an explicit less? comparator correctly — scrambles to
+  // the wrong order (documented broken; see comment above)
   it.fails("honors an explicit less? comparator (SRFI-95 signature) — BROKEN: see comment", async () => {
     const raw = await sortEnv();
     const [result] = await raw("(sort (list 1 3 2) (lambda (a b) (> a b)))");

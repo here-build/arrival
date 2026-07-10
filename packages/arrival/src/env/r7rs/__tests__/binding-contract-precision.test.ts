@@ -22,12 +22,16 @@ function nativeDef(name: string) {
 }
 
 describe("scheme/r7rs/binding Contract.type override — the harvest signature for the two-procedure `call-with-values` (its z.custom<SchemeFunction> params are unrepresentable to the printer)", () => {
+  // INVARIANT: call-with-values's harvested signature names producer/consumer params via
+  // Contract.type override, not the unknown catch-all (pins implementation, not behavior)
   it("call-with-values: producer + consumer procedures → whatever the consumer returns", () => {
     expect(signatureOf(nativeDef("call-with-values"))).toBe(
       "(producer: (...args: unknown[]) => unknown, consumer: (...args: unknown[]) => unknown) => unknown",
     );
   });
 
+  // INVARIANT: values carries no type override — its degraded signature is honest, not a
+  // degrade artifact (pins implementation, not behavior)
   it("values: genuinely variadic over any scheme value — left as the honest `(...args: unknown[]) => unknown` (NOT a catch-all degrade; z.array(z.value) renders faithfully), no override added", () => {
     // Regression guard for the LEAVE-ALONE decision: `values` packages 0+ arbitrary scheme values,
     // so its `(...args: unknown[]) => unknown` is honest, not the degrade path — no `type` override.

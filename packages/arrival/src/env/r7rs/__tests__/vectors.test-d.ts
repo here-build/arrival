@@ -47,26 +47,35 @@ describe("scheme/vectors Contract precision — element/return precision (z.cust
   // docs/test-invariant-atlas/verdicts/env.md, docs/test-suite-v2/REMOVAL-MANIFEST.md
   // §B "env test-d museum rows") — each decoded a retired synthetic schema, no reachable
   // production path. NEW-side rows below are the load-bearing proof.
+  // INVARIANT: vector's element schema decodes to SchemeValue[] (the OLD flat-unknown[]
+  // baseline rows were already retired — see the [P16] removal note above)
   test("vector: NEW z.array(z.value) decodes SchemeValue[], matching the impl's own (...objs: SchemeValue[]) body — and make-vector's own fill-slot convention", () => {
     expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.value>>>>().toEqualTypeOf<SchemeValue[]>();
   });
 
+  // INVARIANT: vector-append's element schema decodes to (AVector|AJSArray)[] on the
+  // scheme face
   test("vector-append: NEW z.array(z.vector(z.value)) decodes (AVector | AJSArray)[] on the scheme face — matches every OTHER accessor's z.vector convention in this file", () => {
     expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof svec>>, "scheme">>().toEqualTypeOf<(AVector | AJSArray)[]>();
   });
 
+  // INVARIANT: vector-ref's vec argument decodes as AVector|AJSArray, not unknown
   test("vector-ref: NEW input [z.vector(z.value), z.schemeNumber] decodes [AVector | AJSArray, AExact|AInexact], not [unknown, …]", () => {
     expectTypeOf<DecodedArgs<[typeof svec, typeof z.schemeNumber], "scheme">>().toEqualTypeOf<
       [AVector | AJSArray, AExact | AInexact]
     >();
   });
 
+  // INVARIANT: vector-ref/vector->list's output decodes as SchemeValue, representation-blind
+  // by design
   test("vector-ref / vector->list: NEW output [z.value] collapses to a bare `SchemeValue` return — representation-blind by design, not unknown", () => {
     expectTypeOf<DecodedReturn<[typeof z.value]>>().toEqualTypeOf<SchemeValue>();
   });
 });
 
 describe("scheme/vectors Contract precision — negative proof", () => {
+  // INVARIANT: a wrong-typed (string) rest element must NOT compile against
+  // vector-map/vector-for-each's tightened contract (pins implementation, not behavior)
   test("vector-map/vector-for-each: a wrong-typed rest element must NOT compile", () => {
     const RUN = false as boolean;
     if (RUN) {
@@ -85,6 +94,8 @@ describe("scheme/vectors Contract precision — negative proof", () => {
 });
 
 describe("scheme/vectors Contract precision — regression guard: the shared mechanism stays sound for a non-vector shape", () => {
+  // INVARIANT: the shared inputRest/apply mechanism stays sound for a non-vector shape
+  // (pins implementation, not behavior)
   test("apply's own declared shape (lists.ts) is untouched by anything added here — same proof symbol.test-d.ts/numeric.test-d.ts already carry", () => {
     expectTypeOf<DecodedArgsWithRest<[typeof z.value], typeof z.value>>().toEqualTypeOf<[SchemeValue, ...SchemeValue[]]>();
   });

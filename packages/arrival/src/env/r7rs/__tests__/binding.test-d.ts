@@ -38,12 +38,17 @@ describe("scheme/r7rs/binding Contract precision — values", () => {
   // §B "env test-d museum rows"): decoded a retired synthetic schema, documentation-as-test
   // with no reachable production path. The NEW-side row below (matching numeric.test-d.ts's
   // converged NEW-side-only shape) is the load-bearing proof.
+  // INVARIANT: the NEW shape decodes to SchemeValue[]/SchemeValue, matching Values.from's
+  // real signature (the OLD flat-unknown[]/unknown baseline row was already retired —
+  // see the [P16] removal note above)
   test("NEW shape: z.array(z.value) / [z.value] — args are SchemeValue[], return is SchemeValue (matches Values.from's own fixed signature)", () => {
     // Mirrors values's real migrated contract: { input: z.array(z.value), output: [z.value] }.
     expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.value>>>>().toEqualTypeOf<SchemeValue[]>();
     expectTypeOf<DecodedReturn<[typeof z.value]>>().toEqualTypeOf<SchemeValue>();
   });
 
+  // INVARIANT: a wrong-typed impl must NOT compile against the tightened values contract
+  // (pins implementation, not behavior)
   test("wrong-typed impl must NOT compile against the tightened contract — the real RED this fix closes", () => {
     const RUN = false as boolean;
     if (RUN) {
@@ -68,6 +73,7 @@ describe("scheme/r7rs/binding Contract precision — call-with-values", () => {
   // alongside this audit).
   const callable = z.lambda;
 
+  // INVARIANT: producer/consumer decode as (...args: unknown[]) => unknown, not any-typed
   test("producer/consumer decode as (...args: unknown[]) => unknown — precise, not any-typed", () => {
     // Checked per-position (not as one combined tuple literal) — expectTypeOf's overload
     // resolution trips on a 2-tuple of two IDENTICAL function types ("Expected 1 arguments,
@@ -79,6 +85,8 @@ describe("scheme/r7rs/binding Contract precision — call-with-values", () => {
     expectTypeOf<Decoded["length"]>().toEqualTypeOf<2>();
   });
 
+  // INVARIANT: call-with-values's output is z.value — it returns the consumer's result,
+  // never void (fixes a real R7RS bug)
   test("output is z.value — call-with-values RETURNS the consumer's result (R7RS never discards)", () => {
     // Mirrors call-with-values's CORRECTED contract shape: output: [z.value]. The intermediate
     // `z.undefinedResult` shape (claiming "void") was a real bug the readonly-slot strictness

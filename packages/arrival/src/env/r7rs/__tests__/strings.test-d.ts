@@ -29,10 +29,14 @@ describe("scheme/strings Contract precision — array-element tightening (string
   // docs/test-invariant-atlas/verdicts/env.md, docs/test-suite-v2/REMOVAL-MANIFEST.md
   // §B "env test-d museum rows") — decoded a retired synthetic schema, no reachable
   // production path. NEW-side rows below are the load-bearing proof.
+  // INVARIANT: string's element schema decodes to ACharacter[], not unknown[] (the OLD
+  // flat-unknown[] baseline row was already retired — see the [P16] removal note above)
   test("NEW `string` shape: z.array(z.schemeChar) decodes to ACharacter[], not unknown[]", () => {
     expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.char>>, "scheme">>().toEqualTypeOf<ACharacter[]>();
   });
 
+  // INVARIANT: comparison/string-append/concat's element schema decodes to AString[], not
+  // unknown[]
   test("NEW comparison/string-append/concat shape: z.array(z.schemeString) decodes to AString[], not unknown[]", () => {
     expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.string>>, "scheme">>().toEqualTypeOf<AString[]>();
   });
@@ -42,14 +46,17 @@ describe("scheme/strings Contract precision — list-shaped slots (string->list 
   const listSchema = z.union([z.pair, z.nil]);
 
   // OLD-shape row DELETED (same sweep/rationale as the array-element block above).
+  // INVARIANT: string->list/split's list-shaped output decodes to APair|null
   test("NEW shape: [z.union([z.pair, z.nil])] decodes the OUTPUT to APair | null, not unknown (string->list / split) — nil's JS face is null, not ANil; AList is the scheme face", () => {
     expectTypeOf<DecodedReturn<[typeof listSchema]>>().toEqualTypeOf<[SchemeValue, SchemeValue] | null>();
   });
 
+  // INVARIANT: list->string's list-shaped input decodes to [APair|null]
   test("NEW shape: [z.union([z.pair, z.nil])] decodes the INPUT to [APair | null], not [unknown] (list->string)", () => {
     expectTypeOf<DecodedArgs<[typeof listSchema]>>().toEqualTypeOf<[[SchemeValue, SchemeValue] | null]>();
   });
 
+  // INVARIANT: join's second-arg slot decodes as [AString, AListAlike]
   test("NEW shape: join's 2nd-arg slot decodes to [AString, APair | ANil], not [AString, SchemeValue]", () => {
     // Explicit AList<SchemeValue, SchemeValue>, not bare AList — bare AList relies on its
     // default type params, which toEqualTypeOf can't reconcile against a computed type here
@@ -63,6 +70,8 @@ describe("scheme/strings Contract precision — list-shaped slots (string->list 
 describe("scheme/strings Contract precision — regression guard: wrong-typed impls must NOT compile against the tightened shapes", () => {
   const RUN = false as boolean;
 
+  // INVARIANT: a wrong-typed char-rest impl must NOT compile against string's tightened
+  // contract (pins implementation, not behavior)
   test("string: a wrong-typed char rest element (raw string, not ACharacter) must NOT compile", () => {
     if (RUN) {
       symbol.native`s: proof`(
@@ -74,6 +83,8 @@ describe("scheme/strings Contract precision — regression guard: wrong-typed im
     expectTypeOf<true>().toEqualTypeOf<true>();
   });
 
+  // INVARIANT: a wrong-typed (bare-string) return must NOT compile against string->list's
+  // tightened contract (pins implementation, not behavior)
   test("string->list: a wrong-typed return (bare string, not APair | ANil) must NOT compile", () => {
     if (RUN) {
       symbol.native`sl: proof`(
@@ -85,6 +96,8 @@ describe("scheme/strings Contract precision — regression guard: wrong-typed im
     expectTypeOf<true>().toEqualTypeOf<true>();
   });
 
+  // INVARIANT: a wrong-typed (string) param must NOT compile against list->string's
+  // tightened contract (pins implementation, not behavior)
   test("list->string: a wrong-typed param (string, not APair | ANil) must NOT compile", () => {
     if (RUN) {
       symbol.native`ls: proof`(

@@ -30,11 +30,14 @@ describe("bytevector Contract precision — wholly-variadic homogeneous element 
   // docs/test-invariant-atlas/verdicts/env.md, docs/test-suite-v2/REMOVAL-MANIFEST.md
   // §B "env test-d museum rows"): decoded a retired synthetic schema, documentation-as-test
   // with no reachable production path. The NEW-side rows below are the load-bearing proof.
+  // INVARIANT: the NEW bytevector shape decodes to ANumeric[] (the OLD flat-unknown[]
+  // baseline row was already retired — see the [P16] removal note above)
   test("NEW bytevector shape: z.array(z.schemeNumber) decodes to ANumeric[] — each arg IS a scheme number, not unknown", () => {
     // Mirrors bytevector's real migrated contract: { input: z.array(z.schemeNumber), output: [z.bytevector] }.
     expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.schemeNumber>>, "scheme">>().toEqualTypeOf<ANumeric[]>();
   });
 
+  // INVARIANT: the NEW bytevector-append shape decodes to ABytevector[] on the scheme face
   test("NEW bytevector-append shape: z.array(z.bytevector) decodes to ABytevector[] on the scheme face — each arg IS a bytevector, not unknown", () => {
     // Mirrors bytevector-append's real migrated contract: { input: z.array(z.bytevector), output: [z.bytevector] }.
     // v2 bytevector is a codec: SCHEME face = ABytevector (the native op's face), JS face = Uint8Array.
@@ -47,6 +50,8 @@ describe("bytevector Contract precision — negative proofs (wrong-typed impl mu
   // mirroring symbol.test-d.ts's established `RUN`-guard idiom exactly.
   const RUN = false as boolean;
 
+  // INVARIANT: a wrong-typed rest element must NOT compile against bytevector's tightened
+  // contract (pins implementation, not behavior)
   test("bytevector: a wrong-typed rest element must NOT compile", () => {
     if (RUN) {
       symbol.native`bv: proof`(
@@ -58,6 +63,8 @@ describe("bytevector Contract precision — negative proofs (wrong-typed impl mu
     expectTypeOf<true>().toEqualTypeOf<true>();
   });
 
+  // INVARIANT: a wrong-typed rest element must NOT compile against bytevector-append's
+  // tightened contract (pins implementation, not behavior)
   test("bytevector-append: a wrong-typed rest element must NOT compile", () => {
     if (RUN) {
       symbol.native`bva: proof`(

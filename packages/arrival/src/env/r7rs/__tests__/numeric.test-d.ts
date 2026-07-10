@@ -29,22 +29,26 @@ import type { ANumeric } from "../../../values/numbers.js";
 const numOrBig = z.union([z.number, z.bigint]);
 
 describe("numeric Contract precision — representative NumSpec shapes decode precisely", () => {
+  // INVARIANT: pure-variadic ops (+) decode rest args and return as ANumeric
   test("pure-variadic (+): in:[], inRest:SchemeNum, out:SchemeNum — args are ANumeric[], return ANumeric (matches addFn's own (...args: ANumeric[]) => ANumeric)", () => {
     expectTypeOf<DecodedArgsWithRest<[], typeof z.schemeNumber, "scheme">>().toEqualTypeOf<ANumeric[]>();
     expectTypeOf<DecodedReturn<[typeof z.schemeNumber], "scheme">>().toEqualTypeOf<ANumeric>();
   });
 
+  // INVARIANT: fixed-head-plus-rest ops (-) decode as [ANumeric, ...ANumeric[]]
   test("fixed-head-plus-rest (-): in:[SchemeNum], inRest:SchemeNum, out:SchemeNum — matches subFn's (first: ANumeric, ...rest: ANumeric[]) => ANumeric", () => {
     expectTypeOf<DecodedArgsWithRest<[typeof z.schemeNumber], typeof z.schemeNumber, "scheme">>().toEqualTypeOf<
       [ANumeric, ...ANumeric[]]
     >();
   });
 
+  // INVARIANT: fixed-2-arity ops (quotient) decode args/return as bigint
   test("fixed-2-arity (quotient): in:[Int,Int], out:Int — args are bigint, return bigint (matches quotientFn's (a: bigint, b: bigint) => bigint)", () => {
     expectTypeOf<DecodedArgs<[typeof z.bigint, typeof z.bigint]>>().toEqualTypeOf<[bigint, bigint]>();
     expectTypeOf<DecodedReturn<[typeof z.bigint]>>().toEqualTypeOf<bigint>();
   });
 
+  // INVARIANT: fixed-1-arity-over-AnyNum ops (abs) decode as number|bigint, not unknown
   test("fixed-1-arity over AnyNum (abs): in:[AnyNum], out:AnyNum — number|bigint, NOT unknown (matches absFn's (x: number|bigint) => number|bigint)", () => {
     // AnyNum has no pre-existing single zod schema (number/integer/bigint each cover only ONE
     // side of the number|bigint union) — the pack inlines `z.union([z.number, z.bigint])`.
@@ -52,11 +56,13 @@ describe("numeric Contract precision — representative NumSpec shapes decode pr
     expectTypeOf<DecodedReturn<[typeof numOrBig]>>().toEqualTypeOf<number | bigint>();
   });
 
+  // INVARIANT: boolean-output predicates (zero?) decode return as boolean, not unknown
   test("boolean-output predicate (zero?): in:[AnyNum], out:Bool — return boolean, not unknown (matches isZeroFn's (x: number|bigint) => boolean)", () => {
     expectTypeOf<DecodedArgs<[typeof numOrBig]>>().toEqualTypeOf<[number | bigint]>();
     expectTypeOf<DecodedReturn<[typeof z.boolean]>>().toEqualTypeOf<boolean>();
   });
 
+  // INVARIANT: multi-value output (floor/) decodes as a 2-tuple of ANumeric
   test("multi-value output (floor/): a 2-tuple output decodes as a [ANumeric, ANumeric] values-vector, not [z.custom<unknown>()]", () => {
     expectTypeOf<DecodedReturn<[typeof z.schemeNumber, typeof z.schemeNumber], "scheme">>().toEqualTypeOf<
       [ANumeric, ANumeric]
@@ -65,6 +71,8 @@ describe("numeric Contract precision — representative NumSpec shapes decode pr
 });
 
 describe("numeric Contract precision — regression guard: the shared mechanism stays sound for a non-numeric shape", () => {
+  // INVARIANT: the shared inputRest/apply mechanism is untouched by the numeric-pack-local
+  // additions (pins implementation, not behavior)
   test("apply's own declared shape (lists.ts) is untouched by anything added here — same proof symbol.test-d.ts already carries", () => {
     // Mirrors symbol.test-d.ts's own "apply's own declared shape" test byte-for-byte — a
     // canary that the numeric-pack-local additions (CODEC_SCHEMA, contractFromSpec, the inline

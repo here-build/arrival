@@ -33,6 +33,8 @@ function def(name: string): AEntity {
 }
 
 describe("scheme/core Contract precision — author-asserted `type` recovers the meaningful signature the blind z.custom<…> slots degrade to the catch-all", () => {
+  // INVARIANT: gensym's harvested signature is `(name?: string) => string` via
+  // Contract.type override, not the unknown catch-all (pins implementation, not behavior)
   it("gensym: an optional string name hint → a fresh symbol (string image), not (...args: unknown[]) => unknown", () => {
     expect(signatureOf(def("gensym"))).toBe("(name?: string) => string");
   });

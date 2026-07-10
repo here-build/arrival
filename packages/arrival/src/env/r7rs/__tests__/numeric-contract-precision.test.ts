@@ -47,6 +47,7 @@ const exact = (n: bigint | number): AExact => new AExact(CONSTANT_CTX, typeof n 
 const inexact = (n: number): AInexact => new AInexact(CONSTANT_CTX, n);
 
 describe("numeric Contract precision — the real exported ops reject wrongly-typed args (were z.unknown(), now precise)", () => {
+  // INVARIANT: + accepts scheme numbers and rejects a non-number rest element, both in and out
   it("+ (pure-variadic SchemeNum): accepts scheme numbers, rejects a non-number rest element", () => {
     const def = nativeDef("+");
     expect(def.in.safeParse([exact(1), exact(2)]).success).toBe(true);
@@ -55,6 +56,7 @@ describe("numeric Contract precision — the real exported ops reject wrongly-ty
     expect(def.out.safeParse(["not a number"]).success).toBe(false);
   });
 
+  // INVARIANT: - rejects a wrongly-typed head or tail element
   it("- (fixed head + SchemeNum rest): rejects a wrongly-typed head or tail element", () => {
     const def = nativeDef("-");
     expect(def.in.safeParse([exact(1), exact(2), exact(3)]).success).toBe(true);
@@ -62,6 +64,8 @@ describe("numeric Contract precision — the real exported ops reject wrongly-ty
     expect(def.in.safeParse([exact(1), "nope"]).success).toBe(false);
   });
 
+  // INVARIANT: quotient rejects a non-scheme-number arg; output is a genuine bigint codec,
+  // not unknown
   it("quotient (fixed Int,Int): rejects a non-scheme-number arg; output is a bigint codec, not unknown", () => {
     const def = nativeDef("quotient");
     expect(def.in.safeDecode([exact(7), exact(2)]).success).toBe(true);
@@ -70,6 +74,7 @@ describe("numeric Contract precision — the real exported ops reject wrongly-ty
     expect(def.out.safeEncode(["x"]).success).toBe(false); // not a bigint
   });
 
+  // INVARIANT: abs accepts exact or inexact scheme numbers and rejects a non-number
   it("abs (AnyNum in/out): accepts exact or inexact, rejects a non-number", () => {
     const def = nativeDef("abs");
     expect(def.in.safeDecode([exact(5)]).success).toBe(true);
@@ -80,6 +85,7 @@ describe("numeric Contract precision — the real exported ops reject wrongly-ty
     expect(def.out.safeEncode(["x"]).success).toBe(false);
   });
 
+  // INVARIANT: zero?'s output schema models a real boolean, not unknown
   it("zero? (AnyNum in, Bool out): output schema now models a boolean, not unknown", () => {
     const def = nativeDef("zero?");
     expect(def.in.safeDecode([exact(0)]).success).toBe(true);
@@ -88,6 +94,8 @@ describe("numeric Contract precision — the real exported ops reject wrongly-ty
     expect(def.out.safeEncode(["not a bool"]).success).toBe(false);
   });
 
+  // INVARIANT: floor/'s output is a genuine 2-tuple of scheme numbers, rejecting wrong
+  // arity or element type
   it("floor/ (multi-value output): a 2-tuple of scheme numbers, not a 1-tuple of z.unknown()", () => {
     const def = nativeDef("floor/");
     expect(def.out.safeParse([exact(1), exact(2)]).success).toBe(true);
@@ -95,12 +103,15 @@ describe("numeric Contract precision — the real exported ops reject wrongly-ty
     expect(def.out.safeParse(["x", "y"]).success).toBe(false); // wrong element type
   });
 
+  // INVARIANT: truncate/ shares floor/'s 2-tuple output shape
   it("truncate/ (multi-value output): same 2-tuple shape as floor/", () => {
     const def = nativeDef("truncate/");
     expect(def.out.safeParse([exact(1), exact(2)]).success).toBe(true);
     expect(def.out.safeParse([exact(1)]).success).toBe(false);
   });
 
+  // INVARIANT: inexact/exact's output pins the specific tower member (AInexact vs AExact),
+  // rejecting the other
   it("inexact / exact (narrower than the generic scheme-number union): output pins the specific tower member", () => {
     const inexactDef = nativeDef("inexact");
     expect(inexactDef.out.safeParse([inexact(1.5)]).success).toBe(true);
@@ -111,6 +122,8 @@ describe("numeric Contract precision — the real exported ops reject wrongly-ty
     expect(exactDef.out.safeParse([inexact(1.5)]).success).toBe(false); // AInexact is not AExact
   });
 
+  // INVARIANT: every numeric native op's contract has migrated off the degraded
+  // fully-unconstrained shape
   it("EVERY numeric native op's Contract has migrated off the degraded z.array(z.unknown())/[z.unknown()] shape", () => {
     // The blanket acceptance-criterion sweep. The OLD bug was BOTH sides degraded together
     // (`{ input: z.array(z.unknown()), output: [z.unknown()] }`) — so a genuine straggler is
@@ -135,6 +148,8 @@ describe("numeric Contract precision — the real exported ops reject wrongly-ty
     expect(stragglers).toEqual([]);
   });
 
+  // INVARIANT: aliased ops (**, %, |, &, ~) bind the identical impl object as their
+  // canonical sibling; == and = are deliberately distinct (pins implementation, not behavior)
   it("alias invariant preserved: **/%/==/|/&/~ bind the SAME impl object as their canonical sibling", () => {
     // The file's own documented invariant (predates this fix — see the "Reused op specs"
     // section in numeric.ts): an alias must NOT get a freshly-built impl, only a freshly-built
@@ -150,6 +165,8 @@ describe("numeric Contract precision — the real exported ops reject wrongly-ty
     expect(nativeDef("==").impl).not.toBe(nativeDef("=").impl);
   });
 
+  // INVARIANT: the numeric pack exports exactly 81 symbols (deliberate drift alarm — forces
+  // a reviewer to touch this test when a symbol is added/removed)
   it("sanity: the pack exports exactly 81 symbols (the scope this fix must cover)", () => {
     expect(Object.keys(symbols)).toHaveLength(81);
   });

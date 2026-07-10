@@ -30,10 +30,14 @@ function def(name: string): AEntity {
 }
 
 describe("scheme/srfi-1 Contract harvest precision — author-asserted `type:` replaces the z.custom degrade path", () => {
+  // INVARIANT: find's harvested signature recovers arity, arg names, and the List<unknown>
+  // receiver via Contract.type override (pins implementation, not behavior)
   it("find: recovers arity + arg names + the List receiver the z.custom predicate arg collapsed to (...args: unknown[]) => unknown", () => {
     expect(signatureOf(def("find"))).toBe("(pred: (x: unknown) => unknown, list: List<unknown>) => unknown");
   });
 
+  // INVARIANT: filter's harvested signature composes directly from z.lambda's printer
+  // image, needing no type override anymore (pins implementation, not behavior)
   it("filter: no `type:` override needed anymore — z.lambda's printer image composes a real signature directly", () => {
     expect(signatureOf(def("filter"))).toBe("(a: (...args: unknown[]) => unknown, b: unknown) => unknown");
   });

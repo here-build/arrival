@@ -1,7 +1,9 @@
 // polyglot-lisp pack — assemble onto a real env, then RUN the Common Lisp
 // idiom family. Split out of polyglot.test.ts (V, 2026-07-10 dialect split —
 // see polyglot.ts's header for the full rationale).
-import { execState, sandboxedEnv, type ExecOptions } from "../../index.js";
+import { execState, type ExecOptions } from "../../index.js";
+// In-package test: internal-module access (the barrel export retired — privatization V5).
+import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
 import { assembleEnv } from "../../common/kernel.js";
 import { type SchemeEnv } from "../../common/scheme-env.js";
 import { describe, expect, it } from "vitest";
