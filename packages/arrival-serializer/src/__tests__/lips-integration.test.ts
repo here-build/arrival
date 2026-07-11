@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { toSExprString } from "../serializer";
 // Import what we can from lips
-import { exec, AExact, schemeToJs, AString, ASymbol, ANil, APair, LexicalScope } from "@here.build/arrival";
+import { exec, AExact, EnvCapability, schemeToJs, AString, ASymbol, ANil, APair, LexicalScope } from "@here.build/arrival";
 // Import custom matchers
 import "@here.build/arrival";
 
@@ -220,9 +220,12 @@ describe("exec with proper environment", () => {
   });
 
   it("should support environment variables", async () => {
+    // Host-supplied values enter as CAPABILITY data (`{ value }` symbol defs) — the
+    // hermetic-Environment ruling retired the JS-side `env.set` write surface.
     const scope = LexicalScope.fresh("test");
-    scope.env.set("x", 10);
-    scope.env.set("y", 20);
+    await new EnvCapability("serializer-test/env-vars", { symbols: { x: { value: 10 }, y: { value: 20 } } })
+      .lower({})
+      .apply(scope.env, undefined as never);
     const result = schemeToJs(
       await exec("(+ x y)", { scope }),
       { forceBigInt: true }
