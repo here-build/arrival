@@ -13,6 +13,19 @@
  * `[STAGED: post-migration]` — a NAMED persistent-handler capability granting
  * a detached scope is explicitly future work, not part of the reverse-wrapper
  * landing these other seven rows gate.
+ *
+ * openRegionScope-gap Ruling A (2026-07-11): the capability/`symbol.rosetta` bind path
+ * used to carry a genuine gap from the legacy `env.defineRosetta` path — `createRosettaWrapper`
+ * (rosetta.ts) opened a region scope around every call; the baked `symbol.rosetta` `run`
+ * wrapper (common/symbols/rosetta.ts) did not, so a `z.procedure` slot's decode fell back to
+ * the shared, never-closing `DETACHED_SCOPE` (`DETACHED_SCOPE.runCtx = CONSTANT_CTX`) for
+ * every capability verb. That gap is CLOSED: `run` now opens a region scope itself, gated on
+ * `contractMayCarryCallable` (_bake.ts) — a bake-time check for a `z.procedure`/`z.value`
+ * input slot — with `runCtx: this.runCtx` (the invocation's LIVE context). The
+ * "region-law-trace-nesting" row below is migrated off `env.defineRosetta` onto
+ * `EnvCapability` + `symbol.rosetta` accordingly; a new "burst-bypass" row pins the concrete
+ * regression this gap caused (a lambda calling a sink verb used to fire it inline instead of
+ * enqueueing under an armed `effects` log).
  */
 import { describe, expect, it } from "vitest";
 import * as z from "../../common/scheme-zod.js";
@@ -22,9 +35,11 @@ import { closeRegionScope, openRegionScope, withRegionScope } from "../../values
 import { CONSTANT_CTX, makeRunContext } from "../../values/primitives/RunContext.js";
 import type { CallCtx } from "../../values/primitives/CallCtx.js";
 import type { SchemeValue } from "../../values/types.js";
-import { execState } from "../../eval/generator-exec.js";
+import { exec, execState } from "../../eval/generator-exec.js";
 import { EvalTrace, type Invocation } from "../../provenance/trace.js";
-import { inferenceEnv } from "../../inference-env.js";
+import { symbol } from "../../common/symbol.js";
+import { EnvCapability } from "../../common/capability.js";
+import { MemoryEffectLog } from "../../values/effect-log.js";
 
 /** A trivial one-arg echo callable — enough surface for the door/identity/
  *  abort rows, which don't care what the callable actually computes. */
@@ -103,50 +118,43 @@ describe("a reverse lambda is region-bound to its invocation", () => {
 
     let before = 0;
     let result: unknown;
-    const env = inferenceEnv.inherit("region-law-trace-nesting");
-    // NOT migrated to `symbol.rosetta` + `EnvCapability` (env.defineRosetta →
-    // EnvCapability sweep, 2026-07-11): this row's whole point is that the LEGACY
-    // `createRosettaWrapper` (rosetta.ts) opens a region scope automatically —
-    // `const scope = openRegionScope({ runCtx, dynSite: inv })` around the
-    // `schemeArgs.map(arg => schemeToJs(arg, options))` conversion, BEFORE `fn` runs,
-    // closed once `fn` settles — exactly the discipline this test asserts nests
-    // correctly across a re-entrant reverse-lambda call. The NEW `symbol.rosetta`
-    // path (`common/symbols/rosetta.ts`'s `run`, bound via `common/capability.ts`'s
-    // "rosetta" case) does NOT call `openRegionScope` anywhere — confirmed by
-    // grepping every call site (only `rosetta.ts:489`, the legacy wrapper, calls it).
-    // `z.procedure()`'s decode (scheme-zod.ts) reads `currentRegionScope() ??
-    // DETACHED_SCOPE` rather than minting one, so a verb declared against the new
-    // machinery would silently fall back to the shared detached scope instead of a
-    // fresh per-invocation one — changing this row's semantics, not just its syntax.
-    // This is a genuine gap between the two paths (not a migration mechanics
-    // question) — flagged rather than papered over with an ad-hoc manual
-    // openRegionScope/closeRegionScope wrap that would duplicate, not exercise,
-    // production machinery. Tracked as a follow-up: either `EnvCapability`'s rosetta
-    // bind needs to open a region scope generically (mirroring the legacy wrapper),
-    // or this row stays pinned to `env.defineRosetta` until a capability-native
-    // reverse-lambda region API exists (the `it.todo` row directly below is the
-    // named future-work marker for the adjacent "persistent handler" case).
-    env.defineRosetta("region-law-capture", {
-      // `this.invocation.currentInvocation` is createRosettaWrapper's own receiver
-      // shape (rosetta.ts:`fn.apply(makeCallCtx(runCtx, inv, argProvenance), …)`) —
-      // the SAME invocation the region scope opened against (`scope.dynSite`).
-      // Calling the wrapper HERE, inside `fn`, awaited before `fn` itself returns,
-      // keeps the re-entry INSIDE the exporting invocation's open scope window —
-      // the region-bound contract this row is testing, not a post-return escape
-      // (that's row 1's job).
-      async fn(this: CallCtx, lambdaWrapper: unknown) {
-        capturedInv = this.invocation.currentInvocation as Invocation | undefined;
-        capturedWrapper = lambdaWrapper as (...a: unknown[]) => Promise<unknown>;
-        before = trace.invocationLog.length;
-        result = await capturedWrapper(41);
-        return null;
+    // MIGRATED (openRegionScope-gap Ruling A, 2026-07-11): `symbol.rosetta`'s baked `run`
+    // wrapper (common/symbols/rosetta.ts) now opens a region scope itself, gated on
+    // `contractMayCarryCallable` (_bake.ts) finding a `z.procedure`/`z.value` input slot — so
+    // a `z.procedure()` arg's decode (scheme-zod.ts) closes over a REAL per-invocation scope
+    // instead of falling back to the shared, never-closing `DETACHED_SCOPE`. This capability
+    // verb declares exactly that slot, restoring the discipline this row exercises.
+    const cap = new EnvCapability("test/region-law-trace-nesting", {
+      symbols: {
+        "region-law-capture": symbol.rosetta`region-law-capture: `(
+          { input: [z.procedure()], output: [z.undefinedResult] },
+          // `this.invocation.currentInvocation` is the run wrapper's own receiver shape
+          // (common/symbols/rosetta.ts's `run`, reached via `common/capability.ts`'s
+          // `rosettaCtx(runCtx)` adapter) — the SAME invocation the region scope opened
+          // against (`scope.dynSite`). Calling the wrapper HERE, inside the impl, awaited
+          // before the impl itself returns, keeps the re-entry INSIDE the exporting
+          // invocation's open scope window — the region-bound contract this row is testing,
+          // not a post-return escape (that's row 1's job).
+          async function (this: CallCtx, lambdaWrapper: (...args: unknown[]) => unknown) {
+            capturedInv = this.invocation.currentInvocation as Invocation | undefined;
+            capturedWrapper = lambdaWrapper as (...a: unknown[]) => Promise<unknown>;
+            before = trace.invocationLog.length;
+            result = await capturedWrapper(41);
+            return undefined;
+          },
+        ),
       },
     });
 
-    await execState("(region-law-capture (lambda (x) (+ x 1)))", { env, tap: trace });
+    await execState("(region-law-capture (lambda (x) (+ x 1)))", { capabilities: [cap], tap: trace });
     expect(capturedInv).toBeDefined();
     expect(capturedWrapper).toBeDefined();
-    expect(result).toBe(42); // sanity: the re-entry actually ran the lambda body
+    // `z.procedure()` declared with no output type keeps "honest untransformed passthrough"
+    // (scheme-zod.ts's own doc on the untyped HOF-callback case) — `result` is the raw scheme
+    // AExact, not a plain JS number (unlike the legacy generic-callable wrapper, which always
+    // ran the result back through `schemeToJs`). `Number(...)` (valueOf) is the sanity check
+    // that actually matters here: the re-entry ran the lambda body and produced 42.
+    expect(Number(result)).toBe(42);
 
     const newInvocations = trace.invocationLog.slice(before);
     expect(newInvocations.length).toBeGreaterThan(0);
@@ -198,4 +206,46 @@ describe("a reverse lambda is region-bound to its invocation", () => {
   it.todo(
     "a persistent handler is a NAMED capability with a detached scope, not a relaxation [STAGED: post-migration]",
   );
+
+  it("BURST-BYPASS CLOSED: a lambda taken via z.procedure re-enters under the LIVE runCtx — a sink it calls ENQUEUES under an armed effects log, never fires inline", async () => {
+    // This is the concrete regression the openRegionScope gap caused: before Ruling A, a
+    // `z.procedure` slot's decode fell back to `DETACHED_SCOPE` (`runCtx: CONSTANT_CTX`, no
+    // `effects`) whenever no OTHER machinery happened to have a region scope ambient — so a
+    // lambda handed to a capability verb, when it called a `sink`-role verb, re-entered under
+    // `CONSTANT_CTX` and hit the run-cache/effects fast path (`runCache === undefined &&
+    // runEffects === undefined`), firing the sink IMMEDIATELY instead of enqueueing it onto
+    // the run's `effects` log — the burst arm's whole discipline (values/run-cache.ts's
+    // `penetrateThroughCache`, arrival-plexus-effect-burst.md §2.3) silently bypassed for any
+    // sink reached through a reverse-lambda re-entry. Sound after the fix because the scope
+    // opened around "call-with-lambda"'s own invocation carries `runCtx: this.runCtx` — the
+    // SAME RunContext the outer `exec(..., { effects })` call minted — so the lambda's body
+    // (evaluated via `applyCallback(callable, args, scope.runCtx)`, region-scope.ts) threads
+    // that live context down to "sink!"'s own `this.runCtx`.
+    let sinkFires = 0;
+    const effects = new MemoryEffectLog();
+    const cap = new EnvCapability("test/region-law-burst-bypass", {
+      symbols: {
+        "sink!": symbol.rosetta`sink!: an effect a lambda re-entry may reach`(
+          { input: [z.number], output: [z.undefinedResult], provenance: "sink" },
+          async (_n: number) => {
+            sinkFires++;
+          },
+        ),
+        "call-with-lambda": symbol.rosetta`call-with-lambda: invoke the lambda arg once`(
+          { input: [z.procedure()], output: [z.undefinedResult] },
+          async (lambdaWrapper: (...args: unknown[]) => unknown) => {
+            await lambdaWrapper();
+            return undefined;
+          },
+        ),
+      },
+    });
+
+    await exec("(call-with-lambda (lambda () (sink! 1)))", { capabilities: [cap], effects });
+
+    expect(sinkFires).toBe(0); // deferred, NEVER fired inline through the re-entry
+    // toMatchObject (not toEqual): the entry also carries `rawArgs` (§5), additive and not
+    // pinned by this row (mirrors effect-log.law.test.ts's own convention).
+    expect(effects.entries).toMatchObject([{ verbName: "sink!", decodedArgs: [1] }]);
+  });
 });

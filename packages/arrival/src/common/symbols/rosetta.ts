@@ -8,9 +8,11 @@ import { attestDeep, freshIfSingleton } from "../../values/attestation.js";
 import { AValue, pointProvenance, unionProvenance } from "../../values/primitives/AValue.js";
 import { jsToScheme } from "../../rosetta.js";
 import { penetrateThroughCache } from "../../values/run-cache.js";
+import { closeRegionScope, openRegionScope, withRegionScope } from "../../values/primitives/region-scope.js";
 import {
   assertCacheClassShape,
   assertProvenanceRoleShape,
+  contractMayCarryCallable,
   extractCallbackRoles,
   type BakeRuntimeOpts,
   CallCtx,
@@ -75,6 +77,13 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
     // construction (the contract the caller declared above), the decoded array always matches.
     const rawImpl = impl as (...args: unknown[]) => unknown;
 
+    // THE REGION-SCOPE GATE (openRegionScope-gap Ruling A) — computed ONCE at bake, off the
+    // SAME normalized `inSchema` every other bake-time gate above already reads. `true` only
+    // for a contract that can hand the impl a live callable (`z.procedure`/`z.value` input
+    // slot — see `contractMayCarryCallable`'s doc for the full gate + the z.value
+    // adjudication); every other verb's `run` below skips the scope entirely — zero cost.
+    const carriesCallable = contractMayCarryCallable(inSchema);
+
     // The interpretive wrapper. Mirrors createRosettaWrapper's spine
     // (schemeToJs → fn → jsToScheme), with the contract codecs standing in for the
     // generic conversions and zod doing the (gated) validation, and the SAME ctx-driven
@@ -89,76 +98,113 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       // createRosettaWrapper's behavior.
       const inputAValues = args.filter((a): a is AValue => a instanceof AValue);
       const inputProvenance = unionProvenance(inputAValues);
+      // Hoisted from step 3 below (still read there, unchanged) — ALSO this call's `dynSite`
+      // for the region scope opened next, mirroring legacy createRosettaWrapper's
+      // `openRegionScope({ runCtx, dynSite: inv })`.
+      const inv = this.invocation.currentInvocation;
 
-      // 1. DECODE args via the input codecs. In zod, a codec's TRANSFORM (the membrane
-      //    crossing) and its input-side VALIDATION are FUSED inside `decode` — you can't
-      //    run the transform without the instanceof/refinement guard. The membrane is
-      //    structural (not optional), so decode always runs. For the primitive codec
-      //    family the only validation BEYOND the transform is `z.integer`'s safe-int check
-      //    (itself part of the boundary contract, not skippable noise) — so `validate`
-      //    is effectively always-on here. The flag stays on the API to track trust and to
-      //    host a real split once a schema carries skippable refinements; the no-op path
-      //    is intentionally NOT faked. TODO(typecheck-skip): wire a transform-only decode
-      //    when a contract gains refinements a trusted caller may skip.
-      void defaultValidate;
-      // kwargs input: a plain-record `contract.inputRest` (its VALUES are ZodType, the CONTAINER
-      // is not) marks a trailing kwargs OBJECT — fold the interleaved `:key value` pairs into that
-      // object (`collectKwargsObject`, the same key-name fold `dict` does) and decode it against
-      // `z.object(shape)`, wrapping the one decoded value as the 1-element args array. A real
-      // `z.ZodType` `inputRest` (variadic tail) or none stays the ordinary array-shaped decode
-      // against `inSchema`. instanceof is the SOUND discriminator: no combinator can make a plain
-      // record satisfy `instanceof ZodType` — a record whose values are ZodType is not itself one.
-      const rest: RestSpec = contract.inputRest;
-      const kwargsSchema = rest !== undefined && !(rest instanceof ZodType) ? z.object(rest) : undefined;
-      const decodedArgs: readonly unknown[] = kwargsSchema
-        ? [z.decode(kwargsSchema, collectKwargsObject(args))]
-        : z.decode(inSchema, args);
+      // REGION DISCIPLINE (openRegionScope-gap Ruling A, values/primitives/region-scope.ts) —
+      // opened ONLY when the bake-time gate (`carriesCallable`, above) found a slot that might
+      // hand the impl a live callable; a lambda-free verb never mints one (zero cost). `runCtx:
+      // this.runCtx` is the invocation's LIVE context — the SAME handle carrying
+      // `cache`/`effects`/`reads` below — so a reverse-lambda minted under this scope (a
+      // `z.procedure` slot's decode, just below) re-enters via `scope.runCtx`: a lambda calling
+      // a sink verb hits the burst arm (`this.runCtx.effects`) instead of firing inline, closing
+      // the burst-bypass hole this ruling exists for. `dynSite: inv` mirrors legacy exactly.
+      // This ONE span — decode through the impl settling — is "symbol invocation" any callable
+      // among `args` region-binds to; closed the INSTANT the impl settles (rule 2: an
+      // incomplete reverse call at that point throws), BEFORE the provenance mint/encode steps
+      // below run — mirrors legacy's own `try { await fn.apply(...) } finally {
+      // closeRegionScope(scope) }` nesting exactly.
+      const scope = carriesCallable ? openRegionScope({ runCtx: this.runCtx, dynSite: inv }) : undefined;
+      let result: unknown;
+      try {
+        // 1. DECODE args via the input codecs. In zod, a codec's TRANSFORM (the membrane
+        //    crossing) and its input-side VALIDATION are FUSED inside `decode` — you can't
+        //    run the transform without the instanceof/refinement guard. The membrane is
+        //    structural (not optional), so decode always runs. For the primitive codec
+        //    family the only validation BEYOND the transform is `z.integer`'s safe-int check
+        //    (itself part of the boundary contract, not skippable noise) — so `validate`
+        //    is effectively always-on here. The flag stays on the API to track trust and to
+        //    host a real split once a schema carries skippable refinements; the no-op path
+        //    is intentionally NOT faked. TODO(typecheck-skip): wire a transform-only decode
+        //    when a contract gains refinements a trusted caller may skip.
+        void defaultValidate;
+        // kwargs input: a plain-record `contract.inputRest` (its VALUES are ZodType, the CONTAINER
+        // is not) marks a trailing kwargs OBJECT — fold the interleaved `:key value` pairs into that
+        // object (`collectKwargsObject`, the same key-name fold `dict` does) and decode it against
+        // `z.object(shape)`, wrapping the one decoded value as the 1-element args array. A real
+        // `z.ZodType` `inputRest` (variadic tail) or none stays the ordinary array-shaped decode
+        // against `inSchema`. instanceof is the SOUND discriminator: no combinator can make a plain
+        // record satisfy `instanceof ZodType` — a record whose values are ZodType is not itself one.
+        const rest: RestSpec = contract.inputRest;
+        const kwargsSchema = rest !== undefined && !(rest instanceof ZodType) ? z.object(rest) : undefined;
+        const decode = (): readonly unknown[] =>
+          kwargsSchema ? [z.decode(kwargsSchema, collectKwargsObject(args))] : z.decode(inSchema, args);
+        // Wrapped in `withRegionScope` when a scope is open — the SYNCHRONOUS window a
+        // `z.procedure` arm's decode reads via `currentRegionScope()` (scheme-zod.ts), so the
+        // minted host-fn wrapper closes over THIS scope instead of falling back to the shared
+        // `DETACHED_SCOPE`.
+        const decodedArgs: readonly unknown[] = scope ? withRegionScope(scope, decode) : decode();
 
-      // 2. RUN the impl with a per-call **invocation `this`** — the SAME flat `CallCtx` the
-      //    dispatch level already handed this wrapper, forwarded straight through (no second
-      //    construction step). The impl still receives ONLY the decoded scheme args
-      //    positionally — ctx is NOT a param. A ctx-coupled verb declares a `function` impl and
-      //    reads run-state off `this` (`this.runCtx.signal` / `this.runCtx.signal?.aborted` /
-      //    `this.invocation`); a pure verb is an arrow that ignores `this`, so
-      //    `impl.call(this, …)` is byte-identical to `impl(…)`. async is implicit.
-      //
-      //    THE RUN-CACHE INTERCEPTION (R2, values/run-cache.ts) sits exactly HERE — the one
-      //    chokepoint where args are decoded and the impl hasn't fired. Gated on the run's
-      //    cache (`this.runCtx.cache` — absent on every non-session run: the fast path below
-      //    is byte-identical to before) and the bake-resolved cache class / sink lineage
-      //    role. A replay-hit serves the DECODED-FACE value in `result`'s place; steps 3–4
-      //    (provenance mint + encode + attestation) then run over it exactly as over a fresh
-      //    impl return — values are never restored around the membrane, only through it.
-      //
-      //    THE BURST ARM (W1, values/effect-log.ts, arrival-plexus-effect-burst.md §2.3)
-      //    rides the SAME chokepoint via `this.runCtx.effects` — a sibling per-run handle,
-      //    not a `cache` field, so a burst run needs no `RunCache` to gather sink effects.
-      //    Its fast-path bypass ALSO checks `runEffects`: a run with an effect log but no
-      //    cache must still reach `penetrateThroughCache` (the burst arm lives inside it).
-      //    THE READ-CLOCK STAMP (W2, values/read-guard.ts, arrival-plexus-effect-burst.md
-      //    §2.4) rides the SAME chokepoint via `this.runCtx.reads` — read-only here (the
-      //    guard CHECK itself runs in the eval loop, after each form): when a burst
-      //    gathers this penetration, `reads.tracker` stamps the entry's
-      //    `enqueuedAtReadClock`. A run with no `reads` seam is unaffected — the fast
-      //    path below only gates on `cache`/`effects`, matching pre-W2 behavior exactly.
-      const runCache = this.runCtx.cache;
-      const runEffects = this.runCtx.effects;
-      const runReads = this.runCtx.reads;
-      const result =
-        runCache === undefined && runEffects === undefined
-          ? await rawImpl.call(this, ...decodedArgs)
-          : await penetrateThroughCache(
-              runCache,
-              // `rawArgs: args` — the pre-decode call args (arrival-provenance-confirmation.md
-              // §5): carried onto a gathered `EffectEntry` verbatim so a confirmation-manifest
-              // host can compute per-argument lineage and reconstruct this effect's own
-              // re-runnable invocation from the provenance-carrying originals.
-              { symbolName: name, cacheClass, sink: provenance === "sink", rawArgs: args },
-              decodedArgs,
-              async () => rawImpl.call(this, ...decodedArgs),
-              runEffects,
-              runReads?.tracker,
-            );
+        // 2. RUN the impl with a per-call **invocation `this`** — the SAME flat `CallCtx` the
+        //    dispatch level already handed this wrapper, forwarded straight through (no second
+        //    construction step). The impl still receives ONLY the decoded scheme args
+        //    positionally — ctx is NOT a param. A ctx-coupled verb declares a `function` impl and
+        //    reads run-state off `this` (`this.runCtx.signal` / `this.runCtx.signal?.aborted` /
+        //    `this.invocation`); a pure verb is an arrow that ignores `this`, so
+        //    `impl.call(this, …)` is byte-identical to `impl(…)`. async is implicit.
+        //
+        //    THE RUN-CACHE INTERCEPTION (R2, values/run-cache.ts) sits exactly HERE — the one
+        //    chokepoint where args are decoded and the impl hasn't fired. Gated on the run's
+        //    cache (`this.runCtx.cache` — absent on every non-session run: the fast path below
+        //    is byte-identical to before) and the bake-resolved cache class / sink lineage
+        //    role. A replay-hit serves the DECODED-FACE value in `result`'s place; steps 3–4
+        //    (provenance mint + encode + attestation) then run over it exactly as over a fresh
+        //    impl return — values are never restored around the membrane, only through it.
+        //
+        //    THE BURST ARM (W1, values/effect-log.ts, arrival-plexus-effect-burst.md §2.3)
+        //    rides the SAME chokepoint via `this.runCtx.effects` — a sibling per-run handle,
+        //    not a `cache` field, so a burst run needs no `RunCache` to gather sink effects.
+        //    Its fast-path bypass ALSO checks `runEffects`: a run with an effect log but no
+        //    cache must still reach `penetrateThroughCache` (the burst arm lives inside it).
+        //    THE READ-CLOCK STAMP (W2, values/read-guard.ts, arrival-plexus-effect-burst.md
+        //    §2.4) rides the SAME chokepoint via `this.runCtx.reads` — read-only here (the
+        //    guard CHECK itself runs in the eval loop, after each form): when a burst
+        //    gathers this penetration, `reads.tracker` stamps the entry's
+        //    `enqueuedAtReadClock`. A run with no `reads` seam is unaffected — the fast
+        //    path below only gates on `cache`/`effects`, matching pre-W2 behavior exactly.
+        const runCache = this.runCtx.cache;
+        const runEffects = this.runCtx.effects;
+        const runReads = this.runCtx.reads;
+        // Also wrapped in `withRegionScope` (belt-and-suspenders beside decode above): covers
+        // the impl's own SYNCHRONOUS prefix (up to its first `await`) for a `z.value` slot,
+        // whose decode does NOT marshal — an impl that calls `schemeToJs`/`applyCallback` on
+        // the raw value itself, synchronously, sees the live scope too. A `z.procedure` slot's
+        // wrapper is already bound to `scope` from decode above; this only matters for the
+        // escape-hatch case (see `contractMayCarryCallable`'s doc).
+        const fire = async (): Promise<unknown> =>
+          scope
+            ? withRegionScope(scope, () => rawImpl.call(this, ...decodedArgs))
+            : rawImpl.call(this, ...decodedArgs);
+        result =
+          runCache === undefined && runEffects === undefined
+            ? await fire()
+            : await penetrateThroughCache(
+                runCache,
+                // `rawArgs: args` — the pre-decode call args (arrival-provenance-confirmation.md
+                // §5): carried onto a gathered `EffectEntry` verbatim so a confirmation-manifest
+                // host can compute per-argument lineage and reconstruct this effect's own
+                // re-runnable invocation from the provenance-carrying originals.
+                { symbolName: name, cacheClass, sink: provenance === "sink", rawArgs: args },
+                decodedArgs,
+                fire,
+                runEffects,
+                runReads?.tracker,
+              );
+      } finally {
+        if (scope) closeRegionScope(scope);
+      }
 
       // 3. PROVENANCE — the SAME spine as createRosettaWrapper. A "source"-role rosetta
       //    (default) MINTS a fresh point off ctx.currentInvocation; a "pipe"-role rosetta is a
@@ -166,7 +212,6 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       //    legacy `pure: true`). With no invocation in ctx (direct-JS) a source also falls back
       //    to the input union. ★The forward-vs-mint choice is provenance-load-bearing: a "pipe"
       //    rosetta that minted would fabricate a fresh origin (the seal-laundering class of bug).
-      const inv = this.invocation.currentInvocation;
       let resultProvenance = inputProvenance;
       if (!forwards && inv && typeof inv.id === "number") {
         if (typeof inv.markProvenancePoint === "function") inv.markProvenancePoint();

@@ -841,6 +841,49 @@ function cacheGateSlots(schema: z.ZodTypeAny): readonly z.ZodTypeAny[] {
   return [schema];
 }
 
+/** THE REGION-SCOPE GATE (openRegionScope-gap Ruling A, arrival-mcp-rework-over-phases.md's
+ *  sibling ruling on capability/symbol.rosetta parity with legacy `createRosettaWrapper`):
+ *  does this contract's (already-normalized) INPUT vector carry a slot that might hand the
+ *  impl a LIVE callable? Two slot kinds can:
+ *  - `z.procedure` — TYPED marshaling; decode ALWAYS wraps the incoming scheme callable into
+ *    a host fn bound to whatever region scope is ambient (`currentRegionScope() ??
+ *    DETACHED_SCOPE`, scheme-zod.ts). If nothing opened a real scope, the wrapper silently
+ *    binds to the shared, never-closing `DETACHED_SCOPE` — a reverse call through it re-enters
+ *    under `DETACHED_SCOPE.runCtx` (`CONSTANT_CTX`), NOT the live run's context, which is
+ *    exactly the burst-bypass hole this gate exists to close (a lambda calling a sink verb
+ *    would fire the sink inline instead of enqueueing under the live run's `effects`).
+ *  - `z.value` — the declared RAW escape hatch ("impl does its own conversion", scheme-zod.ts's
+ *    own doc on `value`): decode performs NO transform, so the impl receives the raw scheme
+ *    value untouched and MAY itself call `schemeToJs`/`applyCallback` on it if it happens to be
+ *    a callable — reading the SAME ambient scope `z.procedure`'s decode reads.
+ *
+ *  Used by `rosetta()` (rosetta.ts) to decide, ONCE at bake, whether its baked `run` wrapper
+ *  needs to open a region scope around a call at all — mirroring the legacy
+ *  `createRosettaWrapper`, which scoped EVERY invocation unconditionally (it had no contract to
+ *  gate on). A lambda-free verb (the overwhelming majority: `+`, `string-append`, every plain
+ *  data-in/data-out rosetta) never mints a scope, never touches the WeakMap wrapper cache —
+ *  zero cost, byte-identical to before this ruling landed.
+ *
+ *  `z.value` is included per an explicit adjudication, not an oversight: contract SHAPE cannot
+ *  see whether a raw value passing through a `z.value` slot happens to be a callable the impl
+ *  later hands to a reverse crossing — under-gating there would silently reopen the exact hole
+ *  this function exists to close for a small, real family of verbs (the manifold/infer `value`
+ *  slots documented in scheme-zod.ts). The ruling errs toward scoping: correctness over the
+ *  micro-cost of an unused scope on the rarer verb that declares `z.value` for something
+ *  genuinely non-callable.
+ *
+ *  Checked on the INPUT side only — `z.procedure`'s own doc bans the OTHER direction ("rosetta
+ *  result is never a bare JS function — provenance untraceable"), and the region discipline this
+ *  gate enables (the escape/pending doors) is specifically about a SCHEME callable crossing INTO
+ *  JS; a JS callback crossing INTO scheme via `z.procedure`'s `encode` arm is a forward crossing
+ *  with no region concern. */
+export function contractMayCarryCallable(inSchema: z.ZodTypeAny): boolean {
+  return cacheGateSlots(inSchema).some((slot) => {
+    const slotName = z.lookupName(slot);
+    return slotName === "procedure" || slotName === "value";
+  });
+}
+
 /** THE `view` SHAPE GATE (errors-as-doors, beside `assertProvenanceRoleShape` — the same
  *  bake-time pattern): a `view` cache class demands a SERIALIZABLE contract — no `z.lambda`
  *  arms (a callable can't be a boundary snapshot), no `z.value` slots (the declared raw
