@@ -222,6 +222,12 @@ function factClauseOf(localized: Localized, paramHead: string): string {
  *  `additionalProperties: false` on the sub-schema, or the current clue is itself an
  *  unexpected-keys rejection (the upstream just demonstrated closed-world behavior). */
 function parameterDump(paramHead: string, subSchema: JsonSchemaProperty, clue: ArgsClue): string {
+  // Deliberately NOT closed-world for the own-decode families: our strict kwargs decode is
+  // closed-world about the TOP-LEVEL parameter names, but this dump describes the failing
+  // param's INNER keys — validated by the upstream, whose openness we only know from the
+  // schema's own additionalProperties or from an unexpected-keys rejection it just emitted.
+  // Marking own-decode clues closed-world here would over-claim one level down (triad
+  // round-3 finding, adjudicated: level confusion — rejected).
   const closedWorld = subSchema.additionalProperties === false || clue.kind === "unexpected-keys";
   const fields = orderedFields(subSchema);
   if (fields.length === 0) {
