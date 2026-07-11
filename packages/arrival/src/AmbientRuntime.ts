@@ -452,3 +452,19 @@ export function bindRosetta(env: AmbientRuntime, name: string, config: RosettaFu
   // carry no role and fall to the classifier's `undefined` default.
   if (config.type !== undefined) rosettaTypesOf(env).set(name, config.type);
 }
+
+/**
+ * Brand check for a concrete arrival AmbientRuntime — the module-dup-robust replacement for
+ * `x instanceof AmbientRuntime`. In the browser (Vite dev serves a module at `?t=<hmr>`,
+ * `/@fs`, and `.vite/deps` as DISTINCT module instances) an env built by one copy of the
+ * class is NOT `instanceof` another copy's class, so every capability-apply / exec guard
+ * spuriously threw `AmbientShapeError`. The static `[CLASS] = "environment"` brand is keyed by
+ * the STRING `"arrival/class"` (well-known-symbols.ts) — a string key is universal across
+ * module copies, and it's inherited by `ResolvingAmbient`, so reading it off the value's
+ * constructor recognizes any real frame regardless of which module instance minted it.
+ */
+export function isAmbientRuntime(value: unknown): value is AmbientRuntime {
+  if (typeof value !== "object" || value === null) return false;
+  const ctor: unknown = Reflect.get(value, "constructor");
+  return typeof ctor === "function" && Reflect.get(ctor, CLASS) === "environment";
+}

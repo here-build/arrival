@@ -25,7 +25,7 @@ import { fromJs } from "./values/primitives/boxing.js";
 import { ABool } from "./values/primitives/ABool.js";
 import { ABytevector } from "./values/primitives/ABytevector.js";
 import { AVector } from "./values/primitives/AVector.js";
-import { AmbientRuntime } from "./AmbientRuntime.js";
+import { AmbientRuntime, isAmbientRuntime } from "./AmbientRuntime.js";
 import { LambdaContext } from "./eval/LambdaContext.js";
 import { AString } from "./values/primitives/AString.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
@@ -138,7 +138,7 @@ export function isSchemeValue(value: unknown): value is BoxedSchemeValue {
     case value instanceof Macro:
     case value instanceof Syntax:
     case value instanceof LambdaContext:
-    case value instanceof AmbientRuntime:
+    case isAmbientRuntime(value):
       return true;
 
     default:

@@ -9,7 +9,7 @@
  *   const results = await exec("(+ 1 2)", { env: myEnv });
  */
 
-import { AmbientRuntime, mintFrame, mintPlainFrame } from "../AmbientRuntime.js";
+import { AmbientRuntime, mintFrame, mintPlainFrame, isAmbientRuntime } from "../AmbientRuntime.js";
 import { user_env, global_env } from "../env-roots.js";
 import run, { evaluate, expectValue, ArrivalError, type EvalTap } from "./evaluator.js";
 import { AmbientShapeError, isHostRuntimeBug, OutputContractError } from "../errors.js";
@@ -130,7 +130,7 @@ export function ensureBaseAssembled(): Promise<void> {
 // so the old direct `as AmbientRuntime` lost its type overlap; narrow HONESTLY on the
 // runtime fact (instanceof) instead of a blind double-cast.
 const preludeExec = (env: SchemeEnv, src: string): Promise<unknown[]> => {
-  if (!(env instanceof AmbientRuntime)) throw new AmbientShapeError("prelude evalScheme", "expected a concrete AmbientRuntime");
+  if (!isAmbientRuntime(env)) throw new AmbientShapeError("prelude evalScheme", "expected a concrete AmbientRuntime");
   return exec(src, { env, skipBootstrapWait: true });
 };
 const capabilityEvalScheme: EvalSchemeInto = preludeExec;
@@ -562,7 +562,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
   // Capabilities.assembled, classifierFromEnv, sealResolutionChain) needs the
   // concrete frame regardless of path, so the check sits right here, at the seam,
   // same honest-instanceof posture as `preludeExec` above (not a cast — a runtime fact).
-  if (!(actualEnv instanceof AmbientRuntime)) throw new AmbientShapeError("exec", "glass `env` must be a concrete AmbientRuntime");
+  if (!isAmbientRuntime(actualEnv)) throw new AmbientShapeError("exec", "glass `env` must be a concrete AmbientRuntime");
 
   // Lazy self-init the runtime bootstrap (native packs + .scm base), so embedders
   // never trigger it manually. `ensureBaseAssembled` is realm-cached (one
@@ -882,7 +882,7 @@ export async function execExpr(
 ): Promise<SchemeValue> {
   const actualEnv = env ?? user_env;
   // Same honest SchemeEnv → AmbientRuntime narrow as execState's seam above.
-  if (!(actualEnv instanceof AmbientRuntime)) throw new AmbientShapeError("execExpr", "glass `env` must be a concrete AmbientRuntime");
+  if (!isAmbientRuntime(actualEnv)) throw new AmbientShapeError("execExpr", "glass `env` must be a concrete AmbientRuntime");
 
   // See exec(): realm-cached lazy bootstrap, awaited once.
   if (!skipBootstrapWait) await ensureBaseAssembled();

@@ -36,7 +36,7 @@ import type { InvocationLike, RosettaFunction } from "../rosetta.js";
 // The retired public `env.defineRosetta` method's internal replacement — this legacy
 // `SymbolDeclaration` bind arm and `provenance/replay.ts`'s playback frame are its only
 // two producers (env-capability-authoring skill's migration recipes name this the way in).
-import { bindRosetta, bindValue, AmbientRuntime, type AmbientValue } from "../AmbientRuntime.js";
+import { bindRosetta, bindValue, AmbientRuntime, type AmbientValue, isAmbientRuntime } from "../AmbientRuntime.js";
 import { CallCtx, makeCallCtx, type CacheClass, type CallbackRoles, type ProvenanceRole } from "./symbols/_bake.js";
 import { type SchemeValue } from "../values/types.js";
 import { AliasTargetError, AmbientShapeError, PreludeArmingError } from "../errors.js";
@@ -314,7 +314,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
         // real AmbientRuntime storage. Packs are applied onto real envs everywhere in production
         // (env-roots leaves, `LexicalScope.fresh()` roots, `inherit()` children thereof); a
         // synthetic structural env cannot RECEIVE bindings — assemble onto a real frame instead.
-        if (!(env instanceof AmbientRuntime)) {
+        if (!isAmbientRuntime(env)) {
           throw new AmbientShapeError(
             `capability "${name}"`,
             `apply target is not an arrival AmbientRuntime — a capability's bindings ` +

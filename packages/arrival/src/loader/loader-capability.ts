@@ -60,7 +60,7 @@ import { theVoid } from "../values/primitives/AVoid.js";
 import invariant from "tiny-invariant";
 import { RequireCycleError, RequireResolverError } from "../errors.js";
 
-import { bindValue, AmbientRuntime, type AmbientValue, mintFrame } from "../AmbientRuntime.js";
+import { bindValue, AmbientRuntime, type AmbientValue, mintFrame, isAmbientRuntime } from "../AmbientRuntime.js";
 import { lookupExtensionResolver, registerExtension } from "./loader-extensions.js";
 import {
   type ContentResolver,
@@ -473,7 +473,7 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
           // narrow to the concrete frame class first (a run env's frames are real AmbientRuntimes
           // by construction), then mint the discarded child through the module-internal fn.
           invariant(
-            env instanceof AmbientRuntime,
+            isAmbientRuntime(env),
             "require/extension: the run env is not an arrival AmbientRuntime — a mid-run prelude scope must be minted off a real frame to receive bindings.",
           );
           const preludeScope = mintFrame(env, `prelude/${name}`);
@@ -492,7 +492,7 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
             // The SAME laundered seam `runEnvOf` always carried (loader.ts's explicit
             // through-`unknown` widen): the assembler is typed over the structural RunEnv,
             // the minted frame is the concrete class; `RunEnv & AmbientRuntime` restates the
-            // narrow above (`env instanceof AmbientRuntime` on a RunEnv) one frame down.
+            // narrow above (`isAmbientRuntime(env)` on a RunEnv) one frame down.
             preludeEvalScope: preludeScope as RunEnv & AmbientRuntime,
           });
           return theVoid; // applied for effect; the pack's symbols are now bound on the env

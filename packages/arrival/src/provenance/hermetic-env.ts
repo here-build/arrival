@@ -40,7 +40,7 @@
  */
 import invariant from "tiny-invariant";
 
-import { bindValue, AmbientRuntime, type AmbientValue, mintFrame, type ResolvingAmbient } from "../AmbientRuntime.js";
+import { bindValue, AmbientRuntime, type AmbientValue, mintFrame, type ResolvingAmbient, isAmbientRuntime } from "../AmbientRuntime.js";
 import { user_env } from "../env-roots.js";
 import { assembleEnv, type EnvPack } from "../common/kernel.js";
 import { schemePacks, type EvalSchemeInto, type SchemeEnv } from "../common/scheme-env.js";
@@ -55,7 +55,7 @@ import { ensureBaseAssembled, exec } from "../eval/generator-exec.js";
  *  before this ever runs — a nested prelude eval must not re-await the (already
  *  settled) realm bootstrap promise. */
 const replayEvalScheme: EvalSchemeInto = (env, source) => {
-  invariant(env instanceof AmbientRuntime, "hermeticEnv: expected a concrete AmbientRuntime");
+  invariant(isAmbientRuntime(env), "hermeticEnv: expected a concrete AmbientRuntime");
   return exec(source, { env, skipBootstrapWait: true });
 };
 
