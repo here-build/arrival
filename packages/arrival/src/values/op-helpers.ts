@@ -10,7 +10,7 @@
  */
 
 import invariant from "tiny-invariant";
-import { CONSTANT_CTX } from "./primitives/RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "./primitives/RunContext.js";
 import { applyCallback } from "./primitives/ACallable.js";
 import { currentRegionScope, isSilentRegion, recordHostScheduleVerdict } from "./primitives/region-scope.js";
 
@@ -261,12 +261,20 @@ const describeOrdElement = (v: unknown): string =>
  *    Number branch REQUIRED: reading number verdict through `!is_false` mis-orders (every
  *    nonzero is scheme-truthy) — a number must be consulted as a number. */
 export function deriveSortCompare(
-  comparator?: (a: unknown, b: unknown) => unknown,
+  comparator: ((a: unknown, b: unknown) => unknown) | undefined,
+  runCtx: RunContext,
 ): (a: unknown, b: unknown) => number {
   if (comparator !== undefined && comparator !== null) {
     // Comparator is a callable VALUE (ANativeProcedure) — invoke through the seam, not bare fn.
     // Sort sync; native cmp returns settled value (lambda cmp → promise, pre-existing limitation).
-    const call = (a: unknown, b: unknown): unknown => applyCallback(comparator, [a, b], CONSTANT_CTX);
+    // `runCtx` threaded (Wave 1, arrival-constant-ctx-audit-2026-07-11.md §2.5 — was the
+    // audit's own top-5 row): both callers (APair/AVector's own `sort` term) already hold a
+    // required, live `runCtx` one hop away. NOTE: this closes the ctx-honesty gap only —
+    // region-scope.ts's own header names a SEPARATE, still-open gap (no `RegionScope` opens
+    // around this comparator loop, so host-schedule/order-attribution provenance isn't
+    // recorded here); that needs `withRegionCall` wiring, a distinct Wave-4 design task this
+    // fix does not invent.
+    const call = (a: unknown, b: unknown): unknown => applyCallback(comparator, [a, b], runCtx);
     // Host-schedule wiring: `sort`'s comparator is the canonical order-dependent
     // selector host — its verdict SEQUENCE (not any single verdict) is the record
     // ("the sequence IS the record"). `recordHostScheduleVerdict` already no-ops
@@ -321,23 +329,33 @@ export function deriveSortCompare(
 
 // Numeric coercion into SchemeExact/SchemeInexact tower
 
-export function coerceNumeric(value: unknown): ANumeric {
+/**
+ * THREADING GAP, confessed (arrival-constant-ctx-audit-2026-07-11.md §2.5): the boxed-operand
+ * arm below correctly preserves the operand's OWN `.ctx`; the raw JS bigint/number arms have
+ * no operand ctx to preserve and mint fresh under `ctx`. `ctx` is OPTIONAL, defaulting to
+ * `CONSTANT_CTX` — every current caller (`env/r7rs/numeric.ts`'s `applyNumeric`,
+ * `env/r7rs/strings.ts`, `env/r7rs/chars.ts`) lives in the env/r7rs cluster (a parallel
+ * agent's file scope, out of bounds here) and does not yet pass one. The honest completion —
+ * each of those call sites threading its own live `runCtx`/`ctxOf(value)` — is THAT cluster's
+ * job; this signature exists so it can be wired without a second signature change.
+ */
+export function coerceNumeric(value: unknown, ctx: RunContext = CONSTANT_CTX): ANumeric {
   switch (true) {
     case value instanceof AExact:
     case value instanceof AInexact:
       return value;
     case typeof value === "bigint":
-      return new AExact(CONSTANT_CTX, value);
+      return new AExact(ctx, value);
     // Safe ints exact (likely Scheme int literals); non-safe + floats inexact
     case typeof value === "number":
-      return Number.isSafeInteger(value) ? new AExact(CONSTANT_CTX, BigInt(value)) : new AInexact(CONSTANT_CTX, value);
+      return Number.isSafeInteger(value) ? new AExact(ctx, BigInt(value)) : new AInexact(ctx, value);
     case value && typeof value === "object" && "valueOf" in value && typeof value.valueOf === "function": {
       const val = value.valueOf();
       switch (true) {
         case typeof val === "bigint":
-          return new AExact(CONSTANT_CTX, val);
+          return new AExact(ctx, val);
         case typeof val === "number":
-          return Number.isSafeInteger(val) ? new AExact(CONSTANT_CTX, BigInt(val)) : new AInexact(CONSTANT_CTX, val);
+          return Number.isSafeInteger(val) ? new AExact(ctx, BigInt(val)) : new AInexact(ctx, val);
         default:
           throw new TypeError(`Cannot convert to SchemeNumeric: ${val}`);
       }
@@ -407,6 +425,10 @@ export function withInputProvenance<T>(args: readonly unknown[], result: T): T {
     if (result instanceof AValue) return result;
     const t = typeof result;
     if (t === "string" || t === "number" || t === "bigint" || t === "boolean") {
+      // PRE-RUN LEGITIMATE, re-verified (arrival-constant-ctx-audit-2026-07-11.md §2.5):
+      // scans `args` for the first boxed operand and inherits ITS ctx — CONSTANT_CTX only
+      // when literally no boxed operand exists among `args` (a genuinely ctx-less call),
+      // the correct `ctxOf`-style idiom already inlined here.
       let ctx = CONSTANT_CTX;
       for (const a of args) {
         if (a instanceof AValue) {
@@ -426,6 +448,8 @@ export function withInputProvenance<T>(args: readonly unknown[], result: T): T {
   }
   const t = typeof result;
   if (t === "string" || t === "number" || t === "bigint" || t === "boolean") {
+    // PRE-RUN LEGITIMATE, re-verified — same idiom as the inactive-oracle branch above:
+    // CONSTANT_CTX only when `inputs` is empty (no boxed operand to inherit from).
     const ctx = inputs.length > 0 ? inputs[0].ctx : CONSTANT_CTX;
     const prov = inputs.length > 0 ? unionProvenance(inputs) : EMPTY_PROVENANCE;
     return fromJs(ctx, result, prov) as T;

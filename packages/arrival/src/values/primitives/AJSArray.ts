@@ -115,14 +115,14 @@ export class AJSArray extends AValue {
   // same as AVector's own map; a borrowed array's map is no longer a foreign-Functor cross-out.
   ["arrival/tagless-final/map"](
     fn: (x: SchemeValue) => SchemeValue | Promise<SchemeValue>,
-    runCtx?: RunContext,
+    runCtx: RunContext,
   ): AVector | Promise<AVector> {
     return this.vec()[tf("map")](fn, runCtx);
   }
 
   ["arrival/tagless-final/filter"](
     pred: ((x: unknown) => unknown | Promise<unknown>) | RegExp,
-    runCtx?: RunContext,
+    runCtx: RunContext,
   ): Promise<AVector> {
     return this.vec()[tf("filter")](pred, runCtx);
   }
@@ -130,12 +130,15 @@ export class AJSArray extends AValue {
   ["arrival/tagless-final/reduce"]<Acc>(
     fn: (element: unknown, acc: Acc) => Acc | Promise<Acc>,
     initial: Acc,
-    runCtx?: RunContext,
+    runCtx: RunContext,
   ): Acc | Promise<Acc> {
     return this.vec()[tf("reduce")](fn, initial, runCtx);
   }
 
-  ["arrival/tagless-final/sort"](comparator?: (a: unknown, b: unknown) => unknown, runCtx?: RunContext): AVector {
+  ["arrival/tagless-final/sort"](
+    comparator: ((a: unknown, b: unknown) => unknown) | undefined,
+    runCtx: RunContext,
+  ): AVector {
     return this.vec()[tf("sort")](comparator, runCtx);
   }
 

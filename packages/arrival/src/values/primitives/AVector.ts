@@ -15,7 +15,7 @@
  * Foldable instances are Fantasy Land (fantasyland/fantasy-land).
  */
 import { CLASS } from "../../well-known-symbols.js";
-import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
+import { type RunContext } from "./RunContext.js";
 import { applyCallback } from "./ACallable.js";
 import { chargeHeap } from "../../heap-budget.js";
 import { is_promise } from "../../eval/guards.js";
@@ -205,7 +205,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   // a separate non-Functor op.)
   ["arrival/tagless-final/map"](
     fn: (x: SchemeValue) => SchemeValue | Promise<SchemeValue>,
-    runCtx?: RunContext,
+    runCtx: RunContext,
   ): AVector | Promise<AVector> {
     // STRICT divergence: generic `map` is a LIST op in R7RS — a vector is not a list. Loose
     // mode tolerates it (the term answers map); strict flags it non-portable. `vector-map` is
@@ -216,12 +216,13 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
       alternative: "use `vector-map` for vectors",
     });
     chargeHeap(runCtx, this.__vector__.length);
-    // `runCtx ?? CONSTANT_CTX`: this term's OWN `runCtx` is optional (the shared
-    // `arrival/tagless-final/map` protocol signature — mirrors APair's map, "one algebra,
-    // every carrier"), so threading it to required is protocol-wide (Wave 1, docs/
-    // working-proposals/arrival-constant-ctx-audit-2026-07-11.md §4) — this `??` is an
-    // explicit confession, not a Wave 0 apology (no live ctx is guaranteed one hop away here).
-    const results = this.__vector__.map((v) => applyCallback(fn, [v], runCtx ?? CONSTANT_CTX));
+    // Wave 1 (arrival-constant-ctx-audit-2026-07-11.md §4): the confession this comment
+    // used to document is closed — `runCtx` is now REQUIRED (mirrors APair's map, "one
+    // algebra, every carrier"; AValue.ts's protocol declaration). The sole production
+    // dispatcher (`env/r7rs/lists.ts`'s single-list `map` arm) already threaded a live
+    // `this.runCtx` through `resolveMethod(seq, tf("map")).call(seq, fn, runCtx)` before
+    // this fix — `?? CONSTANT_CTX` was dead code on every real call path.
+    const results = this.__vector__.map((v) => applyCallback(fn, [v], runCtx));
     // RULINGS.md R2: map is LENGTH-PRESERVING — PROXY the container's own
     // grouping/length-fact stamp through unchanged (mirrors APair's map — "one algebra,
     // every carrier" — the two carriers must agree, not just their element boxes).
@@ -239,7 +240,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   // AND nil dropped). `pred` awaited per element.
   async ["arrival/tagless-final/filter"](
     arg: ((x: SchemeValue) => unknown | Promise<unknown>) | RegExp,
-    runCtx?: RunContext,
+    runCtx: RunContext,
   ): Promise<AVector> {
     // STRICT divergence: `filter` (SRFI-1) is a LIST op — a vector is not a list.
     strictGate(runCtx, {
@@ -251,8 +252,9 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     const pred = arg instanceof RegExp ? (x: SchemeValue) => String(x).match(arg) : arg;
     const out: SchemeValue[] = [];
     for (const v of this.__vector__) {
-      // `runCtx ?? CONSTANT_CTX` confession — same protocol-wide-optional reasoning as map above.
-      const verdict = await applyCallback(pred, [v], runCtx ?? CONSTANT_CTX);
+      // Wave 1 (see map above) — `runCtx` required, confession closed; `env/srfi/srfi-1.ts`'s
+      // `filter` dispatcher already threads a live `this.runCtx` on every real call.
+      const verdict = await applyCallback(pred, [v], runCtx);
       if (!is_false(verdict) && !(verdict instanceof ANil)) out.push(v);
     }
     // filter is LENGTH-CHANGING — the container's own grouping/length-fact stamp is
@@ -270,7 +272,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   async ["arrival/tagless-final/reduce"]<Acc>(
     fn: (element: SchemeValue, acc: Acc) => Acc | Promise<Acc>,
     initial: Acc,
-    runCtx?: RunContext,
+    runCtx: RunContext,
   ): Promise<Acc> {
     // STRICT divergence: `reduce` (SRFI-1) is a LIST op — a vector is not a list.
     strictGate(runCtx, {
@@ -280,8 +282,9 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     });
     chargeHeap(runCtx, this.__vector__.length);
     let acc = initial;
-    // `runCtx ?? CONSTANT_CTX` confession — same protocol-wide-optional reasoning as map above.
-    for (const v of this.__vector__) acc = (await applyCallback(fn, [v, acc], runCtx ?? CONSTANT_CTX)) as Acc;
+    // Wave 1 (see map above) — `runCtx` required, confession closed; `symbol.tagless`'s
+    // dispatcher (the sole caller of this term) always threads a live `this.runCtx`.
+    for (const v of this.__vector__) acc = (await applyCallback(fn, [v, acc], runCtx)) as Acc;
     return acc;
   }
 
@@ -294,12 +297,14 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   // own grouping/length-fact stamp is PROXIED through unchanged (must agree with
   // APair's sort, which proxies identically; the two carriers no longer diverge).
   ["arrival/tagless-final/sort"](
-    comparator?: (a: SchemeValue, b: SchemeValue) => unknown,
-    runCtx?: RunContext,
+    comparator: ((a: SchemeValue, b: SchemeValue) => unknown) | undefined,
+    runCtx: RunContext,
   ): AVector {
     chargeHeap(runCtx, this.__vector__.length);
     const out = this.__vector__.slice();
-    out.sort(deriveSortCompare(comparator as ((a: unknown, b: unknown) => unknown) | undefined));
+    // `runCtx` threaded (Wave 1 — see APair's sort for the full note): the comparator now
+    // runs under THIS invocation's live ctx, not CONSTANT_CTX.
+    out.sort(deriveSortCompare(comparator as ((a: unknown, b: unknown) => unknown) | undefined, runCtx));
     return withInputProvenance([this], new AVector(this.ctx, out));
   }
 

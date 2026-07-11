@@ -101,6 +101,13 @@ export function schemeCompare(a: ANumeric, b: ANumeric): number {
   return Number.NaN; // a NaN operand → incomparable; all chained tests fail
 }
 
+// PRE-RUN LEGITIMATE, re-verified (arrival-constant-ctx-audit-2026-07-11.md §2.5): a public,
+// host-facing string→number utility (re-exported off `index.ts`) with NO in-tree runtime
+// caller as of this pass (grep `parseNumber(` outside this file and its own spec finds only
+// test usage) — distinct from `utils/parsing.ts`'s near-namesake `parse_rational`/
+// `parse_integer`/`parse_float`, which ARE dual-use (called live by `string->number`). No
+// span/crossing concept applies to a bare host utility. If a live rosetta/MCP caller ever
+// appears, it should pass the crossing's own ctx rather than leaning on this default.
 export function parseNumber(str: string): ANumeric {
   str = str.trim();
 

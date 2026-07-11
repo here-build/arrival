@@ -299,7 +299,12 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     return nil;
   }
 
-  // Applicative — single-element list.
+  // Applicative — single-element list. STRUCTURAL SENTINEL, re-verified
+  // (arrival-constant-ctx-audit-2026-07-11.md §2.5): zero dispatchers/callers of
+  // `tagless-final/of` repo-wide as of this pass (`grep '"arrival/tagless-final/of"\]'`).
+  // A no-arg static has no crossing to derive a live ctx from — if a Monoid/Applicative
+  // dispatcher ever lands, this needs a designed answer (a caller-supplied ctx param),
+  // not a threaded param invented here.
   static ["arrival/tagless-final/of"](value: SchemeValue): AListAlike {
     return new APair(CONSTANT_CTX, value, nil);
   }
@@ -568,7 +573,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // Nil-clone tail, same as the old mapPair.
   ["arrival/tagless-final/map"](
     fn: (x: APairAsListValue<Car, Cdr>) => MaybePromise<SchemeValue>,
-    runCtx?: RunContext,
+    runCtx: RunContext,
   ): MaybePromise<AListAlike> {
     chargeHeap(runCtx, countPairElements(this));
     // Spine-walk surfacing elements as `unknown` — the file's canonical convention
@@ -585,15 +590,15 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     // term when it's a callable VALUE and otherwise invokes a host fn with an explicit
     // `this = makeCallCtx(runCtx)` (flat `CallCtx`) — fixes the `this=undefined` crash a bare
     // `fn(x)` caused when the callback (e.g. `cadr`, a rosetta) reads `this.runCtx`.
-    // `runCtx ?? CONSTANT_CTX`: this term's OWN `runCtx` param is optional (the
-    // `arrival/tagless-final/map` protocol member's signature, shared across every
-    // implementor — AVector/AString/ADict/…), so a caller-side thread all the way to a
-    // required param is a protocol-wide change (Wave 1 territory, docs/working-proposals/
-    // arrival-constant-ctx-audit-2026-07-11.md §4), not a Wave 0 one-hop fix. The `??` here
-    // is an explicit, grep-able confession — not the apology idiom Wave 0 deleted from
-    // evaluator.ts (there the live ctx was guaranteed one line away; here it genuinely isn't
-    // yet, absent that protocol-wide thread).
-    const results = elements.map((x) => applyCallback(fn, [x], runCtx ?? CONSTANT_CTX));
+    // Wave 1 (arrival-constant-ctx-audit-2026-07-11.md §4): the confession this comment
+    // used to document is closed — `runCtx` is now a REQUIRED param (AValue.ts's protocol
+    // declaration, mirrored here), so there is no fallback left to reach for. The sole
+    // production dispatcher (`env/r7rs/lists.ts`'s single-list `map` arm) already threaded
+    // a live, defined `this.runCtx` through `resolveMethod(seq, tf("map")).call(seq, fn,
+    // runCtx)` before this fix — `?? CONSTANT_CTX` was dead code on every real call path,
+    // verified via the dispatch chain (`common/symbols/sequence.ts`'s wrapper always
+    // supplies `this.runCtx`, non-optional since Wave 0's `CallCtx` fix).
+    const results = elements.map((x) => applyCallback(fn, [x], runCtx));
     // RULINGS.md R2 (naive-but-explicit strategy): map is
     // LENGTH-PRESERVING — the container's own grouping/length-fact stamp is PROXIED through
     // unchanged onto the rebuilt spine (`withInputProvenance([this], …)` unions `this`'s own
@@ -619,7 +624,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // builtin dispatch — the term owns the algebra.
   ["arrival/tagless-final/filter"](
     arg: ((x: unknown) => unknown | Promise<unknown>) | RegExp,
-    runCtx?: RunContext,
+    runCtx: RunContext,
   ): MaybePromise<AListAlike> {
     chargeHeap(runCtx, countPairElements(this));
     const pred = arg instanceof RegExp ? (x: unknown) => String(x).match(arg) : arg;
@@ -632,8 +637,9 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     }
     // Seam-routed (see map above): `pred` is the user callable OR the RegExp-matcher closure —
     // both invoked with a defined `this`, no bare `pred(x)` crash on a `this.runCtx`-reading callee.
-    // `runCtx ?? CONSTANT_CTX` confession — same protocol-wide-optional reasoning as map above.
-    const verdicts = elements.map((x) => applyCallback(pred, [x], runCtx ?? CONSTANT_CTX));
+    // Wave 1 (see map above) — `runCtx` required, confession closed; `env/srfi/srfi-1.ts`'s
+    // `filter` dispatcher already threads a live `this.runCtx` on every real call.
+    const verdicts = elements.map((x) => applyCallback(pred, [x], runCtx));
     const kept = (verdict: unknown): boolean => !is_false(verdict) && !(verdict instanceof ANil);
     // RULINGS.md R2: filter is LENGTH-CHANGING — the container's own grouping/
     // length-fact stamp is PROVENANCED, minted fresh as the union of (a) the INPUT
@@ -659,7 +665,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   async ["arrival/tagless-final/reduce"]<Acc>(
     fn: (element: unknown, acc: Acc) => Acc | Promise<Acc>,
     initial: Acc,
-    runCtx?: RunContext,
+    runCtx: RunContext,
   ): Promise<Acc> {
     chargeHeap(runCtx, countPairElements(this));
     let acc = initial;
@@ -669,8 +675,9 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
       if (p.car === undefined && p.cdr instanceof ANil) break; // empty-pair sentinel
       // Seam-routed. The dispatch erases the generic `Acc` return to `CallResult`, so cast back
       // at this boundary — the reducer's result IS an `Acc` (a scheme value).
-      // `runCtx ?? CONSTANT_CTX` confession — same protocol-wide-optional reasoning as map above.
-      acc = (await applyCallback(fn, [p.car, acc], runCtx ?? CONSTANT_CTX)) as Acc;
+      // Wave 1 (see map above) — `runCtx` required, confession closed; `symbol.tagless`'s
+      // dispatcher (the sole caller of this term) always threads a live `this.runCtx`.
+      acc = (await applyCallback(fn, [p.car, acc], runCtx)) as Acc;
       node = p.cdr;
     }
     return acc;
@@ -684,7 +691,10 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // before materializing. sort is LENGTH-PRESERVING — the container's own grouping/
   // length-fact stamp is PROXIED through unchanged (`withInputProvenance([this], …)`), same
   // convention as map above — this must agree with AVector's sort (both PROXY).
-  ["arrival/tagless-final/sort"](comparator?: (a: unknown, b: unknown) => unknown, runCtx?: RunContext): AListAlike {
+  ["arrival/tagless-final/sort"](
+    comparator: ((a: unknown, b: unknown) => unknown) | undefined,
+    runCtx: RunContext,
+  ): AListAlike {
     chargeHeap(runCtx, countPairElements(this));
     const out: SchemeValue[] = [];
     let node: unknown = this;
@@ -694,7 +704,14 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
       out.push(p.car);
       node = p.cdr;
     }
-    out.sort(deriveSortCompare(comparator));
+    // `runCtx` threaded (Wave 1, arrival-constant-ctx-audit-2026-07-11.md §2.5's
+    // deriveSortCompare row): the comparator now runs under THIS invocation's live ctx,
+    // not CONSTANT_CTX — closes the metering/cache/effects leak. The SEPARATE host-schedule/
+    // RegionScope wiring `region-scope.ts`'s own header names ("routing a real host
+    // comparator loop through withRegionCall so a scope is open around it") is NOT done
+    // here — that's order-attribution provenance tracking, a distinct Wave-4 design task,
+    // not a ctx-honesty fix.
+    out.sort(deriveSortCompare(comparator, runCtx));
     return withInputProvenance([this], APair.fromArray(this.ctx, out, false));
   }
 

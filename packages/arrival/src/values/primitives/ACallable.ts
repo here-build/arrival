@@ -85,6 +85,12 @@ export class ALambda extends AValue {
     runner: (args: SchemeValue[], runCtx: RunContext, canBounce: boolean) => CallResult;
     ctx?: RunContext;
   }) {
+    // PRE-RUN LEGITIMATE, re-verified (arrival-constant-ctx-audit-2026-07-11.md §2.5): a
+    // lambda's IDENTITY is minted at bake/define time (evalLambda, named-let), not per
+    // invocation — live work threads `runCtx` per-call through `impl(args, runCtx)`
+    // instead. (evaluator.ts's `ctx.runCtx ?? CONSTANT_CTX` upstream fallback at the two
+    // call sites that construct a LONG-LIVED user lambda is a separate, already-closed
+    // Wave-0 concern — not this ctor.)
     super(opts.ctx ?? CONSTANT_CTX);
     this.name = opts.name;
     this.arity = opts.arity;
@@ -131,6 +137,9 @@ export class ANativeProcedure extends AValue {
   readonly #impl: CallableImpl;
 
   constructor(opts: { name: string | symbol; arity: Arity; contract: unknown; impl: CallableImpl; ctx?: RunContext }) {
+    // PRE-RUN LEGITIMATE, re-verified — same reasoning as ALambda's ctor above: a native
+    // procedure's IDENTITY is bound once at capability-assembly time (common/capability.ts),
+    // never per invocation; `impl(args, runCtx)` carries the live per-call ctx instead.
     super(opts.ctx ?? CONSTANT_CTX);
     this.name = opts.name;
     this.arity = opts.arity;
@@ -187,6 +196,9 @@ export class ARosettaProcedure extends AValue {
     impl: CallableImpl;
     ctx?: RunContext;
   }) {
+    // PRE-RUN LEGITIMATE, re-verified — same reasoning as ALambda/ANativeProcedure's ctors
+    // above: bound once at capability-assembly time (scheme-zod.ts's `z.procedure`), never
+    // per invocation.
     super(opts.ctx ?? CONSTANT_CTX);
     this.name = opts.name;
     this.arity = opts.arity;
@@ -248,6 +260,9 @@ export class DoorProcedure extends AValue {
     readonly door: DoorSymbolDef,
     ctx?: RunContext,
   ) {
+    // PRE-RUN LEGITIMATE, re-verified — same reasoning as the sibling ctors above: a door
+    // is bound once at capability-assembly time; it never mints run-tagged output (its
+    // `apply` term unconditionally throws before touching any value).
     super(ctx ?? CONSTANT_CTX);
   }
 

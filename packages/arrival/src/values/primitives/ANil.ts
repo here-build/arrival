@@ -46,6 +46,9 @@ export class ANil extends AValue {
     return {};
   }
 
+  // STRUCTURAL SENTINEL, re-verified (arrival-constant-ctx-audit-2026-07-11.md §2.5):
+  // zero callers repo-wide — scheme `append`/`cons` route through `concatPair`/`APair`'s own
+  // ctor, both of which thread ctx correctly. Fix under the same recipe if this is ever wired.
   append<T extends SchemeValue>(x: T): APair<T, ANil> {
     return new APair<T, ANil>(CONSTANT_CTX, x, nil);
   }
@@ -115,8 +118,18 @@ export class ANil extends AValue {
   // reduce empty cases above; the fl-interop `length` overlay's nil-branch dissolved ONTO
   // the term). No elements ⇒ no provenance to carry, but P4 still requires a boxed AValue
   // (a raw `0` is a bare-value-purge violation — the sibling of the `number->string` bug,
-  // c0852b879c): a fresh empty-provenance `AExact`. No heap-charge / no strict-gating, so
-  // the trailing runCtx `symbol.tagless` threads is ignored.
+  // c0852b879c): a fresh empty-provenance `AExact`.
+  //
+  // THREADING GAP, confessed (arrival-constant-ctx-audit-2026-07-11.md §2.5, top-5-adjacent):
+  // `_runCtx` is discarded, minting under CONSTANT_CTX instead — but this is NOT a one-hop
+  // fix. The sole caller, `env/r7rs/lists.ts`'s `length` builtin (out of THIS cluster's file
+  // scope), dispatches via `m.call(obj)` with NO runCtx argument at all today — so even if
+  // this term read its param, it would still receive `undefined`. The honest completion
+  // needs that call site to thread its own live runCtx (`m.call(obj, runCtx)`), a change
+  // owned by the env/r7rs cluster; wiring only THIS side would still leave the fallback
+  // firing. `nil` itself is always CONSTANT_CTX (the shared singleton — see below), so even
+  // a fixed local read would still resolve to CONSTANT_CTX until that caller-side thread
+  // lands — no functional regression from leaving it as a literal here.
   ["arrival/tagless-final/length"](_runCtx?: unknown): AExact {
     return new AExact(CONSTANT_CTX, 0n);
   }

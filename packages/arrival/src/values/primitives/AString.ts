@@ -36,12 +36,18 @@ export class AString extends AValue {
     return x instanceof AString || typeof x === "string";
   }
 
-  // Monoid (Fantasy Land) — the empty string is the identity for append.
+  // Monoid (Fantasy Land) — the empty string is the identity for append. STRUCTURAL
+  // SENTINEL, re-verified (arrival-constant-ctx-audit-2026-07-11.md §2.5): zero
+  // dispatchers/callers of `tagless-final/empty` repo-wide as of this pass. A no-arg
+  // static has no crossing to derive a live ctx from.
   static ["arrival/tagless-final/empty"](): AString {
     return new AString(CONSTANT_CTX, "");
   }
 
-  // Applicative (Fantasy Land) — lift a value into a SchemeString.
+  // Applicative (Fantasy Land) — lift a value into a SchemeString. STRUCTURAL SENTINEL,
+  // re-verified: zero dispatchers/callers of `tagless-final/of` repo-wide. Same "no
+  // crossing to derive from" reasoning as `empty` above — if a Monoid/Applicative
+  // dispatcher ever lands, this needs a designed answer, not an invented ctx source.
   static ["arrival/tagless-final/of"](value: unknown): AString {
     return new AString(CONSTANT_CTX, String(value));
   }

@@ -29,9 +29,17 @@ export const EMPTY_PROVENANCE: ReadonlySet<number> = new Set<number>();
  * the run-correct source for any value derived from it, else there is no run to
  * inherit (raw JS input) and the run-neutral CONSTANT_CTX is correct. An honest
  * instanceof narrowing — never a cast — so it stays sound when the input is raw.
+ *
+ * `fallback` (docs/working-proposals/arrival-constant-ctx-audit-2026-07-11.md §2.6,
+ * AValue.ts:34 row): the raw-JS arm's "no run to inherit" claim is true for a value
+ * with genuinely no crossing context, but a membrane-adjacent caller DOES have one —
+ * the crossing's own live RunContext — even when the operand itself is a bare
+ * scalar. Optional and defaulted to `CONSTANT_CTX` so every existing bare `ctxOf(x)`
+ * call keeps today's exact meaning; a caller that HAS a crossing ctx passes it
+ * explicitly instead of silently losing it to the raw-JS arm.
  */
-export function ctxOf(x: SchemeValue): RunContext {
-  return x instanceof AValue ? x.ctx : CONSTANT_CTX;
+export function ctxOf(x: SchemeValue, fallback: RunContext = CONSTANT_CTX): RunContext {
+  return x instanceof AValue ? x.ctx : fallback;
 }
 
 export type AKind =
@@ -126,24 +134,39 @@ export abstract class AValue {
   ["arrival/tagless-final/lower"]?(): SchemeValue | null;
   /** Element count — the per-primitive divergence (elements' provenance) lives on the term. */
   ["arrival/tagless-final/length"]?(runCtx?: RunContext): AValue | number;
-  /** Functor — map a fn over the elements (box-preserving or box-stripping per the term). */
+  /** Functor — map a fn over the elements (box-preserving or box-stripping per the term).
+   *  `runCtx` REQUIRED (docs/working-proposals/arrival-constant-ctx-audit-2026-07-11.md
+   *  §4 Wave 1): every real dispatcher (`env/r7rs/lists.ts`'s single-list `map`,
+   *  `common/symbols/sequence.ts`'s wrapper) already threads `this.runCtx` — a live,
+   *  defined RunContext — into the call, so an optional param here only ever bought a
+   *  dead CONSTANT_CTX fallback at the implementor. Required mirrors `apply`'s own
+   *  convention (declared required immediately below), the hottest term in this file. */
   ["arrival/tagless-final/map"]?(
     fn: (x: unknown) => unknown | Promise<unknown>,
-    runCtx?: RunContext,
+    runCtx: RunContext,
   ): SchemeValue | Promise<SchemeValue>;
-  /** Filterable — keep elements matching a pred (or RegExp). */
+  /** Filterable — keep elements matching a pred (or RegExp). `runCtx` required — same
+   *  reasoning as `map` above (`env/srfi/srfi-1.ts`'s dispatcher always threads it). */
   ["arrival/tagless-final/filter"]?(
     pred: ((x: unknown) => unknown | Promise<unknown>) | RegExp,
-    runCtx?: RunContext,
+    runCtx: RunContext,
   ): SchemeValue | Promise<SchemeValue>;
-  /** Foldable left-fold — scheme convention `fn(element, acc)`, seed last. */
+  /** Foldable left-fold — scheme convention `fn(element, acc)`, seed last. `runCtx`
+   *  required — same reasoning as `map` (`symbol.tagless`'s dispatcher always threads
+   *  `this.runCtx`, the sole caller of this term). */
   ["arrival/tagless-final/reduce"]?<Acc>(
     fn: (element: unknown, acc: Acc) => Acc | Promise<Acc>,
     initial: Acc,
-    runCtx?: RunContext,
+    runCtx: RunContext,
   ): Acc | Promise<Acc>;
-  /** Ordering — a sorted sequence (container-preserving); default order is the elements' own `lte`. */
-  ["arrival/tagless-final/sort"]?(comparator?: (a: unknown, b: unknown) => unknown, runCtx?: RunContext): SchemeValue;
+  /** Ordering — a sorted sequence (container-preserving); default order is the elements'
+   *  own `lte`. `runCtx` required — same reasoning as `map` (`env/srfi/srfi-95.ts`'s
+   *  dispatcher always threads it; APair/AVector's own impls thread it into
+   *  `deriveSortCompare`, op-helpers.ts). */
+  ["arrival/tagless-final/sort"]?(
+    comparator: ((a: unknown, b: unknown) => unknown) | undefined,
+    runCtx: RunContext,
+  ): SchemeValue;
   /** Applicable — INVOKE this value as a procedure. Callability IS declaring this term: the
    *  evaluator call-head, the R7RS `apply` builtin, and every HOF dispatch through it uniformly,
    *  the same `resolveMethod` path `map`/`car` use. `args` are the scheme-value operands, `runCtx`
