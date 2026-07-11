@@ -23,7 +23,7 @@ type MethodName = (typeof LS_METHODS)[number];
 /** Wire method name → a real service method, proven for the type-checker. `.some`
  *  with `===` compares each literal against the string with no cast (unlike
  *  `LS_METHODS.includes`, whose param is the literal union and rejects a `string`). */
-const isMethodName = (m: string): m is MethodName => LS_METHODS.includes(m);
+const isMethodName = (m: string): m is MethodName => LS_METHODS.some((x) => x === m);
 
 /** `(require …)` resolution over the wire: a CALLBACK can't cross postMessage,
  *  so each CONNECTION pushes its project-files table ({kind:"files"}) and the
