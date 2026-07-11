@@ -36,7 +36,6 @@
     "@codemirror/lint": "6.9.5",
     "@codemirror/state": "6.6.0",
     "@codemirror/view": "6.43.0",
-    "@here.build/arrival-chain": "workspace:^",
     "@here.build/arrival-sugarcoat": "workspace:^",
     "@here.build/arrival-sampler": "workspace:^",
     "@here.build/arrival-type-lens": "workspace:^",
