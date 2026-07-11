@@ -15,8 +15,11 @@
  * `runRaw`/`run` own a single module-level `seq` so every inherited env name is
  * unique across the whole suite (the name is a debug label only — `inherit` does
  * not key behavior on it). An optional `setup` hook runs against the fresh env
- * BEFORE the bindings are set, which is the one degree of freedom golden-prov-infer
- * needs to register its deterministic `defineRosetta` sources.
+ * BEFORE the bindings are set, which is the one degree of freedom golden-prov-infer /
+ * lineage-grounding need to wire their deterministic fake-source `EnvCapability`
+ * (`symbol.rosetta` verbs — the `env.defineRosetta` migration target, 2026-07-11).
+ * `EnvSetup` is `void | Promise<void>` for exactly this: a capability's `.lower({})
+ * .apply(env, …)` is async, unlike the legacy `defineRosetta` call it replaced.
  */
 import * as z from "../common/scheme-zod.js";
 import { initBridge } from "../index.js";
@@ -39,8 +42,11 @@ export const sStr = (s: string, p: number): AString => z.string.encode(s).withPr
  *  encode canonicalizes to AInexact — matches fromJs's old default for a bare JS number. */
 export const sNum = (n: number, p: number): AValue => z.number.encode(n).withProvenance(new Set([p]));
 
-/** A per-env setup applied before the bindings are written (e.g. `defineRosetta`). */
-export type EnvSetup = (env: Environment) => void;
+/** A per-env setup applied before the bindings are written — e.g. wiring a test-local
+ *  `EnvCapability` (`symbol.rosetta` verbs) via `cap.lower({}).apply(env, undefined as
+ *  never)`, which is async, hence the `Promise<void>` arm (widened from the legacy
+ *  `defineRosetta`-only, synchronous-only shape). */
+export type EnvSetup = (env: Environment) => void | Promise<void>;
 
 let seq = 0;
 
@@ -68,7 +74,7 @@ export async function runRaw(
 ): Promise<SchemeValue | undefined> {
   await initBridge();
   const env = inferenceEnv.inherit(`lin-test-${seq++}`);
-  setup?.(env);
+  await setup?.(env);
   for (const [k, v] of Object.entries(binds)) env.set(k, jsToScheme(CONSTANT_CTX, v));
   const savedOracle = isEagerProvenanceOracleEnabled();
   setEagerProvenanceOracleEnabled(true);

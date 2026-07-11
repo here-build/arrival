@@ -50,6 +50,9 @@ import {
 import { setEmissionEnabled } from "../../provenance/store/emit.js";
 import type { Payload } from "../../provenance/store/interfaces.js";
 import type { EmittedWire, WireframeGraph } from "../../provenance/wireframe/types.js";
+import { symbol, type RosettaSymbolDef } from "../../common/symbol.js";
+import { EnvCapability } from "../../common/capability.js";
+import * as z from "../../common/scheme-zod.js";
 import { prospectiveSourceCone } from "./w1-harness.js";
 import { CORPUS_BASE_NAMES, CORPUS_ROLES, W1_CORPUS, genLinearProgram, type CorpusEntry } from "./w1-corpus.js";
 import { freezeMints, recordRun, replayedCone, type RecordedRun, type RecordingShape } from "./q16-harness.js";
@@ -231,17 +234,20 @@ describe("replay-nondeterminism (§4 R1 + §7: frozen-payload replay stable unde
     return buildWireframe(forms, { classifier: MUTATED_ROLES, isBaseName: corpusIsBaseName });
   }
 
-  /** The mutated world: same ops, DIFFERENT answers (offset by +1000), live. */
-  function mutatedEnv(calls: Map<string, number>) {
+  /** The mutated world: same ops, DIFFERENT answers (offset by +1000), live. A
+   *  test-local `EnvCapability` (`symbol.rosetta` verbs — the `env.defineRosetta`
+   *  migration target), one verb per source op, all sharing the SAME per-op call
+   *  counter closure the legacy loop built. */
+  async function mutatedEnv(calls: Map<string, number>) {
     const env = inferenceEnv.inherit("q16-mutated-world");
+    const symbols: Record<string, RosettaSymbolDef> = {};
     for (const op of Object.keys(SOURCES)) {
-      env.defineRosetta(op, {
-        fn: () => {
-          calls.set(op, (calls.get(op) ?? 0) + 1);
-          return 1000 + (calls.get(op) ?? 0);
-        },
+      symbols[op] = symbol.rosetta`${op}: mutated-world source (offset +1000)`({ input: [], output: [z.number] }, () => {
+        calls.set(op, (calls.get(op) ?? 0) + 1);
+        return 1000 + (calls.get(op) ?? 0);
       });
     }
+    await new EnvCapability("test/mutated-world", { symbols }).lower({}).apply(env, undefined as never);
     return env;
   }
 
@@ -253,7 +259,7 @@ describe("replay-nondeterminism (§4 R1 + §7: frozen-payload replay stable unde
 
     // The world mutates: the same ops now answer 1001, 1002, 1003.
     const mutatedCalls = new Map<string, number>();
-    const live = await execState(CODE, { env: mutatedEnv(mutatedCalls) });
+    const live = await execState(CODE, { env: await mutatedEnv(mutatedCalls) });
     const liveNow = schemeToJs(live.values[live.values.length - 1], {});
     expect(liveNow).not.toEqual(run.egress); // the mutation is REAL — a live call answers differently now
 
@@ -283,7 +289,7 @@ describe("replay-nondeterminism (§4 R1 + §7: frozen-payload replay stable unde
     // Fresh live run #1 and #2 under the mutated world: each is its own run — they
     // even differ from EACH OTHER (the gensym/clock-shaped ops advance), which is
     // exactly why re-execution stability is excluded rather than merely weakened.
-    const env = mutatedEnv(mutatedCalls);
+    const env = await mutatedEnv(mutatedCalls);
     const live1 = schemeToJs((await execState(CODE, { env })).values[0], {});
     const live2 = schemeToJs((await execState(CODE, { env })).values[0], {});
     expect(live1).not.toEqual(run.egress);
@@ -434,7 +440,21 @@ describe("effect-track replay-between-records (§4 CHOSEN, §7 sub-gate)", () =>
     // stream and the stretches from γ, and the live op is never consulted.
     const mutated = inferenceEnv.inherit("q16-mutated-effect");
     let liveCalls = 0;
-    mutated.defineRosetta("emit-step!", { fn: (x: unknown) => ((liveCalls++, Number(x) * 100)) });
+    // Test-local EnvCapability (`symbol.rosetta` — the `env.defineRosetta` migration
+    // target). `mutated` is never actually touched by `replayBetweenRecords` below (no
+    // `env` field in its args) — this binding exists only so `liveCalls` staying 0
+    // is a meaningful (not vacuously-typed-away) assertion that the live op is never
+    // consulted, exactly the legacy fixture's own shape.
+    const emitStep = symbol.rosetta`emit-step!: mutated-world effect echo (×100)`(
+      { input: [z.number], output: [z.number] },
+      (x) => {
+        liveCalls++;
+        return x * 100;
+      },
+    );
+    await new EnvCapability("test/mutated-effect", { symbols: { "emit-step!": emitStep } })
+      .lower({})
+      .apply(mutated, undefined as never);
     const replayAgain = await replayBetweenRecords({
       store: run.store,
       payloads: run.payloads,

@@ -26,10 +26,15 @@ describe("schemePacks — bootstrap + wire, in dependency order", () => {
     const evalScheme: EvalSchemeInto = (_e, src) => void log.push(`eval:${src}`);
     const make = schemePacks(evalScheme);
 
-    const pack = make({ name: "p", bootstrap: "(define-macro …)", wire: (e) => e.defineRosetta("op", { fn: () => 0 }) });
+    // The wire step exercises "wire can mutate env" generically — the exact env
+    // method is incidental to what THIS law pins (bootstrap-then-wire ordering), so a
+    // plain `set` stands in for the legacy `defineRosetta("op", { fn: () => 0 })` call
+    // this fixture used before the migration (the `SchemeEnv` mock above still
+    // declares `defineRosetta` — the interface itself isn't touched by this file).
+    const pack = make({ name: "p", bootstrap: "(define-macro …)", wire: (e) => e.set("op", 0) });
     await assembleEnv(env, [pack]);
 
-    expect(log).toEqual(["eval:(define-macro …)", "rosetta:op"]);
+    expect(log).toEqual(["eval:(define-macro …)", "set:op"]);
   });
 
   // INVARIANT: a dependency's bootstrap runs before its dependent's (C3 order).

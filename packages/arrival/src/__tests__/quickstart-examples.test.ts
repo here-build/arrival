@@ -4,9 +4,12 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
  */
 
 import { describe, expect, it } from "vitest";
-import { exec, execState, jsToScheme, schemeToJs } from "../index.js";
+import { exec, execState, jsToScheme, schemeToJs, schemeToJsUntyped } from "../index.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../inference-env.js";
+import { symbol } from "../common/symbol.js";
+import { EnvCapability } from "../common/capability.js";
+import * as z from "../common/scheme-zod.js";
 
 describe("Quick Start Examples", () => {
   it("Basic execution example", async () => {
@@ -23,10 +26,17 @@ describe("Quick Start Examples", () => {
   });
 
   it("Register custom functions with Rosetta", async () => {
-    // Register a domain function - JS arrays become Scheme lists automatically
-    sandboxedEnv.defineRosetta("double-all", {
-      fn: (numbers: number[]) => numbers.map((x) => x * 2),
-    });
+    // Register a domain function via a test-local EnvCapability (`symbol.rosetta` —
+    // the `env.defineRosetta` migration target). `z.list(z.number)` on both sides:
+    // scheme proper-list ↔ JS `number[]`, decoded/encoded through the contract codecs
+    // — JS arrays become Scheme lists automatically, same as the legacy fixture.
+    const doubleAll = symbol.rosetta`double-all: doubles every element of a numeric list`(
+      { input: [z.list(z.number)], output: [z.list(z.number)] },
+      (numbers) => numbers.map((x) => x * 2),
+    );
+    await new EnvCapability("test/double-all", { symbols: { "double-all": doubleAll } })
+      .lower({})
+      .apply(sandboxedEnv, undefined as never);
 
     // execState (COMPLEX tier): schemeToJs wants BOXED values — `exec` already unwraps.
     const { values: results } = await execState(
@@ -40,10 +50,21 @@ describe("Quick Start Examples", () => {
   });
 
   it("Working with complex data", async () => {
-    // Register function that filters objects
-    sandboxedEnv.defineRosetta("high-priority-users", {
-      fn: (users: Array<{ id: string; priority: number }>) => users.filter((u) => u.priority > 10),
-    });
+    // Register function that filters objects — arbitrary-shaped JS data (an array of
+    // `{id, priority}` records), so both slots stay `z.value` (the rosetta escape
+    // hatch: "impl receives/returns raw scheme value, does its own schemeToJs/
+    // jsToScheme" — scheme-zod.ts's own doc) and the impl does the conversion inline,
+    // exactly what the legacy `defineRosetta` wrapper did automatically for every call.
+    const highPriorityUsers = symbol.rosetta`high-priority-users: filters users by priority`(
+      { input: [z.value], output: [z.value] },
+      (rawUsers) => {
+        const users = schemeToJsUntyped(rawUsers) as Array<{ id: string; priority: number }>;
+        return jsToScheme(CONSTANT_CTX, users.filter((u) => u.priority > 10));
+      },
+    );
+    await new EnvCapability("test/high-priority-users", { symbols: { "high-priority-users": highPriorityUsers } })
+      .lower({})
+      .apply(sandboxedEnv, undefined as never);
 
     // Pass JS data to Scheme
     const users = [

@@ -49,6 +49,11 @@ import { describe, it, expect } from "vitest";
 import { AValue } from "../values/primitives/AValue.js";
 import { provOf } from "../values/lineage-shadow.js";
 import { sStr, runRaw, type EnvSetup } from "./_lineage-test-helpers.js";
+import { symbol } from "../common/symbol.js";
+import { EnvCapability } from "../common/capability.js";
+import * as z from "../common/scheme-zod.js";
+import { jsToScheme } from "../rosetta.js";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 
 // Fixed mint ids — stand-ins for "whatever the membrane minted at this crossing".
 // The SHAPE of how they flow (born / propagate / merge / narrow) is the invariant;
@@ -58,17 +63,51 @@ const MINT_Y = 600; // infer-y's minted leaf
 const FIELD_ID = 700; // infer-dict's `field` slot id
 const OTHER_ID = 701; // infer-dict's `other` slot id (must be PRUNED by the projection)
 
-// Register deterministic fake Rosetta-IN sources on the run env. Each fake source
-// IGNORES its argument and returns an already-stamped value: this is the "data is
-// born at the membrane" behavior — the result's provenance is the mint, independent
-// of the (literal) input. Mirrors lineage-assumptions.test.ts env.defineRosetta(...).
-const inferSources: EnvSetup = (env) => {
+// Register deterministic fake Rosetta-IN sources on the run env via a test-local
+// `EnvCapability` (`symbol.rosetta` verbs — the `env.defineRosetta` migration target).
+// Each fake source IGNORES its argument and returns an already-stamped value: this is
+// the "data is born at the membrane" behavior — the result's provenance is the mint,
+// independent of the (literal) input. Mirrors lineage-assumptions.test.ts's own
+// (still-legacy) `env.defineRosetta(...)` fixtures.
+//
+// `output: [z.value]` (the rosetta escape hatch — "impl returns raw, does its own
+// conversion") is load-bearing here, not cosmetic: it makes `run()` (common/symbols/
+// rosetta.ts) skip `z.encode` for this slot and hand the impl's return straight to
+// `jsToScheme(runCtx, result, {}, resultProvenance)` — the EXACT spine
+// `createRosettaWrapper` (rosetta.ts) used for legacy `defineRosetta`. With no live
+// `ctx.currentInvocation` (a direct `execState` run, same as `runRaw` here),
+// `resultProvenance` falls back to the (empty) input-provenance union, and
+// `jsToScheme`'s "AValue → identity / provenance re-stamp" inbound claim short-circuits
+// on `p === EMPTY_PROVENANCE`, returning the fixture's OWN stamp untouched — byte-
+// identical to what `defineRosetta`'s wrapper did. Provenance role left at its "source"
+// default (mint-on-invocation) — the same default legacy `defineRosetta` (no `pure`)
+// carried.
+const inferSources: EnvSetup = async (env) => {
   // infer-x / infer-y: scalar sources, each minting a single fixed leaf.
-  env.defineRosetta("infer-x", { fn: () => sStr("RESULT-X", MINT_X) });
-  env.defineRosetta("infer-y", { fn: () => sStr("RESULT-Y", MINT_Y) });
+  const inferX = symbol.rosetta`infer-x: fake Rosetta-IN scalar source (X)`(
+    { input: [z.string], output: [z.value] },
+    () => sStr("RESULT-X", MINT_X),
+  );
+  const inferY = symbol.rosetta`infer-y: fake Rosetta-IN scalar source (Y)`(
+    { input: [z.string], output: [z.value] },
+    () => sStr("RESULT-Y", MINT_Y),
+  );
   // infer-dict: a structured source whose fields carry DISTINCT per-field ids, so a
-  // field projection has something to narrow FROM (two ids) TO (one id).
-  env.defineRosetta("infer-dict", { fn: () => ({ field: sStr("FV", FIELD_ID), other: sStr("OV", OTHER_ID) }) });
+  // field projection has something to narrow FROM (two ids) TO (one id). The raw
+  // `{ field, other }` object isn't itself a `SchemeValue` (TS needs one for a `z.value`
+  // slot) — `jsToScheme(CONSTANT_CTX, …)` at its default EMPTY provenance borrows it as
+  // an AJSObject WITHOUT touching the already-stamped field values (a shallow, lazy-
+  // entries wrap), so this pre-wrap is representationally a no-op vs. handing the raw
+  // object straight to `run()`'s own final `jsToScheme` call (which would otherwise do
+  // the identical borrow itself).
+  const inferDict = symbol.rosetta`infer-dict: fake Rosetta-IN structured source`(
+    { input: [z.string], output: [z.value] },
+    () => jsToScheme(CONSTANT_CTX, { field: sStr("FV", FIELD_ID), other: sStr("OV", OTHER_ID) }),
+  );
+  const cap = new EnvCapability("test/infer-sources", {
+    symbols: { "infer-x": inferX, "infer-y": inferY, "infer-dict": inferDict },
+  });
+  await cap.lower({}).apply(env, undefined as never);
 };
 
 // provenance of the result (the infer sources are registered via the setup hook)

@@ -10,6 +10,9 @@ import { describe, expect, it } from "vitest";
 import { inferenceEnv } from "../inference-env.js";
 import { exec } from "../eval/generator-exec.js";
 import { jsToScheme, schemeToJs } from "../rosetta.js";
+import { symbol } from "../common/symbol.js";
+import { EnvCapability } from "../common/capability.js";
+import * as z from "../common/scheme-zod.js";
 
 // Helper to execute and get first result
 async function execOne(expr: string, env = inferenceEnv): Promise<any> {
@@ -72,18 +75,26 @@ describe("Escaped Symbol Resolution", () => {
 
   describe("Escaped symbols in function names", () => {
     it("should define and call functions with escaped names", async () => {
-      inferenceEnv.defineRosetta("get-24", {
-        fn: () => 24,
-      });
+      // A test-local EnvCapability (`symbol.rosetta` — the `env.defineRosetta`
+      // migration target). The bound verb's KEY is the exact scheme-facing name — a
+      // space or a leading digit is a perfectly ordinary JS object-property string, so
+      // `capability.ts`'s binder (`env.set(verb, proc)`) doesn't care that the reader
+      // only reaches it through `|escaped|` syntax.
+      const get24 = symbol.rosetta`get-24: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 24);
+      await new EnvCapability("test/get-24", { symbols: { "get-24": get24 } }).lower({}).apply(inferenceEnv, undefined as never);
 
       const result = await execOne(`(|get-24|)`);
       expect(schemeToJs(result, {})).toBe(24);
     });
 
     it("should define functions with space-containing names", async () => {
-      inferenceEnv.defineRosetta("my function", {
-        fn: (x: number) => x * 2,
-      });
+      const myFunction = symbol.rosetta`my function: doubles its argument`(
+        { input: [z.number], output: [z.number] },
+        (x) => x * 2,
+      );
+      await new EnvCapability("test/my-function", { symbols: { "my function": myFunction } })
+        .lower({})
+        .apply(inferenceEnv, undefined as never);
 
       const result = await execOne(`(|my function| 21)`);
       expect(schemeToJs(result, {})).toBe(42);

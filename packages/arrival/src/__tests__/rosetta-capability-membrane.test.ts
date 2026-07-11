@@ -1,32 +1,56 @@
 /**
- * Legacy `env.defineRosetta` exercises — quarantined survivor of
- * `rosetta-environment.test.ts` (docs/test-suite-v2/REMOVAL-MANIFEST.md §A).
+ * `EnvCapability`-authored rosetta verbs, exercised through the same real-world data
+ * shapes `rosetta-environment.test.ts` used to pin against the legacy
+ * `Environment.defineRosetta` authoring form (docs/test-suite-v2/REMOVAL-MANIFEST.md
+ * §A). Migrated 2026-07-11 off `env.defineRosetta` directly, in favor of
+ * `symbol.rosetta` + `new EnvCapability(...).lower({}).apply(env, …)` — the target
+ * authoring form every capability under `foundations/arrival/**` now uses (the SAME
+ * membrane/wrapper spine `common/symbols/rosetta.ts`'s `run()` builds, proven end-to-end
+ * in `common/__tests__/capability-rosetta-symbol.test.ts`).
  *
- * The file's "LIPS → JS Conversion" / "JS → LIPS Conversion" / "Rosetta Function
- * Wrapping" describes retired 2026-07-09 (G2): their conversion round-trips are now
- * covered more rigorously by `membrane/crossing.law.test.ts`'s CROSSINGS table (every
- * value type × both directions × round-trip promise, driven off one shared table
- * instead of ad hoc per-case asserts). The one genuinely novel regression case
- * (symbol-keyed properties surviving the JS→scheme→JS round-trip) and the one
- * design-pending stub (empty list → empty array) moved into that file too.
+ * This file's OWN survivors after that migration:
+ *   - "Environment.defineRosetta" / "Real-world Use Cases" — membrane round-trips over
+ *     real-world-shaped JS data (arrays of records, nested style dicts, chained calls)
+ *     that `capability-rosetta-symbol.test.ts`'s scalar-typed codec proofs don't cover.
+ *     These pin GENERIC membrane behavior (schemeToJs/impl/jsToScheme round-tripping),
+ *     which is authoring-form-agnostic — they survive as capability-authored pins.
+ *   - "createRosettaWrapper — mandatory `this: CallCtx`" — DELETED (not migrated). Both
+ *     rows exercised a JS-level misuse vector SPECIFIC to `defineRosetta`'s own binding
+ *     shape: the legacy wrapper is bound in env as a BARE async function, so a caller
+ *     could `Reflect.apply(wrapper, <bad receiver>, …)` and the wrapper had to defend
+ *     itself at runtime. Under `EnvCapability`, a rosetta verb binds as an
+ *     `ARosettaProcedure` INSTANCE (never a bare function) invoked only through the
+ *     `arrival/tagless-final/apply` term, which the binder (`capability.ts`'s rosetta
+ *     case) ALWAYS calls with a correctly-constructed `CallCtx`
+ *     (`rosettaCtx(runCtx)`/`makeCallCtx`) — there is no bare closure left to
+ *     `Reflect.apply` a bad receiver onto. The misuse vector is eliminated
+ *     STRUCTURALLY (wrong states impossible), not defended against at runtime, so the
+ *     two "throws on bad receiver" pins have nothing left to express against the new
+ *     binding shape and are removed rather than translated.
  *
- * What's left below (`Environment.defineRosetta` + "Real-world Use Cases") does NOT
- * die with that move: B4's audit (2026-07-09) confirmed the legacy `env.defineRosetta`
- * authoring arm is still load-bearing OUTSIDE this package — `McpEnvCapability`
- * (arrival-mcp) and every real downstream consumer (inhuman/sift-submission/mcp,
- * here.build/saas/server/{mcp,arrival}, inhuman/saas/mcp) construct `SymbolDeclaration`s
- * this exact way. See `src/__tests__/ledger/index.law.test.ts`'s INVERSIONS row
- * "defineRosetta legacy arm authoring form" (gate: McpEnvCapability annotation-lifting)
- * — these rows travel with THAT migration, not this file's retirement.
+ * `env.defineRosetta` itself (the `Environment` method) stays production code — it is
+ * still the mechanism `EnvCapability.apply()`'s LEGACY `SymbolDeclaration` arm binds
+ * through (`capability.ts`'s own doc: "load-bearing OUTSIDE it" — McpEnvCapability and
+ * every downstream consumer still author verbs the bare-fn/`{fn,...}` way). That is a
+ * SEPARATE migration (`src/__tests__/ledger/index.law.test.ts`'s INVERSIONS row
+ * "defineRosetta legacy arm authoring form", gated on McpEnvCapability's
+ * annotation-lifting) — this file only stops CALLING `env.defineRosetta` directly from
+ * arrival core's own tests.
  */
 import invariant from "tiny-invariant";
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { AString } from "../values/primitives/AString.js";
 import { inferenceEnv } from "../inference-env.js";
-import { jsToScheme, schemeToJs } from "../rosetta.js";
-import { testCallCtx } from "../common/symbols/_bake.js";
+import { jsToScheme, schemeToJs, schemeToJsUntyped } from "../rosetta.js";
 import { exec } from "../eval/generator-exec.js";
+import { symbol } from "../common/symbol.js";
+import { EnvCapability } from "../common/capability.js";
+import * as z from "../common/scheme-zod.js";
+import { ARosettaProcedure } from "../values/primitives/ACallable.js";
+import { withDynamicCallSite } from "../eval/dynamic-call-site.js";
+import { tf } from "../values/tagless-final.js";
+import type { SchemeValue } from "../values/types.js";
 
 // Helper to unwrap exec results
 async function execOne(expr: string): Promise<any> {
@@ -34,60 +58,61 @@ async function execOne(expr: string): Promise<any> {
   return results[0];
 }
 
-// `Environment.get` returns the wide `EnvironmentValue` union, which now carries
-// several distinct callable shapes (AProcedure + two builtin signatures). A bare
-// `typeof === "function"` narrows to that union-of-functions, which TS refuses to
-// invoke (incompatible call signatures). This guard collapses a hit to ONE coherent
-// callable signature — the honest shape of a rosetta wrapper (variadic args in).
-function isCallable(value: unknown): value is (...args: any[]) => unknown {
-  return typeof value === "function";
+/** A bound value narrows to a callable rosetta verb — the honest shape of what
+ *  `EnvCapability`'s rosetta case binds (an `ARosettaProcedure` instance, never a bare
+ *  function — see this file's header for why that closes off the old
+ *  `Reflect.apply`-a-bad-receiver misuse vector entirely). */
+function isRosettaVerb(value: unknown): value is ARosettaProcedure {
+  return value instanceof ARosettaProcedure;
 }
 
-describe("Rosetta Environment", () => {
-  // [RETAGGED 2026-07-09, B4 — was INVERTS: reverse-membrane/P1] exercises the legacy
-  // `env.defineRosetta` arm — P1's own "Revealed by" line names this exact form as a JS
-  // artifact living in value space without lineage, still true. Does NOT die with B1-B3
-  // (landed 2026-07-09): the ledger already carries the precise gate — see
-  // `src/__tests__/ledger/index.law.test.ts`'s INVERSIONS row "defineRosetta legacy arm
-  // authoring form" (gate: McpEnvCapability annotation-lifting). Confirmed still undone:
-  // `McpEnvCapability` (arrival-mcp/src/McpEnvCapability.ts) authors every verb as a bare fn /
-  // RosettaSpec-shaped object, and every real downstream consumer (inhuman/sift-submission/
-  // mcp/src/packs/*.ts, here.build/saas/server/{mcp,arrival}, inhuman/saas/mcp) constructs
-  // `SymbolDeclaration`s this exact way. `capability.ts`'s own doc comment (SymbolDeclaration,
-  // ~L62-78) independently confirms this arm is "load-bearing OUTSIDE it… NOT dead code."
-  // Travels with the McpEnvCapability migration, not the reverse-membrane one.
-  describe("Environment.defineRosetta", () => {
-    // INVARIANT: env.defineRosetta extends the environment with a callable rosetta function usable from scheme source
-    it("should extend environment with Rosetta functions", async () => {
-      // Define a Rosetta function in the environment
-      inferenceEnv.defineRosetta("double-all", {
-        fn: (numbers: number[]) => numbers.map((x) => x * 2),
-      });
+/** Invoke a bound rosetta verb the way a JS caller (not scheme source) does post-
+ *  binder-cut: through its `arrival/tagless-final/apply` term, under the ambient
+ *  dynamic call site (empty here — a direct/test call, no evaluator invocation) — same
+ *  pattern `capability-rosetta-symbol.test.ts`'s own `invoke` helper uses. */
+function invoke(verb: ARosettaProcedure, ...args: unknown[]): unknown {
+  return withDynamicCallSite(undefined, () => verb[tf("apply")](args as SchemeValue[], CONSTANT_CTX));
+}
 
-      // Test calling it from LIPS
+describe("Rosetta Environment (capability-authored)", () => {
+  describe("EnvCapability-bound rosetta verbs", () => {
+    // INVARIANT: a capability-bound rosetta verb extends the environment with a callable
+    // usable from scheme source.
+    it("should extend environment with Rosetta functions", async () => {
+      const doubleAll = symbol.rosetta`double-all: doubles every element of a numeric list`(
+        { input: [z.list(z.number)], output: [z.list(z.number)] },
+        (numbers) => numbers.map((x) => x * 2),
+      );
+      await new EnvCapability("test/double-all", { symbols: { "double-all": doubleAll } })
+        .lower({})
+        .apply(inferenceEnv, undefined as never);
+
       const result = await execOne(`
         (double-all (list 1 2 3 4 5))
       `);
 
       console.log("Environment Rosetta result:", result);
 
-      // Should return LIPS list with doubled values
       const jsResult = schemeToJs(result, {});
       expect(jsResult).toEqual([2, 4, 6, 8, 10]);
     });
 
-    // INVARIANT: multiple defined rosetta functions can be chained/composed from scheme source
+    // INVARIANT: multiple capability-bound rosetta verbs can be chained/composed from scheme source
     it("should handle multiple Rosetta functions", async () => {
-      // Define multiple functions
-      inferenceEnv.defineRosetta("sum-array", {
-        fn: (numbers: number[]) => numbers.reduce((a, b) => a + b, 0),
-      });
+      const sumArray = symbol.rosetta`sum-array: sums a numeric list`(
+        { input: [z.list(z.number)], output: [z.number] },
+        (numbers) => numbers.reduce((a, b) => a + b, 0),
+      );
+      const filterEvens = symbol.rosetta`filter-evens: keeps the even elements of a numeric list`(
+        { input: [z.list(z.number)], output: [z.list(z.number)] },
+        (numbers) => numbers.filter((x) => x % 2 === 0),
+      );
+      await new EnvCapability("test/multi-rosetta", {
+        symbols: { "sum-array": sumArray, "filter-evens": filterEvens },
+      })
+        .lower({})
+        .apply(inferenceEnv, undefined as never);
 
-      inferenceEnv.defineRosetta("filter-evens", {
-        fn: (numbers: number[]) => numbers.filter((x) => x % 2 === 0),
-      });
-
-      // Test chaining them
       const result = await execOne(`
         (sum-array (filter-evens (list 1 2 3 4 5 6 7 8)))
       `);
@@ -100,10 +125,25 @@ describe("Rosetta Environment", () => {
     });
 
     it("should work with complex data structures", async () => {
-      // Define a function that works with objects
-      inferenceEnv.defineRosetta("extract-values", {
-        fn: (objects: any[]) => objects.map((obj) => obj.value),
-      });
+      // Arbitrary-shaped JS data (records with a `.value` field) — both slots stay
+      // `z.value` (the rosetta escape hatch: "impl receives/returns raw scheme value,
+      // does its own schemeToJs/jsToScheme" — scheme-zod.ts's own doc) and the impl
+      // does the conversion inline, exactly what the legacy `defineRosetta` wrapper
+      // did automatically for every call. The manual `jsToScheme` wrap on the way out
+      // is for TYPES only (a bare JS array isn't a `SchemeValue`) — `run()`'s own
+      // final `jsToScheme(..., resultProvenance)` call over an ALREADY-boxed value at
+      // matching (empty) provenance is an identity no-op, so this changes nothing at
+      // runtime vs. handing back the raw array the way the legacy fn did.
+      const extractValues = symbol.rosetta`extract-values: plucks .value off every element`(
+        { input: [z.value], output: [z.value] },
+        (rawObjects) => {
+          const objects = schemeToJsUntyped(rawObjects) as Array<{ value: unknown }>;
+          return jsToScheme(CONSTANT_CTX, objects.map((obj) => obj.value));
+        },
+      );
+      await new EnvCapability("test/extract-values", { symbols: { "extract-values": extractValues } })
+        .lower({})
+        .apply(inferenceEnv, undefined as never);
 
       // Create test data (this is tricky in LIPS, so we'll inject it)
       const testData = [
@@ -114,30 +154,37 @@ describe("Rosetta Environment", () => {
 
       // Convert to LIPS and call function
       const lipsData = jsToScheme(CONSTANT_CTX, testData, {});
-      const rosettaFn = inferenceEnv.get("extract-values");
-      invariant(isCallable(rosettaFn), "extract-values must resolve to a callable rosetta wrapper");
-      const result = await rosettaFn.call(testCallCtx(), lipsData);
+      const verb = inferenceEnv.get("extract-values");
+      invariant(isRosettaVerb(verb), "extract-values must resolve to a bound rosetta verb");
+      const result = await invoke(verb, lipsData);
 
       console.log("Complex data result:", result);
 
-      const jsResult = schemeToJs(result, {});
+      const jsResult = schemeToJs(result as SchemeValue, {});
       expect(jsResult).toEqual([10, 20, 30]);
     });
   });
 
-  // [RETAGGED 2026-07-09, B4 — was INVERTS: reverse-membrane/P1] — same legacy `defineRosetta`
-  // arm as the describe above (MCP CSS-filtering / stats patterns exercised here); same gate
-  // (McpEnvCapability annotation-lifting, undone), not the reverse-membrane migration.
   describe("Real-world Use Cases", () => {
-    // INVARIANT: a rosetta function receiving scheme-converted JS objects can filter on a nested
+    // INVARIANT: a rosetta verb receiving scheme-converted JS objects can filter on a nested
     // style property and results round-trip correctly
     it("should handle the MCP CSS filtering pattern", async () => {
       // This simulates the exact pattern we need for MCP
-      inferenceEnv.defineRosetta("filter-by-css-property", {
-        fn: (nodes: any[], property: string, value: string) => {
-          return nodes.filter((node) => node.style && node.style[property] === value);
+      const filterByCssProperty = symbol.rosetta`filter-by-css-property: filters nodes whose style[property] === value`(
+        { input: [z.value, z.string, z.string], output: [z.value] },
+        (rawNodes, property, value) => {
+          const nodes = schemeToJsUntyped(rawNodes) as Array<{ style?: Record<string, string> }>;
+          return jsToScheme(
+            CONSTANT_CTX,
+            nodes.filter((node) => node.style && node.style[property] === value),
+          );
         },
-      });
+      );
+      await new EnvCapability("test/filter-by-css-property", {
+        symbols: { "filter-by-css-property": filterByCssProperty },
+      })
+        .lower({})
+        .apply(inferenceEnv, undefined as never);
 
       // Create test node data
       const testNodes = [
@@ -149,12 +196,12 @@ describe("Rosetta Environment", () => {
 
       // Convert to LIPS and filter
       const lipsNodes = jsToScheme(CONSTANT_CTX, testNodes, {});
-      const filterFn = inferenceEnv.get("filter-by-css-property");
-      invariant(isCallable(filterFn), "filter-by-css-property must resolve to a callable rosetta wrapper");
-      // Args cross the membrane as Scheme values: the wrapper runs schemeToJs on each
-      // before invoking the underlying fn, so the property/value strings are boxed AStrings.
-      const result = await filterFn.call(
-        testCallCtx(),
+      const verb = inferenceEnv.get("filter-by-css-property");
+      invariant(isRosettaVerb(verb), "filter-by-css-property must resolve to a bound rosetta verb");
+      // The string args cross the membrane as real scheme values — the `z.string`
+      // codec decodes them the same way a scheme-level call would.
+      const result = await invoke(
+        verb,
         lipsNodes,
         new AString(CONSTANT_CTX, "overflow"),
         new AString(CONSTANT_CTX, "hidden"),
@@ -162,17 +209,19 @@ describe("Rosetta Environment", () => {
 
       console.log("CSS filtering result:", result);
 
-      const jsResult = schemeToJs(result, {});
+      const jsResult = schemeToJs(result as SchemeValue, {});
       expect(jsResult).toHaveLength(2);
       expect(jsResult[0].name).toBe("div1");
       expect(jsResult[1].name).toBe("div3");
     });
 
-    // INVARIANT: a rosetta function can aggregate scheme-converted JS objects into a stats object
+    // INVARIANT: a rosetta verb can aggregate scheme-converted JS objects into a stats object
     // that round-trips correctly
     it("should create CSS statistics like the MCP server needs", async () => {
-      inferenceEnv.defineRosetta("css-property-stats", {
-        fn: (nodes: any[]) => {
+      const cssPropertyStats = symbol.rosetta`css-property-stats: aggregates node style property:value counts`(
+        { input: [z.value], output: [z.value] },
+        (rawNodes) => {
+          const nodes = schemeToJsUntyped(rawNodes) as Array<{ style?: Record<string, string> }>;
           const stats: Record<string, number> = {};
           nodes.forEach((node) => {
             if (node.style) {
@@ -182,9 +231,12 @@ describe("Rosetta Environment", () => {
               });
             }
           });
-          return stats;
+          return jsToScheme(CONSTANT_CTX, stats);
         },
-      });
+      );
+      await new EnvCapability("test/css-property-stats", { symbols: { "css-property-stats": cssPropertyStats } })
+        .lower({})
+        .apply(inferenceEnv, undefined as never);
 
       const testNodes = [
         { style: { overflow: "hidden", display: "block" } },
@@ -193,36 +245,17 @@ describe("Rosetta Environment", () => {
       ];
 
       const lipsNodes = jsToScheme(CONSTANT_CTX, testNodes, {});
-      const statsFn = inferenceEnv.get("css-property-stats");
-      invariant(isCallable(statsFn), "css-property-stats must resolve to a callable rosetta wrapper");
-      const result = await statsFn.call(testCallCtx(), lipsNodes);
+      const verb = inferenceEnv.get("css-property-stats");
+      invariant(isRosettaVerb(verb), "css-property-stats must resolve to a bound rosetta verb");
+      const result = await invoke(verb, lipsNodes);
 
       console.log("CSS stats result:", result);
 
-      const jsResult = schemeToJs(result, {});
+      const jsResult = schemeToJs(result as SchemeValue, {});
       expect(jsResult["overflow:hidden"]).toBe(2);
       expect(jsResult["overflow:visible"]).toBe(1);
       expect(jsResult["display:block"]).toBe(2);
       expect(jsResult["display:flex"]).toBe(1);
-    });
-  });
-
-  // R-CTX-3: `this: CallCtx` is enforced STATICALLY since the migration door retired
-  // (2026-07-10, V's strictness sweep). These rows pin the surviving invariant: JS-level
-  // misuse (Reflect.apply past the types) throws LOUDLY, never silently CONSTANT_CTX.
-  describe("createRosettaWrapper — mandatory `this: CallCtx`", () => {
-    it("a bare call (no `.call` receiver) throws instead of silently defaulting", async () => {
-      inferenceEnv.defineRosetta("door-probe", { fn: (n: number) => n * 2 });
-      const wrapper = inferenceEnv.get("door-probe");
-      invariant(isCallable(wrapper), "door-probe must resolve to a callable rosetta wrapper");
-      await expect(Reflect.apply(wrapper, undefined, [new AString(CONSTANT_CTX, "unused")])).rejects.toThrow();
-    });
-
-    it("an ad hoc `{}` receiver throws the same way", async () => {
-      inferenceEnv.defineRosetta("door-probe-2", { fn: (n: number) => n * 2 });
-      const wrapper = inferenceEnv.get("door-probe-2");
-      invariant(isCallable(wrapper), "door-probe-2 must resolve to a callable rosetta wrapper");
-      await expect(Reflect.apply(wrapper, {}, [new AString(CONSTANT_CTX, "unused")])).rejects.toThrow();
     });
   });
 });

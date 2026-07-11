@@ -41,16 +41,35 @@ import { AValue } from "../values/primitives/AValue.js";
 import { sStr, runRaw, type EnvSetup } from "./_lineage-test-helpers.js";
 import { ANil } from "../values/primitives/ANil.js";
 import { APair } from "../values/primitives/APair.js";
+import { symbol } from "../common/symbol.js";
+import { EnvCapability } from "../common/capability.js";
+import * as z from "../common/scheme-zod.js";
 
 // Fixed mint ids — stand-ins for "whatever the membrane minted at this crossing".
 const MINT_A = 500;
 const MINT_B = 600;
 
-// Deterministic fake Rosetta-IN sources: each ignores its arg and returns an
-// already-stamped value (the mint), so grounding is reproducible with no model.
-const sources: EnvSetup = (env) => {
-  env.defineRosetta("source-a", { fn: () => sStr("SRC-A", MINT_A) });
-  env.defineRosetta("source-b", { fn: () => sStr("SRC-B", MINT_B) });
+// Deterministic fake Rosetta-IN sources, wired via a test-local `EnvCapability`
+// (`symbol.rosetta` verbs — the `env.defineRosetta` migration target; see golden-
+// prov-infer.test.ts's `inferSources` for the full `z.value`-escape-hatch rationale:
+// it's what keeps a source fixture's ALREADY-stamped return value from being
+// re-encoded, so the mint id it carries survives untouched). Each ignores its arg
+// and returns an already-stamped value (the mint), so grounding is reproducible with
+// no model. Provenance role left at its "source" default (mint-on-invocation), same
+// as legacy `defineRosetta` with no `pure`.
+const sources: EnvSetup = async (env) => {
+  const sourceA = symbol.rosetta`source-a: fake Rosetta-IN source (A)`(
+    { input: [z.string], output: [z.value] },
+    () => sStr("SRC-A", MINT_A),
+  );
+  const sourceB = symbol.rosetta`source-b: fake Rosetta-IN source (B)`(
+    { input: [z.string], output: [z.value] },
+    () => sStr("SRC-B", MINT_B),
+  );
+  const cap = new EnvCapability("test/grounding-sources", {
+    symbols: { "source-a": sourceA, "source-b": sourceB },
+  });
+  await cap.lower({}).apply(env, undefined as never);
 };
 
 /**
