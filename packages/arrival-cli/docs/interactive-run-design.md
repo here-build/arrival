@@ -102,6 +102,51 @@ not the whole form, which also keeps it subtle).
   sugarcoat lens (input flip); structural trace-diff (the real depth feature the triad
   rated above perfetto export — run₁ vs run₂, ghost-predicted vs actual).
 
+## Status (as shipped, 2026-07-12)
+
+Four commits, all on the honest identity model, all headless-tested (109 tests in
+arrival-cli):
+
+- `--json` / subtle TTY color — the display boundary (`output-mode.ts`, `sexpr-color.ts`).
+- `--outline` — source-ordered form outline, glyph-color = state, `×N` = the depth
+  affordance (`run-view.ts`, `run-outline.ts`).
+- `--form <scope>` — drill into one form's invocation set. AGGREGATES (header + "called
+  from" parent histogram + capped samples), never dumps; pruned values collapse to one
+  depth-ladder line (`form-detail.ts`).
+- `--export` — versioned JSON run-introspection contract, the agent/MCP surface
+  (`run-export.ts`).
+
+### Second triad round (3/3, on the shipped outline)
+
+- Drill-down ranked #1 next move — with the constraint it must **aggregate, not dump** (a
+  177-invocation form is a firehose otherwise). Done.
+- **C (async live-cascade) and D (in-source tinting) are traps** — D re-hides the 787
+  events the outline fixed (no end span, aggregate-tint-on-head is the old 1:N lie); C is
+  demo-tax that only animates for the async minority and is the worst headless-test story.
+  Both rejected.
+- Outline stays **flat** (source-order = the index); nesting belongs inside drill-down.
+- Value-pruning does **not** neuter drill-down — structure is the signal; show
+  "value elided", never a global full-fidelity mode.
+- `--export` is the enabler longcat rated highest: makes a future `--diff` a two-file pure
+  function and any web/MCP viewer a contract consumer.
+
+### Next (not built)
+
+- **Trace-diff** (`diff(a, b) → changes[]`) — the strategic prize, but its honest use
+  (same program, different inputs) is blocked on **param-injection in arrival-cli's `run`**
+  (the overridable→flag machinery lives in inhuman's `overridable-argv.ts`; sharing it
+  needs a foundation-package extraction). Diffing two FILES gives scopeId-instability noise
+  — don't. Build `diff` pure over two `RunExport`s once param-scrub exists.
+- **Purity-gated eager-eval ghost** (REPL) — highest wow (round 1), but needs the full
+  safety contract before it's safe: proven-pure-only, fuel + wall-clock + cancel-on-
+  keystroke, same evaluator as the real run, closed expressions only, advisory grey `~`
+  never authoritative, off the main thread.
+- **Interactive keyboard layer** over `--form`/`--outline` — the pure cores are done and
+  tested; the keyboard wrapper is thin but hard to headless-test, so it's deliberately last.
+- **REPL subtlety pass** — the wave-1 greeting still has a gradient wordmark; V's
+  "no gradients/banners" suggests toning it down, but it's V's existing aesthetic — left
+  for V's call rather than changed unilaterally.
+
 ## Deferred / rejected
 
 - **Perfetto/Chrome-trace export** — 3/3 rated it commodity (flattens away the substrate).
