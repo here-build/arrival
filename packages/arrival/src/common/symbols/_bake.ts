@@ -760,8 +760,11 @@ export function isSingleOutput(output: VectorSpec): boolean {
  *  own conservative default rather than guess past this. Same zod-4.3.6 `_zod.def` shape
  *  `type-layer/schema-to-ts.ts`'s `signatureOf` already introspects (verified there); a local
  *  copy because that module wants a differently-shaped return (printer-facing `TupleDef`/
- *  `ArrayDef`) and importing it here would pull the harvest/printer world into the bake layer. */
-function topLevelSchemas(schema: z.ZodTypeAny): readonly z.ZodTypeAny[] | undefined {
+ *  `ArrayDef`) and importing it here would pull the harvest/printer world into the bake layer.
+ *  EXPORTED (beyond this module's own gates below) for `rosetta.ts`'s z.value-callable door
+ *  (Ruling A, longcat thesis-2 attack 3 adjudication) — it reads the SAME shallow slot view
+ *  `contractMayCarryCallable` reads, to find which top-level positions are bare `z.value`. */
+export function topLevelSchemas(schema: z.ZodTypeAny): readonly z.ZodTypeAny[] | undefined {
   const def = (
     schema as {
       _zod?: { def?: { type?: string; items?: readonly z.ZodTypeAny[]; element?: z.ZodTypeAny } };

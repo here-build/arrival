@@ -10,6 +10,7 @@ import { AValue, pointProvenance, unionProvenance } from "../../values/primitive
 import { jsToScheme } from "../../rosetta.js";
 import { penetrateThroughCache } from "../../values/run-cache.js";
 import { closeRegionScope, openRegionScope, withRegionScope } from "../../values/primitives/region-scope.js";
+import { is_callable_value } from "../../values/value-guards.js";
 import {
   assertCacheClassShape,
   assertProvenanceRoleShape,
@@ -26,8 +27,79 @@ import {
   parseNameDoc,
   type RestSpec,
   type RosettaSymbolDef,
+  topLevelSchemas,
   type VectorSpec,
 } from "./_bake.js";
+
+/** THE Z.VALUE-CALLABLE DOOR (longcat thesis-2 attack 3 adjudication, Ruling A,
+ *  docs/working-proposals/arrival-longcat-design-attack-2026-07-11.md) — a plain teaching
+ *  throw, deliberately NOT a class: a parallel pass is extracting the errors-as-doors corpus
+ *  into individual classes (docs/working-proposals/arrival-doors-inventory-2026-07-11.md); this
+ *  stays a bare `throw new Error` so that pass can absorb it later without a merge collision.
+ *
+ *  `z.value` is the declared raw escape hatch (scheme-zod.ts's own doc on `value`): its decode
+ *  performs NO transform (`value` is a bare predicate, not a codec), so the impl receives the
+ *  raw scheme value untouched and does its OWN schemeToJs/applyCallback marshaling — possibly
+ *  AFTER the impl's own first `await`, by which point `withRegionScope`'s synchronous
+ *  save/restore (region-scope.ts) has already reverted the ambient scope to whatever it was
+ *  before this call (see `run`'s own `fire` below) — so a reverse call minted from that stale
+ *  marshal binds `DETACHED_SCOPE`/`CONSTANT_CTX`, not the live run, reopening exactly the
+ *  burst-bypass hole the region-scope gate exists to close. `z.procedure`'s wrapper is safe
+ *  because ITS decode marshals SYNCHRONOUSLY, at decode time, before any await runs
+ *  (`procedure`'s own doc, scheme-zod.ts). So the fix isn't to marshal a `z.value` callable
+ *  safely — it's to never let one land there: make the unsafe shape UNAUTHORED, steering the
+ *  author to declare the slot `z.procedure` instead. */
+function assertNotBareCallableInValueSlot(symbolName: string, value: unknown, position: string): void {
+  if (typeof value === "function" || is_callable_value(value)) {
+    throw new Error(
+      `${symbolName}: a callable argument crossed a z.value slot (${position}) — declare this parameter ` +
+        `z.procedure so its host-fn wrapper is minted at decode, synchronously, under the live region scope. ` +
+        `A callable marshaled from a z.value slot after an await binds a detached scope and can bypass the ` +
+        `effect burst.`,
+    );
+  }
+}
+
+/** Bake-time-only: which of `inSchema`'s TOP-LEVEL slots (the SAME shallow view
+ *  `contractMayCarryCallable` reads — fixed tuple items / a homogeneous array's lone element /
+ *  kwargs object fields) are bare `z.value` — and a runtime closure that checks a call's
+ *  DECODED args at exactly those positions. `undefined` when the contract carries no `z.value`
+ *  slot at all (the overwhelming majority — zero cost). Deliberately scoped IDENTICAL to
+ *  `contractMayCarryCallable`'s own shallow slots: a callable buried inside a CONTAINER argument
+ *  (`z.list(z.value)`, `z.vector(z.value)`, a dict field) is the shallow-gate-recursion gap
+ *  (thesis-2 attack 1), a different, already-tracked finding, not this door's job to catch. */
+function buildValueSlotCheck(
+  symbolName: string,
+  inSchema: z.ZodTypeAny,
+  kwargsShape: Record<string, z.ZodTypeAny> | undefined,
+): ((decodedArgs: readonly unknown[]) => void) | undefined {
+  if (kwargsShape) {
+    const valueKeys = Object.entries(kwargsShape)
+      .filter(([, slot]) => z.lookupName(slot) === "value")
+      .map(([key]) => key);
+    if (valueKeys.length === 0) return undefined;
+    return (decodedArgs) => {
+      const obj = decodedArgs[0] as Record<string, unknown>;
+      for (const key of valueKeys) assertNotBareCallableInValueSlot(symbolName, obj[key], `keyword argument :${key}`);
+    };
+  }
+  const items = topLevelSchemas(inSchema);
+  if (items === undefined) return undefined;
+  // A homogeneous array-ish input's `topLevelSchemas` is always a ONE-item result standing for
+  // EVERY decoded position (its own "array" branch); a fixed multi-item tuple's items map 1:1 to
+  // positions. A one-item result is checked identically either way — a single fixed z.value arg
+  // has exactly one decoded position, the same as "check the array's one element type at every
+  // position" when there happens to be exactly one position.
+  if (items.length === 1) {
+    if (z.lookupName(items[0]) !== "value") return undefined;
+    return (decodedArgs) =>
+      decodedArgs.forEach((a, i) => assertNotBareCallableInValueSlot(symbolName, a, `argument ${i + 1}`));
+  }
+  const valueIndices = items.flatMap((item, i) => (z.lookupName(item) === "value" ? [i] : []));
+  if (valueIndices.length === 0) return undefined;
+  return (decodedArgs) =>
+    valueIndices.forEach((i) => assertNotBareCallableInValueSlot(symbolName, decodedArgs[i], `argument ${i + 1}`));
+}
 
 /** Rosetta host fn in JS-LAND (decoded via the contract codecs). ctx-free for this step.
  *  `Rest` (inferred from `contract.inputRest`, defaulting to `undefined`) is the FIXED-prefix-
@@ -85,6 +157,18 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
     // adjudication); every other verb's `run` below skips the scope entirely — zero cost.
     const carriesCallable = contractMayCarryCallable(inSchema);
 
+    // kwargs input: a plain-record `contract.inputRest` (its VALUES are ZodType, the CONTAINER
+    // is not) marks a trailing kwargs OBJECT — hoisted here (bake-invariant off `contract.
+    // inputRest` alone) so both the z.value-callable door below and `run`'s own decode step
+    // (§1) read the SAME computed shape instead of re-deriving it per call.
+    const bakedInputRest: RestSpec = contract.inputRest;
+    const kwargsShape = bakedInputRest !== undefined && !(bakedInputRest instanceof ZodType) ? bakedInputRest : undefined;
+
+    // THE Z.VALUE-CALLABLE DOOR (Ruling A, see `buildValueSlotCheck`'s own doc above) —
+    // computed ONCE at bake, `undefined` (zero cost) for the overwhelming majority of contracts
+    // that carry no `z.value` input slot at all.
+    const checkValueSlots = buildValueSlotCheck(name, inSchema, kwargsShape);
+
     // The interpretive wrapper. Mirrors createRosettaWrapper's spine
     // (schemeToJs → fn → jsToScheme), with the contract codecs standing in for the
     // generic conversions and zod doing the (gated) validation, and the SAME ctx-driven
@@ -138,8 +222,7 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
         // `z.ZodType` `inputRest` (variadic tail) or none stays the ordinary array-shaped decode
         // against `inSchema`. instanceof is the SOUND discriminator: no combinator can make a plain
         // record satisfy `instanceof ZodType` — a record whose values are ZodType is not itself one.
-        const rest: RestSpec = contract.inputRest;
-        const kwargsShape = rest !== undefined && !(rest instanceof ZodType) ? rest : undefined;
+        // (`kwargsShape` itself is bake-time-hoisted above, beside `checkValueSlots`.)
         // STRICT + humanized (kwargs-rejection.ts, args-error-reporting-v2.md §2.5): unknown
         // keys reject instead of silently stripping, and a ZodError rethrows in the frozen
         // `<name>: arguments rejected — N problem(s):` grammar.
@@ -150,6 +233,12 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
         // minted host-fn wrapper closes over THIS scope instead of falling back to the shared
         // `DETACHED_SCOPE`.
         const decodedArgs: readonly unknown[] = scope ? withRegionScope(scope, decode) : decode();
+        // THE Z.VALUE-CALLABLE DOOR fires HERE — right after decode, before the impl ever runs
+        // (so a bad call never fires a partial effect first). `value`'s decode is an identity
+        // predicate (no transform), so checking post-decode is equivalent to checking the raw
+        // scheme arg; see `buildValueSlotCheck`'s own doc above for the full mechanism + why
+        // this is scoped to bare top-level slots only.
+        checkValueSlots?.(decodedArgs);
 
         // 2. RUN the impl with a per-call **invocation `this`** — the SAME flat `CallCtx` the
         //    dispatch level already handed this wrapper, forwarded straight through (no second
