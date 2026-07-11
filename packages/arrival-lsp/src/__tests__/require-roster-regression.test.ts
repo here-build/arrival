@@ -18,7 +18,10 @@
 //
 // Per `.claude/rules/tests.md` this is a `__tests__/` verdict (boolean pass/fail).
 
-import { buildArrivalSession, loaderFromResolver, resolveRequireType, rosettaTypesOf } from "@here.build/arrival-chain";
+import { rosettaTypesOf } from "@here.build/arrival";
+import { resolveRequireType } from "@here.build/arrival/loader";
+import { buildArrivalSession } from "@here.build/arrival-run";
+import { loaderFromResolver } from "@here.build/llm-plane-arrival-chain";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { assembleHostPrelude } from "../host-prelude.js";

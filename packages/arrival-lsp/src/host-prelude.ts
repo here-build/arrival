@@ -1,9 +1,11 @@
 // host-prelude — assemble a lens `host` option from a host's rosetta type registry.
 //
 // THE SINGLE-SOURCE SEAM. A host (sift) registers each evidence tool with a TS
-// signature string: `defineRosetta("ip/external-c2-candidate?", { fn, type: "(ip:
-// SchemeIP): SBool" })`. Arrival records those strings on the env
-// (the env's rosetta-type registry, `rosettaTypesOf(env)`). This function turns that registry into the two
+// signature string: `env.defineRosetta("ip/external-c2-candidate?", { fn, type: "(ip:
+// SchemeIP): SBool" })` — sift's own env shape (parked, `inhuman/sift-submission`); arrival
+// core's own public `defineRosetta` method is retired (`AmbientRuntime.ts`'s internal
+// `bindRosetta` is the surviving wiring). Either way the TS signature string lands on the
+// env's rosetta-type registry (`rosettaTypesOf(env)`). This function turns that registry into the two
 // coupled artifacts the type-lens needs — both derived from the ONE registration,
 // so the type knowledge lives WITH the rosetta and cannot drift into a parallel
 // hand-maintained `.d.ts`:

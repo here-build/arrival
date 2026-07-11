@@ -6,7 +6,8 @@
 //
 // Per `.claude/rules/tests.md` this is a `__tests__/` verdict (boolean pass/fail).
 
-import { loaderFromResolver, resolveRequireType } from "@here.build/arrival-chain";
+import { resolveRequireType } from "@here.build/arrival/loader";
+import { loaderFromResolver } from "@here.build/llm-plane-arrival-chain";
 import { describe, expect, it } from "vitest";
 
 import { assembleHostPrelude } from "../host-prelude.js";

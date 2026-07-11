@@ -61,13 +61,15 @@
     "research": "vitest run --config vitest.research.config.ts"
   },
   "dependencies": {
-    "@here.build/arrival-chain": "workspace:^",
     "@here.build/arrival-sugarcoat": "workspace:^",
     "@inhuman-tools/mercury": "workspace:^",
     "typescript": "6.0.2"
   },
   "devDependencies": {
+    "@here.build/arrival": "workspace:^",
+    "@here.build/arrival-run": "workspace:^",
     "@here.build/eslint-configs": "workspace:^",
+    "@here.build/llm-plane-arrival-chain": "workspace:^",
     "@here.build/tsconfig": "workspace:^",
     "@types/node": "24.0.0",
     "eslint": "9.39.2",
