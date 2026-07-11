@@ -17,6 +17,11 @@ export interface JsonSchemaProperty {
   maxItems?: number;
   properties?: Record<string, JsonSchemaProperty>;
   required?: readonly string[];
+  /** Closed-world marker — `false` means "only the declared `properties` exist"; the L2
+   *  parameter dump's "only these keys exist (any other key is rejected)" clause is only a
+   *  FACT under it (args-error-reporting-v2 T10). A schema-valued form (JSON Schema allows
+   *  one) is not closed-world and reads the same as absent here. */
+  additionalProperties?: boolean | JsonSchemaProperty;
   minimum?: number;
   maximum?: number;
   examples?: readonly unknown[];

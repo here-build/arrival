@@ -17,7 +17,7 @@
 
 import type { ArgsClue, Localized } from "./args-misuse.js";
 import { isTightKeyMatch, nonBareKwargKeys } from "./doors.js";
-import { renderExampleLiteral, synthesizeParamValue, typeHole } from "./example-call.js";
+import { renderExampleLiteral, stubValue, synthesizeParamValue } from "./example-call.js";
 import { orderedFields, type JsonSchemaProperty, type ToolJsonSchema } from "./tool-schema.js";
 
 /** Same 60-char truncation convention as arrival-manifold bind.ts's `previewOf` and arrival's
@@ -55,16 +55,32 @@ function dumpToken(prop: JsonSchemaProperty, depth = 0): string {
 }
 
 /** The first sentence of a schema description — the menu's per-key gloss (design doc §2.3
- *  Case A: "key + first-clause-of-description makes the semantic pick explicit"). */
+ *  Case A: "key + first-clause-of-description makes the semantic pick explicit"). Splits on
+ *  any sentence terminator, and hard-caps the gloss — a description with no terminal
+ *  punctuation would otherwise ride the menu whole (a token hazard on a line that repeats
+ *  per key). */
+const MAX_GLOSS_CHARS = 80;
+
+/** A sentence "boundary" that is actually a common abbreviation — `e.g. distance(...)`
+ *  must not truncate the gloss to "…, e.g." (triad review: abbreviation splits render
+ *  misleading menus). */
+const ABBREV_TAIL = /\b(?:e\.g|i\.e|etc|vs|cf)\.$/i;
+
 function firstClause(description: string | undefined): string | undefined {
   if (!description) return undefined;
-  const clause = description.split(/(?<=\.)\s/, 1)[0]!.trim();
-  return clause.length > 0 ? clause : undefined;
+  const clause = description.split(/(?<=[.!?])\s/, 1)[0]!.trim();
+  const gloss = clause.length === 0 || ABBREV_TAIL.test(clause) ? description.trim() : clause;
+  if (gloss.length === 0) return undefined;
+  return gloss.length > MAX_GLOSS_CHARS ? `${gloss.slice(0, MAX_GLOSS_CHARS)}…` : gloss;
 }
 
-/** `{k1, k2, …}` — the lean L1 key list (keys only, no descriptions: L1 is the lean rung). */
+/** `{k1, k2, …}` — the lean L1 key list (keys only, no descriptions: L1 is the lean rung).
+ *  Ordered via `orderedFields`, the SAME required-first rule the L2 dump and the signature
+ *  renderer use — the two surfaces must never disagree on order for the same param. */
 function keyListOf(subSchema: JsonSchemaProperty): string {
-  return `{${Object.keys(subSchema.properties ?? {}).join(", ")}}`;
+  return `{${orderedFields(subSchema)
+    .map(({ name }) => name)
+    .join(", ")}}`;
 }
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
@@ -97,6 +113,11 @@ function tightKeyRename(localized: Localized): { renamed: Record<string, unknown
   const matches = declared.filter((k) => isTightKeyMatch(bad, k));
   if (matches.length !== 1) return undefined;
   const to = matches[0]!;
+  // The target key ALREADY EXISTS on the sent object (the model sent both `term` and
+  // `terms`, thrashing) — a rename would silently CLOBBER the model's own `term` value and
+  // still read as an explicit fact. Decline; the menu path teaches without destroying data
+  // (triad review finding, 2026-07-11).
+  if (to in sentValue) return undefined;
   const renamed: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(sentValue)) renamed[k === bad ? to : k] = v;
   return { renamed, from: bad, to };
@@ -116,7 +137,11 @@ function retryParamValue(localized: Localized): { rendered: string; menu?: strin
   const fields = orderedFields(subSchema);
   if ((subSchema.type === "object" || subSchema.properties) && fields.length > 0) {
     const first = fields[0]!;
-    const skeleton = { [first.name]: typeHole(holeTokenOf(first.prop)) };
+    // stubValue, not a blind #|string|# hole: an enum/const first field shows a REAL
+    // member (schema fact, hole rule exempt), a typed scalar shows its own type's hole,
+    // a nested object its required-key skeleton — the same rules synthesizeExampleCall
+    // follows (triad review: a blind string hole mis-teaches an enum slot's type).
+    const skeleton = { [first.name]: stubValue(first.prop, 0) };
     const menuEntries = fields
       .map(({ name, prop }) => {
         const gloss = firstClause(prop.description);
@@ -131,16 +156,6 @@ function retryParamValue(localized: Localized): { rendered: string; menu?: strin
     };
   }
   return { rendered: synthesizeParamValue(subSchema) };
-}
-
-/** The hole token for one property — the signature renderer's own type vocabulary. */
-function holeTokenOf(prop: JsonSchemaProperty): string {
-  const t = prop.type;
-  if (t === "number" || t === "integer") return "number";
-  if (t === "boolean") return "boolean";
-  if (t === "array") return "array";
-  if (t === "object" || prop.properties) return "object";
-  return "string";
 }
 
 /** Compose the whole `Retry shape:` expr — the model's OWN call with ONLY the failing param
@@ -186,6 +201,12 @@ function factClauseOf(localized: Localized, paramHead: string): string {
       return clue.tokens[0] === paramHead
         ? `it is required and was not sent; it takes ${shape}.`
         : `it is missing the required key :${clue.tokens[0]}.`;
+    // A TOP-LEVEL keyword typo: the localized path names the tight-matched REAL param; the
+    // clue token keeps the model's own bad spelling. Renders the frozen explicit-fact
+    // rename clause (H-4 §4 — bridges machine-read it), which is sound here by the
+    // resolver's exactly-one-tight-match gate.
+    case "own-unknown-key":
+      return `you sent :${clue.tokens[0]} — no such parameter; the key you want is :${paramHead}.`;
     case "own-decode":
     case "zod-path":
       return `the tool's schema rejected it; :${paramHead} takes ${shape}.`;
@@ -199,9 +220,7 @@ function factClauseOf(localized: Localized, paramHead: string): string {
  *  `additionalProperties: false` on the sub-schema, or the current clue is itself an
  *  unexpected-keys rejection (the upstream just demonstrated closed-world behavior). */
 function parameterDump(paramHead: string, subSchema: JsonSchemaProperty, clue: ArgsClue): string {
-  const closedWorld =
-    (subSchema as { additionalProperties?: boolean }).additionalProperties === false ||
-    clue.kind === "unexpected-keys";
+  const closedWorld = subSchema.additionalProperties === false || clue.kind === "unexpected-keys";
   const fields = orderedFields(subSchema);
   if (fields.length === 0) {
     const desc = subSchema.description ? ` — ${subSchema.description}` : "";
@@ -224,19 +243,25 @@ function parameterDump(paramHead: string, subSchema: JsonSchemaProperty, clue: A
 
 /** The L3 anti-guess script (futility voice). `#<n>` is the tracker's escalation rung —
  *  capped at 3 by the tracker's own contract, so a 4th-and-later failure re-reads `#3`
- *  ("third-or-later", the floor we actually hold, never a fabricated higher count). The
- *  key-list clause stays factual: "COMPLETE" only under a closed world, otherwise the
- *  schema-declared framing. */
+ *  ("third-or-later", the floor we actually hold, never a fabricated higher count). Every
+ *  clause stays factual: "COMPLETE" only under a closed world; the key-list clause only when
+ *  L2's dump actually enumerated keys (a scalar param's L2 shows a type, not a list — a
+ *  "key list above" reference there would teach distrust); a keyless param gets the
+ *  type-framed variant instead. */
 function antiGuessScript(paramHead: string, level: number, subSchema: JsonSchemaProperty, clue: ArgsClue): string {
-  const closedWorld =
-    (subSchema as { additionalProperties?: boolean }).additionalProperties === false ||
-    clue.kind === "unexpected-keys";
-  const listClause = closedWorld
-    ? "The key list above is COMPLETE — do not invent further key names or syntaxes."
-    : "The key list above is everything the schema declares — do not invent further key names or syntaxes.";
+  const closedWorld = subSchema.additionalProperties === false || clue.kind === "unexpected-keys";
+  const hasKeys = orderedFields(subSchema).length > 0;
+  const listClause = !hasKeys
+    ? "The type shown above is what the schema declares — do not invent further value shapes or syntaxes."
+    : closedWorld
+      ? "The key list above is COMPLETE — do not invent further key names or syntaxes."
+      : "The key list above is everything the schema declares — do not invent further key names or syntaxes.";
+  const escape = hasKeys
+    ? "If none of these keys expresses your intent, this tool cannot express it: pick a "
+    : "If this parameter cannot express your intent, this tool cannot express it: pick a ";
   return (
     `\n  This is rejected shape #${level} for :${paramHead} on this tool. ${listClause} ` +
-    `If none of these keys expresses your intent, this tool cannot express it: pick a ` +
+    escape +
     `different tool, or work from the evidence you already have.`
   );
 }

@@ -10,22 +10,28 @@
 //                                              as fact — the module's central discipline,
 //                                              shared with doors.ts).
 //
-// Four clue families (design doc §2.2's table): three python-jsonschema prose shapes
-// (value-mismatch, unexpected-keys, required-key) plus the TS-SDK/zod issues[].path family —
-// zod-path is AUTHORITATIVE (the path IS the answer, no walk needed); value-mismatch and
-// unexpected-keys walk the SENT-ARGS tree (args are ground truth); required-key walks the
-// SCHEMA (a missing key has no sent-args leaf to find).
+// Six clue families: the OWN-DECODE pair first (arrival's kwargs-rejection grammar names
+// its param natively — own-unknown-key tight-matches a top-level typo against the declared
+// params, own-decode's dotted path resolves like a zod path; design doc §2.5's first-priority
+// rule), then the design doc §2.2 table — three python-jsonschema prose shapes
+// (value-mismatch, unexpected-keys, required-key) plus the TS-SDK/zod issues[].path family.
+// zod-path/own-decode are AUTHORITATIVE (the path IS the answer, no walk needed);
+// value-mismatch and unexpected-keys walk the SENT-ARGS tree (args are ground truth);
+// required-key walks the SCHEMA (a missing key has no sent-args leaf to find).
 //
 // This file does not render prose (that's the `argsMisuseDoor` scope, design doc §3 hook #3)
 // — it only ever answers "which param, if any, does this evidence name with certainty."
 
+import { isTightKeyMatch } from "./doors.js";
 import type { JsonSchemaProperty, ToolJsonSchema } from "./tool-schema.js";
 
 /** One family-tagged clue pulled from an upstream (or own-decode) rejection's prose. */
 export interface ArgsClue {
-  kind: "own-decode" | "zod-path" | "value-mismatch" | "unexpected-keys" | "required-key";
+  kind: "own-unknown-key" | "own-decode" | "zod-path" | "value-mismatch" | "unexpected-keys" | "required-key";
   /** own-decode/zod-path: the failing param's path segments (own-decode splits the dotted
-   *  `:<path> —` line head; zod-path stringifies the issues[].path array). Others: the quoted
+   *  `:<path> —` line head; zod-path stringifies the issues[].path array). own-unknown-key:
+   *  the ONE rejected top-level keyword (which by definition resolves to no schema path —
+   *  its resolver tight-matches it against the declared params instead). Others: the quoted
    *  token(s) from the prose (a single token for value-mismatch/required-key, one-or-more for
    *  unexpected-keys). */
   tokens: readonly string[];
@@ -91,7 +97,13 @@ const REQUIRED_KEY_RE = /'([^']*)' is a required property/g;
  *  `  :<dotted.path> — <issue>` lines. The head gate keeps the line-head regex from firing on
  *  arbitrary `:foo —` prose in an unrelated upstream error. */
 const OWN_DECODE_HEAD_RE = /(?:^|: )arguments rejected — \d+ problem\(s\):/;
-const OWN_DECODE_LINE_RE = /^ {2}:([\w.-]+) — /gm;
+const OWN_DECODE_LINE_RE = /^ {2}:([\w.-]+) — (.*)$/gm;
+
+/** The strict decode's per-key unknown-key issue tail (kwargs-rejection.ts's frozen
+ *  grammar). An unknown key is NOT a schema path — walking it as one always misses — so
+ *  it gets its own clue family (tight-match against the declared params) instead of the
+ *  generic own-decode path family. */
+const OWN_UNKNOWN_KEY_TAIL = "unknown key";
 
 /** Extract every clue an upstream (or own-decode) rejection's prose carries, in family
  *  PRIORITY order (design doc §2.2: zod-path is authoritative — a structured path needs no
@@ -104,12 +116,20 @@ const OWN_DECODE_LINE_RE = /^ {2}:([\w.-]+) — /gm;
 export function extractClues(errorText: string): ArgsClue[] {
   const clues: ArgsClue[] = [];
 
-  // own-decode FIRST (design doc §2.5: "a fourth, first-priority family") — the message names
-  // its failing param natively in a grammar WE freeze, so it outranks even zod-path.
+  // own-decode families FIRST (design doc §2.5: first-priority — the message names its
+  // failing param natively in a grammar WE freeze, so it outranks even zod-path). Within
+  // them, UNKNOWN-KEY lines outrank the rest: a top-level keyword typo usually CAUSES the
+  // sibling missing-required issue (`:qeury` typo ⇒ `:query` missing) — teaching the rename
+  // fixes both, while teaching the missing key first never names the typo (triad review
+  // finding, 2026-07-11).
   if (OWN_DECODE_HEAD_RE.test(errorText)) {
+    const unknownKeys: ArgsClue[] = [];
+    const paths: ArgsClue[] = [];
     for (const m of errorText.matchAll(OWN_DECODE_LINE_RE)) {
-      clues.push({ kind: "own-decode", tokens: m[1]!.split(".") });
+      if (m[2] === OWN_UNKNOWN_KEY_TAIL) unknownKeys.push({ kind: "own-unknown-key", tokens: [m[1]!] });
+      else paths.push({ kind: "own-decode", tokens: m[1]!.split(".") });
     }
+    clues.push(...unknownKeys, ...paths);
   }
 
   for (const m of errorText.matchAll(ZOD_PATH_RE)) {
@@ -326,8 +346,30 @@ function resolveRequiredKey(
   return { path, clue, subSchema, sentValue: sentArgs ? walkValue(sentArgs, path) : undefined };
 }
 
+/** own-unknown-key: the strict decode rejected a TOP-LEVEL keyword that matches no declared
+ *  param — there is no schema path to walk, so soundness comes from the tight-match gate
+ *  instead: EXACTLY one declared top-level param within canonical edit distance 1 of the
+ *  rejected key ⇒ that param is the lesson (the model typo'd its name); zero or several ⇒
+ *  decline (never a guessed rename). `path` names the MATCHED param (the tracker's lesson
+ *  key and the sub-schema to teach); the clue's token keeps the model's own bad spelling
+ *  for the fact line. */
+function resolveOwnUnknownKey(
+  clue: ArgsClue,
+  _sentArgs: Record<string, unknown> | undefined,
+  schema: ToolJsonSchema | undefined,
+): Localized | undefined {
+  const bad = clue.tokens[0];
+  if (bad === undefined || schema?.properties === undefined) return undefined;
+  const matches = Object.keys(schema.properties).filter((k) => isTightKeyMatch(bad, k));
+  if (matches.length !== 1) return undefined;
+  const path = [matches[0]!];
+  const subSchema = walkSchema(schema, path);
+  if (subSchema === undefined) return undefined;
+  return { path, clue, subSchema };
+}
+
 /** One resolver per {@link ArgsClue} family — a lookup table instead of a nested ternary chain,
- *  so adding a fifth family (the own-decode clue, design doc §2.5) is a one-line addition, not
+ *  so adding a family (the own-decode clues, design doc §2.5) is a one-line addition, not
  *  a re-threaded conditional. */
 const RESOLVERS: {
   readonly [K in ArgsClue["kind"]]: (
@@ -336,6 +378,7 @@ const RESOLVERS: {
     schema: ToolJsonSchema | undefined,
   ) => Localized | undefined;
 } = {
+  "own-unknown-key": resolveOwnUnknownKey,
   // own-decode resolves exactly like zod-path: the path IS the answer (our own frozen grammar
   // named it), verified against the schema before it may be taught (same soundness gate).
   "own-decode": resolveZodPath,

@@ -70,9 +70,10 @@ describe("args-misuse — localized door + escalation (docs/args-error-reporting
       expect(extractClues("ValueError: database connection refused")).toEqual([]);
     });
 
-    it("family PRIORITY order: zod-path first, then value-mismatch, unexpected-keys, required-key", () => {
-      // A contrived text carrying all four shapes at once — extraction order is the family
-      // priority `localizeFailingParam` relies on (zod-path tried first, "authoritative").
+    it("family PRIORITY order: zod-path, then value-mismatch, unexpected-keys, required-key (own-decode families outrank all — separate row below)", () => {
+      // A contrived text carrying all four upstream shapes at once — extraction order is the
+      // family priority `localizeFailingParam` relies on (zod-path tried first among the
+      // upstream families, "authoritative").
       const text =
         '[{"path": ["query"], "message": "m"}] ' +
         "'King Saud University' is not of type 'object' " +
@@ -84,6 +85,18 @@ describe("args-misuse — localized door + escalation (docs/args-error-reporting
         "unexpected-keys",
         "required-key",
       ]);
+    });
+
+    it("own-decode grammar (kwargs-rejection.ts): per-issue lines parse head-gated; unknown-key lines become own-unknown-key clues and OUTRANK the path lines (a top-level typo usually causes the sibling missing-required)", () => {
+      const text = "toy/add: arguments rejected — 2 problem(s):\n  :aa — unknown key\n  :a — missing (required)";
+      expect(extractClues(text)).toEqual([
+        { kind: "own-unknown-key", tokens: ["aa"] },
+        { kind: "own-decode", tokens: ["a"] },
+      ] satisfies ArgsClue[]);
+    });
+
+    it("own-decode lines only parse under the frozen head — a stray ' :foo — ' in unrelated upstream prose never becomes a clue", () => {
+      expect(extractClues("  :foo — something upstream said")).toEqual([]);
     });
   });
 
@@ -490,6 +503,55 @@ describe("args-misuse — localized door + escalation (docs/args-error-reporting
       const schema: ToolJsonSchema = { type: "object", properties: { query: QUERY_SUBSCHEMA } };
       const localized = localizeFailingParam('[{"path": ["query"], "message": "m"}]', undefined, schema)!;
       expect(buildRetryShape(QUALIFIED, undefined, localized)).toBeUndefined();
+    });
+
+    it("case-B rename DECLINES when the target key already exists on the sent object — a rename would clobber the model's own value while reading as an explicit fact (triad finding, 2026-07-11)", () => {
+      const sentArgs = { query: { terms: "bad spelling", term: "the real one" } };
+      const localized = localizeFailingParam(
+        "Additional properties are not allowed ('terms' was unexpected)",
+        sentArgs,
+        { type: "object", properties: { query: QUERY_SUBSCHEMA } },
+      )!;
+      const shape = buildRetryShape(QUALIFIED, sentArgs, localized);
+      // Falls to the hole-skeleton + menu path instead — no data destroyed, no false certainty.
+      expect(shape).toBeDefined();
+      expect(shape!.expr).not.toContain('"bad spelling"');
+      expect(shape!.expr).toContain("#|");
+    });
+  });
+
+  // ─── own-unknown-key — the strict decode's TOP-LEVEL typo family (triad finding) ───
+  describe("own-unknown-key — top-level keyword typos localize via the tight-match gate", () => {
+    const SCHEMA: ToolJsonSchema = {
+      type: "object",
+      properties: { a: { type: "number" }, b: { type: "number" } },
+      required: ["a", "b"],
+    };
+
+    it("a lone unknown-key rejection localizes to the tight-matched declared param (the model typo'd it), clue keeps the bad spelling", () => {
+      const localized = localizeFailingParam("toy/add: arguments rejected — 1 problem(s):\n  :aa — unknown key", undefined, SCHEMA);
+      expect(localized?.path).toEqual(["a"]);
+      expect(localized?.clue).toEqual({ kind: "own-unknown-key", tokens: ["aa"] });
+    });
+
+    it("unknown-key + missing-required in ONE rejection teaches the TYPO (the root cause), not the missing key it caused", () => {
+      const text = "toy/add: arguments rejected — 2 problem(s):\n  :aa — unknown key\n  :a — missing (required)";
+      const localized = localizeFailingParam(text, undefined, SCHEMA);
+      expect(localized?.clue.kind).toBe("own-unknown-key");
+      expect(localized?.path).toEqual(["a"]);
+    });
+
+    it("zero or several tight matches ⇒ decline, never a guessed rename", () => {
+      // "zz" matches nothing; "ab" is distance 1 from BOTH "a" and "b" — ambiguous.
+      expect(
+        localizeFailingParam("t: arguments rejected — 1 problem(s):\n  :zz — unknown key", undefined, SCHEMA),
+      ).toBeUndefined();
+      const ambiguous = localizeFailingParam(
+        "t: arguments rejected — 1 problem(s):\n  :ab — unknown key",
+        undefined,
+        SCHEMA,
+      );
+      expect(ambiguous?.clue.kind).not.toBe("own-unknown-key");
     });
   });
 });

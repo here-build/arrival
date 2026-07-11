@@ -857,9 +857,9 @@ const TOOL_MISUSE_SHAPES: readonly RegExp[] = [
   /\bInput validation error\b/i, // the TS MCP SDK's downstream tool-input-rejection wrapper
   // OUR OWN kwargs-decode rejection (arrival common/kwargs-rejection.ts's frozen grammar,
   // design doc §2.5) — `<qualified>: arguments rejected — N problem(s):`, INCLUDING the
-  // headless anonymous-def variant `arguments rejected — …` (the manifold binds tool
-  // rosettas through NAME_DOC_TEMPLATE whose parsed name is empty, so the head degrades
-  // to the bare form — the alternation covers both).
+  // headless variant `arguments rejected — …` that a genuinely ANONYMOUS def degrades to
+  // (kwargs-rejection.ts's own contract; manifold tool defs carry real names since the
+  // NAME_DOC_TEMPLATE fix, but the grammar keeps both forms).
   /(?:^|: )arguments rejected — \d+ problem\(s\):/,
 ];
 
