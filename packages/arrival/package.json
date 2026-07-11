@@ -116,6 +116,7 @@
     "test:watch": "vitest",
     "test-d": "vitest run --config vitest.typecheck.config.ts",
     "benchmarks": "vitest run --config vitest.benchmarks.config.ts",
+    "experiments": "vitest run --config vitest.experiments.config.ts",
     "typecheck": "tsc --noEmit && vitest run --config vitest.typecheck.config.ts",
     "workerd": "vitest run --config vitest.workerd.config.ts"
   },
