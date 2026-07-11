@@ -8,7 +8,7 @@
 // Promoting it into the value-guards true-leaf is a separate task.
 // ----------------------------------------------------------------------
 import { is_promise } from "../eval/guards.js";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AExact } from "../values/primitives/AExact.js";
@@ -130,18 +130,21 @@ function isPendingDatum(value: SchemeValue | PromiseLike<SchemeValue>): value is
 // silent re-box (the audit's #1 provenance drop). Remaining callers are the reader/
 // parse-time and pending-entry settle paths (PARSE_CTX territory) + the public barrel.
 // ----------------------------------------------------------------------
-export function box(object: unknown): SchemeValue {
+// `ctx` is the caller's identity claim for the minted box (a parse ctx on parse-time
+// settle paths, a live runCtx where one is in hand); the CONSTANT_CTX default keeps
+// existing callers (pending-entry settle, the public barrel) byte-identical.
+export function box(object: unknown, ctx: RunContext = CONSTANT_CTX): SchemeValue {
   switch (typeof object) {
     case "string":
-      return new AString(CONSTANT_CTX, object);
+      return new AString(ctx, object);
     case "bigint":
-      return new AExact(CONSTANT_CTX, object);
+      return new AExact(ctx, object);
     case "number":
-      if (Number.isNaN(object)) return new AInexact(CONSTANT_CTX, Number.NaN);
+      if (Number.isNaN(object)) return new AInexact(ctx, Number.NaN);
       if (Number.isSafeInteger(object)) {
-        return new AExact(CONSTANT_CTX, BigInt(object));
+        return new AExact(ctx, BigInt(object));
       }
-      return new AInexact(CONSTANT_CTX, object);
+      return new AInexact(ctx, object);
   }
   return object as SchemeValue;
 }
@@ -153,12 +156,12 @@ export function box(object: unknown): SchemeValue {
 // here (it inlines the pair arm and DOORS on raw scalars — hermetic ruling); this
 // stays a public value-repr helper for host-side member settling.
 // ----------------------------------------------------------------------
-export function patch_value(value: unknown): SchemeValue {
+export function patch_value(value: unknown, ctx: RunContext = CONSTANT_CTX): SchemeValue {
   if (value instanceof APair) {
     value.mark_cycles();
     return quote(value);
   }
-  return box(value);
+  return box(value, ctx);
 }
 
 // ----------------------------------------------------------------------

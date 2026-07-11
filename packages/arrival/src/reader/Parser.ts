@@ -8,7 +8,12 @@
  * (see `maxNestingDepth`).
  */
 import { DatumReference } from "../values/DatumReference.js";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+// PARSE_CTX family (not CONSTANT_CTX): every node this parser mints carries a
+// parse-origin ctx with its SourceLocation — the ctx channel of the span migration.
+// For APairs the `setLocation` calls below stay as the derived MIRROR (both channels
+// written, same loc), so the `[LOCATION]`-slot readers — the evaluator tap gate,
+// scopeId, the cross-package Symbol.for readers — see byte-identical data.
+import { makeParseCtx } from "../values/primitives/RunContext.js";
 import { foldcase_string } from "./foldcase.js";
 import * as specials from "./specials.js";
 import { is_nil } from "../eval/guards.js";
@@ -31,6 +36,7 @@ import { Lexer } from "./Lexer.js";
 import { ABytevector } from "../values/primitives/ABytevector.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { parse_argument } from "../utils/parsing.js";
+import { ctxOf } from "../values/primitives/AValue.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { APair, __tieKnot } from "../values/primitives/APair.js";
@@ -274,13 +280,18 @@ export class Parser {
     return token === "}";
   }
 
-  async read_list(): Promise<AListAlike> {
+  async read_list(openLoc?: SourceLocation): Promise<AListAlike> {
     // ACCUMULATE-THEN-CONSTRUCT (readonly-slot contract): collect the elements (+ each cell's
     // location) left-to-right, then build the spine in ONE right fold — no in-place tail
     // append. The improper dot-tail seeds the fold. An element may be a DatumReference
     // placeholder (`#0#` before its label resolves) — reader-internal, patched by
     // `_resolve_pair` via the knot door before any form leaves the reader; the per-cell cast
     // below is that documented channel.
+    //
+    // `openLoc` (the `(` branch passes it) is the HEAD cell's location — the same value the
+    // caller's `setLocation(loc)` re-stamp always produced as the head's FINAL `[LOCATION]`;
+    // minting the head's ctx under it directly keeps the immutable ctx channel in exact
+    // agreement with the mirror (a ctx can't be overwritten the way the slot could).
     const items: Array<{ node: unknown; loc: ReturnType<Parser["_getLocation"]> }> = [];
     let tail: unknown = nil;
     let dot = false;
@@ -307,10 +318,10 @@ export class Parser {
     }
     let chain: unknown = tail;
     for (let i = items.length - 1; i >= 0; i--) {
-      const cell = new APair(CONSTANT_CTX, items[i].node as SchemeValue, chain as SchemeValue);
-      const loc = items[i].loc;
+      const loc = (i === 0 ? (openLoc ?? items[i].loc) : items[i].loc);
+      const cell = new APair(makeParseCtx(loc), items[i].node as SchemeValue, chain as SchemeValue);
       if (loc) {
-        cell.setLocation(loc);
+        cell.setLocation(loc); // derived mirror — same loc the ctx carries
       }
       chain = cell;
     }
@@ -432,7 +443,9 @@ export class Parser {
     for (let i = 0; i < elements.length; i += 2) {
       const suffixKey = suffixKeyName(elements[i]);
       if (suffixKey !== null) {
-        elements[i] = new ASymbol(CONSTANT_CTX, `:${suffixKey}`); // the flip — canonicalize to the keyword twin
+        // The flip — canonicalize to the keyword twin, keeping the ORIGINAL key token's
+        // parse ctx (its exact leaf location), not the dict's `{` location.
+        elements[i] = new ASymbol(ctxOf(elements[i]), `:${suffixKey}`);
       }
       const keyDatum = elements[i];
       const key = staticDictKey(keyDatum);
@@ -468,13 +481,13 @@ export class Parser {
         "E-DICT-ODD-ARITY",
       );
     }
-    return makeDictLiteralNode(elements);
+    return makeDictLiteralNode(elements, makeParseCtx(loc));
   }
 
-  async read_value() {
+  async read_value(loc?: SourceLocation) {
     const token = await this.read();
     invariant(token !== eof, "Parser: Expected token eof found");
-    return parse_argument(token, this._strict);
+    return parse_argument(token, this._strict, makeParseCtx(loc));
   }
 
   is_comment(token: string) {
@@ -574,7 +587,7 @@ export class Parser {
         for (let node: unknown = list; node instanceof APair; node = node.cdr) {
           items.push(node.car);
         }
-        return new AVector(CONSTANT_CTX, items);
+        return new AVector(makeParseCtx(loc), items);
       }
       if (is_bytevector_literal(token)) {
         this.skip();
@@ -582,11 +595,11 @@ export class Parser {
         const list = await this.read_list();
         // Immutable, same rationale as the vector literal case above.
         if (list instanceof ANil) {
-          return new ABytevector(CONSTANT_CTX, new Uint8Array(0));
+          return new ABytevector(makeParseCtx(loc), new Uint8Array(0));
         }
         const arr = list.to_array(false) as number[];
         return new ABytevector(
-          CONSTANT_CTX,
+          makeParseCtx(loc),
           new Uint8Array(arr.map((v) => (typeof v === "number" ? v : Number(v)))),
         );
       }
@@ -618,11 +631,11 @@ export class Parser {
       // `object` may still be a DatumReference placeholder here — the reader-internal
       // channel `_resolve_pair` patches before the form leaves the reader.
       if (is_literal(token)) {
-        expr = new APair(CONSTANT_CTX, special.symbol, new APair(CONSTANT_CTX, object as SchemeValue, nil));
-        if (loc) expr.setLocation(loc);
+        expr = new APair(makeParseCtx(loc), special.symbol, new APair(makeParseCtx(loc), object as SchemeValue, nil));
+        if (loc) expr.setLocation(loc); // mirror — inner cell rides the ctx channel only (no LOCATION-slot change)
       } else {
-        expr = new APair(CONSTANT_CTX, special.symbol, object as SchemeValue);
-        if (loc) expr.setLocation(loc);
+        expr = new APair(makeParseCtx(loc), special.symbol, object as SchemeValue);
+        if (loc) expr.setLocation(loc); // mirror
       }
       return expr;
     }
@@ -646,7 +659,7 @@ export class Parser {
       this._enterNesting("]");
       this.skip();
       const elements = await this.read_literal_elements("]", false, "vector literal");
-      const vec = new AVector(CONSTANT_CTX, elements);
+      const vec = new AVector(makeParseCtx(loc), elements);
       vec.evalElements = true;
       return vec;
     } else if (token === "]") {
@@ -674,13 +687,16 @@ export class Parser {
     } else if (this.is_open(token)) {
       this._enterNesting(")");
       this.skip();
-      const list = await this.read_list();
+      const list = await this.read_list(loc);
       if (loc && list instanceof APair) {
-        list.setLocation(loc);
+        list.setLocation(loc); // mirror re-stamp — same loc the head cell's ctx already carries
       }
       return list;
     } else {
-      return this.read_value();
+      // Leaf literals (symbol/string/number/char): `loc` — computed above for this very
+      // token — finally has somewhere to go. These classes have no location slot; the
+      // parse ctx is their FIRST source identity (the ~18-site PARSE-CTX-CANDIDATE set).
+      return this.read_value(loc);
     }
     // Unreachable for a well-formed token: every value-producing case above returns and
     // the two stray-close cases throw via _exitNesting. Kept as an explicit terminal so

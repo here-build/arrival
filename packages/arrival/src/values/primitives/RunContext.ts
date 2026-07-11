@@ -26,6 +26,7 @@
 import type { RunCache } from "../run-cache.js";
 import type { EffectLog } from "../effect-log.js";
 import type { ReadGuard } from "../read-guard.js";
+import type { SourceLocation } from "../../errors.js";
 
 /** Per-run allocation meter — the memory analogue of the wall-clock budget. The
  *  reference is fixed for the run; `used` is incremented in place as cells materialize. */
@@ -79,6 +80,17 @@ export interface RunContext {
    *  either: a run may track reads with no effect log at all (inert), gather effects
    *  with no tracker (no guard, no crash — an opt-out, not a lie), or carry both. */
   readonly reads: ReadGuard | undefined;
+  /** Origin discriminant. `"parse"` marks the parse-time family (`PARSE_CTX` /
+   *  `makeParseCtx`): run-neutral like CONSTANT_CTX, but a STATED fact ("minted by the
+   *  reader") instead of a fallback. Absent on live-run ctxs and CONSTANT_CTX. */
+  readonly origin?: "parse";
+  /** Source identity for parse-minted values — the `SourceLocation` the Parser computes
+   *  for every datum. Present only on the parse family (`origin === "parse"`), and even
+   *  there `undefined` for synthesized/location-less parse values (`PARSE_CTX`). This is
+   *  the ctx channel of the span migration: `APair.setLocation` stays a derived MIRROR
+   *  of this field during the migration (the Parser writes both), and leaf literals —
+   *  which have no location slot at all — get source identity through here alone. */
+  readonly location?: SourceLocation;
 }
 
 /** Mint a fresh per-run context for one `exec()`. The single place a RunContext is born. */
@@ -120,3 +132,56 @@ export const CONSTANT_CTX: RunContext = Object.freeze({
   effects: undefined,
   reads: undefined,
 });
+
+/**
+ * The PARSE-ORIGIN context family — the third RunContext species (after live-run and
+ * CONSTANT_CTX). Run-neutral by charter: parse happens BEFORE any run, so no meter, no
+ * cache, no effects, no reads, no signal — a parse-minted value can never carry one
+ * run's state into another (parsed AST is shared across runs by `evalQuote`). What it
+ * ADDS over CONSTANT_CTX is provenance as a stated fact: `origin: "parse"` plus the
+ * `SourceLocation` the Parser computes for every datum — which, for leaf literals
+ * (symbols, strings, numbers, chars, vectors, bytevectors, dicts), is the FIRST source
+ * identity they have ever carried (only APair has a location slot; see the consumer map
+ * `docs/working-proposals/arrival-parse-ctx-consumer-map-2026-07-11.md`).
+ *
+ * Migration contract (staged — this wave): the ctx channel CARRIES the location;
+ * `APair.setLocation` stays a derived MIRROR the Parser also writes, so every existing
+ * `[LOCATION]`-slot reader (the evaluator tap gate, `scopeId`, the three cross-package
+ * `Symbol.for("__location__")` readers) is untouched. The mirror dies in a later wave.
+ *
+ * Interning note: per-node ctxs mean parsed symbols no longer share CONSTANT_CTX's
+ * flyweight intern table — each occurrence is its own instance (the accepted per-form
+ * allocation cost; required, since per-occurrence source identity and a shared interned
+ * instance are mutually exclusive). Sound because eq?/eqv?/equals compare `__name__`,
+ * never reference (values/structural-equal.ts).
+ */
+export interface ParseContext extends RunContext {
+  readonly origin: "parse";
+  readonly location: SourceLocation | undefined;
+}
+
+/** The shared LOCATION-LESS parse ctx — for synthesized or sourceless parse values
+ *  (`makeParseCtx(undefined)` returns this singleton; no per-node allocation when
+ *  there is no location to carry). */
+export const PARSE_CTX: ParseContext = Object.freeze({
+  ...CONSTANT_CTX,
+  origin: "parse" as const,
+  location: undefined,
+});
+
+/**
+ * Mint the parse ctx for one parsed node. Location-bearing nodes get a small frozen
+ * per-node ctx (frozen because parsed AST — and therefore its ctx — is shared across
+ * runs); location-less ones share the `PARSE_CTX` singleton.
+ */
+export function makeParseCtx(location: SourceLocation | undefined): ParseContext {
+  if (location === undefined) return PARSE_CTX;
+  return Object.freeze({ ...CONSTANT_CTX, origin: "parse" as const, location });
+}
+
+/** Narrowing read for the parse family — `ctxOf(v)` + this = "was v minted by the
+ *  reader, and where" (the door-quality/error-reporting payoff: a door can point at
+ *  the exact leaf via `ctx.location`). */
+export function isParseCtx(ctx: RunContext): ctx is ParseContext {
+  return ctx.origin === "parse";
+}

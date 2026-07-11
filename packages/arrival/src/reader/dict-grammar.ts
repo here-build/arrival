@@ -23,7 +23,7 @@ import { ADict, type DictKey, type DictLiteralNode } from "../values/primitives/
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AString } from "../values/primitives/AString.js";
 import { APair } from "../values/primitives/APair.js";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
 import type { SchemeValue } from "../values/types.js";
 
 /** The STATIC string key of a key-position datum, or null if it isn't one.
@@ -76,8 +76,14 @@ export function isUnquoteForm(datum: SchemeValue): boolean {
  * by construction here: the Parser's `make_dict_literal` already threw
  * E-DICT-DUP-KEY on any static-key collision before this ever runs, so ADict's own
  * constructor invariant (no duplicate fold-name) is trivially satisfied.
+ *
+ * `ctx` discriminates the two mouths: the READER passes a parse ctx (the `{`'s
+ * SourceLocation — ADict has no location slot, so this is the literal's only source
+ * identity); the evaluator's quasiquote re-instantiation currently defaults to
+ * CONSTANT_CTX (its live-`ctx.runCtx` threading is the audit's Wave-2 item, not this
+ * wave's — the default keeps that path byte-identical).
  */
-export function makeDictLiteralNode(forms: readonly SchemeValue[]): DictLiteralNode {
+export function makeDictLiteralNode(forms: readonly SchemeValue[], ctx: RunContext = CONSTANT_CTX): DictLiteralNode {
   const pairs: Array<readonly [DictKey, SchemeValue]> = [];
   for (let i = 0; i + 1 < forms.length; i += 2) {
     const keyDatum = forms[i];
@@ -85,7 +91,7 @@ export function makeDictLiteralNode(forms: readonly SchemeValue[]): DictLiteralN
       pairs.push([keyDatum, forms[i + 1]]);
     }
   }
-  const node = new ADict(CONSTANT_CTX, pairs) as DictLiteralNode;
+  const node = new ADict(ctx, pairs) as DictLiteralNode;
   node.literalForms = forms;
   return node;
 }
