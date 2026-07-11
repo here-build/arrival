@@ -23,6 +23,7 @@ import path from "node:path";
 
 import {
   LexicalScope,
+  schemeToJsUntyped,
   StaticValidationError,
   tokenize,
   type Diagnostic,
@@ -33,6 +34,8 @@ import { arrivalLoaderCapability } from "@here.build/arrival/loader";
 import { toSExprString } from "@here.build/arrival-serializer";
 
 import type { ArmedCapabilities } from "./capabilities.js";
+import type { OutputMode } from "./output-mode.js";
+import { colorizeSexpr } from "./sexpr-color.js";
 
 /** Per-run ALLOCATION cap — same default + env var as arrival-run's entry point. */
 function heapDefault(): number {
@@ -120,10 +123,25 @@ export const REQUIRE_SKIP_NOTE =
 /** Output budget: enough to see, never a flood (the serializer shrink-to-fit machinery). */
 const PRINT_OPTS = { maxItems: 64, maxStringChars: 1024, maxTotalChars: 16_384 };
 
-/** One top-level form's value → stdout. `undefined` (define / void) prints nothing — REPL norm. */
-export function printValue(v: unknown): void {
+/**
+ * One top-level form's value → stdout. `undefined` (define / void) prints nothing —
+ * REPL norm. `mode` is the display boundary (output-mode.ts): omit it (the REPL's plain
+ * path, and any legacy caller) and the output is byte-identical to before — plain
+ * uncolored s-expr. Pass a mode (the `run` verb) to opt into `--json` machine output or
+ * TTY color.
+ */
+export function printValue(v: unknown, mode?: OutputMode): void {
   if (v === undefined) return;
-  console.log(toSExprString(v, PRINT_OPTS));
+  if (mode?.format === "json") {
+    // One JSON value per top-level form → NDJSON a `| jq` consumes. A non-serializable
+    // value (a procedure → `undefined` under JSON.stringify) prints nothing, same as a
+    // void form would; never a bare `undefined` line.
+    const json = JSON.stringify(schemeToJsUntyped(v, {}));
+    if (json !== undefined) console.log(json);
+    return;
+  }
+  const text = toSExprString(v, PRINT_OPTS);
+  console.log(mode?.color === true ? colorizeSexpr(text) : text);
 }
 
 export function formatDiagnostic(d: Diagnostic): string {

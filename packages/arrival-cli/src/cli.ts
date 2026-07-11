@@ -25,6 +25,7 @@ import { parseArgs } from "node:util";
 import { exec, execState, LexicalScope, StaticValidationError } from "@here.build/arrival";
 
 import { armCapabilities, type ArmedCapabilities } from "./capabilities.js";
+import { resolveOutputMode, type OutputMode } from "./output-mode.js";
 import { repl } from "./repl.js";
 import {
   budgets,
@@ -39,14 +40,17 @@ import {
 const USAGE = `usage: arrival <command>
 
   arrival run <file.scm>    validate, then execute (require-root = the file's dir)
-                            prints each non-define top-level form's value; there is
-                            no display/format — the door will remind you
+                            prints each non-define top-level form's value as s-expr
+                            (subtle color on a TTY; plain when piped)
   arrival repl              interactive session (persistent defines, Ctrl-D exits)
   arrival check <file.scm> [more.scm …]
                             static diagnostics only — nothing is evaluated;
                             every file is checked, exit 1 if any has errors
 
 options:
+  --json                    (run) emit each form's value as JSON on stdout — one value
+                            per line (NDJSON), for piping to jq and agent consumers.
+                            Machine output is opt-in: default stdout stays s-expr.
   --with <module>           arm a capability module (repeatable) — an npm package,
                             package subpath, or ./relative path exporting
                             EnvCapability instance(s)
@@ -66,7 +70,7 @@ async function readSource(file: string): Promise<string> {
   }
 }
 
-async function runFile(file: string, armed?: ArmedCapabilities): Promise<number> {
+async function runFile(file: string, mode: OutputMode, armed?: ArmedCapabilities): Promise<number> {
   const source = await readSource(file);
   try {
     let values: unknown[];
@@ -94,7 +98,7 @@ async function runFile(file: string, armed?: ArmedCapabilities): Promise<number>
         ...(armed === undefined ? {} : { capabilities: armed.capabilities, config: armed.config }),
       });
     }
-    for (const v of values) printValue(v);
+    for (const v of values) printValue(v, mode);
     return 0;
   } catch (e) {
     printError(e);
@@ -150,6 +154,7 @@ async function main(argv: string[]): Promise<number> {
       help: { type: "boolean", short: "h" },
       with: { type: "string", multiple: true },
       config: { type: "string" },
+      json: { type: "boolean" },
     },
   });
   if (values.help === true) {
@@ -175,7 +180,12 @@ async function main(argv: string[]): Promise<number> {
         return 2;
       }
       const armed = await armCapabilities(values.with ?? [], values.config, process.cwd());
-      return runFile(file, armed);
+      const mode = resolveOutputMode({
+        stdoutIsTTY: process.stdout.isTTY === true,
+        env: process.env,
+        json: values.json === true,
+      });
+      return runFile(file, mode, armed);
     }
     case "check": {
       if (files.length === 0) {
