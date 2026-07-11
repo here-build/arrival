@@ -6,11 +6,12 @@
 // the full mechanism (§2: `extractClues`/`localizeFailingParam`, `ArgsFailureTracker`,
 // `synthesizeParamValue`).
 //
-// S1-S2 flipped from `it.todo` to real tests (args-misuse.ts landed). S3, S4, S5 are still
-// their original placeholder forms — see each row's own comment below.
+// S1-S3 flipped from `it.todo` to real tests (args-misuse.ts + args-failure-tracker.ts landed).
+// S4, S5 are still their original placeholder forms — see each row's own comment below.
 
 import { describe, expect, it } from "vitest";
 
+import { ArgsFailureTracker } from "../args-failure-tracker.js";
 import { extractClues, localizeFailingParam, type ArgsClue } from "../args-misuse.js";
 import { synthesizeExampleCall } from "../example-call.js";
 import type { JsonSchemaProperty, ToolJsonSchema } from "../tool-schema.js";
@@ -252,16 +253,89 @@ describe("args-misuse — localized door + escalation (docs/args-error-reporting
     });
   });
 
-  // S3: ArgsFailureTracker (§2.4) — L1→L2→L3 monotone escalation per (tool, param), capped at
-  // 3; a SUCCESSFUL call of a tool clears ALL of that tool's param counters (the model has a
-  // working shape now — the next failure starts a fresh L1 lesson); the unlocalized (⊥) key
-  // escalates too (Level ⊥'s "eventually show everything" backstop). `ArgsFailureTracker`
-  // doesn't exist yet (new file, args-failure-tracker.ts, §3 hook #5) — `it.todo`.
-  it.todo(
-    "S3 — ArgsFailureTracker: recordFailure is monotone 1→2→3 (capped) per (qualifiedName, paramPath); " +
-      "recordSuccess(tool) clears every param counter for that tool, next failure restarts at L1; the " +
-      "'⊥' (unlocalized) key escalates identically to a named param",
-  );
+  // ─── S3 — ArgsFailureTracker (§2.4) ───
+
+  describe("S3 — ArgsFailureTracker: L1→L2→L3 monotone per (tool,param), capped; success clears the whole tool (design doc §2.4)", () => {
+    it("recordFailure is monotone 1→2→3, capped at 3 on further failures", () => {
+      const tracker = new ArgsFailureTracker();
+      expect(tracker.recordFailure("t/tool", ["query"])).toBe(1);
+      expect(tracker.recordFailure("t/tool", ["query"])).toBe(2);
+      expect(tracker.recordFailure("t/tool", ["query"])).toBe(3);
+      expect(tracker.recordFailure("t/tool", ["query"])).toBe(3);
+      expect(tracker.recordFailure("t/tool", ["query"])).toBe(3);
+    });
+
+    it("counters are independent PER (tool, param) — a different param starts its own L1", () => {
+      const tracker = new ArgsFailureTracker();
+      tracker.recordFailure("t/tool", ["query"]);
+      tracker.recordFailure("t/tool", ["query"]);
+      expect(tracker.recordFailure("t/tool", ["filter"])).toBe(1);
+      expect(tracker.recordFailure("t/tool", ["query"])).toBe(3);
+    });
+
+    it("counters are independent PER TOOL — the same param name on a different tool starts its own L1", () => {
+      const tracker = new ArgsFailureTracker();
+      tracker.recordFailure("t/tool-a", ["query"]);
+      tracker.recordFailure("t/tool-a", ["query"]);
+      expect(tracker.recordFailure("t/tool-b", ["query"])).toBe(1);
+    });
+
+    it("recordSuccess(tool) clears EVERY param counter for that tool; the next failure restarts at L1", () => {
+      const tracker = new ArgsFailureTracker();
+      tracker.recordFailure("t/tool", ["query"]);
+      tracker.recordFailure("t/tool", ["query"]);
+      tracker.recordFailure("t/tool", ["filter"]);
+      tracker.recordSuccess("t/tool");
+      expect(tracker.recordFailure("t/tool", ["query"])).toBe(1);
+      expect(tracker.recordFailure("t/tool", ["filter"])).toBe(1);
+    });
+
+    it("recordSuccess(tool) does NOT clear a DIFFERENT tool's counters", () => {
+      const tracker = new ArgsFailureTracker();
+      tracker.recordFailure("t/tool-a", ["query"]);
+      tracker.recordFailure("t/tool-a", ["query"]);
+      tracker.recordSuccess("t/tool-b");
+      expect(tracker.recordFailure("t/tool-a", ["query"])).toBe(3);
+    });
+
+    it("the '⊥' (unlocalized, paramPath undefined) key escalates identically to a named param", () => {
+      const tracker = new ArgsFailureTracker();
+      expect(tracker.recordFailure("t/tool", undefined)).toBe(1);
+      expect(tracker.recordFailure("t/tool", undefined)).toBe(2);
+      expect(tracker.recordFailure("t/tool", undefined)).toBe(3);
+      expect(tracker.recordFailure("t/tool", undefined)).toBe(3);
+      tracker.recordSuccess("t/tool");
+      expect(tracker.recordFailure("t/tool", undefined)).toBe(1);
+    });
+
+    it("the ⊥ key and a named param are tracked SEPARATELY on the same tool", () => {
+      const tracker = new ArgsFailureTracker();
+      tracker.recordFailure("t/tool", undefined);
+      tracker.recordFailure("t/tool", undefined);
+      expect(tracker.recordFailure("t/tool", ["query"])).toBe(1);
+    });
+
+    it("exportState/importState round-trips the counters exactly (session-store precedent)", () => {
+      const tracker = new ArgsFailureTracker();
+      tracker.recordFailure("t/tool", ["query"]);
+      tracker.recordFailure("t/tool", ["query"]);
+      tracker.recordFailure("t/tool", undefined);
+      const state = tracker.exportState();
+
+      const restored = new ArgsFailureTracker();
+      restored.importState(state);
+      expect(restored.recordFailure("t/tool", ["query"])).toBe(3);
+      expect(restored.recordFailure("t/tool", undefined)).toBe(2);
+    });
+
+    it("importState REPLACES wholesale — a prior tracker's own state doesn't survive underneath it", () => {
+      const tracker = new ArgsFailureTracker();
+      tracker.recordFailure("t/tool", ["query"]);
+      tracker.recordFailure("t/tool", ["query"]);
+      tracker.importState({ entries: [] });
+      expect(tracker.recordFailure("t/tool", ["query"])).toBe(1);
+    });
+  });
 
   // S4: synthesizeExampleCall's stub synthesis (example-call.ts) currently invents a CONCRETE
   // value for every non-enum required slot ("string value", 0, false, …) — exercisable via the
