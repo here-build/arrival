@@ -77,6 +77,7 @@ exports[`V0 pin — barrel surface > the full exported-name set is otherwise unc
   "sameStep",
   "schemeFalse",
   "schemeToJs",
+  "schemeToJsUntyped",
   "schemeTrue",
   "slotsOf",
   "stepKey",

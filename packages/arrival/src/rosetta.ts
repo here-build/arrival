@@ -197,6 +197,22 @@ export function schemeToJs<T extends SchemeValue | null | undefined>(
   return schemeToJsImpl(value, options) as T extends SchemeValue ? AUnwrap<T> : T;
 }
 
+/**
+ * Scheme → JS membrane exit for UNTYPED crossings — the named contract for values whose
+ * static type is unknowable at the call site: an untyped `z.procedure()` HOF-callback
+ * return (the mcp/llm middleware convention), a duck-typed parse-tree walk, a value that
+ * may be a raw JS reply, a registered sentinel symbol, or a boxed scheme value in the
+ * same position. Runtime behavior is IDENTICAL to {@link schemeToJs} (one impl); only
+ * the type contract differs: `unknown` in, `unknown` out — the caller narrows AFTER the
+ * crossing, when the value is plain JS and narrowing is checkable. Reach for the typed
+ * {@link schemeToJs} whenever a codec or contract names the shape; reaching for THIS to
+ * silence a type error on a value you can honestly type is the smell this export exists
+ * to make visible (`grep schemeToJsUntyped` = the audit list of untyped crossings).
+ */
+export function schemeToJsUntyped(value: unknown, options: RosettaOptions = {}): unknown {
+  return schemeToJsImpl(value, options);
+}
+
 /** Teaching door (P5): a bare Promise reaching jsToScheme directly. Every sanctioned
  *  path settles first — rosetta wrappers await the fn result before crossing, the
  *  reverse-membrane wrapper settles promise-valued args, and a Promise INSIDE a

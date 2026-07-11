@@ -28,7 +28,7 @@ export {
   markInteropPrivate as markSandboxPrivate,
   markInteropBoundary as markAsSandboxBoundary,
 } from "./interop-access.js";
-export { schemeToJs, jsToScheme, createRosettaWrapper, type RosettaFunction } from "./rosetta.js";
+export { schemeToJs, schemeToJsUntyped, jsToScheme, createRosettaWrapper, type RosettaFunction } from "./rosetta.js";
 
 // Runtime value hierarchy. Provenance algebra: docs/spec/arrival-chain.md.
 export { type AKind, AValue, EMPTY_PROVENANCE, pointProvenance, unionProvenance } from "./values/primitives/AValue.js";
