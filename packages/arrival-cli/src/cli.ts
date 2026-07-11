@@ -29,6 +29,7 @@ import { armCapabilities, type ArmedCapabilities } from "./capabilities.js";
 import { resolveOutputMode, type OutputMode } from "./output-mode.js";
 import { repl } from "./repl.js";
 import { formDetail, renderFormDetail } from "./form-detail.js";
+import { exportRun } from "./run-export.js";
 import { renderRunOutline } from "./run-outline.js";
 import { runView } from "./run-view.js";
 import { colorMode } from "./tints.js";
@@ -61,6 +62,9 @@ options:
                             invocation ×count (the dynamic multiplicity behind each form)
   --form <scope>            (run) drill into one form by its scopeId (head@line:col, from
                             --outline): its invocation aggregate, callers, sampled values
+  --export                  (run) emit the run introspection as one versioned JSON object
+                            on stdout (forms + counts + states + total invocations) — the
+                            machine/agent contract; suppresses the normal value output
   --with <module>           arm a capability module (repeatable) — an npm package,
                             package subpath, or ./relative path exporting
                             EnvCapability instance(s)
@@ -103,17 +107,19 @@ function emitFormDetail(trace: EvalTrace, scope: string): void {
   for (const line of renderFormDetail(formDetail(trace, scope), stderrMode())) process.stderr.write(`${line}\n`);
 }
 
-async function runFile(
-  file: string,
-  mode: OutputMode,
-  inspect: { outline: boolean; form?: string },
-  armed?: ArmedCapabilities,
-): Promise<number> {
+interface Inspect {
+  readonly outline: boolean;
+  readonly form?: string;
+  /** `--export`: emit the run-introspection JSON contract to stdout, suppress values. */
+  readonly export: boolean;
+}
+
+async function runFile(file: string, mode: OutputMode, inspect: Inspect, armed?: ArmedCapabilities): Promise<number> {
   const source = await readSource(file);
-  // The interactive-run tap: `--outline` / `--form` run under an `EvalTrace` so the
-  // template↔invocation structure is captured, then render it. `undefined` tap ⇒ the
-  // byte-identical untapped path.
-  const trace = inspect.outline || inspect.form !== undefined ? new EvalTrace() : undefined;
+  // The interactive-run tap: `--outline` / `--form` / `--export` run under an `EvalTrace`
+  // so the template↔invocation structure is captured. `undefined` tap ⇒ the byte-identical
+  // untapped path.
+  const trace = inspect.outline || inspect.form !== undefined || inspect.export ? new EvalTrace() : undefined;
   try {
     let values: unknown[];
     if (usesRequire(source)) {
@@ -141,21 +147,29 @@ async function runFile(
         ...(armed === undefined ? {} : { capabilities: armed.capabilities, config: armed.config }),
       });
     }
-    for (const v of values) printValue(v, mode);
-    if (trace !== undefined) emitInspection(trace, inspect);
+    // `--export` mode: the introspection JSON IS the output (stdout stays a clean single
+    // object for `| jq`), so it replaces value printing rather than joining it.
+    if (inspect.export && trace !== undefined) {
+      process.stdout.write(`${JSON.stringify(exportRun(trace))}\n`);
+    } else {
+      for (const v of values) printValue(v, mode);
+      if (trace !== undefined) emitInspection(trace, inspect);
+    }
     return 0;
   } catch (e) {
     printError(e);
     // Even on a fault, the partial trace is worth showing — it marks the failing form
-    // `error`, which is often the whole point of asking for it.
-    if (trace !== undefined) emitInspection(trace, inspect);
+    // `error`, which is often the whole point of asking for it. In export mode the partial
+    // contract still goes to stdout (a consumer sees how far it got).
+    if (inspect.export && trace !== undefined) process.stdout.write(`${JSON.stringify(exportRun(trace))}\n`);
+    else if (trace !== undefined) emitInspection(trace, inspect);
     return 1;
   }
 }
 
 /** `--form` (drill into one form) takes precedence over `--outline` (the overview) when
  *  both are set — you asked for the specific thing. */
-function emitInspection(trace: EvalTrace, inspect: { outline: boolean; form?: string }): void {
+function emitInspection(trace: EvalTrace, inspect: Inspect): void {
   if (inspect.form !== undefined) emitFormDetail(trace, inspect.form);
   else if (inspect.outline) emitOutline(trace);
 }
@@ -211,6 +225,7 @@ async function main(argv: string[]): Promise<number> {
       json: { type: "boolean" },
       outline: { type: "boolean" },
       form: { type: "string" },
+      export: { type: "boolean" },
     },
   });
   if (values.help === true) {
@@ -241,7 +256,12 @@ async function main(argv: string[]): Promise<number> {
         env: process.env,
         json: values.json === true,
       });
-      return runFile(file, mode, { outline: values.outline === true, form: values.form }, armed);
+      return runFile(
+        file,
+        mode,
+        { outline: values.outline === true, form: values.form, export: values.export === true },
+        armed,
+      );
     }
     case "check": {
       if (files.length === 0) {
