@@ -154,7 +154,21 @@ interface AmbientInternals {
   readonly base: AmbientRuntime;
   readonly lowered: readonly LoweredPack[];
 }
-const internals = new WeakMap<AssembledAmbient, AmbientInternals>();
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __arrivalAssembledInternals: WeakMap<AssembledAmbient, AmbientInternals> | undefined;
+}
+
+/** PROCESS-GLOBAL, not module-local: a Worker bundle (esbuild/wrangler) can pull this module
+ *  in twice — once through the `@here.build/arrival` main entry (`exec`/`ambientBase`) and once
+ *  through the `@here.build/arrival/env` subpath (`assembleAmbient`) — giving each copy its own
+ *  WeakMap. The brand `assembleAmbient` sets would then be invisible to the `exec`-side check,
+ *  and every real run doors with "must be a product of assembleAmbient()". Pinning the map on
+ *  `globalThis` makes the brand survive module duplication (the same cross-boundary-identity
+ *  reason `MCP_BREAK` is a registered symbol), while staying a single map when the bundle dedupes. */
+const internals: WeakMap<AssembledAmbient, AmbientInternals> = (globalThis.__arrivalAssembledInternals ??=
+  new WeakMap<AssembledAmbient, AmbientInternals>());
 
 /** The base env behind an ambient — exec's own seam (`Capabilities.assembled(base)`,
  *  the shadow classifier). Throws a teaching door for a hand-rolled object: the phase-2
