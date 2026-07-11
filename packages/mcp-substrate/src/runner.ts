@@ -347,6 +347,13 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
       const blocks: ContentBlock[] = [];
       let failures = 0;
       const erroredStatementIndexes: number[] = [];
+      // Names this program binds into the persistent session scope. Collected to lead the
+      // response with a persistence note (below) — the void-result affordance fix: a program
+      // ending in `(define x (search …))` otherwise renders NOTHING (the void `define` result
+      // is filtered at `!== theVoid`), which a model reads as "the search returned empty" and
+      // confabulates from (MCP-Atlas 2026-07-11 forensics, task …c909). Announcing the binding
+      // both kills that trap and teaches cross-call persistence proactively.
+      const introduced: string[] = [];
 
       for (const [index, form] of forms.entries()) {
         const statementText = displayText[index]!;
@@ -381,6 +388,7 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
           if (facts.definedName !== undefined) {
             history.push(facts.definedName, statementText);
             contextRing?.push(facts.definedName, statementText);
+            introduced.push(facts.definedName);
           }
         } catch (error) {
           erroredStatementIndexes.push(index);
@@ -456,6 +464,19 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
           blocks.push({ type: "text", text });
           failures += 1;
         }
+      }
+
+      // Lead with the persistence note when this program bound anything into session scope
+      // (see `introduced` above). A `#|…|#` reader block comment: inert if pasted back (the
+      // "a printed result is valid input again" invariant holds), and it renders the binding
+      // FACT even when every bound form was a void `define` with no other observation — the
+      // void-result-trap fix. Deduped, declared order.
+      if (introduced.length > 0) {
+        const names = [...new Set(introduced)].join(", ");
+        blocks.unshift({
+          type: "text",
+          text: `#|introduced ${names}; now available for the rest of this session|#`,
+        });
       }
 
       if (tracker) {

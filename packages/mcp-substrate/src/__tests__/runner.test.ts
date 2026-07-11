@@ -216,4 +216,52 @@ describe("createDoorsRunner(...).run(...) — the import-form door (doors.ts's i
       expect(renders[i]).toContain("standard library is already in scope");
     }
   });
+
+  // The void-result-trap fix (MCP-Atlas 2026-07-11 forensics, task …c909): a program whose
+  // only top-level result is a void `define` used to render NOTHING — the model read the empty
+  // observation as "the tool returned no data" and confabulated an empty result. Every program
+  // that binds into session scope now LEADS with a persistence note, so a define is never a
+  // silent success.
+  describe("introduced-names persistence note (void-result-trap fix)", () => {
+    it("a define-only program leads with the #|introduced …|# note instead of an empty response", async () => {
+      const runner = makeRunner();
+      const scope = freshScope("runner-introduced-define-only");
+      const result = await runner.run({ expr: "(define x 41)", ambient, scope, tools: noTools });
+      expect(result.isError).not.toBe(true);
+      const first = result.content[0];
+      expect(first?.type).toBe("text");
+      expect((first as { text: string }).text).toBe("#|introduced x; now available for the rest of this session|#");
+    });
+
+    it("the note LEADS the value observations and lists every bound name once, in declared order", async () => {
+      const runner = makeRunner();
+      const scope = freshScope("runner-introduced-mixed");
+      const result = await runner.run({
+        expr: "(define a 10) (define b (+ a 5)) b",
+        ambient,
+        scope,
+        tools: noTools,
+      });
+      const texts = result.content.map((b) => (b.type === "text" ? b.text : ""));
+      expect(texts[0]).toBe("#|introduced a, b; now available for the rest of this session|#");
+      // the value observation (b = 15) still rides after the note
+      expect(texts.slice(1).join("\n")).toContain("15");
+    });
+
+    it("a program that binds NOTHING emits no note (pure expressions are unaffected)", async () => {
+      const runner = makeRunner();
+      const scope = freshScope("runner-introduced-none");
+      const result = await runner.run({ expr: "(+ 1 2)", ambient, scope, tools: noTools });
+      const texts = result.content.map((b) => (b.type === "text" ? b.text : ""));
+      expect(texts.join("\n")).not.toContain("introduced");
+      expect(texts.join("\n")).toContain("3");
+    });
+
+    it("the note is a valid reader block comment — inert if pasted back (round-trip invariant)", async () => {
+      const { parse } = await import("@here.build/arrival");
+      const note = "#|introduced x, y; now available for the rest of this session|#";
+      // A block comment parses to ZERO forms — pasting it back is a harmless no-op, never data.
+      expect((await parse(note)).length).toBe(0);
+    });
+  });
 });
