@@ -1,7 +1,7 @@
 {
   "name": "@here.build/arrival",
   "version": "0.1.0",
-  "description": "R7RS-subset Scheme interpreter for AI-agent constraint-based execution — transparent provenance, capability sandbox, JS membrane",
+  "description": "R7RS-subset Scheme interpreter for AI-agent constraint-based execution \u2014 transparent provenance, capability sandbox, JS membrane",
   "keywords": [
     "scheme",
     "lisp",
@@ -108,7 +108,7 @@
     "!**/*.stories.*"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "node scripts/gen-carriers-text.mjs && tsc -p tsconfig.build.json",
     "dev": "tsc -p tsconfig.build.json --watch",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

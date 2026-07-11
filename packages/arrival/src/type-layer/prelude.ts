@@ -11,29 +11,19 @@
 // O0-conformance-proven), so re-typing it to a TS string would invert the cross-package
 // arrow. The harvest stays one-directional (defs → prelude text), entirely in this package.
 
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-
 import { escapeName, isTsIdentifier } from "./name-escape.js";
 import type { AEntity } from "../common/symbol.js";
 import { signatureOf } from "./schema-to-ts.js";
+import { CARRIERS_TEXT } from "./carriers-text.generated.js";
 
 // carriers.ts as AMBIENT text: strip the leading `export ` so `interface Cons`, `type List`,
 // and `declare function map` are GLOBAL in the lens's virtual program (the lowered program
-// references `list`/`car`/`map` + the carriers unqualified). Path resolves against the
-// shipped src tree — `../../src/type-layer` from `dist/.../prelude.js`, `.` from src.
-function carrierVocabularyPath(): string {
-  const o = process.env.ARRIVAL_CARRIERS_PATH;
-  if (o !== undefined) return o;
-  const here = fileURLToPath(new URL(".", import.meta.url));
-  const inDist = here.includes(`${"/dist/"}`) || here.endsWith("/dist/type-layer/");
-  const base = inDist ? new URL("../../src/type-layer/carriers.ts", import.meta.url) : new URL("./carriers.ts", import.meta.url);
-  return fileURLToPath(base);
-}
-
+// references `list`/`car`/`map` + the carriers unqualified). The verbatim source is baked into
+// `carriers-text.generated.ts` at build time (scripts/gen-carriers-text.mjs) — reading it via
+// `node:fs` at runtime would break the browser/worker (Vite externalizes `node:fs`).
 let cachedVocabulary: string | undefined;
 function carrierVocabulary(): string {
-  cachedVocabulary ??= readFileSync(carrierVocabularyPath(), "utf8").replace(/^export /gm, "");
+  cachedVocabulary ??= CARRIERS_TEXT.replace(/^export /gm, "");
   return cachedVocabulary;
 }
 
