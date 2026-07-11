@@ -17,8 +17,10 @@
  *   1. the `bakeRosetta` return walk (common/symbols/_bake.ts step 4) — a SOURCE
  *      rosetta's return is machine-made, so its spine + leaves are deep-attested
  *      in the same position as the provenance deep-stamp;
- *   2. pluck inheritance — `AJSObject.get` / `AJSArray`'s element materialization
- *      attest the boxes they mint iff the container itself is attested;
+ *   2. pluck inheritance — `ADict.get`, `AJSObject.get`, and `AJSArray`'s element
+ *      materialization attest the boxes they hand out iff the container itself is
+ *      attested (ADict returns stored boxes by identity, so it stamps at pluck
+ *      rather than at mint);
  *   3. the manifold's `s/*` validators — an explicit, model-authored assertion
  *      (arrival-manifold/src/bind.ts) whose identity-return rides site 1's walk.
  *

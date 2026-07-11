@@ -35,6 +35,7 @@ import { AString } from "./AString.js";
 import { nil } from "./ANil.js";
 import { type SchemeValue } from "../types.js";
 import { type SeenMap, structuralEqual } from "../structural-equal.js";
+import { attestDeep, freshIfSingleton, isAttested } from "../attestation.js";
 import { is_promise } from "../../eval/guards.js";
 import { isSettleChain, settleEntry } from "./pending-entry.js";
 // Runtime import cycle (benign — the same shape AJSObject/AJSArray document): jsToScheme
@@ -161,19 +162,25 @@ export class ADict extends AValue {
     if (key === undefined) return nil;
     const entry = this.byKey.get(key);
     if (entry === undefined) return nil;
+    // Pluck inheritance (values/attestation.ts stamp site 2, same contract as
+    // AJSObject.get): an attested container's plucked field passes attested. The
+    // entries were minted BEFORE any `s/*` assertion could touch the container, so
+    // identity-preserving return alone would hand back unattested boxes.
+    // `freshIfSingleton` first — shared flyweights never attest, their clone does.
+    const pluck = (v: SchemeValue): SchemeValue => (isAttested(this) ? attestDeep(freshIfSingleton(v)) : v);
     if (is_promise(entry)) {
       // A re-read during pendency finds the already-minted chain — return it, never
       // wrap a second one (pending-entry.ts's ONE-settle-chain contract).
       if (isSettleChain(entry)) return entry;
       const cell = settleEntry(
         entry,
-        (settled) => jsToScheme(this.ctx, settled, {}, this.provenance),
+        (settled) => pluck(jsToScheme(this.ctx, settled, {}, this.provenance)),
         (boxed) => this.byKey.set(key, boxed),
       );
       this.byKey.set(key, cell);
       return cell;
     }
-    return entry;
+    return pluck(entry);
   }
 
   /** Distinguishes "key absent" from "key present, value is legitimately nil" —
