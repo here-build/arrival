@@ -148,11 +148,13 @@ function retryParamValue(localized: Localized): { rendered: string; menu?: strin
         return gloss ? `${name} (${gloss})` : name;
       })
       .join(", ");
+    // No trailing "see the signature" pointer: the menu's glosses come from the SAME
+    // schema descriptions the signature renders — when they exist they're already inline
+    // here, and when they don't, the signature has none either (a pointer would be a
+    // false claim — triad round-3 lead, verified).
     return {
       rendered: renderExampleLiteral(skeleton),
-      menu:
-        `:${first.name} is one example key; pick the key matching your intent: ${menuEntries}` +
-        (fields.some(({ prop }) => prop.description) ? "" : " (see each key's description in the signature)"),
+      menu: `:${first.name} is one example key; pick the key matching your intent: ${menuEntries}`,
     };
   }
   return { rendered: synthesizeParamValue(subSchema) };
