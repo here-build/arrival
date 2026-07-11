@@ -78,7 +78,8 @@ await exec(`(define (spin n) (spin (+ n 1))) (spin 0)`, { signal: ctl.signal });
 A budget error ends the *call*, not the session — the scope and its definitions survive, so a
 REPL loop catches, reports, and continues.
 
-## What this is converging toward
+## The CLI over this surface
 
-A CLI (a `run` command and a REPL over exactly this scope/capability surface) is in the works —
-not shipped yet, so this doc deliberately stops at the library API.
+`@here.build/arrival-cli` is a REPL over exactly this scope/capability surface — one
+`LexicalScope` per session, budgets per form, capabilities armed per call. This doc
+deliberately stops at the library API; the CLI is its first consumer, not a different model.

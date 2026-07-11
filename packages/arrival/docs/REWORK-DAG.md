@@ -5,6 +5,11 @@
 execution plan: every node names its dependencies, its exit gate, and the agent tier that
 runs it. Update node status in place as work lands.*
 
+> **Status: Phase 1 EXECUTED to Z** (endgame audit 2026-07-09 — see node Z's row for what
+> passed and what's parked). **Phase 2 (P-track) is SUPERSEDED** by
+> [`PROVENANCE-PLAN.md`](PROVENANCE-PLAN.md)'s Q-track (itself executed Q1–Q21). This file
+> stays as the decision record: which node landed what, under which gate, and why.
+
 **Definition of done (the endgame gate, node Z):** the package is principle-first when
 sunrise IS the default `test` gate, the ledger walker is green, every remaining `[INVERTS:]`
 tag cites a live migration (none orphaned), chibi v2 ≥ v1 registry parity, both membrane
