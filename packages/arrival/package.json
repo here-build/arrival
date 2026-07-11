@@ -67,6 +67,10 @@
       "types": "./dist/provenance/index.d.ts",
       "default": "./dist/provenance/index.js"
     },
+    "./provenance/store": {
+      "types": "./dist/provenance/store/index.d.ts",
+      "default": "./dist/provenance/store/index.js"
+    },
     "./type-layer": {
       "types": "./dist/type-layer/index.d.ts",
       "default": "./dist/type-layer/index.js"
