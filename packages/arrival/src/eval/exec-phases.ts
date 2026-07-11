@@ -155,26 +155,35 @@ interface AmbientInternals {
   readonly lowered: readonly LoweredPack[];
 }
 
-declare global {
-  // eslint-disable-next-line no-var
-  var __arrivalAssembledInternals: WeakMap<AssembledAmbient, AmbientInternals> | undefined;
-}
+/** The brand lives ON the ambient object under a PROCESS-GLOBAL registered symbol — never in a
+ *  module-local side-table. A module-local WeakMap (or even a `globalThis`-pinned one) is
+ *  fragile: a bundler can duplicate this module across the `@here.build/arrival` main entry
+ *  (`exec`) and the `/env` subpath (`assembleAmbient`), and Vite dev serves `exec-phases.js?t=…`
+ *  as a FRESH module instance on every HMR — each copy gets its own WeakMap, so the brand
+ *  `assembleAmbient` set is invisible to the `exec`-side check and every run doors. `Symbol.for`
+ *  resolves to the same symbol across every module copy, and the internals ride the object
+ *  itself, so any copy can read what any copy wrote — the value carries its own proof (the
+ *  MCP_BREAK cross-boundary-identity pattern, applied to the ambient rather than a side map).
+ *  Non-enumerable so it stays off `Object.keys`/spread/JSON — the privatization posture holds. */
+const ASSEMBLED_INTERNALS = Symbol.for("@here.build/arrival/assembled-ambient-internals");
 
-/** PROCESS-GLOBAL, not module-local: a Worker bundle (esbuild/wrangler) can pull this module
- *  in twice — once through the `@here.build/arrival` main entry (`exec`/`ambientBase`) and once
- *  through the `@here.build/arrival/env` subpath (`assembleAmbient`) — giving each copy its own
- *  WeakMap. The brand `assembleAmbient` sets would then be invisible to the `exec`-side check,
- *  and every real run doors with "must be a product of assembleAmbient()". Pinning the map on
- *  `globalThis` makes the brand survive module duplication (the same cross-boundary-identity
- *  reason `MCP_BREAK` is a registered symbol), while staying a single map when the bundle dedupes. */
-const internals: WeakMap<AssembledAmbient, AmbientInternals> = (globalThis.__arrivalAssembledInternals ??=
-  new WeakMap<AssembledAmbient, AmbientInternals>());
+/** Stamp the internals onto a freshly-assembled ambient (called by `assembleAmbient`'s builder). */
+export function brandAssembledAmbient(ambient: AssembledAmbient, base: AmbientRuntime, lowered: readonly LoweredPack[]): void {
+  Object.defineProperty(ambient, ASSEMBLED_INTERNALS, {
+    value: { base, lowered } satisfies AmbientInternals,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+}
 
 /** The base env behind an ambient — exec's own seam (`Capabilities.assembled(base)`,
  *  the shadow classifier). Throws a teaching door for a hand-rolled object: the phase-2
  *  product is minted by `assembleAmbient`, not duck-typed. */
 export function ambientBase(ambient: AssembledAmbient): AmbientRuntime {
-  const found = internals.get(ambient);
+  // `Reflect.get` returns `any` — assigned to the typed local without a cast; the door below
+  // rejects a hand-rolled object that never carried the branded internals.
+  const found: AmbientInternals | undefined = Reflect.get(ambient, ASSEMBLED_INTERNALS);
   if (found === undefined) {
     throw new AmbientShapeError(
       "exec",
@@ -255,7 +264,7 @@ export function makeAssembledAmbient(args: {
       return out;
     },
   };
-  internals.set(ambient, { base, lowered });
+  brandAssembledAmbient(ambient, base, lowered);
   return ambient;
 }
 
