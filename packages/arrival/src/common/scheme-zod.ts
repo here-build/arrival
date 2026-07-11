@@ -1,5 +1,5 @@
 import * as z from "zod";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
 
 import { APair } from "../values/primitives/APair.js";
 import { ANil } from "../values/primitives/ANil.js";
@@ -12,12 +12,13 @@ import { ACharacter } from "../values/primitives/ACharacter.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
 import { AVoid } from "../values/primitives/AVoid.js";
-import { AValue } from "../values/primitives/AValue.js";
+import { AValue, ctxOf } from "../values/primitives/AValue.js";
 import { ADict, isDictShaped, type DictKey } from "../values/primitives/ADict.js";
 import { AJSObject } from "../values/primitives/AJSObject.js";
 import { AJSArray } from "../values/primitives/AJSArray.js";
 import { Values } from "../values/primitives/Values.js";
-import { R7RSError } from "../errors.js";
+import { ArrivalError, R7RSError } from "../errors.js";
+import { chargeHeap, heapBudgetMessage } from "../heap-budget.js";
 import {
   ALambda,
   ANativeProcedure,
@@ -162,6 +163,76 @@ function isSchemeValue(x: unknown): x is SchemeValue {
 export const value = named("value", z.custom<SchemeValue>(isSchemeValue));
 
 // ---------------------------------------------------------------------------
+// :: Marshal ctx — what a codec mints under when no boxed operand exists
+// ---------------------------------------------------------------------------
+//
+// A scalar codec's `encode` receives a bare JS primitive (a `number`, a `string`,
+// a `Uint8Array`, …) — there is no `AValue` operand to `ctxOf()` for the live run
+// (CONSTANT_CTX-audit §2.2's "THREADING GAP" verdict on every scalar codec below).
+// Minting under CONSTANT_CTX drops the crossing off the run's heap
+// meter/cache/effects/reads/signal silently — everything built FROM that value
+// (`ctxOf`, `internTableFor`, `chargeHeap`) inherits the wrong run.
+//
+// The channel, in priority order:
+//
+//   1. `_marshalRunCtx` — an ambient THIS FILE installs and reads (below). Its one
+//      caller today is `procedure()`'s own encode/decode arms, which — unlike every
+//      OTHER codec here — genuinely hold a live RunContext directly (the `impl`'s
+//      own `runCtx` parameter, ACallable.ts's `CallableImpl` contract; or the
+//      closed-over `scope.runCtx`), not a re-read of ambient state. Installing it
+//      for the synchronous window of a nested z.decode/z.encode call is strictly
+//      more honest than letting those nested codecs guess from (2) — this ctx is
+//      the actual invocation's, not whatever happens to be ambient right now.
+//   2. `currentRegionScope()?.runCtx` (values/primitives/region-scope.ts) — the
+//      SAME ambient `z.procedure`'s reverse-crossing decode reads for its wrapper
+//      identity cache. Populated for exactly the crossings `common/symbols/
+//      rosetta.ts`'s `carriesCallable` gate opens a scope for (a contract whose
+//      input can hand the impl a live callable) — every OTHER rosetta call reaches
+//      this file with no scope live. Widening that gate is `rosetta.ts`'s call,
+//      outside this cluster's file territory (it sits above this module in the
+//      call graph); reading it here is a strict improvement over unconditional
+//      CONSTANT_CTX at zero cost when no scope is open.
+//   3. CONSTANT_CTX — no live invocation reachable by any channel above (e.g. a
+//      unit test calling `.parse()`/`.encode()` directly with nothing installed).
+let _marshalRunCtx: RunContext | undefined;
+
+/** Install `ctx` as the ambient marshal ctx for the duration of a SYNCHRONOUS
+ *  `fn` — save/restore, the same idiom `region-scope.ts`'s `withRegionScope` uses
+ *  (single-threaded JS + save/restore makes a module holder safe; nesting works by
+ *  construction, an inner install restoring the outer's ctx on the way out). */
+function withMarshalCtx<T>(ctx: RunContext, fn: () => T): T {
+  const saved = _marshalRunCtx;
+  _marshalRunCtx = ctx;
+  try {
+    return fn();
+  } finally {
+    _marshalRunCtx = saved;
+  }
+}
+
+function marshalCtx(): RunContext {
+  return _marshalRunCtx ?? currentRegionScope()?.runCtx ?? CONSTANT_CTX;
+}
+
+/** The ctx a freshly-minted CONTAINER (list/vector/dict) inherits: the first
+ *  already-boxed element's own run ctx. By the time a container's own `encode`
+ *  runs, every element has already been through the ELEMENT schema's own codec
+ *  (see the `dict` codec's comment below for why the container transform never
+ *  re-decodes a field) — so a `value`-element container holds real AValues minted
+ *  elsewhere in the live run, and a codec-element container (e.g. `list(integer)`)
+ *  holds values THIS FILE just minted via {@link marshalCtx}. Either way, the
+ *  first element's ctx is the container's own live run. Falls to
+ *  {@link marshalCtx} only when there is no element to inherit from (an empty
+ *  container). */
+function firstCtx(elements: readonly SchemeValue[]): RunContext {
+  for (const e of elements) {
+    const c = ctxOf(e);
+    if (c !== CONSTANT_CTX) return c;
+  }
+  return marshalCtx();
+}
+
+// ---------------------------------------------------------------------------
 // :: Scalar primitives
 // ---------------------------------------------------------------------------
 
@@ -169,7 +240,7 @@ export const boolean = named(
   "boolean",
   z.codec(z.instanceof(ABool), z.boolean(), {
     decode: (b) => b.value,
-    encode: (b) => new ABool(CONSTANT_CTX, b),
+    encode: (b) => new ABool(marshalCtx(), b),
   }),
 );
 
@@ -180,7 +251,7 @@ export const char = named(
   "char",
   z.codec(z.instanceof(ACharacter), z.string().length(1), {
     decode: (c) => c.valueOf(),
-    encode: (c) => new ACharacter(CONSTANT_CTX, c),
+    encode: (c) => new ACharacter(marshalCtx(), c),
   }),
 );
 
@@ -188,7 +259,7 @@ export const string = named(
   "string",
   z.codec(z.instanceof(AString), z.string(), {
     decode: (s) => s.valueOf(),
-    encode: (s) => new AString(CONSTANT_CTX, s),
+    encode: (s) => new AString(marshalCtx(), s),
   }),
 );
 
@@ -232,7 +303,7 @@ export const nil = named(
   "nil",
   z.codec(z.instanceof(ANil), z.null(), {
     decode: () => null,
-    encode: () => new ANil(CONSTANT_CTX),
+    encode: () => new ANil(marshalCtx()),
   }),
 );
 
@@ -241,7 +312,7 @@ export const undefinedResult = named(
   "undefinedResult",
   z.codec(z.instanceof(AVoid), z.undefined(), {
     decode: () => undefined,
-    encode: () => new AVoid(CONSTANT_CTX),
+    encode: () => new AVoid(marshalCtx()),
   }),
 );
 
@@ -281,9 +352,9 @@ export const exact = named(
       return n.num;
     },
     encode: (n) => {
-      if (typeof n === "bigint") return new AExact(CONSTANT_CTX, n);
+      if (typeof n === "bigint") return new AExact(marshalCtx(), n);
       TypeError.invariant(Number.isSafeInteger(n), `exact codec: ${n} is not a safe integer`);
-      return new AExact(CONSTANT_CTX, BigInt(n));
+      return new AExact(marshalCtx(), BigInt(n));
     },
   }),
 );
@@ -294,7 +365,7 @@ export const inexact = named(
   "inexact",
   z.codec(z.instanceof(AInexact), z.union([z.bigint(), z.number()]), {
     decode: (n) => n.real,
-    encode: (n) => new AInexact(CONSTANT_CTX, typeof n === "bigint" ? Number(n) : n),
+    encode: (n) => new AInexact(marshalCtx(), typeof n === "bigint" ? Number(n) : n),
   }),
 );
 
@@ -333,7 +404,7 @@ export const integer = named(
     },
     encode: (n) => {
       TypeError.invariant(Number.isSafeInteger(n), `integer codec: ${n} is not a safe integer`);
-      return new AExact(CONSTANT_CTX, BigInt(n));
+      return new AExact(marshalCtx(), BigInt(n));
     },
   }),
 );
@@ -347,13 +418,13 @@ export const number = named(
   z.union([
     z.codec(z.instanceof(AInexact), z.number(), {
       decode: (n) => n.real,
-      encode: (n) => new AInexact(CONSTANT_CTX, n),
+      encode: (n) => new AInexact(marshalCtx(), n),
     }),
     z.codec(z.instanceof(AExact), z.number(), {
       decode: (n) => exactToJsNumberOrDoor(n),
       encode: (n) => {
         TypeError.invariant(Number.isSafeInteger(n), `number codec: ${n} is not a safe integer`);
-        return new AExact(CONSTANT_CTX, BigInt(n));
+        return new AExact(marshalCtx(), BigInt(n));
       },
     }),
   ]),
@@ -371,7 +442,7 @@ export const bigint = named(
         }
         return n.num;
       },
-      encode: (n) => new AExact(CONSTANT_CTX, n),
+      encode: (n) => new AExact(marshalCtx(), n),
     }),
     z.codec(z.instanceof(AInexact), z.bigint(), {
       decode: (n) => {
@@ -381,7 +452,7 @@ export const bigint = named(
         }
         return BigInt(n.real);
       },
-      encode: (n) => new AInexact(CONSTANT_CTX, Number(n)),
+      encode: (n) => new AInexact(marshalCtx(), Number(n)),
     }),
   ]),
 );
@@ -413,7 +484,7 @@ export const looseNumber = named(
     z.custom<number>((v) => typeof v === "number"),
     {
       decode: (n) => (n instanceof AExact ? Number(n.num) / Number(n.denom) : n.real),
-      encode: (n) => (Number.isSafeInteger(n) ? new AExact(CONSTANT_CTX, BigInt(n)) : new AInexact(CONSTANT_CTX, n)),
+      encode: (n) => (Number.isSafeInteger(n) ? new AExact(marshalCtx(), BigInt(n)) : new AInexact(marshalCtx(), n)),
     },
   ),
 );
@@ -438,10 +509,10 @@ export const looseAnyNumber = named(
       },
       encode: (v) =>
         typeof v === "bigint"
-          ? new AExact(CONSTANT_CTX, v)
+          ? new AExact(marshalCtx(), v)
           : Number.isSafeInteger(v)
-            ? new AExact(CONSTANT_CTX, BigInt(v))
-            : new AInexact(CONSTANT_CTX, v),
+            ? new AExact(marshalCtx(), BigInt(v))
+            : new AInexact(marshalCtx(), v),
     },
   ),
 );
@@ -450,7 +521,7 @@ export const bytevector = named(
   "bytevector",
   z.codec(z.instanceof(ABytevector), z.instanceof(Uint8Array), {
     decode: (b) => b.__bytevector__ as Uint8Array<ArrayBuffer>,
-    encode: (b) => new ABytevector(CONSTANT_CTX, b),
+    encode: (b) => new ABytevector(marshalCtx(), b),
   }),
 );
 
@@ -483,12 +554,27 @@ const listContainer = z.custom<AListAlike>((x) => x instanceof APair || x instan
 
 // Walk pair spine into raw car array — rejecting cycles and improper (non-ANil-terminated)
 // lists. OUT schema (`z.array`/`z.tuple`) validates elements/arity.
+//
+// HEAP-METERED (CONSTANT_CTX-audit §2.2 "worst by blast radius" #2): this is the SAME
+// unbounded synchronous walk `env/pack-helpers.ts`'s `to_array` charges for — a
+// `list(...)`-typed rosetta/procedure input arg is a second, independent path to
+// materialize an arbitrary-length scheme list into one JS array, and before this charge
+// it was invisible to every sandboxed run's heap budget. Charges off the OPERAND's own
+// ctx (`ctxOf(l)`, never CONSTANT_CTX) — a run-built list carries the run's RunContext;
+// a quoted literal carries CONSTANT_CTX (no meter, parse-bounded anyway), matching
+// `to_array`'s own rule exactly. This walk and a later `list(...)` ENCODE of a fresh
+// array are independent allocations on independent objects — charging both is not a
+// double-charge of one value.
 function spineToArray(l: AListAlike): unknown[] {
+  const meter = ctxOf(l).heapMeter;
   const out: unknown[] = [];
   let node: unknown = l;
   while (node instanceof APair) {
     if (node.have_cycles("cdr")) throw new TypeError("list codec: cannot decode a circular list");
     out.push(node.car);
+    if (meter !== undefined && ++meter.used > meter.max) {
+      throw new ArrivalError(heapBudgetMessage(meter.max), []);
+    }
     node = node.cdr;
   }
   if (!(node instanceof ANil)) throw new TypeError("list codec: cannot decode an improper list");
@@ -525,7 +611,16 @@ export function list(headsOrElement: z.ZodTypeAny | readonly z.ZodTypeAny[] = va
     "list",
     z.codec(listContainer, out as z.ZodArray<z.ZodTypeAny>, {
       decode: (l) => spineToArray(l) as never,
-      encode: (arr) => APair.fromArray(CONSTANT_CTX, arr as SchemeValue[], false) as AListAlike,
+      // MINT-time charge (CONSTANT_CTX-audit §2.2 #2): the spine `APair.fromArray`
+      // builds is a fresh, independent allocation from the walk `spineToArray` above
+      // charges — charging both is not a double-charge of one value. `firstCtx`
+      // inherits the run off the array's own already-boxed elements (post-element-
+      // codec — see the function's own doc); empty array has nothing to charge.
+      encode: (arr) => {
+        const ctx = firstCtx(arr as SchemeValue[]);
+        chargeHeap(ctx, arr.length);
+        return APair.fromArray(ctx, arr as SchemeValue[], false) as AListAlike;
+      },
     }),
   );
   // Homogeneous form carries single element schema → prints `List<E>`. Fixed-heads
@@ -546,7 +641,14 @@ export function cons<C extends z.ZodTypeAny, D extends z.ZodTypeAny>(carE: C, cd
       // `as never`: zod's tuple input type is a variadic conditional it can't reconcile with
       // a plain 2-array here (generic-boundary cast, same shape as v1's `as z.input<E>[]`).
       decode: (p) => [p.car, p.cdr] as never,
-      encode: ([c, d]) => new APair(CONSTANT_CTX, c as SchemeValue, d as SchemeValue),
+      // Fixed 2-arity — not a spine of arbitrary length, so no heap charge (unlike
+      // `list`/`vector`/`dict`'s unbounded containers); still inherits the live run
+      // off whichever of car/cdr is already boxed (`firstCtx`), never a bare CONSTANT_CTX.
+      encode: ([c, d]) => {
+        const carValue = c as SchemeValue;
+        const cdrValue = d as SchemeValue;
+        return new APair(firstCtx([carValue, cdrValue]), carValue, cdrValue);
+      },
     }),
   );
   // Two element schemas → prints `Pair<Car, Cdr>` (dotted pair), NOT structural `[A, B]`.
@@ -570,11 +672,22 @@ export function vector<E extends z.ZodTypeAny = typeof value>(element: E = value
     z.union([
       z.codec(z.instanceof(AVector), z.array(element), {
         decode: (v) => v.__vector__ as z.input<E>[],
-        encode: (arr) => new AVector(CONSTANT_CTX, arr as SchemeValue[]),
+        // MINT-time charge — same rule as `list`'s encode above (§2.2 #2): a
+        // fresh AVector spine is an independent allocation, charged off the
+        // array's own already-boxed elements via `firstCtx`.
+        encode: (arr) => {
+          const ctx = firstCtx(arr as SchemeValue[]);
+          chargeHeap(ctx, arr.length);
+          return new AVector(ctx, arr as SchemeValue[]);
+        },
       }),
       z.codec(z.instanceof(AJSArray), z.array(element), {
         decode: (v) => v.source as z.input<E>[],
-        encode: (arr) => new AJSArray(CONSTANT_CTX, arr as SchemeValue[]),
+        encode: (arr) => {
+          const ctx = firstCtx(arr as SchemeValue[]);
+          chargeHeap(ctx, arr.length);
+          return new AJSArray(ctx, arr as SchemeValue[]);
+        },
       }),
     ]),
   );
@@ -614,15 +727,28 @@ export function dict<S extends Record<string, z.ZodTypeAny>>(shape: S = {} as S)
           // already unwrapped to plain JS (egress-proxy.ts), the membrane exit shape, not
           // the inside-the-sandbox record this codec feeds its out-schema.
           const names = keys.length ? keys : src.keys();
+          // HEAP-METERED (CONSTANT_CTX-audit §2.2 #2, same rationale as `spineToArray`
+          // above): walking every key of an open-key dict is the same unbounded
+          // synchronous materialization `to_array` charges for lists — charge off the
+          // SOURCE dict's own ctx (never CONSTANT_CTX) before building the record.
+          chargeHeap(ctxOf(src), names.length);
           return Object.fromEntries(names.map((k) => [k, src.get(k)])) as never;
         },
-        encode: (rec: Record<string, unknown>) =>
-          new ADict(
-            CONSTANT_CTX,
-            Object.entries(rec).map(
-              ([k, v]) => [new ASymbol(CONSTANT_CTX, k), v as SchemeValue] as [DictKey, SchemeValue],
-            ),
-          ),
+        encode: (rec: Record<string, unknown>) => {
+          const entries = Object.entries(rec);
+          // MINT-time charge — same rule as `list`/`vector`'s encode above (§2.2 #2):
+          // a fresh ADict is an independent allocation, charged off the record's own
+          // already-boxed VALUES via `firstCtx` (a keyed-shape dict's per-field codecs
+          // already ran, so a value here is an AValue unless the record is empty).
+          // The ctx also mints every key's ASymbol (the "dict-key ASymbol" gap the
+          // audit calls out by name) — a key must ride the SAME run as its value.
+          const ctx = firstCtx(entries.map(([, v]) => v as SchemeValue));
+          chargeHeap(ctx, entries.length);
+          return new ADict(
+            ctx,
+            entries.map(([k, v]) => [new ASymbol(ctx, k), v as SchemeValue] as [DictKey, SchemeValue]),
+          );
+        },
       },
     ),
   );
@@ -635,7 +761,7 @@ export const box = named(
   "box",
   z.codec(z.instanceof(AJSObject), z.custom<object>(), {
     decode: (o) => o.source,
-    encode: (o) => new AJSObject(CONSTANT_CTX, o),
+    encode: (o) => new AJSObject(marshalCtx(), o),
   }),
 );
 
@@ -676,17 +802,22 @@ export function procedure<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(input?
           // owns escape/pending/abort bookkeeping; this closure owns only marshaling.
           const wrapper = (...jsArgs: unknown[]) =>
             withRegionCall(scope, async () => {
-              const schemeArgs = input ? jsArgs.map((a) => z.encode(input, a as never)) : jsArgs;
+              // `withMarshalCtx(scope.runCtx, …)` — NOT a bare `marshalCtx()` read: this
+              // wrapper CLOSES OVER `scope` at decode time but may be INVOKED much later,
+              // when `currentRegionScope()` is whatever's ambient at THAT call (possibly
+              // unrelated, possibly `undefined`) — `scope.runCtx` is the one ctx this
+              // invocation is actually chartered under, so every per-arg scalar/container
+              // codec `input`'s marshaling reaches for (via `marshalCtx()`) must see IT,
+              // not an incidental ambient guess.
+              const schemeArgs = input
+                ? withMarshalCtx(scope.runCtx, () => jsArgs.map((a) => z.encode(input, a as never)))
+                : jsArgs;
               // Re-entry nests under exporting invocation via SAME ambient mechanism the
               // untyped path uses — never through callable's `this`.
-              // `scope.runCtx` also carries the call itself (strict mode, abort signal) even
-              // though per-field zod codecs above stay CONSTANT_CTX by design (unrelated to
-              // region discipline — see scheme-zod.ts's own primitive encoders, e.g.
-              // `bytevector`'s `encode`).
               const r = await withDynamicCallSite(scope.dynSite, () =>
                 applyCallback(callable, schemeArgs as SchemeValue[], scope.runCtx),
               );
-              return output ? z.decode(output, r as never) : r;
+              return output ? withMarshalCtx(scope.runCtx, () => z.decode(output, r as never)) : r;
             });
           scope.cache.set(callable, wrapper);
           return wrapper;
@@ -696,10 +827,18 @@ export function procedure<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(input?
             name: "<host-procedure>",
             arity: { min: input ? 1 : 0, max: null },
             contract: undefined,
-            impl: async (schemeArgs) => {
-              const jsArgs = input ? schemeArgs.map((a) => z.decode(input, a as never)) : schemeArgs;
+            // `runCtx` is THIS invocation's live context — `ACallable.ts`'s `CallableImpl`
+            // contract hands it as `impl`'s own second parameter (`this.#impl(args,
+            // runCtx)`), the most direct channel anywhere in this file: no ambient guess
+            // needed. Installed as the marshal ctx for the synchronous decode/encode
+            // calls below, so every per-arg/per-result scalar+container codec
+            // (`marshalCtx()`) mints under THIS run.
+            impl: async (schemeArgs, runCtx) => {
+              const jsArgs = withMarshalCtx(runCtx, () =>
+                input ? schemeArgs.map((a) => z.decode(input, a as never)) : schemeArgs,
+              );
               const r = await jsFn(...jsArgs);
-              return (output ? z.encode(output, r as never) : r) as SchemeValue;
+              return withMarshalCtx(runCtx, () => (output ? z.encode(output, r as never) : r)) as SchemeValue;
             },
           }),
       },

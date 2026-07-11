@@ -84,7 +84,7 @@ import { ASymbol } from "../values/primitives/ASymbol.js";
 import { ACharacter } from "../values/primitives/ACharacter.js";
 import { ADict, foldKeyName, type DictKey } from "../values/primitives/ADict.js";
 import { ANil, nil } from "../values/primitives/ANil.js";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { chargeHeap } from "../heap-budget.js";
 import { type SchemeValue } from "../values/types.js";
 import { type AValue } from "../values/primitives/AValue.js";
 import equality from "./r7rs/equality.js";
@@ -178,7 +178,12 @@ export default new EnvCapability("scheme/polyglot", {
       function (this: CallCtx, obj: unknown) {
         const keys = obj != null ? (obj as Partial<AValue>)["arrival/tagless-final/keys"] : undefined;
         const names = typeof keys === "function" ? keys.call(obj) : [];
-        return names.map((k) => new AString(CONSTANT_CTX, k));
+        // Live invocation ctx — `this: CallCtx` already carries it (dispatch's
+        // `hostImpl.apply(makeCallCtx(runCtx), args)`, common/capability.ts); minting
+        // under CONSTANT_CTX here was the CONSTANT_CTX-audit's dict-key-adjacent
+        // "high blast" finding for this pack (§2.2) — every `(@keys d)` call built
+        // its result strings run-invisible despite `this.runCtx` sitting one read away.
+        return names.map((k) => new AString(this.runCtx, k));
       },
     ),
     // `dict` — the Scheme-side companion to the `:key` accessor and the `@` read:
@@ -203,18 +208,29 @@ export default new EnvCapability("scheme/polyglot", {
       // the same behavior the old plain-object `obj[key] = value` loop had. ADict's
       // own constructor requires unique fold-names up front (throws otherwise), so
       // resolving duplicates down to one pair per name is this call site's job.
-      ((...args: unknown[]): ADict => {
+      //
+      // A real `function(this: CallCtx, …)`, not an arrow — the CONSTANT_CTX-audit's
+      // "high blast" finding for this pack (§2.2): dispatch delivers the live ctx via
+      // `this: CallCtx` (common/capability.ts's `hostImpl.apply(makeCallCtx(runCtx),
+      // args)`), but an arrow-fn impl structurally cannot read `this` — every `(dict
+      // …)` call built its ADict + every key's ASymbol run-invisible despite the ctx
+      // sitting one hop away. Also heap-charges the fresh ADict (CONSTANT_CTX-audit's
+      // #2 worst bug — an unbounded interleaved arg list is the same unmetered-spine
+      // shape `scheme-zod.ts`'s container codecs close): mirrors `to_array`'s rule,
+      // off `this.runCtx`.
+      function (this: CallCtx, ...args: unknown[]): ADict {
         const byName = new Map<string, [DictKey, SchemeValue]>();
         for (let i = 0; i + 1 < args.length; i += 2) {
           const raw = args[i];
           const key: DictKey =
             raw instanceof ASymbol || raw instanceof AString || raw instanceof ACharacter
               ? raw
-              : new AString(CONSTANT_CTX, String(raw).replace(/^:/, ""));
+              : new AString(this.runCtx, String(raw).replace(/^:/, ""));
           byName.set(foldKeyName(key), [key, args[i + 1] as SchemeValue]);
         }
-        return new ADict(CONSTANT_CTX, [...byName.values()]);
-      }) as unknown as (...args: SchemeValue[]) => ADict,
+        chargeHeap(this.runCtx, byName.size);
+        return new ADict(this.runCtx, [...byName.values()]);
+      } as unknown as (...args: SchemeValue[]) => ADict,
     ),
 
     // ═══════════════════════════════════════════════════════════════════════════
