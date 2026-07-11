@@ -23,12 +23,15 @@ export function tagless(tpl: TemplateStringsArray, ...sub: unknown[]): TaglessSy
     // `name` is a free author string; cast to the declared `TaglessOp` union at this one
     // boundary. A typo'd op just resolves no method and hits the teaching throw below.
     const fn = resolveMethod(receiver, tf(name as TaglessOp));
-    TypeError.invariant(
-      fn !== undefined,
-      () =>
+    // MODEL-REACHABLE door — (car 1) lands here, so per Rule 0 this throws plain: an
+    // `invariant` would prefix "Invariant failed: ", which reads like an engine bug
+    // rather than a program mistake (see the not-callable doors note in evaluator.ts).
+    if (fn === undefined) {
+      throw new TypeError(
         `${name}: the ${describeReceiver(receiver)} primitive does not support \`${name}\` ` +
-        `(it declares no ${tf(name as TaglessOp)}). A tagless op lives ON the arrival terms whose algebra implements it.`,
-    );
+          `(it declares no ${tf(name as TaglessOp)}). A tagless op lives ON the arrival terms whose algebra implements it.`,
+      );
+    }
     return await fn.call(receiver, ...leading, runCtx);
   };
   // No `Contract` param here (see `TaglessSymbolDef.provenance`'s doc) — always "pipe".

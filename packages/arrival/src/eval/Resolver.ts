@@ -66,11 +66,15 @@ function cxrUnfold(name: string): ANativeProcedure | undefined {
       let v: unknown = arg;
       for (const t of steps) {
         const m = (v as Partial<Record<symbol, unknown>> | null | undefined)?.[tf(t === "a" ? "car" : "cdr")];
-        TypeError.invariant(
-          typeof m === "function",
-          () =>
+        // MODEL-REACHABLE door — (cadr 5) is one keystroke away, so per Rule 0 this
+        // throws plain: an `invariant` here would prefix "Invariant failed: ", which
+        // reads like an engine bug rather than a program mistake (see the not-callable
+        // doors note in evaluator.ts).
+        if (typeof m !== "function") {
+          throw new TypeError(
             `${name}: the ${v instanceof AValue ? v.kind : v == null ? String(v) : typeof v} primitive does not support ${t === "a" ? "car" : "cdr"} (no ${t === "a" ? "arrival/tagless-final/car" : "arrival/tagless-final/cdr"}).`,
-        );
+          );
+        }
         v = (m as (...a: unknown[]) => unknown).call(v, runCtx);
       }
       // The walk's result is the receivers' own car/cdr algebra output — scheme values by

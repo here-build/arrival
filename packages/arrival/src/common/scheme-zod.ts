@@ -271,7 +271,12 @@ export const exact = named(
   "exact",
   z.codec(z.instanceof(AExact), z.union([z.bigint(), z.number()]), {
     decode: (n) => {
-      Error.invariant(n.denom === 1n, `exact codec: exact rational ${n.toString()} has no integer form`);
+      // MODEL-REACHABLE door (a program's own exact rational reaching a native's arg
+      // decode) — plain throw, never `invariant`: the "Invariant failed: " prefix
+      // reads like an engine bug rather than a program mistake. Same rule at every
+      // decode site below; the encode sites (host JS → scheme boxing) stay
+      // `invariant` — a bad host value IS an internal contract breach.
+      if (n.denom !== 1n) throw new Error(`exact codec: exact rational ${n.toString()} has no integer form`);
       return n.num;
     },
     encode: (n) => {
@@ -296,14 +301,17 @@ const SAFE_MAX = BigInt(Number.MAX_SAFE_INTEGER);
 const SAFE_MIN = BigInt(Number.MIN_SAFE_INTEGER);
 
 function exactToJsNumberOrDoor(n: AExact): number {
-  Error.invariant(
-    n.denom === 1n,
-    `number codec: exact rational ${n.toString()} cannot be a faithful JS number — use z.bigint or the integer codec`,
-  );
-  Error.invariant(
-    n.num <= SAFE_MAX && n.num >= SAFE_MIN,
-    `number codec: exact integer ${n.toString()} is outside JS safe-integer range — use z.bigint for arbitrary precision`,
-  );
+  // Doors, not invariants — model-reachable (see the `exact` decode note above).
+  if (n.denom !== 1n) {
+    throw new Error(
+      `number codec: exact rational ${n.toString()} cannot be a faithful JS number — use z.bigint or the integer codec`,
+    );
+  }
+  if (n.num > SAFE_MAX || n.num < SAFE_MIN) {
+    throw new Error(
+      `number codec: exact integer ${n.toString()} is outside JS safe-integer range — use z.bigint for arbitrary precision`,
+    );
+  }
   return Number(n.num);
 }
 
@@ -314,10 +322,10 @@ export const integer = named(
   z.codec(z.union([z.instanceof(AExact), z.instanceof(AInexact)]), z.number().int(), {
     decode: (n) => {
       if (n instanceof AInexact) {
-        TypeError.invariant(
-          Number.isSafeInteger(n.real),
-          `integer codec: inexact ${n.toString()} is not a safe integer`,
-        );
+        // Door, not invariant — model-reachable (see the `exact` decode note above).
+        if (!Number.isSafeInteger(n.real)) {
+          throw new TypeError(`integer codec: inexact ${n.toString()} is not a safe integer`);
+        }
         return n.real;
       }
       return exactToJsNumberOrDoor(n); // rejects rationals + out-of-range
@@ -356,14 +364,20 @@ export const bigint = named(
   z.union([
     z.codec(z.instanceof(AExact), z.bigint(), {
       decode: (n) => {
-        TypeError.invariant(n.denom === 1n, `bigint codec: exact rational ${n.toString()} has no integer bigint form`);
+        // Door, not invariant — model-reachable (see the `exact` decode note above).
+        if (n.denom !== 1n) {
+          throw new TypeError(`bigint codec: exact rational ${n.toString()} has no integer bigint form`);
+        }
         return n.num;
       },
       encode: (n) => new AExact(CONSTANT_CTX, n),
     }),
     z.codec(z.instanceof(AInexact), z.bigint(), {
       decode: (n) => {
-        TypeError.invariant(Number.isInteger(n.real), `bigint codec: inexact ${n.toString()} has a fractional part`);
+        // Door, not invariant — model-reachable (see the `exact` decode note above).
+        if (!Number.isInteger(n.real)) {
+          throw new TypeError(`bigint codec: inexact ${n.toString()} has a fractional part`);
+        }
         return BigInt(n.real);
       },
       encode: (n) => new AInexact(CONSTANT_CTX, Number(n)),
