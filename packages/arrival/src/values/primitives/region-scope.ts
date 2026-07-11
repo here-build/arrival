@@ -95,7 +95,13 @@ export interface TrackEmissionSink {
  *  (e.g. a direct-JS caller with no ctx at all — the same "no ambient scope"
  *  fallback every reverse-membrane consumer degrades to). Never fires, so
  *  sharing one instance across every unscoped wrapper adds no listener cost. */
-const NEVER_ABORTS: AbortSignal = new AbortController().signal;
+let _neverAborts: AbortSignal | undefined;
+/** The shared never-firing signal, lazily constructed on first use. `new AbortController()`
+ *  is a disallowed operation at workerd's global (module-init) scope, so it must NOT run at
+ *  import time — deferring it here keeps region-scope importable inside a Cloudflare Worker. */
+function neverAborts(): AbortSignal {
+  return (_neverAborts ??= new AbortController().signal);
+}
 
 /**
  * The invocation-scope token a reverse wrapper closes over. `open`/
@@ -177,7 +183,11 @@ export interface RegionScope {
 export const DETACHED_SCOPE: RegionScope = {
   open: true,
   pending: 0,
-  signal: NEVER_ABORTS,
+  // Lazy getter, not a stored field: `neverAborts()` constructs an AbortController on first
+  // read (deferred out of module init for workerd). readonly `signal` is satisfied by a getter.
+  get signal(): AbortSignal {
+    return neverAborts();
+  },
   runCtx: CONSTANT_CTX,
   dynSite: undefined,
   cache: new WeakMap(),
@@ -201,7 +211,7 @@ export function openRegionScope(opts: { runCtx: RunContext; dynSite: unknown }):
   return {
     open: true,
     pending: 0,
-    signal: parentSignal === undefined ? NEVER_ABORTS : AbortSignal.any([parentSignal]),
+    signal: parentSignal === undefined ? neverAborts() : AbortSignal.any([parentSignal]),
     runCtx: opts.runCtx,
     dynSite: opts.dynSite,
     cache: new WeakMap(),
@@ -257,7 +267,7 @@ export async function reconstructRegionScope(opts: {
     // first resolving that (impossible; the original call is gone) correctly
     // throws the incomplete door, never silently reports a clean close.
     pending: fold.pending,
-    signal: parentSignal === undefined ? NEVER_ABORTS : AbortSignal.any([parentSignal]),
+    signal: parentSignal === undefined ? neverAborts() : AbortSignal.any([parentSignal]),
     runCtx,
     dynSite,
     cache: new WeakMap(),
