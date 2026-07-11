@@ -9,7 +9,7 @@
 // teaching state survives world rebuilds (e.g. tools/listChanged). It is env-lifecycle-agnostic
 // and model-agnostic.
 
-import { APair, exec, parse, theVoid, tokenize, type LexicalScope, type SchemeValue } from "@here.build/arrival";
+import { APair, execState, parse, theVoid, tokenize, type LexicalScope, type SchemeValue } from "@here.build/arrival";
 import type { AssembledAmbient } from "@here.build/arrival/env";
 import { toSExprString } from "@here.build/arrival-serializer";
 
@@ -339,7 +339,13 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
         const remaining = deadline - Date.now();
         if (remaining <= 0) return timeoutResult();
         try {
-          const running = exec(form, {
+          // COMPLEX tier on purpose: the runner is JS-side TOOLING, not a membrane exit.
+          // `exec` (SIMPLE tier) toJS-unwraps every result, which breaks BOTH consumers
+          // downstream — the `!== theVoid` filter (box identity gone: void renders as a
+          // spurious observation) and the serializer's provenance-aware rendering
+          // (ASymbol/AString/Values duck-typing sees plain JS instead of boxed values).
+          // `execState` hands back the boxed per-form values this loop actually renders.
+          const running = execState(form, {
             ambient: input.ambient,
             scope: input.scope,
             budgetMs: remaining,
@@ -354,7 +360,7 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
           }
           const facts = statementFacts[index]!;
           blocks.push(
-            ...raced
+            ...raced.values
               .filter((r) => r !== theVoid)
               .map((r) => ({ type: "text" as const, text: render(r, callMaxTotalChars) })),
           );

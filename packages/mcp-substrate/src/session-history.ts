@@ -11,7 +11,7 @@
 // This module is a sibling to the type-hints context ring. They observe the same events
 // but project different data (original source here vs. degraded `declare const ...` there).
 
-import { exec, type LexicalScope } from "@here.build/arrival";
+import { execState, type LexicalScope } from "@here.build/arrival";
 import type { AssembledAmbient } from "@here.build/arrival/env";
 
 /** Detects a qualified tool name (`server/tool`) anywhere in a form.
@@ -202,7 +202,10 @@ export async function replaySessionHistory(
       continue;
     }
     try {
-      await exec(entry.source, { ambient, scope });
+      // COMPLEX tier: replay only needs the scope mutation, never the values — the SIMPLE
+      // tier's toJS unwrap is a pure hazard here (a strict-exit throw AFTER the define
+      // already landed would misreport a successfully-applied entry as `failed`).
+      await execState(entry.source, { ambient, scope });
       applied.push(entry.name);
     } catch {
       failed.push(entry.name);
