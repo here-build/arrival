@@ -28,6 +28,7 @@ import { EvalTrace } from "@here.build/arrival/provenance";
 import { armCapabilities, type ArmedCapabilities } from "./capabilities.js";
 import { resolveOutputMode, type OutputMode } from "./output-mode.js";
 import { repl } from "./repl.js";
+import { formDetail, renderFormDetail } from "./form-detail.js";
 import { renderRunOutline } from "./run-outline.js";
 import { runView } from "./run-view.js";
 import { colorMode } from "./tints.js";
@@ -58,6 +59,8 @@ options:
   --outline                 (run) after the run, print a source-ordered outline of the
                             forms that executed to stderr — each with its state and its
                             invocation ×count (the dynamic multiplicity behind each form)
+  --form <scope>            (run) drill into one form by its scopeId (head@line:col, from
+                            --outline): its invocation aggregate, callers, sampled values
   --with <module>           arm a capability module (repeatable) — an npm package,
                             package subpath, or ./relative path exporting
                             EnvCapability instance(s)
@@ -77,24 +80,40 @@ async function readSource(file: string): Promise<string> {
   }
 }
 
+/** Color mode for the stderr inspection surfaces (outline / form detail): follows
+ *  stderr's OWN isTTY (clig.dev per-stream rule) — a piped stderr stays uncolored. */
+function stderrMode(): ReturnType<typeof colorMode> {
+  return process.stderr.isTTY === true && process.env.NO_COLOR === undefined ? colorMode(process.env) : "none";
+}
+
 /** Render the run outline to stderr (never stdout — stdout is the program's values, kept
- *  clean for `| jq`). Color follows stderr's OWN isTTY (clig.dev per-stream rule): a piped
- *  stderr stays uncolored. The header's invocation total is the quiet "it did all that"
- *  beat — `(fib 10)` reports 796 invocations across 9 forms. */
+ *  clean for `| jq`). The header's invocation total is the quiet "it did all that" beat —
+ *  `(fib 10)` reports 796 invocations across 9 forms. */
 function emitOutline(trace: EvalTrace): void {
   const nodes = runView(trace);
   if (nodes.length === 0) return;
-  const mode = process.stderr.isTTY === true && process.env.NO_COLOR === undefined ? colorMode(process.env) : "none";
   process.stderr.write(`\n— run outline: ${nodes.length} forms, ${trace.invocationLog.length} invocations —\n`);
-  for (const line of renderRunOutline(nodes, mode)) process.stderr.write(`${line}\n`);
+  for (const line of renderRunOutline(nodes, stderrMode())) process.stderr.write(`${line}\n`);
 }
 
-async function runFile(file: string, mode: OutputMode, outline: boolean, armed?: ArmedCapabilities): Promise<number> {
+/** Drill down into one form (its `scopeId`, from `--outline`) — its invocation aggregate,
+ *  callers, and sampled values, to stderr. */
+function emitFormDetail(trace: EvalTrace, scope: string): void {
+  process.stderr.write("\n");
+  for (const line of renderFormDetail(formDetail(trace, scope), stderrMode())) process.stderr.write(`${line}\n`);
+}
+
+async function runFile(
+  file: string,
+  mode: OutputMode,
+  inspect: { outline: boolean; form?: string },
+  armed?: ArmedCapabilities,
+): Promise<number> {
   const source = await readSource(file);
-  // The interactive-run tap: when `--outline` is on, run under an `EvalTrace` so the
+  // The interactive-run tap: `--outline` / `--form` run under an `EvalTrace` so the
   // template↔invocation structure is captured, then render it. `undefined` tap ⇒ the
   // byte-identical untapped path.
-  const trace = outline ? new EvalTrace() : undefined;
+  const trace = inspect.outline || inspect.form !== undefined ? new EvalTrace() : undefined;
   try {
     let values: unknown[];
     if (usesRequire(source)) {
@@ -123,15 +142,22 @@ async function runFile(file: string, mode: OutputMode, outline: boolean, armed?:
       });
     }
     for (const v of values) printValue(v, mode);
-    if (trace !== undefined) emitOutline(trace);
+    if (trace !== undefined) emitInspection(trace, inspect);
     return 0;
   } catch (e) {
     printError(e);
-    // Even on a fault, the partial trace is worth showing — the outline marks the failing
-    // form `error`, which is often the whole point of asking for it.
-    if (trace !== undefined) emitOutline(trace);
+    // Even on a fault, the partial trace is worth showing — it marks the failing form
+    // `error`, which is often the whole point of asking for it.
+    if (trace !== undefined) emitInspection(trace, inspect);
     return 1;
   }
+}
+
+/** `--form` (drill into one form) takes precedence over `--outline` (the overview) when
+ *  both are set — you asked for the specific thing. */
+function emitInspection(trace: EvalTrace, inspect: { outline: boolean; form?: string }): void {
+  if (inspect.form !== undefined) emitFormDetail(trace, inspect.form);
+  else if (inspect.outline) emitOutline(trace);
 }
 
 async function checkFile(file: string, armed?: ArmedCapabilities): Promise<number> {
@@ -184,6 +210,7 @@ async function main(argv: string[]): Promise<number> {
       config: { type: "string" },
       json: { type: "boolean" },
       outline: { type: "boolean" },
+      form: { type: "string" },
     },
   });
   if (values.help === true) {
@@ -214,7 +241,7 @@ async function main(argv: string[]): Promise<number> {
         env: process.env,
         json: values.json === true,
       });
-      return runFile(file, mode, values.outline === true, armed);
+      return runFile(file, mode, { outline: values.outline === true, form: values.form }, armed);
     }
     case "check": {
       if (files.length === 0) {
