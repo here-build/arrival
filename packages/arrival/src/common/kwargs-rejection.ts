@@ -107,10 +107,11 @@ function issueLines(
 /** Format a kwargs decode rejection into the frozen shape. Exported for the
  *  substrate/manifold layers that assert against (or parse) the grammar.
  *
- *  An ANONYMOUS def (empty name — the manifold binds tool rosettas through
- *  `NAME_DOC_TEMPLATE`, whose parseNameDoc split yields `""`; the real qualified
- *  name arrives as error METADATA in the design's Phase 3) drops the name segment
- *  rather than rendering the broken `: arguments rejected` head. */
+ *  A genuinely ANONYMOUS def (empty parsed name) drops the name segment rather than
+ *  rendering the broken `: arguments rejected` head. (Manifold tool defs are NOT this
+ *  case anymore — their NAME_DOC_TEMPLATE was a malformed 2-part template that parsed
+ *  every def as anonymous, fixed 2026-07-11 in arrival-manifold bind.ts — but the
+ *  headless degradation stays for any true anonymous rosetta.) */
 export function formatKwargsRejection(
   qualifiedName: string,
   problems: readonly ProblemLine[],
