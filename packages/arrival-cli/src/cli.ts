@@ -23,10 +23,14 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 
 import { exec, execState, LexicalScope, StaticValidationError } from "@here.build/arrival";
+import { EvalTrace } from "@here.build/arrival/provenance";
 
 import { armCapabilities, type ArmedCapabilities } from "./capabilities.js";
 import { resolveOutputMode, type OutputMode } from "./output-mode.js";
 import { repl } from "./repl.js";
+import { renderRunOutline } from "./run-outline.js";
+import { runView } from "./run-view.js";
+import { colorMode } from "./tints.js";
 import {
   budgets,
   formatDiagnostic,
@@ -51,6 +55,9 @@ options:
   --json                    (run) emit each form's value as JSON on stdout — one value
                             per line (NDJSON), for piping to jq and agent consumers.
                             Machine output is opt-in: default stdout stays s-expr.
+  --outline                 (run) after the run, print a source-ordered outline of the
+                            forms that executed to stderr — each with its state and its
+                            invocation ×count (the dynamic multiplicity behind each form)
   --with <module>           arm a capability module (repeatable) — an npm package,
                             package subpath, or ./relative path exporting
                             EnvCapability instance(s)
@@ -70,8 +77,24 @@ async function readSource(file: string): Promise<string> {
   }
 }
 
-async function runFile(file: string, mode: OutputMode, armed?: ArmedCapabilities): Promise<number> {
+/** Render the run outline to stderr (never stdout — stdout is the program's values, kept
+ *  clean for `| jq`). Color follows stderr's OWN isTTY (clig.dev per-stream rule): a piped
+ *  stderr stays uncolored. The header's invocation total is the quiet "it did all that"
+ *  beat — `(fib 10)` reports 796 invocations across 9 forms. */
+function emitOutline(trace: EvalTrace): void {
+  const nodes = runView(trace);
+  if (nodes.length === 0) return;
+  const mode = process.stderr.isTTY === true && process.env.NO_COLOR === undefined ? colorMode(process.env) : "none";
+  process.stderr.write(`\n— run outline: ${nodes.length} forms, ${trace.invocationLog.length} invocations —\n`);
+  for (const line of renderRunOutline(nodes, mode)) process.stderr.write(`${line}\n`);
+}
+
+async function runFile(file: string, mode: OutputMode, outline: boolean, armed?: ArmedCapabilities): Promise<number> {
   const source = await readSource(file);
+  // The interactive-run tap: when `--outline` is on, run under an `EvalTrace` so the
+  // template↔invocation structure is captured, then render it. `undefined` tap ⇒ the
+  // byte-identical untapped path.
+  const trace = outline ? new EvalTrace() : undefined;
   try {
     let values: unknown[];
     if (usesRequire(source)) {
@@ -81,7 +104,7 @@ async function runFile(file: string, mode: OutputMode, armed?: ArmedCapabilities
       process.stderr.write(`${REQUIRE_SKIP_NOTE}\n`);
       const { ambient, scope } = await loaderSession(path.dirname(path.resolve(file)), `arrival-run:${path.basename(file)}`, armed);
       try {
-        values = await exec(source, { ambient, scope, ...budgets() });
+        values = await exec(source, { ambient, scope, ...budgets(), tap: trace });
       } finally {
         await ambient.dispose();
       }
@@ -95,13 +118,18 @@ async function runFile(file: string, mode: OutputMode, armed?: ArmedCapabilities
       values = await exec(source, {
         ...budgets(),
         staticValidation: "on",
+        tap: trace,
         ...(armed === undefined ? {} : { capabilities: armed.capabilities, config: armed.config }),
       });
     }
     for (const v of values) printValue(v, mode);
+    if (trace !== undefined) emitOutline(trace);
     return 0;
   } catch (e) {
     printError(e);
+    // Even on a fault, the partial trace is worth showing — the outline marks the failing
+    // form `error`, which is often the whole point of asking for it.
+    if (trace !== undefined) emitOutline(trace);
     return 1;
   }
 }
@@ -155,6 +183,7 @@ async function main(argv: string[]): Promise<number> {
       with: { type: "string", multiple: true },
       config: { type: "string" },
       json: { type: "boolean" },
+      outline: { type: "boolean" },
     },
   });
   if (values.help === true) {
@@ -185,7 +214,7 @@ async function main(argv: string[]): Promise<number> {
         env: process.env,
         json: values.json === true,
       });
-      return runFile(file, mode, armed);
+      return runFile(file, mode, values.outline === true, armed);
     }
     case "check": {
       if (files.length === 0) {
