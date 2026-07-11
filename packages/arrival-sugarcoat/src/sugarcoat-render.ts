@@ -233,6 +233,17 @@ export interface SugarcoatOpts {
    *   "=>" → `:tagline => value`  (key unchanged — keeps construct/access symmetry)
    *   ":"  → `tagline: value`     (JSON/YAML — leading colon flips to trailing) */
   pairGlyph: "=>" | ":";
+  /** Render the empty-list literal `'()` as the word `nil`. SOUND — the reader folds
+   *  `nil` back to `(quote ())`, so it round-trips. schemeToSugarcoat turns this ON
+   *  only when the program doesn't shadow `nil` with a non-empty binding (a `(define
+   *  nil '())` is fine). Off for bare-node callers so a stray render stays literal. */
+  nilGlyph: boolean;
+  /** OPT-IN normalization: treat `str` as the tolerant concatenator it is — render
+   *  `string-append` as headless `@{…}` and DROP redundant string coercions
+   *  (`(number->string x)` → `x`). NOT a lens: the result reads back as `str`, not
+   *  `string-append`, so this mutates the stored form on save. Off by default so the
+   *  round-trip corpus gate is untouched; callers opt in for a one-way modernize. */
+  strTolerant: boolean;
 }
 export const DEFAULT_OPTS: SugarcoatOpts = {
   width: 120,
@@ -240,6 +251,8 @@ export const DEFAULT_OPTS: SugarcoatOpts = {
   curly: true,
   kwargHeads: new Set(["dict"]),
   pairGlyph: ":",
+  nilGlyph: false,
+  strTolerant: false,
 };
 
 /** A `(string-append …)` tolerates a wider line than the general budget before it
@@ -352,6 +365,17 @@ function inlineArrowBody(nd: Node, o: SugarcoatOpts): string {
 const isQuoteForm = (items: Node[]): boolean =>
   items.length === 2 && isAtom(items[0]) && !items[0].str && QUOTE_PREFIX[items[0].atom] !== undefined;
 
+/** `(quote ())` — the empty-list literal `'()`. Rendered as `nil` under `nilGlyph`;
+ *  the reader folds `nil` back, so it round-trips. Quasiquote/unquote don't count —
+ *  only a plain `quote` of the empty list is the list-end bottom. */
+const isEmptyQuote = (items: Node[]): boolean =>
+  items.length === 2 &&
+  isAtom(items[0]) &&
+  !items[0].str &&
+  items[0].atom === "quote" &&
+  !isAtom(items[1]) &&
+  items[1].list.length === 0;
+
 const hasDot = (items: Node[]): boolean => items.some((it) => isAtom(it) && !it.str && it.atom === ".");
 
 const isInfix = (items: Node[], o: SugarcoatOpts): boolean =>
@@ -370,17 +394,35 @@ const unescapeScheme = (s: string): string =>
   s.replace(/\\(["\\ntr])/g, (_m, c: string) => (c === "n" ? "\n" : c === "t" ? "\t" : c === "r" ? "\r" : c));
 const isStrNode = (n: Node): n is { atom: string; str: true } => isAtom(n) && !!(n as { str?: boolean }).str;
 
+// String coercions that `str` (the tolerant concatenator) makes redundant — stripped
+// under `strTolerant`. Only scalar→string coercions: `(list->string x)` is NOT here,
+// str would repr the list, not join its chars, so dropping it would change meaning.
+const COERCE_STRIP = new Set(["number->string", "symbol->string", "->string"]);
+const stripCoercion = (nd: Node): Node =>
+  !isAtom(nd) &&
+  nd.list.length === 2 &&
+  isAtom(nd.list[0]) &&
+  !nd.list[0].str &&
+  COERCE_STRIP.has(nd.list[0].atom)
+    ? nd.list[1]
+    : nd;
+
 /** Emit one interpolation part. A simple symbol → `@id`, guarded to `@|id|` when the
  *  NEXT literal starts with an interp-class char (else the reader reads them glued).
- *  A classic list (`(f x)`) → `@(f x)` graft. Anything else → null (caller bails to
- *  classic — no sound at-exp spelling). */
-function interpPiece(p: Node, next: Node | undefined, o: SugarcoatOpts): string | null {
-  if (isAtom(p) && !p.str && INTERP_ID.test(p.atom)) {
+ *  Any other node → an `@(…)` graft of its CLASSIC-prefix form. Classic (not sugar) is
+ *  load-bearing: the `@(datum)` reader parses the graft as one sexpr, so a method-chain
+ *  (`x.f`, no parens) or a re-parenthesized sugar form (`(xs.map{…})` → double-wrap)
+ *  wouldn't round-trip — but `(f x)` classic reads back verbatim. A non-INTERP_ID atom
+ *  has no spelling → null (caller bails to classic). */
+function interpPiece(p: Node, next: Node | undefined, _o: SugarcoatOpts): string | null {
+  if (isAtom(p)) {
+    if (p.str || !INTERP_ID.test(p.atom)) return null;
     const glue = next != null && isStrNode(next) && INTERP_ID.test(unescapeScheme(next.atom)[0] ?? "");
     return glue ? `@|${p.atom}|` : `@${p.atom}`;
   }
-  const inner = inlineSugarcoat(p, o);
-  return inner.startsWith("(") ? `@${inner}` : null;
+  // inlineScheme of a list is already parenthesized (`(f x)`), which IS the `@(datum)`
+  // graft body — so `@` + it, not `@(` + it + `)` (that would double-wrap to `@((f x))`).
+  return `@${inlineScheme(p)}`;
 }
 
 /** Render `(str …)`/`(string-append …)` as a SINGLE-LINE at-expression, or null when
@@ -390,11 +432,15 @@ function interpPiece(p: Node, next: Node | undefined, o: SugarcoatOpts): string 
  *  at least one prose literal (preference — don't at-exp `(str x y)`). */
 function renderAtExpr(items: Node[], o: SugarcoatOpts): string | null {
   if (!o.curly || !isAtom(items[0]) || items[0].str || !AT_TEXT_HEADS.has(items[0].atom)) return null;
-  const head = items[0].atom;
-  const parts = items.slice(1);
+  // strTolerant: `string-append` is the tolerant `str`; render headless and drop the
+  // redundant coercion wrappers (one-way normalization — see COERCE_STRIP / SugarcoatOpts).
+  const head = o.strTolerant && items[0].atom === "string-append" ? "str" : items[0].atom;
+  const parts = (o.strTolerant ? items.slice(1).map(stripCoercion) : items.slice(1));
   if (parts.length === 0) return null;
   let prevWasStr = false;
-  let sawProse = false;
+  let sawLiteral = false; // ≥1 string literal — else it's `(str x y)`, not worth an at-exp
+  let sawProse = false; // a space/quote-bearing literal — genuine prose
+  let sawInterp = false; // ≥1 hole — a template worth surfacing even without spaces
   let body = "";
   for (let k = 0; k < parts.length; k++) {
     const p = parts[k];
@@ -403,16 +449,20 @@ function renderAtExpr(items: Node[], o: SugarcoatOpts): string | null {
       prevWasStr = true;
       const raw = unescapeScheme(p.atom);
       if (/[\n\r@{}]/.test(raw)) return null; // newline ⇒ multi-line path; @/brace ⇒ no text-mode escape
+      if (raw.length > 0) sawLiteral = true;
       if (/[ "]/.test(raw)) sawProse = true; // space or quote ⇒ genuine prose
       body += raw;
     } else {
       prevWasStr = false;
       const piece = interpPiece(p, parts[k + 1], o);
       if (piece == null) return null;
+      sawInterp = true;
       body += piece;
     }
   }
-  if (!sawProse) return null;
+  // Worth an at-exp iff there's real text AND it's more than a bare word — either prose
+  // or a hole. `(str "hello")` (lone wordless literal) and `(str x y)` (no literal) stay classic.
+  if (!sawLiteral || (!sawProse && !sawInterp)) return null;
   return head === "str" ? `@{${body}}` : `@${head}{${body}}`;
 }
 
@@ -424,8 +474,11 @@ function renderAtExpr(items: Node[], o: SugarcoatOpts): string | null {
 function renderAtDedentBlock(nd: Node, col: number, o: SugarcoatOpts): string | null {
   if (!o.curly || isAtom(nd)) return null;
   const items = nd.list;
-  if (!isAtom(items[0]) || items[0].str || items[0].atom !== "str") return null;
-  const parts = items.slice(1);
+  const h0 = isAtom(items[0]) && !items[0].str ? items[0].atom : null;
+  // `str` always; `string-append` too under strTolerant (it normalizes to str) — both
+  // emit a `@{…}`/`@dedent{…}` (str head), with coercion wrappers stripped when tolerant.
+  if (h0 !== "str" && !(o.strTolerant && h0 === "string-append")) return null;
+  const parts = o.strTolerant ? items.slice(1).map(stripCoercion) : items.slice(1);
   if (parts.length === 0) return null;
   let prevWasStr = false;
   let hasNewline = false;
@@ -654,6 +707,15 @@ const NEVER_METHOD = new Set<string>([
 const isPlainMethodOp = (nd: Node): nd is { atom: string; str?: boolean } =>
   isAtom(nd) && !nd.str && !NEVER_METHOD.has(nd.atom) && !nd.atom.startsWith(":") && decodeAccessor(nd.atom) === null;
 
+// A lone bare unary `(f x)` surfaces as `x.f` only when the head reads well postfix:
+// a predicate (`list?`→`x.list?`), a conversion (`number->string`→`x.number->string`),
+// or a curated well-known op. A generic verb (`display`, `foo`) or `not` stays prefix —
+// `p.not` reads worse than `(not p)`. The reader folds ANY `x.f` back, so this gate is
+// pure render taste, not a round-trip constraint (§5, narrowed from "never emit").
+const UNARY_METHOD_ALLOW = new Set(["length", "reverse", "abs", "string-length", "string-upcase", "string-downcase"]);
+const shouldFlipUnary = (op: string): boolean =>
+  op.endsWith("?") || op.includes("->") || UNARY_METHOD_ALLOW.has(op);
+
 /** Render a `(lambda (p…) body)` as a trailing-lambda block (§3.3). Emits the
  *  IMPLICIT `{ B }` only for the single param `it` AND a non-arrow body — otherwise
  *  the bare body would re-read as the lambda itself (dropping the `it` wrapper), so
@@ -705,7 +767,9 @@ function peelChain(nd: Node, o: SugarcoatOpts): { base: Node; steps: RStep[]; em
     cur = s.recv;
   }
   const lone = steps.length === 1 ? steps[0] : null;
-  const emit = steps.length >= 2 || (lone != null && ("sub" in lone || lone.lam != null));
+  const emit =
+    steps.length >= 2 ||
+    (lone != null && ("sub" in lone || lone.lam != null || ("op" in lone && shouldFlipUnary(lone.op))));
   return { base: cur, steps, emit };
 }
 
@@ -724,6 +788,7 @@ export function inlineSugarcoat(nd: Node, o: SugarcoatOpts): string {
   if (isAtom(nd)) return nd.str ? `"${nd.atom}"` : escSym(nd.atom);
   const items = nd.list;
   if (items.length === 0) return "()";
+  if (o.nilGlyph && isEmptyQuote(items)) return "nil";
   if (isQuoteForm(items)) return QUOTE_PREFIX[atomText(items[0])] + inlineSugarcoat(items[1], o);
   const at = renderAtExpr(items, o);
   if (at != null) return at;
@@ -770,6 +835,18 @@ const isFnDefine = (nd: Node): boolean =>
  *  I-expressions: a `test` line + consequence child reads back as (test cons). */
 const isCondForm = (nd: Node): boolean =>
   !isAtom(nd) && nd.list.length > 0 && isAtom(nd.list[0]) && !nd.list[0].str && nd.list[0].atom === "cond";
+
+/** `(if test then [else])` — ALWAYS broken: the condition pulls onto the `if` line (best
+ *  effort), each arm on its own indented line. A same-line `(if a b c)` packs the two
+ *  branches sideways and reads worst; verticalizing makes the fork legible at a glance. */
+const isIfForm = (nd: Node): boolean =>
+  !isAtom(nd) && nd.list.length >= 3 && isAtom(nd.list[0]) && !nd.list[0].str && nd.list[0].atom === "if";
+
+/** `(begin s…)` — ALWAYS broken, `begin` alone on its line, every step below it. Unlike
+ *  the generic break it does NOT pull the first step up: a sequence reads as a column of
+ *  steps, and a lone leading step on the head line breaks that shape. */
+const isBeginForm = (nd: Node): boolean =>
+  !isAtom(nd) && nd.list.length >= 2 && isAtom(nd.list[0]) && !nd.list[0].str && nd.list[0].atom === "begin";
 
 /** `(string-append …)` — see STRING_APPEND_WIDTH. Granted the wider inline budget. */
 const isStringAppend = (nd: Node): boolean =>
@@ -828,12 +905,25 @@ export function formatSugarcoat(nd: Node, col: number, o: SugarcoatOpts): string
 function formatSugarcoatCore(nd: Node, col: number, o: SugarcoatOpts): string {
   const atBlock = renderAtDedentBlock(nd, col, o);
   if (atBlock != null) return atBlock; // multi-line @dedent{…}/@{…} for newline-bearing str
+  // A single-line at-expression stays inline even past the width budget: the generic
+  // list-break can't split it (a broken `@{…}` would re-render as the classic
+  // string-append staircase, which reads worse), so honour the at-string as one line.
+  const atInline = !isAtom(nd) ? renderAtExpr(nd.list, o) : null;
+  if (atInline != null) return atInline;
   const flat = inlineSugarcoat(nd, o);
   // Function defines, cond, and elidable let-family always break (uniform shape,
   // even if they'd fit); everything else stays inline when it fits. string-append
   // gets a wider budget — text assembly reads worse broken than as one long line.
   const budget = isStringAppend(nd) ? Math.max(o.width, STRING_APPEND_WIDTH) : o.width;
-  if (col + flat.length <= budget && !isFnDefine(nd) && !isCondForm(nd) && !isLetElidable(nd)) return flat;
+  if (
+    col + flat.length <= budget &&
+    !isFnDefine(nd) &&
+    !isCondForm(nd) &&
+    !isLetElidable(nd) &&
+    !isIfForm(nd) &&
+    !isBeginForm(nd)
+  )
+    return flat;
   if (isAtom(nd)) return flat;
   const items = nd.list;
   if (items.length === 0) return "()";
@@ -871,6 +961,21 @@ function formatSugarcoatCore(nd: Node, col: number, o: SugarcoatOpts): string {
     for (const clause of items.slice(1)) {
       if (isAtom(clause) || clause.list.length < 2) {
         out.push(pad2 + inlineSugarcoat(clause, o));
+        continue;
+      }
+      // `(test => recv)` arrow clause: keep the `=>` connected, never hanging alone.
+      // Inline `test => recv` (reads back as the 3-elem clause) when it fits; else
+      // `test =>` trailing the test line with recv indented below (also reads as
+      // (test => recv) — the arrow rides the test line, not an orphan child line).
+      if (clause.list.length === 3 && isAtom(clause.list[1]) && !clause.list[1].str && clause.list[1].atom === "=>") {
+        const testFlat = inlineSugarcoat(clause.list[0], o);
+        const recvFlat = inlineSugarcoat(clause.list[2], o);
+        if (col + 2 + testFlat.length + 4 + recvFlat.length <= o.width) {
+          out.push(`${pad2}${testFlat} => ${recvFlat}`);
+        } else {
+          out.push(`${pad2}${testFlat} =>`);
+          out.push(pad4 + formatSugarcoat(clause.list[2], col + 4, o));
+        }
         continue;
       }
       out.push(pad2 + formatSugarcoat(clause.list[0], col + 2, o)); // test (curly if infix)
@@ -960,7 +1065,8 @@ function formatSugarcoatCore(nd: Node, col: number, o: SugarcoatOpts): string {
   // "head line + indented children" — if pulling left ZERO children, the line
   // would read back as a flat token sequence, silently dropping the list's parens
   // (`((c …) (b …))` → `(c …) (b …)`). Keeping a child preserves the list.
-  if (headFits && items.length > 2) {
+  // `begin` never pulls its first step up — a sequence reads as a clean column of steps.
+  if (headFits && items.length > 2 && !isBeginForm(nd)) {
     const a1 = inlineSugarcoat(items[1], o);
     if (col + headFlat.length + 1 + a1.length <= o.width) {
       line += ` ${a1}`;
@@ -1051,9 +1157,53 @@ export function printScheme(nd: Node, col = 0, width = DEFAULT_OPTS.width): stri
   return `(${lead}\n${rest.join("\n")})`;
 }
 
+// Does a param list / rest-symbol bind the name `nil`? `(f a nil c)` or a rest `nil`.
+const paramsIncludeNil = (nd: Node): boolean =>
+  (isAtom(nd) && !nd.str && nd.atom === "nil") ||
+  (!isAtom(nd) && nd.list.some((p) => isAtom(p) && !p.str && p.atom === "nil"));
+
+/** Whether `'()`→`nil` is safe for this program: true unless `nil` is BOUND to a
+ *  non-empty value somewhere — a `(define nil X)` with X≠'(), or `nil` sitting in a
+ *  lambda / define / let / do binding position (the fold-accumulator idiom `(fold f
+ *  nil xs)`). An explicit `(define nil '())` agrees with the glyph and keeps it on.
+ *  Quoted `'nil` (data, never a binding) doesn't disqualify — the reader protects it. */
+export function collectNilAllowed(forms: Node[]): boolean {
+  const bindsNilToNonEmpty = (nd: Node): boolean => {
+    if (isAtom(nd)) return false;
+    const items = nd.list;
+    if (items.length === 0) return false;
+    const h = isAtom(items[0]) && !items[0].str ? items[0].atom : null;
+    if (h === "define" && items.length >= 2) {
+      const name = items[1];
+      if (isAtom(name) && !name.str && name.atom === "nil") {
+        const val = items[2]; // (define nil X): only '() agrees with the glyph
+        if (!(val != null && !isAtom(val) && isEmptyQuote(val.list))) return true;
+      }
+      if (!isAtom(name) && paramsIncludeNil(name)) return true; // (define (f … nil …) …)
+    }
+    if ((h === "lambda" || h === "named-lambda") && paramsIncludeNil(items[h === "lambda" ? 1 : 2] ?? { list: [] }))
+      return true;
+    if ((h === "let" || h === "let*" || h === "letrec" || h === "letrec*" || h === "do") && items.length >= 2) {
+      const binds = isAtom(items[1]) ? items[2] : items[1]; // named-let: bindings shift right one
+      if (isAtom(items[1]) && !items[1].str && items[1].atom === "nil") return true; // named `nil`
+      if (binds != null && !isAtom(binds))
+        for (const b of binds.list)
+          if (!isAtom(b) && b.list.length >= 1 && isAtom(b.list[0]) && !b.list[0].str && b.list[0].atom === "nil")
+            return true;
+    }
+    return items.some(bindsNilToNonEmpty);
+  };
+  return !forms.some(bindsNilToNonEmpty);
+}
+
 /** Render a whole source file's top-level forms as sugarcoat, blank-line separated. */
 export function schemeToSugarcoat(src: string, opts: Partial<SugarcoatOpts> = {}): string {
   const forms = parseSexprs(src);
-  const o = { ...DEFAULT_OPTS, kwargHeads: collectKwargHeads(forms), ...opts };
+  const o = {
+    ...DEFAULT_OPTS,
+    kwargHeads: collectKwargHeads(forms),
+    nilGlyph: collectNilAllowed(forms),
+    ...opts,
+  };
   return forms.map((f) => formatSugarcoat(f, 0, o)).join("\n\n");
 }

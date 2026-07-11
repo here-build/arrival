@@ -522,12 +522,24 @@ function parseElements(toks: Tok[], accessorDepth: number = R7RS_ACCESSOR_DEPTH)
     return n;
   }
 
+  // The `nil` glyph is the inverse of sugarcoat-render's `'()`→`nil`: a bare `nil`
+  // at a VALUE position folds back to `(quote ())`. Guarded to `quoteDepth === 0` so a
+  // quoted `'nil` (the SYMBOL nil — a valid R7RS datum) stays a symbol, not the empty
+  // list. (A program that binds `nil` as a variable renders WITHOUT the glyph — see
+  // collectNilAllowed — so the only bare `nil` tokens the reader meets are empty-lists.)
+  let quoteDepth = 0;
+  const wordNode = (v: string, str?: boolean): Node =>
+    !str && v === "nil" && quoteDepth === 0 ? { list: [atom("quote"), { list: [] }] } : atom(v, str);
+
   // `'`/`` ` ``/`,`/`,@` prefix → (quote datum) etc. Recurses (`''x` → nested).
   function quoted(parseDatum: () => Node): Node {
     const t = peek();
     if (t?.t === "quote") {
       next();
-      return { list: [atom(QUOTE_WRAP[t.v]), quoted(parseDatum)] };
+      quoteDepth++;
+      const inner = quoted(parseDatum);
+      quoteDepth--;
+      return { list: [atom(QUOTE_WRAP[t.v]), inner] };
     }
     return parseDatum();
   }
@@ -550,7 +562,7 @@ function parseElements(toks: Tok[], accessorDepth: number = R7RS_ACCESSOR_DEPTH)
     if (t.t === "(") return classicList();
     if (t.t === "{") return curly();
     if (t.t === "at") return t.node;
-    if (t.t === "word") return atom(t.v, t.str);
+    if (t.t === "word") return wordNode(t.v, t.str);
     invariant(false, () => `unexpected '${t.t}'`);
   }
 
@@ -571,7 +583,7 @@ function parseElements(toks: Tok[], accessorDepth: number = R7RS_ACCESSOR_DEPTH)
     }
     if (t.t === "word" && !isOp(t.v)) {
       next();
-      return atom(t.v, t.str);
+      return wordNode(t.v, t.str);
     }
     invariant(false, () => `expected operand in curly, got '${t.t === "word" ? t.v : t.t}'`);
   }

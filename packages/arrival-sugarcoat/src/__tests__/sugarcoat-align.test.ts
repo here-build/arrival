@@ -75,7 +75,11 @@ describe("alignSugarcoatClassic", () => {
   });
 
   it("maps string literals (spans include the quotes on both sides)", () => {
-    const sugarcoat = schemeToSugarcoat(`(define greeting (string-append "hello" name))`);
+    // `list` (not string-append) so the literal stays classic: a `string-append`
+    // with a hole now surfaces as an `@string-append{…}` at-expression (the "hello"
+    // loses its quotes inside the at-body), which is a different surface than the
+    // quote-span mapping this test exercises.
+    const sugarcoat = schemeToSugarcoat(`(define greeting (list "hello" name))`);
     const a = alignSugarcoatClassic(sugarcoat)!;
     const sPos = sugarcoat.indexOf('"hello"');
     const cPos = a.toClassic(sPos + 1)!; // inside the string
