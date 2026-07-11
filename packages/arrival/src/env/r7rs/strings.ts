@@ -11,7 +11,6 @@
  */
 
 import foldCase from "fold-case";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
 import { CallCtx } from "../../common/symbols/_bake.js";
 import invariant from "tiny-invariant";
@@ -21,6 +20,13 @@ import { symbol } from "../../common/symbol.js";
 import {
   assertAllocatable,
   charValue,
+  // ctx-neutral by design (op-helpers.ts's own confessed THREADING GAP on
+  // `coerceNumeric`'s ctx param): every call in this file immediately unwraps the
+  // result via `.valueOf()`/`.num`/`.real` to a raw JS number for an index/length
+  // computation — the coerced box itself never escapes as a user-visible value, so
+  // the ctx it would carry is never observed. Contrast the mint sites elsewhere in
+  // this file (make-string, string-ref, …), which DO thread `this.runCtx` because
+  // their result IS the escaping value.
   coerceNumeric,
   deriveOrd,
   schemeBool as bool,
@@ -67,26 +73,26 @@ export default new EnvCapability("scheme/strings", {
         // Both the length and (when present) the filling char contribute lineage —
         // `(make-string n user-char)` should remember user-char as a source even
         // though the length is what dictates the result's size.
-        return withInputProvenance(char === undefined ? [k] : [k, char], new AString(CONSTANT_CTX, c.repeat(len)));
+        return withInputProvenance(char === undefined ? [k] : [k, char], new AString(this.runCtx, c.repeat(len)));
       },
     ),
 
     string: symbol.native`string: a string built from the character arguments`(
       { input: [], inputRest: z.char, output: [z.string] },
       // Union of every character argument — same shape as `vector` below.
-      function (this: CallCtx, ...chars) { return withInputProvenance(chars, new AString(CONSTANT_CTX, chars.map(charValue).join(""))); },
+      function (this: CallCtx, ...chars) { return withInputProvenance(chars, new AString(this.runCtx, chars.map(charValue).join(""))); },
     ),
 
     "string-length": symbol.native`string-length: number of characters in the string`(
       { input: [z.string], output: [z.bigint] },
-      function (this: CallCtx, str) { return withInputProvenance([str], new AExact(CONSTANT_CTX, BigInt([...stringValue(str)].length))); },
+      function (this: CallCtx, str) { return withInputProvenance([str], new AExact(this.runCtx, BigInt([...stringValue(str)].length))); },
     ),
 
     "string-ref": symbol.native`string-ref: the character at index k`(
       { input: [z.string, z.schemeNumber], output: [z.char] },
       function (this: CallCtx, str, k) { return withInputProvenance(
           [str, k],
-          new ACharacter(CONSTANT_CTX, [...stringValue(str)][Number(coerceNumeric(k).valueOf())]),
+          new ACharacter(this.runCtx, [...stringValue(str)][Number(coerceNumeric(k).valueOf())]),
         ); },
     ),
 
@@ -208,7 +214,7 @@ export default new EnvCapability("scheme/strings", {
       { input: [z.string, z.string], output: [z.union([z.bigint, z.boolean])] },
       function (this: CallCtx, str, sub) {
         const i = stringValue(str).indexOf(stringValue(sub));
-        return withInputProvenance([str, sub], i === -1 ? bool(false) : new AExact(CONSTANT_CTX, BigInt(i)));
+        return withInputProvenance([str, sub], i === -1 ? bool(false) : new AExact(this.runCtx, BigInt(i)));
       },
     ),
 
@@ -237,7 +243,7 @@ export default new EnvCapability("scheme/strings", {
         const endIdx = end === undefined ? chars.length : toIndex(end);
         let result: AListAlike = nil;
         for (let i = endIdx - 1; i >= startIdx; i--)
-          result = new APair(CONSTANT_CTX, new ACharacter(CONSTANT_CTX, chars[i]), result);
+          result = new APair(this.runCtx, new ACharacter(this.runCtx, chars[i]), result);
         return result;
       },
     ),
@@ -251,7 +257,7 @@ export default new EnvCapability("scheme/strings", {
           chars.push(charValue(current.car));
           current = current.cdr;
         }
-        return new AString(CONSTANT_CTX, chars.join(""));
+        return new AString(this.runCtx, chars.join(""));
       },
     ),
 
@@ -263,7 +269,7 @@ export default new EnvCapability("scheme/strings", {
         const endIdx = end === undefined ? chars.length : toIndex(end);
         // The copy is a fresh allocation but semantically the same lineage as `str`
         // (start/end indices don't carry meaning here, they shape the slice).
-        return withInputProvenance([str], new AString(CONSTANT_CTX, chars.slice(startIdx, endIdx).join("")));
+        return withInputProvenance([str], new AString(this.runCtx, chars.slice(startIdx, endIdx).join("")));
       },
     ),
 
@@ -276,17 +282,17 @@ export default new EnvCapability("scheme/strings", {
     // result still traces to the original infer/query call.
     "string-upcase": symbol.native`string-upcase: uppercase form of the string`(
       { input: [z.string], output: [z.string] },
-      function (this: CallCtx, str) { return withInputProvenance([str], new AString(CONSTANT_CTX, stringValue(str).toUpperCase())); },
+      function (this: CallCtx, str) { return withInputProvenance([str], new AString(this.runCtx, stringValue(str).toUpperCase())); },
     ),
 
     "string-downcase": symbol.native`string-downcase: lowercase form of the string`(
       { input: [z.string], output: [z.string] },
-      function (this: CallCtx, str) { return withInputProvenance([str], new AString(CONSTANT_CTX, stringValue(str).toLowerCase())); },
+      function (this: CallCtx, str) { return withInputProvenance([str], new AString(this.runCtx, stringValue(str).toLowerCase())); },
     ),
 
     "string-foldcase": symbol.native`string-foldcase: case-folded form of the string`(
       { input: [z.string], output: [z.string] },
-      function (this: CallCtx, str) { return withInputProvenance([str], new AString(CONSTANT_CTX, foldCase(stringValue(str)))); },
+      function (this: CallCtx, str) { return withInputProvenance([str], new AString(this.runCtx, foldCase(stringValue(str)))); },
     ),
 
     // proc is the fixed HEAD; the spread strings are the variadic TAIL (inputRest) — mirrors
@@ -319,11 +325,11 @@ export default new EnvCapability("scheme/strings", {
         const results: unknown[] = [];
         for (let i = 0; i < minLen; i++) {
           // Seam-routed: `proc` is a callable VALUE now, not a bare fn.
-          results.push(applyCallback(proc, strs.map((s) => new ACharacter(CONSTANT_CTX, s[i])), runCtx));
+          results.push(applyCallback(proc, strs.map((s) => new ACharacter(runCtx, s[i])), runCtx));
         }
         const join = (chars: unknown[]) =>
           new AString(
-            CONSTANT_CTX,
+            runCtx,
             chars.map((c) => (c instanceof ACharacter ? charValue(c) : typeof c === "string" ? c : String(c))).join(""),
           );
         // proc may be an async membrane callback → await before joining, so the result
@@ -353,7 +359,7 @@ export default new EnvCapability("scheme/strings", {
         const minLen = Math.min(...strs.map((s) => s.length));
         const pending: unknown[] = [];
         for (let i = 0; i < minLen; i++) {
-          const ret = applyCallback(proc, strs.map((s) => new ACharacter(CONSTANT_CTX, s[i])), runCtx);
+          const ret = applyCallback(proc, strs.map((s) => new ACharacter(runCtx, s[i])), runCtx);
           if (is_promise(ret)) pending.push(ret);
         }
         // R7RS "unspecified" is theVoid on the scheme face (was a bare JS undefined).
@@ -375,7 +381,7 @@ export default new EnvCapability("scheme/strings", {
         // unwrap to the JS string + numeric indices the slice operates on. `substring(s,
         // undefined)` means "to the end", so a missing `end` stays undefined.
         return new AString(
-          CONSTANT_CTX,
+          this.runCtx,
           stringValue(string).substring(
             Number(coerceNumeric(start).valueOf()),
             end === undefined ? undefined : Number(coerceNumeric(end).valueOf()),

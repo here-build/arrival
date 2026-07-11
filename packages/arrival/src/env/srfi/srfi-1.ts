@@ -69,14 +69,14 @@
 // element-tuple, and zip's loop calls validated `some` per element — negligible
 // against interpretation cost, so the `validate:false` valve stays unused,
 // reached for only when evidence demands it.
-import { type MaybePromise, resolveMethod, symbol, withCallbackRoles } from "../../common/symbol.js";
+import { type CallCtx, type MaybePromise, resolveMethod, symbol, withCallbackRoles } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { is_false } from "../../eval/guards.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import type { APair } from "../../values/primitives/APair.js";
 import { maybeThen } from "../../utils/promises.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { type RunContext } from "../../values/primitives/RunContext.js";
 import * as z from "../../common/scheme-zod.js";
 import { tf } from "../../values/tagless-final.js";
 import type { AList, AListAlike, SchemeValue } from "../../values/types.js";
@@ -109,16 +109,21 @@ const listAlike = z.union([z.pair, z.nil]);
 // check of its own (an earlier revision's `typecheck(...)` guards were removed; `symbol.native`
 // contracts are TYPE-ONLY and never validated at runtime — see string-split's comment in
 // srfi-13.ts), so the cast restates the TS-declared `AListAlike` shape, not a runtime-verified one.
-function findImpl(arg: (...args: unknown[]) => unknown, list: AListAlike): SchemeValue {
+// `runCtx` is a required parameter (not a defaulted CONSTANT_CTX) — a plain recursive
+// call (not a dispatch-bound `this: CallCtx`) can't recover the live ctx any other
+// way, so it's threaded explicitly through every recursive step (THREADING GAP,
+// arrival-constant-ctx-audit-2026-07-11.md §2.4, srfi-1.ts:117). The `find` binding
+// below is the thin dispatch-bound wrapper that supplies it from `this.runCtx`.
+function findImpl(arg: (...args: unknown[]) => unknown, list: AListAlike, runCtx: RunContext): SchemeValue {
   if (list instanceof ANil) {
     return nil;
   }
   // Seam-routed: `arg` is a callable VALUE now (ANativeProcedure), not a bare fn.
-  return maybeThen(applyCallback(arg, [list.car], CONSTANT_CTX), function (value) {
+  return maybeThen(applyCallback(arg, [list.car], runCtx), function (value) {
     if (!is_false(value) && !(value instanceof ANil)) {
       return list.car;
     }
-    return findImpl(arg, list.cdr as AListAlike);
+    return findImpl(arg, list.cdr as AListAlike, runCtx);
   }) as SchemeValue;
 }
 
@@ -198,7 +203,12 @@ export default new EnvCapability("scheme/srfi-1", {
         // selector deciding WHICH element egresses (the merged selector+decision role).
         callbackRoles: ["control"],
       },
-      findImpl,
+      // Thin dispatch-bound wrapper: supplies the recursive findImpl with the live
+      // `this.runCtx` (findImpl itself recurses via a plain call, so it cannot recover
+      // ctx off `this`).
+      function (this: CallCtx, arg: (...args: unknown[]) => unknown, list: AListAlike) {
+        return findImpl(arg, list, this.runCtx);
+      },
     ),
 
     // ============ SRFI-1 (list library completion) ============

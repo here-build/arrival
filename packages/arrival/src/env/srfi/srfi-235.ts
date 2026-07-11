@@ -32,7 +32,6 @@ import { symbol, type CallCtx } from "../../common/symbol.js";
 import * as z from "../../common/scheme-zod.js";
 import { is_callable_value } from "../../values/value-guards.js";
 import { AExact } from "../../values/primitives/AExact.js";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import polyglot from "../polyglot.js";
 import equality from "../r7rs/equality.js";
 import lists from "../r7rs/lists.js";
@@ -107,7 +106,7 @@ export default new EnvCapability("scheme/srfi-235", {
         { input: [z.lambda], output: [z.exact] },
         function (this: CallCtx, fn: unknown): AExact {
           const min = is_callable_value(fn) ? fn.arity.min : (fn as (...args: unknown[]) => unknown).length;
-          return new AExact(CONSTANT_CTX, BigInt(min));
+          return new AExact(this.runCtx, BigInt(min));
         },
       ),
   },

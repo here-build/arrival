@@ -27,6 +27,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { testCallCtx } from "../../common/symbol.js";
 import { isSchemeValue, toJS } from "../../membrane.js";
 import { schemeToJs } from "../../rosetta.js";
 import listsCap from "../../env/r7rs/lists.js";
@@ -99,17 +100,20 @@ describe("rosetta.ts — `=== nil` identity-equality sites", () => {
 
 describe("list-copy (env/r7rs/lists.ts) — `=== nil` identity-equality sites", () => {
   it("list-copy(nil-clone) — does NOT alias the input by reference (env/r7rs/lists.ts)", () => {
-    const listCopy = LIST_OPS["list-copy"] as (l: unknown) => unknown;
+    // `list-copy`'s impl is `function(this: CallCtx, …)` (the ctx-honesty rework,
+    // arrival-constant-ctx-audit-2026-07-11.md §2.4) — bind the sanctioned test
+    // door (CallCtx.ts) rather than calling the raw fn bare.
+    const listCopy = LIST_OPS["list-copy"] as (this: unknown, l: unknown) => unknown;
     const input = cloneNil();
-    const result = listCopy(input) as unknown;
+    const result = listCopy.call(testCallCtx(), input) as unknown;
     expect(result === input).toBe(false);
   });
 
   it("list-copy(Pair(1, nil-clone)) — tail does NOT alias the input's tail (env/r7rs/lists.ts)", () => {
-    const listCopy = LIST_OPS["list-copy"] as (l: unknown) => unknown;
+    const listCopy = LIST_OPS["list-copy"] as (this: unknown, l: unknown) => unknown;
     const cdrClone = cloneNil();
     const input = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), cdrClone);
-    const result = listCopy(input);
+    const result = listCopy.call(testCallCtx(), input);
     expect(result).toBeInstanceOf(APair);
     expect((result as APair<any, any>).cdr === cdrClone).toBe(false);
   });

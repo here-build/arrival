@@ -35,7 +35,6 @@ import { AString } from "../../values/primitives/AString.js";
 import { APair, isCircularList } from "../../values/primitives/APair.js";
 import { schemeBool as bool, mintVerdict, stringValue, withInputProvenance } from "../../values/op-helpers.js";
 import { ctxOf } from "../../values/primitives/AValue.js";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { printValue } from "../../values/print.js";
 import { SchemeValue } from "../../values/types.js";
 
@@ -51,7 +50,7 @@ export default new EnvCapability("scheme/equality", {
       // genuinely accepts. Output stays z.boolean: the RETURN is always a real ABool (the
       // schemeBool flyweight), never representation-blind.
       { input: [], inputRest: z.value, output: [z.boolean] },
-      function (...bools) {
+      function (this: CallCtx, ...bools) {
         if (bools.length < 2) return schemeTrue;
         // L1 boxes `#t` / `#f` as SchemeBool — unwrap before comparing, otherwise
         // `(boolean=? #t #t)` would compare two distinct singletons and pass, but
@@ -68,9 +67,8 @@ export default new EnvCapability("scheme/equality", {
         };
         const first = unwrap(bools[0]);
         if (first === undefined) return schemeFalse;
-        // todo use actual context instead of CONSTANT_CTX
         return new ABool(
-          CONSTANT_CTX,
+          this.runCtx,
           bools.every((b) => unwrap(b) === first),
         );
       },
@@ -85,14 +83,13 @@ export default new EnvCapability("scheme/equality", {
     // domain, not `z.value` — this is a precision fix, not a blindness removal.
     "symbol=?": symbol.native`symbol=?: typed equivalence over symbols`(
       { input: [z.symbol, z.symbol], inputRest: z.symbol, output: [z.boolean] },
-      function (...syms) {
+      function (this: CallCtx, ...syms) {
         if (syms.length < 2) return schemeTrue;
         const first = syms[0];
         if (!(first instanceof ASymbol)) return schemeFalse;
         const firstName = first.__name__;
-        // todo use actual context instead of CONSTANT_CTX
         return new ABool(
-          CONSTANT_CTX,
+          this.runCtx,
           syms.every((s) => s instanceof ASymbol && s.__name__ === firstName),
         );
       },
@@ -106,7 +103,9 @@ export default new EnvCapability("scheme/equality", {
       function (s) {
         const name = s.__name__;
         const str = typeof name === "string" ? name : (name as symbol).toString();
-        return withInputProvenance([s], new AString(CONSTANT_CTX, str));
+        // Mirror string->symbol below: mint with the INPUT's ctx (ctxOf(s)), not
+        // CONSTANT_CTX — the sibling conversion already gets this right.
+        return withInputProvenance([s], new AString(ctxOf(s), str));
       },
     ),
     "string->symbol": symbol.native`string->symbol: a symbol whose name is the string's characters`(

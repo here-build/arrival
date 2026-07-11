@@ -32,7 +32,7 @@
 
 import invariant from "tiny-invariant";
 import { type } from "../../utils/typecheck.js";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { type RunContext } from "../../values/primitives/RunContext.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
 import * as z from "../../common/scheme-zod.js";
 import { symbol, type CallCtx } from "../../common/symbol.js";
@@ -58,17 +58,25 @@ import type { AList, AListAlike, AProcedure, SchemeValue } from "../../values/ty
 
 const isWhitespace = (c: string): boolean => /\s/u.test(c);
 
-/** Per-character match flags for a criterion; a promise when the predicate is async. */
+/** Per-character match flags for a criterion; a promise when the predicate is async.
+ * `runCtx` is REQUIRED (not optional/defaulted to CONSTANT_CTX) — the audit's worst
+ * bug in this cluster (arrival-constant-ctx-audit-2026-07-11.md §2.4, srfi-13.ts:71):
+ * a user-supplied criterion predicate is arbitrary scheme code, invoked through
+ * `applyCallback`'s runCtx slot — passing CONSTANT_CTX there ran every
+ * trim/index/count/tokenize predicate unmetered, off cache/effects/abort, regardless
+ * of what the invoking run actually configured. Every caller below threads its own
+ * `this.runCtx`. */
 function criterionFlags(
   criterion: unknown,
   chars: readonly string[],
+  runCtx: RunContext,
 ): boolean[] | Promise<boolean[]> {
   if (criterion instanceof ACharacter) {
     const ch = charValue(criterion);
     return chars.map((c) => c === ch);
   }
   // Seam-routed: the criterion predicate is a callable VALUE now, not a bare fn.
-  const results = chars.map((c) => applyCallback(criterion, [new ACharacter(CONSTANT_CTX, c)], CONSTANT_CTX));
+  const results = chars.map((c) => applyCallback(criterion, [new ACharacter(runCtx, c)], runCtx));
   const collapse = (rs: unknown[]) => rs.map((v) => !is_false(v) && !(v instanceof ANil));
   // pred may be an async membrane callback → await before deciding (see string-map).
   if (results.some(is_promise)) {
@@ -82,12 +90,18 @@ function afterFlags<T>(flags: boolean[] | Promise<boolean[]>, fn: (f: boolean[])
   return is_promise(flags) ? (flags as Promise<boolean[]>).then(fn) : fn(flags as boolean[]);
 }
 
-/** Shared body of the trim trio — `side` picks which end(s) shed matching chars. */
+/** Shared body of the trim trio — `side` picks which end(s) shed matching chars.
+ * `function(this: CallCtx, ...)` (not an arrow) — the returned closure is bound
+ * directly as a `symbol.native` impl, so dispatch delivers the live ctx via `this`
+ * (capability.ts's `hostImpl.apply(makeCallCtx(runCtx), args)`); threaded into
+ * `criterionFlags` (a user predicate must observe the run's real ctx) and into the
+ * result mint below. */
 function trimImpl(name: string, side: "both" | "left" | "right") {
-  return (str: unknown, criterion?: unknown): AString | Promise<AString> => {
+  return function (this: CallCtx, str: unknown, criterion?: unknown): AString | Promise<AString> {
     const chars = [...stringValue(str)];
+    const runCtx = this.runCtx;
     // Default criterion: whitespace (SRFI-13's char-set:whitespace, sans charsets).
-    const flags = criterion === undefined ? chars.map(isWhitespace) : criterionFlags(criterion, chars);
+    const flags = criterion === undefined ? chars.map(isWhitespace) : criterionFlags(criterion, chars, runCtx);
     return afterFlags(flags, (f) => {
       let start = 0;
       let end = chars.length;
@@ -97,15 +111,17 @@ function trimImpl(name: string, side: "both" | "left" | "right") {
       // the slice, but a char criterion is still a value input; include it).
       return withInputProvenance(
         criterion === undefined ? [str] : [str, criterion],
-        new AString(CONSTANT_CTX, chars.slice(start, end).join("")),
+        new AString(runCtx, chars.slice(start, end).join("")),
       );
     });
   };
 }
 
-/** Shared body of take/drop and their -right twins — n out of range is an error (SRFI-13). */
+/** Shared body of take/drop and their -right twins — n out of range is an error (SRFI-13).
+ * `function(this: CallCtx, ...)` (not an arrow) — same dispatch-`this` reasoning as
+ * `trimImpl` above. */
 function sliceImpl(name: string, pick: (chars: string[], k: number) => string[]) {
-  return (str: unknown, n: unknown): AString => {
+  return function (this: CallCtx, str: unknown, n: unknown): AString {
     const chars = [...stringValue(str)];
     const k = toIndex(n);
     invariant(
@@ -113,7 +129,7 @@ function sliceImpl(name: string, pick: (chars: string[], k: number) => string[])
       `${name}: index ${k} out of range for a string of length ${chars.length}`,
     );
     // A slice — same lineage rule as string-copy (n shapes the slice, no meaning of its own).
-    return withInputProvenance([str], new AString(CONSTANT_CTX, pick(chars, k).join("")));
+    return withInputProvenance([str], new AString(this.runCtx, pick(chars, k).join("")));
   };
 }
 
@@ -147,11 +163,12 @@ export default new EnvCapability("scheme/srfi-13", {
         { input: [z.string, z.value], output: [z.union([z.bigint, z.boolean])] },
         function (this: CallCtx, str: unknown, criterion: unknown): AExact | ABool | Promise<AExact | ABool> {
           const chars = [...stringValue(str)];
-          return afterFlags(criterionFlags(criterion, chars), (f) => {
+          const runCtx = this.runCtx;
+          return afterFlags(criterionFlags(criterion, chars, runCtx), (f) => {
             const i = f.indexOf(true);
             return withInputProvenance(
               [str, criterion],
-              i === -1 ? schemeBool(false) : new AExact(CONSTANT_CTX, BigInt(i)),
+              i === -1 ? schemeBool(false) : new AExact(runCtx, BigInt(i)),
             );
           });
         },
@@ -162,9 +179,10 @@ export default new EnvCapability("scheme/srfi-13", {
         { input: [z.string, z.value], output: [z.bigint] },
         function (this: CallCtx, str: unknown, criterion: unknown): AExact | Promise<AExact> {
           const chars = [...stringValue(str)];
-          return afterFlags(criterionFlags(criterion, chars), (f) => {
+          const runCtx = this.runCtx;
+          return afterFlags(criterionFlags(criterion, chars, runCtx), (f) => {
             const n = f.reduce((acc, hit) => acc + (hit ? 1 : 0), 0);
-            return withInputProvenance([str, criterion], new AExact(CONSTANT_CTX, BigInt(n)));
+            return withInputProvenance([str, criterion], new AExact(runCtx, BigInt(n)));
           });
         },
       ),
@@ -226,7 +244,7 @@ export default new EnvCapability("scheme/srfi-13", {
           const text =
             chars.length >= k ? chars.slice(chars.length - k).join("") : fill.repeat(k - chars.length) + chars.join("");
           // Like make-string: a present fill char contributes lineage; the length shapes only.
-          return withInputProvenance(char === undefined ? [str] : [str, char], new AString(CONSTANT_CTX, text));
+          return withInputProvenance(char === undefined ? [str] : [str, char], new AString(this.runCtx, text));
         },
       ),
 
@@ -239,14 +257,14 @@ export default new EnvCapability("scheme/srfi-13", {
           assertAllocatable(k, "string-pad-right");
           const fill = char === undefined ? " " : charValue(char);
           const text = chars.length >= k ? chars.slice(0, k).join("") : chars.join("") + fill.repeat(k - chars.length);
-          return withInputProvenance(char === undefined ? [str] : [str, char], new AString(CONSTANT_CTX, text));
+          return withInputProvenance(char === undefined ? [str] : [str, char], new AString(this.runCtx, text));
         },
       ),
 
     "string-reverse": symbol.native`string-reverse: a reversed copy of the string (SRFI-13)`(
       { input: [z.string], output: [z.string] },
       function (this: CallCtx, str: unknown): AString {
-        return withInputProvenance([str], new AString(CONSTANT_CTX, [...stringValue(str)].reverse().join("")));
+        return withInputProvenance([str], new AString(this.runCtx, [...stringValue(str)].reverse().join("")));
       },
     ),
 
@@ -285,7 +303,9 @@ export default new EnvCapability("scheme/srfi-13", {
         },
         function (this: CallCtx, str: unknown, criterion?: unknown): AListAlike | Promise<AListAlike> {
           const chars = [...stringValue(str)];
-          const flags = criterion === undefined ? chars.map((c) => !isWhitespace(c)) : criterionFlags(criterion, chars);
+          const runCtx = this.runCtx;
+          const flags =
+            criterion === undefined ? chars.map((c) => !isWhitespace(c)) : criterionFlags(criterion, chars, runCtx);
           return afterFlags(flags, (f) => {
             // Splitting op: each token is a fresh derived string — taint each with the
             // source's lineage so list elements stay grounded (cf. string-split below).
@@ -303,7 +323,7 @@ export default new EnvCapability("scheme/srfi-13", {
               }
             }
             if (current !== "") tokens.push(taintString(current, prov));
-            return APair.fromArray(CONSTANT_CTX, tokens);
+            return APair.fromArray(runCtx, tokens);
           });
         },
       ),
@@ -345,7 +365,7 @@ export default new EnvCapability("scheme/srfi-13", {
           const delimiterStr = delimiter instanceof ACharacter ? charValue(delimiter) : stringValue(delimiter);
           const prov = collapseProvenance(str, delimiter);
           return APair.fromArray(
-            CONSTANT_CTX,
+            this.runCtx,
             s.split(delimiterStr).map((piece) => taintString(piece, prov)),
           );
         },

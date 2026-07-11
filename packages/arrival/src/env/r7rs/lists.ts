@@ -26,7 +26,7 @@
 // Installs the global \`TypeError.invariant\` assertion helper used by the
 // list-bounds and circular-list guards below (side-effect import).
 import "@here.build/error-invariant";
-import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
+import { type RunContext } from "../../values/primitives/RunContext.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
 import { CallCtx } from "../../common/symbols/_bake.js";
 
@@ -75,8 +75,8 @@ const defaultCompare = (a: unknown, b: unknown): unknown => structuralEqual(a, b
 // "stdlib originals stay in stdlib.ts" referenced a file deleted long ago.
 const listToArray = to_array("list->array");
 
-function arrayToList(array: SchemeValue[]): SchemeValue {
-  return APair.fromArray(CONSTANT_CTX, array);
+function arrayToList(ctx: RunContext, array: SchemeValue[]): SchemeValue {
+  return APair.fromArray(ctx, array);
 }
 
 function isProperList(obj: SchemeValue): boolean {
@@ -114,9 +114,9 @@ function nonListAppendOperandMessage(item: SchemeValue): string {
   return `append: every argument but the last must be a proper list, got a ${noun} — append only splices list spines, not this carrier`;
 }
 
-const lengthImpl = (obj: unknown): AExact | AInexact => {
+const lengthImpl = function (this: CallCtx, obj: unknown): AExact | AInexact {
   // R7RS length is an exact integer — box to AExact, matching string-length.
-  if (obj == null) return new AExact(CONSTANT_CTX, 0n);
+  if (obj == null) return new AExact(this.runCtx, 0n);
   // Dispatch to the operand's OWN arrival/tagless-final/length — the per-primitive count
   // carries the ELEMENTS' unioned provenance and levies the circular-list check. TOTALIC:
   // a receiver with no length algebra is a type error, never a silent 0. A non-term
@@ -139,7 +139,7 @@ const lengthImpl = (obj: unknown): AExact | AInexact => {
   }
   if (typeof obj === "object" && "length" in obj) {
     const len = obj.length;
-    if (typeof len === "number") return withInputProvenance([obj], new AExact(CONSTANT_CTX, BigInt(len)));
+    if (typeof len === "number") return withInputProvenance([obj], new AExact(this.runCtx, BigInt(len)));
   }
   throw new TypeError(`length: the ${typeof obj} operand does not support length (no arrival/tagless-final/length).`);
 };
@@ -305,7 +305,7 @@ export default new EnvCapability("scheme/lists", {
       { input: [z.value, z.value], output: [z.pair] },
       // A constructor: unions both inputs' provenance over the produced cell
       // (parallel to make-list / list, which stamp only the produced Pair).
-      function (this: CallCtx, car, cdr) { return withInputProvenance([car, cdr], new APair(CONSTANT_CTX, car as SchemeValue, cdr as SchemeValue)); },
+      function (this: CallCtx, car, cdr) { return withInputProvenance([car, cdr], new APair(this.runCtx, car as SchemeValue, cdr as SchemeValue)); },
     ),
 
     // R7RS 6.4 — `list` builds a proper list of its arguments. A constructor, so —
@@ -314,7 +314,7 @@ export default new EnvCapability("scheme/lists", {
     list: symbol.native`list: a proper list of its arguments`(
       { input: z.array(z.value), output: [z.value] },
       function (this: CallCtx, ...args: SchemeValue[]): SchemeValue {
-        const result = args.reduceRight((list, item) => new APair(CONSTANT_CTX, item, list), nil);
+        const result = args.reduceRight((list, item) => new APair(this.runCtx, item, list), nil);
         return withInputProvenance(args, result);
       },
     ),
@@ -373,7 +373,7 @@ export default new EnvCapability("scheme/lists", {
         const value: SchemeValue = fill === undefined ? schemeFalse : (fill as SchemeValue);
         let result: AListAlike = nil;
         for (let i = 0; i < count; i++) {
-          result = new APair(CONSTANT_CTX, value, result);
+          result = new APair(this.runCtx, value, result);
         }
         // Stamp the head Pair only — internal cons cells share the same lineage
         // by definition; downstream traversal reads provenance off whichever pair
@@ -436,7 +436,7 @@ export default new EnvCapability("scheme/lists", {
           // Same clone-aware check at the recursion base — see the top-level guard above.
           if (lst instanceof ANil) return nil;
           if (!(lst instanceof APair)) return lst; // improper list tail
-          return new APair(CONSTANT_CTX, lst.car, copy(lst.cdr));
+          return new APair(this.runCtx, lst.car, copy(lst.cdr));
         };
         // Copy is a fresh allocation but semantically the same lineage as `list`.
         return withInputProvenance([list], copy(list));
@@ -640,7 +640,7 @@ export default new EnvCapability("scheme/lists", {
         }
         if (arg instanceof APair) {
           const arr = listToArray(arg).toReversed();
-          return arrayToList(arr);
+          return arrayToList(this.runCtx, arr);
         }
         throw new TypeError(typeErrorMessage("reverse", type(arg), "array or pair"));
       },

@@ -22,7 +22,6 @@
 // inexact or a rational argument is a clear type error, mirroring numeric.ts's
 // `toInteger` guard (bitwise ops are exact-integer-only, SRFI-151).
 
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import * as z from "../../common/scheme-zod.js";
 import { symbol, type CallCtx } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
@@ -64,7 +63,7 @@ export default new EnvCapability("scheme/srfi-151", {
         { input: [z.bigint], output: [z.exact] },
         function (this: CallCtx, i: unknown): AExact {
           const n = exactIntArg("bit-count", i);
-          return withInputProvenance([i], new AExact(CONSTANT_CTX, bitCount(n)));
+          return withInputProvenance([i], new AExact(this.runCtx, bitCount(n)));
         },
       ),
   },

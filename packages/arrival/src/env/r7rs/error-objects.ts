@@ -18,9 +18,8 @@
  */
 
 import { R7RSError, R7RSFileError, R7RSReadError } from "../../errors.js";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { EnvCapability } from "../../common/capability.js";
-import { symbol } from "../../common/symbol.js";
+import { symbol, type CallCtx } from "../../common/symbol.js";
 import * as z from "../../common/scheme-zod.js";
 import { APair } from "../../values/primitives/APair.js";
 import { nil } from "../../values/primitives/ANil.js";
@@ -34,18 +33,18 @@ export const wrappedOps = {
     return schemeBool(obj instanceof R7RSError);
   },
 
-  "error-object-message"(err: unknown): AString {
+  "error-object-message"(this: CallCtx, err: unknown): AString {
     // R7RS § 6.11: only defined over error objects (values from the `error` procedure) —
     // fail loudly rather than accept any thrown value that happens to expose a message.
     TypeError.invariant(err instanceof R7RSError, "error-object-message: argument is not an error object");
-    return new AString(CONSTANT_CTX, err.message);
+    return new AString(this.runCtx, err.message);
   },
 
-  "error-object-irritants"(err: unknown): SchemeValue {
+  "error-object-irritants"(this: CallCtx, err: unknown): SchemeValue {
     if (err instanceof R7RSError) {
       let result: SchemeValue = nil;
       for (let i = err.irritants.length - 1; i >= 0; i--) {
-        result = new APair(CONSTANT_CTX, err.irritants[i] as SchemeValue, result);
+        result = new APair(this.runCtx, err.irritants[i] as SchemeValue, result);
       }
       return result;
     }
