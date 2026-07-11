@@ -8,10 +8,10 @@
  * needs to install a dynamic call site around a re-entrant scheme call, so a lambda
  * invoked back from host JS nests its trace under the symbol invocation that
  * exported it instead of the lambda's definition-time lexical one. But
- * `eval/evaluator.ts` already imports `Environment.ts`, which imports
+ * `eval/evaluator.ts` already imports `AmbientRuntime.ts`, which imports
  * `createRosettaWrapper` from `rosetta.ts` (a VALUE import) — so `rosetta.ts`
  * importing anything back from `evaluator.ts` would close a real runtime cycle:
- * rosetta.ts → evaluator.ts → Environment.ts → rosetta.ts. Both sides import
+ * rosetta.ts → evaluator.ts → AmbientRuntime.ts → rosetta.ts. Both sides import
  * THIS dependency-free leaf instead (the exact rationale `CallCtx.ts`'s own
  * extraction documents for the same class of cycle).
  *

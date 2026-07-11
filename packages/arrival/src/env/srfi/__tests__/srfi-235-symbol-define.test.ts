@@ -32,6 +32,7 @@
 //      declared deps) throws `DefineLocalityError` — pinning that the bug this
 //      migration fixes was real and is now caught, not merely worked around.
 import { describe, expect, it } from "vitest";
+import { mintFrame } from "../../../AmbientRuntime.js";
 import * as z from "../../../common/scheme-zod.js";
 import { symbol } from "../../../common/symbol.js";
 import { EnvCapability } from "../../../common/capability.js";
@@ -43,13 +44,13 @@ import { assembleEnv } from "../../../common/kernel.js";
 import { DefineLocalityError } from "../../../errors.js";
 import srfi235 from "../srfi-235.js";
 import type { SchemeEnv } from "../../../common/scheme-env.js";
-import type { ResolvingEnvironment } from "../../../Environment.js";
+import type { ResolvingAmbient } from "../../../AmbientRuntime.js";
 
 // Mirrors `_fresh-env.ts`'s own injected evalScheme — `skipBootstrapWait` because
 // these execs run against an env this suite is itself assembling/re-lowering onto,
 // not the shared realm-cached bootstrap.
 const evalScheme = (env: unknown, src: unknown): unknown =>
-  exec(src as string, { env: env as ResolvingEnvironment, skipBootstrapWait: true });
+  exec(src as string, { env: env as ResolvingAmbient, skipBootstrapWait: true });
 
 describe("scheme/srfi-235 — combinator behavior equivalence (semantic-equivalence gate, §4.2)", () => {
   it("complement: negates a predicate's result", async () => {
@@ -97,22 +98,22 @@ describe("scheme/srfi-235 — combinator behavior equivalence (semantic-equivale
 describe("scheme/srfi-235 — the dep edge is real (§2.1's undeclared-dep bug, now a declared edge)", () => {
   it("standalone .apply() (bypassing assembleEnv's C3 dep-walk) leaves deps UNAPPLIED — complement's `compose`/`not` are genuinely unbound, and the call fails with the teaching door", async () => {
     await initBridge();
-    const env = global_env.inherit("test-srfi235-standalone-unbound");
+    const env = mintFrame(global_env, "test-srfi235-standalone-unbound");
     await srfi235.lower({ evalScheme }).apply(env, undefined as never);
     await expect(execState("(complement not)", { env })).rejects.toThrow();
   });
 
   it("bake itself succeeds even with deps unapplied — the FV law is a STATIC declared-`deps` check, not a runtime-binding probe", async () => {
     await initBridge();
-    const env = global_env.inherit("test-srfi235-standalone-bake-ok");
+    const env = mintFrame(global_env, "test-srfi235-standalone-bake-ok");
     await expect(srfi235.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
   });
 
   it("assembleEnv (the real orchestration path — every production caller) DOES walk deps: complement/curry work standalone", async () => {
     await initBridge();
-    const env = global_env.inherit("test-srfi235-assembleEnv-ok") as unknown as SchemeEnv;
+    const env = mintFrame(global_env, "test-srfi235-assembleEnv-ok") as unknown as SchemeEnv;
     await assembleEnv(env, [srfi235.lower({ evalScheme })]);
-    const typedEnv = env as unknown as ResolvingEnvironment;
+    const typedEnv = env as unknown as ResolvingAmbient;
     const [complementResult] = await exec("((complement not) #t)", { env: typedEnv });
     expect(complementResult).toBe(true);
     await exec("(define (add1 a) (+ a 1))", { env: typedEnv });
@@ -136,7 +137,7 @@ describe("scheme/srfi-235 — contract ENFORCEMENT fires at the call boundary", 
 describe("scheme/srfi-235 — the §2.1 bake FV law passes for this pack AS MIGRATED", () => {
   it("lowers cleanly with its declared deps — never DefineLocalityError", async () => {
     await initBridge();
-    const env = global_env.inherit("test-srfi235-fv-law-ok");
+    const env = mintFrame(global_env, "test-srfi235-fv-law-ok");
     await expect(srfi235.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
   });
 

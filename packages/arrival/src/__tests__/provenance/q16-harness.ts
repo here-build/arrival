@@ -22,8 +22,8 @@
  */
 import invariant from "tiny-invariant";
 
-import type { ResolvingEnvironment } from "../../Environment.js";
-import { Environment } from "../../Environment.js";
+import type { ResolvingAmbient } from "../../AmbientRuntime.js";
+import { AmbientRuntime, mintFrame } from "../../AmbientRuntime.js";
 import { execState } from "../../eval/generator-exec.js";
 import { collapseProvenance } from "../../provenance-collapse.js";
 import { schemeToJs } from "../../rosetta.js";
@@ -105,7 +105,7 @@ export class RecordingRegistry {
    *  automatic conversion exactly (research-env.ts's `buildResearchScope` idiom) — and
    *  the boxed, already-stamped return crosses back out untouched via the output escape
    *  hatch. */
-  async register(env: Environment, op: string, shape: RecordingShape): Promise<void> {
+  async register(env: AmbientRuntime, op: string, shape: RecordingShape): Promise<void> {
     const impl = symbol.rosetta`${op}: Q16 harness recording source`(
       { input: [], inputRest: z.value, output: [z.value] },
       // `any[]` rest param — the research-env.ts `buildResearchScope` boundary: a
@@ -213,7 +213,7 @@ export function freezeMints(mints: readonly RecordedMint[]): FrozenMints {
  * return the frozen retrospective side.
  */
 export async function recordRun(
-  baseEnv: ResolvingEnvironment,
+  baseEnv: ResolvingAmbient,
   code: string,
   sources: Record<string, RecordingShape>,
 ): Promise<RecordedRun> {
@@ -221,7 +221,7 @@ export async function recordRun(
   const store = new ProvenanceStoreFake();
   const payloads = new PayloadStoreFake();
   const registry = new RecordingRegistry(store, payloads, regionId);
-  const env = baseEnv.inherit(`q16-record-${regionId}`);
+  const env = mintFrame(baseEnv, `q16-record-${regionId}`);
   for (const [op, shape] of Object.entries(sources)) registry.register(env, op, shape);
 
   // Q20b: production default is OFF — this run's `eagerCone` (the recorded-run's

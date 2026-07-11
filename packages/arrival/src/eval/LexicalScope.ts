@@ -1,6 +1,6 @@
 import { CLASS } from "../well-known-symbols.js";
-import { bindValue, Environment, ResolvingEnvironment } from "../Environment.js";
-import type { BindingName, EnvironmentValue } from "../Environment.js";
+import { AmbientRuntime, mintFrame, mintResolvingFrame, ResolvingAmbient } from "../AmbientRuntime.js";
+import type { AmbientValue } from "../AmbientRuntime.js";
 import type { RunContext } from "../values/primitives/RunContext.js";
 
 /**
@@ -9,7 +9,7 @@ import type { RunContext } from "../values/primitives/RunContext.js";
  * capability base: a closure captures its lexical chain, and resolution falls
  * through to {@link Capabilities} only when the lexical chain misses.
  *
- * Currently a glass over the base-linked {@link Environment} — the lexical
+ * Currently a glass over the base-linked {@link AmbientRuntime} — the lexical
  * frames and the capability base are one `__parent__`-linked chain — but it
  * carries the real method surface the hygiene engine (syntax-rules.ts)
  * consults: `refFrame` (which frame OWNS a name, stopping below `global_env`),
@@ -27,13 +27,13 @@ const MERGE_SCOPE: symbol = Symbol.for("merge"); // ≡ Syntax.__merge_env__ (re
  * `.scope` getter hands back for that same frame. WeakMap so a frame's wrapper is
  * GC'd with the frame.
  */
-const wrappers = new WeakMap<Environment, LexicalScope>();
+const wrappers = new WeakMap<AmbientRuntime, LexicalScope>();
 
-export class LexicalScope<E extends Environment = Environment> {
+export class LexicalScope<E extends AmbientRuntime = AmbientRuntime> {
   static [CLASS] = "lexical-scope";
 
   /** The memoized wrapper for `env` (see {@link wrappers}). */
-  static for<E extends Environment>(env: E): LexicalScope<E> {
+  static for<E extends AmbientRuntime>(env: E): LexicalScope<E> {
     let w = wrappers.get(env);
     if (w === undefined) {
       w = new LexicalScope(env);
@@ -49,14 +49,14 @@ export class LexicalScope<E extends Environment = Environment> {
    * base-chain walk) for `exec({ scope })`. Closes the one gap the instance
    * surface's retirement leaves open (arrival-environment-privatization.md §II.1):
    * before this, the only public way to mint an isolated scope was routing through
-   * `sandboxedEnv.inherit()` — i.e. isolation itself required the instance surface
-   * being retired. Every call mints a NEW root (unlike `.for()`, this is never
+   * the retired instance surface — i.e. isolation itself required the instance
+   * surface being retired. Every call mints a NEW root (unlike `.for()`, this is never
    * memoized — there is no env identity to memoize against; that's the point).
    * The returned scope's builtins still resolve through the run's capability base
    * (`scope.lookup ?? capabilities.lookup`, generator-exec.ts) — only the LEXICAL
    * chain is isolated, exactly like every other `LexicalScope`.
    *
-   * The root frame is a {@link ResolvingEnvironment} — the machinery-target frame class —
+   * The root frame is a {@link ResolvingAmbient} — the machinery-target frame class —
    * so `scope.env` carries the full structural `SchemeEnv` write contract: a SESSION owner
    * (a chain extension registrar, the runtime `(require/extension …)` assembler) registers
    * packs against the scope frame it holds, exactly as it did against the pre-privatization
@@ -64,7 +64,7 @@ export class LexicalScope<E extends Environment = Environment> {
    * migration is the consumer that proved it load-bearing).
    */
   static fresh(name: string | symbol = "session"): SessionScope {
-    return LexicalScope.for(new ResolvingEnvironment(name, {}, null));
+    return LexicalScope.for(mintResolvingFrame(name, {}, null));
   }
 
   constructor(readonly env: E) {}
@@ -76,7 +76,7 @@ export class LexicalScope<E extends Environment = Environment> {
    */
   get kind(): "merge" | undefined {
     // `__name__` is `string | symbol`, so the merge-frame's `Symbol.for("merge")`
-    // identity compares directly — no cast needed (Environment.ts widening).
+    // identity compares directly — no cast needed (AmbientRuntime.ts widening).
     return this.env.__name__ === MERGE_SCOPE ? "merge" : undefined;
   }
 
@@ -91,10 +91,10 @@ export class LexicalScope<E extends Environment = Environment> {
    * parent-less root rather than by an env-roots import, which would cycle through
    * this early-loaded module). `undefined` on a lexical miss (the Resolver then
    * consults {@link Capabilities}; it does NOT fall through here). Own bindings
-   * only (no resolvers / no synth), exactly like `Environment.ref`.
+   * only (no resolvers / no synth), exactly like `AmbientRuntime.ref`.
    */
   refFrame(name: string): LexicalScope | undefined {
-    for (let e: Environment | null = this.env; e && e.__parent__; e = e.__parent__) {
+    for (let e: AmbientRuntime | null = this.env; e && e.__parent__; e = e.__parent__) {
       if (e.has(name)) return LexicalScope.for(e);
     }
     return undefined;
@@ -106,22 +106,31 @@ export class LexicalScope<E extends Environment = Environment> {
    * Currently the env is still base-linked, so this walks through to the base too;
    * the Resolver's `?? capabilities.lookup` is then never reached on a hit.
    */
-  lookup(name: string | symbol, ctx?: RunContext): EnvironmentValue | undefined {
+  lookup(name: string | symbol, ctx?: RunContext): AmbientValue | undefined {
     return this.env._lookupWithResolvers(name, ctx);
   }
 
   /** This frame's OWN symbol-keyed bindings as [symbol, value] pairs. ≡ `getOwnPropertySymbols(env.__env__)` + reads. */
-  ownSymbolEntries(): [symbol, EnvironmentValue][] {
+  ownSymbolEntries(): [symbol, AmbientValue][] {
     const env = this.env.__env__;
-    return Object.getOwnPropertySymbols(env).map((s) => [s, env[s]] as [symbol, EnvironmentValue]);
+    return Object.getOwnPropertySymbols(env).map((s) => [s, env[s]] as [symbol, AmbientValue]);
   }
 
-  /** Bind a name in THIS frame — the EVALUATOR's frame-bind (let/lambda/letrec/define/
-   *  catch land here), routed through the module-internal storage write (`bindValue`,
-   *  Environment.ts). Inside the membrane by definition: the values arriving here are
-   *  evaluation results, already boxed. */
-  define(name: BindingName, value: EnvironmentValue): void {
-    bindValue(this.env, name, value);
+  /**
+   * A FRESH CHILD frame of this scope — the one public frame-BIRTH door left for a
+   * session owner (a per-run scope above a long-lived session scope, discarded when
+   * the run ends). Subtype-preserving via the module-internal `mintFrame`, so a
+   * {@link SessionScope}'s child keeps the structural `SchemeEnv` pack-write contract
+   * (a per-run capability re-lower targets `child.env` — inhuman's run-traced is the
+   * consumer that proved it load-bearing). NO bindings parameter, deliberately: the
+   * child is born EMPTY, and is populated only by the evaluator (program `define`s)
+   * or capability assembly (`assembleEnv` onto `.env`) — never by a JS-side record
+   * (the monadic contract; `define` left this class in the same ruling).
+   */
+  child(name?: string | symbol): LexicalScope<E> {
+    // mintFrame is subtype-preserving over the two concrete frame classes (instanceof
+    // dispatch) — the downcast restates that runtime fact for the generic E.
+    return LexicalScope.for(mintFrame(this.env, name) as E);
   }
 
   toString(): string {
@@ -130,7 +139,7 @@ export class LexicalScope<E extends Environment = Environment> {
 }
 
 /** The scope type {@link LexicalScope.fresh} mints — a `LexicalScope` whose root frame is a
- *  `ResolvingEnvironment`, i.e. whose `.env` satisfies the structural `SchemeEnv` pack-write
+ *  `ResolvingAmbient`, i.e. whose `.env` satisfies the structural `SchemeEnv` pack-write
  *  contract. Named so session products (`ArrivalSession` in arrival-run, chain-env's `ChainEnv`)
  *  can state the refinement without reaching for the internal class name. */
-export type SessionScope = LexicalScope<ResolvingEnvironment>;
+export type SessionScope = LexicalScope<ResolvingAmbient>;

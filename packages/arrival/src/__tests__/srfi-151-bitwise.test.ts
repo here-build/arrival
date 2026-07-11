@@ -13,6 +13,7 @@
  */
 
 import { exec } from "../index.js";
+import { mintFrame } from "../AmbientRuntime.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../inference-env.js";
 import { assembleEnv } from "../common/kernel.js";
@@ -23,7 +24,7 @@ import srfi151 from "../env/srfi/srfi-151.js";
 const evalScheme = (e: SchemeEnv, src: string) => exec(src, { env: e as never });
 
 async function mk() {
-  const env = sandboxedEnv.inherit(`s151-${Math.random().toString(36).slice(2)}`);
+  const env = mintFrame(sandboxedEnv, `s151-${Math.random().toString(36).slice(2)}`);
   await assembleEnv(env as unknown as SchemeEnv, [srfi151.lower({ evalScheme }) as never]);
   const num = async (src: string) => Number((await exec(src, { env }))[0]);
   const raw = (src: string) => exec(src, { env });

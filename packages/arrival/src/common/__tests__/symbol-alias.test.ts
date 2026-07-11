@@ -7,7 +7,7 @@
 //     another alias (no chains).
 
 import { describe, expect, it, beforeAll } from "vitest";
-import type { ResolvingEnvironment } from "../../Environment.js";
+import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 import { execState } from "../../eval/generator-exec.js";
 import { freshEnv } from "../../__tests__/_fresh-env.js";
 import { AString } from "../../values/primitives/AString.js";
@@ -17,7 +17,7 @@ import * as z from "../scheme-zod.js";
 import { EnvCapability } from "../capability.js";
 
 describe("symbol.alias — resolves to the SAME symbol under a new name", () => {
-  let env: ResolvingEnvironment;
+  let env: ResolvingAmbient;
   beforeAll(async () => {
     env = await freshEnv();
     const shout = symbol.rosetta`shout: upcase a string`({ input: [z.string], output: [z.string] }, (s) =>

@@ -42,6 +42,7 @@
 //      C3 requirement its repositioning exists to satisfy), pinned shape-free so
 //      sibling migrations can extend the tail block without touching this row.
 import { describe, expect, it } from "vitest";
+import { mintFrame } from "../../../AmbientRuntime.js";
 import * as z from "../../../common/scheme-zod.js";
 import { symbol } from "../../../common/symbol.js";
 import { EnvCapability } from "../../../common/capability.js";
@@ -54,19 +55,19 @@ import { DefineLocalityError } from "../../../errors.js";
 import { BASE_PACKS } from "../../base-packs.js";
 import srfi1 from "../srfi-1.js";
 import type { SchemeEnv } from "../../../common/scheme-env.js";
-import type { ResolvingEnvironment } from "../../../Environment.js";
+import type { ResolvingAmbient } from "../../../AmbientRuntime.js";
 
 // Mirrors `_fresh-env.ts`'s own injected evalScheme — `skipBootstrapWait` because
 // these execs run against an env this suite is itself assembling/re-lowering onto,
 // not the shared realm-cached bootstrap.
 const evalScheme = (env: unknown, src: unknown): unknown =>
-  exec(src as string, { env: env as ResolvingEnvironment, skipBootstrapWait: true });
+  exec(src as string, { env: env as ResolvingAmbient, skipBootstrapWait: true });
 
 // COMPLEX tier (execState): stringifies the BOXED result (Scheme print format) —
 // needed for list-shaped results, where exec()'s SIMPLE-tier `toJS` unwrap egresses
 // an R9 lazy proxy rather than a plain comparable value (mirrors
 // src/__tests__/srfi.test.ts's own `run` helper).
-async function printed(env: ResolvingEnvironment, src: string): Promise<string> {
+async function printed(env: ResolvingAmbient, src: string): Promise<string> {
   const { values: r } = await execState(src, { env });
   const x = r[r.length - 1] as { toString(): string } | undefined;
   return String(x?.toString?.() ?? x);
@@ -198,23 +199,23 @@ describe("scheme/srfi-1 — multi-values cross the boundary as ONE Values box (z
 describe("scheme/srfi-1 — the dep edges are real (§2.1's undeclared-dep bug class, now declared)", () => {
   it("standalone .apply() (bypassing assembleEnv's C3 dep-walk): a BASE_PACKS-only name genuinely fails unbound — the srfi-189 shape of the luck, not srfi-43's", async () => {
     await initBridge();
-    const env = global_env.inherit("test-srfi1-standalone-unbound");
+    const env = mintFrame(global_env, "test-srfi1-standalone-unbound");
     await srfi1.lower({ evalScheme }).apply(env, undefined as never);
     // NATIVE_PACKS names (pair?, null?, =) exist on global_env — but the BASE_PACKS-
     // only class (`cons`/`reverse` @ scheme/lists, `values` @ scheme/r7rs/binding,
     // `error` @ scheme/r7rs/exceptions) does not: the assembly-order luck the static
     // FV law refuses to consult, demonstrated at runtime (partition's body dies at
     // its first BASE_PACKS-only lookup, `cons`).
-    await expect(execState("(partition odd? '(1 2))", { env: env as unknown as ResolvingEnvironment })).rejects.toThrow(
+    await expect(execState("(partition odd? '(1 2))", { env: env as unknown as ResolvingAmbient })).rejects.toThrow(
       /Unbound variable/,
     );
   });
 
   it("assembleEnv (the real orchestration path — every production caller) walks deps: everything works standalone", async () => {
     await initBridge();
-    const env = global_env.inherit("test-srfi1-assembleEnv-ok") as unknown as SchemeEnv;
+    const env = mintFrame(global_env, "test-srfi1-assembleEnv-ok") as unknown as SchemeEnv;
     await assembleEnv(env, [srfi1.lower({ evalScheme })]);
-    const typedEnv = env as unknown as ResolvingEnvironment;
+    const typedEnv = env as unknown as ResolvingAmbient;
     expect(await printed(typedEnv, "(call-with-values (lambda () (partition odd? '(1 2 3))) list)")).toBe(
       "((1 3) (2))",
     );
@@ -248,7 +249,7 @@ describe("scheme/srfi-1 — contract ENFORCEMENT fires at the call boundary (col
 describe("scheme/srfi-1 — the §2.1 bake FV law passes AS MIGRATED", () => {
   it("lowers cleanly with its declared deps — never DefineLocalityError", async () => {
     await initBridge();
-    const env = global_env.inherit("test-srfi1-fv-law-ok");
+    const env = mintFrame(global_env, "test-srfi1-fv-law-ok");
     await expect(srfi1.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
   });
 

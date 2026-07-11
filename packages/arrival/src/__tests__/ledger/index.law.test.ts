@@ -154,7 +154,7 @@ const GAPS: readonly LedgerRow[] = [
 const INVERSIONS: readonly LedgerRow[] = [
   // "representation-blind equality (string/boolean boxed≡raw)" RETIRED (bare-value-purge/A4
   // landed, docs/REWORK-DAG.md): op-helpers.ts withInputProvenance/ANil length/
-  // Environment.set no longer produce a raw scalar anywhere inside the membrane, so no
+  // AmbientRuntime.set no longer produce a raw scalar anywhere inside the membrane, so no
   // INTERNAL producer can hand equal?/eq?/eqv? an unboxed operand during real scheme
   // execution. VERDICT — not a strict-door throw: AString/ABool's Setoid-level
   // representation-blindness is independently pinned as DURABLE by scheme-string-

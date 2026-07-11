@@ -50,15 +50,15 @@ import { nil } from "../../index.js";
 import { StaticValidationError, validateProgram } from "../../static-validation/validate-program.js";
 import { vocabularyFromChain } from "../../static-validation/vocabulary.js";
 import { freshEnv } from "../_fresh-env.js";
-import type { EnvironmentValue } from "../../Environment.js";
+import type { AmbientValue } from "../../AmbientRuntime.js";
 import type { DoorSymbolDef } from "../../common/symbols/_bake.js";
 
 // ── Fixture helpers ────────────────────────────────────────────────────────────────
 
 /** A one-flat-map sealed chain — the CompiledResolutionChain's own degenerate form,
  *  hand-built so a law row controls the vocabulary EXACTLY. */
-const chainOf = (entries: Record<string, EnvironmentValue>, extraSteps: CompiledResolver[] = []) =>
-  new CompiledResolutionChain([new Map<string | symbol, EnvironmentValue>(Object.entries(entries)), ...extraSteps]);
+const chainOf = (entries: Record<string, AmbientValue>, extraSteps: CompiledResolver[] = []) =>
+  new CompiledResolutionChain([new Map<string | symbol, AmbientValue>(Object.entries(entries)), ...extraSteps]);
 
 const door = (name: string, reason: string, cause?: DoorSymbolDef["cause"]): DoorProcedure =>
   new DoorProcedure({ kind: "door", name, reason, ...(cause !== undefined ? { cause } : {}) });

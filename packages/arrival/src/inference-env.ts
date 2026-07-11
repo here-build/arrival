@@ -1,7 +1,8 @@
 // The interaction scope, sourced from its true home (env-roots) — not laundered through
-// stdlib.ts. `inherit` is purely structural (no eager builtin read); native-root population
-// is owned by `ensureBaseAssembled`, so this module doesn't need to drag stdlib into the
-// import graph to be correct.
+// stdlib.ts. The frame mint is purely structural (no eager builtin read); native-root
+// population is owned by `ensureBaseAssembled`, so this module doesn't need to drag stdlib
+// into the import graph to be correct.
+import { mintFrame } from "./AmbientRuntime.js";
 import { user_env } from "./env-roots.js";
 
 // The inference-plane base env: the totalic environment where models author and evaluate
@@ -16,4 +17,4 @@ import { user_env } from "./env-roots.js";
 // (resolvers walk child→parent). No builtin copy, no allowlist projection needed: the full
 // env leaks nothing host-reaching post-sweep, and inheritance has none of the load-order
 // races a snapshot-based allowlist would.
-export const inferenceEnv = user_env.inherit("inference");
+export const inferenceEnv = mintFrame(user_env, "inference");

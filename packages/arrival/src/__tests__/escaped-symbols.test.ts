@@ -14,7 +14,7 @@ import { symbol } from "../common/symbol.js";
 import { EnvCapability } from "../common/capability.js";
 import * as z from "../common/scheme-zod.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../Environment.js";
+import { bindValue, mintFrame } from "../AmbientRuntime.js";
 
 // Helper to execute and get first result
 async function execOne(expr: string, env = inferenceEnv): Promise<any> {
@@ -60,7 +60,7 @@ describe("Escaped Symbol Resolution", () => {
     it("should access numeric object keys", async () => {
       const result = await execOne(
         `(@ test-obj :|24|)`,
-        inferenceEnv.inherit("escaped-test", {
+        mintFrame(inferenceEnv, "escaped-test", {
           // Box the host object through the membrane — `inherit` stores its record
           // values raw, so the binding must already be a Scheme value (it is read
           // back through `@`/keyword-access as an AJSObject).

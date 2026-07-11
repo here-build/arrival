@@ -59,7 +59,7 @@ import { nil } from "../values/primitives/ANil.js";
 import { theVoid } from "../values/primitives/AVoid.js";
 import invariant from "tiny-invariant";
 
-import { bindValue, Environment, type EnvironmentValue } from "../Environment.js";
+import { bindValue, AmbientRuntime, type AmbientValue, mintFrame } from "../AmbientRuntime.js";
 import { lookupExtensionResolver, registerExtension } from "./loader-extensions.js";
 import {
   type ContentResolver,
@@ -148,7 +148,7 @@ interface AssemblerHolder {
 
 // Explicit `<any, any>`: TS's declaration-emit (this package builds `--build`/composite) can't
 // portably NAME the inferred config/resource type without referencing arrival's internal
-// `Environment` (RunEnv's root) across the package boundary. No consumer reads `.configuration`/
+// `AmbientRuntime` (RunEnv's root) across the package boundary. No consumer reads `.configuration`/
 // `.resources` off this export from outside `loader-capability.ts` itself (every external use is
 // `arrivalLoaderCapability.lower({...})`, generic-erased already) — so widening the export's own
 // generics costs nothing real; the `symbols` builder body above is still checked against the
@@ -444,7 +444,7 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
         // unlike bootstrap assembly (whose `preludeOnly` symbols ride the kernel's phase-gated
         // resolver inside `assembleEnv`), the env here is LIVE and concurrently evaluating the
         // user program, and the bootstrap assembly's prelude phase is long closed. So EACH call
-        // seeds a fresh, DISCARDED child scope `C' = liveEnv.inherit("prelude/<name>")` with
+        // seeds a fresh, DISCARDED child scope `C' = mintFrame(liveEnv, "prelude/<name>")` with
         // `register-extension` (so an applied pack's prelude may still call it), and passes it
         // as BOTH `preludeScope` (the bind target for any `preludeOnly` symbols) AND
         // `preludeEvalScope` (the scope the pack's prelude TEXT is evaluated against — a lookup
@@ -477,12 +477,15 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
           // def bootstrap uses, bound by hand exactly as `apply()` would for a `kind: "native"`
           // def — through the module-internal `bindValue` (the `SchemeEnv` face carries no
           // write member; the instanceof narrow is the same door capability.ts's apply uses:
-          // a run env's frames are real Environments by construction).
-          const preludeScope = env.inherit(`prelude/${name}`);
+          // a run env's frames are real AmbientRuntimes by construction).
+          // The structural `SchemeEnv` face carries no birth member (monadic-birth ruling) —
+          // narrow to the concrete frame class first (a run env's frames are real AmbientRuntimes
+          // by construction), then mint the discarded child through the module-internal fn.
           invariant(
-            preludeScope instanceof Environment,
-            "require/extension: the run env's child frame is not an arrival Environment — a mid-run prelude scope must be a real frame to receive bindings.",
+            env instanceof AmbientRuntime,
+            "require/extension: the run env is not an arrival AmbientRuntime — a mid-run prelude scope must be minted off a real frame to receive bindings.",
           );
+          const preludeScope = mintFrame(env, `prelude/${name}`);
           bindValue(preludeScope, "require/register-extension", symbol.native`require/register-extension: registers a file extension resolver used by require (assembly time only)`(
             { input: [z.value, z.value], output: [z.value], preludeOnly: true },
             function (this: CallCtx, suffix, resolverName) {
@@ -494,8 +497,12 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
           await assembler.require(pack, {
             // The kernel's bind-target face over the same frame (PreludeBindTarget is the
             // `.set`-only shim shape; the frame itself no longer carries `set`).
-            preludeScope: { set: (n, v) => bindValue(preludeScope, n, v as EnvironmentValue) },
-            preludeEvalScope: preludeScope,
+            preludeScope: { set: (n, v) => bindValue(preludeScope, n, v as AmbientValue) },
+            // The SAME laundered seam `runEnvOf` always carried (loader.ts's explicit
+            // through-`unknown` widen): the assembler is typed over the structural RunEnv,
+            // the minted frame is the concrete class; `RunEnv & AmbientRuntime` restates the
+            // narrow above (`env instanceof AmbientRuntime` on a RunEnv) one frame down.
+            preludeEvalScope: preludeScope as RunEnv & AmbientRuntime,
           });
           return theVoid; // applied for effect; the pack's symbols are now bound on the env
         },

@@ -5,7 +5,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { theVoid } from "../values/primitives/AVoid.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { ResolvingEnvironment } from "../Environment.js";
+import { ResolvingAmbient, mintResolvingFrame } from "../AmbientRuntime.js";
 import run from "../eval/evaluator.js";
 // `execExpr` is the COMPLEX-tier form-at-a-time entry (SchemeValue in, boxed
 // SchemeValue out, never unwrapped) — the direct replacement for the retired
@@ -27,21 +27,21 @@ import { nil } from "../values/primitives/ANil.js";
 import { ALambda } from "../values/primitives/ACallable.js";
 import { type SchemeValue } from "../values/types.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../Environment.js";
+import { bindValue } from "../AmbientRuntime.js";
 
 describe("Generator Evaluator with Real LIPS Types", () => {
-  // `ResolvingEnvironment`, not the plain `Environment` its raw evaluator-level content
+  // `ResolvingAmbient`, not the plain `AmbientRuntime` its raw evaluator-level content
   // would otherwise need: `execExpr(code, { env })` types `env` as `SchemeEnv` (V2,
-  // arrival-environment-privatization.md §II.3/D2), which `ResolvingEnvironment`
-  // structurally satisfies and plain `Environment` does not — a byte-identical stand-in
+  // arrival-environment-privatization.md §II.3/D2), which `ResolvingAmbient`
+  // structurally satisfies and plain `AmbientRuntime` does not — a byte-identical stand-in
   // here (no resolver ever registered), see the file header for why this test builds a
   // hand-rolled env instead of the default base.
-  let env: ResolvingEnvironment;
+  let env: ResolvingAmbient;
 
   beforeEach(() => {
     // Create a minimal environment with basic operations
     // Note: SchemeExact has num/denom (for rationals), not value
-    env = new ResolvingEnvironment("test-env", {
+    env = mintResolvingFrame("test-env", {
       "+": (...args: unknown[]) => {
         let result = 0n;
         let hasInexact = false;

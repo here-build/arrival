@@ -36,7 +36,7 @@ import type { InvocationLike, RosettaFunction } from "../rosetta.js";
 // The retired public `env.defineRosetta` method's internal replacement — this legacy
 // `SymbolDeclaration` bind arm and `provenance/replay.ts`'s playback frame are its only
 // two producers (env-capability-authoring skill's migration recipes name this the way in).
-import { bindRosetta, bindValue, Environment, type EnvironmentValue } from "../Environment.js";
+import { bindRosetta, bindValue, AmbientRuntime, type AmbientValue } from "../AmbientRuntime.js";
 import { CallCtx, makeCallCtx, type CacheClass, type CallbackRoles, type ProvenanceRole } from "./symbols/_bake.js";
 import { type SchemeValue } from "../values/types.js";
 import invariant from "tiny-invariant";
@@ -310,21 +310,21 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
       },
       async apply(env: SchemeEnv, ctx?: PackContext<SchemeEnv>) {
         // HERMETIC NARROW (instanceof DOOR, never a cast): with `SchemeEnv.set` hard-deleted,
-        // binding goes through the module-internal `bindValue` (Environment.ts), which writes
-        // real Environment storage. Packs are applied onto real envs everywhere in production
+        // binding goes through the module-internal `bindValue` (AmbientRuntime.ts), which writes
+        // real AmbientRuntime storage. Packs are applied onto real envs everywhere in production
         // (env-roots leaves, `LexicalScope.fresh()` roots, `inherit()` children thereof); a
         // synthetic structural env cannot RECEIVE bindings — assemble onto a real frame instead.
         invariant(
-          env instanceof Environment,
-          `capability "${name}": apply target is not an arrival Environment — a capability's bindings ` +
-            `land in real environment storage (the JS-side write surface is retired; hermetic-Environment ` +
+          env instanceof AmbientRuntime,
+          `capability "${name}": apply target is not an arrival AmbientRuntime — a capability's bindings ` +
+            `land in real environment storage (the JS-side write surface is retired; hermetic-AmbientRuntime ` +
             `ruling). Assemble onto \`LexicalScope.fresh().env\`, an env-roots base, or a child of one.`,
         );
         // The env-backed bind face, shaped like the kernel's PreludeBindTarget shim so
         // `bindTarget` stays ONE type either way. The narrow from the shim's `unknown` is a
         // boundary cast per this file's applyCallback convention: every value routed through
-        // it below is a constructed EnvironmentValue (ANativeProcedure/DoorProcedure/Macro/…).
-        const envTarget: PreludeBindTarget = { set: (n, v) => bindValue(env, n, v as EnvironmentValue) };
+        // it below is a constructed AmbientValue (ANativeProcedure/DoorProcedure/Macro/…).
+        const envTarget: PreludeBindTarget = { set: (n, v) => bindValue(env, n, v as AmbientValue) };
         // preludeOnly routing: a baked native/rosetta def marked `preludeOnly: true`
         // binds onto `ctx.preludeScope` instead of the runtime env — see
         // `PackContext.preludeScope` in kernel.ts for the full assembly-time-only contract. Same
@@ -558,7 +558,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
 
           // ── the raw-value arm (see `SymbolDeclaration`'s doc) ────────────────────────
           if (isValueDef(def)) {
-            bindValue(env, verb, def.value as EnvironmentValue); // raw binding (boxed by bindValue's fromJS tail when it is a bare JS leaf) — a `require`-resolved value, never a scheme call target
+            bindValue(env, verb, def.value as AmbientValue); // raw binding (boxed by bindValue's fromJS tail when it is a bare JS leaf) — a `require`-resolved value, never a scheme call target
             continue;
           }
 
@@ -574,9 +574,9 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                   return bound(...args);
                 };
           // `env.defineRosetta` retired (public method hard-deleted) — `bindRosetta`
-          // (Environment.ts) is the same wiring, internalized: wrap via
+          // (AmbientRuntime.ts) is the same wiring, internalized: wrap via
           // createRosettaWrapper, bind via `env.set`, stamp `rosettaTypesOf` when `.type`
-          // is declared and `env` is genuinely an `Environment` (never a test mock).
+          // is declared and `env` is genuinely an `AmbientRuntime` (never a test mock).
           bindRosetta(env, verb, { ...sym, fn: gated } as RosettaFunction);
         }
         for (const resolver of spec.resolvers ?? []) {

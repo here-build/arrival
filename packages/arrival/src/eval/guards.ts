@@ -1,6 +1,6 @@
 import { Macro } from "./Macro.js";
 import { Syntax } from "./Syntax.js";
-// Leaf value-kernel predicates live in value-guards.ts (no Environment/Macro
+// Leaf value-kernel predicates live in value-guards.ts (no AmbientRuntime/Macro
 // dep) so Pair.ts can import them without dragging the evaluator world in.
 // Re-exported here so every existing `from "./guards.js"` call site is unchanged.
 import { is_function, is_callable_value } from "../values/value-guards.js";

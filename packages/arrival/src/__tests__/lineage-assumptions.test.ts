@@ -21,7 +21,7 @@ import { provOf } from "../values/lineage-shadow.js";
 import { sStr, sNum, run, runRaw } from "./_lineage-test-helpers.js";
 import { requireEagerOracle } from "./_require-eager-oracle.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../Environment.js";
+import { bindValue, mintFrame } from "../AmbientRuntime.js";
 
 // Q20b: this file's local `oneShot` helper calls execState directly (not through
 // _lineage-test-helpers.js's runRaw, which saves/restores its own call) — force
@@ -230,7 +230,7 @@ describe("v0.1 FINALIZATION GATES (G1–G7)", () => {
     const mkVec = () => new AVector(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101)], new Set([7]));
     const summary = (r: unknown) => ({ ctor: (r as { constructor?: { name?: string } })?.constructor?.name ?? typeof r, prov: provOf(r) });
     const oneShot = async (src: string): Promise<unknown> => {
-      const env = inferenceEnv.inherit(`la-${seq++}`);
+      const env = mintFrame(inferenceEnv, `la-${seq++}`);
       bindValue(env, "xs", mkVec());
       // execState (COMPLEX tier): `summary` reads the BOXED result's constructor
       // name + `provOf` provenance — a boxed-state concern (RULINGS.md R1).

@@ -16,7 +16,6 @@ function recorder(): { env: RecorderEnv; log: string[] } {
   const env: RecorderEnv = {
     set: (name) => (log.push(`set:${name}`), undefined),
     get: () => undefined,
-    inherit: () => env,
     registerResolver: (resolver) => void log.push(`resolver:${resolver.id}`),
     list: () => [],
     allBoundNames: () => [],

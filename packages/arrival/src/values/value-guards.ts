@@ -1,8 +1,8 @@
 // Leaf value-kernel predicates.
 //
 // These type guards depend ONLY on the value kernel (Pair, Nil, the native
-// scalar wrappers) — never on Environment / Macro / Syntax. Carved out of
-// guards.ts (a *false leaf* that imports Environment, Macro, …) so Pair.ts can
+// scalar wrappers) — never on AmbientRuntime / Macro / Syntax. Carved out of
+// guards.ts (a *false leaf* that imports AmbientRuntime, Macro, …) so Pair.ts can
 // import the predicates it needs without dragging the evaluator world into
 // the value kernel. guards.ts re-exports them for backward compatibility.
 //
@@ -96,7 +96,7 @@ export function is_macro_value(o: unknown): o is Macro | Syntax {
 
 // Pure structural predicates (no value-kernel deps at all). They live here
 // rather than in guards.ts so leaf utilities (e.g. utils/typecheck.ts) can
-// import them without reaching guards.ts and, through it, Environment/Macro.
+// import them without reaching guards.ts and, through it, AmbientRuntime/Macro.
 export function is_function(o: unknown): o is Function {
   return typeof o === "function" && "bind" in o && typeof o.bind === "function";
 }

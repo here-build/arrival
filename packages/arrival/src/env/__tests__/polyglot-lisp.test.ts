@@ -2,6 +2,7 @@
 // idiom family. Split out of polyglot.test.ts (V, 2026-07-10 dialect split —
 // see polyglot.ts's header for the full rationale).
 import { execState, type ExecOptions } from "../../index.js";
+import { mintFrame } from "../../AmbientRuntime.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
 import { assembleEnv } from "../../common/kernel.js";
@@ -16,7 +17,7 @@ async function exec(code: string, options?: ExecOptions) {
 
 describe("@here.build/arrival/polyglot-lisp", () => {
   it("mapcar / remove-if / remove-if-not run correctly assembled STANDALONE (no core dep needed)", async () => {
-    const env = sandboxedEnv.inherit("polyglot-lisp-test");
+    const env = mintFrame(sandboxedEnv, "polyglot-lisp-test");
     const evalScheme = (e: SchemeEnv, src: string) => exec(src, { env: e as never });
     // Unlike its Clojure/Racket siblings, polyglot-lisp needs no dep on
     // scheme/polyglot (core) — nothing here reaches @/@?/@keys/dict/compose.

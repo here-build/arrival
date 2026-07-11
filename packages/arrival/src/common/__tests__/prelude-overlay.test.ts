@@ -1,7 +1,7 @@
 // prelude-overlay.test.ts — end-to-end proof of the phase-gated `preludeOnly` mechanism
 // (design doc §1.3, reworked: the kernel owns the prelude scope — a per-assembly Map behind
 // `ctx.preludeScope`, answered by a phase-gated resolver on the base env), against a REAL
-// Environment + assembleEnv + EnvCapability + exec. No caller-side wiring exists anymore:
+// AmbientRuntime + assembleEnv + EnvCapability + exec. No caller-side wiring exists anymore:
 // plain `assembleEnv(base, packs)` is the WHOLE story. Facts proven:
 //   1. a preludeOnly verb is callable from a LATER capability's prelude during assembly,
 //      and a plain unbound-variable error at runtime.
@@ -14,6 +14,7 @@
 //      the call's RESULT (`(define x (verb …))`), never the verb.
 
 import { describe, expect, it } from "vitest";
+import { mintFrame, type ResolvingAmbient } from "../../AmbientRuntime.js";
 
 import { exec } from "../../index.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
@@ -28,9 +29,9 @@ const evalScheme = (e: SchemeEnv, src: string) => exec(src, { env: e as never })
 
 /** Plain assembly onto a fresh sandboxed child — the kernel supplies the prelude scope. */
 async function assemble(
-  base: ReturnType<typeof sandboxedEnv.inherit>,
+  base: ResolvingAmbient,
   packs: readonly EnvPack<SchemeEnv>[],
-): Promise<ReturnType<typeof sandboxedEnv.inherit>> {
+): Promise<ResolvingAmbient> {
   await assembleEnv<SchemeEnv>(base as unknown as SchemeEnv, packs);
   return base;
 }
@@ -67,7 +68,7 @@ describe("preludeOnly — the kernel's phase-gated prelude scope (design §1.3)"
       prelude: `(sink/record (overlay/greet "world"))`,
     });
 
-    const base = sandboxedEnv.inherit("overlay-test-1");
+    const base = mintFrame(sandboxedEnv, "overlay-test-1");
     const env = await assemble(base, [capB.lower({ evalScheme }) as never]);
 
     // The prelude ran during assembly and observably called the preludeOnly verb.
@@ -82,7 +83,7 @@ describe("preludeOnly — the kernel's phase-gated prelude scope (design §1.3)"
     const cap = new EnvCapability("test/overlay-define", {
       prelude: `(define overlay-defined-value 42)`,
     });
-    const base = sandboxedEnv.inherit("overlay-test-2");
+    const base = mintFrame(sandboxedEnv, "overlay-test-2");
     const env = await assemble(base, [cap.lower({ evalScheme }) as never]);
 
     const result = await exec(`overlay-defined-value`, { env });
@@ -132,7 +133,7 @@ describe("preludeOnly — the kernel's phase-gated prelude scope (design §1.3)"
       prelude: `(chain/note-c (chain/base-secret))`,
     });
 
-    const base = sandboxedEnv.inherit("overlay-test-3");
+    const base = mintFrame(sandboxedEnv, "overlay-test-3");
     await assemble(base, [capC.lower({ evalScheme }) as never]);
 
     expect(bSeen).toEqual([7]);
@@ -156,7 +157,7 @@ describe("preludeOnly — the kernel's phase-gated prelude scope (design §1.3)"
         (define captured-secret (closure/secret))
       `,
     });
-    const base = sandboxedEnv.inherit("overlay-test-4");
+    const base = mintFrame(sandboxedEnv, "overlay-test-4");
     const env = await assemble(base, [cap.lower({ evalScheme }) as never]);
 
     // The captured VALUE is an ordinary runtime binding.

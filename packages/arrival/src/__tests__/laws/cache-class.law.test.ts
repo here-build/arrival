@@ -23,7 +23,7 @@ import { symbol, type CacheClass } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { CacheClassShapeError, ProvenanceRoleShapeError } from "../../errors.js";
 import { freshEnv } from "../_fresh-env.js";
-import type { ResolvingEnvironment } from "../../Environment.js";
+import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 
 describe("cache class — declaration + resolution (never derived, absent = regenerateable)", () => {
   it("a declared `view` on a serializable contract resolves onto the baked def", () => {
@@ -158,7 +158,7 @@ describe("lineage ⊥ cache — the infer coexistence law (Ruling B)", () => {
 });
 
 describe("stamping — the resolved class rides the provenanceRole rails onto the bound callable", () => {
-  let env: ResolvingEnvironment;
+  let env: ResolvingAmbient;
   beforeAll(async () => {
     env = await freshEnv();
     await new EnvCapability("test/cache-class-stamp", {

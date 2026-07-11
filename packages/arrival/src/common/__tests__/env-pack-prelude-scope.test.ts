@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 
 import { assembleEnv, type EnvPack } from "../kernel.js";
 
-/** A base that records resolver registrations, like `Environment.registerResolver` would. */
+/** A base that records resolver registrations, like `AmbientRuntime.registerResolver` would. */
 interface ResolverStub {
   resolvers: { id: string; resolve(name: string): unknown }[];
   registerResolver(r: { id: string; resolve(name: string): unknown }): void;

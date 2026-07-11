@@ -37,7 +37,7 @@ import { jsToScheme } from "../rosetta.js";
 import { exec as gexec } from "../eval/generator-exec.js";
 import { tf } from "../values/tagless-final.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../Environment.js";
+import { bindValue } from "../AmbientRuntime.js";
 
 // ============================================================================
 // CRITICAL: sandbox escape vectors
@@ -153,7 +153,7 @@ describe("CRITICAL: sandbox escape vectors", () => {
 // SchemeJSObject.get), but TWO other property-access paths bypass it for RAW
 // (non-SchemeJSObject) values:
 //   - `lips.ts` `get` (dot-notation `x.y`) — `else` branch does raw `object[name]`.
-//   - `Environment.ts` `:keyword` plucker — raw branch does `obj[key]` after
+//   - `AmbientRuntime.ts` `:keyword` plucker — raw branch does `obj[key]` after
 //     `Object.hasOwn`, never consulting BLOCKED_PROPERTY_NAMES.
 // A lambda / rosetta is a raw JS function in sandbox scope, so `(:constructor f)`
 // or `f.constructor` walks to `Function.prototype.constructor` → the `Function`
@@ -184,7 +184,7 @@ describe("CRITICAL: accessor isolation leaks", () => {
   it("accessMember (the dot-notation / membrane read policy) blocks raw constructor/__proto__ access", () => {
     // The LIPS `get` dot-notation wrapper was DELETED in the husk dissolution — it
     // was a dead path (no runtime caller, only this test). Its policy IS
-    // `accessMember` (interop-access): the primitive Environment.get's dotted
+    // `accessMember` (interop-access): the primitive AmbientRuntime.get's dotted
     // resolution (`foo.bar`) AND the `@` membrane reads both call directly. So the
     // escape vectors are asserted against the live policy. Blocked names and
     // boundary-crossing inherited props throw InteropAccessError (the callers

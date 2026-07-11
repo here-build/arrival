@@ -28,6 +28,7 @@
  * (payloads round-trip value + stamp ids, §5 D2 — the containment laws are WHY).
  */
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { mintFrame } from "../../AmbientRuntime.js";
 import { initBridge } from "../../index.js";
 import { parse, execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../inference-env.js";
@@ -118,7 +119,7 @@ describe("track containment — STAMP arm (§3 I1 vs the eager oracle)", () => {
     const registry = new SourceRegistry();
     tracks = [];
     for (const v of elements) {
-      const env = inferenceEnv.inherit(`i1-stamp-track-${v}`);
+      const env = mintFrame(inferenceEnv, `i1-stamp-track-${v}`);
       await registry.register(env, "fetch-item", "num");
       const { values } = await execState(`(* (fetch-item ${v}) 2)`, { env });
       const egress = values[values.length - 1];

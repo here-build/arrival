@@ -2,7 +2,7 @@
 // every row below comes from the BASE_PACKS capability declarations themselves — the
 // `symbol.notImplemented` doors each pack authors (env/r7rs/host.ts, env/srfi/srfi-stubs.ts,
 // env/polyglot-stubs.ts, srfi-1's `fold`, …). Nothing here is hand-enumerated, and there is
-// no side registry to drift from: the DECLARATIONS are the registry (the Environment-
+// no side registry to drift from: the DECLARATIONS are the registry (the AmbientRuntime-
 // despecialization ruling that dissolved env/polyglot-rich-errors/registry.ts — teaching
 // about well-known-but-absent names is capability DATA resolving through the ordinary
 // chain, not a curated table inside the error path).

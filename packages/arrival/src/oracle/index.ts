@@ -30,22 +30,22 @@ import { structuralScanner, makeSigmaScanner } from "./scanner.js";
 import { makeOracleEnv } from "./env.js";
 import type { OracleScanner } from "./contract.js";
 import type { OracleEnvΣ } from "./sigma.js";
-import type { Environment } from "../Environment.js";
+import type { AmbientRuntime } from "../AmbientRuntime.js";
 
 /**
- * The assembled oracle. Given an `env` (a live {@link Environment} or pre-built {@link OracleEnvΣ})
+ * The assembled oracle. Given an `env` (a live {@link AmbientRuntime} or pre-built {@link OracleEnvΣ})
  * it is Σ-LIVE: `validSymbols()` returns the position-filtered bound set. Given nothing, it's the
  * Layer-S structural scanner — Σ/T degrade to null/true per the contract. T will land behind the
  * same surface as `makeOracle()` with no argument.
  */
-export function makeOracle(env?: Environment | OracleEnvΣ): OracleScanner {
+export function makeOracle(env?: AmbientRuntime | OracleEnvΣ): OracleScanner {
   if (!env) return structuralScanner;
   const oracleEnv: OracleEnvΣ = isOracleEnv(env) ? env : makeOracleEnv(env);
   return makeSigmaScanner(oracleEnv);
 }
 
-/** Discriminate a pre-built {@link OracleEnvΣ} from a raw {@link Environment} (which has no
+/** Discriminate a pre-built {@link OracleEnvΣ} from a raw {@link AmbientRuntime} (which has no
  *  `boundSymbols`/`isCallable` methods). */
-function isOracleEnv(env: Environment | OracleEnvΣ): env is OracleEnvΣ {
+function isOracleEnv(env: AmbientRuntime | OracleEnvΣ): env is OracleEnvΣ {
   return typeof (env as OracleEnvΣ).boundSymbols === "function" && typeof (env as OracleEnvΣ).isCallable === "function";
 }

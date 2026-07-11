@@ -13,6 +13,7 @@
 // syntax-rules; ellipsis sub-patterns per SRFI-46.
 // ----------------------------------------------------------------------
 import invariant from "tiny-invariant";
+import { bindValue } from "../AmbientRuntime.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import type { Resolver } from "./Resolver.js";
 import type { Capabilities } from "./Capabilities.js";
@@ -595,7 +596,7 @@ export function transform_syntax({
       // resolver-aware, NON-synth and non-throwing — exactly the old scope.get(name,{throwError:false}).
       const value = defChild.lookupSettled(name);
       if (value !== undefined) {
-        defChild.define(gensym_name, value);
+        bindValue(defChild.env, gensym_name, value);
       }
       // keep names so they can be restored after evaluation
       // if there are free symbols as output

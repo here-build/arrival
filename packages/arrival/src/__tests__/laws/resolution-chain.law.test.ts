@@ -20,7 +20,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { Environment, ResolvingEnvironment } from "../../Environment.js";
+import { AmbientRuntime, ResolvingAmbient, mintPlainFrame, mintResolvingFrame } from "../../AmbientRuntime.js";
 import {
   CompiledResolver,
   compileResolutionChain,
@@ -32,16 +32,16 @@ import { user_env, global_env } from "../../env-roots.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../../Environment.js";
+import { bindValue } from "../../AmbientRuntime.js";
 
 const boxed = (n: bigint) => new AExact(CONSTANT_CTX, n);
 
 describe("CompiledResolutionChain — LAW 1: precedence preservation", () => {
   it("re-homes the module-composition rows: own bindings → own resolvers → parent, per layer", () => {
     // The exact topology module-composition.spec.ts pins on the LIVE walk.
-    const parent = new ResolvingEnvironment("parent", { x: boxed(1n) }, null);
+    const parent = mintResolvingFrame("parent", { x: boxed(1n) }, null);
     parent.registerResolver({ id: "parent-resolver", resolve: (name) => (name === "y" ? boxed(2n) : undefined) });
-    const child = new ResolvingEnvironment("child", { z: boxed(3n) }, parent);
+    const child = mintResolvingFrame("child", { z: boxed(3n) }, parent);
     child.registerResolver({ id: "child-resolver", resolve: (name) => (name === "w" ? boxed(4n) : undefined) });
 
     const chain = compileResolutionChain(child);
@@ -63,7 +63,7 @@ describe("CompiledResolutionChain — LAW 1: precedence preservation", () => {
   });
 
   it("a layer's own binding beats its own resolver (a pinned override survives a catch-all)", () => {
-    const env = new ResolvingEnvironment("layer", { pinned: boxed(10n) }, null);
+    const env = mintResolvingFrame("layer", { pinned: boxed(10n) }, null);
     env.registerResolver({ id: "catch-all", resolve: () => boxed(99n) });
     const chain = compileResolutionChain(env);
     expect(chain.lookup("pinned")).toEqual(boxed(10n));
@@ -72,7 +72,7 @@ describe("CompiledResolutionChain — LAW 1: precedence preservation", () => {
 
   it("resolvers fire in registration order within a layer", () => {
     const order: string[] = [];
-    const env = new ResolvingEnvironment("layer", {}, null);
+    const env = mintResolvingFrame("layer", {}, null);
     env.registerResolver({
       id: "first",
       resolve: (name) => {
@@ -95,9 +95,9 @@ describe("CompiledResolutionChain — LAW 1: precedence preservation", () => {
 
 describe("CompiledResolutionChain — LAW 2: merge-at-seal", () => {
   it("resolver-free layers merge child-wins into ONE flat map", () => {
-    const root = new Environment("root", { a: boxed(1n), shadowed: boxed(100n) }, null);
-    const mid = new Environment("mid", { b: boxed(2n), shadowed: boxed(200n) }, root);
-    const leaf = new Environment("leaf", { c: boxed(3n), shadowed: boxed(300n) }, mid);
+    const root = mintPlainFrame("root", { a: boxed(1n), shadowed: boxed(100n) }, null);
+    const mid = mintPlainFrame("mid", { b: boxed(2n), shadowed: boxed(200n) }, root);
+    const leaf = mintPlainFrame("leaf", { c: boxed(3n), shadowed: boxed(300n) }, mid);
 
     const chain = compileResolutionChain(leaf);
     expect(chain.steps).toHaveLength(1);
@@ -138,7 +138,7 @@ describe("CompiledResolutionChain — LAW 3: memo + negative-cache soundness", (
     // A first-class boxed sentinel: resolvers answer with BOXED values only (the
     // hermetic ruling's resolver contract) — identity is what this law pins.
     const value = boxed(7n);
-    const env = new ResolvingEnvironment("layer", {}, null);
+    const env = mintResolvingFrame("layer", {}, null);
     env.registerResolver({
       id: "pure-synth",
       pure: true,
@@ -157,7 +157,7 @@ describe("CompiledResolutionChain — LAW 3: memo + negative-cache soundness", (
 
   it("an IMPURE resolver is probed every time (nothing cached through it)", () => {
     let calls = 0;
-    const env = new ResolvingEnvironment("layer", {}, null);
+    const env = mintResolvingFrame("layer", {}, null);
     env.registerResolver({
       id: "dynamic",
       resolve: (name) => {
@@ -173,7 +173,7 @@ describe("CompiledResolutionChain — LAW 3: memo + negative-cache soundness", (
   it("negative caching holds iff ALL resolvers are pure", () => {
     // ALL-pure: a chain-wide miss is memoized — the resolver is probed once.
     let pureCalls = 0;
-    const allPure = new ResolvingEnvironment("all-pure", {}, null);
+    const allPure = mintResolvingFrame("all-pure", {}, null);
     allPure.registerResolver({
       id: "pure",
       pure: true,
@@ -189,7 +189,7 @@ describe("CompiledResolutionChain — LAW 3: memo + negative-cache soundness", (
 
     // ONE impure resolver disables miss-caching globally.
     let impureCalls = 0;
-    const mixed = new ResolvingEnvironment("mixed", {}, null);
+    const mixed = mintResolvingFrame("mixed", {}, null);
     mixed.registerResolver({ id: "pure", pure: true, resolve: () => undefined });
     mixed.registerResolver({
       id: "impure",
@@ -211,7 +211,7 @@ describe("CompiledResolutionChain — LAW 3: memo + negative-cache soundness", (
     const fromPure = boxed(1n);
     const fromImpure = boxed(2n);
     let impureAnswer: AExact | undefined;
-    const env = new ResolvingEnvironment("layer", {}, null);
+    const env = mintResolvingFrame("layer", {}, null);
     env.registerResolver({ id: "impure-first", resolve: () => impureAnswer });
     env.registerResolver({ id: "pure-second", pure: true, resolve: (n) => (n === "name" ? fromPure : undefined) });
     const chain = compileResolutionChain(env);
@@ -225,9 +225,9 @@ describe("CompiledResolutionChain — LAW 3: memo + negative-cache soundness", (
 describe("CompiledResolutionChain — LAW 4: content address", () => {
   it("deterministic per topology, sensitive to vocabulary and resolver identity", () => {
     const build = () => {
-      const root = new ResolvingEnvironment("root", { a: boxed(1n) }, null);
+      const root = mintResolvingFrame("root", { a: boxed(1n) }, null);
       root.registerResolver({ id: "r1", resolve: () => undefined });
-      return new Environment("leaf", { b: boxed(2n) }, root);
+      return mintPlainFrame("leaf", { b: boxed(2n) }, root);
     };
     const h1 = compileResolutionChain(build()).hash;
     const h2 = compileResolutionChain(build()).hash;
@@ -237,18 +237,18 @@ describe("CompiledResolutionChain — LAW 4: content address", () => {
     bindValue(widened, "c", boxed(3n));
     expect(compileResolutionChain(widened).hash).not.toBe(h1); // vocabulary-sensitive
 
-    const repure = new ResolvingEnvironment("root", { a: boxed(1n) }, null);
+    const repure = mintResolvingFrame("root", { a: boxed(1n) }, null);
     repure.registerResolver({ id: "r1", pure: true, resolve: () => undefined });
-    const leaf = new Environment("leaf", { b: boxed(2n) }, repure);
+    const leaf = mintPlainFrame("leaf", { b: boxed(2n) }, repure);
     expect(compileResolutionChain(leaf).hash).not.toBe(h1); // purity-sensitive
   });
 });
 
 describe("CompiledResolutionChain — LAW 5: the bake seal leaves zero resolver residue", () => {
   it("the preludeOnly overlay is registered during the bake and DROPPED at seal", async () => {
-    const base = new ResolvingEnvironment("bake-seal-law", {}, null);
+    const base = mintResolvingFrame("bake-seal-law", {}, null);
     let duringBake: { resolvers: number; visible: unknown } | undefined;
-    const pack: EnvPack<ResolvingEnvironment> = {
+    const pack: EnvPack<ResolvingAmbient> = {
       name: "law/bake-overlay",
       apply(env, ctx) {
         expect(ctx.preludeScope).toBeDefined(); // bootstrap assembly ALWAYS provides it

@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import { EnvCapability } from "../capability.js";
 import { port, type Resource } from "../resources.js";
-import { ResolvingEnvironment } from "../../Environment.js";
+import { ResolvingAmbient, mintResolvingFrame } from "../../AmbientRuntime.js";
 import { schemeToJsUntyped } from "../../rosetta.js";
 import { testCallCtx, type CallCtx } from "../../values/primitives/CallCtx.js";
 
@@ -30,8 +30,8 @@ const echoResource: Resource<Echo> = {
 // (McpEnvCapability's whole authoring model + every live downstream consumer) and is NOT
 // scheduled to retire by the reverse-membrane migration (B1-B3) — see the ledger's
 // "defineRosetta legacy arm authoring form" row (gate: McpEnvCapability annotation-lifting).
-// What DID retire (2026-07-11) is the public `Environment.defineRosetta` method itself —
-// `capability.ts` now wires this arm through the internal `bindRosetta` (Environment.ts),
+// What DID retire (2026-07-11) is the public `AmbientRuntime.defineRosetta` method itself —
+// `capability.ts` now wires this arm through the internal `bindRosetta` (AmbientRuntime.ts),
 // which still runs every bound verb through `createRosettaWrapper` exactly as before, so
 // `verbs.describe` below is the real rosetta-wrapped procedure (a scheme-calling-convention
 // async fn expecting a `CallCtx` receiver), not the raw activation-bound method — see
@@ -52,14 +52,14 @@ const net = new EnvCapability("net", {
 });
 
 /** A REAL recording env (hermetic-Environment ruling: capability apply narrows to the
- *  concrete `Environment` — a synthetic `{ set }` mock can no longer receive bindings).
+ *  concrete `AmbientRuntime` — a synthetic `{ set }` mock can no longer receive bindings).
  *  `verbs[name]` reads the frame's own storage record and is still the REAL
  *  rosetta-wrapped procedure (`createRosettaWrapper`'s output) — a scheme-calling-convention
  *  async fn expecting a `CallCtx` receiver — not the raw activation-bound `sym.fn`; see
  *  `invoke` below for the calling idiom. The Proxy keeps this suite's `verbs.describe`
  *  property-read idiom; the fn-shape cast is the same boundary narrow the old recorder did. */
-function recordingEnv(): { env: ResolvingEnvironment; verbs: Record<string, (this: CallCtx, ...a: unknown[]) => unknown> } {
-  const env = new ResolvingEnvironment("capability-recording", {}, null);
+function recordingEnv(): { env: ResolvingAmbient; verbs: Record<string, (this: CallCtx, ...a: unknown[]) => unknown> } {
+  const env = mintResolvingFrame("capability-recording", {}, null);
   const verbs = new Proxy({} as Record<string, (this: CallCtx, ...a: unknown[]) => unknown>, {
     get: (_t, name) => env.__env__[name as string],
   });

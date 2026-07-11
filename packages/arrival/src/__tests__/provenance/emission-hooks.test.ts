@@ -17,6 +17,7 @@
  *      off (the sidecar is provably inert on the primary execution path).
  */
 import { afterEach, describe, expect, it } from "vitest";
+import { mintFrame, type ResolvingAmbient } from "../../AmbientRuntime.js";
 
 import { execState } from "../../eval/generator-exec.js";
 import { EvalTrace } from "../../provenance/trace.js";
@@ -40,7 +41,7 @@ afterEach(() => {
  *  wraps it into the async `mintsPoint` path regardless of the impl's own sync body).
  *  Test-local `EnvCapability` (`symbol.rosetta` — the `env.defineRosetta` migration
  *  target); a plain `z.number` output, same as `silent-region.test.ts`'s sibling. */
-async function registerSource(env: ReturnType<typeof inferenceEnv.inherit>): Promise<void> {
+async function registerSource(env: ResolvingAmbient): Promise<void> {
   const fetchItem = symbol.rosetta`fetch-item: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 42);
   await new EnvCapability("test/fetch-item", { symbols: { "fetch-item": fetchItem } })
     .lower({})
@@ -54,7 +55,7 @@ describe("the real port site: a rosetta crossing through evaluator.ts's generic 
     const payloads = new PayloadStoreFake();
     const sink: EmissionSink = { store, payloads, regionId: REGION };
     const trace = new EvalTrace();
-    const env = inferenceEnv.inherit("emission-hooks-on");
+    const env = mintFrame(inferenceEnv, "emission-hooks-on");
     await registerSource(env);
 
     const result = await withRecordCoordinateAsync(COORD, sink, () => execState("(fetch-item)", { env, tap: trace }));
@@ -78,7 +79,7 @@ describe("the real port site: a rosetta crossing through evaluator.ts's generic 
     const payloads = new PayloadStoreFake();
     const sink: EmissionSink = { store, payloads, regionId: REGION };
     const trace = new EvalTrace();
-    const env = inferenceEnv.inherit("emission-hooks-off");
+    const env = mintFrame(inferenceEnv, "emission-hooks-off");
     await registerSource(env);
 
     const result = await withRecordCoordinateAsync(COORD, sink, () => execState("(fetch-item)", { env, tap: trace }));
@@ -93,7 +94,7 @@ describe("the real port site: a rosetta crossing through evaluator.ts's generic 
   it("flag ON but NO coordinate/sink installed (today's actual production shape — nothing wires this yet): no-ops, same result", async () => {
     setEmissionEnabled(true);
     const trace = new EvalTrace();
-    const env = inferenceEnv.inherit("emission-hooks-no-coordinate");
+    const env = mintFrame(inferenceEnv, "emission-hooks-no-coordinate");
     await registerSource(env);
 
     // No withRecordCoordinate wrapper — exactly what every real call site looks like
@@ -113,7 +114,7 @@ describe("the real port site: a rosetta crossing through evaluator.ts's generic 
     const payloads = new PayloadStoreFake();
     const sink: EmissionSink = { store, payloads, regionId: REGION };
     const trace = new EvalTrace();
-    const env = inferenceEnv.inherit("emission-hooks-non-rosetta");
+    const env = mintFrame(inferenceEnv, "emission-hooks-non-rosetta");
 
     const result = await withRecordCoordinateAsync(COORD, sink, () => execState("(+ 1 2)", { env, tap: trace }));
     expect(schemeToJs(result.values[0], {})).toBe(3);

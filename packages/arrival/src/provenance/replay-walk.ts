@@ -33,7 +33,7 @@
  *      over the same inputs — a divergence between the two node switches is a bug
  *      in this file, never an acceptable drift.
  */
-import type { EnvironmentValue, ResolvingEnvironment } from "../Environment.js";
+import type { AmbientValue, ResolvingAmbient } from "../AmbientRuntime.js";
 import type { SchemeValue } from "../values/types.js";
 import type { EnvCapability } from "../common/capability.js";
 import { withSilentRegion } from "../values/primitives/region-scope.js";
@@ -87,7 +87,7 @@ function wireFor(graph: WireframeGraph, node: number, slot: string): Wire {
  *  owns; a fresh `cache` per recursive `template-ref`/graph descent, exactly as
  *  `replayGraphIn` builds a fresh `nodeMemo` per recursive call). */
 async function* nodeValueStep(
-  base: ResolvingEnvironment,
+  base: ResolvingAmbient,
   program: WireframeProgram,
   graph: WireframeGraph,
   frozen: FrozenMints,
@@ -153,7 +153,7 @@ async function* nodeValueStep(
           `template "${node.name}" is absent or has no egress — nothing to replay`,
         );
       }
-      const args: Record<string, EnvironmentValue> = {};
+      const args: Record<string, AmbientValue> = {};
       for (let k = 0; k < template.params.length; k++) {
         args[template.params[k]] = yield* gammaWireStep(
           base,
@@ -208,7 +208,7 @@ async function* nodeValueStep(
  *  YIELD the result before returning it — the single point every external
  *  `for await` pull actually observes. */
 async function* gammaWireStep(
-  base: ResolvingEnvironment,
+  base: ResolvingAmbient,
   program: WireframeProgram,
   graph: WireframeGraph,
   frozen: FrozenMints,
@@ -219,7 +219,7 @@ async function* gammaWireStep(
   node: number,
   slot: string,
 ): AsyncGenerator<ReplayWalkStep, SchemeValue> {
-  const ingress: Record<string, EnvironmentValue> = {};
+  const ingress: Record<string, AmbientValue> = {};
   for (const ref of wire.paramRefs) {
     if (ref.kind === "slot") {
       const bound = slots[ref.name];
@@ -242,7 +242,7 @@ async function* gammaWireStep(
 }
 
 async function* graphEgressStep(
-  base: ResolvingEnvironment,
+  base: ResolvingAmbient,
   program: WireframeProgram,
   graph: WireframeGraph,
   frozen: FrozenMints,

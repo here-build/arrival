@@ -26,7 +26,7 @@
 
 import invariant from "tiny-invariant";
 
-import { Environment, type EnvironmentValue } from "../Environment.js";
+import { AmbientRuntime, type AmbientValue } from "../AmbientRuntime.js";
 import { Capabilities } from "./Capabilities.js";
 import { LexicalScope } from "./LexicalScope.js";
 import { Resolver } from "./Resolver.js";
@@ -135,7 +135,7 @@ export interface AssembledAmbient extends AsyncDisposable {
    *  no-op — realm-scoped by design, never torn down. */
   dispose(): Promise<void>;
   /** One sealed-chain probe — the capability half of a run's composed resolution. */
-  lookup(name: string | symbol): EnvironmentValue | undefined;
+  lookup(name: string | symbol): AmbientValue | undefined;
   /** The ambient's enumerable vocabulary (resolver-synthesized names absent, per the
    *  chain's own contract). */
   names(): ReadonlySet<string | symbol>;
@@ -152,7 +152,7 @@ export interface AssembledAmbient extends AsyncDisposable {
  *  privatization posture: the ambient surfaces `lookup`/`names`/`describeSymbol`/`catalog`,
  *  never the concrete frame class). Keyed by ambient identity. */
 interface AmbientInternals {
-  readonly base: Environment;
+  readonly base: AmbientRuntime;
   readonly lowered: readonly LoweredPack[];
 }
 const internals = new WeakMap<AssembledAmbient, AmbientInternals>();
@@ -160,7 +160,7 @@ const internals = new WeakMap<AssembledAmbient, AmbientInternals>();
 /** The base env behind an ambient — exec's own seam (`Capabilities.assembled(base)`,
  *  the shadow classifier). Throws a teaching door for a hand-rolled object: the phase-2
  *  product is minted by `assembleAmbient`, not duck-typed. */
-export function ambientBase(ambient: AssembledAmbient): Environment {
+export function ambientBase(ambient: AssembledAmbient): AmbientRuntime {
   const found = internals.get(ambient);
   invariant(
     found !== undefined,
@@ -193,7 +193,7 @@ function loweredClosure(roots: readonly LoweredPack[]): LoweredPack[] {
  *  `assembleAmbient` (generator-exec) is the public mint. `disposable: false` marks the
  *  realm-default ambient (dispose = documented no-op; realm-scoped by design). */
 export function makeAssembledAmbient(args: {
-  base: Environment;
+  base: AmbientRuntime;
   capabilities: readonly EnvCapability[];
   assembled: AssembledEnv<SchemeEnv>;
   lowered: readonly LoweredPack[];
@@ -343,7 +343,7 @@ export function validateAgainstAmbient(
  *  against the POST-AUGMENTATION base — which fixes the §1.1 classifier wrinkle by
  *  construction (a `{ capabilities }` run's capability-declared provenance roles are
  *  visible because the only base that exists to hand the classifier is the augmented one). */
-export function classifyProgram(program: ParsedProgram, baseEnv: Environment): LineageNode[] {
+export function classifyProgram(program: ParsedProgram, baseEnv: AmbientRuntime): LineageNode[] {
   const classifier = classifierFromEnv(baseEnv);
   return program.forms.map((form) => classify(form, classifier));
 }

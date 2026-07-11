@@ -15,12 +15,12 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { exec, execState } from "../eval/generator-exec.js";
 import { freshEnv } from "./_fresh-env.js";
-import type { ResolvingEnvironment } from "../Environment.js";
+import type { ResolvingAmbient } from "../AmbientRuntime.js";
 import type { APair } from "../values/primitives/APair.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../Environment.js";
+import { bindValue, mintFrame } from "../AmbientRuntime.js";
 
-let userEnv: ResolvingEnvironment;
+let userEnv: ResolvingAmbient;
 beforeAll(async () => {
   userEnv = await freshEnv();
 });
@@ -139,7 +139,7 @@ describe("evaluation tap", () => {
     const pending = new Promise<unknown>((r) => {
       resolveAsync = r;
     });
-    const env = userEnv.inherit("tap-async-test");
+    const env = mintFrame(userEnv, "tap-async-test");
     bindValue(env, "await-this", () => pending);
 
     const { events, tap } = recorder();

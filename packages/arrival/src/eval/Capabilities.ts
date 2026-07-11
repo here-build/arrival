@@ -1,5 +1,5 @@
 import { CLASS } from "../well-known-symbols.js";
-import type { Environment, EnvironmentValue } from "../Environment.js";
+import type { AmbientRuntime, AmbientValue } from "../AmbientRuntime.js";
 import type { RunContext } from "../values/primitives/RunContext.js";
 import { type CompiledResolutionChain, sealResolutionChain } from "./CompiledResolutionChain.js";
 
@@ -42,7 +42,7 @@ export class Capabilities {
    *   default): the structural `chainRoot` probe over the live walk.
    */
   constructor(
-    readonly env: Environment,
+    readonly env: AmbientRuntime,
     chain?: CompiledResolutionChain,
   ) {
     this.chain = chain;
@@ -54,11 +54,11 @@ export class Capabilities {
    * BY THE CALLER (generator-exec, which already imports the leaf safely) rather than
    * imported here: a value import of env-roots into this module would cycle through
    * the early-loaded eval chain (`Resolver → Capabilities → env-roots → new
-   * Environment`, before `Environment` is constructed). `sealResolutionChain` is
+   * AmbientRuntime`, before `AmbientRuntime` is constructed). `sealResolutionChain` is
    * memoized per base (one chain, one realm-shared memo), so the per-exec call here
    * reuses the artifact the assembly call sites sealed at bake end.
    */
-  static assembled(base: Environment): Capabilities {
+  static assembled(base: AmbientRuntime): Capabilities {
     return new Capabilities(base, sealResolutionChain(base));
   }
 
@@ -67,7 +67,7 @@ export class Capabilities {
    *  Glass: walks this scope's whole live `__parent__` chain (the lexical half never
    *  reaches here on a hit). Assembled: ONE probe of the sealed chain — the degenerate
    *  zero-resolver form is a single flat `Map.get`. */
-  lookup(name: string | symbol, ctx?: RunContext): EnvironmentValue | undefined {
+  lookup(name: string | symbol, ctx?: RunContext): AmbientValue | undefined {
     return this.chain === undefined ? this.env._lookupWithResolvers(name, ctx) : this.chain.lookup(name, ctx);
   }
 
@@ -84,8 +84,8 @@ export class Capabilities {
    *  cycle through the early-loaded eval modules). The hygiene literal check compares a
    *  resolved frame `=== globalRoot` to mean "an unshadowed base builtin"; the root is a
    *  stable identity across the scope's lifetime. GLASS mode only. */
-  private chainRoot(): Environment {
-    let e: Environment = this.env;
+  private chainRoot(): AmbientRuntime {
+    let e: AmbientRuntime = this.env;
     while (e.__parent__) e = e.__parent__;
     return e;
   }
@@ -96,7 +96,7 @@ export class Capabilities {
    * ONE identity per baked base, no structural chain-walk needed. GLASS: the
    * structural chain root (`global_env`), unaffected — glass envs don't bake.
    */
-  get globalRoot(): Environment | CompiledResolutionChain {
+  get globalRoot(): AmbientRuntime | CompiledResolutionChain {
     return this.chain === undefined ? this.chainRoot() : this.chain;
   }
 
@@ -109,7 +109,7 @@ export class Capabilities {
    * user_env) AND a builtin on global_env both resolve to the one sentinel. GLASS: the
    * own-binding probe on the structural chain root (unchanged).
    */
-  refFrame(name: string): Environment | CompiledResolutionChain | undefined {
+  refFrame(name: string): AmbientRuntime | CompiledResolutionChain | undefined {
     if (this.chain === undefined) {
       const root = this.chainRoot();
       return root.has(name) ? root : undefined;

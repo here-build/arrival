@@ -37,6 +37,7 @@
 //      free reference, NO declared deps) throws `DefineLocalityError`, pinning
 //      that the bug this migration fixes was real and is now caught.
 import { describe, expect, it } from "vitest";
+import { mintFrame } from "../../../AmbientRuntime.js";
 import * as z from "../../../common/scheme-zod.js";
 import { symbol } from "../../../common/symbol.js";
 import { EnvCapability } from "../../../common/capability.js";
@@ -48,13 +49,13 @@ import { assembleEnv } from "../../../common/kernel.js";
 import { DefineLocalityError } from "../../../errors.js";
 import srfi128 from "../srfi-128.js";
 import type { SchemeEnv } from "../../../common/scheme-env.js";
-import type { ResolvingEnvironment } from "../../../Environment.js";
+import type { ResolvingAmbient } from "../../../AmbientRuntime.js";
 
 // Mirrors `_fresh-env.ts`'s own injected evalScheme — `skipBootstrapWait` because
 // these execs run against an env this suite is itself assembling/re-lowering onto,
 // not the shared realm-cached bootstrap.
 const evalScheme = (env: unknown, src: unknown): unknown =>
-  exec(src as string, { env: env as ResolvingEnvironment, skipBootstrapWait: true });
+  exec(src as string, { env: env as ResolvingAmbient, skipBootstrapWait: true });
 
 describe("scheme/srfi-128 — comparator behavior equivalence (semantic-equivalence gate, §4.2)", () => {
   it("make-comparator + comparator? + the three accessors", async () => {
@@ -128,7 +129,7 @@ describe("scheme/srfi-128 — comparator behavior equivalence (semantic-equivale
 describe("scheme/srfi-128 — the dep edge is real, both luck classes in one pack (§2.1's undeclared-dep bug class, now declared edges)", () => {
   it("standalone .apply() (deps unwalked): calls touching ONLY NATIVE_PACKS-sourced free names still resolve — the same two-phase-bootstrap luck srfi-43.ts's header names (equality/numeric/chars/strings are already on global_env post-initBridge)", async () => {
     await initBridge();
-    const env = global_env.inherit("test-srfi128-standalone-native-luck");
+    const env = mintFrame(global_env, "test-srfi128-standalone-native-luck");
     await srfi128.lower({ evalScheme }).apply(env, undefined as never);
     // %type-rank's body reaches boolean?/number?/char?/string?/symbol?/null?/pair?
     // (all NATIVE_PACKS-sourced, via scheme/equality + scheme/numeric + scheme/chars)
@@ -139,22 +140,22 @@ describe("scheme/srfi-128 — the dep edge is real, both luck classes in one pac
 
   it("standalone .apply() (deps unwalked): make-comparator genuinely fails — `list` is a BASE_PACKS-only name, absent from global_env, srfi-235's own luck class (NOT runtime luck)", async () => {
     await initBridge();
-    const env = global_env.inherit("test-srfi128-standalone-list-unbound");
+    const env = mintFrame(global_env, "test-srfi128-standalone-list-unbound");
     await srfi128.lower({ evalScheme }).apply(env, undefined as never);
     await expect(execState("(make-comparator number? = <)", { env })).rejects.toThrow();
   });
 
   it("bake itself succeeds even with deps unapplied — the FV law is a STATIC declared-`deps` check, not a runtime-binding probe", async () => {
     await initBridge();
-    const env = global_env.inherit("test-srfi128-standalone-bake-ok");
+    const env = mintFrame(global_env, "test-srfi128-standalone-bake-ok");
     await expect(srfi128.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
   });
 
   it("assembleEnv (the real orchestration path — every production caller) DOES walk deps: make-comparator works standalone", async () => {
     await initBridge();
-    const env = global_env.inherit("test-srfi128-assembleEnv-ok") as unknown as SchemeEnv;
+    const env = mintFrame(global_env, "test-srfi128-assembleEnv-ok") as unknown as SchemeEnv;
     await assembleEnv(env, [srfi128.lower({ evalScheme })]);
-    const typedEnv = env as unknown as ResolvingEnvironment;
+    const typedEnv = env as unknown as ResolvingAmbient;
     const [ok] = await exec("(comparator? (make-comparator number? = <))", { env: typedEnv });
     expect(ok).toBe(true);
   });
@@ -186,7 +187,7 @@ describe("scheme/srfi-128 — contract ENFORCEMENT fires at the call boundary", 
 describe("scheme/srfi-128 — the §2.1 bake FV law passes for this pack AS MIGRATED", () => {
   it("lowers cleanly with its declared deps — never DefineLocalityError", async () => {
     await initBridge();
-    const env = global_env.inherit("test-srfi128-fv-law-ok");
+    const env = mintFrame(global_env, "test-srfi128-fv-law-ok");
     await expect(srfi128.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
   });
 

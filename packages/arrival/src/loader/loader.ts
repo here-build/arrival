@@ -27,8 +27,8 @@ export type MaybePromise<T> = T | Promise<T>;
 
 /** The run env the verbs evaluate module forms into — typed `SchemeEnv` (V2,
  *  arrival-environment-privatization.md §II.3/D2: the same type `ExecOptions.env` now takes),
- *  never the package-internal `Environment` class. Every real caller's env is a base-linked
- *  live one (`env.inherit(...)` below, `execExpr(form, { env })` in loader-capability.ts, both
+ *  never the package-internal `AmbientRuntime` class. Every real caller's env is a base-linked
+ *  live one (the prelude-scope mint in loader-capability.ts, `execExpr(form, { env })` there too, both
  *  need it) — this is the honest name for what was already true, not a widening. */
 export type RunEnv = SchemeEnv;
 
@@ -71,12 +71,12 @@ export function runResolverOf(ctx: unknown, verb: string): Resolver {
 
 /** The run env these verbs spill module `define`s into — the composed resolver's lexical
  *  frame. Kept as the env-shaped face of {@link runResolverOf} for callers that only need
- *  the frame (`require/extension`'s assembler binding, `env.inherit` for prelude scopes).
+ *  the frame (`require/extension`'s assembler binding, the prelude-scope mint).
  *  The widen is the SAME seam the pre-move `currentRunEnv() as RunEnv` read carried: the
- *  frame is a concrete `Environment` (a glass root is a `ResolvingEnvironment` and genuinely
+ *  frame is a concrete `AmbientRuntime` (a glass root is a `ResolvingAmbient` and genuinely
  *  satisfies `SchemeEnv`; the cut's null-rooted frame lacks `registerResolver`), and every
- *  use this face serves (`get`/`set`/`inherit`, the assembler binding) is on the shared
- *  surface — hence the explicit through-`unknown` step where the old cross-package cast
+ *  use this face serves (`get`, the assembler binding, the narrowed prelude-scope mint) is
+ *  on the shared surface — hence the explicit through-`unknown` step where the old cross-package cast
  *  was implicit. */
 export function runEnvOf(ctx: unknown, verb: string): RunEnv {
   return runResolverOf(ctx, verb).env as unknown as RunEnv;

@@ -23,7 +23,7 @@ import { provOf } from "../values/lineage-shadow.js";
 import { sStr } from "./_lineage-test-helpers.js";
 import { requireEagerOracle } from "./_require-eager-oracle.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../Environment.js";
+import { bindValue, mintFrame } from "../AmbientRuntime.js";
 
 // Q20b: this file's local helpers (`eagerProvSize` et al.) call execState
 // directly — force the oracle ON for the file's lifetime.
@@ -67,7 +67,7 @@ function countNodes(n: LineageNode): number {
 describe("lineage checkpoint — runtime stamping derives the SAME cone (correctness)", () => {
   it("lineage full-cone == the eager interpreter's provenance, for (length (list a b c))", async () => {
     await initBridge();
-    const env = inferenceEnv.inherit("lin-correct");
+    const env = mintFrame(inferenceEnv, "lin-correct");
     bindValue(env, "a", sStr("a", 100));
     bindValue(env, "b", sStr("b", 101));
     bindValue(env, "c", sStr("c", 102));
@@ -103,7 +103,7 @@ describe("lineage checkpoint — the static skeleton is constant in N (eager ret
   // used to leave open.
   async function eagerProvSize(n: number): Promise<number> {
     await initBridge();
-    const env = inferenceEnv.inherit(`lin-scale-${n}`);
+    const env = mintFrame(inferenceEnv, `lin-scale-${n}`);
     const names: string[] = [];
     for (let i = 0; i < n; i++) {
       const name = `e${i}`;
@@ -141,7 +141,7 @@ describe("lineage checkpoint — C4 ALREADY achieves O(1) for the UNMINTED fan-o
   // strategy's own free win.
   async function unmintedFanProvSize(n: number): Promise<number> {
     await initBridge();
-    const env = inferenceEnv.inherit(`lin-scale-unminted-${n}`);
+    const env = mintFrame(inferenceEnv, `lin-scale-unminted-${n}`);
     const xs = APair.fromArray(
       CONSTANT_CTX,
       Array.from({ length: n }, (_, i) => sStr(`e${i}`, 1000 + i)),

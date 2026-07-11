@@ -55,7 +55,7 @@ import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
 import { provOf, bindingsForSkeleton } from "../values/lineage-shadow.js";
 import { requireEagerOracle } from "./_require-eager-oracle.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../Environment.js";
+import { bindValue, mintFrame } from "../AmbientRuntime.js";
 
 // Q20b: shadow mode compares the static classifier against the UNTAPPED EAGER
 // stamp (mechanism 1) — the whole point of this file. Force the oracle ON for its
@@ -88,7 +88,7 @@ const strs = () => ({ a: sStr("a", 100), b: sStr("b", 200), c: sStr("c", 300) })
  */
 async function shadow(src: string, binds: Record<string, SchemeValue>): Promise<{ staticCone: number[]; eager: number[] }> {
   await initBridge();
-  const env = inferenceEnv.inherit(`shadow-${seq++}`);
+  const env = mintFrame(inferenceEnv, `shadow-${seq++}`);
   for (const [k, v] of Object.entries(binds)) bindValue(env, k, v);
 
   // exec under the flag: this is the in-engine shadow assert (slices 2+3). If the
@@ -249,7 +249,7 @@ describe("SHADOW — `when` / `unless` mux (one-armed if) == eager golden", () =
 describe("SHADOW — bare fan result spine == eager golden ([] both paths)", () => {
   it("(map (lambda (e) e) xs) — mapped spine carries []", async () => {
     await initBridge();
-    const env = inferenceEnv.inherit(`shadow-fan-${seq++}`);
+    const env = mintFrame(inferenceEnv, `shadow-fan-${seq++}`);
     bindValue(env, "xs", APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false));
     const [result] = (await execState(`(map (lambda (e) e) xs)`, { env, irLineage: true })).values;
     expect(provOf(result)).toEqual([]); // eager spine
@@ -271,7 +271,7 @@ describe("SHADOW — length-over-map fan: A13 CLOSED, static and eager now AGREE
   // — no more shadow divergence, no more throw.
   it("(length (map (lambda (e) e) xs)) — static [] == eager [] (the A13 leak is closed)", async () => {
     await initBridge();
-    const env = inferenceEnv.inherit(`shadow-fan-${seq++}`);
+    const env = mintFrame(inferenceEnv, `shadow-fan-${seq++}`);
     bindValue(env, "xs", APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false));
     const [result] = (await execState(`(length (map (lambda (e) e) xs))`, { env, irLineage: true })).values;
     expect(provOf(result)).toEqual([]); // eager — C4 fix
@@ -291,7 +291,7 @@ describe("SHADOW — length-over-map fan: A13 CLOSED, static and eager now AGREE
 describe("SHADOW BOUNDARY — by-design divergences throw under the flag (strict, not swallowed)", () => {
   async function runFlagged(src: string, binds: Record<string, SchemeValue>): Promise<void> {
     await initBridge();
-    const env = inferenceEnv.inherit(`shadow-bound-${seq++}`);
+    const env = mintFrame(inferenceEnv, `shadow-bound-${seq++}`);
     for (const [k, v] of Object.entries(binds)) bindValue(env, k, v);
     await exec(src, { env, irLineage: true });
   }
@@ -322,7 +322,7 @@ describe("SHADOW BOUNDARY — by-design divergences throw under the flag (strict
   // filter is simply the fan where the split now matters on the EAGER side first.
   it("filter fresh container stamp: (filter pred xs) — static [] (spine, v0.1 fan model), eager [100,102] (R2/C2 PROVENANCED survivors)", async () => {
     await initBridge();
-    const env = inferenceEnv.inherit(`shadow-bound-${seq++}`);
+    const env = mintFrame(inferenceEnv, `shadow-bound-${seq++}`);
     bindValue(env, "xs", APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false));
     await expect(
       exec(`(filter (lambda (e) (not (string=? e "b"))) xs)`, { env, irLineage: true }),
@@ -341,7 +341,7 @@ describe("SHADOW SKIP — macro-head / keyword-projection forms abstain (no thro
     // A `(:keyword …)` head is a where-provenance projection with no static node
     // (v0.2/B2). exec under the flag must not throw — the form is recorded uncovered.
     await initBridge();
-    const env = inferenceEnv.inherit(`shadow-skip-${seq++}`);
+    const env = mintFrame(inferenceEnv, `shadow-skip-${seq++}`);
     bindValue(env, "a", sStr("hello", 100));
     // `(:length a)` resolves via the keyword-accessor membrane pluck; whatever its
     // value/cone, shadow abstains because the head starts with ':'.
@@ -356,7 +356,7 @@ describe("SHADOW SKIP — macro-head / keyword-projection forms abstain (no thro
     // via the macro-head branch instead of the ':'-prefix one. Guards that a
     // macro-headed top-level form does not throw under the flag.
     await initBridge();
-    const env = inferenceEnv.inherit(`shadow-skip-${seq++}`);
+    const env = mintFrame(inferenceEnv, `shadow-skip-${seq++}`);
     await expect(exec(`(define z 5)`, { env, irLineage: true })).resolves.toBeDefined();
   });
 });

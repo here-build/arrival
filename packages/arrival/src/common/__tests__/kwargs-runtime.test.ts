@@ -21,7 +21,7 @@
 //     call `(tool :a v :b v2)` reaches the impl as one decoded object, end to end.
 
 import { describe, expect, it, beforeAll } from "vitest";
-import type { ResolvingEnvironment } from "../../Environment.js";
+import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 import { exec, execState } from "../../eval/generator-exec.js";
 import { freshEnv } from "../../__tests__/_fresh-env.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
@@ -76,7 +76,7 @@ describe("z.kwargs runtime — UNIT (direct def.run, manually-built pluck pairs)
 });
 
 describe("z.kwargs runtime — INTEGRATION ((tool :k v …) through a real env + exec)", () => {
-  let env: ResolvingEnvironment;
+  let env: ResolvingAmbient;
   beforeAll(async () => {
     env = await freshEnv();
     const greet = symbol.rosetta`greet: kwargs greeting`(

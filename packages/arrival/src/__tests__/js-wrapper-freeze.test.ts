@@ -10,7 +10,7 @@
 // exactly the lineage-soundness guarantee the old assert merely *detected* after the fact.
 
 import { describe, it, expect } from "vitest";
-// Import the package entry first so the membrane↔wrappers↔Environment module cycle is fully
+// Import the package entry first so the membrane↔wrappers↔AmbientRuntime module cycle is fully
 // initialized before we construct AJSArray/AJSObject directly below — the wrappers call jsToScheme/
 // fromJS from that cycle at runtime, and the entry sequences the bridge bootstrap (`void initBridge()`).
 import "../index.js";

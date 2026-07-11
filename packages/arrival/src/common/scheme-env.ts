@@ -19,18 +19,18 @@
 // dependency-free layer the base sandbox can be re-expressed in terms of.
 
 import type { EnvPack } from "./kernel.js";
-// Type-only edges (no runtime import — Environment.ts imports THIS module's types, so a
+// Type-only edges (no runtime import — AmbientRuntime.ts imports THIS module's types, so a
 // value edge here would cycle; `import type` erases at emit, same posture as guards.ts's
 // false-leaf note): the storage union a resolver may answer with, and the run identity a
 // resolving read threads.
-import type { EnvironmentValue } from "../Environment.js";
+import type { AmbientValue } from "../AmbientRuntime.js";
 import type { RunContext } from "../values/primitives/RunContext.js";
 
 /** A rosetta (host-fn) contribution, mirroring arrival-scheme's retired `defineRosetta`
  *  config structurally (kept here so we don't import the runtime). Still the type the
  *  legacy `SymbolDeclaration` authoring arm (capability.ts) declares against — the
  *  authoring SHAPE survives even though the `defineRosetta` method that once consumed
- *  it does not (see `bindRosetta`, Environment.ts, the surviving internal wiring). */
+ *  it does not (see `bindRosetta`, AmbientRuntime.ts, the surviving internal wiring). */
 export interface RosettaSpec {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- variadic host fn, matches RosettaFunction
   fn: (...args: any[]) => unknown;
@@ -49,9 +49,9 @@ export interface RosettaSpec {
  *  environment storage holds), or a membrane primitive — a bare fn like the `:key`
  *  pluck, which is NOT rosetta-wrapped because it IS part of the membrane, like `@`.
  *  Deliberately NOT `unknown`: a raw JS scalar answer is a contract violation the
- *  probe sites door on at runtime (`assertResolvedBinding`, Environment.ts) and this
+ *  probe sites door on at runtime (`assertResolvedBinding`, AmbientRuntime.ts) and this
  *  type walls off at compile time. */
-export type ResolvedBinding = EnvironmentValue | ((...args: never[]) => unknown);
+export type ResolvedBinding = AmbientValue | ((...args: never[]) => unknown);
 
 /** A catchall resolver contribution, mirroring arrival-scheme's `FallbackResolver`
  *  structurally (kept here so we don't import the runtime). It fires when the env
@@ -78,30 +78,31 @@ export interface ResolverSpec {
   readonly pure?: boolean;
 }
 
-/** The minimal surface a scheme-env pack touches. arrival-scheme's `Environment`
+/** The minimal surface a scheme-env pack touches. arrival-scheme's `AmbientRuntime`
  *  satisfies this structurally — packs type against THIS, not the concrete class.
  *
- *  There is deliberately NO `set` member (hermetic-Environment ruling, 2026-07-11):
- *  the env is opaque from the JS side — values enter the interpreter only as
- *  capabilities or overrides. Binding is the assembly machinery's own act, through
- *  the module-internal `bindValue` (Environment.ts, never barrel-exported); a pack
- *  contributes bindings DECLARATIVELY (`symbols`/`resolvers`/`bootstrap`), it does
- *  not write. */
+ *  There is deliberately NO `set` member (hermetic-Environment ruling, 2026-07-11)
+ *  and NO `inherit`/`merge` member (the same ruling extended to birth: an env can
+ *  only be BORN — assembled — and READ from JS; frame birth is the module-internal
+ *  `mintFrame`, AmbientRuntime.ts): the env is opaque from the JS side — values enter
+ *  the interpreter only as capabilities or overrides. Binding is the assembly
+ *  machinery's own act, through the module-internal `bindValue` (AmbientRuntime.ts,
+ *  never barrel-exported); a pack contributes bindings DECLARATIVELY
+ *  (`symbols`/`resolvers`/`bootstrap`), it does not write. */
 export interface SchemeEnv {
   get(name: string, options?: { throwError?: boolean }): unknown;
-  inherit(name?: string | symbol, obj?: Record<string, unknown>): SchemeEnv;
   /** Register a catchall resolver (fires on a name the env did not bind). This is the
    *  APPLY-TIME landing door for a capability's declared `resolvers` (CapabilitySpec.
    *  resolvers → capability.ts's apply) and the kernel's bake overlay — assembly-time
    *  producers only. There is deliberately NO `unregisterResolver` on this contract:
    *  resolver REMOVAL is not a pack-facing operation. The kernel's bake-SEAL hook
    *  reaches it structurally (`ResolverHostLike`, kernel.ts) on hosts that offer it —
-   *  `ResolvingEnvironment` does — and falls back to the sealed-flag silencer on hosts
+   *  `ResolvingAmbient` does — and falls back to the sealed-flag silencer on hosts
    *  that don't. */
   registerResolver(resolver: ResolverSpec): void;
   /** Own bound names of THIS scope layer (string keys + symbols), not chained. The
    *  per-layer primitive `allBoundNames` walks; a consumer wanting only own-scope
-   *  names (e.g. inspecting a freshly-`inherit`ed child) reads this directly. */
+   *  names (e.g. inspecting a freshly-minted child frame) reads this directly. */
   list(): (string | symbol)[];
   /** Every name bound anywhere up this scope's `__parent__` chain, de-duplicated
    *  (a closer layer's name appears once). Encapsulates the chain-walk so a consumer

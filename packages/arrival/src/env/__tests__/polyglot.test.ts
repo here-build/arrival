@@ -6,6 +6,7 @@
 // what stays in the shared core: @/@?/@keys/dict, nil, compose/pipe/flow,
 // %interleave.
 import { execState, type ExecOptions } from "../../index.js";
+import { mintFrame } from "../../AmbientRuntime.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
 import { assembleEnv } from "../../common/kernel.js";
@@ -28,7 +29,7 @@ describe("@here.build/arrival/polyglot (shared core)", () => {
   // they thread correctly (the -> / ~> threading-macro half of this invariant moved to the
   // per-dialect test files in the 2026-07-10 dialect split — no longer exercised here)
   it("installs @/@?/@keys/dict and compose/pipe run correctly standalone", async () => {
-    const env = sandboxedEnv.inherit("polyglot-core-test");
+    const env = mintFrame(sandboxedEnv, "polyglot-core-test");
     const evalScheme = (e: SchemeEnv, src: string) => exec(src, { env: e as never });
     await assembleEnv(env as unknown as SchemeEnv, [polyglot.lower({ evalScheme })]);
 

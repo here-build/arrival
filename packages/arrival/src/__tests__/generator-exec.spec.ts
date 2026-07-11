@@ -17,7 +17,7 @@ import { nil } from "../values/primitives/ANil.js";
 import { freshEnv } from "./_fresh-env.js";
 import type { SchemeValue } from "../values/types.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../Environment.js";
+import { bindValue } from "../AmbientRuntime.js";
 
 // This whole file exercises the EVALUATOR's correctness (arithmetic, special forms,
 // macros, …) through box-shaped assertions (`toBeInstanceOf`, `.num`, `.__name__`) —

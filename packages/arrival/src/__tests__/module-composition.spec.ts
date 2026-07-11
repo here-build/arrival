@@ -1,5 +1,5 @@
 /**
- * Tests for Environment Module Composition System
+ * Tests for AmbientRuntime Module Composition System
  *
  * Tests the composable module system where:
  * - Modules form an environment chain (first = base, last = top)
@@ -22,15 +22,15 @@
  * bypassing `exec()` for a fast internal-module unit floor.
  *
  * ENV T1 (2026-07-09, docs/working-proposals/environment-resolution-chain.md §T1): resolvers
- * relocated from every `Environment` frame onto `ResolvingEnvironment` only (the baked-root
+ * relocated from every `AmbientRuntime` frame onto `ResolvingAmbient` only (the baked-root
  * specialization — see env-roots.ts). The rows below are UNCHANGED — same ordering contract,
- * same assertions — construction just targets `ResolvingEnvironment` at the two/three layers
+ * same assertions — construction just targets `ResolvingAmbient` at the two/three layers
  * that register resolvers, matching production (`global_env`/`user_env` are the real
- * `ResolvingEnvironment` instances these tests model).
+ * `ResolvingAmbient` instances these tests model).
  */
 
 import { describe, expect, it } from "vitest";
-import { Environment, ResolvingEnvironment } from "../Environment.js";
+import { AmbientRuntime, ResolvingAmbient, mintResolvingFrame } from "../AmbientRuntime.js";
 import type { ResolverSpec } from "../common/scheme-env.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
@@ -40,10 +40,10 @@ import { nil } from "../values/primitives/ANil.js";
 const FOUND = new AExact(CONSTANT_CTX, 42n);
 
 // Helper to lookup without patch_value dependency
-const lookup = (env: Environment, name: string) => env._lookupWithResolvers(name);
+const lookup = (env: AmbientRuntime, name: string) => env._lookupWithResolvers(name);
 
 
-describe("Environment Module Composition", () => {
+describe("AmbientRuntime Module Composition", () => {
   describe("Resolver Yielding", () => {
     // INVARIANT: multiple registered resolvers are tried in registration order until one
     // returns a defined value (pins implementation, not behavior)
@@ -66,7 +66,7 @@ describe("Environment Module Composition", () => {
         },
       };
 
-      const env = new ResolvingEnvironment("test", {}, null);
+      const env = mintResolvingFrame("test", {}, null);
       env.registerResolver(resolver1);
       env.registerResolver(resolver2);
 
@@ -84,7 +84,7 @@ describe("Environment Module Composition", () => {
         resolve: (name) => (name === "nil-value" ? nil : undefined),
       };
 
-      const env = new ResolvingEnvironment("test", {}, null);
+      const env = mintResolvingFrame("test", {}, null);
       env.registerResolver(resolver);
 
       // nil is a valid FOUND value, should not continue searching
@@ -102,13 +102,13 @@ describe("Environment Module Composition", () => {
       // evaluator boxed values on every path.
       const Y = new AExact(CONSTANT_CTX, 2n);
       const W = new AExact(CONSTANT_CTX, 4n);
-      const env = new ResolvingEnvironment("parent", { x: new AExact(CONSTANT_CTX, 1n) }, null);
+      const env = mintResolvingFrame("parent", { x: new AExact(CONSTANT_CTX, 1n) }, null);
       env.registerResolver({
         id: "parent-resolver",
         resolve: (name) => (name === "y" ? Y : undefined),
       });
 
-      const child = new ResolvingEnvironment("child", { z: new AExact(CONSTANT_CTX, 3n) }, env);
+      const child = mintResolvingFrame("child", { z: new AExact(CONSTANT_CTX, 3n) }, env);
       child.registerResolver({
         id: "child-resolver",
         resolve: (name) => (name === "w" ? W : undefined),

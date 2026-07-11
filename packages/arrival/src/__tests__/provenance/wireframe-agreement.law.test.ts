@@ -19,6 +19,7 @@
  * assembler); the wire-level half is now asserted directly above it.
  */
 import * as fc from "fast-check";
+import { mintFrame } from "../../AmbientRuntime.js";
 import { describe, it, expect, beforeAll } from "vitest";
 import { initBridge } from "../../index.js";
 import { parse, exec, execState } from "../../eval/generator-exec.js";
@@ -288,7 +289,7 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
         const program = buildWireframe(forms, { classifier: classifierWithSink, isBaseName: corpusIsBaseName });
         const wireframe = prospectiveSourceCone(program);
 
-        const env = inferenceEnv.inherit("w1-begin-finding");
+        const env = mintFrame(inferenceEnv, "w1-begin-finding");
         // Test-local EnvCapability (`symbol.rosetta` — the `env.defineRosetta` migration
         // target): identity passthrough, `z.value` on both sides (no transform, matching
         // the legacy `fn: (x) => x` shape exactly).

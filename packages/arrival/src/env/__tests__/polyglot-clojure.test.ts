@@ -2,6 +2,7 @@
 // macros and the Clojure stdlib completion. Split out of polyglot.test.ts (V,
 // 2026-07-10 dialect split — see polyglot.ts's header for the full rationale).
 import { execState, type ExecOptions } from "../../index.js";
+import { mintFrame } from "../../AmbientRuntime.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
 import { assembleEnv } from "../../common/kernel.js";
@@ -16,7 +17,7 @@ async function exec(code: string, options?: ExecOptions) {
 
 describe("@here.build/arrival/polyglot-clojure", () => {
   it("installs the threading macros and comp; they run correctly assembled STANDALONE", async () => {
-    const env = sandboxedEnv.inherit("polyglot-clojure-test");
+    const env = mintFrame(sandboxedEnv, "polyglot-clojure-test");
     const evalScheme = (e: SchemeEnv, src: string) => exec(src, { env: e as never });
     // Assembling JUST polyglot-clojure pulls in scheme/polyglot (core), srfi-1,
     // and the R7RS natives transitively via its own declared `deps` (C3 dep walk)

@@ -4,7 +4,7 @@
  * This class **is** "BakedBase" — the immutable, no-write-surface product of a bake.
  * No separate `BakedBase` wrapper type exists: this artifact has zero mutators
  * (frozen maps + resolver steps, `lookup`/`toString` only), so the type-level
- * distinction from the mutable `Environment` (lexical) frame it seals FROM is real —
+ * distinction from the mutable `AmbientRuntime` (lexical) frame it seals FROM is real —
  * `Capabilities.globalRoot`/`refFrame` (assembled mode) return THIS object as the
  * hygiene sentinel (see Capabilities.ts).
  *
@@ -14,7 +14,7 @@
  * that chain into a frozen artifact:
  *
  *   Per-layer semantics is own-bindings → own-resolvers (registration order) →
- *   parent — a PRECEDENCE CONTRACT (Environment.ts). Flattening the layer chain yields
+ *   parent — a PRECEDENCE CONTRACT (AmbientRuntime.ts). Flattening the layer chain yields
  *   `[map_L0, r_L0…, map_L1, r_L1…, …]`; because the bake froze every map, adjacent maps
  *   with no resolver between them MERGE at seal into one flat Map (child-wins union) —
  *   sound by immutability, order-preserving by construction. A resolver in layer Lᵢ
@@ -37,7 +37,7 @@
  * (natives are JS-backed) is DEFERRED — cross-deploy chain reuse needs a ruling first;
  * two deploys with the same vocabulary shape currently share a hash.
  */
-import { assertResolvedBinding, type Environment, type EnvironmentValue, ResolvingEnvironment } from "../Environment.js";
+import { assertResolvedBinding, type AmbientRuntime, type AmbientValue, ResolvingAmbient } from "../AmbientRuntime.js";
 import type { RunContext } from "../values/primitives/RunContext.js";
 
 /**
@@ -55,7 +55,7 @@ export class CompiledResolver {
    *  own (re-probed) resolver. Preserves the identity contract: `(eq? x x)` holds
    *  for a synthesized callable across lookups (the cxrCache shape, generalized).
    *  Lives on the step, GC'd with the chain — never on frames. */
-  private readonly memo: Map<string | symbol, EnvironmentValue> | undefined;
+  private readonly memo: Map<string | symbol, AmbientValue> | undefined;
 
   constructor(
     readonly id: string,
@@ -70,21 +70,21 @@ export class CompiledResolver {
    *  absent on run-less reads). NOTE the memo/ctx interplay: a `pure` step's hits are
    *  served across runs, so a pure resolver's contract is to mint RUN-NEUTRALLY — the
    *  memo never re-stamps (see `ResolverSpec.resolve`'s doc, common/scheme-env.ts). */
-  probe(name: string | symbol, ctx?: RunContext): EnvironmentValue | undefined {
+  probe(name: string | symbol, ctx?: RunContext): AmbientValue | undefined {
     const promoted = this.memo?.get(name);
     if (promoted !== undefined) return promoted;
     const hit = this.resolve(String(name), ctx);
     if (hit === undefined) return undefined;
     // Boxed-at-the-resolver's-boundary contract — same door as the live walk
-    // (ResolvingEnvironment._lookupWithResolvers): raw JS never enters resolution.
+    // (ResolvingAmbient._lookupWithResolvers): raw JS never enters resolution.
     assertResolvedBinding(hit, name, this.id);
-    this.memo?.set(name, hit as EnvironmentValue);
-    return hit as EnvironmentValue;
+    this.memo?.set(name, hit as AmbientValue);
+    return hit as AmbientValue;
   }
 }
 
 /** One chain step: a merged frozen map, or an interleaved resolver probe. */
-type ResolutionStep = ReadonlyMap<string | symbol, EnvironmentValue> | CompiledResolver;
+type ResolutionStep = ReadonlyMap<string | symbol, AmbientValue> | CompiledResolver;
 
 export class CompiledResolutionChain {
   /** Maps pre-merged at seal, resolvers in their C3-position. */
@@ -96,7 +96,7 @@ export class CompiledResolutionChain {
   readonly names: ReadonlySet<string | symbol>;
 
   /** Set iff the chain is the degenerate zero-resolver form — `lookup` = one `Map.get`. */
-  private readonly flat: ReadonlyMap<string | symbol, EnvironmentValue> | undefined;
+  private readonly flat: ReadonlyMap<string | symbol, AmbientValue> | undefined;
   /** Negative miss-cache (memoizing "unbound") — sound iff EVERY resolver is pure,
    *  computed once at seal: one impure resolver disables it globally (a
    *  dynamic middleware may start answering tomorrow). Omitted in the zero-resolver
@@ -128,7 +128,7 @@ export class CompiledResolutionChain {
   /** The composed base lookup — `undefined` on a miss, no synth (the keyword/cxr synth
    *  layer stays in Resolver.resolve, ABOVE this). `ctx` = the resolving read's
    *  RunContext, forwarded to resolver steps only (map probes need no run identity). */
-  lookup(name: string | symbol, ctx?: RunContext): EnvironmentValue | undefined {
+  lookup(name: string | symbol, ctx?: RunContext): AmbientValue | undefined {
     const flat = this.flat;
     if (flat !== undefined) return flat.get(name); // the degenerate fast path: ONE Map.get
     if (this.misses?.has(name)) return undefined;
@@ -180,17 +180,17 @@ function hashSteps(steps: readonly ResolutionStep[]): string {
 /**
  * Compile a sealed env chain into its ambient artifact. Walks `base → … → root`
  * child-first; per layer, own bindings precede own resolvers precede the parent —
- * the exact precedence contract the live walk implements (Environment.ts), so the
+ * the exact precedence contract the live walk implements (AmbientRuntime.ts), so the
  * module-composition ordering pins bind this step order by construction.
  */
-export function compileResolutionChain(base: Environment): CompiledResolutionChain {
+export function compileResolutionChain(base: AmbientRuntime): CompiledResolutionChain {
   const steps: ResolutionStep[] = [];
   /** Layers whose maps are pending merge (child-first). */
-  let pending: Environment[] = [];
+  let pending: AmbientRuntime[] = [];
 
   const flushMerged = (): void => {
     if (pending.length === 0) return;
-    const merged = new Map<string | symbol, EnvironmentValue>();
+    const merged = new Map<string | symbol, AmbientValue>();
     // Deepest layer first so a CLOSER layer's entry overwrites — child-wins union.
     for (let i = pending.length - 1; i >= 0; i--) {
       const record = pending[i].__env__;
@@ -204,9 +204,9 @@ export function compileResolutionChain(base: Environment): CompiledResolutionCha
     steps.push(merged);
   };
 
-  for (let layer: Environment | null = base; layer !== null; layer = layer.__parent__) {
+  for (let layer: AmbientRuntime | null = base; layer !== null; layer = layer.__parent__) {
     pending.push(layer);
-    const specs = layer instanceof ResolvingEnvironment ? layer.resolverSpecs() : [];
+    const specs = layer instanceof ResolvingAmbient ? layer.resolverSpecs() : [];
     if (specs.length > 0) {
       flushMerged(); // this layer's own bindings precede its resolvers
       for (const spec of specs) {
@@ -226,9 +226,9 @@ export function compileResolutionChain(base: Environment): CompiledResolutionCha
 // (generator-exec's `ensureBaseAssembled` / `assembleCapabilityBase`) call this at bake
 // end — the explicit SEAL; `Capabilities.assembled` calls it too, so an assembled base
 // reaching the exec seam by any route resolves through the same artifact.
-const sealedChains = new WeakMap<Environment, CompiledResolutionChain>();
+const sealedChains = new WeakMap<AmbientRuntime, CompiledResolutionChain>();
 
-export function sealResolutionChain(base: Environment): CompiledResolutionChain {
+export function sealResolutionChain(base: AmbientRuntime): CompiledResolutionChain {
   let chain = sealedChains.get(base);
   if (chain === undefined) {
     chain = compileResolutionChain(base);

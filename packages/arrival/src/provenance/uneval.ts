@@ -14,6 +14,7 @@
 // the selector. Intra-form minimal slicing (sub-form re-synthesis) is the deferred increment.
 
 import { execState, parse } from "../eval/generator-exec.js";
+import { bindValue } from "../AmbientRuntime.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { schemeToJs } from "../rosetta.js";
 import { WireLocalityError } from "../errors.js";
@@ -101,7 +102,7 @@ export function buildUneval(opts: {
       // Bind the run's output as `result`, then evaluate the selector as ONE more tapped step —
       // the effective value is produced by the SAME pure evaluator, so it carries provenance and
       // becomes a trace node, exactly like any value the program itself computed.
-      scope.define("result", result as never);
+      bindValue(scope.env, "result", result as never);
       const sel = await parse(selector);
       const lastForm = sel.at(-1);
       if (lastForm === undefined) throw new Error(`uneval: selector "${selector}" parsed to zero forms`);

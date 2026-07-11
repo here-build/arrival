@@ -35,7 +35,7 @@ import { Capabilities } from "../eval/Capabilities.js";
 import { user_env } from "../env-roots.js";
 import { makeRunContext } from "../values/primitives/RunContext.js";
 import { freshEnv } from "../__tests__/_fresh-env.js";
-import type { Environment } from "../Environment.js";
+import type { AmbientRuntime } from "../AmbientRuntime.js";
 import type { SchemeValue } from "../values/types.js";
 
 const SOURCE = "(+ 1 2 3 4 5)";
@@ -49,7 +49,7 @@ function report(label: string, iterations: number, elapsedMs: number): void {
 }
 
 describe("exec seam overhead — one evaluator, three measurement layers", () => {
-  let env: Environment;
+  let env: AmbientRuntime;
   let ast: SchemeValue;
 
   beforeAll(async () => {

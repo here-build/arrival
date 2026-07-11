@@ -25,6 +25,7 @@
 //   6. the `applicable` contract admits keyword accessors (`(compose :b :a)`) —
 //      the pack family's own documented idiom, which a bare `z.lambda` would reject.
 import { describe, expect, it } from "vitest";
+import { mintFrame } from "../../AmbientRuntime.js";
 import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
@@ -41,13 +42,13 @@ import polyglotClojure from "../polyglot-clojure.js";
 import polyglotLisp from "../polyglot-lisp.js";
 import polyglotRacket from "../polyglot-racket.js";
 import type { SchemeEnv } from "../../common/scheme-env.js";
-import type { ResolvingEnvironment } from "../../Environment.js";
+import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 
 // Mirrors `_fresh-env.ts`'s own injected evalScheme — `skipBootstrapWait` because
 // these execs run against an env this suite is itself assembling/re-lowering onto,
 // not the shared realm-cached bootstrap.
 const evalScheme = (env: unknown, src: unknown): unknown =>
-  exec(src as string, { env: env as ResolvingEnvironment, skipBootstrapWait: true });
+  exec(src as string, { env: env as ResolvingAmbient, skipBootstrapWait: true });
 
 type Defs = Record<string, { kind?: string; macroAttribute?: string; callable?: boolean }>;
 const coreDefs = polyglot.spec.symbols as Defs;
@@ -108,16 +109,16 @@ describe("scheme/polyglot-clojure — deps are real edges (§2.1 luck-into-struc
   // reached.
   it("standalone .apply() of clojure ALONE fails immediately on comp's EAGER cross-capability alias, not on any lazy body", async () => {
     await initBridge();
-    const env = global_env.inherit("test-polyglot-clojure-standalone-unbound");
+    const env = mintFrame(global_env, "test-polyglot-clojure-standalone-unbound");
     await expect(polyglotClojure.lower({ evalScheme }).apply(env, undefined as never)).rejects.toThrow(/compose/);
   });
 
   it("once compose is bound (core applied first), bake+apply succeed even with srfi-1 unapplied — the FV law is a STATIC declared-`deps` check, not a runtime-binding probe; the LAZY frequencies (needs srfi-1's reduce) only fails when CALLED", async () => {
     await initBridge();
-    const env = global_env.inherit("test-polyglot-clojure-standalone-bake-ok");
+    const env = mintFrame(global_env, "test-polyglot-clojure-standalone-bake-ok");
     await polyglot.lower({ evalScheme }).apply(env, undefined as never); // core: binds compose
     await expect(polyglotClojure.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
-    const typedEnv = env as unknown as ResolvingEnvironment;
+    const typedEnv = env as unknown as ResolvingAmbient;
     const [same] = await exec("(eq? comp compose)", { env: typedEnv }); // comp resolved — compose was bound
     expect(same).toBe(true);
     // frequencies' own natives (@/dict/%dict-set) bound standalone from core;
@@ -129,9 +130,9 @@ describe("scheme/polyglot-clojure — deps are real edges (§2.1 luck-into-struc
 
   it("assembleEnv (the real orchestration path) walks deps: the srfi-1 reach works standalone", async () => {
     await initBridge();
-    const env = global_env.inherit("test-polyglot-clojure-assembleEnv-ok") as unknown as SchemeEnv;
+    const env = mintFrame(global_env, "test-polyglot-clojure-assembleEnv-ok") as unknown as SchemeEnv;
     await assembleEnv(env, [polyglotClojure.lower({ evalScheme })]);
-    const typedEnv = env as unknown as ResolvingEnvironment;
+    const typedEnv = env as unknown as ResolvingAmbient;
     const [freq] = await exec('(@ (frequencies (list "a" "b" "a")) "a")', { env: typedEnv }); // reduce (srfi-1)
     expect(Number(freq)).toBe(2);
   });
@@ -140,9 +141,9 @@ describe("scheme/polyglot-clojure — deps are real edges (§2.1 luck-into-struc
 describe("scheme/polyglot-lisp — deps are real edges (§2.1 luck-into-structure)", () => {
   it("assembleEnv walks deps: the srfi-1 `filter` reach works standalone (no core dep needed)", async () => {
     await initBridge();
-    const env = global_env.inherit("test-polyglot-lisp-assembleEnv-ok") as unknown as SchemeEnv;
+    const env = mintFrame(global_env, "test-polyglot-lisp-assembleEnv-ok") as unknown as SchemeEnv;
     await assembleEnv(env, [polyglotLisp.lower({ evalScheme })]);
-    const typedEnv = env as unknown as ResolvingEnvironment;
+    const typedEnv = env as unknown as ResolvingAmbient;
     const [removed] = await exec("(remove-if (lambda (x) (> x 2)) (list 1 2 3 4))", { env: typedEnv }); // filter (srfi-1)
     expect(String(removed)).toContain("1");
   });
@@ -151,9 +152,9 @@ describe("scheme/polyglot-lisp — deps are real edges (§2.1 luck-into-structur
 describe("scheme/polyglot-racket — deps are real edges (§2.1 luck-into-structure)", () => {
   it("assembleEnv walks deps: the exceptions `error` reach (via %dict-guard) works standalone", async () => {
     await initBridge();
-    const env = global_env.inherit("test-polyglot-racket-assembleEnv-ok") as unknown as SchemeEnv;
+    const env = mintFrame(global_env, "test-polyglot-racket-assembleEnv-ok") as unknown as SchemeEnv;
     await assembleEnv(env, [polyglotRacket.lower({ evalScheme })]);
-    const typedEnv = env as unknown as ResolvingEnvironment;
+    const typedEnv = env as unknown as ResolvingAmbient;
     await expect(execState('(dict-ref "not-a-dict" :a)', { env: typedEnv })).rejects.toThrow(
       /dict-ref: expected a dict/, // error (exceptions) — the door composes through the dep edge
     );
@@ -207,7 +208,7 @@ describe("scheme/polyglot family — the §2.1 bake FV law passes AS MIGRATED, p
     ["scheme/polyglot-racket", polyglotRacket],
   ] as const)("%s lowers cleanly with its declared deps — never DefineLocalityError", async (_label, pack) => {
     await initBridge();
-    const env = global_env.inherit(`test-fv-law-ok-${pack.name.replace(/\//g, "-")}`);
+    const env = mintFrame(global_env, `test-fv-law-ok-${pack.name.replace(/\//g, "-")}`);
     await expect(pack.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
   });
 

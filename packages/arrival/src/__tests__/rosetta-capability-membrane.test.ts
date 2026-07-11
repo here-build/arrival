@@ -1,7 +1,7 @@
 /**
  * `EnvCapability`-authored rosetta verbs, exercised through the same real-world data
  * shapes `rosetta-environment.test.ts` used to pin against the legacy
- * `Environment.defineRosetta` authoring form (docs/test-suite-v2/REMOVAL-MANIFEST.md
+ * `AmbientRuntime.defineRosetta` authoring form (docs/test-suite-v2/REMOVAL-MANIFEST.md
  * §A). Migrated 2026-07-11 off `env.defineRosetta` directly, in favor of
  * `symbol.rosetta` + `new EnvCapability(...).lower({}).apply(env, …)` — the target
  * authoring form every capability under `foundations/arrival/**` now uses (the SAME
@@ -9,7 +9,7 @@
  * in `common/__tests__/capability-rosetta-symbol.test.ts`).
  *
  * This file's OWN survivors after that migration:
- *   - "Environment.defineRosetta" / "Real-world Use Cases" — membrane round-trips over
+ *   - "AmbientRuntime.defineRosetta" / "Real-world Use Cases" — membrane round-trips over
  *     real-world-shaped JS data (arrays of records, nested style dicts, chained calls)
  *     that `capability-rosetta-symbol.test.ts`'s scalar-typed codec proofs don't cover.
  *     These pin GENERIC membrane behavior (schemeToJs/impl/jsToScheme round-tripping),
@@ -37,9 +37,9 @@
  * arrival core's own tests.
  *
  * UPDATE (2026-07-11, defineRosetta hard-delete): what did NOT survive is the public
- * `Environment.defineRosetta` METHOD the legacy arm used to call — it's retired from both
+ * `AmbientRuntime.defineRosetta` METHOD the legacy arm used to call — it's retired from both
  * the concrete class and the `SchemeEnv` contract. `capability.ts`'s legacy arm now wires
- * through `bindRosetta`, a module-internal function in `Environment.ts` (not barrel-
+ * through `bindRosetta`, a module-internal function in `AmbientRuntime.ts` (not barrel-
  * exported, not part of `SchemeEnv`) that does the exact same wrapping/binding the old
  * method's body did. The authoring SHAPE is unchanged; only the method NAME/visibility is.
  */
@@ -80,7 +80,7 @@ function invoke(verb: ARosettaProcedure, ...args: unknown[]): unknown {
   return withDynamicCallSite(undefined, () => verb[tf("apply")](args as SchemeValue[], CONSTANT_CTX));
 }
 
-describe("Rosetta Environment (capability-authored)", () => {
+describe("Rosetta AmbientRuntime (capability-authored)", () => {
   describe("EnvCapability-bound rosetta verbs", () => {
     // INVARIANT: a capability-bound rosetta verb extends the environment with a callable
     // usable from scheme source.
@@ -97,7 +97,7 @@ describe("Rosetta Environment (capability-authored)", () => {
         (double-all (list 1 2 3 4 5))
       `);
 
-      console.log("Environment Rosetta result:", result);
+      console.log("AmbientRuntime Rosetta result:", result);
 
       const jsResult = schemeToJs(result, {});
       expect(jsResult).toEqual([2, 4, 6, 8, 10]);

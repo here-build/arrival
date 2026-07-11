@@ -57,15 +57,15 @@ import { PurityError } from "../../errors.js";
 import { nil } from "../../index.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
-import { ResolvingEnvironment } from "../../Environment.js";
+import { ResolvingAmbient, mintFrame, mintResolvingFrame } from "../../AmbientRuntime.js";
 
 /** A REAL recording env — same shape as door-cause.test.ts's, local here so this law
- *  suite has no cross-file coupling to another test's fixture. (Hermetic-Environment
- *  ruling: capability apply narrows to the concrete `Environment`, so a synthetic
+ *  suite has no cross-file coupling to another test's fixture. (Hermetic-AmbientRuntime
+ *  ruling: capability apply narrows to the concrete `AmbientRuntime`, so a synthetic
  *  `{ set }` mock can no longer receive bindings; `bound` is a read facade over the
  *  frame's own storage record.) */
-function recordingEnv(): { env: ResolvingEnvironment; bound: { get(name: string): unknown; has(name: string): boolean } } {
-  const env = new ResolvingEnvironment("degradation-recording", {}, null);
+function recordingEnv(): { env: ResolvingAmbient; bound: { get(name: string): unknown; has(name: string): boolean } } {
+  const env = mintResolvingFrame("degradation-recording", {}, null);
   return {
     env,
     bound: { get: (name) => env.__env__[name], has: (name) => Object.hasOwn(env.__env__, name) },
@@ -194,13 +194,13 @@ describe("LAW 2 — 'doors' mode lowers an absent optional-enabling key to a cau
 
 describe("LAW 3 — AssembledEnv.degraded enumerates every degraded capability", () => {
   it("is empty under the default ('forbid') mode", async () => {
-    const base = sandboxedEnv.inherit("degradation-law-forbid");
+    const base = mintFrame(sandboxedEnv, "degradation-law-forbid");
     const assembled = await assembleEnv(base, [fixtureCapability("test/degradation-assembled-forbid").lower({ config: {} })]);
     expect(assembled.degraded).toEqual([]);
   });
 
   it("carries {capability, needs} for a capability that lowered degraded under 'doors'", async () => {
-    const base = sandboxedEnv.inherit("degradation-law-doors");
+    const base = mintFrame(sandboxedEnv, "degradation-law-doors");
     const assembled = await assembleEnv(base, [
       fixtureCapability("test/degradation-assembled-doors").lower({ config: {}, degradation: "doors" }),
     ]);
@@ -210,7 +210,7 @@ describe("LAW 3 — AssembledEnv.degraded enumerates every degraded capability",
   });
 
   it("stays empty when the config is satisfied, even under 'doors' mode (nothing degraded)", async () => {
-    const base = sandboxedEnv.inherit("degradation-law-satisfied");
+    const base = mintFrame(sandboxedEnv, "degradation-law-satisfied");
     const assembled = await assembleEnv(base, [
       fixtureCapability("test/degradation-assembled-satisfied").lower({
         config: { fs: { readFile: async () => "" } },

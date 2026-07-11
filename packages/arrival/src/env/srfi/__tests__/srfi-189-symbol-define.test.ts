@@ -36,6 +36,7 @@
 //      VALIDATE-ONLY — the returned value is still a real scheme list a sibling
 //      `(car …)`/`(cdr …)` can walk, never a decoded JS array leaking through.
 import { describe, expect, it } from "vitest";
+import { mintFrame } from "../../../AmbientRuntime.js";
 import * as z from "../../../common/scheme-zod.js";
 import { symbol } from "../../../common/symbol.js";
 import { EnvCapability } from "../../../common/capability.js";
@@ -47,15 +48,15 @@ import { assembleEnv } from "../../../common/kernel.js";
 import { DefineLocalityError } from "../../../errors.js";
 import srfi189 from "../srfi-189.js";
 import type { SchemeEnv } from "../../../common/scheme-env.js";
-import type { ResolvingEnvironment } from "../../../Environment.js";
+import type { ResolvingAmbient } from "../../../AmbientRuntime.js";
 
 // Mirrors `_fresh-env.ts`'s own injected evalScheme — `skipBootstrapWait` because
 // these execs run against an env this suite is itself assembling/re-lowering onto,
 // not the shared realm-cached bootstrap.
 const evalScheme = (env: unknown, src: unknown): unknown =>
-  exec(src as string, { env: env as ResolvingEnvironment, skipBootstrapWait: true });
+  exec(src as string, { env: env as ResolvingAmbient, skipBootstrapWait: true });
 
-async function printed(env: ResolvingEnvironment, src: string): Promise<string> {
+async function printed(env: ResolvingAmbient, src: string): Promise<string> {
   const { values: r } = await execState(src, { env });
   const x = r[r.length - 1] as { toString(): string } | undefined;
   return String(x?.toString?.() ?? x);
@@ -215,29 +216,29 @@ describe("scheme/srfi-189 — Either accessors/combinators", () => {
 describe("scheme/srfi-189 — the dep edge is real (§2.1's undeclared-dep bug class, now a declared edge)", () => {
   it("standalone .apply() (bypassing assembleEnv's C3 dep-walk): a `list`-needing call (BASE_PACKS-only `scheme/lists`) genuinely fails unbound", async () => {
     await initBridge();
-    const env = global_env.inherit("test-srfi189-standalone-list-unbound");
+    const env = mintFrame(global_env, "test-srfi189-standalone-list-unbound");
     await srfi189.lower({ evalScheme }).apply(env, undefined as never);
     await expect(execState("(just 1)", { env })).rejects.toThrow();
   });
 
   it("standalone .apply(): a pair?/eq?-only call (NATIVE_PACKS `scheme/equality`, already on global_env) resolves via runtime luck — the mirror of srfi-43's own finding", async () => {
     await initBridge();
-    const env = global_env.inherit("test-srfi189-standalone-equality-luck");
+    const env = mintFrame(global_env, "test-srfi189-standalone-equality-luck");
     await srfi189.lower({ evalScheme }).apply(env, undefined as never);
     await expect(execState('(just? "not-a-just")', { env })).resolves.not.toThrow();
   });
 
   it("bake itself succeeds even with deps unapplied — the FV law is a STATIC declared-`deps` check, not a runtime-binding probe", async () => {
     await initBridge();
-    const env = global_env.inherit("test-srfi189-standalone-bake-ok");
+    const env = mintFrame(global_env, "test-srfi189-standalone-bake-ok");
     await expect(srfi189.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
   });
 
   it("assembleEnv (the real orchestration path — every production caller) DOES walk deps: list/error-needing ops work standalone", async () => {
     await initBridge();
-    const env = global_env.inherit("test-srfi189-assembleEnv-ok") as unknown as SchemeEnv;
+    const env = mintFrame(global_env, "test-srfi189-assembleEnv-ok") as unknown as SchemeEnv;
     await assembleEnv(env, [srfi189.lower({ evalScheme })]);
-    const typedEnv = env as unknown as ResolvingEnvironment;
+    const typedEnv = env as unknown as ResolvingAmbient;
     const [justResult] = await exec("(maybe-ref (just 42))", { env: typedEnv });
     expect(justResult).toBe(42);
     await expect(execState("(maybe-ref (nothing))", { env: typedEnv })).rejects.toThrow(/maybe-ref: Nothing/);
@@ -259,7 +260,7 @@ describe("scheme/srfi-189 — contract ENFORCEMENT fires at the call boundary", 
 describe("scheme/srfi-189 — the §2.1 bake FV law passes for this pack AS MIGRATED", () => {
   it("lowers cleanly with its declared deps — never DefineLocalityError", async () => {
     await initBridge();
-    const env = global_env.inherit("test-srfi189-fv-law-ok");
+    const env = mintFrame(global_env, "test-srfi189-fv-law-ok");
     await expect(srfi189.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
   });
 

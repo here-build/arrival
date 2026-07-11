@@ -31,7 +31,7 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { setEagerProvenanceOracleEnabled, withInputProvenance } from "../values/op-helpers.js";
 import { jsToScheme } from "../rosetta.js";
 // In-package bench: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../Environment.js";
+import { bindValue, mintFrame } from "../AmbientRuntime.js";
 
 const REGION = "bench-region";
 const ITERATIONS = 5000;
@@ -129,7 +129,7 @@ describe("Q20b — eager-oracle accumulation overhead: default-OFF vs forced-ON 
   const WARMUP_ITERATIONS = 500;
 
   async function runExecLoop(iterations: number): Promise<number> {
-    const env = inferenceEnv.inherit(`q20b-bench-${Math.random().toString(36).slice(2)}`);
+    const env = mintFrame(inferenceEnv, `q20b-bench-${Math.random().toString(36).slice(2)}`);
     bindValue(env, "a", jsToScheme(CONSTANT_CTX, 10, {}, new Set([100])));
     bindValue(env, "b", jsToScheme(CONSTANT_CTX, 20, {}, new Set([200])));
     const start = performance.now();

@@ -50,7 +50,7 @@ import { inferenceEnv } from "../../inference-env.js";
 import { initBridge } from "../../index.js";
 import { jsToScheme } from "../../rosetta.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../../Environment.js";
+import { bindValue, mintFrame } from "../../AmbientRuntime.js";
 
 const stamped = (v: number, id: number): AValue =>
   fromJs(CONSTANT_CTX, v, new Set([id])) as AValue;
@@ -102,7 +102,7 @@ describe("Q20b — eager-oracle demotion (@ledger: Q20b — LANDED)", () => {
   it("W4 — a real program run with DEFAULT flags accumulates ZERO stamps end-to-end", async () => {
     expect(isEagerProvenanceOracleEnabled()).toBe(false); // untouched — this run rides the true default
     await initBridge();
-    const env = inferenceEnv.inherit("w4-accumulation-death");
+    const env = mintFrame(inferenceEnv, "w4-accumulation-death");
     bindValue(env, "a", jsToScheme(CONSTANT_CTX, 10, {}, new Set([100])));
     bindValue(env, "b", jsToScheme(CONSTANT_CTX, 20, {}, new Set([200])));
     // A program shaped exactly like the pre-Q20 eager goldens (golden-prov-arithmetic's

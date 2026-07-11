@@ -21,7 +21,7 @@ import { AExact } from "../values/primitives/AExact.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { requireEagerOracle } from "./_require-eager-oracle.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../Environment.js";
+import { bindValue, mintFrame } from "../AmbientRuntime.js";
 
 // Q20b: string-contains's provenance assertions run real programs — force the
 // oracle ON for this file's lifetime.
@@ -36,7 +36,7 @@ const js = (x: unknown) => (x instanceof AValue ? x["arrival/toJS"]() : x);
 describe("string-contains? — boolean predicate", () => {
   it("true when present, false when absent", async () => {
     await initBridge();
-    const env = inferenceEnv.inherit("string-contains-pred");
+    const env = mintFrame(inferenceEnv, "string-contains-pred");
     const [hit] = await exec('(string-contains? "research-Alloy.docx" "Alloy")', { env });
     const [miss] = await exec('(string-contains? "spoolsv.exe" "Alloy")', { env });
     expect(js(hit)).toBe(true);
@@ -45,7 +45,7 @@ describe("string-contains? — boolean predicate", () => {
 
   it("carries the provenance of the searched string (grounded decision)", async () => {
     await initBridge();
-    const env = inferenceEnv.inherit("string-contains-pred-prov");
+    const env = mintFrame(inferenceEnv, "string-contains-pred-prov");
     bindValue(env, "name", stamped("Alloy.exe", 7));
     // execState (COMPLEX tier): asserts box discipline directly (RULINGS.md R1).
     const [r] = (await execState('(string-contains? name "Alloy")', { env })).values;
@@ -57,7 +57,7 @@ describe("string-contains? — boolean predicate", () => {
 describe("string-contains — SRFI-13 index-or-#f", () => {
   it("returns the index of the first occurrence", async () => {
     await initBridge();
-    const env = inferenceEnv.inherit("string-contains-idx");
+    const env = mintFrame(inferenceEnv, "string-contains-idx");
     const [r] = (await execState('(string-contains "abcAlloy" "Alloy")', { env })).values;
     expect(r).toBeInstanceOf(AExact);
     expect(js(r)).toBe(3);
@@ -65,7 +65,7 @@ describe("string-contains — SRFI-13 index-or-#f", () => {
 
   it("returns #f when absent (still truthy-correct: 0 is a real index)", async () => {
     await initBridge();
-    const env = inferenceEnv.inherit("string-contains-miss");
+    const env = mintFrame(inferenceEnv, "string-contains-miss");
     const [miss] = await exec('(string-contains "abc" "Alloy")', { env });
     const [zero] = await exec('(string-contains "Alloy" "Alloy")', { env });
     expect(js(miss)).toBe(false);

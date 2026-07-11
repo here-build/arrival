@@ -31,10 +31,10 @@ import type { Keyword } from "./Keyword.js";
 // (which `import type`s SchemeValue from here) is a pure compile-time cycle.
 import type { R7RSError } from "../errors.js";
 // `AProcedure` is a JS function used as a Scheme procedure with optional
-// `__name__`/`__code__` metadata — a first-class *value* (unlike Macro/Syntax/Environment, which are
+// `__name__`/`__code__` metadata — a first-class *value* (unlike Macro/Syntax/AmbientRuntime, which are
 // env bindings, never values). No runtime brand distinguishes it from a plain
 // procedure, so a value resolved from the env arrives typed as one. `import
-// type` keeps the mutual edge with Environment.ts a pure compile-time cycle.
+// type` keeps the mutual edge with AmbientRuntime.ts a pure compile-time cycle.
 import type { CallCtx } from "./primitives/CallCtx.js";
 import type { ACallable } from "./primitives/ACallable.js";
 import { AValue } from "./primitives/AValue.js";

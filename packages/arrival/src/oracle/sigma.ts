@@ -10,7 +10,7 @@
 //   - top / quote ⇒ no constraint (null) — a top-level datum or quoted data may be any symbol.
 //
 // Two symbol sources, unioned:
-//   1. boundSymbols() — the live discovery env, an OracleEnv over the real Environment (enumerates
+//   1. boundSymbols() — the live discovery env, an OracleEnv over the real AmbientRuntime (enumerates
 //      __env__ up the parent chain). This is the grant boundary: Σ enforces the sandbox's binding
 //      set for free (spec §A2).
 //   2. scope-locals — the LEXICAL binders the prefix itself introduces: let/let*/letrec/letrec*

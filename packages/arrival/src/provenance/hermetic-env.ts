@@ -9,7 +9,7 @@
  * augmented base — hermetic replay envs likewise assemble fresh and never touch that
  * shared frame):
  *
- *   1. a FRESH `user_env.inherit()` child — isolation (no cross-replay bleed), while
+ *   1. a FRESH `mintFrame(user_env)` child — isolation (no cross-replay bleed), while
  *      still inheriting the standard assembled base (`user_env → global_env`) for free;
  *   2. `basePacks` (the program's OWN capabilities — mcp/infer/…, if the original run
  *      used any) lowered and set as the prelude pack's `deps` — `common/scheme-env.ts`'s
@@ -40,7 +40,7 @@
  */
 import invariant from "tiny-invariant";
 
-import { bindValue, Environment, type EnvironmentValue, type ResolvingEnvironment } from "../Environment.js";
+import { bindValue, AmbientRuntime, type AmbientValue, mintFrame, type ResolvingAmbient } from "../AmbientRuntime.js";
 import { user_env } from "../env-roots.js";
 import { assembleEnv, type EnvPack } from "../common/kernel.js";
 import { schemePacks, type EvalSchemeInto, type SchemeEnv } from "../common/scheme-env.js";
@@ -55,15 +55,15 @@ import { ensureBaseAssembled, exec } from "../eval/generator-exec.js";
  *  before this ever runs — a nested prelude eval must not re-await the (already
  *  settled) realm bootstrap promise. */
 const replayEvalScheme: EvalSchemeInto = (env, source) => {
-  invariant(env instanceof Environment, "hermeticEnv: expected a concrete Environment");
+  invariant(env instanceof AmbientRuntime, "hermeticEnv: expected a concrete AmbientRuntime");
   return exec(source, { env, skipBootstrapWait: true });
 };
 
 /** Ingress bindings a replay supplies to the hermetic env — the recorded port payloads
  *  a wire's parameters resolve to (a wire is a closed arrival lambda whose parameters
- *  ARE its ingress). Values are real `EnvironmentValue`s (already boxed scheme values) —
- *  `Environment.set`'s own honest signature, not a raw-JS convenience. */
-export type IngressBindings = Readonly<Record<string, EnvironmentValue>>;
+ *  ARE its ingress). Values are real `AmbientValue`s (already boxed scheme values) —
+ *  the storage membrane's own honest face (`bindValue`'s value type), not a raw-JS convenience. */
+export type IngressBindings = Readonly<Record<string, AmbientValue>>;
 
 /**
  * Build the hermetic replay env: base packs + program prelude + ingress bindings.
@@ -78,9 +78,9 @@ export async function hermeticEnv(
   prelude: string,
   ingress: IngressBindings = {},
   config?: object,
-): Promise<ResolvingEnvironment> {
+): Promise<ResolvingAmbient> {
   await ensureBaseAssembled(); // the standard base (`user_env → global_env`) is live + sealed
-  const base = user_env.inherit("provenance-hermetic-replay");
+  const base = mintFrame(user_env, "provenance-hermetic-replay");
   const loweredBase: EnvPack<SchemeEnv>[] = basePacks.map((c) => c.lower({ evalScheme: replayEvalScheme, config }));
   const preludePack = schemePacks(replayEvalScheme)({
     name: "provenance/hermetic-prelude",
@@ -91,7 +91,13 @@ export async function hermeticEnv(
   // THE SEAL: the prelude's defines already landed in `base.__env__` above —
   // sealing here just compiles the now-complete chain; no separate hash hook needed.
   sealResolutionChain(base);
-  const frame = base.inherit("provenance-ingress");
+  // Internal frame-mint for the ingress layer (module-internal `mintFrame` + `bindValue`,
+  // the replay-ingress arm of the monadic-birth ruling). FUTURE SHAPE, if this ever earns
+  // its own door: a small internal "replay pack" — recorded ingress values as a capability
+  // contribution assembled above the sealed base. Not built now: ingress frames are
+  // per-replay, deliberately ABOVE the seal (never baked), and cheap — a full
+  // assemble+seal per wire would inflate replay for zero isolation gain.
+  const frame = mintFrame(base, "provenance-ingress");
   for (const [name, value] of Object.entries(ingress)) bindValue(frame, name, value);
   return frame;
 }

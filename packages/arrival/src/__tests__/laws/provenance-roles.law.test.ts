@@ -183,7 +183,7 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
     // and every downstream capability (here.build's saas/server/{arrival,mcp}",
     // inhuman's saas/mcp, the sift-submission forensics catalog) still authors verbs
     // this way." `values/lineage-classifier-from-env.ts`'s own header independently
-    // confirms: "The legacy dynamic `Environment.defineRosetta`/`RosettaFunction.pure`
+    // confirms: "The legacy dynamic `AmbientRuntime.defineRosetta`/`RosettaFunction.pure`
     // runtime API is a SEPARATE, not-yet-migrated registration path outside Q2/Q3's
     // declared-role vocabulary — ops registered that way carry no `.provenanceRole`."
     //

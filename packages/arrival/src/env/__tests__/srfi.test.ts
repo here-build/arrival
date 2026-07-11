@@ -1,5 +1,6 @@
 // Unified SRFI palette — assemble each capability onto a real env and run one verb.
 import { exec, execState, schemeToJs } from "../../index.js";
+import { mintFrame } from "../../AmbientRuntime.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
 import { assembleEnv } from "../../common/kernel.js";
@@ -27,7 +28,7 @@ const evalScheme = (e: SchemeEnv, src: string) => exec(src, { env: e as never })
 
 /** Assemble one capability onto a fresh env; return a `(num src)` runner. */
 async function withCap(cap: { lower: (o: { evalScheme: typeof evalScheme }) => unknown }, name: string) {
-  const env = sandboxedEnv.inherit(name);
+  const env = mintFrame(sandboxedEnv, name);
   await assembleEnv(env as unknown as SchemeEnv, [cap.lower({ evalScheme }) as never]);
   return async (src: string) => Number((await exec(src, { env }))[0]);
 }
@@ -97,7 +98,7 @@ describe("@here.build/arrival/srfi", () => {
 // Assembles srfi-1 EXPLICITLY (the accessors are not registered globally this round).
 describe("@here.build/arrival/srfi-1 — positional accessors", () => {
   async function accEnv() {
-    const env = sandboxedEnv.inherit(`s1acc-${Math.random().toString(36).slice(2)}`);
+    const env = mintFrame(sandboxedEnv, `s1acc-${Math.random().toString(36).slice(2)}`);
     await assembleEnv(env as unknown as SchemeEnv, [srfi1.lower({ evalScheme }) as never]);
     const num = async (src: string) => Number((await exec(src, { env }))[0]);
     const raw = (src: string) => exec(src, { env });
@@ -216,7 +217,7 @@ describe("SRFI-95 sort — contract element precision", () => {
 
 describe("SRFI-95 sort — end-to-end behavior (previously uncovered via the builtin dispatch)", () => {
   async function sortEnv() {
-    const env = sandboxedEnv.inherit(`s95-${Math.random().toString(36).slice(2)}`);
+    const env = mintFrame(sandboxedEnv, `s95-${Math.random().toString(36).slice(2)}`);
     await assembleEnv(env as unknown as SchemeEnv, [srfi95.lower({ evalScheme }) as never]);
     // execState (COMPLEX tier): schemeToJs wants BOXED values — `exec` already unwraps.
     return async (src: string) => (await execState(src, { env })).values;

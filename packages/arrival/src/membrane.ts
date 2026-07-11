@@ -26,7 +26,7 @@ import { fromJs } from "./values/primitives/boxing.js";
 import { ABool } from "./values/primitives/ABool.js";
 import { ABytevector } from "./values/primitives/ABytevector.js";
 import { AVector } from "./values/primitives/AVector.js";
-import { Environment as SchemeEnvironment } from "./Environment.js";
+import { AmbientRuntime } from "./AmbientRuntime.js";
 import { LambdaContext } from "./eval/LambdaContext.js";
 import { AString } from "./values/primitives/AString.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
@@ -72,7 +72,7 @@ import { ACharacter } from "./values/primitives/ACharacter.js";
  * capability.ts — still binds a bare host function into value space). A SUPERSET of
  * the value-intent `SchemeValue` union — the JS→Scheme boundary legitimately
  * admits CONTROL forms that are never values (Macro/Syntax/LambdaContext/
- * SchemeEnvironment, a bare `Function`). That's why `BoxedSchemeValue`
+ * AmbientRuntime, a bare `Function`). That's why `BoxedSchemeValue`
  * isn't assignable to `SchemeValue`, and why the membrane keeps its own boundary
  * type instead of widening the value union.
  *
@@ -96,7 +96,7 @@ export type BoxedSchemeValue =
   | Macro
   | Syntax
   | LambdaContext
-  | SchemeEnvironment
+  | AmbientRuntime
   | Keyword
   | ACallable
   | Function;
@@ -138,7 +138,7 @@ export function isSchemeValue(value: unknown): value is BoxedSchemeValue {
     case value instanceof Macro:
     case value instanceof Syntax:
     case value instanceof LambdaContext:
-    case value instanceof SchemeEnvironment:
+    case value instanceof AmbientRuntime:
       return true;
 
     default:

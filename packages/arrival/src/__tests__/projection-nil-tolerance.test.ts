@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { mintFrame } from "../AmbientRuntime.js";
 import { exec, execState } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
 import { is_nil, is_false } from "../eval/guards.js";
@@ -32,13 +33,13 @@ import { ANil } from "../values/primitives/ANil.js";
 // track the run's strict bit identically. `run` exercises the inference env; the final block
 // pins that user_env behaves the same — strict drives it, not the env.
 const run = (code: string, strict: boolean) =>
-  exec(code, { env: inferenceEnv.inherit("nil-tol"), strict });
+  exec(code, { env: mintFrame(inferenceEnv, "nil-tol"), strict });
 
 // execState (COMPLEX tier): the two `toBeInstanceOf(ANil)` cells below assert box
 // discipline directly (RULINGS.md R1) — `is_false`-based cells stay on the simple
 // `run`/`exec` above since `is_false` is representation-blind (raw `false` too).
 const runBoxed = (code: string, strict: boolean) =>
-  execState(code, { env: inferenceEnv.inherit("nil-tol"), strict }).then((s) => s.values);
+  execState(code, { env: mintFrame(inferenceEnv, "nil-tol"), strict }).then((s) => s.values);
 
 // Args that are NEITHER a list/pair NOR the absent value -> type errors (throw in BOTH modes).
 // #f is included deliberately: it is a real boolean, NOT "absent", so projecting it is a type error.

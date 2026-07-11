@@ -1,5 +1,5 @@
 // unbound-variable — the ONE builder for the "Unbound variable" error object, shared
-// by every arrival-side throw site (`Environment.ts#get`, `eval/Resolver.ts#resolveSynth`,
+// by every arrival-side throw site (`AmbientRuntime.ts#get`, `eval/Resolver.ts#resolveSynth`,
 // `eval/evaluator.ts#resolvedBindingOrThrow`), plus the TYPO-SUGGESTION mechanism that
 // enriches it.
 //
@@ -130,7 +130,7 @@ export function suggestFromVocabulary(unboundName: string, vocabulary: Iterable<
 
 /**
  * `unboundVariableError` — builds the thrown Error. `vocabulary` is the throw site's
- * enumeration of every name its resolution walk could have found (`Environment
+ * enumeration of every name its resolution walk could have found (`AmbientRuntime
  * .allBoundNames()`, `Resolver.allBoundNames()`, the sealed chain's `names`);
  * omitted/empty ⇒ the plain wall, no hint machinery at all (the evaluator's
  * defensive unreachable-branch throw).

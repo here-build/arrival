@@ -6,7 +6,7 @@
 //
 // A mistyped name is the one class that CANNOT be a declared capability (it has no
 // declaration site), so it survives inside `unboundVariableError` (src/unbound-
-// variable.ts, consumed by Environment.get / Resolver.resolveSynth). The EXACT-name
+// variable.ts, consumed by AmbientRuntime.get / Resolver.resolveSynth). The EXACT-name
 // half of the old registry became declarations: doors resolve through the ordinary
 // chain and are thereby typo-suggestible FOR FREE through this same mechanism —
 // suggest the door, and calling the door teaches the reason.

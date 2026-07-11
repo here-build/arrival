@@ -32,6 +32,7 @@
 //      `(receive (q r) (values 1 2) (list q r))` against the DEFAULT assembled
 //      base — this row additionally covers the dotted-rest-formals shape).
 import { describe, expect, it } from "vitest";
+import { mintFrame } from "../../../AmbientRuntime.js";
 import type { AEntity } from "../../../common/symbol.js";
 import { exec } from "../../../eval/generator-exec.js";
 import { global_env } from "../../../env-roots.js";
@@ -39,13 +40,13 @@ import { initBridge } from "../../../index.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
 import srfi8 from "../srfi-8.js";
-import type { ResolvingEnvironment } from "../../../Environment.js";
+import type { ResolvingAmbient } from "../../../AmbientRuntime.js";
 
 // Mirrors `_fresh-env.ts`'s own injected evalScheme — `skipBootstrapWait` because
 // these execs run against an env this suite is itself assembling/re-lowering onto,
 // not the shared realm-cached bootstrap.
 const evalScheme = (env: unknown, src: unknown): unknown =>
-  exec(src as string, { env: env as ResolvingEnvironment, skipBootstrapWait: true });
+  exec(src as string, { env: env as ResolvingAmbient, skipBootstrapWait: true });
 
 describe("scheme/srfi-8 — receive behavior equivalence (semantic-equivalence gate, §4.2)", () => {
   it("binds a two-value producer to a fixed formals list", async () => {
@@ -94,13 +95,13 @@ describe("scheme/srfi-8 — contract-freeness (the WRONG-factory regression pin,
 describe("scheme/srfi-8 — the §2.1 bake FV law is out of scope for defineSyntax (regression pin)", () => {
   it("lowers standalone, zero declared deps, never throws a bake FV/role door", async () => {
     await initBridge();
-    const env = global_env.inherit("srfi-8-standalone");
+    const env = mintFrame(global_env, "srfi-8-standalone");
     await expect(srfi8.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
   });
 
   it("never throws DefineLocalityError/DefineForwardReferenceError/ProvenanceRoleShapeError", async () => {
     await initBridge();
-    const env = global_env.inherit("srfi-8-fv-pin");
+    const env = mintFrame(global_env, "srfi-8-fv-pin");
     try {
       await srfi8.lower({ evalScheme }).apply(env, undefined as never);
     } catch (e) {

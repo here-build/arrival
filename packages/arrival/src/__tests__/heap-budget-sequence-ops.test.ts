@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { mintFrame } from "../AmbientRuntime.js";
 import { exec } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
 
@@ -27,7 +28,7 @@ import { inferenceEnv } from "../inference-env.js";
 const lit = (n: number) => `'(${Array.from({ length: n }, (_, i) => i).join(" ")})`;
 const vlit = (n: number) => `#(${Array.from({ length: n }, (_, i) => i).join(" ")})`;
 const run = (code: string, heapBudget: number) =>
-  exec(code, { env: inferenceEnv.inherit("heap-seq"), heapBudget });
+  exec(code, { env: mintFrame(inferenceEnv, "heap-seq"), heapBudget });
 
 describe("heap budget — term-delegated sequence ops charge the per-run allocation meter", () => {
   it("(map …) over a large list trips a tight budget", async () => {

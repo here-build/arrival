@@ -29,6 +29,7 @@
 //      `static-validation.law.test.ts` LAW 4 row, which pins the same fact for
 //      `(cut cons <> 1)` against the DEFAULT assembled base).
 import { describe, expect, it } from "vitest";
+import { mintFrame } from "../../../AmbientRuntime.js";
 import * as z from "../../../common/scheme-zod.js";
 import { symbol, type AEntity } from "../../../common/symbol.js";
 import { EnvCapability } from "../../../common/capability.js";
@@ -38,13 +39,13 @@ import { initBridge } from "../../../index.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
 import srfi26 from "../srfi-26.js";
-import type { ResolvingEnvironment } from "../../../Environment.js";
+import type { ResolvingAmbient } from "../../../AmbientRuntime.js";
 
 // Mirrors `_fresh-env.ts`'s own injected evalScheme — `skipBootstrapWait` because
 // these execs run against an env this suite is itself assembling/re-lowering onto,
 // not the shared realm-cached bootstrap.
 const evalScheme = (env: unknown, src: unknown): unknown =>
-  exec(src as string, { env: env as ResolvingEnvironment, skipBootstrapWait: true });
+  exec(src as string, { env: env as ResolvingAmbient, skipBootstrapWait: true });
 
 describe("scheme/srfi-26 — cut/cute expansion equivalence (semantic-equivalence gate, §4.2)", () => {
   it("cut: builds a positional-slot closure — `(cut cons <> 1)` applied to 0", async () => {
@@ -130,13 +131,13 @@ describe("scheme/srfi-26 — the contract-enforcement row: cut/cute are contract
 describe("scheme/srfi-26 — the §2.1 bake FV law passes (lowered standalone, zero declared deps)", () => {
   it("lowers cleanly with NO deps declared — never DefineLocalityError/DefineForwardReferenceError/ProvenanceRoleShapeError", async () => {
     await initBridge();
-    const env = global_env.inherit("test-srfi-26-fv-law");
+    const env = mintFrame(global_env, "test-srfi-26-fv-law");
     await expect(srfi26.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
   });
 
   it("(regression pin) none of the FV/forward-ref/role drift doors fire for this pack's real bake", async () => {
     await initBridge();
-    const env = global_env.inherit("test-srfi-26-fv-law-2");
+    const env = mintFrame(global_env, "test-srfi-26-fv-law-2");
     try {
       await srfi26.lower({ evalScheme }).apply(env, undefined as never);
     } catch (error) {

@@ -34,7 +34,7 @@ import { is_pair, is_macro_value } from "./value-guards.js";
 import { ASymbol } from "./primitives/ASymbol.js";
 import { AValue } from "./primitives/AValue.js";
 import { assertNever, CLASSIFIED_SPECIAL_FORMS, fullCone, type Bindings, type LineageNode } from "./lineage.js";
-import type { Environment } from "../Environment.js";
+import type { AmbientRuntime } from "../AmbientRuntime.js";
 import { APair } from "./primitives/APair.js";
 import type { AListAlike, SchemeValue } from "./types.js";
 import { ProvenanceShadowDivergence } from "../errors.js";
@@ -55,7 +55,7 @@ type ShadowSkip =
  *  models applications/special-forms, not macro expansions) and a `(:field …)`
  *  keyword projection (where-provenance has no static node — out of scope). Both
  *  are recognised from the SURFACE head, before any expansion. */
-function shadowSkipReason(form: SchemeValue, env: Environment): ShadowSkip | null {
+function shadowSkipReason(form: SchemeValue, env: AmbientRuntime): ShadowSkip | null {
   if (!(form instanceof APair)) return null; // atoms (a literal / a bare symbol) are trivially classifiable
   const head = form.car;
   if (!(head instanceof ASymbol)) return null; // computed operator — fall through (classify stringifies it)
@@ -122,7 +122,7 @@ function collectSlots(n: LineageNode, out: Set<string>): void {
 /** Assemble runtime bindings for a skeleton: each referenced slot ← the provenance
  *  its env binding carries (`provOf(env.get(slot))`). The proven checkpoint pattern
  *  (lineage-checkpoint.test.ts:66), driven by the slots the skeleton actually uses. */
-export function bindingsForSkeleton(skeleton: LineageNode, env: Environment): Bindings {
+export function bindingsForSkeleton(skeleton: LineageNode, env: AmbientRuntime): Bindings {
   const slots = new Set<string>();
   collectSlots(skeleton, slots);
   const b: Record<string, readonly number[]> = {};
@@ -142,7 +142,7 @@ export function assertShadowCone(
   skeleton: LineageNode,
   form: SchemeValue,
   result: SchemeValue,
-  env: Environment,
+  env: AmbientRuntime,
   formText: string,
 ): ShadowSkip | null {
   const skip = shadowSkipReason(form, env);

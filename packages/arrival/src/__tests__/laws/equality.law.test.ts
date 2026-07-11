@@ -36,7 +36,7 @@ describe("equality contract — boxed ≡ unboxed (representation-blind)", () =>
   // plain JS string, in both argument orders, while differing content stays unequal.
   // Bare-value purge (A4/P4) VERDICT — mechanism, not aspiration (docs/REWORK-DAG.md A4,
   // RULINGS.md R1): the purge (op-helpers.ts withInputProvenance always boxes now; ANil's
-  // length boxes; Environment.set boxes every stored scalar) closes every INTERNAL producer
+  // length boxes; AmbientRuntime.set boxes every stored scalar) closes every INTERNAL producer
   // of a raw string reaching scheme execution — a chain-plane op can no longer hand `equal?`
   // an unboxed operand. But that does NOT make this row invert to a Setoid-level throw: this
   // exact representation-blind assertion is independently pinned, unconditionally, by

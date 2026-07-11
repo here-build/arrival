@@ -24,7 +24,7 @@
 import { AValue } from "../values/primitives/AValue.js";
 import { ANativeProcedure } from "../values/primitives/ACallable.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
-import { type BindingName, bindValue, Environment, type EnvironmentValue } from "../Environment.js";
+import { type BindingName, AmbientRuntime, type AmbientValue, mintFrame } from "../AmbientRuntime.js";
 import type { RunContext } from "../values/primitives/RunContext.js";
 import type { SchemeValue } from "../values/types.js";
 import { LexicalScope } from "./LexicalScope.js";
@@ -34,7 +34,7 @@ import { unboundVariableError } from "../unbound-variable.js";
 import { tf } from "../values/tagless-final.js";
 
 // ============================================================================
-// Environment lookup without lips runtime dependency
+// AmbientRuntime lookup without lips runtime dependency
 // ============================================================================
 //
 // c[ad]+r is car/cdr COMPOSITION — the kernel unfolds it by composing each receiver's OWN
@@ -103,7 +103,7 @@ function cxrUnfold(name: string): ANativeProcedure | undefined {
 function resolveSynth(
   name: string | symbol,
   vocabulary: () => Iterable<string | symbol>,
-): EnvironmentValue | undefined {
+): AmbientValue | undefined {
   if (typeof name === "string") {
     const cxr = cxrUnfold(name);
     if (cxr !== undefined) return cxr;
@@ -117,11 +117,11 @@ function resolveSynth(
 
 /**
  * Look up a symbol in the environment — the raw storage walk, no read-settling
- * (a stored pair is handed back as-is; `Environment.get` owns the quote-on-read face).
+ * (a stored pair is handed back as-is; `AmbientRuntime.get` owns the quote-on-read face).
  * For keyword symbols (:name), self-evaluates.
  * The single-env glass form; {@link Resolver.resolve} is the composed (cut) form.
  */
-export function env_get(env: Environment, sym: ASymbol, ctx?: RunContext): EnvironmentValue | undefined {
+export function env_get(env: AmbientRuntime, sym: ASymbol, ctx?: RunContext): AmbientValue | undefined {
   const name = sym.__name__;
 
   // A keyword (`:name`) is self-evaluating — it carries its own `apply` (ASymbol.ts),
@@ -141,9 +141,9 @@ export function env_get(env: Environment, sym: ASymbol, ctx?: RunContext): Envir
 }
 
 /**
- * The semantic role of a nested frame. Currently metadata only (every frame is an
- * `env.inherit` identically) — future work reads it to distinguish the lexical chain
- * from the capability base. Mirrors the existing debug-name passed to `Environment.inherit`.
+ * The semantic role of a nested frame. Currently metadata only (every frame is a
+ * `mintFrame` child identically) — future work reads it to distinguish the lexical
+ * chain from the capability base. Mirrors the debug-name passed to the frame mint.
  */
 export type ScopeKind =
   | "lambda"
@@ -175,7 +175,7 @@ export class Resolver {
    * identity compare holds.
    */
   constructor(
-    scopeEnv: Environment,
+    scopeEnv: AmbientRuntime,
     capabilities?: Capabilities,
     readonly kind?: ScopeKind,
   ) {
@@ -184,7 +184,7 @@ export class Resolver {
   }
 
   /** The lexical frame env — kept for consumers that still expect `resolver.env`. */
-  get env(): Environment {
+  get env(): AmbientRuntime {
     return this.scope.env;
   }
 
@@ -196,7 +196,7 @@ export class Resolver {
    * builtins; the keyword/cxr synth wraps the SAME composed lookup, so a `:key`
    * accessor resolves against the base even though the lexical root is null-rooted.
    */
-  resolve(sym: ASymbol, ctx?: RunContext): EnvironmentValue | undefined {
+  resolve(sym: ASymbol, ctx?: RunContext): AmbientValue | undefined {
     const name = sym.__name__;
     // A keyword (`:name`) is self-evaluating. No lexical
     // or capability lookup at all; this is the one call site every symbol-position
@@ -230,7 +230,7 @@ export class Resolver {
    * composed `scope.lookup ?? capabilities.lookup`; glass collapses to
    * `env._lookupWithResolvers(name)`.
    */
-  lookup(name: string | symbol, ctx?: RunContext): EnvironmentValue | undefined {
+  lookup(name: string | symbol, ctx?: RunContext): AmbientValue | undefined {
     return this.scope.lookup(name, ctx) ?? this.capabilities.lookup(name, ctx);
   }
 
@@ -239,43 +239,36 @@ export class Resolver {
    * then the capability base. Returns a stable {@link LexicalScope} for a lexical owner
    * (so `=== defResolver.scope` compares the captured def frame), the
    * {@link Capabilities.globalRoot} sentinel for an unshadowed builtin (so `===
-   * globalRoot`) — GLASS: a live `Environment`; ASSEMBLED: the sealed
+   * globalRoot`) — GLASS: a live `AmbientRuntime`; ASSEMBLED: the sealed
    * `CompiledResolutionChain` (BakedBase) itself — or `undefined` if unbound. Own
-   * bindings only — no resolvers, no synth — exactly like the old `Environment.ref`
+   * bindings only — no resolvers, no synth — exactly like the old `AmbientRuntime.ref`
    * walk it replaces. NOT a value read and NOT a mutation path.
    */
-  refFrame(name: string): LexicalScope | Environment | CompiledResolutionChain | undefined {
+  refFrame(name: string): LexicalScope | AmbientRuntime | CompiledResolutionChain | undefined {
     return this.scope.refFrame(name) ?? this.capabilities.refFrame(name);
   }
 
   /**
    * A SETTLED value read — the bound value of `name` (scope then capabilities),
-   * read-settled by `Environment.get` (pair → quote; raw-in-storage doors),
+   * read-settled by `AmbientRuntime.get` (pair → quote; raw-in-storage doors),
    * resolver-aware, NON-synth, `undefined` on a miss (never throws).
    * ≡ `env.get(name, { throwError: false })`. Used by hygiene's gensym rename to copy a
    * bound value onto its gensym; distinct from {@link resolve} (which synthesizes c[ad]+r
    * and throws on a miss), so a template-introduced (unbound) identifier yields undefined.
    */
-  lookupSettled(name: BindingName): EnvironmentValue | undefined {
+  lookupSettled(name: BindingName): AmbientValue | undefined {
     return this.env.get(name, { throwError: false });
-  }
-
-  /** Bind a name in the innermost frame (let/lambda/letrec/define) — the EVALUATOR's
-   *  frame-bind, through the module-internal storage write (`bindValue`, Environment.ts;
-   *  the public `set` is hard-deleted — hermetic-Environment ruling). Storage-membrane
-   *  face: `EnvironmentValue` ONLY — a caller with a raw number/bigint boxes at ITS OWN
-   *  boundary (fromJS/jsToScheme) before calling this. */
-  define(name: BindingName, value: EnvironmentValue): void {
-    bindValue(this.env, name, value);
   }
 
   /**
    * A fresh nested lexical frame carrying the SAME capability base — `this.capabilities`
    * propagates verbatim (never re-derived from the child env), so the macro/hygiene seam
-   * keeps a stable `globalRoot` across expansion frames. ≡ `new Resolver(env.inherit(name), caps, kind)`.
+   * keeps a stable `globalRoot` across expansion frames. The frame mint is the
+   * module-internal `mintFrame` (AmbientRuntime.ts) — `define` left this class in the
+   * monadic-birth ruling; the evaluator's frame-binds go straight through `bindValue`.
    */
   child(name?: string | symbol, kind?: ScopeKind): Resolver {
-    return new Resolver(this.env.inherit(name), this.capabilities, kind);
+    return new Resolver(mintFrame(this.env, name), this.capabilities, kind);
   }
 
   /** Whether `name` is bound in THIS frame (not the chain). ≡ `env.has`. */

@@ -19,7 +19,7 @@ import { DoorProcedure } from "../../values/primitives/ACallable.js";
 import { is_callable_value, is_door_procedure } from "../../values/value-guards.js";
 import { PurityError } from "../../errors.js";
 import { EnvCapability } from "../../common/capability.js";
-import { ResolvingEnvironment } from "../../Environment.js";
+import { ResolvingAmbient, mintResolvingFrame } from "../../AmbientRuntime.js";
 
 describe("DoorProcedure — the introspectable door binding (unit, no capability/env)", () => {
   it("exposes `.door` — the baked DoorSymbolDef — for static readers", () => {
@@ -79,11 +79,11 @@ describe("DoorProcedure — the introspectable door binding (unit, no capability
 });
 
 /** A REAL recording env (hermetic-Environment ruling: capability apply narrows to the
- *  concrete `Environment` — a synthetic `{ set }` mock can no longer receive bindings).
+ *  concrete `AmbientRuntime` — a synthetic `{ set }` mock can no longer receive bindings).
  *  `bound` is a read facade over the frame's own storage record, keeping this suite's
  *  `bound.get(name)` idiom without the retired write surface. */
-function recordingEnv(): { env: ResolvingEnvironment; bound: { get(name: string): unknown } } {
-  const env = new ResolvingEnvironment("door-cause-recording", {}, null);
+function recordingEnv(): { env: ResolvingAmbient; bound: { get(name: string): unknown } } {
+  const env = mintResolvingFrame("door-cause-recording", {}, null);
   return { env, bound: { get: (name) => env.__env__[name] } };
 }
 

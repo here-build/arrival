@@ -4,7 +4,7 @@
  * corpus (`w1-corpus.ts`). Two independent halves:
  *
  *  1. THE EAGER ORACLE SIDE — register synthetic Rosetta-IN sources via the legacy
- *     `Environment.defineRosetta` fixture path (the SAME mechanism golden-prov-infer.
+ *     `AmbientRuntime.defineRosetta` fixture path (the SAME mechanism golden-prov-infer.
  *     test.ts uses: a deterministic fake that returns an ALREADY-STAMPED value,
  *     since a direct `execState` run has no live `currentInvocation` to auto-mint
  *     against — see rosetta.ts's `mintsPoint && inv` guard). Each call mints a FRESH
@@ -35,8 +35,8 @@
  * separately asserting the trade IS visible (a proper superset, not vacuously equal)
  * on the pure-mux rows where the arms deliberately diverge.
  */
-import type { ResolvingEnvironment } from "../../Environment.js";
-import { Environment } from "../../Environment.js";
+import type { ResolvingAmbient } from "../../AmbientRuntime.js";
+import { AmbientRuntime, mintFrame } from "../../AmbientRuntime.js";
 import { execState } from "../../eval/generator-exec.js";
 import { collapseProvenance } from "../../provenance-collapse.js";
 import { AString } from "../../values/primitives/AString.js";
@@ -88,7 +88,7 @@ export class SourceRegistry {
    *  untouched — `z.value` on the output side is the declared no-transform escape
    *  hatch that skips `z.encode` and hands the impl's return straight to `jsToScheme`
    *  (golden-prov-infer.test.ts's `inferSources` rationale, restated). */
-  async register(env: Environment, op: string, shape: SourceShape): Promise<void> {
+  async register(env: AmbientRuntime, op: string, shape: SourceShape): Promise<void> {
     const mint = this.mint.bind(this);
     const impl = symbol.rosetta`${op}: W1 harness fake Rosetta-IN source`(
       { input: [], inputRest: z.value, output: [z.value] },
@@ -133,12 +133,12 @@ export class SourceRegistry {
  *  the last one's value flows to the out-port" convention, builder.ts's
  *  `buildWireframe`). */
 export async function runEagerCone(
-  baseEnv: ResolvingEnvironment,
+  baseEnv: ResolvingAmbient,
   code: string,
   sources: Record<string, SourceShape>,
   registry: SourceRegistry,
 ): Promise<Set<string>> {
-  const env = baseEnv.inherit(`w1-agreement-${Math.random().toString(36).slice(2)}`);
+  const env = mintFrame(baseEnv, `w1-agreement-${Math.random().toString(36).slice(2)}`);
   for (const [op, shape] of Object.entries(sources)) await registry.register(env, op, shape);
   // Q20b: production default is OFF — the EAGER ORACLE side of the W1 agreement needs
   // REAL accumulation to produce a cone at all. Force ON for exactly this run,

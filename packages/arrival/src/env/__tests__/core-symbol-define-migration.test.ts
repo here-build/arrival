@@ -17,6 +17,7 @@
 // record, no `deps`) and proves the bake FV law rejects it with `DefineLocalityError`
 // — the law that class of bug is caught by, kept independent of the deleted symbol.
 import { describe, expect, it } from "vitest";
+import { mintFrame } from "../../AmbientRuntime.js";
 import { EnvCapability } from "../../common/capability.js";
 import { symbol } from "../../common/symbol.js";
 import * as z from "../../common/scheme-zod.js";
@@ -56,7 +57,7 @@ describe("scheme/core — behavior equivalence (semantic-equivalence gate, §4.2
 describe("scheme/core — the §2.1 bake FV locality law", () => {
   it("scheme/core lowers cleanly (dep-free since single's deletion) — never DefineLocalityError", async () => {
     await initBridge();
-    const env = global_env.inherit("test-core-fv-law-ok");
+    const env = mintFrame(global_env, "test-core-fv-law-ok");
     await expect(core.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
   });
 

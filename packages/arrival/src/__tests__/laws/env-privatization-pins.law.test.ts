@@ -7,7 +7,7 @@
  *      `capabilities`/`override`/`scope`/`assembleAmbient` in the same wave);
  *      `LexicalScope.fresh` exists (V1's one new API); `SessionScope` names the
  *      refinement it mints (root frame carries the structural SchemeEnv contract —
- *      the V4 session products type against it). The barrel exports ZERO Environment
+ *      the V4 session products type against it). The barrel exports ZERO AmbientRuntime
  *      instances; `rosettaTypesOf` deliberately SURVIVES this cut (WO-1 territory —
  *      rosetta-registry-dissolution.md owns its death, keyed now on scope frames).
  *   2. Glass byte-identity — a custom `{ env }` run still resolves/defines exactly as
@@ -29,10 +29,10 @@ import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
 import { jsToScheme } from "../../rosetta.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { AValue } from "../../values/primitives/AValue.js";
-// In-package test: internal-module access (Environment is not barrel-exported).
-import { Environment } from "../../Environment.js";
+// In-package test: internal-module access (AmbientRuntime is not barrel-exported).
+import { AmbientRuntime, mintFrame } from "../../AmbientRuntime.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../../Environment.js";
+import { bindValue } from "../../AmbientRuntime.js";
 
 describe("V0 pin — barrel surface", () => {
   it("global_env / env are no longer barrel-exported (V1 zero-consumer cut)", () => {
@@ -65,7 +65,7 @@ describe("V0 pin — barrel surface", () => {
 
 describe("V0 pin — glass byte-identity (ExecOptions.env retype is type-only, D2)", () => {
   it("a custom env still resolves builtins through its OWN chain and defines land directly in it — the glass posture generator-exec.ts documents", async () => {
-    const base = sandboxedEnv.inherit("glass-pin-basic");
+    const base = mintFrame(sandboxedEnv, "glass-pin-basic");
     const [sum] = await exec("(+ 1 2)", { env: base });
     expect(sum).toBe(3);
 
@@ -80,7 +80,7 @@ describe("V0 pin — glass byte-identity (ExecOptions.env retype is type-only, D
   });
 
   it("execState's glass posture is unaffected — session `scope` wraps the SAME glass env across calls", async () => {
-    const base = sandboxedEnv.inherit("glass-pin-session");
+    const base = mintFrame(sandboxedEnv, "glass-pin-session");
     await execState("(define greeting \"hi\")", { env: base });
     const { values } = await execState("(string-append greeting \" there\")", { env: base });
     expect(values[0]).toBeInstanceOf(AValue);
@@ -97,7 +97,7 @@ describe("V0 pin — override+scope value-injection parity", () => {
     // The manual membrane path — the pre-override idiom, now reachable only through the
     // module-internal `bindValue` (V7: the public `env.set` is hard-deleted; this row keeps
     // pinning that the ONE remaining write door and `override` mint identical values).
-    const manualEnv = sandboxedEnv.inherit("parity-manual");
+    const manualEnv = mintFrame(sandboxedEnv, "parity-manual");
     bindValue(manualEnv, "users", jsToScheme(CONSTANT_CTX, users, {}));
     const { values: manualValues } = await execState(
       `(map (lambda (u) (:id u)) users)`,
@@ -122,7 +122,7 @@ describe("V0 pin — override+scope value-injection parity", () => {
   it("...and IDENTICAL provenance — both paths mint through jsToScheme(CONSTANT_CTX, …), so both are provenance-empty (run-neutral)", async () => {
     const priority = 15;
 
-    const manualEnv = sandboxedEnv.inherit("parity-provenance-manual");
+    const manualEnv = mintFrame(sandboxedEnv, "parity-provenance-manual");
     bindValue(manualEnv, "priority", jsToScheme(CONSTANT_CTX, priority, {}));
     const { values: manualValues } = await execState(`(* priority 2)`, { env: manualEnv });
 
@@ -150,28 +150,27 @@ describe("V6 pin — defineRosetta hard-delete (docs/working-proposals/arrival-e
   // types against (so a NEW `env.defineRosetta(...)` call site is a compile error everywhere,
   // not just at this one class). The legacy AUTHORING SHAPE (`{ fn, type, pure, ... }`
   // literals — `RosettaSpec`/`SymbolDeclaration`) survives unchanged; only the method that
-  // consumed it is deleted. `Environment.ts`'s internal `bindRosetta` is the sole surviving
+  // consumed it is deleted. `AmbientRuntime.ts`'s internal `bindRosetta` is the sole surviving
   // wiring, reachable only from `common/capability.ts`'s legacy bind arm and
   // `provenance/replay.ts`'s playback frame — never barrel-exported, never a `SchemeEnv` member.
-  it("Environment.prototype.defineRosetta no longer exists", () => {
-    expect("defineRosetta" in Environment.prototype).toBe(false);
+  it("AmbientRuntime.prototype.defineRosetta no longer exists", () => {
+    expect("defineRosetta" in AmbientRuntime.prototype).toBe(false);
   });
 
-  it("a live env instance answers to `get`/`inherit` but not `defineRosetta` (nor `set` — see the V7 rows)", () => {
-    const env = sandboxedEnv.inherit("pin-defineRosetta-gone");
+  it("a live env instance answers to `get` but not `defineRosetta` (nor `set`/`inherit`/`merge` — the V7/V8 rows)", () => {
+    const env = mintFrame(sandboxedEnv, "pin-defineRosetta-gone");
     expect(typeof env.get).toBe("function");
-    expect(typeof env.inherit).toBe("function");
     expect("defineRosetta" in env).toBe(false);
   });
 });
 
 describe("V7 pin — the MONADIC contract (hermetic-Environment ruling, 2026-07-11)", () => {
-  // V, verbatim: "Environment should be something fully opaque on the outside, its value is
+  // V, verbatim: "AmbientRuntime should be something fully opaque on the outside, its value is
   // only in cross-run preservation; it is not designed to be operatable from the JS side at
   // all. from JS perspective, it's fully monadic." Values enter the interpreter ONLY as
   // capabilities or overrides. Concretely pinned:
   //   1. the JS side cannot `set` — the method is gone from the concrete class (so no
-  //      instance, however obtained — `LexicalScope.fresh().env`, `inherit()` children,
+  //      instance, however obtained — `LexicalScope.fresh().env`, minted children,
   //      `currentRunEnv()` — answers it) and from the `SchemeEnv` contract;
   //   2. a raw JS scalar found IN storage is a teaching door on read, never a silent
   //      re-box (the read-path `box()` fallback is deleted — the constant-ctx audit's
@@ -179,13 +178,13 @@ describe("V7 pin — the MONADIC contract (hermetic-Environment ruling, 2026-07-
   //   3. a resolver answering a raw JS scalar doors at the probe — resolvers box at
   //      their own boundary, under the resolving read's ctx.
   it("no env instance answers `set` — not a fresh session root, not a base child", () => {
-    expect("set" in sandboxedEnv.inherit("pin-monadic")).toBe(false);
+    expect("set" in mintFrame(sandboxedEnv, "pin-monadic")).toBe(false);
     expect("set" in LexicalScope.fresh("pin-monadic-fresh").env).toBe(false);
-    expect("set" in Environment.prototype).toBe(false);
+    expect("set" in AmbientRuntime.prototype).toBe(false);
   });
 
   it("raw JS in storage doors on read (a writer bypassed the membrane) — box() re-boxing is dead", () => {
-    const env = sandboxedEnv.inherit("pin-raw-storage");
+    const env = mintFrame(sandboxedEnv, "pin-raw-storage");
     // The only way raw JS can still land in storage is a direct record poke — the exact
     // bypass the door exists to catch.
     env.__env__["smuggled"] = 42 as never;
@@ -208,5 +207,48 @@ describe("V7 pin — the MONADIC contract (hermetic-Environment ruling, 2026-07-
     });
     const [v] = await exec('(string-append greeting "!")', { scope: root });
     expect(v).toBe("hello!");
+  });
+});
+
+describe("V8 pin — MONADIC BIRTH (public inheritance dissolved, 2026-07-11)", () => {
+  // The ruling's second half: an env can only be BORN (assembled) and READ — never
+  // EXTENDED from JS. Doctrine: every production inherit was capability composition in
+  // disguise. Concretely pinned:
+  //   1. `inherit` and `merge` are gone from the concrete class (no instance answers
+  //      them) — frame birth is the module-internal `mintFrame`/`mintPlainFrame`/
+  //      `mintResolvingFrame` (AmbientRuntime.ts, never barrel-exported), reached only by
+  //      the assembly machinery, the evaluator, and the replay ingress;
+  //   2. no bindings-record ingestion from JS — the constructor arm left the public
+  //      type (protected ctor; the raw minters are the static-block escape), and the
+  //      one public frame-birth door, `LexicalScope.child`, takes NO bindings record;
+  //   3. `LexicalScope.define` / `Resolver.define` are gone (ruling A on the
+  //      session-owner question — no convenience carve-out): the evaluator's
+  //      frame-binds go through the internal `bindValue` directly.
+  it("no env instance answers `inherit` or `merge` — not a session root, not a base child", () => {
+    const child = mintFrame(sandboxedEnv, "pin-birth");
+    expect("inherit" in child).toBe(false);
+    expect("merge" in child).toBe(false);
+    expect("inherit" in AmbientRuntime.prototype).toBe(false);
+    expect("merge" in AmbientRuntime.prototype).toBe(false);
+    expect("inherit" in LexicalScope.fresh("pin-birth-fresh").env).toBe(false);
+  });
+
+  it("LexicalScope no longer answers `define` (ruling A — no convenience carve-out)", () => {
+    expect("define" in LexicalScope.fresh("pin-no-define")).toBe(false);
+    expect("define" in LexicalScope.prototype).toBe(false);
+  });
+
+  it("LexicalScope.child is the one public frame-birth door — empty child, subtype-preserving (SchemeEnv contract kept)", async () => {
+    const session = LexicalScope.fresh("pin-child-session");
+    const run = session.child("pin-child-run");
+    // Born EMPTY: no bindings-record parameter exists; the child frame owns nothing yet.
+    expect(run.env.list()).toEqual([]);
+    // Subtype-preserving: a SessionScope's child keeps the structural pack-write contract
+    // (the per-run capability re-lower consumer, inhuman run-traced, targets child.env).
+    expect(typeof (run.env as { registerResolver?: unknown }).registerResolver).toBe("function");
+    // And it chains: a define landing in the SESSION frame resolves from the child scope.
+    await exec("(define session-bound 41)", { scope: session });
+    const [v] = await exec("(+ session-bound 1)", { scope: run });
+    expect(v).toBe(42);
   });
 });

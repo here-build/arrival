@@ -16,10 +16,10 @@ import { inferenceEnv } from "../inference-env.js";
 import { classify, fullCone, type DeclaredRole, type LineageNode } from "../values/lineage.js";
 import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../Environment.js";
+import { bindValue, mintFrame } from "../AmbientRuntime.js";
 
 let seq = 0;
-const env = () => inferenceEnv.inherit(`cfe-${seq++}`);
+const env = () => mintFrame(inferenceEnv, `cfe-${seq++}`);
 
 /** A marker value carrying ONLY a declared role — classify() never invokes the bound
  *  value, so a bare stamped function is enough to exercise the declaration read. */
@@ -50,7 +50,7 @@ describe("classifierFromEnv — reads the declared `.provenanceRole` off the bou
     await initBridge();
     const parent = env();
     bindValue(parent, "dedent", declared("pipe"));
-    const child = parent.inherit("cfe-child");
+    const child = mintFrame(parent, "cfe-child");
     // classified on the CHILD, but `dedent` is bound on the PARENT → still a pipe.
     const n = await node("(dedent s)", child);
     expect(n.kind).toBe("pipe");

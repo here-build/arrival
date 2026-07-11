@@ -1,10 +1,10 @@
 // env-registries — side-table ABOUT the rosettas registered on an env, kept
-// OUT of the scope-node (`Environment`): this isn't lexical scope (bindings +
+// OUT of the scope-node (`AmbientRuntime`): this isn't lexical scope (bindings +
 // `__parent__` + lookup), it's run-scoped metadata external tools harvest.
 // Holding it here, keyed by the env it was registered on, keeps the
 // scope-node minimal while preserving the per-env locality consumers depend on.
 //
-// WHY env-KEYED (WeakMap<Environment, …>), not one flat global:
+// WHY env-KEYED (WeakMap<AmbientRuntime, …>), not one flat global:
 //   • rosetta-types are read PER-ENV — the type-lens harvester spreads ONE
 //     env's type entries (`[...rosettaTypesOf(env)]`); a sibling env's rosettas must
 //     NOT leak in. A flat global would conflate every env built in the process.
@@ -21,7 +21,7 @@
 // declared `.provenanceRole` (see `values/lineage-classifier-from-env.ts`), not a
 // side-table lookup here.
 
-import type { Environment } from "./Environment.js";
+import type { AmbientRuntime } from "./AmbientRuntime.js";
 
 // (No global docstring registry: each hermetic symbol carries its own doc, e.g. Macro's `__doc__`.)
 
@@ -30,12 +30,12 @@ import type { Environment } from "./Environment.js";
 // :: `defineRosetta` carrying a `type`, read per-env by arrival-type-lens's
 // :: `assembleHostPrelude([...registry])`.
 // -------------------------------------------------------------------------
-const rosettaTypesByEnv = new WeakMap<Environment, Map<string, string>>();
+const rosettaTypesByEnv = new WeakMap<AmbientRuntime, Map<string, string>>();
 
 /** This env's rosetta TS-signature registry — the single source the type-lens
  *  harvester derives its `ArrShape` leaf from (`[...rosettaTypesOf(env)]`). Per-env
  *  (NOT chained): the harvester spreads exactly one env's entries. */
-export function rosettaTypesOf(env: Environment): Map<string, string> {
+export function rosettaTypesOf(env: AmbientRuntime): Map<string, string> {
   let m = rosettaTypesByEnv.get(env);
   if (m === undefined) {
     m = new Map();

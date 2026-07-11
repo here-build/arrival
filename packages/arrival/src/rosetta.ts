@@ -3,7 +3,7 @@
  * identity both directions (bifunctor framing: schemeToJs∘jsToScheme = id and
  * jsToScheme∘schemeToJs = id on the values each side owns).
  * `createRosettaWrapper` wraps a JS fn as a Scheme-callable rosetta — the retired public
- * `Environment.defineRosetta` used to be its one caller; `Environment.ts`'s internal
+ * `AmbientRuntime.defineRosetta` used to be its one caller; `AmbientRuntime.ts`'s internal
  * `bindRosetta` is the surviving wiring (capability.ts's legacy arm + replay.ts's
  * playback frame are its only two producers now).
  */
@@ -34,7 +34,7 @@ import {
   withRegionCall,
   withRegionScope,
 } from "./values/primitives/region-scope.js";
-// Leaf, ZERO own imports — see dynamic-call-site.ts header: ambient holder lives there, not eval/evaluator.ts (would close cycle: evaluator.ts → Environment.ts → rosetta.ts).
+// Leaf, ZERO own imports — see dynamic-call-site.ts header: ambient holder lives there, not eval/evaluator.ts (would close cycle: evaluator.ts → AmbientRuntime.ts → rosetta.ts).
 import { withDynamicCallSite } from "./eval/dynamic-call-site.js";
 
 // warnMembrane lives in leaf membrane-warn.ts, shared with boxing.ts `function` boxer — value layer needn't import evaluator-heavy module just to warn.

@@ -70,7 +70,7 @@
  * samples the identical indices — a verification's result is reproducible by anyone
  * re-running it, never a coin flip.
  */
-import type { EnvironmentValue } from "../Environment.js";
+import type { AmbientValue } from "../AmbientRuntime.js";
 import type { EnvCapability } from "../common/capability.js";
 import { boxPayload, FrozenMints, replayGraphEgress, ReplayScopeError } from "./replay.js";
 import { hashGraph } from "./wireframe/hash.js";
@@ -397,7 +397,7 @@ export class SameProcessExecutor implements DrillInExecutor {
     for (const [op, payloads] of Object.entries(ingress.sources)) {
       for (const payload of payloads) frozen.push(op, payload);
     }
-    const slots: Record<string, EnvironmentValue> = {};
+    const slots: Record<string, AmbientValue> = {};
     for (const [name, payload] of Object.entries(ingress.slots)) slots[name] = boxPayload(payload);
     const replayed = await replayGraphEgress({
       program: this.program,

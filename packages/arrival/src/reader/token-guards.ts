@@ -3,7 +3,7 @@
 // numeric/character regexes (../values/primitives.ts). They are read concerns —
 // the Lexer/Parser/Formatter consult them at read time, before the evaluator ever
 // sees a form — so they live in the reader, not in eval/guards.ts (which carries
-// the evaluator's Environment/Macro world). Moved out of eval/guards.ts.
+// the evaluator's AmbientRuntime/Macro world). Moved out of eval/guards.ts.
 import { directives } from "../values/primitives.js";
 import * as specials from "./specials.js";
 

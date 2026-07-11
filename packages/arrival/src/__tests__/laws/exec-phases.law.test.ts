@@ -14,6 +14,7 @@
  *   • VALIDATION WITHOUT EXECUTION — phases 1+2+2.5, zero side effects fired.
  */
 import { describe, expect, it } from "vitest";
+import { mintFrame } from "../../AmbientRuntime.js";
 
 import { EnvCapability } from "../../common/capability.js";
 import type { Resource } from "../../common/resources.js";
@@ -102,7 +103,7 @@ describe("ownership table (§3.3) — phase 5 disposes exactly what the call ass
   });
 
   it("glass { env }: no phase product — ExecState.ambient is absent (§3.4)", async () => {
-    const state = await execState(`(+ 1 2)`, { env: user_env.inherit("law/glass") });
+    const state = await execState(`(+ 1 2)`, { env: mintFrame(user_env, "law/glass") });
     expect(state.ambient).toBeUndefined();
   });
 });

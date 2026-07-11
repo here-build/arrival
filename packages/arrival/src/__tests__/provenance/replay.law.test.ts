@@ -28,6 +28,7 @@
  * effect rows, where replay is shown to be MORE precise than the abstract cone.
  */
 import * as fc from "fast-check";
+import { mintFrame } from "../../AmbientRuntime.js";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { initBridge } from "../../index.js";
@@ -239,7 +240,7 @@ describe("replay-nondeterminism (§4 R1 + §7: frozen-payload replay stable unde
    *  migration target), one verb per source op, all sharing the SAME per-op call
    *  counter closure the legacy loop built. */
   async function mutatedEnv(calls: Map<string, number>) {
-    const env = inferenceEnv.inherit("q16-mutated-world");
+    const env = mintFrame(inferenceEnv, "q16-mutated-world");
     const symbols: Record<string, RosettaSymbolDef> = {};
     for (const op of Object.keys(SOURCES)) {
       symbols[op] = symbol.rosetta`${op}: mutated-world source (offset +1000)`({ input: [], output: [z.number] }, () => {
@@ -438,7 +439,7 @@ describe("effect-track replay-between-records (§4 CHOSEN, §7 sub-gate)", () =>
     // NEITHER pure-γ-only NOR playback-only: mutate the world (the effect op now
     // answers ×100) — the replay is IDENTICAL, because the events come from the
     // stream and the stretches from γ, and the live op is never consulted.
-    const mutated = inferenceEnv.inherit("q16-mutated-effect");
+    const mutated = mintFrame(inferenceEnv, "q16-mutated-effect");
     let liveCalls = 0;
     // Test-local EnvCapability (`symbol.rosetta` — the `env.defineRosetta` migration
     // target). `mutated` is never actually touched by `replayBetweenRecords` below (no

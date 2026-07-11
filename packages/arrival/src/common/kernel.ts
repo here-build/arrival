@@ -2,7 +2,7 @@
 // cycle detection, identity dedup, C3 linearization, and the apply loop with LIFO disposal +
 // per-pack apply timeout.
 //
-// A pack is a named, dependency-carrying, async capability contribution to an env. Environments
+// A pack is a named, dependency-carrying, async capability contribution to an env. AmbientRuntimes
 // are assembled by C3-linearizing the pack DAG and applying each pack once. The dep edge IS the
 // capability grant; the DAG is the authoring form, the assembled env is the flat runtime form.
 //
@@ -265,11 +265,11 @@ function makeCtx<E>(
 //     capability.ts's bindTarget only writes);
 //   • a resolver registered ON THE BASE ENV answers lookups from that Map for the duration of
 //     the C3 loop ONLY. Resolvers are consulted at every layer of a chain walk
-//     (`Environment._lookupWithResolvers`: own bindings → resolvers → parent), so a prelude
+//     (`AmbientRuntime._lookupWithResolvers`: own bindings → resolvers → parent), so a prelude
 //     evaluated against R — or any child scope chaining through the base — resolves the symbol
 //     exactly like the old overlay-parent did;
 //   • at the SEAL (the `finally` — success OR failure) the overlay is DROPPED: the resolver is
-//     unregistered wherever the base supports it (`ResolvingEnvironment` does), so no spent
+//     unregistered wherever the base supports it (`ResolvingAmbient` does), so no spent
 //     machinery survives assembly on any env — no per-assembly resolver ever accumulates. A
 //     structural host offering `registerResolver` but no `unregisterResolver` keeps the
 //     sealed-flag fallback (the resolver stays registered but answers nothing) — same contract,
@@ -281,7 +281,7 @@ function makeCtx<E>(
 //
 // Everything is a per-assembly closure (concurrent assemblies never share state); only the id
 // uniquifier below is module-level, so two overlapping assemblies over the SAME base register
-// distinct resolver ids (Environment.registerResolver dedups by id).
+// distinct resolver ids (AmbientRuntime.registerResolver dedups by id).
 
 /** The structural face of a resolver-capable base (mirrors scheme-env.ts's `SchemeEnv.
  *  registerResolver`/`ResolverSpec` WITHOUT importing them — the kernel stays env-agnostic;

@@ -19,7 +19,7 @@
 //   `deps` names the five packs whose free names this pack's bodies actually call
 //   (`cons`/`list`/`apply`/`length` — scheme/lists; `pair?`/`null?` — scheme/equality;
 //   `string-append` — scheme/strings; `=` — scheme/numeric; `error` — scheme/r7rs/exceptions).
-// ROW 2 — the §2.1 bake FV law: this pack lowers standalone (`global_env.inherit(...)`, a bare
+// ROW 2 — the §2.1 bake FV law: this pack lowers standalone (`mintFrame(global_env, ...)`, a bare
 //   root with none of BASE_PACKS' `.scm` preludes applied) — the FV law is a STATIC allowlist
 //   check (`ownNames(K) ∪ exports(deps) ∪ SPECIAL_FORMS/KEYWORD_SYNTAX ∪ resolver-synth`),
 //   independent of what the runtime `env` happens to already have bound, so this is the real
@@ -30,6 +30,7 @@
 //   message instead of an opaque `car`-on-wrong-shape crash deep in the body (§4.2's "a
 //   wrong-arity call... now fails at the contract boundary, with a better message").
 import { describe, expect, it } from "vitest";
+import { mintFrame } from "../../AmbientRuntime.js";
 
 import { exec, initBridge } from "../../index.js";
 import { global_env } from "../../env-roots.js";
@@ -38,14 +39,14 @@ import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeEr
 import { schemaCapability } from "../schema.js";
 import type { AEntity } from "../../common/symbol.js";
 import type { SymbolDeclaration } from "../../common/capability.js";
-import type { ResolvingEnvironment } from "../../Environment.js";
+import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 
 const capabilities = [schemaCapability];
 
 // Local evalScheme, mirroring `_fresh-env.ts`'s own — used only by the standalone
 // lower()/apply() rows below (the FV-law regression pin), never by the exec() rows.
 const evalScheme = (env: unknown, src: unknown): unknown =>
-  exec(src as string, { env: env as ResolvingEnvironment, skipBootstrapWait: true });
+  exec(src as string, { env: env as ResolvingAmbient, skipBootstrapWait: true });
 
 function resolveSymbols(): Record<string, SymbolDeclaration> {
   const { symbols } = schemaCapability.spec;
@@ -104,13 +105,13 @@ describe("arrival/schema — structural: no prelude field, every symbol is kind:
 describe("arrival/schema — the §2.1 bake FV law passes standalone (deps edge is load-bearing, not decorative)", () => {
   it("lowers cleanly against a BARE root (global_env, no BASE_PACKS preludes) with only its own declared deps", async () => {
     await initBridge();
-    const env = global_env.inherit("schema-fv-law-standalone");
+    const env = mintFrame(global_env, "schema-fv-law-standalone");
     await expect(schemaCapability.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
   });
 
   it("(regression pin) never throws DefineLocalityError/DefineForwardReferenceError/ProvenanceRoleShapeError", async () => {
     await initBridge();
-    const env = global_env.inherit("schema-fv-law-pin");
+    const env = mintFrame(global_env, "schema-fv-law-pin");
     try {
       await schemaCapability.lower({ evalScheme }).apply(env, undefined as never);
     } catch (error) {

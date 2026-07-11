@@ -11,7 +11,7 @@
 import { EnvCapability } from "../common/capability.js";
 import { symbol } from "../common/symbol.js";
 import { Syntax } from "../eval/Syntax.js";
-import { Environment } from "../Environment.js";
+import { bindValue, AmbientRuntime, mintFrame } from "../AmbientRuntime.js";
 import { extract_patterns, restore_data_gensyms, transform_syntax } from "../eval/syntax-rules.js";
 import { is_nil } from "../values/value-guards.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
@@ -29,7 +29,7 @@ import { ANil } from "../values/primitives/ANil.js";
 export default new EnvCapability("scheme/macros", {
   symbols: {
     "syntax-rules": symbol.macro`syntax-rules`(function (
-      this: Environment,
+      this: AmbientRuntime,
       macro: SchemeValue,
       // `resolver` is the EVALUATOR's resolver at define-syntax time (threaded through
       // Macro.invoke), carrying the run's capability base. (D2)
@@ -77,7 +77,7 @@ export default new EnvCapability("scheme/macros", {
       }
       const syntax = new Syntax(
         function (
-          this: Environment,
+          this: AmbientRuntime,
           code: SchemeValue,
           { macro_expand, resolver: useSiteResolver }: MacroInvokeContext,
         ) {
@@ -87,21 +87,21 @@ export default new EnvCapability("scheme/macros", {
           // null-rooted `this`. Its env IS `this` (the expansion env), so the
           // merge-frame plumbing below is unchanged; under glass byte-identical.
           const useResolver = useSiteResolver ?? new Resolver(this);
-          // The def-time syntax-child Resolver: `defResolver.child("syntax")` ≡ `env.inherit("syntax")`.
+          // The def-time syntax-child Resolver: `defResolver.child("syntax")` ≡ a `mintFrame(env, "syntax")` child.
           // Its env is the hygiene scope, shared by-ref into the merge return below.
           const defChild = defResolver.child("syntax");
           // for macros that define variables used in macro (2 levels nestting): if `this` is itself a
           // merge frame (from an outer expansion), copy its symbol-keyed gensyms up into the parent and
-          // unwrap. Routed through the LexicalScope surface (kind/ownSymbolEntries/parent.define) — a
+          // unwrap. Routed through the LexicalScope surface (kind/ownSymbolEntries/parent) + the internal bindValue — a
           // byte-identical pass-through over the env today.
           let useScope = useResolver.scope;
           if (useScope.kind === "merge") {
             for (const [sym, value] of useScope.ownSymbolEntries()) {
-              useScope.parent!.define(sym, value);
+              bindValue(useScope.parent!.env, sym, value);
             }
             useScope = useScope.parent!;
           }
-          const var_scope: Environment = useScope.env;
+          const var_scope: AmbientRuntime = useScope.env;
           let ellipsis, rules, symbols;
           TypeError.invariant(macro instanceof APair, "syntax-rules: malformed macro form");
           if (macro.car instanceof ASymbol) {
@@ -151,7 +151,7 @@ export default new EnvCapability("scheme/macros", {
                 if (new_expr) {
                   expr = new_expr;
                 }
-                const new_env = var_scope.merge(defChild.env, Syntax.__merge_env__);
+                const new_env = mintFrame(var_scope, Syntax.__merge_env__, defChild.env.__env__);
                 // FORM-RETURNING (always): hand back the transcribed FORM + its hygiene scope.
                 // The evaluator yields this form into the flat trampoline (tail position) and the
                 // macroexpand traverse re-expands it — the transformer NEVER evaluates inside

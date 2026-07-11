@@ -14,6 +14,7 @@
 // is a macro-introduced identifier (not user-supplied via a pattern variable), so it is
 // exactly the hygiene-renamed path the fix targets.
 import { describe, expect, it } from "vitest";
+import { mintFrame } from "../AmbientRuntime.js";
 import { exec, schemeToJs } from "../index.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../inference-env.js";
@@ -27,7 +28,7 @@ describe("do/while/try/define-macro — hygiene-renamed heads resolve via symbol
         (syntax-rules ()
           ((sum-to n) (do ((i 0 (+ i 1)) (acc 0 (+ acc i))) ((= i n) acc)))))
       (sum-to 5)`;
-    expect(val(await exec(src, { env: sandboxedEnv.inherit("dw1") }))).toBe(10);
+    expect(val(await exec(src, { env: mintFrame(sandboxedEnv, "dw1") }))).toBe(10);
   });
 
   it("user syntax-rules macro expanding to `while` resolves the keyword", async () => {
@@ -39,7 +40,7 @@ describe("do/while/try/define-macro — hygiene-renamed heads resolve via symbol
     // The test is false on entry, so the body never runs — this only proves the
     // hygiene-renamed `while` head dispatches (no "Unbound variable" throw), not
     // any particular loop behavior. `while` returns unspecified (void).
-    await expect(exec(src, { env: sandboxedEnv.inherit("dw2") })).resolves.not.toThrow();
+    await expect(exec(src, { env: mintFrame(sandboxedEnv, "dw2") })).resolves.not.toThrow();
   });
 
   it("user syntax-rules macro expanding to `try`/`catch` resolves the keyword", async () => {
@@ -51,7 +52,7 @@ describe("do/while/try/define-macro — hygiene-renamed heads resolve via symbol
     // val()/schemeToJs unwraps a symbol result to an apostrophe-prefixed string
     // (ASymbol's documented opaque-exit marker — see control-forms-keywords.test.ts's
     // `repr` helper for the same convention).
-    expect(String(val(await exec(src, { env: sandboxedEnv.inherit("dw3") })))).toBe("'caught");
+    expect(String(val(await exec(src, { env: mintFrame(sandboxedEnv, "dw3") })))).toBe("'caught");
   });
 
   it("user syntax-rules macro expanding to `define-macro` resolves the keyword", async () => {
@@ -65,6 +66,6 @@ describe("do/while/try/define-macro — hygiene-renamed heads resolve via symbol
         (syntax-rules ()
           ((use-doubler x) (begin (define-macro (dbl y) (list '+ y y)) (dbl x)))))
       (use-doubler 21)`;
-    expect(val(await exec(src, { env: sandboxedEnv.inherit("dw4") }))).toBe(42);
+    expect(val(await exec(src, { env: mintFrame(sandboxedEnv, "dw4") }))).toBe(42);
   });
 });

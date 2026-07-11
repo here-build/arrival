@@ -30,11 +30,11 @@ import type { AString } from "../values/primitives/AString.js";
 import type { AValue } from "../values/primitives/AValue.js";
 import { jsToScheme } from "../rosetta.js";
 import { provOf } from "../values/lineage-shadow.js";
-import type { Environment } from "../Environment.js";
+import type { AmbientRuntime } from "../AmbientRuntime.js";
 import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../values/op-helpers.js";
 import type { SchemeValue } from "../values/types.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../Environment.js";
+import { bindValue, mintFrame } from "../AmbientRuntime.js";
 
 /** Stamp a single source-id onto a string input (the per-element id carrier). Codec
  *  encode + withProvenance, not a direct AString construction. */
@@ -48,7 +48,7 @@ export const sNum = (n: number, p: number): AValue => z.number.encode(n).withPro
  *  `EnvCapability` (`symbol.rosetta` verbs) via `cap.lower({}).apply(env, undefined as
  *  never)`, which is async, hence the `Promise<void>` arm (widened from the legacy
  *  `defineRosetta`-only, synchronous-only shape). */
-export type EnvSetup = (env: Environment) => void | Promise<void>;
+export type EnvSetup = (env: AmbientRuntime) => void | Promise<void>;
 
 let seq = 0;
 
@@ -75,7 +75,7 @@ export async function runRaw(
   setup?: EnvSetup,
 ): Promise<SchemeValue | undefined> {
   await initBridge();
-  const env = inferenceEnv.inherit(`lin-test-${seq++}`);
+  const env = mintFrame(inferenceEnv, `lin-test-${seq++}`);
   await setup?.(env);
   for (const [k, v] of Object.entries(binds)) bindValue(env, k, jsToScheme(CONSTANT_CTX, v));
   const savedOracle = isEagerProvenanceOracleEnabled();

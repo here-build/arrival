@@ -12,7 +12,7 @@
 // `resolve_promises` collapses a tree of promises into a single promise (or
 // returns the argument untouched when there are none).
 //
-// Both are self-contained (Environment frame + LambdaContext + value kernel),
+// Both are self-contained (AmbientRuntime frame + LambdaContext + value kernel),
 // so a stdlib pack can import the applier without pulling in the evaluator.
 // ----------------------------------------------------------------------
 import { is_promise } from "./guards.js";

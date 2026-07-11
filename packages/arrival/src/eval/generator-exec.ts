@@ -9,7 +9,7 @@
  *   const results = await exec("(+ 1 2)", { env: myEnv });
  */
 
-import { Environment } from "../Environment.js";
+import { AmbientRuntime, mintFrame, mintPlainFrame } from "../AmbientRuntime.js";
 import { user_env, global_env } from "../env-roots.js";
 import run, { evaluate, expectValue, ArrivalError, type EvalTap } from "./evaluator.js";
 import { isHostRuntimeBug } from "../errors.js";
@@ -59,9 +59,9 @@ import { toJS } from "../membrane.js";
  * defines ACCUMULATE across exec calls (matches pre-cut `user_env` accumulation).
  * Custom-env (`{ env }`) callers never touch it. Lazy: identity is a leaf (no env-roots cycle).
  */
-let _defaultLexicalRoot: Environment | undefined;
-function defaultLexicalRoot(): Environment {
-  return (_defaultLexicalRoot ??= new Environment("user-program", {}, null));
+let _defaultLexicalRoot: AmbientRuntime | undefined;
+function defaultLexicalRoot(): AmbientRuntime {
+  return (_defaultLexicalRoot ??= mintPlainFrame("user-program"));
 }
 
 /**
@@ -124,13 +124,13 @@ export function ensureBaseAssembled(): Promise<void> {
 //
 // ENV T1 narrowing: `env` arrives as the structural `SchemeEnv` the pack machinery is
 // typed against, but every assembly this module drives targets a concrete env (the
-// env-roots `ResolvingEnvironment`s or an `.inherit()` child of one), and `exec`'s
-// `{ env }` option takes the concrete class. Plain `Environment` no longer implements
-// `SchemeEnv` (registerResolver lives on `ResolvingEnvironment` — see Environment.ts),
-// so the old direct `as Environment` lost its type overlap; narrow HONESTLY on the
+// env-roots `ResolvingAmbient`s or a `mintFrame` child of one), and `exec`'s
+// `{ env }` option takes the concrete class. Plain `AmbientRuntime` no longer implements
+// `SchemeEnv` (registerResolver lives on `ResolvingAmbient` — see AmbientRuntime.ts),
+// so the old direct `as AmbientRuntime` lost its type overlap; narrow HONESTLY on the
 // runtime fact (instanceof) instead of a blind double-cast.
 const preludeExec = (env: SchemeEnv, src: string): Promise<unknown[]> => {
-  invariant(env instanceof Environment, "prelude evalScheme: expected a concrete Environment");
+  invariant(env instanceof AmbientRuntime, "prelude evalScheme: expected a concrete AmbientRuntime");
   return exec(src, { env, skipBootstrapWait: true });
 };
 const capabilityEvalScheme: EvalSchemeInto = preludeExec;
@@ -166,7 +166,7 @@ export interface AssembleAmbientOptions {
 export async function assembleAmbient(opts: AssembleAmbientOptions = {}): Promise<AssembledAmbient> {
   await ensureBaseAssembled();
   const capabilities = opts.capabilities ?? [];
-  const base = user_env.inherit("exec-capabilities");
+  const base = mintFrame(user_env, "exec-capabilities");
   const lowered = capabilities.map((c) =>
     c.lower({ evalScheme: capabilityEvalScheme, config: opts.config, degradation: opts.degradation }),
   );
@@ -213,9 +213,9 @@ export interface ExecOptions {
    * use `env` OR the cut options.
    *
    * Typed `SchemeEnv` (V2, arrival-environment-privatization.md §II.3/D2), not the
-   * concrete `Environment` — this frees external glass callers from the
-   * `ReturnType<typeof sandboxedEnv.inherit>` alias; they now type against the already-
-   * exported structural contract. Narrows back to `Environment` honestly (`instanceof`,
+   * concrete `AmbientRuntime` — this frees external glass callers from the
+   * retired instance-surface alias; they now type against the already-
+   * exported structural contract. Narrows back to `AmbientRuntime` honestly (`instanceof`,
    * the `preludeExec` precedent above) at the one seam below that needs the concrete
    * frame class.
    */
@@ -295,7 +295,7 @@ export interface ExecOptions {
    * evaluator's `currentRunResolver()` back-channel at the require apply boundary.
    */
   resolver?: Resolver;
-  dynamic_env?: Environment;
+  dynamic_env?: AmbientRuntime;
   use_dynamic?: boolean;
   /** Tap for tracing per-form evaluation enter/exit. See EvalTap. */
   tap?: EvalTap;
@@ -553,16 +553,16 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     irLineage,
   } = options;
   // Default env = env-roots leaf `user_env` (arrival's interaction scope,
-  // `global_env.inherit("user-env")`), sourced STATICALLY so this entry never
+  // `mintFrame(global_env, "user-env")`), sourced STATICALLY so this entry never
   // imports the stdlib monolith. Bootstrap gate below drives population:
   // `ensureBaseAssembled` assembles native packs + the `.scm` base.
   const actualEnv = env ?? user_env;
-  // SchemeEnv → Environment: `user_env` is always concrete, so this only narrows
+  // SchemeEnv → AmbientRuntime: `user_env` is always concrete, so this only narrows
   // anything on the GLASS path (`env` set) — but every consumer below (Resolver,
   // Capabilities.assembled, classifierFromEnv, sealResolutionChain) needs the
   // concrete frame regardless of path, so the check sits right here, at the seam,
   // same honest-instanceof posture as `preludeExec` above (not a cast — a runtime fact).
-  invariant(actualEnv instanceof Environment, "exec: glass `env` must be a concrete Environment");
+  invariant(actualEnv instanceof AmbientRuntime, "exec: glass `env` must be a concrete AmbientRuntime");
 
   // Lazy self-init the runtime bootstrap (native packs + .scm base), so embedders
   // never trigger it manually. `ensureBaseAssembled` is realm-cached (one
@@ -888,8 +888,8 @@ export async function execExpr(
   }: ExecOptions = {},
 ): Promise<SchemeValue> {
   const actualEnv = env ?? user_env;
-  // Same honest SchemeEnv → Environment narrow as execState's seam above.
-  invariant(actualEnv instanceof Environment, "execExpr: glass `env` must be a concrete Environment");
+  // Same honest SchemeEnv → AmbientRuntime narrow as execState's seam above.
+  invariant(actualEnv instanceof AmbientRuntime, "execExpr: glass `env` must be a concrete AmbientRuntime");
 
   // See exec(): realm-cached lazy bootstrap, awaited once.
   if (!skipBootstrapWait) await ensureBaseAssembled();

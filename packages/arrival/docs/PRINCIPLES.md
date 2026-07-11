@@ -52,7 +52,7 @@ function is a value-layer-only term: the moment it enters value space, the progr
 region the second interpreter cannot enter.
 *Revealed by:* the AProcedure arm, the LAMBDA brand passthrough, curry's bare-arrow leak,
 the legacy `SymbolDeclaration` arm's bare-fn form (capability.ts, wired through
-`Environment.ts`'s internal `bindRosetta` — the retired public `env.defineRosetta` method's
+`AmbientRuntime.ts`'s internal `bindRosetta` — the retired public `env.defineRosetta` method's
 surviving wiring) — every one a JS artifact living in value space without lineage.
 *Forbids:* new bare-fn producers; `typeof === "function"` as a value-space callability test;
 env bindings whose stored value has no class.

@@ -3,7 +3,7 @@
 // form (native → `env.set(verb, impl)`; rosetta → `env.set(verb, gatedRun)`), just a
 // different target scope. Design doc §1.3/§4 step 3.
 //
-// This is the CAPABILITY-LEVEL unit proof (isolated — no real Environment/inherit chain,
+// This is the CAPABILITY-LEVEL unit proof (isolated — no real AmbientRuntime/inherit chain,
 // no assembleEnv): a bare EnvCapability with one preludeOnly rosetta whose bind target we can
 // distinguish because `ctx.preludeScope` is a SEPARATE recording env from the runtime env.
 
@@ -16,7 +16,7 @@ import { symbol } from "../symbol.js";
 import * as z from "../scheme-zod.js";
 import type { SchemeEnv } from "../scheme-env.js";
 import type { PreludeBindTarget } from "../kernel.js";
-import { ResolvingEnvironment } from "../../Environment.js";
+import { ResolvingAmbient, mintResolvingFrame } from "../../AmbientRuntime.js";
 import { AString } from "../../values/primitives/AString.js";
 import { CallCtx } from "../symbols/_bake.js";
 
@@ -26,11 +26,11 @@ type WithCtxFn<Args extends [...unknown[]] = [...unknown[]], Result extends unkn
 ) => Result;
 
 /** A REAL recording runtime env (hermetic-Environment ruling: capability apply narrows to
- *  the concrete `Environment`; the JS-side write surface is retired). `verbs` is a read
+ *  the concrete `AmbientRuntime`; the JS-side write surface is retired). `verbs` is a read
  *  facade over the frame's own storage record, tagged so a test can tell WHICH scope a
  *  verb landed in (the runtime env vs. the prelude overlay). */
-function recordingEnv(tag: string): { env: ResolvingEnvironment; verbs: Record<string, unknown>; tag: string } {
-  const env = new ResolvingEnvironment(`prelude-only-${tag}`, {}, null);
+function recordingEnv(tag: string): { env: ResolvingAmbient; verbs: Record<string, unknown>; tag: string } {
+  const env = mintResolvingFrame(`prelude-only-${tag}`, {}, null);
   const verbs = new Proxy({} as Record<string, unknown>, { get: (_t, name) => env.__env__[name as string] });
   return { env, verbs, tag };
 }

@@ -25,7 +25,7 @@ import invariant from "tiny-invariant";
 import { theVoid } from "../values/primitives/AVoid.js";
 import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
 import { AValue, unionProvenance } from "../values/primitives/AValue.js";
-import { Environment, type EnvironmentValue } from "../Environment.js";
+import { bindValue, AmbientRuntime, type AmbientValue } from "../AmbientRuntime.js";
 import { unboundVariableError } from "../unbound-variable.js";
 import { ArrivalError, EvalError, isHostRuntimeBug, R7RSError, type SourceLocation } from "../errors.js";
 import { is_callable, is_false, is_function, is_macro, is_promise } from "./guards.js";
@@ -149,14 +149,14 @@ export interface EvalContext {
    * The name-resolution + scope-construction facade — the SINGLE binding/resolution
    * channel: the lexical {@link LexicalScope} chain plus the {@link Capabilities} base
    * it falls through to, with `resolver.env` the underlying lexical frame
-   * ({@link Environment} storage). Both exec entries and every frame the evaluator
+   * ({@link AmbientRuntime} storage). Both exec entries and every frame the evaluator
    * builds set it; the macro seam stages it through {@link MacroInvokeContext}. There
    * is no coexisting `env` field — the frame env is reached ONLY as `resolver.env`.
    * Optional because an external caller could still hand a bare `EvalContext`; the
    * evaluator's own frame sites always set it.
    */
   resolver?: Resolver;
-  dynamic_env?: Environment;
+  dynamic_env?: AmbientRuntime;
   use_dynamic?: boolean;
   error?: (e: Error, code?: SchemeValue) => void;
   /** Stack frames for error reporting */
@@ -317,7 +317,7 @@ let _currentRunResolver: Resolver | undefined = undefined;
 /** The run's current env at apply time — the published resolver's lexical frame.
  *  Read by `to_array`'s heap-meter lookup (env/pack-helpers.ts) in place of the
  *  erased env-as-`this`. */
-export const currentRunEnv = (): Environment | undefined => _currentRunResolver?.env;
+export const currentRunEnv = (): AmbientRuntime | undefined => _currentRunResolver?.env;
 
 /**
  * The run's current COMPOSED resolver at apply time — the same save/restore holder
@@ -565,9 +565,9 @@ function makeBounce(generator: Generator<unknown, unknown, unknown>): Bounce {
  * Narrow a resolved environment binding to what the evaluator can carry: a value,
  * or a `Macro`/`Syntax` expander.
  *
- * `Resolver.resolve`/`lookup` return an `EnvironmentValue | undefined`. Three of
+ * `Resolver.resolve`/`lookup` return an `AmbientValue | undefined`. Three of
  * those members can never be carried by the evaluator and are thrown with a clear
- * message: an unbound name (`undefined`), an `Environment` (a scope is neither a
+ * message: an unbound name (`undefined`), an `AmbientRuntime` (a scope is neither a
  * value nor an operator), and a `RegExp` (internal-only — number-parsing and
  * syntax-rules patterns — never resolved as a binding). What remains is a value
  * (`SchemeValue`, which includes a `AProcedure` procedure) OR a `Macro`/`Syntax`.
@@ -581,7 +581,7 @@ function makeBounce(generator: Generator<unknown, unknown, unknown>): Bounce {
  * by which a macro binding is installed. Callers split value vs expander with
  * `is_macro` where they care (the value-channel tap skips an expander).
  */
-function resolvedBindingOrThrow(binding: EnvironmentValue | undefined, sym: ASymbol): SchemeValue | Macro | Syntax {
+function resolvedBindingOrThrow(binding: AmbientValue | undefined, sym: ASymbol): SchemeValue | Macro | Syntax {
   if (binding === undefined) {
     // Structurally unreachable via the ordinary `Resolver.resolve` call path (it
     // throws `unboundVariableError` itself before ever returning `undefined` —
@@ -591,7 +591,7 @@ function resolvedBindingOrThrow(binding: EnvironmentValue | undefined, sym: ASym
     // throw sites, which enumerate the chain they actually missed against).
     throw unboundVariableError(symbol_name(sym));
   }
-  if (binding instanceof Environment) {
+  if (binding instanceof AmbientRuntime) {
     throw new TypeError(`\`${symbol_name(sym)}' is an environment — neither a value nor applicable`);
   }
   if (binding instanceof RegExp) {
@@ -626,7 +626,7 @@ function symbol_name(sym: ASymbol): string {
 }
 
 // ============================================================================
-// Environment lookup without lips runtime dependency
+// AmbientRuntime lookup without lips runtime dependency
 // ============================================================================
 //
 // Name-resolution is the Resolver's job (eval/Resolver.ts owns the throwing,
@@ -1385,7 +1385,7 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       value.__name__ = symbol_name(name);
     }
 
-    ctxResolver(ctx).define(name, value);
+    bindValue(ctxResolver(ctx).env, name, value);
     return theVoid;
   }
 
@@ -1406,7 +1406,7 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     value.__name__ = symbol_name(first);
   }
 
-  ctxResolver(ctx).define(first, value);
+  bindValue(ctxResolver(ctx).env, first, value);
   return theVoid;
 }
 
@@ -1414,7 +1414,7 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 // the special-form table so env lookup reaches the door, exactly like delay /
 // parameterize). Lexical variable rebinding is fundamentally incompatible with
 // arrival's pure-dataflow model: every value carries the lineage of WHERE it was
-// bound, so re-binding a name would sever that lineage. The `Environment.ref`/
+// bound, so re-binding a name would sever that lineage. The `AmbientRuntime.ref`/
 // `Resolver.env.ref` mutation-targeting walk has no evaluator caller — it survives
 // only for hygiene's `Capabilities.refFrame` IDENTITY probe, which is not a
 // mutation path.
@@ -1441,13 +1441,13 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     let i = 0;
     while (argNode instanceof APair) {
       const argName = argNode.car;
-      if (argName instanceof ASymbol) callResolver.define(argName, values[i]);
+      if (argName instanceof ASymbol) bindValue(callResolver.env, argName, values[i]);
       i++;
       argNode = argNode.cdr;
     }
     // Rest arg: (lambda (a b . rest) …)
     if (argNode instanceof ASymbol) {
-      callResolver.define(argNode, APair.fromArray(ctx.runCtx, values.slice(i), false));
+      bindValue(callResolver.env, argNode, APair.fromArray(ctx.runCtx, values.slice(i), false));
     }
     // Dynamic call site: the caller (evaluatePair / wrapLambdaValue) set the holder just before
     // invoking; else fall back to the lexical ctx's invocation. Read here in the synchronous
@@ -1500,7 +1500,7 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // The macro body returns `run(...)` — a `Promise<SchemeValue>` of the expansion
   // FORM; the consumer (`fn.invoke` site) `yield`s it via `is_promise`.
   const macro = new Macro(symbol_name(name), function (
-    this: Environment,
+    this: AmbientRuntime,
     code: SchemeValue,
     evalArgs: EvalContext,
   ): Promise<SchemeValue> {
@@ -1515,7 +1515,7 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       const argName = argNode.car;
       if (argName instanceof ASymbol) {
         const value = codeNode instanceof APair ? codeNode.car : nil;
-        macroResolver.define(argName, value);
+        bindValue(macroResolver.env, argName, value);
       }
       i++;
       argNode = argNode.cdr;
@@ -1525,7 +1525,7 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     }
 
     if (argNode instanceof ASymbol) {
-      macroResolver.define(argNode, codeNode);
+      bindValue(macroResolver.env, argNode, codeNode);
     }
 
     // Forward signal so macro expansion is also budget-bounded.
@@ -1533,7 +1533,7 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       signal: evalArgs.signal,
     });
   });
-  ctxResolver(ctx).define(name, macro);
+  bindValue(ctxResolver(ctx).env, name, macro);
 
   return theVoid;
 }
@@ -1840,7 +1840,7 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       const loopResolver = letResolver.child("named-let", "named-let");
 
       for (const [i, param] of params.entries()) {
-        loopResolver.define(param, values[i]);
+        bindValue(loopResolver.env, param, values[i]);
       }
 
       const dynamicInv = currentDynamicCallSite() ?? ctx.currentInvocation;
@@ -1879,7 +1879,7 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     loopLambda.__name__ = symbol_name(name);
     loopLambda.__params__ = params.map((p) => symbol_name(p));
 
-    letResolver.define(name, loopLambda);
+    bindValue(letResolver.env, name, loopLambda);
   }
 
   // Binding RHS expressions are non-tail (their values feed into the let
@@ -1913,7 +1913,7 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   }
 
   for (const [i, varName] of names.entries()) {
-    letResolver.define(varName, values[i]);
+    bindValue(letResolver.env, varName, values[i]);
   }
 
   // Evaluate body — inherits the let's tail flag via ctx spread; pass-through
@@ -1955,7 +1955,7 @@ function* evalLetStar(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       value = yield value;
     }
 
-    letStarResolver.define(varName, value);
+    bindValue(letStarResolver.env, varName, value);
     bindNode = bindNode.cdr;
   }
 
@@ -1997,8 +1997,8 @@ function* evalLetrec(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     // letrec first pass: the name exists but is unassigned until the second
     // pass overwrites it. theVoid is the unassigned-slot sentinel (referencing
     // it before assignment is an R7RS error caught elsewhere); `undefined` is
-    // not a SchemeValue / EnvironmentValue.
-    letrecResolver.define(varName, theVoid);
+    // not a SchemeValue / AmbientValue.
+    bindValue(letrecResolver.env, varName, theVoid);
     bindingList.push({ name: varName, expr: valExpr });
     bindNode = bindNode.cdr;
   }
@@ -2010,7 +2010,7 @@ function* evalLetrec(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     if (is_promise(value)) {
       value = yield value;
     }
-    letrecResolver.define(name, value);
+    bindValue(letrecResolver.env, name, value);
   }
 
   // Evaluate body — inherits letrec's tail flag; pass-through (tail-collapsible).
@@ -2534,7 +2534,7 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       initValue = yield initValue;
     }
 
-    doResolver.define(varName, initValue);
+    bindValue(doResolver.env, varName, initValue);
     vars.push({ name: varName, step: stepExpr });
 
     bindNode = bindNode.cdr;
@@ -2579,7 +2579,7 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
     for (const [i, { name, step }] of vars.entries()) {
       if (step !== null) {
-        doResolver.define(name, newValues[i]);
+        bindValue(doResolver.env, name, newValues[i]);
       }
     }
   }
@@ -2721,7 +2721,7 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
         delete errObj.cause;
         delete errObj.fileName;
       }
-      catchResolver.define(varName, errorValue);
+      bindValue(catchResolver.env, varName, errorValue);
 
       try {
         // Forward signal: a catch handler running an unbounded computation

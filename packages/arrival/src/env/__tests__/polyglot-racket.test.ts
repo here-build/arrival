@@ -2,6 +2,7 @@
 // macros and the dict accessor family. Split out of polyglot.test.ts (V,
 // 2026-07-10 dialect split — see polyglot.ts's header for the full rationale).
 import { execState, type ExecOptions } from "../../index.js";
+import { mintFrame } from "../../AmbientRuntime.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
 import { assembleEnv } from "../../common/kernel.js";
@@ -16,7 +17,7 @@ async function exec(code: string, options?: ExecOptions) {
 
 describe("@here.build/arrival/polyglot-racket", () => {
   it("installs ~>/~>> (aliasing Clojure's ->/->>) and dict-count, assembled STANDALONE", async () => {
-    const env = sandboxedEnv.inherit("polyglot-racket-test");
+    const env = mintFrame(sandboxedEnv, "polyglot-racket-test");
     const evalScheme = (e: SchemeEnv, src: string) => exec(src, { env: e as never });
     // Assembling JUST polyglot-racket pulls in scheme/polyglot-clojure (for the
     // ->/->> that ~>/~>> expand to, and str) transitively via its own declared

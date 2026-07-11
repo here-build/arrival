@@ -1,5 +1,5 @@
 // The native root environments — created EMPTY here as a cycle-neutral leaf
-// (this module imports ONLY Environment; like boot.ts it has no arrival-internal
+// (this module imports ONLY AmbientRuntime; like boot.ts it has no arrival-internal
 // cycle). Population is owned entirely by `ensureBaseAssembled`
 // (eval/generator-exec.ts), lazily on first exec, realm-cached: no module-load
 // side effects, so the package keeps `sideEffects: false`.
@@ -27,7 +27,7 @@
 //   chain (generator-exec's realm-cached `defaultLexicalRoot` — REPL semantics
 //   preserved exactly), never on this frame. Hermetic callers pass `{ env }`
 //   (glass — live walk, unbaked by definition) or `{ capabilities }` (assembles
-//   + seals a FRESH `user_env.inherit(...)` child per call). The provenance
+//   + seals a FRESH `mintFrame(user_env, ...)` child per call). The provenance
 //   spec's hermetic replay envs likewise assemble fresh and never touch this
 //   shared frame.
 //
@@ -40,12 +40,13 @@
 // re-exports `user_env as env` and keeps both spellings public — renaming is
 // downstream churn with zero semantic gain, so the heritage names stay.
 //
-// Both roots are `ResolvingEnvironment` — the baked-capability specialization that
+// Both roots are `ResolvingAmbient` — the baked-capability specialization that
 // carries fallback resolvers (env-agnostic packs/kernel machinery register onto these
-// two, never onto a plain lexical frame). `user_env`'s `.inherit()` call below resolves
-// to the overridden, subtype-preserving method, so it comes out `ResolvingEnvironment`
-// too, with zero extra ceremony here.
-import { ResolvingEnvironment } from "./Environment.js";
+// two, never onto a plain lexical frame). Both are born through the module-internal
+// minters (the monadic-birth ruling: no public constructor arm, no `inherit`) —
+// `mintFrame`'s subtype-preserving dispatch makes `user_env` come out
+// `ResolvingAmbient` too, with zero extra ceremony here.
+import { mintFrame, mintResolvingFrame } from "./AmbientRuntime.js";
 
-export const global_env = new ResolvingEnvironment("global", {}, undefined);
-export const user_env = global_env.inherit("user-env");
+export const global_env = mintResolvingFrame("global");
+export const user_env = mintFrame(global_env, "user-env");

@@ -27,11 +27,11 @@ import { AJSArray } from "../../../values/primitives/AJSArray.js";
 import { ADict } from "../../../values/primitives/ADict.js";
 import { collapseProvenance } from "../../../provenance-collapse.js";
 import * as z from "../../../common/scheme-zod.js";
-import type { ResolvingEnvironment } from "../../../Environment.js";
+import type { ResolvingAmbient } from "../../../AmbientRuntime.js";
 import type { SchemeValue } from "../../../values/types.js";
 import type { CarrierRow } from "./carriers.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../../../Environment.js";
+import { bindValue } from "../../../AmbientRuntime.js";
 
 /**
  * Box a raw JS leaf — or (the only path `src` actually takes, see below) an
@@ -50,7 +50,7 @@ function stampFresh(raw: unknown, id: number): AValue {
 }
 
 export interface LawEnv {
-  readonly env: ResolvingEnvironment;
+  readonly env: ResolvingAmbient;
   /** Ids minted by this env's `src`, in call order — read AFTER the mint3 snippet
    *  (or any further `src` calls) has run. */
   readonly mintedIds: readonly number[];
@@ -95,7 +95,7 @@ export async function withLawEnv(): Promise<LawEnv> {
 }
 
 export interface Minted {
-  readonly env: ResolvingEnvironment;
+  readonly env: ResolvingAmbient;
   readonly value: SchemeValue;
   /** The 3 ids minted by this exact mint3 call, in call/argument order. */
   readonly ids: readonly [number, number, number];
@@ -115,7 +115,7 @@ export async function mint3(carrier: CarrierRow): Promise<Minted> {
 }
 
 export interface MintedPair {
-  readonly env: ResolvingEnvironment;
+  readonly env: ResolvingAmbient;
   readonly a: SchemeValue;
   readonly b: SchemeValue;
   readonly idsA: readonly [number, number, number];

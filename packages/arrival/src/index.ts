@@ -19,7 +19,7 @@ export { eof } from "./values/primitives/EOF.js";
 //   • define accumulation        → `exec({ scope })` + `LexicalScope.fresh()`
 //   • session/decomposed reuse   → `assembleAmbient` + `exec({ ambient, scope })`
 // inference-env.ts itself is untouched (the identity boundary holds internally); only
-// the public export retired. The barrel now contains ZERO Environment instances.
+// the public export retired. The barrel now contains ZERO AmbientRuntime instances.
 // Interop sealing — `@arrival.private` (+ `markInteropBoundary`) marks a class opaque to
 // a Scheme member-read (`(@ x :internal)` → nil). `markSandboxPrivate`/`markAsSandboxBoundary`
 // are deprecated aliases kept for cross-package consumers (arrival-chain).
@@ -115,7 +115,7 @@ export type { AList } from "./values/types.js";
 
 // Classes that may be needed for type checking or extension
 export { EOF as EOF } from "./values/primitives/EOF.js";
-// Environment is INTERNAL-ONLY — the concrete scope-node is not part of the public
+// AmbientRuntime is INTERNAL-ONLY — the concrete scope-node is not part of the public
 // surface (consumers type against the structural `SchemeEnv` below).
 
 // Invocation-context metadata registry (the rosetta-type side-table), held off the
@@ -124,7 +124,7 @@ export { EOF as EOF } from "./values/primitives/EOF.js";
 export { rosettaTypesOf } from "./env-registries.js";
 
 // The structural env contract cross-package packs/consumers type against (never the
-// concrete `Environment` class) — re-surfaced from `./common/scheme-env.ts` (also
+// concrete `AmbientRuntime` class) — re-surfaced from `./common/scheme-env.ts` (also
 // reachable via the `@here.build/arrival/scheme-env` subpath) for barrel-style consumers.
 export { type SchemeEnv, type RosettaSpec, type ResolverSpec } from "./common/scheme-env.js";
 

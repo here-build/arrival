@@ -18,7 +18,7 @@ import { CONSTANT_CTX, makeRunContext, type RunContext } from "../../values/prim
 import { EnvCapability } from "../capability.js";
 import { symbol, type RosettaSymbolDef, type CallCtx } from "../symbol.js";
 import * as z from "../scheme-zod.js";
-import { ResolvingEnvironment } from "../../Environment.js";
+import { ResolvingAmbient, mintResolvingFrame } from "../../AmbientRuntime.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
@@ -30,11 +30,11 @@ import { tf } from "../../values/tagless-final.js";
 import type { SchemeValue } from "../../values/types.js";
 
 /** A SchemeEnv that records every `set` binding (native + rosetta SymbolDefs route through set). */
-function recordingEnv(): { env: ResolvingEnvironment; verbs: Record<string, ARosettaProcedure> } {
+function recordingEnv(): { env: ResolvingAmbient; verbs: Record<string, ARosettaProcedure> } {
   // A REAL frame (hermetic-Environment ruling: capability apply narrows to the concrete
-  // `Environment`); `verbs` reads the frame's own storage record — same boundary narrow
+  // `AmbientRuntime`); `verbs` reads the frame's own storage record — same boundary narrow
   // the old synthetic recorder did.
-  const env = new ResolvingEnvironment("rosetta-symbol-recording", {}, null);
+  const env = mintResolvingFrame("rosetta-symbol-recording", {}, null);
   const verbs = new Proxy({} as Record<string, ARosettaProcedure>, { get: (_t, n) => env.__env__[n as string] });
   return { env, verbs };
 }

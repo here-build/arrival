@@ -28,6 +28,7 @@
 //     firewall covers the formal, not the whole call — today's honest, whole-call-firewalled
 //     interim per §3.4's DEFERRED per-position walker note).
 import { describe, expect, it } from "vitest";
+import { mintFrame } from "../../AmbientRuntime.js";
 
 import { exec, execState, initBridge, type ExecOptions } from "../../index.js";
 import { AString } from "../../values/primitives/AString.js";
@@ -37,14 +38,14 @@ import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeEr
 import { overridableCapability } from "../overridable.js";
 import type { AEntity, DefineSyntaxSymbolDef } from "../../common/symbol.js";
 import type { SymbolDeclaration } from "../../common/capability.js";
-import type { ResolvingEnvironment } from "../../Environment.js";
+import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 
 const capabilities = [overridableCapability];
 
 // Local evalScheme, mirroring `_fresh-env.ts`'s own — used only by the standalone
 // lower()/apply() rows below (the FV-law regression pin), never by the exec() rows.
 const evalScheme = (env: unknown, src: unknown): unknown =>
-  exec(src as string, { env: env as ResolvingEnvironment, skipBootstrapWait: true });
+  exec(src as string, { env: env as ResolvingAmbient, skipBootstrapWait: true });
 
 // Resolves the pack's builder-form `symbols(activation)` the exact same way `lower()` itself
 // does internally (capability.ts:244) — a REAL `Activation` (`buildDegradationInfo` is the same
@@ -85,7 +86,7 @@ describe("arrival/overridable — structural: no prelude field, define-syntax ki
 describe("arrival/overridable — the §2.1 bake FV law is out of scope for defineSyntax (regression pin)", () => {
   it("lowers standalone (existing deps unchanged), never throws a bake FV/role door", async () => {
     await initBridge();
-    const env = global_env.inherit("overridable-standalone");
+    const env = mintFrame(global_env, "overridable-standalone");
     await expect(
       overridableCapability.lower({ evalScheme, config: { params: {} } }).apply(env, undefined as never),
     ).resolves.not.toThrow();
@@ -93,7 +94,7 @@ describe("arrival/overridable — the §2.1 bake FV law is out of scope for defi
 
   it("never throws DefineLocalityError/DefineForwardReferenceError/ProvenanceRoleShapeError", async () => {
     await initBridge();
-    const env = global_env.inherit("overridable-fv-pin");
+    const env = mintFrame(global_env, "overridable-fv-pin");
     try {
       await overridableCapability.lower({ evalScheme, config: { params: {} } }).apply(env, undefined as never);
     } catch (error) {

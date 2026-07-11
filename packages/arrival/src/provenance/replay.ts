@@ -52,7 +52,7 @@
  *      stable FROM. Refusal-with-route, never a wrong value.
  */
 import { execState } from "../eval/generator-exec.js";
-import { bindRosetta, type EnvironmentValue, type ResolvingEnvironment } from "../Environment.js";
+import { bindRosetta, mintFrame, type AmbientValue, type ResolvingAmbient } from "../AmbientRuntime.js";
 import { collapseProvenance } from "../provenance-collapse.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { jsToScheme, schemeToJs } from "../rosetta.js";
@@ -184,7 +184,7 @@ export async function replayGraphEgress(opts: ReplayGraphOptions): Promise<Repla
 
 /** The recursive walk `replayGraphEgress` wraps (shared base env, one silent region). */
 async function replayGraphIn(
-  base: ResolvingEnvironment,
+  base: ResolvingAmbient,
   program: WireframeProgram,
   graph: WireframeGraph,
   frozen: FrozenMints,
@@ -207,7 +207,7 @@ async function replayGraphIn(
   };
 
   const gammaWire = async (wire: EmittedWire): Promise<SchemeValue> => {
-    const ingress: Record<string, EnvironmentValue> = {};
+    const ingress: Record<string, AmbientValue> = {};
     for (const ref of wire.paramRefs) {
       if (ref.kind === "slot") {
         const bound = slots[ref.name];
@@ -274,7 +274,7 @@ async function replayGraphIn(
             `template "${node.name}" is absent or has no egress — nothing to replay`,
           );
         }
-        const args: Record<string, EnvironmentValue> = {};
+        const args: Record<string, AmbientValue> = {};
         for (let k = 0; k < template.params.length; k++) {
           args[template.params[k]] = await gammaWire(wireFor(idx, `arg${k}`));
         }
@@ -351,11 +351,11 @@ export async function replayProgramWithPlayback(opts: PlaybackReplayOptions): Pr
   const { source, playback, basePacks = [], config } = opts;
   return withSilentRegion(async () => {
     const base = await hermeticEnv(basePacks, "", {}, config);
-    const frame = base.inherit("provenance-playback");
+    const frame = mintFrame(base, "provenance-playback");
     for (const [op, payloads] of playback) {
       const queue = [...payloads];
       // `frame.defineRosetta` retired (public method hard-deleted) — `bindRosetta`
-      // (Environment.ts) is the same wiring, internalized.
+      // (AmbientRuntime.ts) is the same wiring, internalized.
       bindRosetta(frame, op, {
         fn: () => {
           const next = queue.shift();

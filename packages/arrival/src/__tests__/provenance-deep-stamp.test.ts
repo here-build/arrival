@@ -30,7 +30,7 @@ import { inferenceEnv } from "../inference-env.js";
 import { exec } from "../eval/generator-exec.js";
 import { ANil, nil } from "../values/primitives/ANil.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../Environment.js";
+import { bindValue, mintFrame } from "../AmbientRuntime.js";
 
 const PROV = new Set<number>([42]);
 
@@ -183,7 +183,7 @@ describe("dict-ref / @ / :key all route through SchemeJSObject.get", () => {
     // Both `@` and `:key` dispatch into `obj.get(...)` for SchemeJSObject
     // targets — the wrapper's cache makes the two surfaces return the same
     // AValue instance, so `(eq? (@ obj :x) (:x obj))` holds.
-    const env = inferenceEnv.inherit("test");
+    const env = mintFrame(inferenceEnv, "test");
     const wrapper = new AJSObject(CONSTANT_CTX, { x: "hello" });
     bindValue(env, "obj", wrapper);
     const [viaAt] = await exec("(@ obj :x)", { env });

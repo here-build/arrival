@@ -420,7 +420,7 @@ describe("G6 equality-suite cleanup", () => {
       // The return type of [tf("equals")] is `boolean`; the inner `true` is the `other`
       // arg (also `unknown`). No cast needed — the method is typed on ABool directly.
       // Bare-value purge (A4/P4) VERDICT — mechanism, not aspiration: op-helpers.ts's
-      // withInputProvenance now always boxes, ANil's length boxes, Environment.set boxes
+      // withInputProvenance now always boxes, ANil's length boxes, AmbientRuntime.set boxes
       // every stored scalar — so no INTERNAL producer inside the membrane can hand
       // `equal?`/`eq?`/`eqv?` a raw JS boolean anymore during real scheme execution. That
       // does NOT flip this assertion to a strict-door throw: laws/equality.law.test.ts

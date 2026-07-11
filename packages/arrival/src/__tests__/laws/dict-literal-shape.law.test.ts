@@ -9,7 +9,7 @@
 // (P6). The semantics probes that were ALREADY right (P1-P3, P9, P10, P12) live in
 // spec/corpus (collection-literals-{read,eval}.jsonl) — not re-pinned here.
 import { describe, expect, it, beforeAll } from "vitest";
-import type { ResolvingEnvironment } from "../../Environment.js";
+import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 import { execState } from "../../eval/generator-exec.js";
 import { schemeToJs } from "../../rosetta.js";
 import { writeForm } from "../../provenance/slice.js";
@@ -20,7 +20,7 @@ import { APair } from "../../values/primitives/APair.js";
 import { freshEnv } from "../_fresh-env.js";
 
 describe("dict-literal true shape — the P-table probes (dict-literal-true-shape.md)", () => {
-  let env: ResolvingEnvironment;
+  let env: ResolvingAmbient;
   beforeAll(async () => {
     env = await freshEnv();
   });

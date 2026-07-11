@@ -9,7 +9,7 @@
  * house pattern for this class of cross-cutting concern).
  *
  * ── Why NOT auto-detect "this call is a rosetta" structurally ──────────────────────
- * `Environment.defineRosetta` (`Environment.ts`) binds a bare async JS function
+ * `AmbientRuntime.defineRosetta` (`AmbientRuntime.ts`) binds a bare async JS function
  * (`rosetta.ts`'s `createRosettaWrapper` output) — NOT an `ARosettaProcedure` AValue.
  * That class exists (`values/primitives/ACallable.ts`) but its own doc says it's a
  * stage-3-migration target; nothing constructs one today. So the generic apply site

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { mintFrame } from "../AmbientRuntime.js";
 import { exec } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
 import { is_false } from "../eval/guards.js";
@@ -16,7 +17,7 @@ import { is_false } from "../eval/guards.js";
  * structural `equal?`. A strict R7RS-list-only probe (vector/string -> throw) is deferred — see
  * the binding note (it needs ctx, and the async ctx-builder broke bare-scalar forcing).
  */
-const run = (code: string) => exec(code, { env: inferenceEnv.inherit("length-applicability") });
+const run = (code: string) => exec(code, { env: mintFrame(inferenceEnv, "length-applicability") });
 const truthy = async (code: string): Promise<boolean> => !is_false((await run(code))[0]);
 
 describe("length — universal element count over any countable term", () => {

@@ -28,6 +28,7 @@
 //      free reference, NO declared deps) throws `DefineLocalityError`, pinning that the
 //      bug this migration fixes was real and is now caught, not merely worked around.
 import { describe, expect, it } from "vitest";
+import { mintFrame } from "../../../AmbientRuntime.js";
 import * as z from "../../../common/scheme-zod.js";
 import { symbol } from "../../../common/symbol.js";
 import { EnvCapability } from "../../../common/capability.js";
@@ -39,19 +40,19 @@ import { assembleEnv } from "../../../common/kernel.js";
 import { DefineLocalityError } from "../../../errors.js";
 import srfi43 from "../srfi-43.js";
 import type { SchemeEnv } from "../../../common/scheme-env.js";
-import type { ResolvingEnvironment } from "../../../Environment.js";
+import type { ResolvingAmbient } from "../../../AmbientRuntime.js";
 
 // Mirrors `_fresh-env.ts`'s own injected evalScheme — `skipBootstrapWait` because
 // these execs run against an env this suite is itself assembling/re-lowering onto,
 // not the shared realm-cached bootstrap.
 const evalScheme = (env: unknown, src: unknown): unknown =>
-  exec(src as string, { env: env as ResolvingEnvironment, skipBootstrapWait: true });
+  exec(src as string, { env: env as ResolvingAmbient, skipBootstrapWait: true });
 
 // COMPLEX tier (execState): stringifies the BOXED result (Scheme print format) — needed
 // for vector-fold['s]/vector-fold-right's list-shaped accumulator, where exec()'s
 // SIMPLE-tier `toJS` unwrap egresses an R9 lazy proxy rather than a plain comparable
 // value (mirrors src/__tests__/srfi.test.ts's own `run` helper).
-async function printed(env: ResolvingEnvironment, src: string): Promise<string> {
+async function printed(env: ResolvingAmbient, src: string): Promise<string> {
   const { values: r } = await execState(src, { env });
   const x = r[r.length - 1] as { toString(): string } | undefined;
   return String(x?.toString?.() ?? x);
@@ -114,22 +115,22 @@ describe("scheme/srfi-43 — behavior equivalence (semantic-equivalence gate, §
 describe("scheme/srfi-43 — the dep edge is real (§2.1's undeclared-dep bug class, now a declared edge)", () => {
   it("standalone .apply() (bypassing assembleEnv's C3 dep-walk) leaves deps UNAPPLIED — but `vector-length`/`vector-ref`/`=`/`+`/`-`/`<`/`>`/`quotient`/`not` are ALL NATIVE_PACKS members, so `global_env` (post-`initBridge`) already carries them; the call SUCCEEDS anyway, the same two-phase-bootstrap luck srfi-235.ts's header names (unlike srfi-235's own `compose` — a BASE_PACKS-only name genuinely absent from `global_env` — this pack's free names never go missing at runtime standalone). This is exactly why the dep edge's realness is proven at BAKE TIME (the regression-pin test below), not by a runtime-unbound demonstration: a STATIC check that doesn't consult this runtime luck is the only thing that can catch it.", async () => {
     await initBridge();
-    const env = global_env.inherit("test-srfi43-standalone-runtime-luck");
+    const env = mintFrame(global_env, "test-srfi43-standalone-runtime-luck");
     await srfi43.lower({ evalScheme }).apply(env, undefined as never);
     await expect(execState("(vector-count even? #(1 2 3))", { env })).resolves.not.toThrow();
   });
 
   it("bake itself succeeds even with deps unapplied — the FV law is a STATIC declared-`deps` check, not a runtime-binding probe", async () => {
     await initBridge();
-    const env = global_env.inherit("test-srfi43-standalone-bake-ok");
+    const env = mintFrame(global_env, "test-srfi43-standalone-bake-ok");
     await expect(srfi43.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
   });
 
   it("assembleEnv (the real orchestration path — every production caller) DOES walk deps: every op works standalone", async () => {
     await initBridge();
-    const env = global_env.inherit("test-srfi43-assembleEnv-ok") as unknown as SchemeEnv;
+    const env = mintFrame(global_env, "test-srfi43-assembleEnv-ok") as unknown as SchemeEnv;
     await assembleEnv(env, [srfi43.lower({ evalScheme })]);
-    const typedEnv = env as unknown as ResolvingEnvironment;
+    const typedEnv = env as unknown as ResolvingAmbient;
     const [count] = await exec("(vector-count even? #(1 2 3 4))", { env: typedEnv });
     expect(count).toBe(2);
   });
@@ -155,7 +156,7 @@ describe("scheme/srfi-43 — contract ENFORCEMENT fires at the call boundary", (
 describe("scheme/srfi-43 — the §2.1 bake FV law passes for this pack AS MIGRATED", () => {
   it("lowers cleanly with its declared deps — never DefineLocalityError", async () => {
     await initBridge();
-    const env = global_env.inherit("test-srfi43-fv-law-ok");
+    const env = mintFrame(global_env, "test-srfi43-fv-law-ok");
     await expect(srfi43.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
   });
 

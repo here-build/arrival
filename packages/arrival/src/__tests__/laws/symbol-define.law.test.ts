@@ -21,14 +21,14 @@ import * as z from "../../common/scheme-zod.js";
 import { exec, execState } from "../../eval/generator-exec.js";
 import { freshEnv } from "../_fresh-env.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../errors.js";
-import type { ResolvingEnvironment } from "../../Environment.js";
+import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 
 // The injected evalScheme every direct `.apply()` call in this suite needs — mirrors
 // `_fresh-env.ts`'s own (skipBootstrapWait: these execs run AFTER the shared bootstrap
 // that produced `env`, so re-awaiting it would be a redundant, already-settled promise,
 // not a deadlock — unlike the base-pack assembly's OWN prelude evalScheme).
 const evalScheme = (env: unknown, src: unknown): unknown =>
-  exec(src as string, { env: env as ResolvingEnvironment, skipBootstrapWait: true });
+  exec(src as string, { env: env as ResolvingAmbient, skipBootstrapWait: true });
 
 describe("symbol.define — bake round-trip, two-phase order, sequential-RHS, contract enforcement", () => {
   it("declares → assembles → calls: a define referencing a SAME-CAPABILITY rosetta sibling", async () => {

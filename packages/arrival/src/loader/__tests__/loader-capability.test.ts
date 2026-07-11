@@ -25,7 +25,7 @@ import { assembleEnv } from "../../common/kernel.js";
 import type { SchemeEnv } from "../../common/scheme-env.js";
 import invariant from "tiny-invariant";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue, Environment } from "../../Environment.js";
+import { bindValue, AmbientRuntime, mintFrame } from "../../AmbientRuntime.js";
 
 import { __resetExtensionRegistryForTest } from "../loader-extensions.js";
 import { arrivalLoaderCapability } from "../loader-capability.js";
@@ -41,7 +41,7 @@ afterEach(() => __resetExtensionRegistryForTest());
  *  `assembledWithDegraded` below is the (new, additive) sibling that also hands back
  *  `AssembledEnv.degraded` for the tests that need it. */
 async function assembled(config: object, extra: readonly EnvCapability[] = [], degradation?: "forbid" | "doors") {
-  const base = sandboxedEnv.inherit("loader-capability-test");
+  const base = mintFrame(sandboxedEnv, "loader-capability-test");
   // The loader capability LAST (lowest precedence ⇒ applied first), the slot loader-core held —
   // so its preludeOnly register-extension is in the assembly's prelude scope before any
   // dependent capability's prelude evaluates.
@@ -54,7 +54,7 @@ async function assembled(config: object, extra: readonly EnvCapability[] = [], d
  *  row) — a separate helper rather than changing `assembled`'s return shape, so every
  *  existing call site above (and below) is untouched. */
 async function assembledWithDegraded(config: object, degradation?: "forbid" | "doors") {
-  const base = sandboxedEnv.inherit("loader-capability-test-degraded");
+  const base = mintFrame(sandboxedEnv, "loader-capability-test-degraded");
   const packs = [arrivalLoaderCapability].map((c) => c.lower({ evalScheme, config, degradation }));
   const assembly = await assembleEnv<SchemeEnv>(base as unknown as SchemeEnv, packs as never);
   return { env: assembly.env, degraded: assembly.degraded };
@@ -130,7 +130,7 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
             // The assembler applies registry packs onto the REAL live env; with the
             // JS-side write surface retired, the pack binds through the module-internal
             // door exactly as capability.ts's apply does (same instanceof narrow).
-            invariant(env instanceof Environment, "registry pack expects a real env");
+            invariant(env instanceof AmbientRuntime, "registry pack expects a real env");
             bindValue(env, "greeting-of", () => "hi");
           },
         },
