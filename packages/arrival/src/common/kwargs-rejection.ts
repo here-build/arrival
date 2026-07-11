@@ -105,12 +105,18 @@ function issueLines(
 }
 
 /** Format a kwargs decode rejection into the frozen shape. Exported for the
- *  substrate/manifold layers that assert against (or parse) the grammar. */
+ *  substrate/manifold layers that assert against (or parse) the grammar.
+ *
+ *  An ANONYMOUS def (empty name — the manifold binds tool rosettas through
+ *  `NAME_DOC_TEMPLATE`, whose parseNameDoc split yields `""`; the real qualified
+ *  name arrives as error METADATA in the design's Phase 3) drops the name segment
+ *  rather than rendering the broken `: arguments rejected` head. */
 export function formatKwargsRejection(
   qualifiedName: string,
   problems: readonly ProblemLine[],
 ): string {
-  return `${qualifiedName}: arguments rejected — ${problems.length} problem(s):\n${problems.join("\n")}`;
+  const head = qualifiedName === "" ? "arguments rejected" : `${qualifiedName}: arguments rejected`;
+  return `${head} — ${problems.length} problem(s):\n${problems.join("\n")}`;
 }
 
 /** A field schema with no scheme face cannot consume a boxed scheme value: codecs and
