@@ -1,54 +1,256 @@
-// args-misuse — RED suite for the localized args-misuse door (Phase 0 of
+// args-misuse — coordination-signal suite for the localized args-misuse door (Phase 0/2 of
 // docs/args-error-reporting-v2.md's landing strategy, second-foundation/arrival-manifold's
 // design doc, §7.2). The door replaces the bare Signature + Example echo with a LOCALIZED
 // teach — the failing parameter named, its sub-schema taught, a copy-paste-correct retry
 // shape — escalating on repeated failure of the same (tool, param). See the design doc for
 // the full mechanism (§2: `extractClues`/`localizeFailingParam`, `ArgsFailureTracker`,
-// `synthesizeParamValue`) — none of it exists yet; this file is the in-tree coordination
-// signal (§7.3 Phase 0), landing BEFORE the implementation (Phase 2).
+// `synthesizeParamValue`).
 //
-// S1-S3 and S5 are `it.todo` (design doc §7.1: a row contracting a NEW export that doesn't
-// exist yet would fail to COMPILE as `it.fails`, so it carries the full row spec in its
-// title instead — the mechanical, no-red-gate discipline). S4 is `it.fails`: it exercises
-// `synthesizeExampleCall`, which exists TODAY and stubs concrete values — a real regression
-// this row documents until example-call.ts grows the type-placeholder-hole behavior.
+// S1-S2 flipped from `it.todo` to real tests (args-misuse.ts landed). S3, S4, S5 are still
+// their original placeholder forms — see each row's own comment below.
 
 import { describe, expect, it } from "vitest";
 
+import { extractClues, localizeFailingParam, type ArgsClue } from "../args-misuse.js";
 import { synthesizeExampleCall } from "../example-call.js";
-import type { ToolJsonSchema } from "../tool-schema.js";
+import type { JsonSchemaProperty, ToolJsonSchema } from "../tool-schema.js";
+
+// ─── S1 — extractClues: the 4-family table, over the 45edee verbatim fixtures ───
 
 describe("args-misuse — localized door + escalation (docs/args-error-reporting-v2.md §7.2)", () => {
-  // S1: extractClues — the 4-family clue-extraction table (§2.2), fixtured on the 45edee
-  // trajectory's verbatim upstream error strings (design doc §1, §2.2's family table):
-  //   - python-jsonschema value-mismatch: `'King Saud University' is not of type 'object'`
-  //     → { kind: "value-mismatch", tokens: ["King Saud University"], expectedType: "object" }
-  //   - python-jsonschema unexpected-keys: `Additional properties are not allowed ('terms' was
-  //     unexpected)` → { kind: "unexpected-keys", tokens: ["terms"] }
-  //   - python-jsonschema required-key: `'cond' is a required property` → { kind:
-  //     "required-key", tokens: ["cond"] }
-  //   - TS SDK / zod issues JSON: a `"path": ["query", …]` array inside the issues blob →
-  //     { kind: "zod-path", tokens: ["query", …] } — authoritative, no walk needed.
-  // `extractClues` doesn't exist yet (new export, doors.ts or a sibling args-misuse.ts, §3
-  // hook #3) — a red test importing it wouldn't compile, hence `it.todo`.
-  it.todo(
-    "S1 — extractClues: the 4-family table (value-mismatch/unexpected-keys/required-key/zod-path) " +
-      "over the 45edee verbatim fixtures — python-jsonschema \"'King Saud University' is not of type " +
-      "'object'\", \"Additional properties are not allowed ('terms' was unexpected)\", \"'cond' is a " +
-      'required property", and a TS-SDK zod issues[].path array',
-  );
+  describe("S1 — extractClues: the 4-family table, over the 45edee verbatim fixtures (design doc §1, §2.2)", () => {
+    it("python-jsonschema value-mismatch: \"'King Saud University' is not of type 'object'\"", () => {
+      const text =
+        '{"detail":"Failed to call tool \'clinicaltrialsgov-mcp-server_clinicaltrials_list_studies\': ' +
+        "Input validation error: 'King Saud University' is not of type 'object'\"}";
+      expect(extractClues(text)).toEqual([
+        { kind: "value-mismatch", tokens: ["King Saud University"], expectedType: "object" },
+      ] satisfies ArgsClue[]);
+    });
 
-  // S2: localizeFailingParam soundness (T2 in the design doc's claim ledger) — NEVER names a
-  // param absent from the tool's schema; an AMBIGUOUS clue (zero or several candidate paths
-  // in the sent-args tree) resolves to `undefined`, falling back to today's Signature + Example
-  // echo rather than guessing (the "never guess as fact" discipline, §2.2's resolution walk).
-  // Fuzz row: random arg trees with a planted duplicate value across two sibling params must
-  // resolve `undefined` for a value-mismatch clue (exactly-one-candidate is the only ⇒ case).
-  it.todo(
-    "S2 — localizeFailingParam: sound against the tool's schema (never names an absent param); a clue " +
-      "with 0 or 2+ candidate paths in sent-args resolves undefined (falls back to Signature + Example, " +
-      "never a guess) — fuzz over random arg trees with a planted cross-param value collision",
-  );
+    it("python-jsonschema unexpected-keys (single bad key): \"Additional properties are not allowed ('terms' was unexpected)\"", () => {
+      const text =
+        '{"detail":"Failed to call tool \'clinicaltrialsgov-mcp-server_clinicaltrials_list_studies\': ' +
+        "Input validation error: Additional properties are not allowed ('terms' was unexpected)\"}";
+      expect(extractClues(text)).toEqual([{ kind: "unexpected-keys", tokens: ["terms"] }] satisfies ArgsClue[]);
+    });
+
+    it("python-jsonschema unexpected-keys (multiple bad keys) pulls every quoted key out of the parenthesized clause", () => {
+      const text = "Additional properties are not allowed ('k1', 'k2' were unexpected)";
+      expect(extractClues(text)).toEqual([{ kind: "unexpected-keys", tokens: ["k1", "k2"] }] satisfies ArgsClue[]);
+    });
+
+    it("python-jsonschema required-key: \"'cond' is a required property\"", () => {
+      expect(extractClues("'cond' is a required property")).toEqual([
+        { kind: "required-key", tokens: ["cond"] },
+      ] satisfies ArgsClue[]);
+    });
+
+    it('TS SDK / zod issues JSON: a "path": [...] array inside the issues blob is authoritative', () => {
+      const text =
+        "Input validation error: Invalid arguments for tool clinicaltrials/list_studies: " +
+        '[{"code": "invalid_type", "expected": "object", "received": "string", "path": ["query"], ' +
+        '"message": "Expected object, received string"}]';
+      expect(extractClues(text)).toEqual([{ kind: "zod-path", tokens: ["query"] }] satisfies ArgsClue[]);
+    });
+
+    it("a zod-path clue carries the FULL nested path, not just its first segment", () => {
+      const text = '[{"code": "invalid_type", "path": ["filter", "startDate"], "message": "…"}]';
+      expect(extractClues(text)).toEqual([{ kind: "zod-path", tokens: ["filter", "startDate"] }] satisfies ArgsClue[]);
+    });
+
+    it("a multi-issue zod blob yields one zod-path clue PER issue, in appearance order", () => {
+      const text = '[{"path": ["a"], "message": "one"}, {"path": ["b", "c"], "message": "two"}]';
+      expect(extractClues(text)).toEqual([
+        { kind: "zod-path", tokens: ["a"] },
+        { kind: "zod-path", tokens: ["b", "c"] },
+      ] satisfies ArgsClue[]);
+    });
+
+    it("no recognizable family shape → zero clues, never a guessed one", () => {
+      expect(extractClues("ValueError: database connection refused")).toEqual([]);
+    });
+
+    it("family PRIORITY order: zod-path first, then value-mismatch, unexpected-keys, required-key", () => {
+      // A contrived text carrying all four shapes at once — extraction order is the family
+      // priority `localizeFailingParam` relies on (zod-path tried first, "authoritative").
+      const text =
+        '[{"path": ["query"], "message": "m"}] ' +
+        "'King Saud University' is not of type 'object' " +
+        "Additional properties are not allowed ('terms' was unexpected) " +
+        "'cond' is a required property";
+      expect(extractClues(text).map((c) => c.kind)).toEqual([
+        "zod-path",
+        "value-mismatch",
+        "unexpected-keys",
+        "required-key",
+      ]);
+    });
+  });
+
+  // ─── S2 — localizeFailingParam soundness (T2) ───
+
+  describe("S2 — localizeFailingParam: sound against the tool's schema; ambiguous ⇒ undefined (design doc §2.2, T2)", () => {
+    const QUERY_SCHEMA: ToolJsonSchema = {
+      type: "object",
+      properties: {
+        query: {
+          type: "object",
+          properties: {
+            cond: { type: "string", description: "Conditions or disease query." },
+            term: { type: "string", description: "Other terms query." },
+          },
+        },
+        filter: {
+          type: "object",
+          properties: { advanced: { type: "string" } },
+          additionalProperties: false,
+        } as JsonSchemaProperty,
+      },
+    };
+
+    it("Case A (value-mismatch, exactly one candidate) localizes to the top-level kwarg the sent scalar lives under", () => {
+      const errorText =
+        "{\"detail\":\"Failed to call tool 'x': Input validation error: 'King Saud University' is not of type 'object'\"}";
+      const localized = localizeFailingParam(errorText, { query: "King Saud University" }, QUERY_SCHEMA);
+      expect(localized?.path).toEqual(["query"]);
+      expect(localized?.clue.kind).toBe("value-mismatch");
+      expect(localized?.sentValue).toBe("King Saud University");
+      expect(localized?.subSchema).toEqual(QUERY_SCHEMA.properties!.query);
+    });
+
+    it("Case B (unexpected-keys, exactly one candidate) localizes to the containing object kwarg", () => {
+      const errorText = "Additional properties are not allowed ('terms' was unexpected)";
+      const localized = localizeFailingParam(errorText, { query: { terms: "King Saud University" } }, QUERY_SCHEMA);
+      expect(localized?.path).toEqual(["query"]);
+      expect(localized?.clue.kind).toBe("unexpected-keys");
+    });
+
+    it("zod-path is authoritative: a nested path resolves without any walk, verified sound against the schema", () => {
+      const nested: ToolJsonSchema = {
+        type: "object",
+        properties: { filter: { type: "object", properties: { advanced: { type: "string" } } } },
+      };
+      const errorText = '[{"path": ["filter", "advanced"], "message": "Expected string, received number"}]';
+      const localized = localizeFailingParam(errorText, { filter: { advanced: 5 } }, nested);
+      expect(localized?.path).toEqual(["filter", "advanced"]);
+      expect(localized?.subSchema).toEqual({ type: "string" });
+      expect(localized?.sentValue).toBe(5);
+    });
+
+    it("a zod-path clue naming a param absent from the schema is DISCARDED, never named as fact", () => {
+      const errorText = '[{"path": ["nonexistent"], "message": "…"}]';
+      expect(localizeFailingParam(errorText, { nonexistent: "x" }, QUERY_SCHEMA)).toBeUndefined();
+    });
+
+    it(
+      "ZERO candidates (the token appears nowhere in sent-args — e.g. a COMPUTED arg the caller could " +
+        "only record as an opaque marker, design doc §2.2's form-walk fallback) ⇒ undefined, never a guess",
+      () => {
+        const errorText = "'King Saud University' is not of type 'object'";
+        // sentArgs holds an OPAQUE marker (what a form-walk fallback records for a computed
+        // expression like `(build-q)`) instead of the real evaluated string — correctly no match.
+        const localized = localizeFailingParam(errorText, { query: "<computed>" }, QUERY_SCHEMA);
+        expect(localized).toBeUndefined();
+      },
+    );
+
+    it("MANY candidates (a planted duplicate value across two sibling params) ⇒ undefined, never a guess", () => {
+      const twoStringParams: ToolJsonSchema = {
+        type: "object",
+        properties: { a: { type: "string" }, b: { type: "string" } },
+      };
+      const errorText = "'duplicate' is not of type 'number'";
+      const localized = localizeFailingParam(errorText, { a: "duplicate", b: "duplicate" }, twoStringParams);
+      expect(localized).toBeUndefined();
+    });
+
+    it("no sentArgs available at all ⇒ value-mismatch/unexpected-keys decline (nothing to walk)", () => {
+      const errorText = "'King Saud University' is not of type 'object'";
+      expect(localizeFailingParam(errorText, undefined, QUERY_SCHEMA)).toBeUndefined();
+    });
+
+    it("no schema available at all ⇒ every family declines (soundness has nothing to verify against)", () => {
+      const errorText = "'King Saud University' is not of type 'object'";
+      expect(localizeFailingParam(errorText, { query: "King Saud University" }, undefined)).toBeUndefined();
+    });
+
+    it("required-key at the TOP level (no containing node) localizes to the missing kwarg itself", () => {
+      const schema: ToolJsonSchema = {
+        type: "object",
+        properties: { cond: { type: "string" } },
+        required: ["cond"],
+      } as ToolJsonSchema;
+      const localized = localizeFailingParam("'cond' is a required property", {}, schema);
+      expect(localized?.path).toEqual(["cond"]);
+      expect(localized?.subSchema).toEqual({ type: "string" });
+    });
+
+    it("required-key NESTED inside an object param localizes to the CONTAINING kwarg, tie-broken toward sent-args evidence", () => {
+      const schema: ToolJsonSchema = {
+        type: "object",
+        properties: {
+          query: {
+            type: "object",
+            properties: { cond: { type: "string" }, term: { type: "string" } },
+            required: ["cond"],
+          },
+        },
+      };
+      const localized = localizeFailingParam("'cond' is a required property", { query: { term: "x" } }, schema);
+      expect(localized?.path).toEqual(["query"]);
+    });
+
+    it("fuzz: a random arg tree with a PLANTED cross-param value collision always resolves undefined for value-mismatch", () => {
+      // Deterministic LCG (no external fuzz dependency) — small, reproducible, no seed drift
+      // across CI runs. Every iteration plants the SAME collision (two sibling string params
+      // sharing one value) inside an otherwise-random tree shape, then asserts the invariant:
+      // 2+ candidates ⇒ undefined, regardless of how much unrelated noise surrounds them.
+      let seed = 42;
+      const rand = (): number => {
+        seed = (seed * 1_103_515_245 + 12_345) & 0x7f_ff_ff_ff;
+        return seed / 0x7f_ff_ff_ff;
+      };
+      const randomString = (): string => Math.floor(rand() * 1e9).toString(36);
+
+      for (let i = 0; i < 50; i++) {
+        const collisionValue = `collide-${i}`;
+        const noiseKeys = Math.floor(rand() * 4);
+        const sentArgs: Record<string, unknown> = { alpha: collisionValue, beta: collisionValue };
+        const schema: ToolJsonSchema = {
+          type: "object",
+          properties: { alpha: { type: "string" }, beta: { type: "string" } },
+        };
+        for (let n = 0; n < noiseKeys; n++) sentArgs[`noise${n}`] = randomString();
+        const errorText = `'${collisionValue}' is not of type 'number'`;
+        expect(localizeFailingParam(errorText, sentArgs, schema)).toBeUndefined();
+      }
+    });
+
+    it("fuzz: a SINGLE planted match amid random noise always resolves to exactly that path", () => {
+      let seed = 7;
+      const rand = (): number => {
+        seed = (seed * 1_103_515_245 + 12_345) & 0x7f_ff_ff_ff;
+        return seed / 0x7f_ff_ff_ff;
+      };
+      const randomString = (): string => Math.floor(rand() * 1e9).toString(36);
+
+      for (let i = 0; i < 50; i++) {
+        const target = `unique-${i}`;
+        const noiseKeys = Math.floor(rand() * 4);
+        const sentArgs: Record<string, unknown> = { needle: target };
+        const schema: ToolJsonSchema = { type: "object", properties: { needle: { type: "string" } } };
+        for (let n = 0; n < noiseKeys; n++) {
+          const noiseVal = randomString();
+          sentArgs[`noise${n}`] = noiseVal;
+          (schema.properties as Record<string, JsonSchemaProperty>)[`noise${n}`] = { type: "string" };
+        }
+        const errorText = `'${target}' is not of type 'number'`;
+        const localized = localizeFailingParam(errorText, sentArgs, schema);
+        expect(localized?.path).toEqual(["needle"]);
+      }
+    });
+  });
 
   // S3: ArgsFailureTracker (§2.4) — L1→L2→L3 monotone escalation per (tool, param), capped at
   // 3; a SUCCESSFUL call of a tool clears ALL of that tool's param counters (the model has a

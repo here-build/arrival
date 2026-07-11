@@ -1,3 +1,4 @@
+export * from "./args-misuse.js";
 export * from "./attachment-sink.js";
 export * from "./bound-tool.js";
 export * from "./calibration.js";
