@@ -68,7 +68,7 @@ const OTHER_ID = 701; // infer-dict's `other` slot id (must be PRUNED by the pro
 // Each fake source IGNORES its argument and returns an already-stamped value: this is
 // the "data is born at the membrane" behavior — the result's provenance is the mint,
 // independent of the (literal) input. Mirrors lineage-assumptions.test.ts's own
-// (still-legacy) `env.defineRosetta(...)` fixtures.
+// capability-authored fixtures (`_lineage-test-helpers.ts`).
 //
 // `output: [z.value]` (the rosetta escape hatch — "impl returns raw, does its own
 // conversion") is load-bearing here, not cosmetic: it makes `run()` (common/symbols/

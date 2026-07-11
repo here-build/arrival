@@ -2,7 +2,10 @@
  * Scheme<->JS membrane: schemeToJs/jsToScheme marshal at FFI boundary, round-trip to
  * identity both directions (bifunctor framing: schemeToJs∘jsToScheme = id and
  * jsToScheme∘schemeToJs = id on the values each side owns).
- * Environment.defineRosetta() wraps JS fn as Scheme-callable rosetta.
+ * `createRosettaWrapper` wraps a JS fn as a Scheme-callable rosetta — the retired public
+ * `Environment.defineRosetta` used to be its one caller; `Environment.ts`'s internal
+ * `bindRosetta` is the surviving wiring (capability.ts's legacy arm + replay.ts's
+ * playback frame are its only two producers now).
  */
 
 import { AValue, EMPTY_PROVENANCE, pointProvenance, unionProvenance } from "./values/primitives/AValue.js";
@@ -519,9 +522,3 @@ export const createRosettaWrapper = ({ fn, options = {}, pure = false }: Rosetta
     }
   };
 };
-
-declare module "@here.build/arrival" {
-  interface Environment {
-    defineRosetta(name: string, config: RosettaFunction): void;
-  }
-}

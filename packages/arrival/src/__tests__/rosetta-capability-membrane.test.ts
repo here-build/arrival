@@ -28,14 +28,20 @@
  *     two "throws on bad receiver" pins have nothing left to express against the new
  *     binding shape and are removed rather than translated.
  *
- * `env.defineRosetta` itself (the `Environment` method) stays production code — it is
- * still the mechanism `EnvCapability.apply()`'s LEGACY `SymbolDeclaration` arm binds
- * through (`capability.ts`'s own doc: "load-bearing OUTSIDE it" — McpEnvCapability and
- * every downstream consumer still author verbs the bare-fn/`{fn,...}` way). That is a
- * SEPARATE migration (`src/__tests__/ledger/index.law.test.ts`'s INVERSIONS row
- * "defineRosetta legacy arm authoring form", gated on McpEnvCapability's
- * annotation-lifting) — this file only stops CALLING `env.defineRosetta` directly from
+ * The legacy `SymbolDeclaration`/`{fn,...}` AUTHORING SHAPE itself (McpEnvCapability's
+ * whole authoring model, and every downstream consumer still using it — `capability.ts`'s
+ * own doc: "load-bearing OUTSIDE it") stays production code. That authoring shape's
+ * migration is a SEPARATE, still-open one (`src/__tests__/ledger/index.law.test.ts`'s
+ * GAPS row "defineRosetta legacy arm authoring form", gated on McpEnvCapability's
+ * annotation-lifting) — this file only stops CALLING the legacy arm directly from
  * arrival core's own tests.
+ *
+ * UPDATE (2026-07-11, defineRosetta hard-delete): what did NOT survive is the public
+ * `Environment.defineRosetta` METHOD the legacy arm used to call — it's retired from both
+ * the concrete class and the `SchemeEnv` contract. `capability.ts`'s legacy arm now wires
+ * through `bindRosetta`, a module-internal function in `Environment.ts` (not barrel-
+ * exported, not part of `SchemeEnv`) that does the exact same wrapping/binding the old
+ * method's body did. The authoring SHAPE is unchanged; only the method NAME/visibility is.
  */
 import invariant from "tiny-invariant";
 import { describe, expect, it } from "vitest";

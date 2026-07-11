@@ -29,6 +29,8 @@ import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
 import { jsToScheme } from "../../rosetta.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { AValue } from "../../values/primitives/AValue.js";
+// In-package test: internal-module access (Environment is not barrel-exported).
+import { Environment } from "../../Environment.js";
 
 describe("V0 pin — barrel surface", () => {
   it("global_env / env are no longer barrel-exported (V1 zero-consumer cut)", () => {
@@ -135,5 +137,27 @@ describe("V0 pin — override+scope value-injection parity", () => {
     );
     // Both empty — neither path mints a fresh point (CONSTANT_CTX, both sides).
     expect((manualResult as AValue).provenance.size).toBe(0);
+  });
+});
+
+describe("V6 pin — defineRosetta hard-delete (docs/working-proposals/arrival-environment-privatization.md's own V3-V5 precedent, applied to the authoring METHOD)", () => {
+  // The PUBLIC method is gone from both producer surfaces: the concrete class (no instance
+  // ever answers `.defineRosetta`) and the structural `SchemeEnv` contract every pack/consumer
+  // types against (so a NEW `env.defineRosetta(...)` call site is a compile error everywhere,
+  // not just at this one class). The legacy AUTHORING SHAPE (`{ fn, type, pure, ... }`
+  // literals — `RosettaSpec`/`SymbolDeclaration`) survives unchanged; only the method that
+  // consumed it is deleted. `Environment.ts`'s internal `bindRosetta` is the sole surviving
+  // wiring, reachable only from `common/capability.ts`'s legacy bind arm and
+  // `provenance/replay.ts`'s playback frame — never barrel-exported, never a `SchemeEnv` member.
+  it("Environment.prototype.defineRosetta no longer exists", () => {
+    expect("defineRosetta" in Environment.prototype).toBe(false);
+  });
+
+  it("a live env instance answers to `set`/`get`/`inherit` but not `defineRosetta`", () => {
+    const env = sandboxedEnv.inherit("pin-defineRosetta-gone");
+    expect(typeof env.set).toBe("function");
+    expect(typeof env.get).toBe("function");
+    expect(typeof env.inherit).toBe("function");
+    expect("defineRosetta" in env).toBe(false);
   });
 });

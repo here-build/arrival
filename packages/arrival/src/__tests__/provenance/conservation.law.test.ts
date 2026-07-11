@@ -294,7 +294,6 @@ function recordingEnv(): { env: SchemeEnv; verbs: Record<string, ARosettaProcedu
   const env = {
     set: (name: string, value: unknown) => void (verbs[name] = value as ARosettaProcedure),
     get: () => undefined,
-    defineRosetta: () => undefined,
     inherit: () => env,
     registerResolver: () => undefined,
     list: () => [],

@@ -52,7 +52,7 @@
  *      stable FROM. Refusal-with-route, never a wrong value.
  */
 import { execState } from "../eval/generator-exec.js";
-import type { EnvironmentValue, ResolvingEnvironment } from "../Environment.js";
+import { bindRosetta, type EnvironmentValue, type ResolvingEnvironment } from "../Environment.js";
 import { collapseProvenance } from "../provenance-collapse.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { jsToScheme, schemeToJs } from "../rosetta.js";
@@ -354,7 +354,9 @@ export async function replayProgramWithPlayback(opts: PlaybackReplayOptions): Pr
     const frame = base.inherit("provenance-playback");
     for (const [op, payloads] of playback) {
       const queue = [...payloads];
-      frame.defineRosetta(op, {
+      // `frame.defineRosetta` retired (public method hard-deleted) — `bindRosetta`
+      // (Environment.ts) is the same wiring, internalized.
+      bindRosetta(frame, op, {
         fn: () => {
           const next = queue.shift();
           if (next === undefined) {

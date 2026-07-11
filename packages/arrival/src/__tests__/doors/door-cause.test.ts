@@ -19,7 +19,7 @@ import { DoorProcedure } from "../../values/primitives/ACallable.js";
 import { is_callable_value, is_door_procedure } from "../../values/value-guards.js";
 import { PurityError } from "../../errors.js";
 import { EnvCapability } from "../../common/capability.js";
-import type { ResolverSpec, RosettaSpec, SchemeEnv } from "../../common/scheme-env.js";
+import type { ResolverSpec, SchemeEnv } from "../../common/scheme-env.js";
 
 describe("DoorProcedure — the introspectable door binding (unit, no capability/env)", () => {
   it("exposes `.door` — the baked DoorSymbolDef — for static readers", () => {
@@ -80,7 +80,8 @@ describe("DoorProcedure — the introspectable door binding (unit, no capability
 
 /** A recording SchemeEnv — captures every `set()` call by name, throws loudly on any
  *  surface this suite doesn't exercise (mirrors common/__tests__/capability.test.ts's
- *  own `recordingEnv`, local here since that one's `set` is a deliberate no-op stub). */
+ *  own `recordingEnv`, local here since that file's records into a `verbs` object shaped
+ *  for its own rosetta-wrapped-verb invocation idiom, not this suite's plain `Map`). */
 function recordingEnv(): { env: SchemeEnv; bound: Map<string, unknown> } {
   const bound = new Map<string, unknown>();
   const unrecordable = (verb: string) => new Error(`recordingEnv: ${verb} is not recordable`);
@@ -90,9 +91,6 @@ function recordingEnv(): { env: SchemeEnv; bound: Map<string, unknown> } {
       return value;
     },
     get: (name) => bound.get(name),
-    defineRosetta: (_name: string, _cfg: RosettaSpec) => {
-      throw unrecordable("defineRosetta");
-    },
     inherit: () => env,
     registerResolver: (_r: ResolverSpec) => {
       throw unrecordable("registerResolver");

@@ -51,8 +51,9 @@ layer, runCtx threading and mint/propagate classification on the box layer. A ba
 function is a value-layer-only term: the moment it enters value space, the program has a
 region the second interpreter cannot enter.
 *Revealed by:* the AProcedure arm, the LAMBDA brand passthrough, curry's bare-arrow leak,
-`env.defineRosetta`'s legacy form — every one a JS artifact living in value space without
-lineage.
+the legacy `SymbolDeclaration` arm's bare-fn form (capability.ts, wired through
+`Environment.ts`'s internal `bindRosetta` — the retired public `env.defineRosetta` method's
+surviving wiring) — every one a JS artifact living in value space without lineage.
 *Forbids:* new bare-fn producers; `typeof === "function"` as a value-space callability test;
 env bindings whose stored value has no class.
 

@@ -57,7 +57,7 @@ import { PurityError } from "../../errors.js";
 import { nil } from "../../index.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
-import type { ResolverSpec, RosettaSpec, SchemeEnv } from "../../common/scheme-env.js";
+import type { ResolverSpec, SchemeEnv } from "../../common/scheme-env.js";
 
 /** A minimal recording SchemeEnv — same shape as door-cause.test.ts's, local here so this
  *  law suite has no cross-file coupling to another test's fixture. */
@@ -70,9 +70,6 @@ function recordingEnv(): { env: SchemeEnv; bound: Map<string, unknown> } {
       return value;
     },
     get: (name) => bound.get(name),
-    defineRosetta: (_name: string, _cfg: RosettaSpec) => {
-      throw unrecordable("defineRosetta");
-    },
     inherit: () => env,
     registerResolver: (_r: ResolverSpec) => {
       throw unrecordable("registerResolver");

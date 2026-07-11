@@ -10,7 +10,6 @@ function recorder(): { env: SchemeEnv; log: string[] } {
   const env: SchemeEnv = {
     set: (name) => (log.push(`set:${name}`), undefined),
     get: () => undefined,
-    defineRosetta: (name) => log.push(`rosetta:${name}`),
     inherit: () => env,
     registerResolver: (resolver) => void log.push(`resolver:${resolver.id}`),
     list: () => [],
@@ -29,8 +28,8 @@ describe("schemePacks — bootstrap + wire, in dependency order", () => {
     // The wire step exercises "wire can mutate env" generically — the exact env
     // method is incidental to what THIS law pins (bootstrap-then-wire ordering), so a
     // plain `set` stands in for the legacy `defineRosetta("op", { fn: () => 0 })` call
-    // this fixture used before the migration (the `SchemeEnv` mock above still
-    // declares `defineRosetta` — the interface itself isn't touched by this file).
+    // this fixture used before the migration (`defineRosetta` is retired from the
+    // `SchemeEnv` contract entirely now — the mock above no longer declares it either).
     const pack = make({ name: "p", bootstrap: "(define-macro …)", wire: (e) => e.set("op", 0) });
     await assembleEnv(env, [pack]);
 

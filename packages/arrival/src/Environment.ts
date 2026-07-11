@@ -79,17 +79,6 @@ export class Environment {
     public __parent__: Environment | null = null,
   ) {}
 
-  defineRosetta(name: string, config: RosettaFunction): void {
-    const wrapper = createRosettaWrapper(config);
-    this.set(name, wrapper);
-    // `config.pure` is consumed INSIDE createRosettaWrapper (the runtime mint gate,
-    // `mintsPoint = pure !== true`) — no static side-table records it any more; the
-    // static classifier reads the declared `.provenanceRole` off baked bound values
-    // instead (values/lineage-classifier-from-env.ts). Legacy-registered names
-    // carry no role and fall to the classifier's `undefined` default.
-    if (config.type !== undefined) rosettaTypesOf(this).set(name, config.type);
-  }
-
   list(): (string | symbol)[] {
     return ownProps(this.__env__);
   }
@@ -312,4 +301,39 @@ export class ResolvingEnvironment extends Environment implements SchemeEnv {
   ): ResolvingEnvironment {
     return new ResolvingEnvironment(name, obj, this);
   }
+}
+
+/**
+ * The retired `Environment.prototype.defineRosetta` PUBLIC method's wiring, kept alive
+ * ONLY for its two remaining producers: `capability.ts`'s legacy `SymbolDeclaration`
+ * bind arm and `replay.ts`'s playback-frame op registration (both still author bare-fn
+ * `{ fn, ... }` verbs, never `env.defineRosetta` itself — see the ledger's "defineRosetta
+ * legacy arm authoring form" row for why that authoring SHAPE survives while this method
+ * doesn't). Module-internal — not barrel-exported, not part of the `SchemeEnv` contract;
+ * a new call site is a regression onto the retired public API
+ * (env-capability-authoring skill's migration recipes are the way in).
+ *
+ * `env` is typed to the minimal structural need (`.set`), not `Environment`: capability.ts's
+ * caller is `SchemeEnv`-typed (tests supply bare mocks with no `registerResolver`-free
+ * plain `Environment` either) and replay.ts's is a plain internal `Environment` frame
+ * (no `registerResolver`) — neither is assignable to the other, so this widens to their
+ * true common shape instead of casting either one. The `rosettaTypesOf` type-lens side
+ * effect only fires when `env` is genuinely an `Environment` instance (an `instanceof`
+ * guard, never a cast) — exactly the set of callers the retired method's own body ever
+ * ran against: a bare test mock never went through `Environment.prototype.defineRosetta`
+ * to begin with, so it never touched the side table either.
+ */
+export function bindRosetta(
+  env: { set(name: string, value: unknown): unknown },
+  name: string,
+  config: RosettaFunction,
+): void {
+  const wrapper = createRosettaWrapper(config);
+  env.set(name, wrapper);
+  // `config.pure` is consumed INSIDE createRosettaWrapper (the runtime mint gate,
+  // `mintsPoint = pure !== true`) — no static side-table records it any more; the
+  // static classifier reads the declared `.provenanceRole` off baked bound values
+  // instead (values/lineage-classifier-from-env.ts). Legacy-registered names
+  // carry no role and fall to the classifier's `undefined` default.
+  if (config.type !== undefined && env instanceof Environment) rosettaTypesOf(env).set(name, config.type);
 }

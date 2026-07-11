@@ -30,7 +30,6 @@ function recordingEnv(tag: string): { env: SchemeEnv; verbs: Record<string, unkn
   const env = {
     set: (name: string, value: unknown) => void (verbs[name] = value),
     get: (name: string) => verbs[name],
-    defineRosetta: () => undefined,
     inherit: () => env,
     registerResolver: () => undefined,
     list: () => Object.keys(verbs),

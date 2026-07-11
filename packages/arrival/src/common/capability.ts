@@ -32,7 +32,11 @@ import type { RunContext } from "../values/primitives/RunContext.js";
 // invocation there at every apply site; the rosetta bind adapter reads it back. No cycle —
 // the leaf imports nothing.
 import { currentDynamicCallSite } from "../eval/dynamic-call-site.js";
-import type { InvocationLike } from "../rosetta.js";
+import type { InvocationLike, RosettaFunction } from "../rosetta.js";
+// The retired public `env.defineRosetta` method's internal replacement — this legacy
+// `SymbolDeclaration` bind arm and `provenance/replay.ts`'s playback frame are its only
+// two producers (env-capability-authoring skill's migration recipes name this the way in).
+import { bindRosetta } from "../Environment.js";
 import { CallCtx, makeCallCtx, type CacheClass, type CallbackRoles, type ProvenanceRole } from "./symbols/_bake.js";
 import { type SchemeValue } from "../values/types.js";
 import invariant from "tiny-invariant";
@@ -456,7 +460,9 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 // input-union fallback, matching the legacy path's own fallback.
                 // conservation.law's seal-laundering rows gate this equivalence.
                 //
-                // Bind via `set`, NOT defineRosetta — that would double-wrap the membrane.
+                // Bind via `set`, NOT bindRosetta — that would double-wrap the membrane
+                // (this `run` is already the complete ctx-aware wrapper, unlike the legacy
+                // bare-fn arm's raw `sym.fn`, which bindRosetta wraps for the first time).
                 const rawRun = def.run as (this: unknown, ...args: unknown[]) => Promise<unknown>;
                 // Boundary casts per applyCallback's convention: the wrapper produces
                 // scheme values by construction; the ambient site is opaque by design and
@@ -551,7 +557,11 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                   await ensureSpawned();
                   return bound(...args);
                 };
-          env.defineRosetta(verb, { ...sym, fn: gated } as RosettaSpec);
+          // `env.defineRosetta` retired (public method hard-deleted) — `bindRosetta`
+          // (Environment.ts) is the same wiring, internalized: wrap via
+          // createRosettaWrapper, bind via `env.set`, stamp `rosettaTypesOf` when `.type`
+          // is declared and `env` is genuinely an `Environment` (never a test mock).
+          bindRosetta(env, verb, { ...sym, fn: gated } as RosettaFunction);
         }
         for (const resolver of spec.resolvers ?? []) {
           env.registerResolver(resolver);

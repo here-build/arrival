@@ -20,8 +20,11 @@
 
 import type { EnvPack } from "./kernel.js";
 
-/** A rosetta (host-fn) contribution, mirroring arrival-scheme's `defineRosetta`
- *  config structurally (kept here so we don't import the runtime). */
+/** A rosetta (host-fn) contribution, mirroring arrival-scheme's retired `defineRosetta`
+ *  config structurally (kept here so we don't import the runtime). Still the type the
+ *  legacy `SymbolDeclaration` authoring arm (capability.ts) declares against — the
+ *  authoring SHAPE survives even though the `defineRosetta` method that once consumed
+ *  it does not (see `bindRosetta`, Environment.ts, the surviving internal wiring). */
 export interface RosettaSpec {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- variadic host fn, matches RosettaFunction
   fn: (...args: any[]) => unknown;
@@ -59,7 +62,6 @@ export interface ResolverSpec {
 export interface SchemeEnv {
   set(name: string, value: unknown, docValue?: string | null): unknown;
   get(name: string, options?: { throwError?: boolean }): unknown;
-  defineRosetta(name: string, config: RosettaSpec): void;
   inherit(name?: string | symbol, obj?: Record<string, unknown>): SchemeEnv;
   /** Register a catchall resolver (fires on a name the env did not bind). This is the
    *  APPLY-TIME landing door for a capability's declared `resolvers` (CapabilitySpec.
@@ -95,8 +97,8 @@ export interface SchemePackSpec<E = SchemeEnv> {
   readonly config?: unknown;
   /** Scheme source: `(define-macro …)` forms + `(define …)`s, eval'd into env on apply. */
   readonly bootstrap?: string;
-  /** JS wiring (native ops / `defineRosetta`), run AFTER bootstrap so it may
-   *  reference symbols the bootstrap introduced. */
+  /** JS wiring (native ops / rosetta verbs bound via `env.set`), run AFTER bootstrap
+   *  so it may reference symbols the bootstrap introduced. */
   readonly wire?: (env: E) => void | Promise<void>;
 }
 
