@@ -566,7 +566,9 @@ The language stance — an R7RS-small sandboxed base, a forgiving superset layer
 in `language-design-foundations.md` (the monorepo's `docs/foundations/arrival-scheme/`);
 read it before adding a reader macro, literal, or borrowing. The governing principles of this
 package — the two-interpreter keystone, the value plane, the membrane, provenance, the surface
-rules — are [`docs/PRINCIPLES.md`](./docs/PRINCIPLES.md).
+rules — are [`docs/PRINCIPLES.md`](./docs/PRINCIPLES.md). Authoring your own capabilities — the
+contract discipline, the lineage/cache axes, resources, MCP exposure — is
+[`docs/writing-capabilities.md`](./docs/writing-capabilities.md), shipped in the package.
 
 Two surface facts every example above relies on. The *core* grammar is `( … )` lists, `[ … ]`
 vectors, and `{ … }` dicts (`{:key value …}`), canonicalized at read time; the core reader has no
