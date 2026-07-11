@@ -1,5 +1,5 @@
 /**
- * The headless REPL core (arrival-awesome-repl wave 1, D6): a pure fold over the
+ * The headless REPL core (arrival-awesome-repl.md D6): a pure fold over the
  * `ReplEvent` stream (repl-event.ts) into a renderer-agnostic block model — no IO, no
  * ANSI, no DOM. `foldReplEvent(model, event)` is the ENTIRE reasoning; every renderer
  * (today: arrival-cli's ANSI painter; later: a browser DOM renderer, `arrival watch`'s
@@ -21,9 +21,9 @@
  * index 0 — the fold APPENDS a synthetic block for it rather than dropping the event, so a
  * reader crash still renders (one red block, no source slice, the door as its content).
  *
- * R8 VALIDATION (D5 — wave 1 cut): `ReplValidationEvent` is a no-op fold arm. Nothing emits
- * it yet (repl-event.ts's own note); wave 2 (or whenever R8 lands) is free to give it a real
- * arm — amber pre-flight tints — without touching this file's other cases.
+ * R8 VALIDATION (D5 — reserved, intentional): `ReplValidationEvent` is a no-op fold arm.
+ * Nothing emits it yet (repl-event.ts's own note); when R8 lands it gets a real arm —
+ * amber pre-flight tints — without touching this file's other cases.
  */
 
 import type { ContentBlock } from "./content-block.js";
@@ -110,7 +110,7 @@ export function foldReplEvent(model: ReplFoldModel, event: ReplEvent): ReplFoldM
     case "topology":
       return foldTopology(event);
     case "validation":
-      // D5 (wave 1 cut): reserved, nothing emits this arm yet — no-op fold.
+      // D5: reserved, nothing emits this arm yet — no-op fold (header, "R8 VALIDATION").
       return model;
     case "statement":
       return foldStatement(model, event);

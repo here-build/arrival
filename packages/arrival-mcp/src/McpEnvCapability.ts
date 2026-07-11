@@ -199,7 +199,9 @@ function liftInlineAnnotations(
       continue;
     }
 
-    // Support metadata on baked RosettaSymbolDef (generic M)
+    // A def carries annotation fields on one of TWO channels: direct keys on the
+    // object literal (the legacy inline form), or the `metadata` bag of a baked
+    // RosettaSymbolDef (the tool`` channel).
     const meta = (def as any).metadata;
     const hasMeta = meta && typeof meta === "object";
 
@@ -207,7 +209,9 @@ function liftInlineAnnotations(
     const ann: any = {};
     let hasInline = false;
 
-    // First, copy any direct annotation keys (legacy object form)
+    // Direct annotation keys (legacy inline form): descriptor-MOVED off the def —
+    // an `inputSchema` getter must survive un-invoked, and the runtime def must not
+    // keep a second copy that could drift from the lifted one.
     for (const key of Object.keys(def)) {
       if (keySet.has(key)) {
         const desc = Object.getOwnPropertyDescriptor(def, key)!;
@@ -219,7 +223,8 @@ function liftInlineAnnotations(
       }
     }
 
-    // Then, pull from metadata (new generic way for rosetta + tool``)
+    // Metadata-bag keys: COPIED, not moved — the bag belongs to the baked def's own
+    // shape (core reads it), so lifting mirrors the annotation keys without mutating it.
     if (hasMeta) {
       for (const key of Object.keys(meta)) {
         if (keySet.has(key)) {
@@ -229,9 +234,10 @@ function liftInlineAnnotations(
       }
     }
 
-    // For baked defs we want to keep the original (including metadata) in clean
+    // A baked def (`kind` present) passes through WHOLE — its metadata bag is part of
+    // the baked shape; only a legacy object literal is replaced by its stripped copy.
     if ((def as any).kind) {
-      cleanSymbols[name] = def; // keep the full baked def (rosetta etc.)
+      cleanSymbols[name] = def;
     } else {
       cleanSymbols[name] = clean;
     }

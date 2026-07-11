@@ -1,5 +1,5 @@
 /**
- * read-guard — the read log + the read∩write deferral guard (W2, docs/working-proposals/
+ * read-guard — the read log + the read∩write deferral guard (docs/working-proposals/
  * arrival-plexus-effect-burst.md §2.4). Sibling of `EffectLog` (effect-log.ts) on the
  * `RunContext`: where `EffectLog` remembers WHAT was gathered, this file remembers WHAT
  * was READ during the same run, and checks the one guard rule that makes gather-then-burst
@@ -17,15 +17,14 @@
  * only) and this file does not add one: `ReadTracker` is an INJECTABLE interface arrival
  * core only calls through, never implements against a real reactive substrate. The mobx-
  * backed implementation (fanning out plexus's single-slot `trackingHook`, tracking.ts:114)
- * lives with the plexus-facing HOST (arrival-mcp / the gateway layer, W3+ territory) and is
- * armed onto `RunContext.reads` the same way a host arms `cache`/`effects` today. A run with
- * no tracker (`reads` absent) is byte-identical to pre-W2 behavior — no hook installed, no
- * region wrapped, no guard checked.
+ * lives with the plexus-facing HOST (arrival-mcp / the gateway layer) and is armed onto
+ * `RunContext.reads` the same way a host arms `cache`/`effects`. A run with no tracker
+ * (`reads` absent) pays nothing — no hook installed, no region wrapped, no guard checked.
  *
  * ── The write-set is PREDICTED at enqueue, not OBSERVED at burst ──────────────
  * The full design (§2.4) observes writes live via `trackModification` INSIDE a real plexus
- * burst region (W3+, not built yet). Without a burst executor there is nothing to observe,
- * so this wave's guard works off a HOST-SUPPLIED `writeSetOf` resolver: given a gathered
+ * burst region (not built yet). Without a burst executor there is nothing to observe,
+ * so this guard works off a HOST-SUPPLIED `writeSetOf` resolver: given a gathered
  * effect entry (verb + decoded args, the same face `EffectLog` already carries), the host
  * answers "which opaque read-keys will this effect's write touch" — honest and minimal per
  * the task's own framing: a resolver that cannot derive a footprint returns `undefined` (the

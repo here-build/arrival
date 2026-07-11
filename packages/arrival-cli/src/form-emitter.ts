@@ -5,13 +5,12 @@
  * topology FIRST, then statement events strictly ordered by index, terminal-on-error.
  *
  * This mirrors arrival-mcp's `DiscoveryTool.runForms` at a deliberately smaller
- * altitude: no `RunCache`/session replay, no attachment extraction (D8 — no inline
- * images in wave 1), no statement cap — those are MCP-session concerns the local REPL
- * doesn't have. The wave-1 doc's §6 "emitter-loop lift into mcp-substrate" is CUT here:
- * `DiscoveryTool.ts` is owned by another agent for this pass, so rather than editing it
- * this file duplicates the ~15-line source-slicing helper (`sourceTextFor` /
- * `nextLocatedOffset`) instead of importing arrival-mcp's private copy. A real lift
- * (one shared emitter core for both CLI and MCP) is future work, not a wave-1 blocker.
+ * altitude: no `RunCache`/session replay, no attachment extraction (D8: no inline
+ * images), no statement cap — those are MCP-session concerns the local REPL
+ * doesn't have. The ~15-line source-slicing pair (`sourceTextFor`/`nextLocatedOffset`)
+ * deliberately DUPLICATES arrival-mcp's private copy in `DiscoveryTool.ts` rather than
+ * reaching across that package's privacy — keep the two in step until the shared
+ * emitter core (arrival-awesome-repl.md §6's lift into mcp-substrate) exists.
  */
 import {
   APair,

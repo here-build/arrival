@@ -4,7 +4,7 @@
  * repaints a just-submitted turn's region in place as its `ReplBlock`s settle
  * (pending → running → done/error/skipped, mcp-substrate's repl-fold.ts).
  *
- * SCOPE OF REPAINT (the wave-1 cut, noted per the brief): only the CURRENT turn's
+ * SCOPE OF REPAINT (intentional cut): only the CURRENT turn's
  * region is repainted in place (cursor-up + clear-to-end + rewrite) as its own events
  * land — a handful of lines, imperceptible to redraw whole. Once a turn's last event
  * lands, its lines are frozen scrollback; the painter never touches them again ("settled
@@ -66,7 +66,7 @@ export function renderBlock(block: ReplBlock, lens: Lens): string[] {
     return lines;
   }
   for (const c of block.content) {
-    if (c.type !== "text") continue; // wave 1 ships text only (D8: no inline images)
+    if (c.type !== "text") continue; // text only (D8: no inline images)
     for (const line of toLens(c.text, lens).split("\n")) {
       lines.push(`  ${paint(line, block.state === "error" ? "error" : "done")}`);
     }

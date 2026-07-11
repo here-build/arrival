@@ -18,15 +18,15 @@ import type { DiscoveryTool, ToolCallCtx } from "./DiscoveryTool.js";
 import type { ManifestRow } from "./confirm-manifest.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The per-effect rig-altered invariant — SEAM, not built (task-scoped honesty:
-// this wave ships the digest check + fill-or-kill; the world-drift invariant
-// needs a live re-derivation channel W3's plexus burst executor would supply,
-// docs/working-proposals/arrival-plexus-effect-burst.md §2.6/W4 — arrival-mcp's
-// DiscoveryTool is capability-agnostic and has no such channel today).
+// The per-effect rig-altered invariant — SEAM, not built (intentional): the
+// digest check + fill-or-kill are real; the world-drift invariant needs a live
+// re-derivation channel only a plexus burst executor supplies
+// (docs/working-proposals/arrival-plexus-effect-burst.md §2.6) — arrival-mcp's
+// DiscoveryTool is capability-agnostic and has no such channel.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** One row's rig-altered verdict. `altered: true` dooors THAT row only — siblings
- *  still fire (§7's W4 gate text: "effect i doors … siblings unaffected"). */
+/** One row's rig-altered verdict. `altered: true` doors THAT row only — siblings
+ *  still fire (§7: "effect i doors … siblings unaffected"). */
 export interface RigAlteredResult {
   readonly altered: boolean;
   /** Present iff altered — what changed, for the teaching door text. */
@@ -42,8 +42,8 @@ export type RigAlteredCheck = (row: ManifestRow) => RigAlteredResult | Promise<R
 
 /** The HONEST default: no re-derivation channel is wired, so every row reports
  *  unaltered — never a fabricated check. A host with a real writeSetOf/uneval-slice
- *  re-derivation channel (e.g. once W3's plexus burst executor lands) passes its
- *  own `RigAlteredCheck` to {@link DiscoveryToolOptions.rigAlteredCheck} instead. */
+ *  re-derivation channel (a plexus burst executor) passes its own
+ *  `RigAlteredCheck` to {@link DiscoveryToolOptions.rigAlteredCheck} instead. */
 export const noRigAlteredCheck: RigAlteredCheck = () => ({ altered: false });
 
 // ─────────────────────────────────────────────────────────────────────────────

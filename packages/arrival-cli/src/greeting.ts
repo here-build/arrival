@@ -2,8 +2,8 @@
  * The greeting — THE static screenshot artifact (arrival-repl-viral-research.md §1.2,
  * §2.3): the gradient wordmark (wordmark.ts) plus ONE fetch-style identity line
  * (neofetch's genre — version · session facts · lens mode). Composed, not busy: no
- * onboarding wall-of-text here (that's the doc's §7, explicitly NOT what V's ruling
- * asked for this pass — "gradient ASCII wordmark + one fetch-style identity line").
+ * onboarding wall-of-text here, deliberately (the doc's §7 tutorial genre is a
+ * different artifact) — the greeting is the wordmark plus ONE identity line, period.
  */
 import { readFile } from "node:fs/promises";
 import path from "node:path";

@@ -72,10 +72,8 @@ function toolFn<S extends z.ZodRawShape, const O extends VectorSpec, M extends R
         metadata: {
           inputSchema: contract.shape,
           description: doc,
-          // Forwarded (previously declared-and-DROPPED — the live consumer gap the
-          // exec-phases design closes): rides the def's metadata bag as a dynamic
-          // field; the annotation lift + the DiscoveryTool catalog resolve it against
-          // the describe-time activation.
+          // Rides the def's metadata bag as a dynamic field; the annotation lift +
+          // the DiscoveryTool catalog resolve it against the describe-time activation.
           ...(contract.dynamicDescription === undefined ? {} : { dynamicDescription: contract.dynamicDescription }),
         },
       },
@@ -86,7 +84,7 @@ function toolFn<S extends z.ZodRawShape, const O extends VectorSpec, M extends R
 /** `tool.view`` — a boundary snapshot worth persisting (cross-run cacheable, R2 substrate
  *  inherited whole: record-mode overwrite, replay-mode serve, single-flight). DEMANDS a real
  *  output codec vector — unlike bare `tool``, `output` is REQUIRED here, never the `[sz.value]`
- *  escape hatch, because the landed `assertCacheClassShape` gate throws at bake on a `view`
+ *  escape hatch, because the `assertCacheClassShape` gate throws at bake on a `view`
  *  whose contract carries a `z.value`/`z.lambda` slot (a cache entry must serialize). */
 function toolView<S extends z.ZodRawShape, const O extends VectorSpec>(
   tpl: TemplateStringsArray,
@@ -136,7 +134,7 @@ function toolPure<S extends z.ZodRawShape, const O extends VectorSpec>(
 }
 
 /** `tool.effect`` — a mutation verb. `provenance: "sink"` pre-applied; `output` is NOT a
- *  parameter here (void by law — the landed sink shape gate, `assertProvenanceRoleShape`,
+ *  parameter here (void by law — the sink shape gate, `assertProvenanceRoleShape`,
  *  demands no real egress on a `"sink"`-role contract, which is also what makes the run-cache
  *  tombstone-skip sound). A `tool.effect` verb is burst-gatherable by construction: the
  *  effect-burst's gather arm reads `provenance === "sink"` off the bound value, which this
@@ -159,8 +157,8 @@ function toolEffect<S extends z.ZodRawShape>(tpl: TemplateStringsArray, ...sub: 
   };
 }
 
-/** `tool.risky`` — `tool.effect` plus `risky: true`, riding the SYMBOL METADATA channel (the
- *  landed bake-time metadata stamping — `BakeRuntimeOpts.metadata`). "Danger is an attribute
+/** `tool.risky`` — `tool.effect` plus `risky: true`, riding the SYMBOL METADATA channel
+ *  (bake-time metadata stamping — `BakeRuntimeOpts.metadata`). "Danger is an attribute
  *  of the ACTION, not the arguments set": riskiness is STATIC, factory-declared here on every
  *  call this verb ever receives, never something a caller flips via an argument. Delegates to
  *  `tool.effect` verbatim (same sink/void contract) — the only difference is the extra

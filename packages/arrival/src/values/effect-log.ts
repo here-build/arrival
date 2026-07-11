@@ -1,14 +1,14 @@
 /**
- * effect-log — the ORDERED sibling of `RunCache` (W1, docs/working-proposals/
+ * effect-log — the ORDERED sibling of `RunCache` (docs/working-proposals/
  * arrival-plexus-effect-burst.md §2.3/§2.5). Where `RunCache` is a content-keyed,
  * deduplicating `Map` (two identical penetrations share one slot), `EffectLog` is a
  * plain append-only sequence: two identical sink calls are two entries, always — the
  * mode law's "two effects, always" (run-cache.ts's header) holds for the burst arm
  * exactly as it holds for the tombstone arm. This file owns the log entity and the
- * drain (`burst`); it does NOT own the read-clock guard ITSELF (W2, values/
- * read-guard.ts) or the conflict re-execution comparator (W4) — this log only
- * remembers WHAT was gathered, in WHAT order, and (as of W2) the read-clock each entry
- * was gathered at, nothing about whether it is safe to replay against a moved world.
+ * drain (`burst`); it does NOT own the read-clock guard ITSELF (values/read-guard.ts)
+ * or the conflict re-execution comparator (§2.6, unbuilt) — this log only remembers
+ * WHAT was gathered, in WHAT order, and the read-clock each entry was gathered at,
+ * nothing about whether it is safe to replay against a moved world.
  *
  * ── Where it intercepts ───────────────────────────────────────────────────────
  * Same chokepoint as `RunCache`: `penetrateThroughCache`, between arg decode and
@@ -37,7 +37,7 @@ export interface EffectEntry {
   readonly index: number;
   readonly verbName: string;
   readonly decodedArgs: readonly unknown[];
-  /** The read-clock at enqueue (W2, values/read-guard.ts, §2.3's normative field) —
+  /** The read-clock at enqueue (values/read-guard.ts, §2.3's normative field) —
    *  stamped by `penetrateThroughCache` when the run carries a `reads` tracker; absent
    *  when it doesn't (no tracker ⇒ nothing to stamp, and the guard treats a missing
    *  clock as `0`, i.e. every read counts — see read-guard.ts). Reads at or below this
@@ -100,9 +100,9 @@ export class MemoryEffectLog implements EffectLog {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. The drain (§2.5's burst, ordering/atomicity language — minus everything W3+
-//    owns: no plexus region, no sync bracket, no rollback. This is the bare
-//    sequential-execution primitive those waves wrap.)
+// 2. The drain (§2.5's burst, ordering/atomicity language — minus everything the
+//    plexus burst executor owns: no plexus region, no sync bracket, no rollback.
+//    This is the bare sequential-execution primitive that executor wraps.)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Where a drain stopped — the throwing entry's position plus the entries that never
@@ -131,7 +131,7 @@ export class BurstDrainError extends Error {
  * back onto a real effect — this file has no opinion). One pass, no reordering, no
  * retry: a mid-entry throw stops the drain immediately and rethrows `BurstDrainError`
  * carrying the failing entry's position and the entries that never ran — the caller
- * (a real burst executor, W3+) owns rollback; this function performs no side effects
+ * (a real burst executor) owns rollback; this function performs no side effects
  * of its own beyond calling `executor`.
  */
 export async function burst(

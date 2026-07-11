@@ -2,12 +2,12 @@
  * confirm-manifest — the provenance-offloaded confirmation artifact
  * (docs/working-proposals/arrival-provenance-confirmation.md, all §7 rulings).
  *
- * A finished DiscoveryTool run's gathered `EffectLog` (values/effect-log.ts, landed
- * W1) becomes ONE manifest: every effect the run WOULD have fired — risky and
+ * A finished DiscoveryTool run's gathered `EffectLog` (values/effect-log.ts)
+ * becomes ONE manifest: every effect the run WOULD have fired — risky and
  * non-risky alike, "the full burst is visible" (§5) — as a row carrying its decoded
  * args, its own minimal re-runnable invocation, and (opt-in default-on) a
  * per-argument lineage read off the RAW pre-decode args `EffectEntry.rawArgs`
- * now carries (the one additive core change this feature needed — see effect-log.ts).
+ * carries (see effect-log.ts for why raw rides ALONGSIDE decoded, never instead).
  *
  * This module has no opinion on WHEN to hold vs burst (that's DiscoveryTool.call,
  * §7.2's "any risky row ⇒ the whole burst holds") or on how confirm-burst re-fires
@@ -81,8 +81,8 @@ export function manifestDigest(
  *  `ManifestRow.invocationSource` instead (built straight from `rawArgs`, §5's "each
  *  dangerous call becomes its own minimal re-runnable program") — a real slice at
  *  ROW granularity; per-argument backward-derivation slicing would need the
- *  invoking call's AST node threaded onto `EffectEntry` too, which this wave does
- *  not add. */
+ *  invoking call's AST node threaded onto `EffectEntry` too, which it does not
+ *  carry. */
 export interface ManifestArgLineage {
   readonly key: string;
   readonly verdict: "signable" | "scoped" | "unsigned";

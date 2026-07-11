@@ -1,5 +1,5 @@
 /**
- * The sugarcoat lens (D3) — OUTPUT only, in wave 1. Cheap because the serializer
+ * The sugarcoat lens (D3) — OUTPUT only. Cheap because the serializer
  * already produces parse-safe text: a rendered value (or an echoed source slice) is
  * always a re-parseable scheme string, so flipping it to sugarcoat is just
  * `schemeToSugarcoat(text)` — arrival-awesome-repl.md §8's documented composition
@@ -8,13 +8,12 @@
  * value→Node quotation step. Reusing the printer directly means zero new budget/
  * truncation logic.
  *
- * CORRECTION to §8's "In — already true: the reader accepts both surfaces": verified
- * empirically against HEAD (not just cited), and it's false for the CORE reader —
- * `parse("{n * n}")` rejects curly-infix with a teaching door ("this reader has no
- * curly-infix mode … lives in arrival-sugarcoat, not core arrival"). Sugarcoat-surface
- * INPUT would need a lowering pass (`sugarcoatToScheme`) ahead of `parse`, which is
- * NOT wired up here — a real wave-1 cut, not an oversight. Typed input stays classic
- * scheme; only the ECHOED source + rendered values flip surfaces via `,lens`.
+ * INPUT stays classic scheme — and §8's "In — already true: the reader accepts both
+ * surfaces" is WRONG for the core reader: `parse("{n * n}")` rejects curly-infix with
+ * a teaching door ("this reader has no curly-infix mode … lives in arrival-sugarcoat,
+ * not core arrival"). Sugarcoat-surface INPUT would need a lowering pass
+ * (`sugarcoatToScheme`) ahead of `parse`, deliberately not wired here — only the
+ * ECHOED source + rendered values flip surfaces via `,lens`.
  *
  * `,lens` (repl.ts) flips `Lens` for the whole session; every block re-renders through
  * whichever lens is active — same stored text, two views, the round-trip law
