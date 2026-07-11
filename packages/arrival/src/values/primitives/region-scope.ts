@@ -28,6 +28,7 @@
  */
 
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
+import { RegionEscapeError, RegionIncompleteError } from "../../errors.js";
 import {
   emitHostSchedule,
   emitTrackClose,
@@ -271,22 +272,12 @@ export async function reconstructRegionScope(opts: {
 
 /** Rule 1's door (errors-as-doors: names the mechanism, then the fix). */
 function regionEscapeDoor(): Error {
-  return new Error(
-    "reverse lambda escaped its invocation — callbacks are region-bound to the calling symbol; " +
-      "a wrapper handed to host JS may only be invoked WHILE the symbol call that exported it is " +
-      "still running. Persistent handlers (a subscription kept past the call's return) need an " +
-      "explicit capability granting a DETACHED scope — this is not that, by default.",
-  );
+  return new RegionEscapeError();
 }
 
 /** Rule 2's door. */
 function regionIncompleteDoor(pending: number): Error {
-  return new Error(
-    `symbol returned with ${pending} reverse-lambda call${pending === 1 ? "" : "s"} incomplete — ` +
-      "every reverse-lambda call started during a symbol invocation must settle (resolve or reject) " +
-      "before that symbol returns. Await each re-entry, or use a persistent-handler capability for " +
-      "fire-and-forget work instead of leaving a call in flight.",
-  );
+  return new RegionIncompleteError(pending);
 }
 
 /**

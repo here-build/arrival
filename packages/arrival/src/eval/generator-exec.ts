@@ -12,7 +12,7 @@
 import { AmbientRuntime, mintFrame, mintPlainFrame } from "../AmbientRuntime.js";
 import { user_env, global_env } from "../env-roots.js";
 import run, { evaluate, expectValue, ArrivalError, type EvalTap } from "./evaluator.js";
-import { isHostRuntimeBug } from "../errors.js";
+import { AmbientShapeError, isHostRuntimeBug, OutputContractError } from "../errors.js";
 import { Resolver } from "./Resolver.js";
 import { Capabilities } from "./Capabilities.js";
 import { LexicalScope } from "./LexicalScope.js";
@@ -130,7 +130,7 @@ export function ensureBaseAssembled(): Promise<void> {
 // so the old direct `as AmbientRuntime` lost its type overlap; narrow HONESTLY on the
 // runtime fact (instanceof) instead of a blind double-cast.
 const preludeExec = (env: SchemeEnv, src: string): Promise<unknown[]> => {
-  invariant(env instanceof AmbientRuntime, "prelude evalScheme: expected a concrete AmbientRuntime");
+  if (!(env instanceof AmbientRuntime)) throw new AmbientShapeError("prelude evalScheme", "expected a concrete AmbientRuntime");
   return exec(src, { env, skipBootstrapWait: true });
 };
 const capabilityEvalScheme: EvalSchemeInto = preludeExec;
@@ -562,7 +562,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
   // Capabilities.assembled, classifierFromEnv, sealResolutionChain) needs the
   // concrete frame regardless of path, so the check sits right here, at the seam,
   // same honest-instanceof posture as `preludeExec` above (not a cast — a runtime fact).
-  invariant(actualEnv instanceof AmbientRuntime, "exec: glass `env` must be a concrete AmbientRuntime");
+  if (!(actualEnv instanceof AmbientRuntime)) throw new AmbientShapeError("exec", "glass `env` must be a concrete AmbientRuntime");
 
   // Lazy self-init the runtime bootstrap (native packs + .scm base), so embedders
   // never trigger it manually. `ensureBaseAssembled` is realm-cached (one
@@ -827,10 +827,7 @@ export async function exec(code: string | SchemeValue, options: ExecOptions = {}
     // THE EXIT DOOR — the outbound twin of define/overridable's validation: expected
     // vs got, plus the schema's own issue list (which names the precise mismatch path).
     if (values.length === 0) {
-      throw new Error(
-        `exec output contract: expected ${describeExitSchema(contract)}, got NO forms at all — ` +
-          `an empty program has no last result to validate; drop the \`output\` option or run a real form`,
-      );
+      throw new OutputContractError(describeExitSchema(contract), "no-forms");
     }
     const last = values.length - 1;
     const outcome = contract.safeParse(values[last]);
@@ -838,11 +835,7 @@ export async function exec(code: string | SchemeValue, options: ExecOptions = {}
       const issues = outcome.error.issues
         .map((i) => (i.path.length > 0 ? `${i.path.join(".")}: ${i.message}` : i.message))
         .join("; ");
-      throw new Error(
-        `exec output contract: expected ${describeExitSchema(contract)}, got ` +
-          `${describeExitValue(values[last])} — ${issues} — the program's last form must satisfy the ` +
-          `declared \`output\` schema at the exit boundary (the outbound twin of define/overridable's validation)`,
-      );
+      throw new OutputContractError(describeExitSchema(contract), describeExitValue(values[last]), issues);
     }
     values[last] = outcome.data; // the parse result — transforms apply, and the static type says so
   }
@@ -889,7 +882,7 @@ export async function execExpr(
 ): Promise<SchemeValue> {
   const actualEnv = env ?? user_env;
   // Same honest SchemeEnv → AmbientRuntime narrow as execState's seam above.
-  invariant(actualEnv instanceof AmbientRuntime, "execExpr: glass `env` must be a concrete AmbientRuntime");
+  if (!(actualEnv instanceof AmbientRuntime)) throw new AmbientShapeError("execExpr", "glass `env` must be a concrete AmbientRuntime");
 
   // See exec(): realm-cached lazy bootstrap, awaited once.
   if (!skipBootstrapWait) await ensureBaseAssembled();

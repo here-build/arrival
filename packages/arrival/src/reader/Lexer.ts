@@ -9,7 +9,7 @@
  */
 import invariant from "tiny-invariant";
 import { eof } from "../values/primitives/EOF.js";
-import { Unterminated } from "../errors.js";
+import { ParseError, Unterminated } from "../errors.js";
 import { directives, hash_literals, parsable_contants } from "../values/primitives.js";
 import * as specials from "./specials.js";
 
@@ -412,21 +412,26 @@ export class Lexer {
         }
       }
       // No rule matched: fine mid-token (char just accumulates), else a real syntax error.
-      invariant(
-        this._state !== null,
-        () => `Invalid Syntax at line ${this._line + 1}\n${this.__input__.split("\n")[this._line]}`,
-      );
+      if (this._state === null) {
+        throw new ParseError(
+          `Invalid Syntax at line ${this._line + 1}\n${this.__input__.split("\n")[this._line]}`,
+          undefined,
+          "E-LEXER-SYNTAX",
+        );
+      }
       continue;
     }
     // Ignore comment state here: a trailing comment can be the last thing in a file, with no newline after it.
     if (![null, Lexer.comment].includes(this._state)) {
       const line_number = this.__input__.slice(0, Math.max(0, this._newline)).match(/\n/g)?.length ?? 0;
       const line = this.__input__.slice(Math.max(0, this._newline));
-      invariant(
-        this.__input__[this._i] !== "#",
-        () =>
+      if (this.__input__[this._i] === "#") {
+        throw new ParseError(
           `Invalid Syntax at line ${line_number + 1}: invalid token ${this.__input__.slice(Math.max(0, this._i)).replace(/^([^\s()[\]{}]+).*/, "$1")}`,
-      );
+          undefined,
+          "E-LEXER-INVALID-TOKEN",
+        );
+      }
       throw new Unterminated(`Invalid Syntax at line ${line_number + 1}: Unterminated expression ${line}`);
     }
   }

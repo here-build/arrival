@@ -41,6 +41,19 @@ export class Unterminated extends Error {
   /** Type identity for CLASS-brand readers (`type()`), same convention as ArrivalError below. */
   static [CLASS] = "unterminated";
 
+  /** The `ConstructorParameters`-typed static invariant (the errors-as-doors idiom —
+   *  see `docs/working-proposals/arrival-doors-inventory-2026-07-11.md` §0(b)/§3.3):
+   *  `X.invariant(cond, ...factsMatchingX'sCtor)` throws the RECEIVER, never a bare
+   *  `Error`. Repeated per-class (not inherited from one root) because `Unterminated`/
+   *  `ParseError` do not extend `ArrivalError`. */
+  static invariant<T extends new (...args: any) => any>(
+    this: T,
+    condition: boolean,
+    ...args: ConstructorParameters<T>
+  ): asserts condition {
+    if (!condition) throw new this(...args);
+  }
+
   location?: SourceLocation;
   /** Stable spec-taxonomy id — the grammar conformance corpus (spec/corpus/) matches
    *  error CLASSES on this, not on prose. */
@@ -56,6 +69,15 @@ export class Unterminated extends Error {
 export class ParseError extends Error {
   /** Type identity for CLASS-brand readers (`type()`), same convention as ArrivalError below. */
   static [CLASS] = "parse-error";
+
+  /** See `Unterminated.invariant` above — same idiom, repeated per non-`ArrivalError` root. */
+  static invariant<T extends new (...args: any) => any>(
+    this: T,
+    condition: boolean,
+    ...args: ConstructorParameters<T>
+  ): asserts condition {
+    if (!condition) throw new this(...args);
+  }
 
   location?: SourceLocation;
   /** Stable spec-taxonomy id (e.g. E-DICT-DUP-KEY) — the grammar conformance corpus
@@ -111,6 +133,23 @@ function readLocation(code: SchemeValue): SourceLocation | undefined {
 export class ArrivalError extends Error {
   static [CLASS] = "arrival-error";
   public readonly name: string = "ArrivalError";
+
+  /** The `ConstructorParameters`-typed static invariant (errors-as-doors idiom, see
+   *  `docs/working-proposals/arrival-doors-inventory-2026-07-11.md` §0(b)/§3.3):
+   *  `MyError.invariant(cond, ...factsMatchingMyError'sCtor)` throws the RECEIVER
+   *  (`new this(...)`), never a bare `Error` — inherited by EVERY `ArrivalError`
+   *  subclass through the ctor prototype chain, structured ctors included, so no
+   *  subclass needs its own copy. Deliberately NOT the global message-first
+   *  `@here.build/error-invariant` install: that package strips the message under
+   *  `NODE_ENV=production`, and arrival doors are never stripped (prod here is MCP
+   *  or transpile-to-js, never a live runner — message richness is free). */
+  static invariant<T extends new (...args: any) => any>(
+    this: T,
+    condition: boolean,
+    ...args: ConstructorParameters<T>
+  ): asserts condition {
+    if (!condition) throw new this(...args);
+  }
 
   constructor(
     message: string,
@@ -487,6 +526,649 @@ export class DefineForwardReferenceError extends ArrivalError {
   }
 }
 
+// ===========================================================================
+// errors-as-doors extraction, wave 1/2/3 (2026-07-11) — see
+// docs/working-proposals/arrival-doors-inventory-2026-07-11.md. Each class below
+// promotes a previously-unclassed teaching door (a bare `throw new Error(...)`, a
+// tiny-invariant call, or an exported `xDoor()`/`xError()` factory) into a named
+// class carrying its facts as typed readonly fields — the message is built HERE,
+// ONCE, from those facts; every call site becomes a one-line `throw new X(facts…)`
+// (or `X.invariant(cond, facts…)`). Message TEXT is preserved byte-for-byte from
+// the door it replaces wherever a test or classifier matches on it — enrichment
+// (dropping tiny-invariant's "Invariant failed: " prefix) happens only where no
+// site depended on the old wording.
+// ===========================================================================
+
+// -------------------------------------------------------------------------
+// :: Membrane doors — a value crossing the JS↔Scheme boundary in a shape the
+// membrane refuses. Each names a DIFFERENT cure (fix the writer / add a branch /
+// await it / use the value directly / re-enter / detach), so each gets its own
+// class rather than one shared "membrane error."
+// -------------------------------------------------------------------------
+
+/** AmbientRuntime storage (or a fallback resolver's answer) held/returned a raw JS
+ *  scalar instead of a boxed scheme value — a writer or resolver bypassed the
+ *  membrane. Fires on the READ so the message can name the binding; the fix is
+ *  always at the WRITER/resolver, never the read site (`AmbientRuntime.ts`'s
+ *  `assertNotRawInStorage`/`assertResolvedBinding`). */
+export class RawCrossingError extends ArrivalError {
+  static [CLASS] = "raw-crossing-error";
+  public readonly name = "RawCrossingError";
+
+  constructor(
+    /** Which door caught it — storage read vs a fallback resolver's answer. */
+    public readonly site: "storage" | "resolver",
+    /** The binding/lookup name involved. */
+    public readonly variable: string,
+    /** The raw JS `typeof` the value carried (never a boxed scheme value). */
+    public readonly jsType: string,
+    /** Env name (storage site) or resolver id (resolver site). */
+    public readonly where: string,
+  ) {
+    super(
+      site === "storage"
+        ? `\`${variable}\` resolved to a raw JS ${jsType} in ${where} — a writer bypassed the ` +
+          `storage membrane. AmbientRuntime storage is inside the membrane: values enter the interpreter ` +
+          `only as capabilities (EnvCapability symbols/resolvers) or overrides (exec's \`override\`), ` +
+          `each boxing at its own boundary (jsToScheme/fromJS). Fix the writer, not this read.`
+        : `resolver "${where}" answered \`${variable}\` with a raw JS ${jsType} — a resolver ` +
+          `boxes at its own boundary (jsToScheme under the read's ctx; a \`pure\` resolver mints ` +
+          `run-neutrally, since its hits are memoized across runs). Raw JS never enters resolution.`,
+    );
+  }
+}
+
+/** `schemeToJs` reached a boxed shape with no `arrival/toJS` branch in its
+ *  instanceof chain — a silent return would leak the value's internal
+ *  representation to a JS caller expecting a plain value (P5, docs/PRINCIPLES.md).
+ *  Terminal-passthrough door: every `AValue` subclass needs an explicit branch. */
+export class UnrecognizedCrossingError extends ArrivalError {
+  static [CLASS] = "unrecognized-crossing-error";
+  public readonly name = "UnrecognizedCrossingError";
+
+  constructor(
+    /** `value.constructor.name`, or the anonymous-object fallback. */
+    public readonly typeName: string,
+  ) {
+    super(
+      `schemeToJs: no conversion for ${typeName} — every boxed shape needs an explicit branch in ` +
+        `schemeToJs's instanceof chain (rosetta.ts). Silently returning it would leak the value's ` +
+        `internal representation to a JS caller expecting a plain value; the membrane fails loudly ` +
+        `at the crossing instead (P5, docs/PRINCIPLES.md).`,
+    );
+  }
+}
+
+/** A bare `Promise` reached `jsToScheme` directly — every sanctioned path settles
+ *  first (rosetta wrappers await their fn results; a Promise INSIDE a structure
+ *  settles lazily on first read). A raw Promise in scheme space would be an
+ *  opaque, unawaitable leak (P5, docs/PRINCIPLES.md). */
+export class AsyncCrossingError extends ArrivalError {
+  static [CLASS] = "async-crossing-error";
+  public readonly name = "AsyncCrossingError";
+
+  constructor() {
+    super(
+      "jsToScheme: a bare Promise cannot cross the membrane — await it before crossing " +
+        "(rosetta wrappers already await their fn results), or hand the STRUCTURE holding it " +
+        "to the sandbox and let the entry read settle it lazily (AJSObject/ADict entries and " +
+        "AJSArray elements settle on first access, sync after settlement). A raw Promise in " +
+        "scheme space would be an opaque leak (P5, docs/PRINCIPLES.md).",
+    );
+  }
+}
+
+/** `fromJS`/`toJS` received a value already on the OTHER side of the membrane it
+ *  guards — an already-boxed scheme value reaching `fromJS`, or a raw JS value
+ *  reaching `toJS`. STRICT one-way doors: the caller is confused about which side
+ *  of the membrane it stands on; the value should be used/passed through directly,
+ *  never re-crossed. */
+export class RedundantCrossingError extends ArrivalError {
+  static [CLASS] = "redundant-crossing-error";
+  public readonly name = "RedundantCrossingError";
+
+  constructor(
+    /** Which membrane face refused the redundant crossing. */
+    public readonly direction: "fromJS" | "toJS",
+  ) {
+    super(
+      direction === "fromJS"
+        ? "fromJS: received an already-boxed scheme value — fromJS is the JS→Scheme membrane " +
+          "entry; an interpreter-minted value never crosses it. Use the value directly."
+        : "toJS: received a non-scheme value — toJS is the Scheme→JS membrane exit; a raw JS " +
+          "value is already JS. Pass it through directly.",
+    );
+  }
+}
+
+/** Rule 1's door (region-scope.ts): a reverse-lambda callback handed to host JS was
+ *  invoked AFTER its exporting symbol call already returned. Callbacks are
+ *  region-bound to the calling symbol; a persistent handler needs an explicit
+ *  capability granting a DETACHED scope. */
+export class RegionEscapeError extends ArrivalError {
+  static [CLASS] = "region-escape-error";
+  public readonly name = "RegionEscapeError";
+
+  constructor() {
+    super(
+      "reverse lambda escaped its invocation — callbacks are region-bound to the calling symbol; " +
+        "a wrapper handed to host JS may only be invoked WHILE the symbol call that exported it is " +
+        "still running. Persistent handlers (a subscription kept past the call's return) need an " +
+        "explicit capability granting a DETACHED scope — this is not that, by default.",
+    );
+  }
+}
+
+/** Rule 2's door (region-scope.ts): a symbol invocation returned while one or more
+ *  reverse-lambda re-entries it started were still in flight. Every re-entry
+ *  started during a call must settle (resolve or reject) before that call returns. */
+export class RegionIncompleteError extends ArrivalError {
+  static [CLASS] = "region-incomplete-error";
+  public readonly name = "RegionIncompleteError";
+
+  constructor(
+    /** How many reverse-lambda calls were still in flight at close. */
+    public readonly pending: number,
+  ) {
+    super(
+      `symbol returned with ${pending} reverse-lambda call${pending === 1 ? "" : "s"} incomplete — ` +
+        "every reverse-lambda call started during a symbol invocation must settle (resolve or reject) " +
+        "before that symbol returns. Await each re-entry, or use a persistent-handler capability for " +
+        "fire-and-forget work instead of leaving a call in flight.",
+    );
+  }
+}
+
+// -------------------------------------------------------------------------
+// :: Name-resolution doors — three distinct failures of "the symbol you wrote."
+// -------------------------------------------------------------------------
+
+/** The ONE builder for "Unbound variable", shared by every arrival-side throw
+ *  site (`AmbientRuntime.get`, `eval/Resolver.ts#resolveSynth`,
+ *  `eval/evaluator.ts#resolvedBindingOrThrow`) — promoted from the bare
+ *  `unbound-variable.ts` factory (`unboundVariableError`), which still builds the
+ *  `suggestions` list and constructs this class. `publicMessage`/`enriched` ride
+ *  alongside `.message` for the MCP/agent-facing surface and a typed "did this
+ *  enrich?" signal.
+ *
+ *  Extends `ArrivalError`: `failAndWrap`'s `if (error instanceof ArrivalError)
+ *  throw error` rethrows a live throw UNWRAPPED (it's already arrival-level and
+ *  self-teaching) instead of nesting it under a fresh wrapper's `.cause` — so
+ *  `.enriched` rides directly on the caught error at a live throw site, never
+ *  under `.cause` (vocabulary-suggestions.law.test.ts's LIVE `.enriched` law pins
+ *  this — the pin was updated deliberately when this class was promoted). */
+export class UnboundVariableError extends ArrivalError {
+  static [CLASS] = "unbound-variable-error";
+  public readonly name = "UnboundVariableError";
+  /** Agent/MCP-facing wording (same hint, different frame — see unbound-variable.ts). */
+  public readonly publicMessage: string;
+  /** True iff a did-you-mean suffix was appended (a near name existed in vocabulary). */
+  public readonly enriched: boolean;
+
+  constructor(
+    /** The unbound name as written. */
+    public readonly variable: string,
+    /** Near vocabulary matches, best first (empty ⇒ the plain wall, no hint). */
+    public readonly suggestions: readonly string[] = [],
+  ) {
+    const hint =
+      suggestions.length === 0 ? undefined : `did you mean ${suggestions.map((s) => `\`${s}\``).join(" or ")}?`;
+    super(hint ? `Unbound variable \`${variable}' — ${hint}` : `Unbound variable \`${variable}'`);
+    this.publicMessage = hint
+      ? `symbol ${variable} does not exist - look at list of available functions at tool description (${hint})`
+      : `symbol ${variable} does not exist - look at list of available functions at tool description`;
+    this.enriched = hint !== undefined;
+  }
+}
+
+/** Operator/call-head position held a non-callable value — designed off the
+ *  MCP-Atlas error-corpus autopsy (evaluator.ts's `notCallableError`/
+ *  `nonCallableHeadError`). The `quoted-string` variant is the corpus's #1 class:
+ *  a model writes a tool/symbol name as a STRING in call-head position (data, not
+ *  a reference) — echoing the string's own content back reads like the tool
+ *  itself failed, so this variant names the cure (drop the quotes) instead. */
+export class NotCallableError extends ArrivalError {
+  static [CLASS] = "not-callable-error";
+  public readonly name = "NotCallableError";
+
+  constructor(
+    public readonly kind: "type" | "quoted-string",
+    /** The scheme-visible type name (`type()`, e.g. "dict"/"vector"/"number") — always
+     *  set, used by the `"type"` variant. */
+    public readonly typeName: string,
+    /** The string's own content — set only for the `"quoted-string"` variant. */
+    public readonly content?: string,
+  ) {
+    super(
+      kind === "quoted-string"
+        ? `"${content}" is a string, not a function — a quoted name is data, it is never called. ` +
+          `Drop the quotes and call the symbol directly: (${content} …).`
+        : `Not callable: a ${typeName} sits in operator/call-head position, and a ${typeName} is not a function` +
+          ` — common cause: extra parentheses — ((f x)) calls f's RESULT, not f; write (f x).`,
+    );
+  }
+}
+
+/** A resolved binding is a structural non-value the evaluator cannot carry (a
+ *  scope, or the internal-only RegExp face number-parsing/syntax-rules patterns
+ *  use) — `eval/evaluator.ts#resolvedBindingOrThrow`. */
+export class ResolvedNonValueError extends ArrivalError {
+  static [CLASS] = "resolved-non-value-error";
+  public readonly name = "ResolvedNonValueError";
+
+  constructor(
+    public readonly variable: string,
+    public readonly kind: "environment" | "regexp",
+  ) {
+    super(
+      kind === "environment"
+        ? `\`${variable}' is an environment — neither a value nor applicable`
+        : `\`${variable}' resolved to a regular expression — neither a value nor applicable`,
+    );
+  }
+}
+
+// -------------------------------------------------------------------------
+// :: SpecialFormShapeError — a special form's own shape guard failed.
+//
+// ~50 sites across evaluator.ts (if/quote/quasiquote/unquote(-splicing)/define/
+// lambda/define-macro/let/let*/letrec/cond/case/when/unless/do/while/try/`=>`
+// clauses/improper-list-call) are boundary-reachable (malformed-but-plausible
+// Scheme a model can trivially write) yet were plain tiny-invariant calls — each
+// PREFIXED "Invariant failed: " (tiny-invariant's own wording), which reads like
+// an engine bug rather than a program mistake. ONE class, not 50: the FORM is a
+// fact carried on the instance, not a taxonomy of identities — per-form classes
+// would be taxonomy noise. Converges in SHAPE on the bracket-bindings exemplar
+// above (`EvalError` + `E-LET-BRACKET-*` codes: form/code carried as facts,
+// message built once); `code` stays optional here since most of these sites
+// predate the spec-corpus code convention — backfilling one per form is a later,
+// V-reviewed prose pass (docs/working-proposals/arrival-doors-inventory-2026-07-11.md W2).
+// -------------------------------------------------------------------------
+export class SpecialFormShapeError extends ArrivalError {
+  static [CLASS] = "special-form-shape-error";
+  public readonly name = "SpecialFormShapeError";
+
+  constructor(
+    /** The special form whose shape guard failed (`if`, `let`, `=>`, `apply`, …) —
+     *  routing/telemetry key. */
+    public readonly form: string,
+    /** What's wrong — terse today at most sites; a future pass may enrich per-form
+     *  with full what/why/fix prose (V-reviewed, not this pass). */
+    public readonly problem: string,
+    /** Stable spec-taxonomy id, when the corpus already matches one. */
+    public readonly code?: string,
+    public readonly location?: SourceLocation,
+  ) {
+    super(location ? `${form}: ${problem} at ${formatLocation(location)}` : `${form}: ${problem}`);
+  }
+}
+
+// -------------------------------------------------------------------------
+// :: Contract/shape doors — a call/schema shape a contract's own boundary rejects.
+// -------------------------------------------------------------------------
+
+/** `exec`'s `output` contract, at the exit boundary: the program produced no
+ *  forms at all, or its last value doesn't satisfy the declared schema. The
+ *  outbound twin of define/overridable's inbound validation. */
+export class OutputContractError extends ArrivalError {
+  static [CLASS] = "output-contract-error";
+  public readonly name = "OutputContractError";
+
+  constructor(
+    /** `describeExitSchema(contract)` — what the contract declared. */
+    public readonly expected: string,
+    /** `"no-forms"`, or `describeExitValue(...)` of what the program actually produced. */
+    public readonly got: "no-forms" | string,
+    /** The zod issue list, joined — set only when `got !== "no-forms"`. */
+    public readonly issues?: string,
+  ) {
+    super(
+      got === "no-forms"
+        ? `exec output contract: expected ${expected}, got NO forms at all — an empty program has no ` +
+          "last result to validate; drop the `output` option or run a real form"
+        : `exec output contract: expected ${expected}, got ${got} — ${issues} — the program's last form ` +
+          "must satisfy the declared `output` schema at the exit boundary (the outbound twin of " +
+          "define/overridable's validation)",
+    );
+  }
+}
+
+/** A `KeywordPairingError`'s sibling family: kwargs call-shape doors at
+ *  bake/normalize time (`common/symbols/_bake.ts`) — a dangling `:key` with no
+ *  value, or an `inputRest` variadic tail declared over a non-tuple `input`
+ *  (no well-defined prefix length to split at). */
+export class KeywordPairingError extends ArrivalError {
+  static [CLASS] = "keyword-pairing-error";
+  public readonly name = "KeywordPairingError";
+
+  constructor(
+    public readonly kind: "dangling-keyword" | "input-rest-needs-tuple",
+    /** Set only for `"dangling-keyword"` — the odd arg count observed. */
+    public readonly argCount?: number,
+  ) {
+    super(
+      kind === "dangling-keyword"
+        ? "kwargs call has a dangling keyword with no value — expected interleaved `:key value` " +
+          `pairs, got ${argCount} arg(s)`
+        : "inputRest requires `input` to be a fixed positional tuple (e.g. [z.string]) — a single " +
+          "schema `input` has no well-defined prefix length to split the rest at",
+    );
+  }
+}
+
+/** A `schema/object` tagged-list field isn't the `(name type)`/`(name type
+ *  description)` shape the JSON-Schema lowering (`common/schema-tag.ts`) requires. */
+export class SchemaFieldShapeError extends ArrivalError {
+  static [CLASS] = "schema-field-shape-error";
+  public readonly name = "SchemaFieldShapeError";
+
+  constructor() {
+    super("schema/object: field must be (name type) or (name type description)");
+  }
+}
+
+/** A scheme-zod codec's decode/encode side hit a value it cannot faithfully
+ *  represent on the other face — an exact rational with no integer/bigint form,
+ *  an inexact outside JS's safe-integer range or with a fractional part, a
+ *  circular or improper list. Model-reachable (a program's own value reaching a
+ *  native's arg decode), so these are doors, not invariants — every decode-side
+ *  throw in `common/scheme-zod.ts` self-documents that; this class gives them
+ *  one shared identity instead of ad hoc `Error`/`TypeError`. */
+export class CodecFidelityError extends ArrivalError {
+  static [CLASS] = "codec-fidelity-error";
+  public readonly name = "CodecFidelityError";
+
+  constructor(
+    /** Which named codec refused (`exact`/`number`/`integer`/`bigint`/`list`/…). */
+    public readonly codec: string,
+    /** What about the value the codec cannot represent, plus the alternative when one exists. */
+    public readonly problem: string,
+  ) {
+    super(`${codec} codec: ${problem}`);
+  }
+}
+
+// -------------------------------------------------------------------------
+// :: Capability-assembly doors — joins the existing `Assemble*` family
+// (env-pack DAG assembly) with symbol-declaration-time doors from `common/capability.ts`
+// and `eval/{generator-exec,exec-phases}.ts`.
+// -------------------------------------------------------------------------
+
+/** A `symbol.alias` declaration is unwireable: its target isn't declared in the
+ *  SAME capability's own `symbols` record (an alias only dissolves to a sibling),
+ *  or its target is itself another alias (chains aren't supported). */
+export class AliasTargetError extends ArrivalError {
+  static [CLASS] = "alias-target-error";
+  public readonly name = "AliasTargetError";
+
+  constructor(
+    public readonly capabilityName: string,
+    /** The name the alias is bound as. */
+    public readonly aliasName: string,
+    /** The alias's declared target name. */
+    public readonly targetName: string,
+    public readonly kind: "missing-target" | "chained-alias",
+  ) {
+    super(
+      kind === "missing-target"
+        ? `capability "${capabilityName}": symbol.alias\`${targetName}\` (bound as "${aliasName}") has no ` +
+          `target — "${targetName}" is not declared in this capability's own \`symbols\` record. An ` +
+          `alias can only dissolve to a SIBLING symbol declared in the SAME capability; declare ` +
+          `"${targetName}" first, or fix the alias's target name.`
+        : `capability "${capabilityName}": symbol.alias\`${targetName}\` (bound as "${aliasName}") targets ` +
+          `another alias ("${targetName}") — alias chains are not supported; alias directly to the ` +
+          `real symbol.`,
+    );
+  }
+}
+
+/** A capability declares `symbols.prelude` (scheme source to evaluate at apply
+ *  time) but `lower()` was never handed an `evalScheme` — nothing can run the
+ *  prelude text. `common/capability.ts`. */
+export class PreludeArmingError extends ArrivalError {
+  static [CLASS] = "prelude-arming-error";
+  public readonly name = "PreludeArmingError";
+
+  constructor(public readonly capabilityName: string) {
+    super(`capability "${capabilityName}" has a prelude but no evalScheme was provided to lower()`);
+  }
+}
+
+/** A seam expected a concrete `AmbientRuntime` (or an `assembleAmbient()`
+ *  product) and got a hand-rolled/structural stand-in instead — `eval/
+ *  generator-exec.ts` (`exec`/`execExpr`/the prelude evalScheme),
+ *  `eval/exec-phases.ts` (`ambientBase`), `common/capability.ts` (a pack's
+ *  `apply`). Every one of these messages decomposes as `${site}: ${detail}` —
+ *  kept as free text (not further split into facts) because the four sites'
+ *  phrasing genuinely differs in shape, not just in filled-in values. */
+export class AmbientShapeError extends ArrivalError {
+  static [CLASS] = "ambient-shape-error";
+  public readonly name = "AmbientShapeError";
+
+  constructor(
+    /** The call site's own name (`"exec"`, `"execExpr"`, `"prelude evalScheme"`,
+     *  `capability "${name}"`, …). */
+    public readonly site: string,
+    /** The rest of the teaching message. */
+    public readonly detail: string,
+  ) {
+    super(`${site}: ${detail}`);
+  }
+}
+
+// -------------------------------------------------------------------------
+// :: Loader doors — `require` is ONE designed door (the VFS membrane
+// penetration); each of these names a distinct way it refuses.
+// -------------------------------------------------------------------------
+
+/** A require verb (`require`/`require/extension`/…) ran outside the evaluator,
+ *  so no run resolver was published for it to read (`loader/loader.ts`'s
+ *  `runResolverOf`). Direct JS calls must go through `exec`/`execExpr`. */
+export class RunResolverUnreachableError extends ArrivalError {
+  static [CLASS] = "run-resolver-unreachable-error";
+  public readonly name = "RunResolverUnreachableError";
+
+  constructor(public readonly verb: string) {
+    super(
+      `${verb}: no run resolver reachable — the verb was called outside the evaluator ` +
+        `(direct JS calls must go through exec/execExpr so the run resolver is published).`,
+    );
+  }
+}
+
+/** A `require`d path fails the traversal jail (`loader/loader.ts`'s
+ *  `normalizePath`): a NUL byte in a path segment, or a `..` that would escape
+ *  above the project root. */
+export class RequirePathError extends ArrivalError {
+  static [CLASS] = "require-path-error";
+  public readonly name = "RequirePathError";
+
+  constructor(
+    public readonly kind: "nul-byte" | "escapes-root",
+    public readonly path: string,
+  ) {
+    super(
+      kind === "nul-byte"
+        ? `require: invalid path (NUL byte): ${JSON.stringify(path)}`
+        : `require: path escapes the project root: ${path}`,
+    );
+  }
+}
+
+/** `require` detected its own module still evaluating higher up the same chain —
+ *  awaiting it would deadlock (`loader/loader-capability.ts`). Only a module
+ *  actively evaluating (not merely a settled cache hit or a concurrent sibling)
+ *  can cycle. */
+export class RequireCycleError extends ArrivalError {
+  static [CLASS] = "require-cycle-error";
+  public readonly name = "RequireCycleError";
+
+  constructor(public readonly chain: readonly string[]) {
+    super(`require: cyclic dependency: ${chain.join(" → ")}`);
+  }
+}
+
+/** `require`/`require/extension` found no handler for a path (no built-in or
+ *  capability-registered resolver matches its suffix), or no ARMED extension for
+ *  a requested `:name` (`loader/loader-capability.ts`). */
+export class RequireResolverError extends ArrivalError {
+  static [CLASS] = "require-resolver-error";
+  public readonly name = "RequireResolverError";
+
+  constructor(
+    public readonly kind: "no-resolver" | "no-extension",
+    /** The unresolved path (`"no-resolver"`) or extension name (`"no-extension"`). */
+    public readonly path: string,
+    /** Currently-armed extension names — set only for `"no-extension"`. */
+    public readonly armedExtensions?: readonly string[],
+  ) {
+    super(
+      kind === "no-resolver"
+        ? `require: no resolver for ${path}`
+        : `require/extension: no extension :${path}. Armed extensions: ${
+            armedExtensions && armedExtensions.length > 0
+              ? armedExtensions.map((k) => `:${k}`).join(", ")
+              : "(none — the host registered no extension packs for this env)"
+          }`,
+    );
+  }
+}
+
+/** Two capabilities registered different resolver verbs for the same file suffix
+ *  (`loader/loader-extensions.ts`'s `registerExtension`) — a suffix maps to
+ *  exactly one resolver; last-write-wins would silently pick one at random
+ *  assembly-order. */
+export class ExtensionSuffixConflictError extends ArrivalError {
+  static [CLASS] = "extension-suffix-conflict-error";
+  public readonly name = "ExtensionSuffixConflictError";
+
+  constructor(
+    public readonly suffix: string,
+    public readonly existing: string,
+    public readonly attempted: string,
+  ) {
+    super(
+      `require/register-extension: "${suffix}" is already handled by "${existing}", cannot reassign to ` +
+        `"${attempted}". A file suffix maps to exactly one resolver; two capabilities are claiming it.`,
+    );
+  }
+}
+
+// -------------------------------------------------------------------------
+// :: Provenance/wire doors — joins the existing `ReplayScopeError`/
+// `WireLocalityError`/etc. family (all colocated with their mechanism; these two
+// are small enough, and general enough, to live in the shared home instead).
+// -------------------------------------------------------------------------
+
+/** A wire's declared `params` name has no matching key in the caller-supplied
+ *  ingress bindings (`provenance/gamma.ts`'s `assertIngressCovers`) — a caller bug
+ *  (a param a replay driver forgot to supply), named at γ's own boundary instead
+ *  of surfacing as an opaque unbound-variable error three calls deep in `exec`. */
+export class IngressBindingError extends ArrivalError {
+  static [CLASS] = "ingress-binding-error";
+  public readonly name = "IngressBindingError";
+
+  constructor(
+    public readonly span: string,
+    public readonly param: string,
+  ) {
+    super(
+      `hermeticApply: wire "${span}" declares param "${param}" but no ingress binding was supplied for ` +
+        "it — every name in wire.params must have a matching key in ingress, or " +
+        "the applied lambda hits an unbound variable deep inside exec instead of this door.",
+    );
+  }
+}
+
+/** A `TraceArtifact` was produced by a newer protocol version than this
+ *  visualizer supports (`provenance/trace-artifact.ts`'s `loadTraceArtifact`) —
+ *  rejected loudly rather than rendered wrong; there is no older format to
+ *  migrate from yet. */
+export class TraceArtifactVersionError extends ArrivalError {
+  static [CLASS] = "trace-artifact-version-error";
+  public readonly name = "TraceArtifactVersionError";
+
+  constructor(
+    public readonly version: number,
+    public readonly maxVersion: number,
+  ) {
+    super(
+      `Trace artifact version ${version} is newer than this visualizer supports (${maxVersion}). Update the visualizer.`,
+    );
+  }
+}
+
+/** A trace (`provenance/trace.ts`'s `EvalTrace`) hit its entry cap — the message
+ *  carries "budget exceeded" so the same wall-clock-deadline classifier
+ *  (`/budget exceeded|abort|maximum call stack/i`) treats a runaway trace as
+ *  contained rather than an unhandled crash. Run aborts with a partial trace
+ *  instead of OOMing the isolate or freezing the canvas. */
+export class TraceBudgetError extends ArrivalError {
+  static [CLASS] = "trace-budget-error";
+  public readonly name = "TraceBudgetError";
+
+  constructor(public readonly maxEntries: number) {
+    super(
+      `trace step budget exceeded (${maxEntries} entries) — run produced too many steps to ` +
+        `trace; bound the loop or raise ARRIVAL_TRACE_MAX.`,
+    );
+  }
+}
+
+// -------------------------------------------------------------------------
+// :: Value doors — a value-level operation refuses a shape it cannot honor.
+// -------------------------------------------------------------------------
+
+/** `sort`'s default comparator hit an element declaring no `arrival/tagless-final/
+ *  lte` (no natural order, e.g. a bare pair) — `values/op-helpers.ts`. Supply an
+ *  explicit comparator instead of relying on the default total order. */
+export class ComparatorRequiredError extends ArrivalError {
+  static [CLASS] = "comparator-required-error";
+  public readonly name = "ComparatorRequiredError";
+
+  constructor(public readonly elementDescription: string) {
+    super(
+      `sort: cannot order a ${elementDescription} (it declares no arrival/tagless-final/lte; supply a comparator).`,
+    );
+  }
+}
+
+/** arrival omits the complex numeric tower entirely (R7RS § 6.2.3 permits this) —
+ *  `sqrt` of a negative, `make-rectangular`/`make-polar`, a `3+4i` literal, and
+ *  `real-part`/`imag-part`/`magnitude`/`angle` all door here (`values/numbers.ts`'s
+ *  `complexDoor`) rather than silently misparsing. */
+export class ComplexNumberError extends ArrivalError {
+  static [CLASS] = "complex-number-error";
+  public readonly name = "ComplexNumberError";
+
+  constructor() {
+    super("complex numbers are not supported in arrival — inexact reals only; pass real/imag as separate values");
+  }
+}
+
+/** A receiver primitive has no `arrival/tagless-final/<op>` term implementing a
+ *  dispatched tagless op (`common/symbols/tagless.ts`'s `symbol.tagless` binder).
+ *  MODEL-REACHABLE (e.g. `(car 1)`), so this is a door, not an invariant — see the
+ *  not-callable doors note in evaluator.ts for why `invariant`'s "Invariant
+ *  failed: " prefix reads wrong for a program mistake. */
+export class TaglessProtocolError extends ArrivalError {
+  static [CLASS] = "tagless-protocol-error";
+  public readonly name = "TaglessProtocolError";
+
+  constructor(
+    public readonly op: string,
+    /** The scheme-visible receiver description (`describeReceiver`). */
+    public readonly receiver: string,
+    /** The `arrival/tagless-final/<op>` term name the receiver is missing. */
+    public readonly termName: string,
+  ) {
+    super(
+      `${op}: the ${receiver} primitive does not support \`${op}\` (it declares no ${termName}). A ` +
+        `tagless op lives ON the arrival terms whose algebra implements it.`,
+    );
+  }
+}
+
 // -------------------------------------------------------------------------
 // :: ProvenanceShadowDivergence — static fullCone vs the eager stamp disagree (a named bug).
 // -------------------------------------------------------------------------
@@ -504,3 +1186,79 @@ export class ProvenanceShadowDivergence extends Error {
     this.name = "ProvenanceShadowDivergence";
   }
 }
+
+// -------------------------------------------------------------------------
+// :: TypeTagError — `define/overridable`'s s/* type-tag validation door.
+//
+// Two distinct failures under one class (they share the same authoring context —
+// the binding's declared type — but neither is the other's fact variant of a THIRD
+// thing): a type tag `lowerTag` cannot turn into a real validator at all
+// ("unrecognized-tag"), or a value (an override or the in-form default) failing
+// its own declared type at `overridable/resolve` ("value-mismatch"). `env/overridable.ts`.
+// -------------------------------------------------------------------------
+export class TypeTagError extends ArrivalError {
+  static [CLASS] = "type-tag-error";
+  public readonly name = "TypeTagError";
+
+  constructor(
+    /** The `define/overridable` binding name — routing/telemetry key. */
+    public readonly bindingName: string,
+    public readonly kind: "unrecognized-tag" | "value-mismatch",
+    /** unrecognized-tag: `JSON.stringify(jsTag)` + the lowering failure reason, already joined.
+     *  value-mismatch: `describeTag(jsTag)` — what the declared type expects. */
+    public readonly expectedOrReason: string,
+    /** value-mismatch only: `describeValue(raw)` — what actually arrived. */
+    public readonly got?: string,
+    /** value-mismatch only: which source supplied the value. */
+    public readonly source?: "an environment override" | "the in-form default",
+  ) {
+    super(
+      kind === "unrecognized-tag"
+        ? `define/overridable ${bindingName}: unrecognized type tag ${expectedOrReason} — expected an s/* ` +
+          `expression: (s/string)/(s/number)/(s/integer)/(s/boolean), (s/enum value...), ` +
+          `(s/object (s/field ...)...) or (s/array tag) (see @here.build/arrival/schema), optionally ` +
+          `wrapped in (s/optional ...)`
+        : `define/overridable ${bindingName}: expected ${expectedOrReason}, got ${got} (from ${source}) — ` +
+          `${
+            source === "an environment override"
+              ? "the environment that supplied this value should validate at its own boundary too"
+              : "a default must satisfy its own declared type — that's the plain-define-plus-validation floor"
+          }`,
+    );
+  }
+}
+
+// -------------------------------------------------------------------------
+// :: CarrierMismatchError — `append`'s non-last-operand door (R7RS §6.4).
+//
+// A non-last operand must be a proper list (append walks its car-spine to splice
+// each element) — a vector/string/bytevector/other carrier there can't silently
+// contribute "nothing" or become the whole result. Names the carrier and, when one
+// exists, the sibling verb that actually concatenates it (`env/r7rs/lists.ts`).
+// -------------------------------------------------------------------------
+export class CarrierMismatchError extends ArrivalError {
+  static [CLASS] = "carrier-mismatch-error";
+  public readonly name = "CarrierMismatchError";
+
+  constructor(
+    /** The spine-walking verb that refused (currently always "append"). */
+    public readonly verb: string,
+    /** The operand's own scheme-visible type name (`type(item)`). */
+    public readonly carrier: string,
+    /** The sibling verb that concatenates this carrier, when one exists
+     *  ("vector-append"/"string-append"/"bytevector-append"). */
+    public readonly alternative?: string,
+  ) {
+    super(
+      alternative
+        ? `${verb}: every argument but the last must be a proper list, got a ${carrier} — use ` +
+          `\`${alternative}\` to concatenate ${carrier}s`
+        : `${verb}: every argument but the last must be a proper list, got a ${carrier} — ${verb} only ` +
+          `splices list spines, not this carrier`,
+    );
+  }
+}
+
+// NOTE: KwargsRejectionError is NOT here — it's colocated in
+// `common/kwargs-rejection.ts` beside the frozen rejection-string grammar it
+// throws (mechanism-local per §3.2's colocation rule), not duplicated in this leaf.

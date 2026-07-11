@@ -29,6 +29,7 @@ import { bindValue, mintFrame, type ResolvingAmbient } from "../AmbientRuntime.j
 import type { SchemeValue } from "../values/types.js";
 import { withSilentRegion } from "../values/primitives/region-scope.js";
 import { hermeticEnv, type IngressBindings } from "./hermetic-env.js";
+import { IngressBindingError } from "../errors.js";
 import type { EmittedWire } from "./wireframe/types.js";
 
 /** γ's inputs: the wire to replay, the recorded ingress it closes over (keyed BY NAME,
@@ -95,12 +96,7 @@ export async function hermeticApply(opts: HermeticApplyOptions): Promise<unknown
 /** The teaching door `hermeticApply` always had, shared with every boxed γ face. */
 function assertIngressCovers(wire: EmittedWire, ingress: IngressBindings): void {
   for (const name of wire.params) {
-    invariant(
-      Object.hasOwn(ingress, name),
-      `hermeticApply: wire "${wire.span}" declares param "${name}" but no ingress binding was supplied for ` +
-        "it — every name in wire.params must have a matching key in ingress, or " +
-        "the applied lambda hits an unbound variable deep inside exec instead of this door.",
-    );
+    if (!Object.hasOwn(ingress, name)) throw new IngressBindingError(wire.span, name);
   }
 }
 

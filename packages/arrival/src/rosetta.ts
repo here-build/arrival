@@ -20,7 +20,7 @@ import { theVoid } from "./values/primitives/AVoid.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
 import { EOF } from "./values/primitives/EOF.js";
 import { Values } from "./values/primitives/Values.js";
-import { R7RSError } from "./errors.js";
+import { R7RSError, UnrecognizedCrossingError, AsyncCrossingError } from "./errors.js";
 import { is_promise } from "./eval/guards.js";
 import { is_callable_value } from "./values/value-guards.js";
 import { applyCallback, type ACallable } from "./values/primitives/ACallable.js";
@@ -116,12 +116,7 @@ export function callableToHostFn(value: ACallable, options: RosettaOptions): (..
 
 /** Terminal-passthrough door (P5): every AValue subclass needs explicit branch in schemeToJsImpl instanceof chain — silent return would leak internal repr (kind/provenance/…) to JS caller expecting plain value. Fail loudly at crossing, not three calls later (P5, docs/PRINCIPLES.md). Named + exported for `instanceof` in catch, same shape as region-scope.ts door fns. */
 export function schemeToJsUnrecognizedDoor(value: object): Error {
-  return new Error(
-    `schemeToJs: no conversion for ${value.constructor?.name ?? "<anonymous object>"} — every boxed ` +
-      "shape needs an explicit branch in schemeToJs's instanceof chain (rosetta.ts). Silently " +
-      "returning it would leak the value's internal representation to a JS caller expecting a " +
-      "plain value; the membrane fails loudly at the crossing instead (P5, docs/PRINCIPLES.md).",
-  );
+  return new UnrecognizedCrossingError(value.constructor?.name ?? "<anonymous object>");
 }
 
 /**
@@ -224,13 +219,7 @@ export function schemeToJsUntyped(value: unknown, options: RosettaOptions = {}):
  *  opaque, unawaitable leak, so the membrane fails loudly at the crossing. Named +
  *  exported like `schemeToJsUnrecognizedDoor` (the outbound twin). */
 export function jsToSchemeAsyncDoor(): Error {
-  return new Error(
-    "jsToScheme: a bare Promise cannot cross the membrane — await it before crossing " +
-      "(rosetta wrappers already await their fn results), or hand the STRUCTURE holding it " +
-      "to the sandbox and let the entry read settle it lazily (AJSObject/ADict entries and " +
-      "AJSArray elements settle on first access, sync after settlement). A raw Promise in " +
-      "scheme space would be an opaque leak (P5, docs/PRINCIPLES.md).",
-  );
+  return new AsyncCrossingError();
 }
 
 /**

@@ -167,7 +167,7 @@ export class Parser {
       }
       if (token!.token === "#;") {
         this.skip();
-        invariant(this.__lexer__.peek() !== eof, "Lexer: syntax error eof found after comment");
+        if (this.__lexer__.peek() === eof) throw new Unterminated("syntax error: eof found after comment");
         await this._read_object();
         continue;
       }
@@ -312,7 +312,7 @@ export class Parser {
         tail = await this._read_object();
         dot = true;
       } else {
-        invariant(!dot, "Parser: syntax error more than one element after dot");
+        if (dot) throw new ParseError("more than one element after dot", loc ?? undefined, "E-DOT-EXTRA-ELEMENT");
         items.push({ node: await this._read_object(), loc });
       }
     }

@@ -39,7 +39,7 @@ import type { InvocationLike, RosettaFunction } from "../rosetta.js";
 import { bindRosetta, bindValue, AmbientRuntime, type AmbientValue } from "../AmbientRuntime.js";
 import { CallCtx, makeCallCtx, type CacheClass, type CallbackRoles, type ProvenanceRole } from "./symbols/_bake.js";
 import { type SchemeValue } from "../values/types.js";
-import invariant from "tiny-invariant";
+import { AliasTargetError, AmbientShapeError, PreludeArmingError } from "../errors.js";
 import {
   buildDegradationInfo,
   collectDegraded,
@@ -314,12 +314,14 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
         // real AmbientRuntime storage. Packs are applied onto real envs everywhere in production
         // (env-roots leaves, `LexicalScope.fresh()` roots, `inherit()` children thereof); a
         // synthetic structural env cannot RECEIVE bindings — assemble onto a real frame instead.
-        invariant(
-          env instanceof AmbientRuntime,
-          `capability "${name}": apply target is not an arrival AmbientRuntime — a capability's bindings ` +
-            `land in real environment storage (the JS-side write surface is retired; hermetic-AmbientRuntime ` +
-            `ruling). Assemble onto \`LexicalScope.fresh().env\`, an env-roots base, or a child of one.`,
-        );
+        if (!(env instanceof AmbientRuntime)) {
+          throw new AmbientShapeError(
+            `capability "${name}"`,
+            `apply target is not an arrival AmbientRuntime — a capability's bindings ` +
+              `land in real environment storage (the JS-side write surface is retired; hermetic-AmbientRuntime ` +
+              `ruling). Assemble onto \`LexicalScope.fresh().env\`, an env-roots base, or a child of one.`,
+          );
+        }
         // The env-backed bind face, shaped like the kernel's PreludeBindTarget shim so
         // `bindTarget` stays ONE type either way. The narrow from the shim's `unknown` is a
         // boundary cast per this file's applyCallback convention: every value routed through
@@ -357,19 +359,10 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
           if (isAliasDef(rawDef)) {
             const targetDef = symbolsRec[rawDef.target];
             if (targetDef === undefined) {
-              throw new Error(
-                `capability "${capabilityName}": symbol.alias\`${rawDef.target}\` (bound as "${name}") has no ` +
-                  `target — "${rawDef.target}" is not declared in this capability's own \`symbols\` record. An ` +
-                  `alias can only dissolve to a SIBLING symbol declared in the SAME capability; declare ` +
-                  `"${rawDef.target}" first, or fix the alias's target name.`,
-              );
+              throw new AliasTargetError(capabilityName, name, rawDef.target, "missing-target");
             }
             if (isAliasDef(targetDef)) {
-              throw new Error(
-                `capability "${capabilityName}": symbol.alias\`${rawDef.target}\` (bound as "${name}") targets ` +
-                  `another alias ("${rawDef.target}") — alias chains are not supported; alias directly to the ` +
-                  `real symbol.`,
-              );
+              throw new AliasTargetError(capabilityName, name, rawDef.target, "chained-alias");
             }
             def = targetDef;
           }
@@ -583,10 +576,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
           env.registerResolver(resolver);
         }
         if (spec.prelude !== undefined) {
-          invariant(
-            opts.evalScheme !== undefined,
-            `capability "${name}" has a prelude but no evalScheme was provided to lower()`,
-          );
+          if (opts.evalScheme === undefined) throw new PreludeArmingError(name);
           // BOOTSTRAP: evaluate against `env` (= R, already re-parented onto the prelude
           // overlay by the caller) so prelude `define`s land in R — `ctx.preludeEvalScope` is
           // undefined here. MID-RUN: evaluate against the caller's discarded CHILD scope

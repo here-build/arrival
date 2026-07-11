@@ -19,22 +19,20 @@ import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./primitives/AValue.js";
 import { AExact } from "./primitives/AExact.js";
 import { AInexact } from "./primitives/AInexact.js";
+import { ComplexNumberError } from "../errors.js";
 
 // ============================================================================
 // Complex-subsetting door (errors-as-doors)
 // ============================================================================
 
 /**
- * The single teaching message for every complex-number rejection. arrival omits
- * the complex tower entirely (R7RS § 6.2.3 permits this); the door RECOGNIZES the
- * omitted feature and explains the real-only alternative, rather than silently
- * misparsing or returning a wrong value. Matches arrival's %purity-door discipline.
+ * arrival omits the complex tower entirely (R7RS § 6.2.3 permits this); the door
+ * RECOGNIZES the omitted feature and explains the real-only alternative, rather
+ * than silently misparsing or returning a wrong value. Matches arrival's
+ * %purity-door discipline. See `ComplexNumberError` (errors.ts) for the message.
  */
-const COMPLEX_DOOR_MESSAGE =
-  "complex numbers are not supported in arrival — inexact reals only; pass real/imag as separate values";
-
 export function complexDoor(): never {
-  throw new Error(COMPLEX_DOOR_MESSAGE);
+  throw new ComplexNumberError();
 }
 
 // ============================================================================

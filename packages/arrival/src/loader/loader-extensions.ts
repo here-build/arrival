@@ -31,6 +31,8 @@
 //     templates), not user data, so only a capability's prelude may install one.
 //     (See docs/package-specific/arrival-scheme/prelude-only-symbols-and-composable-prompt-2026-07-02.md §1.)
 
+import { ExtensionSuffixConflictError } from "../errors.js";
+
 /** ext-suffix (e.g. `".prompt"`) → the NAME of the resolver verb that handles it. Process-
  *  global + idempotent: the same (suffix, name) re-registers as a no-op across runs (the
  *  same capabilities always register the same names); a DIFFERENT name for an already-claimed
@@ -56,12 +58,7 @@ export function registerExtension(ext: unknown, resolverName: unknown): void {
   const suffix = normalizeSuffix(String(ext));
   const name = resolverNameOf(resolverName);
   const existing = RESOLVERS.get(suffix);
-  if (existing !== undefined && existing !== name) {
-    throw new Error(
-      `require/register-extension: "${suffix}" is already handled by "${existing}", cannot reassign to "${name}". ` +
-        `A file suffix maps to exactly one resolver; two capabilities are claiming it.`,
-    );
-  }
+  ExtensionSuffixConflictError.invariant(existing === undefined || existing === name, suffix, existing ?? name, name);
   RESOLVERS.set(suffix, name);
 }
 

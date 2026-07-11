@@ -14,6 +14,7 @@ import { APair } from "./values/primitives/APair.js";
 import type { RunContext } from "./values/primitives/RunContext.js";
 import { rosettaTypesOf } from "./env-registries.js";
 import { unboundVariableError } from "./unbound-variable.js";
+import { RawCrossingError } from "./errors.js";
 
 // -------------------------------------------------------------------------
 // :: Type definitions for AmbientRuntime bindings
@@ -225,14 +226,7 @@ function isRawJsScalar(value: unknown): value is string | number | bigint | bool
  * message can name the binding — the fix is always at the WRITER.
  */
 function assertNotRawInStorage(value: unknown, name: string | symbol, where: string): void {
-  invariant(
-    !isRawJsScalar(value),
-    () =>
-      `\`${String(name)}\` resolved to a raw JS ${typeof value} in ${where} — a writer bypassed the ` +
-      `storage membrane. AmbientRuntime storage is inside the membrane: values enter the interpreter ` +
-      `only as capabilities (EnvCapability symbols/resolvers) or overrides (exec's \`override\`), ` +
-      `each boxing at its own boundary (jsToScheme/fromJS). Fix the writer, not this read.`,
-  );
+  if (isRawJsScalar(value)) throw new RawCrossingError("storage", String(name), typeof value, where);
 }
 
 /**
@@ -245,13 +239,7 @@ function assertNotRawInStorage(value: unknown, name: string | symbol, where: str
  * (eval/CompiledResolutionChain.ts).
  */
 export function assertResolvedBinding(value: unknown, name: string | symbol, resolverId: string): void {
-  invariant(
-    !isRawJsScalar(value),
-    () =>
-      `resolver "${resolverId}" answered \`${String(name)}\` with a raw JS ${typeof value} — a resolver ` +
-      `boxes at its own boundary (jsToScheme under the read's ctx; a \`pure\` resolver mints ` +
-      `run-neutrally, since its hits are memoized across runs). Raw JS never enters resolution.`,
-  );
+  if (isRawJsScalar(value)) throw new RawCrossingError("resolver", String(name), typeof value, resolverId);
 }
 
 /**

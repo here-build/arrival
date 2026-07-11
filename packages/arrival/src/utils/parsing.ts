@@ -10,6 +10,7 @@ import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
 import { complexDoor } from "../values/numbers.js";
+import { ParseError, strictGate } from "../errors.js";
 import {
   char_re,
   complex_re,
@@ -237,16 +238,17 @@ function parse_string(string: string, ctx: RunContext): AString {
     .replaceAll("\n", String.raw`\n`); // in LIPS strings can be multiline
   const m = string.match(/(\\*)(\\x[0-9A-F])/i);
   if (m && m[1].length % 2 === 0) {
-    throw new Error(`Invalid string literal, unclosed: ${m[2]}`);
+    throw new ParseError(`Invalid string literal, unclosed: ${m[2]}`, undefined, "E-STRING-UNCLOSED");
   }
   try {
     const str = new AString(ctx, JSON.parse(string));
     str.freeze();
     return str;
   } catch (error) {
-    invariant(
-      false,
+    throw new ParseError(
       `Invalid string literal: ${(error as Error).message.replace(/in JSON /, "").replace(/.*Error: /, "")}`,
+      undefined,
+      "E-STRING-INVALID",
     );
   }
 }
@@ -274,11 +276,13 @@ function decodeBarSymbolEscapes(content: string): string {
   // A backslash that doesn't open one of the four recognized escape forms is invalid R7RS
   // syntax — reject it rather than silently passing the stray backslash through.
   const stray = content.match(/\\(?!x[0-9a-fA-F]+;|[|\\abtnr]|[ \t]*\r?\n)/);
-  invariant(
-    stray === null,
-    () =>
-      `Parse: invalid escape '\\${content.slice((stray!.index ?? 0) + 1, (stray!.index ?? 0) + 9)}' in |...| symbol literal`,
-  );
+  if (stray !== null) {
+    throw new ParseError(
+      `Parse: invalid escape '\\${content.slice((stray.index ?? 0) + 1, (stray.index ?? 0) + 9)}' in |...| symbol literal`,
+      undefined,
+      "E-SYMBOL-BAR-ESCAPE",
+    );
+  }
   return content.replaceAll(BAR_SYMBOL_ESCAPE_RE, (_match, hex?: string, mnemonic?: string) => {
     if (hex !== undefined) {
       return String.fromCodePoint(Number.parseInt(hex, 16));
@@ -315,7 +319,9 @@ function splitBarSegments(token: string): { text: string; quoted: boolean }[] {
     }
     buf += char;
   }
-  invariant(!quoted, `Parse: unterminated |...| symbol literal in ${token}`);
+  if (quoted) {
+    throw new ParseError(`Parse: unterminated |...| symbol literal in ${token}`, undefined, "E-SYMBOL-BAR-UNTERMINATED");
+  }
   segments.push({ text: buf, quoted: false });
   return segments;
 }
@@ -359,8 +365,11 @@ export function parse_argument(arg: string, strict = false, ctx: RunContext = CO
   // Strict (the R7RS portability control) rejects the loose-mode `#void`/`#null`
   // reader literals — a program that writes them is not portable to a stock Scheme.
   // The VALUES (void/nil) still exist; only the non-standard readable LITERAL is gated.
-  if (strict && (arg === "#void" || arg === "#null")) {
-    throw new Error(`reader: \`${arg}' is not portable R7RS — strict mode rejects this loose-mode literal`);
+  if (arg === "#void" || arg === "#null") {
+    strictGate(
+      { strict },
+      { op: "reader-literal", rule: `\`${arg}' has no R7RS reader syntax — it is a loose-mode-only literal` },
+    );
   }
   // Constants stay SHARED singletons (#t/#f/±inf/nan) — deliberately outside the parse-ctx
   // family: per-occurrence identity would break the shared-by-reference-forever design.
@@ -390,7 +399,7 @@ export function parse_argument(arg: string, strict = false, ctx: RunContext = CO
       return parse_complex(arg);
     }
   }
-  invariant(!/^#[iexobd]/.test(arg), `Invalid numeric constant: ${arg}`);
+  if (/^#[iexobd]/.test(arg)) throw new ParseError(`Invalid numeric constant: ${arg}`, undefined, "E-NUMERIC-CONSTANT");
   // SYMBOLS deliberately stay OFF the parse-ctx channel (CONSTANT_CTX, byte-identical
   // interning): ASymbol's flyweight table is keyed BY ctx, so a per-occurrence parse ctx
   // would mint per-occurrence instances — and raw reference identity on interned symbols

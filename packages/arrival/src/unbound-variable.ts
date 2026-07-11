@@ -3,9 +3,13 @@
 // `eval/evaluator.ts#resolvedBindingOrThrow`), plus the TYPO-SUGGESTION mechanism that
 // enriches it.
 //
-// ZERO IMPORTS BY DESIGN — the throw sites sit at/below the eval layer, so this module
-// must be importable from anywhere in the graph with no cycle risk (the same constraint
-// the dissolved `env/polyglot-rich-errors/registry.ts` documented).
+// The suggestion machinery below stays zero-imports (the throw sites sit at/below the
+// eval layer, so this module must be importable from anywhere in the graph with no
+// cycle risk — the same constraint the dissolved `env/polyglot-rich-errors/registry.ts`
+// documented). The one exception is `UnboundVariableError` itself, promoted into
+// `errors.ts` (the errors-as-doors extraction, 2026-07-11) — that class has zero
+// imports of its own beyond `ArrivalError`, so importing it here carries no cycle risk
+// either.
 //
 // There is deliberately no static curated table of "well-known" names here (the old
 // dissolved registry kept one, matching typos against it). That table was declaration
@@ -32,6 +36,8 @@
 // actually exists in the vocabulary — an arbitrary unbound identifier (`csv-content`)
 // matches nothing and gets the PLAIN message, with no hint appended. A wrong hint is
 // poison; under-trigger, never guess.
+
+import { UnboundVariableError } from "./errors.js";
 
 /** Names the RESOLVER SYNTHESIZES structurally rather than binding (`c[ad]+r`
  *  composition, eval/Resolver.ts#cxrUnfold) — absent from every enumerable vocabulary
@@ -145,15 +151,6 @@ export function suggestFromVocabulary(unboundName: string, vocabulary: Iterable<
  * that needs "did arrival already enrich this?" asks a typed boolean instead of
  * sniffing the SHAPE of `.message`.
  */
-export function unboundVariableError(
-  name: string,
-  vocabulary: Iterable<string | symbol> = [],
-): Error & { publicMessage: string; enriched: boolean } {
-  const suggestions = suggestFromVocabulary(name, vocabulary);
-  const hint = suggestions.length === 0 ? undefined : `did you mean ${suggestions.map((s) => `\`${s}\``).join(" or ")}?`;
-  const message = hint ? `Unbound variable \`${name}' — ${hint}` : `Unbound variable \`${name}'`;
-  const publicMessage = hint
-    ? `symbol ${name} does not exist - look at list of available functions at tool description (${hint})`
-    : `symbol ${name} does not exist - look at list of available functions at tool description`;
-  return Object.assign(new Error(message), { publicMessage, enriched: hint !== undefined });
+export function unboundVariableError(name: string, vocabulary: Iterable<string | symbol> = []): UnboundVariableError {
+  return new UnboundVariableError(name, suggestFromVocabulary(name, vocabulary));
 }

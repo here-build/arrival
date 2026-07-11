@@ -58,6 +58,7 @@ import { is_callable_value } from "../values/value-guards.js";
 import { nil } from "../values/primitives/ANil.js";
 import { theVoid } from "../values/primitives/AVoid.js";
 import invariant from "tiny-invariant";
+import { RequireCycleError, RequireResolverError } from "../errors.js";
 
 import { bindValue, AmbientRuntime, type AmbientValue, mintFrame } from "../AmbientRuntime.js";
 import { lookupExtensionResolver, registerExtension } from "./loader-extensions.js";
@@ -300,10 +301,7 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
           if (pending) {
             // In-flight as this chain's own ancestor → real cycle (awaiting would deadlock).
             // Otherwise a settled cache hit or a concurrent sibling — share the load.
-            invariant(
-              !evaluating.has(path),
-              () => `require: cyclic dependency: ${[...loadingStack, path].join(" → ")}`,
-            );
+            RequireCycleError.invariant(!evaluating.has(path), [...loadingStack, path]);
             return (await pending).value;
           }
 
@@ -341,7 +339,7 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
               )) as unknown as ResolverResult;
             } else {
               const handler = pickHandler(path, loader.resolvers);
-              invariant(handler, `require: no resolver for ${path}`);
+              RequireResolverError.invariant(handler !== undefined, "no-resolver", path);
               result = await handler.resolve(contents, { path });
             }
 
@@ -456,14 +454,7 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
           const env = runEnvOf(this, "require/extension");
           const name = extensionName(args[0]);
           const pack = extensionRegistry.get(name);
-          invariant(
-            pack,
-            () =>
-              `require/extension: no extension :${name}. Armed extensions: ${
-                [...extensionRegistry.keys()].map((k) => `:${k}`).join(", ") ||
-                "(none — the host registered no extension packs for this env)"
-              }`,
-          );
+          RequireResolverError.invariant(pack !== undefined, "no-extension", name, [...extensionRegistry.keys()]);
           const assembler = (await resources.assembler.get()).getOrCreate(env);
           // ⚠ COMPAT bridge (see header): hand a lifecycle owner the live assembler so it can fold
           // `dispose()` into its own teardown, until it can reach `LoweredPack.windDown()` instead.

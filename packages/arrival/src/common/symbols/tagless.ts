@@ -4,6 +4,7 @@
 import * as z from "../scheme-zod.js";
 import { CallCtx, describeReceiver, parseNameDoc, resolveMethod, type TaglessSymbolDef } from "./_bake.js";
 import { tf, type TaglessOp } from "../../values/tagless-final.js";
+import { TaglessProtocolError } from "../../errors.js";
 
 /** Tagless host op — `symbol.tagless\`name: doc\`` binds a symbol that dispatches to the receiver's
  *  own `arrival/tagless-final/name` term method (the LAST scheme arg is the receiver; a missing
@@ -27,10 +28,7 @@ export function tagless(tpl: TemplateStringsArray, ...sub: unknown[]): TaglessSy
     // `invariant` would prefix "Invariant failed: ", which reads like an engine bug
     // rather than a program mistake (see the not-callable doors note in evaluator.ts).
     if (fn === undefined) {
-      throw new TypeError(
-        `${name}: the ${describeReceiver(receiver)} primitive does not support \`${name}\` ` +
-          `(it declares no ${tf(name as TaglessOp)}). A tagless op lives ON the arrival terms whose algebra implements it.`,
-      );
+      throw new TaglessProtocolError(name, describeReceiver(receiver), tf(name as TaglessOp));
     }
     return await fn.call(receiver, ...leading, runCtx);
   };

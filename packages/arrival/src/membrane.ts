@@ -18,7 +18,6 @@
 
 import { CLASS } from "./well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./values/primitives/RunContext.js";
-import invariant from "tiny-invariant";
 import { DefaultedWeakMap } from "@here.build/collections";
 import { AValue, EMPTY_PROVENANCE } from "./values/primitives/AValue.js";
 import { Values } from "./values/primitives/Values.js";
@@ -37,6 +36,7 @@ import { APair } from "./values/primitives/APair.js";
 // Intentional runtime cycle with rosetta.ts (which imports SchemeJSObject from
 // here). ESM resolves it: both fns are declared before any call site fires.
 import { jsToScheme, callableToHostFn } from "./rosetta.js";
+import { RedundantCrossingError } from "./errors.js";
 import { is_callable_value } from "./values/value-guards.js";
 import { Syntax } from "./eval/Syntax.js";
 import { type SchemeValue } from "./values/types.js";
@@ -190,10 +190,7 @@ const jsToWrapper = new DefaultedWeakMap<object, AJSArray | AJSObject>((key) =>
  *  about which side of the membrane it stands on — refuse loudly instead of
  *  passing through. Type-level: an `AValue`-typed argument resolves to `never`. */
 export function fromJS<T>(value: [T] extends [AValue] ? never : T): FromJSResult {
-  invariant(
-    !isSchemeValue(value),
-    "fromJS: received an already-boxed scheme value — fromJS is the JS→Scheme membrane entry; an interpreter-minted value never crosses it. Use the value directly.",
-  );
+  if (isSchemeValue(value)) throw new RedundantCrossingError("fromJS");
 
   // Containers get membrane-specific handling: array → borrowed AJSArray vector (JS array IS an
   // R7RS vector); binary stays raw (FFI identity, membrane.spec pins it); Promise stays raw (the
@@ -237,10 +234,7 @@ export function toJS(value: SchemeValue) {
   // values-returning program ((partition …), (exact-integer-sqrt …)) would die on
   // the strict-exit invariant below.
   if (value instanceof Values) return value.__values__.map((v) => toJS(v));
-  invariant(
-    isSchemeValue(value),
-    "toJS: received a non-scheme value — toJS is the Scheme→JS membrane exit; a raw JS value is already JS. Pass it through directly.",
-  );
+  if (!isSchemeValue(value)) throw new RedundantCrossingError("toJS");
   // A scheme callable exits as its reverse-membrane region wrapper (so exec()'s
   // simple tier can return an ALambda/AProcedure as a callable host fn), NOT its
   // print-string `arrival/toJS`. Special-cased here rather than in ACallable's

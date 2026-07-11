@@ -147,20 +147,26 @@ describe("LIVE enrichment at the arrival throw site (default assembled env)", ()
     await expect(exec("csv-content")).rejects.toThrow(/^Unbound variable `csv-content'$/);
   });
 
-  // `exec` wraps the original throw into an ArrivalError(message, frames, cause) — the
-  // original unboundVariableError-produced Error (carrying `.enriched`) survives as `.cause`.
+  // `UnboundVariableError` is itself an `ArrivalError` now (errors-as-doors extraction,
+  // 2026-07-11), so whether it reaches the caller unwrapped or nested under `.cause` of a
+  // further wrapper is an evaluator-internal wrapping-depth detail, not this law's subject.
+  // The INVARIANT under test is narrower: the `.enriched` structured signal survives the
+  // throw somewhere on the caught error's own chain — check both faces rather than pin the
+  // wrap depth.
   const causeEnriched = async (src: string): Promise<boolean | undefined> => {
     try {
       await exec(src);
     } catch (e) {
-      return (e as Error & { cause?: { enriched?: boolean } }).cause?.enriched;
+      const err = e as Error & { enriched?: boolean; cause?: { enriched?: boolean } };
+      return err.enriched ?? err.cause?.enriched;
     }
     throw new Error(`expected exec to reject for: ${src}`);
   };
 
-  // INVARIANT: the original enriched Error survives as `.cause` on the wrapped ArrivalError;
-  // `.cause.enriched` is true when a hint fired, false for a bare, unenriched unbound-variable throw
-  it("LIVE: `.cause.enriched` is true when the throw carries a hint, false for the bare wall", async () => {
+  // INVARIANT: the live-thrown `UnboundVariableError`'s `.enriched` signal survives (on
+  // itself, or on `.cause` if further wrapped) — true when a hint fired, false for a bare,
+  // unenriched unbound-variable throw
+  it("LIVE: `.enriched` is true when the throw carries a hint, false for the bare wall", async () => {
     expect(await causeEnriched("reduse")).toBe(true);
     expect(await causeEnriched("csv-content")).toBe(false);
   });

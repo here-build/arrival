@@ -21,7 +21,7 @@ import { APair } from "../values/primitives/APair.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { nil } from "../values/primitives/ANil.js";
 import type { SchemeEnv } from "../common/scheme-env.js";
-import invariant from "tiny-invariant";
+import { RunResolverUnreachableError, RequirePathError } from "../errors.js";
 
 export type MaybePromise<T> = T | Promise<T>;
 
@@ -60,12 +60,7 @@ export type SchemeVal = Awaited<ReturnType<typeof execExpr>>;
 export function runResolverOf(ctx: unknown, verb: string): Resolver {
   void ctx;
   const resolver = currentRunResolver();
-  invariant(
-    resolver,
-    () =>
-      `${verb}: no run resolver reachable — the verb was called outside the evaluator ` +
-      `(direct JS calls must go through exec/execExpr so the run resolver is published).`,
-  );
+  RunResolverUnreachableError.invariant(resolver !== undefined, verb);
   return resolver;
 }
 
@@ -157,9 +152,9 @@ function normalizePath(p: string): string {
   const out: string[] = [];
   for (const seg of p.split("/")) {
     if (seg === "" || seg === ".") continue;
-    invariant(seg !== "\0" && !seg.includes("\0"), () => `require: invalid path (NUL byte): ${JSON.stringify(p)}`);
+    RequirePathError.invariant(seg !== "\0" && !seg.includes("\0"), "nul-byte", p);
     if (seg === "..") {
-      invariant(out.length > 0, () => `require: path escapes the project root: ${p}`);
+      RequirePathError.invariant(out.length > 0, "escapes-root", p);
       out.pop();
     } else {
       out.push(seg);

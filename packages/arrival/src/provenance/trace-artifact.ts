@@ -23,7 +23,7 @@
  * the wire shape.
  */
 import { schemeToJs } from "../rosetta.js";
-import invariant from "tiny-invariant";
+import { TraceArtifactVersionError } from "../errors.js";
 
 import { traceToRegions, type Region, type RegionGraph } from "./trace-to-regions.js";
 import type { EvalTrace } from "./trace.js";
@@ -98,11 +98,9 @@ export function serializeTrace(trace: EvalTrace): TraceArtifact {
  * loudly rather than rendered wrong.
  */
 export function loadTraceArtifact(artifact: TraceArtifact): { graph: RegionGraph } {
-  invariant(
-    artifact.version <= TRACE_PROTOCOL_VERSION,
-    () =>
-      `Trace artifact version ${artifact.version} is newer than this visualizer supports (${TRACE_PROTOCOL_VERSION}). Update the visualizer.`,
-  );
+  if (artifact.version > TRACE_PROTOCOL_VERSION) {
+    throw new TraceArtifactVersionError(artifact.version, TRACE_PROTOCOL_VERSION);
+  }
   // v1 is the floor — no older format exists to migrate from yet. When one does,
   // migrate-forward by version here (additive fields need no migration).
   return { graph: artifact.graph };

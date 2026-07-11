@@ -72,6 +72,7 @@
 
 import { z } from "zod";
 
+import { TypeTagError } from "../errors.js";
 import { EnvCapability } from "../common/capability.js";
 import { symbol, type CallCtx } from "../common/symbol.js";
 // The scheme-aware zod vocabulary — only the identity carrier `sz.value` is needed here (the
@@ -110,12 +111,7 @@ function lowerTag(jsTag: unknown, bindingName: string): z.ZodType {
     return z.fromJSONSchema(json as Parameters<typeof z.fromJSONSchema>[0]);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `define/overridable ${bindingName}: unrecognized type tag ${JSON.stringify(jsTag)} (${reason}) — expected ` +
-        `an s/* expression: (s/string)/(s/number)/(s/integer)/(s/boolean), (s/enum value...), ` +
-        `(s/object (s/field ...)...) or (s/array tag) (see @here.build/arrival/schema), ` +
-        `optionally wrapped in (s/optional ...)`,
-    );
+    throw new TypeTagError(bindingName, "unrecognized-tag", `${JSON.stringify(jsTag)} (${reason})`);
   }
 }
 
@@ -175,13 +171,7 @@ export const overridableCapability = new EnvCapability("arrival/overridable", {
 
           const outcome = zodType.safeParse(raw);
           if (!outcome.success) {
-            const followup = hasOverride
-              ? "the environment that supplied this value should validate at its own boundary too"
-              : "a default must satisfy its own declared type — that's the plain-define-plus-validation floor";
-            throw new Error(
-              `define/overridable ${bindingName}: expected ${describeTag(jsTag)}, got ${describeValue(raw)} ` +
-                `(from ${source}) — ${followup}`,
-            );
+            throw new TypeTagError(bindingName, "value-mismatch", describeTag(jsTag), describeValue(raw), source);
           }
           return jsToScheme(CONSTANT_CTX, outcome.data);
         },

@@ -22,6 +22,8 @@
 import { ZodError, ZodType, type ZodRawShape } from "zod";
 import * as z from "./scheme-zod.js";
 import { AValue } from "../values/primitives/AValue.js";
+import { ArrivalError } from "../errors.js";
+import { CLASS } from "../well-known-symbols.js";
 
 /** Same convention as arrival-manifold bind.ts's `previewOf` (design doc §2.5). */
 const PREVIEW_MAX = 60;
@@ -112,12 +114,28 @@ function issueLines(
  *  case anymore — their NAME_DOC_TEMPLATE was a malformed 2-part template that parsed
  *  every def as anonymous, fixed 2026-07-11 in arrival-manifold bind.ts — but the
  *  headless degradation stays for any true anonymous rosetta.) */
-export function formatKwargsRejection(
-  qualifiedName: string,
-  problems: readonly ProblemLine[],
-): string {
+export function formatKwargsRejection(qualifiedName: string, problems: readonly ProblemLine[]): string {
   const head = qualifiedName === "" ? "arguments rejected" : `${qualifiedName}: arguments rejected`;
   return `${head} — ${problems.length} problem(s):\n${problems.join("\n")}`;
+}
+
+/** A kwargs call rejected at the strict decode chokepoint (`decodeKwargsStrict` below) —
+ *  either the scheme-face guard (a boxed `AValue` sent where the declared shape has no
+ *  scheme face) or the zod decode itself. Colocated here (not `errors.ts`) because the
+ *  frozen rejection-string contract this file owns (H-4-adjacent — the manifold's
+ *  error-contract freezes line HEADS against `formatKwargsRejection`'s output; the
+ *  mcp-substrate own-decode clue family parses `:<param> —` line heads off it) is
+ *  mechanism-local, not a leaf-safe general fact. */
+export class KwargsRejectionError extends ArrivalError {
+  static [CLASS] = "kwargs-rejection-error";
+  public readonly name = "KwargsRejectionError";
+
+  constructor(
+    public readonly qualifiedName: string,
+    public readonly problems: readonly ProblemLine[],
+  ) {
+    super(formatKwargsRejection(qualifiedName, problems));
+  }
 }
 
 /** A field schema with no scheme face cannot consume a boxed scheme value: codecs and
@@ -151,14 +169,14 @@ export function decodeKwargsStrict(
 ): unknown {
   const faceProblems = schemaFaceProblems(shape, sent);
   if (faceProblems.length > 0) {
-    throw new Error(formatKwargsRejection(qualifiedName, faceProblems));
+    throw new KwargsRejectionError(qualifiedName, faceProblems);
   }
   try {
     return z.decode(z.strictObject(shape) as unknown as ZodType, sent);
   } catch (e) {
     if (e instanceof ZodError) {
       const problems = e.issues.flatMap((issue) => issueLines(issue, sent, shape));
-      throw new Error(formatKwargsRejection(qualifiedName, problems));
+      throw new KwargsRejectionError(qualifiedName, problems);
     }
     throw e;
   }

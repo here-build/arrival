@@ -17,7 +17,7 @@ import { ADict, isDictShaped, type DictKey } from "../values/primitives/ADict.js
 import { AJSObject } from "../values/primitives/AJSObject.js";
 import { AJSArray } from "../values/primitives/AJSArray.js";
 import { Values } from "../values/primitives/Values.js";
-import { ArrivalError, R7RSError } from "../errors.js";
+import { ArrivalError, CodecFidelityError, R7RSError } from "../errors.js";
 import { chargeHeap, heapBudgetMessage } from "../heap-budget.js";
 import {
   ALambda,
@@ -348,7 +348,7 @@ export const exact = named(
       // reads like an engine bug rather than a program mistake. Same rule at every
       // decode site below; the encode sites (host JS → scheme boxing) stay
       // `invariant` — a bad host value IS an internal contract breach.
-      if (n.denom !== 1n) throw new Error(`exact codec: exact rational ${n.toString()} has no integer form`);
+      if (n.denom !== 1n) throw new CodecFidelityError("exact", `exact rational ${n.toString()} has no integer form`);
       return n.num;
     },
     encode: (n) => {
@@ -375,13 +375,15 @@ const SAFE_MIN = BigInt(Number.MIN_SAFE_INTEGER);
 function exactToJsNumberOrDoor(n: AExact): number {
   // Doors, not invariants — model-reachable (see the `exact` decode note above).
   if (n.denom !== 1n) {
-    throw new Error(
-      `number codec: exact rational ${n.toString()} cannot be a faithful JS number — use z.bigint or the integer codec`,
+    throw new CodecFidelityError(
+      "number",
+      `exact rational ${n.toString()} cannot be a faithful JS number — use z.bigint or the integer codec`,
     );
   }
   if (n.num > SAFE_MAX || n.num < SAFE_MIN) {
-    throw new Error(
-      `number codec: exact integer ${n.toString()} is outside JS safe-integer range — use z.bigint for arbitrary precision`,
+    throw new CodecFidelityError(
+      "number",
+      `exact integer ${n.toString()} is outside JS safe-integer range — use z.bigint for arbitrary precision`,
     );
   }
   return Number(n.num);
@@ -396,7 +398,7 @@ export const integer = named(
       if (n instanceof AInexact) {
         // Door, not invariant — model-reachable (see the `exact` decode note above).
         if (!Number.isSafeInteger(n.real)) {
-          throw new TypeError(`integer codec: inexact ${n.toString()} is not a safe integer`);
+          throw new CodecFidelityError("integer", `inexact ${n.toString()} is not a safe integer`);
         }
         return n.real;
       }
@@ -438,7 +440,7 @@ export const bigint = named(
       decode: (n) => {
         // Door, not invariant — model-reachable (see the `exact` decode note above).
         if (n.denom !== 1n) {
-          throw new TypeError(`bigint codec: exact rational ${n.toString()} has no integer bigint form`);
+          throw new CodecFidelityError("bigint", `exact rational ${n.toString()} has no integer bigint form`);
         }
         return n.num;
       },
@@ -448,7 +450,7 @@ export const bigint = named(
       decode: (n) => {
         // Door, not invariant — model-reachable (see the `exact` decode note above).
         if (!Number.isInteger(n.real)) {
-          throw new TypeError(`bigint codec: inexact ${n.toString()} has a fractional part`);
+          throw new CodecFidelityError("bigint", `inexact ${n.toString()} has a fractional part`);
         }
         return BigInt(n.real);
       },
@@ -570,14 +572,14 @@ function spineToArray(l: AListAlike): unknown[] {
   const out: unknown[] = [];
   let node: unknown = l;
   while (node instanceof APair) {
-    if (node.have_cycles("cdr")) throw new TypeError("list codec: cannot decode a circular list");
+    if (node.have_cycles("cdr")) throw new CodecFidelityError("list", "cannot decode a circular list");
     out.push(node.car);
     if (meter !== undefined && ++meter.used > meter.max) {
       throw new ArrivalError(heapBudgetMessage(meter.max), []);
     }
     node = node.cdr;
   }
-  if (!(node instanceof ANil)) throw new TypeError("list codec: cannot decode an improper list");
+  if (!(node instanceof ANil)) throw new CodecFidelityError("list", "cannot decode an improper list");
   return out;
 }
 

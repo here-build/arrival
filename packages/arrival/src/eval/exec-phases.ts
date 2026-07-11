@@ -24,9 +24,8 @@
  * Export home: the `/env` subpath (privatization D1 — src/env/index.ts), NOT the barrel.
  */
 
-import invariant from "tiny-invariant";
-
 import { AmbientRuntime, type AmbientValue } from "../AmbientRuntime.js";
+import { AmbientShapeError } from "../errors.js";
 import { Capabilities } from "./Capabilities.js";
 import { LexicalScope } from "./LexicalScope.js";
 import { Resolver } from "./Resolver.js";
@@ -162,11 +161,13 @@ const internals = new WeakMap<AssembledAmbient, AmbientInternals>();
  *  product is minted by `assembleAmbient`, not duck-typed. */
 export function ambientBase(ambient: AssembledAmbient): AmbientRuntime {
   const found = internals.get(ambient);
-  invariant(
-    found !== undefined,
-    "exec: `ambient` must be a product of assembleAmbient() (or ExecState.ambient) — " +
-      "a hand-rolled object satisfying the shape carries no assembled base to resolve through",
-  );
+  if (found === undefined) {
+    throw new AmbientShapeError(
+      "exec",
+      "`ambient` must be a product of assembleAmbient() (or ExecState.ambient) — " +
+        "a hand-rolled object satisfying the shape carries no assembled base to resolve through",
+    );
+  }
   return found.base;
 }
 

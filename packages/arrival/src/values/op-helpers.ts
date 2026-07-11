@@ -25,7 +25,7 @@ import { is_false } from "./value-guards.js";
 import { type ANumeric } from "./numbers.js";
 import { type SchemeValue } from "./types.js";
 import { ACharacter } from "./primitives/ACharacter.js";
-import "../errors.js";
+import { ComparatorRequiredError } from "../errors.js";
 import { tf } from "./tagless-final.js";
 
 // Eager-stamp oracle flag: `withInputProvenance`/`mintVerdict` below are the
@@ -313,14 +313,8 @@ export function deriveSortCompare(
   return (a, b) => {
     const nilCmp = nilOrderCompare(a, b);
     if (nilCmp !== undefined) return nilCmp; // nil = order's bottom (shared with comparison ops)
-    if (!isOrd(a))
-      throw new TypeError(
-        `sort: cannot order a ${describeOrdElement(a)} (it declares no arrival/tagless-final/lte; supply a comparator).`,
-      );
-    if (!isOrd(b))
-      throw new TypeError(
-        `sort: cannot order a ${describeOrdElement(b)} (it declares no arrival/tagless-final/lte; supply a comparator).`,
-      );
+    if (!isOrd(a)) throw new ComparatorRequiredError(describeOrdElement(a));
+    if (!isOrd(b)) throw new ComparatorRequiredError(describeOrdElement(b));
     const aLE = lte(a, b);
     const bLE = lte(b, a);
     return aLE ? (bLE ? 0 : -1) : bLE ? 1 : 0;

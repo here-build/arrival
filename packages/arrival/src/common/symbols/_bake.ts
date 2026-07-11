@@ -41,7 +41,7 @@ import { type RunContext } from "../../values/primitives/RunContext.js";
 import { type CallCtx, makeCallCtx, testCallCtx } from "../../values/primitives/CallCtx.js";
 import { Macro } from "../../eval/Macro.js";
 import { ZodType, ZodUnion } from "zod";
-import { CacheClassShapeError, ProvenanceRoleShapeError } from "../../errors.js";
+import { CacheClassShapeError, KeywordPairingError, ProvenanceRoleShapeError } from "../../errors.js";
 // TYPE-ONLY (erased — no runtime edge back up into capability.ts, which imports this
 // module's values): the per-env binding context a DYNAMIC metadata field resolves
 // against. Same erased-import posture kernel.ts takes for `DegradedCapability`.
@@ -666,9 +666,7 @@ function kwargsKeyOf(arg: unknown): string {
  *  decode. A dangling keyword (odd arg count) doors with a teaching error. */
 export function collectKwargsObject(args: readonly unknown[]): Record<string, unknown> {
   if (args.length % 2 !== 0) {
-    throw new Error(
-      `kwargs call has a dangling keyword with no value — expected interleaved \`:key value\` pairs, got ${args.length} arg(s)`,
-    );
+    throw new KeywordPairingError("dangling-keyword", args.length);
   }
   const obj: Record<string, unknown> = {};
   for (let i = 0; i + 1 < args.length; i += 2) {
@@ -730,10 +728,7 @@ export function normalizeInputVector(input: VectorSpec, inputRest: RestSpec): Ve
   // no well-defined split point. Combining `inputRest` with a single schema is a contract-authoring
   // bug: fail loudly here rather than silently ignoring the rest schema.
   if (!isSchemaTuple(input)) {
-    throw new Error(
-      "inputRest requires `input` to be a fixed positional tuple (e.g. [z.string]) — a single " +
-        "schema `input` has no well-defined prefix length to split the rest at",
-    );
+    throw new KeywordPairingError("input-rest-needs-tuple");
   }
   // Mirrors the exact `z.tuple(fixed, rest)` call shape `map`/`filter` already author inline —
   // the cast narrows the (possibly empty, per `readonly z.ZodTypeAny[]`) tuple to the non-empty

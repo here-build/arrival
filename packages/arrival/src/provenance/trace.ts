@@ -15,6 +15,7 @@
  * READ before changing `computeProvenance`, authoritative-set forwarding, or `accessorField`.
  */
 import invariant from "tiny-invariant";
+import { TraceBudgetError } from "../errors.js";
 
 import { AValue, EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
 import { AutoBindings } from "../values/lineage-auto-bindings.js";
@@ -323,10 +324,7 @@ export class EvalTrace implements EvalTap {
   enter = (node: AListAlike, parent: unknown, tailPosition?: boolean): Invocation => {
     if (this.#nextId >= this.maxEntries) {
       // "budget exceeded" in message so run-isolated's detector returns partial handle.
-      throw new Error(
-        `trace step budget exceeded (${this.maxEntries} entries) — run produced too many steps to ` +
-          `trace; bound the loop or raise ARRIVAL_TRACE_MAX.`,
-      );
+      throw new TraceBudgetError(this.maxEntries);
     }
     // `AListAlike` admits `ANil`, but evaluator's tap-firing rules only call `enter` on a located Pair (see file
     // header: atoms/bare symbols/quoted/macro-Pairs not tracked). Assert real invariant, don't widen `node`'s type.

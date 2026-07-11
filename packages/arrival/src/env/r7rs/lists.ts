@@ -41,6 +41,7 @@ import { is_callable_value } from "../../values/value-guards.js";
 import { type, typeErrorMessage } from "../../utils/typecheck.js";
 import { heapBudgetMessage } from "../../heap-budget.js";
 import { ArrivalError } from "../../eval/evaluator.js";
+import { CarrierMismatchError } from "../../errors.js";
 import { eqv, structuralEqual } from "../../values/structural-equal.js";
 import { to_array } from "../pack-helpers.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
@@ -97,21 +98,14 @@ function isProperList(obj: SchemeValue): boolean {
 // a proper list (R7RS §6.4) — append walks its car-spine to splice each element,
 // so a non-pair/non-nil operand there can't silently contribute "nothing" or
 // silently become the whole result (the bug this door closes: concatPair's `a`
-// side vanishing when it isn't a Pair). The message names the carrier-specific
-// concatenation verb that actually exists for that value, so the failure teaches
-// the fix instead of just refusing.
-function nonListAppendOperandMessage(item: SchemeValue): string {
-  const noun = type(item);
-  if (item instanceof AVector) {
-    return `append: every argument but the last must be a proper list, got a vector — use \`vector-append\` to concatenate vectors`;
-  }
-  if (item instanceof AString) {
-    return `append: every argument but the last must be a proper list, got a string — use \`string-append\` to concatenate strings`;
-  }
-  if (item instanceof ABytevector) {
-    return `append: every argument but the last must be a proper list, got a bytevector — use \`bytevector-append\` to concatenate bytevectors`;
-  }
-  return `append: every argument but the last must be a proper list, got a ${noun} — append only splices list spines, not this carrier`;
+// side vanishing when it isn't a Pair). Names the carrier-specific concatenation
+// verb that actually exists for that value, so the failure teaches the fix
+// instead of just refusing (`CarrierMismatchError`, errors.ts).
+function nonListAppendOperandError(item: SchemeValue): CarrierMismatchError {
+  if (item instanceof AVector) return new CarrierMismatchError("append", "vector", "vector-append");
+  if (item instanceof AString) return new CarrierMismatchError("append", "string", "string-append");
+  if (item instanceof ABytevector) return new CarrierMismatchError("append", "bytevector", "bytevector-append");
+  return new CarrierMismatchError("append", type(item));
 }
 
 const lengthImpl = function (this: CallCtx, obj: unknown): AExact | AInexact {
@@ -606,7 +600,7 @@ export default new EnvCapability("scheme/lists", {
           const isLast = idx === cloned.length - 1;
           if (!isLast && !(item instanceof ANil)) {
             if (!(item instanceof APair)) {
-              throw new Error(nonListAppendOperandMessage(item));
+              throw nonListAppendOperandError(item);
             }
             if (!is_list(item)) {
               throw new Error("append: Invalid argument, value is not a list");

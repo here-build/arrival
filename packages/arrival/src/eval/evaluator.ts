@@ -27,7 +27,16 @@ import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.j
 import { AValue, unionProvenance } from "../values/primitives/AValue.js";
 import { bindValue, AmbientRuntime, type AmbientValue } from "../AmbientRuntime.js";
 import { unboundVariableError } from "../unbound-variable.js";
-import { ArrivalError, EvalError, isHostRuntimeBug, R7RSError, type SourceLocation } from "../errors.js";
+import {
+  ArrivalError,
+  EvalError,
+  isHostRuntimeBug,
+  NotCallableError,
+  R7RSError,
+  ResolvedNonValueError,
+  SpecialFormShapeError,
+  type SourceLocation,
+} from "../errors.js";
 import { is_callable, is_false, is_function, is_macro, is_promise } from "./guards.js";
 import { is_applyable, is_callable_value, is_lambda } from "../values/value-guards.js";
 import { applyCallback, ALambda, type CallResult } from "../values/primitives/ACallable.js";
@@ -592,10 +601,10 @@ function resolvedBindingOrThrow(binding: AmbientValue | undefined, sym: ASymbol)
     throw unboundVariableError(symbol_name(sym));
   }
   if (binding instanceof AmbientRuntime) {
-    throw new TypeError(`\`${symbol_name(sym)}' is an environment — neither a value nor applicable`);
+    throw new ResolvedNonValueError(symbol_name(sym), "environment");
   }
   if (binding instanceof RegExp) {
-    throw new TypeError(`\`${symbol_name(sym)}' resolved to a regular expression — neither a value nor applicable`);
+    throw new ResolvedNonValueError(symbol_name(sym), "regexp");
   }
   return binding;
 }
@@ -1080,12 +1089,12 @@ function controlFlowResolve(predicate: SchemeValue): ((value: unknown) => unknow
  * tail position; its value is consumed by the if itself, so we strip tail.
  */
 function* evalIf(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
-  invariant(rest instanceof APair, "if: missing test expression");
+  SpecialFormShapeError.invariant(rest instanceof APair, "if", "missing test expression");
 
   const testExpr = rest.car;
   const restAfterTest = rest.cdr;
 
-  invariant(restAfterTest instanceof APair, "if: missing then expression");
+  SpecialFormShapeError.invariant(restAfterTest instanceof APair, "if", "missing then expression");
 
   const thenExpr = restAfterTest.car;
   const elseRest = restAfterTest.cdr;
@@ -1153,7 +1162,7 @@ function* evalBegin(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
 /** `(quote datum)` — return the datum unevaluated. */
 function* evalQuote(rest: SchemeValue, _ctx: EvalContext): EvalGenerator {
-  invariant(rest instanceof APair, "quote: missing argument");
+  SpecialFormShapeError.invariant(rest instanceof APair, "quote", "missing argument");
   return rest.car;
 }
 
@@ -1162,7 +1171,7 @@ function* evalQuote(rest: SchemeValue, _ctx: EvalContext): EvalGenerator {
  * Supports unquote and unquote-splicing
  */
 function* evalQuasiquote(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
-  invariant(rest instanceof APair, "quasiquote: missing argument");
+  SpecialFormShapeError.invariant(rest instanceof APair, "quasiquote", "missing argument");
   // Unquoted sub-expressions are operands to implicit list construction —
   // not tail positions. Strip tail so a `(unquote (some-lambda))` inside
   // doesn't tail-replace this slot before the surrounding structure builds.
@@ -1203,10 +1212,9 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
       const keyForm = processed[i];
       const name = foldSubstitutedDictKey(keyForm);
       if (seen.has(name)) {
-        throw Object.assign(
-          new Error(`duplicate dict literal key :${name} after quasiquote substitution — each key may appear once`),
-          { code: "E-DICT-DUP-KEY" },
-        );
+        throw new EvalError(`duplicate dict literal key :${name} after quasiquote substitution — each key may appear once`, {
+          code: "E-DICT-DUP-KEY",
+        });
       }
       seen.add(name);
       // foldSubstitutedDictKey only accepts AString/ASymbol/plain-string (else throws
@@ -1231,7 +1239,7 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
         item.car instanceof ASymbol &&
         symbol_name(item.car) === "unquote-splicing"
       ) {
-        invariant(item.cdr instanceof APair, "unquote-splicing: missing argument");
+        SpecialFormShapeError.invariant(item.cdr instanceof APair, "unquote-splicing", "missing argument");
         let spliced = yield { call: evaluate(item.cdr.car, ctx) };
         if (is_promise(spliced)) {
           spliced = yield spliced;
@@ -1243,7 +1251,7 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
             n = n.cdr;
           }
         } else {
-          invariant(spliced instanceof ANil, "unquote-splicing: expected list");
+          SpecialFormShapeError.invariant(spliced instanceof ANil, "unquote-splicing", "expected list");
         }
         continue;
       }
@@ -1260,12 +1268,12 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
 
   if (first instanceof ASymbol && symbol_name(first) === "unquote") {
     if (level === 1) {
-      invariant(expr.cdr instanceof APair, "unquote: missing argument");
+      SpecialFormShapeError.invariant(expr.cdr instanceof APair, "unquote", "missing argument");
       return yield { call: evaluate(expr.cdr.car, ctx) };
     } else {
       // Nested quasiquote: decrease level and keep the unquote wrapper (stays
       // quoted data until its own depth is reached).
-      invariant(expr.cdr instanceof APair, "unquote: missing argument");
+      SpecialFormShapeError.invariant(expr.cdr instanceof APair, "unquote", "missing argument");
       const processed = yield { call: processQuasiquote(expr.cdr.car, ctx, level - 1) };
       return new APair(CONSTANT_CTX, new ASymbol(CONSTANT_CTX, "unquote"), new APair(CONSTANT_CTX, processed, nil));
     }
@@ -1273,8 +1281,8 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
 
   if (first instanceof ASymbol && symbol_name(first) === "unquote-splicing") {
     // Splicing needs list context — a bare top-level `,@x` (level 1) is invalid.
-    invariant(level > 1, "unquote-splicing: invalid context");
-    invariant(expr.cdr instanceof APair, "unquote-splicing: missing argument");
+    SpecialFormShapeError.invariant(level > 1, "unquote-splicing", "invalid context");
+    SpecialFormShapeError.invariant(expr.cdr instanceof APair, "unquote-splicing", "missing argument");
     const processed = yield { call: processQuasiquote(expr.cdr.car, ctx, level - 1) };
     return new APair(
       CONSTANT_CTX,
@@ -1284,7 +1292,7 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
   }
 
   if (first instanceof ASymbol && symbol_name(first) === "quasiquote") {
-    invariant(expr.cdr instanceof APair, "quasiquote: missing argument");
+    SpecialFormShapeError.invariant(expr.cdr instanceof APair, "quasiquote", "missing argument");
     const processed = yield { call: processQuasiquote(expr.cdr.car, ctx, level + 1) };
     return new APair(CONSTANT_CTX, new ASymbol(CONSTANT_CTX, "quasiquote"), new APair(CONSTANT_CTX, processed, nil));
   }
@@ -1325,7 +1333,7 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
       symbol_name(item.car) === "unquote-splicing" &&
       level === 1
     ) {
-      invariant(item.cdr instanceof APair, "unquote-splicing: missing argument");
+      SpecialFormShapeError.invariant(item.cdr instanceof APair, "unquote-splicing", "missing argument");
       let spliced = yield { call: evaluate(item.cdr.car, ctx) };
       if (is_promise(spliced)) {
         spliced = yield spliced;
@@ -1337,7 +1345,7 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
           splicedNode = splicedNode.cdr;
         }
       } else {
-        invariant(spliced instanceof ANil, "unquote-splicing: expected list");
+        SpecialFormShapeError.invariant(spliced instanceof ANil, "unquote-splicing", "expected list");
       }
       node = node.cdr;
       continue;
@@ -1367,7 +1375,7 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
 
 /** `(define name value)` or `(define (name . args) body)` — the procedure shorthand desugars to a lambda. */
 function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
-  invariant(rest instanceof APair, "define: missing name");
+  SpecialFormShapeError.invariant(rest instanceof APair, "define", "missing name");
 
   const first = rest.car;
   const valueRest = rest.cdr;
@@ -1377,7 +1385,7 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     const name = first.car;
     const args = first.cdr;
 
-    invariant(name instanceof ASymbol, "define: expected symbol for function name");
+    SpecialFormShapeError.invariant(name instanceof ASymbol, "define", "expected symbol for function name");
 
     const value = yield { call: evalLambda(new APair(CONSTANT_CTX, args, valueRest), ctx) };
 
@@ -1390,8 +1398,8 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   }
 
   // Simple definition: (define name value)
-  invariant(first instanceof ASymbol, "define: expected symbol");
-  invariant(valueRest instanceof APair, "define: missing value");
+  SpecialFormShapeError.invariant(first instanceof ASymbol, "define", "expected symbol");
+  SpecialFormShapeError.invariant(valueRest instanceof APair, "define", "missing value");
 
   // NOT tail position — the value must return HERE so we can bind it. If we
   // let `tail` flow through, a `(define x (some-lambda))` could tail-replace
@@ -1421,7 +1429,7 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
 /** `(lambda args body)` — closes over the definition-time env; body starts in tail position (R7RS §3.5). */
 function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
-  invariant(rest instanceof APair, "lambda: missing arguments");
+  SpecialFormShapeError.invariant(rest instanceof APair, "lambda", "missing arguments");
 
   const args = rest.car;
   const body = rest.cdr;
@@ -1483,14 +1491,14 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
 /** `(define-macro (name . args) body)` — fexpr-style macro; params bind to UNEVALUATED argument forms. */
 function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
-  invariant(rest instanceof APair, "define-macro: missing definition");
+  SpecialFormShapeError.invariant(rest instanceof APair, "define-macro", "missing definition");
 
   const first = rest.car;
-  invariant(first instanceof APair, "define-macro: expected (name . args)");
+  SpecialFormShapeError.invariant(first instanceof APair, "define-macro", "expected (name . args)");
 
   const name = first.car;
   const args = first.cdr;
-  invariant(name instanceof ASymbol, "define-macro: expected symbol for name");
+  SpecialFormShapeError.invariant(name instanceof ASymbol, "define-macro", "expected symbol for name");
 
   const body = rest.cdr;
 
@@ -1779,7 +1787,7 @@ function normalizeBindings(
  * Also handles named let: (let name ((var val) ...) body...)
  */
 function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
-  invariant(rest instanceof APair, "let: missing bindings");
+  SpecialFormShapeError.invariant(rest instanceof APair, "let", "missing bindings");
 
   let bindings: SchemeValue;
   let body: SchemeValue;
@@ -1789,7 +1797,7 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   if (rest.car instanceof ASymbol) {
     name = rest.car;
     const afterName = rest.cdr;
-    invariant(afterName instanceof APair, "let: missing bindings after name");
+    SpecialFormShapeError.invariant(afterName instanceof APair, "let", "missing bindings after name");
     bindings = afterName.car;
     body = afterName.cdr;
   } else {
@@ -1891,15 +1899,15 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   let bindNode: SchemeValue = normalizedBindings;
   while (bindNode instanceof APair) {
     const binding = bindNode.car;
-    invariant(binding instanceof APair, "let: invalid binding");
+    SpecialFormShapeError.invariant(binding instanceof APair, "let", "invalid binding");
 
     const varName = binding.car;
-    invariant(varName instanceof ASymbol, "let: expected symbol in binding");
+    SpecialFormShapeError.invariant(varName instanceof ASymbol, "let", "expected symbol in binding");
 
     names.push(varName);
 
     const bindingCdr = binding.cdr;
-    invariant(bindingCdr instanceof APair, "let: missing value in binding");
+    SpecialFormShapeError.invariant(bindingCdr instanceof APair, "let", "missing value in binding");
     const valExpr = bindingCdr.car;
 
     // Parallel semantics: evaluated in the original (pre-let) environment.
@@ -1926,7 +1934,7 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
  * Sequential binding - each binding can see previous ones
  */
 function* evalLetStar(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
-  invariant(rest instanceof APair, "let*: missing bindings");
+  SpecialFormShapeError.invariant(rest instanceof APair, "let*", "missing bindings");
 
   const bindings = rest.car;
   const body = rest.cdr;
@@ -1940,13 +1948,13 @@ function* evalLetStar(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   let bindNode: SchemeValue = normalizedBindings;
   while (bindNode instanceof APair) {
     const binding = bindNode.car;
-    invariant(binding instanceof APair, "let*: invalid binding");
+    SpecialFormShapeError.invariant(binding instanceof APair, "let*", "invalid binding");
 
     const varName = binding.car;
-    invariant(varName instanceof ASymbol, "let*: expected symbol in binding");
+    SpecialFormShapeError.invariant(varName instanceof ASymbol, "let*", "expected symbol in binding");
 
     const bindingCdr = binding.cdr;
-    invariant(bindingCdr instanceof APair, "let*: missing value in binding");
+    SpecialFormShapeError.invariant(bindingCdr instanceof APair, "let*", "missing value in binding");
     const valExpr = bindingCdr.car;
 
     // Sequential semantics: evaluated in the growing let* environment.
@@ -1968,7 +1976,7 @@ function* evalLetStar(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
  * Recursive binding - all bindings can see each other
  */
 function* evalLetrec(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
-  invariant(rest instanceof APair, "letrec: missing bindings");
+  SpecialFormShapeError.invariant(rest instanceof APair, "letrec", "missing bindings");
 
   const bindings = rest.car;
   const body = rest.cdr;
@@ -1985,13 +1993,13 @@ function* evalLetrec(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   let bindNode: SchemeValue = normalizedBindings;
   while (bindNode instanceof APair) {
     const binding = bindNode.car;
-    invariant(binding instanceof APair, "letrec: invalid binding");
+    SpecialFormShapeError.invariant(binding instanceof APair, "letrec", "invalid binding");
 
     const varName = binding.car;
-    invariant(varName instanceof ASymbol, "letrec: expected symbol in binding");
+    SpecialFormShapeError.invariant(varName instanceof ASymbol, "letrec", "expected symbol in binding");
 
     const bindingCdr = binding.cdr;
-    invariant(bindingCdr instanceof APair, "letrec: missing value in binding");
+    SpecialFormShapeError.invariant(bindingCdr instanceof APair, "letrec", "missing value in binding");
     const valExpr = bindingCdr.car;
 
     // letrec first pass: the name exists but is unassigned until the second
@@ -2120,7 +2128,7 @@ function* evalOr(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
  * and resumed (plain-value) paths, exactly like the non-`=>` arms.
  */
 function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext): EvalGenerator {
-  invariant(is_callable(proc), "=> requires a procedure");
+  SpecialFormShapeError.invariant(is_callable(proc), "=>", "requires a procedure");
 
   // A callable VALUE dispatches through its apply term. An ALambda in tail position hands back a
   // Bounce so a self-recursive `=>` collapses on the trampoline (TCO); an ANativeProcedure/
@@ -2145,7 +2153,7 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
   }
 
   // Builtins: direct apply (no Scheme body to tail into).
-  invariant(is_function(proc), "=> requires a procedure");
+  SpecialFormShapeError.invariant(is_function(proc), "=>", "requires a procedure");
   // `proc` is the non-callable-value arm here — the callable-value branch above returned. The
   // SchemeValue callable surface is heterogeneous (a metadata-bearing `AProcedure`, the plain
   // bare-fn arm) and shares no single call signature, so a direct `proc(arg)` isn't expressible;
@@ -2252,7 +2260,7 @@ function* evalCond(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     // R9: consume a bracket clause (see normalizeClause above) before the
     // existing invariant/walk.
     const clause = normalizeClause(node.car, "cond");
-    invariant(clause instanceof APair, "cond: invalid clause");
+    SpecialFormShapeError.invariant(clause instanceof APair, "cond", "invalid clause");
 
     const test = clause.car;
     const exprs = clause.cdr;
@@ -2281,13 +2289,13 @@ function* evalCond(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
         const firstExpr = exprs.car;
         if (firstExpr instanceof ASymbol && firstExpr.literal() === "=>") {
           const exprsCdr = exprs.cdr;
-          invariant(exprsCdr instanceof APair, "cond: missing procedure after =>");
+          SpecialFormShapeError.invariant(exprsCdr instanceof APair, "cond", "missing procedure after =>");
           const procExpr = exprsCdr.car;
           let proc = yield { call: evaluate(procExpr, nonTailCtx) };
           if (is_promise(proc)) {
             proc = yield proc;
           }
-          invariant(is_callable(proc), "cond: => requires a procedure");
+          SpecialFormShapeError.invariant(is_callable(proc), "cond", "=> requires a procedure");
           return yield {
             call: applyArrowProc(proc, testResult, ctx),
             tail: ctx.tail === true,
@@ -2318,7 +2326,7 @@ function* evalCond(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
  * Handle 'case' special form: (case key ((datum...) expr...) ... (else expr...)?)
  */
 function* evalCase(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
-  invariant(rest instanceof APair, "case: missing key");
+  SpecialFormShapeError.invariant(rest instanceof APair, "case", "missing key");
 
   const nonTailCtx: EvalContext = ctx.tail ? { ...ctx, tail: false } : ctx;
 
@@ -2334,7 +2342,7 @@ function* evalCase(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     // R9: consume a bracket clause (see normalizeClause above) before the
     // existing invariant/walk.
     const clause = normalizeClause(node.car, "case");
-    invariant(clause instanceof APair, "case: invalid clause");
+    SpecialFormShapeError.invariant(clause instanceof APair, "case", "invalid clause");
 
     const datums = clause.car;
     const exprs = clause.cdr;
@@ -2361,7 +2369,7 @@ function* evalCase(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     if (datums instanceof AVector && datums.evalElements) {
       throw caseDatumListVectorError(datums);
     }
-    invariant(datums instanceof APair, "case: expected list of datums");
+    SpecialFormShapeError.invariant(datums instanceof APair, "case", "expected list of datums");
     let datumNode: SchemeValue = datums;
     let matched = false;
 
@@ -2417,18 +2425,18 @@ function* evalCaseArrowProc(
   const first = exprs.car;
   if (!(first instanceof ASymbol) || first.literal() !== "=>") return undefined;
   const exprsCdr = exprs.cdr;
-  invariant(exprsCdr instanceof APair, "case: missing procedure after =>");
+  SpecialFormShapeError.invariant(exprsCdr instanceof APair, "case", "missing procedure after =>");
   let proc = yield { call: evaluate(exprsCdr.car, nonTailCtx) };
   if (is_promise(proc)) {
     proc = yield proc;
   }
-  invariant(is_callable(proc), "case: => requires a procedure");
+  SpecialFormShapeError.invariant(is_callable(proc), "case", "=> requires a procedure");
   return proc;
 }
 
 /** `(when test expr...)` — body in tail position inherits when's tail flag (R7RS §3.5). */
 function* evalWhen(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
-  invariant(rest instanceof APair, "when: missing test");
+  SpecialFormShapeError.invariant(rest instanceof APair, "when", "missing test");
 
   const test = rest.car;
   const body = rest.cdr;
@@ -2450,7 +2458,7 @@ function* evalWhen(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
 /** `(unless test expr...)` — the `#f`-guarded mirror of `when`; body in tail position. */
 function* evalUnless(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
-  invariant(rest instanceof APair, "unless: missing test");
+  SpecialFormShapeError.invariant(rest instanceof APair, "unless", "missing test");
 
   const test = rest.car;
   const body = rest.cdr;
@@ -2474,7 +2482,7 @@ function* evalUnless(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
  * Handle 'do' special form: (do ((var init step) ...) (test result...) body...)
  */
 function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
-  invariant(rest instanceof APair, "do: missing bindings");
+  SpecialFormShapeError.invariant(rest instanceof APair, "do", "missing bindings");
 
   const bindings = rest.car;
   // R2/R3: consume the per-element bracket surface only — do does NOT accept
@@ -2482,14 +2490,14 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // ORIGINAL door, unchanged). Arity is 2-3 ([name init] / [name init step]).
   const normalizedBindings = normalizeBindings(bindings, "do", false, 2, 3);
   const restCdr = rest.cdr;
-  invariant(restCdr instanceof APair, "do: missing test clause");
+  SpecialFormShapeError.invariant(restCdr instanceof APair, "do", "missing test clause");
 
   // R9: do's test clause may be a bracket vector, elementwise ≡ the
   // parenthesized clause (see normalizeClause above).
   const testClause = normalizeClause(restCdr.car, "do");
   const body = restCdr.cdr;
 
-  invariant(testClause instanceof APair, "do: invalid test clause");
+  SpecialFormShapeError.invariant(testClause instanceof APair, "do", "invalid test clause");
 
   const test = testClause.car;
   const resultExprs = testClause.cdr;
@@ -2509,10 +2517,10 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   let bindNode: SchemeValue = normalizedBindings;
   while (bindNode instanceof APair) {
     const binding = bindNode.car;
-    invariant(binding instanceof APair, "do: invalid binding");
+    SpecialFormShapeError.invariant(binding instanceof APair, "do", "invalid binding");
 
     const varName = binding.car;
-    invariant(varName instanceof ASymbol, "do: expected symbol");
+    SpecialFormShapeError.invariant(varName instanceof ASymbol, "do", "expected symbol");
 
     const bindingCdr = binding.cdr;
     // No init form → unspecified. theVoid is self-evaluating (an atom — see
@@ -2594,7 +2602,7 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
  * makes `while` stack-safe (the legacy Macro recursed on the JS stack).
  */
 function* evalWhile(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
-  invariant(rest instanceof APair, "while: missing test");
+  SpecialFormShapeError.invariant(rest instanceof APair, "while", "missing test");
 
   const test = rest.car;
   const body = rest.cdr;
@@ -2626,7 +2634,7 @@ function* evalWhile(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
  * At least one of catch or finally must be present.
  */
 function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
-  invariant(rest instanceof APair, "try: missing body");
+  SpecialFormShapeError.invariant(rest instanceof APair, "try", "missing body");
 
   const body = rest.car;
   let catchClause: SchemeValue | null = null;
@@ -2656,7 +2664,7 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     clauseNode = clauseNode.cdr;
   }
 
-  invariant(catchClause || finallyClause, "try: requires catch or finally clause");
+  SpecialFormShapeError.invariant(catchClause !== null || finallyClause !== null, "try", "requires catch or finally clause");
 
   // Each clause runs in its OWN fresh `run()` (nested trampoline) so the outer
   // try/catch can intercept thrown errors. That boundary already isolates the
@@ -2677,15 +2685,15 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     }
 
     if (caughtError && catchClause) {
-      invariant(catchClause instanceof APair, "try: invalid catch clause");
+      SpecialFormShapeError.invariant(catchClause instanceof APair, "try", "invalid catch clause");
       const catchCdr = catchClause.cdr;
-      invariant(catchCdr instanceof APair, "try: invalid catch syntax");
+      SpecialFormShapeError.invariant(catchCdr instanceof APair, "try", "invalid catch syntax");
 
       const varSpec = catchCdr.car;
-      invariant(varSpec instanceof APair, "try: catch requires (var)");
+      SpecialFormShapeError.invariant(varSpec instanceof APair, "try", "catch requires (var)");
 
       const varName = varSpec.car;
-      invariant(varName instanceof ASymbol, "try: catch variable must be a symbol");
+      SpecialFormShapeError.invariant(varName instanceof ASymbol, "try", "catch variable must be a symbol");
 
       const handlers = catchCdr.cdr;
 
@@ -2739,7 +2747,7 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     // propagate per JS semantics (this catch swallows them, matching the old
     // behavior).
     if (finallyClause) {
-      invariant(finallyClause instanceof APair, "try: invalid finally clause");
+      SpecialFormShapeError.invariant(finallyClause instanceof APair, "try", "invalid finally clause");
       const finallyCdr = finallyClause.cdr;
       try {
         await run(evalBegin(finallyCdr, { ...ctx, tail: false }), { signal: ctx.signal });
@@ -2782,10 +2790,9 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 function foldSubstitutedDictKey(v: SchemeValue): string {
   if (v instanceof AString || v instanceof ASymbol) return foldKeyName(v);
   if (typeof v === "string") return v;
-  throw Object.assign(
-    new Error(`dict literal key substituted a non-string value (${String(v)}) — keys must be :keywords or "strings"`),
-    { code: "E-DICT-BAD-KEY" },
-  );
+  throw new EvalError(`dict literal key substituted a non-string value (${String(v)}) — keys must be :keywords or "strings"`, {
+    code: "E-DICT-BAD-KEY",
+  });
 }
 
 // ============================================================================
@@ -2939,10 +2946,7 @@ export function* evaluate(
 function notCallableError(value: unknown): Error {
   const looksDictShaped = value instanceof AJSObject && isDictShaped(value.source);
   const typeName = value instanceof ADict || looksDictShaped ? "dict" : type(value);
-  return new Error(
-    `Not callable: a ${typeName} sits in operator/call-head position, and a ${typeName} is not a function` +
-      ` — common cause: extra parentheses — ((f x)) calls f's RESULT, not f; write (f x).`,
-  );
+  return new NotCallableError("type", typeName);
 }
 
 /**
@@ -2958,10 +2962,7 @@ function notCallableError(value: unknown): Error {
 function nonCallableHeadError(first: SchemeValue): Error {
   if (first instanceof AString) {
     const content = first.valueOf();
-    return new Error(
-      `"${content}" is a string, not a function — a quoted name is data, it is never called. ` +
-        `Drop the quotes and call the symbol directly: (${content} …).`,
-    );
+    return new NotCallableError("quoted-string", "string", content);
   }
   return notCallableError(first);
 }
@@ -3269,7 +3270,7 @@ function* evaluateArgs(rest: SchemeValue, ctx: EvalContext): Generator<unknown, 
     node = node.cdr;
   }
 
-  invariant(node instanceof ANil || node === null, "Syntax Error: improper list in function call");
+  SpecialFormShapeError.invariant(node instanceof ANil || node === null, "apply", "improper list in function call");
 
   return args;
 }

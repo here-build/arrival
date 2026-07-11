@@ -11,7 +11,7 @@
 // runtime/operational projection (the static projection is the type-layer/tsc bridge). A schema
 // tag is a PROPOSITION — this is how it discharges as a validator.
 
-import invariant from "tiny-invariant";
+import { SchemaFieldShapeError } from "../errors.js";
 
 export type JsonSchema = Record<string, unknown>;
 
@@ -66,10 +66,9 @@ export function tagToJsonSchema(tag: unknown): JsonSchema {
       const properties: Record<string, JsonSchema> = {};
       const required: string[] = [];
       for (const field of rest) {
-        invariant(
-          Array.isArray(field) && (field.length === 2 || field.length === 3),
-          "schema/object: field must be (name type) or (name type description)",
-        );
+        if (!Array.isArray(field) || (field.length !== 2 && field.length !== 3)) {
+          throw new SchemaFieldShapeError();
+        }
         const [name, type, description] = field as [string, unknown, string?];
         const schema = tagToJsonSchema(type); // strips the field's own `/optional` suffix internally
         if (description) schema.description = description;
