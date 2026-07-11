@@ -1,6 +1,13 @@
-// Browser entry: same API as the Node one, but everything comes from Vite globs
-// (no fs, no `ts.sys`). This keeps the "empty barrel" (no JS globals) contract
-// identical to Node while staying self-contained for workers.
+// Browser entry: same API as the Node one, but everything is baked in at THIS
+// package's `vite build` time (no fs, no `ts.sys`). This keeps the "empty
+// barrel" (no JS globals) contract identical to Node while staying
+// self-contained for workers — dist/browser.js is a plain module: no
+// `import.meta.glob`, no `?raw` specifiers survive into consumers.
+//
+// TS libs come from the generated explicit-`?raw` barrel (Vite 7 bans
+// bare-package GLOBS like "typescript/lib/lib.*.d.ts" everywhere; bare `?raw`
+// IMPORTS stay legal and get inlined by the lib build). The prelude glob below
+// is relative — Vite-legal — and inlines the same way.
 //
 // skipLibCheck is on by default — re-checking the stock libs on every keystroke
 // buys nothing.
@@ -11,21 +18,16 @@ import {
   type SchemeLanguageServiceOptions,
 } from "./service-core.js";
 import { stripLibFiles } from "./ts-lib-strip.js";
+import { TS_LIB_RAW } from "./ts-libs-raw.generated.js";
 import { TS_DEFAULT_LIB, TS_LIB_FILE_NAMES } from "./ts-libs.generated.js";
 import { PRELUDE_FILE } from "./virtual-files.js";
 
-// Load via glob so both Node and browser see the identical stripped set.
-const rawModules = import.meta.glob("typescript/lib/lib.*.d.ts", { eager: true, query: "?raw" }) as Record<
-  string,
-  string
->;
-
 function getRawForLib(name: string): string {
-  const directKey = `typescript/lib/${name}?raw`;
-  if (rawModules[directKey]) return rawModules[directKey];
-  const match = Object.entries(rawModules).find(([k]) => k.includes(name));
-  if (match) return match[1];
-  throw new Error(`[arrival-type-lens] missing Vite ?raw for ${name}`);
+  // The manifest and the barrel are two generated artifacts — guard their
+  // drift at runtime.
+  if (!(name in TS_LIB_RAW))
+    throw new Error(`[arrival-type-lens] missing bundled ?raw for ${name} (fix: pnpm generate:bundles)`);
+  return TS_LIB_RAW[name];
 }
 
 const TS_LIB_FILES = stripLibFiles(TS_LIB_FILE_NAMES, getRawForLib);
@@ -42,11 +44,14 @@ export type {
   SchemeLanguageServiceOptions,
 } from "./service-core.js";
 
-// Load prelude via glob (same sources as disk path).
-const preludeModules = import.meta.glob("./prelude/**/*.d.ts", { eager: true, query: "?raw" }) as Record<
-  string,
-  string
->;
+// Load prelude via RELATIVE glob (same sources as the disk path). Vite 7's
+// eager-`?raw` glob yields `{ default: string }` modules unless told which
+// binding to take — `import: "default"` makes the values plain strings.
+const preludeModules = import.meta.glob("./prelude/**/*.d.ts", {
+  eager: true,
+  query: "?raw",
+  import: "default",
+}) as Record<string, string>;
 
 export const getBundledPreludeFiles = () => {
   const map = new Map<string, string>();
@@ -57,15 +62,15 @@ export const getBundledPreludeFiles = () => {
     map.set(PRELUDE_FILE, preludeModules[preKey]);
   }
 
-  // Builtin leaves — mirror the logic from getPreludeFiles
+  // Builtin leaves — mirror the logic from getPreludeFiles. Keys are the glob's
+  // relative paths; tolerate a `?raw` suffix (older Vite key shapes) so the
+  // guard is on CONTENT, not on Vite's key cosmetics.
   for (const [key, content] of Object.entries(preludeModules)) {
-    if (key.includes("/builtins/") && key.endsWith(".d.ts?raw")) {
-      const match = /builtins\/([^/]+)\.d\.ts\?raw$/.exec(key);
-      if (match) {
-        const f = match[1];
-        if (!f.startsWith("_")) {
-          map.set(`__leaf_${f}.d.ts`, content);
-        }
+    const match = /builtins\/([^/]+)\.d\.ts(?:\?raw)?$/.exec(key);
+    if (match) {
+      const f = match[1];
+      if (!f.startsWith("_")) {
+        map.set(`__leaf_${f}.d.ts`, content);
       }
     }
   }

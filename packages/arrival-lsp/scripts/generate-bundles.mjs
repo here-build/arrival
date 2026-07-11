@@ -2,16 +2,23 @@
 //
 // The Node entry reads the prelude off disk and the TS default libs off the
 // installed `typescript` package (via fs + strip at runtime).
-// The browser entry does the same via Vite `import.meta.glob(..., '?raw')` + strip
-// (no inlining of huge strings).
+// The browser entry loads the same TS libs via explicit Vite `?raw` imports
+// (a generated barrel), resolved and INLINED by this package's own
+// `vite build` — consumers receive a plain, self-contained module.
+//
+// Why a barrel of explicit imports and not `import.meta.glob`: Vite 7 rejects
+// bare-package glob patterns ("typescript/lib/lib.*.d.ts" — "Invalid glob:
+// must start with '/' or './'") in EVERY context, including our own build.
+// Bare `?raw` IMPORTS remain legal; only bare GLOBS are banned.
 //
 // This script generates at build time:
-//   • `src/ts-libs.generated.ts` — only the small *names* manifest for the
+//   • `src/ts-libs.generated.ts` — the small *names* manifest for the
 //     lib.es2022 reference chain (so Node and browser load exactly the same set).
+//   • `src/ts-libs-raw.generated.ts` — one explicit `?raw` import per closure
+//     file + the `TS_LIB_RAW` name→content record the browser entry reads.
 //
-// Prelude is loaded directly (disk / glob). No generated inlined bundles anymore.
-//
-// Run via `pnpm generate:bundles`. Generated files checked in for src/ consumers.
+// Prelude is loaded directly (disk / relative glob). Run via
+// `pnpm generate:bundles`. Generated files checked in for src/ consumers.
 
 import { createRequire } from "node:module";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -60,12 +67,25 @@ writeFileSync(
     `export const TS_LIB_FILE_NAMES: readonly string[] = [\n${libNamesInOrder.map((n) => `  ${JSON.stringify(n)},`).join("\n")}\n];\n`,
 );
 
-// No longer emit a per-file ?raw barrel for the browser path.
-// browser.ts now uses import.meta.glob directly (cleaner, no name mangling,
-// no long list of export { default as ... }).
-// Only the small names manifest is needed so both Node and browser paths load
-// exactly the same reference closure.
+// ── TS lib explicit-?raw barrel.
+//
+// One import per closure file. Vite resolves each through node resolution and
+// (because this package's own `vite build` bundles the browser/worker entries)
+// inlines the content — dist ships strings, no `?raw` specifiers, no glob.
+const ident = (name) => `raw_${name.replaceAll(/[^a-zA-Z0-9]+/g, "_")}`;
+
+writeFileSync(
+  path.join(srcDir, "ts-libs-raw.generated.ts"),
+  HEADER(
+    `Explicit \`typescript/lib/*?raw\` imports for the ${ROOT_LIB} closure (Vite 7 bans bare-package GLOBS everywhere; bare ?raw IMPORTS stay legal). Inlined by this package's vite build — consumers see plain strings.`,
+  ) +
+    libNamesInOrder.map((n) => `import ${ident(n)} from "typescript/lib/${n}?raw";`).join("\n") +
+    "\n\n" +
+    `export const TS_LIB_RAW: Readonly<Record<string, string>> = {\n${libNamesInOrder
+      .map((n) => `  ${JSON.stringify(n)}: ${ident(n)},`)
+      .join("\n")}\n};\n`,
+);
 
 console.log(
-  `generated ts lib manifest (${libNamesInOrder.length} files, root ${ROOT_LIB})`,
+  `generated ts lib manifest + ?raw barrel (${libNamesInOrder.length} files, root ${ROOT_LIB})`,
 );
