@@ -7,7 +7,7 @@ Every example on this page was executed as written; outputs are real.
 
 ```
 arrival run <file.scm>       validate, then execute — prints each top-level form's value
-arrival check <file.scm> […] static diagnostics only, every file — nothing is evaluated
+arrival check <file.scm> […] static diagnostics only, every file — no Scheme is evaluated
 arrival repl                 interactive session — persistent defines, Ctrl-D exits
 ```
 

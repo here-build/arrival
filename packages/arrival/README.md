@@ -87,7 +87,9 @@ The *friendly* half is not at strictness's expense. The language under these cal
 faithful R7RS — a subset by subtraction (no IO, no dynamics, no mutation), not a lookalike — with
 the reference suite borrowed from the implementation the spec's own community trusts:
 chibi-scheme's `r7rs-tests.scm` runs against arrival form-by-form (`src/__tests__/conformance/`);
-a documented gap is an `it.fails` that flips loudly the day it's fixed, never a silent skip. And
+a documented gap is an `it.fails` that flips loudly the day it's fixed, never a silent skip
+(today's ledger: 651 forms green, 142 documented `it.fails` gaps, 289 exclusions each naming
+the subtracted feature it exercises — of 1082 total). And
 the subset is deep where it counts: **proper tail calls** via a flat trampoline
 (Ganz–Friedman–Wand), **multiple values**, the **full R7RS exception tower**, an **exact numeric
 tower** (bigint-backed rationals — `(+ (/ 1 3) (/ 2 3))` is exactly `1`, not `0.999…`), **datum
@@ -166,7 +168,9 @@ unique symbols, having no portable identity, void loudly the same way.
 
 Critically, JS sits **beneath the language as a peer, not above it as a host** — no ambient
 `console`, `process`, or `require` to escape to, so a real effect is always a recorded crossing,
-never a side door. Every other claim on this page stands on that architectural fact.
+never a side door. Every other claim on this page stands on that architectural fact — as the
+*designed* boundary: at 0.x the implementation of it still has known escapes ([Security
+Status](#security-status)), and those are bugs against this invariant, not sanctioned doors.
 
 ## Provenance penetrates the membrane
 
@@ -271,7 +275,10 @@ retained; evict the cache they live in and a fresh live run may diverge from wha
 
 The thesis first, because without it this section reads as trivia: **the dialect roster was
 reverse-engineered from LLM latent space, not designed.** It is a measurement of what
-models trained on all of Lisp believe Scheme is, turned into a surface. It is still R7RS Scheme;
+models trained on all of Lisp believe Scheme is, turned into a surface — measured the mundane
+way, by custdev rather than introspection: agent sessions are recorded, and every *phantom* (a
+verb the model confidently reached for that didn't exist) is a logged feature request for the
+roster. It is still R7RS Scheme;
 only the behaviors undefined by spec were enrichened to make the runtime polyglot. A model reaches for
 Clojure's threading in one breath and CL's `mapcar` in the next; arrival meets the guess instead
 of punishing it:

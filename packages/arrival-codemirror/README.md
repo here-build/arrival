@@ -30,7 +30,7 @@ guards that pin the real arrival-type-lens service against the backend seam).
   slurp/barf, splice, kill-sexp, strict delete protection, depth-based structural indent. TRUE
   structure comes from the real reader (`parseSexprs`, spans on every node), not the highlighter
   — and every edit passes a **verify-reparse net**: if the result wouldn't parse, the op is a
-  no-op. Corruption is structurally impossible, not merely unlikely. Protection self-suspends on
+  no-op. A structural op corrupting the buffer is impossible, not merely unlikely. Protection self-suspends on
   an unbalanced buffer (you can always hand-repair; pasted-unbalanced text stays editable) and
   resumes when it balances. Quote sugar is understood: splicing `'(…)` never strands the `'`.
 
@@ -65,8 +65,9 @@ guards that pin the real arrival-type-lens service against the backend seam).
 - **`/react`** — the batteries-included mount: `<SchemeEditor>` renders one canonical `.scm`
   through either lens (Sugarcoat derives on entry, edits fold back losslessly, canonical Scheme
   stays the persisted truth), and `useSchemeIde()` loads a shared language service down a
-  graceful ladder — SharedWorker → dedicated Worker → in-thread → plain editor — so `tsc` never
-  blocks the main thread and a failed rung degrades instead of breaking. `setSchemeIdeFiles` /
+  graceful ladder — SharedWorker → dedicated Worker → in-thread → plain editor — so `tsc` stays
+  off the main thread while a worker rung holds (the in-thread rung trades that for
+  availability) and a failed rung degrades instead of breaking. `setSchemeIdeFiles` /
   `setSchemeIdeRequireTypes` feed it project files for `(require …)` resolution.
 
 ## The seam

@@ -85,6 +85,10 @@ One honest scale note: a verb like `(projects)` **materializes its full result o
 Scheme filters it — the composition saves round-trips, not host memory. For big tables, push the
 predicate into the verb (`(projects-by-stage "qualified")`) instead of filtering a full pull.
 
+And one honest security note: the sandbox is arrival's no-ambient-authority interpreter, and at
+0.x the core package's Security Status applies — treat the REPL as a capability boundary, not a
+hardened jail for hostile input.
+
 Omit `session` entirely for a stateless one-shot call. The optional `intent` arg is free-text,
 never validated — it's recorded on the `InteractionLog` and shown to collaborating users.
 
@@ -215,3 +219,10 @@ pnpm test        # vitest
 pnpm typecheck
 pnpm lint
 ```
+
+## License
+
+**[FSL-1.1-MIT](./LICENSE.md)** — Functional Source License 1.1, MIT Future License; each version
+converts to MIT two years after release. Same license and same plain-words boundary as
+`@here.build/arrival` — see the core README's "What Competing Use means here" (your own
+pipelines, agency work, and agents-as-users are always fair use). Questions: team@here.build
