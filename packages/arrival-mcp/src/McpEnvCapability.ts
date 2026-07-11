@@ -191,7 +191,18 @@ function liftInlineAnnotations(
 ): { symbols: Record<string, any>; annotations: Record<string, McpAnnotation> } {
   const keySet = new Set(annotationKeys);
   const cleanSymbols: Record<string, any> = {};
-  const annotations: Record<string, McpAnnotation> = { ...explicit };
+  // Descriptor-copy, NEVER spread: an `inputSchema` GETTER (this-bound to the activation,
+  // resolved later via `Reflect.get(annotation, key, activation)`) must survive un-invoked.
+  // A spread performs [[Get]] on every own enumerable prop — firing the getter at lift time
+  // with `this` = the fresh bag, where `this.resources` doesn't exist.
+  const copyDescriptors = (target: any, source: any): any => {
+    for (const key of Object.keys(source)) {
+      Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key)!);
+    }
+    return target;
+  };
+  const annotations: Record<string, McpAnnotation> = {};
+  for (const [name, entry] of Object.entries(explicit)) annotations[name] = copyDescriptors({}, entry);
 
   for (const [name, def] of Object.entries(symbols)) {
     if (typeof def !== "object" || def === null) {
@@ -242,7 +253,7 @@ function liftInlineAnnotations(
       cleanSymbols[name] = clean;
     }
 
-    if (hasInline) annotations[name] = { ...(annotations[name] || {}), ...ann };
+    if (hasInline) annotations[name] = copyDescriptors(copyDescriptors({}, annotations[name] || {}), ann);
   }
 
   return { symbols: cleanSymbols, annotations };

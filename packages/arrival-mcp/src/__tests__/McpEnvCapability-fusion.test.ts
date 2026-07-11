@@ -116,3 +116,56 @@ describe("capability-level description / dynamicDescription (CAP_DESCRIPTION / C
     await expect(cap.resolveDescription()).resolves.toBeUndefined();
   });
 });
+
+describe("annotation lifting preserves getters un-invoked (the projectDiscovery regression)", () => {
+  // An `inputSchema` GETTER reads `this.resources` — legal per the McpAnnotation doc: it is
+  // resolved via `Reflect.get(annotation, "inputSchema", activation)` at CALL time. Lifting
+  // must therefore never [[Get]] the property while building the annotation bag (a spread
+  // does), or the getter fires with `this` = the fresh bag, where `resources` is undefined.
+  it("an inline inputSchema getter survives construction without firing", () => {
+    let fired = 0;
+    const cap = new McpEnvCapability("lazy-schema", {
+      symbols: {
+      probe: {
+        fn(this: { resources: { db: { live: string } } }) {
+          return this.resources.db.live;
+        },
+        description: "getter-guarded verb",
+        get inputSchema(): readonly z.ZodType[] {
+          fired++;
+          // Mirrors projectDiscovery: the getter dereferences live resources eagerly.
+          return [z.string().describe((this as { resources: { db: { live: string } } }).resources.db.live)];
+        },
+      },
+      },
+    });
+    expect(fired).toBe(0); // construction lifted the getter as a DESCRIPTOR, never a value read
+    const annotation = cap.allAnnotations()["probe"]!;
+    expect(fired).toBe(0); // enumerating annotations still must not fire it
+    const activation = { resources: { db: { live: "armed" } } };
+    const schemas = Reflect.get(annotation, "inputSchema", activation) as readonly z.ZodType[];
+    expect(fired).toBe(1); // resolve-time invocation, activation receiver
+    expect(schemas[0]!.description).toBe("armed");
+  });
+
+  it("an explicit-record getter survives the same way", () => {
+    let fired = 0;
+    const cap = new McpEnvCapability("lazy-explicit", {
+      symbols: {
+        probe: { fn: () => "x", description: "d" },
+      },
+      annotations: {
+        probe: {
+          description: "d",
+          get inputSchema(): readonly z.ZodType[] {
+            fired++;
+            return [z.string()];
+          },
+        },
+      },
+    });
+    expect(fired).toBe(0);
+    void cap.allAnnotations();
+    expect(fired).toBe(0);
+  });
+});
