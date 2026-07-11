@@ -297,7 +297,7 @@ interface RunOptions {
 
 // `_currentStrict` module holder is retired — strict mode is run-CONSTANT
 // (RunContext), so readers consult `ctx.runCtx.strict` directly; it was a pure
-// RunContext duplicate. `_currentRunResolver` STAYS: it is the
+// RunContext duplicate. `globalThis.__arrivalRunResolver` STAYS: it is the
 // rosetta MEMBRANE's env back-channel (llm-plane-arrival-env/prompt.ts evaluates an
 // `s/…` schema DSL and reaches the infer capability under a ctx-less `apply`; runCtx
 // carries no env).
@@ -321,12 +321,23 @@ interface RunOptions {
  * save/restore. The meter is found by walking `__parent__` from this env, so a
  * child-frame env still resolves the run's installed meter.
  */
-let _currentRunResolver: Resolver | undefined = undefined;
+declare global {
+  // eslint-disable-next-line no-var
+  var __arrivalRunResolver: Resolver | undefined;
+}
+// PROCESS-GLOBAL, not module-local: a bundler (Vite dev serves this file raw via /@fs AND
+// prebundles a second copy inside `.vite/deps/@here__build_arrival-chain.js`; esbuild/wrangler
+// can dup across subpaths) can load evaluator.ts twice, giving each copy its own holder — then
+// `exec` (one copy) publishes the resolver into ITS holder while the `(require …)` verb (the
+// other copy, via loader.ts's `currentRunResolver`) reads an empty one and doors with
+// "no run resolver reachable". Pinning it on `globalThis` makes the save/restore holder survive
+// duplication (single-threaded JS still makes the nesting safe — the same reason the module
+// holder was safe, now shared across copies).
 
 /** The run's current env at apply time — the published resolver's lexical frame.
  *  Read by `to_array`'s heap-meter lookup (env/pack-helpers.ts) in place of the
  *  erased env-as-`this`. */
-export const currentRunEnv = (): AmbientRuntime | undefined => _currentRunResolver?.env;
+export const currentRunEnv = (): AmbientRuntime | undefined => globalThis.__arrivalRunResolver?.env;
 
 /**
  * The run's current COMPOSED resolver at apply time — the same save/restore holder
@@ -339,7 +350,7 @@ export const currentRunEnv = (): AmbientRuntime | undefined => _currentRunResolv
  * (`string-append` unbound). Glass callers see a resolver whose scope and
  * capabilities wrap the same base-linked env — byte-identical resolution.
  */
-export const currentRunResolver = (): Resolver | undefined => _currentRunResolver;
+export const currentRunResolver = (): Resolver | undefined => globalThis.__arrivalRunResolver;
 
 /**
  * Re-install `_dynamicCallSite` on every invocation of a lambda VALUE passed as
@@ -3085,13 +3096,13 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
     const __savedDynamicCallSite = currentDynamicCallSite();
     setDynamicCallSite(dynSite);
     const canBounce = is_lambda(fn);
-    const __savedRunResolver = _currentRunResolver;
+    const __savedRunResolver = globalThis.__arrivalRunResolver;
     // The rosetta membrane's env back-channel (llm-plane-arrival-env/prompt.ts reads
     // `currentRunEnv()` under a ctx-less `apply`; `require` reads the full
     // `currentRunResolver()` so module forms keep the run's capability base). The
     // meter/strict run-state that once also rode holders here now travels on
     // `ctx.runCtx` / the operand ctx.
-    _currentRunResolver = ctxResolver(ctx);
+    globalThis.__arrivalRunResolver = ctxResolver(ctx);
     const wrappedArgs = wrapLambdaArgs(args, dynSite);
     let result: SchemeValue;
     try {
@@ -3123,7 +3134,7 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
             ) as SchemeValue);
     } finally {
       setDynamicCallSite(__savedDynamicCallSite);
-      _currentRunResolver = __savedRunResolver;
+      globalThis.__arrivalRunResolver = __savedRunResolver;
     }
 
     // Bounce result — the callee was a Scheme lambda speaking the protocol

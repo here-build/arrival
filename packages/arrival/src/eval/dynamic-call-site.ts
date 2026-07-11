@@ -26,12 +26,18 @@
  *  evaluator.ts only thread it through as an opaque parent pointer. */
 export type Invocation = unknown;
 
-let _dynamicCallSite: Invocation | undefined = undefined;
+declare global {
+  // eslint-disable-next-line no-var
+  var __arrivalDynamicCallSite: Invocation | undefined;
+}
+// PROCESS-GLOBAL (see evaluator.ts's __arrivalRunResolver): a bundler can load this module twice,
+// splitting the ambient so a reverse re-entry's trace nests under the wrong invocation. globalThis
+// keeps one holder; single-threaded save/restore still makes the nesting safe.
 
 /** Read the current holder — the ALambda runner's synchronous prologue falls
  *  back to `ctx.currentInvocation` when this is unset (see evalLambda). */
 export function currentDynamicCallSite(): Invocation | undefined {
-  return _dynamicCallSite;
+  return globalThis.__arrivalDynamicCallSite;
 }
 
 /** Raw, unconditional write — for the direct-dispatch sites (evaluatePair,
@@ -40,7 +46,7 @@ export function currentDynamicCallSite(): Invocation | undefined {
  *  sites save/restore by hand around this (no "prefer the deeper candidate"
  *  comparison — there is nothing to compare against, the call IS the site). */
 export function setDynamicCallSite(site: Invocation | undefined): void {
-  _dynamicCallSite = site;
+  globalThis.__arrivalDynamicCallSite = site;
 }
 
 /** Is `a` a strict descendant of `b` in the invocation tree? Walks `a`'s parent
@@ -66,11 +72,11 @@ export function isStrictDescendant(a: Invocation | undefined, b: Invocation | un
  * passed-in lambda — see evaluator.ts's `wrapLambda` doc for the full case).
  */
 export function withDynamicCallSite<T>(dynSite: Invocation | undefined, fn: () => T): T {
-  const saved = _dynamicCallSite;
-  _dynamicCallSite = isStrictDescendant(saved, dynSite) ? saved : dynSite;
+  const saved = globalThis.__arrivalDynamicCallSite;
+  globalThis.__arrivalDynamicCallSite = isStrictDescendant(saved, dynSite) ? saved : dynSite;
   try {
     return fn();
   } finally {
-    _dynamicCallSite = saved;
+    globalThis.__arrivalDynamicCallSite = saved;
   }
 }

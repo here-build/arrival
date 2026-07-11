@@ -558,7 +558,14 @@ function raceRegionAbort<T>(value: PromiseLike<T>, signal: AbortSignal): Promise
 // `RosettaOptions`: `z.procedure`'s codec transform has no parameter for it.
 // Single-threaded JS + save/restore around the owning call makes the holder
 // safe, exactly like evaluator.ts's `_dynamicCallSite`.
-let _currentRegionScope: RegionScope | undefined = undefined;
+declare global {
+  // eslint-disable-next-line no-var
+  var __arrivalRegionScope: RegionScope | undefined;
+}
+// PROCESS-GLOBAL (see evaluator.ts's __arrivalRunResolver for the full rationale): a bundler
+// can load this module twice (Vite raw /@fs vs a prebundled copy), splitting the ambient so a
+// reverse wrapper minted under one copy's scope reads `undefined` from the other — the region
+// discipline silently degrades to DETACHED_SCOPE. Pinning it on globalThis keeps one holder.
 
 /** The scope a reverse wrapper should close over if minted RIGHT NOW —
  *  `undefined` outside any tracked crossing (e.g. `z.procedure().parse(...)`
@@ -567,18 +574,18 @@ let _currentRegionScope: RegionScope | undefined = undefined;
  *  as "no region discipline for this wrapper" (an always-open, uncached,
  *  never-region-bound passthrough) — never as an error. */
 export function currentRegionScope(): RegionScope | undefined {
-  return _currentRegionScope;
+  return globalThis.__arrivalRegionScope;
 }
 
 /** Install `scope` as ambient for the duration of `fn` (sync only — every
  *  real caller mints wrappers synchronously; the crossing's own async work
  *  happens outside this window, see `createRosettaWrapper`). */
 export function withRegionScope<T>(scope: RegionScope, fn: () => T): T {
-  const saved = _currentRegionScope;
-  _currentRegionScope = scope;
+  const saved = globalThis.__arrivalRegionScope;
+  globalThis.__arrivalRegionScope = scope;
   try {
     return fn();
   } finally {
-    _currentRegionScope = saved;
+    globalThis.__arrivalRegionScope = saved;
   }
 }
