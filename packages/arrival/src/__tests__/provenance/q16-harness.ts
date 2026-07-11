@@ -28,6 +28,8 @@ import { execState } from "../../eval/generator-exec.js";
 import { collapseProvenance } from "../../provenance-collapse.js";
 import { schemeToJs } from "../../rosetta.js";
 import * as z from "../../common/scheme-zod.js";
+import { symbol } from "../../common/symbol.js";
+import { EnvCapability } from "../../common/capability.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { emitMint, setEmissionEnabled } from "../../provenance/store/emit.js";
 import { PayloadStoreFake, ProvenanceStoreFake } from "../../provenance/store/index.js";
@@ -93,10 +95,26 @@ export class RecordingRegistry {
 
   /** Register one RECORDING source on `env`: every crossing mints a stamped value
    *  (eager-oracle side) and awaits a real `emitMint` under a distinct RecordId
-   *  (retrospective side) — see the module header's design call. */
-  register(env: Environment, op: string, shape: RecordingShape): void {
-    env.defineRosetta(op, {
-      fn: async (...args: unknown[]): Promise<unknown> => {
+   *  (retrospective side) — see the module header's design call.
+   *
+   *  Migrated off the retired `env.defineRosetta` onto a test-local `EnvCapability`
+   *  (`symbol.rosetta` verb — the migration target), same `inputRest: z.value` /
+   *  `output: [z.value]` untyped-source shape w1-harness.ts's `SourceRegistry.register`
+   *  uses: args decode to the raw scheme value (no automatic JS conversion), so this
+   *  impl runs `schemeToJs` on each arg itself — mirroring the retired wrapper's
+   *  automatic conversion exactly (research-env.ts's `buildResearchScope` idiom) — and
+   *  the boxed, already-stamped return crosses back out untouched via the output escape
+   *  hatch. */
+  async register(env: Environment, op: string, shape: RecordingShape): Promise<void> {
+    const impl = symbol.rosetta`${op}: Q16 harness recording source`(
+      { input: [], inputRest: z.value, output: [z.value] },
+      // `any[]` rest param — the research-env.ts `buildResearchScope` boundary: a
+      // `z.value` slot decodes to the raw SchemeValue, and `schemeToJs`'s generic
+      // constraint (`T extends SchemeValue | null | undefined`) can't be satisfied by
+      // an `unknown`-typed rest param without a cast; `any` here is the SAME erasure
+      // `symbol.rosetta`'s own `rawImpl` boundary already performs one layer down.
+      async (...args: any[]): Promise<unknown> => {
+        args = args.map((a) => schemeToJs(a));
         this.calls.set(op, (this.calls.get(op) ?? 0) + 1);
         const callSeq = this.calls.get(op) ?? 1;
         let boxed: unknown;
@@ -151,7 +169,8 @@ export class RecordingRegistry {
         invariant(record !== undefined, "q16 harness: emitMint no-oped — setEmissionEnabled(true) must wrap the record run");
         return boxed;
       },
-    });
+    );
+    await new EnvCapability(`test/q16-source-${op}`, { symbols: { [op]: impl } }).lower({}).apply(env, undefined as never);
   }
 }
 

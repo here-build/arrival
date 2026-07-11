@@ -42,6 +42,8 @@ import { collapseProvenance } from "../../provenance-collapse.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import * as z from "../../common/scheme-zod.js";
+import { symbol } from "../../common/symbol.js";
+import { EnvCapability } from "../../common/capability.js";
 import { reachableNodes } from "../../provenance/wireframe/loops.js";
 import type { WireframeGraph, WireframeProgram } from "../../provenance/wireframe/types.js";
 import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../../values/op-helpers.js";
@@ -76,27 +78,38 @@ export class SourceRegistry {
   /** Register one source op on `env` per its shape. Every call MINTS a fresh id
    *  (or one per dict field) — this is deliberate: a source is a Rosetta-IN
    *  crossing, and the real membrane mints once per crossing regardless of how many
-   *  times a fan/loop calls it (golden-prov-infer.test.ts's rationale, restated). */
-  register(env: Environment, op: string, shape: SourceShape): void {
-    env.defineRosetta(op, {
-      fn: (...args: unknown[]): unknown => {
-        void args; // sources introduce data; the (possibly per-element) argument is not consulted
+   *  times a fan/loop calls it (golden-prov-infer.test.ts's rationale, restated).
+   *
+   *  Migrated off the retired `env.defineRosetta` onto a test-local `EnvCapability`
+   *  (`symbol.rosetta` verb — the migration target). `inputRest: z.value` + `output:
+   *  [z.value]` is the untyped-source shape (research-env.ts's `buildResearchScope`
+   *  idiom): args are ignored anyway (the legacy `void args`), and the return is an
+   *  ALREADY-STAMPED `AValue` (`stampedNum`/`stampedStr`) whose mint id must survive
+   *  untouched — `z.value` on the output side is the declared no-transform escape
+   *  hatch that skips `z.encode` and hands the impl's return straight to `jsToScheme`
+   *  (golden-prov-infer.test.ts's `inferSources` rationale, restated). */
+  async register(env: Environment, op: string, shape: SourceShape): Promise<void> {
+    const mint = this.mint.bind(this);
+    const impl = symbol.rosetta`${op}: W1 harness fake Rosetta-IN source`(
+      { input: [], inputRest: z.value, output: [z.value] },
+      (..._args: unknown[]): unknown => {
         if (shape === "num") {
-          const id = this.mint(op);
+          const id = mint(op);
           return stampedNum(id, id);
         }
         if (shape === "str") {
-          const id = this.mint(op);
+          const id = mint(op);
           return stampedStr(`${op}#${id}`, id);
         }
         const out: Record<string, unknown> = {};
         for (const field of shape.dict) {
-          const id = this.mint(op);
+          const id = mint(op);
           out[field] = stampedStr(`${op}.${field}#${id}`, id);
         }
         return out;
       },
-    });
+    );
+    await new EnvCapability(`test/w1-source-${op}`, { symbols: { [op]: impl } }).lower({}).apply(env, undefined as never);
   }
 
   /** Project a set of numeric provenance ids back to the set of declared source op
@@ -126,7 +139,7 @@ export async function runEagerCone(
   registry: SourceRegistry,
 ): Promise<Set<string>> {
   const env = baseEnv.inherit(`w1-agreement-${Math.random().toString(36).slice(2)}`);
-  for (const [op, shape] of Object.entries(sources)) registry.register(env, op, shape);
+  for (const [op, shape] of Object.entries(sources)) await registry.register(env, op, shape);
   // Q20b: production default is OFF — the EAGER ORACLE side of the W1 agreement needs
   // REAL accumulation to produce a cone at all. Force ON for exactly this run,
   // save/restoring the ambient value (never a hardcoded default).

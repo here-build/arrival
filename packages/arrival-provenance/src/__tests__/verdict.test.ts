@@ -20,10 +20,13 @@ import {
   AString,
   CONSTANT_CTX,
   deepProvenance,
+  EnvCapability,
   execState,
   initBridge,
   LexicalScope,
   nil,
+  symbol,
+  z,
 } from "@here.build/arrival";
 import { attestDeep } from "@here.build/arrival/attestation";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -37,11 +40,20 @@ let seq = 0;
  *  `(evidence-read q)` → `"SRC:q"`. Returns the `{ result, trace, source }` bag
  *  `groundingVerdict` (and `buildUneval`) consume — `forms` stays unset, so the
  *  reverse-chain's output form derives from the trace itself (`lastTopLevelForm`),
- *  not a second, identity-mismatched parse of `source`. */
+ *  not a second, identity-mismatched parse of `source`.
+ *
+ *  Test-local `EnvCapability` (`symbol.rosetta` — the `env.defineRosetta` migration
+ *  target): a plain typed `z.string → z.string` contract, no escape hatch needed. */
 async function run(source: string) {
   await initBridge();
   const scope = LexicalScope.fresh(`verdict-test-${seq++}`);
-  scope.env.defineRosetta("evidence-read", { fn: (q: string) => `SRC:${q}` });
+  const evidenceRead = symbol.rosetta`evidence-read: deterministic Rosetta-IN fixture source`(
+    { input: [z.string], output: [z.string] },
+    (q) => `SRC:${q}`,
+  );
+  await new EnvCapability("test/evidence-read", { symbols: { "evidence-read": evidenceRead } })
+    .lower({})
+    .apply(scope.env, undefined as never);
   const trace = new EvalTrace();
   const { values } = await execState(source, { scope, tap: trace });
   const result = values.at(-1);

@@ -24,6 +24,9 @@ import { inferenceEnv } from "../../inference-env.js";
 import { schemeToJs } from "../../rosetta.js";
 import { withRecordCoordinateAsync, type EmissionSink, type RecordCoordinate } from "../../eval/provenance-hooks.js";
 import { PayloadStoreFake, ProvenanceStoreFake, setEmissionEnabled } from "../../provenance/store/index.js";
+import { symbol } from "../../common/symbol.js";
+import { EnvCapability } from "../../common/capability.js";
+import * as z from "../../common/scheme-zod.js";
 
 const COORD: RecordCoordinate = { templateHash: "th-source", ordinalPath: [0], regionEpoch: "e0" };
 const REGION = "region-emission-hooks";
@@ -34,9 +37,14 @@ afterEach(() => {
 
 /** One rosetta source, mirroring `w1-harness.ts`'s `SourceRegistry.register("num")`
  *  shape (a fresh env, a plain synchronous numeric return — `createRosettaWrapper`
- *  wraps it into the async `mintsPoint` path regardless of the impl's own sync body). */
-function registerSource(env: ReturnType<typeof inferenceEnv.inherit>): void {
-  env.defineRosetta("fetch-item", { fn: () => 42 });
+ *  wraps it into the async `mintsPoint` path regardless of the impl's own sync body).
+ *  Test-local `EnvCapability` (`symbol.rosetta` — the `env.defineRosetta` migration
+ *  target); a plain `z.number` output, same as `silent-region.test.ts`'s sibling. */
+async function registerSource(env: ReturnType<typeof inferenceEnv.inherit>): Promise<void> {
+  const fetchItem = symbol.rosetta`fetch-item: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 42);
+  await new EnvCapability("test/fetch-item", { symbols: { "fetch-item": fetchItem } })
+    .lower({})
+    .apply(env, undefined as never);
 }
 
 describe("the real port site: a rosetta crossing through evaluator.ts's generic apply", () => {
@@ -47,7 +55,7 @@ describe("the real port site: a rosetta crossing through evaluator.ts's generic 
     const sink: EmissionSink = { store, payloads, regionId: REGION };
     const trace = new EvalTrace();
     const env = inferenceEnv.inherit("emission-hooks-on");
-    registerSource(env);
+    await registerSource(env);
 
     const result = await withRecordCoordinateAsync(COORD, sink, () => execState("(fetch-item)", { env, tap: trace }));
     expect(schemeToJs(result.values[0], {})).toBe(42);
@@ -71,7 +79,7 @@ describe("the real port site: a rosetta crossing through evaluator.ts's generic 
     const sink: EmissionSink = { store, payloads, regionId: REGION };
     const trace = new EvalTrace();
     const env = inferenceEnv.inherit("emission-hooks-off");
-    registerSource(env);
+    await registerSource(env);
 
     const result = await withRecordCoordinateAsync(COORD, sink, () => execState("(fetch-item)", { env, tap: trace }));
     expect(schemeToJs(result.values[0], {})).toBe(42); // identical program output to the ON case above
@@ -86,7 +94,7 @@ describe("the real port site: a rosetta crossing through evaluator.ts's generic 
     setEmissionEnabled(true);
     const trace = new EvalTrace();
     const env = inferenceEnv.inherit("emission-hooks-no-coordinate");
-    registerSource(env);
+    await registerSource(env);
 
     // No withRecordCoordinate wrapper — exactly what every real call site looks like
     // today, since the wireframe-walking driver (Q15/Q16) that would install one

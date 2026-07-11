@@ -104,6 +104,28 @@ describe("a reverse lambda is region-bound to its invocation", () => {
     let before = 0;
     let result: unknown;
     const env = inferenceEnv.inherit("region-law-trace-nesting");
+    // NOT migrated to `symbol.rosetta` + `EnvCapability` (env.defineRosetta →
+    // EnvCapability sweep, 2026-07-11): this row's whole point is that the LEGACY
+    // `createRosettaWrapper` (rosetta.ts) opens a region scope automatically —
+    // `const scope = openRegionScope({ runCtx, dynSite: inv })` around the
+    // `schemeArgs.map(arg => schemeToJs(arg, options))` conversion, BEFORE `fn` runs,
+    // closed once `fn` settles — exactly the discipline this test asserts nests
+    // correctly across a re-entrant reverse-lambda call. The NEW `symbol.rosetta`
+    // path (`common/symbols/rosetta.ts`'s `run`, bound via `common/capability.ts`'s
+    // "rosetta" case) does NOT call `openRegionScope` anywhere — confirmed by
+    // grepping every call site (only `rosetta.ts:489`, the legacy wrapper, calls it).
+    // `z.procedure()`'s decode (scheme-zod.ts) reads `currentRegionScope() ??
+    // DETACHED_SCOPE` rather than minting one, so a verb declared against the new
+    // machinery would silently fall back to the shared detached scope instead of a
+    // fresh per-invocation one — changing this row's semantics, not just its syntax.
+    // This is a genuine gap between the two paths (not a migration mechanics
+    // question) — flagged rather than papered over with an ad-hoc manual
+    // openRegionScope/closeRegionScope wrap that would duplicate, not exercise,
+    // production machinery. Tracked as a follow-up: either `EnvCapability`'s rosetta
+    // bind needs to open a region scope generically (mirroring the legacy wrapper),
+    // or this row stays pinned to `env.defineRosetta` until a capability-native
+    // reverse-lambda region API exists (the `it.todo` row directly below is the
+    // named future-work marker for the adjacent "persistent handler" case).
     env.defineRosetta("region-law-capture", {
       // `this.invocation.currentInvocation` is createRosettaWrapper's own receiver
       // shape (rosetta.ts:`fn.apply(makeCallCtx(runCtx, inv, argProvenance), …)`) —

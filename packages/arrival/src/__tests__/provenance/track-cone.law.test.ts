@@ -119,7 +119,7 @@ describe("track containment — STAMP arm (§3 I1 vs the eager oracle)", () => {
     tracks = [];
     for (const v of elements) {
       const env = inferenceEnv.inherit(`i1-stamp-track-${v}`);
-      registry.register(env, "fetch-item", "num");
+      await registry.register(env, "fetch-item", "num");
       const { values } = await execState(`(* (fetch-item ${v}) 2)`, { env });
       const egress = values[values.length - 1];
       const cone = collapseProvenance(egress);

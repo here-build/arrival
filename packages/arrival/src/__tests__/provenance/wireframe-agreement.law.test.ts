@@ -34,6 +34,9 @@ import { scopeId } from "../../provenance/scope-id.js";
 import { schemeToJs } from "../../rosetta.js";
 import { collapseProvenance } from "../../provenance-collapse.js";
 import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../../values/op-helpers.js";
+import { symbol } from "../../common/symbol.js";
+import { EnvCapability } from "../../common/capability.js";
+import * as z from "../../common/scheme-zod.js";
 import { SourceRegistry, runEagerCone, prospectiveSourceCone, type SourceShape } from "./w1-harness.js";
 import { W1_CORPUS, CORPUS_ROLES, CORPUS_BASE_NAMES, genLinearProgram } from "./w1-corpus.js";
 
@@ -286,10 +289,19 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
         const wireframe = prospectiveSourceCone(program);
 
         const env = inferenceEnv.inherit("w1-begin-finding");
-        env.defineRosetta("emit!", { fn: (x: unknown) => x });
+        // Test-local EnvCapability (`symbol.rosetta` — the `env.defineRosetta` migration
+        // target): identity passthrough, `z.value` on both sides (no transform, matching
+        // the legacy `fn: (x) => x` shape exactly).
+        const emitBang = symbol.rosetta`emit!: identity passthrough (sink echo)`(
+          { input: [z.value], output: [z.value] },
+          (x: unknown) => x,
+        );
+        await new EnvCapability("test/w1-begin-finding", { symbols: { "emit!": emitBang } })
+          .lower({})
+          .apply(env, undefined as never);
         const registry = new SourceRegistry();
-        registry.register(env, "src-a", num);
-        registry.register(env, "src-b", num);
+        await registry.register(env, "src-a", num);
+        await registry.register(env, "src-b", num);
         const { values } = await execState(`(begin (emit! (src-a)) (src-b))`, { env });
         const eager = registry.opsOf(collapseProvenance(values[values.length - 1]));
 

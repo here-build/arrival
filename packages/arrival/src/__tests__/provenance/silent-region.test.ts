@@ -51,6 +51,9 @@ import { AExact } from "../../values/primitives/AExact.js";
 import { PayloadStoreFake, ProvenanceStoreFake, setEmissionEnabled } from "../../provenance/store/index.js";
 import { hermeticApply } from "../../provenance/gamma.js";
 import type { EmittedWire } from "../../provenance/wireframe/types.js";
+import { symbol } from "../../common/symbol.js";
+import { EnvCapability } from "../../common/capability.js";
+import * as z from "../../common/scheme-zod.js";
 
 const TRACK_COORD: TrackCoordinate = { templateHash: "th-silent-track", ordinalPath: [0], regionEpoch: "e0" };
 const RECORD_COORD: RecordCoordinate = { templateHash: "th-silent-mint", ordinalPath: [0], regionEpoch: "e0" };
@@ -67,9 +70,14 @@ function makeEcho(): ANativeProcedure {
 }
 
 /** Same shape `emission-hooks.test.ts` uses — one rosetta source, a real membrane
- *  crossing `notePotentialRosettaExit` can mint against. */
-function registerSource(env: ReturnType<typeof inferenceEnv.inherit>): void {
-  env.defineRosetta("fetch-item", { fn: () => 42 });
+ *  crossing `notePotentialRosettaExit` can mint against. Test-local `EnvCapability`
+ *  (`symbol.rosetta` — the `env.defineRosetta` migration target); a plain `z.number`
+ *  output (the impl returns an ordinary JS number, no pre-stamped escape hatch needed). */
+async function registerSource(env: ReturnType<typeof inferenceEnv.inherit>): Promise<void> {
+  const fetchItem = symbol.rosetta`fetch-item: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 42);
+  await new EnvCapability("test/fetch-item", { symbols: { "fetch-item": fetchItem } })
+    .lower({})
+    .apply(env, undefined as never);
 }
 
 describe("A. silent-region mode suppresses emission, never doors (§4 CHOSEN, round 2 A4)", () => {
@@ -90,7 +98,7 @@ describe("A. silent-region mode suppresses emission, never doors (§4 CHOSEN, ro
       closeRegionScope(scope);
 
       const env = inferenceEnv.inherit("silent-mint");
-      registerSource(env);
+      await registerSource(env);
       const trace = new EvalTrace();
       const result = await withRecordCoordinateAsync(RECORD_COORD, mintSink, () =>
         execState("(fetch-item)", { env, tap: trace }),
@@ -121,7 +129,7 @@ describe("A. silent-region mode suppresses emission, never doors (§4 CHOSEN, ro
     closeRegionScope(scope);
 
     const env = inferenceEnv.inherit("loud-mint");
-    registerSource(env);
+    await registerSource(env);
     const trace = new EvalTrace();
     await withRecordCoordinateAsync(RECORD_COORD, mintSink, () => execState("(fetch-item)", { env, tap: trace }));
 
@@ -155,7 +163,7 @@ describe("A. silent-region mode suppresses emission, never doors (§4 CHOSEN, ro
       closeRegionScope(scope);
 
       const env = inferenceEnv.inherit("silent-nested-mint");
-      registerSource(env);
+      await registerSource(env);
       const trace = new EvalTrace();
       await withRecordCoordinateAsync(
         { templateHash: "th-nested", ordinalPath: [9], regionEpoch: "e-nested" },
@@ -318,7 +326,7 @@ describe("C. glass whole-program replay — the SAME silent discipline generaliz
 
     // Real run — mints one record.
     const env1 = inferenceEnv.inherit("glass-real-run");
-    registerSource(env1);
+    await registerSource(env1);
     const trace1 = new EvalTrace();
     const real = await withRecordCoordinateAsync(RECORD_COORD, sink, () =>
       execState("(fetch-item)", { env: env1, tap: trace1 }),
@@ -334,7 +342,7 @@ describe("C. glass whole-program replay — the SAME silent discipline generaliz
     // work per the task brief — this row pins only the discipline), run again under
     // a silent region, at the SAME coordinate a real drill-in would reuse.
     const env2 = inferenceEnv.inherit("glass-replay-run");
-    registerSource(env2);
+    await registerSource(env2);
     const trace2 = new EvalTrace();
     const replayed = await withSilentRegion(() =>
       withRecordCoordinateAsync(RECORD_COORD, sink, () => execState("(fetch-item)", { env: env2, tap: trace2 })),
