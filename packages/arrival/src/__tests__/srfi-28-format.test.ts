@@ -25,6 +25,8 @@ import { AString } from "../values/primitives/AString.js";
 import { AValue } from "../values/primitives/AValue.js";
 import srfi28 from "../env/srfi/srfi-28.js";
 import { requireEagerOracle } from "./_require-eager-oracle.js";
+// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
+import { bindValue } from "../Environment.js";
 
 // Q20b: format's provenance assertions run real programs through exec/execState —
 // force the oracle ON for this file's lifetime.
@@ -42,7 +44,7 @@ let seq = 0;
 async function run(src: string, bindings: Record<string, AString> = {}): Promise<unknown> {
   const env = sandboxedEnv.inherit(`srfi-28-${seq++}`);
   await assembleEnv(env as unknown as SchemeEnv, [srfi28.lower({ evalScheme }) as never]);
-  for (const [k, v] of Object.entries(bindings)) (env as unknown as { set(k: string, v: unknown): void }).set(k, v);
+  for (const [k, v] of Object.entries(bindings)) bindValue(env, k, v);
   const [r] = await exec(src, { env });
   return r;
 }
@@ -52,7 +54,7 @@ async function run(src: string, bindings: Record<string, AString> = {}): Promise
 async function runBoxed(src: string, bindings: Record<string, AString> = {}): Promise<unknown> {
   const env = sandboxedEnv.inherit(`srfi-28-${seq++}`);
   await assembleEnv(env as unknown as SchemeEnv, [srfi28.lower({ evalScheme }) as never]);
-  for (const [k, v] of Object.entries(bindings)) (env as unknown as { set(k: string, v: unknown): void }).set(k, v);
+  for (const [k, v] of Object.entries(bindings)) bindValue(env, k, v);
   const [r] = (await execState(src, { env })).values;
   return r;
 }

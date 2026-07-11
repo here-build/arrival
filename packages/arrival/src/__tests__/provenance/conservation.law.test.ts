@@ -46,7 +46,7 @@ import { schemeToJs, type InvocationLike } from "../../rosetta.js";
 import { EnvCapability } from "../../common/capability.js";
 import { symbol, type RosettaSymbolDef } from "../../common/symbol.js";
 import * as z from "../../common/scheme-zod.js";
-import type { SchemeEnv } from "../../common/scheme-env.js";
+import { ResolvingEnvironment } from "../../Environment.js";
 import { ARosettaProcedure } from "../../values/primitives/ACallable.js";
 import { withDynamicCallSite } from "../../eval/dynamic-call-site.js";
 import { nil } from "../../values/primitives/ANil.js";
@@ -289,16 +289,12 @@ function buildProgram(seed: number): { code: string; ids: number[]; binds: Recor
 // published on the evaluator-owned ambient — this harness mirrors the evaluator's own
 // apply-site shape (`withDynamicCallSite` around the term dispatch), not a hand-built
 // `this`.
-function recordingEnv(): { env: SchemeEnv; verbs: Record<string, ARosettaProcedure> } {
-  const verbs: Record<string, ARosettaProcedure> = {};
-  const env = {
-    set: (name: string, value: unknown) => void (verbs[name] = value as ARosettaProcedure),
-    get: () => undefined,
-    inherit: () => env,
-    registerResolver: () => undefined,
-    list: () => [],
-    allBoundNames: () => [],
-  } as unknown as SchemeEnv;
+function recordingEnv(): { env: ResolvingEnvironment; verbs: Record<string, ARosettaProcedure> } {
+  // A REAL frame (hermetic-Environment ruling: capability apply narrows to the concrete
+  // `Environment`); `verbs` reads the frame's own storage record — same boundary narrow
+  // the old synthetic recorder did.
+  const env = new ResolvingEnvironment("conservation-recording", {}, null);
+  const verbs = new Proxy({} as Record<string, ARosettaProcedure>, { get: (_t, n) => env.__env__[n as string] });
   return { env, verbs };
 }
 

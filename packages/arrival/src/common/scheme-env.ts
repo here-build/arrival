@@ -19,6 +19,12 @@
 // dependency-free layer the base sandbox can be re-expressed in terms of.
 
 import type { EnvPack } from "./kernel.js";
+// Type-only edges (no runtime import — Environment.ts imports THIS module's types, so a
+// value edge here would cycle; `import type` erases at emit, same posture as guards.ts's
+// false-leaf note): the storage union a resolver may answer with, and the run identity a
+// resolving read threads.
+import type { EnvironmentValue } from "../Environment.js";
+import type { RunContext } from "../values/primitives/RunContext.js";
 
 /** A rosetta (host-fn) contribution, mirroring arrival-scheme's retired `defineRosetta`
  *  config structurally (kept here so we don't import the runtime). Still the type the
@@ -39,15 +45,30 @@ export interface RosettaSpec {
   pure?: boolean;
 }
 
+/** What a resolver may answer with: a BOXED scheme/runtime binding (the same union
+ *  environment storage holds), or a membrane primitive — a bare fn like the `:key`
+ *  pluck, which is NOT rosetta-wrapped because it IS part of the membrane, like `@`.
+ *  Deliberately NOT `unknown`: a raw JS scalar answer is a contract violation the
+ *  probe sites door on at runtime (`assertResolvedBinding`, Environment.ts) and this
+ *  type walls off at compile time. */
+export type ResolvedBinding = EnvironmentValue | ((...args: never[]) => unknown);
+
 /** A catchall resolver contribution, mirroring arrival-scheme's `FallbackResolver`
  *  structurally (kept here so we don't import the runtime). It fires when the env
  *  did NOT bind `name`, mapping a NAME to a value — the polyglot member accessors
- *  (`:key`) and the unbounded `c[ad]+r` family are exactly this. A resolver may
- *  return a membrane primitive (the `:key` pluck): it is NOT rosetta-wrapped — it
- *  IS part of the membrane, like `@`. */
+ *  (`:key`) and the unbounded `c[ad]+r` family are exactly this. */
 export interface ResolverSpec {
   readonly id: string;
-  resolve(name: string): unknown | undefined;
+  /** Resolve `name` to a boxed binding, or `undefined` for "not mine, keep looking".
+   *
+   *  `ctx` is the RESOLVING READ's RunContext when the lookup came from a live run
+   *  (the evaluator threads it through `Resolver.resolve`/`lookup`); absent on
+   *  run-less reads (host `env.get`, assembly probes). A resolver that MINTS a value
+   *  boxes at its own boundary: under `ctx` when it computes per-read (impure), but a
+   *  `pure` resolver mints RUN-NEUTRALLY (`CONSTANT_CTX`-class) — its hits are
+   *  memoized by the sealed chain and served across runs, so stamping the first
+   *  reader's ctx would leak run identity between runs. */
+  resolve(name: string, ctx?: RunContext): ResolvedBinding | undefined;
   /** DECLARED purity (a drift alarm catches CONTRADICTIONS against this declaration,
    *  never lies outright): `true` promises NAME-STABLE results (same
    *  name ⇒ same value forever), which licenses the compiled resolution chain to
@@ -58,9 +79,15 @@ export interface ResolverSpec {
 }
 
 /** The minimal surface a scheme-env pack touches. arrival-scheme's `Environment`
- *  satisfies this structurally — packs type against THIS, not the concrete class. */
+ *  satisfies this structurally — packs type against THIS, not the concrete class.
+ *
+ *  There is deliberately NO `set` member (hermetic-Environment ruling, 2026-07-11):
+ *  the env is opaque from the JS side — values enter the interpreter only as
+ *  capabilities or overrides. Binding is the assembly machinery's own act, through
+ *  the module-internal `bindValue` (Environment.ts, never barrel-exported); a pack
+ *  contributes bindings DECLARATIVELY (`symbols`/`resolvers`/`bootstrap`), it does
+ *  not write. */
 export interface SchemeEnv {
-  set(name: string, value: unknown, docValue?: string | null): unknown;
   get(name: string, options?: { throwError?: boolean }): unknown;
   inherit(name?: string | symbol, obj?: Record<string, unknown>): SchemeEnv;
   /** Register a catchall resolver (fires on a name the env did not bind). This is the
@@ -97,8 +124,10 @@ export interface SchemePackSpec<E = SchemeEnv> {
   readonly config?: unknown;
   /** Scheme source: `(define-macro …)` forms + `(define …)`s, eval'd into env on apply. */
   readonly bootstrap?: string;
-  /** JS wiring (native ops / rosetta verbs bound via `env.set`), run AFTER bootstrap
-   *  so it may reference symbols the bootstrap introduced. */
+  /** JS wiring (resolver registration, resource arming — NOT direct value binds:
+   *  `SchemeEnv` carries no write member; bindings are contributed via `bootstrap`
+   *  source or a capability's declarative `symbols`), run AFTER bootstrap so it may
+   *  reference symbols the bootstrap introduced. */
   readonly wire?: (env: E) => void | Promise<void>;
 }
 

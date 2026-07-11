@@ -34,6 +34,10 @@ import { Environment, ResolvingEnvironment } from "../Environment.js";
 import type { ResolverSpec } from "../common/scheme-env.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { nil } from "../values/primitives/ANil.js";
+
+// The boxed sentinel a resolver answers with (resolvers box at their own boundary now).
+const FOUND = new AExact(CONSTANT_CTX, 42n);
 
 // Helper to lookup without patch_value dependency
 const lookup = (env: Environment, name: string) => env._lookupWithResolvers(name);
@@ -58,7 +62,7 @@ describe("Environment Module Composition", () => {
         id: "resolver-2",
         resolve: (name) => {
           callOrder.push("resolver-2");
-          return name === "target" ? "found" : undefined;
+          return name === "target" ? FOUND : undefined;
         },
       };
 
@@ -66,23 +70,25 @@ describe("Environment Module Composition", () => {
       env.registerResolver(resolver1);
       env.registerResolver(resolver2);
 
-      expect(lookup(env, "target")).toBe("found");
+      expect(lookup(env, "target")).toBe(FOUND);
       expect(callOrder).toEqual(["resolver-1", "resolver-2"]);
     });
 
     // INVARIANT: a resolver returning undefined "yields" (search continues); returning
-    // null or any other defined value stops the search (pins implementation, not behavior)
-    it("should distinguish between undefined (yield) and null/nil (found)", () => {
+    // any other defined value — including a found NIL — stops the search (pins
+    // implementation, not behavior). Post-hermetic-ruling the raw JS `null` sentinel is
+    // out of the resolver contract (boxed values only); `nil` is its in-contract twin.
+    it("should distinguish between undefined (yield) and a found nil (found)", () => {
       const resolver: ResolverSpec = {
-        id: "null-resolver",
-        resolve: (name) => (name === "null-value" ? null : undefined),
+        id: "nil-resolver",
+        resolve: (name) => (name === "nil-value" ? nil : undefined),
       };
 
       const env = new ResolvingEnvironment("test", {}, null);
       env.registerResolver(resolver);
 
-      // null is a valid return value, should not continue searching
-      expect(lookup(env, "null-value")).toBe(null);
+      // nil is a valid FOUND value, should not continue searching
+      expect(lookup(env, "nil-value")).toBe(nil);
     });
   });
 
@@ -91,32 +97,34 @@ describe("Environment Module Composition", () => {
     // resolvers → parent environment, checked in that order at each level (pins
     // implementation, not behavior)
     it("should implement correct per-module resolution order", () => {
-      // Bindings are boxed SchemeValues (an env binds AExact, not a raw JS number);
-      // the resolver returns below stay raw — _lookupWithResolvers is contract'd to
-      // pass a resolver hit (typed `unknown`) straight through.
+      // Bindings AND resolver answers are boxed SchemeValues — the hermetic ruling's
+      // resolver contract: a resolver boxes at its own boundary, so the walk hands the
+      // evaluator boxed values on every path.
+      const Y = new AExact(CONSTANT_CTX, 2n);
+      const W = new AExact(CONSTANT_CTX, 4n);
       const env = new ResolvingEnvironment("parent", { x: new AExact(CONSTANT_CTX, 1n) }, null);
       env.registerResolver({
         id: "parent-resolver",
-        resolve: (name) => (name === "y" ? 2 : undefined),
+        resolve: (name) => (name === "y" ? Y : undefined),
       });
 
       const child = new ResolvingEnvironment("child", { z: new AExact(CONSTANT_CTX, 3n) }, env);
       child.registerResolver({
         id: "child-resolver",
-        resolve: (name) => (name === "w" ? 4 : undefined),
+        resolve: (name) => (name === "w" ? W : undefined),
       });
 
       // Direct binding in child
       expect(child._lookupWithResolvers("z")).toEqual(new AExact(CONSTANT_CTX, 3n));
 
       // Resolver in child
-      expect(child._lookupWithResolvers("w")).toBe(4);
+      expect(child._lookupWithResolvers("w")).toBe(W);
 
       // Direct binding in parent (after child resolver yields)
       expect(child._lookupWithResolvers("x")).toEqual(new AExact(CONSTANT_CTX, 1n));
 
       // Resolver in parent (after child resolver yields)
-      expect(child._lookupWithResolvers("y")).toBe(2);
+      expect(child._lookupWithResolvers("y")).toBe(Y);
 
       // Not found anywhere
       expect(child._lookupWithResolvers("not-found")).toBe(undefined);

@@ -30,6 +30,8 @@ import { inferenceEnv } from "../inference-env.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { setEagerProvenanceOracleEnabled, withInputProvenance } from "../values/op-helpers.js";
 import { jsToScheme } from "../rosetta.js";
+// In-package bench: the module-internal storage write (hermetic-Environment ruling — no public set).
+import { bindValue } from "../Environment.js";
 
 const REGION = "bench-region";
 const ITERATIONS = 5000;
@@ -128,8 +130,8 @@ describe("Q20b — eager-oracle accumulation overhead: default-OFF vs forced-ON 
 
   async function runExecLoop(iterations: number): Promise<number> {
     const env = inferenceEnv.inherit(`q20b-bench-${Math.random().toString(36).slice(2)}`);
-    env.set("a", jsToScheme(CONSTANT_CTX, 10, {}, new Set([100])));
-    env.set("b", jsToScheme(CONSTANT_CTX, 20, {}, new Set([200])));
+    bindValue(env, "a", jsToScheme(CONSTANT_CTX, 10, {}, new Set([100])));
+    bindValue(env, "b", jsToScheme(CONSTANT_CTX, 20, {}, new Set([200])));
     const start = performance.now();
     for (let i = 0; i < iterations; i++) {
       await execState(`(string-append "sum=" (number->string (+ a (* b 2) ${i})))`, { env });

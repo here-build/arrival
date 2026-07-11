@@ -24,7 +24,7 @@
 
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import * as z from "../../common/scheme-zod.js";
-import { symbol } from "../../common/symbol.js";
+import { symbol, type CallCtx } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { withInputProvenance } from "../../values/op-helpers.js";
 import { AExact } from "../../values/primitives/AExact.js";
@@ -62,7 +62,7 @@ export default new EnvCapability("scheme/srfi-151", {
     "bit-count":
       symbol.native`bit-count: number of 1 bits in a non-negative exact integer; for a negative one, the number of 0 bits in its two's-complement representation (SRFI-151)`(
         { input: [z.bigint], output: [z.exact] },
-        (i: unknown): AExact => {
+        function (this: CallCtx, i: unknown): AExact {
           const n = exactIntArg("bit-count", i);
           return withInputProvenance([i], new AExact(CONSTANT_CTX, bitCount(n)));
         },

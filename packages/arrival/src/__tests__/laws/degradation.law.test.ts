@@ -57,27 +57,19 @@ import { PurityError } from "../../errors.js";
 import { nil } from "../../index.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
-import type { ResolverSpec, SchemeEnv } from "../../common/scheme-env.js";
+import { ResolvingEnvironment } from "../../Environment.js";
 
-/** A minimal recording SchemeEnv — same shape as door-cause.test.ts's, local here so this
- *  law suite has no cross-file coupling to another test's fixture. */
-function recordingEnv(): { env: SchemeEnv; bound: Map<string, unknown> } {
-  const bound = new Map<string, unknown>();
-  const unrecordable = (verb: string) => new Error(`recordingEnv: ${verb} is not recordable`);
-  const env: SchemeEnv = {
-    set: (name, value) => {
-      bound.set(name, value);
-      return value;
-    },
-    get: (name) => bound.get(name),
-    inherit: () => env,
-    registerResolver: (_r: ResolverSpec) => {
-      throw unrecordable("registerResolver");
-    },
-    list: () => [...bound.keys()],
-    allBoundNames: () => [...bound.keys()],
+/** A REAL recording env — same shape as door-cause.test.ts's, local here so this law
+ *  suite has no cross-file coupling to another test's fixture. (Hermetic-Environment
+ *  ruling: capability apply narrows to the concrete `Environment`, so a synthetic
+ *  `{ set }` mock can no longer receive bindings; `bound` is a read facade over the
+ *  frame's own storage record.) */
+function recordingEnv(): { env: ResolvingEnvironment; bound: { get(name: string): unknown; has(name: string): boolean } } {
+  const env = new ResolvingEnvironment("degradation-recording", {}, null);
+  return {
+    env,
+    bound: { get: (name) => env.__env__[name], has: (name) => Object.hasOwn(env.__env__, name) },
   };
-  return { env, bound };
 }
 
 // ============================================================================

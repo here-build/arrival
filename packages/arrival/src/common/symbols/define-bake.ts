@@ -430,7 +430,14 @@ function buildMacro(verb: string, def: DefineSyntaxSymbolDef, closureValue: unkn
     verb,
     function (this: unknown, code: unknown, evalArgs: MacroInvokeContext): Promise<SchemeValue> {
       const argForms = formsOf(code);
-      return Promise.resolve(call_function(closure, argForms, { runCtx: evalArgs.runCtx })) as Promise<SchemeValue>;
+      // `evalArgs.runCtx ?? CONSTANT_CTX`: `MacroInvokeContext.runCtx` is optional at the
+      // macro-engine boundary (env/macros.ts receives it but doesn't yet universally
+      // thread it into every transformer — the macro engine's own plumb is Wave 3, docs/
+      // working-proposals/arrival-constant-ctx-audit-2026-07-11.md §4) — this `??` is an
+      // explicit confession, not a Wave 0 apology.
+      return Promise.resolve(
+        call_function(closure, argForms, { runCtx: evalArgs.runCtx ?? CONSTANT_CTX }),
+      ) as Promise<SchemeValue>;
     },
     def.doc,
   );

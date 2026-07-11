@@ -20,6 +20,8 @@ import { APair } from "../values/primitives/APair.js";
 import { AJSArray } from "../values/primitives/AJSArray.js";
 import { nil } from "../values/primitives/ANil.js";
 import { requireEagerOracle } from "./_require-eager-oracle.js";
+// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
+import { bindValue } from "../Environment.js";
 
 // Q20b: the string-collapse assertions below (join/string-append via real exec) need
 // the eager oracle forced ON for this file's lifetime.
@@ -69,8 +71,8 @@ describe("string-append / join carry deep collapse-provenance end-to-end", () =>
   it("join over a list of stamped values keeps every point", async () => {
     await initBridge();
     const env = inferenceEnv.inherit("collapse-prov-join");
-    env.set("a", stamped("alpha", 1));
-    env.set("b", stamped("beta", 2));
+    bindValue(env, "a", stamped("alpha", 1));
+    bindValue(env, "b", stamped("beta", 2));
     // execState (COMPLEX tier): asserts box discipline + provenance (RULINGS.md R1).
     const [r] = (await execState(`(join "," (list a b))`, { env })).values;
     expect(r).toBeInstanceOf(AString);
@@ -80,8 +82,8 @@ describe("string-append / join carry deep collapse-provenance end-to-end", () =>
   it("string-append over a nested collapse keeps every point", async () => {
     await initBridge();
     const env = inferenceEnv.inherit("collapse-prov-append");
-    env.set("a", stamped("alpha", 1));
-    env.set("b", stamped("beta", 2));
+    bindValue(env, "a", stamped("alpha", 1));
+    bindValue(env, "b", stamped("beta", 2));
     const [r] = (await execState(`(string-append "x:" (join "," (list a b)))`, { env })).values;
     expect(r).toBeInstanceOf(AString);
     expect(sorted((r as AString).provenance as Set<number>)).toEqual([1, 2]);

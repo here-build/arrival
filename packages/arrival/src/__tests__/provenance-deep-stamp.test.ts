@@ -29,6 +29,8 @@ import { jsToScheme } from "../rosetta.js";
 import { inferenceEnv } from "../inference-env.js";
 import { exec } from "../eval/generator-exec.js";
 import { ANil, nil } from "../values/primitives/ANil.js";
+// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
+import { bindValue } from "../Environment.js";
 
 const PROV = new Set<number>([42]);
 
@@ -183,7 +185,7 @@ describe("dict-ref / @ / :key all route through SchemeJSObject.get", () => {
     // AValue instance, so `(eq? (@ obj :x) (:x obj))` holds.
     const env = inferenceEnv.inherit("test");
     const wrapper = new AJSObject(CONSTANT_CTX, { x: "hello" });
-    env.set("obj", wrapper);
+    bindValue(env, "obj", wrapper);
     const [viaAt] = await exec("(@ obj :x)", { env });
     const [viaColon] = await exec("(:x obj)", { env });
     expect(viaAt).toBe(viaColon);

@@ -38,7 +38,7 @@
 // cleanup, not done here; the dedicated machinery natives are correct and
 // tested as they stand.
 import { EnvCapability } from "../../common/capability.js";
-import { symbol } from "../../common/symbol.js";
+import { symbol, type CallCtx } from "../../common/symbol.js";
 import * as z from "../../common/scheme-zod.js";
 import { R7RSError } from "../../errors.js";
 import { AString } from "../../values/primitives/AString.js";
@@ -80,7 +80,7 @@ export default new EnvCapability("scheme/r7rs/exceptions", {
       // kind of slot (scheme-zod.ts's own documented convention). Output is `z.never()`:
       // the impl's own declared return type is `never` — it always throws.
       { input: [z.value], output: [z.undefinedResult] },
-      (obj) => {
+      function (this: CallCtx, obj) {
         throw obj;
       },
     ),
@@ -120,7 +120,7 @@ export default new EnvCapability("scheme/r7rs/exceptions", {
         inputRest: z.value,
         output: [z.error],
       },
-      (message, ...irritants) => {
+      function (this: CallCtx, message, ...irritants) {
         const msg = message instanceof AString ? message.valueOf() : String(message);
         return new R7RSError(msg, ...irritants);
       },
@@ -132,18 +132,18 @@ export default new EnvCapability("scheme/r7rs/exceptions", {
     // `car`/`cdr`/`cons` directly (see the file header).
     "%handlers-empty?": symbol.native`%handlers-empty?: is the exception-handler stack empty (machinery)`(
       { input: [z.value], output: [z.boolean] },
-      (stack) => bool(stack instanceof ANil),
+      function (this: CallCtx, stack) { return bool(stack instanceof ANil); },
     ),
     "%handler-car": symbol.native`%handler-car: the top handler of a non-empty exception-handler stack (machinery)`(
       { input: [z.value], output: [z.value] },
-      (stack) => {
+      function (this: CallCtx, stack) {
         invariant(stack instanceof APair, "%handler-car: the exception-handler stack is empty");
         return stack.car as SchemeValue;
       },
     ),
     "%handler-cdr": symbol.native`%handler-cdr: the exception-handler stack minus its top handler (machinery)`(
       { input: [z.value], output: [z.value] },
-      (stack) => {
+      function (this: CallCtx, stack) {
         invariant(stack instanceof APair, "%handler-cdr: the exception-handler stack is empty");
         return stack.cdr as SchemeValue;
       },
@@ -195,7 +195,7 @@ export default new EnvCapability("scheme/r7rs/exceptions", {
     // logic.
     "%error-object-from-irritants": symbol.native`%error-object-from-irritants: build an R7RS error object from a message and a scheme list of irritants (machinery)`(
       { input: [z.string, z.value], output: [z.error] },
-      (message, irritantsList) => {
+      function (this: CallCtx, message, irritantsList) {
         const msg = message instanceof AString ? message.valueOf() : String(message);
         const irritants = to_array("error")(irritantsList as SchemeValue);
         return new R7RSError(msg, ...irritants);

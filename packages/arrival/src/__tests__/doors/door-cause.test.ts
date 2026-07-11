@@ -19,7 +19,7 @@ import { DoorProcedure } from "../../values/primitives/ACallable.js";
 import { is_callable_value, is_door_procedure } from "../../values/value-guards.js";
 import { PurityError } from "../../errors.js";
 import { EnvCapability } from "../../common/capability.js";
-import type { ResolverSpec, SchemeEnv } from "../../common/scheme-env.js";
+import { ResolvingEnvironment } from "../../Environment.js";
 
 describe("DoorProcedure — the introspectable door binding (unit, no capability/env)", () => {
   it("exposes `.door` — the baked DoorSymbolDef — for static readers", () => {
@@ -78,27 +78,13 @@ describe("DoorProcedure — the introspectable door binding (unit, no capability
   });
 });
 
-/** A recording SchemeEnv — captures every `set()` call by name, throws loudly on any
- *  surface this suite doesn't exercise (mirrors common/__tests__/capability.test.ts's
- *  own `recordingEnv`, local here since that file's records into a `verbs` object shaped
- *  for its own rosetta-wrapped-verb invocation idiom, not this suite's plain `Map`). */
-function recordingEnv(): { env: SchemeEnv; bound: Map<string, unknown> } {
-  const bound = new Map<string, unknown>();
-  const unrecordable = (verb: string) => new Error(`recordingEnv: ${verb} is not recordable`);
-  const env: SchemeEnv = {
-    set: (name, value) => {
-      bound.set(name, value);
-      return value;
-    },
-    get: (name) => bound.get(name),
-    inherit: () => env,
-    registerResolver: (_r: ResolverSpec) => {
-      throw unrecordable("registerResolver");
-    },
-    list: () => [...bound.keys()],
-    allBoundNames: () => [...bound.keys()],
-  };
-  return { env, bound };
+/** A REAL recording env (hermetic-Environment ruling: capability apply narrows to the
+ *  concrete `Environment` — a synthetic `{ set }` mock can no longer receive bindings).
+ *  `bound` is a read facade over the frame's own storage record, keeping this suite's
+ *  `bound.get(name)` idiom without the retired write surface. */
+function recordingEnv(): { env: ResolvingEnvironment; bound: { get(name: string): unknown } } {
+  const env = new ResolvingEnvironment("door-cause-recording", {}, null);
+  return { env, bound: { get: (name) => env.__env__[name] } };
 }
 
 describe("common/capability.ts's door bind arm — cause DERIVED from the owning capability", () => {

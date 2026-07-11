@@ -73,7 +73,7 @@
 import { z } from "zod";
 
 import { EnvCapability } from "../common/capability.js";
-import { symbol } from "../common/symbol.js";
+import { symbol, type CallCtx } from "../common/symbol.js";
 // The scheme-aware zod vocabulary — only the identity carrier `sz.value` is needed here (the
 // verb decodes/encodes manually via `schemeToJs`/`jsToScheme`; no codec crossing at the contract
 // level). NOT `sz.symbol` for the `name` param — see that param's own comment below for why.
@@ -164,7 +164,7 @@ export const overridableCapability = new EnvCapability("arrival/overridable", {
         // reads the ASymbol directly via `.literal()` (the same "bare symbol name" accessor
         // the print protocol itself uses).
         { input: [sz.value, sz.value, sz.value], output: [sz.value], type: "(name: symbol, type: string|list, default: any): any" },
-        (nameSym, typeTag, defaultVal) => {
+        function (this: CallCtx, nameSym, typeTag, defaultVal) {
           const bindingName = (nameSym as ASymbol).literal();
           const jsTag = schemeToJs(typeTag);
           const zodType = lowerTag(jsTag, bindingName);

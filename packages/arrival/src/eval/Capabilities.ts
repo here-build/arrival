@@ -1,5 +1,6 @@
 import { CLASS } from "../well-known-symbols.js";
 import type { Environment, EnvironmentValue } from "../Environment.js";
+import type { RunContext } from "../values/primitives/RunContext.js";
 import { type CompiledResolutionChain, sealResolutionChain } from "./CompiledResolutionChain.js";
 
 /**
@@ -66,8 +67,8 @@ export class Capabilities {
    *  Glass: walks this scope's whole live `__parent__` chain (the lexical half never
    *  reaches here on a hit). Assembled: ONE probe of the sealed chain — the degenerate
    *  zero-resolver form is a single flat `Map.get`. */
-  lookup(name: string | symbol): EnvironmentValue | undefined {
-    return this.chain === undefined ? this.env._lookupWithResolvers(name) : this.chain.lookup(name);
+  lookup(name: string | symbol, ctx?: RunContext): EnvironmentValue | undefined {
+    return this.chain === undefined ? this.env._lookupWithResolvers(name, ctx) : this.chain.lookup(name, ctx);
   }
 
   /** The base's enumerable VOCABULARY — assembled: the sealed chain's merged static

@@ -30,6 +30,8 @@ import * as z from "../../../common/scheme-zod.js";
 import type { ResolvingEnvironment } from "../../../Environment.js";
 import type { SchemeValue } from "../../../values/types.js";
 import type { CarrierRow } from "./carriers.js";
+// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
+import { bindValue } from "../../../Environment.js";
 
 /**
  * Box a raw JS leaf — or (the only path `src` actually takes, see below) an
@@ -83,12 +85,12 @@ export async function withLawEnv(): Promise<LawEnv> {
   const env = await freshEnv();
   const mintedIds: number[] = [];
   let seq = 0;
-  env.set("src", (raw: unknown) => {
+  bindValue(env, "src", (raw: unknown) => {
     const id = ++seq;
     mintedIds.push(id);
     return stampFresh(raw, id);
   });
-  env.set("borrow-array", (...args: SchemeValue[]) => fromJS(args));
+  bindValue(env, "borrow-array", (...args: SchemeValue[]) => fromJS(args));
   return { env, mintedIds };
 }
 

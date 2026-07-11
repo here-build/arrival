@@ -78,6 +78,28 @@ export default [
       "import-x/order": "off",
       // Loop counter updates in interpreter are intentional
       "sonarjs/updated-loop-counter": "off",
+      // The arrow-fn trap (Wave 0 of the CONSTANT_CTX rework, docs/working-proposals/
+      // arrival-constant-ctx-audit-2026-07-11.md §4/§0): dispatch delivers the LIVE
+      // RunContext to every native/rosetta impl via `this: CallCtx`
+      // (common/capability.ts's `hostImpl.apply(makeCallCtx(runCtx), args)`,
+      // common/symbols/rosetta.ts's `rawImpl.call(this, ...)`) — but an impl authored
+      // as an arrow function structurally CANNOT read `this`, and neither TypeScript
+      // nor review flags the forfeiture. This selector targets exactly the impl
+      // ARGUMENT (the 2nd call argument, right after the contract) of a
+      // `symbol.native`/`symbol.rosetta` tagged-template call — never a bare helper
+      // arrow elsewhere in the file (e.g. a local `const helper = (x) => …` used
+      // INSIDE a properly-typed `function (this: CallCtx, …)` impl is untouched).
+      // Scope note: arrival-core-only for now (this config); a shared/monorepo-wide
+      // extension of this rule is a separate follow-up, not bundled here.
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "CallExpression[callee.type='TaggedTemplateExpression'][callee.tag.type='MemberExpression'][callee.tag.object.name='symbol'][callee.tag.property.name=/^(native|rosetta)$/] > ArrowFunctionExpression:nth-child(2)",
+          message:
+            "arrow-fn trap: a symbol.native/symbol.rosetta impl must be `function (this: CallCtx, …)`, not an arrow — dispatch delivers the live RunContext via `this`, and an arrow structurally cannot read it (silently minting CONSTANT_CTX-shaped values instead). See docs/working-proposals/arrival-constant-ctx-audit-2026-07-11.md §4.",
+        },
+      ],
     },
   },
   {

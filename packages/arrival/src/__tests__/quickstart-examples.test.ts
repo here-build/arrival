@@ -10,6 +10,8 @@ import { inferenceEnv as sandboxedEnv } from "../inference-env.js";
 import { symbol } from "../common/symbol.js";
 import { EnvCapability } from "../common/capability.js";
 import * as z from "../common/scheme-zod.js";
+// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
+import { bindValue } from "../Environment.js";
 
 describe("Quick Start Examples", () => {
   it("Basic execution example", async () => {
@@ -73,7 +75,7 @@ describe("Quick Start Examples", () => {
       { id: "charlie", priority: 20 },
     ];
 
-    sandboxedEnv.set("users", jsToScheme(CONSTANT_CTX, users, {}));
+    bindValue(sandboxedEnv, "users", jsToScheme(CONSTANT_CTX, users, {}));
 
     // execState (COMPLEX tier): schemeToJs wants BOXED values — `exec` already unwraps.
     const { values: results } = await execState(

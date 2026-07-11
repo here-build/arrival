@@ -16,6 +16,8 @@ import { AString } from "../values/primitives/AString.js";
 import { nil } from "../values/primitives/ANil.js";
 import { freshEnv } from "./_fresh-env.js";
 import type { SchemeValue } from "../values/types.js";
+// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
+import { bindValue } from "../Environment.js";
 
 // This whole file exercises the EVALUATOR's correctness (arithmetic, special forms,
 // macros, …) through box-shaped assertions (`toBeInstanceOf`, `.num`, `.__name__`) —
@@ -311,7 +313,7 @@ describe("generator-exec", () => {
     it("should run finally clause after success", async () => {
       const log: string[] = [];
       const env = await freshEnv();
-      env.set("log", (tag: AString) => {
+      bindValue(env, "log", (tag: AString) => {
         log.push(String(tag.valueOf()));
         return nil;
       });
@@ -330,7 +332,7 @@ describe("generator-exec", () => {
     it("should run finally clause after catch", async () => {
       const log: string[] = [];
       const env = await freshEnv();
-      env.set("log", (tag: AString) => {
+      bindValue(env, "log", (tag: AString) => {
         log.push(String(tag.valueOf()));
         return nil;
       });

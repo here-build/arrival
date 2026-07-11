@@ -35,7 +35,7 @@ import { type } from "../../utils/typecheck.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
 import * as z from "../../common/scheme-zod.js";
-import { symbol } from "../../common/symbol.js";
+import { symbol, type CallCtx } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { assertAllocatable, charValue, schemeBool, stringValue, toIndex, withInputProvenance } from "../../values/op-helpers.js";
 import { type ABool } from "../../values/primitives/ABool.js";
@@ -121,7 +121,7 @@ export default new EnvCapability("scheme/srfi-13", {
   symbols: {
     "string-null?": symbol.native`string-null?: #t iff the string is empty (SRFI-13)`(
       { input: [z.string], output: [z.boolean] },
-      (str: unknown): ABool => {
+      function (this: CallCtx, str: unknown): ABool {
         return withInputProvenance([str], schemeBool(stringValue(str).length === 0));
       },
     ),
@@ -129,14 +129,14 @@ export default new EnvCapability("scheme/srfi-13", {
     // SRFI-13 argument order: the AFFIX comes first — (string-prefix? prefix s).
     "string-prefix?": symbol.native`string-prefix?: #t iff s starts with prefix — (string-prefix? prefix s) (SRFI-13)`(
       { input: [z.string, z.string], output: [z.boolean] },
-      (prefix: unknown, str: unknown): ABool => {
+      function (this: CallCtx, prefix: unknown, str: unknown): ABool {
         return withInputProvenance([prefix, str], schemeBool(stringValue(str).startsWith(stringValue(prefix))));
       },
     ),
 
     "string-suffix?": symbol.native`string-suffix?: #t iff s ends with suffix — (string-suffix? suffix s) (SRFI-13)`(
       { input: [z.string, z.string], output: [z.boolean] },
-      (suffix: unknown, str: unknown): ABool => {
+      function (this: CallCtx, suffix: unknown, str: unknown): ABool {
         return withInputProvenance([suffix, str], schemeBool(stringValue(str).endsWith(stringValue(suffix))));
       },
     ),
@@ -145,7 +145,7 @@ export default new EnvCapability("scheme/srfi-13", {
     "string-index":
       symbol.native`string-index: index of the first char matching a char or one-arg predicate, or #f (SRFI-13; no charsets)`(
         { input: [z.string, z.value], output: [z.union([z.bigint, z.boolean])] },
-        (str: unknown, criterion: unknown): AExact | ABool | Promise<AExact | ABool> => {
+        function (this: CallCtx, str: unknown, criterion: unknown): AExact | ABool | Promise<AExact | ABool> {
           const chars = [...stringValue(str)];
           return afterFlags(criterionFlags(criterion, chars), (f) => {
             const i = f.indexOf(true);
@@ -160,7 +160,7 @@ export default new EnvCapability("scheme/srfi-13", {
     "string-count":
       symbol.native`string-count: how many chars match a char or one-arg predicate (SRFI-13; no charsets)`(
         { input: [z.string, z.value], output: [z.bigint] },
-        (str: unknown, criterion: unknown): AExact | Promise<AExact> => {
+        function (this: CallCtx, str: unknown, criterion: unknown): AExact | Promise<AExact> {
           const chars = [...stringValue(str)];
           return afterFlags(criterionFlags(criterion, chars), (f) => {
             const n = f.reduce((acc, hit) => acc + (hit ? 1 : 0), 0);
@@ -217,7 +217,7 @@ export default new EnvCapability("scheme/srfi-13", {
     "string-pad":
       symbol.native`string-pad: right-justified to exactly len — pads on the left with char (default space), truncates from the left when too long (SRFI-13)`(
         { input: [z.string, z.schemeNumber, z.char.optional()], output: [z.string] },
-        (str: unknown, len: unknown, char?: unknown): AString => {
+        function (this: CallCtx, str: unknown, len: unknown, char?: unknown): AString {
           const chars = [...stringValue(str)];
           const k = toIndex(len);
           // O(1) cap check BEFORE `.repeat` allocates — see assertAllocatable.
@@ -233,7 +233,7 @@ export default new EnvCapability("scheme/srfi-13", {
     "string-pad-right":
       symbol.native`string-pad-right: left-justified to exactly len — pads on the right with char (default space), truncates on the right when too long (SRFI-13)`(
         { input: [z.string, z.schemeNumber, z.char.optional()], output: [z.string] },
-        (str: unknown, len: unknown, char?: unknown): AString => {
+        function (this: CallCtx, str: unknown, len: unknown, char?: unknown): AString {
           const chars = [...stringValue(str)];
           const k = toIndex(len);
           assertAllocatable(k, "string-pad-right");
@@ -245,7 +245,7 @@ export default new EnvCapability("scheme/srfi-13", {
 
     "string-reverse": symbol.native`string-reverse: a reversed copy of the string (SRFI-13)`(
       { input: [z.string], output: [z.string] },
-      (str: unknown): AString => {
+      function (this: CallCtx, str: unknown): AString {
         return withInputProvenance([str], new AString(CONSTANT_CTX, [...stringValue(str)].reverse().join("")));
       },
     ),
@@ -261,7 +261,7 @@ export default new EnvCapability("scheme/srfi-13", {
           // folds to one string. `List<string>` (carriers.ts vocabulary) is the honest, informative image.
           type: "(list: List<string>, delimiter?: string) => string",
         },
-        (list, delimiter) => {
+        function (this: CallCtx, list, delimiter) {
           const parts = to_array("string-join")(list);
           const sep = delimiter === undefined ? " " : stringValue(delimiter);
           // Collapsing op: fold the list to one string, then re-stamp the DEEP union of
@@ -283,7 +283,7 @@ export default new EnvCapability("scheme/srfi-13", {
           // whole string"; the docstring teaches the domain), matching the sibling trim/index ops.
           type: "(str: string, criterion?: unknown) => List<string>",
         },
-        (str: unknown, criterion?: unknown): AListAlike | Promise<AListAlike> => {
+        function (this: CallCtx, str: unknown, criterion?: unknown): AListAlike | Promise<AListAlike> {
           const chars = [...stringValue(str)];
           const flags = criterion === undefined ? chars.map((c) => !isWhitespace(c)) : criterionFlags(criterion, chars);
           return afterFlags(flags, (f) => {
@@ -330,7 +330,7 @@ export default new EnvCapability("scheme/srfi-13", {
           // single `string` delimiter. Both recovered by the author assertion.
           type: "(str: string, delimiter: string) => List<string>",
         },
-        (str, delimiter) => {
+        function (this: CallCtx, str, delimiter) {
           const s = stringValue(str);
           // SRFI-152 refinement over plain JS `.split`: an empty subject is NO fields.
           if (s === "") return nil;

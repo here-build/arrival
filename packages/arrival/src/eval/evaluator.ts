@@ -219,8 +219,16 @@ export interface EvalContext {
    * old `_currentStrict` module holder is retired, readers consult
    * `ctx.runCtx` / the operand ctx instead). Propagated structurally like `strict`
    * (the `{ ...ctx }` spreads).
+   *
+   * REQUIRED (Wave 0 of the CONSTANT_CTX rework, docs/working-proposals/
+   * arrival-constant-ctx-audit-2026-07-11.md): both real mint sites
+   * (generator-exec.ts's `exec`/`execExpr`, both via `makeRunContext`) always set this,
+   * and every derived `EvalContext` is a `{ ...ctx }` spread — so an absent `runCtx` here
+   * could only mean a hand-built literal skipping the real run, never a legitimate state.
+   * Making it required deletes the `ctx.runCtx ?? CONSTANT_CTX` apology idiom this file
+   * used to carry at 7 sites — each was a live-ctx-dropping bug (§2.1 of the audit).
    */
-  runCtx?: RunContext;
+  runCtx: RunContext;
 }
 
 /** Options for the trampoline runner (`run`). */
@@ -1439,7 +1447,7 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     }
     // Rest arg: (lambda (a b . rest) …)
     if (argNode instanceof ASymbol) {
-      callResolver.define(argNode, APair.fromArray(ctx.runCtx ?? CONSTANT_CTX, values.slice(i), false));
+      callResolver.define(argNode, APair.fromArray(ctx.runCtx, values.slice(i), false));
     }
     // Dynamic call site: the caller (evaluatePair / wrapLambdaValue) set the holder just before
     // invoking; else fall back to the lexical ctx's invocation. Read here in the synchronous
@@ -1467,7 +1475,7 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     arity: { min: params.length, max: hasRest ? null : params.length },
     scope: closureResolver,
     runner,
-    ctx: ctx.runCtx ?? CONSTANT_CTX,
+    ctx: ctx.runCtx,
   });
   lambda.__params__ = params;
   return lambda;
@@ -1866,7 +1874,7 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       arity: { min: params.length, max: params.length },
       scope: letResolver,
       runner,
-      ctx: ctx.runCtx ?? CONSTANT_CTX,
+      ctx: ctx.runCtx,
     });
     loopLambda.__name__ = symbol_name(name);
     loopLambda.__params__ = params.map((p) => symbol_name(p));
@@ -2125,7 +2133,7 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
     setDynamicCallSite(dynSite);
     let r: CallResult;
     try {
-      r = proc[tf("apply")](wrapLambdaArgs([arg], dynSite), ctx.runCtx ?? CONSTANT_CTX, is_lambda(proc));
+      r = proc[tf("apply")](wrapLambdaArgs([arg], dynSite), ctx.runCtx, is_lambda(proc));
     } finally {
       setDynamicCallSite(__savedDynamicCallSite);
     }
@@ -2156,7 +2164,7 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
       [arg],
     ),
     // Same bare-fn boxing seam as the main apply arm — see its comment.
-    (v) => jsToScheme(ctx.runCtx ?? CONSTANT_CTX, v, {}),
+    (v) => jsToScheme(ctx.runCtx, v, {}),
   ) as SchemeValue | SchemeBounceMarker | Promise<SchemeValue>;
   invariant(!is_bounce_marker(result), "=> builtin returned a bounce sentinel");
   if (is_promise(result)) {
@@ -2844,7 +2852,7 @@ export function* evaluate(
   // Symbol lookup. A symbol can resolve to a value OR — via the define-syntax
   // mechanism (a `let`-bound transformer returned to be bound) — a Macro/Syntax.
   if (code instanceof ASymbol) {
-    const value = resolvedBindingOrThrow(ctxResolver(ctx).resolve(code), code);
+    const value = resolvedBindingOrThrow(ctxResolver(ctx).resolve(code, ctx.runCtx), code);
     // The tap reports resolved VALUES; a macro/syntax binding has no value to
     // report, so skip it for an expander.
     if (!is_macro(value)) {
@@ -3008,7 +3016,7 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
   // application, and tried to CALL the resolved Keyword. symbol_name (the string) stays the
   // SPECIAL_FORMS fallback key for a non-keyword-resolving head (bootstrap / shadowing above).
   if (first instanceof ASymbol) {
-    const resolved = ctxResolver(ctx).lookup(first.__name__);
+    const resolved = ctxResolver(ctx).lookup(first.__name__, ctx.runCtx);
     const handler = resolved instanceof Keyword ? SPECIAL_FORMS[resolved.name] : SPECIAL_FORMS[symbol_name(first)];
     if (handler) {
       // Pass-through dispatch — the special form's result IS this Pair's
@@ -3031,7 +3039,7 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
       fn = yield fn;
     }
   } else if (first instanceof ASymbol) {
-    fn = resolvedBindingOrThrow(ctxResolver(ctx).resolve(first), first);
+    fn = resolvedBindingOrThrow(ctxResolver(ctx).resolve(first, ctx.runCtx), first);
     // Fire the tap here too — this is the call-head fast path that bypasses
     // `evaluate()`. Without this, tracers miss the resolved value of every
     // function name (e.g., `(my-hof xs)` never reports `my-hof`'s lambda). The
@@ -3095,7 +3103,7 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
       // contract). A bare fn keeps the legacy `this: CallCtx` apply.
       result =
         is_callable_value(fn) || is_applyable(fn)
-          ? (fn[tf("apply")](wrappedArgs, ctx.runCtx ?? CONSTANT_CTX, canBounce) as SchemeValue)
+          ? (fn[tf("apply")](wrappedArgs, ctx.runCtx, canBounce) as SchemeValue)
           : // The outer gate (is_function || is_callable_value || is_applyable) already
             // guarantees one of the three; the ternary above excludes the latter two, so
             // only the plain-JS-function case remains here. The RESULT boxes through the
@@ -3110,7 +3118,7 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
                 makeCallCtx(ctx.runCtx, ctx.currentInvocation as InvocationLike | undefined),
                 wrappedArgs,
               ),
-              (v) => jsToScheme(ctx.runCtx ?? CONSTANT_CTX, v, {}),
+              (v) => jsToScheme(ctx.runCtx, v, {}),
             ) as SchemeValue);
     } finally {
       setDynamicCallSite(__savedDynamicCallSite);

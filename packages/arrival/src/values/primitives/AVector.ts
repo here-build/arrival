@@ -15,7 +15,7 @@
  * Foldable instances are Fantasy Land (fantasyland/fantasy-land).
  */
 import { CLASS } from "../../well-known-symbols.js";
-import { type RunContext } from "./RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { applyCallback } from "./ACallable.js";
 import { chargeHeap } from "../../heap-budget.js";
 import { is_promise } from "../../eval/guards.js";
@@ -216,7 +216,12 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
       alternative: "use `vector-map` for vectors",
     });
     chargeHeap(runCtx, this.__vector__.length);
-    const results = this.__vector__.map((v) => applyCallback(fn, [v], runCtx));
+    // `runCtx ?? CONSTANT_CTX`: this term's OWN `runCtx` is optional (the shared
+    // `arrival/tagless-final/map` protocol signature — mirrors APair's map, "one algebra,
+    // every carrier"), so threading it to required is protocol-wide (Wave 1, docs/
+    // working-proposals/arrival-constant-ctx-audit-2026-07-11.md §4) — this `??` is an
+    // explicit confession, not a Wave 0 apology (no live ctx is guaranteed one hop away here).
+    const results = this.__vector__.map((v) => applyCallback(fn, [v], runCtx ?? CONSTANT_CTX));
     // RULINGS.md R2: map is LENGTH-PRESERVING — PROXY the container's own
     // grouping/length-fact stamp through unchanged (mirrors APair's map — "one algebra,
     // every carrier" — the two carriers must agree, not just their element boxes).
@@ -246,7 +251,8 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     const pred = arg instanceof RegExp ? (x: SchemeValue) => String(x).match(arg) : arg;
     const out: SchemeValue[] = [];
     for (const v of this.__vector__) {
-      const verdict = await applyCallback(pred, [v], runCtx);
+      // `runCtx ?? CONSTANT_CTX` confession — same protocol-wide-optional reasoning as map above.
+      const verdict = await applyCallback(pred, [v], runCtx ?? CONSTANT_CTX);
       if (!is_false(verdict) && !(verdict instanceof ANil)) out.push(v);
     }
     // filter is LENGTH-CHANGING — the container's own grouping/length-fact stamp is
@@ -274,7 +280,8 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     });
     chargeHeap(runCtx, this.__vector__.length);
     let acc = initial;
-    for (const v of this.__vector__) acc = (await applyCallback(fn, [v, acc], runCtx)) as Acc;
+    // `runCtx ?? CONSTANT_CTX` confession — same protocol-wide-optional reasoning as map above.
+    for (const v of this.__vector__) acc = (await applyCallback(fn, [v, acc], runCtx ?? CONSTANT_CTX)) as Acc;
     return acc;
   }
 

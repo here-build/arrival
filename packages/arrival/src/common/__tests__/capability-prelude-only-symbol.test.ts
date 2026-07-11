@@ -15,6 +15,8 @@ import type { PackContext } from "../kernel.js";
 import { symbol } from "../symbol.js";
 import * as z from "../scheme-zod.js";
 import type { SchemeEnv } from "../scheme-env.js";
+import type { PreludeBindTarget } from "../kernel.js";
+import { ResolvingEnvironment } from "../../Environment.js";
 import { AString } from "../../values/primitives/AString.js";
 import { CallCtx } from "../symbols/_bake.js";
 
@@ -23,19 +25,22 @@ type WithCtxFn<Args extends [...unknown[]] = [...unknown[]], Result extends unkn
   ...args: Args
 ) => Result;
 
-/** A SchemeEnv that records every `set` binding, tagged so a test can tell WHICH scope a
+/** A REAL recording runtime env (hermetic-Environment ruling: capability apply narrows to
+ *  the concrete `Environment`; the JS-side write surface is retired). `verbs` is a read
+ *  facade over the frame's own storage record, tagged so a test can tell WHICH scope a
  *  verb landed in (the runtime env vs. the prelude overlay). */
-function recordingEnv(tag: string): { env: SchemeEnv; verbs: Record<string, unknown>; tag: string } {
-  const verbs: Record<string, unknown> = {};
-  const env = {
-    set: (name: string, value: unknown) => void (verbs[name] = value),
-    get: (name: string) => verbs[name],
-    inherit: () => env,
-    registerResolver: () => undefined,
-    list: () => Object.keys(verbs),
-    allBoundNames: () => Object.keys(verbs),
-  } as unknown as SchemeEnv;
+function recordingEnv(tag: string): { env: ResolvingEnvironment; verbs: Record<string, unknown>; tag: string } {
+  const env = new ResolvingEnvironment(`prelude-only-${tag}`, {}, null);
+  const verbs = new Proxy({} as Record<string, unknown>, { get: (_t, name) => env.__env__[name as string] });
   return { env, verbs, tag };
+}
+
+/** The OVERLAY is deliberately still a synthetic `{ set }` recorder — `PreludeBindTarget`
+ *  is the kernel's Map-shim shape (the `.set`-only bind face), NOT an env; the hermetic
+ *  cut removed `set` from envs, not from the shim contract. */
+function recordingOverlay(): { overlay: PreludeBindTarget; verbs: Record<string, unknown> } {
+  const verbs: Record<string, unknown> = {};
+  return { overlay: { set: (name, value) => void (verbs[name] = value) }, verbs };
 }
 
 describe("EnvCapability.lower().apply() — routing preludeOnly symbols onto ctx.preludeScope", () => {
@@ -47,7 +52,7 @@ describe("EnvCapability.lower().apply() — routing preludeOnly symbols onto ctx
     );
     const cap = new EnvCapability("test/prelude-only", { symbols: { "prelude-only/verb": def } });
     const { env: runtimeEnv, verbs: runtimeVerbs } = recordingEnv("runtime");
-    const { env: overlay, verbs: overlayVerbs } = recordingEnv("overlay");
+    const { overlay, verbs: overlayVerbs } = recordingOverlay();
     const ctx: PackContext<SchemeEnv> = { onDispose: () => undefined, order: [], preludeScope: overlay };
 
     await cap.lower({}).apply(runtimeEnv, ctx);
@@ -65,7 +70,7 @@ describe("EnvCapability.lower().apply() — routing preludeOnly symbols onto ctx
     );
     const cap = new EnvCapability("test/ordinary", { symbols: { "ordinary/verb": def } });
     const { env: runtimeEnv, verbs: runtimeVerbs } = recordingEnv("runtime");
-    const { env: overlay, verbs: overlayVerbs } = recordingEnv("overlay");
+    const { overlay, verbs: overlayVerbs } = recordingOverlay();
     const ctx: PackContext<SchemeEnv> = { onDispose: () => undefined, order: [], preludeScope: overlay };
 
     await cap.lower({}).apply(runtimeEnv, ctx);
@@ -100,7 +105,7 @@ describe("EnvCapability.lower().apply() — routing preludeOnly symbols onto ctx
     );
     const cap = new EnvCapability("test/prelude-only-native", { symbols: { "prelude-only/native-verb": def } });
     const { env: runtimeEnv, verbs: runtimeVerbs } = recordingEnv("runtime");
-    const { env: overlay, verbs: overlayVerbs } = recordingEnv("overlay");
+    const { overlay, verbs: overlayVerbs } = recordingOverlay();
     const ctx: PackContext<SchemeEnv> = { onDispose: () => undefined, order: [], preludeScope: overlay };
 
     await cap.lower({}).apply(runtimeEnv, ctx);

@@ -36,7 +36,7 @@ import type { InvocationLike, RosettaFunction } from "../rosetta.js";
 // The retired public `env.defineRosetta` method's internal replacement — this legacy
 // `SymbolDeclaration` bind arm and `provenance/replay.ts`'s playback frame are its only
 // two producers (env-capability-authoring skill's migration recipes name this the way in).
-import { bindRosetta } from "../Environment.js";
+import { bindRosetta, bindValue, Environment, type EnvironmentValue } from "../Environment.js";
 import { CallCtx, makeCallCtx, type CacheClass, type CallbackRoles, type ProvenanceRole } from "./symbols/_bake.js";
 import { type SchemeValue } from "../values/types.js";
 import invariant from "tiny-invariant";
@@ -309,6 +309,22 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
         await spawned;
       },
       async apply(env: SchemeEnv, ctx?: PackContext<SchemeEnv>) {
+        // HERMETIC NARROW (instanceof DOOR, never a cast): with `SchemeEnv.set` hard-deleted,
+        // binding goes through the module-internal `bindValue` (Environment.ts), which writes
+        // real Environment storage. Packs are applied onto real envs everywhere in production
+        // (env-roots leaves, `LexicalScope.fresh()` roots, `inherit()` children thereof); a
+        // synthetic structural env cannot RECEIVE bindings — assemble onto a real frame instead.
+        invariant(
+          env instanceof Environment,
+          `capability "${name}": apply target is not an arrival Environment — a capability's bindings ` +
+            `land in real environment storage (the JS-side write surface is retired; hermetic-Environment ` +
+            `ruling). Assemble onto \`LexicalScope.fresh().env\`, an env-roots base, or a child of one.`,
+        );
+        // The env-backed bind face, shaped like the kernel's PreludeBindTarget shim so
+        // `bindTarget` stays ONE type either way. The narrow from the shim's `unknown` is a
+        // boundary cast per this file's applyCallback convention: every value routed through
+        // it below is a constructed EnvironmentValue (ANativeProcedure/DoorProcedure/Macro/…).
+        const envTarget: PreludeBindTarget = { set: (n, v) => bindValue(env, n, v as EnvironmentValue) };
         // preludeOnly routing: a baked native/rosetta def marked `preludeOnly: true`
         // binds onto `ctx.preludeScope` instead of the runtime env — see
         // `PackContext.preludeScope` in kernel.ts for the full assembly-time-only contract. Same
@@ -316,7 +332,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
         // TARGET scope differs. Absent `ctx.preludeScope` (a bare direct apply outside any
         // assembly), fall back to `env` so the symbol is never silently dropped.
         const bindTarget = (def: AEntity): PreludeBindTarget =>
-          "preludeOnly" in def && def.preludeOnly ? (ctx?.preludeScope ?? env) : env;
+          "preludeOnly" in def && def.preludeOnly ? (ctx?.preludeScope ?? envTarget) : envTarget;
         const prefix = spec.symbolPrefix ?? "";
         // Two-phase binding: symbol.define/symbol.defineSyntax entries are collected
         // here (in declaration order — JS object-key insertion order) and evaluated+bound
@@ -528,13 +544,13 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 // Resolving a call head to this VALUE → SPECIAL_FORMS[def.name] (the dual of
                 // cxr): the special form is aliasable + lexically shadowable, unlike the
                 // name-matched-before-lookup table it replaces.
-                env.set(verb, new Keyword(def.name));
+                bindValue(env, verb, new Keyword(def.name));
                 break;
               case "macro":
                 // A non-evaluating MACRO form: bind the raw transformer (Macro/Syntax) as-is.
                 // Not arg-evaluating (native/rosetta) nor evaluator-dispatched (keyword) — the
                 // generic is_macro/is_syntax eval hook expands it. Home of syntax-rules.
-                env.set(verb, def.macro);
+                bindValue(env, verb, def.macro);
                 break;
             }
             continue;
@@ -542,7 +558,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
 
           // ── the raw-value arm (see `SymbolDeclaration`'s doc) ────────────────────────
           if (isValueDef(def)) {
-            env.set(verb, def.value); // raw binding — a `require`-resolved value, never a scheme call target
+            bindValue(env, verb, def.value as EnvironmentValue); // raw binding (boxed by bindValue's fromJS tail when it is a bare JS leaf) — a `require`-resolved value, never a scheme call target
             continue;
           }
 

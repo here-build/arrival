@@ -26,6 +26,8 @@ import { APair } from "../values/primitives/APair.js";
 import { nil } from "../values/primitives/ANil.js";
 import { ALambda } from "../values/primitives/ACallable.js";
 import { type SchemeValue } from "../values/types.js";
+// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
+import { bindValue } from "../Environment.js";
 
 describe("Generator Evaluator with Real LIPS Types", () => {
   // `ResolvingEnvironment`, not the plain `Environment` its raw evaluator-level content
@@ -160,8 +162,8 @@ describe("Generator Evaluator with Real LIPS Types", () => {
 
     // INVARIANT: symbol evaluation looks up the value bound in the environment
     it("should look up symbols in environment", async () => {
-      env.set("x", new AExact(CONSTANT_CTX, 10n));
-      env.set("y", new AExact(CONSTANT_CTX, 20n));
+      bindValue(env, "x", new AExact(CONSTANT_CTX, 10n));
+      bindValue(env, "y", new AExact(CONSTANT_CTX, 20n));
       expect(await execExpr(new ASymbol(CONSTANT_CTX, "x"), { env })).toEqual(new AExact(CONSTANT_CTX, 10n));
       expect(await execExpr(new ASymbol(CONSTANT_CTX, "y"), { env })).toEqual(new AExact(CONSTANT_CTX, 20n));
     });
@@ -200,7 +202,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
     // arrival}, inhuman/saas/mcp).
     it("should handle JS functions that return promises", async () => {
       // With membrane, JS functions receive JS values (not SchemeExact)
-      env.set("async-add", async (a: number, b: number) => {
+      bindValue(env, "async-add", async (a: number, b: number) => {
         await new Promise((r) => setTimeout(r, 1));
         return a + b;
       });
@@ -247,7 +249,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       // INVARIANT: (unquote expr) inside quasiquote evaluates expr and splices the value in place
       it("should evaluate unquoted expressions", async () => {
         // `(1 ,(+ 1 1) 3)
-        env.set("x", new AExact(CONSTANT_CTX, 10n));
+        bindValue(env, "x", new AExact(CONSTANT_CTX, 10n));
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "quasiquote"), APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "unquote"), new ASymbol(CONSTANT_CTX, "x")], false), new AExact(CONSTANT_CTX, 3n)], false)], false);
         const result = (await execExpr(code, { env })) as APair<any, any>;
         expect(result.car).toEqual(new AExact(CONSTANT_CTX, 1n));
@@ -317,7 +319,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       // INVARIANT: begin executes every expression for its side effects, in sequence
       it("should execute side effects", async () => {
         let sideEffect = 0;
-        env.set("inc!", () => {
+        bindValue(env, "inc!", () => {
           sideEffect++;
           return new AExact(CONSTANT_CTX, BigInt(sideEffect));
         });
@@ -402,7 +404,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       // see sibling bindings
       it("should use parallel binding semantics", async () => {
         // (let ((x 1) (y x)) y) - should fail because x isn't bound yet
-        env.set("x", new AExact(CONSTANT_CTX, 100n));
+        bindValue(env, "x", new AExact(CONSTANT_CTX, 100n));
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "let"), APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "x"), new AExact(CONSTANT_CTX, 1n)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "y"), new ASymbol(CONSTANT_CTX, "x")], false)], false), new ASymbol(CONSTANT_CTX, "y")], false);
         // y should be 100 (outer x), not 1 (inner x)
         expect(await execExpr(code, { env })).toEqual(new AExact(CONSTANT_CTX, 100n));
@@ -426,7 +428,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       // INVARIANT: and short-circuits on the first #f without evaluating the rest
       it("should short-circuit on false", async () => {
         let called = false;
-        env.set("side-effect", () => {
+        bindValue(env, "side-effect", () => {
           called = true;
           return true;
         });
@@ -455,7 +457,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       // INVARIANT: or short-circuits on the first truthy value without evaluating the rest
       it("should short-circuit on true", async () => {
         let called = false;
-        env.set("side-effect", () => {
+        bindValue(env, "side-effect", () => {
           called = true;
           return false;
         });
@@ -508,7 +510,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should handle => syntax", async () => {
         // (cond ((+ 1 2) => (lambda (x) (* x 2))))
         // With membrane, JS functions receive JS values (not SchemeExact)
-        env.set("double", (x: number) => x * 2);
+        bindValue(env, "double", (x: number) => x * 2);
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "cond"), APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "+"), new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)], false), new ASymbol(CONSTANT_CTX, "=>"), new ASymbol(CONSTANT_CTX, "double")], false)], false);
         // The bare-fn boxing seam boxes the => builtin's raw return; this spec's
         // `execExpr` surfaces the box — unwrap to assert the value.
@@ -585,7 +587,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       // INVARIANT: do executes the command body once per iteration for its side effects
       it("should execute body on each iteration", async () => {
         let count = 0;
-        env.set("inc!", () => {
+        bindValue(env, "inc!", () => {
           count++;
           return undefined;
         });

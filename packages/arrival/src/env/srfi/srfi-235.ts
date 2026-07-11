@@ -28,7 +28,7 @@
 // has always meant `constantly`, so the spec-faithful name is `constantly` and `always`
 // is preserved only as a back-compat alias (a type-lens probe references it by name).
 import { EnvCapability } from "../../common/capability.js";
-import { symbol } from "../../common/symbol.js";
+import { symbol, type CallCtx } from "../../common/symbol.js";
 import * as z from "../../common/scheme-zod.js";
 import { is_callable_value } from "../../values/value-guards.js";
 import { AExact } from "../../values/primitives/AExact.js";
@@ -105,7 +105,7 @@ export default new EnvCapability("scheme/srfi-235", {
     "procedure-min-arity":
       symbol.native`procedure-min-arity: the minimum argument count fn accepts (arity introspection for scheme-authored combinators like curry)`(
         { input: [z.lambda], output: [z.exact] },
-        (fn: unknown): AExact => {
+        function (this: CallCtx, fn: unknown): AExact {
           const min = is_callable_value(fn) ? fn.arity.min : (fn as (...args: unknown[]) => unknown).length;
           return new AExact(CONSTANT_CTX, BigInt(min));
         },

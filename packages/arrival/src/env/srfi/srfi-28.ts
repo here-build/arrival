@@ -36,7 +36,7 @@
 // the arrival printer, being display-only, differs from R7RS `write`). Non-string args
 // render identically under `~a` and `~s`.
 
-import { symbol } from "../../common/symbol.js";
+import { symbol, type CallCtx } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import * as z from "../../common/scheme-zod.js";
 import { stringValue, isSchemeNumber } from "../../values/op-helpers.js";
@@ -94,7 +94,7 @@ export default new EnvCapability("scheme/srfi-28", {
         // scheme-value identity — since a directive-fill arg can be ANY scheme
         // value (rendered via `displayOf`/`writeOf`).
         { input: [z.union([z.string, z.boolean])], inputRest: z.value, output: [z.string] },
-        (head: AString | ABool | undefined, ...tail: unknown[]): AString => {
+        function (this: CallCtx, head: AString | ABool | undefined, ...tail: unknown[]): AString {
           // ── Resolve destination vs format string ───────────────────────────────
           // SRFI-28: `head` IS the format string. SRFI-48/CL: `head` is a
           // destination; we admit `#f` only, and then `tail[0]` is the format.

@@ -24,7 +24,8 @@
 import { AValue } from "../values/primitives/AValue.js";
 import { ANativeProcedure } from "../values/primitives/ACallable.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
-import { type BindingName, Environment, type EnvironmentValue } from "../Environment.js";
+import { type BindingName, bindValue, Environment, type EnvironmentValue } from "../Environment.js";
+import type { RunContext } from "../values/primitives/RunContext.js";
 import type { SchemeValue } from "../values/types.js";
 import { LexicalScope } from "./LexicalScope.js";
 import { Capabilities } from "./Capabilities.js";
@@ -115,12 +116,12 @@ function resolveSynth(
 }
 
 /**
- * Look up a symbol in the environment without requiring lips runtime.
- * This uses _lookupWithResolvers directly to avoid patch_value.
+ * Look up a symbol in the environment — the raw storage walk, no read-settling
+ * (a stored pair is handed back as-is; `Environment.get` owns the quote-on-read face).
  * For keyword symbols (:name), self-evaluates.
  * The single-env glass form; {@link Resolver.resolve} is the composed (cut) form.
  */
-export function env_get(env: Environment, sym: ASymbol): EnvironmentValue | undefined {
+export function env_get(env: Environment, sym: ASymbol, ctx?: RunContext): EnvironmentValue | undefined {
   const name = sym.__name__;
 
   // A keyword (`:name`) is self-evaluating — it carries its own `apply` (ASymbol.ts),
@@ -131,7 +132,7 @@ export function env_get(env: Environment, sym: ASymbol): EnvironmentValue | unde
     return sym;
   }
 
-  const value = env._lookupWithResolvers(name);
+  const value = env._lookupWithResolvers(name, ctx);
   if (value !== undefined) {
     return value;
   }
@@ -195,7 +196,7 @@ export class Resolver {
    * builtins; the keyword/cxr synth wraps the SAME composed lookup, so a `:key`
    * accessor resolves against the base even though the lexical root is null-rooted.
    */
-  resolve(sym: ASymbol): EnvironmentValue | undefined {
+  resolve(sym: ASymbol, ctx?: RunContext): EnvironmentValue | undefined {
     const name = sym.__name__;
     // A keyword (`:name`) is self-evaluating. No lexical
     // or capability lookup at all; this is the one call site every symbol-position
@@ -204,9 +205,7 @@ export class Resolver {
     if (typeof name === "string" && name.startsWith(":")) {
       return sym;
     }
-    const lookup = (n: string | symbol): EnvironmentValue | undefined =>
-      this.scope.lookup(n) ?? this.capabilities.lookup(n);
-    const value = lookup(name);
+    const value = this.lookup(name, ctx);
     if (value !== undefined) return value;
     return resolveSynth(name, () => this.allBoundNames());
   }
@@ -231,8 +230,8 @@ export class Resolver {
    * composed `scope.lookup ?? capabilities.lookup`; glass collapses to
    * `env._lookupWithResolvers(name)`.
    */
-  lookup(name: string | symbol): EnvironmentValue | undefined {
-    return this.scope.lookup(name) ?? this.capabilities.lookup(name);
+  lookup(name: string | symbol, ctx?: RunContext): EnvironmentValue | undefined {
+    return this.scope.lookup(name, ctx) ?? this.capabilities.lookup(name, ctx);
   }
 
   /**
@@ -251,7 +250,8 @@ export class Resolver {
 
   /**
    * A SETTLED value read — the bound value of `name` (scope then capabilities),
-   * patch_value-settled, resolver-aware, NON-synth, `undefined` on a miss (never throws).
+   * read-settled by `Environment.get` (pair → quote; raw-in-storage doors),
+   * resolver-aware, NON-synth, `undefined` on a miss (never throws).
    * ≡ `env.get(name, { throwError: false })`. Used by hygiene's gensym rename to copy a
    * bound value onto its gensym; distinct from {@link resolve} (which synthesizes c[ad]+r
    * and throws on a miss), so a template-introduced (unbound) identifier yields undefined.
@@ -260,11 +260,13 @@ export class Resolver {
     return this.env.get(name, { throwError: false });
   }
 
-  /** Bind a name in the innermost frame (let/lambda/letrec/define). ≡ `env.set`. Storage-membrane
+  /** Bind a name in the innermost frame (let/lambda/letrec/define) — the EVALUATOR's
+   *  frame-bind, through the module-internal storage write (`bindValue`, Environment.ts;
+   *  the public `set` is hard-deleted — hermetic-Environment ruling). Storage-membrane
    *  face: `EnvironmentValue` ONLY — a caller with a raw number/bigint boxes at ITS OWN
-   *  boundary (fromJS/jsToScheme) before calling this, same door as `Environment.set`. */
+   *  boundary (fromJS/jsToScheme) before calling this. */
   define(name: BindingName, value: EnvironmentValue): void {
-    this.env.set(name, value);
+    bindValue(this.env, name, value);
   }
 
   /**

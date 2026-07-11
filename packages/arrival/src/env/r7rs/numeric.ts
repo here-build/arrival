@@ -1205,7 +1205,7 @@ export default new EnvCapability("scheme/numeric", {
     // R8 mint: boxes + forwards the operand's provenance (see nativeTypePredicate's doc
     // for why an unboxed native return is a P4 violation). Rest-param shape matches Impl's
     // variadic contract — no arity-erasing cast needed.
-    "number?": symbol.native`number?: #t for any number`(PREDICATE_CONTRACT, (...args: unknown[]): ABool => {
+    "number?": symbol.native`number?: #t for any number`(PREDICATE_CONTRACT, function (this: CallCtx, ...args: unknown[]): ABool {
       const [value] = args;
       return mintVerdict([value], isSchemeNumber(value));
     }),

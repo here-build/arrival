@@ -125,8 +125,10 @@ function isPendingDatum(value: SchemeValue | PromiseLike<SchemeValue>): value is
 // Lifts a raw JS primitive to its Scheme value-type so member reads return
 // Scheme-typed values, not bare JS. Only strings/bigints/numbers need boxing;
 // objects/arrays are handled by the membrane at access time and pass through.
-// Lives here (a reader leaf) so `patch_value` — and Environment.get, which calls
-// it — can reach it without a dependency on the eval layer.
+// NOTE (hermetic-Environment ruling, 2026-07-11): Environment.get no longer calls
+// this — a raw JS scalar found in env storage is an invariant DOOR there, never a
+// silent re-box (the audit's #1 provenance drop). Remaining callers are the reader/
+// parse-time and pending-entry settle paths (PARSE_CTX territory) + the public barrel.
 // ----------------------------------------------------------------------
 export function box(object: unknown): SchemeValue {
   switch (typeof object) {
@@ -147,8 +149,9 @@ export function box(object: unknown): SchemeValue {
 // ----------------------------------------------------------------------
 // Settles a value read out of a binding/member before handing back to Scheme:
 // a Pair is cycle-marked then quoted (so the evaluator treats it as data, not
-// a call); everything else is boxed. Lives here (a reader leaf) so Environment.get
-// can reach it without a dependency on the eval layer.
+// a call); everything else is boxed. Environment.get's read path no longer routes
+// here (it inlines the pair arm and DOORS on raw scalars — hermetic ruling); this
+// stays a public value-repr helper for host-side member settling.
 // ----------------------------------------------------------------------
 export function patch_value(value: unknown): SchemeValue {
   if (value instanceof APair) {

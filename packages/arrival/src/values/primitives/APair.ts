@@ -585,7 +585,15 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     // term when it's a callable VALUE and otherwise invokes a host fn with an explicit
     // `this = makeCallCtx(runCtx)` (flat `CallCtx`) — fixes the `this=undefined` crash a bare
     // `fn(x)` caused when the callback (e.g. `cadr`, a rosetta) reads `this.runCtx`.
-    const results = elements.map((x) => applyCallback(fn, [x], runCtx));
+    // `runCtx ?? CONSTANT_CTX`: this term's OWN `runCtx` param is optional (the
+    // `arrival/tagless-final/map` protocol member's signature, shared across every
+    // implementor — AVector/AString/ADict/…), so a caller-side thread all the way to a
+    // required param is a protocol-wide change (Wave 1 territory, docs/working-proposals/
+    // arrival-constant-ctx-audit-2026-07-11.md §4), not a Wave 0 one-hop fix. The `??` here
+    // is an explicit, grep-able confession — not the apology idiom Wave 0 deleted from
+    // evaluator.ts (there the live ctx was guaranteed one line away; here it genuinely isn't
+    // yet, absent that protocol-wide thread).
+    const results = elements.map((x) => applyCallback(fn, [x], runCtx ?? CONSTANT_CTX));
     // RULINGS.md R2 (naive-but-explicit strategy): map is
     // LENGTH-PRESERVING — the container's own grouping/length-fact stamp is PROXIED through
     // unchanged onto the rebuilt spine (`withInputProvenance([this], …)` unions `this`'s own
@@ -624,7 +632,8 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     }
     // Seam-routed (see map above): `pred` is the user callable OR the RegExp-matcher closure —
     // both invoked with a defined `this`, no bare `pred(x)` crash on a `this.runCtx`-reading callee.
-    const verdicts = elements.map((x) => applyCallback(pred, [x], runCtx));
+    // `runCtx ?? CONSTANT_CTX` confession — same protocol-wide-optional reasoning as map above.
+    const verdicts = elements.map((x) => applyCallback(pred, [x], runCtx ?? CONSTANT_CTX));
     const kept = (verdict: unknown): boolean => !is_false(verdict) && !(verdict instanceof ANil);
     // RULINGS.md R2: filter is LENGTH-CHANGING — the container's own grouping/
     // length-fact stamp is PROVENANCED, minted fresh as the union of (a) the INPUT
@@ -660,7 +669,8 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
       if (p.car === undefined && p.cdr instanceof ANil) break; // empty-pair sentinel
       // Seam-routed. The dispatch erases the generic `Acc` return to `CallResult`, so cast back
       // at this boundary — the reducer's result IS an `Acc` (a scheme value).
-      acc = (await applyCallback(fn, [p.car, acc], runCtx)) as Acc;
+      // `runCtx ?? CONSTANT_CTX` confession — same protocol-wide-optional reasoning as map above.
+      acc = (await applyCallback(fn, [p.car, acc], runCtx ?? CONSTANT_CTX)) as Acc;
       node = p.cdr;
     }
     return acc;

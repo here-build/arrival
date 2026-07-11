@@ -36,6 +36,8 @@ import { AValue } from "../values/primitives/AValue.js";
 import { jsToScheme } from "../rosetta.js";
 import { exec as gexec } from "../eval/generator-exec.js";
 import { tf } from "../values/tagless-final.js";
+// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
+import { bindValue } from "../Environment.js";
 
 // ============================================================================
 // CRITICAL: sandbox escape vectors
@@ -202,7 +204,7 @@ describe("CRITICAL: accessor isolation leaks", () => {
     await initBridge();
     // Guard against over-blocking: legitimate own-property access must keep
     // working through both paths after the isolation is applied.
-    inferenceEnv.set("__probe_obj", jsToScheme(CONSTANT_CTX, { name: "maya", nested: { city: "lisbon" } }));
+    bindValue(inferenceEnv, "__probe_obj", jsToScheme(CONSTANT_CTX, { name: "maya", nested: { city: "lisbon" } }));
     const [byKeyword] = await exec("(:name __probe_obj)", { env: inferenceEnv });
     expect(String(byKeyword)).toBe("maya");
   });
@@ -407,8 +409,8 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
     a.self = a;
     const b: Record<string, unknown> = {};
     b.self = b;
-    inferenceEnv.set("__cyc_a", jsToScheme(CONSTANT_CTX, a));
-    inferenceEnv.set("__cyc_b", jsToScheme(CONSTANT_CTX, b));
+    bindValue(inferenceEnv, "__cyc_a", jsToScheme(CONSTANT_CTX, a));
+    bindValue(inferenceEnv, "__cyc_b", jsToScheme(CONSTANT_CTX, b));
 
     // execState (COMPLEX tier): the test name asserts the BOXED `#f` verdict
     // specifically (RULINGS.md R1) — `exec`'s plain-JS exit would give the raw

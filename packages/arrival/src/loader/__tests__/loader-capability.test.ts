@@ -23,6 +23,9 @@ import type { SchemeValue } from "../../values/types.js";
 import { EnvCapability } from "../../common/capability.js";
 import { assembleEnv } from "../../common/kernel.js";
 import type { SchemeEnv } from "../../common/scheme-env.js";
+import invariant from "tiny-invariant";
+// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
+import { bindValue, Environment } from "../../Environment.js";
 
 import { __resetExtensionRegistryForTest } from "../loader-extensions.js";
 import { arrivalLoaderCapability } from "../loader-capability.js";
@@ -124,7 +127,11 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
           name: "ext/greeter",
           apply: (env: SchemeEnv) => {
             applies += 1;
-            env.set("greeting-of", () => "hi");
+            // The assembler applies registry packs onto the REAL live env; with the
+            // JS-side write surface retired, the pack binds through the module-internal
+            // door exactly as capability.ts's apply does (same instanceof narrow).
+            invariant(env instanceof Environment, "registry pack expects a real env");
+            bindValue(env, "greeting-of", () => "hi");
           },
         },
       ],

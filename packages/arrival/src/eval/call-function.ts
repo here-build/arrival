@@ -27,16 +27,23 @@ import { promise_all } from "../utils/promises.js";
 
 type SchemeFunction = (...args: any[]) => any;
 
+// `runCtx` is REQUIRED (Wave 0 of the CONSTANT_CTX rework, docs/working-proposals/
+// arrival-constant-ctx-audit-2026-07-11.md §2.1): the old `{ runCtx }: {...; runCtx?:
+// RunContext } = {}` shape let a caller pass nothing at all — and real callers did
+// (env/r7rs/lists.ts's map/member/assoc, before this wave, invoked with `{}`), so every
+// `map`/`member`/`assoc` callback ran with no abort signal, no heap meter, forced
+// non-strict, regardless of the run's actual configuration. Making it required turns that
+// silent drop into a compile error at every call site.
 export function call_function(
   fn: SchemeFunction | ACallable,
   args: SchemeValue[],
-  { use_dynamic, runCtx }: { use_dynamic?: boolean; runCtx?: RunContext } = {},
+  { use_dynamic, runCtx }: { use_dynamic?: boolean; runCtx: RunContext },
 ) {
   // A callable VALUE (ANativeProcedure/ALambda/ARosettaProcedure) is invoked through the
   // seam — its apply term, `runCtx` threaded — not as a bare fn (`fn.apply` would throw
   // "apply called on an object, not a function"). Bare fns keep the LambdaContext path below.
   if (is_callable_value(fn)) {
-    return resolve_promises(applyCallback(fn, args, runCtx ?? CONSTANT_CTX) as SchemeValue);
+    return resolve_promises(applyCallback(fn, args, runCtx) as SchemeValue);
   }
   // No call frame is built: a generator-lambda carries its own closure env, a
   // native reads none, so no frame is needed here. Only `use_dynamic` rides the

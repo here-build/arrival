@@ -15,6 +15,8 @@ import { parse } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
 import { classify, fullCone, type DeclaredRole, type LineageNode } from "../values/lineage.js";
 import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
+// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
+import { bindValue } from "../Environment.js";
 
 let seq = 0;
 const env = () => inferenceEnv.inherit(`cfe-${seq++}`);
@@ -32,8 +34,8 @@ describe("classifierFromEnv — reads the declared `.provenanceRole` off the bou
     const e = env();
     // Names picked to defeat any residual name-based guess — a "pure"-sounding name
     // declared `source`, and a name with no semantic hint declared `pipe`.
-    e.set("dedent", declared("pipe"));
-    e.set("infer-x", declared("source"));
+    bindValue(e, "dedent", declared("pipe"));
+    bindValue(e, "infer-x", declared("source"));
 
     const dedented = await node("(dedent s)", e);
     expect(dedented.kind).toBe("pipe"); // declared pipe propagates → pass-through
@@ -47,7 +49,7 @@ describe("classifierFromEnv — reads the declared `.provenanceRole` off the bou
   it("the declared role is visible through env inheritance (chain-walk is env.get's, not the classifier's)", async () => {
     await initBridge();
     const parent = env();
-    parent.set("dedent", declared("pipe"));
+    bindValue(parent, "dedent", declared("pipe"));
     const child = parent.inherit("cfe-child");
     // classified on the CHILD, but `dedent` is bound on the PARENT → still a pipe.
     const n = await node("(dedent s)", child);
@@ -57,9 +59,9 @@ describe("classifierFromEnv — reads the declared `.provenanceRole` off the bou
   it("declared `fan`: map/filter classify to a fan (map length-preserving, filter not)", async () => {
     await initBridge();
     const e = env();
-    e.set("infer-x", declared("source"));
-    e.set("map", declared("fan"));
-    e.set("filter", declared("fan"));
+    bindValue(e, "infer-x", declared("source"));
+    bindValue(e, "map", declared("fan"));
+    bindValue(e, "filter", declared("fan"));
 
     const mapped = await node("(map infer-x xs)", e);
     expect(mapped.kind).toBe("fan");
@@ -84,9 +86,9 @@ describe("classifierFromEnv — reads the declared `.provenanceRole` off the bou
   it("declared `sink`/`transparent`/`opaque` reach their matching graph-layer kinds", async () => {
     await initBridge();
     const e = env();
-    e.set("log!", declared("sink"));
-    e.set("passthrough", declared("transparent"));
-    e.set("ext-call", declared("opaque"));
+    bindValue(e, "log!", declared("sink"));
+    bindValue(e, "passthrough", declared("transparent"));
+    bindValue(e, "ext-call", declared("opaque"));
 
     const sunk = await node("(log! v)", e);
     expect(sunk.kind).toBe("sink");

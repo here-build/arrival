@@ -13,6 +13,8 @@ import { jsToScheme, schemeToJs } from "../rosetta.js";
 import { symbol } from "../common/symbol.js";
 import { EnvCapability } from "../common/capability.js";
 import * as z from "../common/scheme-zod.js";
+// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
+import { bindValue } from "../Environment.js";
 
 // Helper to execute and get first result
 async function execOne(expr: string, env = inferenceEnv): Promise<any> {
@@ -107,7 +109,7 @@ describe("Escaped Symbol Resolution", () => {
         "24": "numeric key value",
       };
 
-      inferenceEnv.set("test-obj", jsToScheme(CONSTANT_CTX, testObj));
+      bindValue(inferenceEnv, "test-obj", jsToScheme(CONSTANT_CTX, testObj));
 
       // :24 should be treated as keyword and converted to "24" by @ function
       const result1 = await execOne(`(@ test-obj :24)`);
@@ -124,7 +126,7 @@ describe("Escaped Symbol Resolution", () => {
         foo_bar: "underscored",
       };
 
-      inferenceEnv.set("test-obj", jsToScheme(CONSTANT_CTX, testObj));
+      bindValue(inferenceEnv, "test-obj", jsToScheme(CONSTANT_CTX, testObj));
 
       const result = await execOne(`
         (list
@@ -192,7 +194,7 @@ describe("Escaped Symbol Resolution", () => {
         },
       };
 
-      inferenceEnv.set("components", jsToScheme(CONSTANT_CTX, component));
+      bindValue(inferenceEnv, "components", jsToScheme(CONSTANT_CTX, component));
 
       const result = await execOne(`
         (@ components :|794f1e9c-5726-4a0c-a8b6-c0ae5f31f4e4|)
@@ -213,7 +215,7 @@ describe("Escaped Symbol Resolution", () => {
         ],
       };
 
-      inferenceEnv.set("data", jsToScheme(CONSTANT_CTX, data));
+      bindValue(inferenceEnv, "data", jsToScheme(CONSTANT_CTX, data));
 
       const result = await execOne(`
         (begin
@@ -239,7 +241,7 @@ describe("Escaped Symbol Resolution", () => {
       ];
 
       // Convert to LIPS list — scheme filter expects pair chains, not JS arrays
-      inferenceEnv.set("items", jsToScheme(CONSTANT_CTX, items));
+      bindValue(inferenceEnv, "items", jsToScheme(CONSTANT_CTX, items));
 
       // Use `string=?` for string comparison — `eq?` is reference identity (R7RS § 6.1)
       // and post-eq?/eqv?-split returns #f for two distinct heap string instances.

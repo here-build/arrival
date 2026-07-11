@@ -31,6 +31,8 @@ import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { AValue } from "../../values/primitives/AValue.js";
 // In-package test: internal-module access (Environment is not barrel-exported).
 import { Environment } from "../../Environment.js";
+// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
+import { bindValue } from "../../Environment.js";
 
 describe("V0 pin — barrel surface", () => {
   it("global_env / env are no longer barrel-exported (V1 zero-consumer cut)", () => {
@@ -86,15 +88,17 @@ describe("V0 pin — glass byte-identity (ExecOptions.env retype is type-only, D
 });
 
 describe("V0 pin — override+scope value-injection parity", () => {
-  it("env.set + jsToScheme and define/overridable + override produce IDENTICAL values", async () => {
+  it("the internal write (bindValue + jsToScheme) and define/overridable + override produce IDENTICAL values", async () => {
     const users = [
       { id: "alice", priority: 15 },
       { id: "bob", priority: 5 },
     ];
 
-    // The manual membrane path (README's "Passing data across", the pre-override idiom).
+    // The manual membrane path — the pre-override idiom, now reachable only through the
+    // module-internal `bindValue` (V7: the public `env.set` is hard-deleted; this row keeps
+    // pinning that the ONE remaining write door and `override` mint identical values).
     const manualEnv = sandboxedEnv.inherit("parity-manual");
-    manualEnv.set("users", jsToScheme(CONSTANT_CTX, users, {}));
+    bindValue(manualEnv, "users", jsToScheme(CONSTANT_CTX, users, {}));
     const { values: manualValues } = await execState(
       `(map (lambda (u) (:id u)) users)`,
       { env: manualEnv },
@@ -119,7 +123,7 @@ describe("V0 pin — override+scope value-injection parity", () => {
     const priority = 15;
 
     const manualEnv = sandboxedEnv.inherit("parity-provenance-manual");
-    manualEnv.set("priority", jsToScheme(CONSTANT_CTX, priority, {}));
+    bindValue(manualEnv, "priority", jsToScheme(CONSTANT_CTX, priority, {}));
     const { values: manualValues } = await execState(`(* priority 2)`, { env: manualEnv });
 
     const { values: declaredValues } = await execState(
@@ -153,11 +157,56 @@ describe("V6 pin — defineRosetta hard-delete (docs/working-proposals/arrival-e
     expect("defineRosetta" in Environment.prototype).toBe(false);
   });
 
-  it("a live env instance answers to `set`/`get`/`inherit` but not `defineRosetta`", () => {
+  it("a live env instance answers to `get`/`inherit` but not `defineRosetta` (nor `set` — see the V7 rows)", () => {
     const env = sandboxedEnv.inherit("pin-defineRosetta-gone");
-    expect(typeof env.set).toBe("function");
     expect(typeof env.get).toBe("function");
     expect(typeof env.inherit).toBe("function");
     expect("defineRosetta" in env).toBe(false);
+  });
+});
+
+describe("V7 pin — the MONADIC contract (hermetic-Environment ruling, 2026-07-11)", () => {
+  // V, verbatim: "Environment should be something fully opaque on the outside, its value is
+  // only in cross-run preservation; it is not designed to be operatable from the JS side at
+  // all. from JS perspective, it's fully monadic." Values enter the interpreter ONLY as
+  // capabilities or overrides. Concretely pinned:
+  //   1. the JS side cannot `set` — the method is gone from the concrete class (so no
+  //      instance, however obtained — `LexicalScope.fresh().env`, `inherit()` children,
+  //      `currentRunEnv()` — answers it) and from the `SchemeEnv` contract;
+  //   2. a raw JS scalar found IN storage is a teaching door on read, never a silent
+  //      re-box (the read-path `box()` fallback is deleted — the constant-ctx audit's
+  //      #1 provenance drop);
+  //   3. a resolver answering a raw JS scalar doors at the probe — resolvers box at
+  //      their own boundary, under the resolving read's ctx.
+  it("no env instance answers `set` — not a fresh session root, not a base child", () => {
+    expect("set" in sandboxedEnv.inherit("pin-monadic")).toBe(false);
+    expect("set" in LexicalScope.fresh("pin-monadic-fresh").env).toBe(false);
+    expect("set" in Environment.prototype).toBe(false);
+  });
+
+  it("raw JS in storage doors on read (a writer bypassed the membrane) — box() re-boxing is dead", () => {
+    const env = sandboxedEnv.inherit("pin-raw-storage");
+    // The only way raw JS can still land in storage is a direct record poke — the exact
+    // bypass the door exists to catch.
+    env.__env__["smuggled"] = 42 as never;
+    expect(() => env.get("smuggled")).toThrowError(/bypassed the storage membrane/);
+  });
+
+  it("a resolver answering a raw JS scalar doors at the probe (box at the resolver's own boundary)", async () => {
+    const root = LexicalScope.fresh("pin-resolver-door");
+    root.env.registerResolver({ id: "raw-answerer", resolve: (n) => (n === "leaky" ? ("raw" as never) : undefined) });
+    expect(() => root.env.get("leaky")).toThrowError(/resolver "raw-answerer"/);
+    // And through a real run's composed resolution (the evaluator path, ctx threaded).
+    await expect(exec("leaky", { scope: root })).rejects.toThrowError(/resolver "raw-answerer"/);
+  });
+
+  it("a resolver answering a BOXED value flows through, ctx-threaded read included", async () => {
+    const root = LexicalScope.fresh("pin-resolver-boxed");
+    root.env.registerResolver({
+      id: "boxed-answerer",
+      resolve: (n, ctx) => (n === "greeting" ? jsToScheme(ctx ?? CONSTANT_CTX, "hello", {}) : undefined),
+    });
+    const [v] = await exec('(string-append greeting "!")', { scope: root });
+    expect(v).toBe("hello!");
   });
 });

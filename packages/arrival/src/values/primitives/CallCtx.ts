@@ -16,8 +16,8 @@ import { type InvocationLike } from "../../rosetta.js";
 /**
  * The ONE `this` every callable body sees — the dispatch-level receiver AND the
  * per-verb invocation context, fused into one shape.
- * `runCtx` is never optional (the constructor bakes in the `CONSTANT_CTX` default), so a
- * verb never needs its own `?? CONSTANT_CTX` fallback. `invocation` is the per-call-site
+ * `runCtx` is never optional (the constructor requires it — no default, see `makeCallCtx`
+ * below), so a verb never needs its own `?? CONSTANT_CTX` fallback. `invocation` is the per-call-site
  * provenance carrier (genuinely call-varying, unlike `runCtx` — never lives on RunContext).
  * `argProvenance` is the opt-in per-arg DEEP provenance vector (rosetta.ts's
  * `RosettaOptions.argProvenance`, aligned to the call's scheme args) — folded flat onto
@@ -36,9 +36,16 @@ export interface CallCtx {
  *  or any raw fn bound straight into env) is invoked with. The ONE construction site — every
  *  dispatch site (evaluator bare-fn call-head, `applyCallback`'s bare-fn fallback, the native
  *  bind in `capability.ts`, `createRosettaWrapper`'s impl invocation) calls this instead of
- *  hand-building the shape. */
+ *  hand-building the shape.
+ *
+ *  `runCtx` has no default (Wave 0 of the CONSTANT_CTX rework, docs/working-proposals/
+ *  arrival-constant-ctx-audit-2026-07-11.md §2.6): verified zero production callers leaned on
+ *  the old `= CONSTANT_CTX` default — every real dispatch site already passed an explicit
+ *  `runCtx` — so the default was a latent hazard (the easiest path for the next fallback to
+ *  land on), not a load-bearing convenience. `testCallCtx()` remains the sanctioned door for
+ *  CONSTANT_CTX under test. */
 export function makeCallCtx(
-  runCtx: RunContext = CONSTANT_CTX,
+  runCtx: RunContext,
   currentInvocation?: InvocationLike,
   argProvenance?: readonly ReadonlySet<number>[],
 ): CallCtx {
@@ -51,8 +58,9 @@ export function makeCallCtx(
  * REAL `CallCtx` instead of leaning on `this` optionality — `this` is never optional on a
  * callable body's signature, so nothing downstream needs a nullable-`this` fallback.
  * A thin wrapper over `makeCallCtx(CONSTANT_CTX, …)`: `CONSTANT_CTX` survives ONLY inside
- * this explicit constructor (or `makeCallCtx()`'s own default), never as an implicit
- * fallback threaded through a verb's `this?.` read. `overrides` lets a call site supply a
+ * this explicit constructor, never as an implicit fallback threaded through a verb's
+ * `this?.` read (as of Wave 0, `makeCallCtx` itself takes no default — see above).
+ * `overrides` lets a call site supply a
  * real `InvocationLike` (to exercise provenance minting) or a non-default `RunContext`
  * without hand-building the whole `{runCtx, invocation: {…}}` shape.
  */

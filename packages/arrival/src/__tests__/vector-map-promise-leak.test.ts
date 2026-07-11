@@ -10,6 +10,8 @@
 import { describe, expect, it } from "vitest";
 import { freshEnv } from "./_fresh-env.js";
 import { execState } from "../eval/generator-exec.js";
+// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
+import { bindValue } from "../Environment.js";
 
 const env = await freshEnv();
 // COMPLEX tier (execState): stringifies the BOXED result (Scheme print format,
@@ -18,8 +20,8 @@ const run = async (form: string) => String((await execState(form, { env })).valu
 
 // An async proc: a JS function returning a resolved Promise. Mirrors a
 // membrane-crossing callback whose body awaits an async boundary.
-env.set("async-double", async (x: { valueOf(): number }) => Number(x.valueOf()) * 2);
-env.set("async-noop", async () => 0);
+bindValue(env, "async-double", async (x: { valueOf(): number }) => Number(x.valueOf()) * 2);
+bindValue(env, "async-noop", async () => 0);
 
 describe("vector/string map+for-each await async procs (no raw Promise leak)", () => {
   it("vector-map with an async proc yields settled values, not [object Promise]", async () => {
@@ -32,7 +34,7 @@ describe("vector/string map+for-each await async procs (no raw Promise leak)", (
 
   it("string-map with an async proc yields settled chars, not [object Promise]", async () => {
     // identity-ish async proc over chars
-    env.set("async-char", async (c: unknown) => c);
+    bindValue(env, "async-char", async (c: unknown) => c);
     const out = await run(`(string-map async-char "abc")`);
     expect(out).not.toMatch(/\[object Promise\]/);
   });

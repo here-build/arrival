@@ -17,7 +17,7 @@
 // "expression" walk would wrongly report the claw names as unbound.
 import { EnvCapability } from "../../common/capability.js";
 import * as z from "../../common/scheme-zod.js";
-import { symbol } from "../../common/symbol.js";
+import { symbol, type CallCtx } from "../../common/symbol.js";
 import { Values } from "../../values/primitives/Values.js";
 import { maybeThen } from "../../utils/promises.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
@@ -36,7 +36,7 @@ export default new EnvCapability("scheme/r7rs/binding", {
 
     values: symbol.native`values: package zero or more values for a continuation`(
       { input: [], inputRest: z.value, output: [z.value] },
-      (...args) => Values.from(args),
+      function (this: CallCtx, ...args) { return Values.from(args); },
     ),
 
     "call-with-values": symbol.native`call-with-values: feed a producer's values into a consumer`(

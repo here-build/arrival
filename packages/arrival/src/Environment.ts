@@ -9,7 +9,9 @@ import { createRosettaWrapper, type RosettaFunction } from "./rosetta.js";
 import type { Syntax } from "./eval/Syntax.js";
 import invariant from "tiny-invariant";
 import { fromJS, isSchemeValue } from "./membrane.js";
-import { patch_value } from "./reader/values-repr.js";
+import { quote } from "./reader/values-repr.js";
+import { APair } from "./values/primitives/APair.js";
+import type { RunContext } from "./values/primitives/RunContext.js";
 import { rosettaTypesOf } from "./env-registries.js";
 import { unboundVariableError } from "./unbound-variable.js";
 
@@ -109,12 +111,12 @@ export class Environment {
    * that used to sit between them lives only on {@link ResolvingEnvironment} now;
    * a plain frame is own → parent, full stop.
    */
-  _lookupWithResolvers(name: string | symbol): EnvironmentValue | undefined {
+  _lookupWithResolvers(name: string | symbol, ctx?: RunContext): EnvironmentValue | undefined {
     if (Object.hasOwn(this.__env__, name as string)) {
       return this.__env__[name as string];
     }
 
-    return this.__parent__?._lookupWithResolvers(name);
+    return this.__parent__?._lookupWithResolvers(name, ctx);
   }
 
   toString(): string {
@@ -126,25 +128,26 @@ export class Environment {
   }
 
   /**
-   * `get()`'s `patch_value(directValue)` call below is the SAME storage-membrane class
-   * of work as `set()`'s (former) auto-boxing — every read gets coerced (pair →
-   * `quote(mark_cycles(...))`, else `box(value)`) on the way out, mirroring the
-   * box-on-the-way-in `set()` used to do. Unlike `set()`'s boxing, this coercion isn't
-   * a narrow-the-signature fix: it runs on the READ path for every lookup hit (own
-   * bindings, resolver hits, and parent-chain hits alike), so moving it to "the
-   * caller's boundary" isn't a single call-site rewrite — it would need every
-   * `get()`/`lookupSettled()`/`_lookupWithResolvers` consumer to apply its own patch,
-   * or a wrapping read-membrane type (`Frame`/`BakedBase`) that owns "coerce on read"
-   * as a declared responsibility instead of a per-call incidental. Left deliberately
-   * unresolved: frames vs. baked roots as distinct types is a bigger cut than a
-   * no-regret move.
+   * The read face. What used to be `patch_value(directValue)` here — a box-on-the-way-out
+   * coercion of raw JS scalars found in storage — is now an INVARIANT DOOR: storage is
+   * inside the membrane (hermetic-Environment ruling, 2026-07-11), every writer boxes at
+   * its own boundary before {@link bindValue}, so a raw JS scalar surfacing on a read
+   * means a writer bypassed the membrane (a direct `__env__` poke, a cast-through
+   * `inherit(name, obj)` record) — teach and refuse, never silently re-box under the
+   * run-neutral ctx (that silent re-box was the audit's #1 provenance drop:
+   * docs/working-proposals/arrival-constant-ctx-audit-2026-07-11.md §2.3, values-repr
+   * box ← Environment.get).
+   *
+   * The APair arm survives: a stored pair is cycle-marked + quoted on the way out so a
+   * host-read (or hygiene's `lookupSettled` copy) hands back DATA the evaluator won't
+   * re-evaluate — read-settling of an already-scheme value, not membrane coercion.
    */
-  get(symbol: BindingName, options: { throwError?: boolean } = {}): EnvironmentValue | undefined {
+  get(symbol: BindingName, options: { throwError?: boolean; ctx?: RunContext } = {}): EnvironmentValue | undefined {
     // `:key` keyword accessors aren't special-cased here: a `:`-prefixed symbol is never
     // a binding, so it falls through to `_lookupWithResolvers` where the polyglot
     // capability's `keyword-accessor` resolver (membrane.ts) maps it to the `@`-alias
     // pluck — exactly like the `c[ad]+r` catchall. One catchall path.
-    const { throwError = true } = options;
+    const { throwError = true, ctx } = options;
 
     let name: string | symbol = symbol as string | symbol;
     if (symbol instanceof ASymbol || symbol instanceof AString) {
@@ -152,9 +155,14 @@ export class Environment {
     }
 
     // Direct lookup for the literal symbol (handles names like %as.data)
-    const directValue = this._lookupWithResolvers(name);
+    const directValue = this._lookupWithResolvers(name, ctx);
     if (directValue !== undefined) {
-      return patch_value(directValue);
+      if (directValue instanceof APair) {
+        directValue.mark_cycles();
+        return quote(directValue);
+      }
+      assertNotRawInStorage(directValue, name, `environment ${String(this.__name__)}`);
+      return directValue;
     }
 
     if (throwError) {
@@ -167,51 +175,111 @@ export class Environment {
     return undefined;
   }
 
-  /**
-   * Storage-membrane face: `set()` accepts `EnvironmentValue` ONLY — an honest
-   * signature. A caller that used to pass a raw JS `number`/`bigint` and rely on
-   * Environment auto-boxing it into AExact/AInexact must now box at ITS OWN boundary
-   * before calling `set` (via `fromJS`/`jsToScheme` per context) — storage is inside
-   * the membrane, not a second door into it.
-   */
-  set(name: BindingName, value: EnvironmentValue): this {
-    let storedValue: EnvironmentValue;
-
-    if (isSchemeValue(value)) {
-      storedValue = value;
-    }
-    // Bare-value purge: a raw JS boolean/string/symbol used to pass through
-    // unboxed here — a P4 violation (the membrane's world ends at the frame boundary;
-    // storage IS inside). Falls to the `fromJS` branch below, which boxes it
-    // (boolean→ABool, string→AString, a registered symbol→keyword ASymbol, a unique
-    // symbol→#void+warn) exactly like every other non-scheme JS value entering storage.
-    // Membrane wrapping happens at interop points, not storage
-    else if (typeof value === "function") {
-      storedValue = value as EnvironmentValue;
-    }
-    // Unwrapped for exception handling (R7RSError, etc.)
-    else if (value instanceof Error) {
-      storedValue = value as EnvironmentValue;
-    }
-    else {
-      storedValue = fromJS(value) as EnvironmentValue;
-    }
-
-    let key: string | symbol;
-    if (name instanceof ASymbol) {
-      key = name.__name__;
-    } else if (name instanceof AString) {
-      key = name.valueOf();
-    } else {
-      key = name;
-    }
-    this.__env__[key as string] = storedValue;
-    return this;
-  }
-
   has(name: string): boolean {
     return Object.hasOwn(this.__env__, name);
   }
+}
+
+/**
+ * The raw-scalar predicate both storage doors share: exactly the JS leaf types the
+ * retired read-path `box()` used to coerce (string/number/bigint) plus the boolean it
+ * silently passed through raw. Everything else storable is either a scheme value, a
+ * sanctioned carve-out (fn/Error — see {@link bindValue}), or a structural runtime
+ * type (Macro/Syntax/Environment/RegExp/EOF) — none of which are "raw JS crossed
+ * unboxed."
+ */
+function isRawJsScalar(value: unknown): value is string | number | bigint | boolean {
+  const t = typeof value;
+  return t === "string" || t === "number" || t === "bigint" || t === "boolean";
+}
+
+/**
+ * INVARIANT DOOR (P5-style — teach, don't ban): a raw JS scalar surfacing from
+ * environment storage means some writer bypassed the storage membrane. Values enter
+ * the interpreter ONLY as capabilities or overrides (hermetic-Environment ruling);
+ * inside the membrane every binding is a boxed scheme value. Fires on the READ so the
+ * message can name the binding — the fix is always at the WRITER.
+ */
+function assertNotRawInStorage(value: unknown, name: string | symbol, where: string): void {
+  invariant(
+    !isRawJsScalar(value),
+    () =>
+      `\`${String(name)}\` resolved to a raw JS ${typeof value} in ${where} — a writer bypassed the ` +
+      `storage membrane. Environment storage is inside the membrane: values enter the interpreter ` +
+      `only as capabilities (EnvCapability symbols/resolvers) or overrides (exec's \`override\`), ` +
+      `each boxing at its own boundary (jsToScheme/fromJS). Fix the writer, not this read.`,
+  );
+}
+
+/**
+ * The RESOLVER-BOUNDARY door — same predicate, resolver-shaped teaching: a fallback
+ * resolver ({@link ResolverSpec}) answers lookups the env did not bind, and its
+ * contract is to hand back a BOXED scheme value (minted under the resolving read's
+ * `ctx` when one is threaded, run-neutrally when it declares `pure`) or a membrane
+ * primitive — never a raw JS scalar for the evaluator to consume contract-free.
+ * Shared by the live walk ({@link ResolvingEnvironment}) and the sealed chain
+ * (eval/CompiledResolutionChain.ts).
+ */
+export function assertResolvedBinding(value: unknown, name: string | symbol, resolverId: string): void {
+  invariant(
+    !isRawJsScalar(value),
+    () =>
+      `resolver "${resolverId}" answered \`${String(name)}\` with a raw JS ${typeof value} — a resolver ` +
+      `boxes at its own boundary (jsToScheme under the read's ctx; a \`pure\` resolver mints ` +
+      `run-neutrally, since its hits are memoized across runs). Raw JS never enters resolution.`,
+  );
+}
+
+/**
+ * The ONE storage write — module-internal, deliberately NOT barrel-exported and NOT a
+ * method (the hermetic-Environment ruling: "not designed to be operatable from the JS
+ * side at all; from JS, it's fully monadic"). The public `Environment.set` method and
+ * the `SchemeEnv.set` contract member are hard-deleted (same cut shape as
+ * `defineRosetta`, commit 9a1a533779); the writers that legitimately remain are all
+ * inside the membrane:
+ *
+ *   • the EVALUATOR's frame binds — scheme `define`/let/lambda/letrec/catch, via
+ *     `Resolver.define`/`LexicalScope.define`;
+ *   • CAPABILITY assembly — `common/capability.ts`'s apply (every symbol kind) and
+ *     `common/symbols/define-bake.ts`'s Pass-2 binds;
+ *   • {@link bindRosetta} below (the retired-`defineRosetta` wiring);
+ *   • the REPLAY playback frame (provenance/replay.ts, via bindRosetta).
+ *
+ * CARVE-OUTS, with their live consumers named:
+ *   • `function` — {@link bindRosetta}'s wrapper storage (`createRosettaWrapper`'s
+ *     output is a bare scheme-calling-convention fn) and the legacy SymbolDeclaration
+ *     arm's activation-bound fns (capability.ts). Quarantined legacy: new callable
+ *     kinds bind first-class ANativeProcedures instead.
+ *   • `Error` — the evaluator's catch-frame bind of a raised condition object
+ *     (evaluator.ts `catchResolver.define(varName, errorValue)`): R7RSError extends
+ *     the host `Error`, NOT AValue, so `isSchemeValue` misses it — verified reachable
+ *     via any `(guard (e ...) (raise (error ...)))` round-trip.
+ *   • the `fromJS` tail — BAKE-TIME boxing for the raw-value authoring arms
+ *     (capability.ts's `{ value }` defs, `require`-resolved leaves). Pre-run by
+ *     construction (assembly happens before any run exists), so the run-neutral mint
+ *     inside `fromJS` is the doc-blessed bootstrap case, not a ctx drop.
+ */
+export function bindValue(env: Environment, name: BindingName, value: EnvironmentValue): void {
+  let storedValue: EnvironmentValue;
+
+  if (isSchemeValue(value)) {
+    storedValue = value;
+  } else if (typeof value === "function" || value instanceof Error) {
+    // The two carve-outs (see the doc above) — stored verbatim, never fromJS-wrapped.
+    storedValue = value;
+  } else {
+    storedValue = fromJS(value) as EnvironmentValue;
+  }
+
+  let key: string | symbol;
+  if (name instanceof ASymbol) {
+    key = name.__name__;
+  } else if (name instanceof AString) {
+    key = name.valueOf();
+  } else {
+    key = name;
+  }
+  env.__env__[key as string] = storedValue;
 }
 
 /**
@@ -278,19 +346,23 @@ export class ResolvingEnvironment extends Environment implements SchemeEnv {
    * BOTH win over the parent (a closer module shadows a deeper dependency). A resolver
    * returns `undefined` to mean "not mine, keep looking" — never a found nil.
    */
-  override _lookupWithResolvers(name: string | symbol): EnvironmentValue | undefined {
+  override _lookupWithResolvers(name: string | symbol, ctx?: RunContext): EnvironmentValue | undefined {
     if (Object.hasOwn(this.__env__, name as string)) {
       return this.__env__[name as string];
     }
 
     for (const resolver of this.__resolvers__) {
-      const result = resolver.resolve(String(name));
+      const result = resolver.resolve(String(name), ctx);
       if (result !== undefined) {
+        // Boxed-at-the-resolver's-boundary contract (hermetic-Environment ruling):
+        // a raw-scalar answer doors here, at the probe, so BOTH read faces (this live
+        // walk and the sealed chain) refuse before raw JS reaches the evaluator.
+        assertResolvedBinding(result, name, resolver.id);
         return result as EnvironmentValue;
       }
     }
 
-    return this.__parent__?._lookupWithResolvers(name);
+    return this.__parent__?._lookupWithResolvers(name, ctx);
   }
 
   /** Covariant override: a `ResolvingEnvironment`'s child stays resolver-capable (e.g. the
@@ -313,27 +385,20 @@ export class ResolvingEnvironment extends Environment implements SchemeEnv {
  * a new call site is a regression onto the retired public API
  * (env-capability-authoring skill's migration recipes are the way in).
  *
- * `env` is typed to the minimal structural need (`.set`), not `Environment`: capability.ts's
- * caller is `SchemeEnv`-typed (tests supply bare mocks with no `registerResolver`-free
- * plain `Environment` either) and replay.ts's is a plain internal `Environment` frame
- * (no `registerResolver`) — neither is assignable to the other, so this widens to their
- * true common shape instead of casting either one. The `rosettaTypesOf` type-lens side
- * effect only fires when `env` is genuinely an `Environment` instance (an `instanceof`
- * guard, never a cast) — exactly the set of callers the retired method's own body ever
- * ran against: a bare test mock never went through `Environment.prototype.defineRosetta`
- * to begin with, so it never touched the side table either.
+ * `env` is a real `Environment` now (the hermetic cut): with `SchemeEnv.set` gone,
+ * capability.ts's apply narrows its structural env to the concrete class at the top
+ * (an instanceof DOOR, never a cast) before any bind fires, and replay.ts's playback
+ * frame always was one — so the old widest-common-shape `{ set }` parameter has no
+ * remaining non-Environment caller. The wrapper is stored through {@link bindValue}
+ * (its `function` carve-out — this is the carve-out's named consumer).
  */
-export function bindRosetta(
-  env: { set(name: string, value: unknown): unknown },
-  name: string,
-  config: RosettaFunction,
-): void {
+export function bindRosetta(env: Environment, name: string, config: RosettaFunction): void {
   const wrapper = createRosettaWrapper(config);
-  env.set(name, wrapper);
+  bindValue(env, name, wrapper);
   // `config.pure` is consumed INSIDE createRosettaWrapper (the runtime mint gate,
   // `mintsPoint = pure !== true`) — no static side-table records it any more; the
   // static classifier reads the declared `.provenanceRole` off baked bound values
   // instead (values/lineage-classifier-from-env.ts). Legacy-registered names
   // carry no role and fall to the classifier's `undefined` default.
-  if (config.type !== undefined && env instanceof Environment) rosettaTypesOf(env).set(name, config.type);
+  if (config.type !== undefined) rosettaTypesOf(env).set(name, config.type);
 }

@@ -20,6 +20,8 @@ import { AString } from "../values/primitives/AString.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { requireEagerOracle } from "./_require-eager-oracle.js";
+// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
+import { bindValue } from "../Environment.js";
 
 // Q20b: string-contains's provenance assertions run real programs — force the
 // oracle ON for this file's lifetime.
@@ -44,7 +46,7 @@ describe("string-contains? — boolean predicate", () => {
   it("carries the provenance of the searched string (grounded decision)", async () => {
     await initBridge();
     const env = inferenceEnv.inherit("string-contains-pred-prov");
-    env.set("name", stamped("Alloy.exe", 7));
+    bindValue(env, "name", stamped("Alloy.exe", 7));
     // execState (COMPLEX tier): asserts box discipline directly (RULINGS.md R1).
     const [r] = (await execState('(string-contains? name "Alloy")', { env })).values;
     expect(r).toBeInstanceOf(AValue);

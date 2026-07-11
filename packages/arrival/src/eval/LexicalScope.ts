@@ -1,6 +1,7 @@
 import { CLASS } from "../well-known-symbols.js";
-import { Environment, ResolvingEnvironment } from "../Environment.js";
+import { bindValue, Environment, ResolvingEnvironment } from "../Environment.js";
 import type { BindingName, EnvironmentValue } from "../Environment.js";
+import type { RunContext } from "../values/primitives/RunContext.js";
 
 /**
  * The LEXICAL binding chain — let/lambda/letrec/do/catch frames, the names a
@@ -105,8 +106,8 @@ export class LexicalScope<E extends Environment = Environment> {
    * Currently the env is still base-linked, so this walks through to the base too;
    * the Resolver's `?? capabilities.lookup` is then never reached on a hit.
    */
-  lookup(name: string | symbol): EnvironmentValue | undefined {
-    return this.env._lookupWithResolvers(name);
+  lookup(name: string | symbol, ctx?: RunContext): EnvironmentValue | undefined {
+    return this.env._lookupWithResolvers(name, ctx);
   }
 
   /** This frame's OWN symbol-keyed bindings as [symbol, value] pairs. ≡ `getOwnPropertySymbols(env.__env__)` + reads. */
@@ -115,9 +116,12 @@ export class LexicalScope<E extends Environment = Environment> {
     return Object.getOwnPropertySymbols(env).map((s) => [s, env[s]] as [symbol, EnvironmentValue]);
   }
 
-  /** Bind a name in THIS frame. ≡ `env.set` (same value-processing). */
+  /** Bind a name in THIS frame — the EVALUATOR's frame-bind (let/lambda/letrec/define/
+   *  catch land here), routed through the module-internal storage write (`bindValue`,
+   *  Environment.ts). Inside the membrane by definition: the values arriving here are
+   *  evaluation results, already boxed. */
   define(name: BindingName, value: EnvironmentValue): void {
-    this.env.set(name, value);
+    bindValue(this.env, name, value);
   }
 
   toString(): string {

@@ -14,7 +14,7 @@ import unicodeProperties from "unicode-properties";
 import invariant from "tiny-invariant";
 
 import * as z from "../../common/scheme-zod.js";
-import { symbol } from "../../common/symbol.js";
+import { symbol, type CallCtx } from "../../common/symbol.js";
 import { charValue, coerceNumeric, deriveOrd, schemeBool as bool, schemeFalse, schemeTrue } from "../../values/op-helpers.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
 import { AExact } from "../../values/primitives/AExact.js";
@@ -27,7 +27,7 @@ export default new EnvCapability("scheme/chars", {
 
     "char=?": symbol.native`char=?: typed equivalence over characters`(
       { input: [], inputRest: z.char, output: [z.boolean] },
-      (...chars) => {
+      function (this: CallCtx, ...chars) {
         if (chars.length < 2) return schemeTrue;
         const first = charValue(chars[0]);
         return bool(chars.slice(1).every((c) => charValue(c) === first));
@@ -56,7 +56,7 @@ export default new EnvCapability("scheme/chars", {
     // Case-insensitive comparisons
     "char-ci=?": symbol.native`char-ci=?: case-insensitive character equivalence`(
       { input: [], inputRest: z.char, output: [z.boolean] },
-      (...chars) => {
+      function (this: CallCtx, ...chars) {
         if (chars.length < 2) return schemeTrue;
         const first = charValue(chars[0]).toLowerCase();
         return bool(chars.slice(1).every((c) => charValue(c).toLowerCase() === first));
@@ -65,7 +65,7 @@ export default new EnvCapability("scheme/chars", {
 
     "char-ci<?": symbol.native`char-ci<?: case-insensitive strictly-increasing order`(
       { input: [], inputRest: z.char, output: [z.boolean] },
-      (...chars) => {
+      function (this: CallCtx, ...chars) {
         for (let i = 0; i < chars.length - 1; i++) {
           if (charValue(chars[i]).toLowerCase() >= charValue(chars[i + 1]).toLowerCase()) return schemeFalse;
         }
@@ -75,7 +75,7 @@ export default new EnvCapability("scheme/chars", {
 
     "char-ci>?": symbol.native`char-ci>?: case-insensitive strictly-decreasing order`(
       { input: [], inputRest: z.char, output: [z.boolean] },
-      (...chars) => {
+      function (this: CallCtx, ...chars) {
         for (let i = 0; i < chars.length - 1; i++) {
           if (charValue(chars[i]).toLowerCase() <= charValue(chars[i + 1]).toLowerCase()) return schemeFalse;
         }
@@ -85,7 +85,7 @@ export default new EnvCapability("scheme/chars", {
 
     "char-ci<=?": symbol.native`char-ci<=?: case-insensitive non-decreasing order`(
       { input: [], inputRest: z.char, output: [z.boolean] },
-      (...chars) => {
+      function (this: CallCtx, ...chars) {
         for (let i = 0; i < chars.length - 1; i++) {
           if (charValue(chars[i]).toLowerCase() > charValue(chars[i + 1]).toLowerCase()) return schemeFalse;
         }
@@ -95,7 +95,7 @@ export default new EnvCapability("scheme/chars", {
 
     "char-ci>=?": symbol.native`char-ci>=?: case-insensitive non-increasing order`(
       { input: [], inputRest: z.char, output: [z.boolean] },
-      (...chars) => {
+      function (this: CallCtx, ...chars) {
         for (let i = 0; i < chars.length - 1; i++) {
           if (charValue(chars[i]).toLowerCase() < charValue(chars[i + 1]).toLowerCase()) return schemeFalse;
         }
@@ -112,7 +112,7 @@ export default new EnvCapability("scheme/chars", {
     // truth.
     "char-alphabetic?": symbol.native`char-alphabetic?: #t iff the character is a letter`(
       { input: [z.char], output: [z.boolean] },
-      (char) => {
+      function (this: CallCtx, char) {
         const cp = charValue(char).codePointAt(0)!;
         // Letter categories: Lu (upper), Ll (lower), Lt (title), Lm (modifier), Lo (other).
         switch (unicodeProperties.getCategory(cp)) {
@@ -130,7 +130,7 @@ export default new EnvCapability("scheme/chars", {
 
     "char-numeric?": symbol.native`char-numeric?: #t iff the character is a numeric digit`(
       { input: [z.char], output: [z.boolean] },
-      (char) => {
+      function (this: CallCtx, char) {
         const cp = charValue(char).codePointAt(0)!;
         // Number categories: Nd (decimal digit), Nl (letter number), No (other).
         // The previous `isDigit` only matched Nd — CJK numerals (Nl) and Roman
@@ -148,7 +148,7 @@ export default new EnvCapability("scheme/chars", {
 
     "char-whitespace?": symbol.native`char-whitespace?: #t iff the character is whitespace`(
       { input: [z.char], output: [z.boolean] },
-      (char) => {
+      function (this: CallCtx, char) {
         // JS \s ≈ Unicode White_Space property — covers ASCII tab/LF/CR/space
         // plus the Z* categories (Zs/Zl/Zp) plus a few format chars. Closer to
         // R7RS than getCategory alone (which would miss tab/LF as Cc).
@@ -158,7 +158,7 @@ export default new EnvCapability("scheme/chars", {
 
     "char-upper-case?": symbol.native`char-upper-case?: #t iff the character is uppercase`(
       { input: [z.char], output: [z.boolean] },
-      (char) => {
+      function (this: CallCtx, char) {
         const cp = charValue(char).codePointAt(0)!;
         return bool(unicodeProperties.getCategory(cp) === "Lu");
       },
@@ -166,7 +166,7 @@ export default new EnvCapability("scheme/chars", {
 
     "char-lower-case?": symbol.native`char-lower-case?: #t iff the character is lowercase`(
       { input: [z.char], output: [z.boolean] },
-      (char) => {
+      function (this: CallCtx, char) {
         const cp = charValue(char).codePointAt(0)!;
         return bool(unicodeProperties.getCategory(cp) === "Ll");
       },
@@ -174,7 +174,7 @@ export default new EnvCapability("scheme/chars", {
 
     "digit-value": symbol.native`digit-value: numeric value of a digit character, or #f`(
       { input: [z.char], output: [z.union([z.number, z.boolean])] },
-      (char) => {
+      function (this: CallCtx, char) {
         const c = charValue(char);
         const codePoint = c.codePointAt(0)!;
         if (!unicodeProperties.isDigit(codePoint)) return schemeFalse;
@@ -191,17 +191,17 @@ export default new EnvCapability("scheme/chars", {
     // Case conversion
     "char-upcase": symbol.native`char-upcase: uppercase form of the character`(
       { input: [z.char], output: [z.char] },
-      (char) => new ACharacter(CONSTANT_CTX, charValue(char).toUpperCase()),
+      function (this: CallCtx, char) { return new ACharacter(CONSTANT_CTX, charValue(char).toUpperCase()); },
     ),
 
     "char-downcase": symbol.native`char-downcase: lowercase form of the character`(
       { input: [z.char], output: [z.char] },
-      (char) => new ACharacter(CONSTANT_CTX, charValue(char).toLowerCase()),
+      function (this: CallCtx, char) { return new ACharacter(CONSTANT_CTX, charValue(char).toLowerCase()); },
     ),
 
     "char-foldcase": symbol.native`char-foldcase: case-folded form of the character`(
       { input: [z.char], output: [z.char] },
-      (char) => {
+      function (this: CallCtx, char) {
         const c = charValue(char);
         const folded = foldCase(c);
         // R7RS § 6.6: char-foldcase returns a character (single Unicode scalar).
@@ -220,7 +220,7 @@ export default new EnvCapability("scheme/chars", {
     // `codePointAt(0)` reads a full surrogate pair when present.
     "char->integer": symbol.native`char->integer: Unicode scalar value of the character`(
       { input: [z.char], output: [z.bigint] },
-      (char) => {
+      function (this: CallCtx, char) {
         return new AExact(CONSTANT_CTX, BigInt(charValue(char).codePointAt(0)!));
       },
     ),
@@ -232,7 +232,7 @@ export default new EnvCapability("scheme/chars", {
     // are NOT Unicode scalars per the standard; reject explicitly.
     "integer->char": symbol.native`integer->char: character for a Unicode scalar value`(
       { input: [z.schemeNumber], output: [z.char] },
-      (n) => {
+      function (this: CallCtx, n) {
         const num = coerceNumeric(n);
         const code = num instanceof AExact ? Number(num.num) : Math.floor(num.real);
         invariant(code >= 0 && code <= 0x10_ff_ff, `integer->char: code point ${code} out of Unicode range`);

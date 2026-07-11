@@ -64,6 +64,8 @@ import { execState } from "../eval/generator-exec.js";
 import { freshEnv } from "./_fresh-env.js";
 import { nil } from "../values/primitives/ANil.js";
 import type { ExecOptions } from "../eval/generator-exec.js";
+// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
+import { bindValue } from "../Environment.js";
 
 /**
  * Execute Scheme source through the full default-env trampoline and return the
@@ -258,7 +260,7 @@ describe("tail-call optimization (R7RS §3.5)", () => {
       // it just calls a bound function; the count lives in JS, not a mutated binding.
       let ticks = 0;
       const env = await freshEnv();
-      env.set("tick", () => {
+      bindValue(env, "tick", () => {
         ticks += 1;
         return nil;
       });

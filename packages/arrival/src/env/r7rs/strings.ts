@@ -59,7 +59,7 @@ export default new EnvCapability("scheme/strings", {
   symbols: {
     "make-string": symbol.native`make-string: a string of k copies of a fill character`(
       { input: [z.schemeNumber, z.char.optional()], output: [z.string] },
-      (k, char) => {
+      function (this: CallCtx, k, char) {
         const len = Number(coerceNumeric(k).valueOf());
         // O(1) cap check BEFORE `.repeat(len)` allocates — see assertAllocatable.
         assertAllocatable(len, "make-string");
@@ -74,21 +74,20 @@ export default new EnvCapability("scheme/strings", {
     string: symbol.native`string: a string built from the character arguments`(
       { input: [], inputRest: z.char, output: [z.string] },
       // Union of every character argument — same shape as `vector` below.
-      (...chars) => withInputProvenance(chars, new AString(CONSTANT_CTX, chars.map(charValue).join(""))),
+      function (this: CallCtx, ...chars) { return withInputProvenance(chars, new AString(CONSTANT_CTX, chars.map(charValue).join(""))); },
     ),
 
     "string-length": symbol.native`string-length: number of characters in the string`(
       { input: [z.string], output: [z.bigint] },
-      (str) => withInputProvenance([str], new AExact(CONSTANT_CTX, BigInt([...stringValue(str)].length))),
+      function (this: CallCtx, str) { return withInputProvenance([str], new AExact(CONSTANT_CTX, BigInt([...stringValue(str)].length))); },
     ),
 
     "string-ref": symbol.native`string-ref: the character at index k`(
       { input: [z.string, z.schemeNumber], output: [z.char] },
-      (str, k) =>
-        withInputProvenance(
+      function (this: CallCtx, str, k) { return withInputProvenance(
           [str, k],
           new ACharacter(CONSTANT_CTX, [...stringValue(str)][Number(coerceNumeric(k).valueOf())]),
-        ),
+        ); },
     ),
 
     // ── PURITY DOORS — string mutators OMITTED by design (R7RS §6.7) ─────────────
@@ -101,7 +100,7 @@ export default new EnvCapability("scheme/strings", {
     // String comparison
     "string=?": symbol.native`string=?: typed equivalence over strings`(
       { input: [], inputRest: z.string, output: [z.boolean] },
-      (...strs) => {
+      function (this: CallCtx, ...strs) {
         let verdict = true;
         if (strs.length >= 2) {
           const first = stringValue(strs[0]);
@@ -133,7 +132,7 @@ export default new EnvCapability("scheme/strings", {
     // Case-insensitive string comparison
     "string-ci=?": symbol.native`string-ci=?: case-insensitive string equivalence`(
       { input: [], inputRest: z.string, output: [z.boolean] },
-      (...strs) => {
+      function (this: CallCtx, ...strs) {
         let verdict = true;
         if (strs.length >= 2) {
           const first = stringValue(strs[0]).toLowerCase();
@@ -145,7 +144,7 @@ export default new EnvCapability("scheme/strings", {
 
     "string-ci<?": symbol.native`string-ci<?: case-insensitive strictly-increasing order`(
       { input: [], inputRest: z.string, output: [z.boolean] },
-      (...strs) => {
+      function (this: CallCtx, ...strs) {
         let verdict = true;
         for (let i = 0; i < strs.length - 1; i++) {
           if (stringValue(strs[i]).toLowerCase() >= stringValue(strs[i + 1]).toLowerCase()) {
@@ -159,7 +158,7 @@ export default new EnvCapability("scheme/strings", {
 
     "string-ci>?": symbol.native`string-ci>?: case-insensitive strictly-decreasing order`(
       { input: [], inputRest: z.string, output: [z.boolean] },
-      (...strs) => {
+      function (this: CallCtx, ...strs) {
         let verdict = true;
         for (let i = 0; i < strs.length - 1; i++) {
           if (stringValue(strs[i]).toLowerCase() <= stringValue(strs[i + 1]).toLowerCase()) {
@@ -173,7 +172,7 @@ export default new EnvCapability("scheme/strings", {
 
     "string-ci<=?": symbol.native`string-ci<=?: case-insensitive non-decreasing order`(
       { input: [], inputRest: z.string, output: [z.boolean] },
-      (...strs) => {
+      function (this: CallCtx, ...strs) {
         let verdict = true;
         for (let i = 0; i < strs.length - 1; i++) {
           if (stringValue(strs[i]).toLowerCase() > stringValue(strs[i + 1]).toLowerCase()) {
@@ -187,7 +186,7 @@ export default new EnvCapability("scheme/strings", {
 
     "string-ci>=?": symbol.native`string-ci>=?: case-insensitive non-increasing order`(
       { input: [], inputRest: z.string, output: [z.boolean] },
-      (...strs) => {
+      function (this: CallCtx, ...strs) {
         let verdict = true;
         for (let i = 0; i < strs.length - 1; i++) {
           if (stringValue(strs[i]).toLowerCase() < stringValue(strs[i + 1]).toLowerCase()) {
@@ -207,7 +206,7 @@ export default new EnvCapability("scheme/strings", {
     // "this name contains 'Alloy'" decision over an evidence read stays grounded.
     "string-contains": symbol.native`string-contains: index of the first occurrence of sub, or #f`(
       { input: [z.string, z.string], output: [z.union([z.bigint, z.boolean])] },
-      (str, sub) => {
+      function (this: CallCtx, str, sub) {
         const i = stringValue(str).indexOf(stringValue(sub));
         return withInputProvenance([str, sub], i === -1 ? bool(false) : new AExact(CONSTANT_CTX, BigInt(i)));
       },
@@ -215,7 +214,7 @@ export default new EnvCapability("scheme/strings", {
 
     "string-contains?": symbol.native`string-contains?: #t iff str contains sub`(
       { input: [z.string, z.string], output: [z.boolean] },
-      (str, sub) => withInputProvenance([str, sub], bool(stringValue(str).includes(stringValue(sub)))),
+      function (this: CallCtx, str, sub) { return withInputProvenance([str, sub], bool(stringValue(str).includes(stringValue(sub)))); },
     ),
 
     "string-append": symbol.native`string-append: concatenation of all string arguments`(
@@ -224,7 +223,7 @@ export default new EnvCapability("scheme/strings", {
       // nested structure (a list/vector/array of inference-stamped values) is hoisted,
       // not just the top-level AValue args. Without this, `(string-append prefix
       // (join "" parts))` forgets where `parts` came from. See provenance-collapse.ts.
-      (...strs) => taintString(strs.map(stringValue).join(""), collapseProvenance(...strs)),
+      function (this: CallCtx, ...strs) { return taintString(strs.map(stringValue).join(""), collapseProvenance(...strs)); },
     ),
 
     "string->list": symbol.native`string->list: list of the string's characters`(
@@ -232,7 +231,7 @@ export default new EnvCapability("scheme/strings", {
         input: [z.string, z.schemeNumber.optional(), z.schemeNumber.optional()],
         output: [z.union([z.pair, z.nil])],
       },
-      (str, start, end) => {
+      function (this: CallCtx, str, start, end) {
         const chars = [...stringValue(str)];
         const startIdx = start === undefined ? 0 : toIndex(start);
         const endIdx = end === undefined ? chars.length : toIndex(end);
@@ -245,7 +244,7 @@ export default new EnvCapability("scheme/strings", {
 
     "list->string": symbol.native`list->string: string built from a list of characters`(
       { input: [z.union([z.pair, z.nil])], output: [z.string] },
-      (list) => {
+      function (this: CallCtx, list) {
         const chars: string[] = [];
         let current: SchemeValue = list;
         while (current && current !== nil && current instanceof APair) {
@@ -258,7 +257,7 @@ export default new EnvCapability("scheme/strings", {
 
     "string-copy": symbol.native`string-copy: a fresh copy of the string (or slice)`(
       { input: [z.string, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.string] },
-      (str, start, end) => {
+      function (this: CallCtx, str, start, end) {
         const chars = [...stringValue(str)];
         const startIdx = start === undefined ? 0 : toIndex(start);
         const endIdx = end === undefined ? chars.length : toIndex(end);
@@ -277,17 +276,17 @@ export default new EnvCapability("scheme/strings", {
     // result still traces to the original infer/query call.
     "string-upcase": symbol.native`string-upcase: uppercase form of the string`(
       { input: [z.string], output: [z.string] },
-      (str) => withInputProvenance([str], new AString(CONSTANT_CTX, stringValue(str).toUpperCase())),
+      function (this: CallCtx, str) { return withInputProvenance([str], new AString(CONSTANT_CTX, stringValue(str).toUpperCase())); },
     ),
 
     "string-downcase": symbol.native`string-downcase: lowercase form of the string`(
       { input: [z.string], output: [z.string] },
-      (str) => withInputProvenance([str], new AString(CONSTANT_CTX, stringValue(str).toLowerCase())),
+      function (this: CallCtx, str) { return withInputProvenance([str], new AString(CONSTANT_CTX, stringValue(str).toLowerCase())); },
     ),
 
     "string-foldcase": symbol.native`string-foldcase: case-folded form of the string`(
       { input: [z.string], output: [z.string] },
-      (str) => withInputProvenance([str], new AString(CONSTANT_CTX, foldCase(stringValue(str)))),
+      function (this: CallCtx, str) { return withInputProvenance([str], new AString(CONSTANT_CTX, foldCase(stringValue(str)))); },
     ),
 
     // proc is the fixed HEAD; the spread strings are the variadic TAIL (inputRest) — mirrors
@@ -371,7 +370,7 @@ export default new EnvCapability("scheme/strings", {
     // ---------------------------------------------------------------------
     substring: symbol.native`substring: the slice of the string between start and end`(
       { input: [z.string, z.schemeNumber, z.schemeNumber.optional()], output: [z.string] },
-      (string, start, end) => {
+      function (this: CallCtx, string, start, end) {
         // `string` is an AString (grafted String.prototype), the indices AExact/AInexact —
         // unwrap to the JS string + numeric indices the slice operates on. `substring(s,
         // undefined)` means "to the end", so a missing `end` stays undefined.
@@ -387,12 +386,12 @@ export default new EnvCapability("scheme/strings", {
 
     concat: symbol.rosetta`concat: the concatenation of all string arguments (LIPS extension)`(
       { input: [z.string], inputRest: z.string, output: [z.string] },
-      (...args) => args.join(""),
+      function (this: CallCtx, ...args) { return args.join(""); },
     ),
 
     join: symbol.native`join: the list elements folded to one string with a separator (LIPS extension)`(
       { input: [z.string, z.union([z.pair, z.nil])], output: [z.union([z.string, z.string])] },
-      (separator: SchemeValue, list: SchemeValue): AString => {
+      function (this: CallCtx, separator: SchemeValue, list: SchemeValue): AString {
         // Collapsing op: fold the list to one string, then re-stamp the DEEP union of
         // every element's lineage (+ the separator's) — else `(join sep inferred-list)`
         // strips the provenance the trace wires on. See provenance-collapse.ts.
@@ -403,7 +402,7 @@ export default new EnvCapability("scheme/strings", {
 
     "string->number": symbol.native`string->number: parse the string as a number, or #f (R7RS)`(
       { input: [z.string, z.number.optional()], output: [z.union([z.number, z.boolean])] },
-      (arg, radix) => {
+      function (this: CallCtx, arg, radix) {
         // `arg` is an AString, `radix` an AExact/AInexact (or absent → base 10) — unwrap
         // to the JS string + number the regex tests and parse_* helpers consume.
         const str = stringValue(arg);

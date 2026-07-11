@@ -22,6 +22,8 @@ import { classify, fullCone, type Classifier, type LineageNode } from "../values
 import { provOf } from "../values/lineage-shadow.js";
 import { sStr } from "./_lineage-test-helpers.js";
 import { requireEagerOracle } from "./_require-eager-oracle.js";
+// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
+import { bindValue } from "../Environment.js";
 
 // Q20b: this file's local helpers (`eagerProvSize` et al.) call execState
 // directly — force the oracle ON for the file's lifetime.
@@ -66,9 +68,9 @@ describe("lineage checkpoint — runtime stamping derives the SAME cone (correct
   it("lineage full-cone == the eager interpreter's provenance, for (length (list a b c))", async () => {
     await initBridge();
     const env = inferenceEnv.inherit("lin-correct");
-    env.set("a", sStr("a", 100));
-    env.set("b", sStr("b", 101));
-    env.set("c", sStr("c", 102));
+    bindValue(env, "a", sStr("a", 100));
+    bindValue(env, "b", sStr("b", 101));
+    bindValue(env, "c", sStr("c", 102));
 
     // execState (COMPLEX tier): `provOf` reads BOXED provenance (RULINGS.md R1).
     const [r] = (await execState(`(length (list a b c))`, { env })).values;
@@ -105,7 +107,7 @@ describe("lineage checkpoint — the static skeleton is constant in N (eager ret
     const names: string[] = [];
     for (let i = 0; i < n; i++) {
       const name = `e${i}`;
-      env.set(name, sStr(name, 1000 + i));
+      bindValue(env, name, sStr(name, 1000 + i));
       names.push(name);
     }
     // MINTED (R2's constructor verb): `list` unions all N args' own provenance onto the
@@ -145,7 +147,7 @@ describe("lineage checkpoint — C4 ALREADY achieves O(1) for the UNMINTED fan-o
       Array.from({ length: n }, (_, i) => sStr(`e${i}`, 1000 + i)),
       false,
     );
-    env.set("xs", xs);
+    bindValue(env, "xs", xs);
     const [r] = (await execState(`(length (map (lambda (e) e) xs))`, { env })).values;
     return provOf(r).length;
   }

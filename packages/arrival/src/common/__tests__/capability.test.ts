@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import { EnvCapability } from "../capability.js";
 import { port, type Resource } from "../resources.js";
-import type { SchemeEnv } from "../scheme-env.js";
+import { ResolvingEnvironment } from "../../Environment.js";
 import { schemeToJsUntyped } from "../../rosetta.js";
 import { testCallCtx, type CallCtx } from "../../values/primitives/CallCtx.js";
 
@@ -51,31 +51,18 @@ const net = new EnvCapability("net", {
   },
 });
 
-/** A minimal SchemeEnv that records every `set` binding — the legacy arm's landing door
- *  now that `bindRosetta` (Environment.ts) wires it via `env.set(name, wrapper)` rather
- *  than a per-env-overridable `defineRosetta` method. `verbs[name]` is therefore the REAL
+/** A REAL recording env (hermetic-Environment ruling: capability apply narrows to the
+ *  concrete `Environment` — a synthetic `{ set }` mock can no longer receive bindings).
+ *  `verbs[name]` reads the frame's own storage record and is still the REAL
  *  rosetta-wrapped procedure (`createRosettaWrapper`'s output) — a scheme-calling-convention
  *  async fn expecting a `CallCtx` receiver — not the raw activation-bound `sym.fn`; see
- *  `invoke` below for the calling idiom. The scope-shaping verbs (registerResolver / list /
- *  allBoundNames) are not exercised by these tests, so they throw LOUD rather than silently
- *  mis-record — mirroring `captureSymbols`'s recorder. */
-function recordingEnv(): { env: SchemeEnv; verbs: Record<string, (this: CallCtx, ...a: unknown[]) => unknown> } {
-  const verbs: Record<string, (this: CallCtx, ...a: unknown[]) => unknown> = {};
-  const unrecordable = (verb: string) => new Error(`recordingEnv: ${verb} is not recordable`);
-  const env: SchemeEnv = {
-    set: (name, value) => void (verbs[name] = value as (this: CallCtx, ...a: unknown[]) => unknown),
-    get: () => undefined,
-    inherit: () => env,
-    registerResolver: () => {
-      throw unrecordable("registerResolver");
-    },
-    list: () => {
-      throw unrecordable("list");
-    },
-    allBoundNames: () => {
-      throw unrecordable("allBoundNames");
-    },
-  };
+ *  `invoke` below for the calling idiom. The Proxy keeps this suite's `verbs.describe`
+ *  property-read idiom; the fn-shape cast is the same boundary narrow the old recorder did. */
+function recordingEnv(): { env: ResolvingEnvironment; verbs: Record<string, (this: CallCtx, ...a: unknown[]) => unknown> } {
+  const env = new ResolvingEnvironment("capability-recording", {}, null);
+  const verbs = new Proxy({} as Record<string, (this: CallCtx, ...a: unknown[]) => unknown>, {
+    get: (_t, name) => env.__env__[name as string],
+  });
   return { env, verbs };
 }
 

@@ -177,7 +177,17 @@ function multiListMap(
 // mapImpl's per-arg `isProperList` cycle-check raises "map: argument N is not a
 // list", whereas multiListMap lets listToArray raise its own circular-list error.
 // Unifying the two is a deferred behavior-preserving cleanup.
-function mapImpl(fn: SchemeValue, ...lists: Array<AListAlike>): SchemeValue | Promise<SchemeValue> {
+//
+// `runCtx` is a real, required parameter (not the rest tail) — Wave 0 of the
+// CONSTANT_CTX rework (docs/working-proposals/arrival-constant-ctx-audit-2026-07-11.md
+// §2.1, "fires today"): the sole caller (for-each's impl, below) now threads its own
+// `this.runCtx`, closing the bug where every for-each callback ran under CONSTANT_CTX
+// (`call_function(fn, args, {})`) — no abort signal, no heap meter, forced non-strict.
+function mapImpl(
+  runCtx: RunContext,
+  fn: SchemeValue,
+  lists: readonly AListAlike[],
+): SchemeValue | Promise<SchemeValue> {
   // `typecheck` guarantees callability at runtime but is not a TS guard; re-state it
   // as a type-level assertion so `call_function` sees a shape it can invoke. Callable
   // VALUES (ANativeProcedure — e.g. the kernel-synthesized cxr accessors — /ALambda)
@@ -199,7 +209,7 @@ function mapImpl(fn: SchemeValue, ...lists: Array<AListAlike>): SchemeValue | Pr
   const results: SchemeValue[] = [];
   for (let i = 0; i < length; i++) {
     const args = arrays.map((arr: SchemeValue[]) => arr[i]);
-    results.push(call_function(fn, args, {}));
+    results.push(call_function(fn, args, { runCtx }));
   }
 
   const hasPromises = results.some(is_promise);
@@ -274,9 +284,12 @@ export default new EnvCapability("scheme/lists", {
         // author-asserts fn-first over a list-only rest (`Cons<unknown> | null`) → `void`.
         type: "(fn: (...args: unknown[]) => unknown, ...lists: (Cons<unknown> | null)[]) => void",
       },
-      // Runs mapImpl for its side effects and discards the result list.
-      (fn, ...lists) => {
-        const ret = mapImpl(fn, ...lists);
+      // Runs mapImpl for its side effects and discards the result list. `this: CallCtx`
+      // (not an arrow) — the dispatch-delivered `this.runCtx` is threaded into mapImpl so
+      // every for-each callback observes the run's real signal/meter/strict, not
+      // CONSTANT_CTX (Wave 0, arrival-constant-ctx-audit-2026-07-11.md §2.1).
+      function (this: CallCtx, fn, ...lists) {
+        const ret = mapImpl(this.runCtx, fn, lists);
         // R7RS "unspecified" is theVoid on the scheme face (Face split; the bare JS
         // undefined return relied on downstream boxing).
         if (is_promise(ret)) {
@@ -292,7 +305,7 @@ export default new EnvCapability("scheme/lists", {
       { input: [z.value, z.value], output: [z.pair] },
       // A constructor: unions both inputs' provenance over the produced cell
       // (parallel to make-list / list, which stamp only the produced Pair).
-      (car, cdr) => withInputProvenance([car, cdr], new APair(CONSTANT_CTX, car as SchemeValue, cdr as SchemeValue)),
+      function (this: CallCtx, car, cdr) { return withInputProvenance([car, cdr], new APair(CONSTANT_CTX, car as SchemeValue, cdr as SchemeValue)); },
     ),
 
     // R7RS 6.4 — `list` builds a proper list of its arguments. A constructor, so —
@@ -300,7 +313,7 @@ export default new EnvCapability("scheme/lists", {
     // head only.
     list: symbol.native`list: a proper list of its arguments`(
       { input: z.array(z.value), output: [z.value] },
-      (...args: SchemeValue[]): SchemeValue => {
+      function (this: CallCtx, ...args: SchemeValue[]): SchemeValue {
         const result = args.reduceRight((list, item) => new APair(CONSTANT_CTX, item, list), nil);
         return withInputProvenance(args, result);
       },
@@ -354,7 +367,7 @@ export default new EnvCapability("scheme/lists", {
       // list-ref (which extracts a single element), so pair|nil is the honest, runtime-
       // testable ceiling (see lists-contract-precision.test.ts).
       { input: [z.schemeNumber, z.value.optional()], output: [z.union([z.pair, z.nil])] },
-      (k: unknown, fill?: unknown): AListAlike => {
+      function (this: CallCtx, k: unknown, fill?: unknown): AListAlike {
         const count = typeof k === "number" ? k : (k as { valueOf(): number }).valueOf();
         // The default fill is #f — the flyweight ABool (Face split), not a raw JS false.
         const value: SchemeValue = fill === undefined ? schemeFalse : (fill as SchemeValue);
@@ -389,7 +402,7 @@ export default new EnvCapability("scheme/lists", {
       // Output is z.value: the element at an index is any scheme value (e.g.
       // (list-ref '(1 2 3) 0) => 1, a bare number, not a list), not a pair|nil union.
       { input: [z.union([z.pair, z.nil]), z.schemeNumber], output: [z.value] },
-      (list, k) => {
+      function (this: CallCtx, list, k) {
         const count = k.valueOf();
         let current: SchemeValue = list;
         for (let i = 0; i < count; i++) {
@@ -410,7 +423,7 @@ export default new EnvCapability("scheme/lists", {
       // Output is z.value: like list-tail, list-copy explicitly tolerates an IMPROPER
       // list (the !(lst instanceof APair) branch below returns the dangling tail as-is).
       { input: [z.union([z.pair, z.nil])], output: [z.value] },
-      (list) => {
+      function (this: CallCtx, list) {
         // === nil would miss Nil CLONES (singletons minted via withProvenance by the
         // evaluator's control-flow provenance pass): a clone would bypass this guard,
         // fall to the improper-list branch below, and alias the input by reference —
@@ -442,7 +455,7 @@ export default new EnvCapability("scheme/lists", {
       // obj stays z.value BY DESIGN: eq?'s raw === identity compare is the canonical
       // representation-blind case — not imprecision to fix.
       { input: [z.value], inputRest: z.pair, output: [z.union([z.pair, z.booleanFalse])] },
-      (obj, list) => {
+      function (this: CallCtx, obj, list) {
         let current: unknown = list;
         TypeError.invariant(!isCircularList(list), "memq: circular list");
         while (current instanceof APair) {
@@ -458,7 +471,7 @@ export default new EnvCapability("scheme/lists", {
       // `eqv` compares Scheme values, so the search key is `z.value` — the same
       // schema memq declares, there read representation-blind for its `===` identity test.
       { input: [z.value, z.union([z.pair, z.nil])], output: [z.union([z.value, z.booleanFalse])] },
-      (obj, list) => {
+      function (this: CallCtx, obj, list) {
         let current: unknown = list;
         // `list` decodes to the honest `AListAlike` (ANil | APair) — isCircularList only
         // accepts a Pair (an ANil head can never be circular), so the ANil arm short-circuits
@@ -475,7 +488,7 @@ export default new EnvCapability("scheme/lists", {
     assq: symbol.native`assq: first alist entry whose car is eq? to obj, else #f`(
       // obj stays z.value BY DESIGN — same eq? reasoning as memq above.
       { input: [z.value, z.union([z.pair, z.nil])], output: [z.union([z.value, z.booleanFalse])] },
-      (obj, alist) => {
+      function (this: CallCtx, obj, alist) {
         let current: unknown = alist;
         // Same ANil-short-circuit reasoning as memv above — isCircularList needs a Pair.
         TypeError.invariant(!(alist instanceof APair && isCircularList(alist)), "assq: circular list");
@@ -491,7 +504,7 @@ export default new EnvCapability("scheme/lists", {
     assv: symbol.native`assv: first alist entry whose car is eqv? to obj, else #f`(
       // `eqv` compares Scheme values → the search key is `z.value` (cf. assq's `===`).
       { input: [z.value, z.union([z.pair, z.nil])], output: [z.union([z.value, z.booleanFalse])] },
-      (obj, alist) => {
+      function (this: CallCtx, obj, alist) {
         let current: unknown = alist;
         // Same ANil-short-circuit reasoning as memv above — isCircularList needs a Pair.
         TypeError.invariant(!(alist instanceof APair && isCircularList(alist)), "assv: circular list");
@@ -523,7 +536,11 @@ export default new EnvCapability("scheme/lists", {
         // despite input position 2.
         callbackRoles: ["control"],
       },
-      (obj, list, compare = defaultCompare) => {
+      // `this: CallCtx` (not an arrow) — Wave 0 of the CONSTANT_CTX rework
+      // (arrival-constant-ctx-audit-2026-07-11.md §2.1): the dispatch-delivered
+      // `this.runCtx` is threaded to `call_function` so a user-supplied `compare`
+      // observes the run's real signal/meter/strict.
+      function (this: CallCtx, obj, list, compare = defaultCompare) {
         let current: unknown = list;
         // Same ANil-short-circuit reasoning as memv above — isCircularList needs a Pair.
         TypeError.invariant(!(list instanceof APair && isCircularList(list)), "member: circular list");
@@ -533,7 +550,7 @@ export default new EnvCapability("scheme/lists", {
           // chokepoint mapImpl/multiListMap use above), not a raw JS call (which throws
           // "compare is not a function" on any boxed scheme procedure). Its result may be a
           // boxed SchemeBool post-L1 (a truthy JS object); route through is_false.
-          if (!is_false(call_function(compare, [obj, current.car], {}))) return current;
+          if (!is_false(call_function(compare, [obj, current.car], { runCtx: this.runCtx }))) return current;
           current = current.cdr;
         }
         return schemeFalse;
@@ -553,7 +570,8 @@ export default new EnvCapability("scheme/lists", {
         // compare is the same equality selector.
         callbackRoles: ["control"],
       },
-      (obj, alist, compare = defaultCompare) => {
+      // `this: CallCtx` (not an arrow) — same threading as `member` above.
+      function (this: CallCtx, obj, alist, compare = defaultCompare) {
         let current: unknown = alist;
         // Same ANil-short-circuit reasoning as memv above — isCircularList needs a Pair.
         TypeError.invariant(!(alist instanceof APair && isCircularList(alist)), "assoc: circular list");
@@ -562,7 +580,7 @@ export default new EnvCapability("scheme/lists", {
           // Same seam-routing as member above — `compare` is a callable VALUE when
           // user-supplied, invoked via `call_function`, not a raw JS call. Its result may
           // be a boxed SchemeBool post-L1 (a truthy JS object) → route through is_false.
-          if (pair instanceof APair && !is_false(call_function(compare, [obj, pair.car], {}))) return pair;
+          if (pair instanceof APair && !is_false(call_function(compare, [obj, pair.car], { runCtx: this.runCtx }))) return pair;
           current = current.cdr;
         }
         return schemeFalse;
@@ -571,7 +589,7 @@ export default new EnvCapability("scheme/lists", {
 
     append: symbol.native`append: a fresh list splicing all argument lists (R7RS, last arg may be improper)`(
       { input: z.array(z.value), output: [z.value] },
-      (...items: SchemeValue[]): SchemeValue => {
+      function (this: CallCtx, ...items: SchemeValue[]): SchemeValue {
         // `append` builds a FRESH list (pure): it clones every segment first, then splices
         // the CLONES together. Because every cell touched is a clone, no caller-visible
         // value is mutated — the result is the only new thing (`append!`, the destructive
@@ -616,7 +634,7 @@ export default new EnvCapability("scheme/lists", {
       // so z.union([z.nil, z.pair]) is the honest input domain, not a representation-blind
       // z.value; a bare array throws (the impl's own final `else` branch).
       { input: [z.union([z.nil, z.pair])], output: [z.value] },
-      (arg) => {
+      function (this: CallCtx, arg) {
         if (arg instanceof ANil) {
           return nil;
         }
@@ -638,7 +656,7 @@ export default new EnvCapability("scheme/lists", {
       // array branch, so a pair|nil narrowing would be dishonest here (it would
       // silently exclude that real array path).
       { input: [z.schemeNumber, z.value], output: [z.value], type: "<T>(index: number, list: T[]): T | null" },
-      (index, obj) => {
+      function (this: CallCtx, index, obj) {
         // `index` is a Scheme/JS number; coerce the count to a primitive (a boxed
         // AExact resolves through valueOf), exactly as the bare `count < index` did.
         const idx = Number(index);

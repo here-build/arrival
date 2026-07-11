@@ -21,6 +21,8 @@ import { inferenceEnv } from "../inference-env.js";
 import { AString } from "../values/primitives/AString.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { requireEagerOracle } from "./_require-eager-oracle.js";
+// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
+import { bindValue } from "../Environment.js";
 
 // Q20b: SRFI-13's provenance assertions run real programs — force the oracle ON
 // for this file's lifetime.
@@ -36,7 +38,7 @@ let seq = 0;
 async function run(src: string, bindings: Record<string, AString> = {}): Promise<unknown> {
   await initBridge();
   const env = inferenceEnv.inherit(`srfi-13-${seq++}`);
-  for (const [k, v] of Object.entries(bindings)) env.set(k, v);
+  for (const [k, v] of Object.entries(bindings)) bindValue(env, k, v);
   const [r] = await exec(src, { env });
   return r;
 }
@@ -46,7 +48,7 @@ async function run(src: string, bindings: Record<string, AString> = {}): Promise
 async function runBoxed(src: string, bindings: Record<string, AString> = {}): Promise<unknown> {
   await initBridge();
   const env = inferenceEnv.inherit(`srfi-13-${seq++}`);
-  for (const [k, v] of Object.entries(bindings)) env.set(k, v);
+  for (const [k, v] of Object.entries(bindings)) bindValue(env, k, v);
   const [r] = (await execState(src, { env })).values;
   return r;
 }

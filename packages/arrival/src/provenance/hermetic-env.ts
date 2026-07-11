@@ -40,7 +40,7 @@
  */
 import invariant from "tiny-invariant";
 
-import { Environment, type EnvironmentValue, type ResolvingEnvironment } from "../Environment.js";
+import { bindValue, Environment, type EnvironmentValue, type ResolvingEnvironment } from "../Environment.js";
 import { user_env } from "../env-roots.js";
 import { assembleEnv, type EnvPack } from "../common/kernel.js";
 import { schemePacks, type EvalSchemeInto, type SchemeEnv } from "../common/scheme-env.js";
@@ -92,6 +92,6 @@ export async function hermeticEnv(
   // sealing here just compiles the now-complete chain; no separate hash hook needed.
   sealResolutionChain(base);
   const frame = base.inherit("provenance-ingress");
-  for (const [name, value] of Object.entries(ingress)) frame.set(name, value);
+  for (const [name, value] of Object.entries(ingress)) bindValue(frame, name, value);
   return frame;
 }

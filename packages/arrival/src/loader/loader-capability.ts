@@ -59,6 +59,7 @@ import { nil } from "../values/primitives/ANil.js";
 import { theVoid } from "../values/primitives/AVoid.js";
 import invariant from "tiny-invariant";
 
+import { bindValue, Environment, type EnvironmentValue } from "../Environment.js";
 import { lookupExtensionResolver, registerExtension } from "./loader-extensions.js";
 import {
   type ContentResolver,
@@ -237,7 +238,7 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
       // later-applied capability's prelude, unbound everywhere at runtime.
       "require/register-extension": symbol.native`require/register-extension: registers a file extension resolver used by require (assembly time only)`(
         { input: [z.value, z.value], output: [z.value], preludeOnly: true },
-        (suffix, resolverName) => {
+        function (this: CallCtx, suffix, resolverName) {
           registerExtension(suffix, resolverName);
           return nil; // effect verb — unspecified-as-nil, never a raw JS `undefined`/`null`
         },
@@ -333,7 +334,11 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
               // registry's own contract IS that its resolver returns a ResolverResult shape (an
               // authoring convention, not something the type system can see through applyCallback's
               // generic seam) — bridge through `unknown` at this one boundary.
-              result = (await applyCallback(registered, [contents, { path }])) as unknown as ResolverResult;
+              result = (await applyCallback(
+                registered,
+                [contents, { path }],
+                this.runCtx,
+              )) as unknown as ResolverResult;
             } else {
               const handler = pickHandler(path, loader.resolvers);
               invariant(handler, `require: no resolver for ${path}`);
@@ -469,17 +474,29 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
           // A discarded child scope, seeded with register-extension so the applied pack's
           // prelude may still call it. Never linked into `env` — used only for THIS call.
           // Inlined bind (no capability `apply()` pass runs over this scope): the SAME native
-          // def bootstrap uses, set by hand exactly as `apply()` would for a `kind: "native"` def.
+          // def bootstrap uses, bound by hand exactly as `apply()` would for a `kind: "native"`
+          // def — through the module-internal `bindValue` (the `SchemeEnv` face carries no
+          // write member; the instanceof narrow is the same door capability.ts's apply uses:
+          // a run env's frames are real Environments by construction).
           const preludeScope = env.inherit(`prelude/${name}`);
-          preludeScope.set("require/register-extension", symbol.native`require/register-extension: registers a file extension resolver used by require (assembly time only)`(
+          invariant(
+            preludeScope instanceof Environment,
+            "require/extension: the run env's child frame is not an arrival Environment — a mid-run prelude scope must be a real frame to receive bindings.",
+          );
+          bindValue(preludeScope, "require/register-extension", symbol.native`require/register-extension: registers a file extension resolver used by require (assembly time only)`(
             { input: [z.value, z.value], output: [z.value], preludeOnly: true },
-            (suffix, resolverName) => {
+            function (this: CallCtx, suffix, resolverName) {
               registerExtension(suffix, resolverName);
 
               return nil; // effect verb — unspecified-as-nil, never a raw JS `undefined`/`null`
             },
           ).impl);
-          await assembler.require(pack, { preludeScope, preludeEvalScope: preludeScope });
+          await assembler.require(pack, {
+            // The kernel's bind-target face over the same frame (PreludeBindTarget is the
+            // `.set`-only shim shape; the frame itself no longer carries `set`).
+            preludeScope: { set: (n, v) => bindValue(preludeScope, n, v as EnvironmentValue) },
+            preludeEvalScope: preludeScope,
+          });
           return theVoid; // applied for effect; the pack's symbols are now bound on the env
         },
       );

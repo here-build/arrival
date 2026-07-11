@@ -31,6 +31,8 @@ import { exec } from "../../eval/generator-exec.js";
 import { user_env, global_env } from "../../env-roots.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
+import { bindValue } from "../../Environment.js";
 
 const boxed = (n: bigint) => new AExact(CONSTANT_CTX, n);
 
@@ -38,17 +40,17 @@ describe("CompiledResolutionChain — LAW 1: precedence preservation", () => {
   it("re-homes the module-composition rows: own bindings → own resolvers → parent, per layer", () => {
     // The exact topology module-composition.spec.ts pins on the LIVE walk.
     const parent = new ResolvingEnvironment("parent", { x: boxed(1n) }, null);
-    parent.registerResolver({ id: "parent-resolver", resolve: (name) => (name === "y" ? 2 : undefined) });
+    parent.registerResolver({ id: "parent-resolver", resolve: (name) => (name === "y" ? boxed(2n) : undefined) });
     const child = new ResolvingEnvironment("child", { z: boxed(3n) }, parent);
-    child.registerResolver({ id: "child-resolver", resolve: (name) => (name === "w" ? 4 : undefined) });
+    child.registerResolver({ id: "child-resolver", resolve: (name) => (name === "w" ? boxed(4n) : undefined) });
 
     const chain = compileResolutionChain(child);
 
     // Row-for-row equivalence with the live walk:
     expect(chain.lookup("z")).toEqual(boxed(3n)); // direct binding in child
-    expect(chain.lookup("w")).toBe(4); // resolver in child
+    expect(chain.lookup("w")).toEqual(boxed(4n)); // resolver in child
     expect(chain.lookup("x")).toEqual(boxed(1n)); // binding in parent (child resolver yields)
-    expect(chain.lookup("y")).toBe(2); // resolver in parent (child resolver yields)
+    expect(chain.lookup("y")).toEqual(boxed(2n)); // resolver in parent (child resolver yields)
     expect(chain.lookup("not-found")).toBeUndefined();
 
     // …and the step form is the flattened layer sequence, split at each resolver's position:
@@ -62,7 +64,7 @@ describe("CompiledResolutionChain — LAW 1: precedence preservation", () => {
 
   it("a layer's own binding beats its own resolver (a pinned override survives a catch-all)", () => {
     const env = new ResolvingEnvironment("layer", { pinned: boxed(10n) }, null);
-    env.registerResolver({ id: "catch-all", resolve: () => 99 });
+    env.registerResolver({ id: "catch-all", resolve: () => boxed(99n) });
     const chain = compileResolutionChain(env);
     expect(chain.lookup("pinned")).toEqual(boxed(10n));
     expect(env._lookupWithResolvers("pinned")).toEqual(chain.lookup("pinned"));
@@ -82,11 +84,11 @@ describe("CompiledResolutionChain — LAW 1: precedence preservation", () => {
       id: "second",
       resolve: (name) => {
         order.push("second");
-        return name === "target" ? "found" : undefined;
+        return name === "target" ? boxed(42n) : undefined;
       },
     });
     const chain = compileResolutionChain(env);
-    expect(chain.lookup("target")).toBe("found");
+    expect(chain.lookup("target")).toEqual(boxed(42n));
     expect(order).toEqual(["first", "second"]);
   });
 });
@@ -133,7 +135,9 @@ describe("CompiledResolutionChain — LAW 2: merge-at-seal", () => {
 describe("CompiledResolutionChain — LAW 3: memo + negative-cache soundness", () => {
   it("a PURE resolver's hit promotes once, with stable identity", () => {
     let calls = 0;
-    const value = { synthetic: true };
+    // A first-class boxed sentinel: resolvers answer with BOXED values only (the
+    // hermetic ruling's resolver contract) — identity is what this law pins.
+    const value = boxed(7n);
     const env = new ResolvingEnvironment("layer", {}, null);
     env.registerResolver({
       id: "pure-synth",
@@ -158,12 +162,12 @@ describe("CompiledResolutionChain — LAW 3: memo + negative-cache soundness", (
       id: "dynamic",
       resolve: (name) => {
         calls++;
-        return name === "dyn" ? calls : undefined;
+        return name === "dyn" ? boxed(BigInt(calls)) : undefined;
       },
     });
     const chain = compileResolutionChain(env);
-    expect(chain.lookup("dyn")).toBe(1);
-    expect(chain.lookup("dyn")).toBe(2); // live answer, never memoized
+    expect(chain.lookup("dyn")).toEqual(boxed(1n));
+    expect(chain.lookup("dyn")).toEqual(boxed(2n)); // live answer, never memoized
   });
 
   it("negative caching holds iff ALL resolvers are pure", () => {
@@ -204,15 +208,17 @@ describe("CompiledResolutionChain — LAW 3: memo + negative-cache soundness", (
     // Topology: impure resolver REGISTERED BEFORE a pure one in the same layer. Once the
     // pure step promotes a name, the impure step must still be probed first on every
     // lookup — it may start answering tomorrow, and its position wins.
-    let impureAnswer: unknown;
+    const fromPure = boxed(1n);
+    const fromImpure = boxed(2n);
+    let impureAnswer: AExact | undefined;
     const env = new ResolvingEnvironment("layer", {}, null);
     env.registerResolver({ id: "impure-first", resolve: () => impureAnswer });
-    env.registerResolver({ id: "pure-second", pure: true, resolve: (n) => (n === "name" ? "from-pure" : undefined) });
+    env.registerResolver({ id: "pure-second", pure: true, resolve: (n) => (n === "name" ? fromPure : undefined) });
     const chain = compileResolutionChain(env);
 
-    expect(chain.lookup("name")).toBe("from-pure"); // promoted into the pure step's memo
-    impureAnswer = "from-impure"; // the dynamic middleware starts answering
-    expect(chain.lookup("name")).toBe("from-impure"); // position still wins over the memo
+    expect(chain.lookup("name")).toBe(fromPure); // promoted into the pure step's memo
+    impureAnswer = fromImpure; // the dynamic middleware starts answering
+    expect(chain.lookup("name")).toBe(fromImpure); // position still wins over the memo
   });
 });
 
@@ -228,7 +234,7 @@ describe("CompiledResolutionChain — LAW 4: content address", () => {
     expect(h2).toBe(h1); // deterministic composition (realm-independent)
 
     const widened = build();
-    widened.set("c", boxed(3n));
+    bindValue(widened, "c", boxed(3n));
     expect(compileResolutionChain(widened).hash).not.toBe(h1); // vocabulary-sensitive
 
     const repure = new ResolvingEnvironment("root", { a: boxed(1n) }, null);
@@ -246,7 +252,7 @@ describe("CompiledResolutionChain — LAW 5: the bake seal leaves zero resolver 
       name: "law/bake-overlay",
       apply(env, ctx) {
         expect(ctx.preludeScope).toBeDefined(); // bootstrap assembly ALWAYS provides it
-        ctx.preludeScope!.set("bake-only", 42);
+        ctx.preludeScope!.set("bake-only", boxed(42n)); // boxed: the overlay resolver serves this through the resolution walk, and resolution carries boxed values only (hermetic ruling)
         duringBake = {
           resolvers: env.resolverSpecs().length,
           visible: env._lookupWithResolvers("bake-only"),
@@ -256,7 +262,7 @@ describe("CompiledResolutionChain — LAW 5: the bake seal leaves zero resolver 
     await assembleEnv(base, [pack]);
 
     // During the bake: overlay registered, binding visible through the live walk.
-    expect(duringBake).toEqual({ resolvers: 1, visible: 42 });
+    expect(duringBake).toEqual({ resolvers: 1, visible: boxed(42n) });
     // At seal: unregistered — NO resolver remains on the env (zero residue), and the
     // name is a plain miss everywhere.
     expect(base.resolverSpecs()).toHaveLength(0);

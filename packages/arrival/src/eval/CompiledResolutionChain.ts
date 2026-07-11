@@ -37,7 +37,8 @@
  * (natives are JS-backed) is DEFERRED — cross-deploy chain reuse needs a ruling first;
  * two deploys with the same vocabulary shape currently share a hash.
  */
-import { type Environment, type EnvironmentValue, ResolvingEnvironment } from "../Environment.js";
+import { assertResolvedBinding, type Environment, type EnvironmentValue, ResolvingEnvironment } from "../Environment.js";
+import type { RunContext } from "../values/primitives/RunContext.js";
 
 /**
  * A resolver step in the compiled chain — the genuine runtime middleware contract.
@@ -58,18 +59,25 @@ export class CompiledResolver {
 
   constructor(
     readonly id: string,
-    readonly resolve: (name: string) => unknown,
+    readonly resolve: (name: string, ctx?: RunContext) => unknown,
     readonly pure: boolean,
   ) {
     this.memo = pure ? new Map() : undefined;
   }
 
-  /** The step probe the chain walk calls: memo (pure only) → resolve → promote. */
-  probe(name: string | symbol): EnvironmentValue | undefined {
+  /** The step probe the chain walk calls: memo (pure only) → resolve → promote.
+   *  `ctx` is the resolving read's RunContext (threaded from the evaluator's lookup;
+   *  absent on run-less reads). NOTE the memo/ctx interplay: a `pure` step's hits are
+   *  served across runs, so a pure resolver's contract is to mint RUN-NEUTRALLY — the
+   *  memo never re-stamps (see `ResolverSpec.resolve`'s doc, common/scheme-env.ts). */
+  probe(name: string | symbol, ctx?: RunContext): EnvironmentValue | undefined {
     const promoted = this.memo?.get(name);
     if (promoted !== undefined) return promoted;
-    const hit = this.resolve(String(name));
+    const hit = this.resolve(String(name), ctx);
     if (hit === undefined) return undefined;
+    // Boxed-at-the-resolver's-boundary contract — same door as the live walk
+    // (ResolvingEnvironment._lookupWithResolvers): raw JS never enters resolution.
+    assertResolvedBinding(hit, name, this.id);
     this.memo?.set(name, hit as EnvironmentValue);
     return hit as EnvironmentValue;
   }
@@ -118,13 +126,14 @@ export class CompiledResolutionChain {
   }
 
   /** The composed base lookup — `undefined` on a miss, no synth (the keyword/cxr synth
-   *  layer stays in Resolver.resolve, ABOVE this). */
-  lookup(name: string | symbol): EnvironmentValue | undefined {
+   *  layer stays in Resolver.resolve, ABOVE this). `ctx` = the resolving read's
+   *  RunContext, forwarded to resolver steps only (map probes need no run identity). */
+  lookup(name: string | symbol, ctx?: RunContext): EnvironmentValue | undefined {
     const flat = this.flat;
     if (flat !== undefined) return flat.get(name); // the degenerate fast path: ONE Map.get
     if (this.misses?.has(name)) return undefined;
     for (const step of this.steps) {
-      const hit = step instanceof CompiledResolver ? step.probe(name) : step.get(name);
+      const hit = step instanceof CompiledResolver ? step.probe(name, ctx) : step.get(name);
       if (hit !== undefined) return hit;
     }
     this.misses?.add(name);
@@ -201,7 +210,7 @@ export function compileResolutionChain(base: Environment): CompiledResolutionCha
     if (specs.length > 0) {
       flushMerged(); // this layer's own bindings precede its resolvers
       for (const spec of specs) {
-        steps.push(new CompiledResolver(spec.id, (name) => spec.resolve(name), spec.pure === true));
+        steps.push(new CompiledResolver(spec.id, (name, ctx) => spec.resolve(name, ctx), spec.pure === true));
       }
     }
   }

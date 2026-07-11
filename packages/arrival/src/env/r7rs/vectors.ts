@@ -52,7 +52,7 @@ export default new EnvCapability("scheme/vectors", {
   symbols: {
     "make-vector": symbol.native`make-vector: a vector of length k, each slot fill`(
       { input: [z.schemeNumber, z.value.optional()], output: [z.vector(z.value)] },
-      (k: unknown, fill?: SchemeValue): AVector => {
+      function (this: CallCtx, k: unknown, fill?: SchemeValue): AVector {
         const len = Number(typeof k === "number" ? k : (k as AExact).valueOf());
         // O(1) cap check BEFORE Array.from materializes \`len\` slots — see
         // assertAllocatable. \`Array.from({length})\` on an oversized count is the
@@ -76,7 +76,7 @@ export default new EnvCapability("scheme/vectors", {
       // Elements are scheme values by design (any object may sit in a vector slot) — the
       // typed z.value replacement, matching make-vector's own fill-slot convention.
       { input: z.array(z.value), output: [z.vector(z.value)] },
-      (...objs: SchemeValue[]): AVector => {
+      function (this: CallCtx, ...objs: SchemeValue[]): AVector {
         return withInputProvenance(objs, new AVector(CONSTANT_CTX, [...objs]));
       },
     ),
@@ -86,7 +86,7 @@ export default new EnvCapability("scheme/vectors", {
       // accessor in this file (vector-length/vector-copy/vector->string/…).
       { input: z.array(z.vector(z.value)), output: [z.vector(z.value)] },
       // v2 vector() decodes the scheme face to AVector | AJSArray (borrowed array), not AVector only.
-      (...vectors: (AVector | AJSArray)[]): AVector => {
+      function (this: CallCtx, ...vectors: (AVector | AJSArray)[]): AVector {
         const arrays = vectors.map((v) => asVector(v, "vector-append"));
         return withInputProvenance(vectors, new AVector(CONSTANT_CTX, ([] as SchemeValue[]).concat(...arrays)));
       },
@@ -100,7 +100,7 @@ export default new EnvCapability("scheme/vectors", {
 
     "vector-length": symbol.native`vector-length: number of elements in vec`(
       { input: [z.vector(z.value)], output: [z.number] },
-      (vec: unknown): AExact => {
+      function (this: CallCtx, vec: unknown): AExact {
         return new AExact(CONSTANT_CTX, BigInt(asVector(vec, "vector-length").length));
       },
     ),
@@ -115,7 +115,7 @@ export default new EnvCapability("scheme/vectors", {
       // (not narrowed to AVector) deliberately: the protocol admits a borrowed AJSArray
       // too, which is NOT an AVector instance. A non-vector declares no such method →
       // a clear throw (vector-ref on a non-vector IS an error, unlike the #f of vector?).
-      (vec: unknown, k: unknown): SchemeValue => {
+      function (this: CallCtx, vec: unknown, k: unknown): SchemeValue {
         const m = (vec as Record<string, unknown> | null | undefined)?.[tf("vector-ref")];
         if (typeof m !== "function") {
           throw new TypeError(`vector-ref: arg 1 is not a vector (declares no arrival/tagless-final/vector-ref)`);
@@ -137,7 +137,7 @@ export default new EnvCapability("scheme/vectors", {
       // A list of scheme values, representation-blind by design — z.value, matching
       // vector-ref's own element-output convention.
       { input: [z.vector(z.value), z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.value] },
-      (vec: unknown, start?: unknown, end?: unknown): SchemeValue => {
+      function (this: CallCtx, vec: unknown, start?: unknown, end?: unknown): SchemeValue {
         const arr = asVector(vec, "vector->list");
         const s = start === undefined ? 0 : toIndex(start);
         const e = end === undefined ? arr.length : toIndex(end);
@@ -151,7 +151,7 @@ export default new EnvCapability("scheme/vectors", {
 
     "list->vector": symbol.native`list->vector: a vector of the list's elements`(
       { input: [z.union([z.pair, z.nil])], output: [z.vector(z.value)] },
-      (list: unknown): AVector => {
+      function (this: CallCtx, list: unknown): AVector {
         const result: SchemeValue[] = [];
         let current = list;
         while (current instanceof APair) {
@@ -164,7 +164,7 @@ export default new EnvCapability("scheme/vectors", {
 
     "vector->string": symbol.native`vector->string: a string from vec's character elements in [start, end)`(
       { input: [z.vector(z.value), z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.string] },
-      (vec: unknown, start?: unknown, end?: unknown): AString => {
+      function (this: CallCtx, vec: unknown, start?: unknown, end?: unknown): AString {
         const arr = asVector(vec, "vector->string");
         const s = start === undefined ? 0 : toIndex(start);
         const e = end === undefined ? arr.length : toIndex(end);
@@ -179,7 +179,7 @@ export default new EnvCapability("scheme/vectors", {
 
     "string->vector": symbol.native`string->vector: a vector of str's characters in [start, end)`(
       { input: [z.string, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.vector(z.value)] },
-      (str: unknown, start?: unknown, end?: unknown): AVector => {
+      function (this: CallCtx, str: unknown, start?: unknown, end?: unknown): AVector {
         const s_str = stringValue(str);
         const s = start === undefined ? 0 : toIndex(start);
         const e = end === undefined ? s_str.length : toIndex(end);
@@ -193,7 +193,7 @@ export default new EnvCapability("scheme/vectors", {
 
     "vector-copy": symbol.native`vector-copy: a fresh copy of vec over [start, end)`(
       { input: [z.vector(z.value), z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.vector(z.value)] },
-      (vec: unknown, start?: unknown, end?: unknown): AVector => {
+      function (this: CallCtx, vec: unknown, start?: unknown, end?: unknown): AVector {
         const arr = asVector(vec, "vector-copy");
         const s = start === undefined ? 0 : toIndex(start);
         const e = end === undefined ? arr.length : toIndex(end);

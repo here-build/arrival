@@ -33,6 +33,8 @@ import { provOf } from "../values/lineage-shadow.js";
 import type { Environment } from "../Environment.js";
 import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../values/op-helpers.js";
 import type { SchemeValue } from "../values/types.js";
+// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
+import { bindValue } from "../Environment.js";
 
 /** Stamp a single source-id onto a string input (the per-element id carrier). Codec
  *  encode + withProvenance, not a direct AString construction. */
@@ -75,7 +77,7 @@ export async function runRaw(
   await initBridge();
   const env = inferenceEnv.inherit(`lin-test-${seq++}`);
   await setup?.(env);
-  for (const [k, v] of Object.entries(binds)) env.set(k, jsToScheme(CONSTANT_CTX, v));
+  for (const [k, v] of Object.entries(binds)) bindValue(env, k, jsToScheme(CONSTANT_CTX, v));
   const savedOracle = isEagerProvenanceOracleEnabled();
   setEagerProvenanceOracleEnabled(true);
   try {

@@ -76,7 +76,7 @@
 // so this module is the sole definition site.
 
 import { EnvCapability } from "../common/capability.js";
-import { symbol } from "../common/symbol.js";
+import { symbol, type CallCtx } from "../common/symbol.js";
 import * as z from "../common/scheme-zod.js";
 import { schemeBool } from "../values/op-helpers.js";
 import { AString } from "../values/primitives/AString.js";
@@ -151,7 +151,7 @@ export default new EnvCapability("scheme/polyglot", {
       // `z.value` is the identity term for "a polymorphic accessor's operand"
       // (scheme-zod.ts's own worked example).
       { input: [z.value, z.value], output: [z.value] },
-      (obj: unknown, key: unknown): SchemeValue | Promise<SchemeValue> => {
+      function (this: CallCtx, obj: unknown, key: unknown): SchemeValue | Promise<SchemeValue> {
         if (obj == null) return nil;
         const keyStr = normalizeMemberKey(key);
         if (keyStr === null) return nil;
@@ -163,7 +163,7 @@ export default new EnvCapability("scheme/polyglot", {
       // The verdict is the boxed scheme face (schemeBool flyweight — Face split; the
       // raw JS boolean the has term returns is a protocol-layer detail).
       { input: [z.value, z.value], output: [z.boolean] },
-      (obj: unknown, key: unknown) => {
+      function (this: CallCtx, obj: unknown, key: unknown) {
         if (obj == null) return schemeBool(false);
         const keyStr = normalizeMemberKey(key);
         if (keyStr === null) return schemeBool(false);
@@ -175,7 +175,7 @@ export default new EnvCapability("scheme/polyglot", {
       // The keys term returns raw JS strings; the scheme face boxes each to AString
       // (z.array(z.string)'s scheme side — Face split).
       { input: [z.value], output: [z.array(z.string)] },
-      (obj: unknown) => {
+      function (this: CallCtx, obj: unknown) {
         const keys = obj != null ? (obj as Partial<AValue>)["arrival/tagless-final/keys"] : undefined;
         const names = typeof keys === "function" ? keys.call(obj) : [];
         return names.map((k) => new AString(CONSTANT_CTX, k));

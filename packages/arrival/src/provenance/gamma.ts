@@ -25,7 +25,7 @@ import invariant from "tiny-invariant";
 
 import { exec, execState } from "../eval/generator-exec.js";
 import type { EnvCapability } from "../common/capability.js";
-import type { ResolvingEnvironment } from "../Environment.js";
+import { bindValue, type ResolvingEnvironment } from "../Environment.js";
 import type { SchemeValue } from "../values/types.js";
 import { withSilentRegion } from "../values/primitives/region-scope.js";
 import { hermeticEnv, type IngressBindings } from "./hermetic-env.js";
@@ -125,7 +125,7 @@ export async function applyWireInEnv(
 ): Promise<SchemeValue> {
   assertIngressCovers(wire, ingress);
   const frame = base.inherit(`gamma-wire-${wire.span}`);
-  for (const [name, value] of Object.entries(ingress)) frame.set(name, value);
+  for (const [name, value] of Object.entries(ingress)) bindValue(frame, name, value);
   const state = await execState(wireApplication(wire), { env: frame, skipBootstrapWait: true });
   const boxed = state.values.at(-1);
   invariant(boxed !== undefined, "applyWireInEnv: a wire application evaluates exactly one form — exec returned none");

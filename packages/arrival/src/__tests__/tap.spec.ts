@@ -17,6 +17,8 @@ import { exec, execState } from "../eval/generator-exec.js";
 import { freshEnv } from "./_fresh-env.js";
 import type { ResolvingEnvironment } from "../Environment.js";
 import type { APair } from "../values/primitives/APair.js";
+// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
+import { bindValue } from "../Environment.js";
 
 let userEnv: ResolvingEnvironment;
 beforeAll(async () => {
@@ -138,7 +140,7 @@ describe("evaluation tap", () => {
       resolveAsync = r;
     });
     const env = userEnv.inherit("tap-async-test");
-    env.set("await-this", () => pending);
+    bindValue(env, "await-this", () => pending);
 
     const { events, tap } = recorder();
     // execState (COMPLEX tier): the bare `env.set`-bound native returns a raw
