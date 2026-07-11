@@ -37,6 +37,10 @@ export interface ArgsClue {
   tokens: readonly string[];
   /** value-mismatch only: the expected type named by the error ("object", "array", …). */
   expectedType?: string;
+  /** own-decode only: the humanized issue tail (`missing (required)`, `expected number, got
+   *  string: "50"`, …) — lets the renderer distinguish a MISSING required arg (which earns the
+   *  discovery nudge — don't punt to the user, enumerate it) from a type mismatch. */
+  issue?: string;
 }
 
 /** The localization result: the ONE param path a clue implicates, resolved against BOTH the
@@ -127,7 +131,7 @@ export function extractClues(errorText: string): ArgsClue[] {
     const paths: ArgsClue[] = [];
     for (const m of errorText.matchAll(OWN_DECODE_LINE_RE)) {
       if (m[2] === OWN_UNKNOWN_KEY_TAIL) unknownKeys.push({ kind: "own-unknown-key", tokens: [m[1]!] });
-      else paths.push({ kind: "own-decode", tokens: m[1]!.split(".") });
+      else paths.push({ kind: "own-decode", tokens: m[1]!.split("."), issue: m[2] });
     }
     clues.push(...unknownKeys, ...paths);
   }

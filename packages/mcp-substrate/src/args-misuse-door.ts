@@ -182,6 +182,16 @@ export function buildRetryShape(
   return { expr: `(${qualifiedName} ${kwargs})`, ...(menu ? { menu } : {}) };
 }
 
+/** The discovery nudge appended to a MISSING-REQUIRED fact line (MCP-Atlas 2026-07-11
+ *  forensics: the model froze on a missing `repo_path` / resource locator and asked the user
+ *  instead of enumerating it — the manifold hides tools behind one REPL so a missing arg reads
+ *  as blocking). A required value you lack is a cue to DISCOVER, not to ask: another bound tool
+ *  usually lists/searches for it. Deliberately tool-agnostic (no invented tool name — the
+ *  never-guess discipline); the signature list already shows what's bound. */
+const DISCOVERY_NUDGE =
+  " If you don't have a value for it, discover it with a listing/search tool from the bound set" +
+  " (enumerate the resource) rather than asking the user for it.";
+
 /** The L1 fact clause after `Failing argument: :<param> — `, per clue family. Every clause is
  *  built from held facts only (the sent value, the schema, the upstream's own quoted tokens) —
  *  never a guess phrased as one (doors.ts's central discipline). */
@@ -201,7 +211,7 @@ function factClauseOf(localized: Localized, paramHead: string): string {
     }
     case "required-key":
       return clue.tokens[0] === paramHead
-        ? `it is required and was not sent; it takes ${shape}.`
+        ? `it is required and was not sent; it takes ${shape}.${DISCOVERY_NUDGE}`
         : `it is missing the required key :${clue.tokens[0]}.`;
     // A TOP-LEVEL keyword typo: the localized path names the tight-matched REAL param; the
     // clue token keeps the model's own bad spelling. Renders the frozen explicit-fact
@@ -210,6 +220,14 @@ function factClauseOf(localized: Localized, paramHead: string): string {
     case "own-unknown-key":
       return `you sent :${clue.tokens[0]} — no such parameter; the key you want is :${paramHead}.`;
     case "own-decode":
+      // A missing-required own-decode carries the discovery nudge too (the dominant Phase-1
+      // shape at OUR layer — the strict kwargs decode rejects an omitted required kwarg here,
+      // before invoke); a type-mismatch own-decode does not (the model HAS a value, it's just
+      // the wrong type).
+      if (clue.issue?.startsWith("missing")) {
+        return `it is required and was not sent; it takes ${shape}.${DISCOVERY_NUDGE}`;
+      }
+      return `the tool's schema rejected it; :${paramHead} takes ${shape}.`;
     case "zod-path":
       return `the tool's schema rejected it; :${paramHead} takes ${shape}.`;
   }

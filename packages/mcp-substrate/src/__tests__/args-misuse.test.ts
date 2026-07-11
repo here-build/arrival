@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 
 import { ArgsFailureTracker } from "../args-failure-tracker.js";
 import { extractClues, localizeFailingParam, type ArgsClue } from "../args-misuse.js";
-import { buildRetryShape } from "../args-misuse-door.js";
+import { buildRetryShape, renderArgsMisuseTeaching } from "../args-misuse-door.js";
 import { synthesizeExampleCall } from "../example-call.js";
 import type { JsonSchemaProperty, ToolJsonSchema } from "../tool-schema.js";
 
@@ -91,7 +91,7 @@ describe("args-misuse — localized door + escalation (docs/args-error-reporting
       const text = "toy/add: arguments rejected — 2 problem(s):\n  :aa — unknown key\n  :a — missing (required)";
       expect(extractClues(text)).toEqual([
         { kind: "own-unknown-key", tokens: ["aa"] },
-        { kind: "own-decode", tokens: ["a"] },
+        { kind: "own-decode", tokens: ["a"], issue: "missing (required)" },
       ] satisfies ArgsClue[]);
     });
 
@@ -552,6 +552,29 @@ describe("args-misuse — localized door + escalation (docs/args-error-reporting
         SCHEMA,
       );
       expect(ambiguous?.clue.kind).not.toBe("own-unknown-key");
+    });
+  });
+
+  // The discovery nudge (MCP-Atlas 2026-07-11 forensics, tasks …e8a/…fd3): a MISSING required
+  // arg — the model lacks a value it needs — must teach "discover it, don't ask the user",
+  // never on a type-mismatch (there the model HAS a value, just the wrong type).
+  describe("discovery nudge on missing-required args", () => {
+    const SCHEMA: ToolJsonSchema = {
+      type: "object",
+      properties: { repo_path: { type: "string" }, revision: { type: "string" } },
+      required: ["repo_path"],
+    };
+    it("a missing-required own-decode fact line carries the 'discover it, don't ask the user' nudge", () => {
+      const loc = localizeFailingParam("git/git_log: arguments rejected — 1 problem(s):\n  :repo_path — missing (required)", undefined, SCHEMA)!;
+      const body = renderArgsMisuseTeaching({ qualifiedName: "git/git_log", sentArgs: undefined, localized: loc, level: 1 });
+      expect(body).toContain("Failing argument: :repo_path — it is required and was not sent");
+      expect(body).toContain("discover it with a listing/search tool");
+      expect(body).toContain("rather than asking the user");
+    });
+    it("a TYPE-mismatch own-decode does NOT carry the discovery nudge (the model has a value, wrong type)", () => {
+      const loc = localizeFailingParam('git/git_log: arguments rejected — 1 problem(s):\n  :repo_path — expected string, got number: 5', undefined, SCHEMA)!;
+      const body = renderArgsMisuseTeaching({ qualifiedName: "git/git_log", sentArgs: undefined, localized: loc, level: 1 });
+      expect(body).not.toContain("discover it");
     });
   });
 });
