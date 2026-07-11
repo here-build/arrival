@@ -1,16 +1,15 @@
 // example-call — synthesizeExampleCall: every stub rule, nesting, and rendering-convention
-// case BEFORE this utility is wired into doors.ts (Part 2) or manifold-tool.ts (Part 3). See
-// example-call.ts's header for the design rationale (real-value precedence, the one-level
-// object-nesting bound, and why the renderer is MIRRORED from doors.ts rather than imported).
+// case. See example-call.ts's header for the design rationale (real-value precedence, the
+// one-level object-nesting bound, and why the renderer is MIRRORED from doors.ts rather than
+// imported).
 //
 // Non-enum scalar stubs render as TYPE-PLACEHOLDER holes (`#|string|#`, `#|number|#`,
-// `#|boolean|#`), never a fabricated concrete value — flipped 2026-07-11 per
-// second-foundation/arrival-manifold/docs/args-error-reporting-v2.md §2.3/§2.6 ("concrete
-// examples drift — models copy rendered exprs verbatim, so an invented value…becomes the
-// model's next call"). An enum slot is EXEMPT (a real declared member is schema fact, not
-// invention) and a schema-authored real value (`const`/`examples`/`default`) still wins over
-// synthesis entirely — see the "real-value precedence" describe block below, unaffected by
-// this change.
+// `#|boolean|#`), never a fabricated concrete value (docs/args-error-reporting-v2.md §2.3/§2.6
+// in second-foundation/arrival-manifold: concrete examples drift — models copy rendered exprs
+// verbatim, so an invented value becomes the model's next call). An enum slot is EXEMPT (a
+// real declared member is schema fact, not invention) and a schema-authored real value
+// (`const`/`examples`/`default`) wins over synthesis entirely — see the "real-value
+// precedence" describe block below.
 
 import { describe, expect, it } from "vitest";
 
@@ -102,8 +101,8 @@ describe("synthesizeExampleCall — per-type stub rules (type-placeholder holes,
 });
 
 describe(
-  "synthesizeExampleCall — array minItems/maxItems (found+fixed 2026-07-05: previously " +
-    "ignored entirely — a declared minItems > 1 synthesized a schema-INVALID single-item call)",
+  "synthesizeExampleCall — array minItems/maxItems (honored: ignoring a declared minItems > 1 " +
+    "would synthesize a schema-INVALID single-item call)",
   () => {
     it("minItems: 3 on a required array synthesizes exactly 3 items, not 1", () => {
       const schema: ToolJsonSchema = {

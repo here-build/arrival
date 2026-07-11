@@ -24,9 +24,9 @@ const escapeString = (s: string): string =>
 const BARE_KEY = /^[a-z][\w-]*$/i;
 
 function renderLiteral(value: unknown): string {
-  // Checked FIRST — a TypePlaceholder is a `typeof value === "object"` instance too, so it
-  // must be intercepted before the generic dict-literal branch below would instead render it
-  // as an empty `{}` (it carries no own-enumerable JSON-ish keys).
+  // Checked FIRST — a TypePlaceholder is a `typeof value === "object"` instance too, and its
+  // `token` field is an own-enumerable property, so the generic dict-literal branch below
+  // would otherwise render it as a bogus `{:token "string"}` dict instead of a hole.
   if (value instanceof TypePlaceholder) return `#|${value.token}|#`;
   if (value === null || value === undefined) return "nil";
   if (typeof value === "string") return `"${escapeString(value)}"`;
@@ -63,15 +63,20 @@ function renderCall(qualifiedName: string, args: Record<string, unknown>): strin
 
 /** A TYPE-PLACEHOLDER hole — what a non-enum slot renders instead of a fabricated concrete
  *  value (second-foundation/arrival-manifold/docs/args-error-reporting-v2.md §2.3's
- *  construction rules, §2.6): "concrete examples drift — models copy rendered exprs verbatim,
- *  so an invented value…becomes the model's next call" (V, 2026-07-11). `renderLiteral` renders
- *  this as `#|<token>|#` — the reader's OWN block-comment syntax — directly in value position,
- *  UNQUOTED, so `:term #|string|#` is deliberately NOT evaluable (a keyword immediately
- *  followed by a comment with no value): blind copy-paste fails loudly at the reader instead of
- *  silently running our invention. `token` matches the signature renderer's own type vocabulary
- *  (tool-signature.ts's `typeToken`: `string`/`number`/`boolean`) so the hole and the catalog
- *  entry teach the same word. An ENUM slot is exempt (stubValue's enum branch, unaffected by
- *  this class entirely) — an enum member is schema fact, not invention. */
+ *  construction rules, §2.6): concrete examples drift — models copy rendered exprs verbatim,
+ *  so an invented value becomes the model's next call. `renderLiteral` renders this as
+ *  `#|<token>|#` — the reader's OWN block-comment syntax — directly in value position,
+ *  UNQUOTED, so a hole is never a value: our invention can never run as plausible data.
+ *  Blind copy-paste fails, but WHERE depends on shape (verified against the real reader):
+ *  an unfilled hole in a dict literal fails at the reader (`{:cond #|string|#}` → uneven-dict
+ *  ParseError); an ODD count of unfilled kwarg holes fails at the kwargs decode (dangling
+ *  keyword); an EVEN count of unfilled kwarg holes MIS-PAIRS instead — `(t :a #|n|# :b #|n|#)`
+ *  strips to `(t :a :b)` and the tool is invoked with `:b`'s keyword as `:a`'s value, garbage
+ *  the upstream's own validation rejects. So the guarantee is "never our datum passing as
+ *  real", NOT "always a reader-level failure". `token` matches the signature renderer's own
+ *  type vocabulary (tool-signature.ts's `typeToken`: `string`/`number`/`boolean`) so the hole
+ *  and the catalog entry teach the same word. An ENUM slot is exempt (stubValue's enum branch,
+ *  unaffected by this class entirely) — an enum member is schema fact, not invention. */
 class TypePlaceholder {
   constructor(readonly token: string) {}
 }
@@ -97,16 +102,14 @@ function realValueOf(prop: JsonSchemaProperty): unknown {
   return NO_REAL_VALUE;
 }
 
-/** How many items an array stub needs to stay SCHEMA-VALID (found+fixed 2026-07-05: neither
- *  `minItems` nor `maxItems` was ever read here — confirmed empirically that a declared
- *  `minItems: 3` still synthesized a single-item array, a call that fails the tool's own
- *  schema). `1` is the floor absent a declared `minItems` — it exists to demonstrate the
- *  element shape at all, same rationale as always stubbing a required param instead of
- *  omitting it; `minItems` only ever raises that floor, never lowers it below what a
- *  DECLARED `minItems` demands. `maxItems` clamps LAST (minimum first, then maximum — the
- *  same clamp ORDER a numeric bound would apply), so a self-contradictory schema
- *  (`minItems > maxItems`) lands on the maximum — some bound honored, never a crash. A
- *  `maxItems: 0` (an array that must stay empty) correctly synthesizes zero items, not one. */
+/** How many items an array stub needs to stay SCHEMA-VALID — ignoring `minItems` synthesizes
+ *  a call that fails the tool's own schema. `1` is the floor absent a declared `minItems` —
+ *  it exists to demonstrate the element shape at all, same rationale as always stubbing a
+ *  required param instead of omitting it; `minItems` only ever raises that floor. `maxItems`
+ *  clamps LAST (minimum first, then maximum — the same clamp ORDER a numeric bound would
+ *  apply), so a self-contradictory schema (`minItems > maxItems`) lands on the maximum — some
+ *  bound honored, never a crash. A `maxItems: 0` (an array that must stay empty) correctly
+ *  synthesizes zero items, not one. */
 function arrayItemCount(prop: JsonSchemaProperty): number {
   let count = Math.max(1, prop.minItems ?? 0);
   if (prop.maxItems !== undefined) count = Math.min(count, prop.maxItems);
@@ -164,7 +167,7 @@ export function stubValue(prop: JsonSchemaProperty, depth: number): unknown {
     case "array": {
       // `arrayItemCount(prop)` recursively-synthesized items (usually 1 — enough to
       // demonstrate the element shape — but raised to satisfy a declared `minItems` and
-      // clamped to a declared `maxItems`, found+fixed 2026-07-05), wrapped in the `[...]`
+      // clamped to a declared `maxItems`), wrapped in the `[...]`
       // list-literal grammar — the SAME bracket convention render-observation.ts/doors.ts
       // already use for a JS array (never the `#(...)` reader vector-literal form, which this
       // codebase reserves for a genuine Scheme vector value, not a JSON-array-shaped tool

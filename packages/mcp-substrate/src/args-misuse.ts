@@ -10,14 +10,14 @@
 //                                              as fact — the module's central discipline,
 //                                              shared with doors.ts).
 //
-// Four clue families (design doc §2.2's table), two python-jsonschema-prose shapes fused into
-// one family below (value-mismatch, unexpected-keys) plus required-key and the TS-SDK/zod
-// issues[].path family — zod-path is AUTHORITATIVE (the path IS the answer, no walk needed);
-// the other three walk the SENT-ARGS tree first (args are ground truth), falling back to a
-// SCHEMA-only walk for required-key (a missing key has no sent-args leaf to find).
+// Four clue families (design doc §2.2's table): three python-jsonschema prose shapes
+// (value-mismatch, unexpected-keys, required-key) plus the TS-SDK/zod issues[].path family —
+// zod-path is AUTHORITATIVE (the path IS the answer, no walk needed); value-mismatch and
+// unexpected-keys walk the SENT-ARGS tree (args are ground truth); required-key walks the
+// SCHEMA (a missing key has no sent-args leaf to find).
 //
-// This file does not render prose (that's doors.ts's `argsMisuseDoor`, §3 hook #3 — not yet
-// built) — it only ever answers "which param, if any, does this evidence name with certainty."
+// This file does not render prose (that's the `argsMisuseDoor` scope, design doc §3 hook #3)
+// — it only ever answers "which param, if any, does this evidence name with certainty."
 
 import type { JsonSchemaProperty, ToolJsonSchema } from "./tool-schema.js";
 
@@ -55,14 +55,21 @@ export interface Localized {
 /** TS SDK / zod issues JSON: captures the CONTENTS of a `"path": [...]` array literal —
  *  intersected with the surrounding text rather than requiring the whole message to be one
  *  JSON blob, since the upstream frequently wraps issues JSON inside its own prose (see the
- *  45edee fixture's `Input validation error: Invalid arguments for tool X: [{...}]` shape). */
+ *  45edee fixture's `Input validation error: Invalid arguments for tool X: [{...}]` shape).
+ *  An incidental `"path"` fragment elsewhere in wrapped prose CAN match, but it only ever
+ *  becomes a Localized after `walkSchema` verifies the path against the tool's own schema —
+ *  a coincidental match either names a real declared param or is discarded, never invents
+ *  one. Anchoring on the full issues-array shape would trade that residual for missing
+ *  legitimately re-wrapped blobs — the wrong side of narrow-and-miss. */
 const ZOD_PATH_RE = /"path"\s*:\s*(\[[^\]]*])/g;
 
 /** python-jsonschema value-mismatch: `'<sent value>' is not of type '<expected type>'`. Both
  *  captures are single-quoted prose tokens (python's own repr convention for a string leaf) —
  *  a non-string sent value (a bare number/bool) renders unquoted by python and is deliberately
  *  NOT matched here (see `resolveValueMismatch`'s doc for why the sent-args walk is
- *  string-leaf-only, the same scope boundary). */
+ *  string-leaf-only, the same scope boundary). A sent value with an EMBEDDED apostrophe
+ *  (`'King's …'`) splits the capture — the truncated token then matches no sent-args leaf and
+ *  localization declines to the fallback (narrow-and-miss, never a wrong leaf). */
 const VALUE_MISMATCH_RE = /'([^']*)' is not of type '([^']*)'/g;
 
 /** python-jsonschema unexpected-keys: `Additional properties are not allowed ('k1', 'k2' were
@@ -122,7 +129,10 @@ export function extractClues(errorText: string): ArgsClue[] {
  *  at a time. `undefined` the moment a segment isn't declared — the caller's "verify it
  *  resolves in the schema, else discard" step (design doc §2.2), and S2's soundness
  *  invariant: a `Localized.path` is NEVER returned without a resolved `subSchema` alongside
- *  it, so a param absent from the schema can never be named. */
+ *  it, so a param absent from the schema can never be named. `properties`-only by scope: an
+ *  array-index segment (zod paths like `["items", 0, "name"]`) or a `patternProperties`-only
+ *  shape has no `properties` entry to walk, so such paths DECLINE to the fallback rather than
+ *  localize — completeness ceded, soundness kept. */
 function walkSchema(
   schema: JsonSchemaProperty | ToolJsonSchema | undefined,
   path: readonly string[],
@@ -299,18 +309,9 @@ function resolveRequiredKey(
   return { path, clue, subSchema, sentValue: sentArgs ? walkValue(sentArgs, path) : undefined };
 }
 
-/** Localize a misuse rejection's failing parameter — the args-as-ground-truth pipeline (design
- *  doc §2.2): extract every clue, try each in family-priority order, return the FIRST that
- *  resolves against both the sent-args tree and the tool's schema. Zero clues, or every clue
- *  ambiguous (0 or several candidates) ⇒ `undefined` — the caller falls back to today's
- *  Signature + Example echo, NEVER a guessed param name (S2's soundness law, shared with
- *  doors.ts's "never phrase a guess as a fact" discipline). `sentArgs` absent (schema-only
- *  resolution) still localizes zod-path/required-key clues (no walk needed / schema-only by
- *  nature); value-mismatch/unexpected-keys need args to walk and correctly decline without
- *  them. */
 /** One resolver per {@link ArgsClue} family — a lookup table instead of a nested ternary chain,
- *  so adding a fifth family (the own-decode clue, design doc §2.5, out of this file's scope
- *  today) is a one-line addition, not a re-threaded conditional. */
+ *  so adding a fifth family (the own-decode clue, design doc §2.5) is a one-line addition, not
+ *  a re-threaded conditional. */
 const RESOLVERS: {
   readonly [K in ArgsClue["kind"]]: (
     clue: ArgsClue,
@@ -324,6 +325,21 @@ const RESOLVERS: {
   "required-key": resolveRequiredKey,
 };
 
+/** Localize a misuse rejection's failing parameter — the args-as-ground-truth pipeline (design
+ *  doc §2.2): extract every clue, try each in family-priority order, return the FIRST that
+ *  resolves against both the sent-args tree and the tool's schema. Zero clues, or every clue
+ *  ambiguous (0 or several candidates) ⇒ `undefined` — the caller falls back to today's
+ *  Signature + Example echo, NEVER a guessed param name (S2's soundness law, shared with
+ *  doors.ts's "never phrase a guess as a fact" discipline). `sentArgs` absent (schema-only
+ *  resolution) still localizes zod-path/required-key clues (no walk needed / schema-only by
+ *  nature); value-mismatch/unexpected-keys need args to walk and correctly decline without
+ *  them.
+ *
+ *  First-sound-wins is deliberate for a MULTI-clue rejection (a multi-issue zod blob names
+ *  several failing paths): every schema-verified zod path is an authoritative fact about a
+ *  genuinely failing param, so teaching the first one is never a guess — the model fixes it,
+ *  the next rejection carries only the remaining issues, and the ladder converges one true
+ *  lesson at a time. */
 export function localizeFailingParam(
   errorText: string,
   sentArgs: Record<string, unknown> | undefined,

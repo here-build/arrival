@@ -1,13 +1,10 @@
-// args-misuse — coordination-signal suite for the localized args-misuse door (Phase 0/2 of
-// docs/args-error-reporting-v2.md's landing strategy, second-foundation/arrival-manifold's
-// design doc, §7.2). The door replaces the bare Signature + Example echo with a LOCALIZED
-// teach — the failing parameter named, its sub-schema taught, a copy-paste-correct retry
-// shape — escalating on repeated failure of the same (tool, param). See the design doc for
-// the full mechanism (§2: `extractClues`/`localizeFailingParam`, `ArgsFailureTracker`,
-// `synthesizeParamValue`).
-//
-// S1-S3 flipped from `it.todo` to real tests (args-misuse.ts + args-failure-tracker.ts landed).
-// S4, S5 are still their original placeholder forms — see each row's own comment below.
+// args-misuse — the localization + escalation contract behind the localized args-misuse door
+// (second-foundation/arrival-manifold/docs/args-error-reporting-v2.md §7.2). The door replaces
+// the bare Signature + Example echo with a LOCALIZED teach — the failing parameter named, its
+// sub-schema taught, a copy-paste-correct retry shape — escalating on repeated failure of the
+// same (tool, param). S1 contracts `extractClues`, S2 `localizeFailingParam`, S3
+// `ArgsFailureTracker`, S4 `synthesizeExampleCall`'s hole rendering; S5 remains an `it.todo`
+// (it contracts the retry-shape builder, design doc §2.6, which has no export yet).
 
 import { describe, expect, it } from "vitest";
 
@@ -187,6 +184,31 @@ describe("args-misuse — localized door + escalation (docs/args-error-reporting
       expect(localized?.subSchema).toEqual({ type: "string" });
     });
 
+    it("a MULTI-issue zod blob localizes to the FIRST schema-valid path — every zod path is an authoritative fact about a failing param, so first-sound-wins is a true lesson, and the next rejection carries the remaining issues", () => {
+      const schema: ToolJsonSchema = {
+        type: "object",
+        properties: { query: { type: "object" }, filter: { type: "object" } },
+      };
+      const errorText = '[{"path": ["query"], "message": "one"}, {"path": ["filter"], "message": "two"}]';
+      const localized = localizeFailingParam(errorText, { query: 1, filter: 2 }, schema);
+      expect(localized?.path).toEqual(["query"]);
+      // …and when the FIRST issue's path fails schema verification, the SECOND still localizes.
+      const firstUnsound = '[{"path": ["ghost"], "message": "one"}, {"path": ["filter"], "message": "two"}]';
+      expect(localizeFailingParam(firstUnsound, { filter: 2 }, schema)?.path).toEqual(["filter"]);
+    });
+
+    it("required-key with TWO sent-args-backed containers (both candidate objects were sent as partial shells) ⇒ undefined, never a guess", () => {
+      const schema: ToolJsonSchema = {
+        type: "object",
+        properties: {
+          query: { type: "object", properties: { cond: { type: "string" } }, required: ["cond"] },
+          filter: { type: "object", properties: { cond: { type: "string" } }, required: ["cond"] },
+        },
+      };
+      const localized = localizeFailingParam("'cond' is a required property", { query: {}, filter: {} }, schema);
+      expect(localized).toBeUndefined();
+    });
+
     it("required-key NESTED inside an object param localizes to the CONTAINING kwarg, tie-broken toward sent-args evidence", () => {
       const schema: ToolJsonSchema = {
         type: "object",
@@ -335,16 +357,36 @@ describe("args-misuse — localized door + escalation (docs/args-error-reporting
       tracker.importState({ entries: [] });
       expect(tracker.recordFailure("t/tool", ["query"])).toBe(1);
     });
+
+    it("importState DISCARDS a counter that is not a valid level (corrupt/tampered blob) — the entry restores to no-history (fresh L1), never a fabricated escalation; valid siblings survive", () => {
+      const tracker = new ArgsFailureTracker();
+      const valid = new ArgsFailureTracker();
+      valid.recordFailure("t/tool", ["ok"]);
+      valid.recordFailure("t/tool", ["ok"]);
+      const [okEntry] = valid.exportState().entries;
+      tracker.importState({
+        entries: [
+          okEntry!,
+          [okEntry![0].replace("ok", "zero"), 0],
+          [okEntry![0].replace("ok", "neg"), -5],
+          [okEntry![0].replace("ok", "big"), 99],
+          [okEntry![0].replace("ok", "frac"), 2.5],
+          [okEntry![0].replace("ok", "nan"), Number.NaN],
+        ],
+      });
+      expect(tracker.recordFailure("t/tool", ["ok"])).toBe(3); // valid 2 survived → 3
+      expect(tracker.recordFailure("t/tool", ["zero"])).toBe(1);
+      expect(tracker.recordFailure("t/tool", ["neg"])).toBe(1);
+      expect(tracker.recordFailure("t/tool", ["big"])).toBe(1);
+      expect(tracker.recordFailure("t/tool", ["frac"])).toBe(1);
+      expect(tracker.recordFailure("t/tool", ["nan"])).toBe(1);
+    });
   });
 
-  // S4: synthesizeExampleCall's stub synthesis (example-call.ts) LANDED the TYPE-PLACEHOLDER
-  // hole (`#|string|#`, matching the signature's own type vocabulary) for every non-enum slot,
-  // instead of the concrete invented stub it used to render ("string value", 0, false, …): a
-  // concrete stub is copy-pasted verbatim by models (V, 2026-07-11 — "concrete examples
-  // drift"), so it must read as an unfillable hole, not a fabricated datum. An enum slot keeps
-  // showing a REAL member (schema fact, not invention) — unaffected. Flipped from `it.fails` to
-  // a plain `it` now that example-call.ts renders the hole (P15: an `it.fails` that starts
-  // passing is itself a failure — this row's landing IS the flip).
+  // S4: a non-enum slot must read as an unfillable TYPE-PLACEHOLDER hole (`#|string|#`,
+  // matching the signature's own type vocabulary), never a fabricated concrete datum —
+  // concrete examples drift: models copy rendered exprs verbatim, so an invented value becomes
+  // the model's next call. An enum slot shows a REAL member (schema fact, not invention).
   it(
     "S4 — synthesizeExampleCall renders a TYPE-PLACEHOLDER comment (#|string|#) for a non-enum required " +
       "slot instead of a concrete invented stub, while an enum slot still shows a real member (design doc " +

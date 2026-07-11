@@ -17,16 +17,18 @@ export interface ArgsFailureState {
   entries: ReadonlyArray<readonly [string, number]>;
 }
 
-/** Composite key for one (tool, param) counter: `${qualifiedName} ${paramPathJoined}`, with
+/** Composite key for one (tool, param) counter: `${qualifiedName}\0${paramPathJoined}`, with
  *  `"⊥"` standing in for an UNLOCALIZED misuse (design doc §2.4: "the ⊥ key escalates too" —
  *  Level ⊥'s eventual "show everything" backstop needs its own counter, same monotone rule as
  *  a named param). A multi-segment path joins on `.` — the same dotted-path convention the
- *  own-decode humanizer's per-issue lines use (design doc §2.5). Space-joining `qualifiedName`
- *  and the param segment is safe: neither a qualified tool name (`slug/tool`) nor a JSON
- *  Schema property name can contain a literal space in this codebase's naming space. */
+ *  own-decode humanizer's per-issue lines use (design doc §2.5). The NUL separator can appear
+ *  in neither half (MCP tool names are `^[a-zA-Z0-9_-]+$` on the wire; a JSON string never
+ *  carries a raw NUL), so `recordSuccess`'s prefix-clear cannot cross tools — a space or any
+ *  printable separator would rest on the weaker assumption that no server slug or property
+ *  name ever contains it. */
 function trackerKey(qualifiedName: string, paramPath: readonly string[] | undefined): string {
   const paramPathJoined = paramPath && paramPath.length > 0 ? paramPath.join(".") : "⊥";
-  return `${qualifiedName} ${paramPathJoined}`;
+  return `${qualifiedName}\0${paramPathJoined}`;
 }
 
 /** The escalation level a rendered door shows — capped at 3 (design doc §2.3 Levels 1-3; a
@@ -52,11 +54,10 @@ export class ArgsFailureTracker {
 
   /** A SUCCESSFUL call of `qualifiedName` clears every one of ITS param counters (including its
    *  `⊥` counter) — the model has a working shape now; the next failure on this tool starts a
-   *  fresh L1 lesson. Never touches a DIFFERENT tool's counters. Prefix-matched on
-   *  `${qualifiedName} ` (the key format's own separator), safe because neither a qualified
-   *  tool name nor a param-path segment can contain a literal space (see {@link trackerKey}). */
+   *  fresh L1 lesson. Never touches a DIFFERENT tool's counters: the prefix match ends at the
+   *  NUL separator, which no qualified name can contain (see {@link trackerKey}). */
   recordSuccess(qualifiedName: string): void {
-    const prefix = `${qualifiedName} `;
+    const prefix = `${qualifiedName}\0`;
     for (const key of this.byToolParam.keys()) {
       if (key.startsWith(prefix)) this.byToolParam.delete(key);
     }
@@ -71,9 +72,14 @@ export class ArgsFailureTracker {
   /** Replace the tracker's state WHOLESALE (a full rehydration, never a merge) — mirrors
    *  `DoorSession.importState`'s identical contract in doors.ts. An absent/empty `entries`
    *  (an old SessionBlob predating this key) restores an empty tracker, never an error — the
-   *  additive-key tolerance design doc §2.4 requires. */
+   *  additive-key tolerance design doc §2.4 requires. A counter that is not a valid
+   *  {@link ArgsFailureLevel} (a tampered/corrupt blob: `0`, `-5`, `99`, `NaN`, `2.5`) is
+   *  DISCARDED, not clamped — a discarded entry restores to "no history", a fresh L1 lesson,
+   *  whereas clamping would fabricate an escalation level no failure ever earned. */
   importState(state: ArgsFailureState): void {
     this.byToolParam.clear();
-    for (const [key, count] of state.entries) this.byToolParam.set(key, count);
+    for (const [key, count] of state.entries) {
+      if (Number.isInteger(count) && count >= 1 && count <= MAX_LEVEL) this.byToolParam.set(key, count);
+    }
   }
 }

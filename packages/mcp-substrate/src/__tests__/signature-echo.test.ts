@@ -199,8 +199,8 @@ describe("A — a downstream -32602 'Input validation error' gets a synthesized 
     expect(suffix).toContain("\nSignature: ");
     expect(suffix).toContain("\nExample: ");
     // Non-enum slot: the type-placeholder hole (design doc
-    // second-foundation/arrival-manifold/docs/args-error-reporting-v2.md §2.3/§2.6), not a
-    // fabricated concrete "string value" (2026-07-11 consumer-pin update).
+    // second-foundation/arrival-manifold/docs/args-error-reporting-v2.md §2.3/§2.6), never a
+    // fabricated concrete value.
     expect(example).toBe(`(${qualified} :query {:condition #|string|#})`);
   });
 });
