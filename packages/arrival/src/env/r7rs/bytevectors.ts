@@ -15,8 +15,6 @@
  * classifies ANY value.
  */
 
-import "../../errors.js";
-
 import * as z from "../../common/scheme-zod.js";
 import { symbol, type CallCtx } from "../../common/symbol.js";
 import { ABytevector } from "../../values/primitives/ABytevector.js";
