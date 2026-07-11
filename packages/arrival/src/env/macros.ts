@@ -79,7 +79,11 @@ export default new EnvCapability("scheme/macros", {
         function (
           this: AmbientRuntime,
           code: SchemeValue,
-          { macro_expand, resolver: useSiteResolver }: MacroInvokeContext,
+          // `runCtx` is the EXPANDING run's live context (threaded through Syntax.expand
+          // from the evaluator's is_macro dispatch) — expansion runs live and its minted
+          // cells charge THAT run's meter, never the defining run's (the constant-ctx
+          // audit's §2.1 ruling: expansion output is NOT parse-ctx territory).
+          { macro_expand, resolver: useSiteResolver, runCtx }: MacroInvokeContext,
         ) {
           // The use-site Resolver — the EVALUATOR's resolver at expansion time (threaded
           // through Syntax.expand), carrying the run's capability base. NOT a fresh glass
@@ -132,6 +136,9 @@ export default new EnvCapability("scheme/macros", {
                 useResolver,
                 defResolver,
                 capabilities: defResolver.capabilities,
+                // The live run's ctx — matcher accumulation mints through the engine's
+                // metered mint door.
+                ctx: runCtx,
               });
               if (bindings) {
                 // name is modified in transform_syntax
@@ -146,6 +153,7 @@ export default new EnvCapability("scheme/macros", {
                   scope: defChild,
                   names,
                   ellipsis,
+                  ctx: runCtx,
                 });
                 // TODO: if expression is undefined throw an error
                 if (new_expr) {
@@ -160,7 +168,7 @@ export default new EnvCapability("scheme/macros", {
                 // quote/quasiquote) so quote yields literal symbols with no post-eval fixup.
                 // `macro_expand` no longer changes the return — both callers want the form.
                 void macro_expand;
-                return { expr: restore_data_gensyms(expr, names), scope: new_env };
+                return { expr: restore_data_gensyms(expr, names, runCtx), scope: new_env };
               }
               rules = rules.cdr;
             }

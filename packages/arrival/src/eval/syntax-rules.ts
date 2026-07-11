@@ -14,13 +14,14 @@
 // ----------------------------------------------------------------------
 import invariant from "tiny-invariant";
 import { bindValue } from "../AmbientRuntime.js";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import type { RunContext } from "../values/primitives/RunContext.js";
+import { chargeHeap } from "../heap-budget.js";
 import type { Resolver } from "./Resolver.js";
 import type { Capabilities } from "./Capabilities.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { Macro } from "./Macro.js";
-import { APair, __tieKnot, concatPair } from "../values/primitives/APair.js";
+import { APair, __tieKnot } from "../values/primitives/APair.js";
 import { Syntax } from "./Syntax.js";
 import { eqv } from "../values/structural-equal.js";
 import { AListAlike, type SchemeValue } from "../values/types.js";
@@ -53,18 +54,44 @@ function same_atom(a, b) {
 // feeding these tails can be an arbitrary SchemeValue, not a list. Same cons-loop as
 // `concatPair` (values/primitives/APair.ts), typed for that wider arbitrary-tail domain
 // instead of forcing a scalar into AListAlike.
-function concatPairLoose(a: SchemeValue, b: SchemeValue): SchemeValue {
+function concatPairLoose(ctx: RunContext, a: SchemeValue, b: SchemeValue): SchemeValue {
   const cars: SchemeValue[] = [];
   let node: unknown = a;
   while (node instanceof APair) {
     cars.push(node.car);
     node = node.cdr;
   }
+  chargeHeap(ctx, cars.length);
   let result: SchemeValue = b;
   for (let i = cars.length; i--; ) {
-    result = new APair(CONSTANT_CTX, cars[i], result);
+    result = new APair(ctx, cars[i], result);
   }
   return result;
+}
+
+// ----------------------------------------------------------------------
+// The engine's MINT DOOR — every cell the matcher/expander constructs during a live
+// expansion carries the run's identity (`AValue.ctx`) AND charges its allocation meter.
+// Expansion is a native op that materializes output in synchronous walks with no
+// trampoline TICK, and a recursive macro's re-copied accumulation is exactly the
+// O(K²)-churn shape the meter exists to contain (heap-budget.ts's chokepoint rule) —
+// so the charge lives HERE, at the mint, not on a post-hoc walk of the output (which
+// couldn't tell fresh cells from call-site fragments shared by reference). A
+// meter-less ctx makes chargeHeap a no-op, so unmetered runs are byte-identical.
+// ----------------------------------------------------------------------
+function consCell<Car extends SchemeValue, Cdr extends SchemeValue>(
+  ctx: RunContext,
+  car: Car,
+  cdr: Cdr,
+): APair<Car, Cdr> {
+  chargeHeap(ctx, 1);
+  return new APair(ctx, car, cdr);
+}
+
+/** `APair.fromArray` through the mint door — n elements ⇒ n fresh spine cells. */
+function listFromArray<T extends SchemeValue>(ctx: RunContext, array: readonly T[], deep = false): AListAlike<T> {
+  chargeHeap(ctx, array.length);
+  return APair.fromArray(ctx, array, deep);
 }
 
 /** Span propagation for macro expansion. Expansion-
@@ -106,6 +133,10 @@ interface HygieneScope {
   useResolver: Resolver;
   defResolver: Resolver;
   capabilities: Capabilities;
+  /** The live per-run context (`MacroInvokeContext.runCtx`, threaded by the
+   *  syntax-rules caller) — the matcher's accumulation cells mint through it, so a
+   *  metered run's match work observes its own allocation bound. */
+  ctx: RunContext;
 }
 
 // The pattern-match accumulator. Its leaf cells hold a HETEROGENEOUS mix the matcher
@@ -151,7 +182,7 @@ export function extract_patterns(
     },
     symbols: {},
   };
-  const { useResolver, defResolver, capabilities } = scope;
+  const { useResolver, defResolver, capabilities, ctx } = scope;
   // pattern_names parameter is used to distinguish
   // multiple matches of ((x ...) ...) against ((1 2 3) (1 2 3))
   // in loop we add x to the list so we know that this is not
@@ -198,13 +229,13 @@ export function extract_patterns(
           if (ellipsis) {
             const count = code.length - 2;
             const array_head = count > 0 ? code.slice(0, count) : code;
-            const as_list = APair.fromArray(CONSTANT_CTX, array_head, false);
+            const as_list = listFromArray(ctx, array_head);
             bindings["..."].symbols[name] = bindings["..."].symbols[name]
               ? // list-accumulation cell (the array style is the `??= []` cell in the symbol arm)
-                concatPair(CONSTANT_CTX, bindings["..."].symbols[name] as SchemeValue, new APair(CONSTANT_CTX, as_list, nil))
-              : new APair(CONSTANT_CTX, as_list, nil);
+                concatPairLoose(ctx, bindings["..."].symbols[name] as SchemeValue, consCell(ctx, as_list, nil))
+              : consCell(ctx, as_list, nil);
           } else {
-            bindings["..."].symbols[name] = APair.fromArray(CONSTANT_CTX, code, false);
+            bindings["..."].symbols[name] = listFromArray(ctx, code);
           }
         } else if (Array.isArray(pattern[0])) {
           const names = [...pattern_names];
@@ -274,7 +305,7 @@ export function extract_patterns(
           if (n === list) break;
           n = n.cdr;
         }
-        code = APair.fromArray(CONSTANT_CTX, prefixEls, false) as AListAlike;
+        code = listFromArray(ctx, prefixEls) as AListAlike;
         const new_sate = { ...state, trailing: improper_list };
         if (!traverse(pattern.cdr.cdr, rest, new_sate)) {
           return false;
@@ -293,14 +324,14 @@ export function extract_patterns(
               let node = bindings["..."].symbols[name] as SchemeValue; // list-accumulation cell
               node =
                 node instanceof ANil
-                  ? new APair(CONSTANT_CTX, nil, new APair(CONSTANT_CTX, code as SchemeValue, nil))
-                  : concatPair(CONSTANT_CTX, node, new APair(CONSTANT_CTX, code as SchemeValue, nil));
+                  ? consCell(ctx, nil, consCell(ctx, code as SchemeValue, nil))
+                  : concatPairLoose(ctx, node, consCell(ctx, code as SchemeValue, nil));
               bindings["..."].symbols[name] = node;
             } else {
-              bindings["..."].symbols[name] = new APair(CONSTANT_CTX, code, nil);
+              bindings["..."].symbols[name] = consCell(ctx, code, nil);
             }
           } else {
-            bindings["..."].symbols[name] = new APair(CONSTANT_CTX, code, nil);
+            bindings["..."].symbols[name] = consCell(ctx, code, nil);
           }
         } else {
           if (code instanceof APair) {
@@ -309,7 +340,7 @@ export function extract_patterns(
               if (pattern.cdr.cdr instanceof ANil) {
                 return false;
               } else if (!bindings["..."].symbols[name]) {
-                bindings["..."].symbols[name] = new APair(CONSTANT_CTX, code.car, nil);
+                bindings["..."].symbols[name] = consCell(ctx, code.car, nil);
                 return traverse(pattern.cdr.cdr, code.cdr, state);
               }
             }
@@ -336,9 +367,9 @@ export function extract_patterns(
             pattern_names.push(name);
             if (bindings["..."].symbols[name]) {
               const node = bindings["..."].symbols[name] as SchemeValue; // list-accumulation cell
-              bindings["..."].symbols[name] = concatPair(CONSTANT_CTX, node, new APair(CONSTANT_CTX, code as SchemeValue, nil));
+              bindings["..."].symbols[name] = concatPairLoose(ctx, node, consCell(ctx, code as SchemeValue, nil));
             } else {
-              bindings["..."].symbols[name] = new APair(CONSTANT_CTX, code as SchemeValue, nil);
+              bindings["..."].symbols[name] = consCell(ctx, code as SchemeValue, nil);
             }
           } else if (
             pattern.car instanceof ASymbol &&
@@ -490,11 +521,13 @@ export function extract_patterns(
 // O(depth) for a deep macro tail loop. Restoring the form once per expansion is
 // O(form) and never composes, so a macro in tail position keeps O(1) TCO.
 // ----------------------------------------------------------------------
-export function restore_data_gensyms(node, gensyms) {
+export function restore_data_gensyms(node, gensyms, ctx: RunContext) {
   if (gensyms.length === 0) return node;
   const restore = (sym) => {
     const r = gensyms.find((g) => g.gensym === sym);
-    return r ? new ASymbol(CONSTANT_CTX, r.name) : sym;
+    // Interned mint: an already-known literal name is a flyweight HIT (no allocation,
+    // no charge); a genuinely fresh name charges 1 inside ASymbol's own ctor.
+    return r ? new ASymbol(ctx, r.name) : sym;
   };
   function walk(n, data) {
     if (n instanceof ASymbol) {
@@ -509,7 +542,7 @@ export function restore_data_gensyms(node, gensyms) {
         else if (lit === "unquote" || lit === "unquote-splicing") childData = false;
       }
       // head resolves in the CURRENT context (it is the operator); operands take childData.
-      return carrySpan(new APair(CONSTANT_CTX, walk(head, data), walk(n.cdr, childData)), n);
+      return carrySpan(consCell(ctx, walk(head, data), walk(n.cdr, childData)), n);
     }
     return n;
   }
@@ -532,6 +565,12 @@ interface TransformOptions {
   symbols: unknown[];
   names: GensymRecord[];
   ellipsis: string | ASymbol;
+  /** The live per-run context — every template-instantiation mint (rebuilt pairs,
+   *  relit symbols, dotted-access forms) goes through it, so expansion output carries
+   *  the run's identity and charges its meter. (The `gensym` mint itself still rides
+   *  reader/values-repr.ts's own ctx — its optional-ctx param is the audit's separate
+   *  Wave-3 rider; the plumb it needs now exists here.) */
+  ctx: RunContext;
 }
 
 // ----------------------------------------------------------------------
@@ -542,6 +581,7 @@ export function transform_syntax({
   symbols,
   names,
   ellipsis: ellipsis_symbol,
+  ctx,
 }: TransformOptions) {
   // `scope` is the def-time syntax-child RESOLVER (`defResolver.child("syntax")`); the
   // engine consults its refFrame/lookupSettled/define instead of raw env .ref/.get/.set.
@@ -561,11 +601,15 @@ export function transform_syntax({
         const parts = name.split(".");
         const first = parts[0];
         if (first in bindings.symbols) {
-          return APair.fromArray(CONSTANT_CTX, [
-            new ASymbol(CONSTANT_CTX, "."),
-            bindings.symbols[first] as SchemeValue, // plain cell — never an array/null (ellipsis-only)
-            ...parts.slice(1).map((x) => new AString(CONSTANT_CTX, x)),
-          ]);
+          return listFromArray(
+            ctx,
+            [
+              new ASymbol(ctx, "."),
+              bindings.symbols[first] as SchemeValue, // plain cell — never an array/null (ellipsis-only)
+              ...parts.slice(1).map((x) => new AString(ctx, x)),
+            ],
+            true, // fromArray's default deep, preserved
+          );
         }
       }
     }
@@ -640,7 +684,7 @@ export function transform_syntax({
               if (bound.car.cdr instanceof ANil) {
                 return bound.car.car;
               }
-              next(name, new APair(CONSTANT_CTX, bound.car.cdr, nil));
+              next(name, consCell(ctx, bound.car.cdr, nil));
             }
             return bound.car;
           }
@@ -677,12 +721,12 @@ export function transform_syntax({
               // concatPair. Discriminating on `car` keeps a pair from ever
               // reaching `.concat` (which APair does not have → throw).
               if (!(rest_expr instanceof ANil) && item.car instanceof APair) {
-                return carrySpanSpine(concatPairLoose(item.car, transform_ellipsis_expr(rest_expr, bindings, state, next) as SchemeValue), expr);
+                return carrySpanSpine(concatPairLoose(ctx, item.car, transform_ellipsis_expr(rest_expr, bindings, state, next) as SchemeValue), expr);
               }
               return item.car;
             } else if (item.car instanceof APair) {
               if (!(item.car.cdr instanceof ANil)) {
-                next(name, new APair(CONSTANT_CTX, item.car.cdr, item.cdr));
+                next(name, consCell(ctx, item.car.cdr, item.cdr));
               }
               return item.car.car;
             } else if (item.cdr instanceof ANil) {
@@ -701,8 +745,8 @@ export function transform_syntax({
       }
 
       return carrySpan(
-        new APair(
-          CONSTANT_CTX,
+        consCell(
+          ctx,
           transform_ellipsis_expr(first, bindings, state, next) as SchemeValue,
           transform_ellipsis_expr(expr.cdr, bindings, state, next) as SchemeValue,
         ),
@@ -747,7 +791,7 @@ export function transform_syntax({
       // <template> in its car. Guard it before reading `.car` — a bare
       // `(...)` would leave `first.cdr` as nil, whose `.car` is undefined.
       if (!disabled && first instanceof APair && ASymbol.is(first.car, ellipsis_symbol) && first.cdr instanceof APair) {
-        return carrySpan(new APair(CONSTANT_CTX, first.cdr.car, expr instanceof APair ? traverse(expr.cdr) : nil), expr);
+        return carrySpan(consCell(ctx, first.cdr.car, expr instanceof APair ? traverse(expr.cdr) : nil), expr);
       }
       if (second && ASymbol.is(second, ellipsis_symbol) && !disabled) {
         const symbols = bindings["..."].symbols;
@@ -778,7 +822,7 @@ export function transform_syntax({
           }
           let new_expr = first;
           if (is_spread) {
-            new_expr = carrySpan(new APair(CONSTANT_CTX, first, new APair(CONSTANT_CTX, second, nil)), expr);
+            new_expr = carrySpan(consCell(ctx, first, consCell(ctx, second, nil)), expr);
           }
           let result: SchemeValue;
           if (keys.length > 0) {
@@ -799,15 +843,15 @@ export function transform_syntax({
               // on empty ellipsis
               if (car !== undefined) {
                 if (is_spread) {
-                  result = result instanceof ANil ? (car as SchemeValue) : carrySpanSpine(concatPairLoose(result, car as SchemeValue), expr);
+                  result = result instanceof ANil ? (car as SchemeValue) : carrySpanSpine(concatPairLoose(ctx, result, car as SchemeValue), expr);
                 } else {
-                  result = carrySpan(new APair(CONSTANT_CTX, car as SchemeValue, result), expr);
+                  result = carrySpan(consCell(ctx, car as SchemeValue, result), expr);
                 }
               }
               bind = new_bind;
             }
             if (result instanceof APair && !is_spread) {
-              result = carrySpanSpine(APair.fromArray(CONSTANT_CTX, result.to_array(false).reverse(), false), expr);
+              result = carrySpanSpine(listFromArray(ctx, result.to_array(false).reverse()), expr);
             }
             // case of (list) ... (rest code)
 
@@ -819,7 +863,7 @@ export function transform_syntax({
               !ASymbol.is(expr.cdr.cdr.car, ellipsis_symbol)
             ) {
               const rest = traverse(expr.cdr.cdr, { disabled });
-              return concatPairLoose(result, rest);
+              return concatPairLoose(ctx, result, rest);
             }
             return result;
           } else {
@@ -827,7 +871,7 @@ export function transform_syntax({
               nested: true,
             });
             if (car) {
-              return carrySpan(new APair(CONSTANT_CTX, car, nil), expr);
+              return carrySpan(consCell(ctx, car, nil), expr);
             }
             return nil;
           }
@@ -851,12 +895,12 @@ export function transform_syntax({
             };
             const value = transform_ellipsis_expr(expr, bind, { nested: false }, next);
             if (value !== undefined) {
-              result = carrySpan(new APair(CONSTANT_CTX, value as SchemeValue, result), expr);
+              result = carrySpan(consCell(ctx, value as SchemeValue, result), expr);
             }
             bind = new_bind;
           }
           if (result instanceof APair) {
-            result = carrySpanSpine(APair.fromArray(CONSTANT_CTX, result.to_array(false).reverse(), false), expr);
+            result = carrySpanSpine(listFromArray(ctx, result.to_array(false).reverse()), expr);
           }
           // case if (x ... y ...) second spread is not processed
           // and (??? . x) last symbol
@@ -867,7 +911,7 @@ export function transform_syntax({
             if (is_null) {
               return node;
             }
-            result = result instanceof ANil ? node : carrySpanSpine(concatPairLoose(result as SchemeValue, node), expr);
+            result = result instanceof ANil ? node : carrySpanSpine(concatPairLoose(ctx, result as SchemeValue, node), expr);
           }
           return result;
         }
@@ -884,13 +928,13 @@ export function transform_syntax({
         rest =
           exprCdr.car instanceof ASymbol
             ? carrySpan(
-                new APair(
-                  CONSTANT_CTX,
+                consCell(
+                  ctx,
                   traverse(exprCdr.car, { disabled }),
                   exprCdr.cdr instanceof APair
                     ? carrySpan(
-                        new APair(
-                          CONSTANT_CTX,
+                        consCell(
+                          ctx,
                           exprCdr.cdr.cdr instanceof APair ? exprCdr.cdr.cdr.car : nil,
                           traverse(exprCdr.cdr.cdr instanceof APair ? exprCdr.cdr.cdr.cdr : nil, { disabled }),
                         ),
@@ -900,11 +944,11 @@ export function transform_syntax({
                 ),
                 exprCdr,
               )
-            : carrySpan(new APair(CONSTANT_CTX, exprCdr.car, traverse(exprCdr.cdr, { disabled })), exprCdr);
+            : carrySpan(consCell(ctx, exprCdr.car, traverse(exprCdr.cdr, { disabled })), exprCdr);
       } else {
         rest = expr instanceof APair ? traverse(expr.cdr, { disabled }) : nil;
       }
-      return carrySpan(new APair(CONSTANT_CTX, head, rest), expr);
+      return carrySpan(consCell(ctx, head, rest), expr);
     }
     if (expr instanceof ASymbol) {
       if (disabled && ASymbol.is(expr, ellipsis_symbol)) {

@@ -181,7 +181,13 @@ function formsOf(code: unknown): SchemeValue[] {
  *  `defineBodyOf`'s function arm strips the lambda wrapper and classifies the
  *  LAMBDA'S OWN last body form (`lastOf`) — exactly how an ordinary prelude-authored
  *  `(define (f args) body…)` already classifies today. A non-lambda body (a
- *  constant) keeps the plain `(define name value)` shape unchanged. */
+ *  constant) keeps the plain `(define name value)` shape unchanged.
+ *
+ *  CONSTANT_CTX here is a verified STRUCTURAL SENTINEL, not a dropped run ctx
+ *  (constant-ctx audit 2026-07-11, define-bake row): the synthesized form is
+ *  genuinely PRE-RUN bake work — fed only to `classifyProgramPrelude`/`freeVars`
+ *  (structural walks with zero `.ctx` reads) and discarded after classification.
+ *  It never enters a run, so there is no meter to charge and no identity to carry. */
 function synthesizeDefine(name: string, body: SchemeValue): SchemeValue {
   const nameSym = new ASymbol(CONSTANT_CTX, name);
   if (
@@ -430,13 +436,14 @@ function buildMacro(verb: string, def: DefineSyntaxSymbolDef, closureValue: unkn
     verb,
     function (this: unknown, code: unknown, evalArgs: MacroInvokeContext): Promise<SchemeValue> {
       const argForms = formsOf(code);
-      // `evalArgs.runCtx ?? CONSTANT_CTX`: `MacroInvokeContext.runCtx` is optional at the
-      // macro-engine boundary (env/macros.ts receives it but doesn't yet universally
-      // thread it into every transformer — the macro engine's own plumb is Wave 3, docs/
-      // working-proposals/arrival-constant-ctx-audit-2026-07-11.md §4) — this `??` is an
-      // explicit confession, not a Wave 0 apology.
+      // `evalArgs.runCtx` is REQUIRED on `MacroInvokeContext` (the Wave-3 macro-engine
+      // plumb, docs/working-proposals/arrival-constant-ctx-audit-2026-07-11.md §4): the
+      // evaluator's is_macro dispatch — the only builder of this context — always threads
+      // its live `EvalContext.runCtx`. A define-syntax fexpr body therefore runs with the
+      // INVOKING run's real context (its meter, cache, signal), whether that run is a
+      // user exec or the bake-time `evalScheme` exec (which mints a real RunContext too).
       return Promise.resolve(
-        call_function(closure, argForms, { runCtx: evalArgs.runCtx ?? CONSTANT_CTX }),
+        call_function(closure, argForms, { runCtx: evalArgs.runCtx }),
       ) as Promise<SchemeValue>;
     },
     def.doc,

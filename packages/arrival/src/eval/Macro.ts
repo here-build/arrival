@@ -8,9 +8,14 @@ export interface MacroInvokeContext {
   error?: (e: Error) => void;
   use_dynamic?: boolean;
   dynamic_env?: unknown;
-  /** The per-run context, threaded to syntax-rules so the expander can read its
-   *  per-run `debug` option without an env variable or module holder. */
-  runCtx?: RunContext;
+  /** The per-run context, threaded to the macro engine so every value the expander
+   *  MINTS during a live expansion carries the run's identity and charges its
+   *  allocation meter (eval/syntax-rules.ts's mint door). REQUIRED — the evaluator's
+   *  `is_macro` dispatch (the only builder of this context) always holds a live
+   *  `EvalContext.runCtx`, itself required since the constant-ctx wave-0 cut; an
+   *  optional field here would just re-open the `?? CONSTANT_CTX` apology seam the
+   *  wave-3 plumb closes (docs/working-proposals/arrival-constant-ctx-audit-2026-07-11.md §4). */
+  runCtx: RunContext;
   /** The use-site resolver (synced to `env`). The expander uses the def-time
    *  Resolver a `Syntax` captures instead. Optional — define-macro fexprs ignore it. */
   resolver?: Resolver;
