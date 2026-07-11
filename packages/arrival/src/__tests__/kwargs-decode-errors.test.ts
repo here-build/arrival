@@ -37,7 +37,7 @@ describe("kwargs decode rejection — humanized frozen shape (docs/args-error-re
   // R1: a single value-mismatch issue (the 45edee trajectory's attempt 1 shape — a scalar
   // sent where the kwargs field declares an object) humanizes to the frozen head + one
   // per-issue line, instead of today's raw ZodError issues dump.
-  it.fails(
+  it(
     "R1 — a single-issue kwargs rejection humanizes to '<name>: arguments rejected — 1 problem(s):' " +
       "+ one ':<param> — expected <type>, got <type>: <preview>' line (today: raw ZodError dump — the " +
       "known regression fixed by the rosetta.ts kwargs-decode humanizer, design doc §2.5)",
@@ -70,7 +70,7 @@ describe("kwargs decode rejection — humanized frozen shape (docs/args-error-re
   // instead of rejecting. Stays `it.fails` until the strictObject fix (design doc Open
   // Question 1 — a separate commit, since it changes accept/reject behavior, not just
   // reporting) lands; flips to a plain pin the day this hazard is disproven for real.
-  it.fails(
+  it(
     "R2 — THE SILENT-STRIP PROBE: a misspelled OPTIONAL kwarg key (:pagesize vs declared :pageSize) is " +
       "REJECTED, never silently dropped (CONFIRMED failing 2026-07-11 — z.object's default strip mode lets " +
       "it through with pageSize left undefined; z.strictObject is the fix, design doc Open Question 1)",
@@ -97,7 +97,7 @@ describe("kwargs decode rejection — humanized frozen shape (docs/args-error-re
   // multi-required-field object returns issues in shape-declaration order, not sent-arg
   // order) — a model reading a truncated observation should see the FIRST-declared miss
   // first, matching the signature it was just shown.
-  it.fails(
+  it(
     "R3 — a two-issue kwargs rejection counts BOTH problems and lists each on its own line, in schema " +
       "declaration order (query before pageSize) — today: raw ZodError dump, no stable count/order contract",
     async () => {

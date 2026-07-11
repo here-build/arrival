@@ -76,6 +76,7 @@ export {
   encode,
   custom,
   object,
+  strictObject,
   literal,
   codec,
   config,

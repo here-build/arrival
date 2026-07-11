@@ -115,11 +115,12 @@ describe("z.kwargs runtime — INTEGRATION ((tool :k v …) through a real env +
     expect((out as AString)["arrival/toJS"]()).toBe("Ada:undefined");
   });
 
-  it("a required kwarg missing DOORS cleanly — a per-FIELD validation error (path incl. \"a\"), not the " +
+  it("a required kwarg missing DOORS cleanly — a per-FIELD validation error (path incl. :a), not the " +
     "pre-fix cryptic \"expected object, received array\" mismatch", async () => {
     // Verified pre-fix (RED): the thrown ZodError's message was `"expected object, received array"`
     // (the WHOLE args array failing the object schema, no field-level detail — decoding an array
-    // against an object schema). Post-fix it's a real per-field issue naming the missing key.
-    await expect(exec(`(kw-greet)`, { env })).rejects.toThrow(/"a"/);
+    // against an object schema). Post-fix the kwargs humanizer (common/kwargs-rejection.ts,
+    // args-error-reporting-v2.md §2.5) names the missing key in the frozen grammar.
+    await expect(exec(`(kw-greet)`, { env })).rejects.toThrow(/:a — missing \(required\)/);
   });
 });

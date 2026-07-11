@@ -4,6 +4,7 @@
 
 import * as z from "../scheme-zod.js";
 import { ZodType } from "zod";
+import { decodeKwargsStrict } from "../kwargs-rejection.js";
 import { attestDeep, freshIfSingleton } from "../../values/attestation.js";
 import { AValue, pointProvenance, unionProvenance } from "../../values/primitives/AValue.js";
 import { jsToScheme } from "../../rosetta.js";
@@ -138,9 +139,12 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
         // against `inSchema`. instanceof is the SOUND discriminator: no combinator can make a plain
         // record satisfy `instanceof ZodType` — a record whose values are ZodType is not itself one.
         const rest: RestSpec = contract.inputRest;
-        const kwargsSchema = rest !== undefined && !(rest instanceof ZodType) ? z.object(rest) : undefined;
+        const kwargsShape = rest !== undefined && !(rest instanceof ZodType) ? rest : undefined;
+        // STRICT + humanized (kwargs-rejection.ts, args-error-reporting-v2.md §2.5): unknown
+        // keys reject instead of silently stripping, and a ZodError rethrows in the frozen
+        // `<name>: arguments rejected — N problem(s):` grammar.
         const decode = (): readonly unknown[] =>
-          kwargsSchema ? [z.decode(kwargsSchema, collectKwargsObject(args))] : z.decode(inSchema, args);
+          kwargsShape ? [decodeKwargsStrict(name, kwargsShape, collectKwargsObject(args))] : z.decode(inSchema, args);
         // Wrapped in `withRegionScope` when a scope is open — the SYNCHRONOUS window a
         // `z.procedure` arm's decode reads via `currentRegionScope()` (scheme-zod.ts), so the
         // minted host-fn wrapper closes over THIS scope instead of falling back to the shared
