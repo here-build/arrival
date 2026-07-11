@@ -5,9 +5,13 @@
 // signature differently. Kept byte-identical to the pre-split shapes/logic — a pure relocation.
 
 export interface JsonSchemaProperty {
-  type?: string;
+  /** JSON Schema allows a type ARRAY (e.g. ["string","null"]) — a scalar union. */
+  type?: string | readonly string[];
   description?: string;
   enum?: readonly unknown[];
+  /** Union members (anyOf/oneOf render identically in a signature: pick ONE shape). */
+  anyOf?: readonly JsonSchemaProperty[];
+  oneOf?: readonly JsonSchemaProperty[];
   items?: JsonSchemaProperty;
   minItems?: number;
   maxItems?: number;
