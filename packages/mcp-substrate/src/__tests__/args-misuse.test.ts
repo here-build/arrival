@@ -337,17 +337,18 @@ describe("args-misuse — localized door + escalation (docs/args-error-reporting
     });
   });
 
-  // S4: synthesizeExampleCall's stub synthesis (example-call.ts) currently invents a CONCRETE
-  // value for every non-enum required slot ("string value", 0, false, …) — exercisable via the
-  // REAL function today. The design doc (§2.3 construction rules, §2.6) requires a TYPE-
-  // PLACEHOLDER comment (`#|string|#`, matching the signature's own type vocabulary) for every
-  // non-enum slot instead: a concrete stub is copy-pasted verbatim by models (V, 2026-07-11 —
-  // "concrete examples drift"), so it must read as an unfillable hole, not a fabricated datum.
-  // An enum slot keeps showing a REAL member (schema fact, not invention) — unaffected.
-  it.fails(
+  // S4: synthesizeExampleCall's stub synthesis (example-call.ts) LANDED the TYPE-PLACEHOLDER
+  // hole (`#|string|#`, matching the signature's own type vocabulary) for every non-enum slot,
+  // instead of the concrete invented stub it used to render ("string value", 0, false, …): a
+  // concrete stub is copy-pasted verbatim by models (V, 2026-07-11 — "concrete examples
+  // drift"), so it must read as an unfillable hole, not a fabricated datum. An enum slot keeps
+  // showing a REAL member (schema fact, not invention) — unaffected. Flipped from `it.fails` to
+  // a plain `it` now that example-call.ts renders the hole (P15: an `it.fails` that starts
+  // passing is itself a failure — this row's landing IS the flip).
+  it(
     "S4 — synthesizeExampleCall renders a TYPE-PLACEHOLDER comment (#|string|#) for a non-enum required " +
       "slot instead of a concrete invented stub, while an enum slot still shows a real member (design doc " +
-      "§2.3, §2.6) — today: every non-enum slot gets a fabricated concrete value ('string value', 0, …)",
+      "§2.3, §2.6)",
     () => {
       const schema: ToolJsonSchema = {
         type: "object",

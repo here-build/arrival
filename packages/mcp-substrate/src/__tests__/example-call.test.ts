@@ -1,8 +1,16 @@
 // example-call — synthesizeExampleCall: every stub rule, nesting, and rendering-convention
 // case BEFORE this utility is wired into doors.ts (Part 2) or manifold-tool.ts (Part 3). See
-// example-call.ts's header for the design rationale (real-value precedence, the numeric clamp,
-// the boolean default, the one-level object-nesting bound, and why the renderer is MIRRORED
-// from doors.ts rather than imported).
+// example-call.ts's header for the design rationale (real-value precedence, the one-level
+// object-nesting bound, and why the renderer is MIRRORED from doors.ts rather than imported).
+//
+// Non-enum scalar stubs render as TYPE-PLACEHOLDER holes (`#|string|#`, `#|number|#`,
+// `#|boolean|#`), never a fabricated concrete value — flipped 2026-07-11 per
+// second-foundation/arrival-manifold/docs/args-error-reporting-v2.md §2.3/§2.6 ("concrete
+// examples drift — models copy rendered exprs verbatim, so an invented value…becomes the
+// model's next call"). An enum slot is EXEMPT (a real declared member is schema fact, not
+// invention) and a schema-authored real value (`const`/`examples`/`default`) still wins over
+// synthesis entirely — see the "real-value precedence" describe block below, unaffected by
+// this change.
 
 import { describe, expect, it } from "vitest";
 
@@ -27,70 +35,40 @@ describe("synthesizeExampleCall — edge cases (no schema, empty schema, all-opt
   });
 });
 
-describe("synthesizeExampleCall — per-type stub rules", () => {
-  it('string → "string value"', () => {
+describe("synthesizeExampleCall — per-type stub rules (type-placeholder holes, design doc §2.3/§2.6)", () => {
+  it('string → the "#|string|#" type-placeholder hole', () => {
     const schema: ToolJsonSchema = { type: "object", properties: { path: { type: "string" } }, required: ["path"] };
     expect(synthesizeExampleCall("filesystem_read_text_file", schema)).toBe(
-      '(filesystem_read_text_file :path "string value")',
+      "(filesystem_read_text_file :path #|string|#)",
     );
   });
 
-  it("number/integer with no bounds → 0", () => {
-    const schema: ToolJsonSchema = {
+  it('number/integer → the "#|number|#" hole, REGARDLESS of declared minimum/maximum bounds (bounds no longer clamp a concrete value — there is no concrete value to clamp; the caller fills the hole with a real, bound-satisfying number)', () => {
+    const noBounds: ToolJsonSchema = {
       type: "object",
       properties: { count: { type: "number" }, page: { type: "integer" } },
       required: ["count", "page"],
     };
-    expect(synthesizeExampleCall("paginate", schema)).toBe("(paginate :count 0 :page 0)");
-  });
+    expect(synthesizeExampleCall("paginate", noBounds)).toBe("(paginate :count #|number|# :page #|number|#)");
 
-  it("number with a minimum above 0 → clamps UP to the minimum", () => {
-    const schema: ToolJsonSchema = {
+    const withBounds: ToolJsonSchema = {
       type: "object",
-      properties: { amount: { type: "number", minimum: 5 } },
+      properties: { amount: { type: "number", minimum: 5, maximum: 10 } },
       required: ["amount"],
     };
-    expect(synthesizeExampleCall("billing_charge", schema)).toBe("(billing_charge :amount 5)");
+    expect(synthesizeExampleCall("billing_charge", withBounds)).toBe("(billing_charge :amount #|number|#)");
   });
 
-  it("number with a maximum below 0 → clamps DOWN to the maximum", () => {
-    const schema: ToolJsonSchema = {
-      type: "object",
-      properties: { delta: { type: "number", maximum: -3 } },
-      required: ["delta"],
-    };
-    expect(synthesizeExampleCall("adjust", schema)).toBe("(adjust :delta -3)");
-  });
-
-  it("number where 0 satisfies both bounds → 0, not either bound", () => {
-    const schema: ToolJsonSchema = {
-      type: "object",
-      properties: { level: { type: "number", minimum: -10, maximum: 10 } },
-      required: ["level"],
-    };
-    expect(synthesizeExampleCall("set_level", schema)).toBe("(set_level :level 0)");
-  });
-
-  it("number where 0 violates BOTH bounds — clamps to the nearer one still applied in order (minimum then maximum)", () => {
-    const schema: ToolJsonSchema = {
-      type: "object",
-      properties: { level: { type: "number", minimum: -10, maximum: -2 } },
-      required: ["level"],
-    };
-    // 0 < minimum? no (-10). 0 > maximum? yes (-2) → clamps to -2.
-    expect(synthesizeExampleCall("set_level", schema)).toBe("(set_level :level -2)");
-  });
-
-  it("boolean → false (documented: mirrors the numeric stub's zero-value convention)", () => {
+  it('boolean → the "#|boolean|#" hole', () => {
     const schema: ToolJsonSchema = {
       type: "object",
       properties: { dryRun: { type: "boolean" } },
       required: ["dryRun"],
     };
-    expect(synthesizeExampleCall("deploy", schema)).toBe("(deploy :dryRun false)");
+    expect(synthesizeExampleCall("deploy", schema)).toBe("(deploy :dryRun #|boolean|#)");
   });
 
-  it("enum → the FIRST listed value, regardless of declared type", () => {
+  it("enum → the FIRST listed value, regardless of declared type — a REAL member (schema fact, exempt from the placeholder rule)", () => {
     const schema: ToolJsonSchema = {
       type: "object",
       properties: { unit: { type: "string", enum: ["celsius", "fahrenheit"] } },
@@ -99,27 +77,27 @@ describe("synthesizeExampleCall — per-type stub rules", () => {
     expect(synthesizeExampleCall("weather_get_forecast", schema)).toBe('(weather_get_forecast :unit "celsius")');
   });
 
-  it("unknown/missing type on a REQUIRED param → the safest fallback, a quoted string", () => {
+  it('unknown/missing type on a REQUIRED param → the safest fallback hole, "#|string|#"', () => {
     const schema: ToolJsonSchema = { type: "object", properties: { payload: {} }, required: ["payload"] };
-    expect(synthesizeExampleCall("misc_tool", schema)).toBe('(misc_tool :payload "string value")');
+    expect(synthesizeExampleCall("misc_tool", schema)).toBe("(misc_tool :payload #|string|#)");
   });
 
-  it("array with a scalar items schema → ONE synthesized item wrapped in [...]", () => {
+  it("array with a scalar items schema → ONE type-placeholder item wrapped in [...]", () => {
     const schema: ToolJsonSchema = {
       type: "object",
       properties: { tags: { type: "array", items: { type: "string" } } },
       required: ["tags"],
     };
-    expect(synthesizeExampleCall("label_apply", schema)).toBe('(label_apply :tags ["string value"])');
+    expect(synthesizeExampleCall("label_apply", schema)).toBe("(label_apply :tags [#|string|#])");
   });
 
-  it("array with NO declared items schema → degrades to a one-element string-value list", () => {
+  it("array with NO declared items schema → degrades to a one-element string-hole list", () => {
     const schema: ToolJsonSchema = {
       type: "object",
       properties: { channels: { type: "array" } },
       required: ["channels"],
     };
-    expect(synthesizeExampleCall("slack_send", schema)).toBe('(slack_send :channels ["string value"])');
+    expect(synthesizeExampleCall("slack_send", schema)).toBe("(slack_send :channels [#|string|#])");
   });
 });
 
@@ -134,7 +112,7 @@ describe(
         required: ["tags"],
       };
       expect(synthesizeExampleCall("label_apply", schema)).toBe(
-        '(label_apply :tags ["string value" "string value" "string value"])',
+        "(label_apply :tags [#|string|# #|string|# #|string|#])",
       );
     });
 
@@ -144,7 +122,7 @@ describe(
         properties: { tags: { type: "array", items: { type: "string" }, minItems: 0 } },
         required: ["tags"],
       };
-      expect(synthesizeExampleCall("label_apply", schema)).toBe('(label_apply :tags ["string value"])');
+      expect(synthesizeExampleCall("label_apply", schema)).toBe("(label_apply :tags [#|string|#])");
     });
 
     it("maxItems: 0 (an array that must stay empty) synthesizes ZERO items, not one", () => {
@@ -162,16 +140,16 @@ describe(
         properties: { tags: { type: "array", items: { type: "string" }, maxItems: 2 } },
         required: ["tags"],
       };
-      expect(synthesizeExampleCall("label_apply", schema)).toBe('(label_apply :tags ["string value"])');
+      expect(synthesizeExampleCall("label_apply", schema)).toBe("(label_apply :tags [#|string|#])");
     });
 
-    it("contradictory bounds (minItems > maxItems): clamps in order (min then max) → lands on maxItems, mirroring numericStub's own precedent", () => {
+    it("contradictory bounds (minItems > maxItems): clamps in order (min then max) → lands on maxItems", () => {
       const schema: ToolJsonSchema = {
         type: "object",
         properties: { tags: { type: "array", items: { type: "string" }, minItems: 5, maxItems: 2 } },
         required: ["tags"],
       };
-      expect(synthesizeExampleCall("label_apply", schema)).toBe('(label_apply :tags ["string value" "string value"])');
+      expect(synthesizeExampleCall("label_apply", schema)).toBe("(label_apply :tags [#|string|# #|string|#])");
     });
 
     it("minItems on an array-of-objects repeats the SAME recursively-synthesized object item", () => {
@@ -191,13 +169,13 @@ describe(
         required: ["flights"],
       };
       expect(synthesizeExampleCall("airline_book", schema)).toBe(
-        '(airline_book :flights [{:origin "string value"} {:origin "string value"}])',
+        "(airline_book :flights [{:origin #|string|#} {:origin #|string|#}])",
       );
     });
   },
 );
 
-describe("synthesizeExampleCall — real-value precedence: const > examples[0] > default > enum[0] > type", () => {
+describe("synthesizeExampleCall — real-value precedence: const > examples[0] > default > enum[0] > type (UNAFFECTED by the type-placeholder rule — a schema-AUTHORED value is never invention)", () => {
   it("const wins over examples, default, AND enum", () => {
     const schema: ToolJsonSchema = {
       type: "object",
@@ -250,7 +228,7 @@ describe("synthesizeExampleCall — real-value precedence: const > examples[0] >
       properties: { offset: { type: "number", default: 0, minimum: 5 } },
       required: ["offset"],
     };
-    // default (0) wins over the numeric-clamp synthesis entirely — it's a REAL value.
+    // default (0) wins over placeholder synthesis entirely — it's a REAL value.
     expect(synthesizeExampleCall("t", schema)).toBe("(t :offset 0)");
   });
 });
@@ -262,7 +240,7 @@ describe("synthesizeExampleCall — required-first-then-optional; optional omitt
       properties: { query: { type: "string" }, limit: { type: "number" } },
       required: ["query"],
     };
-    expect(synthesizeExampleCall("search_run", schema)).toBe('(search_run :query "string value")');
+    expect(synthesizeExampleCall("search_run", schema)).toBe("(search_run :query #|string|#)");
   });
 
   it("required-before-declared-order: a required field declared AFTER an optional one still comes first", () => {
@@ -272,7 +250,7 @@ describe("synthesizeExampleCall — required-first-then-optional; optional omitt
       properties: { b: { type: "number" }, a: { type: "string" } },
       required: ["a"],
     };
-    expect(synthesizeExampleCall("t", schema)).toBe('(t :a "string value")');
+    expect(synthesizeExampleCall("t", schema)).toBe("(t :a #|string|#)");
   });
 
   it("multiple required fields preserve their declared order", () => {
@@ -281,7 +259,7 @@ describe("synthesizeExampleCall — required-first-then-optional; optional omitt
       properties: { z: { type: "string" }, a: { type: "string" } },
       required: ["z", "a"],
     };
-    expect(synthesizeExampleCall("t", schema)).toBe('(t :z "string value" :a "string value")');
+    expect(synthesizeExampleCall("t", schema)).toBe("(t :z #|string|# :a #|string|#)");
   });
 });
 
@@ -298,7 +276,7 @@ describe("synthesizeExampleCall — object/nested properties, bounded to one lev
       },
       required: ["filter"],
     };
-    expect(synthesizeExampleCall("search_run", schema)).toBe('(search_run :filter {:status "string value"})');
+    expect(synthesizeExampleCall("search_run", schema)).toBe("(search_run :filter {:status #|string|#})");
   });
 
   it("a nested object's OPTIONAL fields are also omitted (minimal call at every depth)", () => {
@@ -314,11 +292,11 @@ describe("synthesizeExampleCall — object/nested properties, bounded to one lev
       required: ["filter"],
     };
     const call = synthesizeExampleCall("search_run", schema);
-    expect(call).toBe('(search_run :filter {:status "string value"})');
+    expect(call).toBe("(search_run :filter {:status #|string|#})");
     expect(call).not.toContain("note");
   });
 
-  it("a SECOND level of object nesting collapses to an empty object — the one-level bound", () => {
+  it("a SECOND level of object nesting collapses to an empty object — the one-level bound (unaffected by the placeholder rule: this is a STRUCTURE decision, not a value one)", () => {
     const schema: ToolJsonSchema = {
       type: "object",
       properties: {
@@ -349,7 +327,7 @@ describe("synthesizeExampleCall — object/nested properties, bounded to one lev
       required: ["flights"],
     };
     expect(synthesizeExampleCall("airline_book_reservation", schema)).toBe(
-      '(airline_book_reservation :flights [{:origin "string value" :destination "string value"}])',
+      "(airline_book_reservation :flights [{:origin #|string|# :destination #|string|#}])",
     );
   });
 
@@ -412,7 +390,7 @@ describe("synthesizeExampleCall — object/nested properties, bounded to one lev
       },
       required: ["cube"],
     };
-    expect(synthesizeExampleCall("cube_fill", schema)).toBe('(cube_fill :cube [[["string value"]]])');
+    expect(synthesizeExampleCall("cube_fill", schema)).toBe("(cube_fill :cube [[[#|string|#]]])");
   });
 
   it('an object with `properties` but no explicit type: "object" is still treated as an object shape', () => {
@@ -421,12 +399,12 @@ describe("synthesizeExampleCall — object/nested properties, bounded to one lev
       properties: { meta: { properties: { id: { type: "string" } }, required: ["id"] } },
       required: ["meta"],
     };
-    expect(synthesizeExampleCall("t", schema)).toBe('(t :meta {:id "string value"})');
+    expect(synthesizeExampleCall("t", schema)).toBe("(t :meta {:id #|string|#})");
   });
 });
 
 describe("synthesizeExampleCall — rendering conventions (mirrors doors.ts's renderRetryExpr/renderJsonLiteral)", () => {
-  it("nested dicts and lists use the {:k v} / [a b] literal grammar, not (dict ...)/(list ...)", () => {
+  it('nested dicts and lists use the {:k v} / [a b] literal grammar, not (dict ...)/(list ...); a type-placeholder hole renders UNQUOTED (#|string|#, not "#|string|#") in either position', () => {
     const schema: ToolJsonSchema = {
       type: "object",
       properties: {
@@ -435,10 +413,10 @@ describe("synthesizeExampleCall — rendering conventions (mirrors doors.ts's re
       },
       required: ["meta", "tags"],
     };
-    expect(synthesizeExampleCall("t", schema)).toBe('(t :meta {:name "string value"} :tags ["string value"])');
+    expect(synthesizeExampleCall("t", schema)).toBe("(t :meta {:name #|string|#} :tags [#|string|#])");
   });
 
-  it("a string real-value is escaped the same way renderJsonLiteral escapes it", () => {
+  it("a string real-value is escaped the same way renderJsonLiteral escapes it (a schema-authored const, not a placeholder)", () => {
     const schema: ToolJsonSchema = {
       type: "object",
       properties: { note: { type: "string", const: 'a "quoted" value\nwith a newline' } },
@@ -500,7 +478,7 @@ describe("synthesizeExampleCall — FIXED: a non-bare TOP-LEVEL property name no
       },
       required: ["meta"],
     };
-    expect(synthesizeExampleCall("t", schema)).toBe('(t :meta {"weird key!" "string value"})');
+    expect(synthesizeExampleCall("t", schema)).toBe('(t :meta {"weird key!" #|string|#})');
   });
 });
 
@@ -508,26 +486,24 @@ describe("synthesizeExampleCall — degenerate / contradictory schemas (adversar
   // These are genuine adversarial attempts that the synthesizer handles gracefully — pinned as
   // WORKS-CORRECTLY (defensible, non-crashing) so the behavior on impossible/degenerate input is
   // a documented baseline, not an accident.
-  it("contradictory bounds (minimum > maximum): clamps in order (min then max) → lands on the MAXIMUM", () => {
-    // No value satisfies min 10 AND max 5. numericStub applies minimum first (0→10), then maximum
-    // (10→5), so it returns the maximum. Defensible: some bound is honored; it never crashes.
+  it("contradictory bounds (minimum > maximum): renders the SAME #|number|# hole as any other number — no bound is a fact once no concrete value is synthesized, so contradiction can't manifest as a wrong clamp", () => {
     const schema: ToolJsonSchema = {
       type: "object",
       properties: { n: { type: "number", minimum: 10, maximum: 5 } },
       required: ["n"],
     };
-    expect(synthesizeExampleCall("t", schema)).toBe("(t :n 5)");
+    expect(synthesizeExampleCall("t", schema)).toBe("(t :n #|number|#)");
   });
 
   it("an EMPTY enum on a required prop falls through to the declared type (no crash, no `undefined`)", () => {
-    // stubValue guards `prop.enum.length > 0`, so an empty enum is skipped and the string type
-    // supplies the placeholder — never `enum[0]` (which would be `undefined`).
+    // stubValue guards `prop.enum.length > 0`, so an empty enum is skipped and the string
+    // type-placeholder hole is used instead — never `enum[0]` (which would be `undefined`).
     const schema: ToolJsonSchema = {
       type: "object",
       properties: { u: { type: "string", enum: [] } },
       required: ["u"],
     };
-    expect(synthesizeExampleCall("t", schema)).toBe('(t :u "string value")');
+    expect(synthesizeExampleCall("t", schema)).toBe("(t :u #|string|#)");
   });
 
   it("VERIFIED (no bug): an enum/type MISMATCH (numbers under a string-declared prop) still honors enum-wins-over-type, consistent with typeToken's own precedent — the schema itself is unsatisfiable either way", () => {
@@ -535,7 +511,8 @@ describe("synthesizeExampleCall — degenerate / contradictory schemas (adversar
     // enum, no enum member is a string) — a schema-author contradiction this synthesizer can't
     // repair. `stubValue` already prefers enum over the declared type (mirrors tool-signature.ts's
     // `typeToken`); this just confirms that precedent doesn't crash or misrender for a
-    // TYPE-inconsistent enum, it renders the enum member with its OWN actual (numeric) grammar.
+    // TYPE-inconsistent enum, it renders the enum member with its OWN actual (numeric) grammar —
+    // a REAL declared value, exempt from the placeholder rule regardless of the mismatch.
     const schema: ToolJsonSchema = {
       type: "object",
       properties: { unit: { type: "string", enum: [1, 2, 3] } },
@@ -553,6 +530,6 @@ describe("synthesizeExampleCall — degenerate / contradictory schemas (adversar
       properties: { a: { type: "string" } },
       required: ["a", "ghost"],
     };
-    expect(synthesizeExampleCall("t", schema)).toBe('(t :a "string value")');
+    expect(synthesizeExampleCall("t", schema)).toBe("(t :a #|string|#)");
   });
 });

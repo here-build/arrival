@@ -24,6 +24,10 @@ const escapeString = (s: string): string =>
 const BARE_KEY = /^[a-z][\w-]*$/i;
 
 function renderLiteral(value: unknown): string {
+  // Checked FIRST — a TypePlaceholder is a `typeof value === "object"` instance too, so it
+  // must be intercepted before the generic dict-literal branch below would instead render it
+  // as an empty `{}` (it carries no own-enumerable JSON-ish keys).
+  if (value instanceof TypePlaceholder) return `#|${value.token}|#`;
   if (value === null || value === undefined) return "nil";
   if (typeof value === "string") return `"${escapeString(value)}"`;
   if (typeof value === "number" || typeof value === "bigint") return String(value);
@@ -57,6 +61,23 @@ function renderCall(qualifiedName: string, args: Record<string, unknown>): strin
 
 // ─── stub synthesis ───
 
+/** A TYPE-PLACEHOLDER hole — what a non-enum slot renders instead of a fabricated concrete
+ *  value (second-foundation/arrival-manifold/docs/args-error-reporting-v2.md §2.3's
+ *  construction rules, §2.6): "concrete examples drift — models copy rendered exprs verbatim,
+ *  so an invented value…becomes the model's next call" (V, 2026-07-11). `renderLiteral` renders
+ *  this as `#|<token>|#` — the reader's OWN block-comment syntax — directly in value position,
+ *  UNQUOTED, so `:term #|string|#` is deliberately NOT evaluable (a keyword immediately
+ *  followed by a comment with no value): blind copy-paste fails loudly at the reader instead of
+ *  silently running our invention. `token` matches the signature renderer's own type vocabulary
+ *  (tool-signature.ts's `typeToken`: `string`/`number`/`boolean`) so the hole and the catalog
+ *  entry teach the same word. An ENUM slot is exempt (stubValue's enum branch, unaffected by
+ *  this class entirely) — an enum member is schema fact, not invention. */
+class TypePlaceholder {
+  constructor(readonly token: string) {}
+}
+
+const placeholder = (token: string): TypePlaceholder => new TypePlaceholder(token);
+
 /** A private sentinel distinguishing "no real value was authored" from a legitimately-authored
  *  `null`/`0`/`false` (any of `const`/`examples[0]`/`default` CAN genuinely be one of those) — a
  *  plain `undefined` return can't carry that distinction since `undefined` is also JS's "absent
@@ -76,27 +97,16 @@ function realValueOf(prop: JsonSchemaProperty): unknown {
   return NO_REAL_VALUE;
 }
 
-/** `0` if it satisfies both `minimum`/`maximum` (when declared); otherwise the nearest bound
- *  that does — e.g. `minimum: 5` synthesizes `5`; `maximum: -3` synthesizes `-3`. Order of the
- *  two clamps doesn't matter for a well-formed schema (`minimum <= maximum`). */
-function numericStub(prop: JsonSchemaProperty): number {
-  let v = 0;
-  if (prop.minimum !== undefined && v < prop.minimum) v = prop.minimum;
-  if (prop.maximum !== undefined && v > prop.maximum) v = prop.maximum;
-  return v;
-}
-
 /** How many items an array stub needs to stay SCHEMA-VALID (found+fixed 2026-07-05: neither
  *  `minItems` nor `maxItems` was ever read here — confirmed empirically that a declared
  *  `minItems: 3` still synthesized a single-item array, a call that fails the tool's own
  *  schema). `1` is the floor absent a declared `minItems` — it exists to demonstrate the
  *  element shape at all, same rationale as always stubbing a required param instead of
  *  omitting it; `minItems` only ever raises that floor, never lowers it below what a
- *  DECLARED `minItems` demands. `maxItems` clamps LAST (mirrors `numericStub`'s own
- *  minimum-then-maximum order), so a self-contradictory schema (`minItems > maxItems`) lands
- *  on the maximum — some bound honored, never a crash — the exact same defensible-not-crash
- *  precedent `numericStub` documents for contradictory `minimum`/`maximum`. A `maxItems: 0`
- *  (an array that must stay empty) correctly synthesizes zero items, not one. */
+ *  DECLARED `minItems` demands. `maxItems` clamps LAST (minimum first, then maximum — the
+ *  same clamp ORDER a numeric bound would apply), so a self-contradictory schema
+ *  (`minItems > maxItems`) lands on the maximum — some bound honored, never a crash. A
+ *  `maxItems: 0` (an array that must stay empty) correctly synthesizes zero items, not one. */
 function arrayItemCount(prop: JsonSchemaProperty): number {
   let count = Math.max(1, prop.minItems ?? 0);
   if (prop.maxItems !== undefined) count = Math.min(count, prop.maxItems);
@@ -136,19 +146,21 @@ export function stubValue(prop: JsonSchemaProperty, depth: number): unknown {
   if (real !== NO_REAL_VALUE) return real;
   // enum wins over the declared `type`, mirroring `typeToken`'s own treatment — but only once
   // no const/examples/default was authored (those are stronger, more specific hints than an
-  // arbitrary first-listed enum member).
+  // arbitrary first-listed enum member); an enum member is schema FACT, exempt from the
+  // type-placeholder rule below (design doc §2.3/§2.6 — never invention, so never a hole).
   if (prop.enum && prop.enum.length > 0) return prop.enum[0];
+  // Every scalar case below is a TYPE-PLACEHOLDER hole, not a fabricated concrete value (design
+  // doc §2.3/§2.6, see {@link TypePlaceholder}) — `minimum`/`maximum` no longer influence the
+  // rendered token (there is no concrete number to clamp anymore); a declared bound is still
+  // honored implicitly, the caller fills the hole with a real, bound-satisfying value.
   switch (prop.type) {
     case "string":
-      return "string value";
+      return placeholder("string");
     case "number":
     case "integer":
-      return numericStub(prop);
+      return placeholder("number");
     case "boolean":
-      // Either true or false is defensible (the spec has no universal convention); false
-      // mirrors the numeric stub's own "zero value" choice (0) — the same neutral, additive-
-      // identity-flavored default across both scalar kinds, rather than an arbitrary pick.
-      return false;
+      return placeholder("boolean");
     case "array": {
       // `arrayItemCount(prop)` recursively-synthesized items (usually 1 — enough to
       // demonstrate the element shape — but raised to satisfy a declared `minItems` and
@@ -157,7 +169,7 @@ export function stubValue(prop: JsonSchemaProperty, depth: number): unknown {
       // already use for a JS array (never the `#(...)` reader vector-literal form, which this
       // codebase reserves for a genuine Scheme vector value, not a JSON-array-shaped tool
       // argument). No declared `items` schema degrades to an empty JsonSchemaProperty, which
-      // itself falls through to the "unknown type" fallback below — the same "string value"
+      // itself falls through to the "unknown type" fallback below — the same `#|string|#`
       // safest-fallback a required-but-untyped property gets. Every item is the SAME
       // recursively-synthesized stub (this dialect has no "vary the Nth element" concept to
       // synthesize against) — repeating it is what makes a `minItems`-driven count valid.
@@ -172,10 +184,9 @@ export function stubValue(prop: JsonSchemaProperty, depth: number): unknown {
       // check (`items.type === "object" || !!items.properties`).
       if (prop.properties) return stubObject(prop, depth);
       // Truly unknown/missing type with no real value and no shape to recurse into — the
-      // safest generic fallback: a quoted string is valid input to nearly every param shape
-      // (a string-typed param takes it verbatim; most other upstream handlers can at least
-      // parse or report on a string better than an arbitrarily-typed placeholder).
-      return "string value";
+      // safest generic hole: a string-typed slot accepts nearly any value shape, so `string`
+      // is the safest type token to hint at when none was declared.
+      return placeholder("string");
   }
 }
 

@@ -12,8 +12,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { BoundTool } from "../bound-tool.js";
-import { synthesizeExampleCall } from "../example-call.js";
 import { DoorSession, implicatedTool, isToolMisuseError, signatureEchoFor } from "../doors.js";
+import { synthesizeExampleCall } from "../example-call.js";
 
 describe("isToolMisuseError — the argument/validation/kwarg shapes only", () => {
   it("matches kwargs, s/*, and upstream argument-rejection shapes", () => {
@@ -198,6 +198,9 @@ describe("A — a downstream -32602 'Input validation error' gets a synthesized 
     const suffix = session.echoSignature(echo!.tool, echo!.signatureText, example);
     expect(suffix).toContain("\nSignature: ");
     expect(suffix).toContain("\nExample: ");
-    expect(example).toBe(`(${qualified} :query {:condition "string value"})`);
+    // Non-enum slot: the type-placeholder hole (design doc
+    // second-foundation/arrival-manifold/docs/args-error-reporting-v2.md §2.3/§2.6), not a
+    // fabricated concrete "string value" (2026-07-11 consumer-pin update).
+    expect(example).toBe(`(${qualified} :query {:condition #|string|#})`);
   });
 });
