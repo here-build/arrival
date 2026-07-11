@@ -3,13 +3,14 @@
 // the bare Signature + Example echo with a LOCALIZED teach — the failing parameter named, its
 // sub-schema taught, a copy-paste-correct retry shape — escalating on repeated failure of the
 // same (tool, param). S1 contracts `extractClues`, S2 `localizeFailingParam`, S3
-// `ArgsFailureTracker`, S4 `synthesizeExampleCall`'s hole rendering; S5 remains an `it.todo`
-// (it contracts the retry-shape builder, design doc §2.6, which has no export yet).
+// `ArgsFailureTracker`, S4 `synthesizeExampleCall`'s hole rendering, S5 `buildRetryShape`
+// (the §2.6 composition — flipped from it.todo when args-misuse-door.ts landed).
 
 import { describe, expect, it } from "vitest";
 
 import { ArgsFailureTracker } from "../args-failure-tracker.js";
 import { extractClues, localizeFailingParam, type ArgsClue } from "../args-misuse.js";
+import { buildRetryShape } from "../args-misuse-door.js";
 import { synthesizeExampleCall } from "../example-call.js";
 import type { JsonSchemaProperty, ToolJsonSchema } from "../tool-schema.js";
 
@@ -410,17 +411,85 @@ describe("args-misuse — localized door + escalation (docs/args-error-reporting
     },
   );
 
-  // S5: the retry-shape builder (§2.3's `Retry shape:` line, §2.6's composition priority order)
-  // — holes appear ONLY inside the rewritten (failing) param, every other sent arg is echoed
-  // verbatim; the whole result parses as a valid reader form (T1's coherence law: renderer vs
-  // reader); it NEVER contains the model's own sent SCALAR relocated as though it were a real
-  // fix (case A's "pick-a-key menu", never a silent relocation) nor any invented concrete data
-  // outside a declared enum member. No such builder exists yet (new export composing
-  // renderRetryExpr + synthesizeParamValue, §2.6/§3 hook #7) — `it.todo`.
-  it.todo(
-    "S5 — retry-shape builder: holes appear ONLY in the rewritten (failing) param, every other sent arg " +
-      "is echoed verbatim; the whole result parses as a reader form (renderer/reader coherence law); it " +
-      "NEVER contains the model's sent scalar relocated as a silent fix, nor invented concrete data outside " +
-      "a declared enum member",
-  );
+  // S5: the retry-shape builder (§2.3's `Retry shape:` line, §2.6's composition priority
+  // order) — holes appear ONLY inside the rewritten (failing) param, every other sent arg is
+  // echoed verbatim; the whole result parses as a valid reader form (T1's coherence law:
+  // renderer vs reader — asserted against arrival's REAL tokenizer/parser, not a regex); it
+  // NEVER contains the model's own sent SCALAR relocated as though it were a real fix (case
+  // A's "pick-a-key menu", never a silent relocation) nor any invented concrete data outside
+  // a declared enum member.
+  describe("S5 — buildRetryShape (design doc §2.3 construction rules, §2.6 priority order)", () => {
+    const QUALIFIED = "clinicaltrialsgov-mcp-server/clinicaltrials_list_studies";
+    const QUERY_SUBSCHEMA: JsonSchemaProperty = {
+      type: "object",
+      properties: {
+        cond: { type: "string", description: "Conditions or disease query." },
+        term: { type: "string", description: "Other terms query." },
+      },
+    };
+
+    /** The coherence law, proven against the REAL reader (never a regex): a hole-free retry
+     *  expr parses as one form as-is; a hole-bearing one parses once the model fills the hole
+     *  — and must NOT parse blind (the hole strips as a block comment, leaving an uneven dict:
+     *  our invention can never run as plausible data — the anti-copy-paste feature,
+     *  example-call.ts's TypePlaceholder contract). */
+    async function parsesAsOneForm(expr: string): Promise<boolean> {
+      const { parse } = await import("@here.build/arrival");
+      try {
+        return (await parse(expr)).length === 1;
+      } catch {
+        return false;
+      }
+    }
+
+    it("case A (value-mismatch on a keyed object param): the rewritten param carries a #|type|# hole under the first declared key + a pick-a-key menu; the OTHER sent args are echoed verbatim; the sent scalar is NEVER relocated", async () => {
+      const sent = "King Saud University";
+      const sentArgs = { query: sent, pageSize: 50 };
+      const localized = localizeFailingParam(`'${sent}' is not of type 'object'`, sentArgs, {
+        type: "object",
+        properties: { query: QUERY_SUBSCHEMA, pageSize: { type: "number" } },
+      })!;
+      const shape = buildRetryShape(QUALIFIED, sentArgs, localized);
+      expect(shape).toBeDefined();
+      expect(shape!.expr).toContain(":query {:cond #|string|#}");
+      expect(shape!.expr).toContain(":pageSize 50"); // other args verbatim
+      expect(shape!.expr).not.toContain(sent); // never the sent scalar relocated
+      expect(shape!.menu).toContain("cond (Conditions or disease query.)");
+      // Blind copy-paste FAILS at the reader (the dict-literal hole strips to an uneven
+      // dict); filling the hole with a real value parses as one form.
+      await expect(parsesAsOneForm(shape!.expr)).resolves.toBe(false);
+      await expect(parsesAsOneForm(shape!.expr.replace("#|string|#", '"diabetes"'))).resolves.toBe(true);
+    });
+
+    it("case B (unexpected-key at edit distance 1): the model's OWN object is echoed with just the key renamed — copy-paste-correct, no holes (the model's data is not our invention)", async () => {
+      const sentArgs = { query: { terms: "King Saud University" } };
+      const localized = localizeFailingParam(
+        "Additional properties are not allowed ('terms' was unexpected)",
+        sentArgs,
+        { type: "object", properties: { query: QUERY_SUBSCHEMA } },
+      )!;
+      const shape = buildRetryShape(QUALIFIED, sentArgs, localized);
+      expect(shape).toBeDefined();
+      expect(shape!.expr).toBe(`(${QUALIFIED} :query {:term "King Saud University"})`);
+      expect(shape!.menu).toBeUndefined();
+      await expect(parsesAsOneForm(shape!.expr)).resolves.toBe(true);
+    });
+
+    it("declines (undefined) on a NESTED failing path — rewriting the container would drop its healthy siblings, so no retry expr beats a wrong one", () => {
+      const schema: ToolJsonSchema = {
+        type: "object",
+        properties: { filter: { type: "object", properties: { geo: { type: "string" } } } },
+      };
+      const sentArgs = { filter: { geo: "x" } };
+      const localized = localizeFailingParam('[{"path": ["filter", "geo"], "message": "m"}]', sentArgs, schema)!;
+      expect(localized.path).toEqual(["filter", "geo"]);
+      expect(buildRetryShape(QUALIFIED, sentArgs, localized)).toBeUndefined();
+    });
+
+    it("declines (undefined) without sent args — there is no call of the model's own to echo", () => {
+      const schema: ToolJsonSchema = { type: "object", properties: { query: QUERY_SUBSCHEMA } };
+      const localized = localizeFailingParam('[{"path": ["query"], "message": "m"}]', undefined, schema)!;
+      expect(buildRetryShape(QUALIFIED, undefined, localized)).toBeUndefined();
+    });
+  });
 });

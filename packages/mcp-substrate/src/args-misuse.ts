@@ -23,9 +23,11 @@ import type { JsonSchemaProperty, ToolJsonSchema } from "./tool-schema.js";
 
 /** One family-tagged clue pulled from an upstream (or own-decode) rejection's prose. */
 export interface ArgsClue {
-  kind: "zod-path" | "value-mismatch" | "unexpected-keys" | "required-key";
-  /** zod-path: the issues[].path array, stringified. Others: the quoted token(s) from the
-   *  prose (a single token for value-mismatch/required-key, one-or-more for unexpected-keys). */
+  kind: "own-decode" | "zod-path" | "value-mismatch" | "unexpected-keys" | "required-key";
+  /** own-decode/zod-path: the failing param's path segments (own-decode splits the dotted
+   *  `:<path> —` line head; zod-path stringifies the issues[].path array). Others: the quoted
+   *  token(s) from the prose (a single token for value-mismatch/required-key, one-or-more for
+   *  unexpected-keys). */
   tokens: readonly string[];
   /** value-mismatch only: the expected type named by the error ("object", "array", …). */
   expectedType?: string;
@@ -84,6 +86,13 @@ const QUOTED_TOKEN_RE = /'([^']*)'/g;
 /** python-jsonschema required-key: `'<key>' is a required property`. */
 const REQUIRED_KEY_RE = /'([^']*)' is a required property/g;
 
+/** OUR OWN kwargs-decode rejection (arrival common/kwargs-rejection.ts's frozen grammar,
+ *  design doc §2.5): `<qualified>: arguments rejected — N problem(s):` followed by
+ *  `  :<dotted.path> — <issue>` lines. The head gate keeps the line-head regex from firing on
+ *  arbitrary `:foo —` prose in an unrelated upstream error. */
+const OWN_DECODE_HEAD_RE = /(?:^|: )arguments rejected — \d+ problem\(s\):/;
+const OWN_DECODE_LINE_RE = /^ {2}:([\w.-]+) — /gm;
+
 /** Extract every clue an upstream (or own-decode) rejection's prose carries, in family
  *  PRIORITY order (design doc §2.2: zod-path is authoritative — a structured path needs no
  *  walk — so it's tried first by every caller that iterates this list). A single error text
@@ -94,6 +103,14 @@ const REQUIRED_KEY_RE = /'([^']*)' is a required property/g;
  *  the latter is this module's job to fall back FROM). */
 export function extractClues(errorText: string): ArgsClue[] {
   const clues: ArgsClue[] = [];
+
+  // own-decode FIRST (design doc §2.5: "a fourth, first-priority family") — the message names
+  // its failing param natively in a grammar WE freeze, so it outranks even zod-path.
+  if (OWN_DECODE_HEAD_RE.test(errorText)) {
+    for (const m of errorText.matchAll(OWN_DECODE_LINE_RE)) {
+      clues.push({ kind: "own-decode", tokens: m[1]!.split(".") });
+    }
+  }
 
   for (const m of errorText.matchAll(ZOD_PATH_RE)) {
     let path: unknown;
@@ -319,6 +336,9 @@ const RESOLVERS: {
     schema: ToolJsonSchema | undefined,
   ) => Localized | undefined;
 } = {
+  // own-decode resolves exactly like zod-path: the path IS the answer (our own frozen grammar
+  // named it), verified against the schema before it may be taught (same soundness gate).
+  "own-decode": resolveZodPath,
   "zod-path": resolveZodPath,
   "value-mismatch": resolveValueMismatch,
   "unexpected-keys": resolveUnexpectedKeys,

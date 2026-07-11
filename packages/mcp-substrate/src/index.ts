@@ -1,5 +1,6 @@
 export * from "./args-failure-tracker.js";
 export * from "./args-misuse.js";
+export * from "./args-misuse-door.js";
 export * from "./attachment-sink.js";
 export * from "./bound-tool.js";
 export * from "./calibration.js";

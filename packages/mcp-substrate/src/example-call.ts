@@ -210,6 +210,32 @@ function requiredStubs(
   return args;
 }
 
+/** Render ONE value in the example-call literal grammar — the hole-aware sibling of doors.ts's
+ *  `renderJsonLiteral` (which never sees a {@link TypePlaceholder}). Exported for the retry-shape
+ *  builder (args-misuse-door.ts, design doc §2.6): the rewritten failing param carries holes, the
+ *  other params carry the model's own concrete sent values, and BOTH must render through the same
+ *  grammar so the composed expr stays parseable by construction. */
+export function renderExampleLiteral(value: unknown): string {
+  return renderLiteral(value);
+}
+
+/** A TYPE-PLACEHOLDER hole value for composed arg trees (renders as `#|token|#`, see
+ *  {@link TypePlaceholder}) — the retry-shape builder plants these in the rewritten param's
+ *  value slots instead of invented concrete data (design doc §2.3's construction rules). */
+export function typeHole(token: string): unknown {
+  return placeholder(token);
+}
+
+/** A minimal schema-valid value for ONE property, rendered in reader grammar (design doc §2.6)
+ *  — e.g. `{}` for an all-optional object param, `#|string|#` for a bare string param,
+ *  `{:id #|string|#}` for an object with one required key. The depth budget starts AT this
+ *  property (the caller is already focused one level down the tool's schema — the L1 retry
+ *  shape rewrites exactly one failing param), so a nested object param shows its own required
+ *  keys before collapsing. */
+export function synthesizeParamValue(prop: JsonSchemaProperty): string {
+  return renderLiteral(stubValue(prop, 0));
+}
+
 /** Synthesize a complete, syntactically valid example call for `qualifiedName` off its declared
  *  input `schema` — every REQUIRED top-level param gets a minimal stub value (a real
  *  const/examples/default when the schema authors one, else a type-appropriate placeholder);

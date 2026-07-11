@@ -13,6 +13,9 @@ import { APair, execState, parse, theVoid, tokenize, type LexicalScope, type Sch
 import type { AssembledAmbient } from "@here.build/arrival/env";
 import { toSExprString } from "@here.build/arrival-serializer";
 
+import { ArgsFailureTracker, type ArgsFailureState } from "./args-failure-tracker.js";
+import { localizeFailingParam } from "./args-misuse.js";
+import { renderArgsMisuseTeaching, renderFullSchemaTeaching } from "./args-misuse-door.js";
 import type { AttachmentSink } from "./attachment-sink.js";
 import type { BoundTool, ToolNaming } from "./bound-tool.js";
 import { type CalibrationOptions, DEFAULT_CALIBRATION } from "./calibration.js";
@@ -198,6 +201,13 @@ export interface DoorsRunnerOptions {
   session?: DoorSession;
   /** Optional shared `FutilityTracker`. If omitted, futility doors are disabled for this runner. */
   tracker?: FutilityTracker;
+  /** Optional shared `ArgsFailureTracker` (args-misuse escalation state, design doc §2.4).
+   *  UNLIKE `tracker`, a private instance is constructed when omitted (the `session` precedent,
+   *  not the futility one): escalation is intrinsic to the args-misuse door's correctness —
+   *  without state every failure would render the lean L1 forever. Inject the host's instance
+   *  when reset-on-success must fire (the binder sees tool successes, the runner doesn't) or
+   *  when state must survive a world rebuild. */
+  argsTracker?: ArgsFailureTracker;
 }
 
 /** The serializable teaching state for a `DoorsRunner`.
@@ -214,6 +224,9 @@ interface SessionBlob {
   localBindings: LocalBindingState;
   doorSession: { seen: readonly string[]; pendingFollow: readonly (readonly [string, DoorCode])[]; seq: number };
   contextRing: readonly (readonly [string, string])[];
+  /** ADDITIVE (design doc §2.4): args-misuse escalation counters. Absent in older blobs ⇒
+   *  empty tracker on restore — no version bump, the `competence`-key tolerance precedent. */
+  argsFailures?: ArgsFailureState;
 }
 
 /** Session-scoped stateful runner — NOT a pure function. Holds door session, local-binding
@@ -232,6 +245,7 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
 
   const session = options.session ?? new DoorSession();
   const tracker = options.tracker;
+  const argsTracker = options.argsTracker ?? new ArgsFailureTracker();
   const localBindingTracker = createLocalBindingTracker();
   let callCounter = 0;
   let generation = 0;
@@ -409,14 +423,34 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
               }
             }
           } else {
-            // SIGNATURE-ECHO (doors.ts's signatureEchoFor, gated by the injected misuse-shape
-            // strategy) + the EXAMPLE synthesized through the injected example-synthesis
-            // strategy (the two strategies.ts seams a positional consumer overrides), never
-            // the kwargs-specific defaults directly.
+            // THE ARGS-MISUSE PIPELINE (design doc §3 hook #2). Gated by the same
+            // signature-echo decision as before (misuse shape + exactly one implicated tool
+            // + a known signature — the strategies.ts seams a positional consumer overrides).
+            // When the failure LOCALIZES to one param (args-misuse.ts, fed by the binder's
+            // membrane metadata via strategies.argsOfError), the L1/L2/L3 teaching replaces
+            // the generic Example line — the model's own call beats a stub — and `Signature:`
+            // still rides below it. When it doesn't, today's Signature + Example fallback is
+            // byte-identical (the do-no-harm guard), with the ⊥ counter escalating a
+            // repeatedly-unlocalizable tool to the full-schema backstop at L2+.
             const echo = signatureEchoFor(statementText, raw, signatureByName, input.tools, strategies.isMisuseError);
             if (echo) {
-              const example = strategies.synthesizeExample(echo.tool, toolSchemas.get(echo.tool));
-              text += session.echoSignature(echo.tool, echo.signatureText, example);
+              const schema = toolSchemas.get(echo.tool);
+              const metadata = strategies.argsOfError?.(error);
+              const sentArgs = metadata?.qualifiedName === echo.tool ? metadata.sentArgs : undefined;
+              const localized = localizeFailingParam(raw, sentArgs, schema);
+              if (localized) {
+                const level = argsTracker.recordFailure(echo.tool, localized.path);
+                const body = renderArgsMisuseTeaching({ qualifiedName: echo.tool, sentArgs, localized, level });
+                text += session.appendArgsTeaching(echo.tool, localized.path.join("."), level, body);
+                text += session.echoSignature(echo.tool, echo.signatureText);
+              } else {
+                const level = argsTracker.recordFailure(echo.tool, undefined);
+                const example = strategies.synthesizeExample(echo.tool, schema);
+                text += session.echoSignature(echo.tool, echo.signatureText, example);
+                if (level >= 2) {
+                  text += session.appendArgsTeaching(echo.tool, "⊥", level, renderFullSchemaTeaching(echo.tool, schema));
+                }
+              }
             }
           }
           blocks.push({ type: "text", text });
@@ -468,6 +502,7 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
       localBindings: localBindingTracker.exportState(),
       doorSession: session.exportState(),
       contextRing: contextRing?.exportEntries() ?? [],
+      argsFailures: argsTracker.exportState(),
     };
     return JSON.stringify(blob);
   }
@@ -480,6 +515,7 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
     localBindingTracker.importState(parsed.localBindings);
     session.importState(parsed.doorSession);
     contextRing?.restoreEntries(parsed.contextRing);
+    argsTracker.importState(parsed.argsFailures ?? { entries: [] });
   }
 
   return { run, exportSession, restoreSession };

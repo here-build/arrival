@@ -30,6 +30,7 @@ export type DoorCode =
   | "envelope/scope-confusion"
   | "envelope/import-form"
   | "envelope/signature-echo"
+  | "envelope/args-misuse"
   | "envelope/futile-retry"
   | "envelope/duplicate-call"
   | "envelope/bypass-autoexec";
@@ -444,6 +445,18 @@ function isTightMatch(attempted: string, candidate: string, tools: ReadonlyMap<s
   return editDistance(a, bare) <= 1 || editDistance(a, full) <= 1;
 }
 
+/** KEY-level tight match (design doc §2.2's observation 2 — `isTightMatch` applied one level
+ *  down, to a sub-schema's KEYS instead of tool names): canonical-form equality, or an edit
+ *  distance of 1 between canonical forms (a single typo / one-off insertion-deletion — the
+ *  45edee `terms`→`term` rename was exactly one edit). Deliberately as narrow as the tool-name
+ *  gate: a distance-2 key is a plausible GUESS, and the key-rename clause renders as an
+ *  explicit fact ("the key you want is :term."), so only certainty qualifies. */
+export function isTightKeyMatch(attempted: string, candidate: string): boolean {
+  const a = normalizeSymbolName(attempted);
+  const c = normalizeSymbolName(candidate);
+  return a === c || editDistance(a, c) <= 1;
+}
+
 /** Data-literal shape classifier: `"null"` (its own nil/omit teaching), `"general"` (a value
  *  that should have been quoted), or `undefined` (no literal shape — leave the wall untouched
  *  rather than teach something false, the task's rule 4). */
@@ -842,6 +855,12 @@ const TOOL_MISUSE_SHAPES: readonly RegExp[] = [
   /\binvalid arguments\b/i, // upstream JSON-Schema/zod argument rejection
   /\brequired propert(?:y|ies)\b/i, // JSON-Schema "must have required property"
   /\bInput validation error\b/i, // the TS MCP SDK's downstream tool-input-rejection wrapper
+  // OUR OWN kwargs-decode rejection (arrival common/kwargs-rejection.ts's frozen grammar,
+  // design doc §2.5) — `<qualified>: arguments rejected — N problem(s):`, INCLUDING the
+  // headless anonymous-def variant `arguments rejected — …` (the manifold binds tool
+  // rosettas through NAME_DOC_TEMPLATE whose parsed name is empty, so the head degrades
+  // to the bare form — the alternation covers both).
+  /(?:^|: )arguments rejected — \d+ problem\(s\):/,
 ];
 
 /** True iff an error message is an argument/validation/kwarg/arity failure (see the shape list). */
@@ -1051,6 +1070,21 @@ export class DoorSession {
     this.log(JSON.stringify({ door: "envelope/signature-echo", seq: this.seq, tool }));
     const exampleLine = example === undefined ? "" : `\nExample: ${example}`;
     return `\nSignature: ${signatureText}${exampleLine}`;
+  }
+
+  /** ARGS-MISUSE TEACHING render + telemetry (design doc §3 hook #4 — echoSignature's sibling,
+   *  same log-and-return-suffix shape): emits one `{door, seq, tool, param, level}` stderr line
+   *  under `envelope/args-misuse` and returns `body` (the pre-rendered L1/L2/L3 teaching lines,
+   *  built by args-misuse-door.ts) to append below the preserved verbatim first line. `param` is
+   *  the dotted failing-param path (`"⊥"` for the unlocalized backstop); `level` is the
+   *  tracker's escalation rung — benches measure retries-per-level directly off this line
+   *  (follow-rate discipline, Rule 5). NO verbose/terse gate: escalation REPLACES the monotonic
+   *  verbosity gradient (the signature-echo precedent — repetition here earns MORE teaching,
+   *  and the ArgsFailureTracker owns that state, never the session's `seen` set). */
+  appendArgsTeaching(tool: string, param: string, level: number, body: string): string {
+    this.seq += 1;
+    this.log(JSON.stringify({ door: "envelope/args-misuse", seq: this.seq, tool, param, level }));
+    return body;
   }
 
   /** BYPASS AUTO-EXEC telemetry (mirrors {@link echoSignature}'s logging-without-rejection
