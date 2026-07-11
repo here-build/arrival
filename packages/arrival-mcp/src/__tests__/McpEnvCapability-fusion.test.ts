@@ -124,19 +124,20 @@ describe("annotation lifting preserves getters un-invoked (the projectDiscovery 
   // does), or the getter fires with `this` = the fresh bag, where `resources` is undefined.
   it("an inline inputSchema getter survives construction without firing", () => {
     let fired = 0;
+    let receiver: unknown;
     const cap = new McpEnvCapability("lazy-schema", {
       symbols: {
-      probe: {
-        fn(this: { resources: { db: { live: string } } }) {
-          return this.resources.db.live;
+        probe: {
+          fn: () => "x",
+          description: "getter-guarded verb",
+          get inputSchema(): readonly z.ZodType[] {
+            // Mirrors projectDiscovery: the getter is lazy precisely because it dereferences
+            // live resources — firing it before activation exists is the regression.
+            fired++;
+            receiver = this;
+            return [z.string()];
+          },
         },
-        description: "getter-guarded verb",
-        get inputSchema(): readonly z.ZodType[] {
-          fired++;
-          // Mirrors projectDiscovery: the getter dereferences live resources eagerly.
-          return [z.string().describe((this as { resources: { db: { live: string } } }).resources.db.live)];
-        },
-      },
       },
     });
     expect(fired).toBe(0); // construction lifted the getter as a DESCRIPTOR, never a value read
@@ -144,8 +145,9 @@ describe("annotation lifting preserves getters un-invoked (the projectDiscovery 
     expect(fired).toBe(0); // enumerating annotations still must not fire it
     const activation = { resources: { db: { live: "armed" } } };
     const schemas = Reflect.get(annotation, "inputSchema", activation) as readonly z.ZodType[];
-    expect(fired).toBe(1); // resolve-time invocation, activation receiver
-    expect(schemas[0]!.description).toBe("armed");
+    expect(fired).toBe(1); // resolve-time invocation only
+    expect(receiver).toBe(activation); // and with the ACTIVATION as `this`, not the lifted bag
+    expect(schemas).toHaveLength(1);
   });
 
   it("an explicit-record getter survives the same way", () => {
