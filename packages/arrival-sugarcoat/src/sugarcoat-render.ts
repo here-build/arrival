@@ -786,8 +786,8 @@ function renderTrailingLambda(lam: Node, o: SugarcoatOpts): string {
 }
 
 /** One postfix step on the render side: a subscript/key run (`[…]`), or a method
- *  (`.op` bare, or `.op{B}` braced — its lambda carried for rendering). */
-type RStep = { sub: string } | { op: string; lam?: Node };
+ *  (`.op` bare, `.op(args)` predicate call, or `.op{B}` braced — its lambda carried). */
+type RStep = { sub: string } | { op: string; lam?: Node; args?: Node[] };
 
 /** Peel ONE outermost step off `nd`, returning the receiver + the step — or null if
  *  `nd` isn't a single-receiver postfix application. Mirrors §4.3's constructors. */
@@ -808,6 +808,14 @@ function asStep(nd: Node, o: SugarcoatOpts): { recv: Node; step: RStep } | null 
     return { recv: items[2], step: { op: items[0].atom, lam: items[1] } };
   // bare method `(op recv)`.
   if (items.length === 2 && isPlainMethodOp(items[0])) return { recv: items[1], step: { op: items[0].atom } };
+  // predicate with args `(pred? arg… recv)` → `recv.pred?(arg…)` — receiver LAST. GATED to
+  // `?`-heads: a subject-test reads well receiver-last (`seat.valid-seat?(game)`), but a
+  // receiver-FIRST builtin (`vector-ref v i`, `list-ref lst i`) must NEVER flip — and none
+  // are predicates, so the `?` gate excludes them cleanly. `equal?`/`eq?`/`eqv?` are already
+  // out via NEVER_METHOD. Reader folds `.op(args)` back by its own receiver-last rule, so
+  // the round-trip holds.
+  if (items.length >= 3 && isPlainMethodOp(items[0]) && items[0].atom.endsWith("?"))
+    return { recv: items[items.length - 1], step: { op: items[0].atom, args: items.slice(1, -1) } };
   return null;
 }
 
@@ -824,7 +832,10 @@ function peelChain(nd: Node, o: SugarcoatOpts): { base: Node; steps: RStep[]; em
   const lone = steps.length === 1 ? steps[0] : null;
   const emit =
     steps.length >= 2 ||
-    (lone != null && ("sub" in lone || lone.lam != null || ("op" in lone && shouldFlipUnary(lone.op))));
+    (lone != null &&
+      ("sub" in lone ||
+        lone.lam != null ||
+        ("op" in lone && (shouldFlipUnary(lone.op) || (lone.args?.length ?? 0) > 0))));
   return { base: cur, steps, emit };
 }
 
@@ -835,7 +846,9 @@ function peelChain(nd: Node, o: SugarcoatOpts): { base: Node; steps: RStep[]; em
  *  (else `recv.op {sibling}` would swallow the sibling — see sugarcoat-read's brace gate). */
 function stepText(s: RStep, o: SugarcoatOpts): string {
   if ("sub" in s) return s.sub;
-  return s.lam ? `.${escSym(s.op)}${renderTrailingLambda(s.lam, o)}` : `.${escSym(s.op)}`;
+  const args = s.args && s.args.length > 0 ? `(${s.args.map((a) => inlineSugarcoat(a, o)).join(" ")})` : "";
+  const lam = s.lam ? renderTrailingLambda(s.lam, o) : "";
+  return `.${escSym(s.op)}${args}${lam}`;
 }
 
 /** One-line rendering, no width check. */

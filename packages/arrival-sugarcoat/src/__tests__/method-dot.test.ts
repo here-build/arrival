@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-
+import * as fs from "node:fs";
 import { schemeToSugarcoat, printScheme } from "../sugarcoat-render.js";
 import { readSugarcoatExpr, readSugarcoat } from "../sugarcoat-read.js";
 
@@ -87,6 +87,18 @@ describe("newline method chains (⏎.op)", () => {
     expect(lines[0]).toBe("the-closure-collection");
     expect(lines.every((l, i) => i === 0 || l.trimStart().startsWith("."))).toBe(true);
   });
+
+  it('test', () => {
+    console.log(
+      schemeToSugarcoat(
+        fs.readFileSync(
+          "/Users/jabher/WebstormProjects/dappsnap/foundations/arrival/arrival-sugarcoat/src/__tests__/test-file.arrival.scm",
+          { encoding: "utf8" },
+        ),
+        { strTolerant: true, skin: "math" },
+      ),
+    );
+  })
 });
 
 // §1 rewrite_L — a `\.` is a LITERAL dot in the symbol (unescaped on read, re-escaped
@@ -111,5 +123,35 @@ describe("trailing-lambda passthrough is arrow-shaped only", () => {
   });
   it("a variadic (lambda x) body is wrapped in the pronoun, not mistaken for the arrow form", () => {
     expect(read("xs.map{ (lambda x) }")).toBe("(map (lambda (it) (lambda x)) xs)");
+  });
+});
+
+// A binary/n-ary PREDICATE `(pred? arg… recv)` flips to the receiver-last method call
+// `recv.pred?(arg…)`. Gated to `?`-heads: a subject-test reads well receiver-last, while a
+// receiver-FIRST builtin (`vector-ref`, `list-ref`) is never a predicate, so it can't
+// mis-seat. Round-trips through the reader's `.op(args)` receiver-last fold.
+describe("render: predicate method-dot with args (receiver-last)", () => {
+  const cases: Array<[string, string]> = [
+    ["(valid-seat? (:game state) seat)", "seat.valid-seat?(state[:game])"],
+    ["(valid-seat? game seat)", "seat.valid-seat?(game)"],
+    ["(between? lo hi x)", "x.between?(lo hi)"], // n-ary predicate flips too
+    ["(list? x)", "x.list?"], // unary unchanged (already flipped)
+  ];
+  for (const [scheme, sugar] of cases) it(`${scheme} → ${sugar}`, () => expect(render(scheme)).toBe(sugar));
+
+  it("receiver-FIRST non-predicates stay prefix (no mis-seat)", () => {
+    expect(render("(vector-ref v i)")).toBe("(vector-ref v i)");
+    expect(render("(list-ref lst 3)")).toBe("(list-ref lst 3)");
+  });
+
+  it("equal?/eq? (NEVER_METHOD) never flip to a method dot", () => {
+    expect(render("(eq? a b)")).not.toContain(".eq?");
+    expect(render("(equal? a b)")).not.toContain(".equal?");
+  });
+
+  it("round-trips through the reader's receiver-last fold", () => {
+    for (const s of ["(valid-seat? (:game state) seat)", "(between? lo hi x)"]) {
+      expect(readAll(render(s))).toBe(s);
+    }
   });
 });
