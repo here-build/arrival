@@ -11,7 +11,7 @@
 
 import { CompletionContext } from "@codemirror/autocomplete";
 import { EditorState } from "@codemirror/state";
-import { createSchemeLanguageService } from "@here.build/arrival-type-lens";
+import { createSchemeLanguageService } from "@inhuman.tools/arrival-type-lens";
 import { describe, expect, it } from "vitest";
 
 import {

@@ -12,9 +12,9 @@
 // Plus line/col ↔ offset helpers for BOTH coordinate systems, since CodeMirror
 // works in either and a consumer may need to convert at the boundary.
 
-import type { Mapping } from "@inhuman-tools/mercury";
+import type { Mapping } from "@inhuman.tools/mercury";
 
-export type { Mapping } from "@inhuman-tools/mercury";
+export type { Mapping } from "@inhuman.tools/mercury";
 
 /** A `[start, start+length)` half-open range, in the LSP/`ts.TextSpan` shape. */
 export interface Span {

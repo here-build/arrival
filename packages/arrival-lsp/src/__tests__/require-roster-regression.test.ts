@@ -20,8 +20,8 @@
 
 import { rosettaTypesOf } from "@here.build/arrival";
 import { resolveRequireType } from "@here.build/arrival/loader";
-import { buildArrivalSession } from "@here.build/arrival-run";
-import { loaderFromResolver } from "@here.build/llm-plane-arrival-chain";
+import { buildArrivalSession } from "@inhuman.tools/arrival-run";
+import { loaderFromResolver } from "@inhuman.tools/llm-plane-arrival-chain";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { assembleHostPrelude } from "../host-prelude.js";

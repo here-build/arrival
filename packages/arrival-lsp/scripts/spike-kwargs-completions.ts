@@ -16,7 +16,7 @@
 //
 // Run: cd second-foundation/arrival-type-lens && node_modules/.bin/tsx scripts/spike-kwargs-completions.ts
 
-import { emitTypes } from "@inhuman-tools/mercury/types-emit";
+import { emitTypes } from "@inhuman.tools/mercury/types-emit";
 import ts from "typescript";
 
 import { readFileSync } from "node:fs";

@@ -38,7 +38,7 @@
     "@codemirror/view": "6.43.0",
     "@here.build/arrival-sugarcoat": "workspace:^",
     "@here.build/arrival-sampler": "workspace:^",
-    "@here.build/arrival-type-lens": "workspace:^",
+    "@inhuman.tools/arrival-type-lens": "workspace:^",
     "@here.build/editor-theme": "workspace:^",
     "@lezer/highlight": "1.2.1",
     "@uiw/react-codemirror": "4.25.9"

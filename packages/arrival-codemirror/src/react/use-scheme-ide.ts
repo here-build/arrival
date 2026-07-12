@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { LsPort } from "@here.build/arrival-type-lens/ls-client";
+import type { LsPort } from "@inhuman.tools/arrival-type-lens/ls-client";
 
 import type { SchemeIdeBackend } from "../index.js";
 
@@ -35,7 +35,7 @@ export function configureSchemeIdeHost(config: {
 let idePromise: Promise<SchemeIdeBackend | null> | null = null;
 
 async function workerBackend(shared: boolean): Promise<SchemeIdeBackend> {
-  const { connectSchemeLs } = await import("@here.build/arrival-type-lens/ls-client");
+  const { connectSchemeLs } = await import("@inhuman.tools/arrival-type-lens/ls-client");
   const connectOptions = { ...LS_OPTIONS, ...hostConfig };
   // Inline new URL(...) — bundlers only recognize this exact pattern for
   // worker bundling. Hoisting the URL breaks it.
@@ -112,7 +112,7 @@ function loadIde(): Promise<SchemeIdeBackend | null> {
       }
     }
     try {
-      const m = await import("@here.build/arrival-type-lens/browser");
+      const m = await import("@inhuman.tools/arrival-type-lens/browser");
       // In-thread rung: resolve straight off the live table.
       return m.createBrowserSchemeLanguageService({
         ...LS_OPTIONS,

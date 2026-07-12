@@ -1,5 +1,5 @@
 {
-  "name": "@here.build/arrival-type-lens",
+  "name": "@inhuman.tools/arrival-type-lens",
   "version": "0.1.0",
   "description": "Scheme\u2192TS type lens \u2014 the shared PRE prelude (branded base types + Dict mapped type + __arr declaration-merge contract) the 34 builtin .d.ts leaves merge into, so arrival programs bite under tsc.",
   "license": "FSL-1.1-MIT",
@@ -62,14 +62,14 @@
   },
   "dependencies": {
     "@here.build/arrival-sugarcoat": "workspace:^",
-    "@inhuman-tools/mercury": "workspace:^",
+    "@inhuman.tools/mercury": "workspace:^",
     "typescript": "6.0.2"
   },
   "devDependencies": {
     "@here.build/arrival": "workspace:^",
-    "@here.build/arrival-run": "workspace:^",
+    "@inhuman.tools/arrival-run": "workspace:^",
     "@here.build/eslint-configs": "workspace:^",
-    "@here.build/llm-plane-arrival-chain": "workspace:^",
+    "@inhuman.tools/llm-plane-arrival-chain": "workspace:^",
     "@here.build/tsconfig": "workspace:^",
     "@types/node": "24.0.0",
     "eslint": "9.39.2",

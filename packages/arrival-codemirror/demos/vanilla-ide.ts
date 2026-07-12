@@ -6,7 +6,7 @@
 
 import { closeBrackets } from "@codemirror/autocomplete";
 import { EditorView, lineNumbers } from "@codemirror/view";
-import { createBrowserSchemeLanguageService } from "@here.build/arrival-type-lens/browser";
+import { createBrowserSchemeLanguageService } from "@inhuman.tools/arrival-type-lens/browser";
 
 import { paramHintsExtension, schemeIde, schemeStructural, schemeSugarcoat } from "@here.build/arrival-codemirror";
 

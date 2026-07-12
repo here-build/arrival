@@ -6,7 +6,7 @@
 // Per `.claude/rules/tests.md` this is a `__tests__/` verdict (boolean pass/fail).
 
 import { schemeToSugarcoat } from "@here.build/arrival-sugarcoat";
-import { createSchemeLanguageService } from "@here.build/arrival-type-lens";
+import { createSchemeLanguageService } from "@inhuman.tools/arrival-type-lens";
 import { describe, expect, it } from "vitest";
 
 import { sugarcoatIdeBackend } from "../sugarcoat-ide.js";
