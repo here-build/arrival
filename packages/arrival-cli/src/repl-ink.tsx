@@ -27,6 +27,7 @@ import {
 
 import { emitForms } from "./form-emitter.js";
 import { identityLine } from "./greeting.js";
+import { pushHistory, recallNext, recallPrev, type NavState } from "./history-nav.js";
 import { highlightScheme } from "./highlight.js";
 import { colorizeSexpr } from "./sexpr-color.js";
 import { toLens, type Lens } from "./lens.js";
@@ -125,11 +126,23 @@ function ReplApp({ session, budgetMs, heapBudget, mode = colorMode() }: ReplAppP
   const [running, setRunning] = useState<ReplFoldModel | null>(null);
   const [lens, setLens] = useState<Lens>("sugarcoat");
   const input = useRef<InputBuffer>({ line: "", cursor: 0, pending: "" });
+  const cmdHistory = useRef<string[]>([]);
+  const nav = useRef<NavState | null>(null);
   const [, redraw] = useReducer((x: number) => x + 1, 0);
 
   const reset = useCallback((): void => {
     input.current = { line: "", cursor: 0, pending: "" };
+    nav.current = null;
   }, []);
+
+  /** Place a recalled entry into the buffer: a multi-line form restores its own
+   *  pending/line split so the continuation state is faithful, cursor at end. */
+  const applyEntry = (st: InputBuffer, entry: string): void => {
+    const lines = entry.split("\n");
+    st.pending = lines.slice(0, -1).join("\n");
+    st.line = lines[lines.length - 1] ?? "";
+    st.cursor = st.line.length;
+  };
 
   const submit = useCallback(
     async (src: string): Promise<void> => {
@@ -169,6 +182,7 @@ function ReplApp({ session, budgetMs, heapBudget, mode = colorMode() }: ReplAppP
         redraw();
         return;
       }
+      cmdHistory.current = pushHistory(cmdHistory.current, full);
       reset();
       redraw();
       void submit(full);
@@ -203,10 +217,32 @@ function ReplApp({ session, budgetMs, heapBudget, mode = colorMode() }: ReplAppP
         redraw();
         return;
       }
+      // Prefix-match history recall (zsh / Chrome-console): Up matches entries starting with
+      // the typed line; Down walks forward, past-newest restores the draft. Cursor moves
+      // don't reset nav; a content edit (below) does.
+      if (key.upArrow) {
+        const r = recallPrev(cmdHistory.current, nav.current, st.line);
+        if (r !== null) {
+          nav.current = r.nav;
+          applyEntry(st, r.entry);
+          redraw();
+        }
+        return;
+      }
+      if (key.downArrow) {
+        const r = recallNext(cmdHistory.current, nav.current);
+        if (r !== null) {
+          nav.current = r.nav;
+          applyEntry(st, r.entry);
+          redraw();
+        }
+        return;
+      }
       if (key.backspace || key.delete) {
         if (st.cursor > 0) {
           st.line = st.line.slice(0, st.cursor - 1) + st.line.slice(st.cursor);
           st.cursor -= 1;
+          nav.current = null; // editing rebases the prefix
           redraw();
         }
         return;
@@ -226,6 +262,7 @@ function ReplApp({ session, budgetMs, heapBudget, mode = colorMode() }: ReplAppP
       if (text !== "" && !key.ctrl && !key.meta) {
         st.line = st.line.slice(0, st.cursor) + text + st.line.slice(st.cursor);
         st.cursor += text.length;
+        nav.current = null; // typing rebases the prefix
       }
       if (enter) {
         onEnter(st.pending === "" ? st.line : `${st.pending}\n${st.line}`);
