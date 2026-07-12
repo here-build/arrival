@@ -905,16 +905,20 @@ export function inlineSugarcoat(nd: Node, o: SugarcoatOpts): string {
 /** A flat list = every element is an atom, e.g. a function signature `(f x y)`. */
 const isFlatList = (nd: Node): boolean => !isAtom(nd) && nd.list.length > 0 && nd.list.every(isAtom);
 
-/** A function `define` — `(define (name args…) body…)` with a FLAT-LIST signature.
- *  These always render broken (`define (sig)` ⏎ body), never inline as
- *  `(define (f x) body)`, so every function definition is shaped identically
- *  regardless of width (the inline/broken mix reads as an imbalance). */
+/** Definition heads whose FLAT-LIST second element is a function SIGNATURE (a binding
+ *  target), not an application to be method-dotted. */
+const DEFINE_HEADS = new Set(["define", "define/overridable"]);
+
+/** A function `define` — `(define (name args…) body…)` (or `define/overridable`) with a
+ *  FLAT-LIST signature. These always render broken (`define (sig)` ⏎ body), never inline as
+ *  `(define (f x) body)`, so every function definition is shaped identically regardless of
+ *  width (the inline/broken mix reads as an imbalance). */
 const isFnDefine = (nd: Node): boolean =>
   !isAtom(nd) &&
   nd.list.length >= 2 &&
   isAtom(nd.list[0]) &&
   !nd.list[0].str &&
-  nd.list[0].atom === "define" &&
+  DEFINE_HEADS.has(nd.list[0].atom) &&
   isFlatList(nd.list[1]);
 
 /** `(cond …)` — always rendered vertical: `cond` ⏎ each clause as `test` ⏎
@@ -1018,6 +1022,19 @@ function formatSugarcoatCore(nd: Node, col: number, o: SugarcoatOpts): string {
   // reads back as X, not (X) — so keep it inline even past the width budget
   // (e.g. a single long `let` binding `((cls (map …)))`). Round-trip > width here.
   if (items.length === 1) return flat;
+
+  // Function define — `head (name args…)` ⏎ body. The SIGNATURE is a BINDING target, not a
+  // call: render it as a literal paren group, NEVER method-dotted. `define (hand-value? x)`,
+  // not `define x.hand-value?` (which reads as assigning to a method). The body renders
+  // normally — its own predicate calls DO flip (`x.dict?`). Reader folds the classic
+  // `head (sig)` ⏎ body straight back to the definition.
+  if (isFnDefine(nd)) {
+    const pad2 = " ".repeat(col + 2);
+    const sig = `(${childList(items[1]).map((a) => atomText(a)).join(" ")})`;
+    const out = [`${atomText(items[0])} ${sig}`];
+    for (const bodyExpr of items.slice(2)) out.push(pad2 + formatSugarcoat(bodyExpr, col + 2, o));
+    return out.join("\n");
+  }
 
   // let-family with elidable bindings: `let*` ⏎ each binding `name` ⏎ `value` ⏎ body.
   // The `(( ))` is dropped in the view; the reader re-groups leading binding-shaped

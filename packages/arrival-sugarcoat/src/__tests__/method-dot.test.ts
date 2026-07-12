@@ -164,3 +164,18 @@ describe("render: relational predicates stay prefix (not method dots)", () => {
     it(`${s} stays prefix`, () => expect(render(s)).toBe(s));
   }
 });
+
+// A define/define/overridable SIGNATURE is a binding target, not a call — it must never
+// method-dot-flip, even for a predicate name. `define (hand-value? x)`, not the confusing
+// `define x.hand-value?`. The body flips normally (its predicate calls ARE calls).
+describe("render: define signatures are never method-dotted", () => {
+  it("predicate function define keeps a literal signature", () => {
+    expect(render("(define (hand-value? x) (dict? x))")).toBe("define (hand-value? x)\n  x.dict?");
+  });
+  it("n-ary predicate signature stays literal", () => {
+    expect(render("(define (between? lo hi x) (list? x))").split("\n")[0]).toBe("define (between? lo hi x)");
+  });
+  it("round-trips", () => {
+    expect(readAll(render("(define (hand-value? x) (dict? x))"))).toBe("(define (hand-value? x) (dict? x))");
+  });
+});
