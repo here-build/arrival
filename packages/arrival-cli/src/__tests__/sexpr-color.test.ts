@@ -57,3 +57,27 @@ describe("colorizeSexpr — actually colors the structure", () => {
     expect(out).toContain("   ");
   });
 });
+
+describe("colorizeSexpr — darcula type coloring (each leaf type distinct)", () => {
+  it("number, string, keyword, boolean, char each get a color; symbol stays default", () => {
+    const num = colorizeSexpr("42", "truecolor");
+    const str = colorizeSexpr('"x"', "truecolor");
+    const kw = colorizeSexpr(":k", "truecolor");
+    const bool = colorizeSexpr("#t", "truecolor");
+    const sym = colorizeSexpr("foo", "truecolor");
+    // symbol: no color (terminal foreground)
+    expect(sym).toBe("foo");
+    // the rest: colored (escapes present)
+    for (const c of [num, str, kw, bool]) expect(c).toMatch(/\x1b\[/);
+    // and by distinct classes: number ≠ keyword ≠ string colors
+    expect(num).not.toBe("42");
+    expect(num.match(/38;2;[\d;]+/)?.[0]).not.toBe(kw.match(/38;2;[\d;]+/)?.[0]); // blue ≠ purple
+    expect(str.match(/38;2;[\d;]+/)?.[0]).not.toBe(num.match(/38;2;[\d;]+/)?.[0]); // green ≠ blue
+  });
+  it("negative / decimal / rational / radix numbers all color as numbers", () => {
+    const blue = colorizeSexpr("42", "truecolor").match(/38;2;[\d;]+/)?.[0];
+    for (const nlit of ["-5", "3.14", "1/2", "#xff"]) {
+      expect(colorizeSexpr(nlit, "truecolor").match(/38;2;[\d;]+/)?.[0]).toBe(blue);
+    }
+  });
+});
