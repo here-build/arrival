@@ -179,3 +179,25 @@ describe("render: define signatures are never method-dotted", () => {
     expect(readAll(render("(define (hand-value? x) (dict? x))"))).toBe("(define (hand-value? x) (dict? x))");
   });
 });
+
+// `let` always breaks (cognitive density, not line length — a binding is a named
+// intermediate the reader tracks). Its BINDINGS are binding targets, never method-dotted:
+// `(let ((y (g x))) …)` keeps `((y (g x)))`, never `x.g.y`.
+describe("render: let always breaks; bindings stay literal (never method-dotted)", () => {
+  it("a short let still breaks to multiple lines", () => {
+    expect(render("(define (short) (let ((x 1)) x))").includes("\n")).toBe(true);
+  });
+  it("non-elidable let keeps the binding pair literal, not a method chain", () => {
+    const out = render("(define (f x) (let ((y (g x))) (h y)))");
+    expect(out).toContain("let ((y (g x)))");
+    expect(out).not.toContain("x.g.y");
+  });
+  it("named let renders its loop symbol + literal bindings", () => {
+    expect(render("(let loop ((i 0)) (loop i))").split("\n")[0]).toBe("let loop ((i 0))");
+  });
+  it("round-trips", () => {
+    for (const s of ["(define (f x) (let ((y (g x))) (h y)))", "(let loop ((i 0)) (loop i))"]) {
+      expect(readAll(render(s))).toBe(s);
+    }
+  });
+});

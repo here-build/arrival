@@ -944,6 +944,12 @@ const isStringAppend = (nd: Node): boolean =>
   !isAtom(nd) && nd.list.length > 0 && isAtom(nd.list[0]) && !nd.list[0].str && nd.list[0].atom === "string-append";
 
 const LET_FAMILY = new Set(["let", "let*", "letrec", "letrec*"]);
+/** Any `let`-family form. A `let` binds a named intermediate — pure cognitive density, not
+ *  line length — so it ALWAYS breaks (like `if`/`cond`/`begin`), never renders inline, even
+ *  when it would fit. Elidable ones take the nicer `name` ⏎ `value` render (isLetElidable);
+ *  the rest fall to the generic break (`let (bindings)` ⏎ body). */
+const isLetForm = (nd: Node): boolean =>
+  !isAtom(nd) && nd.list.length >= 2 && isAtom(nd.list[0]) && !nd.list[0].str && LET_FAMILY.has(nd.list[0].atom);
 const isBindingShaped = (nd: Node): boolean => !isAtom(nd) && nd.list.length === 2 && isAtom(nd.list[0]);
 /** A `let`/`let*`/`letrec`/`letrec*` whose bindings can be ELIDED in the view
  *  (each binding shown as `name` ⏎ `value`, dropping the `(( ))`). Safe only when
@@ -1010,7 +1016,7 @@ function formatSugarcoatCore(nd: Node, col: number, o: SugarcoatOpts): string {
     col + flat.length <= budget &&
     !isFnDefine(nd) &&
     !isCondForm(nd) &&
-    !isLetElidable(nd) &&
+    !isLetForm(nd) &&
     !isIfForm(nd) &&
     !isBeginForm(nd)
   )
@@ -1052,6 +1058,29 @@ function formatSugarcoatCore(nd: Node, col: number, o: SugarcoatOpts): string {
       out.push(pad4 + formatSugarcoat(bind[1], col + 4, o)); // binding value
     }
     for (const bodyExpr of items.slice(2)) out.push(pad2 + formatSugarcoat(bodyExpr, col + 2, o));
+    return out.join("\n");
+  }
+
+  // Non-elidable / named let (elidable ones took the branch above): keep the bindings as a
+  // literal `(( ))` group — each binding `(name <value>)` with the NAME literal (a binding
+  // target, never method-dotted, same rule as a define signature) and the value sugared. The
+  // generic break would method-dot the binding pair `(y (g x))` into `x.g.y`, mis-reading a
+  // binding as a call.
+  if (isLetForm(nd)) {
+    const pad2 = " ".repeat(col + 2);
+    const named = isAtom(items[1]);
+    const bindsNode = named ? items[2] : items[1];
+    const loop = named ? ` ${atomText(items[1])}` : "";
+    const binds = isAtom(bindsNode)
+      ? inlineSugarcoat(bindsNode, o)
+      : `(${childList(bindsNode)
+          .map((b) => {
+            const bl = childList(b);
+            return bl.length >= 2 ? `(${atomText(bl[0])} ${inlineSugarcoat(bl[1], o)})` : inlineSugarcoat(b, o);
+          })
+          .join(" ")})`;
+    const out = [`${atomText(items[0])}${loop} ${binds}`];
+    for (const bodyExpr of items.slice(named ? 3 : 2)) out.push(pad2 + formatSugarcoat(bodyExpr, col + 2, o));
     return out.join("\n");
   }
 
