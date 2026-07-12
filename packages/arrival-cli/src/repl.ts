@@ -27,6 +27,7 @@ import { EMPTY_REPL_MODEL, foldReplEvent, type ReplBlock, type ReplFoldModel } f
 import type { ArmedCapabilities } from "./capabilities.js";
 import { emitForms } from "./form-emitter.js";
 import { identityLine, readOwnVersion } from "./greeting.js";
+import { replInk } from "./repl-ink.js";
 import type { Lens } from "./lens.js";
 import { paintRegion, renderTurn } from "./painter.js";
 import { budgets, loaderSession, printError, printValue, type LoaderSession } from "./session.js";
@@ -161,5 +162,21 @@ async function replInteractive(ambient: LoaderSession["ambient"], scope: LoaderS
 export async function repl(armed?: ArmedCapabilities): Promise<number> {
   const { ambient, scope } = await loaderSession(process.cwd(), "arrival-repl", armed);
   const interactive = process.stdin.isTTY === true;
-  return interactive ? replInteractive(ambient, scope, armed) : replPlain(ambient, scope);
+  if (!interactive) return replPlain(ambient, scope);
+  // `ARRIVAL_REPL=classic` keeps the pre-Ink painter path — the escape hatch if the TUI
+  // misbehaves on some terminal.
+  if (process.env.ARRIVAL_REPL === "classic") return replInteractive(ambient, scope, armed);
+  // Default TTY: the Ink bottom-anchored TUI (repl-ink.tsx).
+  const version = await readOwnVersion();
+  try {
+    await replInk({
+      session: { ambient, scope },
+      ...budgets(),
+      capabilityCount: armed?.capabilities.length ?? 0,
+      version,
+    });
+  } finally {
+    await ambient.dispose();
+  }
+  return 0;
 }
