@@ -14,7 +14,7 @@
  * line/cursor — a terminal editor cannot afford React's async-state lag mid-word.
  */
 import React, { useCallback, useReducer, useRef, useState } from "react";
-import { Box, render, Static, Text, useApp, useInput } from "ink";
+import { Box, render, Static, Text, useApp, useInput, useStdout } from "ink";
 
 import { scan } from "@here.build/arrival/oracle";
 import {
@@ -29,6 +29,7 @@ import { DISABLE_AUTOWRAP, ENABLE_AUTOWRAP } from "./ansi.js";
 import { emitForms } from "./form-emitter.js";
 import { pushHistory, recallNext, recallPrev, type NavState } from "./history-nav.js";
 import { highlightScheme } from "./highlight.js";
+import { clipboardSet, COMMAND_START, commandDone } from "./osc.js";
 import { colorizeSexpr } from "./sexpr-color.js";
 import { toLens, type Lens } from "./lens.js";
 import { paint, colorMode, type TintName } from "./tints.js";
@@ -120,6 +121,24 @@ function TurnView({ blocks, lens, mode }: { blocks: readonly ReplBlock[]; lens: 
   );
 }
 
+/** A settled turn's OSC 133 exit code (§ TASK 2): 1 iff any block errored, else 0. */
+function turnExitCode(blocks: readonly ReplBlock[]): number {
+  return blocks.some((b) => b.state === "error") ? 1 : 0;
+}
+
+/** The plain (uncolored) value text of a settled turn — every "text" content chunk across
+ *  every block, joined. Feeds `,copy` (§ TASK 3): the user wants the VALUE they can paste
+ *  elsewhere, not the ANSI-painted rendering. */
+function turnValueText(blocks: readonly ReplBlock[]): string {
+  const parts: string[] = [];
+  for (const b of blocks) {
+    for (const c of b.content) {
+      if (c.type === "text") parts.push(c.text);
+    }
+  }
+  return parts.join("\n");
+}
+
 interface InputBuffer {
   line: string;
   cursor: number;
@@ -137,13 +156,24 @@ export interface ReplAppProps {
 }
 
 function ReplApp({ session, budgetMs, heapBudget, version, capabilityCount, mode = colorMode() }: ReplAppProps): React.ReactElement {
-  const { exit } = useApp();
+  const { exit, waitUntilRenderFlush } = useApp();
+  // The raw stream Ink itself writes to (the real terminal in production, the fake capture
+  // stream under ink-testing-library) — `write` is Ink's blessed side-channel for external
+  // content that must land in the SAME stream without disturbing the live region (it
+  // clears/restores the live frame around the write). OSC 133 marks (§ TASK 2) can't ride
+  // inside a `<Text>` child: Ink's renderer tokenizes text through `@alcalzone/ansi-tokenize`,
+  // which keeps SGR color codes and OSC-8 hyperlinks but silently DROPS every other OSC
+  // control sequence (verified empirically — a `<Text>` containing nothing but an OSC 133
+  // mark renders as empty). So the marks go out via `write`, not the render tree.
+  const { write: writeStdout } = useStdout();
   const [history, setHistory] = useState<ReplBlock[][]>([]);
   const [running, setRunning] = useState<ReplFoldModel | null>(null);
   const [lens, setLens] = useState<Lens>("sugarcoat");
   const input = useRef<InputBuffer>({ line: "", cursor: 0, pending: "" });
   const cmdHistory = useRef<string[]>([]);
   const nav = useRef<NavState | null>(null);
+  /** The last SETTLED turn's plain value text — `,copy`'s source. `null` until one exists. */
+  const lastValueText = useRef<string | null>(null);
   const [, redraw] = useReducer((x: number) => x + 1, 0);
 
   const reset = useCallback((): void => {
@@ -174,10 +204,19 @@ function ReplApp({ session, budgetMs, heapBudget, version, capabilityCount, mode
           setRunning(model);
         },
       });
+      lastValueText.current = turnValueText(model.blocks);
+      // OSC 133 command block (§ TASK 2): COMMAND_START goes out BEFORE the state flip that
+      // makes Ink append this turn to `<Static>` scrollback; `waitUntilRenderFlush` blocks
+      // until that append has actually reached the stream (flushing any pending throttled
+      // render), so `commandDone` lands strictly AFTER the turn's own text — never inside
+      // the live/re-rendered region, which never receives marks at all.
+      writeStdout(COMMAND_START);
       setHistory((h) => [...h, [...model.blocks]]);
       setRunning(null);
+      await waitUntilRenderFlush();
+      writeStdout(commandDone(turnExitCode(model.blocks)));
     },
-    [session, budgetMs, heapBudget],
+    [session, budgetMs, heapBudget, writeStdout, waitUntilRenderFlush],
   );
 
   const onEnter = useCallback(
@@ -189,6 +228,15 @@ function ReplApp({ session, budgetMs, heapBudget, version, capabilityCount, mode
       }
       if (full.trim() === ",lens") {
         setLens((l) => (l === "sugarcoat" ? "scheme" : "sugarcoat"));
+        reset();
+        redraw();
+        return;
+      }
+      if (full.trim() === ",copy") {
+        const text = lastValueText.current;
+        if (text !== null && text !== "") {
+          process.stdout.write(clipboardSet(text));
+        }
         reset();
         redraw();
         return;
@@ -310,25 +358,50 @@ function ReplApp({ session, budgetMs, heapBudget, version, capabilityCount, mode
         return;
       }
 
-      // A chunk can batch text + Enter (a paste, or a test's single `write("form\r")`): the
-      // leading text is typed, then Enter fires. An interactive single Enter arrives as
-      // `key.return` with no text. Peel the first newline; insert the text before it.
-      let text = ch;
-      let enter = key.return === true;
-      if (!enter && (ch.includes("\r") || ch.includes("\n"))) {
-        text = ch.slice(0, ch.search(/[\r\n]/));
-        enter = true;
-      }
-      text = text.replace(/[\r\n]/g, "");
-
-      if (text !== "" && !key.ctrl && !key.meta) {
-        st.line = st.line.slice(0, st.cursor) + text + st.line.slice(st.cursor);
-        st.cursor += text.length;
-        nav.current = null; // typing rebases the prefix
-      }
-      if (enter) {
+      // An interactive single Enter arrives as `key.return` with no text — submit the
+      // current buffer as-is.
+      if (key.return === true) {
         onEnter(st.pending === "" ? st.line : `${st.pending}\n${st.line}`);
         return;
+      }
+
+      // A chunk can batch MULTIPLE lines: a bracketed-paste chunk (Ink's input parser hands
+      // the whole paste to this handler as ONE `ch` string when no `usePaste` listener is
+      // registered — see ink's input-parser.js) or a test's single `write("form\r")`/
+      // `write("a\nb\n")`. Split on every `\r`/`\n`: each COMPLETE segment (text before a
+      // newline) is typed at the cursor, then run through the same submit path as a real
+      // Enter, in order — so `(+ 1 2)\n(* 3 4)\n` submits BOTH forms, not just the first.
+      // The trailing segment (after the last newline, no newline of its own — "" if the
+      // chunk ended in a newline) is only typed into the line, never submitted.
+      if (ch.includes("\r") || ch.includes("\n")) {
+        const segments = ch.split(/\r\n|\r|\n/);
+        for (let i = 0; i < segments.length - 1; i++) {
+          const seg = segments[i]!;
+          // `onEnter` may reset/replace `input.current` (submit, continuation, `,lens`), so
+          // re-fetch it fresh each iteration rather than reusing the outer `st`.
+          const cur = input.current;
+          if (seg !== "" && !key.ctrl && !key.meta) {
+            cur.line = cur.line.slice(0, cur.cursor) + seg + cur.line.slice(cur.cursor);
+            cur.cursor += seg.length;
+            nav.current = null;
+          }
+          onEnter(cur.pending === "" ? cur.line : `${cur.pending}\n${cur.line}`);
+        }
+        const trailing = segments[segments.length - 1] ?? "";
+        const cur = input.current;
+        if (trailing !== "" && !key.ctrl && !key.meta) {
+          cur.line = cur.line.slice(0, cur.cursor) + trailing + cur.line.slice(cur.cursor);
+          cur.cursor += trailing.length;
+          nav.current = null;
+        }
+        redraw();
+        return;
+      }
+
+      if (ch !== "" && !key.ctrl && !key.meta) {
+        st.line = st.line.slice(0, st.cursor) + ch + st.line.slice(st.cursor);
+        st.cursor += ch.length;
+        nav.current = null; // typing rebases the prefix
       }
       redraw();
     },

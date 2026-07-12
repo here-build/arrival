@@ -4,9 +4,10 @@
 // `(+ 1 2)` genuinely evaluates through emitForms/foldReplEvent.
 import { render } from "ink-testing-library";
 import React from "react";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ReplApp } from "../repl-ink.js";
+import { clipboardSet, COMMAND_START, commandDone } from "../osc.js";
 import { loaderSession, type LoaderSession } from "../session.js";
 import { stripAnsi } from "./ansi-strip.js";
 
@@ -170,6 +171,83 @@ describe("replInk cursor navigation", () => {
     stdin.write("Z");
     const f = await waitUntil(lastFrame, (ff) => line(ff).includes("fooZ"));
     expect(line(f)).toContain("fooZ bar");
+    unmount();
+  });
+});
+
+describe("replInk multi-line paste", () => {
+  it("submits EVERY complete form in one batched chunk, not just the first", async () => {
+    const { stdin, lastFrame, unmount } = mount();
+    // A single write — the shape Ink's input parser hands a bracketed paste to this
+    // handler: one `ch` string with both newlines still embedded.
+    stdin.write("(+ 1 2)\n(* 3 4)\n");
+    const frame = await waitUntil(lastFrame, (f) => /\b3\b/.test(f) && /\b12\b/.test(f));
+    expect(frame).toMatch(/\b3\b/); // first form's value
+    expect(frame).toMatch(/\b12\b/); // second form's value — the bug dropped this
+    unmount();
+  });
+
+  it("leaves an incomplete trailing form (no closing newline) on the input line", async () => {
+    const { stdin, lastFrame, unmount } = mount();
+    stdin.write("(+ 1 2)\n(* 3 4");
+    await waitUntil(lastFrame, (f) => /\b3\b/.test(f));
+    const frame = await waitUntil(lastFrame, (f) => promptLine(f).includes("(* 3 4"));
+    expect(promptLine(frame)).toContain("(* 3 4"); // typed, not submitted
+    unmount();
+  });
+});
+
+// OSC 133 marks never ride inside a `<Text>` child (Ink's `@alcalzone/ansi-tokenize` keeps
+// SGR colors and OSC-8 hyperlinks but silently drops every other OSC control sequence), so
+// they go out via Ink's `useStdout().write` side-channel — the SAME stream `lastFrame`/
+// `frames` capture, but not folded into any single rendered frame. Assert against the
+// concatenated write history (`frames`), which is what a real terminal's byte stream sees,
+// rather than `lastFrame()` (one snapshot, which won't hold an out-of-band write once a
+// later write lands).
+describe("replInk OSC 133 command blocks", () => {
+  it("writes COMMAND_START, then the turn settles, then commandDone(0) — in that order", async () => {
+    const { stdin, frames, unmount } = mount();
+    stdin.write("(+ 1 2)\r");
+    const joined = await waitUntil(
+      () => frames.join(""),
+      (s) => s.includes(COMMAND_START) && s.includes(commandDone(0)),
+    );
+    expect(joined).toContain(COMMAND_START);
+    expect(joined).toContain(commandDone(0));
+    expect(joined.indexOf(COMMAND_START)).toBeLessThan(joined.indexOf(commandDone(0)));
+    unmount();
+  });
+
+  it("never emits marks while a turn is still being typed (nothing has settled yet)", async () => {
+    const { stdin, lastFrame, frames, unmount } = mount();
+    stdin.write("(+ 1 2)"); // typed, not submitted
+    await waitUntil(lastFrame, (f) => promptLine(f).includes("(+ 1 2)"));
+    expect(frames.join("")).not.toContain(COMMAND_START);
+    unmount();
+  });
+});
+
+describe("replInk ,copy", () => {
+  it("writes the last settled turn's value via OSC 52", async () => {
+    const { stdin, lastFrame, unmount } = mount();
+    stdin.write("(+ 1 2)\r");
+    await waitUntil(lastFrame, (f) => /\b3\b/.test(f));
+
+    const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    stdin.write(",copy\r");
+    await waitUntil(() => (writeSpy.mock.calls.length > 0 ? "done" : ""), (s) => s === "done");
+    expect(writeSpy.mock.calls.some((call) => String(call[0]).includes(clipboardSet("3")))).toBe(true);
+    writeSpy.mockRestore();
+    unmount();
+  });
+
+  it("is a no-op with no settled turn yet", async () => {
+    const { stdin, lastFrame, unmount } = mount();
+    const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    stdin.write(",copy\r");
+    await waitUntil(lastFrame, (f) => promptLine(f).startsWith(">")); // back to a fresh prompt
+    expect(writeSpy).not.toHaveBeenCalled();
+    writeSpy.mockRestore();
     unmount();
   });
 });
