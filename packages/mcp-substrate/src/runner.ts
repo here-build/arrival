@@ -11,7 +11,7 @@
 
 import { APair, execState, parse, theVoid, tokenize, type LexicalScope, type SchemeValue } from "@here.build/arrival";
 import type { AssembledAmbient } from "@here.build/arrival/env";
-import { toSExprString } from "@here.build/arrival-serializer";
+import { toSExprString, toSExprStringWithElisions, type ElisionRecord } from "@here.build/arrival-serializer";
 
 import { ArgsFailureTracker, type ArgsFailureState } from "./args-failure-tracker.js";
 import { localizeFailingParam } from "./args-misuse.js";
@@ -30,7 +30,7 @@ import {
   type DoorCode,
 } from "./doors.js";
 import { FutilityTracker, type FutilityState } from "./futility.js";
-import { observationCaps, renderObservation } from "./render-observation.js";
+import { observationCaps, renderObservationWithElisions } from "./render-observation.js";
 import {
   createLocalBindingTracker,
   createSessionHistory,
@@ -145,6 +145,26 @@ function topLevelDefineStatementNumber(
 function isLibraryEnriched(raw: string, name: string): boolean {
   const bareWall = `Unbound variable \`${name}'`;
   return raw.startsWith(bareWall) && raw.length > bareWall.length;
+}
+
+/** The trailing `;; Note:` block for a call that middle-elided one or more arrays/entries
+ *  (serializer-elision plan §6) — ONE block per `run()` call, one line per elided collection,
+ *  emitted regardless of how many forms/observations contributed. Wording is contractual:
+ *  say "not rendered", never "compacted"/"truncated" — the whole point is that the model
+ *  must not read the shown sample as complete. */
+function renderElisionNote(elisions: readonly ElisionRecord[]): string {
+  const lines = elisions.map((e) => {
+    const shown = e.total - e.notRendered;
+    const same = e.shownShape === e.hiddenShape ? " (same shape as shown)" : "";
+    return (
+      `;;   array of ${e.total} items: ${e.notRendered} not rendered (${shown} shown). ` +
+      `shown: ${e.shownShape}; not rendered: ${e.hiddenShape}${same}`
+    );
+  });
+  return [
+    ";; Note: arrays were shortened for display — the shown items are NOT the full result.",
+    ...lines,
+  ].join("\n");
 }
 
 export interface RunInput {
@@ -283,11 +303,14 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
     const callMaxTotalChars = input.responseSizeMaxChars ?? calibration.observationMaxTotalChars;
     const timeoutMs = calibration.defaultEvalTimeoutMs;
 
-    const render = (value: unknown, maxTotalCharsOverride?: number): string => {
+    // Middle-elision (serializer-elision plan) is OPT-IN via `calibration.observationElision` —
+    // `render` always returns `elisions` (empty when the knob is unset), so accumulation below
+    // is unconditional and costs nothing when the feature is off.
+    const render = (value: unknown, maxTotalCharsOverride?: number): { text: string; elisions: ElisionRecord[] } => {
       const effectiveMax = maxTotalCharsOverride ?? calibration.observationMaxTotalChars;
       return options.rendering === "sexpr"
-        ? toSExprString(value, observationCaps(effectiveMax))
-        : renderObservation(value, { maxTotalChars: effectiveMax });
+        ? toSExprStringWithElisions(value, observationCaps(effectiveMax, calibration.observationElision))
+        : renderObservationWithElisions(value, { maxTotalChars: effectiveMax, ...calibration.observationElision });
     };
 
     // Derived FRESH from this call's tools (never cached across calls — RunInput.tools is the
@@ -354,6 +377,9 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
       // confabulates from (MCP-Atlas 2026-07-11 forensics, task …c909). Announcing the binding
       // both kills that trap and teaches cross-call persistence proactively.
       const introduced: string[] = [];
+      // Elisions collected across EVERY rendered observation this call, from every form —
+      // rendered as ONE trailing `;; Note:` block below (never per-array, never per-form).
+      const allElisions: ElisionRecord[] = [];
 
       for (const [index, form] of forms.entries()) {
         const statementText = displayText[index]!;
@@ -380,11 +406,12 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
             return result;
           }
           const facts = statementFacts[index]!;
-          blocks.push(
-            ...raced.values
-              .filter((r) => r !== theVoid)
-              .map((r) => ({ type: "text" as const, text: render(r, callMaxTotalChars) })),
-          );
+          for (const r of raced.values) {
+            if (r === theVoid) continue;
+            const { text, elisions } = render(r, callMaxTotalChars);
+            blocks.push({ type: "text", text });
+            allElisions.push(...elisions);
+          }
           if (facts.definedName !== undefined) {
             history.push(facts.definedName, statementText);
             contextRing?.push(facts.definedName, statementText);
@@ -477,6 +504,14 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
           type: "text",
           text: `#|introduced ${names}; now available for the rest of this session|#`,
         });
+      }
+
+      // ONE trailing note for every array/entries collection middle-elided this call (any
+      // form, any observation) — placed AFTER the form results, BEFORE the futility doors
+      // below (serializer-elision plan §6). Never emitted when nothing elided (the
+      // `observationElision` calibration knob is off, or every observation fit).
+      if (allElisions.length > 0) {
+        blocks.push({ type: "text", text: renderElisionNote(allElisions) });
       }
 
       if (tracker) {

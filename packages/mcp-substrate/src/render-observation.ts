@@ -9,7 +9,14 @@
 // keep their `(head ...)` form but their children are still processed for nested
 // collections. Primitives delegate to the serializer.
 
-import { formatSExpr, type SerializeOpts, toSExprString, type SExpr } from "@here.build/arrival-serializer";
+import {
+  formatSExpr,
+  type ElisionRecord,
+  type SerializeOpts,
+  toSExprString,
+  toSExprStringWithElisions,
+  type SExpr,
+} from "@here.build/arrival-serializer";
 
 /** Default total observation budget. Overridable per server via the `observation.maxTotalChars`
  *  config knob (config.ts → manifold-tool.ts). 20k (2026-07-06 measurement: weakly-best budget
@@ -244,6 +251,31 @@ export function renderObservation(value: unknown, opts: { maxTotalChars?: number
   return toSExprString(value, serializeOpts);
 }
 
+/**
+ * The `{text, elisions}` sibling of `renderObservation` (serializer-elision plan §6) — same
+ * brace/bracket rendering, additionally threading `SerializeOpts.elideHead`/`elideTail` (and
+ * the per-array limit knobs) through `toSExprStringWithElisions` so a caller can build a
+ * trailing note from the collected `ElisionRecord`s. `renderObservation` itself is UNCHANGED
+ * (never sets these knobs) — this is purely additive.
+ *
+ * A top-level raw string never elides (there's no array to elide) — it reuses
+ * `renderObservation`'s own shortcut and returns an empty `elisions` list.
+ */
+export function renderObservationWithElisions(
+  value: unknown,
+  opts: { maxTotalChars?: number } & ObservationElisionOpts = {},
+): { text: string; elisions: ElisionRecord[] } {
+  if (typeof value === "string") {
+    return { text: renderObservation(value, opts), elisions: [] };
+  }
+  const { maxTotalChars, ...elision } = opts;
+  const serializeOpts: SerializeOptsPending = {
+    ...observationCaps(maxTotalChars, elision),
+    format: (sexpr) => format(sexpr),
+  };
+  return toSExprStringWithElisions(value, serializeOpts);
+}
+
 /** See the `SerializeOptsPending` note above `renderObservation`: the published dist's
  *  `SerializeOpts` may not yet declare `format` even though this function always sets it — a
  *  structural superset, never a literal assigned where the narrower type is checked, so this
@@ -252,13 +284,38 @@ type SerializeOptsPending = SerializeOpts & {
   format?: (sexpr: SExpr) => string;
 };
 
+/** Middle-elision knobs (serializer-elision plan §7) — OPT-IN by presence, same rule as the
+ *  serializer's own `SerializeOpts`. `undefined` (the default) means every field below stays
+ *  unset and `observationCaps` behaves exactly as before; the manifold is the one caller that
+ *  passes these (its own calibration surface — arrival-manifold/src/manifold-tool.ts). */
+export interface ObservationElisionOpts {
+  /** Real per-array item cap when elision is ON — NOT the same knob as the generous
+   *  `SEED_MAX_ITEMS` seed below (that seed exists so array-count truncation never bites
+   *  before the char budget does; this is the deliberate small per-array display limit). */
+  maxItems?: number;
+  topLevelArrayLimit?: number;
+  secondLevelArrayLimit?: number;
+  elideHead?: number;
+  elideTail?: number;
+}
+
 /** Observation budget + truncation seeds for the serializer.
  *
- *  Seeds are sized so they only trigger after the total char budget is the real limiter. */
-export function observationCaps(maxTotalChars: number = DEFAULT_OBSERVATION_MAX_TOTAL_CHARS): SerializeOptsPending {
+ *  Seeds are sized so they only trigger after the total char budget is the real limiter.
+ *  `elision` is OPT-IN (see `ObservationElisionOpts`) — omitted, `maxItems` stays the
+ *  generous `SEED_MAX_ITEMS` seed and every new knob stays unset, so behaviour is
+ *  byte-for-byte what it was before this parameter existed. */
+export function observationCaps(
+  maxTotalChars: number = DEFAULT_OBSERVATION_MAX_TOTAL_CHARS,
+  elision?: ObservationElisionOpts,
+): SerializeOptsPending {
   return {
     maxTotalChars,
-    maxItems: SEED_MAX_ITEMS,
+    maxItems: elision?.maxItems ?? SEED_MAX_ITEMS,
     maxStringChars: maxTotalChars,
+    topLevelArrayLimit: elision?.topLevelArrayLimit,
+    secondLevelArrayLimit: elision?.secondLevelArrayLimit,
+    elideHead: elision?.elideHead,
+    elideTail: elision?.elideTail,
   };
 }
