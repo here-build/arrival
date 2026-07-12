@@ -14,6 +14,7 @@
  * Pure: `renderRunOutline(nodes, mode) → lines[]`. `mode "none"` is uncolored (the test /
  * pipe path); a color mode tints. Tests assert on the stripped lines.
  */
+import { fileUrl, hyperlink } from "./osc.js";
 import type { TemplateNode, TemplateState } from "./run-view.js";
 import { paint, type TintName } from "./tints.js";
 import type { colorMode } from "./tints.js";
@@ -43,8 +44,11 @@ function tint(text: string, name: TintName, mode: ColorMode): string {
 /** Render the outline. `mode` defaults to `"none"` (uncolored) — the caller passes a live
  *  color mode when a human is looking. Head and count columns are width-aligned (padding
  *  the RAW string, not the colored one, so escape bytes never throw off the column) so the
- *  dim locations form a clean right rail. */
-export function renderRunOutline(nodes: readonly TemplateNode[], mode: ColorMode = "none"): string[] {
+ *  dim locations form a clean right rail. `file` (the run's absolute source path, when known)
+ *  wraps each location in an OSC 8 hyperlink to `file:line` — editor-aware terminals make it
+ *  clickable. Gated on a live color mode too: a piped/`none` run stays byte-identical, never
+ *  leaking escape bytes into output a script might parse. */
+export function renderRunOutline(nodes: readonly TemplateNode[], mode: ColorMode = "none", file?: string): string[] {
   if (nodes.length === 0) return [];
   const headWidth = Math.max(...nodes.map((n) => n.head.length));
   const countStrs = nodes.map((n) => (n.count > 1 ? `×${n.count}` : ""));
@@ -54,7 +58,8 @@ export function renderRunOutline(nodes: readonly TemplateNode[], mode: ColorMode
     const head = tint(n.head.padEnd(headWidth), TINT[n.state], mode);
     const raw = countStrs[i]!;
     const count = (raw === "" ? "" : tint(raw, "accent", mode)) + " ".repeat(countWidth - raw.length);
-    const loc = tint(`${n.line}:${n.col}`, "gutter", mode);
+    const locText = tint(`${n.line}:${n.col}`, "gutter", mode);
+    const loc = file !== undefined && mode !== "none" ? hyperlink(fileUrl(file, n.line), locText) : locText;
     // glyph  head   ×N     line:col  — count aligned, location dim on the right rail.
     return `${glyph} ${head}  ${count}  ${loc}`;
   });

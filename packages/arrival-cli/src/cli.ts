@@ -92,19 +92,20 @@ function stderrMode(): ReturnType<typeof colorMode> {
 
 /** Render the run outline to stderr (never stdout — stdout is the program's values, kept
  *  clean for `| jq`). The header's invocation total is the quiet "it did all that" beat —
- *  `(fib 10)` reports 796 invocations across 9 forms. */
-function emitOutline(trace: EvalTrace): void {
+ *  `(fib 10)` reports 796 invocations across 9 forms. `absFile` (the run file's absolute
+ *  path) lets each location become a clickable OSC 8 hyperlink on a colored terminal. */
+function emitOutline(trace: EvalTrace, absFile: string): void {
   const nodes = runView(trace);
   if (nodes.length === 0) return;
   process.stderr.write(`\n— run outline: ${nodes.length} forms, ${trace.invocationLog.length} invocations —\n`);
-  for (const line of renderRunOutline(nodes, stderrMode())) process.stderr.write(`${line}\n`);
+  for (const line of renderRunOutline(nodes, stderrMode(), absFile)) process.stderr.write(`${line}\n`);
 }
 
 /** Drill down into one form (its `scopeId`, from `--outline`) — its invocation aggregate,
- *  callers, and sampled values, to stderr. */
-function emitFormDetail(trace: EvalTrace, scope: string): void {
+ *  callers, and sampled values, to stderr. `absFile` threads through the same as above. */
+function emitFormDetail(trace: EvalTrace, scope: string, absFile: string): void {
   process.stderr.write("\n");
-  for (const line of renderFormDetail(formDetail(trace, scope), stderrMode())) process.stderr.write(`${line}\n`);
+  for (const line of renderFormDetail(formDetail(trace, scope), stderrMode(), absFile)) process.stderr.write(`${line}\n`);
 }
 
 interface Inspect {
@@ -116,6 +117,9 @@ interface Inspect {
 
 async function runFile(file: string, mode: OutputMode, inspect: Inspect, armed?: ArmedCapabilities): Promise<number> {
   const source = await readSource(file);
+  // Resolved once — the absolute path the inspection surfaces hyperlink into (OSC 8), not
+  // re-derived per emit.
+  const absFile = path.resolve(file);
   // The interactive-run tap: `--outline` / `--form` / `--export` run under an `EvalTrace`
   // so the template↔invocation structure is captured. `undefined` tap ⇒ the byte-identical
   // untapped path.
@@ -153,7 +157,7 @@ async function runFile(file: string, mode: OutputMode, inspect: Inspect, armed?:
       process.stdout.write(`${JSON.stringify(exportRun(trace))}\n`);
     } else {
       for (const v of values) printValue(v, mode);
-      if (trace !== undefined) emitInspection(trace, inspect);
+      if (trace !== undefined) emitInspection(trace, inspect, absFile);
     }
     return 0;
   } catch (e) {
@@ -162,16 +166,16 @@ async function runFile(file: string, mode: OutputMode, inspect: Inspect, armed?:
     // `error`, which is often the whole point of asking for it. In export mode the partial
     // contract still goes to stdout (a consumer sees how far it got).
     if (inspect.export && trace !== undefined) process.stdout.write(`${JSON.stringify(exportRun(trace))}\n`);
-    else if (trace !== undefined) emitInspection(trace, inspect);
+    else if (trace !== undefined) emitInspection(trace, inspect, absFile);
     return 1;
   }
 }
 
 /** `--form` (drill into one form) takes precedence over `--outline` (the overview) when
  *  both are set — you asked for the specific thing. */
-function emitInspection(trace: EvalTrace, inspect: Inspect): void {
-  if (inspect.form !== undefined) emitFormDetail(trace, inspect.form);
-  else if (inspect.outline) emitOutline(trace);
+function emitInspection(trace: EvalTrace, inspect: Inspect, absFile: string): void {
+  if (inspect.form !== undefined) emitFormDetail(trace, inspect.form, absFile);
+  else if (inspect.outline) emitOutline(trace, absFile);
 }
 
 async function checkFile(file: string, armed?: ArmedCapabilities): Promise<number> {

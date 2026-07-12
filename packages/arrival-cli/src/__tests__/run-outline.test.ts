@@ -50,4 +50,18 @@ describe("renderRunOutline", () => {
     const plain = renderRunOutline(NODES, "none");
     expect(colored.map(stripAnsi)).toEqual(plain);
   });
+
+  it("with a file and a colored mode, wraps the location in an OSC 8 hyperlink to file:line", () => {
+    const lines = renderRunOutline(NODES, "truecolor", "/abs/example.scm");
+    expect(lines[0]).toContain("file:///abs/example.scm:1");
+    // the visible line:col text still reads fine once the CSI color escapes are stripped —
+    // the OSC 8 wrapper doesn't touch the text it wraps.
+    expect(stripAnsi(lines[0]!)).toContain("1:0");
+  });
+
+  it("`mode: \"none\"` stays byte-identical even when a file is given — no OSC 8 leaks into piped output", () => {
+    const plain = renderRunOutline(NODES, "none");
+    const withFile = renderRunOutline(NODES, "none", "/abs/example.scm");
+    expect(withFile).toEqual(plain);
+  });
 });

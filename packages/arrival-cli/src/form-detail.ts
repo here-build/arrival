@@ -18,6 +18,7 @@
 import { headOf, scopeId, type EvalTrace, type Invocation, type InvocationState } from "@here.build/arrival/provenance";
 import { toSExprString } from "@here.build/arrival-serializer";
 
+import { fileUrl, hyperlink } from "./osc.js";
 import { paint, type TintName } from "./tints.js";
 import type { colorMode } from "./tints.js";
 
@@ -121,6 +122,22 @@ function tint(text: string, name: TintName, mode: ColorMode): string {
   return mode === "none" ? text : paint(text, name, mode);
 }
 
+/** Pull the `line` out of a `scopeId` string (`head@line:col`, or `head@source:line:col`) —
+ *  `undefined` for a location-less scope like the callers' `"(root)"` sentinel. */
+function scopeLine(scope: string): number | undefined {
+  const m = /@(?:.*:)?(\d+):\d+$/.exec(scope);
+  return m === null || m[1] === undefined ? undefined : Number(m[1]);
+}
+
+/** Wrap already-tinted `text` in an OSC 8 hyperlink to `scope`'s source location, when a
+ *  `file` and a live color `mode` are both present — the same gate as the outline renderer,
+ *  so piped/`none` output never picks up escape bytes. */
+function withLocationLink(text: string, scope: string, mode: ColorMode, file: string | undefined): string {
+  if (file === undefined || mode === "none") return text;
+  const line = scopeLine(scope);
+  return line === undefined ? text : hyperlink(fileUrl(file, line), text);
+}
+
 function statesSummary(states: Partial<Record<InvocationState, number>>): string {
   const parts: string[] = [];
   if (states.resolved) parts.push(`${states.resolved} done`);
@@ -130,8 +147,10 @@ function statesSummary(states: Partial<Record<InvocationState, number>>): string
 }
 
 /** Render a `FormDetail` to lines. Subtle: dim scaffolding (locations, "called from"),
- *  the head + count the one bright bit, errors escalate. */
-export function renderFormDetail(d: FormDetail, mode: ColorMode = "none"): string[] {
+ *  the head + count the one bright bit, errors escalate. `file` (the run's absolute source
+ *  path, when known) makes the head and each "called from" site an OSC 8 hyperlink to its
+ *  source location — gated on a live color `mode` so piped/`none` output stays untouched. */
+export function renderFormDetail(d: FormDetail, mode: ColorMode = "none", file?: string): string[] {
   if (!d.found) {
     return [tint(`no form ${d.scope} in this run — is the scopeId right? (see --outline)`, "gutter", mode)];
   }
@@ -143,15 +162,17 @@ export function renderFormDetail(d: FormDetail, mode: ColorMode = "none"): strin
   const extras = [depth];
   if (d.tailCount > 0) extras.push(`${d.tailCount} tail`);
   if (d.cachedCount > 0) extras.push(`${d.cachedCount} cached`);
+  const headText = withLocationLink(tint(d.head, headTint, mode), d.scope, mode, file);
   lines.push(
-    `${tint(d.head, headTint, mode)} ${tint(`×${d.count}`, "accent", mode)}  ` +
+    `${headText} ${tint(`×${d.count}`, "accent", mode)}  ` +
       `${tint(statesSummary(d.states), headTint, mode)}  ${tint(`· ${extras.join(" · ")}`, "gutter", mode)}`,
   );
 
   if (d.callers.length > 0) {
     lines.push(tint("  called from:", "gutter", mode));
     for (const [caller, n] of d.callers.slice(0, 5)) {
-      lines.push(`    ${tint(caller, "gutter", mode)} ${tint(`×${n}`, "accent", mode)}`);
+      const callerText = withLocationLink(tint(caller, "gutter", mode), caller, mode, file);
+      lines.push(`    ${callerText} ${tint(`×${n}`, "accent", mode)}`);
     }
     if (d.callers.length > 5) lines.push(tint(`    …and ${d.callers.length - 5} more call sites`, "gutter", mode));
   }

@@ -70,4 +70,28 @@ describe("renderFormDetail", () => {
     expect(lines.some((l) => l.includes("samples:"))).toBe(true);
     expect(lines.some((l) => l.includes("42"))).toBe(true);
   });
+
+  it("with a file and a colored mode, the head is an OSC 8 hyperlink to its source location", async () => {
+    const d = formDetail(await traced("(+ 40 2)"), "+@1:0");
+    const lines = renderFormDetail(d, "truecolor", "/abs/fib.scm");
+    expect(lines.join("\n")).toContain("file:///abs/fib.scm:1");
+    // the head text still reads fine once stripped — the hyperlink wraps, doesn't mangle.
+    expect(lines.map(stripAnsi).join("\n")).toContain("+");
+  });
+
+  it("caller locations become hyperlinks too (the recursion's call sites)", async () => {
+    const trace = await traced("(define (fib n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))\n(fib 10)");
+    const d = formDetail(trace, "if@1:16");
+    const lines = renderFormDetail(d, "truecolor", "/abs/fib.scm");
+    const calledFrom = lines.filter((l) => l.includes("fib@1:33") || l.includes("fib@1:47"));
+    expect(calledFrom.length).toBeGreaterThan(0);
+    expect(calledFrom.every((l) => l.includes("file:///abs/fib.scm:1"))).toBe(true);
+  });
+
+  it("`mode: \"none\"` stays byte-identical even when a file is given — no OSC 8 leaks", async () => {
+    const d = formDetail(await traced("(+ 40 2)"), "+@1:0");
+    const plain = renderFormDetail(d, "none");
+    const withFile = renderFormDetail(d, "none", "/abs/fib.scm");
+    expect(withFile).toEqual(plain);
+  });
 });
