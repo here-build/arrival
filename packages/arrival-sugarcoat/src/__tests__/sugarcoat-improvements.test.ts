@@ -66,15 +66,26 @@ describe("begin always breaks (steps each on a line, none on the head)", () => {
     it(`round-trips ${s}`, () => expect(roundtripAll(s)).toBe(canon(s)));
 });
 
-// ── 4. cond `=>` clause: the arrow stays connected, never hanging alone ──
-describe("cond => clause keeps the arrow connected", () => {
-  it("inline when it fits: `test => recv`", () => {
-    expect(render("(cond ((foo x) => (bar)) (else (baz)))")).toBe("cond\n  (foo x) => (bar)\n  else\n    (baz)");
+// ── 4. cond `=>` clause → `=?>` (partial-arrow glyph): distinct from the lambda `=>`,
+//       folds back to the R7RS `=>` receiver symbol, stays connected (never hanging) ──
+describe("cond => clause renders as =?> and stays connected", () => {
+  it("inline when it fits: `test =?> recv`", () => {
+    expect(render("(cond ((foo x) => (bar)) (else (baz)))")).toBe("cond\n  (foo x) =?> (bar)\n  else\n    (baz)");
   });
-  it("wide recv: `test =>` trailing, recv on the next line (never a lone =>)", () => {
+  it("does NOT touch the lambda arrow (only the cond receiver form)", () => {
+    const out = render("(cond ((f x) => (lambda (d) (g d))) (else (h)))");
+    expect(out).toContain("(f x) =?> {(d) => (g d)}"); // cond arrow =?>, lambda arrow still =>
+  });
+  it("wide recv: `test =?>` trailing, recv on the next line (never a lone arrow)", () => {
     const out = render("(cond ((foo x) => (a-really-quite-long-receiver-call p q r s)) (else (baz)))", { width: 30 });
-    expect(out).toContain("(foo x) =>");
-    expect(out).not.toMatch(/^\s*=>\s*$/m); // no line that is only `=>`
+    expect(out).toContain("(foo x) =?>");
+    expect(out).not.toMatch(/^\s*=\??>\s*$/m); // no line that is only an arrow
+  });
+  it("reader folds =?> (and math skins ⇀ / ⇸) back to the => symbol", () => {
+    for (const g of ["=?>", "⇀", "⇸"])
+      expect(readSugarcoat(`cond\n  (foo x) ${g} (bar)\n  else\n    (baz)`).map((f) => printScheme(f)).join("")).toBe(
+        canon("(cond ((foo x) => (bar)) (else (baz)))"),
+      );
   });
   for (const s of ["(cond ((foo x) => (bar)) (else (baz)))"])
     it(`round-trips ${s}`, () => expect(readSugarcoat(render(s)).map((f) => printScheme(f)).join("\n")).toBe(canon(s)));

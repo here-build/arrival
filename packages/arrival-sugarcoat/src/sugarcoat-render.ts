@@ -229,10 +229,6 @@ export interface SugarcoatOpts {
    *  rendered as a pair line. Homoiconic: the pair is a tree node in the VIEW
    *  that collapses back to the flat `… k v …` canonical on read. */
   kwargHeads: Set<string>;
-  /** Surface glyph for a key→value pair:
-   *   "=>" → `:tagline => value`  (key unchanged — keeps construct/access symmetry)
-   *   ":"  → `tagline: value`     (JSON/YAML — leading colon flips to trailing) */
-  pairGlyph: "=>" | ":";
   /** Render the empty-list literal `'()` as the word `nil`. SOUND — the reader folds
    *  `nil` back to `(quote ())`, so it round-trips. schemeToSugarcoat turns this ON
    *  only when the program doesn't shadow `nil` with a non-empty binding (a `(define
@@ -250,7 +246,6 @@ export const DEFAULT_OPTS: SugarcoatOpts = {
   neoteric: false,
   curly: true,
   kwargHeads: new Set(["dict"]),
-  pairGlyph: ":",
   nilGlyph: false,
   strTolerant: false,
 };
@@ -963,17 +958,20 @@ function formatSugarcoatCore(nd: Node, col: number, o: SugarcoatOpts): string {
         out.push(pad2 + inlineSugarcoat(clause, o));
         continue;
       }
-      // `(test => recv)` arrow clause: keep the `=>` connected, never hanging alone.
-      // Inline `test => recv` (reads back as the 3-elem clause) when it fits; else
-      // `test =>` trailing the test line with recv indented below (also reads as
-      // (test => recv) — the arrow rides the test line, not an orphan child line).
+      // `(test => recv)` cond-arrow clause: the R7RS receiver form — a PARTIAL
+      // function (`test`'s value, when truthy, is sent to `recv`; #f falls through).
+      // Rendered `=?>` (the ASCII partial-function arrow `⇀`, the `?` piercing the
+      // shaft) to disambiguate it from the lambda arrow `=>` and the kwarg pair glyph —
+      // three jobs, one token, now two. The reader folds `=?>`/`⇀`/`⇸` back to the `=>`
+      // symbol. Inline `test =?> recv` (reads back as the 3-elem clause) when it fits;
+      // else `test =?>` trailing the test line with recv indented below.
       if (clause.list.length === 3 && isAtom(clause.list[1]) && !clause.list[1].str && clause.list[1].atom === "=>") {
         const testFlat = inlineSugarcoat(clause.list[0], o);
         const recvFlat = inlineSugarcoat(clause.list[2], o);
-        if (col + 2 + testFlat.length + 4 + recvFlat.length <= o.width) {
-          out.push(`${pad2}${testFlat} => ${recvFlat}`);
+        if (col + 2 + testFlat.length + 5 + recvFlat.length <= o.width) {
+          out.push(`${pad2}${testFlat} =?> ${recvFlat}`);
         } else {
-          out.push(`${pad2}${testFlat} =>`);
+          out.push(`${pad2}${testFlat} =?>`);
           out.push(pad4 + formatSugarcoat(clause.list[2], col + 4, o));
         }
         continue;
@@ -1028,9 +1026,13 @@ function formatSugarcoatCore(nd: Node, col: number, o: SugarcoatOpts): string {
     const out = [line];
     while (i < items.length) {
       if (isKeyword(items[i]) && i + 1 < items.length) {
-        // "=>" keeps the keyword as-is; ":" flips leading→trailing colon (JSON/YAML).
+        // A pair line is the trailing-colon form `key: value` — the leading `:key`
+        // flips to a trailing `key:` (JSON/YAML). This is the ONLY pair glyph: `=>`
+        // was retired so the arrow means only the lambda (`{… => …}`) and, pierced,
+        // the cond receiver (`=?>`). The broken `:key value` form is unsound anyway
+        // (a `:key value` child line reads as the accessor call `(:key value)`).
         const raw = atomText(items[i]);
-        const keyPart = o.pairGlyph === ":" ? `${raw.slice(1)}:` : `${raw} =>`;
+        const keyPart = `${raw.slice(1)}:`;
         const vFlat = inlineSugarcoat(items[i + 1], o);
         if (col + 2 + keyPart.length + 1 + vFlat.length <= o.width) {
           // fits: `key: value` on one line.
@@ -1082,8 +1084,9 @@ function formatSugarcoatCore(nd: Node, col: number, o: SugarcoatOpts): string {
 // ── the pairing bijection (the bifunctor's core, as homoiconic tree-rewrites) ──
 //
 // inflate: flat canonical → view tree, grouping each `:key value` run under a
-//   kwarg-head into a `(=> key value)` pair node (the internal tag is `=>`; the
-//   DISPLAY glyph — `:` or `=>` — is a separate render choice).
+//   kwarg-head into a `(=> key value)` pair node (the internal tag is `=>`, at
+//   index 0 — never confusable with a cond clause's `=>` at index 1; the DISPLAY
+//   is always the trailing-colon `key: value`, no glyph choice).
 // flatten: view tree → flat canonical, splicing every pair node back to `key value`.
 // Law: flatten(inflate(t)) ≡ t. Storage stays flat (lowest entropy); the paired
 // form exists only in the view. Odd-arity/non-keyword simply doesn't pair (and is

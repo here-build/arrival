@@ -528,8 +528,16 @@ function parseElements(toks: Tok[], accessorDepth: number = R7RS_ACCESSOR_DEPTH)
   // list. (A program that binds `nil` as a variable renders WITHOUT the glyph — see
   // collectNilAllowed — so the only bare `nil` tokens the reader meets are empty-lists.)
   let quoteDepth = 0;
-  const wordNode = (v: string, str?: boolean): Node =>
-    !str && v === "nil" && quoteDepth === 0 ? { list: [atom("quote"), { list: [] }] } : atom(v, str);
+  const wordNode = (v: string, str?: boolean): Node => {
+    if (str) return atom(v, true);
+    // `nil` → `(quote ())` at value position (guarded so quoted `'nil` stays a symbol).
+    if (v === "nil" && quoteDepth === 0) return { list: [atom("quote"), { list: [] }] };
+    // The cond partial-arrow glyph → the R7RS `=>` receiver symbol. `=?>` is the ASCII
+    // form; `⇀`/`⇸` (partial-function arrows) are accepted as the math skin. Pure
+    // invented punctuation — never a user symbol — so it folds unconditionally.
+    if (v === "=?>" || v === "⇀" || v === "⇸") return atom("=>");
+    return atom(v);
+  };
 
   // `'`/`` ` ``/`,`/`,@` prefix → (quote datum) etc. Recurses (`''x` → nested).
   function quoted(parseDatum: () => Node): Node {
