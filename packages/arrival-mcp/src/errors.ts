@@ -26,6 +26,12 @@ export type MCPErrorKind =
   | "no-receiver-match"
   /** Action handler threw. */
   | "handler"
+  /** A written program failed grammar (parse) validation — rejected before persisting.
+   *  Reserved siblings for the same three-tier taxonomy, not yet producers: `program-scope`
+   *  (unbound-symbol/door checks — deferred, false-positives on legitimate multi-file
+   *  in-progress rework where a require target isn't written yet) and `program-type`
+   *  (arrival-type-lens tsc diagnostics — deferred pending a session-warm caching story). */
+  | "program-grammar"
   /** Catch-all for genuinely unknown failures. */
   | "runtime";
 
