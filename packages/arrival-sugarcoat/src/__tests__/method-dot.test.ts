@@ -255,3 +255,18 @@ describe("render: literal scalars are never method-dot receivers", () => {
     expect(readAll(render("(not (valid-card-set? cards 7))"))).toBe("(not (valid-card-set? cards 7))");
   });
 });
+
+// A multi-binding let/let* breaks EACH binding onto its own line (a let* is sequential —
+// every binding is a step). A single binding stays compact on the head line.
+describe("render: multi-binding let breaks each binding onto its own line", () => {
+  it("≥2 bindings: head alone, each binding on its own line", () => {
+    const out = render("(let* ((a (f x)) (b (g y))) (h b))");
+    expect(out).toBe("let*\n  ((a (f x))\n   (b (g y)))\n  (h b)");
+  });
+  it("single binding stays on the head line", () => {
+    expect(render("(let ((x (f y))) (h x))")).toBe("let ((x (f y)))\n  (h x)");
+  });
+  it("round-trips", () => {
+    expect(readAll(render("(let* ((a (f x)) (b (g y))) (h b))"))).toBe("(let* ((a (f x)) (b (g y))) (h b))");
+  });
+});

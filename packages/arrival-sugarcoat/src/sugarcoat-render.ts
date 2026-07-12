@@ -1129,16 +1129,30 @@ function formatSugarcoatCore(nd: Node, col: number, o: SugarcoatOpts): string {
     const pad2 = " ".repeat(col + 2);
     const named = isAtom(items[1]);
     const bindsNode = named ? items[2] : items[1];
-    const loop = named ? ` ${atomText(items[1])}` : "";
-    const binds = isAtom(bindsNode)
-      ? inlineSugarcoat(bindsNode, o)
-      : `(${childList(bindsNode)
-          .map((b) => {
-            const bl = childList(b);
-            return bl.length >= 2 ? `(${atomText(bl[0])} ${inlineSugarcoat(bl[1], o)})` : inlineSugarcoat(b, o);
-          })
-          .join(" ")})`;
-    const out = [`${atomText(items[0])}${loop} ${binds}`];
+    const head = `${atomText(items[0])}${named ? ` ${atomText(items[1])}` : ""}`;
+    const out: string[] = [];
+    if (isAtom(bindsNode)) {
+      out.push(`${head} ${inlineSugarcoat(bindsNode, o)}`);
+    } else {
+      const binds = childList(bindsNode).map((b) => {
+        const bl = childList(b);
+        return bl.length >= 2 ? `(${atomText(bl[0])} ${inlineSugarcoat(bl[1], o)})` : inlineSugarcoat(b, o);
+      });
+      if (binds.length <= 1) {
+        // single (or empty) binding stays compact on the head line.
+        out.push(`${head} (${binds.join(" ")})`);
+      } else {
+        // ≥2 bindings: `head` alone, then EACH binding on its own line inside the `(( ))`
+        // group, aligned under the first. A let* is sequential — every binding is a step the
+        // reader tracks, so packing them onto one line is exactly the density that hurts. The
+        // explicit `(( ))` stays (round-trip: the reader reads the multi-line paren group as
+        // one bindings datum, then the body).
+        out.push(head);
+        binds.forEach((b, i) => {
+          out.push(`${pad2}${i === 0 ? "(" : " "}${b}${i === binds.length - 1 ? ")" : ""}`);
+        });
+      }
+    }
     for (const bodyExpr of items.slice(named ? 3 : 2)) out.push(pad2 + formatSugarcoat(bodyExpr, col + 2, o));
     return out.join("\n");
   }
