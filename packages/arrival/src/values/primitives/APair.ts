@@ -15,7 +15,7 @@
  */
 import { CLASS, CYCLES, DATA, LOCATION, REF } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
-import { applyCallback, type ACallable } from "./ACallable.js";
+import { applyCallback } from "./ACallable.js";
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { deriveSortCompare, withInputProvenance } from "../op-helpers.js";
@@ -31,7 +31,7 @@ import { promise_all } from "../../utils/promises.js";
 import { collapseProvenance } from "../../provenance-collapse.js";
 import { reStampChild } from "./deep-restamp.js";
 import { egressContainerProxy } from "../egress-proxy.js";
-import { type AList, AListAlike, AListAlikeValue, APairAsListValue, type SchemeValue, } from "../types.js";
+import { type AList, AListAlike, AListAlikeValue, APairAsListValue, type MembraneExit, type SchemeValue, } from "../types.js";
 import { AString } from "./AString.js";
 import { ASymbol } from "./ASymbol.js";
 import { AExact } from "./AExact.js";
@@ -495,7 +495,18 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // as the last element, per the one-way list→array projection. A cyclic SPINE
   // still throws the iterator's taught invariant — an infinite list has no finite
   // array projection; cycles THROUGH elements terminate via the proxy tracker.
-  ["arrival/toJS"](wrapCallable?: (value: ACallable) => unknown): unknown[] {
+  ["arrival/toJS"](): unknown[] {
+    const spine: SchemeValue[] = [...this];
+    return egressContainerProxy(this, "array", {
+      keys: () => spine.map((_, i) => String(i)),
+      read: (key) => spine[Number(key)],
+    }) as unknown[];
+  }
+
+  // Membrane exit (rosetta's egressAValue is the only builder of `exit`): identical
+  // spine projection, but elements materialize through the full recursive crossing and
+  // the proxy caches per (box, mode, SCOPE) — see egress-proxy.ts's identity laws.
+  ["arrival/toJSMembrane"](exit: MembraneExit): unknown[] {
     const spine: SchemeValue[] = [...this];
     return egressContainerProxy(
       this,
@@ -504,8 +515,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
         keys: () => spine.map((_, i) => String(i)),
         read: (key) => spine[Number(key)],
       },
-      undefined,
-      wrapCallable,
+      { membrane: exit },
     ) as unknown[];
   }
 

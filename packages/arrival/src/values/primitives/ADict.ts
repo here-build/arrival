@@ -28,14 +28,12 @@ import { CLASS } from "../../well-known-symbols.js";
 import { type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { egressContainerProxy } from "../egress-proxy.js";
-import { type ACallable } from "./ACallable.js";
-import { is_callable_value } from "../value-guards.js";
 import { APair } from "./APair.js";
 import { ASymbol } from "./ASymbol.js";
 import { ACharacter } from "./ACharacter.js";
 import { AString } from "./AString.js";
 import { nil } from "./ANil.js";
-import { type SchemeValue } from "../types.js";
+import { type MembraneExit, type SchemeValue } from "../types.js";
 import { type SeenMap, structuralEqual } from "../structural-equal.js";
 import { attestDeep, freshIfSingleton, isAttested } from "../attestation.js";
 import { is_promise } from "../../eval/guards.js";
@@ -239,11 +237,26 @@ export class ADict extends AValue {
    *  dict → same proxy (egress-proxy.ts owns the tracker and the write doors). A
    *  pending entry egresses as a Promise OF the unwrapped JS value (the settle chain
    *  continued through the box's own `arrival/toJS`) — the JS consumer awaits it. */
-  ["arrival/toJS"](wrapCallable?: (value: ACallable) => unknown): Record<string, unknown> {
-    const materializeBoxed = (boxed: unknown): unknown => {
-      if (wrapCallable && is_callable_value(boxed)) return wrapCallable(boxed);
-      return boxed instanceof AValue ? boxed["arrival/toJS"]() : boxed;
-    };
+  ["arrival/toJS"](): Record<string, unknown> {
+    return egressContainerProxy(this, "object", {
+      keys: () => this.keys(),
+      read: (name) => {
+        const entry = this.get(name);
+        return is_promise(entry)
+          ? entry.then((boxed) => (boxed instanceof AValue ? boxed["arrival/toJS"]() : boxed))
+          : entry;
+      },
+    }) as Record<string, unknown>;
+  }
+
+  // Membrane exit (rosetta's egressAValue is the only builder of `exit`): same folded-key
+  // read model, but a settled entry continues through `exit.element` — the full recursive
+  // crossing under the pinned scope (exit.element's withRegionScope is sync save/restore
+  // inside the microtask continuation, correctly reinstalled at settle time). BENIGN
+  // double-dispatch, by design (do not "fix"): the proxy's materializeElement also passes
+  // the pending PROMISE itself through membrane.element, where schemeToJsImpl's Promise
+  // FFI passthrough returns it unchanged — the real projection is this .then continuation.
+  ["arrival/toJSMembrane"](exit: MembraneExit): Record<string, unknown> {
     return egressContainerProxy(
       this,
       "object",
@@ -251,11 +264,10 @@ export class ADict extends AValue {
         keys: () => this.keys(),
         read: (name) => {
           const entry = this.get(name);
-          return is_promise(entry) ? entry.then(materializeBoxed) : entry;
+          return is_promise(entry) ? entry.then((boxed) => exit.element(boxed)) : entry;
         },
       },
-      undefined,
-      wrapCallable,
+      { membrane: exit },
     ) as Record<string, unknown>;
   }
 

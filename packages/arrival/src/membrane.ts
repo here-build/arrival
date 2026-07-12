@@ -35,7 +35,7 @@ import { AInexact } from "./values/primitives/AInexact.js";
 import { APair } from "./values/primitives/APair.js";
 // Intentional runtime cycle with rosetta.ts (which imports SchemeJSObject from
 // here). ESM resolves it: both fns are declared before any call site fires.
-import { jsToScheme, callableToHostFn } from "./rosetta.js";
+import { jsToScheme, callableToHostFn, egressAValue } from "./rosetta.js";
 import { RedundantCrossingError } from "./errors.js";
 import { is_callable_value } from "./values/value-guards.js";
 import { Syntax } from "./eval/Syntax.js";
@@ -243,6 +243,13 @@ export function toJS(value: SchemeValue) {
   // rosetta cycle safely (jsToScheme above). schemeToJs applies the same
   // is_callable_value check before its own protocol dispatch.
   if (is_callable_value(value)) return callableToHostFn(value, {});
+  // Containers cross via the membrane protocol under default options — egressAValue
+  // shares rosetta's default-mode slots, so `toJS(v) === schemeToJs(v)` holds and a
+  // NESTED callable gets the same host-fn face a bare top-level one gets right above
+  // (it used to degrade to its print string). Non-container AValues fall through to
+  // their serialization protocol inside egressAValue; non-AValue scheme orphans keep
+  // the direct protocol call — both byte-identical to the old single dispatch.
+  if (value instanceof AValue) return egressAValue(value, {});
   return value["arrival/toJS"]();
 }
 

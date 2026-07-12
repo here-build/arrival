@@ -69,11 +69,19 @@ operands → fresh ABool carrying the union. Today's op-helpers shortcut becomes
 a verdict derived from lineage carries it, a verdict derived from constants doesn't.
 
 ## R9 — Container toJS: deep unwrap via lazy ref-tracking proxies
-Deep unwrap everywhere — but through **lazy-materializing recursive proxies** with a WeakMap
+Deep unwrap everywhere — but through **lazy-materializing recursive proxies** with a
 ref-tracker (multi-referenced values stay singletons). No full materialization at egress;
 the proxy lenses in depth on demand. Future bonus: deep field access can preserve provenance
 reach-back (non-primitive reads re-enter the boxed world). Cost: one proxy + on-demand
 generation instead of a full copy.
+
+AMENDED (egress-membrane-exit rework, 2026-07-12 —
+`docs/working-proposals/arrival-egress-membrane-exit.md`): proxy identity is per
+PROJECTION, not one global slot. Bare (serialization `arrival/toJS`) = (box) forever;
+membrane (`arrival/toJSMembrane`, rosetta/exec crossings — options honored at every
+depth, nested callables become host fns) = (box, mode, exporting RegionScope); gated
+(tier-state) = (gate, box). Singleton/aliasing law holds WITHIN a slot; cross-slot
+identity was never coherent once projection depends on options/scope.
 
 ## Key taxonomy — PRINCIPLES P7 corollary, migrate now
 Three roles, one mechanism each:

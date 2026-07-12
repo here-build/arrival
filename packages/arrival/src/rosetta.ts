@@ -24,7 +24,7 @@ import { R7RSError, UnrecognizedCrossingError, AsyncCrossingError } from "./erro
 import { is_promise } from "./eval/guards.js";
 import { is_callable_value } from "./values/value-guards.js";
 import { applyCallback, type ACallable } from "./values/primitives/ACallable.js";
-import { type AUnwrap, type AWrap, type SchemeBounceMarker, type SchemeValue } from "./values/types.js";
+import { type AUnwrap, type AWrap, type EgressMode, type SchemeBounceMarker, type SchemeValue } from "./values/types.js";
 import invariant from "tiny-invariant";
 import {
   closeRegionScope,
@@ -44,6 +44,9 @@ import { makeCallCtx, type CallCtx } from "./values/primitives/CallCtx.js";
 import { tf } from "./values/tagless-final.js";
 
 interface RosettaOptions {
+  // NOTE: a new field here must be classified in `modeKeyOf` below (projection-
+  // affecting ⇒ new EgressMode member; wrapper-call-only ⇒ the Exclude list) — the
+  // `_modeKeyExhaustive` type guard turns forgetting into a compile error.
   forceBigInt?: boolean;
   returnEither?: boolean;
   /**
@@ -51,6 +54,28 @@ interface RosettaOptions {
    */
   argProvenance?: boolean;
 }
+
+/** The membrane-crossing cache mode for `options` — `forceBigInt` is the ONE field
+ *  that changes element projection (`returnEither`/`argProvenance` are read only
+ *  inside createRosettaWrapper's call packaging, never by schemeToJsImpl or inbound
+ *  jsToScheme — triad+Fable-verified). Feeds both the (box, mode, scope) container
+ *  slots (egress-proxy) and the (callable, mode, scope) wrapper slots below. */
+export function modeKeyOf(options: RosettaOptions): EgressMode {
+  return options.forceBigInt ? "mem:1" : "mem:0";
+}
+
+/** Type-level exhaustiveness: a NEW RosettaOptions field makes this `never` and the
+ *  assignment a compile error, forcing the author to classify it (see modeKeyOf).
+ *  (A destructure or `satisfies` does NOT do this — destructuring is never
+ *  exhaustiveness-checked.) */
+type _ModeKeyHandles = Exclude<
+  keyof RosettaOptions,
+  "forceBigInt" | "returnEither" | "argProvenance"
+> extends never
+  ? true
+  : never;
+const _modeKeyExhaustive: _ModeKeyHandles = true;
+void _modeKeyExhaustive;
 
 type Fn = (...args: any[]) => any;
 
@@ -92,10 +117,20 @@ function isBounceMarker(x: unknown): x is SchemeBounceMarker {
   return typeof x === "object" && x !== null && (x as Partial<SchemeBounceMarker>).__bounce === true;
 }
 
-/** Callable's JS projection IS region wrapper (not print string). Called from schemeToJsImpl is_callable_value branch AND exported for membrane.toJS() matching special-case (where plain `toJS`/exec simple-tier exit routes callable) — kept out of ACallable `arrival/toJS` so class need not import rosetta.ts (scheme-zod init cycle). */
+/** Callable's JS projection IS region wrapper (not print string). Called from schemeToJsImpl is_callable_value branch AND exported for membrane.toJS() matching special-case (where plain `toJS`/exec simple-tier exit routes callable) — kept out of ACallable `arrival/toJS` so class need not import rosetta.ts (scheme-zod init cycle).
+ * Wrapper identity = (callable, scope, MODE): the wrapper closes over `options`, so two
+ * option bags that project differently must not share a slot (first-mint-wins was the
+ * pre-split behavior); scheme-zod's typed decode shares the same two-level cache under
+ * its own `"typed"` key — see RegionScope.cache's doc. */
 export function callableToHostFn(value: ACallable, options: RosettaOptions): (...args: unknown[]) => unknown {
   const scope = currentRegionScope() ?? DETACHED_SCOPE;
-  const cached = scope.cache.get(value);
+  const key = modeKeyOf(options);
+  let byKey = scope.cache.get(value);
+  if (byKey === undefined) {
+    byKey = new Map();
+    scope.cache.set(value, byKey);
+  }
+  const cached = byKey.get(key);
   if (cached) return cached;
   const wrapper = (...jsArgs: unknown[]): Promise<unknown> =>
     withRegionCall(scope, async () => {
@@ -110,8 +145,35 @@ export function callableToHostFn(value: ACallable, options: RosettaOptions): (..
       // Nested callable in result crosses under SAME scope — one discipline for whole re-entry, not just top-level return.
       return withRegionScope(scope, () => schemeToJs(raw, options));
     });
-  scope.cache.set(value, wrapper);
+  byKey.set(key, wrapper);
   return wrapper;
+}
+
+/**
+ * Boxed-AValue egress: containers cross via `arrival/toJSMembrane` (full recursive
+ * projection under the caller's options + the PINNED exporting region scope),
+ * everything else via its serialization protocol — THE one place the two protocols
+ * meet (shared by schemeToJsImpl's AValue branch and membrane.ts#toJS, so the
+ * dispatch cannot drift between them).
+ *
+ * The scope is captured ONCE, here, at exit construction — which on both rosetta
+ * crossings happens INSIDE the live `withRegionScope` marshalling window — and every
+ * lazy element materialization re-enters it via `withRegionScope(pinned, …)`. Unpinned,
+ * a nested callable would mint its wrapper at first proxy READ (usually after the
+ * window restored) under DETACHED_SCOPE/CONSTANT_CTX — a region-discipline bypass.
+ * Late invocation after the exporting invocation closed hits the SAME escape door a
+ * bare exported callable does. Paths with no ambient scope (exec's simple tier,
+ * trace/display) pin DETACHED_SCOPE — today's behavior for their top-level callables.
+ */
+export function egressAValue(value: AValue, options: RosettaOptions): unknown {
+  const membrane = value["arrival/toJSMembrane"];
+  if (membrane === undefined) return value["arrival/toJS"]();
+  const pinned = currentRegionScope() ?? DETACHED_SCOPE;
+  return membrane.call(value, {
+    element: (el: unknown) => withRegionScope(pinned, () => schemeToJsImpl(el, options)),
+    modeKey: modeKeyOf(options),
+    cache: pinned.egressProxies,
+  });
 }
 
 /** Terminal-passthrough door (P5): every AValue subclass needs explicit branch in schemeToJsImpl instanceof chain — silent return would leak internal repr (kind/provenance/…) to JS caller expecting plain value. Fail loudly at crossing, not three calls later (P5, docs/PRINCIPLES.md). Named + exported for `instanceof` in catch, same shape as region-scope.ts door fns. */
@@ -141,13 +203,15 @@ function schemeToJsImpl(value: unknown, options: RosettaOptions): unknown {
     return callableToHostFn(value, options);
   }
 
-  // Other boxed shapes: ONE protocol dispatch via class `arrival/toJS` (NOT membrane.toJS — would close module-init cycle rosetta→membrane→evaluator, scheme-zod z.instanceof codecs capture undefined classes). Scalars unwrap, containers egress as lazy readonly proxies (egress-proxy.ts chokepoint keeps same-box → same-proxy), borrowed wrappers return source identity, ABytevector → raw Uint8Array. (Callables handled above; Macro/Syntax never a value, can't reach schemeToJs.)
-  // A container's own `arrival/toJS` takes the optional `wrapCallable` (AValue.ts) so a
-  // NESTED callable element gets this SAME reverse-membrane projection instead of its
-  // class's fallback-display-only print string (egress-proxy.ts's `materializeElement`
-  // is the leaf-module chokepoint that can't import `callableToHostFn` itself).
+  // Other boxed shapes: containers via `arrival/toJSMembrane` (full recursive
+  // projection — nested callables/forceBigInt/containers all honor `options`), the
+  // rest via `arrival/toJS` — one dispatch, `egressAValue` (shared with membrane.toJS
+  // so the two exits can't drift). Scalars unwrap, containers egress as lazy readonly
+  // proxies (egress-proxy.ts — identity per (box, mode, scope) for membrane, per box
+  // for bare), borrowed wrappers return source identity, ABytevector → raw Uint8Array.
+  // (Callables handled above; Macro/Syntax never a value, can't reach schemeToJs.)
   if (value instanceof AValue) {
-    return value["arrival/toJS"]((v) => callableToHostFn(v, options));
+    return egressAValue(value, options);
   }
 
   // RAW containers (never boxed): rosetta marshalling + trace/MCP serialization hand raw arrays/objects whose ELEMENTS may be boxed — cross elementwise so no AValue leaks into JSON.

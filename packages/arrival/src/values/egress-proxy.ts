@@ -1,23 +1,45 @@
 /**
  * R9 lazy egress proxies — the container exit of the membrane.
  *
- * Design: RULINGS.md R9. A native
- * container (AVector / APair / ADict) exits `toJS` as a lazy, observationally-plain-JS
- * proxy instead of an eager deep copy: elements materialize through their own
- * `arrival/toJS` on first read, and a WeakMap tracker guarantees the same box always
- * egresses as the same proxy (aliasing law — a tail/element shared by two containers is
- * ONE object on the JS side, reference-equality observable).
+ * Design: RULINGS.md R9 + docs/working-proposals/arrival-egress-membrane-exit.md. A
+ * native container (AVector / APair / ADict) exits as a lazy, observationally-plain-JS
+ * proxy instead of an eager deep copy: elements materialize on first read, and a
+ * tracker guarantees a stable identity per projection — where "projection" is now an
+ * explicit law, not one global slot:
+ *
+ *   • BARE (serialization — `arrival/toJS()`, no options): identity = (box), forever.
+ *     One module-level WeakMap, exactly the original R9 behavior. Elements
+ *     materialize through their own `arrival/toJS` (a nested callable stringifies —
+ *     that IS the serialization contract).
+ *   • MEMBRANE (`arrival/toJSMembrane(exit)` — rosetta/exec crossings): identity =
+ *     (box, mode, SCOPE). The cache lives on the exporting RegionScope
+ *     (`RegionScope.egressProxies`), handed in via `MembraneExit.cache`, so a later
+ *     invocation re-egressing the same box mints proxies bound to ITS scope instead
+ *     of resurrecting wrappers pinned to a closed (or DETACHED) one. Elements
+ *     materialize through `exit.element` — the full recursive membrane crossing.
+ *   • GATED (tier-state egress): identity = (gate, box). A gate is snapshot-scoped
+ *     (`tierGateFromSnapshot` mints a fresh closure per snapshot), so its proxies are
+ *     too — same-gate re-egress is a cache hit, a new snapshot's gate mints a fresh
+ *     proxy honestly reflecting current tiers. Never combined with a membrane exit
+ *     today (tiering is bare-mode by design — payload serialization WANTS print
+ *     strings); if both are supplied, the membrane cache wins and the gate still
+ *     governs materialization.
+ *
+ * BORROWED carriers (AJSArray/AJSObject) are a FOURTH egress class that never routes
+ * here: they egress source identity (`return this.source`) — that IS their membrane
+ * contract, and adding a proxy or a membrane walk would break it.
  *
  * Mechanics (each locked in the design doc):
  * - The target is a REAL `[]` / `{}` doubling as the materialization cache: every trap
  *   answer is backed by an ordinary configurable+writable target property, so all Proxy
  *   invariants are trivially satisfiable, `Array.isArray(proxy)` is true for the array
  *   shape, and a second read is a plain property hit.
- * - The proxy registers in the WeakMap BEFORE any element materializes, so a cyclic
- *   reach-back (a container that — via any depth — contains itself) resolves to the
- *   already-registered proxy structurally, with no recursion. (JSON.stringify on such a
- *   value then fails with the same TypeError a genuinely cyclic plain object produces —
- *   observationally plain JS, exactly.)
+ * - The proxy registers in its cache slot BEFORE any trap can run (built, set,
+ *   returned — traps only fire on reads after return), so a cyclic reach-back (a
+ *   container that — via any depth — contains itself) resolves to the
+ *   already-registered proxy structurally, with no recursion. (JSON.stringify on such
+ *   a value then fails with the same TypeError a genuinely cyclic plain object
+ *   produces — observationally plain JS, exactly.) The invariant holds PER SLOT.
  * - The write family (`set` / `deleteProperty` / `defineProperty` / `setPrototypeOf`)
  *   throws the same teaching door family as AJSObject's read-only membrane: the egressed
  *   value is a projection of an immutable Scheme value, not a mailbox back into it.
@@ -25,32 +47,25 @@
  * - Provenance reach-back (R9's "future bonus": deep non-primitive reads re-entering the
  *   boxed world with lineage intact) is deliberately NOT scaffolded in this iteration.
  *
- * Leaf module: imports only the AValue base (for the tracker key type and the
- * materialization dispatch) and the interop error — never membrane/env/bridge.
+ * Leaf module: imports only the AValue base (for tracker key types and the bare
+ * materialization dispatch) and the interop error — never membrane/env/bridge/rosetta.
+ * The membrane recursion reaches this file exclusively as the `MembraneExit` VALUE
+ * built by rosetta's `egressAValue` (type-only import below), which is exactly why a
+ * nested callable can get its real reverse-membrane host-fn projection without this
+ * module ever importing `callableToHostFn`.
  */
 import { AValue } from "./primitives/AValue.js";
-import type { ACallable } from "./primitives/ACallable.js";
-import { is_callable_value } from "./value-guards.js";
+import type { EgressMode, MembraneExit } from "./types.js";
 import { InteropAccessError } from "../errors.js";
 
-/** Singleton tracker: same box → same proxy, forever. Module-level, mirrors
- *  membrane.ts's `jsToWrapper` (the entry-side twin of this exit-side cache).
- *
- *  Deliberately a plain `WeakMap`, not `DefaultedWeakMap` (@here.build/collections),
- *  unlike `jsToWrapper`'s conversion: `jsToWrapper` dispatches its ONE factory purely
- *  off the key's own shape (`Array.isArray`), so binding it once at construction is
- *  exactly right. Here the "recipe" — `shape` and `reader` — is supplied PER CALL by
- *  `egressContainerProxy`'s three callers (AVector/APair/ADict's own `arrival/toJS`),
- *  not derivable from `box` alone without importing all three concrete container
- *  classes into this deliberately leaf module (see the file header: "imports only the
- *  AValue base... never membrane/env/bridge") — that coupling is exactly what the
- *  leaf-module boundary exists to avoid. A single bound factory can't accept a
- *  per-call reader, so the get-check-set idiom stays. (Ordering is NOT the blocker:
- *  `reader.keys()`/`.read()` never materialize elements during construction — see
- *  `EgressReader`'s doc — so a DefaultedWeakMap-style "set after the factory returns"
- *  would preserve the "register before any element materializes" invariant fine; the
- *  factory-arity mismatch is the actual reason this one stays manual.) */
-const egressProxies = new WeakMap<AValue, object>();
+/** BARE-law tracker: same box → same proxy, forever. Deterministic (no options, no
+ *  scope), so box-forever identity is coherent — the original R9 law, now scoped to
+ *  the serialization projection only. */
+const bareProxies = new WeakMap<AValue, object>();
+
+/** GATED-law tracker: a gate is snapshot-scoped; its proxies are too. Same-gate
+ *  re-egress hits; a fresh snapshot's fresh gate closure gets a fresh inner map. */
+const gatedProxies = new WeakMap<TierGate, WeakMap<AValue, object>>();
 
 /** Shallow read model a container hands to its proxy: `keys()` enumerates the own
  *  string keys (index strings for the array shape), `read(key)` returns the ELEMENT —
@@ -60,26 +75,18 @@ export interface EgressReader {
   read(key: string): unknown;
 }
 
-/** Element exit: protocol dispatch — the element's class is the conversion authority;
- *  a raw FFI-passthrough element has no protocol and exits as itself.
- *
- *  A callable element is special-cased BEFORE the generic protocol dispatch: a
- *  callable's own `arrival/toJS` is fallback-display-only (a print string — see
- *  ACallable.ts), because the REAL reverse-membrane host-fn projection needs
- *  `callableToHostFn` (rosetta.ts), which this leaf module cannot import (would cycle
- *  through rosetta → scheme-zod at module-init). `wrapCallable`, supplied by whichever
- *  caller DOES have that machinery (schemeToJsImpl, via each container's `arrival/toJS`),
- *  closes the gap — the same projection a BARE callable argument already gets. Absent
- *  (e.g. a print path with no rosetta context), a nested callable falls back to the
- *  print string exactly as before — byte-identical for every caller that doesn't opt in. */
-function materializeElement(element: unknown, wrapCallable?: (value: ACallable) => unknown): unknown {
-  if (wrapCallable && is_callable_value(element)) return wrapCallable(element);
+/** Element exit. Membrane egress routes through `exit.element` — the full recursive
+ *  crossing (options + pinned scope + nested-callable wrapping live in rosetta's
+ *  closure, never here). Bare egress dispatches the element's own serialization
+ *  protocol; a raw FFI-passthrough element has no protocol and exits as itself. */
+function materializeElement(element: unknown, membrane?: MembraneExit): unknown {
+  if (membrane !== undefined) return membrane.element(element);
   return element instanceof AValue ? element["arrival/toJS"]() : element;
 }
 
 /**
  * The payload-tiering tier-state gate seam. This module stays a LEAF (file header
- * above: "never membrane/env/bridge") so this interface is deliberately ABSTRACT — no `PayloadTier`/
+ * above) so this interface is deliberately ABSTRACT — no `PayloadTier`/
  * `EvidenceTier` import from `provenance/store`. The concrete implementation
  * (`provenance/store/tiering.ts`'s `tierGateFromSnapshot`) closes over its own tier
  * state and hands back a value shaped like this.
@@ -100,6 +107,19 @@ export interface TierGate {
   stubbedValue(key: string): unknown;
 }
 
+/** `egressContainerProxy`'s options — one object, so the membrane pair
+ *  (materializer + mode + scope-owned cache) travels as a unit and cannot drift
+ *  apart at a call site. */
+export interface EgressOpts {
+  /** Tier-state gate consulted BEFORE `reader.read(key)` on first materialization of
+   *  each key. Omitting it is byte-stable pass-through. */
+  gate?: TierGate;
+  /** The membrane exit — presence switches materialization from bare serialization
+   *  to `exit.element`, and the cache to the exit's scope-owned (box, mode) slots.
+   *  Bare egress omits it. */
+  membrane?: MembraneExit;
+}
+
 function writeDoor(kind: "assign" | "mutate", key: string | symbol | undefined): never {
   const verb =
     kind === "assign"
@@ -112,33 +132,68 @@ function writeDoor(kind: "assign" | "mutate", key: string | symbol | undefined):
   );
 }
 
+/** One cache slot under whichever identity law governs this egress — a get/set pair
+ *  the build below stays agnostic to. */
+interface ProxySlot {
+  get(): object | undefined;
+  set(proxy: object): void;
+}
+
+function membraneSlot(cache: WeakMap<AValue, Map<EgressMode, object>>, box: AValue, mode: EgressMode): ProxySlot {
+  return {
+    get: () => cache.get(box)?.get(mode),
+    set: (proxy) => {
+      let byMode = cache.get(box);
+      if (byMode === undefined) {
+        byMode = new Map();
+        cache.set(box, byMode);
+      }
+      byMode.set(mode, proxy);
+    },
+  };
+}
+
+function boxSlot(cache: WeakMap<AValue, object>, box: AValue): ProxySlot {
+  return {
+    get: () => cache.get(box),
+    set: (proxy) => cache.set(box, proxy),
+  };
+}
+
+function gatedSlot(gate: TierGate, box: AValue): ProxySlot {
+  let byBox = gatedProxies.get(gate);
+  if (byBox === undefined) {
+    byBox = new WeakMap();
+    gatedProxies.set(gate, byBox);
+  }
+  return boxSlot(byBox, box);
+}
+
 /**
- * Build (or return the already-built) lazy egress proxy for `box`.
+ * Build (or return the already-built) lazy egress proxy for `box`, under the identity
+ * law its options select (file header): membrane ⇒ (box, mode, scope) via
+ * `opts.membrane.cache`; gated ⇒ (gate, box); bare ⇒ (box) forever.
  *
  * Identity is guaranteed HERE, at the single chokepoint every container's
- * `arrival/toJS` calls — membrane.toJS needs no separate pre-check because protocol
- * dispatch lands in this cache either way.
- *
- * `gate` (optional, additive): a tier-state gate consulted BEFORE
- * `reader.read(key)` on first materialization of each key. Omitting it (every
- * ungated call site) is EXACTLY the old behavior — `ensure` below takes the
- * `gate === undefined` branch unconditionally, so this is byte-stable for every
- * caller that doesn't opt in. The gate does not replace or duplicate the lazy-
- * materialization seam itself (`reader`/`ensure`/the WeakMap identity cache) — it
- * sits in front of it, deciding per key whether the existing seam runs at all.
- *
- * `wrapCallable` (optional, additive): forwarded to `materializeElement` — see its own
- * doc for why a nested callable element needs it to get the real reverse-membrane
- * projection instead of a print string. Omitting it is byte-stable (today's behavior).
+ * `arrival/toJS` / `arrival/toJSMembrane` calls — membrane.toJS needs no separate
+ * pre-check because protocol dispatch lands in the right slot either way.
  */
 export function egressContainerProxy(
   box: AValue,
   shape: "array" | "object",
   reader: EgressReader,
-  gate?: TierGate,
-  wrapCallable?: (value: ACallable) => unknown,
+  opts?: EgressOpts,
 ): object {
-  const cached = egressProxies.get(box);
+  const membrane = opts?.membrane;
+  const gate = opts?.gate;
+  const slot =
+    membrane !== undefined
+      ? membraneSlot(membrane.cache, box, membrane.modeKey)
+      : gate !== undefined
+        ? gatedSlot(gate, box)
+        : boxSlot(bareProxies, box);
+
+  const cached = slot.get();
   if (cached) return cached;
 
   const names = reader.keys();
@@ -152,7 +207,7 @@ export function egressContainerProxy(
     if (Object.prototype.hasOwnProperty.call(target, key)) return;
     target[key] =
       gate === undefined || gate.allows(key)
-        ? materializeElement(reader.read(key), wrapCallable)
+        ? materializeElement(reader.read(key), membrane)
         : gate.stubbedValue(key);
   };
 
@@ -189,6 +244,9 @@ export function egressContainerProxy(
     },
   });
 
-  egressProxies.set(box, proxy);
+  // Register BEFORE returning — traps only fire on reads after return, so a cyclic
+  // reach-back during a later materialization finds this slot already occupied
+  // (the register-before-materialize invariant, per slot).
+  slot.set(proxy);
   return proxy;
 }

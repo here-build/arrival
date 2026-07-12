@@ -61,7 +61,7 @@ describe("egressContainerProxy — Q14 gate, additive over the existing lazy-mat
     const reader = trackedReader(["x", "y"]);
     const passthroughGate = { allows: () => true, stubbedValue: () => "UNREACHABLE" };
 
-    const proxy = egressContainerProxy(box, "array", reader, passthroughGate) as readonly unknown[];
+    const proxy = egressContainerProxy(box, "array", reader, { gate: passthroughGate }) as readonly unknown[];
 
     expect(proxy[0]).toBe("x");
     expect(proxy[1]).toBe("y");
@@ -80,7 +80,7 @@ describe("egressContainerProxy — Q14 gate, additive over the existing lazy-mat
     const box = testBox();
     const reader = trackedReader(["never-should-materialize", "untouched-by-tiering"]);
 
-    const proxy = egressContainerProxy(box, "array", reader, gate) as readonly unknown[];
+    const proxy = egressContainerProxy(box, "array", reader, { gate }) as readonly unknown[];
 
     expect(proxy[0]).toEqual({ "provenance/tier": "stub", payloadHash: "hash-0", stampIds: [4, 2] });
     expect(reader.readKeys).toEqual([]); // key 0 was gated OFF before reader.read ever ran
@@ -101,9 +101,32 @@ describe("egressContainerProxy — Q14 gate, additive over the existing lazy-mat
     const box = testBox();
     const reader = trackedReader(["real value made it through"]);
 
-    const proxy = egressContainerProxy(box, "array", reader, gate) as readonly unknown[];
+    const proxy = egressContainerProxy(box, "array", reader, { gate }) as readonly unknown[];
 
     expect(proxy[0]).toBe("real value made it through");
     expect(reader.readKeys).toEqual(["0"]);
+  });
+
+  it("gated egress caches per (gate, box): a gate is snapshot-scoped, its proxies are too", () => {
+    const box = testBox();
+    const reader = trackedReader(["v"]);
+    const gateA = { allows: () => true, stubbedValue: () => "A" };
+    const gateB = { allows: () => false, stubbedValue: () => "B-stub" };
+
+    const underA1 = egressContainerProxy(box, "array", reader, { gate: gateA });
+    const underA2 = egressContainerProxy(box, "array", reader, { gate: gateA });
+    expect(underA2).toBe(underA1); // same gate → cache hit
+
+    // A FRESH gate (a new snapshot's closure) mints a FRESH proxy honestly reflecting
+    // its own tier view — never the earlier gate's cached materialization.
+    const underB = egressContainerProxy(box, "array", reader, { gate: gateB }) as readonly unknown[];
+    expect(underB).not.toBe(underA1);
+    expect(underB[0]).toBe("B-stub");
+
+    // Ungated bare egress of the same box is a third, independent identity.
+    const bare = egressContainerProxy(box, "array", reader);
+    expect(bare).not.toBe(underA1);
+    expect(bare).not.toBe(underB);
+    expect(egressContainerProxy(box, "array", reader)).toBe(bare); // bare = (box), forever
   });
 });

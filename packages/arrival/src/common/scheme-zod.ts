@@ -796,7 +796,17 @@ export function procedure<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(input?
         // encode/decode in/out param types are opaque conditionals here (generic boundary).
         decode: (callable) => {
           const scope = currentRegionScope() ?? DETACHED_SCOPE;
-          const cached = scope.cache.get(callable);
+          // `"typed"` = this factory family's slot in the two-level wrapper cache (see
+          // RegionScope.cache's doc): rosetta's untyped `callableToHostFn` keys by
+          // EgressMode; the pre-split single-keyed idiom let whichever family crossed
+          // a callable FIRST serve its wrapper to the other (typed marshalling lost,
+          // or gained where not asked for).
+          let byKey = scope.cache.get(callable);
+          if (byKey === undefined) {
+            byKey = new Map();
+            scope.cache.set(callable, byKey);
+          }
+          const cached = byKey.get("typed");
           if (cached) return cached;
           // Wrapper CLOSES OVER `scope` (minted here, at decode time) — never re-reads
           // ambient holder, so a call arriving after the exporting symbol invocation returned
@@ -821,7 +831,7 @@ export function procedure<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(input?
               );
               return output ? withMarshalCtx(scope.runCtx, () => z.decode(output, r as never)) : r;
             });
-          scope.cache.set(callable, wrapper);
+          byKey.set("typed", wrapper);
           return wrapper;
         },
         encode: (jsFn) =>

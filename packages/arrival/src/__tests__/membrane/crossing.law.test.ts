@@ -18,7 +18,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { CROSSINGS, VIOLATIONS } from "../laws/_tables/crossings.js";
 import { fromJS, toJS, isSchemeValue } from "../../membrane.js";
-import { jsToScheme, schemeToJs } from "../../rosetta.js";
+import { jsToScheme, schemeToJs, modeKeyOf } from "../../rosetta.js";
 import { exec } from "../../eval/generator-exec.js";
 import { setMembraneWarnings } from "../../membrane-warn.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
@@ -32,6 +32,9 @@ import { theVoid } from "../../values/primitives/AVoid.js";
 import { APair } from "../../values/primitives/APair.js";
 import { AVector } from "../../values/primitives/AVector.js";
 import { ADict } from "../../values/primitives/ADict.js";
+import { ANativeProcedure } from "../../values/primitives/ACallable.js";
+import { closeRegionScope, openRegionScope, withRegionScope } from "../../values/primitives/region-scope.js";
+import { RegionEscapeError } from "../../errors.js";
 import { AJSArray } from "../../values/primitives/AJSArray.js";
 import { AJSObject } from "../../values/primitives/AJSObject.js";
 import type { SchemeValue } from "../../values/types.js";
@@ -681,7 +684,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
   }
 });
 
-describe("R9 lazy egress laws — containers exit as ref-tracking proxies (two-tier-exec-api.md §5)", () => {
+describe("R9 lazy egress laws — containers exit as ref-tracking proxies (RULINGS.md R9)", () => {
   it("identity: the same box always egresses as the SAME proxy", () => {
     const vec = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n)]);
     expect(toJS(vec)).toBe(toJS(vec));
@@ -878,3 +881,122 @@ describe("forgery guard: a borrowed object's own arrival/*-named key is DATA, ne
 // block carried ("live AHalfBaked escapes exec under speculate", ledger GAPS) are gone
 // because the gap became UNREACHABLE, not fixed — no carrier can exist anymore, so
 // there is nothing left for force-on-egress to force. See REMOVAL-MANIFEST.md.
+
+// ── Egress membrane exit laws (docs/working-proposals/arrival-egress-membrane-exit.md) ──
+// The two-protocol split: `arrival/toJS` = SERIALIZATION (callables stringify — a law,
+// not an accident), `arrival/toJSMembrane` = MEMBRANE crossing (options + reverse-membrane
+// wrappers reach every depth). Identity: bare=(box); membrane=(box, mode, SCOPE).
+describe("egress membrane exit — the two protocols and their identity laws", () => {
+  const native = (tag: string): ANativeProcedure =>
+    new ANativeProcedure({
+      name: `test-${tag}`,
+      arity: { min: 0, max: null },
+      contract: undefined,
+      impl: (_args, runCtx) => new AExact(runCtx, 7n),
+    });
+  const dictOf = (entries: ReadonlyArray<readonly [string, SchemeValue | Promise<SchemeValue>]>): ADict =>
+    new ADict(
+      CONSTANT_CTX,
+      entries.map(([k, v]) => [new ASymbol(CONSTANT_CTX, k), v] as const),
+    );
+
+  it("nested callable crosses as a host FUNCTION via schemeToJs AND membrane.toJS (the flip, pinned)", async () => {
+    const d = dictOf([["f", native("a")]]);
+    const viaRosetta = schemeToJs(d) as Record<string, unknown>;
+    expect(typeof viaRosetta.f).toBe("function");
+    // Invoking round-trips through the reverse membrane (DETACHED scope — always open).
+    await expect((viaRosetta.f as () => Promise<unknown>)()).resolves.toBe(7);
+    // membrane.toJS (exec's exit) shares the default-mode slot — same face, same proxy.
+    const viaToJS = toJS(d) as Record<string, unknown>;
+    expect(typeof viaToJS.f).toBe("function");
+    expect(viaToJS).toBe(viaRosetta);
+  });
+
+  it("depth ≥ 2: the innermost callable crosses as fn under membrane, as string under bare", () => {
+    const inner = dictOf([["f", native("deep")]]);
+    const outerDict = dictOf([["inner", inner]]);
+    const outerVec = new AVector(CONSTANT_CTX, [inner]);
+    const viaDict = schemeToJs(outerDict) as { inner: { f: unknown } };
+    expect(typeof viaDict.inner.f).toBe("function");
+    const viaVec = schemeToJs(outerVec) as ReadonlyArray<{ f: unknown }>;
+    expect(typeof viaVec[0].f).toBe("function");
+    // Bare protocol (serialization — what hostFace/faceOf call): string at every depth.
+    const bare = outerDict["arrival/toJS"]() as { inner: { f: unknown } };
+    expect(typeof bare.inner.f).toBe("string");
+    expect(bare.inner.f).toMatch(/^#<procedure/);
+  });
+
+  it("nested forceBigInt: options reach container elements (the sibling defect, fixed)", () => {
+    const d = dictOf([["n", new AExact(CONSTANT_CTX, 5n)]]);
+    expect((schemeToJs(d, { forceBigInt: true }) as { n: unknown }).n).toBe(5n);
+    expect((schemeToJs(d) as { n: unknown }).n).toBe(5);
+  });
+
+  it("mode isolation: bare / mem:0 / mem:1 are distinct slots; each is stable within itself", () => {
+    const d = dictOf([["n", new AExact(CONSTANT_CTX, 1n)]]);
+    const bare1 = d["arrival/toJS"]();
+    const bare2 = d["arrival/toJS"]();
+    expect(bare1).toBe(bare2);
+    const mem1 = schemeToJs(d);
+    const mem2 = schemeToJs(d);
+    expect(mem1).toBe(mem2); // same DETACHED scope, same mode
+    const big = schemeToJs(d, { forceBigInt: true });
+    expect(big).not.toBe(mem1);
+    expect(bare1).not.toBe(mem1);
+    // Wrapper-call-only options do NOT split the mode (they never change projection).
+    expect(modeKeyOf({})).toBe("mem:0");
+    expect(modeKeyOf({ forceBigInt: true })).toBe("mem:1");
+    expect(modeKeyOf({ returnEither: true })).toBe("mem:0");
+    expect(modeKeyOf({ argProvenance: true })).toBe("mem:0");
+  });
+
+  it("membrane proxies are SCOPE-owned: a second invocation mints its own; the closed scope's wrapper doors", async () => {
+    const d = dictOf([["f", native("scoped")]]);
+    const scopeA = openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined });
+    const proxyA = withRegionScope(scopeA, () => schemeToJs(d)) as Record<string, unknown>;
+    const fnA = proxyA.f as () => Promise<unknown>; // materializes lazily — under the PINNED scopeA
+    closeRegionScope(scopeA);
+    await expect(fnA()).rejects.toThrow(RegionEscapeError); // A's discipline, not silent CONSTANT_CTX
+    const scopeB = openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined });
+    const proxyB = withRegionScope(scopeB, () => schemeToJs(d)) as Record<string, unknown>;
+    expect(proxyB).not.toBe(proxyA); // (box, mode, SCOPE) — never resurrect A's projection
+    await expect((proxyB.f as () => Promise<unknown>)()).resolves.toBe(7); // B is live
+    closeRegionScope(scopeB);
+    // Scope-less egress (DETACHED singleton) is a third, distinct identity.
+    const detached = schemeToJs(d);
+    expect(detached).not.toBe(proxyA);
+    expect(detached).not.toBe(proxyB);
+  });
+
+  it("serialization law: bare toJS on a callable-bearing dict yields the print string", () => {
+    const d = dictOf([["f", native("ser")]]);
+    const bare = d["arrival/toJS"]() as Record<string, unknown>;
+    expect(typeof bare.f).toBe("string");
+    expect(bare.f).toMatch(/^#<procedure/);
+  });
+
+  it("ADict pending entry settling to a callable: membrane → function, bare → string", async () => {
+    const membraneDict = dictOf([["f", Promise.resolve<SchemeValue>(native("pend-m"))]]);
+    const viaMembrane = schemeToJs(membraneDict) as Record<string, unknown>;
+    expect(typeof (await viaMembrane.f)).toBe("function");
+    const bareDict = dictOf([["f", Promise.resolve<SchemeValue>(native("pend-b"))]]);
+    const viaBare = bareDict["arrival/toJS"]() as Record<string, unknown>;
+    expect(typeof (await viaBare.f)).toBe("string");
+  });
+
+  it("wrapper cache is (callable, scope, MODE)-keyed: option modes never share a wrapper; a mode is stable", () => {
+    const f = native("wrap");
+    const d = dictOf([["f", f]]);
+    const scope = openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined });
+    const p0 = withRegionScope(scope, () => schemeToJs(d)) as Record<string, unknown>;
+    const p1 = withRegionScope(scope, () => schemeToJs(d, { forceBigInt: true })) as Record<string, unknown>;
+    const w0 = p0.f;
+    const w0again = (withRegionScope(scope, () => schemeToJs(d)) as Record<string, unknown>).f;
+    const w1 = p1.f;
+    expect(typeof w0).toBe("function");
+    expect(typeof w1).toBe("function");
+    expect(w0).toBe(w0again); // same (callable, scope, mem:0)
+    expect(w0).not.toBe(w1); // mem:0 vs mem:1 — the wrapper closes over options
+    closeRegionScope(scope);
+  });
+});

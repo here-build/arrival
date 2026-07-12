@@ -240,3 +240,49 @@ export function isString(x: unknown): x is SchemeStringLike | string {
 export type AList<Car extends SchemeValue = any, Cdr extends Car extends ANil ? ANil : SchemeValue = any> =
   | APair<Car, Cdr>
   | ANil;
+
+// ── Egress projection modes + the membrane element exit ───────────────────────────
+// (docs/working-proposals/arrival-egress-membrane-exit.md — the two-protocol split:
+// `arrival/toJS` = serialization projection, `arrival/toJSMembrane` = membrane exit.)
+
+/** The egress projection modes. `bare` = serialization (no options, callables
+ *  stringify). `mem:0`/`mem:1` = membrane crossing, split by `forceBigInt` — the ONE
+ *  RosettaOptions field that changes element projection (`returnEither`/
+ *  `argProvenance` are wrapper-call concerns read only inside createRosettaWrapper,
+ *  never by schemeToJsImpl or inbound jsToScheme). Adding a projection-affecting
+ *  RosettaOptions field REQUIRES a new member here — rosetta.ts's
+ *  `_modeKeyExhaustive` type guard makes forgetting it a compile error. */
+export type EgressMode = "bare" | "mem:0" | "mem:1";
+export const BARE_MODE: EgressMode = "bare";
+
+/** The region wrapper cache's inner key — NOT EgressMode: `"typed"` is scheme-zod's
+ *  `z.procedure` factory family (its own marshalling, options-less), not an egress
+ *  mode, and `"bare"` never mints wrappers, so the live domain is
+ *  {"mem:0","mem:1","typed"}. See region-scope.ts's cache doc. */
+export type WrapperKey = EgressMode | "typed";
+
+/**
+ * The membrane's element exit, handed to a container's `arrival/toJSMembrane`
+ * (implemented ONLY by the native containers ADict/APair/AVector — see AValue.ts).
+ * Built exclusively by rosetta.ts's `egressAValue`; egress-proxy consumes it.
+ */
+export interface MembraneExit {
+  /** Full recursive membrane crossing for one element, running under the PINNED
+   *  exporting region scope — closes over `withRegionScope(pinned, () =>
+   *  schemeToJsImpl(el, options))`. Handles nested callables (schemeToJsImpl's own
+   *  is_callable_value fast path → callableToHostFn, minting under the pinned scope),
+   *  nested forceBigInt, nested containers (the recursion re-enters toJSMembrane with
+   *  the same options, so the same modeKey falls out). */
+  element(el: unknown): unknown;
+  /** Branded cache-mode discriminator — derived from options CONTENT by rosetta's
+   *  `modeKeyOf`; closure identity is irrelevant. Never `"bare"` in practice (bare
+   *  egress carries no MembraneExit at all). */
+  modeKey: EgressMode;
+  /** The pinned scope's OWN membrane-proxy cache (`RegionScope.egressProxies` —
+   *  the law: membrane proxy identity = (box, mode, SCOPE)). Handed in as a plain
+   *  WeakMap so egress-proxy needs zero new imports. Without this, a
+   *  (box, mode)-forever cache would resurrect wrappers pinned to a CLOSED scope for
+   *  a later invocation (spurious escape doors), or serve DETACHED-pinned wrappers to
+   *  a live rosetta crossing (discipline bypass by cache pollution). */
+  cache: WeakMap<AValue, Map<EgressMode, object>>;
+}

@@ -194,11 +194,22 @@ describe("a reverse lambda is region-bound to its invocation", () => {
     const scope = openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined });
     const untyped = withRegionScope(scope, () => schemeToJs(echo));
     const typed = withRegionScope(scope, () => z.procedure().parse(echo));
-    // Same (callable, scope) → the SAME cache entry, regardless of which door minted it.
-    expect(typed).toBe(untyped);
+    // DISTINCT wrappers by law (the two-level (callable, scope, FAMILY) cache — see
+    // RegionScope.cache's doc): the typed wrapper carries z.procedure's marshalling,
+    // the untyped one is the plain passthrough. The old single-slot `toBe` here pinned
+    // the first-caller-wins collision (whichever path crossed first served ITS wrapper
+    // to the other — typed marshalling silently lost or gained). Each family is stable
+    // within itself, and BOTH adopt the same scope token — one discipline.
+    expect(typed).not.toBe(untyped);
+    expect(withRegionScope(scope, () => schemeToJs(echo))).toBe(untyped);
+    expect(withRegionScope(scope, () => z.procedure().parse(echo))).toBe(typed);
 
     closeRegionScope(scope);
+    // The shared discipline: the CLOSED scope doors BOTH families' wrappers.
     await expect((typed as (...a: unknown[]) => Promise<unknown>)(1)).rejects.toThrow(
+      /region-bound to the calling symbol/,
+    );
+    await expect((untyped as (...a: unknown[]) => Promise<unknown>)(1)).rejects.toThrow(
       /region-bound to the calling symbol/,
     );
   });

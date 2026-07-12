@@ -16,7 +16,7 @@
  */
 import { CLASS } from "../../well-known-symbols.js";
 import { type RunContext } from "./RunContext.js";
-import { applyCallback, type ACallable } from "./ACallable.js";
+import { applyCallback } from "./ACallable.js";
 import { chargeHeap } from "../../heap-budget.js";
 import { is_promise } from "../../eval/guards.js";
 import { is_false } from "../value-guards.js";
@@ -27,7 +27,7 @@ import { ANil, nil } from "./ANil.js";
 import { strictGate } from "../../errors.js";
 import { printValue } from "../print.js";
 import { type SeenMap, structuralEqual } from "../structural-equal.js";
-import type { SchemeValue } from "../types.js";
+import type { MembraneExit, SchemeValue } from "../types.js";
 // op-helpers imports AVector back, but both directions are referenced only inside function
 // bodies (op-helpers' asVector; this term's sort), so the cycle never bites at module-eval.
 import { deriveSortCompare, withInputProvenance } from "../op-helpers.js";
@@ -86,7 +86,18 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   // egress proxy — observationally a plain array (Array.isArray true, JSON/spread/
   // iteration work), elements unwrap through their own `arrival/toJS` on first read,
   // same box → same proxy (egress-proxy.ts owns the tracker and the write doors).
-  ["arrival/toJS"](wrapCallable?: (value: ACallable) => unknown): readonly unknown[] {
+  ["arrival/toJS"](): readonly unknown[] {
+    const elements = this.__vector__;
+    return egressContainerProxy(this, "array", {
+      keys: () => elements.map((_, i) => String(i)),
+      read: (key) => elements[Number(key)],
+    }) as readonly unknown[];
+  }
+
+  // Membrane exit (rosetta's egressAValue is the only builder of `exit`): identical
+  // read model, but elements materialize through the full recursive crossing and the
+  // proxy caches per (box, mode, SCOPE) — see egress-proxy.ts's identity laws.
+  ["arrival/toJSMembrane"](exit: MembraneExit): readonly unknown[] {
     const elements = this.__vector__;
     return egressContainerProxy(
       this,
@@ -95,8 +106,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
         keys: () => elements.map((_, i) => String(i)),
         read: (key) => elements[Number(key)],
       },
-      undefined,
-      wrapCallable,
+      { membrane: exit },
     ) as readonly unknown[];
   }
 

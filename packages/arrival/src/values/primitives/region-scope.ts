@@ -28,6 +28,8 @@
  */
 
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
+import type { AValue } from "./AValue.js";
+import type { EgressMode, WrapperKey } from "../types.js";
 import { RegionEscapeError, RegionIncompleteError } from "../../errors.js";
 import {
   emitHostSchedule,
@@ -127,23 +129,34 @@ export interface RegionScope {
    *  `withDynamicCallSite` so a re-entry's trace nests under THIS invocation
    *  instead of the lambda's definition-time lexical one. */
   readonly dynSite: unknown;
-  /** Per-(callable, scope) wrapper identity: the same callable exported
-   *  twice through this SAME scope gets back the SAME JS function. A WeakMap
-   *  keyed by the callable value itself, owned by the scope — a fresh scope
-   *  starts with a fresh, empty cache, so two invocations of the same symbol
-   *  each get their own wrapper (never `===` across scopes).
+  /** Per-(callable, scope, FAMILY) wrapper identity: the same callable exported
+   *  twice through this SAME scope UNDER THE SAME FAMILY gets back the SAME JS
+   *  function. Owned by the scope — a fresh scope starts with a fresh, empty cache,
+   *  so two invocations of the same symbol each get their own wrapper (never `===`
+   *  across scopes).
    *
-   *  Deliberately a plain `WeakMap`, not `DefaultedWeakMap` (@here.build/collections):
-   *  TWO independent call sites build wrappers over this SAME cache with DIFFERENT
-   *  factories — rosetta.ts's `callableToHostFn` (the untyped passthrough) and
-   *  scheme-zod.ts's `z.procedure` decode (the typed `input`/`output`-marshaling
-   *  wrapper). `DefaultedWeakMap` binds ONE factory at construction; forcing this
-   *  cache into it would make whichever caller reaches an unset key FIRST silently
-   *  win for the OTHER caller too (losing the typed marshaling, or vice versa) — a
-   *  real behavior change, not a get-check-set collapse. The manual get-check-set
-   *  idiom stays because the "value recipe" is genuinely per-call-site here, not
-   *  derivable from the key alone. */
-  readonly cache: WeakMap<object, (...args: unknown[]) => unknown>;
+   *  TWO-LEVEL, keyed by `WrapperKey` (values/types.ts): TWO independent call sites
+   *  build wrappers over this SAME cache with DIFFERENT factories — rosetta.ts's
+   *  `callableToHostFn` (the untyped passthrough, whose behavior additionally varies
+   *  by the crossing's RosettaOptions ⇒ keyed by `EgressMode`) and scheme-zod.ts's
+   *  `z.procedure` decode (the typed `input`/`output`-marshaling wrapper ⇒ keyed
+   *  `"typed"`). The pre-split single-keyed idiom had a first-caller-wins collision
+   *  between those families (a callable crossing typed first served its typed
+   *  wrapper to a later untyped crossing, and vice versa) — the same defect class
+   *  the (box, mode, scope) container-proxy law resolves, one level down. Explicit
+   *  non-goal: schema collision WITHIN `"typed"` (same callable, two different
+   *  z.procedure schemas) is pre-existing and stays. */
+  readonly cache: WeakMap<object, Map<WrapperKey, (...args: unknown[]) => unknown>>;
+
+  /** Per-(box, mode, scope) MEMBRANE egress-proxy identity — the container twin of
+   *  `cache` above (values/egress-proxy.ts consumes it via `MembraneExit.cache`;
+   *  rosetta's `egressAValue` hands it over from the pinned scope). Scope-owned for
+   *  the same reason wrappers are: a membrane proxy's elements materialize under the
+   *  pinned scope, so proxies must not outlive it into a later invocation (closed-
+   *  scope wrapper resurrection) nor leak DETACHED-pinned materialization into a
+   *  live crossing's slots. Bare (serialization) proxies never land here — they keep
+   *  the module-level box-forever map in egress-proxy.ts. */
+  readonly egressProxies: WeakMap<AValue, Map<EgressMode, object>>;
 
   /** This scope's `TrackCoordinate`, captured AMBIENTLY at `openRegionScope`
    *  time (mirrors `runCtx`/`dynSite`: closed over once, never re-read) —
@@ -191,6 +204,7 @@ export const DETACHED_SCOPE: RegionScope = {
   runCtx: CONSTANT_CTX,
   dynSite: undefined,
   cache: new WeakMap(),
+  egressProxies: new WeakMap(),
   // A detached scope was never minted under `withTrackCoordinate` — no
   // coordinate/sink means `noteTrackOpen`/`noteTrackClose`/`recordHostScheduleVerdict`
   // no-op unconditionally for every wrapper sharing this singleton.
@@ -215,6 +229,7 @@ export function openRegionScope(opts: { runCtx: RunContext; dynSite: unknown }):
     runCtx: opts.runCtx,
     dynSite: opts.dynSite,
     cache: new WeakMap(),
+    egressProxies: new WeakMap(),
     // Captured NOW, from whatever `withTrackCoordinate` installed ambiently —
     // never re-read later (same rationale as runCtx/dynSite above).
     trackCoordinate: _trackCoordinate,
@@ -271,6 +286,7 @@ export async function reconstructRegionScope(opts: {
     runCtx,
     dynSite,
     cache: new WeakMap(),
+    egressProxies: new WeakMap(),
     trackCoordinate: coordinate,
     trackSink: sink,
     // Seeded past every ordinal this coordinate already used, so the next

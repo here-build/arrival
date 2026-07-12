@@ -2,6 +2,12 @@
  * pending-entry.ts — the LAZY PENDING CELL for a Promise-valued entry inside a structure
  * (an AJSObject/ADict entry, an AJSArray element).
  *
+ * LAW: native spine carriers (AVector/APair) never hold pending cells — their elements
+ * are owned `SchemeValue`s structurally, so this machinery is ADict/AJSObject/AJSArray
+ * ONLY. A raw scheme Promise inside a native vector/list egresses through
+ * schemeToJsImpl's FFI passthrough as the Promise itself, by design — ADict's
+ * settle-then-project egress branch is law, not an oversight the other containers miss.
+ *
  * Design (the LIPS-decomposer removal ruling, utils/promises.ts header): structures hold
  * promise-valued members INERT; the interpreter awaits lazily at the seam where the value
  * is actually NEEDED. For container entries that seam is the ENTRY READ (tagless get /
