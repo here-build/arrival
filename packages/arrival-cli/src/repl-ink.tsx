@@ -25,6 +25,7 @@ import {
   type ReplFoldModel,
 } from "@here.build/mcp-substrate";
 
+import { DISABLE_AUTOWRAP, ENABLE_AUTOWRAP } from "./ansi.js";
 import { emitForms } from "./form-emitter.js";
 import { pushHistory, recallNext, recallPrev, type NavState } from "./history-nav.js";
 import { highlightScheme } from "./highlight.js";
@@ -313,10 +314,24 @@ function ReplApp({ session, budgetMs, heapBudget, version, capabilityCount, mode
 
 /** Mount the Ink repl over a persistent loader session. No banner, no header — the version /
  *  lens status rides the far right of the prompt line and vanishes on the first keystroke.
- *  Resolves when the user exits (Ctrl-D). Caller disposes the ambient. */
+ *  Resolves when the user exits (Ctrl-D). Caller disposes the ambient.
+ *
+ *  Autowrap is disabled for the session (Ink owns line-width layout; the terminal's own
+ *  autowrap adds a phantom newline when a line fills to the edge) and restored on exit — via
+ *  `signal-exit` too, so a Ctrl-C / signal never leaves the user's terminal no-wrap. */
 export async function replInk(props: ReplAppProps): Promise<void> {
-  const app = render(<ReplApp {...props} />);
-  await app.waitUntilExit();
+  const restore = (): void => {
+    process.stdout.write(ENABLE_AUTOWRAP);
+  };
+  process.stdout.write(DISABLE_AUTOWRAP);
+  process.once("exit", restore); // backstop for a signal that skips the finally
+  try {
+    const app = render(<ReplApp {...props} />);
+    await app.waitUntilExit();
+  } finally {
+    process.removeListener("exit", restore);
+    restore();
+  }
 }
 
 export { ReplApp };

@@ -64,6 +64,12 @@ export function cursorUp(n: number): string {
 export const CLEAR_TO_END = `${ESC}0J`;
 export const HIDE_CURSOR = `${ESC}?25l`;
 export const SHOW_CURSOR = `${ESC}?25h`;
+// Autowrap (DECAWM). Ink lays out line widths itself (Yoga), so the terminal's own autowrap
+// is redundant: a line that fills exactly to the edge (a right-aligned status) leaves the
+// terminal in pending-wrap, and its next advance is a PHANTOM newline on top of Ink's break.
+// Disable for the Ink session, restore on cleanup.
+export const DISABLE_AUTOWRAP = `${ESC}?7l`;
+export const ENABLE_AUTOWRAP = `${ESC}?7h`;
 export const CARRIAGE_RETURN = "\r";
 /** Full clear + cursor-home — `,lens`'s replay uses this (repl.ts): unlike
  *  `paintRegion`'s cursor-up (which only reaches lines still on-screen), a lens flip
