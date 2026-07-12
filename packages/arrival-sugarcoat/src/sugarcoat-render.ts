@@ -771,6 +771,13 @@ const UNARY_METHOD_ALLOW = new Set(["length", "reverse", "abs", "string-length",
 const shouldFlipUnary = (op: string): boolean =>
   op.endsWith("?") || op.includes("->") || UNARY_METHOD_ALLOW.has(op);
 
+/** Relational / equality predicates — suffix `=?` `<?` `>?` `<=?` `>=?` (`char=?`,
+ *  `string<?`, `boolean=?`, a bare `=?`). A SYMMETRIC or ordering check, not a subject-test:
+ *  flipping `(char=? #\2 x)` to `#\2.char=?(x)` mis-reads an equality guard as a method on
+ *  its left operand. These stay prefix even though they end in `?`. (The word forms
+ *  `equal?`/`eq?`/`eqv?` are out separately via NEVER_METHOD.) */
+const isRelationalPredicate = (op: string): boolean => /[<>=]=?\?$/.test(op);
+
 /** Render a `(lambda (p…) body)` as a trailing-lambda block (§3.3). Emits the
  *  IMPLICIT `{ B }` only for the single param `it` AND a non-arrow body — otherwise
  *  the bare body would re-read as the lambda itself (dropping the `it` wrapper), so
@@ -809,12 +816,18 @@ function asStep(nd: Node, o: SugarcoatOpts): { recv: Node; step: RStep } | null 
   // bare method `(op recv)`.
   if (items.length === 2 && isPlainMethodOp(items[0])) return { recv: items[1], step: { op: items[0].atom } };
   // predicate with args `(pred? arg… recv)` → `recv.pred?(arg…)` — receiver LAST. GATED to
-  // `?`-heads: a subject-test reads well receiver-last (`seat.valid-seat?(game)`), but a
-  // receiver-FIRST builtin (`vector-ref v i`, `list-ref lst i`) must NEVER flip — and none
-  // are predicates, so the `?` gate excludes them cleanly. `equal?`/`eq?`/`eqv?` are already
-  // out via NEVER_METHOD. Reader folds `.op(args)` back by its own receiver-last rule, so
-  // the round-trip holds.
-  if (items.length >= 3 && isPlainMethodOp(items[0]) && items[0].atom.endsWith("?"))
+  // SUBJECT-TEST `?`-heads: `seat.valid-seat?(game)` reads well, but two families must NOT
+  // flip — (a) receiver-FIRST builtins (`vector-ref v i`, `list-ref lst i`), which aren't
+  // predicates, so the `?` gate excludes them; (b) RELATIONAL predicates (`char=?`,
+  // `string<?`, `<=?`), a symmetric/ordering check where `#\2.char=?(x)` mis-reads equality
+  // as a method — excluded by isRelationalPredicate. (`equal?`/`eq?`/`eqv?` are already out
+  // via NEVER_METHOD.) Reader folds `.op(args)` back receiver-last, so the round-trip holds.
+  if (
+    items.length >= 3 &&
+    isPlainMethodOp(items[0]) &&
+    items[0].atom.endsWith("?") &&
+    !isRelationalPredicate(items[0].atom)
+  )
     return { recv: items[items.length - 1], step: { op: items[0].atom, args: items.slice(1, -1) } };
   return null;
 }

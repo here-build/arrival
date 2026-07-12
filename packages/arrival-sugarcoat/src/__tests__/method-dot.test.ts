@@ -155,3 +155,12 @@ describe("render: predicate method-dot with args (receiver-last)", () => {
     }
   });
 });
+
+// Exclusion-from-exclusion: RELATIONAL predicates (suffix =? <? >? <=? >=?) are symmetric /
+// ordering checks, not subject-tests — `#\2.char=?(x)` mis-reads an equality guard, so they
+// stay prefix despite ending in `?`.
+describe("render: relational predicates stay prefix (not method dots)", () => {
+  for (const s of ["(char=? #\\2 x)", "(string=? a b)", "(char<? a b)", "(char<=? a b)", "(symbol=? a b)"]) {
+    it(`${s} stays prefix`, () => expect(render(s)).toBe(s));
+  }
+});
