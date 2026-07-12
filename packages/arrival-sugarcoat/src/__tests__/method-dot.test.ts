@@ -187,9 +187,9 @@ describe("render: let always breaks; bindings stay literal (never method-dotted)
   it("a short let still breaks to multiple lines", () => {
     expect(render("(define (short) (let ((x 1)) x))").includes("\n")).toBe(true);
   });
-  it("non-elidable let keeps the binding pair literal, not a method chain", () => {
+  it("a let binding keeps its value literal, never method-dots the binding pair", () => {
     const out = render("(define (f x) (let ((y (g x))) (h y)))");
-    expect(out).toContain("let ((y (g x)))");
+    expect(out).toContain("(g x)");
     expect(out).not.toContain("x.g.y");
   });
   it("named let renders its loop symbol + literal bindings", () => {
@@ -256,17 +256,21 @@ describe("render: literal scalars are never method-dot receivers", () => {
   });
 });
 
-// A multi-binding let/let* breaks EACH binding onto its own line, name and value on separate
-// lines (a let* is sequential — every binding is a step). A single binding stays compact.
-describe("render: multi-binding let breaks bindings, name/value on separate lines", () => {
-  it("≥2 bindings: head alone, each binding as (name ⏎ value)", () => {
-    const out = render("(let* ((a (f x)) (b (g y))) (h b))");
-    expect(out).toBe("let*\n  ((a\n      (f x))\n   (b\n      (g y)))\n  (h b)");
+// A let/let* with a SINGLE body expr elides the `(( ))` (the reader reserves the last child
+// as body): each binding is `name` ⏎ `value`, no parens. With ≥2 body exprs, a binding-shaped
+// first body expr would be swallowed, so the `(( ))` group is kept.
+describe("render: let bindings — elided (single body) vs paren-kept (multi body)", () => {
+  it("single-body let* elides to name ⏎ value (no parens)", () => {
+    expect(render("(let* ((a (f x)) (b (g y))) (h b))")).toBe("let*\n  a\n    (f x)\n  b\n    (g y)\n  (h b)");
   });
-  it("single binding stays compact on the head line", () => {
-    expect(render("(let ((x (f y))) (h x))")).toBe("let ((x (f y)))\n  (h x)");
+  it("single-binding single-body let elides too", () => {
+    expect(render("(let ((x (f y))) (h x))")).toBe("let\n  x\n    (f y)\n  (h x)");
   });
-  it("round-trips", () => {
+  it("≥2 body exprs keep the `(( ))` group (elision would swallow the first body expr)", () => {
+    expect(render("(let ((a 1)) (b 2) (c 3))")).toBe("let ((a 1))\n  (b 2)\n  (c 3)");
+  });
+  it("round-trips both forms", () => {
     expect(readAll(render("(let* ((a (f x)) (b (g y))) (h b))"))).toBe("(let* ((a (f x)) (b (g y))) (h b))");
+    expect(readAll(render("(let ((a 1)) (b 2) (c 3))"))).toBe("(let ((a 1)) (b 2) (c 3))");
   });
 });

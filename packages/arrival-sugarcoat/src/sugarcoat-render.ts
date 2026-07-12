@@ -1010,19 +1010,22 @@ const LET_FAMILY = new Set(["let", "let*", "letrec", "letrec*"]);
 const isLetForm = (nd: Node): boolean =>
   !isAtom(nd) && nd.list.length >= 2 && isAtom(nd.list[0]) && !nd.list[0].str && LET_FAMILY.has(nd.list[0].atom);
 const isBindingShaped = (nd: Node): boolean => !isAtom(nd) && nd.list.length === 2 && isAtom(nd.list[0]);
-/** A `let`/`let*`/`letrec`/`letrec*` whose bindings can be ELIDED in the view
- *  (each binding shown as `name` ⏎ `value`, dropping the `(( ))`). Safe only when
- *  every binding is `(sym val)` AND the body's first expr is NOT itself binding-
- *  shaped (else the reader couldn't tell where bindings end). Named `let` excluded
- *  (items[1] would be a symbol, not a bindings list). Unsafe → generic render
- *  (bindings stay a `(( ))` paren group), which is still faithful. */
+/** A `let`/`let*`/`letrec`/`letrec*` whose bindings can be ELIDED in the view (each binding
+ *  shown as `name` ⏎ `value`, dropping the `(( ))`). Safe when every binding is `(sym val)`
+ *  AND the reader can recover where the bindings end. The reader's `regroupLetFamily` reserves
+ *  the LAST child as body (its `i < length-1` guard), so:
+ *    • a SINGLE body expr is always recoverable — even a binding-shaped one like
+ *      `(ok (cond …))` — because it's the last child and never swallowed into the bindings;
+ *    • with ≥2 body exprs, a binding-shaped FIRST body expr WOULD be swallowed, so that case
+ *      stays non-elided (the `(( ))` group is kept, still faithful).
+ *  Named `let` excluded (items[1] is a symbol, not a bindings list). */
 const isLetElidable = (nd: Node): boolean => {
   if (isAtom(nd) || nd.list.length < 2) return false;
   const [h, binds] = nd.list;
   if (!isAtom(h) || h.str || !LET_FAMILY.has(h.atom)) return false;
   if (isAtom(binds) || binds.list.length === 0 || !binds.list.every(isBindingShaped)) return false;
   const body = nd.list.slice(2);
-  return body.length > 0 && !isBindingShaped(body[0]);
+  return body.length === 1 || (body.length > 1 && !isBindingShaped(body[0]));
 };
 
 /** Break a too-long curly-infix `{a op b op …}` operator-led: first operand after
