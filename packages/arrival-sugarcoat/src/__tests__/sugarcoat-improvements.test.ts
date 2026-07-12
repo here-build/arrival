@@ -46,13 +46,19 @@ describe("lone-unary → method dot (gated)", () => {
 });
 
 // ── 2. `if` always breaks: condition on the head line, arms on their own lines ──
-describe("if always breaks (condition on head line, arms below)", () => {
-  it("small if breaks", () => expect(render("(if a b c)")).toBe("if a\n  b\n  c"));
-  it("two-arm if breaks", () => expect(render("(if a b)")).toBe("if a\n  b"));
-  it("keeps a short condition on the head line", () => {
-    expect(render("(if (null? xs) 0 (fold-left f x y))")).toBe("if xs.null?\n  0\n  (fold-left f x y)");
+describe("if breaks by density (trivial inlines, a nested arm verticalizes)", () => {
+  // A TRIVIAL if — condition + arms are atoms or flat (all-atom) lists — reads best on one
+  // line; the always-break was too blunt for these low-density forks.
+  it("all-atom if inlines", () => expect(render("(if a b c)")).toBe("(if a b c)"));
+  it("two-arm trivial if inlines", () => expect(render("(if a b)")).toBe("(if a b)"));
+  it("flat-list arms are still trivial (inline)", () => {
+    expect(render("(if (null? xs) 0 (fold-left f x y))")).toBe("(if xs.null? 0 (fold-left f x y))");
   });
-  for (const s of ["(if a b c)", "(if (null? xs) 0 (fold-left f x y))"])
+  // The moment an arm nests a real sub-computation, the fork verticalizes again.
+  it("a nested-compound arm verticalizes", () => {
+    expect(render("(if (valid? x) (make-result (f x)) (err))")).toBe("if x.valid?\n  x.f.make-result\n  (err)");
+  });
+  for (const s of ["(if a b c)", "(if (null? xs) 0 (fold-left f x y))", "(if (valid? x) (make-result (f x)) (err))"])
     it(`round-trips ${s}`, () => expect(roundtripAll(s)).toBe(canon(s)));
 });
 

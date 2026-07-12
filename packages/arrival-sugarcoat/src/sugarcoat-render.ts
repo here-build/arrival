@@ -986,11 +986,19 @@ const isFnDefine = (nd: Node): boolean =>
 const isCondForm = (nd: Node): boolean =>
   !isAtom(nd) && nd.list.length > 0 && isAtom(nd.list[0]) && !nd.list[0].str && nd.list[0].atom === "cond";
 
-/** `(if test then [else])` — ALWAYS broken: the condition pulls onto the `if` line (best
- *  effort), each arm on its own indented line. A same-line `(if a b c)` packs the two
- *  branches sideways and reads worst; verticalizing makes the fork legible at a glance. */
+/** `(if test then [else])` — broken by default: the condition pulls onto the `if` line, each
+ *  arm on its own indented line, so a fork carrying real structure is legible at a glance.
+ *  The exception is a TRIVIAL if (isTrivialIf) — a low-density fork reads better on one line. */
 const isIfForm = (nd: Node): boolean =>
   !isAtom(nd) && nd.list.length >= 3 && isAtom(nd.list[0]) && !nd.list[0].str && nd.list[0].atom === "if";
+
+/** A trivial `if` — condition and both arms are atoms or FLAT (all-atom) lists, e.g.
+ *  `(if (< d 0) -1 1)`. A structural (Halstead-ish) density signal: no arm carries nested
+ *  compound structure, so the fork is low-density and reads cleanest on ONE line
+ *  (`if {d < 0} -1 1`) rather than force-verticalized. The moment an arm nests a real
+ *  sub-computation, the always-break returns (the fork-legibility argument holds again). */
+const isTrivialIf = (nd: Node): boolean =>
+  !isAtom(nd) && isIfForm(nd) && nd.list.slice(1).every((a) => isAtom(a) || isFlatList(a));
 
 /** `(begin s…)` — ALWAYS broken, `begin` alone on its line, every step below it. Unlike
  *  the generic break it does NOT pull the first step up: a sequence reads as a column of
@@ -1082,7 +1090,7 @@ function formatSugarcoatCore(nd: Node, col: number, o: SugarcoatOpts): string {
     !isFnDefine(nd) &&
     !isCondForm(nd) &&
     !isLetForm(nd) &&
-    !isIfForm(nd) &&
+    (!isIfForm(nd) || isTrivialIf(nd)) &&
     !isBeginForm(nd)
   )
     return flat;
