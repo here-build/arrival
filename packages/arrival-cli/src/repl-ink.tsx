@@ -26,7 +26,6 @@ import {
 } from "@here.build/mcp-substrate";
 
 import { emitForms } from "./form-emitter.js";
-import { identityLine } from "./greeting.js";
 import { pushHistory, recallNext, recallPrev, type NavState } from "./history-nav.js";
 import { highlightScheme } from "./highlight.js";
 import { colorizeSexpr } from "./sexpr-color.js";
@@ -45,8 +44,8 @@ const TINT: Record<ReplBlockState, TintName> = {
   skipped: "skipped",
 };
 
-const PROMPT = "arrival> ";
-const CONTINUE = "     ... ";
+const PROMPT = "> ";
+const CONTINUE = ". ";
 
 /** `12345` heap cells → `"1.2K"`. */
 function formatCells(n: number): string {
@@ -120,7 +119,7 @@ export interface ReplAppProps {
   readonly mode?: ColorMode;
 }
 
-function ReplApp({ session, budgetMs, heapBudget, mode = colorMode() }: ReplAppProps): React.ReactElement {
+function ReplApp({ session, budgetMs, heapBudget, version, capabilityCount, mode = colorMode() }: ReplAppProps): React.ReactElement {
   const { exit } = useApp();
   const [history, setHistory] = useState<ReplBlock[][]>([]);
   const [running, setRunning] = useState<ReplFoldModel | null>(null);
@@ -282,6 +281,12 @@ function ReplApp({ session, budgetMs, heapBudget, mode = colorMode() }: ReplAppP
   const after = highlightScheme(st.line.slice(st.cursor + 1), mode);
   const pendingLines = st.pending === "" ? [] : st.pending.split("\n");
 
+  // The far-right status — version · lens (· N caps). Shown only at a FRESH prompt (nothing
+  // typed, no continuation); it vanishes the moment the user starts typing, leaving a bare `>`.
+  const caps = capabilityCount > 0 ? ` · ${capabilityCount} cap${capabilityCount === 1 ? "" : "s"}` : "";
+  const info = `arrival ${version} · ${lens}${caps}`;
+  const showInfo = st.line === "" && st.pending === "";
+
   return (
     <Box flexDirection="column">
       <Static items={history}>
@@ -292,23 +297,24 @@ function ReplApp({ session, budgetMs, heapBudget, mode = colorMode() }: ReplAppP
         <Text key={`p${i}`}>{paint(i === 0 ? PROMPT : CONTINUE, "gutter", mode) + highlightScheme(l, mode)}</Text>
       ))}
       {running === null && (
-        <Text>
-          {paint(promptStr, "gutter", mode)}
-          {before}
-          <Text inverse>{atChar}</Text>
-          {after}
-        </Text>
+        <Box justifyContent="space-between">
+          <Text>
+            {paint(promptStr, "gutter", mode)}
+            {before}
+            <Text inverse>{atChar}</Text>
+            {after}
+          </Text>
+          {showInfo ? <Text>{paint(info, "gutter", mode)}</Text> : null}
+        </Box>
       )}
     </Box>
   );
 }
 
-/** Mount the Ink repl over a persistent loader session. Prints the one-line identity header
- *  above the app (Ink renders inline — no alt-screen — so the header stays as scrollback),
- *  then resolves when the user exits (Ctrl-D). Caller disposes the ambient. */
+/** Mount the Ink repl over a persistent loader session. No banner, no header — the version /
+ *  lens status rides the far right of the prompt line and vanishes on the first keystroke.
+ *  Resolves when the user exits (Ctrl-D). Caller disposes the ambient. */
 export async function replInk(props: ReplAppProps): Promise<void> {
-  const mode = props.mode ?? colorMode();
-  process.stdout.write(`${identityLine({ version: props.version, capabilityCount: props.capabilityCount, lens: "sugarcoat" }, mode)}\n\n`);
   const app = render(<ReplApp {...props} />);
   await app.waitUntilExit();
 }

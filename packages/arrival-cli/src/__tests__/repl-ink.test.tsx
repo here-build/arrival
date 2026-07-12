@@ -13,10 +13,15 @@ import { stripAnsi } from "./ansi-strip.js";
 const UP = "[A";
 const DOWN = "[B";
 
-/** The live input line (last line carrying the prompt), stripped of color/cursor escapes. */
+/** The live input line (last line carrying the `>` / `.` prompt), stripped of color/cursor
+ *  escapes. When at a fresh prompt it also carries the right-aligned `arrival …` status. */
 function promptLine(frame: string | undefined): string {
   const lines = stripAnsi(frame ?? "").split("\n");
-  for (let i = lines.length - 1; i >= 0; i--) if (lines[i]!.includes("arrival>")) return lines[i]!;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const l = lines[i]!;
+    // `>`/`.` prompt (a trailing-space-only line is trimmed to just the glyph by Ink).
+    if (l.startsWith(">") || l.startsWith(".")) return l;
+  }
   return "";
 }
 
@@ -46,18 +51,22 @@ async function waitUntil(get: () => string | undefined, pred: (s: string) => boo
 }
 
 describe("replInk", () => {
-  it("shows the prompt at the bottom on mount", () => {
+  it("shows a minimal `>` prompt with right-aligned version status on mount", () => {
     const { lastFrame, unmount } = mount();
-    expect(lastFrame()).toContain("arrival>");
+    const p = promptLine(lastFrame());
+    expect(p.startsWith(">")).toBe(true);
+    expect(p).toContain("arrival test"); // the far-right status
     unmount();
   });
 
-  it("echoes typed input on the prompt line before submit", async () => {
+  it("echoes typed input and HIDES the status once typing starts", async () => {
     const { stdin, lastFrame, unmount } = mount();
+    expect(promptLine(lastFrame())).toContain("arrival test"); // shown at a fresh prompt
     stdin.write("(+ 1 2)");
-    const frame = await waitUntil(lastFrame, (f) => f.includes("(+ 1 2)"));
-    expect(frame).toContain("(+ 1 2)");
-    expect(frame).toContain("arrival>"); // still at the prompt, not yet submitted
+    const frame = await waitUntil(lastFrame, (f) => promptLine(f).includes("(+ 1 2)"));
+    expect(promptLine(frame)).toContain("(+ 1 2)");
+    expect(promptLine(frame).startsWith(">")).toBe(true); // still at the prompt
+    expect(promptLine(frame)).not.toContain("arrival test"); // status vanished on typing
     unmount();
   });
 
@@ -72,8 +81,9 @@ describe("replInk", () => {
   it("holds a multi-line form open until it closes (continuation)", async () => {
     const { stdin, lastFrame, unmount } = mount();
     stdin.write("(+ 1\r"); // unbalanced → continuation, NOT submitted
-    const cont = await waitUntil(lastFrame, (f) => f.includes("..."));
-    expect(cont).toContain("..."); // the CONTINUE prompt
+    const cont = await waitUntil(lastFrame, (f) => promptLine(f).startsWith("."));
+    expect(promptLine(cont).startsWith(".")).toBe(true); // the `.` continuation prompt
+    expect(stripAnsi(cont)).toContain("(+ 1"); // the pending line held above
     stdin.write(" 2)\r"); // now it closes
     const done = await waitUntil(lastFrame, (f) => /\b3\b/.test(f));
     expect(done).toMatch(/\b3\b/);
@@ -100,7 +110,7 @@ describe("replInk", () => {
   it("prefix match: typed text filters recall to matching entries", async () => {
     const { stdin, lastFrame, unmount } = mount();
     stdin.write("(define a 1)\r");
-    await waitUntil(lastFrame, (f) => promptLine(f) === "arrival> " || f.includes("define"));
+    await waitUntil(lastFrame, (f) => f.includes("define"));
     stdin.write("(list 9)\r");
     await waitUntil(lastFrame, (f) => /\b9\b/.test(f));
 
