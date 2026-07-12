@@ -26,12 +26,11 @@ import { EMPTY_REPL_MODEL, foldReplEvent, type ReplBlock, type ReplFoldModel } f
 
 import type { ArmedCapabilities } from "./capabilities.js";
 import { emitForms } from "./form-emitter.js";
-import { greetingLines, readOwnVersion } from "./greeting.js";
+import { identityLine, readOwnVersion } from "./greeting.js";
 import type { Lens } from "./lens.js";
 import { paintRegion, renderTurn } from "./painter.js";
 import { budgets, loaderSession, printError, printValue, type LoaderSession } from "./session.js";
 import { CLEAR_SCREEN, CURSOR_HOME } from "./ansi.js";
-import { paint } from "./tints.js";
 
 const PROMPT = "arrival> ";
 const CONTINUE = "     ... ";
@@ -82,8 +81,7 @@ async function replPlain(ambient: LoaderSession["ambient"], scope: LoaderSession
 async function replay(history: readonly (readonly ReplBlock[])[], lens: Lens, capabilityCount: number): Promise<void> {
   process.stdout.write(CLEAR_SCREEN + CURSOR_HOME);
   const version = await readOwnVersion();
-  for (const line of greetingLines({ version, capabilityCount, lens })) process.stdout.write(`${line}\n`);
-  process.stdout.write("\n");
+  process.stdout.write(`${identityLine({ version, capabilityCount, lens })}\n\n`);
   for (const turn of history) {
     if (turn.length === 0) continue;
     process.stdout.write(`${renderTurn(turn, lens).join("\n")}\n\n`);
@@ -98,8 +96,7 @@ async function replInteractive(ambient: LoaderSession["ambient"], scope: LoaderS
   const history: ReplBlock[][] = []; // settled turns, oldest → newest
 
   const version = await readOwnVersion();
-  for (const line of greetingLines({ version, capabilityCount, lens })) process.stdout.write(`${line}\n`);
-  process.stdout.write(`\n${paint("try:  (map (lambda (n) (* n n)) (iota 6))", "gutter")}\n\n`);
+  process.stdout.write(`${identityLine({ version, capabilityCount, lens })}\n\n`);
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
   let buffer = "";
