@@ -13,7 +13,9 @@
  * https://bottosson.github.io/posts/oklab/) → truecolor ANSI, with a nearest-xterm-256
  * fallback (ansi.ts) for terminals that don't advertise `COLORTERM`.
  */
-import { fg256, fgTruecolor, RESET, wrap } from "./ansi.js";
+import { Chalk, type ChalkInstance } from "chalk";
+
+import { RESET } from "./ansi.js";
 
 /** Delta's own hue degrees (factors-properties.css `--⚙️hue-emphasis-*` defaults) —
  *  copied, not invented: accent=211 (Apple's cognitive blue), success=142, danger=35,
@@ -54,7 +56,7 @@ function oklchToSrgb(l: number, c: number, hDeg: number): [number, number, numbe
   return [clamp255(rl), clamp255(gl), clamp255(bl)];
 }
 
-export type TintName = "pending" | "running" | "done" | "error" | "skipped" | "accent" | "gutter";
+export type TintName = "pending" | "running" | "done" | "error" | "skipped" | "accent" | "gutter" | "variant";
 
 /** One entry per tint (§5's vocabulary table, terminal column). `[L, C, H]` — `H`
  *  unused when `C` is 0 (neutral gray, spec-honest: OKLCH hue is undefined at zero
@@ -67,6 +69,10 @@ const TINT_LCH: Record<TintName, readonly [number, number, number]> = {
   skipped: [LIGHTNESS.dim, CHROMA.neutral, 0],
   accent: [LIGHTNESS.normal, CHROMA.primary, HUE.accent],
   gutter: [LIGHTNESS.dim, CHROMA.neutral, 0],
+  // The wordmark's gradient far end (purple, "specialized contexts") — reused by the
+  // syntax highlighter for definition forms (define/lambda/let), distinct from control's
+  // accent blue.
+  variant: [LIGHTNESS.normal, CHROMA.tertiary, HUE.variant],
 };
 
 /** Truecolor iff the terminal says so (`COLORTERM=truecolor|24bit`) and colors are
@@ -81,13 +87,22 @@ export function colorMode(env: NodeJS.ProcessEnv = process.env, force?: "truecol
   return "256";
 }
 
+/** One chalk instance per capability rung — chalk owns the escape emission and the
+ *  truecolor→256→16 DOWNSAMPLE (a `.rgb()` at level 2 renders the nearest xterm-256), so
+ *  this file no longer hand-rolls SGR. `level: 0` short-circuits to the raw text. The OKLCH
+ *  → sRGB projection (Delta's perceptual hues, chalk has no OKLCH) stays ours. */
+const CHALK: Record<"truecolor" | "256" | "none", ChalkInstance> = {
+  none: new Chalk({ level: 0 }),
+  "256": new Chalk({ level: 2 }),
+  truecolor: new Chalk({ level: 3 }),
+};
+
 /** Render `text` through `tint`, honoring `mode` (defaults to the live terminal's). */
 export function paint(text: string, tint: TintName, mode: ReturnType<typeof colorMode> = colorMode()): string {
   if (mode === "none") return text;
   const [l, c, h] = TINT_LCH[tint];
   const [r, g, b] = oklchToSrgb(l, c, h);
-  const open = mode === "truecolor" ? fgTruecolor(r, g, b) : fg256(r, g, b);
-  return wrap(open, text);
+  return CHALK[mode].rgb(r, g, b)(text);
 }
 
 /** Raw RGB for a tint — exposed for the wordmark's gradient (interpolates hue/lightness

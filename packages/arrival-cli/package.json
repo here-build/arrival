@@ -39,11 +39,17 @@
     "@here.build/arrival": "workspace:^",
     "@here.build/arrival-serializer": "workspace:^",
     "@here.build/arrival-sugarcoat": "workspace:^",
-    "@here.build/mcp-substrate": "workspace:^"
+    "@here.build/mcp-substrate": "workspace:^",
+    "chalk": "5.6.2",
+    "ink": "7.1.0",
+    "react": "19.2.0",
+    "react-devtools-core": "7.0.1"
   },
   "devDependencies": {
     "@here.build/tsconfig": "workspace:^",
     "@types/node": "24.0.0",
+    "@types/react": "19.2.14",
+    "ink-testing-library": "4.0.0",
     "typescript": "6.0.2",
     "vitest": "4.1.0"
   }

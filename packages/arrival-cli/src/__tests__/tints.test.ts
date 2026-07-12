@@ -28,15 +28,15 @@ describe("paint", () => {
     expect(paint("hello", "error", "none")).toBe("hello");
   });
 
-  it("wraps with a truecolor SGR open + RESET, stripping back to the original text", () => {
+  it("emits a truecolor SGR open (chalk-rendered), stripping back to the original text", () => {
     const painted = paint("hello", "done", "truecolor");
-    expect(painted).toMatch(/^\x1b\[38;2;\d+;\d+;\d+mhello\x1b\[0m$/);
+    expect(painted).toMatch(/\x1b\[38;2;\d+;\d+;\d+mhello/); // chalk resets with \x1b[39m
     expect(stripAnsi(painted)).toBe("hello");
   });
 
-  it("256 mode uses the nearest-256 SGR form", () => {
+  it("256 mode downsamples to the nearest-256 SGR form", () => {
     const painted = paint("hello", "done", "256");
-    expect(painted).toMatch(/^\x1b\[38;5;\d+mhello\x1b\[0m$/);
+    expect(painted).toMatch(/\x1b\[38;5;\d+mhello/);
     expect(stripAnsi(painted)).toBe("hello");
   });
 
