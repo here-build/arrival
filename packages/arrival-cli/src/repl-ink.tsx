@@ -78,18 +78,20 @@ function wordRight(line: string, cursor: number): number {
 
 /** One block's lines. Source is highlighted through the lens; content (the value) subtly
  *  colored; the glyph carries state. Mirrors painter.ts's `renderBlock` but in Ink Text. */
-function BlockView({ block, lens, mode }: { block: ReplBlock; lens: Lens; mode: ColorMode }): React.ReactElement {
+function BlockView({ block, lens, mode, width }: { block: ReplBlock; lens: Lens; mode: ColorMode; width: number }): React.ReactElement {
   const glyph = paint(GLYPH[block.state], TINT[block.state], mode);
   const src = block.source === "" ? "" : highlightScheme(toLens(block.source, lens), mode);
   const srcLines = src.split("\n");
   // Execution time rides the FAR RIGHT of the source line (space-between, like the prompt
-  // row's status) — heap is dropped (noise; the wall-clock is the number that reads).
+  // row's status) — heap is dropped (noise; the wall-clock is the number that reads). A
+  // settled block lives in <Static>, whose items size to CONTENT not terminal width — so the
+  // row needs an explicit `width` for space-between to have room to push the time right.
   const elapsed =
     block.counters !== undefined && (block.state === "done" || block.state === "error")
       ? paint(`${block.counters.elapsedMs}ms`, "gutter", mode)
       : "";
   const rows: React.ReactElement[] = [
-    <Box key="s0" justifyContent="space-between">
+    <Box key="s0" width={width} justifyContent="space-between">
       <Text>{`${glyph} ${srcLines[0] ?? ""}`}</Text>
       {elapsed !== "" ? <Text>{elapsed}</Text> : null}
     </Box>,
@@ -111,11 +113,11 @@ function BlockView({ block, lens, mode }: { block: ReplBlock; lens: Lens; mode: 
   return <Box flexDirection="column">{rows}</Box>;
 }
 
-function TurnView({ blocks, lens, mode }: { blocks: readonly ReplBlock[]; lens: Lens; mode: ColorMode }): React.ReactElement {
+function TurnView({ blocks, lens, mode, width }: { blocks: readonly ReplBlock[]; lens: Lens; mode: ColorMode; width: number }): React.ReactElement {
   return (
     <Box flexDirection="column">
       {blocks.map((b, i) => (
-        <BlockView key={i} block={b} lens={lens} mode={mode} />
+        <BlockView key={i} block={b} lens={lens} mode={mode} width={width} />
       ))}
     </Box>
   );
@@ -165,7 +167,8 @@ function ReplApp({ session, budgetMs, heapBudget, version, capabilityCount, mode
   // which keeps SGR color codes and OSC-8 hyperlinks but silently DROPS every other OSC
   // control sequence (verified empirically — a `<Text>` containing nothing but an OSC 133
   // mark renders as empty). So the marks go out via `write`, not the render tree.
-  const { write: writeStdout } = useStdout();
+  const { write: writeStdout, stdout } = useStdout();
+  const width = stdout.columns ?? 80;
   const [history, setHistory] = useState<ReplBlock[][]>([]);
   const [running, setRunning] = useState<ReplFoldModel | null>(null);
   const [lens, setLens] = useState<Lens>("sugarcoat");
@@ -426,9 +429,9 @@ function ReplApp({ session, budgetMs, heapBudget, version, capabilityCount, mode
   return (
     <Box flexDirection="column">
       <Static items={history}>
-        {(turn, i) => <TurnView key={i} blocks={turn} lens={lens} mode={mode} />}
+        {(turn, i) => <TurnView key={i} blocks={turn} lens={lens} mode={mode} width={width} />}
       </Static>
-      {running !== null && <TurnView blocks={running.blocks} lens={lens} mode={mode} />}
+      {running !== null && <TurnView blocks={running.blocks} lens={lens} mode={mode} width={width} />}
       {pendingLines.map((l, i) => (
         <Text key={`p${i}`}>{paint(i === 0 ? PROMPT : CONTINUE, "gutter", mode) + highlightScheme(l, mode)}</Text>
       ))}
