@@ -15,7 +15,7 @@
 //     compiler at runtime (createSchemeLanguageServiceCore uses `ts`); it is a
 //     regular dependency the consumer's bundler resolves.
 //   • `typescript/lib/*.d.ts?raw` TEXT must inline — that is the whole point.
-//   • workspace deps (@here.build/arrival-sugarcoat, @inhuman-tools/mercury)
+//   • workspace deps (@here.build/arrival-sugarcoat, @inhuman.tools/mercury)
 //     stay external like any bare import.
 //   • relative modules (service-core, ls-server, …) bundle in; browser and
 //     worker share hash-named chunks under dist/chunks/ (no collision with the
