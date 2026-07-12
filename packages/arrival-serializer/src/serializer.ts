@@ -24,9 +24,31 @@ const TRUNCATED_MARKER = Symbol.for("arrival:truncated");
  * spares threading caps through every recursive `toSExpr`. The caps are applied
  * STREAMING — at each collection/string we stop emitting at the cap and never
  * serialize the tail (a 10k-element array costs `maxItems`, not 10k).
+ *
+ * `primaryArray`/`primaryLimit`/`defaultLimit` and `elideHead`/`elideTail` back the
+ * middle-elision feature (opt-in — see `SerializeOpts` below): `primaryArray` is the ONE
+ * array (by REFERENCE) that earns the elevated `primaryLimit`; every other collection uses
+ * `defaultLimit`. `elideHead`/`elideTail` gate middle-elision itself — `Infinity`/`0` (the
+ * `NO_CAPS` defaults) mean "off", matching today's tail-truncation exactly.
  */
-type Caps = { maxItems: number; maxStringChars: number };
-const NO_CAPS: Caps = { maxItems: Infinity, maxStringChars: Infinity };
+type Caps = {
+  maxItems: number;
+  maxStringChars: number;
+  elideHead: number;
+  elideTail: number;
+  primaryArray: readonly unknown[] | null;
+  primaryLimit: number;
+  defaultLimit: number;
+};
+const NO_CAPS: Caps = {
+  maxItems: Infinity,
+  maxStringChars: Infinity,
+  elideHead: Infinity,
+  elideTail: 0,
+  primaryArray: null,
+  primaryLimit: Infinity,
+  defaultLimit: Infinity,
+};
 let activeCaps: Caps = NO_CAPS;
 
 /** A `#| … |#` block-comment marker the formatter renders verbatim, so a truncated
@@ -146,14 +168,199 @@ const collectBinaryLeaf = (collector: ActiveExtrasCollector, blob: Blob): SExpr 
   return attachmentTag(`${id} ${descriptor}`);
 };
 
-/** Render the first `maxItems` of an array, appending a `+N more of TOTAL` marker when
- *  truncated. STREAMING — `slice` then map, so the dropped tail is never rendered. */
-const capItems = <T>(arr: readonly T[], render: (item: T) => SExpr): SExpr[] => {
-  if (arr.length <= activeCaps.maxItems) return arr.map(render);
-  const shown: SExpr[] = arr.slice(0, activeCaps.maxItems).map(render);
-  shown.push(truncatedMarker(`+${arr.length - activeCaps.maxItems} more of ${arr.length}`));
-  return shown;
+// ── Middle-elision (opt-in — see `SerializeOpts.elideHead`/`elideTail`) ─────────────────────
+// A too-long array rendered as "head ... +N more of TOTAL" at the very tail reads, to a model,
+// as a near-complete dump with a buried footnote — an easy miss (the grounding failure: a
+// 100-item array shown ~93-deep with the missing-7 marker at the very end was read as complete,
+// and the answer was in the 7). Middle-elision instead shows a SMALL head + SMALL tail around a
+// LOUD marker, so incompleteness sits where it can't be skimmed past, plus records an
+// `ElisionRecord` (when a sink is active) for the trailing `;; Note:` block downstream.
+
+export interface ElisionRecord {
+  /** Total length of the elided collection. */
+  total: number;
+  /** How many items/entries were NOT rendered (the hidden middle). */
+  notRendered: number;
+  /** Shape descriptor (`describeElision`) over the SHOWN head+tail items. */
+  shownShape: string;
+  /** Shape descriptor over the HIDDEN middle items. */
+  hiddenShape: string;
+}
+
+/** Collected elisions for the render CURRENTLY in flight, or `null` when nothing is collecting
+ *  (the plain `toSExprString` path never sets this — backward-compatible by construction). */
+let activeElisionSink: ElisionRecord[] | null = null;
+
+/** Rewind the sink for a render pass — mirrors `beginCollectorPass`: `toSExprString`'s
+ *  shrink-to-fit loop re-renders the same value, so only the FINAL pass's elisions must stand. */
+const beginElisionPass = (): void => {
+  if (activeElisionSink === null) return;
+  activeElisionSink.length = 0;
 };
+
+type ElisionKind = "object" | "array" | "number" | "string" | "boolean" | "null" | "other";
+
+const PLURAL_KIND: Record<ElisionKind, string> = {
+  number: "numbers",
+  string: "strings",
+  boolean: "booleans",
+  object: "objects",
+  array: "arrays",
+  null: "nils",
+  other: "items",
+};
+
+const kindOf = (x: unknown): ElisionKind => {
+  if (x === null) return "null";
+  if (Array.isArray(x)) return "array";
+  if (typeof x === "object") return "object";
+  if (typeof x === "number" || typeof x === "string" || typeof x === "boolean") return typeof x as ElisionKind;
+  return "other";
+};
+
+/** The descriptor phrase filling `<N> ___ were not rendered` — a cheap ONE-LEVEL shape scan
+ *  over a list of hidden (or shown) items, never a deep walk. `items.length > 1000` skips type
+ *  identification entirely (cost guard) and just says "items". */
+function describeElision(items: readonly unknown[]): string {
+  if (items.length === 0 || items.length > 1000) return "items";
+
+  const kinds = items.map(kindOf);
+  const uniqueKinds = [...new Set(kinds)];
+  if (uniqueKinds.length > 1) {
+    const phrase = new Intl.ListFormat("en", { type: "conjunction" }).format(
+      uniqueKinds.map((k) => PLURAL_KIND[k]).sort(),
+    );
+    return `mixed items (${phrase})`;
+  }
+
+  const kind = uniqueKinds[0]!;
+  if (kind === "object") {
+    const keySets = items.map((x) => Object.keys(x as object).sort().join(","));
+    const allSame = keySets.every((k) => k === keySets[0]);
+    return allSame ? "similar items" : "similar items of varying shape";
+  }
+  if (kind === "array") {
+    const innerKinds = new Set<ElisionKind>();
+    let anyEmpty = false;
+    for (const inner of items as readonly unknown[][]) {
+      if (inner.length === 0) {
+        anyEmpty = true;
+        continue;
+      }
+      for (const el of inner) innerKinds.add(kindOf(el));
+    }
+    if (anyEmpty || innerKinds.size !== 1) return "arrays";
+    return `arrays of ${PLURAL_KIND[[...innerKinds][0]!]}`;
+  }
+  return PLURAL_KIND[kind];
+}
+
+/** Middle-elision (or, when OFF, today's tail-truncation) over a list of "items" that render
+ *  ONE `SExpr` each (array elements, Set members, APair elements). `unitLabel` names what
+ *  `total` counts in the marker sentence ("array length" for arrays/pairs). */
+function capWithElision<T>(items: readonly T[], limit: number, render: (item: T) => SExpr, unitLabel: string): SExpr[] {
+  const head = activeCaps.elideHead;
+  const tail = activeCaps.elideTail;
+  const elisionOn = Number.isFinite(head) && head + tail > 0;
+
+  if (!elisionOn) {
+    // OFF path — TODAY's behaviour, unchanged: head `limit` + a `+N more of TOTAL` tail marker.
+    if (items.length <= limit) return items.map(render);
+    const shown = items.slice(0, limit).map(render);
+    shown.push(truncatedMarker(`+${items.length - limit} more of ${items.length}`));
+    return shown;
+  }
+
+  if (items.length <= Math.max(limit, head + tail)) return items.map(render); // fits → full
+  const shownHeadItems = items.slice(0, head);
+  const shownTailItems = items.slice(items.length - tail);
+  const hiddenItems = items.slice(head, items.length - tail);
+  const notRendered = items.length - head - tail;
+
+  if (activeElisionSink) {
+    activeElisionSink.push({
+      total: items.length,
+      notRendered,
+      shownShape: describeElision([...shownHeadItems, ...shownTailItems]),
+      hiddenShape: describeElision(hiddenItems),
+    });
+  }
+
+  const descriptor = describeElision(items);
+  const marker = truncatedMarker(`${notRendered} ${descriptor} were not rendered; total ${unitLabel} is ${items.length}`);
+  return [...shownHeadItems.map(render), marker, ...shownTailItems.map(render)];
+}
+
+/** Same middle-elision, for Map/dict ENTRIES — each entry renders as TWO `SExpr`s
+ *  (`:key`, value), so the head/tail slicing and flattening differ from `capWithElision`.
+ *  Per the elision plan: dicts/maps use the fixed descriptor word `"entries"` — no shape scan
+ *  (a key/value pair doesn't have "a shape" the way array elements do). */
+function capEntriesWithElision<T>(entries: readonly T[], limit: number, renderEntry: (entry: T) => [SExpr, SExpr]): SExpr[] {
+  const head = activeCaps.elideHead;
+  const tail = activeCaps.elideTail;
+  const elisionOn = Number.isFinite(head) && head + tail > 0;
+  const flatten = (xs: readonly T[]): SExpr[] => xs.flatMap((e) => renderEntry(e));
+
+  if (!elisionOn) {
+    if (entries.length <= limit) return flatten(entries);
+    const shown = flatten(entries.slice(0, limit));
+    shown.push(truncatedMarker(`+${entries.length - limit} more of ${entries.length}`));
+    return shown;
+  }
+
+  if (entries.length <= Math.max(limit, head + tail)) return flatten(entries);
+  const shownHeadEntries = entries.slice(0, head);
+  const shownTailEntries = entries.slice(entries.length - tail);
+  const notRendered = entries.length - head - tail;
+
+  if (activeElisionSink) {
+    activeElisionSink.push({ total: entries.length, notRendered, shownShape: "entries", hiddenShape: "entries" });
+  }
+
+  const marker = truncatedMarker(`${notRendered} entries were not rendered; total entries is ${entries.length}`);
+  return [...flatten(shownHeadEntries), marker, ...flatten(shownTailEntries)];
+}
+
+/** Render the first `maxItems` of an array — middle-elided when `elideHead`/`elideTail` are
+ *  set, else the classic `+N more of TOTAL` tail marker (unchanged). The array earns the
+ *  elevated `primaryLimit` iff it IS the per-render `primaryArray` (selected by reference —
+ *  see `selectPrimaryArray`), else it uses `defaultLimit`. */
+const capItems = <T>(arr: readonly T[], render: (item: T) => SExpr): SExpr[] => {
+  const limit = arr === activeCaps.primaryArray ? activeCaps.primaryLimit : activeCaps.defaultLimit;
+  return capWithElision(arr, limit, render, "array length");
+};
+
+/** The `arrival/toJS` protocol-key unwrap (same convention as the AValue branches in
+ *  `toSExprDispatch`) — used ONLY to look through an AValue-wrapped root for the purpose of
+ *  primary-array SELECTION; the walk itself still renders the real root through the normal
+ *  dispatch. */
+const unwrapForSelection = (value: unknown): unknown => {
+  if (value !== null && typeof value === "object" && typeof (value as Record<string, unknown>)["arrival/toJS"] === "function") {
+    return (value as { "arrival/toJS": () => unknown })["arrival/toJS"]();
+  }
+  return value;
+};
+
+type PrimarySelection = { array: readonly unknown[]; kind: "top" | "second" } | null;
+
+/** Choose the ONE array (by reference) that earns an elevated limit — §2 of the elision plan.
+ *  Runs ONCE per `toSExprString` call (before the shrink-to-fit loop), using the INITIAL
+ *  (unshrunk) `maxItems` as the "is this array big enough to matter" threshold: the root
+ *  itself, if it's an array; else, among a plain-object root's own enumerable values, the
+ *  SINGLE array-valued one longer than `maxItems` (zero or multiple such arrays ⇒ no
+ *  elevation — ambiguity means every array falls back to `defaultLimit`). */
+function selectPrimaryArray(root: unknown, maxItems: number): PrimarySelection {
+  const unwrapped = unwrapForSelection(root);
+  if (Array.isArray(unwrapped)) return { array: unwrapped, kind: "top" };
+  if (unwrapped !== null && typeof unwrapped === "object") {
+    const candidates: (readonly unknown[])[] = [];
+    for (const value of Object.values(unwrapped as Record<string, unknown>)) {
+      if (Array.isArray(value) && value.length > maxItems) candidates.push(value);
+    }
+    if (candidates.length === 1) return { array: candidates[0]!, kind: "second" };
+  }
+  return null;
+}
 
 /** Cap a string to `maxStringChars`, annotating the elision inline. O(maxStringChars) —
  *  `slice` never walks the dropped tail. */
@@ -189,6 +396,20 @@ export type SerializeOpts = {
    *  tree AFTER the streaming caps applied during `toSExpr` (truncation markers included);
    *  default `formatSExpr` at `indent`. The shrink loop re-invokes it on every pass. */
   format?: (sexpr: SExpr) => string;
+  /** Elevated per-array limit for an array that IS the observation root (§2, elision plan).
+   *  Ignored unless the root actually is an array; falls back to `maxItems` when unset. */
+  topLevelArrayLimit?: number;
+  /** Elevated per-array limit for the SINGLE dominant array one level below the root (a plain
+   *  object with exactly one array-valued property longer than `maxItems`). Falls back to
+   *  `maxItems` when unset; ambiguous (zero or ≥2 qualifying arrays) ⇒ ignored entirely. */
+  secondLevelArrayLimit?: number;
+  /** Items shown at the HEAD when middle-eliding a long collection. Presence of `elideHead`
+   *  OR `elideTail` turns middle-elision ON (opt-in); each defaults to 5 when only the other
+   *  is set. When NEITHER is set, every capped collection keeps today's tail-truncation
+   *  (`+N more of TOTAL` at the end) byte-for-byte. */
+  elideHead?: number;
+  /** Items shown at the TAIL when middle-eliding. See `elideHead`. */
+  elideTail?: number;
 };
 
 export type SExprSerializable =
@@ -408,14 +629,11 @@ function toSExprDispatch(obj: any, visited: Set<any>): SExpr {
 
   // Map → convert to object-like representation
   if (obj instanceof Map) {
-    const all = [...obj];
-    const entries: SExpr[] = [];
-    for (const [key, value] of all.slice(0, activeCaps.maxItems)) {
-      entries.push(`:${String(key)}`, toSExpr(value, visited));
-    }
-    if (all.length > activeCaps.maxItems) {
-      entries.push(truncatedMarker(`+${all.length - activeCaps.maxItems} more of ${all.length}`));
-    }
+    const all = [...obj] as [unknown, unknown][];
+    const entries = capEntriesWithElision(all, activeCaps.defaultLimit, ([key, value]) => [
+      `:${String(key)}`,
+      toSExpr(value, visited),
+    ]);
     return ["map", ...entries];
   }
 
@@ -452,13 +670,10 @@ function toSExprDispatch(obj: any, visited: Set<any>): SExpr {
   // Plain object → dict literal `(dict :k v …)`
   if (typeof obj === "object" && obj !== null) {
     const all = Object.entries(obj).filter(([, value]) => typeof value !== "function");
-    const entries: SExpr[] = [];
-    for (const [key, value] of all.slice(0, activeCaps.maxItems)) {
-      entries.push(`:${key}`, toSExpr(value, visited));
-    }
-    if (all.length > activeCaps.maxItems) {
-      entries.push(truncatedMarker(`+${all.length - activeCaps.maxItems} more of ${all.length}`));
-    }
+    const entries = capEntriesWithElision(all, activeCaps.defaultLimit, ([key, value]) => [
+      `:${key}`,
+      toSExpr(value, visited),
+    ]);
     return ["dict", ...entries];
   }
 
@@ -696,8 +911,40 @@ export function formatSExpr(sexpr: SExpr, indent = 0): string {
   throw new Error(`Unknown s-expression type: ${typeof sexpr}`);
 }
 
+/** Is `current` the improper-list dotted tail (non-nil, non-empty-object cdr)? Shared by both
+ *  the streaming OFF path and the materialized ON (middle-elision) path below. */
+const isImproperTail = (current: any): boolean =>
+  current && !isNil(current) && !(current.constructor?.name === "Object" && Object.keys(current).length === 0);
+
+/** Middle-elision variant of `convertLipsPairToArray`, taken when elision is ON. Unlike the
+ *  streaming OFF path, this MATERIALIZES the list first — a tail window needs to know the
+ *  total length, which a forward-only cdr walk can't get cheaply. Scheme list observations
+ *  share the same practical size ceiling as their JS-array sibling, so this is the same
+ *  trade-off `capItems` already accepts, not a new cost story. */
+function convertLipsPairToArrayElided(pair: any, visited: Set<any>): SExpr[] {
+  const items: any[] = [];
+  let current = pair;
+  while (current && current.constructor?.name === "APair") {
+    items.push(current.car);
+    current = current.cdr;
+    if (current && typeof current === "object" && visited.has(current)) {
+      throw new Error("Circular reference in LIPS Pair");
+    }
+  }
+
+  const rendered = capWithElision(items, activeCaps.defaultLimit, (item) => toSExpr(item, visited), "array length");
+  if (isImproperTail(current)) rendered.push(toSExpr(current, visited));
+  return rendered;
+}
+
 // Convert LIPS Pair linked list to JavaScript array
 function convertLipsPairToArray(pair: any, visited: Set<any>): SExpr[] {
+  if (Number.isFinite(activeCaps.elideHead) && activeCaps.elideHead + activeCaps.elideTail > 0) {
+    return convertLipsPairToArrayElided(pair, visited);
+  }
+
+  // OFF path — TODAY's behaviour, unchanged: streaming, the tail of a huge list is never
+  // serialized (only cheap-counted for the `+N more of TOTAL` marker).
   const result: SExpr[] = [];
   let current = pair;
   let shown = 0;
@@ -731,7 +978,7 @@ function convertLipsPairToArray(pair: any, visited: Set<any>): SExpr[] {
   }
 
   // If cdr is not null/empty, it's an improper list (rare in practice)
-  if (current && !isNil(current) && !(current.constructor?.name === "Object" && Object.keys(current).length === 0)) {
+  if (isImproperTail(current)) {
     // This would be a dotted pair notation in Scheme, but we'll just add it to the array
     result.push(toSExpr(current, visited));
   }
@@ -784,8 +1031,19 @@ export const toSExprString = (obj: any, optsOrIndent: number | SerializeOpts = 0
   const format = opts.format ?? ((sexpr: SExpr) => formatSExpr(sexpr, indent));
 
   // No caps requested → unchanged behaviour. (`beginCollectorPass` is a no-op unless the render
-  // came through `serializeWithExtras` — the plain path stays byte-identical.)
-  if (opts.maxItems == null && opts.maxStringChars == null && opts.maxTotalChars == null) {
+  // came through `serializeWithExtras` — the plain path stays byte-identical.) The new elision
+  // knobs count as "caps requested" too — a caller that sets ONLY `elideHead`/`elideTail` (no
+  // maxItems/maxStringChars/maxTotalChars) still must hit the capped branch below, or
+  // middle-elision would silently never activate.
+  if (
+    opts.maxItems == null &&
+    opts.maxStringChars == null &&
+    opts.maxTotalChars == null &&
+    opts.topLevelArrayLimit == null &&
+    opts.secondLevelArrayLimit == null &&
+    opts.elideHead == null &&
+    opts.elideTail == null
+  ) {
     beginCollectorPass();
     return format(toSExpr(obj));
   }
@@ -794,9 +1052,42 @@ export const toSExprString = (obj: any, optsOrIndent: number | SerializeOpts = 0
   let maxItems = opts.maxItems ?? 100;
   let maxStringChars = opts.maxStringChars ?? 2_000;
 
+  // Middle-elision is ON iff either knob is present (opt-in by presence); the other then
+  // defaults to 5. `elideHead`/`elideTail` themselves stay FIXED across the shrink-to-fit loop
+  // below (a shrinking head/tail would defeat the point — the shown sample must stay stable).
+  const elisionRequested = opts.elideHead != null || opts.elideTail != null;
+  const elideHead = elisionRequested ? (opts.elideHead ?? 5) : Infinity;
+  const elideTail = elisionRequested ? (opts.elideTail ?? 5) : 0;
+  // The per-array-limit floor during shrink: once elision is on, shrinking a limit below
+  // `elideHead + elideTail` buys nothing (the head+tail window is already the effective
+  // floor for what's shown) — floor there instead of the generic `FLOOR_ITEMS`.
+  const arrayLimitFloor = elisionRequested ? elideHead + elideTail : FLOOR_ITEMS;
+
+  // Primary-array selection (§2, elision plan): runs ONCE, by reference, against the INITIAL
+  // (unshrunk) `maxItems` — the shrink loop below only rescales the LIMIT values, never
+  // re-selects which array is primary.
+  const primarySelection = selectPrimaryArray(obj, maxItems);
+  let topLevelArrayLimit = opts.topLevelArrayLimit;
+  let secondLevelArrayLimit = opts.secondLevelArrayLimit;
+
   const render = (): string => {
     beginCollectorPass(); // shrink-to-fit re-renders must not re-collect extras / re-burn quota
-    activeCaps = { maxItems, maxStringChars };
+    beginElisionPass(); // …nor re-collect elisions — only the FINAL pass's elisions stand.
+    const primaryLimit =
+      primarySelection === null
+        ? maxItems
+        : primarySelection.kind === "top"
+          ? (topLevelArrayLimit ?? maxItems)
+          : (secondLevelArrayLimit ?? maxItems);
+    activeCaps = {
+      maxItems,
+      maxStringChars,
+      elideHead,
+      elideTail,
+      primaryArray: primarySelection?.array ?? null,
+      primaryLimit,
+      defaultLimit: maxItems,
+    };
     try {
       return format(toSExpr(obj));
     } finally {
@@ -807,10 +1098,14 @@ export const toSExprString = (obj: any, optsOrIndent: number | SerializeOpts = 0
   let out = render();
   // Shrink-to-fit: tighten BOTH caps toward the floor and re-render. Each pass is itself
   // capped, so a re-run never re-walks a huge tail. Fair across siblings — no tail-cut.
-  while (out.length > maxTotalChars && (maxItems > FLOOR_ITEMS || maxStringChars > FLOOR_STRING)) {
+  while (out.length > maxTotalChars && (maxItems > arrayLimitFloor || maxStringChars > FLOOR_STRING)) {
     const factor = Math.min(0.9, maxTotalChars / out.length);
-    maxItems = Math.max(FLOOR_ITEMS, Math.floor(maxItems * factor));
+    maxItems = Math.max(arrayLimitFloor, Math.floor(maxItems * factor));
     maxStringChars = Math.max(FLOOR_STRING, Math.floor(maxStringChars * factor));
+    if (topLevelArrayLimit != null) topLevelArrayLimit = Math.max(arrayLimitFloor, Math.floor(topLevelArrayLimit * factor));
+    if (secondLevelArrayLimit != null) {
+      secondLevelArrayLimit = Math.max(arrayLimitFloor, Math.floor(secondLevelArrayLimit * factor));
+    }
     out = render();
   }
 
@@ -825,6 +1120,23 @@ export const toSExprString = (obj: any, optsOrIndent: number | SerializeOpts = 0
   }
   return out;
 };
+
+/**
+ * Serialize a value to `{text, elisions}` (§5, elision plan) — the additive sibling of
+ * `toSExprString` for callers that need the collected `ElisionRecord`s to build a trailing
+ * note (mcp-substrate's `runner.ts`). The SAME walk + caps + shrink-to-fit machinery renders
+ * `text`; `toSExprString` itself never sets the sink, so its behaviour is untouched.
+ */
+export function toSExprStringWithElisions(obj: any, opts: SerializeOpts = {}): { text: string; elisions: ElisionRecord[] } {
+  const sink: ElisionRecord[] = [];
+  const previous = activeElisionSink;
+  activeElisionSink = sink;
+  try {
+    return { text: toSExprString(obj, opts), elisions: sink };
+  } finally {
+    activeElisionSink = previous;
+  }
+}
 
 export type SerializeWithExtrasOpts = SerializeOpts & {
   /** ONE call's shared attachment numbering/quota, threaded across its renders (ids stay
