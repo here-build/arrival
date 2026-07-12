@@ -81,6 +81,11 @@ describe("cond => clause renders as =?> and stays connected", () => {
     expect(out).toContain("(foo x) =?>");
     expect(out).not.toMatch(/^\s*=\??>\s*$/m); // no line that is only an arrow
   });
+  it("case receiver clause also renders =?> (same R7RS => receiver form)", () => {
+    const s = "(case k ((1 2) => proc) (else (x)))";
+    expect(render(s)).toContain("(1 2) =?> proc");
+    expect(readSugarcoat(render(s)).map((f) => printScheme(f)).join("")).toBe(canon(s)); // folds back
+  });
   it("reader folds =?> (and math skins ⇀ / ⇸) back to the => symbol", () => {
     for (const g of ["=?>", "⇀", "⇸"])
       expect(readSugarcoat(`cond\n  (foo x) ${g} (bar)\n  else\n    (baz)`).map((f) => printScheme(f)).join("")).toBe(

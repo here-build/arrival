@@ -780,7 +780,11 @@ function stepText(s: RStep, o: SugarcoatOpts): string {
 
 /** One-line rendering, no width check. */
 export function inlineSugarcoat(nd: Node, o: SugarcoatOpts): string {
-  if (isAtom(nd)) return nd.str ? `"${nd.atom}"` : escSym(nd.atom);
+  // A bare `=>` symbol is always a RECEIVER arrow (cond/case's `(datum => proc)`, the
+  // partial function) — never a value or the lambda arrow (that's emitted as a literal
+  // by the arrow-lambda branch, never routed through here). Render it `=?>` so the case
+  // form matches cond; the reader folds `=?>` back to the `=>` symbol.
+  if (isAtom(nd)) return nd.str ? `"${nd.atom}"` : nd.atom === "=>" ? "=?>" : escSym(nd.atom);
   const items = nd.list;
   if (items.length === 0) return "()";
   if (o.nilGlyph && isEmptyQuote(items)) return "nil";
