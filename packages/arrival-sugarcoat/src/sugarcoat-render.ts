@@ -1142,14 +1142,24 @@ function formatSugarcoatCore(nd: Node, col: number, o: SugarcoatOpts): string {
         // single (or empty) binding stays compact on the head line.
         out.push(`${head} (${binds.join(" ")})`);
       } else {
-        // ≥2 bindings: `head` alone, then EACH binding on its own line inside the `(( ))`
-        // group, aligned under the first. A let* is sequential — every binding is a step the
-        // reader tracks, so packing them onto one line is exactly the density that hurts. The
-        // explicit `(( ))` stays (round-trip: the reader reads the multi-line paren group as
-        // one bindings datum, then the body).
+        // ≥2 bindings: `head` alone, then each binding as `(name` ⏎ `value)` — NAME and VALUE
+        // on separate lines. A let* is sequential; every binding is a step the reader tracks,
+        // and setting the value apart from the name reads clearest. Aligned inside the `(( ))`
+        // group, which stays explicit (round-trip: the reader reads the multi-line paren group
+        // as one bindings datum, then the body).
+        const valuePad = " ".repeat(col + 6);
+        const bindsList = childList(bindsNode);
         out.push(head);
-        binds.forEach((b, i) => {
-          out.push(`${pad2}${i === 0 ? "(" : " "}${b}${i === binds.length - 1 ? ")" : ""}`);
+        bindsList.forEach((b, i) => {
+          const bl = childList(b);
+          const last = i === bindsList.length - 1;
+          if (bl.length >= 2) {
+            out.push(`${pad2}${i === 0 ? "((" : " ("}${atomText(bl[0])}`);
+            out.push(`${valuePad}${inlineSugarcoat(bl[1], o)})${last ? ")" : ""}`);
+          } else {
+            // degenerate binding (not `(name value)`) — keep it on one line, faithfully.
+            out.push(`${pad2}${i === 0 ? "(" : " "}${inlineSugarcoat(b, o)}${last ? ")" : ""}`);
+          }
         });
       }
     }

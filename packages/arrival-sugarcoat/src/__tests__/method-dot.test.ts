@@ -256,14 +256,14 @@ describe("render: literal scalars are never method-dot receivers", () => {
   });
 });
 
-// A multi-binding let/let* breaks EACH binding onto its own line (a let* is sequential —
-// every binding is a step). A single binding stays compact on the head line.
-describe("render: multi-binding let breaks each binding onto its own line", () => {
-  it("≥2 bindings: head alone, each binding on its own line", () => {
+// A multi-binding let/let* breaks EACH binding onto its own line, name and value on separate
+// lines (a let* is sequential — every binding is a step). A single binding stays compact.
+describe("render: multi-binding let breaks bindings, name/value on separate lines", () => {
+  it("≥2 bindings: head alone, each binding as (name ⏎ value)", () => {
     const out = render("(let* ((a (f x)) (b (g y))) (h b))");
-    expect(out).toBe("let*\n  ((a (f x))\n   (b (g y)))\n  (h b)");
+    expect(out).toBe("let*\n  ((a\n      (f x))\n   (b\n      (g y)))\n  (h b)");
   });
-  it("single binding stays on the head line", () => {
+  it("single binding stays compact on the head line", () => {
     expect(render("(let ((x (f y))) (h x))")).toBe("let ((x (f y)))\n  (h x)");
   });
   it("round-trips", () => {
