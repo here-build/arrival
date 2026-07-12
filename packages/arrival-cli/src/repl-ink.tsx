@@ -29,6 +29,7 @@ import { DISABLE_AUTOWRAP, ENABLE_AUTOWRAP } from "./ansi.js";
 import { emitForms } from "./form-emitter.js";
 import { pushHistory, recallNext, recallPrev, type NavState } from "./history-nav.js";
 import { highlightScheme } from "./highlight.js";
+import { looksLikeMarkdown, renderMarkdown, topLevelString } from "./markdown.js";
 import { clipboardSet, COMMAND_START, commandDone, notify } from "./osc.js";
 import { colorizeSexpr } from "./sexpr-color.js";
 import { toLens, type Lens } from "./lens.js";
@@ -108,10 +109,18 @@ function BlockView({ block, lens, mode, width }: { block: ReplBlock; lens: Lens;
     let ci = 0;
     for (const c of block.content) {
       if (c.type !== "text") continue;
-      for (const line of colorizeSexpr(toLens(c.text, lens), mode).split("\n")) {
-        const painted = block.state === "error" ? paint(line, "error", mode) : line;
-        rows.push(<Text key={`c${ci++}`}>{`  ${painted}`}</Text>);
-      }
+      // A done value that IS a markdown string renders as markdown (headers/lists/code/links)
+      // instead of a quoted literal — a RENDERING choice, so it applies in every mode (`mode`
+      // only gates color: uncolored markdown structure under `none`). Everything else is
+      // darcula-colored through the sugarcoat lens.
+      const md = block.state === "done" ? topLevelString(c.text) : null;
+      const contentLines =
+        md !== null && looksLikeMarkdown(md)
+          ? renderMarkdown(md, mode)
+          : colorizeSexpr(toLens(c.text, lens), mode)
+              .split("\n")
+              .map((line) => (block.state === "error" ? paint(line, "error", mode) : line));
+      for (const line of contentLines) rows.push(<Text key={`c${ci++}`}>{`  ${line}`}</Text>);
     }
   }
   return <Box flexDirection="column">{rows}</Box>;

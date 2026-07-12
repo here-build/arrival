@@ -261,3 +261,24 @@ describe("replInk ,copy", () => {
     unmount();
   });
 });
+
+describe("replInk markdown value rendering", () => {
+  it("a markdown string VALUE renders as a markdown header line (no quotes/hash)", async () => {
+    const { stdin, lastFrame, unmount } = mount();
+    stdin.write('"# Hello"\r');
+    const frame = await waitUntil(lastFrame, (f) => stripAnsi(f).includes("Hello"));
+    // The block SOURCE line still shows the typed `"# Hello"`; the rendered VALUE is a bare
+    // markdown header line "Hello" (no `#`, no quotes) — assert that content line exists.
+    const contentLines = stripAnsi(frame).split("\n").map((l) => l.trim());
+    expect(contentLines).toContain("Hello");
+    expect(contentLines).not.toContain('"# Hello"'); // the value is not shown as a raw literal line
+    unmount();
+  });
+  it("a plain string value stays a quoted literal (not markdown)", async () => {
+    const { stdin, lastFrame, unmount } = mount();
+    stdin.write('"just some text"\r');
+    const frame = await waitUntil(lastFrame, (f) => stripAnsi(f).includes("just some text"));
+    expect(stripAnsi(frame)).toContain('"just some text"'); // quotes preserved
+    unmount();
+  });
+});
