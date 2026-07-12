@@ -225,3 +225,16 @@ describe("render: named-function HOF → receiver-last method call", () => {
     for (const s of ["(map run-one-test tests)", "(filter even? nums)"]) expect(readAll(render(s))).toBe(s);
   });
 });
+
+// `not` is never a method-dot step — `(not (dict? x))` stays `(not x.dict?)`, never chains to
+// the backwards-reading `x.dict?.not`. The negation MACRO (`(not (= a b))` → `{a ≠ b}`) is a
+// separate check, unaffected.
+describe("render: not stays prefix (never a .not step)", () => {
+  it("wraps a flipped predicate in prefix not, not a trailing .not", () => {
+    expect(render("(not (dict? x))")).toBe("(not x.dict?)");
+    expect(render("(not (list? y))")).toBe("(not y.list?)");
+  });
+  it("plain (not x) stays prefix", () => {
+    expect(render("(not done)")).toBe("(not done)");
+  });
+});

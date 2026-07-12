@@ -724,6 +724,11 @@ const NEVER_METHOD = new Set<string>([
   "begin",
   "do",
   "set!",
+  // `not` never becomes a method-dot step: `(not (dict? x))` must stay `(not x.dict?)`, not
+  // chain to `x.dict?.not` (a trailing `.not` reads backwards). The sugarcoat negation MACRO
+  // — `(not (= a b))` → `{a ≠ b}` — is a separate `negComparison` check that runs before the
+  // chain, so it's untouched by this exclusion.
+  "not",
   "let",
   "let*",
   "letrec",
