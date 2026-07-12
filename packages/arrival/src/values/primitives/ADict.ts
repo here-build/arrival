@@ -28,6 +28,8 @@ import { CLASS } from "../../well-known-symbols.js";
 import { type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { egressContainerProxy } from "../egress-proxy.js";
+import { type ACallable } from "./ACallable.js";
+import { is_callable_value } from "../value-guards.js";
 import { APair } from "./APair.js";
 import { ASymbol } from "./ASymbol.js";
 import { ACharacter } from "./ACharacter.js";
@@ -237,16 +239,24 @@ export class ADict extends AValue {
    *  dict → same proxy (egress-proxy.ts owns the tracker and the write doors). A
    *  pending entry egresses as a Promise OF the unwrapped JS value (the settle chain
    *  continued through the box's own `arrival/toJS`) — the JS consumer awaits it. */
-  ["arrival/toJS"](): Record<string, unknown> {
-    return egressContainerProxy(this, "object", {
-      keys: () => this.keys(),
-      read: (name) => {
-        const entry = this.get(name);
-        return is_promise(entry)
-          ? entry.then((boxed) => (boxed instanceof AValue ? boxed["arrival/toJS"]() : boxed))
-          : entry;
+  ["arrival/toJS"](wrapCallable?: (value: ACallable) => unknown): Record<string, unknown> {
+    const materializeBoxed = (boxed: unknown): unknown => {
+      if (wrapCallable && is_callable_value(boxed)) return wrapCallable(boxed);
+      return boxed instanceof AValue ? boxed["arrival/toJS"]() : boxed;
+    };
+    return egressContainerProxy(
+      this,
+      "object",
+      {
+        keys: () => this.keys(),
+        read: (name) => {
+          const entry = this.get(name);
+          return is_promise(entry) ? entry.then(materializeBoxed) : entry;
+        },
       },
-    }) as Record<string, unknown>;
+      undefined,
+      wrapCallable,
+    ) as Record<string, unknown>;
   }
 
   // Print protocol — a real `(dict :k v ...)` repr; neither prior dict representation

@@ -20,6 +20,7 @@ import { INTEROP_BOUNDARY } from "../../interop-access.js";
 import type { SeenMap } from "../structural-equal.js";
 import type { SchemeBounceMarker, SchemeValue } from "../types.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
+import type { ACallable } from "./ACallable.js";
 
 export const EMPTY_PROVENANCE: ReadonlySet<number> = new Set<number>();
 
@@ -76,8 +77,17 @@ export abstract class AValue {
 
   /** Plain-JS representation for serialization (cache / log / HTTP). A global
    *  protocol key (like `arrival/tagless-final/*`/`arrival/print`), written as a
-   *  literal at each use site rather than declared as a named constant. */
-  abstract ["arrival/toJS"](): unknown;
+   *  literal at each use site rather than declared as a named constant.
+   *
+   *  `wrapCallable` (optional, additive): a container's implementation (AVector/APair/
+   *  ADict — see egress-proxy.ts) forwards this to `egressContainerProxy` so a NESTED
+   *  callable element gets the real reverse-membrane host-fn projection instead of its
+   *  own `arrival/toJS`'s "fallback display only" print string — the same projection
+   *  `schemeToJsImpl`'s top-level `is_callable_value` branch already gives a BARE
+   *  callable argument (rosetta.ts). Every non-container override ignores it (a scalar/
+   *  callable's own `arrival/toJS` has nothing to forward it to); the top-level callable
+   *  crossing bypasses this method entirely (rosetta.ts special-cases it earlier). */
+  abstract ["arrival/toJS"](wrapCallable?: (value: ACallable) => unknown): unknown;
 
   /** AValues are immutable — provenance updates mint a new instance. Returns the
    *  `SchemeValue` union (each concrete subclass overrides with its OWN narrower type, which

@@ -142,8 +142,12 @@ function schemeToJsImpl(value: unknown, options: RosettaOptions): unknown {
   }
 
   // Other boxed shapes: ONE protocol dispatch via class `arrival/toJS` (NOT membrane.toJS — would close module-init cycle rosetta→membrane→evaluator, scheme-zod z.instanceof codecs capture undefined classes). Scalars unwrap, containers egress as lazy readonly proxies (egress-proxy.ts chokepoint keeps same-box → same-proxy), borrowed wrappers return source identity, ABytevector → raw Uint8Array. (Callables handled above; Macro/Syntax never a value, can't reach schemeToJs.)
+  // A container's own `arrival/toJS` takes the optional `wrapCallable` (AValue.ts) so a
+  // NESTED callable element gets this SAME reverse-membrane projection instead of its
+  // class's fallback-display-only print string (egress-proxy.ts's `materializeElement`
+  // is the leaf-module chokepoint that can't import `callableToHostFn` itself).
   if (value instanceof AValue) {
-    return value["arrival/toJS"]();
+    return value["arrival/toJS"]((v) => callableToHostFn(v, options));
   }
 
   // RAW containers (never boxed): rosetta marshalling + trace/MCP serialization hand raw arrays/objects whose ELEMENTS may be boxed — cross elementwise so no AValue leaks into JSON.

@@ -15,7 +15,7 @@
  */
 import { CLASS, CYCLES, DATA, LOCATION, REF } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
-import { applyCallback } from "./ACallable.js";
+import { applyCallback, type ACallable } from "./ACallable.js";
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { deriveSortCompare, withInputProvenance } from "../op-helpers.js";
@@ -495,12 +495,18 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // as the last element, per the one-way list→array projection. A cyclic SPINE
   // still throws the iterator's taught invariant — an infinite list has no finite
   // array projection; cycles THROUGH elements terminate via the proxy tracker.
-  ["arrival/toJS"](): unknown[] {
+  ["arrival/toJS"](wrapCallable?: (value: ACallable) => unknown): unknown[] {
     const spine: SchemeValue[] = [...this];
-    return egressContainerProxy(this, "array", {
-      keys: () => spine.map((_, i) => String(i)),
-      read: (key) => spine[Number(key)],
-    }) as unknown[];
+    return egressContainerProxy(
+      this,
+      "array",
+      {
+        keys: () => spine.map((_, i) => String(i)),
+        read: (key) => spine[Number(key)],
+      },
+      undefined,
+      wrapCallable,
+    ) as unknown[];
   }
 
   // Setoid (Fantasy Land) — structural car/cdr equality, threading the harness's shared `seen`.

@@ -16,7 +16,7 @@
  */
 import { CLASS } from "../../well-known-symbols.js";
 import { type RunContext } from "./RunContext.js";
-import { applyCallback } from "./ACallable.js";
+import { applyCallback, type ACallable } from "./ACallable.js";
 import { chargeHeap } from "../../heap-budget.js";
 import { is_promise } from "../../eval/guards.js";
 import { is_false } from "../value-guards.js";
@@ -86,12 +86,18 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   // egress proxy — observationally a plain array (Array.isArray true, JSON/spread/
   // iteration work), elements unwrap through their own `arrival/toJS` on first read,
   // same box → same proxy (egress-proxy.ts owns the tracker and the write doors).
-  ["arrival/toJS"](): readonly unknown[] {
+  ["arrival/toJS"](wrapCallable?: (value: ACallable) => unknown): readonly unknown[] {
     const elements = this.__vector__;
-    return egressContainerProxy(this, "array", {
-      keys: () => elements.map((_, i) => String(i)),
-      read: (key) => elements[Number(key)],
-    }) as readonly unknown[];
+    return egressContainerProxy(
+      this,
+      "array",
+      {
+        keys: () => elements.map((_, i) => String(i)),
+        read: (key) => elements[Number(key)],
+      },
+      undefined,
+      wrapCallable,
+    ) as readonly unknown[];
   }
 
   valueOf(): readonly T[] {

@@ -29,6 +29,8 @@
  * materialization dispatch) and the interop error — never membrane/env/bridge.
  */
 import { AValue } from "./primitives/AValue.js";
+import type { ACallable } from "./primitives/ACallable.js";
+import { is_callable_value } from "./value-guards.js";
 import { InteropAccessError } from "../errors.js";
 
 /** Singleton tracker: same box → same proxy, forever. Module-level, mirrors
@@ -59,8 +61,19 @@ export interface EgressReader {
 }
 
 /** Element exit: protocol dispatch — the element's class is the conversion authority;
- *  a raw FFI-passthrough element has no protocol and exits as itself. */
-function materializeElement(element: unknown): unknown {
+ *  a raw FFI-passthrough element has no protocol and exits as itself.
+ *
+ *  A callable element is special-cased BEFORE the generic protocol dispatch: a
+ *  callable's own `arrival/toJS` is fallback-display-only (a print string — see
+ *  ACallable.ts), because the REAL reverse-membrane host-fn projection needs
+ *  `callableToHostFn` (rosetta.ts), which this leaf module cannot import (would cycle
+ *  through rosetta → scheme-zod at module-init). `wrapCallable`, supplied by whichever
+ *  caller DOES have that machinery (schemeToJsImpl, via each container's `arrival/toJS`),
+ *  closes the gap — the same projection a BARE callable argument already gets. Absent
+ *  (e.g. a print path with no rosetta context), a nested callable falls back to the
+ *  print string exactly as before — byte-identical for every caller that doesn't opt in. */
+function materializeElement(element: unknown, wrapCallable?: (value: ACallable) => unknown): unknown {
+  if (wrapCallable && is_callable_value(element)) return wrapCallable(element);
   return element instanceof AValue ? element["arrival/toJS"]() : element;
 }
 
@@ -113,12 +126,17 @@ function writeDoor(kind: "assign" | "mutate", key: string | symbol | undefined):
  * caller that doesn't opt in. The gate does not replace or duplicate the lazy-
  * materialization seam itself (`reader`/`ensure`/the WeakMap identity cache) — it
  * sits in front of it, deciding per key whether the existing seam runs at all.
+ *
+ * `wrapCallable` (optional, additive): forwarded to `materializeElement` — see its own
+ * doc for why a nested callable element needs it to get the real reverse-membrane
+ * projection instead of a print string. Omitting it is byte-stable (today's behavior).
  */
 export function egressContainerProxy(
   box: AValue,
   shape: "array" | "object",
   reader: EgressReader,
   gate?: TierGate,
+  wrapCallable?: (value: ACallable) => unknown,
 ): object {
   const cached = egressProxies.get(box);
   if (cached) return cached;
@@ -132,7 +150,10 @@ export function egressContainerProxy(
   const ensure = (key: PropertyKey): void => {
     if (typeof key !== "string" || !nameSet.has(key)) return;
     if (Object.prototype.hasOwnProperty.call(target, key)) return;
-    target[key] = gate === undefined || gate.allows(key) ? materializeElement(reader.read(key)) : gate.stubbedValue(key);
+    target[key] =
+      gate === undefined || gate.allows(key)
+        ? materializeElement(reader.read(key), wrapCallable)
+        : gate.stubbedValue(key);
   };
 
   const proxy = new Proxy(target, {
