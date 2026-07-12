@@ -167,14 +167,18 @@ function isValuesTuple(value: unknown): value is { __values__: SchemeValue[] } {
 }
 
 /**
- * Scheme→JS exit for serialization — mirrors the simple-tier `exec` unwrap (membrane `toJS`)
- * over the arrival PROTOCOL key (`"arrival/toJS"` — the same cross-package convention
- * arrival-serializer itself dispatches on), because R5 lands no core exports and `toJS` is
- * not on the public surface. Three arms, same order as membrane.toJS:
+ * Scheme→JS exit for SERIALIZATION — deliberately the bare `arrival/toJS` protocol, NOT
+ * membrane.toJS's membrane crossing (they used to coincide; they no longer do — the
+ * membrane exit gives a NESTED callable a live host fn via `arrival/toJSMembrane`, which
+ * is exactly wrong for a wire serializer: the wire wants strings, and a nested callable
+ * stringifying to `#<procedure …>` here IS the serialization contract, pinned as law in
+ * arrival's crossing tests). Dispatches the PROTOCOL key directly (the same
+ * cross-package convention arrival-serializer itself uses) because R5 lands no core
+ * exports. Three arms:
  *   • multiple values exit as a JS ARRAY of unwrapped elements;
- *   • a callable exits as a host FUNCTION face (serializer: `<function>` — byte-identical);
- *   • everything else dispatches its own `arrival/toJS` term (containers egress as the same
- *     lazy proxies `exec` returns); a raw crosser with no protocol key passes through — it
+ *   • a TOP-LEVEL callable exits as the named function face (serializer: `<function>`);
+ *   • everything else dispatches its own `arrival/toJS` term (containers egress as
+ *     bare-mode lazy proxies); a raw crosser with no protocol key passes through — it
  *     is already JS.
  */
 function hostFace(value: SchemeValue): unknown {
