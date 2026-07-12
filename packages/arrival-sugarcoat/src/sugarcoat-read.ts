@@ -45,6 +45,9 @@ const GLYPH_OP: Record<string, string> = {
   "≃": "eqv?",
   "≤": "<=",
   "≥": ">=",
+  "∷": "cons", // math-skin infix heads: `{a ∷ b}`, `{x ∈ xs}`, `{f ∘ g}`
+  "∈": "member",
+  "∘": "compose",
 };
 const opOf = (glyph: string): string => GLYPH_OP[glyph] ?? glyph;
 
@@ -79,8 +82,11 @@ const GLYPH_PREC: Record<string, number> = {
   "≢": 3,
   "≉": 3,
   "≄": 3,
+  "∷": 3, // cons — comparison tier (looser than arithmetic)
+  "∈": 3, // member
   "+": 4,
   "-": 4,
+  "∘": 5, // compose — tight, like `.`
   // Multiplicative tier MUST mirror sugarcoat-render's INFIX_PREC — render emits
   // `modulo`/`quotient`/`remainder` as infix, so read has to recognise them back
   // or `{a modulo b}` fails as "unbalanced {" (round-trip break).

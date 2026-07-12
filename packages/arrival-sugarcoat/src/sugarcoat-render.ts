@@ -309,7 +309,15 @@ const MATH_GLYPH: Record<string, string> = {
   "eqv?": "≃",
   "<=": "≤",
   ">=": "≥",
+  // heads that become infix ONLY in the math skin (see MATH_INFIX): `(cons a b)` →
+  // `{a ∷ b}`, `(member x xs)` → `{x ∈ xs}`, `(compose f g)` → `{f ∘ g}`.
+  cons: "∷",
+  member: "∈",
+  compose: "∘",
 };
+// Heads promoted to infix under the math skin only (ASCII keeps them prefix: `(cons a
+// b)`). member returns the tail/#f, not a bool — `∈` reads it as membership intent.
+const MATH_INFIX = new Set(["cons", "member", "compose"]);
 const glyphOf = (op: string, o: SugarcoatOpts): string =>
   (o.skin === "math" ? MATH_GLYPH[op] : undefined) ?? INFIX_GLYPH[op] ?? op;
 // Skin-dependent arrows: the lambda body arrow (`↦` maps-to) and the cond/case
@@ -357,6 +365,11 @@ const INFIX_PREC: Record<string, number> = {
   modulo: 5,
   quotient: 5,
   remainder: 5,
+  // math-skin infix (see MATH_INFIX): cons/member at the comparison tier (looser than
+  // arithmetic, so `{x + 1 ∷ xs}` = `(cons (+ x 1) xs)`); compose binds tight like `.`.
+  cons: 3,
+  member: 3,
+  compose: 5,
 };
 const precOf = (op: string): number => INFIX_PREC[op] ?? 3;
 
@@ -416,7 +429,12 @@ const isEmptyQuote = (items: Node[]): boolean =>
 const hasDot = (items: Node[]): boolean => items.some((it) => isAtom(it) && !it.str && it.atom === ".");
 
 const isInfix = (items: Node[], o: SugarcoatOpts): boolean =>
-  o.curly && items.length >= 3 && !hasDot(items) && isAtom(items[0]) && !items[0].str && INFIX.has(items[0].atom);
+  o.curly &&
+  items.length >= 3 &&
+  !hasDot(items) &&
+  isAtom(items[0]) &&
+  !items[0].str &&
+  (INFIX.has(items[0].atom) || (o.skin === "math" && MATH_INFIX.has(items[0].atom)));
 
 const isKeyword = (nd: Node): boolean => isAtom(nd) && !nd.str && nd.atom.startsWith(":") && nd.atom.length > 1;
 

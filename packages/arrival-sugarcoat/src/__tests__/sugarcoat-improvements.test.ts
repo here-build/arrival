@@ -226,3 +226,31 @@ describe("math skin: (not (relop …)) ↔ ≠ / ≢ / ≉ / ≄", () => {
     expect(render("(not (= a b))")).toBe("(not {a = b})");
   });
 });
+
+// ── math skin: cons/member/compose become infix (opt-in, bidirectional) ──
+describe("math skin: cons ∷ / member ∈ / compose ∘ as infix", () => {
+  const cases: Array<[string, string]> = [
+    ["(cons car cdr)", "{car ∷ cdr}"], // V's example
+    ["(cons a b)", "{a ∷ b}"],
+    ["(member x xs)", "{x ∈ xs}"],
+    ["(compose f g)", "{f ∘ g}"],
+    ["(compose f g h)", "{f ∘ g ∘ h}"], // variadic
+  ];
+  for (const [scheme, out] of cases) {
+    it(`${scheme} → ${out}`, () => expect(render(scheme, math)).toBe(out));
+    it(`reads ${out} → ${scheme}`, () => expect(read1(out)).toBe(canon(scheme)));
+    it(`round-trips ${scheme}`, () => expect(roundtrip(scheme, math)).toBe(canon(scheme)));
+  }
+  it("cons is looser than arithmetic: (cons (+ x 1) xs) → {x + 1 ∷ xs}", () => {
+    expect(render("(cons (+ x 1) xs)", math)).toBe("{x + 1 ∷ xs}");
+    expect(read1("{x + 1 ∷ xs}")).toBe(canon("(cons (+ x 1) xs)"));
+  });
+  it("nested cons braces (render never emits the ambiguous chained form)", () => {
+    expect(render("(cons a (cons b xs))", math)).toBe("{a ∷ {b ∷ xs}}");
+    expect(roundtrip("(cons a (cons b xs))", math)).toBe(canon("(cons a (cons b xs))"));
+  });
+  it("ascii skin keeps them prefix", () => {
+    expect(render("(cons a b)")).toBe("(cons a b)");
+    expect(render("(compose f g)")).toBe("(compose f g)");
+  });
+});
