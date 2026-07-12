@@ -124,3 +124,52 @@ describe("replInk", () => {
     unmount();
   });
 });
+
+const CTRL_A = "";
+const CTRL_W = "";
+const ALT_F = "f";
+
+describe("replInk block render", () => {
+  it("shows execution time on the right, and no heap", async () => {
+    const { stdin, lastFrame, unmount } = mount();
+    stdin.write("(+ 1 2)\r");
+    const frame = await waitUntil(lastFrame, (f) => /\b3\b/.test(f));
+    expect(stripAnsi(frame)).toMatch(/\dms/); // elapsed time present
+    expect(stripAnsi(frame)).not.toContain("heap"); // heap dropped
+    unmount();
+  });
+});
+
+describe("replInk cursor navigation", () => {
+  const line = (f: string | undefined): string => promptLine(f).replace(/^>\s?/, "");
+  it("Ctrl-A jumps to line start (insert lands at the front)", async () => {
+    const { stdin, lastFrame, unmount } = mount();
+    stdin.write("abc");
+    await waitUntil(lastFrame, (f) => line(f).includes("abc"));
+    stdin.write(CTRL_A);
+    stdin.write("X");
+    const f = await waitUntil(lastFrame, (ff) => line(ff).includes("Xabc"));
+    expect(line(f)).toContain("Xabc");
+    unmount();
+  });
+  it("Ctrl-W deletes the word before the cursor", async () => {
+    const { stdin, lastFrame, unmount } = mount();
+    stdin.write("foo bar");
+    await waitUntil(lastFrame, (f) => line(f).includes("foo bar"));
+    stdin.write(CTRL_W);
+    const f = await waitUntil(lastFrame, (ff) => !line(ff).includes("bar"));
+    expect(line(f).trimEnd()).toBe("foo");
+    unmount();
+  });
+  it("Alt-f moves forward by word", async () => {
+    const { stdin, lastFrame, unmount } = mount();
+    stdin.write("foo bar");
+    await waitUntil(lastFrame, (f) => line(f).includes("foo bar"));
+    stdin.write(CTRL_A); // → line start
+    stdin.write(ALT_F); // → after "foo"
+    stdin.write("Z");
+    const f = await waitUntil(lastFrame, (ff) => line(ff).includes("fooZ"));
+    expect(line(f)).toContain("fooZ bar");
+    unmount();
+  });
+});

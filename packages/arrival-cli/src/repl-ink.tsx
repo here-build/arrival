@@ -48,13 +48,6 @@ const TINT: Record<ReplBlockState, TintName> = {
 const PROMPT = "> ";
 const CONTINUE = ". ";
 
-/** `12345` heap cells → `"1.2K"`. */
-function formatCells(n: number): string {
-  if (n < 1000) return String(n);
-  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}K`;
-  return `${(n / 1_000_000).toFixed(1)}M`;
-}
-
 /** Does the buffer close (balanced parens/strings/blocks)? The oracle's own scanner — the
  *  one lexer that reads `#\(`, strings, `#|…|#` faithfully. Unscannable ⇒ let it submit and
  *  the reader's door teach. */
@@ -66,32 +59,55 @@ function closeable(src: string): boolean {
   }
 }
 
+/** Previous word boundary from `cursor` (readline/Emacs M-b): skip trailing whitespace, then
+ *  the word. */
+function wordLeft(line: string, cursor: number): number {
+  let i = cursor;
+  while (i > 0 && /\s/.test(line[i - 1]!)) i -= 1;
+  while (i > 0 && !/\s/.test(line[i - 1]!)) i -= 1;
+  return i;
+}
+/** Next word boundary from `cursor` (M-f): skip whitespace, then the word. */
+function wordRight(line: string, cursor: number): number {
+  let i = cursor;
+  while (i < line.length && /\s/.test(line[i]!)) i += 1;
+  while (i < line.length && !/\s/.test(line[i]!)) i += 1;
+  return i;
+}
+
 /** One block's lines. Source is highlighted through the lens; content (the value) subtly
  *  colored; the glyph carries state. Mirrors painter.ts's `renderBlock` but in Ink Text. */
 function BlockView({ block, lens, mode }: { block: ReplBlock; lens: Lens; mode: ColorMode }): React.ReactElement {
   const glyph = paint(GLYPH[block.state], TINT[block.state], mode);
   const src = block.source === "" ? "" : highlightScheme(toLens(block.source, lens), mode);
   const srcLines = src.split("\n");
-  const lines: React.ReactElement[] = [<Text key="s0">{`${glyph} ${srcLines[0] ?? ""}`}</Text>];
-  srcLines.slice(1).forEach((l, i) => lines.push(<Text key={`s${i + 1}`}>{`  ${l}`}</Text>));
+  // Execution time rides the FAR RIGHT of the source line (space-between, like the prompt
+  // row's status) — heap is dropped (noise; the wall-clock is the number that reads).
+  const elapsed =
+    block.counters !== undefined && (block.state === "done" || block.state === "error")
+      ? paint(`${block.counters.elapsedMs}ms`, "gutter", mode)
+      : "";
+  const rows: React.ReactElement[] = [
+    <Box key="s0" justifyContent="space-between">
+      <Text>{`${glyph} ${srcLines[0] ?? ""}`}</Text>
+      {elapsed !== "" ? <Text>{elapsed}</Text> : null}
+    </Box>,
+  ];
+  srcLines.slice(1).forEach((l, i) => rows.push(<Text key={`s${i + 1}`}>{`  ${l}`}</Text>));
 
   if (block.state === "skipped") {
-    lines.push(<Text key="skip">{paint("  (skipped — an earlier form in this submission crashed)", "skipped", mode)}</Text>);
+    rows.push(<Text key="skip">{paint("  (skipped — an earlier form in this submission crashed)", "skipped", mode)}</Text>);
   } else {
     let ci = 0;
     for (const c of block.content) {
       if (c.type !== "text") continue;
       for (const line of colorizeSexpr(toLens(c.text, lens), mode).split("\n")) {
         const painted = block.state === "error" ? paint(line, "error", mode) : line;
-        lines.push(<Text key={`c${ci++}`}>{`  ${painted}`}</Text>);
+        rows.push(<Text key={`c${ci++}`}>{`  ${painted}`}</Text>);
       }
     }
-    if (block.counters !== undefined && (block.state === "done" || block.state === "error")) {
-      const { heapUsed, elapsedMs } = block.counters;
-      lines.push(<Text key="ctr">{paint(`  heap ${formatCells(heapUsed)} · ${elapsedMs}ms`, "gutter", mode)}</Text>);
-    }
   }
-  return <Box flexDirection="column">{lines}</Box>;
+  return <Box flexDirection="column">{rows}</Box>;
 }
 
 function TurnView({ blocks, lens, mode }: { blocks: readonly ReplBlock[]; lens: Lens; mode: ColorMode }): React.ReactElement {
@@ -207,13 +223,57 @@ function ReplApp({ session, budgetMs, heapBudget, version, capabilityCount, mode
         }
         return;
       }
+      // readline/Emacs line navigation + editing.
+      if (key.ctrl && ch === "a") {
+        st.cursor = 0; // line start (also Home on most terminals)
+        redraw();
+        return;
+      }
+      if (key.ctrl && ch === "e") {
+        st.cursor = st.line.length; // line end (also End)
+        redraw();
+        return;
+      }
+      if (key.ctrl && ch === "u") {
+        st.line = st.line.slice(st.cursor); // kill to line start
+        st.cursor = 0;
+        nav.current = null;
+        redraw();
+        return;
+      }
+      if (key.ctrl && ch === "k") {
+        st.line = st.line.slice(0, st.cursor); // kill to line end
+        nav.current = null;
+        redraw();
+        return;
+      }
+      if (key.ctrl && ch === "w") {
+        const w = wordLeft(st.line, st.cursor); // kill word before cursor
+        st.line = st.line.slice(0, w) + st.line.slice(st.cursor);
+        st.cursor = w;
+        nav.current = null;
+        redraw();
+        return;
+      }
+      // Alt/Option word navigation (M-b / M-f; Option+←/→ also arrive as meta on most terminals).
+      if (key.meta && ch === "b") {
+        st.cursor = wordLeft(st.line, st.cursor);
+        redraw();
+        return;
+      }
+      if (key.meta && ch === "f") {
+        st.cursor = wordRight(st.line, st.cursor);
+        redraw();
+        return;
+      }
       if (key.leftArrow) {
-        st.cursor = Math.max(0, st.cursor - 1);
+        // A word jump when Alt/Ctrl-modified (Option/Ctrl+←), else one char.
+        st.cursor = key.meta || key.ctrl ? wordLeft(st.line, st.cursor) : Math.max(0, st.cursor - 1);
         redraw();
         return;
       }
       if (key.rightArrow) {
-        st.cursor = Math.min(st.line.length, st.cursor + 1);
+        st.cursor = key.meta || key.ctrl ? wordRight(st.line, st.cursor) : Math.min(st.line.length, st.cursor + 1);
         redraw();
         return;
       }
@@ -240,8 +300,10 @@ function ReplApp({ session, budgetMs, heapBudget, version, capabilityCount, mode
       }
       if (key.backspace || key.delete) {
         if (st.cursor > 0) {
-          st.line = st.line.slice(0, st.cursor - 1) + st.line.slice(st.cursor);
-          st.cursor -= 1;
+          // Alt/Option+Backspace deletes the whole word before the cursor.
+          const from = key.meta ? wordLeft(st.line, st.cursor) : st.cursor - 1;
+          st.line = st.line.slice(0, from) + st.line.slice(st.cursor);
+          st.cursor = from;
           nav.current = null; // editing rebases the prefix
           redraw();
         }
