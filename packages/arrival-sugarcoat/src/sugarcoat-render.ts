@@ -893,21 +893,20 @@ const isLiteralScalar = (nd: Node): boolean => {
 function peelChain(nd: Node, o: SugarcoatOpts): { base: Node; steps: RStep[]; emit: boolean } {
   const steps: RStep[] = [];
   let cur = nd;
-  for (let s = asStep(cur, o); s; s = asStep(cur, o)) {
+  // STOP the peel when the next receiver would be a raw scalar literal: `7.valid?`, `#t.foo`,
+  // `6.iota` read as nonsense (a literal has no methods). Stopping (rather than gating the
+  // whole chain) keeps the compound as the base — `(iota 6).map{…}`, not a flattened prefix.
+  for (let s = asStep(cur, o); s && !isLiteralScalar(s.recv); s = asStep(cur, o)) {
     steps.unshift(s.step); // discovered outermost-first → unshift gives base-first
     cur = s.recv;
   }
   const lone = steps.length === 1 ? steps[0] : null;
   const emit =
-    // A raw scalar literal (number/bool/char) is never a receiver — `7.valid?`, `#t.foo`,
-    // `#\a.bar` read as nonsense (a literal has no methods) — so a chain based on one stays
-    // prefix. (A literal as an ARGUMENT is fine — only the base is gated.)
-    !isLiteralScalar(cur) &&
-    (steps.length >= 2 ||
-      (lone != null &&
-        ("sub" in lone ||
-          lone.lam != null ||
-          ("op" in lone && (shouldFlipUnary(lone.op) || (lone.args?.length ?? 0) > 0)))));
+    steps.length >= 2 ||
+    (lone != null &&
+      ("sub" in lone ||
+        lone.lam != null ||
+        ("op" in lone && (shouldFlipUnary(lone.op) || (lone.args?.length ?? 0) > 0))));
   return { base: cur, steps, emit };
 }
 

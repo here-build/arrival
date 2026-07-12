@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import * as fs from "node:fs";
 import { schemeToSugarcoat, printScheme } from "../sugarcoat-render.js";
 import { readSugarcoatExpr, readSugarcoat } from "../sugarcoat-read.js";
 
@@ -87,18 +86,6 @@ describe("newline method chains (⏎.op)", () => {
     expect(lines[0]).toBe("the-closure-collection");
     expect(lines.every((l, i) => i === 0 || l.trimStart().startsWith("."))).toBe(true);
   });
-
-  it('test', () => {
-    console.log(
-      schemeToSugarcoat(
-        fs.readFileSync(
-          "/Users/jabher/WebstormProjects/dappsnap/foundations/arrival/arrival-sugarcoat/src/__tests__/test-file.arrival.scm",
-          { encoding: "utf8" },
-        ),
-        { strTolerant: true, skin: "math" },
-      ),
-    );
-  })
 });
 
 // §1 rewrite_L — a `\.` is a LITERAL dot in the symbol (unescaped on read, re-escaped

@@ -17,7 +17,7 @@ describe("toLens", () => {
 
   it("round-trips a multi-form pipeline through the sugarcoat printer", () => {
     const rendered = toLens("(map (lambda (n) (* n n)) (iota 6))", "sugarcoat");
-    expect(rendered).toBe("6.iota.map{(n) => n * n}");
+    expect(rendered).toBe("(iota 6).map{(n) => n * n}");
   });
 
   it("falls back to the original text when the sugarcoat reader can't model it — never loses content", () => {
