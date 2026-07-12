@@ -201,3 +201,27 @@ describe("render: let always breaks; bindings stay literal (never method-dotted)
     }
   });
 });
+
+// Element-wise HOF with a NAMED function flips receiver-last: `(map run-one-test tests)` →
+// `tests.map(run-one-test)`. Only known HOFs (collection reliably last); accessors passed as
+// values stay prefix (they have their own `[0]` sugar, aren't named functions).
+describe("render: named-function HOF → receiver-last method call", () => {
+  const cases: Array<[string, string]> = [
+    ["(map run-one-test tests)", "tests.map(run-one-test)"],
+    ["(filter even? nums)", "nums.filter(even?)"],
+    ["(for-each display xs)", "xs.for-each(display)"],
+    ["(remove null? xs)", "xs.remove(null?)"],
+  ];
+  for (const [scheme, sugar] of cases) it(`${scheme} → ${sugar}`, () => expect(render(scheme)).toBe(sugar));
+
+  it("accessor mapper stays prefix (car/cadr aren't named functions)", () => {
+    expect(render("(map car xs)")).toBe("(map car xs)");
+    expect(render("(map cadr xs)")).toBe("(map cadr xs)");
+  });
+  it("a non-HOF head never flips a named-arg call", () => {
+    expect(render("(foo bar baz)")).toBe("(foo bar baz)");
+  });
+  it("round-trips", () => {
+    for (const s of ["(map run-one-test tests)", "(filter even? nums)"]) expect(readAll(render(s))).toBe(s);
+  });
+});

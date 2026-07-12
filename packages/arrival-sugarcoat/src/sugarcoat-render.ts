@@ -757,6 +757,27 @@ const NEVER_METHOD = new Set<string>([
   "remainder",
 ]);
 
+/** Element-wise HOFs whose LAST argument is the collection — so `(map f xs)` flips to
+ *  `xs.map(f)` (named f) / `xs.map{…}` (lambda f). A general `(op a b)` does NOT flip (the
+ *  receiver is ambiguous); only these known heads earn the un-gated collection-last flip. */
+const ELEMENT_HOFS = new Set<string>([
+  "map",
+  "filter",
+  "for-each",
+  "find",
+  "find-tail",
+  "remove",
+  "partition",
+  "count",
+  "filter-map",
+  "append-map",
+  "take-while",
+  "drop-while",
+  "any",
+  "every",
+  "list-index",
+]);
+
 /** A head usable as a bare/braced postfix method op: a plain symbol that is neither
  *  a special form, an infix op, an access head, nor a pair-accessor word. */
 const isPlainMethodOp = (nd: Node): nd is { atom: string; str?: boolean } =>
@@ -813,6 +834,19 @@ function asStep(nd: Node, o: SugarcoatOpts): { recv: Node; step: RStep } | null 
   // braced method `(op LAMBDA recv)` — exactly two args, lambda first (§5 gate).
   if (items.length === 3 && isPlainMethodOp(items[0]) && !isAtom(items[1]) && isArrowLambda(items[1].list))
     return { recv: items[2], step: { op: items[0].atom, lam: items[1] } };
+  // element-wise HOF with a NAMED (non-lambda) function: `(map run-one-test tests)` →
+  // `tests.map(run-one-test)`. The collection is reliably LAST for these known HOFs, so the
+  // flip is safe WITHOUT the `?` gate a general `(op a b)` would need (there the receiver is
+  // ambiguous). The lambda case is the braced rule above; here the mapper is a symbol / a
+  // value-producing compound — but NOT an accessor/keyword (`(map car xs)` stays prefix: an
+  // accessor passed as a value has its own `[0]` sugar and isn't a named function).
+  if (
+    items.length === 3 &&
+    isPlainMethodOp(items[0]) &&
+    ELEMENT_HOFS.has(items[0].atom) &&
+    (isAtom(items[1]) ? isPlainMethodOp(items[1]) : true)
+  )
+    return { recv: items[2], step: { op: items[0].atom, args: [items[1]] } };
   // bare method `(op recv)`.
   if (items.length === 2 && isPlainMethodOp(items[0])) return { recv: items[1], step: { op: items[0].atom } };
   // predicate with args `(pred? arg… recv)` → `recv.pred?(arg…)` — receiver LAST. GATED to
