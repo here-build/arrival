@@ -167,6 +167,26 @@ export abstract class AValue {
     comparator: ((a: unknown, b: unknown) => unknown) | undefined,
     runCtx: RunContext,
   ): SchemeValue;
+  /** Prefix — the first n elements, in the receiver's OWN representation (list→fresh list
+   *  with SRFI-1 dotted-tail tolerance; vector→fresh vector). `runCtx` required — same
+   *  reasoning as `map` (`env/srfi/srfi-1.ts`'s sequence dispatcher always threads it). */
+  ["arrival/tagless-final/take"]?(n: number, runCtx: RunContext): SchemeValue | Promise<SchemeValue>;
+  /** Suffix — the receiver after its first n elements (list: the n-th cdr ITSELF, shared
+   *  structure per SRFI-1; vector: a fresh same-kind vector). `runCtx` required — as `take`. */
+  ["arrival/tagless-final/drop"]?(n: number, runCtx: RunContext): SchemeValue | Promise<SchemeValue>;
+  /** Longest satisfying prefix — pred evaluated SEQUENTIALLY (the walk stops at the first
+   *  falsy verdict, so filter's concurrent fan is not sound here); result in the receiver's
+   *  own representation. `runCtx` required — `symbol.tagless`'s dispatcher always threads it. */
+  ["arrival/tagless-final/take-while"]?(
+    pred: (x: unknown) => unknown | Promise<unknown>,
+    runCtx: RunContext,
+  ): SchemeValue | Promise<SchemeValue>;
+  /** The take-while remainder — list: a SHARED tail of the receiver; vector: a fresh
+   *  same-kind vector. Same sequential-pred discipline and `runCtx` reasoning as take-while. */
+  ["arrival/tagless-final/drop-while"]?(
+    pred: (x: unknown) => unknown | Promise<unknown>,
+    runCtx: RunContext,
+  ): SchemeValue | Promise<SchemeValue>;
   /** Applicable — INVOKE this value as a procedure. Callability IS declaring this term: the
    *  evaluator call-head, the R7RS `apply` builtin, and every HOF dispatch through it uniformly,
    *  the same `resolveMethod` path `map`/`car` use. `args` are the scheme-value operands, `runCtx`

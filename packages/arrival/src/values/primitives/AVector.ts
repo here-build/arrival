@@ -308,6 +308,85 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     return withInputProvenance([this], new AVector(this.ctx, out));
   }
 
+  // Prefix — SAME-KIND: vector in, fresh vector out (mirrors sort's container-preserving
+  // return; take/drop/take-while/drop-while are all LENGTH-CHANGING, so — unlike sort/map's
+  // PROXIED stamp — the container's own grouping/length-fact stamp is PROVENANCED fresh, same
+  // discipline as filter above). `n` is clamped into [0, length] — R7RS/SRFI-1 `take` on an
+  // out-of-range n is an error on lists, but a vector has no cons-cell tail to run off, so the
+  // clamp is the faithful vector answer, not a loose tolerance.
+  ["arrival/tagless-final/take"](n: number, runCtx: RunContext): AVector {
+    // STRICT divergence: `take` (SRFI-1) is a LIST op — a vector is not a list.
+    strictGate(runCtx, {
+      op: "take",
+      rule: "`take` (SRFI-1) operates on lists; a vector is not a list",
+      alternative: "take the list form: (list->vector (take (vector->list v) n))",
+    });
+    const k = Math.max(0, Math.min(n, this.__vector__.length));
+    chargeHeap(runCtx, k);
+    const out = this.__vector__.slice(0, k);
+    return withInputProvenance([this, ...out], new AVector(this.ctx, out));
+  }
+
+  // Suffix — SAME-KIND, same clamp/provenance discipline as take above.
+  ["arrival/tagless-final/drop"](n: number, runCtx: RunContext): AVector {
+    // STRICT divergence: `drop` (SRFI-1) is a LIST op — a vector is not a list.
+    strictGate(runCtx, {
+      op: "drop",
+      rule: "`drop` (SRFI-1) operates on lists; a vector is not a list",
+      alternative: "drop the list form: (list->vector (drop (vector->list v) n))",
+    });
+    const k = Math.max(0, Math.min(n, this.__vector__.length));
+    const out = this.__vector__.slice(k);
+    chargeHeap(runCtx, out.length);
+    return withInputProvenance([this, ...out], new AVector(this.ctx, out));
+  }
+
+  // Longest satisfying prefix — SEQUENTIAL walk (NOT filter's concurrent fan): the stop at the
+  // first falsy verdict IS the semantics (pred order-observable — a concurrent fan would still
+  // have to serialize the stop-decision, so there is no win to be had, only a correctness risk).
+  // Keep-rule matches filter's (Scheme-truthy AND nil dropped). SAME-KIND, PROVENANCED like take.
+  async ["arrival/tagless-final/take-while"](
+    pred: (x: SchemeValue) => unknown | Promise<unknown>,
+    runCtx: RunContext,
+  ): Promise<AVector> {
+    // STRICT divergence: `take-while` (SRFI-1) is a LIST op — a vector is not a list.
+    strictGate(runCtx, {
+      op: "take-while",
+      rule: "`take-while` (SRFI-1) operates on lists; a vector is not a list",
+      alternative: "(list->vector (take-while pred (vector->list v)))",
+    });
+    const out: SchemeValue[] = [];
+    for (const v of this.__vector__) {
+      const verdict = await applyCallback(pred, [v], runCtx);
+      if (is_false(verdict) || verdict instanceof ANil) break;
+      out.push(v);
+    }
+    chargeHeap(runCtx, out.length);
+    return withInputProvenance([this, ...out], new AVector(this.ctx, out));
+  }
+
+  // The take-while remainder — same sequential-pred discipline (the stop index IS the
+  // semantics), SAME-KIND fresh vector, PROVENANCED like take/drop.
+  async ["arrival/tagless-final/drop-while"](
+    pred: (x: SchemeValue) => unknown | Promise<unknown>,
+    runCtx: RunContext,
+  ): Promise<AVector> {
+    // STRICT divergence: `drop-while` (SRFI-1) is a LIST op — a vector is not a list.
+    strictGate(runCtx, {
+      op: "drop-while",
+      rule: "`drop-while` (SRFI-1) operates on lists; a vector is not a list",
+      alternative: "(list->vector (drop-while pred (vector->list v)))",
+    });
+    let i = 0;
+    for (; i < this.__vector__.length; i++) {
+      const verdict = await applyCallback(pred, [this.__vector__[i]], runCtx);
+      if (is_false(verdict) || verdict instanceof ANil) break;
+    }
+    const out = this.__vector__.slice(i);
+    chargeHeap(runCtx, out.length);
+    return withInputProvenance([this, ...out], new AVector(this.ctx, out));
+  }
+
   // Element-count. Interim fix (RULINGS.md R2): `length` reads the CONTAINER's
   // OWN flat grouping/length-fact stamp (`withInputProvenance([this], count)`), never the
   // elements' deep union — a pure count depends only on cardinality, not on what each

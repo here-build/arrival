@@ -56,6 +56,7 @@ import { BASE_PACKS } from "../../base-packs.js";
 import srfi1 from "../srfi-1.js";
 import type { SchemeEnv } from "../../../common/scheme-env.js";
 import type { ResolvingAmbient } from "../../../AmbientRuntime.js";
+import { printValue } from "../../../values/print.js";
 
 // Mirrors `_fresh-env.ts`'s own injected evalScheme — `skipBootstrapWait` because
 // these execs run against an env this suite is itself assembling/re-lowering onto,
@@ -67,24 +68,53 @@ const evalScheme = (env: unknown, src: unknown): unknown =>
 // needed for list-shaped results, where exec()'s SIMPLE-tier `toJS` unwrap egresses
 // an R9 lazy proxy rather than a plain comparable value (mirrors
 // src/__tests__/srfi.test.ts's own `run` helper).
+//
+// `printValue` (values/print.ts), NOT `x.toString()`: the print protocol is
+// `arrival/print`, not `toString` — APair happens to also define `toString` as a
+// delegating alias (APair.ts), which is why a bare `.toString()` accidentally worked
+// for every list-shaped row this suite had before the vector rows below. AVector
+// answers `arrival/print` only (no `toString` override), so `.toString()` on a vector
+// result falls through to `Object.prototype.toString` ("[object Object]") — `printValue`
+// is the representation-blind printer every value (list OR vector) actually answers.
 async function printed(env: ResolvingAmbient, src: string): Promise<string> {
   const { values: r } = await execState(src, { env });
-  const x = r[r.length - 1] as { toString(): string } | undefined;
-  return String(x?.toString?.() ?? x);
+  const x = r[r.length - 1] as unknown;
+  return printValue(x);
 }
 
 describe("scheme/srfi-1 — behavior equivalence (§4.2 gate), weighted toward the named-let-normalized bodies", () => {
-  it("take / drop — including SRFI-1's dotted-tail and any-value tolerances (xs is z.value BY SPEC)", async () => {
+  it("take / drop — SRFI-1's dotted-tail tolerance preserved; the old any-value-at-n>0 tolerance is now a loud crash (tagless-final dispatcher migration)", async () => {
     const env = await freshEnv();
     expect(await printed(env, "(take '(1 2 3 4 5) 2)")).toBe("(1 2)");
     expect(await printed(env, "(drop '(1 2 3 4 5) 2)")).toBe("(3 4 5)");
     // SRFI-1: "(take '(1 2 3 . d) 2) ⇒ (1 2)"; "(drop '(1 2 3 . d) 2) ⇒ (3 . d)"
     expect(await printed(env, "(take '(1 2 3 . d) 2)")).toBe("(1 2)");
     expect(await printed(env, "(drop '(1 2 3 . d) 2)")).toBe("(3 . d)");
-    // n beyond length / n<=0 / non-pair xs — the prelude-era tolerances, preserved
+    // n beyond length — still tolerated (the receiver's own term's job, not the
+    // dispatcher's)
     expect(await printed(env, "(take '(1 2) 99)")).toBe("(1 2)");
-    expect(await printed(env, "(take 5 3)")).toBe("()");
-    expect(await printed(env, "(drop 5 3)")).toBe("5");
+    // A non-pair/non-vector xs used to silently answer '()/xs itself (the prelude-era
+    // "lis may be any value" tolerance) — that tolerance is GONE. `5` declares neither
+    // `arrival/tagless-final/take` nor `arrival/tagless-final/drop`, so the dispatcher's
+    // term-lookup gate crashes loudly instead of masking the mistake.
+    await expect(printed(env, "(take 5 3)")).rejects.toThrow(/does not support take/);
+    await expect(printed(env, "(drop 5 3)")).rejects.toThrow(/does not support drop/);
+  });
+
+  it("take / drop / take-while / drop-while on vectors — same-kind (vector→vector), non-collection crashes loudly", async () => {
+    const env = await freshEnv();
+    expect(await printed(env, "(take #(1 2 3 4 5) 2)")).toBe("#(1 2)");
+    expect(await printed(env, "(drop #(1 2 3) 1)")).toBe("#(2 3)");
+    expect(await printed(env, "(take #(1 2) 99)")).toBe("#(1 2)");
+    expect(await printed(env, "(drop #(1 2) 99)")).toBe("#()");
+    expect(await printed(env, "(take-while even? #(2 4 6 1 8))")).toBe("#(2 4 6)");
+    expect(await printed(env, "(drop-while even? #(2 4 6 1 8))")).toBe("#(1 8)");
+    // Empty-input edge rows — both representations answer their own empty form.
+    expect(await printed(env, "(take-while even? '())")).toBe("()");
+    expect(await printed(env, "(take '() 3)")).toBe("()");
+    // A receiver declaring neither term (a bare number) crashes loudly, not silently.
+    await expect(printed(env, "(take-while even? 42)")).rejects.toThrow(/does not support/);
+    await expect(printed(env, "(drop-while even? 42)")).rejects.toThrow(/does not support/);
   });
 
   it("first…tenth walk through %list-nth (named-let normalized) and keep the teaching error", async () => {

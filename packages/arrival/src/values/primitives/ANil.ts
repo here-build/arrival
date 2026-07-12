@@ -114,6 +114,24 @@ export class ANil extends AValue {
     return nil;
   }
 
+  // take/drop of nothing is nothing; the while-splits of nothing are nothing — identity cases
+  // ON the term, mirroring map/filter above.
+  ["arrival/tagless-final/take"](_n: unknown): ANil {
+    return nil;
+  }
+
+  ["arrival/tagless-final/drop"](_n: unknown): ANil {
+    return nil;
+  }
+
+  ["arrival/tagless-final/take-while"](_pred: unknown): ANil {
+    return nil;
+  }
+
+  ["arrival/tagless-final/drop-while"](_pred: unknown): ANil {
+    return nil;
+  }
+
   // Length of the EMPTY list is 0 — the authoritative empty-count (mirrors the map/filter/
   // reduce empty cases above; the fl-interop `length` overlay's nil-branch dissolved ONTO
   // the term). No elements ⇒ no provenance to carry, but P4 still requires a boxed AValue

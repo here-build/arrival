@@ -715,6 +715,81 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     return withInputProvenance([this], APair.fromArray(this.ctx, out, false));
   }
 
+  // Prefix — the first n elements as a FRESH list (SRFI-1 take), dotted-tail tolerant: the
+  // `instanceof APair` guard stops the walk naturally at an improper tail or once n exceeds
+  // the list's own length, so no separate improper-list branch is needed. LENGTH-CHANGING
+  // (RULINGS.md R2, same family as filter/take-while below): PROVENANCED fresh, the union of
+  // the INPUT container's own top-level stamp and the taken elements' own.
+  ["arrival/tagless-final/take"](n: number, runCtx: RunContext): AListAlike {
+    const out: SchemeValue[] = [];
+    let node: unknown = this;
+    let k = n;
+    while (k > 0 && node instanceof APair) {
+      if (node.car === undefined && node.cdr instanceof ANil) break; // empty-pair sentinel
+      out.push(node.car);
+      node = node.cdr;
+      k--;
+    }
+    chargeHeap(runCtx, out.length);
+    return withInputProvenance([this, ...out], APair.fromArray(this.ctx, out, false));
+  }
+
+  // Suffix — the n-th cdr ITSELF (SRFI-1 drop): shared structure, not a rebuild, so this is a
+  // pure projection — no fresh cell, no heap charge, no re-stamp (mirrors `arrival/tagless-
+  // final/cdr`'s "compute directly on the term" register, but hands back the tail node whole
+  // rather than peeling one layer). The same `instanceof APair` guard gives dotted-tail
+  // tolerance: an improper tail or n past the list's own length just stops the walk and
+  // returns whatever node is standing there (a Pair, the dotted tail, or nil).
+  ["arrival/tagless-final/drop"](n: number, _runCtx: RunContext): SchemeValue {
+    let node: SchemeValue = this;
+    let k = n;
+    while (k > 0 && node instanceof APair) {
+      if (node.car === undefined && node.cdr instanceof ANil) return node.cdr; // empty-pair sentinel
+      node = node.cdr as SchemeValue;
+      k--;
+    }
+    return node;
+  }
+
+  // Longest satisfying prefix (SRFI-1 take-while) — fresh list, same LENGTH-CHANGING
+  // provenance convention as take above. The predicate walk is SEQUENTIAL, not filter's
+  // concurrent fan: take-while must stop at the FIRST falsy verdict, which a concurrent
+  // Promise.all over the whole spine can't express (it would force-evaluate every element
+  // before any verdict is known).
+  async ["arrival/tagless-final/take-while"](
+    pred: (x: unknown) => unknown | Promise<unknown>,
+    runCtx: RunContext,
+  ): Promise<AListAlike> {
+    const out: SchemeValue[] = [];
+    let node: unknown = this;
+    while (node instanceof APair) {
+      if (node.car === undefined && node.cdr instanceof ANil) break; // empty-pair sentinel
+      const verdict = await applyCallback(pred, [node.car], runCtx);
+      if (is_false(verdict) || verdict instanceof ANil) break;
+      out.push(node.car);
+      node = node.cdr;
+    }
+    chargeHeap(runCtx, out.length);
+    return withInputProvenance([this, ...out], APair.fromArray(this.ctx, out, false));
+  }
+
+  // The take-while remainder (SRFI-1 drop-while) — SHARED tail, same pure-projection register
+  // as drop above (no heap charge, no re-stamp). Same sequential-predicate discipline as
+  // take-while: stop at the first falsy verdict and return the node standing there whole.
+  async ["arrival/tagless-final/drop-while"](
+    pred: (x: unknown) => unknown | Promise<unknown>,
+    runCtx: RunContext,
+  ): Promise<SchemeValue> {
+    let node: SchemeValue = this;
+    while (node instanceof APair) {
+      if (node.car === undefined && node.cdr instanceof ANil) return node.cdr; // empty-pair sentinel
+      const verdict = await applyCallback(pred, [node.car], runCtx);
+      if (is_false(verdict) || verdict instanceof ANil) return node;
+      node = node.cdr as SchemeValue;
+    }
+    return node;
+  }
+
   // Element-count. Interim fix (RULINGS.md R2): `length` reads the CONTAINER's
   // OWN flat grouping/length-fact stamp (`withInputProvenance([this], count)` unions just
   // `this`'s own top-level provenance) — it no longer deep-walks the spine unioning every

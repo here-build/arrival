@@ -34,9 +34,12 @@
 //     for `take`/`drop` ("(take '(1 2 3 . d) 2) ⇒ (1 2)"). The shallow union is
 //     the honest boundary for a family whose bodies own the deep structure
 //     handling.
-//   - xs slots that tolerate ANY value by spec (take/drop's "lis may be any value",
-//     %list-nth's not-a-pair→error branch, first?/first-or's whole falsy-on-empty
-//     purpose): `z.value` — tolerance IS the declared contract there, not looseness.
+//   - xs slots that tolerate ANY value by spec (%list-nth's not-a-pair→error branch,
+//     first?/first-or's whole falsy-on-empty purpose): `z.value` — tolerance IS the
+//     declared contract there, not looseness. (take/drop ALSO declare xs as `z.value`,
+//     but for a different reason now — see the tagless-final dispatcher convention
+//     note below; SRFI-1's own any-value-at-n=0 tolerance is deliberately NOT
+//     preserved there anymore.)
 //   - multi-value outputs (span/break/partition — `(values a b)`): `output: [z.values]`.
 //     A multi-value return is ONE `Values` box at this seam (binding.ts's own `values`
 //     native returns `Values.from(args)`); declaring `output: [A, B]` would make the
@@ -61,14 +64,16 @@
 // BOUND SYMBOL. Most of this pack's defines recurse via named `let` — their
 // recursion never re-crosses the boundary, so they pay ONE decode per outer call
 // (cold; enforcement is effectively free against interpretation cost). The
-// direct self-recursers (take, drop, %list-nth, %any-null?, %some, %every, zip)
-// are written in that same named-let idiom deliberately: a body that
-// self-recursed through its own bound wrapper would pay a decode + async hop
-// PER ELEMENT instead. The one remaining per-element boundary crossing is
-// compositional — %some/%every call the validated `%any-null?` sibling once per
-// element-tuple, and zip's loop calls validated `some` per element — negligible
-// against interpretation cost, so the `validate:false` valve stays unused,
-// reached for only when evidence demands it.
+// direct self-recursers (%list-nth, %any-null?, %some, %every, zip) are written
+// in that same named-let idiom deliberately: a body that self-recursed through
+// its own bound wrapper would pay a decode + async hop PER ELEMENT instead. (take
+// and drop LEFT this list — they're tagless-final dispatchers now, not scheme
+// named-lets; their per-element cost lives on the receiver's own term, outside
+// this wrapper's boundary entirely.) The one remaining per-element boundary
+// crossing is compositional — %some/%every call the validated `%any-null?`
+// sibling once per element-tuple, and zip's loop calls validated `some` per
+// element — negligible against interpretation cost, so the `validate:false`
+// valve stays unused, reached for only when evidence demands it.
 import { type CallCtx, type MaybePromise, resolveMethod, symbol, withCallbackRoles } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { is_false } from "../../eval/guards.js";
@@ -213,48 +218,78 @@ export default new EnvCapability("scheme/srfi-1", {
 
     // ============ SRFI-1 (list library completion) ============
 
-    "take-while": symbol.define`take-while: longest prefix of xs satisfying pred, as a fresh list`(
-      { input: [z.lambda, listAlike], output: [listAlike] },
-      `(lambda (pred xs)
-         (let loop ((xs xs) (acc '()))
-           (if (and (pair? xs) (pred (car xs)))
-               (loop (cdr xs) (cons (car xs) acc))
-               (reverse acc))))`,
+    // take-while / drop-while — tagless-final dispatchers, NOT scheme-spine bodies: the
+    // old `(and (pair? xs) …)` named-let was #f on a vector (`pair?` never holds), so a
+    // tool-result vector silently answered '() instead of raising — a real production
+    // bug, not a hypothetical one. Receiver-LAST, exactly like `reduce` above (scheme
+    // surface is `(take-while pred xs)`; symbol.tagless's convention takes the LAST
+    // scheme arg as receiver, so `xs` lands there and `pred` passes through leading).
+    // The term (`arrival/tagless-final/take-while` — AValue.ts) OWNS the algebra: list
+    // AND vector both answer (list→fresh list; vector→fresh vector, same-kind), and a
+    // receiver declaring NEITHER hits `symbol.tagless`'s own TaglessProtocolError door —
+    // loud, not the old silent '(). pred's role is "control": a selector deciding
+    // prefix membership, the same override reasoning as `filter`'s callbackRoles above.
+    "take-while": withCallbackRoles(
+      symbol.tagless`take-while: longest prefix of xs satisfying pred, in xs's own representation (list→fresh list, vector→fresh vector)`,
+      ["control"],
+    ),
+    // drop-while — the take-while remainder, same receiver-last/term-owns-algebra/loud-
+    // crash reasoning as take-while directly above (see that comment).
+    "drop-while": withCallbackRoles(
+      symbol.tagless`drop-while: xs with the take-while prefix removed, in xs's own representation (list: a shared tail of xs)`,
+      ["control"],
     ),
 
-    // Output is z.value, not listAlike: the result is a TAIL of xs — proper only if xs
-    // was, which the shallow input union cannot promise (CONTRACT CONVENTIONS).
-    "drop-while": symbol.define`drop-while: xs with the take-while prefix removed (a shared tail of xs)`(
-      { input: [z.lambda, listAlike], output: [z.value] },
-      `(lambda (pred xs)
-         (let loop ((xs xs))
-           (if (and (pair? xs) (pred (car xs)))
-               (loop (cdr xs))
-               xs)))`,
-    ),
-
-    // xs is z.value by SRFI-1's own spec ("(take '(1 2 3 . d) 2) ⇒ (1 2)"; any value
-    // once n hits 0) — tolerance is the contract. Written in the file's dominant
-    // named-let idiom so self-recursion never re-crosses the contract boundary
-    // (see the file header's PERF PROTOCOL note).
-    take: symbol.define`take: the first n elements of xs as a fresh list (dotted tails tolerated per SRFI-1)`(
-      { input: [z.value, z.schemeNumber], output: [listAlike] },
-      `(lambda (xs n)
-         (let loop ((xs xs) (n n))
-           (if (or (<= n 0) (not (pair? xs)))
-               '()
-               (cons (car xs) (loop (cdr xs) (- n 1))))))`,
-    ),
-
-    // Output z.value: drop returns the n-th cdr of xs ITSELF (SRFI-1: "lis may be any
-    // value"), not a fresh list. Named-let idiom, as take (see the file header).
-    drop: symbol.define`drop: xs after the first n elements (the n-th cdr — shares structure with xs)`(
+    // take / drop — tagless-final dispatchers via symbol.sequence, NOT symbol.tagless:
+    // scheme surface is `(take xs n)` — xs is FIRST, not last, so symbol.tagless's
+    // last-arg-is-receiver convention cannot serve here. Mirrors this file's own
+    // `filter` above / lists.ts's `map` instead: `resolveMethod`/`tf` term-lookup IS
+    // the type gate, and a receiver declaring no `arrival/tagless-final/take|drop`
+    // term crashes loudly (TypeError) rather than the old silent '() on a non-pair
+    // (the same production bug take-while/drop-while had — `pair?` is #f on a vector).
+    // The receiver slot stays `z.value` (filter/map's representation-agnostic idiom):
+    // the result is in the RECEIVER'S OWN representation (list or vector), so no
+    // richer scheme-zod collection type is honest for every call site. `n` normalizes
+    // via `.valueOf()`, the vectors.ts `vector-ref` idiom.
+    //
+    // DELIBERATE BEHAVIOR CHANGE from the old scheme body: SRFI-1's "lis may be any
+    // value once n hits 0" tolerance is GONE — `(take 5 0)` now crashes (does not
+    // support take) instead of silently answering `'()`. Strict types over silent
+    // tolerance: a silent '() on a non-list receiver was the disease this migration
+    // cures, not a feature to preserve.
+    take: symbol.sequence`take: the first n elements of xs, in xs's own representation (list→fresh list, dotted tails tolerated per SRFI-1; vector→fresh vector)`(
       { input: [z.value, z.schemeNumber], output: [z.value] },
-      `(lambda (xs n)
-         (let loop ((xs xs) (n n))
-           (if (or (<= n 0) (not (pair? xs)))
-               xs
-               (loop (cdr xs) (- n 1)))))`,
+      (args, runCtx) => {
+        const [xs, n] = args;
+        const m = resolveMethod(xs, tf("take"));
+        if (m === undefined) {
+          throw new TypeError(
+            `take: the ${xs == null ? String(xs) : typeof xs} operand does not support take (no ${tf("take")}).`,
+          );
+        }
+        const k = typeof n === "number" ? n : (n as { valueOf(): number }).valueOf();
+        return m.call(xs, k, runCtx) as MaybePromise<SchemeValue>;
+      },
+    ),
+
+    // drop — the take remainder; same dispatcher/loud-crash/behavior-change reasoning
+    // as take directly above (see that comment). Output stays z.value (not listAlike):
+    // list drop returns the n-th cdr of xs ITSELF (shares structure), vector drop
+    // returns a fresh vector — both are the receiver's own representation, never a
+    // guaranteed pair-or-nil shape.
+    drop: symbol.sequence`drop: xs after the first n elements, in xs's own representation (list: the n-th cdr — shares structure with xs; vector→fresh vector)`(
+      { input: [z.value, z.schemeNumber], output: [z.value] },
+      (args, runCtx) => {
+        const [xs, n] = args;
+        const m = resolveMethod(xs, tf("drop"));
+        if (m === undefined) {
+          throw new TypeError(
+            `drop: the ${xs == null ? String(xs) : typeof xs} operand does not support drop (no ${tf("drop")}).`,
+          );
+        }
+        const k = typeof n === "number" ? n : (n as { valueOf(): number }).valueOf();
+        return m.call(xs, k, runCtx) as MaybePromise<SchemeValue>;
+      },
     ),
 
     // Multi-value output — ONE Values box at the seam (CONTRACT CONVENTIONS above).

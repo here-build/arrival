@@ -142,6 +142,28 @@ export class AJSArray extends AValue {
     return this.vec()[tf("sort")](comparator, runCtx);
   }
 
+  ["arrival/tagless-final/take"](n: number, runCtx: RunContext): AVector {
+    return this.vec()[tf("take")](n, runCtx);
+  }
+
+  ["arrival/tagless-final/drop"](n: number, runCtx: RunContext): AVector {
+    return this.vec()[tf("drop")](n, runCtx);
+  }
+
+  ["arrival/tagless-final/take-while"](
+    pred: (x: SchemeValue) => unknown | Promise<unknown>,
+    runCtx: RunContext,
+  ): Promise<AVector> {
+    return this.vec()[tf("take-while")](pred, runCtx);
+  }
+
+  ["arrival/tagless-final/drop-while"](
+    pred: (x: SchemeValue) => unknown | Promise<unknown>,
+    runCtx: RunContext,
+  ): Promise<AVector> {
+    return this.vec()[tf("drop-while")](pred, runCtx);
+  }
+
   // Delegated so `(car borrowed-array)` still works in non-strict mode (loose-mode list-like
   // reading through the vector's own strict gate).
   ["arrival/tagless-final/car"](runCtx?: RunContext): SchemeValue {
