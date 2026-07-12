@@ -180,6 +180,10 @@ export interface RunInput {
   /** Per-call override, already clamped to [calibration.responseSizeMinChars,
    *  calibration.responseSizeMaxChars] by the caller. */
   responseSizeMaxChars?: number;
+  /** Per-call evaluation time budget in ms (the WHOLE multi-statement call), already
+   *  clamped by the caller. Absent ⇒ `calibration.defaultEvalTimeoutMs`. Same per-call-only,
+   *  never-mutates-the-world-default shape as `responseSizeMaxChars`. */
+  timeoutMs?: number;
   /** Per-call override for the attachment pass-through quota (manifold's `response-attachments`
    *  arg); irrelevant to a caller with a no-op `AttachmentSink`. */
   attachmentQuota?: number;
@@ -301,7 +305,7 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
     }
 
     const callMaxTotalChars = input.responseSizeMaxChars ?? calibration.observationMaxTotalChars;
-    const timeoutMs = calibration.defaultEvalTimeoutMs;
+    const timeoutMs = input.timeoutMs ?? calibration.defaultEvalTimeoutMs;
 
     // Middle-elision (serializer-elision plan) is OPT-IN via `calibration.observationElision` —
     // `render` always returns `elisions` (empty when the knob is unset), so accumulation below

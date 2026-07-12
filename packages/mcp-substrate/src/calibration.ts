@@ -48,7 +48,7 @@ export const DEFAULT_CALIBRATION: CalibrationOptions = {
   doorsTier3Top: 10,
   responseSizeMinChars: 1000,
   responseSizeMaxChars: 40_000,
-  defaultEvalTimeoutMs: 15_000,
+  defaultEvalTimeoutMs: 600_000,
   observationMaxTotalChars: 20_000,
   hintRaceBudgetMs: 300,
   heapBudgetPerForm: 100_000_000,
