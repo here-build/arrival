@@ -35,17 +35,21 @@ describe("highlightScheme — mode none is exact identity", () => {
 });
 
 describe("highlightScheme — classification", () => {
-  it("definition and control keywords get DIFFERENT colours", () => {
+  it("definition and control keywords share ONE keyword colour (orange)", () => {
     const def = highlightScheme("define", "truecolor");
     const ctrl = highlightScheme("if", "truecolor");
     expect(def).not.toBe("define"); // coloured
     expect(ctrl).not.toBe("if");
-    expect(def).not.toBe(ctrl.replace("if", "define")); // different SGR
+    // same darcula keyword hex for both — structural keywords are one class
+    expect(def).toBe(ctrl.replace("if", "define"));
   });
 
-  it("a plain symbol / number stays the terminal's own foreground (quiet)", () => {
-    expect(highlightScheme("my-var", "truecolor")).toBe("my-var");
-    expect(highlightScheme("42", "truecolor")).toBe("42");
+  it("a plain symbol / number each get a darcula colour, distinct from each other", () => {
+    const sym = highlightScheme("my-var", "truecolor");
+    const num = highlightScheme("42", "truecolor");
+    expect(sym).not.toBe("my-var"); // symbol gray-blue
+    expect(num).not.toBe("42"); // number blue
+    expect(sym).not.toBe(num.replace("42", "my-var")); // different hex
   });
 
   it("strings and :keywords are coloured", () => {

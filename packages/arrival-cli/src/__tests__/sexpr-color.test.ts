@@ -47,8 +47,9 @@ describe("colorizeSexpr — actually colors the structure", () => {
     const keyword = colorizeSexpr(":verdict", "truecolor");
     const symbol = colorizeSexpr("verdict", "truecolor");
     expect(keyword).not.toBe(symbol);
-    // the plain symbol carries no hue (default foreground) — stays raw
-    expect(symbol).toBe("verdict");
+    // both colored, but by distinct hex — :keyword purple, symbol baseline gray-blue
+    expect(symbol).not.toBe("verdict");
+    expect(keyword.match(/38;2;[\d;]+/)?.[0]).not.toBe(symbol.match(/38;2;[\d;]+/)?.[0]);
   });
 
   it("leaves whitespace untinted (minimal diff)", () => {
@@ -59,16 +60,16 @@ describe("colorizeSexpr — actually colors the structure", () => {
 });
 
 describe("colorizeSexpr — darcula type coloring (each leaf type distinct)", () => {
-  it("number, string, keyword, boolean, char each get a color; symbol stays default", () => {
+  it("number, string, keyword, boolean, char, symbol each get a darcula color", () => {
     const num = colorizeSexpr("42", "truecolor");
     const str = colorizeSexpr('"x"', "truecolor");
     const kw = colorizeSexpr(":k", "truecolor");
     const bool = colorizeSexpr("#t", "truecolor");
     const sym = colorizeSexpr("foo", "truecolor");
-    // symbol: no color (terminal foreground)
-    expect(sym).toBe("foo");
-    // the rest: colored (escapes present)
-    for (const c of [num, str, kw, bool]) expect(c).toMatch(/\x1b\[/);
+    // symbol: baseline gray-blue (every leaf gets a color now)
+    expect(sym).not.toBe("foo");
+    // all colored (escapes present)
+    for (const c of [num, str, kw, bool, sym]) expect(c).toMatch(/\x1b\[/);
     // and by distinct classes: number ≠ keyword ≠ string colors
     expect(num).not.toBe("42");
     expect(num.match(/38;2;[\d;]+/)?.[0]).not.toBe(kw.match(/38;2;[\d;]+/)?.[0]); // blue ≠ purple

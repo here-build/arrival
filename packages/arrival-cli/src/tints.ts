@@ -105,6 +105,31 @@ export function paint(text: string, tint: TintName, mode: ReturnType<typeof colo
   return CHALK[mode].rgb(r, g, b)(text);
 }
 
+/**
+ * The repo's compensated-Darcula TOKEN palette — copied from
+ * `second-foundation/editor-theme/theme-darcula.ts` (the source of truth; re-sync if it
+ * changes). Used by BOTH the code highlighter (`highlight.ts`) and the value colorizer
+ * (`sexpr-color.ts`) so the input line, the settled-block source, and the output value all
+ * share ONE palette — a `:keyword` is the same purple everywhere, a number the same blue.
+ * (The semantic STATE tints above — the ✓/▸/✗ glyph, the dim gutter — are a separate axis.)
+ */
+export const DARCULA = {
+  keyword: "#c1712c", // define/lambda/if/cond/… — one orange for all structural keywords
+  symbol: "#abb7c3", // plain identifiers (variableName/name)
+  string: "#779465", // strings + char literals
+  number: "#6190b3", // numbers
+  constant: "#6190b3", // #t/#f/nil — darcula colors these as numbers (blue)
+  property: "#9b78ac", // :keyword / propertyName
+  comment: "#717171",
+  delimiter: "#717171", // parens/brackets/braces
+  heading: "#b4b4b4", // markdown heading/strong (bold)
+} as const;
+
+/** Paint `text` a specific hex — chalk downsamples per the mode's rung; `none` → raw. */
+export function paintHex(text: string, hex: string, mode: ReturnType<typeof colorMode> = colorMode()): string {
+  return mode === "none" ? text : CHALK[mode].hex(hex)(text);
+}
+
 /** Raw RGB for a tint — exposed for the wordmark's gradient (interpolates hue/lightness
  *  itself, then reuses this projection so both consumers agree on the math). */
 export function tintRgb(l: number, c: number, hDeg: number): [number, number, number] {

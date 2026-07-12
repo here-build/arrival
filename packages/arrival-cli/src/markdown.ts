@@ -15,7 +15,7 @@
  */
 import { RESET, sgr } from "./ansi.js";
 import { hyperlink } from "./osc.js";
-import { paint, type colorMode } from "./tints.js";
+import { DARCULA, paintHex, type colorMode } from "./tints.js";
 
 type ColorMode = ReturnType<typeof colorMode>;
 
@@ -42,16 +42,16 @@ export function looksLikeMarkdown(text: string): boolean {
  *  so consuming spans (link, code) run before the emphasis spans; the color/SGR escapes
  *  inserted carry no `*`/`` ` ``/`[`, so later regexes don't trip on them. */
 function inline(s: string, mode: ColorMode): string {
-  let out = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, t: string, u: string) => hyperlink(u, tintish(t, "accent", mode)));
-  out = out.replace(/`([^`]+)`/g, (_m, c: string) => tintish(c, "done", mode));
+  let out = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, t: string, u: string) => hyperlink(u, tintish(t, DARCULA.property, mode)));
+  out = out.replace(/`([^`]+)`/g, (_m, c: string) => tintish(c, DARCULA.string, mode));
   out = out.replace(/\*\*([^*]+)\*\*/g, (_m, b: string) => wrap(sgr("bold"), b, mode));
   out = out.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, (_m, pre: string, i: string) => pre + wrap(sgr("italic"), i, mode));
   out = out.replace(/_([^_\n]+)_/g, (_m, i: string) => wrap(sgr("italic"), i, mode));
   return out;
 }
 
-function tintish(text: string, name: Parameters<typeof paint>[1], mode: ColorMode): string {
-  return mode === "none" ? text : paint(text, name, mode);
+function tintish(text: string, hex: string, mode: ColorMode): string {
+  return mode === "none" ? text : paintHex(text, hex, mode);
 }
 function wrap(open: string, text: string, mode: ColorMode): string {
   return mode === "none" ? text : `${open}${text}${RESET}`;
@@ -68,27 +68,27 @@ export function renderMarkdown(md: string, mode: ColorMode): string[] {
       continue;
     }
     if (inFence) {
-      out.push(tintish(`  ${line}`, "done", mode));
+      out.push(tintish(`  ${line}`, DARCULA.string, mode));
       continue;
     }
     const h = /^(#{1,6}) (.*)$/.exec(line);
     if (h) {
-      out.push(wrap(sgr("bold"), tintish(inline(h[2]!, mode), "accent", mode), mode));
+      out.push(wrap(sgr("bold"), tintish(inline(h[2]!, mode), DARCULA.heading, mode), mode));
       continue;
     }
     const li = /^[-*+] (.*)$/.exec(line);
     if (li) {
-      out.push(`  ${tintish("•", "accent", mode)} ${inline(li[1]!, mode)}`);
+      out.push(`  ${tintish("•", DARCULA.keyword, mode)} ${inline(li[1]!, mode)}`);
       continue;
     }
     const ol = /^(\d+\.) (.*)$/.exec(line);
     if (ol) {
-      out.push(`  ${tintish(ol[1]!, "accent", mode)} ${inline(ol[2]!, mode)}`);
+      out.push(`  ${tintish(ol[1]!, DARCULA.keyword, mode)} ${inline(ol[2]!, mode)}`);
       continue;
     }
     const bq = /^> (.*)$/.exec(line);
     if (bq) {
-      out.push(tintish(`│ ${inline(bq[1]!, mode)}`, "gutter", mode));
+      out.push(tintish(`│ ${inline(bq[1]!, mode)}`, DARCULA.comment, mode));
       continue;
     }
     out.push(inline(line, mode));

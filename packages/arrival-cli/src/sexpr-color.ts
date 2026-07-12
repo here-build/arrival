@@ -1,10 +1,10 @@
 /**
  * Type-aware ANSI coloring of serializer s-expr output — the "human looking at a TTY" view
- * of a value. A darcula-style palette dispatched on the LEAF TYPE, so a value reads by type
- * at a glance: strings & chars green, numbers blue, `:keywords` / booleans / `nil` the
- * constant purple, symbols the terminal's own foreground, delimiters dim. (Structure itself
- * is the sugarcoat lens's job — it already renders dicts as `key:` and breaks big forms; this
- * only paints the tokens.)
+ * of a value. The repo's compensated-darcula palette (`tints.ts` DARCULA, shared with the
+ * code highlighter) dispatched on the LEAF TYPE, so a value reads by type at a glance:
+ * strings & chars green, numbers / booleans / `nil` blue, `:keywords` purple, plain symbols
+ * the baseline gray-blue, delimiters dim. (Structure itself is the sugarcoat lens's job — it
+ * already renders dicts as `key:` and breaks big forms; this only paints the tokens.)
  *
  * The one hard invariant: coloring adds ONLY escape sequences, never a character of text.
  * `stripAnsi(colorizeSexpr(s)) === s` for every input, and `colorizeSexpr(s, "none") === s`
@@ -13,7 +13,7 @@
  * (`#| … |#` truncation markers, `#attachment` tags): an unrecognized run is just a symbol,
  * passed through in the default foreground.
  */
-import { paint, type TintName } from "./tints.js";
+import { DARCULA, paintHex } from "./tints.js";
 import { colorMode } from "./tints.js";
 
 type ColorMode = ReturnType<typeof colorMode>;
@@ -25,19 +25,19 @@ function isNumber(atom: string): boolean {
   return /^[+-]?(\d|\.\d|#[xbodei])/i.test(atom);
 }
 
-/** The darcula tint for a leaf atom, or `null` to leave it in the default foreground (a
- *  symbol / anything unrecognized). */
-function atomTint(atom: string): TintName | null {
-  if (atom.length > 1 && atom.startsWith(":")) return "variant"; // :keyword → purple constant
-  if (atom === "#t" || atom === "#f" || atom === "#true" || atom === "#false" || atom === "nil") return "variant";
-  if (atom.startsWith("#\\")) return "done"; // char literal → green (like a string)
-  if (isNumber(atom)) return "accent"; // number → blue
-  return null; // symbol → terminal foreground
+/** The darcula hex for a leaf atom. Every leaf gets a color (symbols the baseline gray-blue),
+ *  so the value palette matches the code highlighter exactly. */
+function atomColor(atom: string): string {
+  if (atom.length > 1 && atom.startsWith(":")) return DARCULA.property; // :keyword → purple
+  if (atom === "#t" || atom === "#f" || atom === "#true" || atom === "#false" || atom === "nil") return DARCULA.constant;
+  if (atom.startsWith("#\\")) return DARCULA.string; // char literal → green (like a string)
+  if (isNumber(atom)) return DARCULA.number; // number → blue
+  return DARCULA.symbol; // plain identifier → baseline gray-blue
 }
 
-/** Emit `text` in `tint` unless the mode is `none` (then raw). */
-function tint(text: string, name: TintName, mode: ColorMode): string {
-  return mode === "none" ? text : paint(text, name, mode);
+/** Emit `text` in `hex` unless the mode is `none` (then raw). */
+function tint(text: string, hex: string, mode: ColorMode): string {
+  return mode === "none" ? text : paintHex(text, hex, mode);
 }
 
 /**
@@ -68,7 +68,7 @@ export function colorizeSexpr(src: string, mode: ColorMode = colorMode()): strin
         }
         j += 1;
       }
-      out += tint(src.slice(i, j), "done", mode); // string → green
+      out += tint(src.slice(i, j), DARCULA.string, mode); // string → green
       i = j;
       continue;
     }
@@ -77,7 +77,7 @@ export function colorizeSexpr(src: string, mode: ColorMode = colorMode()): strin
     if (ch === "#" && src[i + 1] === "|") {
       const end = src.indexOf("|#", i + 2);
       const j = end === -1 ? n : end + 2;
-      out += tint(src.slice(i, j), "gutter", mode);
+      out += tint(src.slice(i, j), DARCULA.comment, mode);
       i = j;
       continue;
     }
@@ -86,14 +86,14 @@ export function colorizeSexpr(src: string, mode: ColorMode = colorMode()): strin
     if (ch === ";") {
       let j = i;
       while (j < n && src[j] !== "\n") j += 1;
-      out += tint(src.slice(i, j), "gutter", mode);
+      out += tint(src.slice(i, j), DARCULA.comment, mode);
       i = j;
       continue;
     }
 
     // Delimiter — one dim character (structure recedes).
     if (DELIM.has(ch)) {
-      out += tint(ch, "gutter", mode);
+      out += tint(ch, DARCULA.delimiter, mode);
       i += 1;
       continue;
     }
@@ -115,8 +115,7 @@ export function colorizeSexpr(src: string, mode: ColorMode = colorMode()): strin
       j += 1;
     }
     const atom = src.slice(i, j);
-    const name = atomTint(atom);
-    out += name === null ? atom : tint(atom, name, mode);
+    out += tint(atom, atomColor(atom), mode);
     i = j;
   }
   return out;

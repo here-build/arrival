@@ -10,10 +10,15 @@
  * The tokenizer preserves every character (whitespace, unterminated strings, partial input
  * mid-keystroke) and only wraps whole tokens.
  */
-import { paint, type TintName } from "./tints.js";
+import { DARCULA, paintHex } from "./tints.js";
 import { colorMode } from "./tints.js";
 
 type ColorMode = ReturnType<typeof colorMode>;
+
+/** A number literal — decimal, signed, rational, or radix-prefixed (mirrors sexpr-color). */
+function isNumber(atom: string): boolean {
+  return /^[+-]?(\d|\.\d|#[xbodei])/i.test(atom);
+}
 
 // Keyword classification — copied from arrival-codemirror's `scheme-sugarcoat.ts`
 // (DEFINITION_KEYWORDS / CONTROL_KEYWORDS), the source of truth. Duplicated (not imported)
@@ -37,18 +42,19 @@ const CONTROL_KEYWORDS = new Set(
 
 const DELIM = new Set(["(", ")", "[", "]", "{", "}"]);
 
-/** Classify an atom (a maximal run of non-delimiter, non-space chars) → its tint, or `null`
- *  to leave it the terminal's own foreground (plain symbols, numbers — kept quiet). */
-function atomTint(atom: string): TintName | null {
-  if (DEFINITION_KEYWORDS.has(atom)) return "variant";
-  if (CONTROL_KEYWORDS.has(atom)) return "accent";
-  if (atom === "#t" || atom === "#f" || atom === "#true" || atom === "#false") return "accent";
-  if (atom.length > 1 && atom.startsWith(":")) return "accent"; // :keyword
-  return null;
+/** Classify an atom → its darcula hex. Same palette as the value colorizer (sexpr-color.ts)
+ *  so the input line, block source, and output value all agree: keywords orange, `:kw`
+ *  purple, numbers/booleans blue, everything else the baseline symbol gray-blue. */
+function atomColor(atom: string): string {
+  if (DEFINITION_KEYWORDS.has(atom) || CONTROL_KEYWORDS.has(atom)) return DARCULA.keyword;
+  if (atom === "#t" || atom === "#f" || atom === "#true" || atom === "#false" || atom === "nil") return DARCULA.constant;
+  if (atom.length > 1 && atom.startsWith(":")) return DARCULA.property; // :keyword
+  if (isNumber(atom)) return DARCULA.number;
+  return DARCULA.symbol;
 }
 
-function tint(text: string, name: TintName, mode: ColorMode): string {
-  return mode === "none" ? text : paint(text, name, mode);
+function tint(text: string, hex: string, mode: ColorMode): string {
+  return mode === "none" ? text : paintHex(text, hex, mode);
 }
 
 /** Highlight Scheme/sugarcoat source. `mode` defaults to the live terminal capability;
@@ -74,7 +80,7 @@ export function highlightScheme(src: string, mode: ColorMode = colorMode()): str
         }
         j += 1;
       }
-      out += tint(src.slice(i, j), "done", mode);
+      out += tint(src.slice(i, j), DARCULA.string, mode);
       i = j;
       continue;
     }
@@ -82,7 +88,7 @@ export function highlightScheme(src: string, mode: ColorMode = colorMode()): str
     if (ch === "#" && src[i + 1] === "|") {
       const end = src.indexOf("|#", i + 2);
       const j = end === -1 ? n : end + 2;
-      out += tint(src.slice(i, j), "gutter", mode);
+      out += tint(src.slice(i, j), DARCULA.comment, mode);
       i = j;
       continue;
     }
@@ -90,13 +96,13 @@ export function highlightScheme(src: string, mode: ColorMode = colorMode()): str
     if (ch === ";") {
       let j = i;
       while (j < n && src[j] !== "\n") j += 1;
-      out += tint(src.slice(i, j), "gutter", mode);
+      out += tint(src.slice(i, j), DARCULA.comment, mode);
       i = j;
       continue;
     }
 
     if (DELIM.has(ch)) {
-      out += tint(ch, "gutter", mode);
+      out += tint(ch, DARCULA.delimiter, mode);
       i += 1;
       continue;
     }
@@ -114,8 +120,7 @@ export function highlightScheme(src: string, mode: ColorMode = colorMode()): str
       j += 1;
     }
     const atom = src.slice(i, j);
-    const name = atomTint(atom);
-    out += name === null ? atom : tint(atom, name, mode);
+    out += tint(atom, atomColor(atom), mode);
     i = j;
   }
   return out;
