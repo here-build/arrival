@@ -109,17 +109,22 @@ function regroupLetFamily(node: Node): Node {
   if (isAtomNode(node) || node.list.length < 2) return node;
   const h = node.list[0];
   if (!isAtomNode(h) || !LET_FAMILY.has(h.atom)) return node;
-  const x = node.list[1];
-  const alreadyBindingsList = !isAtomNode(x) && (x.list.length === 0 || !isAtomNode(x.list[0]));
+  // NAMED let `(let loop binding… body)`: the loop symbol is child 1, bindings start at 2.
+  // (A plain let's child 1 is a list — the first elided binding or the `(( ))` group.)
+  const named = isAtomNode(node.list[1]) && node.list.length > 2;
+  const bindStart = named ? 2 : 1;
+  const x = node.list[bindStart];
+  const alreadyBindingsList = x !== undefined && !isAtomNode(x) && (x.list.length === 0 || !isAtomNode(x.list[0]));
   if (alreadyBindingsList) return node;
   const bindings: Node[] = [];
-  let i = 1;
-  // Never consume the LAST child: a let-family form requires a body, so when every
-  // child is binding-shaped the final one is the body (`items.length` ⇒ `(length items)`
-  // as a body would otherwise be swallowed into the bindings, emitting a body-less let).
+  let i = bindStart;
+  // Never consume the LAST child: a let-family form requires a body, so when every child is
+  // binding-shaped the final one is the body (it would otherwise be swallowed into the
+  // bindings, emitting a body-less let).
   while (i < node.list.length - 1 && bindingShaped(node.list[i])) bindings.push(node.list[i++]);
   if (bindings.length === 0) return node;
-  return { list: [h, { list: bindings }, ...node.list.slice(i)] };
+  const prefix = named ? [h, node.list[1]!] : [h];
+  return { list: [...prefix, { list: bindings }, ...node.list.slice(i)] };
 }
 
 // `start`/`end` are absolute offsets in the ORIGINAL sugarcoat text, present only when

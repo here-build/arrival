@@ -192,8 +192,13 @@ describe("render: let always breaks; bindings stay literal (never method-dotted)
     expect(out).toContain("(g x)");
     expect(out).not.toContain("x.g.y");
   });
-  it("named let renders its loop symbol + literal bindings", () => {
-    expect(render("(let loop ((i 0)) (loop i))").split("\n")[0]).toBe("let loop ((i 0))");
+  it("named let elides its bindings too (loop symbol on the head line)", () => {
+    expect(render("(let loop ((i 0)) (loop i))")).toBe("let loop\n  i\n    0\n  (loop i)");
+  });
+  it("multi-binding named let elides + round-trips", () => {
+    const s = "(let loop ((rel 0) (rest deck)) (step rel rest))";
+    expect(render(s).split("\n")[0]).toBe("let loop");
+    expect(readAll(render(s))).toBe(s);
   });
   it("round-trips", () => {
     for (const s of ["(define (f x) (let ((y (g x))) (h y)))", "(let loop ((i 0)) (loop i))"]) {

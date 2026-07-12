@@ -1021,10 +1021,13 @@ const isBindingShaped = (nd: Node): boolean => !isAtom(nd) && nd.list.length ===
  *  Named `let` excluded (items[1] is a symbol, not a bindings list). */
 const isLetElidable = (nd: Node): boolean => {
   if (isAtom(nd) || nd.list.length < 2) return false;
-  const [h, binds] = nd.list;
+  const h = nd.list[0];
   if (!isAtom(h) || h.str || !LET_FAMILY.has(h.atom)) return false;
-  if (isAtom(binds) || binds.list.length === 0 || !binds.list.every(isBindingShaped)) return false;
-  const body = nd.list.slice(2);
+  // Named let `(let loop bindings body)`: the loop symbol is child 1; bindings/body shift +1.
+  const named = isAtom(nd.list[1]) && nd.list.length > 2;
+  const binds = named ? nd.list[2] : nd.list[1];
+  if (binds === undefined || isAtom(binds) || binds.list.length === 0 || !binds.list.every(isBindingShaped)) return false;
+  const body = nd.list.slice(named ? 3 : 2);
   return body.length === 1 || (body.length > 1 && !isBindingShaped(body[0]));
 };
 
@@ -1110,16 +1113,20 @@ function formatSugarcoatCore(nd: Node, col: number, o: SugarcoatOpts): string {
   if (isLetElidable(nd)) {
     const pad2 = " ".repeat(col + 2);
     const pad4 = " ".repeat(col + 4);
-    const out = [atomText(items[0])];
-    // isLetElidable guarantees items[1] is a non-empty list of binding-shaped
-    // `(name value)` 2-lists (see its `binds.list.every(isBindingShaped)` gate),
-    // so childList re-asserts that proven arm — same idiom as items[0] above.
-    for (const b of childList(items[1])) {
+    // Named let `(let loop bindings body)` — the loop symbol rides the head line (`let loop`),
+    // bindings/body shift by one. The reader's regroupLetFamily skips the loop symbol to match.
+    const named = isAtom(items[1]) && items.length > 2;
+    const bindsNode = named ? items[2] : items[1];
+    const out = [named ? `${atomText(items[0])} ${atomText(items[1])}` : atomText(items[0])];
+    // isLetElidable guarantees the bindings arm is a non-empty list of binding-shaped
+    // `(name value)` 2-lists (its `binds.list.every(isBindingShaped)` gate), so childList
+    // re-asserts that proven arm.
+    for (const b of childList(bindsNode)) {
       const bind = childList(b);
       out.push(pad2 + formatSugarcoat(bind[0], col + 2, o)); // binding name
       out.push(pad4 + formatSugarcoat(bind[1], col + 4, o)); // binding value
     }
-    for (const bodyExpr of items.slice(2)) out.push(pad2 + formatSugarcoat(bodyExpr, col + 2, o));
+    for (const bodyExpr of items.slice(named ? 3 : 2)) out.push(pad2 + formatSugarcoat(bodyExpr, col + 2, o));
     return out.join("\n");
   }
 
