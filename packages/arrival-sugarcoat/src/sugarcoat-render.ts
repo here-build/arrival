@@ -874,6 +874,22 @@ function asStep(nd: Node, o: SugarcoatOpts): { recv: Node; step: RStep } | null 
 /** Peel `nd` fully into `base + [step…]` (base-first order) and decide whether to
  *  surface it as a postfix chain (§5): ≥2 steps, or a single accessor/key/braced
  *  step. A lone bare unary method canonicalizes to prefix (emit=false). */
+/** A raw scalar literal — number, boolean, or char. Never a method-dot RECEIVER: `7.valid?`,
+ *  `#t.foo`, `#\a.bar` read as nonsense (a literal has no methods). Strings are NOT scalars
+ *  here (`nd.str` is a separate literal kind, and `"s".upcase` reads fine). */
+const isLiteralScalar = (nd: Node): boolean => {
+  if (!isAtom(nd) || nd.str) return false;
+  const a = nd.atom;
+  return (
+    a === "#t" ||
+    a === "#f" ||
+    a === "#true" ||
+    a === "#false" ||
+    a.startsWith("#\\") ||
+    /^[+-]?(\d|\.\d|#[xbodei])/i.test(a)
+  );
+};
+
 function peelChain(nd: Node, o: SugarcoatOpts): { base: Node; steps: RStep[]; emit: boolean } {
   const steps: RStep[] = [];
   let cur = nd;
@@ -883,11 +899,15 @@ function peelChain(nd: Node, o: SugarcoatOpts): { base: Node; steps: RStep[]; em
   }
   const lone = steps.length === 1 ? steps[0] : null;
   const emit =
-    steps.length >= 2 ||
-    (lone != null &&
-      ("sub" in lone ||
-        lone.lam != null ||
-        ("op" in lone && (shouldFlipUnary(lone.op) || (lone.args?.length ?? 0) > 0))));
+    // A raw scalar literal (number/bool/char) is never a receiver — `7.valid?`, `#t.foo`,
+    // `#\a.bar` read as nonsense (a literal has no methods) — so a chain based on one stays
+    // prefix. (A literal as an ARGUMENT is fine — only the base is gated.)
+    !isLiteralScalar(cur) &&
+    (steps.length >= 2 ||
+      (lone != null &&
+        ("sub" in lone ||
+          lone.lam != null ||
+          ("op" in lone && (shouldFlipUnary(lone.op) || (lone.args?.length ?? 0) > 0)))));
   return { base: cur, steps, emit };
 }
 

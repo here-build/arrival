@@ -238,3 +238,20 @@ describe("render: not stays prefix (never a .not step)", () => {
     expect(render("(not done)")).toBe("(not done)");
   });
 });
+
+// A raw scalar literal (number/bool/char) is never a method-dot RECEIVER — `7.valid?` reads
+// as nonsense. Such a chain stays prefix. A literal as an ARGUMENT is still fine (only the
+// chain base is gated).
+describe("render: literal scalars are never method-dot receivers", () => {
+  it("number/bool/char receiver keeps the call prefix", () => {
+    expect(render("(valid-card-set? cards 7)")).toBe("(valid-card-set? cards 7)");
+    expect(render("(some? cards #t)")).toBe("(some? cards #t)");
+    expect(render("(map f 7)")).toBe("(map f 7)");
+  });
+  it("a literal as an ARGUMENT still flips (only the base is gated)", () => {
+    expect(render("(foo? #t x)")).toBe("x.foo?(#t)");
+  });
+  it("round-trips", () => {
+    expect(readAll(render("(not (valid-card-set? cards 7))"))).toBe("(not (valid-card-set? cards 7))");
+  });
+});
