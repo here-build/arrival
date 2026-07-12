@@ -154,3 +154,49 @@ describe("strTolerant: normalize string-append → str, strip coercions (opt-in)
     expect(render(matchstate)).toContain("number->string");
   });
 });
+
+// ── 8. math skin (opt-in Agda-style Unicode) — Family A infix + arrows, bidirectional ──
+const math = { skin: "math" as const };
+describe("math skin: infix glyph swaps + arrows (opt-in, bidirectional)", () => {
+  const swaps: Array<[string, string]> = [
+    ["(and a b)", "{a ∧ b}"],
+    ["(or a b)", "{a ∨ b}"],
+    ["(equal? a b)", "{a ≡ b}"],
+    ["(eq? a b)", "{a ≈ b}"], // wavy — identity pair
+    ["(eqv? a b)", "{a ≃ b}"],
+    ["(<= a b)", "{a ≤ b}"],
+    ["(>= a b)", "{a ≥ b}"],
+    ["(= a b)", "{a = b}"], // numeric = stays =
+  ];
+  for (const [scheme, out] of swaps) it(`${scheme} → ${out}`, () => expect(render(scheme, math)).toBe(out));
+
+  it("V's ok? body in the math skin", () => {
+    expect(render("(and (list? x) (= (length x) 2) (eq? (car x) 'ok))", math)).toBe(
+      "{x.list? ∧ x.length = 2 ∧ x[0] ≈ 'ok}",
+    );
+  });
+  it("lambda arrow → ↦ (maps-to)", () => {
+    expect(render("(map (lambda (x) (* x 2)) xs)", math)).toBe("xs.map{(x) ↦ x * 2}");
+  });
+  it("cond/case receiver → ⇀", () => {
+    expect(render("(cond ((f x) => (g)) (else (h)))", math)).toContain("(f x) ⇀ (g)");
+    expect(render("(case k ((1 2) => proc) (else (x)))", math)).toContain("(1 2) ⇀ proc");
+  });
+
+  // reader accepts the math vocabulary (bidirectional) and folds to canonical
+  const reads: Array<[string, string]> = [
+    ["{a ∧ b}", "(and a b)"],
+    ["{a ∨ b}", "(or a b)"],
+    ["{a ≡ b}", "(equal? a b)"],
+    ["{a ≈ b}", "(eq? a b)"],
+    ["{a ≃ b}", "(eqv? a b)"],
+    ["{a ≤ b}", "(<= a b)"],
+    ["{a ≥ b}", "(>= a b)"],
+    ["xs.map{(x) ↦ x * 2}", "(map (lambda (x) (* x 2)) xs)"],
+  ];
+  for (const [sugar, scheme] of reads) it(`reads ${sugar} → ${scheme}`, () => expect(read1(sugar)).toBe(scheme));
+
+  // full round-trip through the math skin
+  for (const s of ["(and (list? x) (or (eq? a b) (<= c d)))", "(map (lambda (x) (* x 2)) xs)", "(equal? p q)"])
+    it(`round-trips ${s} (math)`, () => expect(roundtrip(s, math)).toBe(canon(s)));
+});

@@ -31,22 +31,45 @@ import {
 // glyph → canonical op (inverse of INFIX_GLYPH). INJECTIVE: only ==←equal?, &&←and,
 // ||←or are remapped; everything else (=, eq?, eqv?, arithmetic, comparison) is its
 // own op. So read∘render = id for every equality kind.
-const GLYPH_OP: Record<string, string> = { "==": "equal?", "&&": "and", "||": "or" };
+// Both skins fold to the canonical op: ASCII (`==`/`&&`/`||`) AND the math skin
+// (`≡`/`∧`/`∨`/`≈`/`≃`/`≤`/`≥`). The reader is skin-agnostic — it accepts either
+// vocabulary (or a mix), so a math-rendered view saves back to the same canonical scheme.
+const GLYPH_OP: Record<string, string> = {
+  "==": "equal?",
+  "&&": "and",
+  "||": "or",
+  "≡": "equal?",
+  "∧": "and",
+  "∨": "or",
+  "≈": "eq?",
+  "≃": "eqv?",
+  "≤": "<=",
+  "≥": ">=",
+};
 const opOf = (glyph: string): string => GLYPH_OP[glyph] ?? glyph;
 
-// glyph → precedence — must mirror sugarcoat-render's INFIX_PREC. `=>` loosest.
+// glyph → precedence — must mirror sugarcoat-render's INFIX_PREC. `=>`/`↦` loosest.
+// Each math glyph mirrors its ASCII twin's precedence (see GLYPH_OP).
 const GLYPH_PREC: Record<string, number> = {
   "=>": 0,
+  "↦": 0, // math lambda arrow (maps-to) — same as `=>`
   "||": 1,
+  "∨": 1,
   "&&": 2,
+  "∧": 2,
   "==": 3,
+  "≡": 3,
   "=": 3,
   "eq?": 3,
+  "≈": 3,
   "eqv?": 3,
+  "≃": 3,
   "<": 3,
   ">": 3,
   "<=": 3,
+  "≤": 3,
   ">=": 3,
+  "≥": 3,
   "+": 4,
   "-": 4,
   // Multiplicative tier MUST mirror sugarcoat-render's INFIX_PREC — render emits
@@ -614,7 +637,7 @@ function parseElements(toks: Tok[], accessorDepth: number = R7RS_ACCESSOR_DEPTH)
         operands.push(infix(p + 1));
       }
       left =
-        glyph === "=>"
+        glyph === "=>" || glyph === "↦" // ASCII or math (maps-to) lambda arrow
           ? { list: [atom("lambda"), operands[0], operands[1]] }
           : { list: [atom(opOf(glyph)), ...operands] };
     }

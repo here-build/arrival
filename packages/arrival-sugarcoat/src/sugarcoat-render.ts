@@ -229,6 +229,11 @@ export interface SugarcoatOpts {
    *  rendered as a pair line. Homoiconic: the pair is a tree node in the VIEW
    *  that collapses back to the flat `… k v …` canonical on read. */
   kwargHeads: Set<string>;
+  /** Glyph vocabulary. `"ascii"` (default) — `&&`/`||`/`==`/`=>`, keyboard-typeable.
+   *  `"math"` — the Agda-style Unicode skin: `∧`/`∨`/`≡`/`≈`/`≃`/`≤`/`≥`, lambda arrow
+   *  `↦`, cond/case receiver `⇀`. Still a bidirectional lens (the reader accepts BOTH
+   *  vocabularies), just prettier and harder to type — for render eloquence. */
+  skin: "ascii" | "math";
   /** Render the empty-list literal `'()` as the word `nil`. SOUND — the reader folds
    *  `nil` back to `(quote ())`, so it round-trips. schemeToSugarcoat turns this ON
    *  only when the program doesn't shadow `nil` with a non-empty binding (a `(define
@@ -246,6 +251,7 @@ export const DEFAULT_OPTS: SugarcoatOpts = {
   neoteric: false,
   curly: true,
   kwargHeads: new Set(["dict"]),
+  skin: "ascii",
   nilGlyph: false,
   strTolerant: false,
 };
@@ -292,7 +298,24 @@ const INFIX_GLYPH: Record<string, string> = {
   and: "&&",
   or: "||",
 };
-const glyphOf = (op: string): string => INFIX_GLYPH[op] ?? op;
+// The math skin (Agda-style). `∧`/`∨` also retire the `||` overload with symbol-bar
+// `|…|` syntax. `≡` structural-equal, wavy `≈`/`≃` for the identity pair (eq?/eqv?),
+// `≤`/`≥`. Numeric `=`, `<`, `>`, arithmetic stay themselves. Reader accepts both skins.
+const MATH_GLYPH: Record<string, string> = {
+  "equal?": "≡",
+  and: "∧",
+  or: "∨",
+  "eq?": "≈",
+  "eqv?": "≃",
+  "<=": "≤",
+  ">=": "≥",
+};
+const glyphOf = (op: string, o: SugarcoatOpts): string =>
+  (o.skin === "math" ? MATH_GLYPH[op] : undefined) ?? INFIX_GLYPH[op] ?? op;
+// Skin-dependent arrows: the lambda body arrow (`↦` maps-to) and the cond/case
+// receiver (`⇀` partial function). ASCII keeps `=>` and the pierced `=?>`.
+const lamArrow = (o: SugarcoatOpts): string => (o.skin === "math" ? "↦" : "=>");
+const condArrow = (o: SugarcoatOpts): string => (o.skin === "math" ? "⇀" : "=?>");
 
 // Precedence ladder (higher binds tighter), keyed on the CANONICAL op. This is a
 // deliberate departure from SRFI-105 (which is precedence-free): it lets a child
@@ -328,7 +351,7 @@ function infixContent(items: Node[], o: SugarcoatOpts): string {
   return items
     .slice(1)
     .map((x) => infixOperand(x, myPrec, o))
-    .join(` ${glyphOf(op)} `);
+    .join(` ${glyphOf(op, o)} `);
 }
 
 /** Render an operand inside an infix at `parentPrec`. An infix operand keeps its
@@ -722,7 +745,7 @@ function renderTrailingLambda(lam: Node, o: SugarcoatOpts): string {
   const body = childList(lam)[2];
   const bodyTxt = inlineArrowBody(body, o);
   const implicit = names.length === 1 && names[0] === "it" && !(!isAtom(body) && isArrowLambda(body.list));
-  return implicit ? `{ ${bodyTxt} }` : `{(${names.join(" ")}) => ${bodyTxt}}`;
+  return implicit ? `{ ${bodyTxt} }` : `{(${names.join(" ")}) ${lamArrow(o)} ${bodyTxt}}`;
 }
 
 /** One postfix step on the render side: a subscript/key run (`[…]`), or a method
@@ -784,7 +807,7 @@ export function inlineSugarcoat(nd: Node, o: SugarcoatOpts): string {
   // partial function) — never a value or the lambda arrow (that's emitted as a literal
   // by the arrow-lambda branch, never routed through here). Render it `=?>` so the case
   // form matches cond; the reader folds `=?>` back to the `=>` symbol.
-  if (isAtom(nd)) return nd.str ? `"${nd.atom}"` : nd.atom === "=>" ? "=?>" : escSym(nd.atom);
+  if (isAtom(nd)) return nd.str ? `"${nd.atom}"` : nd.atom === "=>" ? condArrow(o) : escSym(nd.atom);
   const items = nd.list;
   if (items.length === 0) return "()";
   if (o.nilGlyph && isEmptyQuote(items)) return "nil";
@@ -795,7 +818,7 @@ export function inlineSugarcoat(nd: Node, o: SugarcoatOpts): string {
     return `{${infixContent(items, o)}}`;
   }
   if (isArrowLambda(items)) {
-    return `{${inlineSugarcoat(items[1], o)} => ${inlineArrowBody(items[2], o)}}`;
+    return `{${inlineSugarcoat(items[1], o)} ${lamArrow(o)} ${inlineArrowBody(items[2], o)}}`;
   }
   // postfix chain (§4.3 + §5 gate): accessor/key subscripts (`(car X)`→`X[0]`,
   // `(:k X)`→`X[:k]`, `(@ X k)`→`X[k]`) and method dots (`(map Λ xs)`→`xs.map{…}`,
@@ -877,7 +900,7 @@ function formatInfix(items: Node[], col: number, o: SugarcoatOpts): string {
   let out = `{${formatSugarcoat(operands[0], col + 1, o)}`;
   const contCol = col + 2;
   for (let k = 1; k < operands.length; k++) {
-    const g = glyphOf(op);
+    const g = glyphOf(op, o);
     out += `\n${" ".repeat(contCol)}${g} ${formatSugarcoat(operands[k], contCol + g.length + 1, o)}`;
   }
   return `${out}}`;
@@ -972,10 +995,10 @@ function formatSugarcoatCore(nd: Node, col: number, o: SugarcoatOpts): string {
       if (clause.list.length === 3 && isAtom(clause.list[1]) && !clause.list[1].str && clause.list[1].atom === "=>") {
         const testFlat = inlineSugarcoat(clause.list[0], o);
         const recvFlat = inlineSugarcoat(clause.list[2], o);
-        if (col + 2 + testFlat.length + 5 + recvFlat.length <= o.width) {
-          out.push(`${pad2}${testFlat} =?> ${recvFlat}`);
+        if (col + 2 + testFlat.length + condArrow(o).length + 2 + recvFlat.length <= o.width) {
+          out.push(`${pad2}${testFlat} ${condArrow(o)} ${recvFlat}`);
         } else {
-          out.push(`${pad2}${testFlat} =?>`);
+          out.push(`${pad2}${testFlat} ${condArrow(o)}`);
           out.push(pad4 + formatSugarcoat(clause.list[2], col + 4, o));
         }
         continue;
