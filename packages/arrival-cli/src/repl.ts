@@ -157,26 +157,46 @@ async function replInteractive(ambient: LoaderSession["ambient"], scope: LoaderS
   return 0;
 }
 
-/** `armed` — the host-armed capability set (`--with` / config file), assembled into
- *  the session ambient at start; the whole session sees one vocabulary. */
-export async function repl(armed?: ArmedCapabilities): Promise<number> {
-  const { ambient, scope } = await loaderSession(process.cwd(), "arrival-repl", armed);
+/**
+ * Render an interactive session a HOST already assembled — the reuse seam (inhuman's
+ * `inhuman repl`, and the `arrival` bin below both go through here). The host owns the
+ * capability VOCABULARY — its infer / loader / extras armed into `session.ambient`; this
+ * owns only the TERMINAL — budget defaults, the bottom-anchored Ink TUI, syntax
+ * highlighting, history recall. Non-TTY falls to the plain reader; `ARRIVAL_REPL=classic`
+ * to the painter path. Disposes the session ambient on exit.
+ *
+ * `opts.version` labels the vanishing status line (a host passes its OWN version; default
+ * = arrival-cli's). `opts.capabilityCount` is the count shown beside it.
+ */
+export async function replFromSession(
+  session: LoaderSession,
+  opts: { version?: string; capabilityCount?: number } = {},
+): Promise<number> {
+  const { ambient, scope } = session;
   const interactive = process.stdin.isTTY === true;
   if (!interactive) return replPlain(ambient, scope);
   // `ARRIVAL_REPL=classic` keeps the pre-Ink painter path — the escape hatch if the TUI
   // misbehaves on some terminal.
-  if (process.env.ARRIVAL_REPL === "classic") return replInteractive(ambient, scope, armed);
+  if (process.env.ARRIVAL_REPL === "classic") return replInteractive(ambient, scope);
   // Default TTY: the Ink bottom-anchored TUI (repl-ink.tsx).
-  const version = await readOwnVersion();
+  const version = opts.version ?? (await readOwnVersion());
   try {
     await replInk({
       session: { ambient, scope },
       ...budgets(),
-      capabilityCount: armed?.capabilities.length ?? 0,
+      capabilityCount: opts.capabilityCount ?? 0,
       version,
     });
   } finally {
     await ambient.dispose();
   }
   return 0;
+}
+
+/** `armed` — the host-armed capability set (`--with` / config file), assembled into
+ *  the session ambient at start; the whole session sees one vocabulary. The `arrival`
+ *  bin's own repl: assemble the loader session here, then render via the host seam. */
+export async function repl(armed?: ArmedCapabilities): Promise<number> {
+  const session = await loaderSession(process.cwd(), "arrival-repl", armed);
+  return replFromSession(session, { capabilityCount: armed?.capabilities.length ?? 0 });
 }
