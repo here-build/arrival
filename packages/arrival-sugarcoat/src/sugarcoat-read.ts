@@ -48,6 +48,10 @@ const GLYPH_OP: Record<string, string> = {
 };
 const opOf = (glyph: string): string => GLYPH_OP[glyph] ?? glyph;
 
+// Negated-comparison glyphs → the relop they wrap in `(not (relop …))` (Family B,
+// bidirectional). The infix builder special-cases these to nest under `not`.
+const NEG_READ: Record<string, string> = { "≠": "=", "≢": "equal?", "≉": "eq?", "≄": "eqv?" };
+
 // glyph → precedence — must mirror sugarcoat-render's INFIX_PREC. `=>`/`↦` loosest.
 // Each math glyph mirrors its ASCII twin's precedence (see GLYPH_OP).
 const GLYPH_PREC: Record<string, number> = {
@@ -70,6 +74,11 @@ const GLYPH_PREC: Record<string, number> = {
   "≤": 3,
   ">=": 3,
   "≥": 3,
+  // negated-comparison glyphs (math skin) — same tier; each expands to `(not (relop …))`.
+  "≠": 3,
+  "≢": 3,
+  "≉": 3,
+  "≄": 3,
   "+": 4,
   "-": 4,
   // Multiplicative tier MUST mirror sugarcoat-render's INFIX_PREC — render emits
@@ -639,7 +648,9 @@ function parseElements(toks: Tok[], accessorDepth: number = R7RS_ACCESSOR_DEPTH)
       left =
         glyph === "=>" || glyph === "↦" // ASCII or math (maps-to) lambda arrow
           ? { list: [atom("lambda"), operands[0], operands[1]] }
-          : { list: [atom(opOf(glyph)), ...operands] };
+          : NEG_READ[glyph] // `≠`/`≢`/`≉`/`≄` → (not (relop …))
+            ? { list: [atom("not"), { list: [atom(NEG_READ[glyph]), ...operands] }] }
+            : { list: [atom(opOf(glyph)), ...operands] };
     }
     return left;
   }

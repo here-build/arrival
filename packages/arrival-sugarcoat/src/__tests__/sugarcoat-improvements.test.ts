@@ -200,3 +200,29 @@ describe("math skin: infix glyph swaps + arrows (opt-in, bidirectional)", () => 
   for (const s of ["(and (list? x) (or (eq? a b) (<= c d)))", "(map (lambda (x) (* x 2)) xs)", "(equal? p q)"])
     it(`round-trips ${s} (math)`, () => expect(roundtrip(s, math)).toBe(canon(s)));
 });
+
+// ── Family B: negated-comparison collapse (math skin, bidirectional) ──
+describe("math skin: (not (relop …)) ↔ ≠ / ≢ / ≉ / ≄", () => {
+  const collapses: Array<[string, string]> = [
+    ["(not (= a b))", "{a ≠ b}"],
+    ["(not (equal? a b))", "{a ≢ b}"],
+    ["(not (eq? a b))", "{a ≉ b}"],
+    ["(not (eqv? a b))", "{a ≄ b}"],
+  ];
+  for (const [scheme, out] of collapses) {
+    it(`${scheme} → ${out}`, () => expect(render(scheme, math)).toBe(out));
+    it(`reads ${out} → ${scheme}`, () => expect(read1(out)).toBe(canon(scheme)));
+    it(`round-trips ${scheme}`, () => expect(roundtrip(scheme, math)).toBe(canon(scheme)));
+  }
+  it("composes inside a larger infix", () => {
+    expect(render("(and p (not (= a b)))", math)).toBe("{p ∧ a ≠ b}");
+    expect(read1("{p ∧ a ≠ b}")).toBe(canon("(and p (not (= a b)))"));
+  });
+  it("a non-comparison (not …) does NOT collapse", () => {
+    expect(render("(not (foo a b))", math)).toBe("(not (foo a b))");
+    expect(render("(not p)", math)).toBe("(not p)"); // deferred: not → ¬
+  });
+  it("ascii skin leaves (not (= a b)) uncollapsed", () => {
+    expect(render("(not (= a b))")).toBe("(not {a = b})");
+  });
+});

@@ -317,6 +317,23 @@ const glyphOf = (op: string, o: SugarcoatOpts): string =>
 const lamArrow = (o: SugarcoatOpts): string => (o.skin === "math" ? "↦" : "=>");
 const condArrow = (o: SugarcoatOpts): string => (o.skin === "math" ? "⇀" : "=?>");
 
+// Family B — the negated-comparison collapse (math skin, bidirectional): `(not (= a
+// b))` → `{a ≠ b}`; the reader pattern-matches `≠` back to `(not (= …))`. Same for the
+// structural (`equal?`→`≢`) and identity (`eq?`→`≉`, `eqv?`→`≄`) heads. Only the binary
+// comparison heads collapse — `(not (foo …))` on a general predicate stays `(not …)`.
+// Precedence is the comparison tier (3), matching the un-negated form.
+const NEG_GLYPH: Record<string, string> = { "=": "≠", "equal?": "≢", "eq?": "≉", "eqv?": "≄" };
+function negComparison(items: Node[], o: SugarcoatOpts): { glyph: string; operands: Node[] } | null {
+  if (o.skin !== "math" || items.length !== 2 || !isAtom(items[0]) || items[0].str || items[0].atom !== "not")
+    return null;
+  const inner = items[1];
+  if (isAtom(inner) || inner.list.length < 3 || !isAtom(inner.list[0]) || inner.list[0].str) return null;
+  const glyph = NEG_GLYPH[inner.list[0].atom];
+  return glyph ? { glyph, operands: inner.list.slice(1) } : null;
+}
+const negContent = (neg: { glyph: string; operands: Node[] }, o: SugarcoatOpts): string =>
+  neg.operands.map((x) => infixOperand(x, 3, o)).join(` ${neg.glyph} `);
+
 // Precedence ladder (higher binds tighter), keyed on the CANONICAL op. This is a
 // deliberate departure from SRFI-105 (which is precedence-free): it lets a child
 // that binds tighter than its parent drop its braces, so compound expressions read
@@ -359,6 +376,8 @@ function infixContent(items: Node[], o: SugarcoatOpts): string {
  *  preserved, incl. non-associative `-`/`/`); a tighter operand drops them and
  *  shares the zone. Non-infix operands render normally. */
 function infixOperand(nd: Node, parentPrec: number, o: SugarcoatOpts): string {
+  const neg = !isAtom(nd) ? negComparison(nd.list, o) : null;
+  if (neg) return 3 <= parentPrec ? `{${negContent(neg, o)}}` : negContent(neg, o);
   if (!isAtom(nd) && nd.list.length >= 3 && isInfix(nd.list, o)) {
     const opPrec = precOf(atomText(nd.list[0]));
     const content = infixContent(nd.list, o);
@@ -814,6 +833,8 @@ export function inlineSugarcoat(nd: Node, o: SugarcoatOpts): string {
   if (isQuoteForm(items)) return QUOTE_PREFIX[atomText(items[0])] + inlineSugarcoat(items[1], o);
   const at = renderAtExpr(items, o);
   if (at != null) return at;
+  const neg = negComparison(items, o); // (not (= a b)) → {a ≠ b} (math skin)
+  if (neg) return `{${negContent(neg, o)}}`;
   if (isInfix(items, o)) {
     return `{${infixContent(items, o)}}`;
   }
