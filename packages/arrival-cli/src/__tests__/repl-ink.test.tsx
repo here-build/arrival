@@ -227,6 +227,16 @@ describe("replInk OSC 133 command blocks", () => {
   });
 });
 
+describe("replInk long-run notify (OSC 9)", () => {
+  it("a fast turn does NOT fire a desktop notification", async () => {
+    const { stdin, lastFrame, frames, unmount } = mount();
+    stdin.write("(+ 1 2)\r");
+    await waitUntil(lastFrame, (f) => /\b3\b/.test(f)); // settled well under the 4s threshold
+    expect(frames.join("")).not.toContain("]9;"); // no OSC 9
+    unmount();
+  });
+});
+
 describe("replInk ,copy", () => {
   it("writes the last settled turn's value via OSC 52", async () => {
     const { stdin, lastFrame, unmount } = mount();

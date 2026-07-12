@@ -29,7 +29,7 @@ import { DISABLE_AUTOWRAP, ENABLE_AUTOWRAP } from "./ansi.js";
 import { emitForms } from "./form-emitter.js";
 import { pushHistory, recallNext, recallPrev, type NavState } from "./history-nav.js";
 import { highlightScheme } from "./highlight.js";
-import { clipboardSet, COMMAND_START, commandDone } from "./osc.js";
+import { clipboardSet, COMMAND_START, commandDone, notify } from "./osc.js";
 import { colorizeSexpr } from "./sexpr-color.js";
 import { toLens, type Lens } from "./lens.js";
 import { paint, colorMode, type TintName } from "./tints.js";
@@ -48,6 +48,10 @@ const TINT: Record<ReplBlockState, TintName> = {
 
 const PROMPT = "> ";
 const CONTINUE = ". ";
+
+/** A turn slower than this fires an OSC 9 desktop notification — long enough that a run you'd
+ *  look away from (a slow `infer`, heavy compute) pings you back, short enough to catch it. */
+const NOTIFY_MS = 4000;
 
 /** Does the buffer close (balanced parens/strings/blocks)? The oracle's own scanner — the
  *  one lexer that reads `#\(`, strings, `#|…|#` faithfully. Unscannable ⇒ let it submit and
@@ -197,6 +201,7 @@ function ReplApp({ session, budgetMs, heapBudget, version, capabilityCount, mode
     async (src: string): Promise<void> => {
       let model = EMPTY_REPL_MODEL;
       setRunning(model);
+      const started = Date.now();
       await emitForms(src, {
         ambient: session.ambient,
         scope: session.scope,
@@ -207,6 +212,13 @@ function ReplApp({ session, budgetMs, heapBudget, version, capabilityCount, mode
           setRunning(model);
         },
       });
+      // A slow turn pings the desktop (OSC 9) — you can look away from a long run and get
+      // pulled back. One-shot escape via the same side-channel as the marks; no display effect.
+      const elapsed = Date.now() - started;
+      if (elapsed >= NOTIFY_MS) {
+        const label = src.split("\n")[0]!.slice(0, 60);
+        writeStdout(notify(`arrival — done in ${(elapsed / 1000).toFixed(1)}s · ${label}`));
+      }
       lastValueText.current = turnValueText(model.blocks);
       // OSC 133 command block (§ TASK 2): COMMAND_START goes out BEFORE the state flip that
       // makes Ink append this turn to `<Static>` scrollback; `waitUntilRenderFlush` blocks
