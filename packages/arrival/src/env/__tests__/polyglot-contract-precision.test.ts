@@ -25,10 +25,14 @@
 // honest accounting of what is and isn't mechanically provable for that one symbol.
 
 import { describe, expect, it } from "vitest";
+import dedent from "dedent";
 import polyglot from "../polyglot.js";
 import type { AEntity } from "../../common/symbol.js";
+import { signatureOf } from "../../type-layer/schema-to-ts.js";
 import { ADict } from "../../values/primitives/ADict.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+
+const norm = (s: string) => s.replace(/\s+/g, " ").trim();
 
 // `symbols` is a builder (activation) => Record<string, AEntity> for this capability —
 // call it with an empty (unused) activation shape; polyglot's symbols builder never reads
@@ -42,6 +46,13 @@ function nativeDef(name: string) {
   const def = symbols[name];
   if (def === undefined) throw new Error(`polyglot pack: no symbol named ${name}`);
   if (def.kind !== "native") throw new Error(`polyglot pack: ${name} is not a native def (got ${def.kind})`);
+  return def;
+}
+
+function defineDef(name: string) {
+  const def = symbols[name];
+  if (def === undefined) throw new Error(`polyglot pack: no symbol named ${name}`);
+  if (def.kind !== "define") throw new Error(`polyglot pack: ${name} is not a define def (got ${def.kind})`);
   return def;
 }
 
@@ -76,5 +87,46 @@ describe("scheme/polyglot Contract precision — the real exported ops reject wr
     expect(def.out.safeParse([["not", "a", "dict"]]).success).toBe(false);
     expect(def.out.safeParse(["just a string"]).success).toBe(false);
     expect(def.out.safeParse([42]).success).toBe(false);
+  });
+});
+
+describe("scheme/polyglot Contract.type overrides — compose/pipe composition ladders (z.lambda harvest is shapeless)", () => {
+  it("compose: RTL seed-last ladder depth 0–6", () => {
+    expect(norm(signatureOf(defineDef("compose")))).toBe(
+      norm(dedent`
+        {
+          (): <T>(x: T) => T;
+          <A extends unknown[], R>(f: (...args: A) => R): (...args: A) => R;
+          <A extends unknown[], B, R>(f: (b: B) => R, g: (...args: A) => B): (...args: A) => R;
+          <A extends unknown[], B, C, R>(f: (c: C) => R, g: (b: B) => C, h: (...args: A) => B): (...args: A) => R;
+          <A extends unknown[], B, C, D, R>(f: (d: D) => R, g: (c: C) => D, h: (b: B) => C, i: (...args: A) => B): (...args: A) => R;
+          <A extends unknown[], B, C, D, E, R>(f: (e: E) => R, g: (d: D) => E, h: (c: C) => D, i: (b: B) => C, j: (...args: A) => B): (...args: A) => R;
+          <A extends unknown[], B, C, D, E, F, R>(f: (f: F) => R, g: (e: E) => F, h: (d: D) => E, i: (c: C) => D, j: (b: B) => C, k: (...args: A) => B): (...args: A) => R;
+        }
+      `),
+    );
+  });
+
+  it("pipe: LTR seed-first ladder depth 0–6", () => {
+    expect(norm(signatureOf(defineDef("pipe")))).toBe(
+      norm(dedent`
+        {
+          (): <T>(x: T) => T;
+          <A extends unknown[], R>(f: (...args: A) => R): (...args: A) => R;
+          <A extends unknown[], B, R>(f: (...args: A) => B, g: (b: B) => R): (...args: A) => R;
+          <A extends unknown[], B, C, R>(f: (...args: A) => B, g: (b: B) => C, h: (c: C) => R): (...args: A) => R;
+          <A extends unknown[], B, C, D, R>(f: (...args: A) => B, g: (b: B) => C, h: (c: C) => D, i: (d: D) => R): (...args: A) => R;
+          <A extends unknown[], B, C, D, E, R>(f: (...args: A) => B, g: (b: B) => C, h: (c: C) => D, i: (d: D) => E, j: (e: E) => R): (...args: A) => R;
+          <A extends unknown[], B, C, D, E, F, R>(f: (...args: A) => B, g: (b: B) => C, h: (c: C) => D, i: (d: D) => E, j: (e: E) => F, k: (f: F) => R): (...args: A) => R;
+        }
+      `),
+    );
+  });
+
+  // flow is a CONSTANT define (eq? pipe) — no Contract.type channel; harvest stays z.lambda.
+  it("flow: constant alias — no type override (callable false)", () => {
+    const def = defineDef("flow");
+    expect(def.callable).toBe(false);
+    expect(def.type).toBeUndefined();
   });
 });

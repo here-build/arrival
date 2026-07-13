@@ -78,6 +78,7 @@
 import { EnvCapability } from "../common/capability.js";
 import { symbol, type CallCtx } from "../common/symbol.js";
 import * as z from "../common/scheme-zod.js";
+import dedent from "dedent";
 import { schemeBool } from "../values/op-helpers.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
@@ -176,7 +177,7 @@ export default new EnvCapability("scheme/polyglot", {
       // (z.array(z.string)'s scheme side — Face split).
       { input: [z.value], output: [z.array(z.string)] },
       function (this: CallCtx, obj: unknown) {
-        const keys = obj != null ? (obj as Partial<AValue>)["arrival/tagless-final/keys"] : undefined;
+        const keys = obj == null ? undefined : (obj as Partial<AValue>)["arrival/tagless-final/keys"];
         const names = typeof keys === "function" ? keys.call(obj) : [];
         // Live invocation ctx — `this: CallCtx` already carries it (dispatch's
         // `hostImpl.apply(makeCallCtx(runCtx), args)`, common/capability.ts); minting
@@ -251,12 +252,26 @@ export default new EnvCapability("scheme/polyglot", {
     // alike; their dialect-specific spellings — `comp`, `~>` chains — live in the
     // sibling packs. `flow` is Ramda/F#-flavored, not any one Lisp dialect's own.)
     // ═══════════════════════════════════════════════════════════════════════════
-    // compose — right-to-left composition: ((compose f g) x) => (f (g x)).
-    // Keyword accessors are first-class functions, so (compose :state last :versions)
-    // names a pipeline — hence `applicable` (callable-or-symbol), never bare z.lambda,
-    // on the variadic fns. Output is unconditional: the body always mints a lambda.
+    // compose — right-to-left: ((compose f g) x) => (f (g x)).
+    // `applicable` (not bare z.lambda): keyword accessors are first-class — (compose :k f).
+    // type: seed multi-arg (`apply`); rest unary. Depth 0–6; deeper is a type error (no catch-all).
     compose: symbol.define`compose: right-to-left composition — ((compose f g) x) => (f (g x)); zero fns = identity`(
-      { input: [], inputRest: applicable, output: [z.lambda] },
+      {
+        input: [],
+        inputRest: applicable,
+        output: [z.lambda],
+        type: dedent`
+          {
+            (): <T>(x: T) => T;
+            <A extends unknown[], R>(f: (...args: A) => R): (...args: A) => R;
+            <A extends unknown[], B, R>(f: (b: B) => R, g: (...args: A) => B): (...args: A) => R;
+            <A extends unknown[], B, C, R>(f: (c: C) => R, g: (b: B) => C, h: (...args: A) => B): (...args: A) => R;
+            <A extends unknown[], B, C, D, R>(f: (d: D) => R, g: (c: C) => D, h: (b: B) => C, i: (...args: A) => B): (...args: A) => R;
+            <A extends unknown[], B, C, D, E, R>(f: (e: E) => R, g: (d: D) => E, h: (c: C) => D, i: (b: B) => C, j: (...args: A) => B): (...args: A) => R;
+            <A extends unknown[], B, C, D, E, F, R>(f: (f: F) => R, g: (e: E) => F, h: (d: D) => E, i: (c: C) => D, j: (b: B) => C, k: (...args: A) => B): (...args: A) => R;
+          }
+        `,
+      },
       `(lambda fns
          (lambda args
            (let ((rfns (reverse fns)))
@@ -265,9 +280,24 @@ export default new EnvCapability("scheme/polyglot", {
                  (let loop ((fs (cdr rfns)) (acc (apply (car rfns) args)))
                    (if (null? fs) acc (loop (cdr fs) ((car fs) acc))))))))`,
     ),
-    // pipe — left-to-right composition: ((pipe f g) x) => (g (f x)).
+    // pipe — left-to-right twin of compose. Same ladder, seed first.
     pipe: symbol.define`pipe: left-to-right composition — ((pipe f g) x) => (g (f x)); zero fns = identity`(
-      { input: [], inputRest: applicable, output: [z.lambda] },
+      {
+        input: [],
+        inputRest: applicable,
+        output: [z.lambda],
+        type: dedent`
+          {
+            (): <T>(x: T) => T;
+            <A extends unknown[], R>(f: (...args: A) => R): (...args: A) => R;
+            <A extends unknown[], B, R>(f: (...args: A) => B, g: (b: B) => R): (...args: A) => R;
+            <A extends unknown[], B, C, R>(f: (...args: A) => B, g: (b: B) => C, h: (c: C) => R): (...args: A) => R;
+            <A extends unknown[], B, C, D, R>(f: (...args: A) => B, g: (b: B) => C, h: (c: C) => D, i: (d: D) => R): (...args: A) => R;
+            <A extends unknown[], B, C, D, E, R>(f: (...args: A) => B, g: (b: B) => C, h: (c: C) => D, i: (d: D) => E, j: (e: E) => R): (...args: A) => R;
+            <A extends unknown[], B, C, D, E, F, R>(f: (...args: A) => B, g: (b: B) => C, h: (c: C) => D, i: (d: D) => E, j: (e: E) => F, k: (f: F) => R): (...args: A) => R;
+          }
+        `,
+      },
       `(lambda fns
          (lambda args
            (if (null? fns)
@@ -275,10 +305,7 @@ export default new EnvCapability("scheme/polyglot", {
                (let loop ((fs (cdr fns)) (acc (apply (car fns) args)))
                  (if (null? fs) acc (loop (cdr fs) ((car fs) acc)))))))`,
     ),
-    // flow — pipe's Ramda/F#-flavored alias. CONSTANT: the RHS is the bare
-    // identifier `pipe` (already bound — declared just above), so the contract
-    // is the single value schema z.lambda (the value IS the bound pipe
-    // procedure).
+    // flow — CONSTANT alias of pipe (eq? identity). No Contract.type channel on constants.
     flow: symbol.define`flow: an alias of pipe (left-to-right composition) — the Ramda/F# name`(z.lambda, `pipe`),
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -292,12 +319,13 @@ export default new EnvCapability("scheme/polyglot", {
     // boundary once per element, so a `z.list()` codec (an O(n) spine decode)
     // would turn one interleave into O(n²) decode work; `z.value`'s instanceof
     // check keeps the recursive boundary flat.
-    "%interleave": symbol.define`%interleave: zip ks and vs into a flat (k v k v …) list — the dict/apply argument shape (private helper)`(
-      { input: [z.value, z.value], output: [z.value] },
-      `(lambda (ks vs)
+    "%interleave":
+      symbol.define`%interleave: zip ks and vs into a flat (k v k v …) list — the dict/apply argument shape (private helper)`(
+        { input: [z.value, z.value], output: [z.value] },
+        `(lambda (ks vs)
          (if (or (null? ks) (null? vs))
              '()
              (cons (car ks) (cons (car vs) (%interleave (cdr ks) (cdr vs))))))`,
-    ),
+      ),
   },
 });
