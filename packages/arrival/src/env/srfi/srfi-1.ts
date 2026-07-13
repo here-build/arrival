@@ -1,69 +1,56 @@
-// SRFI-1 — list library completion. Scheme-bootstrap capability.
+// SRFI-1 — list library *subset* for immutable Arrival. Scheme-bootstrap capability.
 //
 // SINGLE SOURCE: `base-packs.ts` assembles this pack (via `allSrfi`) and evals it
-// (via initBridge's assembleEnv), so this module is the sole definition site.
+// (via initBridge's assembleEnv), so this module is the sole definition site for the
+// names it owns.
 //
-// SCOPE: the whole SRFI-1 surface lives here — the *completion* set (take-while …
-// length+), `remove` (relocated from arrival-extensions, beside its `delete` twin),
-// and the "missing third" + parallel-list utilities (iota, range — iota's [0,stop)
-// wrapper, delete-duplicates, filter-map, count, append-map, some/every, zip,
-// list-index, unfold) plus the safe list-head accessors first?/first-or — relocated
-// here from the dissolved arrival-extensions pack as the falsy/default-on-empty twins of
-// SRFI-1 `first`, a contract loose `car` cannot supply (it projects to truthy nil).
+// SCOPE (honest): NOT the full SRFI-1 export set. Agent-reached completion set +
+// parallel-list utilities + arrival extras, under **implement-or-door**:
+//   • Live: take/drop/take-while/drop-while, span/break/partition as (list a b),
+//     first…tenth, last/last-pair, find/find-tail, filter/remove/delete*,
+//     fold-right/reduce/reduce-right, concatenate/append-reverse, iota, zip,
+//     some (+ any alias)/every, list-index, count, filter-map, append-map,
+//     length+, list-tabulate, unfold (HISTORICAL protocol — see DEVIATIONS).
+//   • Doored: remaining official exports — linear-update `!` purity doors; pure
+//     unshipped names as subset doors; bare `fold` → reduce / fold-right.
+//   • Peer-covered (scheme/lists + equality; not re-listed here): cons, list, map,
+//     for-each, member/assoc family, set-car!/set-cdr!/append!/list-set! purity.
+//   • Extras (not SRFI): first?, first-or, range; private %… helpers.
 //
-// DEPS: the define bodies below freely reference
+// DEVIATIONS FROM SRFI-1 (read before porting):
+//   • Multi-return doored on binding; span/break/partition products are (list a b).
+//   • some is SRFI any (Ramda-familiar name); `any` aliases it. both some and every
+//     return #t/#f only (not last-pred-value).
+//   • find miss → nil (truthy ANil), not #f — known; fix tracked separately.
+//   • unfold is NOT SRFI's (p f g seed); historical (fn init) pair-or-#f protocol.
+//   • take/drop/filter/reduce may be representation-polymorphic; SRFI is list-only.
+//     take/drop reject non-collection receivers even at n=0.
+//
+// DEPS: the define bodies freely reference
 //   • `not`/`equal?`/`eq?`/`pair?`/`null?`  → scheme/equality   (NATIVE_PACKS)
 //   • `<=`/`<`/`>=`/`=`/`+`/`-`/`*`         → scheme/numeric    (NATIVE_PACKS)
 //   • `error`                               → scheme/exceptions (BASE_PACKS)
-//   • `cons`/`reverse`/`append`/`member`/`length`/`map`/`apply`/`list` → scheme/lists (BASE_PACKS)
+//   • `cons`/`reverse`/`append`/`member`/`length`/`map`/`apply`/`list` → scheme/lists
 // `deps: [equality, numeric, exceptions, lists]`.
-// span/break/partition return `(list a b)` (multi-return doored on binding).
-// `car`/`cdr`/`cadr` need no edge: the cxr synth family is a kernel resolver, in
-// the bake allowlist by construction (define-bake.ts's CXR_RE).
+// `car`/`cdr`/`cadr` need no edge: cxr synth is a kernel resolver (define-bake CXR_RE).
 //
-// CONTRACT CONVENTIONS (the judgment calls, so the next author doesn't re-derive
-// them):
-//   - list slots: `z.union([z.pair, z.nil])` — the SHALLOW pair-or-nil identity union
-//     (this file's own `listAlike`), NEVER `z.list`: the list codec WALKS the spine
-//     on decode (O(n) per call) and throws on circular/improper input — but
-//     `length+` exists to ANSWER circular lists, and SRFI-1 blesses dotted tails
-//     for `take`/`drop` ("(take '(1 2 3 . d) 2) ⇒ (1 2)"). The shallow union is
-//     the honest boundary for a family whose bodies own the deep structure
-//     handling.
-//   - xs slots that tolerate ANY value by spec (%list-nth's not-a-pair→error branch,
-//     first?/first-or's whole falsy-on-empty purpose): `z.value` — tolerance IS the
-//     declared contract there, not looseness. (take/drop ALSO declare xs as `z.value`,
-//     but for a different reason now — see the tagless-final dispatcher convention
-//     note below; SRFI-1's own any-value-at-n=0 tolerance is deliberately NOT
-//     preserved there anymore.)
+// CONTRACT CONVENTIONS (judgment calls, so the next author doesn't re-derive them):
+//   - list slots: `z.union([z.pair, z.nil])` — SHALLOW pair-or-nil (listAlike), NEVER
+//     `z.list`: list codec walks the spine (O(n)) and throws on circular/improper, but
+//     `length+` answers circular lists and SRFI-1 blesses dotted tails for take/drop.
+//   - xs slots that tolerate ANY value by spec (%list-nth not-a-pair→error, first?/first-or):
+//     `z.value`. take/drop also use `z.value` for tagless dispatch (not SRFI any-at-n=0).
 //   - two-list products (span/break/partition): `output: [listAlike]` — `(list a b)`.
-//   - fresh-list outputs built via `reverse`/`cons` chains: `z.union([z.pair, z.nil])`.
-//     Tail-returning outputs (drop/drop-while/append-reverse/concatenate — the result
-//     embeds a caller-supplied tail the shallow input contract cannot promise is
-//     proper): `z.value`, documented per site.
-//   - counts/indices: `z.exact` where built purely from exact literals + `+`/`-`
-//     (list-index, length+'s n), `z.schemeNumber` where the value is another
-//     verb's output (`count` returns `length`'s result, and length's own
-//     declared output is `z.schemeNumber`).
-//   - some/every: `z.boolean` — arrival's historical some/every return #t/#f, NOT
-//     SRFI's last-pred-value (only #f is falsy here — ANil is truthy — so the `and`
-//     chain in %every can only ever egress #t or #f). Deviation preserved 1:1.
+//   - fresh-list outputs via reverse/cons: `z.union([z.pair, z.nil])`. Tail-returning
+//     (drop/drop-while/append-reverse/concatenate): `z.value` when embedding caller tails.
+//   - counts/indices: `z.exact` from exact arithmetic; `z.schemeNumber` when re-exporting
+//     another verb's numeric output (count ← length).
+//   - some/every: `z.boolean` — #t/#f only, not SRFI last-pred-value.
 //
-// PERF PROTOCOL (the hot-path judgment this pack is the flagship for): the
-// contract wrapper costs one `z.decode` + one async hop PER CALL THROUGH THE
-// BOUND SYMBOL. Most of this pack's defines recurse via named `let` — their
-// recursion never re-crosses the boundary, so they pay ONE decode per outer call
-// (cold; enforcement is effectively free against interpretation cost). The
-// direct self-recursers (%list-nth, %any-null?, %some, %every, zip) are written
-// in that same named-let idiom deliberately: a body that self-recursed through
-// its own bound wrapper would pay a decode + async hop PER ELEMENT instead. (take
-// and drop LEFT this list — they're tagless-final dispatchers now, not scheme
-// named-lets; their per-element cost lives on the receiver's own term, outside
-// this wrapper's boundary entirely.) The one remaining per-element boundary
-// crossing is compositional — %some/%every call the validated `%any-null?`
-// sibling once per element-tuple, and zip's loop calls validated `some` per
-// element — negligible against interpretation cost, so the `validate:false`
-// valve stays unused, reached for only when evidence demands it.
+// PERF PROTOCOL: contract costs one decode + async hop PER BOUND CALL. Named-let
+// recursion never re-crosses the boundary (one cold decode per outer call). %list-nth /
+// %any-null? / %some / %every / zip use that idiom. take/drop are tagless dispatchers.
+// validate:false unused — evidence-gated only.
 import { type CallCtx, type MaybePromise, resolveMethod, symbol, withCallbackRoles } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { is_false } from "../../eval/guards.js";
@@ -78,6 +65,81 @@ import equality from "../r7rs/equality.js";
 import exceptions from "../r7rs/exceptions.js";
 import lists from "../r7rs/lists.js";
 import numeric from "../r7rs/numeric.js";
+
+// ── implement-or-door inventory (official SRFI-1 names not live above) ────────
+// Shared purity wording mirrors scheme/lists set-car! / append! doors.
+const PURITY =
+  "every value is frozen by design — linear-update / mutating list ops would falsify the provenance lineage the spine carries; use the pure twin (drop the !) or rebuild with cons / append / filter / reverse / …";
+const LSET =
+  "list-as-set algebra is outside the shipped SRFI-1 subset; compose member / delete / delete-duplicates / filter instead";
+const LSET_BANG = `${PURITY}; pure lset* algebra is also outside the shipped subset`;
+
+/** name → reason. Sole inventory for silent→door coverage of the rest of SRFI-1. */
+const DOORS = {
+  // purity — linear-update / mutators (never implement under immutable subset)
+  "take!": `${PURITY}; use take`,
+  "drop-right!": `${PURITY}; use drop-right once live, or rebuild`,
+  "split-at!": `${PURITY}; use pure split-at product once live, or (list (take xs n) (drop xs n))`,
+  "concatenate!": `${PURITY}; use concatenate`,
+  "reverse!": `${PURITY}; use reverse`,
+  "append-reverse!": `${PURITY}; use append-reverse`,
+  "append-map!": `${PURITY}; use append-map`,
+  "map!": `${PURITY}; use map`,
+  "filter!": `${PURITY}; use filter`,
+  "partition!": `${PURITY}; use partition → (list yes no)`,
+  "remove!": `${PURITY}; use remove`,
+  "take-while!": `${PURITY}; use take-while`,
+  "span!": `${PURITY}; use span`,
+  "break!": `${PURITY}; use break`,
+  "delete!": `${PURITY}; use delete`,
+  "delete-duplicates!": `${PURITY}; use delete-duplicates`,
+  "alist-delete!": `${PURITY}; filter by key with remove / filter`,
+  "lset-union!": LSET_BANG,
+  "lset-intersection!": LSET_BANG,
+  "lset-difference!": LSET_BANG,
+  "lset-xor!": LSET_BANG,
+  "lset-diff+intersection!": LSET_BANG,
+
+  // not-in-subset — pure but unshipped (doors, not silence)
+  xcons: "tiny HOF sugar (lambda (d a) (cons a d)) — write cons flipped or a lambda",
+  "cons*": "rest-as-tail constructor not shipped; nest cons / list with last cdr",
+  "circular-list": "cycle construction is outside the immutable subset; circular *detection* is length+ → #f",
+  "proper-list?": "not in shipped subset; use list? / pair-walk + null?",
+  "circular-list?": "not shipped; length+ → #f is the cycle answer we expose",
+  "dotted-list?": "not shipped; dotted tails only where SRFI blesses (take/drop/length+)",
+  "not-pair?": "sugar for (not (pair? x)) — write that or compose not + pair?",
+  "null-list?": "termination helper for proper/circular lists not shipped; use null? carefully",
+  "list=": "element-wise n-ary list equality with custom elt= not shipped; use equal? or a fold",
+  "car+cdr": "multi-return deconstructor — multi-return is doored; use (list (car p) (cdr p))",
+  "take-right": "pure but unshipped; rebuild with length + drop / reverse-take pattern",
+  "drop-right": "pure but unshipped; rebuild with length + take pattern",
+  "split-at": "pure multi-product not shipped; use (list (take xs n) (drop xs n))",
+  unzip1: "transpose inverse of zip not shipped; (map car lists) for the first column",
+  unzip2: "n-way unzip multi-return not shipped; compose map car/cadr or door multi-return",
+  unzip3: "n-way unzip multi-return not shipped; compose map over positions",
+  unzip4: "n-way unzip multi-return not shipped; compose map over positions",
+  unzip5: "n-way unzip multi-return not shipped; compose map over positions",
+  "pair-fold": "fold over pairs (sublists) often paired with set-cdr!; not in agent grain",
+  "pair-fold-right": "fold over pairs (sublists); not in agent grain — use fold-right on cars",
+  "unfold-right": "iterative dual of SRFI unfold; not in grain (and our unfold is historical)",
+  "map-in-order": "ordered map for effectful procs; pure map already walks L→R — use map",
+  "pair-for-each": "side-effect walk of pairs; use for-each on cars or recurse on cdr",
+  "alist-cons": "trivial (cons (cons key val) alist) — write that",
+  "alist-copy": "spine copy of alist pairs not shipped; map list-copy / pair rebuild",
+  "alist-delete": "filter by key not shipped; use remove / filter with equal? on cars",
+  "lset<=": LSET,
+  "lset=": LSET,
+  "lset-adjoin": LSET,
+  "lset-union": LSET,
+  "lset-intersection": LSET,
+  "lset-difference": LSET,
+  "lset-xor": LSET,
+  "lset-diff+intersection": `${LSET}; multi-return product would be (list diff intersection) if ever shipped`,
+} as const satisfies Record<string, string>;
+
+const DOOR_SYMBOLS = Object.fromEntries(
+  Object.entries(DOORS).map(([name, reason]) => [name, symbol.notImplemented`${name}: ${reason}`]),
+);
 
 // The shallow pair-or-nil list identity (see CONTRACT CONVENTIONS above) — one shared
 // instance so the harvest prints one name and the decode path is one union.
@@ -582,6 +644,8 @@ export default new EnvCapability("scheme/srfi-1", {
       `(lambda (fn . lists)
          (%some fn lists))`,
     ),
+    // Spec name; same binding as some (boolean-only subset deviation shared).
+    any: symbol.alias`some`,
 
     "%every": symbol.define`%every: #t iff fn holds for every element-tuple of the parallel lists (private helper for every)`(
       { input: [z.lambda, listAlike], output: [z.boolean] },
@@ -633,5 +697,8 @@ export default new EnvCapability("scheme/srfi-1", {
                (reverse result)
                (iter (fn (cdr pair)) (cons (car pair) result)))))`,
     ),
+
+    // Official SRFI-1 names not live above — purity / subset doors (see DOORS).
+    ...DOOR_SYMBOLS,
   },
 });

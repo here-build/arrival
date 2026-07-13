@@ -302,3 +302,25 @@ describe("scheme/srfi-1 — base-packs C3 positioning for declared deps (excepti
     }
   });
 });
+
+describe("scheme/srfi-1 — implement-or-door + any alias", () => {
+  it("any is the SRFI name for some (boolean-only subset)", async () => {
+    const env = await freshEnv();
+    const [a] = await exec("(any odd? '(2 4 5))", { env });
+    const [s] = await exec("(some odd? '(2 4 5))", { env });
+    expect(a).toBe(true);
+    expect(s).toBe(true);
+    const [none] = await exec("(any odd? '(2 4))", { env });
+    expect(none).toBe(false);
+  });
+
+  it("linear-update and pure-unshipped names are doors, not silent absences", () => {
+    const symbols = srfi1.spec.symbols as Record<string, { kind?: string }>;
+    for (const name of ["take!", "filter!", "reverse!", "xcons", "lset-union", "car+cdr", "split-at"] as const) {
+      expect(symbols[name]?.kind, name).toBe("door");
+    }
+    // live family still live
+    expect(symbols.take?.kind).not.toBe("door");
+    expect(symbols.some?.kind).not.toBe("door");
+  });
+});
