@@ -105,6 +105,17 @@ type FieldKeys<O extends object> = (keyof O & string)[];
 //     argument↔parameter checking. `((nth fns i) a b)` → `sexpr(nth(fns, i), a, b)`.
 declare function sexpr<F extends (...a: any[]) => any>(f: F, ...args: Parameters<F>): ReturnType<F>;
 
+// ── Law T truthiness wrapper (v1) ────────────────────────────────────────────
+// Every `if` condition the lens emits wraps in `__scmTruth(c)` (types-emit.ts):
+// Scheme truthiness is `x !== false` — `0`/`""`/`'()` are truthy — while tsc's
+// native condition narrowing is JS-truthiness, which would mint false facts on
+// self-referencing arms (`(if x x 'fallback)` dropping Scheme-truthy 0/"" from
+// the true arm's type). The plain-boolean signature deliberately BLOCKS all
+// condition-value narrowing (maximum-caution v1); the verified upgrade path is
+// `<T>(x: T) => x is Exclude<T, false>` — exact Scheme truthiness AS narrowing —
+// gated on the `(if x x 'fallback)` oracle family.
+declare const __scmTruth: (x: unknown) => boolean;
+
 // ── THE LEAF MERGE CONTRACT ──────────────────────────────────────────────────
 // Every one of the 34 builtin leaves (`prelude/builtins/<slug>.d.ts`) augments
 // `__arr` by re-declaring this interface with its own ONE member, e.g.
