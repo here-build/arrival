@@ -155,6 +155,21 @@ export abstract class ArrivalMcpRunnerDO<Env extends ArrivalMcpRunnerEnv> extend
     return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_TTL_MS;
   }
 
+  /** A fresh, EMPTY handshake meta for lazy re-init (sweep recovery). Drives `#buildLive`'s
+   *  handshake replay so a swept session's non-initialize request is accepted (instead of a
+   *  transport 400) and lands on empty state; `onsessioninitialized` persists the real meta. */
+  #syntheticMeta(sessionId: string, sub: string): SessionMeta {
+    const now = Date.now();
+    return {
+      sessionId,
+      userSub: sub,
+      protocolVersion: this.#pendingInit?.protocolVersion ?? "2025-06-18",
+      clientInfo: this.#pendingInit?.clientInfo ?? {},
+      createdAt: now,
+      lastCallAt: now,
+    };
+  }
+
   async fetch(request: Request): Promise<Response> {
     const sub = request.headers.get(INTERNAL_SUB_HEADER);
     const sessionId = request.headers.get("mcp-session-id");
@@ -178,12 +193,24 @@ export abstract class ArrivalMcpRunnerDO<Env extends ArrivalMcpRunnerEnv> extend
     }
 
     // First request of a fresh session: capture the initialize params for the durable
-    // handshake meta (consumed by onsessioninitialized; harmless no-op on a non-init body).
-    if (meta === undefined && request.method === "POST" && this.#pendingInit === undefined) {
-      this.#pendingInit = await extractInitParams(request);
+    // handshake meta (consumed by onsessioninitialized; undefined on a non-init body).
+    let initParams: Awaited<ReturnType<typeof extractInitParams>>;
+    if (meta === undefined && request.method === "POST") {
+      initParams = await extractInitParams(request);
+      if (initParams !== undefined && this.#pendingInit === undefined) this.#pendingInit = initParams;
     }
 
-    const live = await this.#ensureLive(sessionId, sub, meta);
+    // Lazy re-init (sweep recovery): a non-initialize POST with no meta means the client
+    // believes it holds a session we GC'd. Rather than let the transport 400 "Server not
+    // initialized" (real MCP clients brick on that — they spin the dead id forever), drive an
+    // EMPTY re-init: a synthetic meta makes #buildLive replay the handshake so the transport
+    // accepts the call, and onsessioninitialized persists fresh meta + arms the reaper. The
+    // call runs on empty state; the natural "undefined symbol" error tells the model its
+    // prior session was reset.
+    const swept = meta === undefined && request.method === "POST" && initParams === undefined;
+    const effectiveMeta = swept ? this.#syntheticMeta(sessionId, sub) : meta;
+
+    const live = await this.#ensureLive(sessionId, sub, effectiveMeta);
 
     // Bump the idle TTL on every authenticated touch of an initialized session — UNLESS a
     // sweep raced this fetch (`#gen` bumped): re-persisting `meta` here would resurrect a
