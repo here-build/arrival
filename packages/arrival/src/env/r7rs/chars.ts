@@ -14,6 +14,7 @@ import invariant from "tiny-invariant";
 
 import * as z from "../../common/scheme-zod.js";
 import { symbol, type CallCtx } from "../../common/symbol.js";
+import { STRING_TYPE_GUARD } from "../../common/type-guard-sig.js";
 import { charValue, coerceNumeric, deriveOrd, schemeBool as bool, schemeFalse, schemeTrue } from "../../values/op-helpers.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
 import { AExact } from "../../values/primitives/AExact.js";
@@ -25,7 +26,7 @@ export default new EnvCapability("scheme/chars", {
     // Char harvest image is string (single-char); no separate ambient Char carrier.
     "char?": {
       ...symbol.taglessGuard`char?: #t iff obj is a character`,
-      type: "(x: unknown) => x is string",
+      type: STRING_TYPE_GUARD,
     },
 
     "char=?": symbol.native`char=?: typed equivalence over characters`(

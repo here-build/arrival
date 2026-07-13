@@ -182,21 +182,25 @@ describe("signatureOf — the args-vector → function-signature composer", () =
     expect(signatureOf(def)).toBe("(ip: SchemeIP) => SchemeIP");
   });
 
-  // INVARIANT: `?` type predicates harvest as TS type-guards (arrow form for declare const).
-  it("honors a type-guard `type` on a native type predicate (x is T)", () => {
+  // INVARIANT: `?` type predicates harvest as dual type-guards (unknown arm + Extract arm).
+  it("honors a dual type-guard `type` on a native type predicate", () => {
+    const dual =
+      "{ (x: unknown): x is string; <T>(x: T): x is Extract<T, string>; }";
     const def = symbol.native`string?: proof`(
-      { input: [z.value], output: [z.boolean], type: "(x: unknown) => x is string" },
+      { input: [z.value], output: [z.boolean], type: dual },
       () => true,
     );
-    expect(signatureOf(def)).toBe("(x: unknown) => x is string");
+    expect(signatureOf(def)).toBe(dual);
   });
 
-  it("honors a type-guard `type` on a taglessGuard type predicate", () => {
+  it("honors a dual type-guard `type` on a taglessGuard type predicate", () => {
+    const dual =
+      "{ (x: unknown): x is readonly unknown[]; <T>(x: T): x is Extract<T, readonly any[]>; }";
     const def = {
       ...symbol.taglessGuard`vector?: proof`,
-      type: "(x: unknown) => x is readonly unknown[]",
+      type: dual,
     };
-    expect(signatureOf(def)).toBe("(x: unknown) => x is readonly unknown[]");
+    expect(signatureOf(def)).toBe(dual);
   });
 
   // INVARIANT: a native def composes as scheme-value args with a synchronous (non-Promise) return.

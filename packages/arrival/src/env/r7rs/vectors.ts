@@ -20,6 +20,7 @@
  */
 
 import * as z from "../../common/scheme-zod.js";
+import { VECTOR_TYPE_GUARD } from "../../common/type-guard-sig.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
 import { CallCtx } from "../../common/symbols/_bake.js";
 import { ctxOf } from "../../values/primitives/AValue.js";
@@ -97,8 +98,8 @@ export default new EnvCapability("scheme/vectors", {
     // reach-around in the builtin (the Family-2 "reached around the box" dissolution).
     "vector?": {
       ...symbol.taglessGuard`vector?: #t iff obj is a vector`,
-      // Vector = native TS array in the harvest dialect (carriers: vector ≡ readonly T[]).
-      type: "(x: unknown) => x is readonly unknown[]",
+      // Dual guard: unknown → readonly unknown[]; Extract preserves element types.
+      type: VECTOR_TYPE_GUARD,
     },
 
     "vector-length": symbol.native`vector-length: number of elements in vec`(

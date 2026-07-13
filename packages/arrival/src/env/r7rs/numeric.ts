@@ -23,6 +23,11 @@ import invariant from "tiny-invariant";
 // doesn't depend on load order.
 import "@here.build/error-invariant";
 import { symbol, type Contract, type RestSpec, type VectorSpec } from "../../common/symbol.js";
+import {
+  EXACT_TYPE_GUARD,
+  INEXACT_TYPE_GUARD,
+  NUMBER_TYPE_GUARD,
+} from "../../common/type-guard-sig.js";
 import { EnvCapability } from "../../common/capability.js";
 import { type RunContext } from "../../values/primitives/RunContext.js";
 import { CallCtx } from "../../common/symbols/_bake.js";
@@ -1016,17 +1021,22 @@ const bitwiseXorSpec: NumSpec = { in: [], inRest: z.bigint, out: z.bigint, fn: b
 // `lcmSpec` describes that INTERNAL step, not `lcmFn`'s real `(...unknown[]) => ANumeric`
 // signature, so it is not reused here.) ─────────────────────────────────────────────
 
-/** Type-predicate harvest helper — total boolean at runtime; `type:` is a TS type-guard.
- *  Tower images: exact → bigint, inexact → number, schemeNumber → number | bigint. */
-const typePred = (narrow: string): Contract<VectorSpec, VectorSpec, RestSpec> => ({
+/** Type-predicate contracts — total boolean at runtime; dual type-guard harvest. */
+const NUMBER_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.value],
   output: [z.boolean],
-  type: `(x: unknown) => x is ${narrow}`,
-});
-
-const NUMBER_GUARD = typePred("number | bigint");
-const EXACT_GUARD = typePred("bigint");
-const INEXACT_GUARD = typePred("number");
+  type: NUMBER_TYPE_GUARD,
+};
+const EXACT_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
+  input: [z.value],
+  output: [z.boolean],
+  type: EXACT_TYPE_GUARD,
+};
+const INEXACT_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
+  input: [z.value],
+  output: [z.boolean],
+  type: INEXACT_TYPE_GUARD,
+};
 
 /** floor/ truncate/ → (q . r); input schemeNumber. */
 const QUOTIENT_REMAINDER_PRODUCT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
