@@ -68,6 +68,9 @@ const stringNode: NodeBuilder = (ts) => ts.factory.createKeywordTypeNode(ts.Synt
 const numberNode: NodeBuilder = (ts) => ts.factory.createKeywordTypeNode(ts.SyntaxKind.NumberKeyword);
 const booleanNode: NodeBuilder = (ts) => ts.factory.createKeywordTypeNode(ts.SyntaxKind.BooleanKeyword);
 const bigintNode: NodeBuilder = (ts) => ts.factory.createKeywordTypeNode(ts.SyntaxKind.BigIntKeyword);
+/** number | bigint — looseAnyNumber's decoded JS face (finite number + exact bigint arm). */
+const numberOrBigintNode: NodeBuilder = (ts) =>
+  ts.factory.createUnionTypeNode([numberNode(ts), bigintNode(ts)]);
 const nullNode: NodeBuilder = (ts) => ts.factory.createLiteralTypeNode(ts.factory.createNull());
 const uint8ArrayNode: NodeBuilder = (ts) => ts.factory.createTypeReferenceNode("Uint8Array", undefined);
 const voidNode: NodeBuilder = (ts) => ts.factory.createKeywordTypeNode(ts.SyntaxKind.VoidKeyword);
@@ -101,6 +104,12 @@ const IMAGE_BY_NAME: ReadonlyMap<string, NodeBuilder> = new Map<string, NodeBuil
   // duplicated `number | number` / `bigint | bigint`. The image is their carrier, printed once.
   ["number", numberNode],
   ["bigint", bigintNode],
+  // looseNumber / looseAnyNumber are CODECs whose OUT side is a bare z.custom (so NaN/±Inf
+  // and bigint arms stay legal). Without an image the OUT custom leaf prints as unknown —
+  // floor/abs/etc. harvest as (a: unknown) => unknown even though the decoded type is known.
+  // Teach the names; do NOT rewrite OUT to z.number() (rejects non-finites).
+  ["looseNumber", numberNode],
+  ["looseAnyNumber", numberOrBigintNode],
   ["symbol", stringNode],
   // bytevector is a CODEC in v2 (out = z.instanceof(Uint8Array), a custom leaf that would print
   // `unknown`); the name-keyed image restores its Uint8Array carrier (as v1's instanceof did).

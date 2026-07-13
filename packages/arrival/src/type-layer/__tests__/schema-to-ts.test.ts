@@ -97,6 +97,12 @@ describe("printType — rosetta codecs (decoded JS side, io:output)", () => {
     expect(printType(z.integer)).toBe("number");
     expect(printType(z.bigint)).toBe("bigint");
   });
+  // INVARIANT: looseNumber / looseAnyNumber print by decoded JS type (IMAGE_BY_NAME).
+  // Without images their OUT z.custom leaf would harvest as unknown — floor/abs collapse.
+  it("prints the loose number-codec family by its decoded JS type", () => {
+    expect(printType(z.looseNumber)).toBe("number");
+    expect(printType(z.looseAnyNumber)).toBe("number | bigint");
+  });
 });
 
 describe("printType — compounds", () => {
