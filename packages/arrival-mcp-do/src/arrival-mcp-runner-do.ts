@@ -57,6 +57,10 @@ export const INTERNAL_SUB_HEADER = "x-internal-sub";
 /** Session idle TTL before the alarm reaps (ms), absent an env override. */
 const DEFAULT_TTL_MS = 30 * 60_000;
 
+/** Cap on how long `#close` waits for a live-state dispose before proceeding, so a hung
+ *  teardown (a stuck WS close) can't hold the input gate open indefinitely. */
+const DISPOSE_TIMEOUT_MS = 5_000;
+
 /** The env slice the shell itself reads — a product Env extends this. */
 export interface ArrivalMcpRunnerEnv {
   /** Session idle TTL override (ms) for the reaper alarm. Absent ⇒ 30 minutes. */
@@ -139,6 +143,12 @@ export abstract class ArrivalMcpRunnerDO<Env extends ArrivalMcpRunnerEnv> extend
   #pendingInit?: { protocolVersion: string; clientInfo: Record<string, unknown> };
   /** One-at-a-time tool-call queue (see the module header's CALL SERIALIZATION). */
   #chain: Promise<unknown> = Promise.resolve();
+  /** Teardown generation. `#close` bumps it; `fetch`/`#buildLive` capture it at entry and
+   *  no-op their meta WRITES on mismatch. `blockConcurrencyWhile` gates DELIVERY of new
+   *  events but NOT the continuations of an already-in-flight `fetch` — so a fetch that read
+   *  meta before a sweep must not re-persist it, or the swept session resurrects over a
+   *  revoked credential. In-memory suffices: a recycled isolate has no in-flight fetch. */
+  #gen = 0;
 
   #ttlMs(): number {
     const raw = Number(this.env.MCP_SESSION_TTL_MS);
@@ -155,6 +165,9 @@ export abstract class ArrivalMcpRunnerDO<Env extends ArrivalMcpRunnerEnv> extend
       );
     }
 
+    // Capture the teardown generation BEFORE any await: if a sweep runs while this fetch is
+    // in flight, our meta writes below must no-op (the resurrection guard — see `#gen`).
+    const gen = this.#gen;
     const meta = await this.ctx.storage.get<SessionMeta>(this.metaKey);
 
     // Fixation guard: a valid credential for user A never rides user B's session id. The
@@ -172,8 +185,10 @@ export abstract class ArrivalMcpRunnerDO<Env extends ArrivalMcpRunnerEnv> extend
 
     const live = await this.#ensureLive(sessionId, sub, meta);
 
-    // Bump the idle TTL on every authenticated touch of an initialized session.
-    if (meta !== undefined) {
+    // Bump the idle TTL on every authenticated touch of an initialized session — UNLESS a
+    // sweep raced this fetch (`#gen` bumped): re-persisting `meta` here would resurrect a
+    // just-closed session over a revoked credential.
+    if (meta !== undefined && this.#gen === gen) {
       meta.lastCallAt = Date.now();
       await this.ctx.storage.put(this.metaKey, meta);
       await this.ctx.storage.setAlarm(meta.lastCallAt + this.#ttlMs());
@@ -195,18 +210,31 @@ export abstract class ArrivalMcpRunnerDO<Env extends ArrivalMcpRunnerEnv> extend
     await (Date.now() >= expiresAt ? this.#close() : this.ctx.storage.setAlarm(expiresAt));
   }
 
-  /** Session teardown — DELETE (`onsessionclosed`) and the TTL reaper share it. */
+  /** Session teardown — DELETE (`onsessionclosed`) and the TTL reaper share it. Bumps `#gen`
+   *  (so an in-flight fetch's meta write no-ops — the resurrection guard) and runs the whole
+   *  teardown under `blockConcurrencyWhile` so no NEW event interleaves dispose→revoke→wipe. */
   async #close(): Promise<void> {
-    const live = this.#live;
-    this.#live = undefined;
-    if (live !== undefined) {
-      const state = await live.catch(() => undefined);
-      state?.lifetime.abort();
-      await state?.built.dispose().catch(() => {});
-    }
-    await this.onClose();
-    await this.ctx.storage.deleteAlarm();
-    await this.ctx.storage.deleteAll();
+    this.#gen++;
+    await this.ctx.blockConcurrencyWhile(async () => {
+      const live = this.#live;
+      this.#live = undefined;
+      if (live !== undefined) {
+        const state = await live.catch(() => undefined);
+        state?.lifetime.abort();
+        // Race a timeout so a hung dispose (e.g. a stuck WS close) can't wedge the input gate.
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        await Promise.race([
+          (state?.built.dispose() ?? Promise.resolve()).catch(() => {}),
+          new Promise<void>((resolve) => {
+            timer = setTimeout(resolve, DISPOSE_TIMEOUT_MS);
+          }),
+        ]);
+        if (timer !== undefined) clearTimeout(timer);
+      }
+      await this.onClose();
+      await this.ctx.storage.deleteAlarm();
+      await this.ctx.storage.deleteAll();
+    });
   }
 
   /** The live wiring (transport + server + tools), built once per wake. With a stored
@@ -218,6 +246,9 @@ export abstract class ArrivalMcpRunnerDO<Env extends ArrivalMcpRunnerEnv> extend
   }
 
   async #buildLive(sessionId: string, sub: string, meta: SessionMeta | undefined): Promise<LiveState> {
+    // Generation at build time — `onsessioninitialized` (below) refuses to write meta if a
+    // sweep raced this build, so a rebuild off stale meta can't resurrect the session.
+    const gen = this.#gen;
     const lifetime = new AbortController();
     const store: AsyncSessionStore = createDoSessionRunStore(this.ctx.storage);
     // The in-memory half of ToolCallCtx.session — the id + a scratch bag (the durable twin
@@ -241,6 +272,8 @@ export abstract class ArrivalMcpRunnerDO<Env extends ArrivalMcpRunnerEnv> extend
         // A rehydration replay re-fires this callback — never clobber the original meta.
         const existing = await this.ctx.storage.get<SessionMeta>(this.metaKey);
         if (existing !== undefined) return;
+        // A sweep raced this build (generation bumped) — do not resurrect a swept session.
+        if (this.#gen !== gen) return;
         const now = Date.now();
         const fresh: SessionMeta = {
           sessionId: id,
