@@ -10,12 +10,15 @@
 // the SRFI-13 subset agents actually reach for (predicates, slices, trim/pad,
 // index/count, join/tokenize) plus SRFI-152's `string-split` (the #1 miss).
 //
-// SCOPE NARROWING (honest deltas from full SRFI-13):
+// SCOPE NARROWING (honest deltas from full SRFI-13) — implement-or-door:
 //   • criteria are a CHAR or a one-arg PREDICATE — SRFI-13 char-sets are not
-//     bound here (no charset type in this scheme), documented per-symbol;
+//     bound here (no charset type); char-set API doored in srfi-stubs (SRFI-14);
 //   • no optional start/end index arguments (use `substring` first);
 //   • `string-split` is SRFI-152, not SRFI-13 — bound here because it is the
-//     most-reached-for missing symbol; its docstring says so.
+//     most-reached-for missing symbol; its docstring says so;
+//   • remaining official SRFI-13 exports not live here or in scheme/strings are
+//     `symbol.notImplemented` doors in this pack (purity for `!`, subset for pure);
+//   • R7RS string mutators (string-set!/fill!/copy!) live as doors in scheme/strings.
 //
 // FOLLOW-UP (contract-layer gap this pack exercises hardest): scheme-zod has no
 // element-typed list schema, so `string-join`/`string-tokenize`/`string-split`
@@ -49,6 +52,102 @@ import { is_false, is_promise } from "../../eval/guards.js";
 import { promise_all } from "../../utils/promises.js";
 import { to_array } from "../pack-helpers.js";
 import type { AList, AListAlike, AProcedure, SchemeValue } from "../../values/types.js";
+
+// ── implement-or-door inventory (official SRFI-13 names not live in this pack) ─
+// R7RS peers (scheme/strings) cover string?/make-string/string/length/ref/append/
+// list conversion/copy/map/for-each/upcase/downcase/contains + mutator doors.
+const PURITY =
+  "every value is frozen by design — mutating a string after construction would falsify the provenance lineage it carries; construct a new string instead";
+const SHARED =
+  "shared-text substrings are not part of this sandbox — strings are independent values; use string-copy / substring / string-append / string-concatenate pure twins";
+const START_END =
+  "optional start/end parse helpers are omitted — arrival's SRFI-13 ops take whole strings; slice first with substring / string-copy";
+const KMP =
+  "low-level KMP search machinery is not shipped; use string-contains / string-index";
+const CMP =
+  "SRFI-13 comparison names without ? are not bound — use R7RS string=? / string<? / string-ci=? family (scheme/strings + equality)";
+const SUBSET =
+  "not in the shipped SRFI-13 pure subset (no char-sets, no start/end, agent grain); compose from string->list / filter / list->string / substring / string-append or the live SRFI-13 verbs";
+
+const DOORS = {
+  // purity — SRFI-13-only mutators (R7RS string-set!/fill!/copy! already in scheme/strings)
+  "string-reverse!": `${PURITY}; use string-reverse`,
+  "string-titlecase!": `${PURITY}; use string-titlecase once live, or pure case maps`,
+  "string-upcase!": `${PURITY}; use string-upcase`,
+  "string-downcase!": `${PURITY}; use string-downcase`,
+  "string-map!": `${PURITY}; use string-map`,
+  "string-xcopy!": `${PURITY}; use xsubstring / substring + string-append`,
+
+  // shared storage
+  "substring/shared": SHARED,
+  "string-concatenate/shared": SHARED,
+  "string-append/shared": SHARED,
+  "string-concatenate-reverse/shared": SHARED,
+
+  // start/end parse internals
+  "string-parse-start+end": START_END,
+  "string-parse-final-start+end": START_END,
+  "let-string-start+end": START_END,
+  "check-substring-spec": START_END,
+  "substring-spec-ok?": START_END,
+
+  // KMP internals
+  "make-kmp-restart-vector": KMP,
+  "kmp-step": KMP,
+  "string-kmp-partial-search": KMP,
+
+  // SRFI comparison names (R7RS uses string=? etc.)
+  "string-compare": "multi-return / continuation-style compare is doored; use string=? / string<? / string-ci=?",
+  "string-compare-ci": "multi-return / continuation-style ci-compare is doored; use string-ci=? / string-ci<?",
+  "string<>": CMP,
+  "string=": CMP,
+  "string<": CMP,
+  "string>": CMP,
+  "string<=": CMP,
+  "string>=": CMP,
+  "string-ci<>": CMP,
+  "string-ci=": CMP,
+  "string-ci<": CMP,
+  "string-ci>": CMP,
+  "string-ci<=": CMP,
+  "string-ci>=": CMP,
+  "string-hash": "string hash keys not shipped; use an explicit key / dict path, not a hash of the text",
+  "string-hash-ci": "string hash keys not shipped; use an explicit key / dict path",
+
+  // pure not-yet-in-subset (compositional redirects where cheap)
+  "string-every": SUBSET,
+  "string-any": SUBSET,
+  "string-tabulate": SUBSET,
+  "reverse-list->string": `${SUBSET}; or (list->string (reverse chars))`,
+  "string-index-right": SUBSET,
+  "string-skip": SUBSET,
+  "string-skip-right": SUBSET,
+  "string-contains-ci": `${SUBSET}; or lowercase both sides then string-contains`,
+  "string-prefix-length": SUBSET,
+  "string-suffix-length": SUBSET,
+  "string-prefix-length-ci": SUBSET,
+  "string-suffix-length-ci": SUBSET,
+  "string-prefix-ci?": `${SUBSET}; or string-prefix? after foldcase`,
+  "string-suffix-ci?": `${SUBSET}; or string-suffix? after foldcase`,
+  "string-titlecase": SUBSET,
+  "string-concatenate": `${SUBSET}; or (apply string-append list-of-strings)`,
+  "string-concatenate-reverse": `${SUBSET}; or concatenate of reverse`,
+  "string-fold": SUBSET,
+  "string-fold-right": SUBSET,
+  "string-unfold": SUBSET,
+  "string-unfold-right": SUBSET,
+  "string-for-each-index": SUBSET,
+  xsubstring: SUBSET,
+  "string-replace": SUBSET,
+  "string-filter":
+    "build compositionally: (list->string (filter pred (string->list s))) using filter (SRFI-1), string->list and list->string (R7RS)",
+  "string-delete":
+    "build compositionally: (list->string (remove pred (string->list s))) using remove (SRFI-1), string->list and list->string (R7RS)",
+} as const satisfies Record<string, string>;
+
+const DOOR_SYMBOLS = Object.fromEntries(
+  Object.entries(DOORS).map(([name, reason]) => [name, symbol.notImplemented`${name}: ${reason}`]),
+);
 
 // ── criterion machinery ──────────────────────────────────────────────────────
 // SRFI-13 criteria: we honestly support a CHAR (equality) or a ONE-ARG PREDICATE
@@ -211,17 +310,21 @@ export default new EnvCapability("scheme/srfi-13", {
         sliceImpl("string-drop-right", (chars, k) => chars.slice(0, chars.length - k)),
       ),
 
+    // Official SRFI-13: string-trim = LEFT only; string-trim-both = both ends.
+    // string-trim-left is a non-index synonym of official left trim (compat).
     "string-trim":
-      symbol.native`string-trim: both ends shed of whitespace, or of chars matching a char/one-arg predicate (SRFI-13; no charsets)`(
+      symbol.native`string-trim: the left end shed of whitespace, or of chars matching a char/one-arg predicate (SRFI-13; no charsets)`(
         { input: [z.string, z.value.optional()], output: [z.string] },
-        trimImpl("string-trim", "both"),
+        trimImpl("string-trim", "left"),
       ),
 
-    "string-trim-left":
-      symbol.native`string-trim-left: the left end shed of whitespace, or of chars matching a char/one-arg predicate (SRFI-13; no charsets)`(
+    "string-trim-both":
+      symbol.native`string-trim-both: both ends shed of whitespace, or of chars matching a char/one-arg predicate (SRFI-13; no charsets)`(
         { input: [z.string, z.value.optional()], output: [z.string] },
-        trimImpl("string-trim-left", "left"),
+        trimImpl("string-trim-both", "both"),
       ),
+
+    "string-trim-left": symbol.alias`string-trim`,
 
     "string-trim-right":
       symbol.native`string-trim-right: the right end shed of whitespace, or of chars matching a char/one-arg predicate (SRFI-13; no charsets)`(
@@ -370,5 +473,9 @@ export default new EnvCapability("scheme/srfi-13", {
           );
         },
       ),
+
+    // Official SRFI-13 names not live above — purity / subset doors (see DOORS).
+    // string-filter lives here (was stubs-only) so the pack owns the full index.
+    ...DOOR_SYMBOLS,
   },
 });

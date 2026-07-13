@@ -7,15 +7,13 @@
 // the REASON, and the EXACT alternative bound in this environment — turning the
 // wall into a route back to the real dataflow.
 //
-// Seven families, grouped internally (family 2 — the R7RS §6.13.1 file openers +
-// the CL-ism with-open-file — live beside the families they belong with: the
-// R7RS verbs in `r7rs/host.ts` beside the §6.13 port doors, the CL-ism in
-// `env/polyglot-stubs.ts`; each stub beside its family pack):
+// Families (family 2 — R7RS §6.13.1 file openers + CL with-open-file — live beside
+// their family packs: R7RS verbs in r7rs/host.ts, CL-ism in polyglot-stubs.ts):
 //   1. SRFI-69/125 hash tables → dicts are native & immutable ({…} / (dict …)).
 //   3. SRFI-27 random → ambient non-determinism has no place in a pure sandbox.
 //   4. SRFI-14 char-sets → the string library takes a char or one-arg predicate.
 //   5. SRFI-19 time/date → the clock is ambient; timestamps arrive in tool results.
-//   6. SRFI-13 string-filter → not shipped; build it from filter + string<->list.
+//   (6. SRFI-13 pure gaps — owned by scheme/srfi-13 doors, not this junk drawer.)
 //   7. SRFI-113 sets (list->set, set-contains?) → no set type exists to redirect to.
 //   8. string ports (call-with-input-string, SRFI-6) → omitted, same as host.ts's ports.
 //
@@ -62,14 +60,7 @@ const CHAR_SET_REASON =
 const TIME_DATE_REASON =
   "the date/time library is omitted from arrival by design — the clock is ambient and non-deterministic, with no construction-site to root a value's lineage at; timestamps arrive in tool results, so compare and format them as plain strings or numbers";
 
-// ── 6. SRFI-13 string-filter ─────────────────────────────────────────────────
-// Unlike families 1-5 (design omissions), this is a genuine gap in the bound SRFI-13
-// subset (string-index/string-count/string-trim stop at "a char or one-arg predicate,
-// no char-sets" — see CHAR_SET_REASON) — but it has an honest compositional redirect
-// using symbols verified bound elsewhere: `filter` (SRFI-1, srfi-1.ts) and
-// `string->list` / `list->string` (R7RS, r7rs/strings.ts).
-const STRING_FILTER_REASON =
-  "string-filter is not implemented (SRFI-13) — build the same result compositionally from what IS bound: (list->string (filter pred (string->list s))), using filter (SRFI-1), string->list and list->string (R7RS)";
+// (6. SRFI-13 string-filter — moved into scheme/srfi-13 pack doors; pack owns the index.)
 
 // ── 7. SRFI-113 sets ──────────────────────────────────────────────────────────
 // Verified: no set type is bound anywhere in this env (grepped values/ + env/{srfi,r7rs,
@@ -130,8 +121,7 @@ export default new EnvCapability("scheme/srfi-stubs", {
     "time-utc->date": symbol.notImplemented`time-utc->date: ${TIME_DATE_REASON}`,
     "current-julian-day": symbol.notImplemented`current-julian-day: ${TIME_DATE_REASON}`,
 
-    // 6. SRFI-13 string-filter (compositional gap, not a design omission)
-    "string-filter": symbol.notImplemented`string-filter: ${STRING_FILTER_REASON}`,
+    // (6. SRFI-13 string-filter — scheme/srfi-13 owns the door now)
 
     // 7. SRFI-113 sets (no set type — no redirect claimed)
     "list->set": symbol.notImplemented`list->set: ${SET_REASON}`,

@@ -128,20 +128,25 @@ describe("string-take / string-drop and the -right twins", () => {
   });
 });
 
-describe("string-trim family — default whitespace; char/predicate criteria", () => {
-  it("default: whitespace at both/left/right", async () => {
-    expect(js(await run('(string-trim "  hi  ")'))).toBe("hi");
-    expect(js(await run('(string-trim-left "  hi  ")'))).toBe("hi  ");
+describe("string-trim family — SRFI-13 left/right/both; char/predicate criteria", () => {
+  it("default: whitespace left / both / right", async () => {
+    // Official: string-trim = left only; string-trim-both = both ends.
+    expect(js(await run('(string-trim "  hi  ")'))).toBe("hi  ");
+    expect(js(await run('(string-trim-both "  hi  ")'))).toBe("hi");
+    expect(js(await run('(string-trim-left "  hi  ")'))).toBe("hi  "); // alias of string-trim
     expect(js(await run('(string-trim-right "  hi  ")'))).toBe("  hi");
   });
   it("char criterion", async () => {
-    expect(js(await run('(string-trim "xxhixx" #\\x)'))).toBe("hi");
+    expect(js(await run('(string-trim "xxhixx" #\\x)'))).toBe("hixx");
+    expect(js(await run('(string-trim-both "xxhixx" #\\x)'))).toBe("hi");
   });
   it("predicate criterion", async () => {
-    expect(js(await run('(string-trim "12hi34" char-numeric?)'))).toBe("hi");
+    expect(js(await run('(string-trim "12hi34" char-numeric?)'))).toBe("hi34");
+    expect(js(await run('(string-trim-both "12hi34" char-numeric?)'))).toBe("hi");
   });
   it("all-trimmed and empty strings", async () => {
     expect(js(await run('(string-trim "   ")'))).toBe("");
+    expect(js(await run('(string-trim-both "   ")'))).toBe("");
     expect(js(await run('(string-trim "")'))).toBe("");
   });
 });
