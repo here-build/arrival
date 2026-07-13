@@ -26,12 +26,12 @@
 // Installs the global \`TypeError.invariant\` assertion helper used by the
 // list-bounds and circular-list guards below (side-effect import).
 import "@here.build/error-invariant";
+import dedent from "dedent";
 import { type RunContext } from "../../values/primitives/RunContext.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
 import { CallCtx } from "../../common/symbols/_bake.js";
 
 import * as z from "../../common/scheme-zod.js";
-import { FOR_EACH_HOF, MAP_HOF } from "../../common/hof-sig.js";
 import { type MaybePromise, resolveMethod, symbol } from "../../common/symbol.js";
 import { schemeFalse, withInputProvenance } from "../../values/op-helpers.js";
 import invariant from "tiny-invariant";
@@ -232,12 +232,21 @@ export default new EnvCapability("scheme/lists", {
       // the vector case. Output is z.value: both dispatch paths (the tf("map") protocol
       // member, and multiListMap) declare SchemeValue | Promise<SchemeValue>, never a
       // raw-primitive leak.
-      // Harvest: faithful List|vector dual generics (hof-sig MAP_HOF), not R[]/unknown.
+      // Harvest: faithful List|vector dual generics (inline type:), not R[]/unknown.
       {
         input: z.tuple([z.lambda], z.value),
         output: [z.value],
         provenance: "fan",
-        type: MAP_HOF,
+        type: dedent`
+          {
+            <T, B>(f: (x: T) => B, xs: List<T>): List<B>;
+            <T, B>(f: (x: T) => B, xs: readonly T[]): readonly B[];
+            <A, B, R>(f: (a: A, b: B) => R, as: List<A>, bs: List<B>): List<R>;
+            <A, B, R>(f: (a: A, b: B) => R, as: readonly A[], bs: readonly B[]): readonly R[];
+            <A, B, C, R>(f: (a: A, b: B, c: C) => R, as: List<A>, bs: List<B>, cs: List<C>): List<R>;
+            <A, B, C, R>(f: (a: A, b: B, c: C) => R, as: readonly A[], bs: readonly B[], cs: readonly C[]): readonly R[];
+          }
+        `,
       },
       (args, runCtx) => {
         const [fn, ...lists] = args;
@@ -271,7 +280,13 @@ export default new EnvCapability("scheme/lists", {
         input: [z.lambda],
         inputRest: z.union([z.pair, z.nil]),
         output: [z.undefinedResult],
-        type: FOR_EACH_HOF,
+        type: dedent`
+          {
+            <T>(f: (x: T) => unknown, xs: List<T>): void;
+            <A, B>(f: (a: A, b: B) => unknown, as: List<A>, bs: List<B>): void;
+            <A, B, C>(f: (a: A, b: B, c: C) => unknown, as: List<A>, bs: List<B>, cs: List<C>): void;
+          }
+        `,
       },
       // Runs mapImpl for its side effects and discards the result list. `this: CallCtx`
       // (not an arrow) — the dispatch-delivered `this.runCtx` is threaded into mapImpl so
@@ -333,7 +348,14 @@ export default new EnvCapability("scheme/lists", {
         input: [z.lambda],
         inputRest: z.value,
         output: [z.value],
-        type: "<T>(proc: (...args: unknown[]) => T, ...argsThenList: unknown[]) => T",
+        type: dedent`
+          {
+            <R>(proc: () => R, args: List<never>): R;
+            <A, R>(proc: (a: A) => R, args: List<A>): R;
+            <A, B, R>(proc: (a: A, b: B) => R, a: A, args: List<B>): R;
+            <A, R>(proc: (...args: A[]) => R, ...argsThenList: [...A[], List<A>]): R;
+          }
+        `,
       },
       // The final tail element must be a PROPER list — `listToArray` (the shared
       // pack-helpers `to_array`) is the door: it rejects an improper/atom final arg loudly
@@ -518,7 +540,12 @@ export default new EnvCapability("scheme/lists", {
         // The optional z.custom compare collapses signatureOf to the catch-all; `type` restores
         // the real shape — same as the non-degraded memq/memv siblings (obj + `Cons<unknown> |
         // null` list → `unknown | false`), plus the optional binary comparator.
-        type: "(obj: unknown, list: Cons<unknown> | null, compare?: (a: unknown, b: unknown) => unknown) => unknown | false",
+        type: dedent`
+          {
+            <T>(obj: T, list: List<T>): List<T> | false;
+            <T>(obj: T, list: List<T>, compare: (a: T, b: T) => unknown): List<T> | false;
+          }
+        `,
         // callbackRoles DECLARED: pipe host with value egress — shape underdetermines.
         // compare is `control` (boolean-returning equality selector: its verdict decides
         // WHICH sublist egresses). Roles align with LAMBDA arms — compare is arm 0
@@ -554,7 +581,12 @@ export default new EnvCapability("scheme/lists", {
         input: [z.value, z.union([z.pair, z.nil]), z.lambda.optional()],
         output: [z.union([z.value, z.booleanFalse])],
         // Same degrade + author-assertion as `member` above (the alist search twin).
-        type: "(obj: unknown, alist: Cons<unknown> | null, compare?: (a: unknown, b: unknown) => unknown) => unknown | false",
+        type: dedent`
+          {
+            <K, V>(obj: K, alist: List<[K, V]>): [K, V] | false;
+            <K, V>(obj: K, alist: List<[K, V]>, compare: (a: K, b: K) => unknown): [K, V] | false;
+          }
+        `,
         // Same `control` declaration as `member` above — the alist search twin's
         // compare is the same equality selector.
         callbackRoles: ["control"],
@@ -644,7 +676,12 @@ export default new EnvCapability("scheme/lists", {
       // `reverse` above (pair|nil only; its raw-array branch is gone), nth keeps its
       // array branch, so a pair|nil narrowing would be dishonest here (it would
       // silently exclude that real array path).
-      { input: [z.schemeNumber, z.value], output: [z.value], type: "<T>(index: number, list: T[]): T | null" },
+      { input: [z.schemeNumber, z.value], output: [z.value], type: dedent`
+          {
+            <T>(index: number, list: List<T>): T | null;
+            <T>(index: number, list: readonly T[]): T | null;
+          }
+        ` },
       function (this: CallCtx, index, obj) {
         // `index` is a Scheme/JS number; coerce the count to a primitive (a boxed
         // AExact resolves through valueOf), exactly as the bare `count < index` did.

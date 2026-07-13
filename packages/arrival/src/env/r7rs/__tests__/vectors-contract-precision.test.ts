@@ -18,7 +18,8 @@
 // elements ARE runtime-discriminating — those three are what this file exercises.
 import { describe, expect, it } from "vitest";
 import vectorsPack from "../vectors.js";
-import { VECTOR_FOR_EACH_HOF, VECTOR_MAP_HOF } from "../../../common/hof-sig.js";
+import dedent from "dedent";
+const norm = (s: string) => s.replace(/\s+/g, " ").trim();
 import { signatureOf } from "../../../type-layer/schema-to-ts.js";
 import type { AEntity } from "../../../common/symbol.js";
 import { AVector } from "../../../values/primitives/AVector.js";
@@ -107,11 +108,27 @@ describe("scheme/vectors Contract.type overrides — the harvest signature for t
   // INVARIANT: vector-map's harvested signature is proc-first over a vector rest,
   // returning a new vector (pins implementation, not behavior)
   it("vector-map: proc-first over a vector rest → a new vector", () => {
-    expect(signatureOf(nativeDef("vector-map"))).toBe(VECTOR_MAP_HOF);
+    expect(norm(signatureOf(nativeDef("vector-map")))).toBe(
+      norm(dedent`
+        {
+          <T, B>(f: (x: T) => B, v: readonly T[]): readonly B[];
+          <A, B, R>(f: (a: A, b: B) => R, a: readonly A[], b: readonly B[]): readonly R[];
+          <A, B, C, R>(f: (a: A, b: B, c: C) => R, a: readonly A[], b: readonly B[], c: readonly C[]): readonly R[];
+        }
+      `),
+    );
   });
   // INVARIANT: vector-for-each's harvested signature is proc-first over a vector rest,
   // returning void (pins implementation, not behavior)
   it("vector-for-each: proc-first over a vector rest, for effect → void", () => {
-    expect(signatureOf(nativeDef("vector-for-each"))).toBe(VECTOR_FOR_EACH_HOF);
+    expect(norm(signatureOf(nativeDef("vector-for-each")))).toBe(
+      norm(dedent`
+        {
+          <T>(f: (x: T) => unknown, v: readonly T[]): void;
+          <A, B>(f: (a: A, b: B) => unknown, a: readonly A[], b: readonly B[]): void;
+          <A, B, C>(f: (a: A, b: B, c: C) => unknown, a: readonly A[], b: readonly B[], c: readonly C[]): void;
+        }
+      `),
+    );
   });
 });

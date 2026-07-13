@@ -11,12 +11,12 @@
  */
 
 import foldCase from "fold-case";
+import dedent from "dedent";
 import { applyCallback } from "../../values/primitives/ACallable.js";
 import { CallCtx } from "../../common/symbols/_bake.js";
 import invariant from "tiny-invariant";
 
 import * as z from "../../common/scheme-zod.js";
-import { STRING_FOR_EACH_HOF, STRING_MAP_HOF } from "../../common/hof-sig.js";
 import { symbol } from "../../common/symbol.js";
 import {
   assertAllocatable,
@@ -312,7 +312,12 @@ export default new EnvCapability("scheme/strings", {
         input: [z.lambda],
         inputRest: z.string,
         output: [z.string],
-        type: STRING_MAP_HOF,
+        type: dedent`
+          {
+            (f: (c: string) => string, s: string): string;
+            (f: (...chars: string[]) => string, ...strings: string[]): string;
+          }
+        `,
         // callbackRoles DECLARED: the host is role `pipe` (string-map was never a
         // declared fan), so the fan default can't fire and shape underdetermines.
         // proc's return BECOMES the output character — `element-transformer`.
@@ -351,7 +356,12 @@ export default new EnvCapability("scheme/strings", {
         input: [z.lambda],
         inputRest: z.string,
         output: [z.undefinedResult],
-        type: STRING_FOR_EACH_HOF,
+        type: dedent`
+          {
+            (f: (c: string) => unknown, s: string): void;
+            (f: (...chars: string[]) => unknown, ...strings: string[]): void;
+          }
+        `,
       },
       function (this: CallCtx, proc: unknown, ...strings: AString[]): AVoid | Promise<AVoid> {
         invariant(strings.length > 0, "string-for-each: expected at least one string");

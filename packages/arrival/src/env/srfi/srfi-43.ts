@@ -32,6 +32,7 @@
 //   - vector-empty?: a DEFINITE #t/#f (the body's whole result is `(= … 0)`, always an
 //     ABool) — `z.boolean`, not the looser value-or-false union the search ops need.
 import { EnvCapability } from "../../common/capability.js";
+import dedent from "dedent";
 import { symbol } from "../../common/symbol.js";
 import * as z from "../../common/scheme-zod.js";
 import equality from "../r7rs/equality.js";
@@ -42,7 +43,11 @@ export default new EnvCapability("scheme/srfi-43", {
   deps: [equality, numeric, vectors],
   symbols: {
     "vector-fold": symbol.define`vector-fold: left fold over a vector — (kons acc elt) folded across indices 0..n-1`(
-      { input: [z.lambda, z.value, z.vector(z.value)], output: [z.value] },
+      { input: [z.lambda, z.value, z.vector(z.value)], output: [z.value], type: dedent`
+          {
+            <T, A>(kons: (acc: A, elt: T) => A, knil: A, vec: readonly T[]): A;
+          }
+        ` },
       `(lambda (kons knil vec)
          (let ((n (vector-length vec)))
            (let loop ((i 0) (acc knil))
@@ -51,7 +56,11 @@ export default new EnvCapability("scheme/srfi-43", {
     ),
 
     "vector-fold-right": symbol.define`vector-fold-right: right fold over a vector — (kons acc elt) across indices n-1..0`(
-      { input: [z.lambda, z.value, z.vector(z.value)], output: [z.value] },
+      { input: [z.lambda, z.value, z.vector(z.value)], output: [z.value], type: dedent`
+          {
+            <T, A>(kons: (acc: A, elt: T) => A, knil: A, vec: readonly T[]): A;
+          }
+        ` },
       `(lambda (kons knil vec)
          (let loop ((i (- (vector-length vec) 1)) (acc knil))
            (if (< i 0) acc
@@ -59,7 +68,11 @@ export default new EnvCapability("scheme/srfi-43", {
     ),
 
     "vector-count": symbol.define`vector-count: number of indices where (pred elt) is truthy`(
-      { input: [z.lambda, z.vector(z.value)], output: [z.exact] },
+      { input: [z.lambda, z.vector(z.value)], output: [z.exact], type: dedent`
+          {
+            <T>(pred: (elt: T) => unknown, vec: readonly T[]): number;
+          }
+        ` },
       `(lambda (pred vec)
          (let ((n (vector-length vec)))
            (let loop ((i 0) (c 0))
@@ -68,7 +81,15 @@ export default new EnvCapability("scheme/srfi-43", {
     ),
 
     "vector-index": symbol.define`vector-index: first index where (pred elt) is truthy, else #f`(
-      { input: [z.lambda, z.vector(z.value)], output: [z.union([z.exact, z.booleanFalse])] },
+      {
+        input: [z.lambda, z.vector(z.value)],
+        output: [z.union([z.exact, z.booleanFalse])],
+        type: dedent`
+          {
+            <T>(pred: (elt: T) => unknown, vec: readonly T[]): number | false;
+          }
+        `,
+      },
       `(lambda (pred vec)
          (let ((n (vector-length vec)))
            (let loop ((i 0))
@@ -79,7 +100,15 @@ export default new EnvCapability("scheme/srfi-43", {
 
     "vector-binary-search":
       symbol.define`vector-binary-search: index of value equal under (cmp elt value)=0 in sorted vec, else #f`(
-        { input: [z.vector(z.value), z.value, z.lambda], output: [z.union([z.exact, z.booleanFalse])] },
+        {
+          input: [z.vector(z.value), z.value, z.lambda],
+          output: [z.union([z.exact, z.booleanFalse])],
+          type: dedent`
+          {
+            <T>(vec: readonly T[], value: T, cmp: (elt: T, value: T) => number): number | false;
+          }
+        `,
+        },
         `(lambda (vec value cmp)
            (let loop ((lo 0) (hi (- (vector-length vec) 1)))
              (if (> lo hi) #f
@@ -96,7 +125,15 @@ export default new EnvCapability("scheme/srfi-43", {
     ),
 
     "vector-any": symbol.define`vector-any: first truthy (pred elt), scanning left to right, else #f`(
-      { input: [z.lambda, z.vector(z.value)], output: [z.union([z.value, z.booleanFalse])] },
+      {
+        input: [z.lambda, z.vector(z.value)],
+        output: [z.union([z.value, z.booleanFalse])],
+        type: dedent`
+          {
+            <T, R>(pred: (elt: T) => R, vec: readonly T[]): R | false;
+          }
+        `,
+      },
       `(lambda (pred vec)
          (let ((n (vector-length vec)))
            (let loop ((i 0))
@@ -106,7 +143,15 @@ export default new EnvCapability("scheme/srfi-43", {
     ),
 
     "vector-every": symbol.define`vector-every: last (pred elt) if all truthy, else #f (short-circuits on #f)`(
-      { input: [z.lambda, z.vector(z.value)], output: [z.union([z.value, z.booleanFalse])] },
+      {
+        input: [z.lambda, z.vector(z.value)],
+        output: [z.union([z.value, z.booleanFalse])],
+        type: dedent`
+          {
+            <T, R>(pred: (elt: T) => R, vec: readonly T[]): R | true | false;
+          }
+        `,
+      },
       `(lambda (pred vec)
          (let ((n (vector-length vec)))
            (if (= n 0) #t

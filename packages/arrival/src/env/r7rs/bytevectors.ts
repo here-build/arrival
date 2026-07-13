@@ -16,8 +16,8 @@
  */
 
 import * as z from "../../common/scheme-zod.js";
+import dedent from "dedent";
 import { symbol, type CallCtx } from "../../common/symbol.js";
-import { BYTEVECTOR_TYPE_GUARD } from "../../common/type-guard-sig.js";
 import { ABytevector } from "../../values/primitives/ABytevector.js";
 import { AString } from "../../values/primitives/AString.js";
 import { asBytevector, schemeBool, stringValue, toIndex, withInputProvenance } from "../../values/op-helpers.js";
@@ -27,7 +27,12 @@ import { EnvCapability } from "../../common/capability.js";
 export default new EnvCapability("scheme/bytevectors", {
   symbols: {
     "bytevector?": symbol.native`bytevector?: #t iff the object is a bytevector (boxed or raw binary)`(
-      { input: [z.value], output: [z.boolean], type: BYTEVECTOR_TYPE_GUARD },
+      { input: [z.value], output: [z.boolean], type: dedent`
+          {
+            (x: unknown): x is Uint8Array;
+            <T>(x: T): x is Extract<T, Uint8Array>;
+          }
+        ` },
       function (this: CallCtx, obj) {
         // Polymorphic by design: scheme producers mint SchemeBytevector, but raw
         // binary legitimately flows from FFI through the membrane unboxed (it

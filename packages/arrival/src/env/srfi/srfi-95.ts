@@ -12,6 +12,7 @@
 //
 // SINGLE SOURCE: `srfi/index.ts` adds this to `allSrfi`, so `base-packs.ts` assembles it.
 import * as z from "../../common/scheme-zod.js";
+import dedent from "dedent";
 import { resolveMethod, symbol, type MaybePromise } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { tf } from "../../values/tagless-final.js";
@@ -40,7 +41,12 @@ export default new EnvCapability("scheme/srfi-95", {
         // representation-agnostic (list→list, vector→vector), so a `List` narrowing would be false
         // (unlike find, whose schema IS list-only). The comparator mirrors the `(a,b)=>unknown`
         // AValue.ts declares for the sort protocol — the assertion states that shape, not an invention.
-        type: "(seq: unknown, less?: (a: unknown, b: unknown) => unknown) => unknown",
+        type: dedent`
+          {
+            <T>(seq: List<T>, less?: (a: T, b: T) => unknown): List<T>;
+            <T>(seq: readonly T[], less?: (a: T, b: T) => unknown): readonly T[];
+          }
+        `,
         // callbackRoles DECLARED (docs/PROVENANCE.md §2, Q4): pipe host with value egress —
         // shape underdetermines. less? is `control` (the ORDERING return; the merged
         // selector+decision role) — sort is the canonical host-schedule op (spec §5's

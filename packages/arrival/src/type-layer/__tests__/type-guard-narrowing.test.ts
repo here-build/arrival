@@ -1,27 +1,36 @@
 // Dual type-guard harvest — control-flow narrowing pins.
-//
-// list?/pair?/vector? (and sibling ? predicates) harvest as dual call signatures:
-//   { (x: unknown): x is Container;
-//     <T>(x: T): x is Extract<T, ContainerAny>; }
-// so unknown → Container and string | List<number> → List<number> (element kept).
-//
-// Uses the real harvested signatures from the r7rs packs + the same TypeScript
-// checker the lens uses (not a hand-rolled dual string).
+// type: fields are inline dedent`…` on the packs; this suite re-states the critical
+// dual shapes for checker inference (not importing shared constants).
 import { describe, expect, it } from "vitest";
 import ts from "typescript";
+import dedent from "dedent";
 import { signatureOf } from "../schema-to-ts.js";
-import {
-  LIST_TYPE_GUARD,
-  PAIR_TYPE_GUARD,
-  VECTOR_TYPE_GUARD,
-  dualTypeGuard,
-} from "../../common/type-guard-sig.js";
 import equality from "../../env/r7rs/equality.js";
 import vectors from "../../env/r7rs/vectors.js";
 import { symbol } from "../../common/symbol.js";
 import * as z from "../../common/scheme-zod.js";
 
-/** Minimal carrier ambient — full carriers-text pulls lib collisions (`length`, …). */
+const norm = (s: string) => s.replace(/\s+/g, " ").trim();
+
+const LIST_DUAL = dedent`
+  {
+    (x: unknown): x is List<unknown>;
+    <T>(x: T): x is Extract<T, List<any>>;
+  }
+`;
+const PAIR_DUAL = dedent`
+  {
+    (x: unknown): x is Pair<unknown, unknown>;
+    <T>(x: T): x is Extract<T, Pair<any, any>>;
+  }
+`;
+const VECTOR_DUAL = dedent`
+  {
+    (x: unknown): x is readonly unknown[];
+    <T>(x: T): x is Extract<T, readonly any[]>;
+  }
+`;
+
 const AMBIENT = `
 declare const LIST_BRAND: unique symbol;
 interface Cons<out T> { readonly [LIST_BRAND]: T; }
@@ -29,11 +38,7 @@ type List<T> = Cons<T> | null;
 interface Pair<out H, out T> { readonly car: H; readonly cdr: T; }
 `;
 
-/** Compile a probe and return type-string of `typeof narrowed` after `if (guard(x))`. */
-function narrowedType(opts: {
-  guardSig: string;
-  inputType: string;
-}): string {
+function narrowedType(opts: { guardSig: string; inputType: string }): string {
   const source = [
     AMBIENT,
     `declare const guard: ${opts.guardSig};`,
@@ -82,44 +87,32 @@ function narrowedType(opts: {
   return result;
 }
 
-describe("dualTypeGuard string shape", () => {
-  it("builds dual call signatures with free Extract arm", () => {
-    expect(dualTypeGuard("List<unknown>", "List<any>")).toBe(
-      "{ (x: unknown): x is List<unknown>; <T>(x: T): x is Extract<T, List<any>>; }",
-    );
-    expect(LIST_TYPE_GUARD).toContain("Extract<T, List<any>>");
-    expect(PAIR_TYPE_GUARD).toContain("Pair<any, any>");
-    expect(VECTOR_TYPE_GUARD).toContain("readonly any[]");
+describe("harvested list?/pair?/vector? signatures are dual guards (inline dedent)", () => {
+  it("list?", () => {
+    const def = (equality.spec.symbols as Record<string, unknown>)["list?"];
+    expect(norm(signatureOf(def as never))).toBe(norm(LIST_DUAL));
   });
-});
-
-describe("harvested list?/pair?/vector? signatures are dual guards", () => {
-  it("list? harvest matches LIST_TYPE_GUARD", () => {
-    const def = (equality.spec.symbols as Record<string, { type?: string }>)["list?"];
-    expect(signatureOf(def as never)).toBe(LIST_TYPE_GUARD);
+  it("pair?", () => {
+    const def = (equality.spec.symbols as Record<string, unknown>)["pair?"];
+    expect(norm(signatureOf(def as never))).toBe(norm(PAIR_DUAL));
   });
-  it("pair? harvest matches PAIR_TYPE_GUARD", () => {
-    const def = (equality.spec.symbols as Record<string, { type?: string }>)["pair?"];
-    expect(signatureOf(def as never)).toBe(PAIR_TYPE_GUARD);
-  });
-  it("vector? harvest matches VECTOR_TYPE_GUARD", () => {
-    const def = (vectors.spec.symbols as Record<string, { type?: string }>)["vector?"];
-    expect(signatureOf(def as never)).toBe(VECTOR_TYPE_GUARD);
+  it("vector?", () => {
+    const def = (vectors.spec.symbols as Record<string, unknown>)["vector?"];
+    expect(norm(signatureOf(def as never))).toBe(norm(VECTOR_DUAL));
   });
 });
 
 describe("dual guard control-flow narrowing (lens-critical)", () => {
   it("list?: unknown → List<unknown>", () => {
-    const t = narrowedType({ guardSig: LIST_TYPE_GUARD, inputType: "unknown" });
+    const t = narrowedType({ guardSig: LIST_DUAL, inputType: "unknown" });
     expect(t).toMatch(/List<unknown>|Cons<unknown>\s*\|\s*null/);
   });
 
-  it("list?: string | List<number> keeps List<number> (element preserved)", () => {
+  it("list?: string | List<number> keeps List<number>", () => {
     const t = narrowedType({
-      guardSig: LIST_TYPE_GUARD,
+      guardSig: LIST_DUAL,
       inputType: "string | List<number>",
     });
-    // Accept Cons<number>|null or List<number>
     expect(t).toMatch(/number/);
     expect(t).not.toMatch(/string/);
     expect(t).not.toBe("List<unknown>");
@@ -127,25 +120,25 @@ describe("dual guard control-flow narrowing (lens-critical)", () => {
 
   it("list?: List<string> | number keeps List<string>", () => {
     const t = narrowedType({
-      guardSig: LIST_TYPE_GUARD,
+      guardSig: LIST_DUAL,
       inputType: "List<string> | number",
     });
     expect(t).toMatch(/string/);
     expect(t).not.toMatch(/number/);
   });
 
-  it("vector?: string | readonly number[] keeps readonly number[]", () => {
+  it("vector?: string | readonly number[] keeps number[]", () => {
     const t = narrowedType({
-      guardSig: VECTOR_TYPE_GUARD,
+      guardSig: VECTOR_DUAL,
       inputType: "string | readonly number[]",
     });
     expect(t).toMatch(/number/);
     expect(t).not.toMatch(/string/);
   });
 
-  it("pair?: string | Pair<number, boolean> keeps Pair<number, boolean>", () => {
+  it("pair?: string | Pair<number, boolean> keeps Pair", () => {
     const t = narrowedType({
-      guardSig: PAIR_TYPE_GUARD,
+      guardSig: PAIR_DUAL,
       inputType: "string | Pair<number, boolean>",
     });
     expect(t).toMatch(/number/);
@@ -153,25 +146,11 @@ describe("dual guard control-flow narrowing (lens-critical)", () => {
     expect(t).not.toMatch(/string/);
   });
 
-  it("monomorphic (x: unknown) => x is List<unknown> is WEAKER than dual on pure unknown (still List) but dual is required for Extract path", () => {
-    // Document the dual's unknown arm still works (not Extract-only never).
-    const mono = narrowedType({
-      guardSig: "(x: unknown) => x is List<unknown>",
-      inputType: "unknown",
-    });
-    const dual = narrowedType({
-      guardSig: LIST_TYPE_GUARD,
-      inputType: "unknown",
-    });
-    expect(mono).toMatch(/List|Cons/);
-    expect(dual).toMatch(/List|Cons/);
-  });
-
   it("signatureOf passes dual type: through unchanged", () => {
     const def = symbol.native`list?: pin`(
-      { input: [z.value], output: [z.boolean], type: LIST_TYPE_GUARD },
+      { input: [z.value], output: [z.boolean], type: LIST_DUAL },
       () => true,
     );
-    expect(signatureOf(def)).toBe(LIST_TYPE_GUARD);
+    expect(norm(signatureOf(def))).toBe(norm(LIST_DUAL));
   });
 });

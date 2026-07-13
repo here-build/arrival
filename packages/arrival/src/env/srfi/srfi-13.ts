@@ -34,6 +34,7 @@
 // lineage so list elements stay grounded.
 
 import invariant from "tiny-invariant";
+import dedent from "dedent";
 import { type } from "../../utils/typecheck.js";
 import { type RunContext } from "../../values/primitives/RunContext.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
@@ -259,7 +260,11 @@ export default new EnvCapability("scheme/srfi-13", {
     // Index-or-#f, like string-contains (#f is the ONLY false value — index 0 is truthy).
     "string-index":
       symbol.native`string-index: index of the first char matching a char or one-arg predicate, or #f (SRFI-13; no charsets)`(
-        { input: [z.string, z.value], output: [z.union([z.bigint, z.boolean])] },
+        { input: [z.string, z.value], output: [z.union([z.bigint, z.boolean])], type: dedent`
+          {
+            (s: string, criterion: string | ((c: string) => unknown)): number | false;
+          }
+        ` },
         function (this: CallCtx, str: unknown, criterion: unknown): AExact | ABool | Promise<AExact | ABool> {
           const chars = [...stringValue(str)];
           const runCtx = this.runCtx;
@@ -275,7 +280,11 @@ export default new EnvCapability("scheme/srfi-13", {
 
     "string-count":
       symbol.native`string-count: how many chars match a char or one-arg predicate (SRFI-13; no charsets)`(
-        { input: [z.string, z.value], output: [z.bigint] },
+        { input: [z.string, z.value], output: [z.bigint], type: dedent`
+          {
+            (s: string, criterion: string | ((c: string) => unknown)): number;
+          }
+        ` },
         function (this: CallCtx, str: unknown, criterion: unknown): AExact | Promise<AExact> {
           const chars = [...stringValue(str)];
           const runCtx = this.runCtx;
@@ -288,25 +297,41 @@ export default new EnvCapability("scheme/srfi-13", {
 
     "string-take":
       symbol.native`string-take: the first n characters of the string; n out of range is an error (SRFI-13)`(
-        { input: [z.string, z.schemeNumber], output: [z.string] },
+        { input: [z.string, z.schemeNumber], output: [z.string], type: dedent`
+          {
+            (s: string, n: number): string;
+          }
+        ` },
         sliceImpl("string-take", (chars, k) => chars.slice(0, k)),
       ),
 
     "string-drop":
       symbol.native`string-drop: the string without its first n characters; n out of range is an error (SRFI-13)`(
-        { input: [z.string, z.schemeNumber], output: [z.string] },
+        { input: [z.string, z.schemeNumber], output: [z.string], type: dedent`
+          {
+            (s: string, n: number): string;
+          }
+        ` },
         sliceImpl("string-drop", (chars, k) => chars.slice(k)),
       ),
 
     "string-take-right":
       symbol.native`string-take-right: the last n characters of the string; n out of range is an error (SRFI-13)`(
-        { input: [z.string, z.schemeNumber], output: [z.string] },
+        { input: [z.string, z.schemeNumber], output: [z.string], type: dedent`
+          {
+            (s: string, n: number): string;
+          }
+        ` },
         sliceImpl("string-take-right", (chars, k) => chars.slice(chars.length - k)),
       ),
 
     "string-drop-right":
       symbol.native`string-drop-right: the string without its last n characters; n out of range is an error (SRFI-13)`(
-        { input: [z.string, z.schemeNumber], output: [z.string] },
+        { input: [z.string, z.schemeNumber], output: [z.string], type: dedent`
+          {
+            (s: string, n: number): string;
+          }
+        ` },
         sliceImpl("string-drop-right", (chars, k) => chars.slice(0, chars.length - k)),
       ),
 

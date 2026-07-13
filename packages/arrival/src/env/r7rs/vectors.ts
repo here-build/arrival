@@ -20,8 +20,7 @@
  */
 
 import * as z from "../../common/scheme-zod.js";
-import { VECTOR_FOR_EACH_HOF, VECTOR_MAP_HOF } from "../../common/hof-sig.js";
-import { VECTOR_TYPE_GUARD } from "../../common/type-guard-sig.js";
+import dedent from "dedent";
 import { applyCallback } from "../../values/primitives/ACallable.js";
 import { CallCtx } from "../../common/symbols/_bake.js";
 import { ctxOf } from "../../values/primitives/AValue.js";
@@ -100,7 +99,12 @@ export default new EnvCapability("scheme/vectors", {
     "vector?": {
       ...symbol.taglessGuard`vector?: #t iff obj is a vector`,
       // Dual guard: unknown → readonly unknown[]; Extract preserves element types.
-      type: VECTOR_TYPE_GUARD,
+      type: dedent`
+          {
+            (x: unknown): x is readonly unknown[];
+            <T>(x: T): x is Extract<T, readonly any[]>;
+          }
+        `,
     },
 
     "vector-length": symbol.native`vector-length: number of elements in vec`(
@@ -218,7 +222,13 @@ export default new EnvCapability("scheme/vectors", {
         inputRest: z.vector(z.value),
         output: [z.vector(z.value)],
         provenance: "fan",
-        type: VECTOR_MAP_HOF,
+        type: dedent`
+          {
+            <T, B>(f: (x: T) => B, v: readonly T[]): readonly B[];
+            <A, B, R>(f: (a: A, b: B) => R, a: readonly A[], b: readonly B[]): readonly R[];
+            <A, B, C, R>(f: (a: A, b: B, c: C) => R, a: readonly A[], b: readonly B[], c: readonly C[]): readonly R[];
+          }
+        `,
       },
       function (this: CallCtx, proc: unknown, ...vectors: (AVector | AJSArray)[]) {
         invariant(vectors.length > 0, "vector-map: expected at least one vector argument");
@@ -250,7 +260,13 @@ export default new EnvCapability("scheme/vectors", {
         input: [z.lambda],
         inputRest: z.vector(z.value),
         output: [z.undefinedResult],
-        type: VECTOR_FOR_EACH_HOF,
+        type: dedent`
+          {
+            <T>(f: (x: T) => unknown, v: readonly T[]): void;
+            <A, B>(f: (a: A, b: B) => unknown, a: readonly A[], b: readonly B[]): void;
+            <A, B, C>(f: (a: A, b: B, c: C) => unknown, a: readonly A[], b: readonly B[], c: readonly C[]): void;
+          }
+        `,
       },
       function (this: CallCtx, proc: unknown, ...vectors: (AVector | AJSArray)[]): AVoid | Promise<AVoid> {
         invariant(vectors.length > 0, "vector-for-each: expected at least one vector argument");

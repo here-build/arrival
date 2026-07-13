@@ -9,12 +9,12 @@
  */
 
 import foldCase from "fold-case";
+import dedent from "dedent";
 import unicodeProperties from "unicode-properties";
 import invariant from "tiny-invariant";
 
 import * as z from "../../common/scheme-zod.js";
 import { symbol, type CallCtx } from "../../common/symbol.js";
-import { STRING_TYPE_GUARD } from "../../common/type-guard-sig.js";
 import { charValue, coerceNumeric, deriveOrd, schemeBool as bool, schemeFalse, schemeTrue } from "../../values/op-helpers.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
 import { AExact } from "../../values/primitives/AExact.js";
@@ -26,7 +26,12 @@ export default new EnvCapability("scheme/chars", {
     // Char harvest image is string (single-char); no separate ambient Char carrier.
     "char?": {
       ...symbol.taglessGuard`char?: #t iff obj is a character`,
-      type: STRING_TYPE_GUARD,
+      type: dedent`
+          {
+            (x: unknown): x is string;
+            <T>(x: T): x is Extract<T, string>;
+          }
+        `,
     },
 
     "char=?": symbol.native`char=?: typed equivalence over characters`(

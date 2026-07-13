@@ -18,16 +18,12 @@
  */
 
 import * as z from "../../common/scheme-zod.js";
+import dedent from "dedent";
 import invariant from "tiny-invariant";
 // `TypeError.invariant` is a global augmentation — import explicitly so correctness
 // doesn't depend on load order.
 import "@here.build/error-invariant";
 import { symbol, type Contract, type RestSpec, type VectorSpec } from "../../common/symbol.js";
-import {
-  EXACT_TYPE_GUARD,
-  INEXACT_TYPE_GUARD,
-  NUMBER_TYPE_GUARD,
-} from "../../common/type-guard-sig.js";
 import { EnvCapability } from "../../common/capability.js";
 import { type RunContext } from "../../values/primitives/RunContext.js";
 import { CallCtx } from "../../common/symbols/_bake.js";
@@ -1025,17 +1021,32 @@ const bitwiseXorSpec: NumSpec = { in: [], inRest: z.bigint, out: z.bigint, fn: b
 const NUMBER_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.value],
   output: [z.boolean],
-  type: NUMBER_TYPE_GUARD,
+  type: dedent`
+          {
+            (x: unknown): x is number | bigint;
+            <T>(x: T): x is Extract<T, number | bigint>;
+          }
+        `,
 };
 const EXACT_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.value],
   output: [z.boolean],
-  type: EXACT_TYPE_GUARD,
+  type: dedent`
+          {
+            (x: unknown): x is bigint;
+            <T>(x: T): x is Extract<T, bigint>;
+          }
+        `,
 };
 const INEXACT_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.value],
   output: [z.boolean],
-  type: INEXACT_TYPE_GUARD,
+  type: dedent`
+          {
+            (x: unknown): x is number;
+            <T>(x: T): x is Extract<T, number>;
+          }
+        `,
 };
 
 /** floor/ truncate/ → (q . r); input schemeNumber. */

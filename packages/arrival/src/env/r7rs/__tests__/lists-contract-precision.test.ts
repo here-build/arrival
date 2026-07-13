@@ -25,7 +25,8 @@
 // output (now z.array(z.value) — Array.isArray refinement).
 import { describe, expect, it } from "vitest";
 import listsPack from "../lists.js";
-import { FOR_EACH_HOF, MAP_HOF } from "../../../common/hof-sig.js";
+import dedent from "dedent";
+const norm = (s: string) => s.replace(/\s+/g, " ").trim();
 import { signatureOf } from "../../../type-layer/schema-to-ts.js";
 import type { AEntity } from "../../../common/symbol.js";
 import { APair } from "../../../values/primitives/APair.js";
@@ -344,26 +345,52 @@ describe("scheme/lists Contract.type overrides — the harvest signature (signat
   // `unknown` — map dispatches to Pair/Nil/Vector terms, so narrowing to a List would be false,
   // exactly sort's own documented reasoning; a genuinely list-only receiver is `Cons<unknown> |
   // null`, the same image the file's own non-degraded list ops harvest as).
-  // INVARIANT: map harvests faithful List|vector dual generics (hof-sig MAP_HOF)
+  // INVARIANT: map harvests faithful List|vector dual generics (inline dedent type:)
   it("map (sequence): List|vector dual generics over element types (not R[]/unknown)", () => {
-    expect(signatureOf(sequenceDef("map"))).toBe(MAP_HOF);
+    expect(norm(signatureOf(sequenceDef("map")))).toBe(
+      norm(dedent`
+        {
+          <T, B>(f: (x: T) => B, xs: List<T>): List<B>;
+          <T, B>(f: (x: T) => B, xs: readonly T[]): readonly B[];
+          <A, B, R>(f: (a: A, b: B) => R, as: List<A>, bs: List<B>): List<R>;
+          <A, B, R>(f: (a: A, b: B) => R, as: readonly A[], bs: readonly B[]): readonly R[];
+          <A, B, C, R>(f: (a: A, b: B, c: C) => R, as: List<A>, bs: List<B>, cs: List<C>): List<R>;
+          <A, B, C, R>(f: (a: A, b: B, c: C) => R, as: readonly A[], bs: readonly B[], cs: readonly C[]): readonly R[];
+        }
+      `),
+    );
   });
-  // INVARIANT: for-each harvests list dual generics → void
   it("for-each: list dual generics → void", () => {
-    expect(signatureOf(nativeDef("for-each"))).toBe(FOR_EACH_HOF);
+    expect(norm(signatureOf(nativeDef("for-each")))).toBe(
+      norm(dedent`
+        {
+          <T>(f: (x: T) => unknown, xs: List<T>): void;
+          <A, B>(f: (a: A, b: B) => unknown, as: List<A>, bs: List<B>): void;
+          <A, B, C>(f: (a: A, b: B, c: C) => unknown, as: List<A>, bs: List<B>, cs: List<C>): void;
+        }
+      `),
+    );
   });
   // INVARIANT: member's harvested signature is obj+list+optional compare returning the
   // matched sublist or #f (pins implementation, not behavior)
-  it("member: obj + list + optional binary compare → matched sublist or #f (restores what the degraded `(...args: unknown[]) => unknown` lost)", () => {
-    expect(signatureOf(nativeDef("member"))).toBe(
-      "(obj: unknown, list: Cons<unknown> | null, compare?: (a: unknown, b: unknown) => unknown) => unknown | false",
+  it("member: generic List search with optional compare", () => {
+    expect(norm(signatureOf(nativeDef("member")))).toBe(
+      norm(dedent`
+        {
+          <T>(obj: T, list: List<T>): List<T> | false;
+          <T>(obj: T, list: List<T>, compare: (a: T, b: T) => unknown): List<T> | false;
+        }
+      `),
     );
   });
-  // INVARIANT: assoc's harvested signature is obj+alist+optional compare returning the
-  // matched entry or #f (pins implementation, not behavior)
-  it("assoc: obj + alist + optional binary compare → matched entry or #f", () => {
-    expect(signatureOf(nativeDef("assoc"))).toBe(
-      "(obj: unknown, alist: Cons<unknown> | null, compare?: (a: unknown, b: unknown) => unknown) => unknown | false",
+  it("assoc: generic alist search with optional compare", () => {
+    expect(norm(signatureOf(nativeDef("assoc")))).toBe(
+      norm(dedent`
+        {
+          <K, V>(obj: K, alist: List<[K, V]>): [K, V] | false;
+          <K, V>(obj: K, alist: List<[K, V]>, compare: (a: K, b: K) => unknown): [K, V] | false;
+        }
+      `),
     );
   });
 });
