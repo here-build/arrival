@@ -46,6 +46,7 @@
 import { EnvCapability } from "../common/capability.js";
 import { symbol } from "../common/symbol.js";
 import * as z from "../common/scheme-zod.js";
+import dedent from "dedent";
 import polyglot from "./polyglot.js";
 import equality from "./r7rs/equality.js";
 import numeric from "./r7rs/numeric.js";
@@ -89,10 +90,7 @@ export default new EnvCapability("scheme/polyglot-clojure", {
                      ,@(cdr forms)))))`,
       { macroAttribute: "expression" },
     ),
-    // comp — Clojure's name for compose (shared core). A CONSTANT define: the RHS
-    // is the bare identifier `compose`, bound by the `polyglot` dep — the contract
-    // is the single value schema z.lambda (the value IS the bound compose
-    // procedure), same shape as srfi-235's `always` alias.
+    // comp — CONSTANT alias of compose (eq? identity). No Contract.type channel on constants.
     comp: symbol.define`comp: Clojure's name for compose — a back-compat alias binding the same procedure`(
       z.lambda,
       `compose`,
@@ -180,34 +178,76 @@ export default new EnvCapability("scheme/polyglot-clojure", {
            (dict)
            coll))`,
     ),
-    // partial — Clojure: fix the leading args of f, returning a function of the
-    // rest. `f` applied (later) by the minted closure → applicable; the fixed
-    // args are genuinely anything.
+    // partial — fix leading args; always returns a fn (unlike curry, which may fire).
+    // type: zero-fix preserves full arity; fixed arms for 1–3; catch-all for deeper.
     partial: symbol.define`partial: Clojure — fix the leading args of f, returning a function of the rest`(
-      { input: [applicable], inputRest: z.value, output: [z.lambda] },
+      {
+        input: [applicable],
+        inputRest: z.value,
+        output: [z.lambda],
+        type: dedent`
+          {
+            <A extends unknown[], R>(f: (...args: A) => R): (...args: A) => R;
+            <A, B, R>(f: (a: A, b: B) => R, a: A): (b: B) => R;
+            <A, B, C, R>(f: (a: A, b: B, c: C) => R, a: A): (b: B, c: C) => R;
+            <A, B, C, R>(f: (a: A, b: B, c: C) => R, a: A, b: B): (c: C) => R;
+            <A, B, C, R>(f: (a: A, b: B, c: C) => R, a: A, b: B, c: C): () => R;
+            <R>(f: (...args: unknown[]) => R, ...fixed: unknown[]): (...more: unknown[]) => R;
+          }
+        `,
+      },
       `(lambda (f . args)
          (lambda more (apply f (append args more))))`,
     ),
-    // juxt — Clojure: a function that applies every fn to the same args,
-    // collecting the results into a list (in fn order).
+    // juxt — same args → List of results (scheme list; order lost as union).
+    // type: 1–3 precise arms + catch-all (same pragmatism as curry, not compose's hard cap).
     juxt: symbol.define`juxt: Clojure — a function applying every fn to the same args, collecting the results into a list in fn order`(
-      { input: [], inputRest: applicable, output: [z.lambda] },
+      {
+        input: [],
+        inputRest: applicable,
+        output: [z.lambda],
+        type: dedent`
+          {
+            <A extends unknown[], R1>(f1: (...args: A) => R1): (...args: A) => List<R1>;
+            <A extends unknown[], R1, R2>(f1: (...args: A) => R1, f2: (...args: A) => R2): (...args: A) => List<R1 | R2>;
+            <A extends unknown[], R1, R2, R3>(f1: (...args: A) => R1, f2: (...args: A) => R2, f3: (...args: A) => R3): (...args: A) => List<R1 | R2 | R3>;
+            (...fns: ((...args: unknown[]) => unknown)[]): (...args: unknown[]) => List<unknown>;
+          }
+        `,
+      },
       `(lambda fns
          (lambda args
            (map (lambda (f) (apply f args)) fns)))`,
     ),
-    // mapv / filterv — Clojure: map/filter with a vector result instead of a list.
-    // `f`/`pred` PASS THROUGH to map/filter's own dispatch (which owns the
-    // callable-or-matcher polymorphism — filter accepts a RegExp, per its own doc),
-    // so they stay `z.value`; the trailing lists must be real list spines for the
-    // list->vector lift to hold, so those are `z.list()`; the output is
-    // unconditionally a vector.
+    // mapv / filterv — map/filter + list->vector. f/pred stay z.value (map/filter own
+    // callable-or-matcher); spines z.list(); output always vector.
+    // type: list-only in (contract), vector out — no vector dual.
     mapv: symbol.define`mapv: Clojure — map with a vector result instead of a list`(
-      { input: [z.value], inputRest: z.list(), output: [z.vector()] },
+      {
+        input: [z.value],
+        inputRest: z.list(),
+        output: [z.vector()],
+        type: dedent`
+          {
+            <T, B>(f: (x: T) => B, xs: List<T>): readonly B[];
+            <A, B, R>(f: (a: A, b: B) => R, as: List<A>, bs: List<B>): readonly R[];
+            <A, B, C, R>(f: (a: A, b: B, c: C) => R, as: List<A>, bs: List<B>, cs: List<C>): readonly R[];
+          }
+        `,
+      },
       `(lambda (f . lists) (list->vector (apply map (cons f lists))))`,
     ),
     filterv: symbol.define`filterv: Clojure — filter with a vector result instead of a list`(
-      { input: [z.value, z.list()], output: [z.vector()] },
+      {
+        input: [z.value, z.list()],
+        output: [z.vector()],
+        type: dedent`
+          {
+            <T, S extends T>(p: (x: T) => x is S, xs: List<T>): readonly S[];
+            <T>(p: (x: T) => unknown, xs: List<T>): readonly T[];
+          }
+        `,
+      },
       `(lambda (pred lst) (list->vector (filter pred lst)))`,
     ),
     // %conj-list — conj's list arm (private helper). `z.value` both sides —
