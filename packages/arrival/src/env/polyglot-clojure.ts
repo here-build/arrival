@@ -133,27 +133,46 @@ export default new EnvCapability("scheme/polyglot-clojure", {
                  (%dict-set obj (car ks) v)
                  (%dict-set obj (car ks) (assoc-in (@ obj (car ks)) (cdr ks) v)))))`,
     ),
-    // update-in — Clojure: assoc-in the result of applying f to the current value.
-    // `f` is applied directly by this body → `applicable` (a keyword accessor is a
-    // legal updater exactly like any fn).
+    // update-in — f unary updater via applicable. type: pins 3-arg shape (callable would collapse).
     "update-in": symbol.define`update-in: Clojure — assoc-in the result of applying f to the value currently at nested path ks`(
-      { input: [z.value, z.list(), applicable], output: [z.value] },
+      {
+        input: [z.value, z.list(), applicable],
+        output: [z.value],
+        type: dedent`
+          {
+            (obj: unknown, ks: List<unknown>, f: (cur: unknown) => unknown): unknown;
+          }
+        `,
+      },
       `(lambda (obj ks f)
          (assoc-in obj ks (f (get-in obj ks))))`,
     ),
-    // zipmap — Clojure: a dict pairing each key with the value at the same
-    // position in vs.
+    // zipmap — dict of ks→vs. type: string keys preferred; unknown keys still → string dict face.
     zipmap: symbol.define`zipmap: Clojure — a dict pairing each key in ks with the value at the same position in vs`(
-      { input: [z.list(), z.list()], output: [z.dict()] },
+      {
+        input: [z.list(), z.list()],
+        output: [z.dict()],
+        type: dedent`
+          {
+            <V>(ks: List<string>, vs: List<V>): Record<string, V>;
+            <V>(ks: List<unknown>, vs: List<V>): Record<string, V>;
+          }
+        `,
+      },
       `(lambda (ks vs) (apply dict (%interleave ks vs)))`,
     ),
-    // frequencies — Clojure: a dict of each distinct element to its occurrence
-    // count. Non-string elements key by their `repr` (dict keys are strings).
-    // `coll` stays `z.value`: the body delegates to `reduce` (srfi-1's tagless
-    // term dispatcher), so any reduce-capable receiver (list, vector, nil) is
-    // legal — a `z.list()` contract would narrow the real surface.
+    // frequencies — reduce-dispatched coll (list|vector|nil). Keys via repr → string dict face.
     frequencies: symbol.define`frequencies: Clojure — a dict of each distinct element to its occurrence count (non-string elements key by repr)`(
-      { input: [z.value], output: [z.dict()] },
+      {
+        input: [z.value],
+        output: [z.dict()],
+        type: dedent`
+          {
+            <T>(coll: List<T>): Record<string, number>;
+            <T>(coll: readonly T[]): Record<string, number>;
+          }
+        `,
+      },
       `(lambda (coll)
          (reduce
            (lambda (x acc)
@@ -163,11 +182,18 @@ export default new EnvCapability("scheme/polyglot-clojure", {
            (dict)
            coll))`,
     ),
-    // group-by — Clojure: a dict of (f element) to the list of elements that
-    // produced it, in original order. `f` applied directly → applicable; `coll`
-    // term-dispatched via reduce → z.value (same reasoning as frequencies).
+    // group-by — f → key; values always lists of elements. Record keys = string (repr floor).
     "group-by": symbol.define`group-by: Clojure — a dict of (f element) to the list of elements that produced it, in original order`(
-      { input: [applicable, z.value], output: [z.dict()] },
+      {
+        input: [applicable, z.value],
+        output: [z.dict()],
+        type: dedent`
+          {
+            <T>(f: (x: T) => unknown, coll: List<T>): Record<string, List<T>>;
+            <T>(f: (x: T) => unknown, coll: readonly T[]): Record<string, List<T>>;
+          }
+        `,
+      },
       `(lambda (f coll)
          (reduce
            (lambda (x acc)
@@ -280,23 +306,31 @@ export default new EnvCapability("scheme/polyglot-clojure", {
       `(lambda (to from)
          (reduce (lambda (x acc) (conj acc x)) to from))`,
     ),
-    // rest — Clojure: cdr that tolerates a non-pair (nil) instead of erroring.
-    // The `z.value` input IS the semantics (tolerance is the whole binding).
+    // rest — cdr that tolerates non-pair → '(). type: List arm + tolerant unknown arm.
     rest: symbol.define`rest: Clojure — cdr that tolerates a non-pair (returns '()) instead of erroring`(
-      { input: [z.value], output: [z.value] },
+      {
+        input: [z.value],
+        output: [z.value],
+        type: dedent`
+          {
+            <T>(xs: List<T>): List<T>;
+            (xs: unknown): List<unknown>;
+          }
+        `,
+      },
       `(lambda (xs) (if (pair? xs) (cdr xs) '()))`,
     ),
-    // empty? — Clojure: #t iff the list / string / vector / dict has no elements.
-    // (`@keys` returns a raw JS array, not a scheme list — `length` accepts it
-    // directly as a ".length carrier", r7rs/lists.ts, so no array->list needed here.)
-    // OUTPUT is `z.boolean`: every cond arm returns a boxed ABool — the `#t`/`#f`
-    // literals and the null?/pair?/dict? verdicts obviously, AND the
-    // `=`-driven string?/vector?/dict? arms too (`nativeNumericOp`'s
-    // `applyNumeric` boxes every boolean result, r7rs/numeric.ts, so `(= 0 0)`
-    // and every `=`-arm of `empty?` return ABool, never a raw JS boolean).
-    // Matches the sibling `dict-has-key?` (racket), also `z.boolean`.
+    // empty? — list/string/vector/dict. OUTPUT z.boolean: every arm is ABool (`=` boxes via applyNumeric).
     "empty?": symbol.define`empty?: Clojure — #t iff the list / string / vector / dict has no elements`(
-      { input: [z.value], output: [z.boolean] },
+      {
+        input: [z.value],
+        output: [z.boolean],
+        type: dedent`
+          {
+            (xs: List<unknown> | readonly unknown[] | string | Record<string, unknown>): boolean;
+          }
+        `,
+      },
       `(lambda (xs)
          (cond
            ((null? xs) #t)

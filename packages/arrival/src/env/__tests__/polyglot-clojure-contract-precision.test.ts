@@ -80,3 +80,69 @@ describe("scheme/polyglot-clojure Contract.type — mapv/filterv/partial/juxt ha
     expect(def.type).toBeUndefined();
   });
 });
+
+describe("scheme/polyglot-clojure Contract.type — optional collection/dict harvest", () => {
+  it("update-in: three-arg shape with unary updater", () => {
+    expect(norm(signatureOf(defineDef("update-in")))).toBe(
+      norm(dedent`
+        {
+          (obj: unknown, ks: List<unknown>, f: (cur: unknown) => unknown): unknown;
+        }
+      `),
+    );
+  });
+
+  it("zipmap: keys → Record string values", () => {
+    expect(norm(signatureOf(defineDef("zipmap")))).toBe(
+      norm(dedent`
+        {
+          <V>(ks: List<string>, vs: List<V>): Record<string, V>;
+          <V>(ks: List<unknown>, vs: List<V>): Record<string, V>;
+        }
+      `),
+    );
+  });
+
+  it("frequencies: coll → Record string counts", () => {
+    expect(norm(signatureOf(defineDef("frequencies")))).toBe(
+      norm(dedent`
+        {
+          <T>(coll: List<T>): Record<string, number>;
+          <T>(coll: readonly T[]): Record<string, number>;
+        }
+      `),
+    );
+  });
+
+  it("group-by: f + coll → Record of Lists", () => {
+    expect(norm(signatureOf(defineDef("group-by")))).toBe(
+      norm(dedent`
+        {
+          <T>(f: (x: T) => unknown, coll: List<T>): Record<string, List<T>>;
+          <T>(f: (x: T) => unknown, coll: readonly T[]): Record<string, List<T>>;
+        }
+      `),
+    );
+  });
+
+  it("rest: List preserve + tolerant unknown", () => {
+    expect(norm(signatureOf(defineDef("rest")))).toBe(
+      norm(dedent`
+        {
+          <T>(xs: List<T>): List<T>;
+          (xs: unknown): List<unknown>;
+        }
+      `),
+    );
+  });
+
+  it("empty?: multi-carrier domain → boolean", () => {
+    expect(norm(signatureOf(defineDef("empty?")))).toBe(
+      norm(dedent`
+        {
+          (xs: List<unknown> | readonly unknown[] | string | Record<string, unknown>): boolean;
+        }
+      `),
+    );
+  });
+});
