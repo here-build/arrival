@@ -595,26 +595,19 @@ const sqrtFn = (x: ANumeric): ANumeric => {
 const logFn = (z: number, base?: number): number => (base === undefined ? Math.log(z) : Math.log(z) / Math.log(base));
 const atanFn = (y: number, x?: number): number => (x === undefined ? Math.atan(y) : Math.atan2(y, x));
 
-// ── Bitwise ────────────────────────────────────────────────────────────────────────
-
-const bitwiseAndFn = (...args: bigint[]): bigint => {
-  if (args.length === 0) return -1n;
-  return args.reduce((a, b) => a & b);
-};
-
-const bitwiseIorFn = (...args: bigint[]): bigint => {
-  if (args.length === 0) return 0n;
-  return args.reduce((a, b) => a | b);
-};
-
-const bitwiseXorFn = (...args: bigint[]): bigint => {
-  if (args.length === 0) return 0n;
-  return args.reduce((a, b) => a ^ b);
-};
-
-const bitwiseNotFn = (x: bigint): bigint => ~x;
-
-const arithmeticShiftFn = (n: bigint, count: number): bigint => (count >= 0 ? n << BigInt(count) : n >> BigInt(-count));
+// ── Bitwise — DOORED: here lieth the dragons (V ruling 2026-07-14) ──────────────────
+// Doored AHEAD of the one-number rework (docs/working-proposals/arrival-one-number-rework.md):
+// scheme exact integers become safe-range JS numbers, and JS's native bitwise operators
+// (`|` `&` `^` `~` `<<` `>>`) silently coerce their operands to 32 BITS — every result on
+// a value wider than 2^31 is silent corruption, precisely the wrong-value class the rework
+// exists to abolish. Correct wide bitwise needs the arbitrary-precision ALU the one-number
+// representation deliberately gave up. Arrival's domain (LLM orchestration) has produced
+// zero demand for bitwise (no in-repo .scm uses it); when a real demand lands, implement
+// via split-limb words over safe integers — NEVER via the JS operators. Until then:
+// doors, not dragons. (The former bigint impls — correct, but stranded by the ruling —
+// died here; git has them.)
+const BITWISE_DOOR =
+  "doored under the one-number representation (safe-integer exacts, no bigints): JS bitwise operators truncate to 32 bits — silent corruption above 2^31; here lieth the dragons. See the Bitwise section note in env/r7rs/numeric.ts and arrival-one-number-rework.md";
 
 // ════════════════════════════════════════════════════════════════════════════
 // Reused op specs / cores — aliases (`**`/`%`/`==`/`|`/`&`/`~`) bind the SAME op
@@ -625,21 +618,14 @@ const arithmeticShiftFn = (n: bigint, count: number): bigint => (count >= 0 ? n 
 // `arithmeticShiftSpec` also consumed by `>>`/`<<` inline ops.
 // ════════════════════════════════════════════════════════════════════════════
 
-const arithmeticShiftSpec: NumSpec = { in: [z.bigint, z.integer], out: z.bigint, fn: arithmeticShiftFn };
 
 const exptSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: schemeExpt };
 const remainderSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: remainderFn };
 const numEqSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.boolean, fn: numEqFn };
-const bitwiseIorSpec: NumSpec = { in: [], inRest: z.bigint, out: z.bigint, fn: bitwiseIorFn };
-const bitwiseAndSpec: NumSpec = { in: [], inRest: z.bigint, out: z.bigint, fn: bitwiseAndFn };
-const bitwiseNotSpec: NumSpec = { in: [z.bigint], out: z.bigint, fn: bitwiseNotFn };
 
 const exptOp = nativeNumericOp("expt", exptSpec);
 const remainderOp = nativeNumericOp("remainder", remainderSpec);
 const numEqOp = nativeNumericOp("=", numEqSpec);
-const bitwiseIorOp = nativeNumericOp("bitwise-ior", bitwiseIorSpec);
-const bitwiseAndOp = nativeNumericOp("bitwise-and", bitwiseAndSpec);
-const bitwiseNotOp = nativeNumericOp("bitwise-not", bitwiseNotSpec);
 
 // The numeric comparison cores (provenance), wrapped by `wrapOrd`
 // (FL-Ord fallback) and `looseCompare` (nil-tolerant overlay) below.
@@ -842,19 +828,6 @@ const oneMinusFn = function (this: CallCtx, n: unknown): ANumeric {
   return subFn(converted, one);
 };
 
-const shiftRightFn = function (this: CallCtx, a: unknown, b: unknown): ANumeric {
-  const aNum = coerceNumeric(a, this.runCtx);
-  const bNum = coerceNumeric(b, this.runCtx);
-  return marshalCall("arithmetic-shift", arithmeticShiftSpec, [aNum, bNum]) as ANumeric;
-};
-
-const shiftLeftFn = function (this: CallCtx, a: unknown, b: unknown): ANumeric {
-  const aNum = coerceNumeric(a, this.runCtx);
-  const bNum = coerceNumeric(b, this.runCtx);
-  const negB = subFn(bNum);
-  return marshalCall("arithmetic-shift", arithmeticShiftSpec, [aNum, negB]) as ANumeric;
-};
-
 const inexactFn = function (this: CallCtx, z: unknown): AInexact {
   const n = coerceNumeric(z, this.runCtx);
   if (n instanceof AInexact) return n;
@@ -1007,7 +980,6 @@ const tanSpec: NumSpec = { in: [z.looseNumber], out: z.looseNumber, fn: Math.tan
 const asinSpec: NumSpec = { in: [z.looseNumber], out: z.looseNumber, fn: Math.asin };
 const acosSpec: NumSpec = { in: [z.looseNumber], out: z.looseNumber, fn: Math.acos };
 const atanSpec: NumSpec = { in: [z.looseNumber], inRest: z.looseNumber, out: z.looseNumber, fn: atanFn };
-const bitwiseXorSpec: NumSpec = { in: [], inRest: z.bigint, out: z.bigint, fn: bitwiseXorFn };
 
 // ── Bespoke contracts — ops whose impl does NOT come from `nativeNumericOp`/`NumSpec`
 // (own coercion + bespoke `marshalCall` wrapper, or no NumSpec), so their Contract is
@@ -1294,26 +1266,20 @@ export default new EnvCapability("scheme/numeric", {
     acos: symbol.native`acos: arc cosine`(contractFromSpec(acosSpec), nativeNumericOp("acos", acosSpec)),
     atan: symbol.native`atan: arc tangent, or atan2`(contractFromSpec(atanSpec), nativeNumericOp("atan", atanSpec)),
 
-    // ── Bitwise (integer only) ────────────────────────────────────────────────────
-    "bitwise-and": symbol.native`bitwise-and: bitwise AND`(contractFromSpec(bitwiseAndSpec), bitwiseAndOp),
-    "bitwise-ior": symbol.native`bitwise-ior: bitwise inclusive OR`(contractFromSpec(bitwiseIorSpec), bitwiseIorOp),
-    "bitwise-xor": symbol.native`bitwise-xor: bitwise exclusive OR`(
-      contractFromSpec(bitwiseXorSpec),
-      nativeNumericOp("bitwise-xor", bitwiseXorSpec),
-    ),
-    "bitwise-not": symbol.native`bitwise-not: bitwise NOT`(contractFromSpec(bitwiseNotSpec), bitwiseNotOp),
-    "arithmetic-shift": symbol.native`arithmetic-shift: shift left (right if count < 0)`(
-      contractFromSpec(arithmeticShiftSpec),
-      nativeNumericOp("arithmetic-shift", arithmeticShiftSpec),
-    ),
+    // ── Bitwise — DOORED (see the dragons note above) ─────────────────────────────
+    "bitwise-and": symbol.notImplemented`bitwise-and: ${BITWISE_DOOR}`,
+    "bitwise-ior": symbol.notImplemented`bitwise-ior: ${BITWISE_DOOR}`,
+    "bitwise-xor": symbol.notImplemented`bitwise-xor: ${BITWISE_DOOR}`,
+    "bitwise-not": symbol.notImplemented`bitwise-not: ${BITWISE_DOOR}`,
+    "arithmetic-shift": symbol.notImplemented`arithmetic-shift: ${BITWISE_DOOR}`,
 
     // ── LIPS-style aliases (canonical-named cores under the alias key) ────────────
     "**": symbol.native`**: exponentiation (alias of expt)`(contractFromSpec(exptSpec), exptOp),
     "%": symbol.native`%: remainder (alias)`(contractFromSpec(remainderSpec), remainderOp),
     "==": symbol.native`==: numeric equality (alias of =)`(contractFromSpec(numEqSpec), numEqOp),
-    "|": symbol.native`|: bitwise inclusive OR (alias)`(contractFromSpec(bitwiseIorSpec), bitwiseIorOp),
-    "&": symbol.native`&: bitwise AND (alias)`(contractFromSpec(bitwiseAndSpec), bitwiseAndOp),
-    "~": symbol.native`~: bitwise NOT (alias)`(contractFromSpec(bitwiseNotSpec), bitwiseNotOp),
+    "|": symbol.notImplemented`|: bitwise alias — ${BITWISE_DOOR}`,
+    "&": symbol.notImplemented`&: bitwise alias — ${BITWISE_DOOR}`,
+    "~": symbol.notImplemented`~: bitwise alias — ${BITWISE_DOOR}`,
 
     // ── Inline misc ops (own coercion + marshalled call; no provenance layer) ─────
     // Each impl below has a CONCRETE fixed-arity signature (unlike nativeNumericOp/
@@ -1345,14 +1311,8 @@ export default new EnvCapability("scheme/numeric", {
       ONE_ARG_NUM_OUTPUT_CONTRACT,
       oneMinusFn as (...args: unknown[]) => unknown,
     ),
-    ">>": symbol.native`>>: arithmetic-shift by the count`(
-      TWO_ARG_NUM_OUTPUT_CONTRACT,
-      shiftRightFn as (...args: unknown[]) => unknown,
-    ),
-    "<<": symbol.native`<<: arithmetic-shift by the negated count`(
-      TWO_ARG_NUM_OUTPUT_CONTRACT,
-      shiftLeftFn as (...args: unknown[]) => unknown,
-    ),
+    ">>": symbol.notImplemented`>>: bitwise-shift alias — ${BITWISE_DOOR}`,
+    "<<": symbol.notImplemented`<<: bitwise-shift alias — ${BITWISE_DOOR}`,
     inexact: symbol.native`inexact: exact→inexact conversion`(
       INEXACT_CONTRACT,
       inexactFn as (...args: unknown[]) => unknown,

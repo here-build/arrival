@@ -1,15 +1,17 @@
 /**
- * SRFI-151 bitwise operations (env/srfi/srfi-151.ts).
+ * SRFI-151 bitwise operations — DOORED IN FULL (V ruling 2026-07-14).
  *
- * The base `scheme/numeric` pack ALREADY binds `bitwise-and` / `bitwise-ior` /
- * `bitwise-xor` / `bitwise-not` / `arithmetic-shift` (with the SRFI sign
- * convention: positive count = left shift). The srfi-151 pack therefore adds only
- * the one genuinely-absent verb, `bit-count`. This suite pins `bit-count` across
- * both signs and the inexact-rejection contract, and confirms the base five remain
- * reachable by inheritance (documenting why the pack is bit-count-only).
+ * This suite pins the DOORS, not behavior: every bitwise verb — the numeric-pack
+ * five (`bitwise-and`/`bitwise-ior`/`bitwise-xor`/`bitwise-not`/`arithmetic-shift`),
+ * the LIPS aliases (`|` `&` `~` `>>` `<<`), and srfi-151's `bit-count` — must reject
+ * with the dragons door, never compute. Rationale (env/srfi/srfi-151.ts header +
+ * docs/working-proposals/arrival-one-number-rework.md): under the one-number
+ * representation, exact integers are safe-range JS numbers, and JS's native bitwise
+ * operators silently truncate to 32 bits — a confident-wrong-answer factory above
+ * 2^31. Doors, not dragons.
  *
- * Assembles srfi-151 EXPLICITLY onto a fresh inference env (the pack is not
- * registered globally this round); the base bitwise verbs arrive by inheritance.
+ * If a real bitwise demand ever lands and gets a split-limb implementation, these
+ * rows flip from door-pins to behavior-pins — deliberately, in that commit.
  */
 
 import { exec } from "../index.js";
@@ -26,65 +28,35 @@ const evalScheme = (e: SchemeEnv, src: string) => exec(src, { env: e as never })
 async function mk() {
   const env = mintFrame(sandboxedEnv, `s151-${Math.random().toString(36).slice(2)}`);
   await assembleEnv(env as unknown as SchemeEnv, [srfi151.lower({ evalScheme }) as never]);
-  const num = async (src: string) => Number((await exec(src, { env }))[0]);
-  const raw = (src: string) => exec(src, { env });
-  return { num, raw };
+  return (src: string) => exec(src, { env });
 }
 
-describe("bit-count — SRFI-151 population count", () => {
-  it("counts 1 bits of non-negative exact integers", async () => {
-    const { num } = await mk();
-    expect(await num("(bit-count 0)")).toBe(0);
-    expect(await num("(bit-count 1)")).toBe(1);
-    expect(await num("(bit-count 7)")).toBe(3); // 0b111
-    expect(await num("(bit-count 255)")).toBe(8); // 0b1111_1111
-    expect(await num("(bit-count 256)")).toBe(1); // 0b1_0000_0000
+const DOOR_FORMS = [
+  // numeric-pack canonical five (reachable by inheritance from the base env)
+  "(bitwise-and 12 10)",
+  "(bitwise-ior 12 10)",
+  "(bitwise-xor 12 10)",
+  "(bitwise-not 5)",
+  "(arithmetic-shift 1 4)",
+  // LIPS aliases. (`|` is doored at the BINDING too, but unreachable from the reader
+  // regardless — R7RS `|…|` vertical-bar symbol syntax claims the token, so `(| 12 10)`
+  // is a parse error; true before the door as well. Not row-testable.)
+  "(& 12 10)",
+  "(~ 5)",
+  "(>> 16 4)",
+  "(<< 1 4)",
+  // srfi-151's own verb
+  "(bit-count 7)",
+] as const;
+
+describe("bitwise family — doored in full (here lieth the dragons)", () => {
+  it.each(DOOR_FORMS)("%s rejects with the dragons door", async (form) => {
+    const run = await mk();
+    await expect(run(form)).rejects.toThrow(/is not available[\s\S]*dragons/);
   });
 
-  it("counts 0 bits of negative integers (infinite two's-complement, SRFI-151)", async () => {
-    const { num } = await mk();
-    // -1 is …1111 → zero 0-bits.
-    expect(await num("(bit-count -1)")).toBe(0);
-    // -2 is …1110 → one 0-bit.
-    expect(await num("(bit-count -2)")).toBe(1);
-    // -8 is …11111000 → three 0-bits; ~(-8) = 7 → popcount 3.
-    expect(await num("(bit-count -8)")).toBe(3);
-    // -256 is …1_0000_0000 → eight 0-bits.
-    expect(await num("(bit-count -256)")).toBe(8);
-  });
-
-  it("handles big (beyond 53-bit) exact integers precisely", async () => {
-    const { num } = await mk();
-    // (arithmetic-shift 1 100) has exactly one 1-bit — leans on bigint, not float.
-    expect(await num("(bit-count (arithmetic-shift 1 100))")).toBe(1);
-    // (- (arithmetic-shift 1 100) 1) is 100 one-bits.
-    expect(await num("(bit-count (- (arithmetic-shift 1 100) 1))")).toBe(100);
-  });
-
-  it("rejects an inexact argument with a clear type error", async () => {
-    const { raw } = await mk();
-    await expect(raw("(bit-count 3.0)")).rejects.toThrow(/expected an exact integer.*inexact/);
-  });
-
-  it("rejects a rational (non-integer exact) argument", async () => {
-    const { raw } = await mk();
-    await expect(raw("(bit-count 1/2)")).rejects.toThrow(/expected an exact integer.*rational/);
-  });
-});
-
-describe("base bitwise verbs remain reachable (already bound in scheme/numeric)", () => {
-  it("bitwise-and / ior / xor / not and arithmetic-shift work by inheritance", async () => {
-    const { num } = await mk();
-    expect(await num("(bitwise-and 12 10)")).toBe(8);
-    expect(await num("(bitwise-ior 12 10)")).toBe(14);
-    expect(await num("(bitwise-xor 12 10)")).toBe(6);
-    expect(await num("(bitwise-not 5)")).toBe(-6);
-    // negative operands are well-defined on bigints (two's-complement).
-    expect(await num("(bitwise-and -1 6)")).toBe(6);
-    expect(await num("(bitwise-xor -1 0)")).toBe(-1);
-    // shift: positive = left, negative = right, zero = identity.
-    expect(await num("(arithmetic-shift 1 4)")).toBe(16);
-    expect(await num("(arithmetic-shift 16 -4)")).toBe(1);
-    expect(await num("(arithmetic-shift 5 0)")).toBe(5);
+  it("the door names the rework doc (the rejection teaches)", async () => {
+    const run = await mk();
+    await expect(run("(bit-count 7)")).rejects.toThrow(/arrival-one-number-rework/);
   });
 });

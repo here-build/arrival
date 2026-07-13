@@ -158,9 +158,10 @@ describe("numeric Contract precision — the real exported ops reject wrongly-ty
     // as SEPARATE bindOp arguments specifically so this identity survives.
     expect(nativeDef("**").impl).toBe(nativeDef("expt").impl);
     expect(nativeDef("%").impl).toBe(nativeDef("remainder").impl);
-    expect(nativeDef("|").impl).toBe(nativeDef("bitwise-ior").impl);
-    expect(nativeDef("&").impl).toBe(nativeDef("bitwise-and").impl);
-    expect(nativeDef("~").impl).toBe(nativeDef("bitwise-not").impl);
+    // `|`/`&`/`~` (and `>>`/`<<`) are DOORS now — the whole bitwise family is doored
+    // under the one-number ruling (2026-07-14, "here lieth the dragons" — numeric.ts's
+    // Bitwise section note). Door-hood is pinned by srfi-151-bitwise.test.ts; the
+    // alias-identity invariant no longer applies to them.
     // "==" binds the RAW numEqOp (no looseCompare overlay); "=" wraps it — this is a
     // pre-existing, deliberate DIFFERENCE (not an identity), so they must NOT be equal.
     expect(nativeDef("==").impl).not.toBe(nativeDef("=").impl);

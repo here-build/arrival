@@ -1,70 +1,35 @@
-// SRFI-151 — bitwise operations. Scheme-bootstrap capability.
+// SRFI-151 — bitwise operations. DOORED IN FULL: here lieth the dragons.
 //
-// SINGLE SOURCE: `base-packs.ts` assembles this pack (via allSrfi) and evals it
-// (via initBridge's assembleEnv), so this module is the sole definition site.
+// (V ruling 2026-07-14, ahead of the one-number rework —
+//  docs/working-proposals/arrival-one-number-rework.md.)
 //
-// SCOPE (honest): SRFI-151's core bitwise verbs —
-// `bitwise-and` / `bitwise-ior` / `bitwise-xor` / `bitwise-not` / `arithmetic-shift`
-// — are ALREADY bound in the base `scheme/numeric` pack (env/r7rs/numeric.ts;
-// `arithmetic-shift` already carries the SRFI sign convention, positive count =
-// left shift). The inference base reaches them by inheritance, so re-binding them
-// here would shadow the numeric core with a redundant, divergently-maintained copy
-// — the model-design cut says derive/reuse, never duplicate. This pack therefore
-// adds ONLY the one genuinely-absent verb models reach for after seeing the base
-// five: `bit-count`. (`bitwise-shift` is NOT a real SRFI name and is intentionally
-// omitted.)
+// WHY THE DRAGONS: under the one-number representation, scheme exact integers are
+// safe-range JS numbers (|x| ≤ 2^53−1) — and JavaScript's native bitwise operators
+// (`|` `&` `^` `~` `<<` `>>`) silently coerce their operands to **32 bits** before
+// operating. Every bitwise result on a value wider than 2^31 is silent corruption:
+// no error, no warning, a confidently wrong number. That is precisely the
+// wrong-value class the one-number rework exists to abolish, and correct wide
+// bitwise needs the arbitrary-precision ALU the representation deliberately gave
+// up. The former implementations here and in env/r7rs/numeric.ts were bigint-based
+// and correct — but stranded by the ruling; git has them.
 //
-// `bit-count` follows SRFI-151 EXACTLY, negatives included: for i ≥ 0 it counts the
-// 1 bits; for i < 0 it counts the 0 bits of the infinite two's-complement rep, which
-// with bigint is simply popcount(~i) — ~i = -i-1 is non-negative, so its 1-count IS
-// i's 0-count. No approximation and no narrowing error is needed here — the honest
-// full contract is cheap with arbitrary-precision integers. Exact-integer only: an
-// inexact or a rational argument is a clear type error, mirroring numeric.ts's
-// `toInteger` guard (bitwise ops are exact-integer-only, SRFI-151).
+// Arrival's domain (LLM orchestration — counts, indices, scores, temperatures) has
+// produced zero demand for bitwise: no in-repo .scm uses any of these verbs. If a
+// real demand ever lands, the honest implementation is split-limb arithmetic over
+// safe integers (word = limbs of ≤ 26 bits, ops composed limb-wise) — NEVER the JS
+// operators, whose 32-bit truncation is the dragon. Until then: doors, not dragons
+// (errors-as-doors — the rejection teaches, a wrong answer doesn't).
+//
+// The r7rs/numeric.ts pack doors the core five (`bitwise-and`/`bitwise-ior`/
+// `bitwise-xor`/`bitwise-not`/`arithmetic-shift`) and the LIPS aliases
+// (`|` `&` `~` `>>` `<<`) with the same rationale; this pack doors the one verb it
+// ever owned, `bit-count`.
 
-import * as z from "../../common/scheme-zod.js";
-import { symbol, type CallCtx } from "../../common/symbol.js";
+import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
-import { withInputProvenance } from "../../values/op-helpers.js";
-import { AExact } from "../../values/primitives/AExact.js";
-import { AInexact } from "../../values/primitives/AInexact.js";
-
-/** Exact-integer extraction — mirrors numeric.ts `toInteger`'s guard: an AExact whose
- *  denom is 1 yields its bigint numerator; an inexact or a rational is a clear type
- *  error (bitwise ops are exact-integer-only per SRFI-151). */
-function exactIntArg(name: string, v: unknown): bigint {
-  if (v instanceof AExact) {
-    if (v.isInteger) return v.num;
-    throw new TypeError(`${name}: expected an exact integer, got the rational ${v.toString()}`);
-  }
-  if (v instanceof AInexact) {
-    throw new TypeError(`${name}: expected an exact integer, got the inexact ${v.toString()}`);
-  }
-  throw new TypeError(`${name}: expected an exact integer, got ${v === null ? "nil" : typeof v}`);
-}
-
-/** Population count over the two's-complement representation: the 1 bits for i ≥ 0,
- *  the 0 bits for i < 0 (SRFI-151). For i < 0, ~i = -i-1 ≥ 0 and its 1-count IS i's
- *  0-count, so one popcount covers both signs. */
-function bitCount(i: bigint): bigint {
-  let x = i < 0n ? ~i : i;
-  let count = 0n;
-  while (x > 0n) {
-    count += x & 1n;
-    x >>= 1n;
-  }
-  return count;
-}
 
 export default new EnvCapability("scheme/srfi-151", {
   symbols: {
-    "bit-count":
-      symbol.native`bit-count: number of 1 bits in a non-negative exact integer; for a negative one, the number of 0 bits in its two's-complement representation (SRFI-151)`(
-        { input: [z.bigint], output: [z.exact] },
-        function (this: CallCtx, i: unknown): AExact {
-          const n = exactIntArg("bit-count", i);
-          return withInputProvenance([i], new AExact(this.runCtx, bitCount(n)));
-        },
-      ),
+    "bit-count": symbol.notImplemented`bit-count: doored under the one-number representation (safe-integer exacts, no bigints) — JS bitwise truncates to 32 bits, silent corruption above 2^31; here lieth the dragons. See this file's header and arrival-one-number-rework.md`,
   },
 });
