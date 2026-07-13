@@ -31,6 +31,7 @@ import { applyCallback } from "../../values/primitives/ACallable.js";
 import { CallCtx } from "../../common/symbols/_bake.js";
 
 import * as z from "../../common/scheme-zod.js";
+import { FOR_EACH_HOF, MAP_HOF } from "../../common/hof-sig.js";
 import { type MaybePromise, resolveMethod, symbol } from "../../common/symbol.js";
 import { schemeFalse, withInputProvenance } from "../../values/op-helpers.js";
 import invariant from "tiny-invariant";
@@ -231,16 +232,12 @@ export default new EnvCapability("scheme/lists", {
       // the vector case. Output is z.value: both dispatch paths (the tf("map") protocol
       // member, and multiListMap) declare SchemeValue | Promise<SchemeValue>, never a
       // raw-primitive leak.
-      // The z.custom callable head is UNREPRESENTABLE to the harvest printer, collapsing
-      // signatureOf to the catch-all `(...args: unknown[]) => unknown`. `type` author-
-      // asserts the real shape: fn-first over a REPRESENTATION-AGNOSTIC sequence rest —
-      // map dispatches to Pair/Nil/Vector terms, so narrowing the rest to a List would be
-      // false (it would exclude the vector case).
+      // Harvest: faithful List|vector dual generics (hof-sig MAP_HOF), not R[]/unknown.
       {
         input: z.tuple([z.lambda], z.value),
         output: [z.value],
         provenance: "fan",
-        type: "<R>(fn: (...args: unknown[]) => R, ...lists: unknown[]) => R[]",
+        type: MAP_HOF,
       },
       (args, runCtx) => {
         const [fn, ...lists] = args;
@@ -274,9 +271,7 @@ export default new EnvCapability("scheme/lists", {
         input: [z.lambda],
         inputRest: z.union([z.pair, z.nil]),
         output: [z.undefinedResult],
-        // The z.custom callable head collapses signatureOf to the catch-all. `type`
-        // author-asserts fn-first over a list-only rest (`Cons<unknown> | null`) → `void`.
-        type: "(fn: (...args: unknown[]) => unknown, ...lists: (Cons<unknown> | null)[]) => void",
+        type: FOR_EACH_HOF,
       },
       // Runs mapImpl for its side effects and discards the result list. `this: CallCtx`
       // (not an arrow) — the dispatch-delivered `this.runCtx` is threaded into mapImpl so

@@ -25,6 +25,7 @@
 // output (now z.array(z.value) — Array.isArray refinement).
 import { describe, expect, it } from "vitest";
 import listsPack from "../lists.js";
+import { FOR_EACH_HOF, MAP_HOF } from "../../../common/hof-sig.js";
 import { signatureOf } from "../../../type-layer/schema-to-ts.js";
 import type { AEntity } from "../../../common/symbol.js";
 import { APair } from "../../../values/primitives/APair.js";
@@ -343,17 +344,13 @@ describe("scheme/lists Contract.type overrides — the harvest signature (signat
   // `unknown` — map dispatches to Pair/Nil/Vector terms, so narrowing to a List would be false,
   // exactly sort's own documented reasoning; a genuinely list-only receiver is `Cons<unknown> |
   // null`, the same image the file's own non-degraded list ops harvest as).
-  // INVARIANT: map's harvested signature is fn-first over a representation-agnostic
-  // sequence rest, generic over fn's return (pins implementation, not behavior)
-  it("map (sequence): fn-first + representation-agnostic sequence rest, GENERIC over fn's return (a later fix narrowed this further than the plain unknown-collapse the other four ops in this block still carry)", () => {
-    expect(signatureOf(sequenceDef("map"))).toBe("<R>(fn: (...args: unknown[]) => R, ...lists: unknown[]) => R[]");
+  // INVARIANT: map harvests faithful List|vector dual generics (hof-sig MAP_HOF)
+  it("map (sequence): List|vector dual generics over element types (not R[]/unknown)", () => {
+    expect(signatureOf(sequenceDef("map"))).toBe(MAP_HOF);
   });
-  // INVARIANT: for-each's harvested signature is fn-first over a list-only rest,
-  // returning void (pins implementation, not behavior)
-  it("for-each: fn-first over list-only rest (its schema is z.union([pair,nil]), unlike map) → void", () => {
-    expect(signatureOf(nativeDef("for-each"))).toBe(
-      "(fn: (...args: unknown[]) => unknown, ...lists: (Cons<unknown> | null)[]) => void",
-    );
+  // INVARIANT: for-each harvests list dual generics → void
+  it("for-each: list dual generics → void", () => {
+    expect(signatureOf(nativeDef("for-each"))).toBe(FOR_EACH_HOF);
   });
   // INVARIANT: member's harvested signature is obj+list+optional compare returning the
   // matched sublist or #f (pins implementation, not behavior)

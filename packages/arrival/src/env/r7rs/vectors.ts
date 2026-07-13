@@ -20,6 +20,7 @@
  */
 
 import * as z from "../../common/scheme-zod.js";
+import { VECTOR_FOR_EACH_HOF, VECTOR_MAP_HOF } from "../../common/hof-sig.js";
 import { VECTOR_TYPE_GUARD } from "../../common/type-guard-sig.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
 import { CallCtx } from "../../common/symbols/_bake.js";
@@ -217,11 +218,7 @@ export default new EnvCapability("scheme/vectors", {
         inputRest: z.vector(z.value),
         output: [z.vector(z.value)],
         provenance: "fan",
-        // The z.custom callable head collapses signatureOf to the catch-all `(...args: unknown[])
-        // => unknown` (losing the vector rest + vector return). `type` restores the real shape:
-        // proc-first, then a `readonly unknown[][]` rest (the same image z.vector(z.value) harvests as
-        // for vector-append) → a new vector (`readonly unknown[]`).
-        type: "(proc: (...args: unknown[]) => unknown, ...vectors: readonly unknown[][]) => readonly unknown[]",
+        type: VECTOR_MAP_HOF,
       },
       function (this: CallCtx, proc: unknown, ...vectors: (AVector | AJSArray)[]) {
         invariant(vectors.length > 0, "vector-map: expected at least one vector argument");
@@ -253,8 +250,7 @@ export default new EnvCapability("scheme/vectors", {
         input: [z.lambda],
         inputRest: z.vector(z.value),
         output: [z.undefinedResult],
-        // Same degrade + author-assertion as vector-map (the for-effect twin) → `void`.
-        type: "(proc: (...args: unknown[]) => unknown, ...vectors: readonly unknown[][]) => void",
+        type: VECTOR_FOR_EACH_HOF,
       },
       function (this: CallCtx, proc: unknown, ...vectors: (AVector | AJSArray)[]): AVoid | Promise<AVoid> {
         invariant(vectors.length > 0, "vector-for-each: expected at least one vector argument");

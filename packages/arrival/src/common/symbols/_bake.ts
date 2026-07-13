@@ -393,6 +393,12 @@ export interface TaglessSymbolDef {
   /** Always `"pipe"` — `tagless()` takes no `Contract`, so there is no author override
    *  channel yet (see `Contract.provenance`'s kind-default table). */
   readonly provenance: ProvenanceRole;
+  /**
+   * Author-asserted harvest signature — same role as `Contract.type` / TaglessGuardSymbolDef.type.
+   * Tagless ops are shapeless at the binder (`z.array(z.value)`); HOF generics (reduce,
+   * take-while, …) set this so the lens sees List/vector dual overloads, not unknown.
+   */
+  readonly type?: string;
   /** DECLARED per-callable-arg callback roles. A tagless def's contract is shapeless by
    *  construction (`in: z.array(z.value)` — the real per-op types live on the receiver
    *  terms), so shape can NEVER extract here; `withCallbackRoles` below is the declaration

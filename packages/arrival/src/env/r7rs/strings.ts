@@ -16,6 +16,7 @@ import { CallCtx } from "../../common/symbols/_bake.js";
 import invariant from "tiny-invariant";
 
 import * as z from "../../common/scheme-zod.js";
+import { STRING_FOR_EACH_HOF, STRING_MAP_HOF } from "../../common/hof-sig.js";
 import { symbol } from "../../common/symbol.js";
 import {
   assertAllocatable,
@@ -311,7 +312,7 @@ export default new EnvCapability("scheme/strings", {
         input: [z.lambda],
         inputRest: z.string,
         output: [z.string],
-        type: "(proc: (...args: unknown[]) => unknown, ...strings: string[]) => string",
+        type: STRING_MAP_HOF,
         // callbackRoles DECLARED: the host is role `pipe` (string-map was never a
         // declared fan), so the fan default can't fire and shape underdetermines.
         // proc's return BECOMES the output character — `element-transformer`.
@@ -350,7 +351,7 @@ export default new EnvCapability("scheme/strings", {
         input: [z.lambda],
         inputRest: z.string,
         output: [z.undefinedResult],
-        type: "(proc: (...args: unknown[]) => unknown, ...strings: string[]) => void",
+        type: STRING_FOR_EACH_HOF,
       },
       function (this: CallCtx, proc: unknown, ...strings: AString[]): AVoid | Promise<AVoid> {
         invariant(strings.length > 0, "string-for-each: expected at least one string");

@@ -52,6 +52,13 @@
 // %any-null? / %some / %every / zip use that idiom. take/drop are tagless dispatchers.
 // validate:false unused — evidence-gated only.
 import { type CallCtx, type MaybePromise, resolveMethod, symbol, withCallbackRoles } from "../../common/symbol.js";
+import {
+  FILTER_HOF,
+  FIND_HOF,
+  FOLD_RIGHT_HOF,
+  REDUCE_HOF,
+  TAKE_WHILE_HOF,
+} from "../../common/hof-sig.js";
 import { EnvCapability } from "../../common/capability.js";
 import { is_false } from "../../eval/guards.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
@@ -206,7 +213,13 @@ export default new EnvCapability("scheme/srfi-1", {
         // element-transformer — but the pred is a SELECTOR: its verdict decides
         // membership (a length-changing verb), the merged selector+decision role
         // this codebase calls `control`.
-        { input: [z.lambda, z.value], output: [z.value], provenance: "fan", callbackRoles: ["control"] },
+        {
+          input: [z.lambda, z.value],
+          output: [z.value],
+          provenance: "fan",
+          callbackRoles: ["control"],
+          type: FILTER_HOF,
+        },
         (args, runCtx) => {
           const [pred, seq] = args;
           const m = resolveMethod(seq, tf("filter"));
@@ -230,7 +243,10 @@ export default new EnvCapability("scheme/srfi-1", {
     // def is contract-less (shapeless `z.array(z.value)` in), so declaration is the ONLY
     // channel — `withCallbackRoles`, not a Contract field.
     reduce: withCallbackRoles(
-      symbol.tagless`reduce: left fold in scheme convention fn(element, acc); ridentity if empty`,
+      {
+        ...symbol.tagless`reduce: left fold in scheme convention fn(element, acc); ridentity if empty`,
+        type: REDUCE_HOF,
+      },
       ["accumulator"],
     ),
     // fold — SRFI-1's bare LEFT fold is deliberately NOT bound under this name: `reduce`
@@ -245,13 +261,8 @@ export default new EnvCapability("scheme/srfi-1", {
       {
         input: [z.lambda, z.union([z.pair, z.nil])],
         output: [z.value],
-        // The z.custom predicate arg is unrepresentable to the harvest printer, collapsing the WHOLE
-        // signature to the degrade path `(...args: unknown[]) => unknown`. Author-assert the real
-        // shape (checkable by eye against findImpl): the receiver is `List<unknown>` — findImpl is
-        // list-only (its `list` parameter is typed `AListAlike`, i.e. pair-or-nil), NOT
-        // representation-agnostic like filter/sort — the predicate is a one-arg callable, and the
-        // result is the matched car or nil (any value).
-        type: "(pred: (x: unknown) => unknown, list: List<unknown>) => unknown",
+        // Dual generic + type-guard overload; miss → null (nil). Runtime still returns ANil.
+        type: FIND_HOF,
         // callbackRoles DECLARED: the host is a pipe (not fan) with value egress, so
         // shape underdetermines the pred's role. It is `control` — a boolean-returning
         // selector deciding WHICH element egresses (the merged selector+decision role).
@@ -279,13 +290,19 @@ export default new EnvCapability("scheme/srfi-1", {
     // loud, not the old silent '(). pred's role is "control": a selector deciding
     // prefix membership, the same override reasoning as `filter`'s callbackRoles above.
     "take-while": withCallbackRoles(
-      symbol.tagless`take-while: longest prefix of xs satisfying pred, in xs's own representation (list→fresh list, vector→fresh vector)`,
+      {
+        ...symbol.tagless`take-while: longest prefix of xs satisfying pred, in xs's own representation (list→fresh list, vector→fresh vector)`,
+        type: TAKE_WHILE_HOF,
+      },
       ["control"],
     ),
     // drop-while — the take-while remainder, same receiver-last/term-owns-algebra/loud-
     // crash reasoning as take-while directly above (see that comment).
     "drop-while": withCallbackRoles(
-      symbol.tagless`drop-while: xs with the take-while prefix removed, in xs's own representation (list: a shared tail of xs)`,
+      {
+        ...symbol.tagless`drop-while: xs with the take-while prefix removed, in xs's own representation (list: a shared tail of xs)`,
+        type: TAKE_WHILE_HOF,
+      },
       ["control"],
     ),
 
@@ -460,14 +477,15 @@ export default new EnvCapability("scheme/srfi-1", {
     ),
 
     "fold-right": symbol.define`fold-right: right-associative fold — (f x0 (f x1 … (f xn knil)))`(
-      { input: [z.lambda, z.value, listAlike], output: [z.value] },
+      { input: [z.lambda, z.value, listAlike], output: [z.value], type: FOLD_RIGHT_HOF },
       `(lambda (f knil xs)
          (let loop ((xs xs))
            (if (null? xs) knil (f (car xs) (loop (cdr xs))))))`,
     ),
 
     "reduce-right": symbol.define`reduce-right: fold-right with the last element as the seed; ridentity if empty`(
-      { input: [z.lambda, z.value, listAlike], output: [z.value] },
+      // Same f/knil/xs shape as fold-right for the non-empty path; empty uses ridentity.
+      { input: [z.lambda, z.value, listAlike], output: [z.value], type: FOLD_RIGHT_HOF },
       `(lambda (f ridentity xs)
          (if (null? xs)
              ridentity

@@ -18,6 +18,7 @@
 // elements ARE runtime-discriminating — those three are what this file exercises.
 import { describe, expect, it } from "vitest";
 import vectorsPack from "../vectors.js";
+import { VECTOR_FOR_EACH_HOF, VECTOR_MAP_HOF } from "../../../common/hof-sig.js";
 import { signatureOf } from "../../../type-layer/schema-to-ts.js";
 import type { AEntity } from "../../../common/symbol.js";
 import { AVector } from "../../../values/primitives/AVector.js";
@@ -106,15 +107,11 @@ describe("scheme/vectors Contract.type overrides — the harvest signature for t
   // INVARIANT: vector-map's harvested signature is proc-first over a vector rest,
   // returning a new vector (pins implementation, not behavior)
   it("vector-map: proc-first over a vector rest → a new vector", () => {
-    expect(signatureOf(nativeDef("vector-map"))).toBe(
-      "(proc: (...args: unknown[]) => unknown, ...vectors: readonly unknown[][]) => readonly unknown[]",
-    );
+    expect(signatureOf(nativeDef("vector-map"))).toBe(VECTOR_MAP_HOF);
   });
   // INVARIANT: vector-for-each's harvested signature is proc-first over a vector rest,
   // returning void (pins implementation, not behavior)
   it("vector-for-each: proc-first over a vector rest, for effect → void", () => {
-    expect(signatureOf(nativeDef("vector-for-each"))).toBe(
-      "(proc: (...args: unknown[]) => unknown, ...vectors: readonly unknown[][]) => void",
-    );
+    expect(signatureOf(nativeDef("vector-for-each"))).toBe(VECTOR_FOR_EACH_HOF);
   });
 });

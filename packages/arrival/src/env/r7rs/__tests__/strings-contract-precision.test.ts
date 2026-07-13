@@ -36,6 +36,7 @@
 
 import { describe, expect, it } from "vitest";
 import stringsPack from "../strings.js";
+import { STRING_FOR_EACH_HOF, STRING_MAP_HOF } from "../../../common/hof-sig.js";
 import { signatureOf } from "../../../type-layer/schema-to-ts.js";
 import type { AEntity } from "../../../common/symbol.js";
 import { AString } from "../../../values/primitives/AString.js";
@@ -181,15 +182,11 @@ describe("scheme/strings Contract.type overrides — the harvest signature for t
   // INVARIANT: string-map's harvested signature is proc-first over a string rest,
   // returning string (pins implementation, not behavior)
   it("string-map: proc-first over a string rest → string", () => {
-    expect(signatureOf(nativeDef("string-map"))).toBe(
-      "(proc: (...args: unknown[]) => unknown, ...strings: string[]) => string",
-    );
+    expect(signatureOf(nativeDef("string-map"))).toBe(STRING_MAP_HOF);
   });
   // INVARIANT: string-for-each's harvested signature is proc-first over a string rest,
   // returning void (pins implementation, not behavior)
   it("string-for-each: proc-first over a string rest, for effect → void", () => {
-    expect(signatureOf(nativeDef("string-for-each"))).toBe(
-      "(proc: (...args: unknown[]) => unknown, ...strings: string[]) => void",
-    );
+    expect(signatureOf(nativeDef("string-for-each"))).toBe(STRING_FOR_EACH_HOF);
   });
 });
