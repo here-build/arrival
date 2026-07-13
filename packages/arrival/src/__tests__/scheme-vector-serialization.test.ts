@@ -13,19 +13,20 @@ import { jsToScheme, schemeToJs } from "../rosetta.js";
 
 // The interpreter is monadic-boxed: a vector's payload is SchemeValue[], so an
 // integer element IS an AExact (the boxer routes a safe-int JS number to
-// `new AExact(ctx, BigInt(n), 1n)` — boxing.ts). schemeToJs unwraps each AExact
-// back to its JS number, so the `.toEqual([1, 2, 3])` round-trip is unchanged.
-const ex = (n: bigint) => new AExact(CONSTANT_CTX, n);
+// `new AExact(ctx, n, 1)` — boxing.ts, RATIO-rework §0.2: num/denom are safe-int
+// `number`s, not `bigint`). schemeToJs unwraps each AExact back to its JS number,
+// so the `.toEqual([1, 2, 3])` round-trip is unchanged.
+const ex = (n: number) => new AExact(CONSTANT_CTX, n);
 
 describe("boxed vector/bytevector — Scheme→JS serialization (schemeToJs)", () => {
   it("a boxed vector unwraps to a raw JS array (no object leak)", () => {
-    const v = new AVector(CONSTANT_CTX, [ex(1n), ex(2n), ex(3n)]);
+    const v = new AVector(CONSTANT_CTX, [ex(1), ex(2), ex(3)]);
     expect(schemeToJs(v)).toEqual([1, 2, 3]);
     expect(Array.isArray(schemeToJs(v))).toBe(true);
   });
 
   it("a nested boxed vector unwraps recursively", () => {
-    const v = new AVector(CONSTANT_CTX, [new AVector(CONSTANT_CTX, [ex(1n), ex(2n)]), ex(3n)]);
+    const v = new AVector(CONSTANT_CTX, [new AVector(CONSTANT_CTX, [ex(1), ex(2)]), ex(3)]);
     expect(schemeToJs(v)).toEqual([[1, 2], 3]);
   });
 
@@ -45,7 +46,7 @@ describe("boxed vector — provenance propagation (jsToScheme)", () => {
   // INVARIANT: jsToScheme deep-stamps provenance onto both the container and each
   // element (pins implementation, not behavior).
   it("deep-stamps element provenance, keeps it a vector", () => {
-    const v = new AVector(CONSTANT_CTX, [ex(1n), ex(2n), ex(3n)]);
+    const v = new AVector(CONSTANT_CTX, [ex(1), ex(2), ex(3)]);
     const prov = new Set<number>([42]);
     const stamped = jsToScheme(CONSTANT_CTX, v, {}, prov) as AVector;
     expect(stamped).toBeInstanceOf(AVector);

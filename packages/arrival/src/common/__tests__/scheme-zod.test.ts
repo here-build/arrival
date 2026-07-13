@@ -41,7 +41,7 @@ function makeBool(b: boolean) {
 function makeString(s: string) {
   return new AString(CONSTANT_CTX, s);
 }
-function makeExact(num: bigint, denom = 1n) {
+function makeExact(num: number, denom = 1) {
   return new AExact(CONSTANT_CTX, num, denom);
 }
 function makeInexact(real: number) {
@@ -281,7 +281,7 @@ describe("scheme-zod z.dict(shape)/z.dict() — keyed to ADict.get()'s own proto
     const shaped = z.dict({ name: z.string, age: z.integer });
     const nativeDict = new ADict(CONSTANT_CTX, [
       [new ASymbol(CONSTANT_CTX, "name"), makeString("Ada")],
-      [new ASymbol(CONSTANT_CTX, "age"), makeExact(36n)],
+      [new ASymbol(CONSTANT_CTX, "age"), makeExact(36)],
     ]);
 
     expect(shaped.parse(nativeDict)).toEqual({ name: "Ada", age: 36 });
@@ -290,7 +290,7 @@ describe("scheme-zod z.dict(shape)/z.dict() — keyed to ADict.get()'s own proto
     expect(encoded).toBeInstanceOf(ADict);
     expect((encoded as ADict).get("name")).toBeInstanceOf(AString);
     expect(((encoded as ADict).get("name") as AString)["arrival/toJS"]()).toBe("Grace");
-    expect(((encoded as ADict).get("age") as AExact).num).toBe(85n);
+    expect(((encoded as ADict).get("age") as AExact).num).toBe(85);
   });
 
   // INVARIANT: a dict-shaped AJSObject is also accepted on decode (isDictShaped
@@ -307,7 +307,7 @@ describe("scheme-zod z.dict(shape)/z.dict() — keyed to ADict.get()'s own proto
     // feeds its out-schema (`z.record(z.string(), value)`) per-field, so its decode
     // builds the boxed record from keys()/get() directly and must NOT route through the
     // membrane exit.
-    const a = makeExact(1n);
+    const a = makeExact(1);
     const b = makeString("x");
     const nativeDict = new ADict(CONSTANT_CTX, [
       [new ASymbol(CONSTANT_CTX, "a"), a],
@@ -347,7 +347,7 @@ describe("scheme-zod z.procedure — contract-aware marshaling", () => {
       name: "double",
       arity: { min: 1, max: 1 },
       contract: undefined,
-      impl: (args) => new AExact(CONSTANT_CTX, (args[0] as AExact).num * 2n),
+      impl: (args) => new AExact(CONSTANT_CTX, (args[0] as AExact).num * 2),
     });
     const decoded = z.procedure(z.integer, z.integer).parse(doubleProc);
     await expect(decoded(21)).resolves.toBe(42);
@@ -360,9 +360,9 @@ describe("scheme-zod z.procedure — contract-aware marshaling", () => {
     const encoded = proc.encode((...args: unknown[]) => (args[0] as number) + 1);
     expect(encoded).toBeInstanceOf(ANativeProcedure);
 
-    const out = await applyCallback(encoded, [makeExact(41n)]);
+    const out = await applyCallback(encoded, [makeExact(41)]);
     expect(out).toBeInstanceOf(AExact);
-    expect((out as AExact).num).toBe(42n);
+    expect((out as AExact).num).toBe(42);
   });
 
   // INVARIANT: with no input/output codecs, decode round-trips raw scheme values through
@@ -375,7 +375,7 @@ describe("scheme-zod z.procedure — contract-aware marshaling", () => {
       impl: (args) => args[0],
     });
     const decoded = z.procedure().parse(identityNative);
-    const rawArg = makeExact(5n);
+    const rawArg = makeExact(5);
     // no `input` codec supplied → jsArgs pass straight through as scheme args, untransformed
     await expect(decoded(rawArg)).resolves.toBe(rawArg);
   });
@@ -384,7 +384,7 @@ describe("scheme-zod z.procedure — contract-aware marshaling", () => {
   // unchanged (untyped fallback).
   it("untyped fallback: encode round-trips raw scheme values unchanged", async () => {
     const rawEncoded = z.procedure().encode((...args: unknown[]) => args[0]);
-    const raw = makeExact(9n);
+    const raw = makeExact(9);
     const out = await applyCallback(rawEncoded, [raw]);
     expect(out).toBe(raw); // no `output` codec supplied → passed straight back unchanged
   });
@@ -398,7 +398,7 @@ describe("scheme-zod z.value — exhaustive predicate, passthrough on both faces
       makeBool(true),
       makeChar("x"),
       makeString("s"),
-      makeExact(1n),
+      makeExact(1),
       makeInexact(1.5),
       new ASymbol(CONSTANT_CTX, "sym"),
       new ANil(CONSTANT_CTX),
@@ -408,7 +408,7 @@ describe("scheme-zod z.value — exhaustive predicate, passthrough on both faces
       new AJSArray(CONSTANT_CTX, []),
       new ADict(CONSTANT_CTX, []),
       new AJSObject(CONSTANT_CTX, {}),
-      new APair(CONSTANT_CTX, makeExact(1n), nil),
+      new APair(CONSTANT_CTX, makeExact(1), nil),
     ];
     for (const v of instances) {
       expect(() => z.value.parse(v)).not.toThrow();
@@ -417,7 +417,7 @@ describe("scheme-zod z.value — exhaustive predicate, passthrough on both faces
 
   // INVARIANT: z.decode(z.value, x) === x — passthrough only, z.value never transforms.
   it("z.decode(value, x) === x — passthrough only, never transforms", () => {
-    const sym = makeExact(7n);
+    const sym = makeExact(7);
     expect(z.decode(z.value, sym)).toBe(sym);
   });
 
@@ -474,19 +474,28 @@ describe("scheme-zod z.undefinedResult / z.error — real codecs", () => {
   });
 });
 
+// RE-PINNED (one-number rework, RATIO — docs/working-proposals/arrival-one-number-rework.md
+// §2.3): AExact's payload is a safe-int `number` now, not `bigint` (§0.2). The whole codec
+// family below flipped its JS face from `bigint`/`bigint | number` to plain `number` —
+// `z.exact`/`z.integer`/`z.number`/`z.schemeNumber` no longer accept or produce a raw JS
+// bigint at all (a bigint is now an opaque host value, never a scheme number). `z.bigint`
+// alone survives as a thin, explicitly-named compat shim (scheme-zod.ts's own header
+// comment) for consumers outside this rework's scope — it still speaks real JS `bigint` on
+// its OWN face, but is now safe-int-only underneath (its `encode` doors past
+// Number.MAX_SAFE_INTEGER, since the AExact it mints into can't hold more). Every row below
+// re-verified directly against the landed scheme-zod.ts, not assumed from the old comments.
 describe("scheme-zod number codec family — boundary cases (ported from v1's own coverage)", () => {
   describe("z.exact", () => {
-    // INVARIANT: z.exact round-trips a safe integer via both bigint and number encode
-    // inputs.
-    it("round-trips a safe integer both ways (bigint and number encode inputs)", () => {
-      expect(z.exact.parse(makeExact(42n))).toBe(42n);
-      expect((z.exact.encode(42n) as AExact).num).toBe(42n);
-      expect((z.exact.encode(42) as AExact).num).toBe(42n);
+    // INVARIANT: z.exact round-trips a safe integer (JS face is plain `number` now, no
+    // bigint arm — §2.3).
+    it("round-trips a safe integer (JS face is plain number, no bigint arm)", () => {
+      expect(z.exact.parse(makeExact(42))).toBe(42);
+      expect((z.exact.encode(42) as AExact).num).toBe(42);
     });
 
-    // INVARIANT: z.exact doors a non-integer exact rational (denom !== 1n) on decode.
-    it("doors a non-integer exact rational on decode (denom !== 1n)", () => {
-      expect(() => z.exact.parse(makeExact(1n, 3n))).toThrow(/no integer form/);
+    // INVARIANT: z.exact doors a non-integer exact rational (denom !== 1) on decode.
+    it("doors a non-integer exact rational on decode (denom !== 1)", () => {
+      expect(() => z.exact.parse(makeExact(1, 3))).toThrow(/no integer form/);
     });
 
     // INVARIANT: z.exact doors encoding a non-safe-integer JS number.
@@ -496,11 +505,11 @@ describe("scheme-zod number codec family — boundary cases (ported from v1's ow
   });
 
   describe("z.inexact", () => {
-    // INVARIANT: z.inexact decodes AInexact.real and accepts lossy bigint/number on
-    // encode.
-    it("decodes AInexact.real; encode accepts bigint/number, lossy accepted", () => {
+    // INVARIANT: z.inexact decodes AInexact.real and encodes a plain JS number (no bigint
+    // arm — §2.3, AInexact.real was always a bare number, never bigint).
+    it("decodes AInexact.real; encode accepts a plain number", () => {
       expect(z.inexact.parse(makeInexact(1.5))).toBe(1.5);
-      expect((z.inexact.encode(3n) as AInexact).real).toBe(3);
+      expect((z.inexact.encode(3) as AInexact).real).toBe(3);
       expect((z.inexact.encode(2.5) as AInexact).real).toBe(2.5);
     });
   });
@@ -509,11 +518,11 @@ describe("scheme-zod number codec family — boundary cases (ported from v1's ow
     // INVARIANT: z.integer decodes a safe AExact or AInexact integer and canonicalizes
     // encode to AExact.
     it("decodes a safe AExact or AInexact integer; encode canonicalizes to AExact", () => {
-      expect(z.integer.parse(makeExact(42n))).toBe(42);
+      expect(z.integer.parse(makeExact(42))).toBe(42);
       expect(z.integer.parse(makeInexact(42))).toBe(42);
       const out = z.integer.encode(42);
       expect(out).toBeInstanceOf(AExact);
-      expect((out as AExact).denom).toBe(1n);
+      expect((out as AExact).denom).toBe(1);
     });
 
     // INVARIANT: z.integer doors a non-safe-integer AInexact on decode.
@@ -521,37 +530,33 @@ describe("scheme-zod number codec family — boundary cases (ported from v1's ow
       expect(() => z.integer.parse(makeInexact(1.5))).toThrow(/safe integer/);
     });
 
-    // INVARIANT: z.integer doors an out-of-range exact integer on decode (precision-loss
-    // guard).
-    it("doors an out-of-range exact integer on decode (precision loss guard)", () => {
-      const huge = makeExact(BigInt(Number.MAX_SAFE_INTEGER) + 10n);
-      expect(() => z.integer.parse(huge)).toThrow(/safe-integer range/);
+    // RE-PINNED: an out-of-range exact integer can no longer even be CONSTRUCTED — AExact's
+    // own constructor now enforces Number.isSafeInteger on every component (§0.2), earlier
+    // than any codec ever sees it. The old row constructed a live over-range AExact and
+    // doored it at z.integer's decode step; that gate moved to construction time.
+    it("an out-of-range exact integer can no longer even be constructed (construction-time gate, §0.2)", () => {
+      expect(() => makeExact(Number.MAX_SAFE_INTEGER + 10)).toThrow(/safe integer/);
     });
 
     // INVARIANT: z.integer doors a non-integer exact rational on decode.
     it("doors a non-integer exact rational on decode (shares number's exactToJsNumberOrDoor helper)", () => {
-      expect(() => z.integer.parse(makeExact(1n, 3n))).toThrow(/faithful JS number|rational/i);
+      expect(() => z.integer.parse(makeExact(1, 3))).toThrow(/faithful JS number|rational/i);
     });
   });
 
   describe("z.schemeNumber", () => {
     // INVARIANT: z.schemeNumber's union decodes each branch (exact/inexact) through its
-    // own codec.
-    it("union of exact|inexact: decodes each branch through its OWN codec (bigint for exact, number for inexact)", () => {
-      expect(z.schemeNumber.parse(makeExact(5n))).toBe(5n);
+    // own codec, both to a plain JS number (no bigint arm — §2.3).
+    it("union of exact|inexact: decodes each branch through its OWN codec, both to a plain number", () => {
+      expect(z.schemeNumber.parse(makeExact(5))).toBe(5);
       expect(z.schemeNumber.parse(makeInexact(5.5))).toBe(5.5);
     });
 
     // INVARIANT: z.schemeNumber's encode always tries the exact branch first — a genuine
     // float throws rather than falling through to inexact (pins implementation, not
-    // behavior).
-    it("encode direction always tries exact FIRST (both members share a bigint|number out-schema): a bigint or safe-integer number encodes to AExact; a genuine float THROWS rather than falling through to inexact", () => {
-      // Unlike z.number/z.bigint (whose two union members target disjoint OUT types, z.number()
-      // XOR z.bigint()), exact's own out-schema is z.union([bigint, number]) — broad enough to
-      // structurally match ANY encode input schemeNumber sees, so zod's union always picks the
-      // FIRST matching member (exact) and never reaches inexact at all. Verified directly against
-      // zod 4.3.6's real union-encode behavior, not assumed.
-      expect(z.schemeNumber.encode(5n)).toBeInstanceOf(AExact);
+    // behavior; unchanged by the rework — verified directly, still zod 4.3.6's real
+    // union-encode behavior).
+    it("encode direction always tries exact FIRST: a safe-integer number encodes to AExact; a genuine float THROWS rather than falling through to inexact", () => {
       expect(z.schemeNumber.encode(5)).toBeInstanceOf(AExact);
       expect(() => z.schemeNumber.encode(5.5)).toThrow(/safe integer/);
     });
@@ -561,37 +566,44 @@ describe("scheme-zod number codec family — boundary cases (ported from v1's ow
     // INVARIANT: z.number decodes exact/inexact to a JS number and canonically encodes
     // to AInexact.
     it("decodes exact/inexact to a JS number; encode canonically produces AInexact", () => {
-      expect(z.number.parse(makeExact(21n))).toBe(21);
+      expect(z.number.parse(makeExact(21))).toBe(21);
       expect(z.number.parse(makeInexact(1.5))).toBe(1.5);
       expect(z.number.encode(3)).toBeInstanceOf(AInexact);
     });
 
-    // INVARIANT: z.number doors an over-range exact integer (no silent precision loss).
-    it("doors an over-range exact integer (no silent precision loss)", () => {
-      const huge = makeExact(BigInt(Number.MAX_SAFE_INTEGER) + 10n);
-      expect(() => z.number.parse(huge)).toThrow(/safe-integer range/);
+    // RE-PINNED: same construction-time gate as z.integer above — an over-range exact can't
+    // exist to reach z.number's decode at all anymore.
+    it("an over-range exact integer can no longer even be constructed (construction-time gate, §0.2)", () => {
+      expect(() => makeExact(Number.MAX_SAFE_INTEGER + 10)).toThrow(/safe integer/);
     });
 
     // INVARIANT: z.number doors a non-integer exact rational.
     it("doors a non-integer exact rational", () => {
-      expect(() => z.number.parse(makeExact(1n, 3n))).toThrow(/faithful JS number|rational/i);
+      expect(() => z.number.parse(makeExact(1, 3))).toThrow(/faithful JS number|rational/i);
     });
   });
 
-  describe("z.bigint", () => {
-    // INVARIANT: z.bigint round-trips arbitrary precision beyond the safe-integer range,
-    // canonically encoding to AExact.
-    it("round-trips arbitrary precision beyond the safe-integer range; encode canonically AExact", () => {
-      const big = BigInt(Number.MAX_SAFE_INTEGER) + 100n;
-      expect(z.bigint.parse(makeExact(big))).toBe(big);
-      const out = z.bigint.encode(big);
+  // RE-PINNED (§2.3): z.bigint is retired as the numeric vocabulary's ACTIVE cast but kept
+  // exported as a thin compat shim — its OWN face is still real JS `bigint` (decode/encode
+  // both cross the bigint boundary), but the AExact underneath is safe-int-only, so it can
+  // no longer carry arbitrary precision. This inverts the old headline case entirely: was
+  // "round-trips arbitrary precision beyond the safe-integer range", now "doors past it".
+  describe("z.bigint (thin compat shim, safe-int only post-rework — §2.3)", () => {
+    it("round-trips a SMALL bigint (its own face is genuine bigint; the AExact underneath is safe-int number)", () => {
+      expect(z.bigint.parse(makeExact(42))).toBe(42n);
+      const out = z.bigint.encode(42n);
       expect(out).toBeInstanceOf(AExact);
-      expect((out as AExact).num).toBe(big);
+      expect((out as AExact).num).toBe(42);
+    });
+
+    it("DOORS encoding a bigint beyond safe-integer range (no more arbitrary precision)", () => {
+      const bigBeyondSafeRange = BigInt(Number.MAX_SAFE_INTEGER) + 100n;
+      expect(() => z.bigint.encode(bigBeyondSafeRange)).toThrow(/exceeds safe-integer range/);
     });
 
     // INVARIANT: z.bigint doors an exact rational with no integer bigint form.
     it("doors an exact rational with no integer bigint form", () => {
-      expect(() => z.bigint.parse(makeExact(1n, 3n))).toThrow(/no integer bigint form/);
+      expect(() => z.bigint.parse(makeExact(1, 3))).toThrow(/no integer bigint form/);
     });
 
     // INVARIANT: z.bigint doors an inexact value with a fractional part.

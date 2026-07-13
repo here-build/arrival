@@ -102,7 +102,7 @@ describe("scheme/r7rs/exceptions — semantic equivalence regression rows (the t
     const out: number[] = [];
     let node: unknown = irritants;
     while (node !== null && typeof node === "object" && "car" in (node as object)) {
-      const pair = node as { car: { num?: bigint }; cdr: unknown };
+      const pair = node as { car: { num?: number }; cdr: unknown };
       out.push(Number(pair.car.num ?? Number.NaN));
       node = pair.cdr;
     }
@@ -117,7 +117,7 @@ describe("scheme/r7rs/exceptions — semantic equivalence regression rows (the t
          (lambda () (+ (raise-continuable "should be a number") 23)))`,
       { env },
     );
-    expect((result as { num?: bigint }).num).toBe(65n);
+    expect((result as { num?: number }).num).toBe(65);
   });
 
   it("with-exception-handler restores the outer handler stack after thunk throws past it (the %with-restore finally-discipline, gap (2)'s workaround)", async () => {

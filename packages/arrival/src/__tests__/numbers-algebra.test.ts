@@ -12,8 +12,11 @@ import { setoidLaws } from "./algebra-laws.js";
 import { tf } from "../values/tagless-final.js";
 
 // Exact rationals over a small domain (collisions exercise symmetry/transitivity).
+// RE-PINNED (one-number rework, RATIO — docs/working-proposals/arrival-one-number-rework.md
+// §0.2): AExact's num/denom are safe-int `number`s now, not `bigint` — `fc.integer` replaces
+// `fc.bigInt` (fast-check's bigint arbitrary can't feed a number-only constructor at all).
 const exactArb = fc
-  .tuple(fc.bigInt({ min: -50n, max: 50n }), fc.bigInt({ min: 1n, max: 50n }))
+  .tuple(fc.integer({ min: -50, max: 50 }), fc.integer({ min: 1, max: 50 }))
   .map(([num, denom]) => new AExact(CONSTANT_CTX, num, denom));
 
 // Inexact reals incl. NaN / ±0 / ±Infinity — the cases that bite reflexivity.
@@ -26,7 +29,7 @@ setoidLaws("SchemeInexact", { arb: inexactArb, equalClone: (a) => new AInexact(C
 
 describe("number Setoid — exactness boundary (the (equal? 1 1.0) fix)", () => {
   it("exact 1 is NOT arrival/tagless-final/equals inexact 1.0 (both directions)", () => {
-    const one = new AExact(CONSTANT_CTX, 1n);
+    const one = new AExact(CONSTANT_CTX, 1);
     const oneFloat = new AInexact(CONSTANT_CTX, 1);
     expect(one[tf("equals")](oneFloat)).toBe(false);
     expect(oneFloat[tf("equals")](one)).toBe(false);
@@ -35,8 +38,8 @@ describe("number Setoid — exactness boundary (the (equal? 1 1.0) fix)", () => 
   it("structuralEqual honors the exactness boundary (the bug)", () => {
     // Before: structuralEqual collapsed via valueOf → #t. Now its FL/equals
     // consult-hook catches the number instances first → correct #f.
-    expect(structuralEqual(new AExact(CONSTANT_CTX, 1n), new AInexact(CONSTANT_CTX, 1))).toBe(false);
-    expect(structuralEqual(new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 1n))).toBe(true);
+    expect(structuralEqual(new AExact(CONSTANT_CTX, 1), new AInexact(CONSTANT_CTX, 1))).toBe(false);
+    expect(structuralEqual(new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 1))).toBe(true);
     expect(structuralEqual(new AInexact(CONSTANT_CTX, 1), new AInexact(CONSTANT_CTX, 1))).toBe(true);
   });
 

@@ -73,12 +73,22 @@ if (!fs.existsSync(CHIBI_TESTS_PATH)) {
       // Read-time door (design §6 point 3) — visible/counted in the vitest tree instead of
       // vanishing pre-parse, but NOT part of `manifest.tests` (the anti-vacuity floor below is
       // about parseable, classifiable test forms).
+      //
+      // The label used to hardcode "complex tower (R7RS §6.2.3 omitted)" for EVERY unreadable
+      // step — accurate when the complex tower was the only reader door in the corpus. The
+      // one-number rework (docs/working-proposals/arrival-one-number-rework.md §0.3/§2.5)
+      // added a second, unrelated reader door: an exact integer literal beyond
+      // Number.isSafeInteger range now ParseErrors at read time instead of silently minting a
+      // bigint (e.g. `4611686018427387904`, `9007199254740993`, and several
+      // exact-integer-sqrt-of-a-huge-power results in "4.2 Derived expression types"). Labeling
+      // those as "complex tower" was self-contradicting the door message printed right next to
+      // it — classify by the actual reader error instead of assuming a single cause.
       const label = `${normalizeText(step.text).slice(0, 160)}  ${CHIBI_TESTS_PATH}:${step.line}`.slice(0, 300);
+      const feature = step.readerError.includes("exceeds safe-integer range")
+        ? "exact literal beyond safe-integer range (docs/working-proposals/arrival-one-number-rework.md §0.3 — RATIO's safe-int-only exact components)"
+        : "complex tower (R7RS §6.2.3 omitted)";
       it.skip(
-        `${label} — excluded: complex tower (R7RS §6.2.3 omitted) [reader door: ${step.readerError.slice(0, 100)}]`.slice(
-          0,
-          300,
-        ),
+        `${label} — excluded: ${feature} [reader door: ${step.readerError.slice(0, 100)}]`.slice(0, 300),
         () => {},
       );
     };

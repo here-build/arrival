@@ -58,8 +58,8 @@ function makeProbe(): { fn: (this: { runCtx: RunContext }, ...args: unknown[]) =
   };
 }
 
-const one = new AExact(liveCtx, 1n);
-const two = new AExact(liveCtx, 2n);
+const one = new AExact(liveCtx, 1);
+const two = new AExact(liveCtx, 2);
 
 describe("W1 seq-op ctx threading — APair map/filter/reduce thread the invocation's real ctx into their callback", () => {
   it("map: callback observes the passed liveCtx, not CONSTANT_CTX", async () => {
@@ -88,7 +88,7 @@ describe("W1 seq-op ctx threading — APair map/filter/reduce thread the invocat
   it("reduce: callback observes the passed liveCtx, not CONSTANT_CTX", async () => {
     const list = new APair(liveCtx, one, new APair(liveCtx, two, nil));
     const probe = makeProbe();
-    await list["arrival/tagless-final/reduce"](probe.fn, 0n, liveCtx);
+    await list["arrival/tagless-final/reduce"](probe.fn, 0, liveCtx);
     expect(probe.observed).toHaveLength(2);
     for (const ctx of probe.observed) {
       expect(ctx.heapMeter).toBeDefined();
@@ -127,7 +127,7 @@ describe("W1 seq-op ctx threading — AVector map/filter/reduce thread the invoc
   it("reduce: callback observes the passed liveCtx, not CONSTANT_CTX", async () => {
     const vec = new AVector(liveCtx, [one, two]);
     const probe = makeProbe();
-    await vec["arrival/tagless-final/reduce"](probe.fn, 0n, liveCtx);
+    await vec["arrival/tagless-final/reduce"](probe.fn, 0, liveCtx);
     expect(probe.observed).toHaveLength(2);
     for (const ctx of probe.observed) {
       expect(ctx.heapMeter).toBeDefined();

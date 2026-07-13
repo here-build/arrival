@@ -395,15 +395,150 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
       "test step's own datum, so the general ports EXCLUDED rule can't catch it",
     gate: "permanent — ports/IO omitted by design, no fix planned (harness-capability.ts prelude's own documented cascade)",
   },
-  {
-    match: { kind: "form", exact: "(test #f (= 9007199254740992.0 9007199254740993))" },
-    reason: "IEEE 754 precision limit: numbers beyond 2^53 lose precision when inexact",
-    gate: "permanent — IEEE 754 semantics, no fix planned",
-  },
+  // -----------------------------------------------------------------------
+  // FIXED (2026-07-14, one-number rework, docs/working-proposals/arrival-one-number-rework.md):
+  // the row for `(test #f (= 9007199254740992.0 9007199254740993))` is DEAD, not passing —
+  // `9007199254740993` (2^53 + 1) now ParseErrors at read time (RATIO's safe-int-only exact
+  // literal gate, §0.3), so the form never reaches a `TestStep` at all; it's a `registerUnreadable`
+  // row now (chibi-r7rs-v2.spec.ts), like the complex-literal precedent this file's header
+  // already documents for `(real? -2.5+0i)`. Dropped rather than carried as a guaranteed-dead
+  // rule — verified via `registryCoherenceFindings` (was reporting "dead ExpectedFailure rule").
+  // -----------------------------------------------------------------------
   {
     match: { kind: "form", exact: "(test #t (if (and (= a b) (= b c)) (= a c) #t))" },
     reason: "Numeric = non-transitivity across exact-bignum vs inexact (2^1000 ± 1) — IEEE/tower edge, known",
     gate: "permanent — IEEE 754/tower edge, no fix planned",
+  },
+  // -----------------------------------------------------------------------
+  // One-number rework (RATIO, docs/working-proposals/arrival-one-number-rework.md §0.3): a
+  // genuinely NEW expected failure, not a stale carry-over. The CLtL 12.3 transitivity example
+  // (r7rs-tests.scm:838-841) computes `a = (/ 10.0 single-float-epsilon)` — JS's OWN double
+  // epsilon (~2.22e-16), not a real single-float one, so `a` lands near 9e15, just past
+  // Number.MAX_SAFE_INTEGER (9007199254740991) — then `j = (exact a)` throws (numeric.ts's
+  // exactFn: the simplestInRange approximation itself would need a component beyond safe-int
+  // range). Under the OLD bigint-rational representation this line never threw (bigints have
+  // no ceiling); under RATIO, hitting exactly this boundary is the intended crash-on-overflow
+  // behavior (§0.3: "exact results whose components leave safe range THROW"), not a bug.
+  // -----------------------------------------------------------------------
+  {
+    match: {
+      kind: "form",
+      exact: normalizeText(`(test #t (if (and (<= a j) (< j (+ j 1))) (not (<= (+ j 1) a)) #t))`),
+    },
+    reason:
+      "one-number rework (RATIO): (exact a) on a/≈9.007e15 (just past Number.MAX_SAFE_INTEGER) throws by design " +
+      "(§0.3 crash-on-overflow) — the corpus's own float epsilon computation lands just past the safe-int ceiling",
+    gate: "permanent — RATIO's safe-int component ceiling (docs/working-proposals/arrival-one-number-rework.md §0.3), no fix planned",
+  },
+  // -----------------------------------------------------------------------
+  // One-number rework (RATIO) fallout — env/r7rs/vectors.ts's `vector-length` (vectors.ts:149)
+  // has the IDENTICAL bug shape as the bytevectors.ts rows above (`new AExact(ctx, BigInt(n))`),
+  // but this file is a PROTECTED file for this test-triage session (another agent's live WIP —
+  // vectors.ts and lists.ts share the same bigint-leftover pattern, both flagged DO-NOT-TOUCH,
+  // strongly suggesting a concurrent sweep is already porting them). The blast radius is much
+  // wider than the two direct `vector-length` call sites below: the harness's OWN scheme-side
+  // comparator (`chibi-test-equal?`, harness-capability.ts) calls `(vector-length a)`/
+  // `(vector-length b)` whenever EITHER expected or actual value is vector-shaped — so any test
+  // returning/comparing a vector fails via this bug regardless of its own datum ever mentioning
+  // vector-length. That comparator-injected path is invisible to a `symbols` matcher (no
+  // "vector-length" token in the test's own text) and isn't enumerated as individual rows here —
+  // see the test-triage report for the full list; re-triage once the concurrent vectors.ts fix
+  // lands (this rule will then go dead — a `registryCoherenceFindings` alarm pointing straight
+  // back here, the harness's own self-correction mechanism, same lifecycle as every other
+  // FIXED/removed rule in this file's history).
+  // -----------------------------------------------------------------------
+  {
+    match: { kind: "symbols", anyOf: ["vector-length"] },
+    reason:
+      "BUG (blocking, not by design): env/r7rs/vectors.ts:149 still calls `new AExact(ctx, BigInt(n))` — same " +
+      "shape as the bytevectors.ts rows above. File is protected this session (concurrent WIP); see the comment " +
+      "above for the much wider comparator-injected blast radius this rule does NOT cover",
+    gate: "needs a src fix to env/r7rs/vectors.ts (protected file, concurrent WIP this session) — not a ratio-design tradeoff",
+    maxMatches: 2,
+  },
+  // -----------------------------------------------------------------------
+  // Same vectors.ts bug as directly above, reached via the comparator's `(vector-length …)`
+  // call rather than the test's own datum — these rows DO reference a vector-producing
+  // identifier of their own (vector-copy/vector-append/vector-map/list->vector/string->vector/
+  // bare vector construction), each verified grep-unique to exactly its matched forms (no
+  // over-match risk). The bare literal-vector-comparison cases with NO distinguishing
+  // identifier (`(quote #(a b c))`, quasiquoted vectors, `vector-lit`) are enumerated
+  // individually further below.
+  // -----------------------------------------------------------------------
+  {
+    match: { kind: "symbols", anyOf: ["vector-copy"] },
+    reason: "BUG (blocking): comparator-invoked env/r7rs/vectors.ts vector-length bug — see the vector-length row above",
+    gate: "needs a src fix to env/r7rs/vectors.ts (protected file, concurrent WIP this session)",
+    maxMatches: 4,
+  },
+  {
+    match: { kind: "symbols", anyOf: ["vector-append"] },
+    reason: "BUG (blocking): comparator-invoked env/r7rs/vectors.ts vector-length bug — see the vector-length row above",
+    gate: "needs a src fix to env/r7rs/vectors.ts (protected file, concurrent WIP this session)",
+    maxMatches: 6,
+  },
+  {
+    // 4 matches, not 3: r7rs-tests.scm:1703-1710 ALSO calls vector-map (inside a `set!`-using
+    // test already caught earlier by the purity EXCLUDED rule — precedence unaffected, but
+    // `matchesRule`'s raw symbol-count still sees it).
+    match: { kind: "symbols", anyOf: ["vector-map"] },
+    reason: "BUG (blocking): comparator-invoked env/r7rs/vectors.ts vector-length bug — see the vector-length row above",
+    gate: "needs a src fix to env/r7rs/vectors.ts (protected file, concurrent WIP this session)",
+    maxMatches: 4,
+  },
+  {
+    match: { kind: "symbols", anyOf: ["list->vector"] },
+    reason: "BUG (blocking): comparator-invoked env/r7rs/vectors.ts vector-length bug — see the vector-length row above",
+    gate: "needs a src fix to env/r7rs/vectors.ts (protected file, concurrent WIP this session)",
+  },
+  {
+    match: { kind: "symbols", anyOf: ["string->vector"] },
+    reason: "BUG (blocking): comparator-invoked env/r7rs/vectors.ts vector-length bug — see the vector-length row above",
+    gate: "needs a src fix to env/r7rs/vectors.ts (protected file, concurrent WIP this session)",
+    maxMatches: 4,
+  },
+  {
+    match: { kind: "symbols", anyOf: ["vector-lit"] },
+    reason: "BUG (blocking): comparator-invoked env/r7rs/vectors.ts vector-length bug — see the vector-length row above",
+    gate: "needs a src fix to env/r7rs/vectors.ts (protected file, concurrent WIP this session)",
+  },
+  {
+    // Bare `(vector 'a 'b 'c)` constructor call, compared against a vector-literal expected
+    // value. NOTE: this symbols rule ALSO matches r7rs-tests.scm:480/488 (a syntax-rules
+    // template building a vector) and several vector-fill!/vector-copy! forms (already caught
+    // earlier by the purity EXCLUDED rule, so precedence is unaffected) — counted by the
+    // coherence check but harmless since no maxMatches is set here.
+    match: { kind: "symbols", anyOf: ["vector"] },
+    reason: "BUG (blocking): comparator-invoked env/r7rs/vectors.ts vector-length bug — see the vector-length row above",
+    gate: "needs a src fix to env/r7rs/vectors.ts (protected file, concurrent WIP this session)",
+  },
+  // -----------------------------------------------------------------------
+  // Bare vector-literal comparisons with no distinguishing identifier of their own (the
+  // comparator's `vector-length` call is the ONLY reason these fail) — form-exact, one row
+  // each, same vectors.ts bug as the block above.
+  // -----------------------------------------------------------------------
+  {
+    match: { kind: "form", exact: normalizeText(`(test #(a b c) (quote #(a b c)))`) },
+    reason: "BUG (blocking): comparator-invoked env/r7rs/vectors.ts vector-length bug — see the vector-length row above",
+    gate: "needs a src fix to env/r7rs/vectors.ts (protected file, concurrent WIP this session)",
+  },
+  {
+    match: { kind: "form", exact: normalizeText(`(test #(a b c) '#(a b c))`) },
+    reason: "BUG (blocking): comparator-invoked env/r7rs/vectors.ts vector-length bug — see the vector-length row above",
+    gate: "needs a src fix to env/r7rs/vectors.ts (protected file, concurrent WIP this session)",
+  },
+  {
+    match: {
+      kind: "form",
+      exact: normalizeText(`(test #(10 5 4 16 9 8) \`#(10 5 ,(square 2) ,@(map square '(4 3)) 8))`),
+    },
+    reason: "BUG (blocking): comparator-invoked env/r7rs/vectors.ts vector-length bug — see the vector-length row above",
+    gate: "needs a src fix to env/r7rs/vectors.ts (protected file, concurrent WIP this session)",
+  },
+  {
+    match: { kind: "form", exact: normalizeText(`(test #(0 (2 2 2 2) "Anna") '#(0 (2 2 2 2) "Anna"))`) },
+    reason: "BUG (blocking): comparator-invoked env/r7rs/vectors.ts vector-length bug — see the vector-length row above",
+    gate: "needs a src fix to env/r7rs/vectors.ts (protected file, concurrent WIP this session)",
   },
   // -----------------------------------------------------------------------
   // Purity invariant — writing methods are OMITTED by design (every entity is frozen).

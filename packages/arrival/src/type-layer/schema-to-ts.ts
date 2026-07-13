@@ -10,8 +10,9 @@
 //                                 zod-to-ts (`zodToTs` + `printNode`) with
 //                                 io:"output" (so a CODEC prints its DECODED JS
 //                                 side: z.string → "string", z.number → "number",
-//                                 z.bigint → "bigint") plus the instanceof override
-//                                 below. Output is flattened to a single line.
+//                                 z.exact → "number" — exact is a safe-integer ratio
+//                                 of `number`s, never bigint) plus the instanceof
+//                                 override below. Output is flattened to a single line.
 //
 //   2. the instanceof OVERRIDE  — the scheme-identity primitives (z.pair / z.schemeString /
 //                                 z.schemeExact / z.lambda / …) are "custom" to zod and
@@ -67,10 +68,6 @@ const unknownNode: NodeBuilder = (ts) => ts.factory.createKeywordTypeNode(ts.Syn
 const stringNode: NodeBuilder = (ts) => ts.factory.createKeywordTypeNode(ts.SyntaxKind.StringKeyword);
 const numberNode: NodeBuilder = (ts) => ts.factory.createKeywordTypeNode(ts.SyntaxKind.NumberKeyword);
 const booleanNode: NodeBuilder = (ts) => ts.factory.createKeywordTypeNode(ts.SyntaxKind.BooleanKeyword);
-const bigintNode: NodeBuilder = (ts) => ts.factory.createKeywordTypeNode(ts.SyntaxKind.BigIntKeyword);
-/** number | bigint — looseAnyNumber's decoded JS face (finite number + exact bigint arm). */
-const numberOrBigintNode: NodeBuilder = (ts) =>
-  ts.factory.createUnionTypeNode([numberNode(ts), bigintNode(ts)]);
 const nullNode: NodeBuilder = (ts) => ts.factory.createLiteralTypeNode(ts.factory.createNull());
 const uint8ArrayNode: NodeBuilder = (ts) => ts.factory.createTypeReferenceNode("Uint8Array", undefined);
 const voidNode: NodeBuilder = (ts) => ts.factory.createKeywordTypeNode(ts.SyntaxKind.VoidKeyword);
@@ -98,18 +95,21 @@ const IMAGE_BY_NAME: ReadonlyMap<string, NodeBuilder> = new Map<string, NodeBuil
   // NOTE: no "pair" entry — `z.pair` is `cons(value, value)`, named "cons", and prints via
   // the named-generic pre-check as `Pair<unknown, unknown>` before this table is ever consulted.
   ["string", stringNode],
-  ["exact", bigintNode],
+  ["exact", numberNode],
   ["inexact", numberNode],
-  // number/bigint are UNIONS of two same-output codecs in v2; without an image they'd print the
-  // duplicated `number | number` / `bigint | bigint`. The image is their carrier, printed once.
+  // number/exact/bigint are UNIONS of two same-output codecs in v2; without an image
+  // they'd print the duplicated `number | number`. The image is their carrier, printed
+  // once. `bigint`'s face is `number` too — per
+  // docs/working-proposals/arrival-one-number-rework.md §2.3, exact is a safe-integer
+  // ratio of `number`s and z.bigint is retired; it never decodes to a real JS bigint.
   ["number", numberNode],
-  ["bigint", bigintNode],
-  // looseNumber / looseAnyNumber are CODECs whose OUT side is a bare z.custom (so NaN/±Inf
-  // and bigint arms stay legal). Without an image the OUT custom leaf prints as unknown —
+  ["bigint", numberNode],
+  // looseNumber / looseAnyNumber are CODECs whose OUT side is a bare z.custom (so
+  // NaN/±Inf stay legal). Without an image the OUT custom leaf prints as unknown —
   // floor/abs/etc. harvest as (a: unknown) => unknown even though the decoded type is known.
   // Teach the names; do NOT rewrite OUT to z.number() (rejects non-finites).
   ["looseNumber", numberNode],
-  ["looseAnyNumber", numberOrBigintNode],
+  ["looseAnyNumber", numberNode],
   ["symbol", stringNode],
   // bytevector is a CODEC in v2 (out = z.instanceof(Uint8Array), a custom leaf that would print
   // `unknown`); the name-keyed image restores its Uint8Array carrier (as v1's instanceof did).
@@ -134,10 +134,11 @@ const IMAGE_BY_NAME: ReadonlyMap<string, NodeBuilder> = new Map<string, NodeBuil
  *
  *  A registered vocabulary name WITH an image prints that image directly (fires for CODECS too —
  *  v2 made most primitives codecs/pipes, not leaf customs). A registered name WITHOUT an image
- *  (`schemeNumber`/`vector`/`dict`/`list`/`cons`, and the number/bigint UNION whose members carry
- *  their own image) returns undefined so zod-to-ts composes it per-member — so `z.schemeNumber`
- *  prints "bigint | number" (exact/inexact fire per-member), never short-circuited. An UNregistered
- *  leaf custom degrades to `unknown` (never throw); an unregistered compound defers. */
+ *  (`schemeNumber`/`vector`/`dict`/`list`/`cons`, and the number/exact/bigint UNIONs whose members
+ *  carry their own image) returns undefined so zod-to-ts composes it per-member — so `z.schemeNumber`
+ *  prints "number | number" (exact/inexact fire per-member, both `number` now that z.bigint is
+ *  retired), undeduped — the same known gap as `z.vector` below — never short-circuited. An
+ *  UNregistered leaf custom degrades to `unknown` (never throw); an unregistered compound defers. */
 const instanceofOverride: OptionalTypeOverrideFunction = (schema, typescript) => {
   // Named-generic pre-check — MUST fire before the leaf guard below: `list`/`cons` are CODECS
   // (`_zod.def.type === "pipe"`), so that guard would early-return them to zod-to-ts, which
@@ -161,7 +162,7 @@ const instanceofOverride: OptionalTypeOverrideFunction = (schema, typescript) =>
   // CODECS (pipe), so the guard would defer them to zod-to-ts and print the raw OUT schema
   // (undefinedResult→undefined, bytevector→unknown, number→number|number) instead of the carrier
   // image (void / Uint8Array / number). A registered name with NO image → undefined → composed
-  // per-member by zod-to-ts (schemeNumber → bigint | number; vector/dict/list/cons → structural).
+  // per-member by zod-to-ts (schemeNumber → number | number; vector/dict/list/cons → structural).
   const name = z.lookupName(schema);
   if (name !== undefined) {
     const builder = IMAGE_BY_NAME.get(name);
@@ -198,7 +199,8 @@ function flatten(printed: string): string {
  * Print one scheme-zod schema as a single-line TypeScript type-string.
  *
  * Codecs print their DECODED (output) side (io:"output"): z.string → "string",
- * z.number → "number", z.bigint → "bigint". instanceof primitives print their
+ * z.number → "number", z.exact → "number" (a safe-integer ratio of `number`s —
+ * z.bigint is retired, never a real bigint). instanceof primitives print their
  * class name via the override (z.pair → "Pair"). Compounds compose
  * (z.object → "{ k: T; … }", z.array → "T[]", z.tuple → "[A, B]", z.union → "A | B").
  */

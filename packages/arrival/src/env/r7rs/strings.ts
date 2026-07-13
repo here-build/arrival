@@ -85,8 +85,8 @@ export default new EnvCapability("scheme/strings", {
     ),
 
     "string-length": symbol.native`string-length: number of characters in the string`(
-      { input: [z.string], output: [z.bigint] },
-      function (this: CallCtx, str) { return withInputProvenance([str], new AExact(this.runCtx, BigInt([...stringValue(str)].length))); },
+      { input: [z.string], output: [z.exact] },
+      function (this: CallCtx, str) { return withInputProvenance([str], new AExact(this.runCtx, [...stringValue(str)].length)); },
     ),
 
     "string-ref": symbol.native`string-ref: the character at index k`(
@@ -220,10 +220,10 @@ export default new EnvCapability("scheme/strings", {
     // predicate convention). Both carry the lineage of the strings they searched, so a
     // "this name contains 'Alloy'" decision over an evidence read stays grounded.
     "string-contains": symbol.native`string-contains: index of the first occurrence of sub, or #f`(
-      { input: [z.string, z.string], output: [z.union([z.bigint, z.boolean])] },
+      { input: [z.string, z.string], output: [z.union([z.exact, z.boolean])] },
       function (this: CallCtx, str, sub) {
         const i = stringValue(str).indexOf(stringValue(sub));
-        return withInputProvenance([str, sub], i === -1 ? bool(false) : new AExact(this.runCtx, BigInt(i)));
+        return withInputProvenance([str, sub], i === -1 ? bool(false) : new AExact(this.runCtx, i));
       },
     ),
 

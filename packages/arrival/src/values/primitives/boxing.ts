@@ -21,8 +21,20 @@ import { warnMembrane } from "../../membrane-warn.js";
  * value-primitive files) — nothing here needs indirection through a self-registering
  * boxer table. The one membrane-side arm (`function` → #void warn) uses the leaf
  * `membrane-warn`, so no evaluator is pulled into the value layer.
+ *
+ * `bigint` is the one tag that does NOT box (docs/working-proposals/
+ * arrival-one-number-rework.md §2.3): an opaque HOST value, not a scheme number — it
+ * rides the same raw identity lane a bytevector does at the membrane's public face
+ * (membrane.ts's `isBytevectorLike`), never reinterpreted as an `AExact`. That widens
+ * this function's return type by exactly that one member; every caller already treats
+ * the result as `unknown`/a cast target (rosetta.ts's INBOUND_CLAIMS row, op-helpers.ts's
+ * `withInputProvenance`).
  */
-export function fromJs(ctx: RunContext, v: unknown, provenance: ReadonlySet<number> = EMPTY_PROVENANCE): AValue {
+export function fromJs(
+  ctx: RunContext,
+  v: unknown,
+  provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
+): AValue | bigint {
   // Same-instance fast path: already a Scheme value. Re-stamp only when a distinct,
   // non-empty provenance is supplied (then `withProvenance` mints a copy).
   if (v instanceof AValue) {
@@ -45,11 +57,16 @@ export function fromJs(ctx: RunContext, v: unknown, provenance: ReadonlySet<numb
     case "string":
       return new AString(ctx, v, provenance);
     case "number":
-      // Safe-integer JS numbers route to exact (precision-preserving through scheme
-      // arithmetic); anything beyond MAX_SAFE_INTEGER would round on bigint conversion.
-      return Number.isSafeInteger(v) ? new AExact(ctx, BigInt(v), 1n, provenance) : new AInexact(ctx, v, provenance);
+      // Safe-integer JS numbers route to exact (both AExact components are plain
+      // `number`s, §2.1); anything beyond MAX_SAFE_INTEGER is inexact — never a silent
+      // out-of-range exact (values/mint-numeric.ts's crash-on-overflow law is for
+      // ARITHMETIC results; ingress from a bare host number stays this status-quo
+      // silent law per the plan's §0.3).
+      return Number.isSafeInteger(v) ? new AExact(ctx, v, 1, provenance) : new AInexact(ctx, v, provenance);
     case "bigint":
-      return new AExact(ctx, v, 1n, provenance);
+      // Opaque host value — not a scheme number (see this function's header doc):
+      // never boxed, rides straight through by identity.
+      return v;
     case "boolean":
       // Reuse singletons on the empty-provenance fast path; allocate only when stamped.
       return provenance === EMPTY_PROVENANCE ? (v ? schemeTrue : schemeFalse) : new ABool(ctx, v, provenance);

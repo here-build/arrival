@@ -61,6 +61,7 @@ describe("inbound registry — the declared, ordered claim table IS the law", ()
       "symbol → :keyword (registered) / #void (unique, warn)",
       "function → #void (warn)",
       "scheme orphan (EOF/Values/R7RSError) → identity",
+      "bigint → raw passthrough (opaque host value, not a scheme number)",
       "binary (Uint8Array/ArrayBuffer/DataView/Buffer) → raw passthrough (declared)",
       "promise → door (settle first; container entries settle lazily)",
       "exotic object → borrowed AJSObject (warn)",
@@ -95,7 +96,7 @@ describe("inbound registry — the declared, ordered claim table IS the law", ()
 
   it("deep re-stamp went CLASS-SIDE: a fresh stamp on a pair spine mints a fresh spine via arrival/withProvenanceDeep, children inherit the stamp; identity fast paths hold", () => {
     const car = new AString(CONSTANT_CTX, "a");
-    const cdr = new AExact(CONSTANT_CTX, 1n);
+    const cdr = new AExact(CONSTANT_CTX, 1);
     const pair = new APair(CONSTANT_CTX, car, cdr);
 
     // Empty stamp → identity fast path (no clone).

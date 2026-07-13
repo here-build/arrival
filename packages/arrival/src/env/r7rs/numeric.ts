@@ -34,7 +34,7 @@ import { AInexact } from "../../values/primitives/AInexact.js";
 import { AString } from "../../values/primitives/AString.js";
 import { APair } from "../../values/primitives/APair.js";
 import type { SchemeValue } from "../../values/types.js";
-import { type ANumeric, bigintISqrt, complexDoor, schemeCompare, toReal } from "../../values/numbers.js";
+import { type ANumeric, exactISqrt, complexDoor, schemeCompare, toReal } from "../../values/numbers.js";
 import {
   coerceNumeric,
   isSchemeNumber,
@@ -45,6 +45,7 @@ import {
   isEagerAccumulationActive,
   type AOrd,
 } from "../../values/op-helpers.js";
+import { checkedMul, mintExact } from "../../values/mint-numeric.js";
 import { type } from "../../utils/typecheck.js";
 import { tf } from "../../values/tagless-final.js";
 
@@ -223,7 +224,7 @@ function schemeNegate(a: ANumeric): ANumeric {
   if (a instanceof AInexact) {
     return new AInexact(a.ctx, -a.real);
   }
-  return new AExact(a.ctx, -a.num, a.denom);
+  return a.neg();
 }
 
 function schemeMul(a: ANumeric, b: ANumeric): ANumeric {
@@ -257,114 +258,108 @@ const mulFn = (...args: ANumeric[]): ANumeric => args.reduce(schemeMul);
 
 const divFn = (first: ANumeric, ...rest: ANumeric[]): ANumeric => {
   if (rest.length === 0) {
-    return schemeDiv(new AExact(first.ctx, 1n), first);
+    return schemeDiv(new AExact(first.ctx, 1), first);
   }
   return rest.reduce(schemeDiv, first);
 };
 
 // ── Integer division family ─────────────────────────────────────────────────────
+// Everything below is plain `number` now (§2.0/§2.1 — RATIO, both AExact fields
+// already safe-int by construction); the old bigint/number dual-branch collapses to
+// one path per helper, `exact`-tagged only to thread contagion (bothExact) into the
+// caller's AExact-vs-AInexact choice.
 
-function toInteger(n: ANumeric, opName: string): { value: bigint | number; exact: boolean } {
-  if (n instanceof AExact) {
-    TypeError.invariant(n.denom === 1n, `${opName}: not an integer`);
-    return { value: n.num, exact: true };
-  } else {
-    TypeError.invariant(Number.isInteger(n.real), `${opName}: not an integer`);
-    return { value: n.real, exact: false };
-  }
+/** `a - (a % b)` divides `b` EXACTLY (by construction of `%`), so the IEEE division
+ *  below is exact whenever the true quotient is itself a safe integer — mirrors
+ *  `AExact.quotient`'s own technique, never `Math.trunc(a/b)` directly. */
+function truncDiv(a: number, b: number): number {
+  const r = a % b;
+  return (a - r) / b;
 }
 
-function toIntegerPair(
-  a: ANumeric,
-  b: ANumeric,
-  opName: string,
-): { bothExact: true; av: bigint; bv: bigint } | { bothExact: false; av: number; bv: number } {
-  const ai = toInteger(a, opName);
-  const bi = toInteger(b, opName);
-  if (ai.exact && bi.exact) {
-    return { bothExact: true, av: ai.value as bigint, bv: bi.value as bigint };
-  }
-  const av = ai.exact ? Number(ai.value) : (ai.value as number);
-  const bv = bi.exact ? Number(bi.value) : (bi.value as number);
-  return { bothExact: false, av, bv };
-}
-
-function bigintFloorDiv(a: bigint, b: bigint): bigint {
-  const q = a / b;
-  if (a % b !== 0n && a < 0n !== b < 0n) {
-    return q - 1n;
-  }
+function floorDiv(a: number, b: number): number {
+  const q = truncDiv(a, b);
+  const r = a % b;
+  if (r !== 0 && a < 0 !== b < 0) return q - 1;
   return q;
 }
 
-const quotientFn = (a: bigint, b: bigint): bigint => {
-  invariant(b != 0n, "quotient: division by zero");
-  return a / b;
+function toInteger(n: ANumeric, opName: string): { value: number; exact: boolean } {
+  if (n instanceof AExact) {
+    TypeError.invariant(n.denom === 1, `${opName}: not an integer`);
+    return { value: n.num, exact: true };
+  }
+  TypeError.invariant(Number.isInteger(n.real), `${opName}: not an integer`);
+  return { value: n.real, exact: false };
+}
+
+function toIntegerPair(a: ANumeric, b: ANumeric, opName: string): { bothExact: boolean; av: number; bv: number } {
+  const ai = toInteger(a, opName);
+  const bi = toInteger(b, opName);
+  return { bothExact: ai.exact && bi.exact, av: ai.value, bv: bi.value };
+}
+
+function boxInteger(ctx: RunContext, exact: boolean, value: number): ANumeric {
+  return exact ? new AExact(ctx, value) : new AInexact(ctx, value);
+}
+
+const quotientFn = (a: ANumeric, b: ANumeric): ANumeric => {
+  const p = toIntegerPair(a, b, "quotient");
+  invariant(p.bv !== 0, "quotient: division by zero");
+  return boxInteger(a.ctx, p.bothExact, truncDiv(p.av, p.bv));
 };
 
 const remainderFn = (a: ANumeric, b: ANumeric): ANumeric => {
   const p = toIntegerPair(a, b, "remainder");
-  if (p.bothExact) {
-    invariant(p.bv !== 0n, "remainder: division by zero");
-    return new AExact(a.ctx, p.av % p.bv);
-  }
-  return new AInexact(a.ctx, p.av % p.bv);
+  invariant(p.bv !== 0, "remainder: division by zero");
+  return boxInteger(a.ctx, p.bothExact, p.av % p.bv);
 };
 
 const moduloFn = (a: ANumeric, b: ANumeric): ANumeric => {
   const p = toIntegerPair(a, b, "modulo");
-  if (p.bothExact) {
-    invariant(p.bv !== 0n, "modulo: division by zero");
-    return new AExact(a.ctx, ((p.av % p.bv) + p.bv) % p.bv);
-  }
-  return new AInexact(a.ctx, ((p.av % p.bv) + p.bv) % p.bv);
+  invariant(p.bv !== 0, "modulo: division by zero");
+  return boxInteger(a.ctx, p.bothExact, ((p.av % p.bv) + p.bv) % p.bv);
 };
 
 const floorQuotientFn = (a: ANumeric, b: ANumeric): ANumeric => {
   const p = toIntegerPair(a, b, "floor-quotient");
-  if (p.bothExact) {
-    invariant(p.bv !== 0n, "floor-quotient: division by zero");
-    return new AExact(a.ctx, bigintFloorDiv(p.av, p.bv));
-  }
-  return new AInexact(a.ctx, Math.floor(p.av / p.bv));
+  invariant(p.bv !== 0, "floor-quotient: division by zero");
+  return boxInteger(a.ctx, p.bothExact, floorDiv(p.av, p.bv));
 };
 
 const floorRemainderFn = (a: ANumeric, b: ANumeric): ANumeric => {
   const p = toIntegerPair(a, b, "floor-remainder");
-  if (p.bothExact) {
-    invariant(p.bv !== 0n, "floor-remainder: division by zero");
-    return new AExact(a.ctx, ((p.av % p.bv) + p.bv) % p.bv);
-  }
-  const q = Math.floor(p.av / p.bv);
-  return new AInexact(a.ctx, p.av - q * p.bv);
+  invariant(p.bv !== 0, "floor-remainder: division by zero");
+  return boxInteger(a.ctx, p.bothExact, ((p.av % p.bv) + p.bv) % p.bv);
 };
 
 const truncateQuotientFn = (a: ANumeric, b: ANumeric): ANumeric => {
   const p = toIntegerPair(a, b, "truncate-quotient");
-  if (p.bothExact) {
-    invariant(p.bv !== 0n, "truncate-quotient: division by zero");
-    return new AExact(a.ctx, p.av / p.bv);
-  }
-  return new AInexact(a.ctx, Math.trunc(p.av / p.bv));
+  invariant(p.bv !== 0, "truncate-quotient: division by zero");
+  return boxInteger(a.ctx, p.bothExact, truncDiv(p.av, p.bv));
 };
 
 const truncateRemainderFn = (a: ANumeric, b: ANumeric): ANumeric => {
   const p = toIntegerPair(a, b, "truncate-remainder");
-  if (p.bothExact) {
-    invariant(p.bv !== 0n, "truncate-remainder: division by zero");
-    return new AExact(a.ctx, p.av % p.bv);
-  }
-  return new AInexact(a.ctx, p.av % p.bv);
+  invariant(p.bv !== 0, "truncate-remainder: division by zero");
+  return boxInteger(a.ctx, p.bothExact, p.av % p.bv);
 };
 
-const absFn = (x: number | bigint): number | bigint => (typeof x === "bigint" ? (x < 0n ? -x : x) : Math.abs(x));
+// abs/zero?/positive?/negative? — box-native (§2.2 encode-edge law): operate on the
+// already-coerced ANumeric and return/answer directly off ITS OWN exactness, never
+// round-trip through a shape-guessing loose codec (a plain JS `number` result of an
+// op has no memory of which box it came from — `Number.isSafeInteger` cannot recover
+// "was the operand exact" once the value is unboxed).
+function schemeAbs(x: ANumeric): ANumeric {
+  return x instanceof AExact ? x.abs() : new AInexact(x.ctx, Math.abs(x.real));
+}
 
 // ── gcd / lcm ───────────────────────────────────────────────────────────────────
 
-function gcd2(a: bigint, b: bigint): bigint {
-  a = a < 0n ? -a : a;
-  b = b < 0n ? -b : b;
-  while (b !== 0n) {
+function gcd2(a: number, b: number): number {
+  a = a < 0 ? -a : a;
+  b = b < 0 ? -b : b;
+  while (b !== 0) {
     const t = b;
     b = a % b;
     a = t;
@@ -372,22 +367,68 @@ function gcd2(a: bigint, b: bigint): bigint {
   return a;
 }
 
-const gcdFn = (...args: bigint[]): bigint => {
-  if (args.length === 0) return 0n;
-  return args.reduce(gcd2, 0n);
+/** gcd/lcm are box-native for the SAME reason `schemeAbs` is (§2.2): a variadic fold
+ *  over `toInteger`'d operands, contagion tracked via `hasInexact` so a single inexact
+ *  argument makes the whole result inexact even when the accumulated magnitude happens
+ *  to be an integer — `(exact? (gcd 4.0 6))` must be `#f`. Zero-arg identity (R7RS: 0)
+ *  is intercepted by `marshalCall`'s `zeroArgIdentity` before `fn` is ever called, so
+ *  `args` here always has ≥1 element. */
+const gcdFn = (...args: ANumeric[]): ANumeric => {
+  let acc = 0;
+  let hasInexact = false;
+  for (const n of args) {
+    const { value, exact } = toInteger(n, "gcd");
+    if (!exact) hasInexact = true;
+    acc = gcd2(acc, value);
+  }
+  return boxInteger(args[0].ctx, !hasInexact, acc);
+};
+
+/** `lcm(a,b) = (a/g)*b` where `g = gcd(a,b)` — the DIVIDE-then-multiply order (never
+ *  `(a*b)/g`) so the checked multiply below only ever guards the FINAL product, not an
+ *  intermediate that could overflow before the gcd ever reduces it (§2.1: "lcm (a/g*b,
+ *  checked product)"). Zero-arg identity (R7RS: 1) via `marshalCall`, same as gcd. */
+const lcmFn = (...args: ANumeric[]): ANumeric => {
+  let acc = 1;
+  let hasInexact = false;
+  for (const n of args) {
+    const { value, exact } = toInteger(n, "lcm");
+    if (!exact) hasInexact = true;
+    const av = value < 0 ? -value : value;
+    const g = gcd2(acc, av);
+    acc = g === 0 ? 0 : checkedMul(acc / g, av, "lcm");
+  }
+  return boxInteger(args[0].ctx, !hasInexact, acc);
 };
 
 // ── expt ─────────────────────────────────────────────────────────────────────────
 
+/** `base**exponent` via a checked repeated-mult fold (§2.1: "expt (repeated-mult with
+ *  per-step check)") — never the bare `**` operator, which would silently produce an
+ *  imprecise/overflowed float with no crash-on-overflow gate. `exponent` is always a
+ *  non-negative safe-int here (schemeExpt's own `n >= 0`/`m = -n` split). Fast paths
+ *  for |base| ≤ 1 avoid looping the full exponent magnitude when the result is bounded
+ *  regardless (0^n, 1^n, (-1)^n) — exponents can themselves be up to 2^53. */
+function checkedPow(base: number, exponent: number, op: string): number {
+  if (base === 0) return exponent === 0 ? 1 : 0;
+  if (base === 1) return 1;
+  if (base === -1) return exponent % 2 === 0 ? 1 : -1;
+  let result = 1;
+  for (let i = 0; i < exponent; i++) {
+    result = checkedMul(result, base, op);
+  }
+  return result;
+}
+
 function schemeExpt(base: ANumeric, power: ANumeric): ANumeric {
-  if (base instanceof AExact && power instanceof AExact && power.denom === 1n) {
+  if (base instanceof AExact && power instanceof AExact && power.denom === 1) {
     const n = power.num;
-    if (n >= 0n) {
-      return new AExact(base.ctx, base.num ** n, base.denom ** n);
+    if (n >= 0) {
+      return mintExact(base.ctx, checkedPow(base.num, n, "expt"), checkedPow(base.denom, n, "expt"), undefined, "expt");
     }
-    invariant(base.num !== 0n, "expt: division by zero (0 raised to a negative power)");
+    invariant(base.num !== 0, "expt: division by zero (0 raised to a negative power)");
     const m = -n;
-    return new AExact(base.ctx, base.denom ** m, base.num ** m);
+    return mintExact(base.ctx, checkedPow(base.denom, m, "expt"), checkedPow(base.num, m, "expt"), undefined, "expt");
   }
   return new AInexact(base.ctx, Math.pow(toReal(base), toReal(power)));
 }
@@ -398,12 +439,7 @@ function schemeNumEq(a: ANumeric, b: ANumeric): boolean {
   if (a instanceof AExact && b instanceof AExact) {
     return a.cmp(b) === 0;
   }
-  if (a instanceof AInexact && b instanceof AInexact) {
-    return a.real === b.real;
-  }
-  const aReal = a instanceof AExact ? Number(a.num) / Number(a.denom) : a.real;
-  const bReal = b instanceof AExact ? Number(b.num) / Number(b.denom) : b.real;
-  return aReal === bReal;
+  return toReal(a) === toReal(b);
 }
 
 const numEqFn = (first: ANumeric, ...rest: ANumeric[]): boolean => {
@@ -470,12 +506,15 @@ const minFn = (first: ANumeric, ...rest: ANumeric[]): ANumeric => {
 };
 
 // ── Predicates ────────────────────────────────────────────────────────────────────
+// Box-native (§2.2 — same reasoning as schemeAbs): AExact/AInexact both carry
+// isZero/isPositive/isNegative getters directly, so no shape-guessing codec is
+// involved at all — sign predicates never touch encode.
 
-const isZeroFn = (x: number | bigint): boolean => x === 0 || x === 0n;
-const isPositiveFn = (x: number | bigint): boolean => (typeof x === "bigint" ? x > 0n : x > 0);
-const isNegativeFn = (x: number | bigint): boolean => (typeof x === "bigint" ? x < 0n : x < 0);
-const isOddFn = (x: bigint): boolean => x % 2n !== 0n;
-const isEvenFn = (x: bigint): boolean => x % 2n === 0n;
+const isZeroFn = (x: ANumeric): boolean => x.isZero;
+const isPositiveFn = (x: ANumeric): boolean => x.isPositive;
+const isNegativeFn = (x: ANumeric): boolean => x.isNegative;
+const isOddFn = (x: number): boolean => x % 2 !== 0;
+const isEvenFn = (x: number): boolean => x % 2 === 0;
 
 // ── Rounding ──────────────────────────────────────────────────────────────────────
 
@@ -490,24 +529,61 @@ const roundFn = (x: number): number => {
   return ceiled;
 };
 
+// floor/ceiling/truncate/round are box-native too (§2.2): AExact already carries these
+// as methods (AExact.ts), so routing through them — rather than a raw `z.looseNumber`
+// in/out spec — means an inexact operand can never come back exact just because its
+// rounded VALUE happens to be a safe integer (`(exact? (floor 2.5))` must be `#f`).
+function schemeFloor(x: ANumeric): ANumeric {
+  return x instanceof AExact ? x.floor() : new AInexact(x.ctx, Math.floor(x.real));
+}
+function schemeCeiling(x: ANumeric): ANumeric {
+  return x instanceof AExact ? x.ceiling() : new AInexact(x.ctx, Math.ceil(x.real));
+}
+function schemeTruncate(x: ANumeric): ANumeric {
+  return x instanceof AExact ? x.truncate() : new AInexact(x.ctx, Math.trunc(x.real));
+}
+function schemeRound(x: ANumeric): ANumeric {
+  return x instanceof AExact ? x.round() : new AInexact(x.ctx, roundFn(x.real));
+}
+
 // ── Rational accessors ──────────────────────────────────────────────────────────────
 
-function floatToRational(x: number): { num: bigint; denom: bigint } {
-  invariant(Number.isFinite(x), "numerator/denominator requires a finite number");
-  if (Number.isInteger(x)) {
-    return { num: BigInt(x), denom: 1n };
-  }
+/** Exact rational nearest a finite, non-integer double, read off its OWN decimal
+ *  string (handles both fixed ("0.5") and exponential ("1e-10") `Number.toString()`
+ *  forms) — shared by numerator/denominator's inexact arm and `inexact->exact`.
+ *  `Number(...)` parses of a ≤17-significant-digit string are exact for magnitudes
+ *  within the safe-integer ceiling (the common case); the guard below doors rather
+ *  than silently rounding a mantissa/scale that lands outside it. */
+function floatToRational(x: number): { num: number; denom: number } {
+  invariant(Number.isFinite(x), "requires a finite number");
+  if (Number.isInteger(x)) return { num: x, denom: 1 };
   const str = x.toString();
-  const dotIndex = str.indexOf(".");
-  if (dotIndex === -1) {
-    return { num: BigInt(x), denom: 1n };
+  const expMatch = str.match(/^(-?)(\d+)(?:\.(\d+))?e([+-]?\d+)$/i);
+  if (expMatch) {
+    const [, sign, intPart, fracPart = "", expStr] = expMatch;
+    const exp = Number(expStr);
+    const digits = intPart + fracPart;
+    const netExp = exp - fracPart.length;
+    const mantissa = Number(`${sign}${digits}`);
+    TypeError.invariant(Number.isSafeInteger(mantissa), `${x}: precision exceeds safe-integer representation`);
+    if (netExp >= 0) return { num: checkedMul(mantissa, 10 ** netExp, "exact"), denom: 1 };
+    const denom = 10 ** -netExp;
+    TypeError.invariant(Number.isSafeInteger(denom), `${x}: precision exceeds safe-integer representation`);
+    const g = gcd2(mantissa < 0 ? -mantissa : mantissa, denom);
+    return { num: mantissa / g, denom: denom / g };
   }
+  const dotIndex = str.indexOf(".");
+  if (dotIndex === -1) return { num: x, denom: 1 };
   const decimals = str.length - dotIndex - 1;
-  const denom = 10n ** BigInt(decimals);
-  const num = BigInt(str.replace(".", "").replace(/^-/, ""));
-  const sign = x < 0 ? -1n : 1n;
-  const g = gcd2(num < 0n ? -num : num, denom);
-  return { num: (sign * num) / g, denom: denom / g };
+  const denom = 10 ** decimals;
+  const numAbs = Number(str.replace(".", "").replace(/^-/, ""));
+  TypeError.invariant(
+    Number.isSafeInteger(denom) && Number.isSafeInteger(numAbs),
+    `${x}: precision exceeds safe-integer representation`,
+  );
+  const sign = x < 0 ? -1 : 1;
+  const g = gcd2(numAbs, denom);
+  return { num: sign * (numAbs / g), denom: denom / g };
 }
 
 const numeratorFn = (x: ANumeric): ANumeric => {
@@ -516,7 +592,7 @@ const numeratorFn = (x: ANumeric): ANumeric => {
   }
   invariant(x instanceof AInexact, "numerator requires a rational number");
   const { num } = floatToRational(x.real);
-  return new AInexact(x.ctx, Number(num));
+  return new AInexact(x.ctx, num);
 };
 
 const denominatorFn = (x: ANumeric): ANumeric => {
@@ -525,42 +601,43 @@ const denominatorFn = (x: ANumeric): ANumeric => {
   }
   invariant(x instanceof AInexact, "denominator requires a rational number");
   const { denom } = floatToRational(x.real);
-  return new AInexact(x.ctx, Number(denom));
+  return new AInexact(x.ctx, denom);
 };
 
 // ── R7RS S2 gaps: square / exact-integer-sqrt / rationalize ─────────────────────────
 
 const squareFn = (x: ANumeric): ANumeric => schemeMul(x, x);
 
-/** R7RS exact-integer-sqrt: (s . r) with s² ≤ n < (s+1)² and n = s² + r. Product pair. */
+/** R7RS exact-integer-sqrt: (s . r) with s² ≤ n < (s+1)² and n = s² + r. Product pair.
+ *  `s*s`/`s²` can't overflow: `exactISqrt`'s own contract guarantees `s*s ≤ n`, and `n`
+ *  is already a safe-int AExact field — no checked helper needed. */
 const exactIntegerSqrtFn = function (this: CallCtx, n: unknown): APair<AExact, AExact> {
   const a = coerceNumeric(n, this.runCtx);
-  invariant(a instanceof AExact && a.denom === 1n, "exact-integer-sqrt: exact integer required");
-  invariant(a.num >= 0n, "exact-integer-sqrt: non-negative integer required");
-  const s = bigintISqrt(a.num);
+  invariant(a instanceof AExact && a.denom === 1, "exact-integer-sqrt: exact integer required");
+  invariant(a.num >= 0, "exact-integer-sqrt: non-negative integer required");
+  const s = exactISqrt(a.num);
   const r = a.num - s * s;
   return new APair(this.runCtx, new AExact(this.runCtx, s), new AExact(this.runCtx, r));
 };
 
 /** Simplest rational in [x, y] (x ≤ y). R7RS-style recursive invert of fractional parts. */
-function simplestInRange(x: number, y: number): { num: bigint; denom: bigint } {
+function simplestInRange(x: number, y: number): { num: number; denom: number } {
   if (y < x) return simplestInRange(y, x);
-  if (x <= 0 && y >= 0) return { num: 0n, denom: 1n };
+  if (x <= 0 && y >= 0) return { num: 0, denom: 1 };
   if (y < 0) {
     const n = simplestInRange(-y, -x);
     return { num: -n.num, denom: n.denom };
   }
   if (x < 0) return simplestInRange(0, y);
   const fx = Math.floor(x);
-  const fy = Math.floor(y);
   // x is integer (at left bound)
-  if (fx >= x) return { num: BigInt(fx), denom: 1n };
+  if (fx >= x) return { num: fx, denom: 1 };
   // an integer lies strictly between x and y
-  if (fx + 1 <= y) return { num: BigInt(fx + 1), denom: 1n };
+  if (fx + 1 <= y) return { num: fx + 1, denom: 1 };
   // same integer part: n + 1/q where q is simplest in inverted fractional range
   const inv = simplestInRange(1 / (y - fx), 1 / (x - fx));
   // n + 1/(p/q) = n + q/p = (n*p + q)/p
-  return { num: BigInt(fx) * inv.num + inv.denom, denom: inv.num };
+  return { num: fx * inv.num + inv.denom, denom: inv.num };
 }
 
 const rationalizeFn = function (this: CallCtx, x: unknown, e: unknown): ANumeric {
@@ -573,7 +650,7 @@ const rationalizeFn = function (this: CallCtx, x: unknown, e: unknown): ANumeric
   if (xv instanceof AExact && ev instanceof AExact) {
     return new AExact(this.runCtx, num, denom);
   }
-  return new AInexact(this.runCtx, Number(num) / Number(denom));
+  return new AInexact(this.runCtx, num / denom);
 };
 
 // ── Transcendentals ─────────────────────────────────────────────────────────────────
@@ -583,8 +660,8 @@ const sqrtFn = (x: ANumeric): ANumeric => {
   if (val < 0) {
     complexDoor();
   }
-  if (x instanceof AExact && x.denom === 1n && x.num >= 0n) {
-    const r = bigintISqrt(x.num);
+  if (x instanceof AExact && x.denom === 1 && x.num >= 0) {
+    const r = exactISqrt(x.num);
     if (r * r === x.num) {
       return new AExact(x.ctx, r);
     }
@@ -760,116 +837,59 @@ function looseCompare(sym, core: (this: CallCtx, ...a: unknown[]) => unknown) {
 // `nativeNumericOp`.
 // ════════════════════════════════════════════════════════════════════════════
 
-const lcmCoreFn = (...args: bigint[]): bigint => {
-  if (args.length === 0) return 1n;
-  const lcm2 = (a: bigint, b: bigint): bigint => {
-    const g = gcd2(a, b);
-    return g === 0n ? 0n : (a / g) * b;
-  };
-  // Seed with 1n and abs each operand so the result is non-negative.
-  return args.reduce((a, b) => lcm2(a, b < 0n ? -b : b), 1n);
-};
-const lcmSpec: NumSpec = { in: [], inRest: z.bigint, out: z.bigint, fn: lcmCoreFn };
-
 // `function(this: CallCtx, …)` (not an arrow) on every helper below — bound directly
 // as a symbol.native impl, dispatch delivers the live ctx via `this` (capability.ts's
 // `hostImpl.apply(makeCallCtx(runCtx), args)`). Threaded into `coerceNumeric`'s ctx
 // param, completing op-helpers.ts's own confessed THREADING GAP (its doc comment:
 // "every current caller… lives in the env/r7rs cluster… does not yet pass one" —
 // that cluster is this file).
-// (q . r) product — multi-return is doored on binding.
+// (q . r) product — multi-return is doored on binding. `floorQuotientFn`/
+// `floorRemainderFn` already accept EITHER ANumeric kind via `toIntegerPair` — no
+// pre-conversion to AExact needed (the old bigint port's `BigInt(Math.trunc(...))`
+// pre-box was dead weight even before this rework: the callee re-derives via
+// `toInteger` regardless).
 const floorSlashFn = function (this: CallCtx, n1: unknown, n2: unknown): unknown {
   const a = coerceNumeric(n1, this.runCtx);
   const b = coerceNumeric(n2, this.runCtx);
-  const aExact = a instanceof AExact ? a : new AExact(a.ctx, BigInt(Math.trunc(a.real)));
-  const bExact = b instanceof AExact ? b : new AExact(b.ctx, BigInt(Math.trunc(b.real)));
-  const q = floorQuotientFn(aExact, bExact);
-  const r = floorRemainderFn(aExact, bExact);
+  const q = floorQuotientFn(a, b);
+  const r = floorRemainderFn(a, b);
   return new APair(this.runCtx, q as SchemeValue, r as SchemeValue);
 };
 
 const truncateSlashFn = function (this: CallCtx, n1: unknown, n2: unknown): unknown {
   const a = coerceNumeric(n1, this.runCtx);
   const b = coerceNumeric(n2, this.runCtx);
-  const aExact = a instanceof AExact ? a : new AExact(a.ctx, BigInt(Math.trunc(a.real)));
-  const bExact = b instanceof AExact ? b : new AExact(b.ctx, BigInt(Math.trunc(b.real)));
-  const q = truncateQuotientFn(aExact, bExact);
-  const r = truncateRemainderFn(aExact, bExact);
+  const q = truncateQuotientFn(a, b);
+  const r = truncateRemainderFn(a, b);
   return new APair(this.runCtx, q as SchemeValue, r as SchemeValue);
-};
-
-const lcmFn = function (this: CallCtx, ...args: unknown[]): ANumeric {
-  if (args.length === 0) return new AExact(this.runCtx, 1n);
-  let hasInexact = false;
-  const exactArgs: AExact[] = [];
-  for (const arg of args) {
-    const n = coerceNumeric(arg, this.runCtx);
-    if (n instanceof AInexact) {
-      hasInexact = true;
-      exactArgs.push(new AExact(n.ctx, BigInt(Math.trunc(n.real))));
-    } else {
-      exactArgs.push(new AExact(n.ctx, n.num / n.denom));
-    }
-  }
-  const result = marshalCall("lcm", lcmSpec, exactArgs, this.runCtx);
-  const resultBigint = result instanceof AExact ? result.num : (result as bigint);
-  return hasInexact ? new AInexact(exactArgs[0].ctx, Number(resultBigint)) : new AExact(exactArgs[0].ctx, resultBigint);
 };
 
 const onePlusFn = function (this: CallCtx, n: unknown): ANumeric {
   const converted = coerceNumeric(n, this.runCtx);
-  const one = new AExact(converted.ctx, 1n);
+  const one = new AExact(converted.ctx, 1);
   return addFn(converted, one);
 };
 
 const oneMinusFn = function (this: CallCtx, n: unknown): ANumeric {
   const converted = coerceNumeric(n, this.runCtx);
-  const one = new AExact(converted.ctx, 1n);
+  const one = new AExact(converted.ctx, 1);
   return subFn(converted, one);
 };
 
 const inexactFn = function (this: CallCtx, z: unknown): AInexact {
   const n = coerceNumeric(z, this.runCtx);
   if (n instanceof AInexact) return n;
-  const exact = n;
-  if (exact.denom === 1n) return new AInexact(exact.ctx, Number(exact.num));
-  return new AInexact(exact.ctx, Number(exact.num) / Number(exact.denom));
+  return new AInexact(n.ctx, n.num / n.denom);
 };
 
 const exactFn = function (this: CallCtx, z: unknown): AExact {
   const n = coerceNumeric(z, this.runCtx);
   if (n instanceof AExact) return n;
-  const inexact = n;
-  const real = inexact.real;
+  const real = n.real;
   TypeError.invariant(Number.isFinite(real), "Cannot convert infinity or NaN to exact");
-  if (Number.isInteger(real)) return new AExact(inexact.ctx, BigInt(real));
-  // JS Number.toString picks fixed (`0.5`) vs exponential (`1e-10`/`1e+21`) by
-  // magnitude. Parse the mantissa+exponent and combine into a power-of-10 denom.
-  const str = real.toString();
-  const expMatch = str.match(/^(-?)(\d+)(?:\.(\d+))?e([+-]?\d+)$/i);
-  if (expMatch) {
-    const [, sign, intPart, fracPart = "", expStr] = expMatch;
-    const exp = Number(expStr);
-    const digits = intPart + fracPart;
-    const netExp = exp - fracPart.length;
-    const mantissa = BigInt(`${sign}${digits}`);
-    const gcd = (a: bigint, b: bigint): bigint => (b === 0n ? a : gcd(b, a % b));
-    if (netExp >= 0) {
-      return new AExact(inexact.ctx, mantissa * 10n ** BigInt(netExp));
-    }
-    const denomBig = 10n ** BigInt(-netExp);
-    const absNum = mantissa < 0n ? -mantissa : mantissa;
-    const g = gcd(absNum, denomBig);
-    return new AExact(inexact.ctx, mantissa / g, denomBig / g);
-  }
-  const decimalIndex = str.indexOf(".");
-  if (decimalIndex === -1) return new AExact(inexact.ctx, BigInt(real));
-  const decimals = str.length - decimalIndex - 1;
-  const scale = 10n ** BigInt(decimals);
-  const num = BigInt(Math.round(real * Number(scale)));
-  const gcd = (a: bigint, b: bigint): bigint => (b === 0n ? a : gcd(b, a % b));
-  const g = gcd(num < 0n ? -num : num, scale);
-  return new AExact(inexact.ctx, num / g, scale / g);
+  if (Number.isInteger(real)) return mintExact(n.ctx, real, 1, undefined, "inexact->exact");
+  const { num, denom } = floatToRational(real);
+  return mintExact(n.ctx, num, denom, undefined, "inexact->exact");
 };
 
 // Boxed (RULINGS.md R1) — see NUMBER_TO_STRING_CONTRACT's doc for why a raw return
@@ -881,7 +901,7 @@ const numberToStringFn = function (this: CallCtx, z: unknown, radix?: unknown): 
   const base = radixArg === undefined ? 10 : Number(radixArg.valueOf());
   let s: string;
   if (n instanceof AExact) {
-    s = n.denom === 1n ? n.num.toString(base) : `${n.num.toString(base)}/${n.denom.toString(base)}`;
+    s = n.denom === 1 ? n.num.toString(base) : `${n.num.toString(base)}/${n.denom.toString(base)}`;
   } else {
     // Inexact mark preservation (R7RS § 6.2): `(number->string 5.0)` must stay "5.0".
     s = base === 10 ? n.toString() : n.real.toString(base);
@@ -932,7 +952,7 @@ const addSpec: NumSpec = {
   inRest: z.schemeNumber,
   out: z.schemeNumber,
   fn: addFn,
-  zeroArgIdentity: (ctx) => new AExact(ctx, 0n),
+  zeroArgIdentity: (ctx) => new AExact(ctx, 0),
 };
 const subSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: subFn };
 const mulSpec: NumSpec = {
@@ -940,10 +960,15 @@ const mulSpec: NumSpec = {
   inRest: z.schemeNumber,
   out: z.schemeNumber,
   fn: mulFn,
-  zeroArgIdentity: (ctx) => new AExact(ctx, 1n),
+  zeroArgIdentity: (ctx) => new AExact(ctx, 1),
 };
 const divSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: divFn };
-const quotientSpec: NumSpec = { in: [z.bigint, z.bigint], out: z.bigint, fn: quotientFn };
+// `z.bigint` RETIRED here (§2.3 — was the direct cause of the "quotient: argument 0
+// type mismatch" door instead of an "integer" message): quotient now shares the same
+// box-native `toIntegerPair` door every other integer-division op uses, via
+// `z.schemeNumber` in/out (bypasses the loose codecs entirely, same reasoning as
+// `schemeAbs`/`schemeFloor`).
+const quotientSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: quotientFn };
 const moduloSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: moduloFn };
 const floorQuotientSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: floorQuotientFn };
 const floorRemainderSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: floorRemainderFn };
@@ -958,45 +983,77 @@ const realPartSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: (
 const imagPartSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
 const magnitudeSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
 const angleSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
-const absSpec: NumSpec = { in: [z.looseAnyNumber], out: z.looseAnyNumber, fn: absFn };
-const gcdSpec: NumSpec = { in: [], inRest: z.bigint, out: z.bigint, fn: gcdFn };
+// abs/zero?/positive?/negative?/gcd/lcm/floor/ceiling/truncate/round are ALL
+// box-native (`z.schemeNumber` in/out, `fn` operates on ANumeric directly) — none of
+// them touch `z.looseNumber`/`z.looseAnyNumber` in OUTPUT position, which is precisely
+// how they satisfy the encode-edge law (§2.2) without a generic `wantExact`-threading
+// mechanism: encode never runs a shape-guessing codec on these because `fn`'s return is
+// already the correctly (in)exact box. A future op that DOES need loose-number OUTPUT
+// should follow this same pattern rather than reintroducing the shape-guessing bug.
+const absSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: schemeAbs };
+const gcdSpec: NumSpec = {
+  in: [],
+  inRest: z.schemeNumber,
+  out: z.schemeNumber,
+  fn: gcdFn,
+  zeroArgIdentity: (ctx) => new AExact(ctx, 0),
+};
 const maxSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: maxFn };
 const minSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: minFn };
-const zeroSpec: NumSpec = { in: [z.looseAnyNumber], out: z.boolean, fn: isZeroFn };
-const positiveSpec: NumSpec = { in: [z.looseAnyNumber], out: z.boolean, fn: isPositiveFn };
-const negativeSpec: NumSpec = { in: [z.looseAnyNumber], out: z.boolean, fn: isNegativeFn };
-const oddSpec: NumSpec = { in: [z.bigint], out: z.boolean, fn: isOddFn };
-const evenSpec: NumSpec = { in: [z.bigint], out: z.boolean, fn: isEvenFn };
-const floorSpec: NumSpec = { in: [z.looseNumber], out: z.looseNumber, fn: Math.floor };
-const ceilingSpec: NumSpec = { in: [z.looseNumber], out: z.looseNumber, fn: Math.ceil };
-const truncateSpec: NumSpec = { in: [z.looseNumber], out: z.looseNumber, fn: Math.trunc };
-const roundSpec: NumSpec = { in: [z.looseNumber], out: z.looseNumber, fn: roundFn };
+const zeroSpec: NumSpec = { in: [z.schemeNumber], out: z.boolean, fn: isZeroFn };
+const positiveSpec: NumSpec = { in: [z.schemeNumber], out: z.boolean, fn: isPositiveFn };
+const negativeSpec: NumSpec = { in: [z.schemeNumber], out: z.boolean, fn: isNegativeFn };
+// `z.bigint` RETIRED — odd?/even? flip to `z.integer` (Scout's disposition table):
+// already the right codec (decodes either AExact/AInexact to a safe-int `number`,
+// doors on a non-integer/out-of-range operand with an "integer" message, matching
+// R7RS's own domain for these two predicates).
+const oddSpec: NumSpec = { in: [z.integer], out: z.boolean, fn: isOddFn };
+const evenSpec: NumSpec = { in: [z.integer], out: z.boolean, fn: isEvenFn };
+const floorSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: schemeFloor };
+const ceilingSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: schemeCeiling };
+const truncateSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: schemeTruncate };
+const roundSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: schemeRound };
 const sqrtSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: sqrtFn };
-const expSpec: NumSpec = { in: [z.looseNumber], out: z.looseNumber, fn: Math.exp };
-const logSpec: NumSpec = { in: [z.looseNumber], inRest: z.looseNumber, out: z.looseNumber, fn: logFn };
-const sinSpec: NumSpec = { in: [z.looseNumber], out: z.looseNumber, fn: Math.sin };
-const cosSpec: NumSpec = { in: [z.looseNumber], out: z.looseNumber, fn: Math.cos };
-const tanSpec: NumSpec = { in: [z.looseNumber], out: z.looseNumber, fn: Math.tan };
-const asinSpec: NumSpec = { in: [z.looseNumber], out: z.looseNumber, fn: Math.asin };
-const acosSpec: NumSpec = { in: [z.looseNumber], out: z.looseNumber, fn: Math.acos };
-const atanSpec: NumSpec = { in: [z.looseNumber], inRest: z.looseNumber, out: z.looseNumber, fn: atanFn };
+// Transcendentals: DECODE stays `z.looseNumber` (permissive — accepts +nan.0/+inf.0,
+// lossily divides a non-integer exact rational; unaffected by the encode-edge bug,
+// which is an ENCODE-direction issue). OUTPUT flips `z.looseNumber` → `z.inexact`
+// (§2.2: "inexact-by-spec-class... mint wantExact=false silently") — `z.inexact`
+// ALWAYS constructs AInexact, never re-derives exactness from the result's shape, so
+// `(exact? (sin 0))` can't accidentally come back `#t` just because `Math.sin(0)`
+// happens to be the safe integer `0`.
+const expSpec: NumSpec = { in: [z.looseNumber], out: z.inexact, fn: Math.exp };
+const logSpec: NumSpec = { in: [z.looseNumber], inRest: z.looseNumber, out: z.inexact, fn: logFn };
+const sinSpec: NumSpec = { in: [z.looseNumber], out: z.inexact, fn: Math.sin };
+const cosSpec: NumSpec = { in: [z.looseNumber], out: z.inexact, fn: Math.cos };
+const tanSpec: NumSpec = { in: [z.looseNumber], out: z.inexact, fn: Math.tan };
+const asinSpec: NumSpec = { in: [z.looseNumber], out: z.inexact, fn: Math.asin };
+const acosSpec: NumSpec = { in: [z.looseNumber], out: z.inexact, fn: Math.acos };
+const atanSpec: NumSpec = { in: [z.looseNumber], inRest: z.looseNumber, out: z.inexact, fn: atanFn };
+const lcmSpec: NumSpec = {
+  in: [],
+  inRest: z.schemeNumber,
+  out: z.schemeNumber,
+  fn: lcmFn,
+  zeroArgIdentity: (ctx) => new AExact(ctx, 1),
+};
 
 // ── Bespoke contracts — ops whose impl does NOT come from `nativeNumericOp`/`NumSpec`
 // (own coercion + bespoke `marshalCall` wrapper, or no NumSpec), so their Contract is
 // hand-declared to match the impl's OWN JS signature (input) and narrowest return type
-// (output) — never a `NumSpec` borrowed from an unrelated helper. (E.g. `lcmFn` wraps
-// `lcmSpec`'s raw bigint-in/out `marshalCall` with its OWN pre/post ANumeric coercion —
-// `lcmSpec` describes that INTERNAL step, not `lcmFn`'s real `(...unknown[]) => ANumeric`
-// signature, so it is not reused here.) ─────────────────────────────────────────────
+// (output) — never a `NumSpec` borrowed from an unrelated helper. ─────────────────────
 
-/** Type-predicate contracts — total boolean at runtime; dual type-guard harvest. */
+/** Type-predicate contracts — total boolean at runtime; dual type-guard harvest.
+ *  `z.bigint` RETIRED (§2.3): every scheme number (exact AND inexact) decodes to a
+ *  plain JS `number` post-rework — there is no longer a JS-side type that
+ *  distinguishes "exact" from "inexact" (that distinction is a scheme-plane box-class
+ *  fact, not a JS shape one), so `NUMBER_GUARD`/`EXACT_GUARD` both narrow to `number`. */
 const NUMBER_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.value],
   output: [z.boolean],
   type: dedent`
           {
-            (x: unknown): x is number | bigint;
-            <T>(x: T): x is Extract<T, number | bigint>;
+            (x: unknown): x is number;
+            <T>(x: T): x is Extract<T, number>;
           }
         `,
 };
@@ -1005,8 +1062,8 @@ const EXACT_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
   output: [z.boolean],
   type: dedent`
           {
-            (x: unknown): x is bigint;
-            <T>(x: T): x is Extract<T, bigint>;
+            (x: unknown): x is number;
+            <T>(x: T): x is Extract<T, number>;
           }
         `,
 };
@@ -1045,13 +1102,6 @@ const ONE_ARG_NUM_OUTPUT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = 
  *  declared domain; integer narrowing is `arithmeticShiftSpec`'s own runtime check. */
 const TWO_ARG_NUM_OUTPUT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber, z.schemeNumber],
-  output: [z.schemeNumber],
-};
-
-/** `lcm` — `(...args: unknown[]) => ANumeric`. `lcmFn` `coerceNumeric`s every arg before
- *  its own exact/inexact bookkeeping — same reasoning as the contracts above. */
-const LCM_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
-  input: z.array(z.schemeNumber),
   output: [z.schemeNumber],
 };
 
@@ -1159,6 +1209,10 @@ export default new EnvCapability("scheme/numeric", {
     gcd: symbol.native`gcd: greatest common divisor (non-negative)`(
       contractFromSpec(gcdSpec),
       nativeNumericOp("gcd", gcdSpec),
+    ),
+    lcm: symbol.native`lcm: least common multiple (non-negative)`(
+      contractFromSpec(lcmSpec),
+      nativeNumericOp("lcm", lcmSpec),
     ),
     expt: symbol.native`expt: exponentiation`(contractFromSpec(exptSpec), exptOp),
     max: symbol.native`max: maximum (inexactness contagious)`(
@@ -1295,7 +1349,6 @@ export default new EnvCapability("scheme/numeric", {
       QUOTIENT_REMAINDER_PRODUCT_CONTRACT,
       truncateSlashFn as (...args: unknown[]) => unknown,
     ),
-    lcm: symbol.native`lcm: least common multiple (non-negative)`(LCM_CONTRACT, lcmFn),
     // R8 mint: boxes + forwards the operand's provenance (see nativeTypePredicate's doc
     // for why an unboxed native return is a P4 violation). Rest-param shape matches Impl's
     // variadic contract — no arity-erasing cast needed.

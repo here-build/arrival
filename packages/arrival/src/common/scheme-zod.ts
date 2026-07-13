@@ -339,54 +339,55 @@ export const error = named(
 
 // --- numbers ---
 
+// `exact`'s JS face is now plain `number` (§2.3 — `z.bigint` retired): every AExact
+// field is safe-int `number` by construction (arrival-one-number-rework.md §0.2), so
+// there is no longer a magnitude class that needs `bigint` to carry faithfully. A raw
+// host `bigint` is a SEPARATE opaque pass-through value post-rework (never a scheme
+// number) — this codec's `encode` no longer auto-adopts one; a caller holding a host
+// bigint should convert explicitly (the "host-API break, said loudly" of §2.3).
 export const exact = named(
   "exact",
-  z.codec(z.instanceof(AExact), z.union([z.bigint(), z.number()]), {
+  z.codec(z.instanceof(AExact), z.number(), {
     decode: (n) => {
       // MODEL-REACHABLE door (a program's own exact rational reaching a native's arg
       // decode) — plain throw, never `invariant`: the "Invariant failed: " prefix
       // reads like an engine bug rather than a program mistake. Same rule at every
       // decode site below; the encode sites (host JS → scheme boxing) stay
       // `invariant` — a bad host value IS an internal contract breach.
-      if (n.denom !== 1n) throw new CodecFidelityError("exact", `exact rational ${n.toString()} has no integer form`);
+      if (n.denom !== 1) throw new CodecFidelityError("exact", `exact rational ${n.toString()} has no integer form`);
       return n.num;
     },
     encode: (n) => {
-      if (typeof n === "bigint") return new AExact(marshalCtx(), n);
       TypeError.invariant(Number.isSafeInteger(n), `exact codec: ${n} is not a safe integer`);
-      return new AExact(marshalCtx(), BigInt(n));
+      return new AExact(marshalCtx(), n);
     },
   }),
 );
 
-// `rational` folded into `inexact`: this codec is the superset (accepts bigint|number on
-// encode), so a separate AInexact→number codec bought nothing.
+// `rational` folded into `inexact`: this codec is the superset (accepted bigint|number on
+// encode pre-rework; now plain `number` — AInexact's `.real` was always a bare `number`,
+// never bigint, so retiring the bigint arm here is a pure simplification, not a behavior
+// change for the AInexact side).
 export const inexact = named(
   "inexact",
-  z.codec(z.instanceof(AInexact), z.union([z.bigint(), z.number()]), {
+  z.codec(z.instanceof(AInexact), z.number(), {
     decode: (n) => n.real,
-    encode: (n) => new AInexact(marshalCtx(), typeof n === "bigint" ? Number(n) : n),
+    encode: (n) => new AInexact(marshalCtx(), n),
   }),
 );
 
-const SAFE_MAX = BigInt(Number.MAX_SAFE_INTEGER);
-const SAFE_MIN = BigInt(Number.MIN_SAFE_INTEGER);
-
 function exactToJsNumberOrDoor(n: AExact): number {
-  // Doors, not invariants — model-reachable (see the `exact` decode note above).
-  if (n.denom !== 1n) {
+  // Door, not invariant — model-reachable (see the `exact` decode note above).
+  if (n.denom !== 1) {
     throw new CodecFidelityError(
       "number",
-      `exact rational ${n.toString()} cannot be a faithful JS number — use z.bigint or the integer codec`,
+      `exact rational ${n.toString()} cannot be a faithful JS number — use the integer codec, or looseNumber to accept the projected (divided) value`,
     );
   }
-  if (n.num > SAFE_MAX || n.num < SAFE_MIN) {
-    throw new CodecFidelityError(
-      "number",
-      `exact integer ${n.toString()} is outside JS safe-integer range — use z.bigint for arbitrary precision`,
-    );
-  }
-  return Number(n.num);
+  // No safe-range check needed: every AExact.num is ALREADY safe-int by construction
+  // (§0.2's invariant, enforced at every mint site) — a value that violates it can't
+  // exist as a live AExact to begin with.
+  return n.num;
 }
 
 // `integer` — accepts either exact-domain kind, JS image is `number().int()`, canonicalizes
@@ -406,7 +407,7 @@ export const integer = named(
     },
     encode: (n) => {
       TypeError.invariant(Number.isSafeInteger(n), `integer codec: ${n} is not a safe integer`);
-      return new AExact(marshalCtx(), BigInt(n));
+      return new AExact(marshalCtx(), n);
     },
   }),
 );
@@ -426,25 +427,39 @@ export const number = named(
       decode: (n) => exactToJsNumberOrDoor(n),
       encode: (n) => {
         TypeError.invariant(Number.isSafeInteger(n), `number codec: ${n} is not a safe integer`);
-        return new AExact(marshalCtx(), BigInt(n));
+        return new AExact(marshalCtx(), n);
       },
     }),
   ]),
 );
 
-// AExact listed first so encode canonically produces AExact (matches `integer`).
+// `bigint` — RETIRED as this vocabulary's active numeric cast (§2.3: every numeric
+// op in env/r7rs/numeric.ts has flipped off it, onto `schemeNumber`/`integer`).
+// KEPT, mechanically ported to the new AExact shape (`number`-backed `num`/`denom`),
+// so consumers this sweep does NOT own (env/r7rs/chars.ts, strings.ts, srfi-13.ts —
+// Sweep 3's territory) keep a real, compiling export to flip away from at their own
+// pace rather than hitting a missing-export break as a SECOND, unrelated failure on
+// top of their own AExact-shape breakage. New code should reach for `integer`
+// (safe-int `number`, doors on a non-integer/out-of-range operand) instead.
 export const bigint = named(
   "bigint",
   z.union([
     z.codec(z.instanceof(AExact), z.bigint(), {
       decode: (n) => {
         // Door, not invariant — model-reachable (see the `exact` decode note above).
-        if (n.denom !== 1n) {
+        if (n.denom !== 1) {
           throw new CodecFidelityError("bigint", `exact rational ${n.toString()} has no integer bigint form`);
         }
-        return n.num;
+        return BigInt(n.num);
       },
-      encode: (n) => new AExact(marshalCtx(), n),
+      encode: (n) => {
+        const num = Number(n);
+        TypeError.invariant(
+          Number.isSafeInteger(num),
+          `bigint codec: ${n} exceeds safe-integer range — exact numbers are safe-integer-only post-rework`,
+        );
+        return new AExact(marshalCtx(), num);
+      },
     }),
     z.codec(z.instanceof(AInexact), z.bigint(), {
       decode: (n) => {
@@ -474,47 +489,48 @@ export const bigint = named(
 //
 // These two codecs are the missing PERMISSIVE half of the numeric vocabulary.
 
-/** Any scheme number ↔ JS `number`, LOSSY (non-integer exact rational divides; out-of-safe-
- *  range exact integers divide too — no invariant, no door) and permissive of non-finite
- *  values (`+nan.0`/`+inf.0`/`-inf.0` pass through AInexact's `.real` unchanged). Encode
- *  canonicalizes safe-integer JS number to AExact, else AInexact — same rule `number`'s
- *  AExact branch uses, without `number`'s finite-only guard. */
+/** Any scheme number ↔ JS `number`, LOSSY (non-integer exact rational divides — no
+ *  invariant, no door; out-of-safe-range exact integers can no longer exist at all,
+ *  §0.2) and permissive of non-finite values (`+nan.0`/`+inf.0`/`-inf.0` pass through
+ *  AInexact's `.real` unchanged). Encode canonicalizes safe-integer JS number to
+ *  AExact, else AInexact — same rule `number`'s AExact branch uses, without
+ *  `number`'s finite-only guard. */
 export const looseNumber = named(
   "looseNumber",
   z.codec(
     z.union([z.instanceof(AExact), z.instanceof(AInexact)]),
     z.custom<number>((v) => typeof v === "number"),
     {
-      decode: (n) => (n instanceof AExact ? Number(n.num) / Number(n.denom) : n.real),
-      encode: (n) => (Number.isSafeInteger(n) ? new AExact(marshalCtx(), BigInt(n)) : new AInexact(marshalCtx(), n)),
+      decode: (n) => (n instanceof AExact ? n.num / n.denom : n.real),
+      encode: (n) => (Number.isSafeInteger(n) ? new AExact(marshalCtx(), n) : new AInexact(marshalCtx(), n)),
     },
   ),
 );
 
-/** Any scheme number ↔ JS `number | bigint` — `looseNumber`'s domain, PLUS an out-of-safe-
- *  range exact integer decodes to `bigint` instead of lossy float (preserving magnitude,
- *  the one case `looseNumber` alone would corrupt). Used by `abs`/`zero?`/`positive?`/
- *  `negative?` — ops whose `fn` branches on `typeof x === "bigint"` to stay exact. */
+/** Any scheme number ↔ JS `number | bigint`. Pre-rework this distinguished an
+ *  out-of-safe-range exact integer (→ `bigint`, preserving magnitude) from everything
+ *  else (→ `looseNumber`'s lossy float); post-rework NO live AExact can be
+ *  out-of-safe-range (§0.2's construction invariant), so the `bigint` decode arm below
+ *  is unreachable dead code kept only so this codec's declared JS-face union stays a
+ *  strict superset of `looseNumber`'s for callers still keyed on the wider type
+ *  (type-layer/schema-to-ts.ts's `IMAGE_BY_NAME` table — outside this sweep's file
+ *  scope). No live caller in `env/r7rs/numeric.ts` uses this codec anymore (every op
+ *  that used to needed it went box-native instead, per the encode-edge law, §2.2). */
 export const looseAnyNumber = named(
   "looseAnyNumber",
   z.codec(
     z.union([z.instanceof(AExact), z.instanceof(AInexact)]),
     z.union([z.custom<number>((v) => typeof v === "number"), z.bigint()]),
     {
-      decode: (n) => {
-        if (n instanceof AExact) {
-          if (n.isInteger && n.num >= SAFE_MIN && n.num <= SAFE_MAX) return Number(n.num);
-          if (n.isInteger) return n.num;
-          return Number(n.num) / Number(n.denom);
+      decode: (n) => (n instanceof AExact ? n.num / n.denom : n.real),
+      encode: (v) => {
+        if (typeof v === "bigint") {
+          const num = Number(v);
+          TypeError.invariant(Number.isSafeInteger(num), `looseAnyNumber: ${v} exceeds safe-integer range`);
+          return new AExact(marshalCtx(), num);
         }
-        return n.real;
+        return Number.isSafeInteger(v) ? new AExact(marshalCtx(), v) : new AInexact(marshalCtx(), v);
       },
-      encode: (v) =>
-        typeof v === "bigint"
-          ? new AExact(marshalCtx(), v)
-          : Number.isSafeInteger(v)
-            ? new AExact(marshalCtx(), BigInt(v))
-            : new AInexact(marshalCtx(), v),
     },
   ),
 );

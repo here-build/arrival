@@ -289,7 +289,7 @@ describe("B. hermeticApply — γ = apply(wire, ingress) under a silent region (
   it("computes the correct γ result: apply(wire, ingress) against Q7's hermetic env", async () => {
     const result = await hermeticApply({
       wire: WIRE,
-      ingress: { x: new AExact(CONSTANT_CTX, 41n) },
+      ingress: { x: new AExact(CONSTANT_CTX, 41) },
       basePacks: [],
       prelude: PRELUDE,
     });
@@ -300,7 +300,7 @@ describe("B. hermeticApply — γ = apply(wire, ingress) under a silent region (
     expect(isSilentRegion()).toBe(false);
     const pending = hermeticApply({
       wire: WIRE,
-      ingress: { x: new AExact(CONSTANT_CTX, 1n) },
+      ingress: { x: new AExact(CONSTANT_CTX, 1) },
       basePacks: [],
       prelude: PRELUDE,
     });

@@ -260,7 +260,7 @@ export default new EnvCapability("scheme/srfi-13", {
     // Index-or-#f, like string-contains (#f is the ONLY false value — index 0 is truthy).
     "string-index":
       symbol.native`string-index: index of the first char matching a char or one-arg predicate, or #f (SRFI-13; no charsets)`(
-        { input: [z.string, z.value], output: [z.union([z.bigint, z.boolean])], type: dedent`
+        { input: [z.string, z.value], output: [z.union([z.exact, z.boolean])], type: dedent`
           {
             (s: string, criterion: string | ((c: string) => unknown)): number | false;
           }
@@ -272,7 +272,7 @@ export default new EnvCapability("scheme/srfi-13", {
             const i = f.indexOf(true);
             return withInputProvenance(
               [str, criterion],
-              i === -1 ? schemeBool(false) : new AExact(runCtx, BigInt(i)),
+              i === -1 ? schemeBool(false) : new AExact(runCtx, i),
             );
           });
         },
@@ -280,7 +280,7 @@ export default new EnvCapability("scheme/srfi-13", {
 
     "string-count":
       symbol.native`string-count: how many chars match a char or one-arg predicate (SRFI-13; no charsets)`(
-        { input: [z.string, z.value], output: [z.bigint], type: dedent`
+        { input: [z.string, z.value], output: [z.exact], type: dedent`
           {
             (s: string, criterion: string | ((c: string) => unknown)): number;
           }
@@ -290,7 +290,7 @@ export default new EnvCapability("scheme/srfi-13", {
           const runCtx = this.runCtx;
           return afterFlags(criterionFlags(criterion, chars, runCtx), (f) => {
             const n = f.reduce((acc, hit) => acc + (hit ? 1 : 0), 0);
-            return withInputProvenance([str, criterion], new AExact(runCtx, BigInt(n)));
+            return withInputProvenance([str, criterion], new AExact(runCtx, n));
           });
         },
       ),

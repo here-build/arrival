@@ -144,7 +144,7 @@ export type AWrap<T> = [unknown] extends [T]
         : [T] extends [boolean]
           ? ABool
           : [T] extends [bigint]
-            ? AExact
+            ? bigint // opaque host value (§2.3, one-number-rework.md) — never boxed, identity (same law as the binary FFI arm below).
             : [T] extends [number]
               ? AExact | AInexact
               : [T] extends [string]
@@ -175,7 +175,7 @@ export type AUnwrap<T extends SchemeValue> = [SchemeValue] extends [T]
   : [T] extends [ABool]
     ? boolean
     : [T] extends [AExact]
-      ? number | bigint
+      ? number // plain number ALWAYS (§2.3): AExact's payload is safe-int by construction, so the out-of-range-bigint face is dead — egress divides (toJS(1/3) = 0.333…), never a bigint.
       : [T] extends [AInexact]
         ? number
         : [T] extends [AString]
@@ -246,19 +246,24 @@ export type AList<Car extends SchemeValue = any, Cdr extends Car extends ANil ? 
 // `arrival/toJS` = serialization projection, `arrival/toJSMembrane` = membrane exit.)
 
 /** The egress projection modes. `bare` = serialization (no options, callables
- *  stringify). `mem:0`/`mem:1` = membrane crossing, split by `forceBigInt` — the ONE
- *  RosettaOptions field that changes element projection (`returnEither`/
- *  `argProvenance` are wrapper-call concerns read only inside createRosettaWrapper,
- *  never by schemeToJsImpl or inbound jsToScheme). Adding a projection-affecting
- *  RosettaOptions field REQUIRES a new member here — rosetta.ts's
- *  `_modeKeyExhaustive` type guard makes forgetting it a compile error. */
-export type EgressMode = "bare" | "mem:0" | "mem:1";
+ *  stringify). `mem` = membrane crossing — the ONE non-bare mode; it used to split
+ *  `mem:0`/`mem:1` on `forceBigInt` (the one RosettaOptions field that ever changed
+ *  element projection), but `forceBigInt` is retired (docs/working-proposals/
+ *  arrival-one-number-rework.md §2.3 — bigint is an opaque host value, not a scheme
+ *  number, so there is no longer a numeric-projection option to key on) and the scout
+ *  found no production setter for it anyway — every real crossing already always
+ *  resolved to `mem:0`. `returnEither`/`argProvenance` remain wrapper-call concerns
+ *  read only inside createRosettaWrapper, never by schemeToJsImpl or inbound
+ *  jsToScheme. Adding a FUTURE projection-affecting RosettaOptions field still
+ *  REQUIRES a new member here — rosetta.ts's `_modeKeyExhaustive` type guard makes
+ *  forgetting it a compile error. */
+export type EgressMode = "bare" | "mem";
 export const BARE_MODE: EgressMode = "bare";
 
 /** The region wrapper cache's inner key — NOT EgressMode: `"typed"` is scheme-zod's
  *  `z.procedure` factory family (its own marshalling, options-less), not an egress
  *  mode, and `"bare"` never mints wrappers, so the live domain is
- *  {"mem:0","mem:1","typed"}. See region-scope.ts's cache doc. */
+ *  {"mem","typed"}. See region-scope.ts's cache doc. */
 export type WrapperKey = EgressMode | "typed";
 
 /**
@@ -271,8 +276,8 @@ export interface MembraneExit {
    *  exporting region scope — closes over `withRegionScope(pinned, () =>
    *  schemeToJsImpl(el, options))`. Handles nested callables (schemeToJsImpl's own
    *  is_callable_value fast path → callableToHostFn, minting under the pinned scope),
-   *  nested forceBigInt, nested containers (the recursion re-enters toJSMembrane with
-   *  the same options, so the same modeKey falls out). */
+   *  nested containers (the recursion re-enters toJSMembrane with the same options, so
+   *  the same modeKey falls out). */
   element(el: unknown): unknown;
   /** Branded cache-mode discriminator — derived from options CONTENT by rosetta's
    *  `modeKeyOf`; closure identity is irrelevant. Never `"bare"` in practice (bare

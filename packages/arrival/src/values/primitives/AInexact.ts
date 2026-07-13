@@ -7,6 +7,7 @@ import { type RunContext } from "./RunContext.js";
 import { CLASS } from "../../well-known-symbols.js";
 import { complexDoor, schemeCompare } from "../numbers.js";
 import { AExact } from "./AExact.js";
+import { mintExact } from "../mint-numeric.js";
 
 export class AInexact extends AValue {
   static [CLASS] = "number";
@@ -68,20 +69,22 @@ export class AInexact extends AValue {
 
   private static floatToRational(ctx: RunContext, x: number, tolerance: number = 1e-10): AExact {
     if (Number.isInteger(x)) {
-      return new AExact(ctx, BigInt(x));
+      return mintExact(ctx, x, 1, undefined, "inexact->exact");
     }
 
-    // Simple approach: use decimal representation
+    // Simple approach: use decimal representation. `denom`/`num` route through
+    // `mintExact` (not a bare `new AExact`) so a decimal expansion wide enough to leave
+    // safe-integer range THROWS per §0.3, rather than silently truncating.
     const str = x.toString();
     const dotIndex = str.indexOf(".");
     if (dotIndex === -1) {
-      return new AExact(ctx, BigInt(x));
+      return mintExact(ctx, x, 1, undefined, "inexact->exact");
     }
 
     const decimals = str.length - dotIndex - 1;
-    const denom = 10n ** BigInt(decimals);
-    const num = BigInt(str.replace(".", ""));
-    return new AExact(ctx, num, denom);
+    const denom = 10 ** decimals;
+    const num = Number(str.replace(".", ""));
+    return mintExact(ctx, num, denom, undefined, "inexact->exact");
   }
 
   // Conversion to JS

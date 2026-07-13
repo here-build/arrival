@@ -49,7 +49,7 @@ function contractDef(pack: { spec: { symbols?: unknown } }, name: string) {
 }
 
 const fn = () => {};
-const properList = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil);
+const properList = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), nil);
 const realString = new AString(CONSTANT_CTX, "abc");
 
 describe("2026-07-05 audit — runtime Contract precision on the REAL exported ops", () => {

@@ -63,7 +63,7 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
   it("number (safe integer) → SchemeExact", () => {
     const result = fromJs(CONSTANT_CTX, 42);
     expect(result).toBeInstanceOf(AExact);
-    expect((result as AExact).num).toBe(42n);
+    expect((result as AExact).num).toBe(42);
   });
 
   // Non-integer float → SchemeInexact (real part).
@@ -74,12 +74,13 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
     expect((result as AInexact).real).toBe(3.14);
   });
 
-  // typeof 1n === "bigint" → SchemeExact regardless of size.
-  // INVARIANT: bigint → SchemeExact regardless of size
-  it("bigint → SchemeExact", () => {
+  // typeof 1n === "bigint" → opaque host value (docs/working-proposals/
+  // arrival-one-number-rework.md §2.3), never boxed — rides the raw pass-through lane.
+  // INVARIANT: bigint is not boxed — fromJs returns it unchanged (opaque host value, not a scheme number)
+  it("bigint → opaque host passthrough (never boxed; not a scheme number)", () => {
     const result = fromJs(CONSTANT_CTX, 123n);
-    expect(result).toBeInstanceOf(AExact);
-    expect((result as AExact).num).toBe(123n);
+    expect(result).toBe(123n);
+    expect(typeof result).toBe("bigint");
   });
 
   // SchemeBool.ts:32-34 — empty-provenance fast path REUSES the schemeTrue/schemeFalse
@@ -97,7 +98,10 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
     expect(result).toBeInstanceOf(ABool);
     expect(result).not.toBe(schemeTrue);
     expect((result as ABool).value).toBe(true);
-    expect([...result.provenance]).toEqual([99]);
+    // Cast: `fromJs`'s return type widened to `AValue | bigint` (§2.3's opaque-host-value
+    // law) — this call's runtime shape is always ABool (a boolean input never produces
+    // the bigint arm), same idiom as the `.value` cast just above.
+    expect([...(result as ABool).provenance]).toEqual([99]);
   });
 
   // The two JS bottoms map to the two distinct Scheme absences (Rosetta
@@ -124,7 +128,7 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
     const result = fromJs(CONSTANT_CTX, [1, 2, 3]);
     expect(result).toBeInstanceOf(AJSArray);
     expect((result as { kind: string }).kind).toBe("vector");
-    expect((result as unknown as { __vector__: AExact[] }).__vector__[0].num).toBe(1n);
+    expect((result as unknown as { __vector__: AExact[] }).__vector__[0].num).toBe(1);
   });
 
   // INVARIANT: plain object → AJSObject wrapper preserving source
@@ -184,7 +188,10 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
     const result = fromJs(CONSTANT_CTX, orig, prov);
     expect(result).not.toBe(orig);
     expect(result).toBeInstanceOf(AString);
-    expect([...result.provenance]).toEqual([7]);
+    // Cast: `fromJs`'s return type widened to `AValue | bigint` (§2.3's opaque-host-value
+    // law) — this call's runtime shape is always AString (an AValue input re-stamps
+    // through its own class, never the bigint arm).
+    expect([...(result as AString).provenance]).toEqual([7]);
   });
 });
 
@@ -283,7 +290,7 @@ describe("isSchemeValue completeness — every native AValue subtype is recognis
   });
 
   it("SchemeExact → true", () => {
-    expect(isSchemeValue(new AExact(CONSTANT_CTX, 42n))).toBe(true);
+    expect(isSchemeValue(new AExact(CONSTANT_CTX, 42))).toBe(true);
   });
 
   it("SchemeInexact → true", () => {
@@ -296,7 +303,7 @@ describe("isSchemeValue completeness — every native AValue subtype is recognis
   });
 
   it("Pair → true", () => {
-    expect(isSchemeValue(new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil))).toBe(true);
+    expect(isSchemeValue(new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), nil))).toBe(true);
   });
 
   it("nil singleton → true (via the `=== nil` short-circuit)", () => {
@@ -362,13 +369,21 @@ describe("membrane fromJS / toJS — round-trip + wrapper-cache identity", () =>
     expect(toJS(fromJS(42))).toBe(42);
   });
 
-  // INVARIANT: bigint materializes to AExact and round-trips to a JS number (bigint-vs-number is normalized away)
-  it("bigint materializes to an exact integer (JS bigint-vs-number is normalized)", () => {
-    // host-agnostic: 10n is the exact integer 10. fromJS boxes it to AExact; toJS gives back the
-    // exact value as a JS number (the bigint type is a host detail arrival does not preserve).
-    expect(fromJS(10n)).toBeInstanceOf(AExact);
-    // @ts-expect-error fromJS returns `FromJSResult` (wider than `SchemeValue`); see above.
-    expect(toJS(fromJS(10n))).toBe(10);
+  // INVARIANT: bigint is an opaque host value — the membrane routes it through unboxed,
+  // identical both directions (never a scheme number; see coerce-numeric.spec.ts for the
+  // arithmetic-coercion door and docs/working-proposals/arrival-one-number-rework.md §2.3).
+  it("bigint crosses as an opaque host value (never boxed into an exact)", () => {
+    // host-agnostic: 10n stays 10n — arrival never reinterprets a host bigint as a scheme
+    // number. fromJS rides the same raw identity lane Uint8Array/ArrayBuffer/DataView use.
+    const entered = fromJS(10n);
+    expect(entered).toBe(10n);
+    // Never boxed on entry, so schemeToJs's generic scalar fallback (not toJS's strict
+    // door, which refuses a value that never crossed AS a scheme value) returns it
+    // unchanged.
+    // @ts-expect-error `entered`'s static type is `FromJSResult` (bigint included, per
+    // the opaque-host-value law) — schemeToJs expects `SchemeValue`; the mismatch is in
+    // the declared union's width, not a real unsoundness.
+    expect(schemeToJs(entered)).toBe(10n);
   });
 
   // LAW (nil-as-array, V 2026-07-13): null enters as nil; nil exits as [] — the

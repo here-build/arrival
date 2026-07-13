@@ -28,7 +28,7 @@ function nativeDef(name: string) {
   return def;
 }
 
-const exact = (n: number): AExact => new AExact(CONSTANT_CTX, BigInt(n));
+const exact = (n: number): AExact => new AExact(CONSTANT_CTX, n);
 const bv = (bytes: number[]): ABytevector => new ABytevector(CONSTANT_CTX, Uint8Array.from(bytes));
 
 describe("scheme/bytevectors Contract precision — the real exported ops reject wrongly-typed args (were z.array(z.unknown()), now precise)", () => {

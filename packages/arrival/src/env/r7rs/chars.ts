@@ -192,7 +192,7 @@ export default new EnvCapability("scheme/chars", {
         // The scheme face of the numeric arm: exact for integers (digits), inexact for the
         // rare fractional numeric values (vulgar-fraction No characters).
         return Number.isInteger(numericValue)
-          ? new AExact(this.runCtx, BigInt(numericValue))
+          ? new AExact(this.runCtx, numericValue)
           : new AInexact(this.runCtx, numericValue);
       },
     ),
@@ -228,9 +228,9 @@ export default new EnvCapability("scheme/chars", {
     // surrogate (e.g. 0xD83D for 😀) instead of the full code point (0x1F600).
     // `codePointAt(0)` reads a full surrogate pair when present.
     "char->integer": symbol.native`char->integer: Unicode scalar value of the character`(
-      { input: [z.char], output: [z.bigint] },
+      { input: [z.char], output: [z.exact] },
       function (this: CallCtx, char) {
-        return new AExact(this.runCtx, BigInt(charValue(char).codePointAt(0)!));
+        return new AExact(this.runCtx, charValue(char).codePointAt(0)!);
       },
     ),
 

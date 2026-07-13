@@ -33,7 +33,7 @@ import type { AListAlike, SchemeValue } from "../../values/types.js";
 const TIGHT_BUDGET = 50;
 
 function schemeExactList(n: number, ctx = makeRunContext({ heapBudget: TIGHT_BUDGET })): AListAlike {
-  const elements: SchemeValue[] = Array.from({ length: n }, (_, i) => new AExact(ctx, BigInt(i)));
+  const elements: SchemeValue[] = Array.from({ length: n }, (_, i) => new AExact(ctx, i));
   return APair.fromArray(ctx, elements, false);
 }
 
@@ -59,27 +59,27 @@ describe("LAW — list codec DECODE (spineToArray) charges the operand's own hea
 describe("LAW — list/vector/dict codec ENCODE mints under the crossing's own run, heap-charged", () => {
   it("encoding a large array into a list under a tight budget dies on the budget door", () => {
     const ctx = makeRunContext({ heapBudget: TIGHT_BUDGET });
-    const elements: SchemeValue[] = Array.from({ length: 500 }, (_, i) => new AExact(ctx, BigInt(i)));
+    const elements: SchemeValue[] = Array.from({ length: 500 }, (_, i) => new AExact(ctx, i));
     expect(() => z.encode(z.list(z.value), elements)).toThrow(/heap budget exceeded/);
   });
 
   it("encoding a small array into a list under the SAME tight budget is unaffected", () => {
     const ctx = makeRunContext({ heapBudget: TIGHT_BUDGET });
-    const elements: SchemeValue[] = [new AExact(ctx, 1n), new AExact(ctx, 2n)];
+    const elements: SchemeValue[] = [new AExact(ctx, 1), new AExact(ctx, 2)];
     const result = z.encode(z.list(z.value), elements);
     expect(result).toBeInstanceOf(APair);
   });
 
   it("encoding a large array into a vector under a tight budget dies on the budget door", () => {
     const ctx = makeRunContext({ heapBudget: TIGHT_BUDGET });
-    const elements: SchemeValue[] = Array.from({ length: 500 }, (_, i) => new AExact(ctx, BigInt(i)));
+    const elements: SchemeValue[] = Array.from({ length: 500 }, (_, i) => new AExact(ctx, i));
     expect(() => z.encode(z.vector(z.value), elements)).toThrow(/heap budget exceeded/);
   });
 
   it("encoding a large record into a dict under a tight budget dies on the budget door", () => {
     const ctx = makeRunContext({ heapBudget: TIGHT_BUDGET });
     const rec: Record<string, SchemeValue> = {};
-    for (let i = 0; i < 500; i++) rec[`k${i}`] = new AExact(ctx, BigInt(i));
+    for (let i = 0; i < 500; i++) rec[`k${i}`] = new AExact(ctx, i);
     expect(() => z.encode(z.dict(), rec)).toThrow(/heap budget exceeded/);
   });
 
@@ -92,7 +92,7 @@ describe("LAW — list/vector/dict codec ENCODE mints under the crossing's own r
     // (mint) charge pinned separately above.
     const entries: [ASymbol, SchemeValue][] = Array.from({ length: 500 }, (_, i) => [
       new ASymbol(CONSTANT_CTX, `k${i}`),
-      new AExact(CONSTANT_CTX, BigInt(i)),
+      new AExact(CONSTANT_CTX, i),
     ]);
     const dict = new ADict(ctx, entries);
     expect(() => z.decode(z.dict(), dict)).toThrow(/heap budget exceeded/);

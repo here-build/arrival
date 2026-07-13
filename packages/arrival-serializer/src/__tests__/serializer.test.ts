@@ -348,4 +348,36 @@ describe("S-Expression Serializer", () => {
       expect(result).toContain('#ts "state.items.length"');
     });
   });
+
+  describe("AValue provenance envelope — invisible by default, opt-in via lineageEnvelopes", () => {
+    // Same "AValue-duck" fixture shape as r6-serialize-with-extras.test.ts: anything exposing
+    // `arrival/toJS` + `kind` + a `provenance` Set is treated as an AValue by the serializer,
+    // whether it's a real one or not.
+    const stringDuck = (provenance: ReadonlySet<number>) => ({
+      "arrival/toJS": () => "hello",
+      kind: "string",
+      provenance,
+    });
+
+    it("empty provenance renders the plain value, not the envelope", () => {
+      expect(toSExprString(stringDuck(new Set()))).toBe("hello");
+    });
+
+    it("default mode: NON-empty provenance renders IDENTICALLY to empty provenance — the leak fix", () => {
+      const empty = toSExprString(stringDuck(new Set()));
+      const nonEmpty = toSExprString(stringDuck(new Set([7])));
+      expect(nonEmpty).toBe("hello");
+      expect(nonEmpty).toBe(empty);
+    });
+
+    it("`lineageEnvelopes: true` restores the {kind, provenance, …} envelope for NON-empty provenance", () => {
+      const result = toSExprString(stringDuck(new Set([7])), { lineageEnvelopes: true });
+      expect(result).toBe("(dict :kind string :provenance (set 7))");
+    });
+
+    it("`lineageEnvelopes: true` still renders EMPTY provenance plain — nothing to show even opted in", () => {
+      const result = toSExprString(stringDuck(new Set()), { lineageEnvelopes: true });
+      expect(result).toBe("hello");
+    });
+  });
 });

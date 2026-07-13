@@ -28,7 +28,7 @@ import { APair } from "../values/primitives/APair.js";
 import { nil } from "../values/primitives/ANil.js";
 import { AExact } from "../values/primitives/AExact.js";
 
-const num = (n: number) => new AExact(CONSTANT_CTX, BigInt(n));
+const num = (n: number) => new AExact(CONSTANT_CTX, n);
 const list = (...ns: number[]) => APair.fromArray(CONSTANT_CTX, ns.map(num), false) as APair<any, any>;
 
 describe("APair[Symbol.iterator]", () => {

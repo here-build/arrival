@@ -156,7 +156,7 @@ export class ANil extends AValue {
   // a fixed local read would still resolve to CONSTANT_CTX until that caller-side thread
   // lands — no functional regression from leaving it as a literal here.
   ["arrival/tagless-final/length"](_runCtx?: unknown): AExact {
-    return new AExact(CONSTANT_CTX, 0n);
+    return new AExact(CONSTANT_CTX, 0);
   }
 }
 

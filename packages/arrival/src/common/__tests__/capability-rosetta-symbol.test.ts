@@ -93,7 +93,7 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
     const verb = await wireRosetta(def);
     // A SchemeExact is not a SchemeString → the z.string codec's instanceof guard doors.
-    await expect(invoke(verb, undefined, new AExact(CONSTANT_CTX, 3n))).rejects.toThrow();
+    await expect(invoke(verb, undefined, new AExact(CONSTANT_CTX, 3))).rejects.toThrow();
   });
 
   // INVARIANT: a bound rosetta verb mints provenance off ctx.currentInvocation, marking the point and

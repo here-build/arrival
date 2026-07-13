@@ -44,7 +44,7 @@ function nativeDef(name: string) {
   return def;
 }
 
-const exact = (n: bigint | number): AExact => new AExact(CONSTANT_CTX, typeof n === "bigint" ? n : BigInt(n));
+const exact = (n: number): AExact => new AExact(CONSTANT_CTX, n);
 const inexact = (n: number): AInexact => new AInexact(CONSTANT_CTX, n);
 
 describe("numeric Contract precision — the real exported ops reject wrongly-typed args (were z.unknown(), now precise)", () => {
@@ -65,14 +65,18 @@ describe("numeric Contract precision — the real exported ops reject wrongly-ty
     expect(def.in.safeParse([exact(1), "nope"]).success).toBe(false);
   });
 
-  // INVARIANT: quotient rejects a non-scheme-number arg; output is a genuine bigint codec,
-  // not unknown
-  it("quotient (fixed Int,Int): rejects a non-scheme-number arg; output is a bigint codec, not unknown", () => {
+  // RE-PINNED (one-number rework, RATIO — docs/working-proposals/arrival-one-number-rework.md
+  // §2.3): quotient's real contract flipped off `z.bigint` onto `z.schemeNumber` (numeric.ts:971
+  // — `quotientSpec`'s `out`), matching every other numeric op post-rework. The old "output is a
+  // genuine bigint codec" framing is gone: quotient's out-channel now encodes a plain safe-int
+  // JS `number`, same as `+`/`-`/`abs`/etc above.
+  // INVARIANT: quotient rejects a non-scheme-number arg; output encodes a plain number
+  it("quotient (fixed Int,Int): rejects a non-scheme-number arg; output is z.schemeNumber (plain number), not bigint", () => {
     const def = nativeDef("quotient");
     expect(def.in.safeDecode([exact(7), exact(2)]).success).toBe(true);
     expect(def.in.safeDecode(["x", exact(2)]).success).toBe(false); // wrong scheme-value type entirely
-    expect(def.out.safeEncode([7n]).success).toBe(true);
-    expect(def.out.safeEncode(["x"]).success).toBe(false); // not a bigint
+    expect(def.out.safeEncode([7]).success).toBe(true);
+    expect(def.out.safeEncode(["x"]).success).toBe(false); // not a number
   });
 
   // INVARIANT: abs accepts exact or inexact scheme numbers and rejects a non-number
@@ -82,7 +86,10 @@ describe("numeric Contract precision — the real exported ops reject wrongly-ty
     expect(def.in.safeDecode([inexact(5.5)]).success).toBe(true);
     expect(def.in.safeDecode(["x"]).success).toBe(false);
     expect(def.out.safeEncode([5]).success).toBe(true);
-    expect(def.out.safeEncode([5n]).success).toBe(true);
+    // RE-PINNED (§2.3): a raw JS bigint is no longer a scheme number at all (opaque host
+    // pass-through) — `z.schemeNumber`'s encode (exact | inexact, both `number`-typed) now
+    // rejects it outright. Was `expect(def.out.safeEncode([5n]).success).toBe(true)` pre-rework.
+    expect(def.out.safeEncode([5n]).success).toBe(false);
     expect(def.out.safeEncode(["x"]).success).toBe(false);
   });
 

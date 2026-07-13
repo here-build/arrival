@@ -145,7 +145,7 @@ export default new EnvCapability("scheme/vectors", {
         `,
       },
       function (this: CallCtx, vec: unknown): AExact {
-        return new AExact(this.runCtx, BigInt(asVector(vec, "vector-length").length));
+        return new AExact(this.runCtx, asVector(vec, "vector-length").length);
       },
     ),
 

@@ -72,14 +72,14 @@ function list(...xs: SchemeValue[]): AListAlike {
 function representativeValues(): { name: string; value: AValue }[] {
   const reps: { name: string; value: AValue }[] = [
     { name: "Nil", value: nil },
-    { name: "Pair", value: new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil) },
+    { name: "Pair", value: new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), nil) },
     { name: "SchemeString", value: new AString(CONSTANT_CTX, "x") },
-    { name: "SchemeExact", value: new AExact(CONSTANT_CTX, 1n) },
+    { name: "SchemeExact", value: new AExact(CONSTANT_CTX, 1) },
     { name: "SchemeInexact", value: new AInexact(CONSTANT_CTX, 1.5) },
     { name: "SchemeBool", value: new ABool(CONSTANT_CTX, true) },
     { name: "SchemeCharacter", value: new ACharacter(CONSTANT_CTX, "a") },
     { name: "SchemeSymbol", value: new ASymbol(CONSTANT_CTX, "sym") },
-    { name: "SchemeVector", value: new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n)]) },
+    { name: "SchemeVector", value: new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1)]) },
     { name: "SchemeBytevector", value: new ABytevector(CONSTANT_CTX, [1, 2, 3]) },
     { name: "SchemeJSObject", value: new AJSObject(CONSTANT_CTX, { a: 1 }) },
   ];
@@ -111,27 +111,27 @@ describe("G2 Pair Setoid", () => {
     p[tf("equals")](other, seen);
 
   it("equal proper lists compare equal through the Pair Setoid", () => {
-    const a = list(new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n), new AExact(CONSTANT_CTX, 3n)) as APair<any, any>;
-    const b = list(new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n), new AExact(CONSTANT_CTX, 3n)) as APair<any, any>;
+    const a = list(new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2), new AExact(CONSTANT_CTX, 3)) as APair<any, any>;
+    const b = list(new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2), new AExact(CONSTANT_CTX, 3)) as APair<any, any>;
     expect(pairEq(a, b)).toBe(true);
   });
 
   it("unequal lists compare unequal", () => {
-    const a = list(new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)) as APair<any, any>;
-    const b = list(new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 9n)) as APair<any, any>;
+    const a = list(new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2)) as APair<any, any>;
+    const b = list(new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 9)) as APair<any, any>;
     expect(pairEq(a, b)).toBe(false);
   });
 
   it("pair vs non-pair is false", () => {
-    const a = list(new AExact(CONSTANT_CTX, 1n)) as APair<any, any>;
-    expect(pairEq(a, new AExact(CONSTANT_CTX, 1n))).toBe(false);
+    const a = list(new AExact(CONSTANT_CTX, 1)) as APair<any, any>;
+    expect(pairEq(a, new AExact(CONSTANT_CTX, 1))).toBe(false);
     expect(pairEq(a, nil)).toBe(false);
   });
 
   it("nested lists compare structurally", () => {
-    const a = list(list(new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)), new AString(CONSTANT_CTX, "k")) as APair<any, any>;
-    const b = list(list(new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)), new AString(CONSTANT_CTX, "k")) as APair<any, any>;
-    const c = list(list(new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 7n)), new AString(CONSTANT_CTX, "k")) as APair<any, any>;
+    const a = list(list(new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2)), new AString(CONSTANT_CTX, "k")) as APair<any, any>;
+    const b = list(list(new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2)), new AString(CONSTANT_CTX, "k")) as APair<any, any>;
+    const c = list(list(new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 7)), new AString(CONSTANT_CTX, "k")) as APair<any, any>;
     expect(pairEq(a, b)).toBe(true);
     expect(pairEq(a, c)).toBe(false);
   });
@@ -139,24 +139,24 @@ describe("G2 Pair Setoid", () => {
   it("self-cyclic pairs (a.cdr=a, b.cdr=b) compare equal AND terminate", () => {
     // A `set-cdr!` cycle: the cdr slot holds any SchemeValue at runtime (here the pair
     // itself), so the locals carry the real slot type rather than the nil-narrowed infer.
-    const a: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil);
+    const a: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), nil);
     // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
     a.cdr = a;
-    const b: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil);
+    const b: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), nil);
     // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
     b.cdr = b;
     expect(pairEq(a, b)).toBe(true);
   });
 
   it("mutually-cyclic pairs (a↔b vs c↔d) compare equal AND terminate", () => {
-    const a: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil);
-    const b: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 2n), nil);
+    const a: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), nil);
+    const b: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 2), nil);
     // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
     a.cdr = b;
     // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
     b.cdr = a;
-    const c: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil);
-    const d: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 2n), nil);
+    const c: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), nil);
+    const d: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 2), nil);
     // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
     c.cdr = d;
     // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
@@ -167,8 +167,8 @@ describe("G2 Pair Setoid", () => {
   // INVARIANT: an explicit `seen` map argument is honored by the Setoid call
   // (pins implementation, not behavior).
   it("an explicit seen Map argument is honored", () => {
-    const a = list(new AExact(CONSTANT_CTX, 1n)) as APair<any, any>;
-    const b = list(new AExact(CONSTANT_CTX, 1n)) as APair<any, any>;
+    const a = list(new AExact(CONSTANT_CTX, 1)) as APair<any, any>;
+    const b = list(new AExact(CONSTANT_CTX, 1)) as APair<any, any>;
     expect(pairEq(a, b, new Map())).toBe(true);
   });
 });
@@ -193,14 +193,14 @@ describe("G3 Vector Setoid — cyclic vectors terminate", () => {
     v[tf("equals")](other, seen);
 
   it("mutually-cyclic vectors a↔b vs c↔d compare equal AND terminate", () => {
-    const a = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n)]);
-    const b = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 2n)]);
+    const a = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1)]);
+    const b = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 2)]);
     // @ts-expect-error __vector__ is private + readonly; mutating for cycle test
     (a.__vector__ as unknown as AExact[]).push(b);
     // @ts-expect-error __vector__ is private + readonly; mutating for cycle test
     (b.__vector__ as unknown as AExact[]).push(a);
-    const c = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n)]);
-    const d = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 2n)]);
+    const c = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1)]);
+    const d = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 2)]);
     // @ts-expect-error __vector__ is private + readonly; mutating for cycle test
     c.__vector__.push(d);
     // @ts-expect-error __vector__ is private + readonly; mutating for cycle test
@@ -209,9 +209,9 @@ describe("G3 Vector Setoid — cyclic vectors terminate", () => {
   });
 
   it("equal acyclic vectors compare equal; unequal differ", () => {
-    const a = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)]);
-    const b = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)]);
-    const c = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 3n)]);
+    const a = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2)]);
+    const b = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2)]);
+    const c = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 3)]);
     expect(vecEq(a, b)).toBe(true);
     expect(vecEq(a, c)).toBe(false);
   });
@@ -222,18 +222,18 @@ describe("G3 Vector Setoid — cyclic vectors terminate", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe("G4 equal? regression — structuralEqual", () => {
   it("deep nested structures: true and false", () => {
-    const a = list(list(new AExact(CONSTANT_CTX, 1n)), new AString(CONSTANT_CTX, "k"), new AVector(CONSTANT_CTX, [new ABool(CONSTANT_CTX, true)]));
-    const b = list(list(new AExact(CONSTANT_CTX, 1n)), new AString(CONSTANT_CTX, "k"), new AVector(CONSTANT_CTX, [new ABool(CONSTANT_CTX, true)]));
-    const c = list(list(new AExact(CONSTANT_CTX, 1n)), new AString(CONSTANT_CTX, "k"), new AVector(CONSTANT_CTX, [new ABool(CONSTANT_CTX, false)]));
+    const a = list(list(new AExact(CONSTANT_CTX, 1)), new AString(CONSTANT_CTX, "k"), new AVector(CONSTANT_CTX, [new ABool(CONSTANT_CTX, true)]));
+    const b = list(list(new AExact(CONSTANT_CTX, 1)), new AString(CONSTANT_CTX, "k"), new AVector(CONSTANT_CTX, [new ABool(CONSTANT_CTX, true)]));
+    const c = list(list(new AExact(CONSTANT_CTX, 1)), new AString(CONSTANT_CTX, "k"), new AVector(CONSTANT_CTX, [new ABool(CONSTANT_CTX, false)]));
     expect(structuralEqual(a, b)).toBe(true);
     expect(structuralEqual(a, c)).toBe(false);
   });
 
   it("cyclic list via structuralEqual terminates", () => {
-    const a: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil);
+    const a: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), nil);
     // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
     a.cdr = a;
-    const b: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil);
+    const b: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), nil);
     // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
     b.cdr = b;
     expect(structuralEqual(a, b)).toBe(true);
@@ -242,10 +242,10 @@ describe("G4 equal? regression — structuralEqual", () => {
   });
 
   it("cyclic vector via structuralEqual terminates", () => {
-    const a = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n)]);
+    const a = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1)]);
     // @ts-expect-error __vector__ is private + readonly; mutating for cycle test
     (a.__vector__ as unknown as AExact[]).push(a);
-    const b = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n)]);
+    const b = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1)]);
     // @ts-expect-error __vector__ is private + readonly; mutating for cycle test
     (b.__vector__ as unknown as AExact[]).push(b);
     expect(structuralEqual(a, b)).toBe(true);
@@ -255,7 +255,7 @@ describe("G4 equal? regression — structuralEqual", () => {
   // method (pins implementation, not behavior).
   it("Pair & Vector now route through their own Setoid (sanity)", () => {
     // tagless-final/equals is declared directly on AValue subtypes — no cast needed.
-    expect(typeof (new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), nil))[tf("equals")]).toBe("function");
+    expect(typeof (new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), nil))[tf("equals")]).toBe("function");
     expect(typeof (new AVector(CONSTANT_CTX, []))[tf("equals")]).toBe("function");
   });
 });
@@ -265,14 +265,14 @@ describe("G4 equal? regression — structuralEqual", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe("G5 eq?/eqv? landmine — must stay identity/scalar", () => {
   it("eq?/eqv? on distinct equal lists is #f; equal? is #t", () => {
-    expect(eq(list(new AExact(CONSTANT_CTX, 1n)), list(new AExact(CONSTANT_CTX, 1n)))).toBe(false);
-    expect(eqv(list(new AExact(CONSTANT_CTX, 1n)), list(new AExact(CONSTANT_CTX, 1n)))).toBe(false);
-    expect(structuralEqual(list(new AExact(CONSTANT_CTX, 1n)), list(new AExact(CONSTANT_CTX, 1n)))).toBe(true);
+    expect(eq(list(new AExact(CONSTANT_CTX, 1)), list(new AExact(CONSTANT_CTX, 1)))).toBe(false);
+    expect(eqv(list(new AExact(CONSTANT_CTX, 1)), list(new AExact(CONSTANT_CTX, 1)))).toBe(false);
+    expect(structuralEqual(list(new AExact(CONSTANT_CTX, 1)), list(new AExact(CONSTANT_CTX, 1)))).toBe(true);
   });
 
   it("eqv? exact vs inexact #f; exact vs exact #t", () => {
-    expect(eqv(new AExact(CONSTANT_CTX, 1n), new AInexact(CONSTANT_CTX, 1))).toBe(false);
-    expect(eqv(new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 1n))).toBe(true);
+    expect(eqv(new AExact(CONSTANT_CTX, 1), new AInexact(CONSTANT_CTX, 1))).toBe(false);
+    expect(eqv(new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 1))).toBe(true);
   });
 });
 
@@ -302,10 +302,10 @@ describe("G6 equality-suite cleanup", () => {
   // treats distinct-instance same-name symbols and nil clones as eqv.
   describe("eqv? over scalars (canonical structural-equal)", () => {
     it("exact ≡ exact (same value) → true", () => {
-      expect(eqv(new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 1n))).toBe(true);
+      expect(eqv(new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 1))).toBe(true);
     });
     it("exact vs inexact → false (exactness distinguishes)", () => {
-      expect(eqv(new AExact(CONSTANT_CTX, 1n), new AInexact(CONSTANT_CTX, 1))).toBe(false);
+      expect(eqv(new AExact(CONSTANT_CTX, 1), new AInexact(CONSTANT_CTX, 1))).toBe(false);
     });
     it("char same/diff", () => {
       expect(eqv(new ACharacter(CONSTANT_CTX, "a"), new ACharacter(CONSTANT_CTX, "a"))).toBe(true);
@@ -334,8 +334,8 @@ describe("G6 equality-suite cleanup", () => {
     const EQM = (x: AValue, y: unknown): boolean =>
       x[tf("equals")](y);
     const pairs: { name: string; x: AValue; y: AValue }[] = [
-      { name: "exact==exact", x: new AExact(CONSTANT_CTX, 1n), y: new AExact(CONSTANT_CTX, 1n) },
-      { name: "exact!=exact", x: new AExact(CONSTANT_CTX, 1n), y: new AExact(CONSTANT_CTX, 2n) },
+      { name: "exact==exact", x: new AExact(CONSTANT_CTX, 1), y: new AExact(CONSTANT_CTX, 1) },
+      { name: "exact!=exact", x: new AExact(CONSTANT_CTX, 1), y: new AExact(CONSTANT_CTX, 2) },
       { name: "inexact==inexact", x: new AInexact(CONSTANT_CTX, 1.5), y: new AInexact(CONSTANT_CTX, 1.5) },
       { name: "char==char", x: new ACharacter(CONSTANT_CTX, "a"), y: new ACharacter(CONSTANT_CTX, "a") },
       { name: "char!=char", x: new ACharacter(CONSTANT_CTX, "a"), y: new ACharacter(CONSTANT_CTX, "b") },
@@ -375,8 +375,8 @@ describe("G6 equality-suite cleanup", () => {
     it("assv finds a distinct-instance symbol key of the same name", () => {
       const needle = distinctSym("k");
       const alist = list(
-        new APair(CONSTANT_CTX, new ASymbol(CONSTANT_CTX, "j"), new AExact(CONSTANT_CTX, 1n)),
-        new APair(CONSTANT_CTX, new ASymbol(CONSTANT_CTX, "k"), new AExact(CONSTANT_CTX, 2n)),
+        new APair(CONSTANT_CTX, new ASymbol(CONSTANT_CTX, "j"), new AExact(CONSTANT_CTX, 1)),
+        new APair(CONSTANT_CTX, new ASymbol(CONSTANT_CTX, "k"), new AExact(CONSTANT_CTX, 2)),
       );
       const found = LIST_OPS.assv(needle, alist);
       expect(found).not.toBe(false);
@@ -386,8 +386,8 @@ describe("G6 equality-suite cleanup", () => {
 
     // Numeric eqv? path (interned-symbol-independent): assv still matches numbers.
     it("memv matches distinct-instance exact numbers (eqv? numeric path)", () => {
-      const needle = new AExact(CONSTANT_CTX, 2n);
-      const lst = list(new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n), new AExact(CONSTANT_CTX, 3n));
+      const needle = new AExact(CONSTANT_CTX, 2);
+      const lst = list(new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2), new AExact(CONSTANT_CTX, 3));
       const found = LIST_OPS.memv(needle, lst);
       expect(found).not.toBe(false);
       expect(((found as APair<any, any>).car as AExact).valueOf()).toBe(2);
@@ -396,8 +396,8 @@ describe("G6 equality-suite cleanup", () => {
 
   describe("G5 reaffirm — eq/eqv stay pointer-grade on Pairs (NOT deep)", () => {
     it("distinct equal Pairs: eq/eqv #f, equal? #t", () => {
-      const a = list(new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)) as APair<any, any>;
-      const b = list(new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)) as APair<any, any>;
+      const a = list(new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2)) as APair<any, any>;
+      const b = list(new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2)) as APair<any, any>;
       expect(eq(a, b)).toBe(false);
       expect(eqv(a, b)).toBe(false);
       expect(structuralEqual(a, b)).toBe(true);

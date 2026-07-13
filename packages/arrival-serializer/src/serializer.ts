@@ -51,6 +51,14 @@ const NO_CAPS: Caps = {
 };
 let activeCaps: Caps = NO_CAPS;
 
+/** Lineage-envelope opt-in for the CURRENT render (mirrors `activeCaps`'s module-level
+ *  threading — serialization is synchronous, so this is safe without cloning through every
+ *  recursive `toSExpr`). Default `false`: an AValue's `{provenance, kind, source…}` envelope
+ *  is INTERNAL plumbing, never model-visible output — see the guard in `toSExprDispatch`
+ *  below. `true` only inside a `toSExprString`/`serializeWithExtras` call whose
+ *  `SerializeOpts.lineageEnvelopes` was set (lineage-debugging consumers opting in). */
+let activeLineageEnvelopes = false;
+
 /** A `#| … |#` block-comment marker the formatter renders verbatim, so a truncated
  *  list still PARSES (the comment is ignored) — it round-trips to the shown sample. */
 const truncatedMarker = (note: string): SExpr => ({ [TRUNCATED_MARKER]: note });
@@ -410,6 +418,12 @@ export type SerializeOpts = {
   elideHead?: number;
   /** Items shown at the TAIL when middle-eliding. See `elideHead`. */
   elideTail?: number;
+  /** Opt-in: render an AValue's internal `{provenance, kind, source…}` envelope for
+   *  entries whose provenance is NON-empty (lineage-debugging consumers only). Default
+   *  `false` — provenance is invisible in serialized output regardless of size; every
+   *  AValue exposing `arrival/toJS` renders its plain value. Empty-provenance AValues
+   *  always render plain, even when this is `true` (there is no lineage to show). */
+  lineageEnvelopes?: boolean;
 };
 
 export type SExprSerializable =
@@ -511,14 +525,19 @@ function toSExprDispatch(obj: any, visited: Set<any>): SExpr {
 
   // Handle LIPS-specific types before generic Symbol.toSExpr
   if (obj && typeof obj === "object") {
-    // SchemeExact (exact integers/rationals)
+    // SchemeExact (exact integers/rationals) — num/denom are safe-integer `number`s,
+    // never bigint (docs/working-proposals/arrival-one-number-rework.md §2.1: exact
+    // is a gcd-normalized (num, denom) ratio of `number`s). The out-of-range branch
+    // below is now unreachable for a well-formed AExact (the class invariant keeps
+    // both components safe-integer at all times) — kept as a defensive fallback
+    // since this file duck-types the shape rather than `instanceof`-checking it.
     if (obj.constructor?.name === "AExact" && "num" in obj && "denom" in obj) {
-      if (obj.denom === 1n) {
-        const value = obj.num as bigint;
+      if (obj.denom === 1) {
+        const value = obj.num as number;
         if (value > Number.MAX_SAFE_INTEGER || value < Number.MIN_SAFE_INTEGER) {
           return `${value.toString()}`;
         }
-        return Number(value);
+        return value;
       }
       // Rational: num/denom
       return `${obj.num}/${obj.denom}`;
@@ -651,16 +670,21 @@ function toSExprDispatch(obj: any, visited: Set<any>): SExpr {
     if (blob !== undefined) return collectBinaryLeaf(activeCollector, blob);
   }
 
-  // AValue with empty provenance carries no lineage to show — serialize its
-  // plain value (`["arrival/toJS"]()`, the arrival protocol key — same convention
-  // as `arrival/tagless-final/*`/`arrival/print`), not the internal
-  // {provenance, kind, source} envelope. (A non-empty provenance keeps the
-  // envelope, by design.)
+  // AValue → serialize its plain value (`["arrival/toJS"]()`, the arrival protocol key —
+  // same convention as `arrival/tagless-final/*`/`arrival/print`), never the internal
+  // {provenance, kind, source} envelope — provenance is stratum-3 plumbing (§ model-design
+  // rules: quirks/plumbing eliminate-or-hide), invisible in model-facing text by default
+  // REGARDLESS of how many provenance points it carries (the manifold arms an EvalTrace that
+  // stamps points on every tool response — a non-empty-provenance guard here used to leak the
+  // envelope into every REPL observation). `lineageEnvelopes: true` (SerializeOpts) restores
+  // the envelope for entries whose provenance is non-empty — an explicit opt-in for
+  // lineage-debugging consumers; empty provenance still renders plain either way (nothing to
+  // show).
   if (
     typeof obj === "object" &&
     obj !== null &&
     obj.provenance instanceof Set &&
-    obj.provenance.size === 0 &&
+    !(activeLineageEnvelopes && obj.provenance.size > 0) &&
     typeof obj["arrival/toJS"] === "function" &&
     typeof obj.kind === "string"
   ) {
@@ -1030,6 +1054,20 @@ export const toSExprString = (obj: any, optsOrIndent: number | SerializeOpts = 0
   const indent = opts.indent ?? 0;
   const format = opts.format ?? ((sexpr: SExpr) => formatSExpr(sexpr, indent));
 
+  // Threaded like `activeCaps` — module-level is safe (synchronous, no re-entrancy within
+  // one `toSExprString` call) and spares plumbing a flag through every recursive `toSExpr`.
+  // Saved/restored (not just reset to `false`) so a `format` callback that itself calls back
+  // into a serializer entry point doesn't clobber an outer call's setting.
+  const previousLineageEnvelopes = activeLineageEnvelopes;
+  activeLineageEnvelopes = opts.lineageEnvelopes ?? false;
+  try {
+    return toSExprStringImpl(obj, opts, format);
+  } finally {
+    activeLineageEnvelopes = previousLineageEnvelopes;
+  }
+};
+
+function toSExprStringImpl(obj: any, opts: SerializeOpts, format: (sexpr: SExpr) => string): string {
   // No caps requested → unchanged behaviour. (`beginCollectorPass` is a no-op unless the render
   // came through `serializeWithExtras` — the plain path stays byte-identical.) The new elision
   // knobs count as "caps requested" too — a caller that sets ONLY `elideHead`/`elideTail` (no
@@ -1119,7 +1157,7 @@ export const toSExprString = (obj: any, optsOrIndent: number | SerializeOpts = 0
     out = `${out.slice(0, maxTotalChars)}\n#| … output hard-truncated at ${maxTotalChars} chars |#`;
   }
   return out;
-};
+}
 
 /**
  * Serialize a value to `{text, elisions}` (§5, elision plan) — the additive sibling of

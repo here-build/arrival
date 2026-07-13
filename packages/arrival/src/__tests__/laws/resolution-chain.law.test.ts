@@ -34,23 +34,23 @@ import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
 import { bindValue } from "../../AmbientRuntime.js";
 
-const boxed = (n: bigint) => new AExact(CONSTANT_CTX, n);
+const boxed = (n: number) => new AExact(CONSTANT_CTX, n);
 
 describe("CompiledResolutionChain — LAW 1: precedence preservation", () => {
   it("re-homes the module-composition rows: own bindings → own resolvers → parent, per layer", () => {
     // The exact topology module-composition.spec.ts pins on the LIVE walk.
-    const parent = mintResolvingFrame("parent", { x: boxed(1n) }, null);
-    parent.registerResolver({ id: "parent-resolver", resolve: (name) => (name === "y" ? boxed(2n) : undefined) });
-    const child = mintResolvingFrame("child", { z: boxed(3n) }, parent);
-    child.registerResolver({ id: "child-resolver", resolve: (name) => (name === "w" ? boxed(4n) : undefined) });
+    const parent = mintResolvingFrame("parent", { x: boxed(1) }, null);
+    parent.registerResolver({ id: "parent-resolver", resolve: (name) => (name === "y" ? boxed(2) : undefined) });
+    const child = mintResolvingFrame("child", { z: boxed(3) }, parent);
+    child.registerResolver({ id: "child-resolver", resolve: (name) => (name === "w" ? boxed(4) : undefined) });
 
     const chain = compileResolutionChain(child);
 
     // Row-for-row equivalence with the live walk:
-    expect(chain.lookup("z")).toEqual(boxed(3n)); // direct binding in child
-    expect(chain.lookup("w")).toEqual(boxed(4n)); // resolver in child
-    expect(chain.lookup("x")).toEqual(boxed(1n)); // binding in parent (child resolver yields)
-    expect(chain.lookup("y")).toEqual(boxed(2n)); // resolver in parent (child resolver yields)
+    expect(chain.lookup("z")).toEqual(boxed(3)); // direct binding in child
+    expect(chain.lookup("w")).toEqual(boxed(4)); // resolver in child
+    expect(chain.lookup("x")).toEqual(boxed(1)); // binding in parent (child resolver yields)
+    expect(chain.lookup("y")).toEqual(boxed(2)); // resolver in parent (child resolver yields)
     expect(chain.lookup("not-found")).toBeUndefined();
 
     // …and the step form is the flattened layer sequence, split at each resolver's position:
@@ -63,10 +63,10 @@ describe("CompiledResolutionChain — LAW 1: precedence preservation", () => {
   });
 
   it("a layer's own binding beats its own resolver (a pinned override survives a catch-all)", () => {
-    const env = mintResolvingFrame("layer", { pinned: boxed(10n) }, null);
-    env.registerResolver({ id: "catch-all", resolve: () => boxed(99n) });
+    const env = mintResolvingFrame("layer", { pinned: boxed(10) }, null);
+    env.registerResolver({ id: "catch-all", resolve: () => boxed(99) });
     const chain = compileResolutionChain(env);
-    expect(chain.lookup("pinned")).toEqual(boxed(10n));
+    expect(chain.lookup("pinned")).toEqual(boxed(10));
     expect(env._lookupWithResolvers("pinned")).toEqual(chain.lookup("pinned"));
   });
 
@@ -84,28 +84,28 @@ describe("CompiledResolutionChain — LAW 1: precedence preservation", () => {
       id: "second",
       resolve: (name) => {
         order.push("second");
-        return name === "target" ? boxed(42n) : undefined;
+        return name === "target" ? boxed(42) : undefined;
       },
     });
     const chain = compileResolutionChain(env);
-    expect(chain.lookup("target")).toEqual(boxed(42n));
+    expect(chain.lookup("target")).toEqual(boxed(42));
     expect(order).toEqual(["first", "second"]);
   });
 });
 
 describe("CompiledResolutionChain — LAW 2: merge-at-seal", () => {
   it("resolver-free layers merge child-wins into ONE flat map", () => {
-    const root = mintPlainFrame("root", { a: boxed(1n), shadowed: boxed(100n) }, null);
-    const mid = mintPlainFrame("mid", { b: boxed(2n), shadowed: boxed(200n) }, root);
-    const leaf = mintPlainFrame("leaf", { c: boxed(3n), shadowed: boxed(300n) }, mid);
+    const root = mintPlainFrame("root", { a: boxed(1), shadowed: boxed(100) }, null);
+    const mid = mintPlainFrame("mid", { b: boxed(2), shadowed: boxed(200) }, root);
+    const leaf = mintPlainFrame("leaf", { c: boxed(3), shadowed: boxed(300) }, mid);
 
     const chain = compileResolutionChain(leaf);
     expect(chain.steps).toHaveLength(1);
     expect(chain.steps[0]).toBeInstanceOf(Map);
-    expect(chain.lookup("a")).toEqual(boxed(1n));
-    expect(chain.lookup("b")).toEqual(boxed(2n));
-    expect(chain.lookup("c")).toEqual(boxed(3n));
-    expect(chain.lookup("shadowed")).toEqual(boxed(300n)); // child wins
+    expect(chain.lookup("a")).toEqual(boxed(1));
+    expect(chain.lookup("b")).toEqual(boxed(2));
+    expect(chain.lookup("c")).toEqual(boxed(3));
+    expect(chain.lookup("shadowed")).toEqual(boxed(300)); // child wins
     expect(chain.names.has("a")).toBe(true);
     expect(chain.names.has("shadowed")).toBe(true);
     expect(chain.names.has("nope")).toBe(false);
@@ -137,7 +137,7 @@ describe("CompiledResolutionChain — LAW 3: memo + negative-cache soundness", (
     let calls = 0;
     // A first-class boxed sentinel: resolvers answer with BOXED values only (the
     // hermetic ruling's resolver contract) — identity is what this law pins.
-    const value = boxed(7n);
+    const value = boxed(7);
     const env = mintResolvingFrame("layer", {}, null);
     env.registerResolver({
       id: "pure-synth",
@@ -162,12 +162,12 @@ describe("CompiledResolutionChain — LAW 3: memo + negative-cache soundness", (
       id: "dynamic",
       resolve: (name) => {
         calls++;
-        return name === "dyn" ? boxed(BigInt(calls)) : undefined;
+        return name === "dyn" ? boxed(calls) : undefined;
       },
     });
     const chain = compileResolutionChain(env);
-    expect(chain.lookup("dyn")).toEqual(boxed(1n));
-    expect(chain.lookup("dyn")).toEqual(boxed(2n)); // live answer, never memoized
+    expect(chain.lookup("dyn")).toEqual(boxed(1));
+    expect(chain.lookup("dyn")).toEqual(boxed(2)); // live answer, never memoized
   });
 
   it("negative caching holds iff ALL resolvers are pure", () => {
@@ -208,8 +208,8 @@ describe("CompiledResolutionChain — LAW 3: memo + negative-cache soundness", (
     // Topology: impure resolver REGISTERED BEFORE a pure one in the same layer. Once the
     // pure step promotes a name, the impure step must still be probed first on every
     // lookup — it may start answering tomorrow, and its position wins.
-    const fromPure = boxed(1n);
-    const fromImpure = boxed(2n);
+    const fromPure = boxed(1);
+    const fromImpure = boxed(2);
     let impureAnswer: AExact | undefined;
     const env = mintResolvingFrame("layer", {}, null);
     env.registerResolver({ id: "impure-first", resolve: () => impureAnswer });
@@ -225,21 +225,21 @@ describe("CompiledResolutionChain — LAW 3: memo + negative-cache soundness", (
 describe("CompiledResolutionChain — LAW 4: content address", () => {
   it("deterministic per topology, sensitive to vocabulary and resolver identity", () => {
     const build = () => {
-      const root = mintResolvingFrame("root", { a: boxed(1n) }, null);
+      const root = mintResolvingFrame("root", { a: boxed(1) }, null);
       root.registerResolver({ id: "r1", resolve: () => undefined });
-      return mintPlainFrame("leaf", { b: boxed(2n) }, root);
+      return mintPlainFrame("leaf", { b: boxed(2) }, root);
     };
     const h1 = compileResolutionChain(build()).hash;
     const h2 = compileResolutionChain(build()).hash;
     expect(h2).toBe(h1); // deterministic composition (realm-independent)
 
     const widened = build();
-    bindValue(widened, "c", boxed(3n));
+    bindValue(widened, "c", boxed(3));
     expect(compileResolutionChain(widened).hash).not.toBe(h1); // vocabulary-sensitive
 
-    const repure = mintResolvingFrame("root", { a: boxed(1n) }, null);
+    const repure = mintResolvingFrame("root", { a: boxed(1) }, null);
     repure.registerResolver({ id: "r1", pure: true, resolve: () => undefined });
-    const leaf = mintPlainFrame("leaf", { b: boxed(2n) }, repure);
+    const leaf = mintPlainFrame("leaf", { b: boxed(2) }, repure);
     expect(compileResolutionChain(leaf).hash).not.toBe(h1); // purity-sensitive
   });
 });
@@ -252,7 +252,7 @@ describe("CompiledResolutionChain — LAW 5: the bake seal leaves zero resolver 
       name: "law/bake-overlay",
       apply(env, ctx) {
         expect(ctx.preludeScope).toBeDefined(); // bootstrap assembly ALWAYS provides it
-        ctx.preludeScope!.set("bake-only", boxed(42n)); // boxed: the overlay resolver serves this through the resolution walk, and resolution carries boxed values only (hermetic ruling)
+        ctx.preludeScope!.set("bake-only", boxed(42)); // boxed: the overlay resolver serves this through the resolution walk, and resolution carries boxed values only (hermetic ruling)
         duringBake = {
           resolvers: env.resolverSpecs().length,
           visible: env._lookupWithResolvers("bake-only"),
@@ -262,7 +262,7 @@ describe("CompiledResolutionChain — LAW 5: the bake seal leaves zero resolver 
     await assembleEnv(base, [pack]);
 
     // During the bake: overlay registered, binding visible through the live walk.
-    expect(duringBake).toEqual({ resolvers: 1, visible: boxed(42n) });
+    expect(duringBake).toEqual({ resolvers: 1, visible: boxed(42) });
     // At seal: unregistered — NO resolver remains on the env (zero residue), and the
     // name is a plain miss everywhere.
     expect(base.resolverSpecs()).toHaveLength(0);

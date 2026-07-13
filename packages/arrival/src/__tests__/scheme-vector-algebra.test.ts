@@ -26,7 +26,7 @@ import { tf } from "../values/tagless-final.js";
 // A vector element is a boxed exact integer (the interpreter is monadic-boxed:
 // `(vector 1 2 3)` mints AExact slots). The reader domain is small ints, so an
 // exact box is the faithful element.
-const box = (n: number): AExact => new AExact(CONSTANT_CTX, BigInt(n));
+const box = (n: number): AExact => new AExact(CONSTANT_CTX, n);
 const vec = (ns: number[]): AVector => new AVector(CONSTANT_CTX, ns.map(box));
 
 // Numeric value of one element — AExact coerces via valueOf. A mapped structure

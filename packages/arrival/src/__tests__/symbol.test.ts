@@ -90,7 +90,7 @@ describe("symbol.rosetta — JS-land, codec decode/encode", () => {
       (s) => s.length,
     );
     // A SchemeExact is not a SchemeString → the z.string codec's instanceof guard doors.
-    await expect(def.run.call(testCallCtx(), new AExact(CONSTANT_CTX, 3n))).rejects.toThrow();
+    await expect(def.run.call(testCallCtx(), new AExact(CONSTANT_CTX, 3))).rejects.toThrow();
   });
 
   it("can SKIP validation (trusted call site) but still runs the codec transform", async () => {
@@ -154,31 +154,34 @@ describe("the number codec FAMILY — exactness + range + JS-type declared by th
   describe("z.number ↔ JS number (encode → inexact)", () => {
     it("decodes a safe-integer exact and a float inexact to JS number", async () => {
       const def = symbol.rosetta`dbl: double`({ input: [z.number], output: [z.number] }, (n) => n * 2);
-      const fromExact = await def.run.call(testCallCtx(), new AExact(CONSTANT_CTX, 21n));
+      const fromExact = await def.run.call(testCallCtx(), new AExact(CONSTANT_CTX, 21));
       expect((fromExact as AInexact).real).toBe(42);
       const fromInexact = await def.run.call(testCallCtx(), new AInexact(CONSTANT_CTX, 1.5));
       expect((fromInexact as AInexact).real).toBe(3);
     });
 
-    it("DOORS an over-range exact integer (no silent precision loss)", async () => {
-      const def = symbol.rosetta`idn: identity number`({ input: [z.number], output: [z.number] }, (n) => n);
-      const huge = new AExact(CONSTANT_CTX, BigInt(Number.MAX_SAFE_INTEGER) + 10n);
-      await expect(def.run.call(testCallCtx(), huge)).rejects.toThrow(/safe-integer|faithful JS number/i);
+    it("an over-range exact integer can no longer even be constructed (RATIO's construction-time gate, §0.2)", () => {
+      // Pre-rework this doored at the z.number CODEC's decode step (a live, constructed
+      // over-range AExact reaching a native's arg decode). Post-rework there is no later
+      // gate to reach — AExact's own constructor enforces Number.isSafeInteger on every
+      // component, so an over-range exact integer throws at construction, earlier than any
+      // codec ever sees it (docs/working-proposals/arrival-one-number-rework.md §0.2/§0.3).
+      expect(() => new AExact(CONSTANT_CTX, Number.MAX_SAFE_INTEGER + 10)).toThrow(/safe integer/i);
     });
 
     it("DOORS a non-integer exact rational", async () => {
       const def = symbol.rosetta`idn2: identity number`({ input: [z.number], output: [z.number] }, (n) => n);
-      await expect(def.run.call(testCallCtx(), new AExact(CONSTANT_CTX, 1n, 3n))).rejects.toThrow(/faithful JS number|rational/i);
+      await expect(def.run.call(testCallCtx(), new AExact(CONSTANT_CTX, 1, 3))).rejects.toThrow(/faithful JS number|rational/i);
     });
   });
 
   describe("z.integer ↔ JS number constrained to safe ints (encode → exact)", () => {
     it("decodes a safe int and encodes the return as EXACT", async () => {
       const def = symbol.rosetta`inc: increment`({ input: [z.integer], output: [z.integer] }, (n) => n + 1);
-      const out = await def.run.call(testCallCtx(), new AExact(CONSTANT_CTX, 41n));
+      const out = await def.run.call(testCallCtx(), new AExact(CONSTANT_CTX, 41));
       expect(out).toBeInstanceOf(AExact);
-      expect((out as AExact).num).toBe(42n);
-      expect((out as AExact).denom).toBe(1n);
+      expect((out as AExact).num).toBe(42);
+      expect((out as AExact).denom).toBe(1);
     });
 
     it("DOORS a non-safe-integer inexact input", async () => {
@@ -187,13 +190,25 @@ describe("the number codec FAMILY — exactness + range + JS-type declared by th
     });
   });
 
-  describe("z.bigint ↔ JS bigint (arbitrary precision, encode → exact)", () => {
-    it("decodes to bigint faithfully beyond safe-integer range", async () => {
+  // RE-PINNED (one-number rework, RATIO — docs/working-proposals/arrival-one-number-rework.md
+  // §2.3): `z.bigint` is retired as the active numeric cast but KEPT exported as a thin
+  // compat shim (scheme-zod.ts's own header comment on `bigint`) for consumers outside this
+  // sweep's scope. It no longer carries arbitrary precision — AExact's payload is a safe-int
+  // `number` by construction (§0.2), so there is no magnitude class beyond
+  // Number.MAX_SAFE_INTEGER a live AExact could ever hold; the codec's `encode` arm doors on
+  // exactly that boundary instead of silently widening. The suite below was the OLD codec's
+  // headline case ("faithful beyond safe-integer range") — now the opposite is true and
+  // pinned instead: round-trips SMALL bigints faithfully, DOORS on anything past safe-int.
+  describe("z.bigint ↔ JS bigint (thin compat shim, safe-int only post-rework — §2.3)", () => {
+    it("DOORS encoding a bigint beyond safe-integer range (no more arbitrary precision)", async () => {
+      // The INPUT itself must stay a constructible (safe-int) AExact — a huge value can no
+      // longer exist as a live AExact at all (§0.2's construction invariant). Push it over
+      // the boundary via the impl's own arithmetic instead: MAX_SAFE_INTEGER + 1n === 2^53,
+      // which is NOT a safe integer (Number.isSafeInteger(2^53) is false) — the OUTPUT
+      // codec's encode arm is where this now doors, not construction of the input.
       const def = symbol.rosetta`bigid: identity bigint`({ input: [z.bigint], output: [z.bigint] }, (n) => n + 1n);
-      const big = BigInt(Number.MAX_SAFE_INTEGER) + 100n;
-      const out = await def.run.call(testCallCtx(), new AExact(CONSTANT_CTX, big));
-      expect(out).toBeInstanceOf(AExact);
-      expect((out as AExact).num).toBe(big + 1n);
+      const maxSafe = new AExact(CONSTANT_CTX, Number.MAX_SAFE_INTEGER);
+      await expect(def.run.call(testCallCtx(), maxSafe)).rejects.toThrow(/safe-integer/i);
     });
 
     it("infers the impl arg as bigint", () => {
@@ -203,9 +218,9 @@ describe("the number codec FAMILY — exactness + range + JS-type declared by th
       });
     });
 
-    it("round-trips bigint → scheme → bigint", async () => {
+    it("round-trips a SMALL bigint → scheme → bigint (safe-int only)", async () => {
       const def = symbol.rosetta`bid: bigint identity`({ input: [z.bigint], output: [z.bigint] }, (n) => n);
-      const out = (await def.run.call(testCallCtx(), new AExact(CONSTANT_CTX, 7n))) as AExact;
+      const out = (await def.run.call(testCallCtx(), new AExact(CONSTANT_CTX, 7))) as AExact;
       // re-decode the encoded scheme value through the same codec
       const back = z.decode(z.bigint, out);
       expect(back).toBe(7n);
@@ -219,7 +234,7 @@ describe("variadic + multiple values", () => {
       { input: z.array(z.number), output: [z.number] },
       (...ns: number[]) => ns.reduce((a, b) => a + b, 0),
     );
-    const out = await def.run.call(testCallCtx(), new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n), new AExact(CONSTANT_CTX, 3n));
+    const out = await def.run.call(testCallCtx(), new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2), new AExact(CONSTANT_CTX, 3));
     expect((out as AInexact).real).toBe(6);
   });
 

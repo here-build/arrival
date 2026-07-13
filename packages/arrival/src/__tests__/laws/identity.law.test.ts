@@ -93,7 +93,7 @@ describe("rosetta.ts — `=== nil` identity-equality sites", () => {
   });
 
   it("schemeToJs(Pair(1, nil-clone)) — proper list, not dotted (rosetta.ts:130)", () => {
-    const p = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), cloneNil());
+    const p = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), cloneNil());
     expect(schemeToJs(p)).toEqual([1]);
   });
 });
@@ -112,7 +112,7 @@ describe("list-copy (env/r7rs/lists.ts) — `=== nil` identity-equality sites", 
   it("list-copy(Pair(1, nil-clone)) — tail does NOT alias the input's tail (env/r7rs/lists.ts)", () => {
     const listCopy = LIST_OPS["list-copy"] as (this: unknown, l: unknown) => unknown;
     const cdrClone = cloneNil();
-    const input = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), cdrClone);
+    const input = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), cdrClone);
     const result = listCopy.call(testCallCtx(), input);
     expect(result).toBeInstanceOf(APair);
     expect((result as APair<any, any>).cdr === cdrClone).toBe(false);
@@ -122,7 +122,7 @@ describe("list-copy (env/r7rs/lists.ts) — `=== nil` identity-equality sites", 
 describe("APair.ts tagless-final map/filter/reduce/traverse — `=== nil` identity-equality sites", () => {
   it("mapPair(f, Pair(1, nil-clone)) — produces (1) only, fn called once", async () => {
     const calls: unknown[] = [];
-    const p = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), cloneNil());
+    const p = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), cloneNil());
     const result = await p[tf("map")]((x) => {
       calls.push(x);
       return x;
@@ -134,7 +134,7 @@ describe("APair.ts tagless-final map/filter/reduce/traverse — `=== nil` identi
 
   it("filterPair(_, Pair(1, nil-clone)) — predicate called once", async () => {
     let predCalls = 0;
-    const p = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), cloneNil());
+    const p = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), cloneNil());
     await p[tf("filter")](() => {
       predCalls++;
       return true;
@@ -144,7 +144,7 @@ describe("APair.ts tagless-final map/filter/reduce/traverse — `=== nil` identi
 
   it("reducePair(f, init, Pair(1, nil-clone)) — f called once", async () => {
     const collected: unknown[] = [];
-    const p = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), cloneNil());
+    const p = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), cloneNil());
     // arrival/tagless-final/reduce is element-FIRST: fn(element, acc).
     await p[tf("reduce")]((v: unknown, acc: unknown[]) => {
       collected.push(v);
@@ -159,7 +159,7 @@ describe("APair.ts tagless-final map/filter/reduce/traverse — `=== nil` identi
       ofCalls.push(v);
       return v;
     };
-    const p = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), cloneNil());
+    const p = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), cloneNil());
     p[tf("traverse")](of, (x: unknown) => x);
     expect(ofCalls.length).toBe(2);
     expect(ofCalls[0] instanceof ANil).toBe(true);

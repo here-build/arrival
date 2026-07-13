@@ -53,7 +53,7 @@ function sequenceDef(name: string) {
   return def;
 }
 
-const exact = (n: bigint | number): AExact => new AExact(CONSTANT_CTX, typeof n === "bigint" ? n : BigInt(n));
+const exact = (n: number): AExact => new AExact(CONSTANT_CTX, n);
 const str = (s: string): AString => new AString(CONSTANT_CTX, s);
 // Adversarial fixture: `properList` deliberately builds pair-chains over non-SchemeValue
 // elements too (raw JS numbers/functions — see call sites below) to probe zod schema

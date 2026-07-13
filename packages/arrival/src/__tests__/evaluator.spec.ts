@@ -41,70 +41,74 @@ describe("Generator Evaluator with Real LIPS Types", () => {
   beforeEach(() => {
     // Create a minimal environment with basic operations
     // Note: SchemeExact has num/denom (for rationals), not value
+    // RE-PINNED (one-number rework, RATIO — docs/working-proposals/arrival-one-number-rework.md
+    // §2.1): AExact's payload is a safe-int `number` now, not `bigint` — this hand-rolled test
+    // env's arithmetic helpers ported bigint accumulators/comparisons to plain number ones
+    // (`0`→`0`, `BigInt(...)`→direct number use, the dead `typeof arg === "bigint"` arm
+    // dropped since a raw host bigint is now an opaque pass-through the interpreter never
+    // hands this test helper — §2.3).
     env = mintResolvingFrame("test-env", {
       "+": (...args: unknown[]) => {
-        let result = 0n;
+        let result = 0;
         let hasInexact = false;
         for (const arg of args) {
           if (arg instanceof AExact) {
             result += arg.num;
           } else if (arg instanceof AInexact) {
             hasInexact = true;
-            result += BigInt(Math.floor(arg.real));
+            result += Math.floor(arg.real);
           } else if (typeof arg === "number") {
             hasInexact = true;
-            result += BigInt(Math.floor(arg));
-          } else if (typeof arg === "bigint") {
-            result += arg;
+            result += Math.floor(arg);
           }
         }
-        return hasInexact ? new AInexact(CONSTANT_CTX, Number(result)) : new AExact(CONSTANT_CTX, result);
+        return hasInexact ? new AInexact(CONSTANT_CTX, result) : new AExact(CONSTANT_CTX, result);
       },
       "-": (...args: unknown[]) => {
-        if (args.length === 0) return new AExact(CONSTANT_CTX, 0n);
-        let result = args[0] instanceof AExact ? args[0].num : BigInt(args[0] as number);
+        if (args.length === 0) return new AExact(CONSTANT_CTX, 0);
+        let result = args[0] instanceof AExact ? args[0].num : (args[0] as number);
         if (args.length === 1) return new AExact(CONSTANT_CTX, -result);
         for (let i = 1; i < args.length; i++) {
           const arg = args[i];
-          result -= arg instanceof AExact ? arg.num : BigInt(arg as number);
+          result -= arg instanceof AExact ? arg.num : (arg as number);
         }
         return new AExact(CONSTANT_CTX, result);
       },
       "*": (...args: unknown[]) => {
-        let result = 1n;
+        let result = 1;
         for (const arg of args) {
-          result *= arg instanceof AExact ? arg.num : BigInt(arg as number);
+          result *= arg instanceof AExact ? arg.num : (arg as number);
         }
         return new AExact(CONSTANT_CTX, result);
       },
       "/": (a: unknown, b: unknown) => {
-        const aVal = a instanceof AExact ? Number(a.num) : (a as number);
-        const bVal = b instanceof AExact ? Number(b.num) : (b as number);
+        const aVal = a instanceof AExact ? a.num : (a as number);
+        const bVal = b instanceof AExact ? b.num : (b as number);
         return new AInexact(CONSTANT_CTX, aVal / bVal);
       },
       "<": (a: unknown, b: unknown) => {
-        const aVal = a instanceof AExact ? a.num : BigInt(a as number);
-        const bVal = b instanceof AExact ? b.num : BigInt(b as number);
+        const aVal = a instanceof AExact ? a.num : (a as number);
+        const bVal = b instanceof AExact ? b.num : (b as number);
         return aVal < bVal;
       },
       ">": (a: unknown, b: unknown) => {
-        const aVal = a instanceof AExact ? a.num : BigInt(a as number);
-        const bVal = b instanceof AExact ? b.num : BigInt(b as number);
+        const aVal = a instanceof AExact ? a.num : (a as number);
+        const bVal = b instanceof AExact ? b.num : (b as number);
         return aVal > bVal;
       },
       "<=": (a: unknown, b: unknown) => {
-        const aVal = a instanceof AExact ? a.num : BigInt(a as number);
-        const bVal = b instanceof AExact ? b.num : BigInt(b as number);
+        const aVal = a instanceof AExact ? a.num : (a as number);
+        const bVal = b instanceof AExact ? b.num : (b as number);
         return aVal <= bVal;
       },
       ">=": (a: unknown, b: unknown) => {
-        const aVal = a instanceof AExact ? a.num : BigInt(a as number);
-        const bVal = b instanceof AExact ? b.num : BigInt(b as number);
+        const aVal = a instanceof AExact ? a.num : (a as number);
+        const bVal = b instanceof AExact ? b.num : (b as number);
         return aVal >= bVal;
       },
       "=": (a: unknown, b: unknown) => {
-        const aVal = a instanceof AExact ? a.num : BigInt(a as number);
-        const bVal = b instanceof AExact ? b.num : BigInt(b as number);
+        const aVal = a instanceof AExact ? a.num : (a as number);
+        const bVal = b instanceof AExact ? b.num : (b as number);
         return aVal === bVal;
       },
       list: (...args: SchemeValue[]) => APair.fromArray(CONSTANT_CTX, args, false),
@@ -154,7 +158,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
   describe("evaluate()", () => {
     // INVARIANT: self-evaluating atoms (exact number, string, nil) evaluate to themselves
     it("should evaluate atoms to themselves", async () => {
-      expect(await execExpr(new AExact(CONSTANT_CTX, 42n), { env })).toEqual(new AExact(CONSTANT_CTX, 42n));
+      expect(await execExpr(new AExact(CONSTANT_CTX, 42), { env })).toEqual(new AExact(CONSTANT_CTX, 42));
       const hello = new AString(CONSTANT_CTX, "hello");
       expect(await execExpr(hello, { env })).toBe(hello);
       expect(await execExpr(nil, { env })).toBe(nil);
@@ -162,26 +166,26 @@ describe("Generator Evaluator with Real LIPS Types", () => {
 
     // INVARIANT: symbol evaluation looks up the value bound in the environment
     it("should look up symbols in environment", async () => {
-      bindValue(env, "x", new AExact(CONSTANT_CTX, 10n));
-      bindValue(env, "y", new AExact(CONSTANT_CTX, 20n));
-      expect(await execExpr(new ASymbol(CONSTANT_CTX, "x"), { env })).toEqual(new AExact(CONSTANT_CTX, 10n));
-      expect(await execExpr(new ASymbol(CONSTANT_CTX, "y"), { env })).toEqual(new AExact(CONSTANT_CTX, 20n));
+      bindValue(env, "x", new AExact(CONSTANT_CTX, 10));
+      bindValue(env, "y", new AExact(CONSTANT_CTX, 20));
+      expect(await execExpr(new ASymbol(CONSTANT_CTX, "x"), { env })).toEqual(new AExact(CONSTANT_CTX, 10));
+      expect(await execExpr(new ASymbol(CONSTANT_CTX, "y"), { env })).toEqual(new AExact(CONSTANT_CTX, 20));
     });
 
     // INVARIANT: a function-call form evaluates operator and operands, then applies
     it("should evaluate simple function calls", async () => {
       // (+ 1 2 3)
-      const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "+"), new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n), new AExact(CONSTANT_CTX, 3n)], false);
+      const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "+"), new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2), new AExact(CONSTANT_CTX, 3)], false);
       const result = await execExpr(code, { env });
-      expect(result).toEqual(new AExact(CONSTANT_CTX, 6n));
+      expect(result).toEqual(new AExact(CONSTANT_CTX, 6));
     });
 
     // INVARIANT: nested function calls evaluate inside-out
     it("should evaluate nested function calls", async () => {
       // (+ (* 2 3) (* 4 5))
-      const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "+"), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "*"), new AExact(CONSTANT_CTX, 2n), new AExact(CONSTANT_CTX, 3n)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "*"), new AExact(CONSTANT_CTX, 4n), new AExact(CONSTANT_CTX, 5n)], false)], false);
+      const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "+"), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "*"), new AExact(CONSTANT_CTX, 2), new AExact(CONSTANT_CTX, 3)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "*"), new AExact(CONSTANT_CTX, 4), new AExact(CONSTANT_CTX, 5)], false)], false);
       const result = await execExpr(code, { env });
-      expect(result).toEqual(new AExact(CONSTANT_CTX, 26n)); // 6 + 20
+      expect(result).toEqual(new AExact(CONSTANT_CTX, 26)); // 6 + 20
     });
 
     // INVARIANT: a JS function bound in env that returns a promise is awaited and its
@@ -207,7 +211,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         return a + b;
       });
 
-      const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "async-add"), new AExact(CONSTANT_CTX, 10n), new AExact(CONSTANT_CTX, 20n)], false);
+      const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "async-add"), new AExact(CONSTANT_CTX, 10), new AExact(CONSTANT_CTX, 20)], false);
       const result = await execExpr(code, { env });
       // The bare-fn boxing seam (evaluator main apply arm) boxes the raw return — the
       // pre-seam raw-30 passthrough was the R1 leak, not the contract. This spec's
@@ -222,10 +226,10 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       // INVARIANT: (quote x) returns its argument unevaluated, structure intact
       it("should return its argument unevaluated", async () => {
         // (quote (1 2 3))
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "quote"), APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n), new AExact(CONSTANT_CTX, 3n)], false)], false);
+        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "quote"), APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2), new AExact(CONSTANT_CTX, 3)], false)], false);
         const result = (await execExpr(code, { env })) as APair<any, any>;
-        expect(result.car).toEqual(new AExact(CONSTANT_CTX, 1n));
-        expect((result.cdr as APair<any, any>).car).toEqual(new AExact(CONSTANT_CTX, 2n));
+        expect(result.car).toEqual(new AExact(CONSTANT_CTX, 1));
+        expect((result.cdr as APair<any, any>).car).toEqual(new AExact(CONSTANT_CTX, 2));
       });
 
       // INVARIANT: (quote symbol) returns the symbol itself, not its bound value
@@ -241,20 +245,20 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       // INVARIANT: a quasiquoted list with no unquotes returns unevaluated, like quote
       it("should return simple list unevaluated", async () => {
         // `(1 2 3)
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "quasiquote"), APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n), new AExact(CONSTANT_CTX, 3n)], false)], false);
+        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "quasiquote"), APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2), new AExact(CONSTANT_CTX, 3)], false)], false);
         const result = (await execExpr(code, { env })) as APair<any, any>;
-        expect(result.car).toEqual(new AExact(CONSTANT_CTX, 1n));
+        expect(result.car).toEqual(new AExact(CONSTANT_CTX, 1));
       });
 
       // INVARIANT: (unquote expr) inside quasiquote evaluates expr and splices the value in place
       it("should evaluate unquoted expressions", async () => {
         // `(1 ,(+ 1 1) 3)
-        bindValue(env, "x", new AExact(CONSTANT_CTX, 10n));
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "quasiquote"), APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "unquote"), new ASymbol(CONSTANT_CTX, "x")], false), new AExact(CONSTANT_CTX, 3n)], false)], false);
+        bindValue(env, "x", new AExact(CONSTANT_CTX, 10));
+        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "quasiquote"), APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "unquote"), new ASymbol(CONSTANT_CTX, "x")], false), new AExact(CONSTANT_CTX, 3)], false)], false);
         const result = (await execExpr(code, { env })) as APair<any, any>;
-        expect(result.car).toEqual(new AExact(CONSTANT_CTX, 1n));
-        expect((result.cdr as APair<any, any>).car).toEqual(new AExact(CONSTANT_CTX, 10n));
-        expect(((result.cdr as APair<any, any>).cdr as APair<any, any>).car).toEqual(new AExact(CONSTANT_CTX, 3n));
+        expect(result.car).toEqual(new AExact(CONSTANT_CTX, 1));
+        expect((result.cdr as APair<any, any>).car).toEqual(new AExact(CONSTANT_CTX, 10));
+        expect(((result.cdr as APair<any, any>).cdr as APair<any, any>).car).toEqual(new AExact(CONSTANT_CTX, 3));
       });
 
       // INVARIANT: (unquote-splicing expr) evaluates expr to a list and splices its
@@ -263,7 +267,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         // `(1 ,@(list 2 3) 4)
         const code = APair.fromArray(CONSTANT_CTX, [
           new ASymbol(CONSTANT_CTX, "quasiquote"),
-          APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "unquote-splicing"), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "list"), new AExact(CONSTANT_CTX, 2n), new AExact(CONSTANT_CTX, 3n)], false)], false), new AExact(CONSTANT_CTX, 4n)], false),
+          APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "unquote-splicing"), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "list"), new AExact(CONSTANT_CTX, 2), new AExact(CONSTANT_CTX, 3)], false)], false), new AExact(CONSTANT_CTX, 4)], false),
         ], false);
         const result = await execExpr(code, { env });
         const arr = (result as APair<any, any>).to_array();
@@ -280,14 +284,14 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       // INVARIANT: if treats '() (nil) as truthy — only #f is false
       it("should evaluate then branch when condition is nil (Scheme: only #f is false)", async () => {
         // (if () 1 2) - in R7RS Scheme, only #f is false, () is truthy
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "if"), nil, new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)], false);
-        expect(await execExpr(code, { env })).toEqual(new AExact(CONSTANT_CTX, 1n));
+        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "if"), nil, new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2)], false);
+        expect(await execExpr(code, { env })).toEqual(new AExact(CONSTANT_CTX, 1));
       });
 
       // INVARIANT: if with no else-branch returns the unspecified/void value when the test is false
       it("should return undefined when no else branch and condition is false", async () => {
         // (if #f 1)
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "if"), schemeFalse, new AExact(CONSTANT_CTX, 1n)], false);
+        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "if"), schemeFalse, new AExact(CONSTANT_CTX, 1)], false);
         expect(await execExpr(code, { env })).toBe(theVoid);
       });
 
@@ -296,11 +300,11 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         // (if (< 1 2) (if (> 3 2) 100 200) 300)
         const code = APair.fromArray(CONSTANT_CTX, [
           new ASymbol(CONSTANT_CTX, "if"),
-          APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "<"), new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)], false),
-          APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "if"), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, ">"), new AExact(CONSTANT_CTX, 3n), new AExact(CONSTANT_CTX, 2n)], false), new AExact(CONSTANT_CTX, 100n), new AExact(CONSTANT_CTX, 200n)], false),
-          new AExact(CONSTANT_CTX, 300n),
+          APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "<"), new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2)], false),
+          APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "if"), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, ">"), new AExact(CONSTANT_CTX, 3), new AExact(CONSTANT_CTX, 2)], false), new AExact(CONSTANT_CTX, 100), new AExact(CONSTANT_CTX, 200)], false),
+          new AExact(CONSTANT_CTX, 300),
         ], false);
-        expect(await execExpr(code, { env })).toEqual(new AExact(CONSTANT_CTX, 100n));
+        expect(await execExpr(code, { env })).toEqual(new AExact(CONSTANT_CTX, 100));
       });
     });
 
@@ -321,13 +325,13 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         let sideEffect = 0;
         bindValue(env, "inc!", () => {
           sideEffect++;
-          return new AExact(CONSTANT_CTX, BigInt(sideEffect));
+          return new AExact(CONSTANT_CTX, sideEffect);
         });
 
         // (begin (inc!) (inc!) (inc!))
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "begin"), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "inc!")], false), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "inc!")], false), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "inc!")], false)], false);
         const result = await execExpr(code, { env });
-        expect(result).toEqual(new AExact(CONSTANT_CTX, 3n));
+        expect(result).toEqual(new AExact(CONSTANT_CTX, 3));
         expect(sideEffect).toBe(3);
       });
     });
@@ -337,18 +341,18 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       // implementation, not behavior)
       it("should define a simple variable", async () => {
         // (define x 42)
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "define"), new ASymbol(CONSTANT_CTX, "x"), new AExact(CONSTANT_CTX, 42n)], false);
+        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "define"), new ASymbol(CONSTANT_CTX, "x"), new AExact(CONSTANT_CTX, 42)], false);
         await execExpr(code, { env });
-        expect(env._lookupWithResolvers("x")).toEqual(new AExact(CONSTANT_CTX, 42n));
+        expect(env._lookupWithResolvers("x")).toEqual(new AExact(CONSTANT_CTX, 42));
       });
 
       // INVARIANT: define evaluates the value expression before binding (not the literal
       // form) (pins implementation, not behavior)
       it("should evaluate the value expression", async () => {
         // (define x (+ 1 2))
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "define"), new ASymbol(CONSTANT_CTX, "x"), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "+"), new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)], false)], false);
+        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "define"), new ASymbol(CONSTANT_CTX, "x"), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "+"), new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2)], false)], false);
         await execExpr(code, { env });
-        expect(env._lookupWithResolvers("x")).toEqual(new AExact(CONSTANT_CTX, 3n));
+        expect(env._lookupWithResolvers("x")).toEqual(new AExact(CONSTANT_CTX, 3));
       });
 
       // INVARIANT: (define (f args) body) shorthand defines f as a callable ALambda
@@ -377,19 +381,19 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should capture closure environment", async () => {
         // (define a 10)
         // ((lambda (x) (+ a x)) 5)
-        await execExpr(APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "define"), new ASymbol(CONSTANT_CTX, "a"), new AExact(CONSTANT_CTX, 10n)], false), { env });
-        const code = APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "lambda"), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "x")], false), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "+"), new ASymbol(CONSTANT_CTX, "a"), new ASymbol(CONSTANT_CTX, "x")], false)], false), new AExact(CONSTANT_CTX, 5n)], false);
+        await execExpr(APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "define"), new ASymbol(CONSTANT_CTX, "a"), new AExact(CONSTANT_CTX, 10)], false), { env });
+        const code = APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "lambda"), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "x")], false), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "+"), new ASymbol(CONSTANT_CTX, "a"), new ASymbol(CONSTANT_CTX, "x")], false)], false), new AExact(CONSTANT_CTX, 5)], false);
         const result = await execExpr(code, { env });
-        expect(result).toEqual(new AExact(CONSTANT_CTX, 15n));
+        expect(result).toEqual(new AExact(CONSTANT_CTX, 15));
       });
 
       // INVARIANT: a symbol (non-list) parameter spec binds all arguments as a
       // rest-parameter list
       it("should handle rest parameters", async () => {
         // ((lambda args args) 1 2 3)
-        const code = APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "lambda"), new ASymbol(CONSTANT_CTX, "args"), new ASymbol(CONSTANT_CTX, "args")], false), new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n), new AExact(CONSTANT_CTX, 3n)], false);
+        const code = APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "lambda"), new ASymbol(CONSTANT_CTX, "args"), new ASymbol(CONSTANT_CTX, "args")], false), new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2), new AExact(CONSTANT_CTX, 3)], false);
         const result = (await execExpr(code, { env })) as APair<any, any>;
-        expect(result.to_array()).toEqual([new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n), new AExact(CONSTANT_CTX, 3n)]);
+        expect(result.to_array()).toEqual([new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2), new AExact(CONSTANT_CTX, 3)]);
       });
     });
 
@@ -404,10 +408,10 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       // see sibling bindings
       it("should use parallel binding semantics", async () => {
         // (let ((x 1) (y x)) y) - should fail because x isn't bound yet
-        bindValue(env, "x", new AExact(CONSTANT_CTX, 100n));
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "let"), APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "x"), new AExact(CONSTANT_CTX, 1n)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "y"), new ASymbol(CONSTANT_CTX, "x")], false)], false), new ASymbol(CONSTANT_CTX, "y")], false);
+        bindValue(env, "x", new AExact(CONSTANT_CTX, 100));
+        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "let"), APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "x"), new AExact(CONSTANT_CTX, 1)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "y"), new ASymbol(CONSTANT_CTX, "x")], false)], false), new ASymbol(CONSTANT_CTX, "y")], false);
         // y should be 100 (outer x), not 1 (inner x)
-        expect(await execExpr(code, { env })).toEqual(new AExact(CONSTANT_CTX, 100n));
+        expect(await execExpr(code, { env })).toEqual(new AExact(CONSTANT_CTX, 100));
       });
     });
 
@@ -441,8 +445,8 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       // INVARIANT: and returns the value of its last operand when all are true
       it("should return last value if all true", async () => {
         // (and 1 2 3)
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "and"), new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n), new AExact(CONSTANT_CTX, 3n)], false);
-        expect(await execExpr(code, { env })).toEqual(new AExact(CONSTANT_CTX, 3n));
+        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "and"), new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2), new AExact(CONSTANT_CTX, 3)], false);
+        expect(await execExpr(code, { env })).toEqual(new AExact(CONSTANT_CTX, 3));
       });
     });
 
@@ -462,16 +466,16 @@ describe("Generator Evaluator with Real LIPS Types", () => {
           return false;
         });
         // (or 1 (side-effect))
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "or"), new AExact(CONSTANT_CTX, 1n), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "side-effect")], false)], false);
-        expect(await execExpr(code, { env })).toEqual(new AExact(CONSTANT_CTX, 1n));
+        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "or"), new AExact(CONSTANT_CTX, 1), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "side-effect")], false)], false);
+        expect(await execExpr(code, { env })).toEqual(new AExact(CONSTANT_CTX, 1));
         expect(called).toBe(false);
       });
 
       // INVARIANT: or returns the value of its last operand when all are false (0 is truthy)
       it("should return last value if all false", async () => {
         // (or #f #f 0) - 0 is truthy in Scheme
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "or"), schemeFalse, schemeFalse, new AExact(CONSTANT_CTX, 0n)], false);
-        expect(await execExpr(code, { env })).toEqual(new AExact(CONSTANT_CTX, 0n));
+        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "or"), schemeFalse, schemeFalse, new AExact(CONSTANT_CTX, 0)], false);
+        expect(await execExpr(code, { env })).toEqual(new AExact(CONSTANT_CTX, 0));
       });
     });
 
@@ -487,7 +491,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         // (cond ((> 1 2) 'no) (else 'yes))
         const code = APair.fromArray(CONSTANT_CTX, [
           new ASymbol(CONSTANT_CTX, "cond"),
-          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, ">"), new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "quote"), new ASymbol(CONSTANT_CTX, "no")], false)], false),
+          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, ">"), new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "quote"), new ASymbol(CONSTANT_CTX, "no")], false)], false),
           APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "else"), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "quote"), new ASymbol(CONSTANT_CTX, "yes")], false)], false),
         ], false);
         const result = (await execExpr(code, { env })) as ASymbol;
@@ -497,8 +501,8 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       // INVARIANT: a clause with only a test (no body) returns the test's value
       it("should return test value when no expressions", async () => {
         // (cond (5)) => 5
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "cond"), APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 5n)], false)], false);
-        expect(await execExpr(code, { env })).toEqual(new AExact(CONSTANT_CTX, 5n));
+        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "cond"), APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 5)], false)], false);
+        expect(await execExpr(code, { env })).toEqual(new AExact(CONSTANT_CTX, 5));
       });
 
       // INVARIANT: (test => proc) applies proc to the test's value when the test is truthy.
@@ -511,7 +515,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         // (cond ((+ 1 2) => (lambda (x) (* x 2))))
         // With membrane, JS functions receive JS values (not SchemeExact)
         bindValue(env, "double", (x: number) => x * 2);
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "cond"), APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "+"), new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)], false), new ASymbol(CONSTANT_CTX, "=>"), new ASymbol(CONSTANT_CTX, "double")], false)], false);
+        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "cond"), APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "+"), new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2)], false), new ASymbol(CONSTANT_CTX, "=>"), new ASymbol(CONSTANT_CTX, "double")], false)], false);
         // The bare-fn boxing seam boxes the => builtin's raw return; this spec's
         // `execExpr` surfaces the box — unwrap to assert the value.
         expect(((await execExpr(code, { env })) as AExact)["arrival/toJS"]()).toBe(6);
@@ -529,9 +533,9 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         // (case 5 ((1) 'one) ((2) 'two) (else 'other))
         const code = APair.fromArray(CONSTANT_CTX, [
           new ASymbol(CONSTANT_CTX, "case"),
-          new AExact(CONSTANT_CTX, 5n),
-          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1n)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "quote"), new ASymbol(CONSTANT_CTX, "one")], false)], false),
-          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 2n)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "quote"), new ASymbol(CONSTANT_CTX, "two")], false)], false),
+          new AExact(CONSTANT_CTX, 5),
+          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "quote"), new ASymbol(CONSTANT_CTX, "one")], false)], false),
+          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 2)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "quote"), new ASymbol(CONSTANT_CTX, "two")], false)], false),
           APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "else"), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "quote"), new ASymbol(CONSTANT_CTX, "other")], false)], false),
         ], false);
         const result = (await execExpr(code, { env })) as ASymbol;
@@ -543,14 +547,14 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       // INVARIANT: when executes its body and returns the last value when the test is true
       it("should execute body when test is true", async () => {
         // (when #t 1 2 3)
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "when"), schemeTrue, new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n), new AExact(CONSTANT_CTX, 3n)], false);
-        expect(await execExpr(code, { env })).toEqual(new AExact(CONSTANT_CTX, 3n));
+        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "when"), schemeTrue, new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2), new AExact(CONSTANT_CTX, 3)], false);
+        expect(await execExpr(code, { env })).toEqual(new AExact(CONSTANT_CTX, 3));
       });
 
       // INVARIANT: when returns the unspecified/void value when the test is false
       it("should return undefined when test is false", async () => {
         // (when #f 1 2 3)
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "when"), schemeFalse, new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n), new AExact(CONSTANT_CTX, 3n)], false);
+        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "when"), schemeFalse, new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2), new AExact(CONSTANT_CTX, 3)], false);
         expect(await execExpr(code, { env })).toBe(theVoid);
       });
     });
@@ -559,14 +563,14 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       // INVARIANT: unless executes its body and returns the last value when the test is false
       it("should execute body when test is false", async () => {
         // (unless #f 1 2 3)
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "unless"), schemeFalse, new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n), new AExact(CONSTANT_CTX, 3n)], false);
-        expect(await execExpr(code, { env })).toEqual(new AExact(CONSTANT_CTX, 3n));
+        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "unless"), schemeFalse, new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2), new AExact(CONSTANT_CTX, 3)], false);
+        expect(await execExpr(code, { env })).toEqual(new AExact(CONSTANT_CTX, 3));
       });
 
       // INVARIANT: unless returns the unspecified/void value when the test is true
       it("should return undefined when test is true", async () => {
         // (unless #t 1 2 3)
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "unless"), schemeTrue, new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n), new AExact(CONSTANT_CTX, 3n)], false);
+        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "unless"), schemeTrue, new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2), new AExact(CONSTANT_CTX, 3)], false);
         expect(await execExpr(code, { env })).toBe(theVoid);
       });
     });
@@ -578,10 +582,10 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         // (do ((i 0 (+ i 1))) ((>= i 5) i))
         const code = APair.fromArray(CONSTANT_CTX, [
           new ASymbol(CONSTANT_CTX, "do"),
-          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "i"), new AExact(CONSTANT_CTX, 0n), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "+"), new ASymbol(CONSTANT_CTX, "i"), new AExact(CONSTANT_CTX, 1n)], false)], false)], false),
-          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, ">="), new ASymbol(CONSTANT_CTX, "i"), new AExact(CONSTANT_CTX, 5n)], false), new ASymbol(CONSTANT_CTX, "i")], false),
+          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "i"), new AExact(CONSTANT_CTX, 0), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "+"), new ASymbol(CONSTANT_CTX, "i"), new AExact(CONSTANT_CTX, 1)], false)], false)], false),
+          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, ">="), new ASymbol(CONSTANT_CTX, "i"), new AExact(CONSTANT_CTX, 5)], false), new ASymbol(CONSTANT_CTX, "i")], false),
         ], false);
-        expect(await execExpr(code, { env })).toEqual(new AExact(CONSTANT_CTX, 5n));
+        expect(await execExpr(code, { env })).toEqual(new AExact(CONSTANT_CTX, 5));
       });
 
       // INVARIANT: do executes the command body once per iteration for its side effects
@@ -594,8 +598,8 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         // (do ((i 0 (+ i 1))) ((>= i 3)) (inc!))
         const code = APair.fromArray(CONSTANT_CTX, [
           new ASymbol(CONSTANT_CTX, "do"),
-          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "i"), new AExact(CONSTANT_CTX, 0n), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "+"), new ASymbol(CONSTANT_CTX, "i"), new AExact(CONSTANT_CTX, 1n)], false)], false)], false),
-          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, ">="), new ASymbol(CONSTANT_CTX, "i"), new AExact(CONSTANT_CTX, 3n)], false)], false),
+          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "i"), new AExact(CONSTANT_CTX, 0), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "+"), new ASymbol(CONSTANT_CTX, "i"), new AExact(CONSTANT_CTX, 1)], false)], false)], false),
+          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, ">="), new ASymbol(CONSTANT_CTX, "i"), new AExact(CONSTANT_CTX, 3)], false)], false),
           APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "inc!")], false),
         ], false);
         await execExpr(code, { env });
@@ -624,8 +628,8 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         ], false);
         await execExpr(defineMacro, { env });
 
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "my-when"), schemeTrue, new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n), new AExact(CONSTANT_CTX, 3n)], false);
-        expect(await execExpr(code, { env })).toEqual(new AExact(CONSTANT_CTX, 3n));
+        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "my-when"), schemeTrue, new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2), new AExact(CONSTANT_CTX, 3)], false);
+        expect(await execExpr(code, { env })).toEqual(new AExact(CONSTANT_CTX, 3));
       });
     });
 
@@ -650,7 +654,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         // verified at the full-env layer in purity-doors.test.ts). The point at
         // THIS layer: delay no longer evaluates lazily; it is gone from the
         // special-form table.
-        await expect(execExpr(APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "delay"), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "+"), new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)], false)], false), { env })).rejects.toThrow();
+        await expect(execExpr(APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "delay"), APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "+"), new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2)], false)], false), { env })).rejects.toThrow();
       });
     });
   });
@@ -660,29 +664,29 @@ describe("Generator Evaluator with Real LIPS Types", () => {
     // without stack overflow
     it("should handle deep recursion without stack overflow", async () => {
       // Create a deeply nested expression: (+ 1 (+ 1 (+ 1 ... (+ 1 0)...)))
-      let code: APair<any, any> | typeof nil = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "+"), new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 0n)], false);
+      let code: APair<any, any> | typeof nil = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "+"), new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 0)], false);
 
       // 10,000 levels of nesting
       for (let i = 0; i < 10000; i++) {
-        code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "+"), new AExact(CONSTANT_CTX, 1n), code], false);
+        code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "+"), new AExact(CONSTANT_CTX, 1), code], false);
       }
 
       const result = await execExpr(code, { env });
-      expect(result).toEqual(new AExact(CONSTANT_CTX, 10001n));
+      expect(result).toEqual(new AExact(CONSTANT_CTX, 10001));
     });
 
     // INVARIANT: a deeply nested if-expression chain (10k levels) evaluates without
     // stack overflow
     it("should handle deeply nested if expressions", async () => {
       // Create deeply nested ifs: (if #t (if #t (if #t ... 42 ...)))
-      let code: SchemeValue = new AExact(CONSTANT_CTX, 42n);
+      let code: SchemeValue = new AExact(CONSTANT_CTX, 42);
 
       for (let i = 0; i < 10000; i++) {
-        code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "if"), schemeTrue, code, new AExact(CONSTANT_CTX, 0n)], false);
+        code = APair.fromArray(CONSTANT_CTX, [new ASymbol(CONSTANT_CTX, "if"), schemeTrue, code, new AExact(CONSTANT_CTX, 0)], false);
       }
 
       const result = await execExpr(code, { env });
-      expect(result).toEqual(new AExact(CONSTANT_CTX, 42n));
+      expect(result).toEqual(new AExact(CONSTANT_CTX, 42));
     });
 
     it("tail recursion to 10k depth does not overflow", async () => {

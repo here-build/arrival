@@ -1,8 +1,11 @@
 /**
  * Scheme Numeric Tower Implementation (R7RS-small §6.2: integer ⊂ rational ⊂ real,
  * exact/inexact). Two classes based on exactness, both always present:
- * - AExact: arbitrary precision (bigint num/denom) — represents integers AND
- *   rationals (denom=1 is the integer case).
+ * - AExact: safe-integer RATIO (`number` num/denom, both always `Number.isSafeInteger`)
+ *   — represents integers AND rationals (denom=1 is the integer case). Per
+ *   docs/working-proposals/arrival-one-number-rework.md §2.0/§2.1: a result whose
+ *   num/denom would leave safe range THROWS (crash-on-overflow), never silently
+ *   coerces — see `values/mint-numeric.ts` for the mint choke-point.
  * - AInexact: IEEE 754 binary64 real, boxed.
  * Tower predicates check VALUES, not types.
  *
@@ -19,7 +22,7 @@ import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./primitives/AValue.js";
 import { AExact } from "./primitives/AExact.js";
 import { AInexact } from "./primitives/AInexact.js";
-import { ComplexNumberError } from "../errors.js";
+import { ComplexNumberError, ParseError } from "../errors.js";
 
 // ============================================================================
 // Complex-subsetting door (errors-as-doors)
@@ -42,21 +45,21 @@ export function complexDoor(): never {
 export type ANumeric = AExact | AInexact;
 
 /**
- * Integer square root of a non-negative bigint via Newton's method.
- * Math.sqrt(Number(n)) loses precision for n ≥ 2^53 and misclassifies large
- * perfect squares; bigint Newton is exact at every scale. Returns r with
- * r*r ≤ n < (r+1)*(r+1).
+ * Integer square root of a non-negative safe-integer `number` (`exact-integer-sqrt`'s
+ * core, §2.1 — replaces the old `bigintISqrt`; the bigint-Newton reason for existing is
+ * gone under the safe-int invariant, since `n` can never exceed
+ * `Number.MAX_SAFE_INTEGER` in the first place). `Math.sqrt` gives a float estimate that
+ * can be off by one at the boundary due to double rounding; the two correction loops
+ * below walk to the true integer sqrt. Every intermediate (`r*r`, `(r+1)*(r+1)`) stays
+ * safe by construction: `r ≤ sqrt(n) ≤ sqrt(MAX_SAFE_INTEGER)`, so `r*r ≤ n` always.
+ * Returns r with r*r ≤ n < (r+1)*(r+1).
  */
-export function bigintISqrt(n: bigint): bigint {
-  invariant(n >= 0n, "isqrt: negative");
-  if (n < 2n) return n;
-  let r = 1n << ((BigInt(n.toString(2).length) + 1n) / 2n);
-  while (true) {
-    const next = (r + n / r) / 2n;
-    if (next >= r) break;
-    r = next;
-  }
-  while (r * r > n) r -= 1n;
+export function exactISqrt(n: number): number {
+  invariant(Number.isSafeInteger(n) && n >= 0, "isqrt: requires a non-negative safe integer");
+  if (n < 2) return n;
+  let r = Math.floor(Math.sqrt(n));
+  while (r * r > n) r -= 1;
+  while ((r + 1) * (r + 1) <= n) r += 1;
   return r;
 }
 // ============================================================================
@@ -71,7 +74,7 @@ export function bigintISqrt(n: bigint): bigint {
  */
 export function toReal(n: ANumeric): number {
   if (n instanceof AExact) {
-    return Number(n.num) / Number(n.denom);
+    return n.num / n.denom;
   }
   return n.real;
 }
@@ -79,11 +82,11 @@ export function toReal(n: ANumeric): number {
 /**
  * Three-way comparison of two reals: -1 / 0 / 1, or NaN if incomparable
  * (either operand is a NaN inexact). The exact/exact case routes through
- * `SchemeExact.cmp` (bigint cross-multiplication) instead of coercing to a
- * JS double — that float coercion was the source of the R7RS bug where
- * `(< 999999999999999998 999999999999999999)` returned #f: both 18-digit
- * integers collapse to the same double (1e18), so `prev < curr` was false.
- * Only when at least one side is inexact do we fall back to `toReal`, where
+ * `AExact.cmp` — a safe-int cross-multiply compare, with a float fallback for the
+ * (now rare) case where the cross-multiplied intermediate itself would overflow
+ * (see `AExact.cmp`'s own doc: a comparator only needs ORDER, so a monotonic float
+ * approximation is a sound comparator even where the exact integer product can't be
+ * formed). Only when at least one side is inexact do we fall back to `toReal`, where
  * the precision is already gone and float comparison is the correct semantics
  * (and NaN naturally propagates → every comparison against it is #f).
  */
@@ -97,6 +100,23 @@ export function schemeCompare(a: ANumeric, b: ANumeric): number {
   if (ar > br) return 1;
   if (ar === br) return 0;
   return Number.NaN; // a NaN operand → incomparable; all chained tests fail
+}
+
+const PARSE_SAFE_MAX = BigInt(Number.MAX_SAFE_INTEGER);
+const PARSE_SAFE_MIN = BigInt(Number.MIN_SAFE_INTEGER);
+
+/** Parses a magnitude via BigInt (so arbitrarily many digits are read exactly, unlike
+ *  `parseInt`/`Number()` which silently round past 2^53) then gates it against the
+ *  safe-integer invariant (§0.3): a literal too large for exact THROWS `ParseError`
+ *  ("write it inexact") rather than either truncating or minting an impossible
+ *  bigint-backed `AExact`. `original` is the pre-parse source slice, for the message. */
+function parseSafeIntLiteral(magnitude: bigint, original: string): number {
+  if (magnitude > PARSE_SAFE_MAX || magnitude < PARSE_SAFE_MIN) {
+    throw new ParseError(
+      `exact literal ${original} exceeds safe-integer range — write it inexact (e.g. append a decimal point, or use #i) if approximation is acceptable`,
+    );
+  }
+  return Number(magnitude);
 }
 
 // PRE-RUN LEGITIMATE, re-verified (arrival-constant-ctx-audit-2026-07-11.md §2.5): a public,
@@ -159,10 +179,10 @@ export function parseNumber(str: string): ANumeric {
   // Handle rational (a/b)
   const rationalMatch = str.match(/^([+-]?\d+)\/(\d+)$/);
   if (rationalMatch) {
-    const num = BigInt(rationalMatch[1]);
-    const denom = BigInt(rationalMatch[2]);
+    const num = parseSafeIntLiteral(BigInt(rationalMatch[1]), str);
+    const denom = parseSafeIntLiteral(BigInt(rationalMatch[2]), str);
     const result = new AExact(CONSTANT_CTX, num, denom);
-    if (forceInexact && result instanceof AExact) {
+    if (forceInexact) {
       return result.toInexact();
     }
     return result;
@@ -177,15 +197,17 @@ export function parseNumber(str: string): ANumeric {
     return new AInexact(CONSTANT_CTX, value);
   }
 
-  // Handle integer. Parse the magnitude via BigInt so digits beyond 2^53 are
-  // preserved — `parseInt` would round to a lossy double before we ever reach
-  // `BigInt(...)`. BigInt accepts radix prefixes (0x/0o/0b) but not a trailing
-  // sign on them, so split the sign off first.
+  // Handle integer. Parse the magnitude via BigInt so digits beyond 2^53 are read
+  // exactly — `parseInt` would round to a lossy double before the safe-range gate ever
+  // saw the true value. BigInt accepts radix prefixes (0x/0o/0b) but not a trailing
+  // sign on them, so split the sign off first. `parseSafeIntLiteral` throws
+  // `ParseError` (never silently truncates/coerces) if the literal exceeds safe range.
   const neg = str.startsWith("-");
   const digits = neg || str.startsWith("+") ? str.slice(1) : str;
   const prefix = radix === 16 ? "0x" : radix === 8 ? "0o" : radix === 2 ? "0b" : "";
-  const magnitude = BigInt(prefix + digits);
-  const exact = new AExact(CONSTANT_CTX, neg ? -magnitude : magnitude);
+  const magnitudeBig = BigInt(prefix + digits);
+  const exactNum = parseSafeIntLiteral(neg ? -magnitudeBig : magnitudeBig, str);
+  const exact = new AExact(CONSTANT_CTX, exactNum);
   if (forceInexact) {
     return exact.toInexact();
   }
@@ -209,7 +231,7 @@ export function isComplex(_n: unknown): boolean {
 
 export function isInteger(n: unknown): n is AExact | bigint | number {
   if (n instanceof AExact) {
-    return n.denom === 1n;
+    return n.denom === 1;
   }
   if (n instanceof AInexact) {
     return false;

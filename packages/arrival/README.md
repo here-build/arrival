@@ -7,6 +7,23 @@
     Lisp finally built for AI *as the user*: the agent writes the programs. ![Elegant weapons,
     for a more civilized age.](https://imgs.xkcd.com/comics/lisp_cycles.png)
 
+**Interactive computing's second user has arrived.**
+
+Little here is new, and that is the point. The reader that presents serialized text as
+structure is a reader macro (1965). The error that names the fix is DWIM and the condition
+system (1974, 1984). Provenance riding values is a property list (1960). An environment that
+amends its own tool signatures while running is the live image (1980). We did not set out to
+rebuild the Lisp machine; we set out to fix how agents use tools, and every fix that survived
+measurement turned out to already be on the shelf.
+
+Some knowledge slips away not because it is stale, but because the practice that carried it
+broke — how to land on the moon is one such piece. Interactive computing solved the agent's
+exact problem — flattened text, no session, opaque errors, structure destroyed at every
+boundary — between 1958 and 1984, and the industry stepped away from it when the web went
+stateless. The LLM is the first new kind of user interactive computing has had since us. We
+recover what can still be grasped, neither with pride nor shame: engineering that was right
+the first time, needed again.
+
 Arrival is a programming medium, not a tool. The grain, stated by subtraction: take an ordinary
 small Scheme and remove its ability to hide — where a value came from, what a tool call was, what
 crossed the boundary. Most of what makes a language big is hiding: a produced value is an opaque

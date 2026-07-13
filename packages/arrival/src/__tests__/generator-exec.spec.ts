@@ -34,16 +34,16 @@ describe("generator-exec", () => {
     it("should evaluate simple arithmetic", async () => {
       const [result] = await exec("(+ 1 2 3)");
       expect(result).toBeInstanceOf(AExact);
-      expect((result as AExact).num).toBe(6n);
+      expect((result as AExact).num).toBe(6);
     });
 
     // INVARIANT: multiple top-level expressions each produce one result, in order
     it("should evaluate multiple expressions and return all results", async () => {
       const results = await exec("1 2 3");
       expect(results).toHaveLength(3);
-      expect((results[0] as AExact).num).toBe(1n);
-      expect((results[1] as AExact).num).toBe(2n);
-      expect((results[2] as AExact).num).toBe(3n);
+      expect((results[0] as AExact).num).toBe(1);
+      expect((results[1] as AExact).num).toBe(2);
+      expect((results[2] as AExact).num).toBe(3);
     });
 
     // INVARIANT: define binds a value (returning void) and later top-level forms see the binding
@@ -53,20 +53,20 @@ describe("generator-exec", () => {
       // define returns the void value (unspecified)
       expect(results[0]).toBe(theVoid);
       // x + 8 = 50
-      expect((results[1] as AExact).num).toBe(50n);
+      expect((results[1] as AExact).num).toBe(50);
     });
 
     // INVARIANT: lambdas parsed from string source evaluate/apply correctly
     it("should evaluate lambdas", async () => {
       const [result] = await exec("((lambda (x) (+ x 1)) 5)");
-      expect((result as AExact).num).toBe(6n);
+      expect((result as AExact).num).toBe(6);
     });
 
     // INVARIANT: nested arithmetic expressions compose correctly from string source
     it("should handle nested expressions", async () => {
       const [result] = await exec("(+ (* 2 3) (- 10 4))");
       // 2*3 + (10-4) = 6 + 6 = 12
-      expect((result as AExact).num).toBe(12n);
+      expect((result as AExact).num).toBe(12);
     });
   });
 
@@ -74,23 +74,23 @@ describe("generator-exec", () => {
     // INVARIANT: if from string source selects the correct branch for both #t and #f
     it("should handle if expressions", async () => {
       const [result1] = await exec("(if #t 1 2)");
-      expect((result1 as AExact).num).toBe(1n);
+      expect((result1 as AExact).num).toBe(1);
 
       const [result2] = await exec("(if #f 1 2)");
-      expect((result2 as AExact).num).toBe(2n);
+      expect((result2 as AExact).num).toBe(2);
     });
 
     // INVARIANT: let bindings from string source resolve correctly
     it("should handle let bindings", async () => {
       const [result] = await exec("(let ((x 3) (y 4)) (+ x y))");
-      expect((result as AExact).num).toBe(7n);
+      expect((result as AExact).num).toBe(7);
     });
 
     // INVARIANT: let* sequential bindings from string source resolve correctly
     it("should handle let* bindings", async () => {
       const [result] = await exec("(let* ((x 3) (y (+ x 1))) (+ x y))");
       // x=3, y=4, x+y=7
-      expect((result as AExact).num).toBe(7n);
+      expect((result as AExact).num).toBe(7);
     });
 
     // INVARIANT: letrec supports recursive definition (factorial) from string source
@@ -102,13 +102,13 @@ describe("generator-exec", () => {
                              (* n (fact (- n 1)))))))
           (fact 5))
       `);
-      expect((result as AExact).num).toBe(120n);
+      expect((result as AExact).num).toBe(120);
     });
 
     // INVARIANT: begin sequencing from string source returns the last value
     it("should handle begin", async () => {
       const [result] = await exec("(begin 1 2 3)");
-      expect((result as AExact).num).toBe(3n);
+      expect((result as AExact).num).toBe(3);
     });
 
     // INVARIANT: and/or short-circuit and value semantics hold from string source
@@ -134,7 +134,7 @@ describe("generator-exec", () => {
           (#t 2)
           (else 3))
       `);
-      expect((result as AExact).num).toBe(2n);
+      expect((result as AExact).num).toBe(2);
     });
 
     // INVARIANT: case dispatch from string source selects the matching clause
@@ -163,13 +163,13 @@ describe("generator-exec", () => {
       expect(result).toBeInstanceOf(APair);
       const list = result as APair<ASymbol, APair<AExact, any>>;
       expect(list.car.__name__).toBe("a");
-      expect(list.cdr.car.num).toBe(42n);
+      expect(list.cdr.car.num).toBe(42);
     });
 
     // INVARIANT: cons/car/cdr operate correctly on quoted list data from string source
     it("should handle cons/car/cdr", async () => {
       const [carResult] = await exec("(car '(1 2 3))");
-      expect((carResult as AExact).num).toBe(1n);
+      expect((carResult as AExact).num).toBe(1);
 
       const [cdrResult] = await exec("(cdr '(1 2 3))");
       expect(cdrResult).toBeInstanceOf(APair);
@@ -185,7 +185,7 @@ describe("generator-exec", () => {
               acc
               (loop (- n 1) (* acc n))))
       `);
-      expect((result as AExact).num).toBe(120n);
+      expect((result as AExact).num).toBe(120);
     });
   });
 
@@ -199,7 +199,7 @@ describe("generator-exec", () => {
             \`(if ,test (begin ,@body)))
           (when #t 1 2 3))
       `);
-      expect((result as AExact).num).toBe(3n);
+      expect((result as AExact).num).toBe(3);
     });
   });
 
@@ -212,7 +212,7 @@ describe("generator-exec", () => {
             ((>= i 5) sum))
       `);
       // sum of 0+1+2+3+4 = 10
-      expect((result as AExact).num).toBe(10n);
+      expect((result as AExact).num).toBe(10);
     });
   });
 
@@ -236,7 +236,7 @@ describe("generator-exec", () => {
     it("should evaluate a single parsed expression", async () => {
       const [parsed] = await parse("(+ 1 2)");
       const result = await execExpr(parsed);
-      expect((result as AExact).num).toBe(3n);
+      expect((result as AExact).num).toBe(3);
     });
   });
 
@@ -265,7 +265,7 @@ describe("generator-exec", () => {
           (+ a b)))
         (async-add 1 2)
       `);
-      expect((results[1] as AExact).num).toBe(3n);
+      expect((results[1] as AExact).num).toBe(3);
     });
   });
 
@@ -277,7 +277,7 @@ describe("generator-exec", () => {
           42
           (catch (e) 0))
       `);
-      expect((result as AExact).num).toBe(42n);
+      expect((result as AExact).num).toBe(42);
     });
 
     // INVARIANT: a raised exception inside try's body is caught by its catch clause,
@@ -288,7 +288,7 @@ describe("generator-exec", () => {
           (raise "error!")
           (catch (e) 99))
       `);
-      expect((result as AExact).num).toBe(99n);
+      expect((result as AExact).num).toBe(99);
     });
 
     // Skip this test until we improve error object handling
@@ -357,7 +357,7 @@ describe("generator-exec", () => {
           (#t 42))
           (raise "error"))
       `);
-      expect((result as AExact).num).toBe(42n);
+      expect((result as AExact).num).toBe(42);
     });
 
     // INVARIANT: guard returns the body's value unchanged when no exception is raised
@@ -367,7 +367,7 @@ describe("generator-exec", () => {
           (#t 0))
           (+ 1 2))
       `);
-      expect((result as AExact).num).toBe(3n);
+      expect((result as AExact).num).toBe(3);
     });
 
     // Skip until error-object? works correctly with generator evaluator
@@ -390,7 +390,7 @@ describe("generator-exec", () => {
         (my-param)
       `);
       // my-param returns 10
-      expect((results[1] as AExact).num).toBe(10n);
+      expect((results[1] as AExact).num).toBe(10);
     });
 
     it("should allow parameterize to rebind values", async () => {
@@ -400,7 +400,7 @@ describe("generator-exec", () => {
           (my-param))
       `);
       // Inside parameterize, my-param returns 42
-      expect((results[1] as AExact).num).toBe(42n);
+      expect((results[1] as AExact).num).toBe(42);
     });
 
     it("should restore parameter values after parameterize", async () => {
@@ -411,8 +411,8 @@ describe("generator-exec", () => {
         (my-param)
       `);
       // After parameterize, my-param returns 10 again
-      expect((results[1] as AExact).num).toBe(42n);
-      expect((results[2] as AExact).num).toBe(10n);
+      expect((results[1] as AExact).num).toBe(42);
+      expect((results[2] as AExact).num).toBe(10);
     });
   });
 });

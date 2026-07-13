@@ -73,12 +73,12 @@ export default new EnvCapability("scheme/bytevectors", {
 
     "bytevector-length": symbol.native`bytevector-length: number of bytes in the bytevector`(
       { input: [z.bytevector], output: [z.number] },
-      function (this: CallCtx, bv) { return new AExact(this.runCtx, BigInt(asBytevector(bv, "bytevector-length").byteLength)); },
+      function (this: CallCtx, bv) { return new AExact(this.runCtx, asBytevector(bv, "bytevector-length").byteLength); },
     ),
 
     "bytevector-u8-ref": symbol.native`bytevector-u8-ref: the byte at index k`(
       { input: [z.bytevector, z.schemeNumber], output: [z.number] },
-      function (this: CallCtx, bv, k) { return new AExact(this.runCtx, BigInt(asBytevector(bv, "bytevector-u8-ref")[toIndex(k)]!)); },
+      function (this: CallCtx, bv, k) { return new AExact(this.runCtx, asBytevector(bv, "bytevector-u8-ref")[toIndex(k)]!); },
     ),
 
     // ── PURITY DOORS — bytevector mutators OMITTED by design (R7RS §6.9) ─────────

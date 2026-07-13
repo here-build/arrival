@@ -50,7 +50,7 @@ describe("z.kwargs runtime — UNIT (direct def.run, manually-built pluck pairs)
       pluck("a"),
       new AString(CONSTANT_CTX, "Ada"),
       pluck("b"),
-      new AExact(CONSTANT_CTX, 5n),
+      new AExact(CONSTANT_CTX, 5),
     );
     expect((out as AString)["arrival/toJS"]()).toBe("Ada:5");
   });
@@ -65,7 +65,7 @@ describe("z.kwargs runtime — UNIT (direct def.run, manually-built pluck pairs)
     const out = await def.run.call(
       testCallCtx(),
       pluck("b"),
-      new AExact(CONSTANT_CTX, 5n),
+      new AExact(CONSTANT_CTX, 5),
       pluck("a"),
       new AString(CONSTANT_CTX, "Ada"),
     );

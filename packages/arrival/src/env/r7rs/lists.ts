@@ -111,7 +111,7 @@ function nonListAppendOperandError(item: SchemeValue): CarrierMismatchError {
 
 const lengthImpl = function (this: CallCtx, obj: unknown): AExact | AInexact {
   // R7RS length is an exact integer — box to AExact, matching string-length.
-  if (obj == null) return new AExact(this.runCtx, 0n);
+  if (obj == null) return new AExact(this.runCtx, 0);
   // Dispatch to the operand's OWN arrival/tagless-final/length — the per-primitive count
   // carries the ELEMENTS' unioned provenance and levies the circular-list check. TOTALIC:
   // a receiver with no length algebra is a type error, never a silent 0. A non-term
@@ -134,7 +134,7 @@ const lengthImpl = function (this: CallCtx, obj: unknown): AExact | AInexact {
   }
   if (typeof obj === "object" && "length" in obj) {
     const len = obj.length;
-    if (typeof len === "number") return withInputProvenance([obj], new AExact(this.runCtx, BigInt(len)));
+    if (typeof len === "number") return withInputProvenance([obj], new AExact(this.runCtx, len));
   }
   throw new TypeError(`length: the ${typeof obj} operand does not support length (no arrival/tagless-final/length).`);
 };

@@ -18,12 +18,13 @@ describe("printType — native identity primitives (scheme primitive → plain-T
   it("prints z.schemeString as string", () => {
     expect(printType(z.string)).toBe("string");
   });
-  // INVARIANT: the numeric tower prints exact as "bigint" and inexact as "number" via the
-  // name-keyed image, not the raw union.
-  it("prints the numeric tower as exact=bigint / inexact=number", () => {
-    // v2 makes these codecs/unions; the name-keyed image (bigint/inexact→number) prints them once,
-    // not the raw union OUT schema (which would be `bigint | bigint` / `bigint | number`).
-    expect(printType(z.bigint)).toBe("bigint");
+  // INVARIANT: the numeric tower prints exact and inexact both as "number" via the
+  // name-keyed image, not the raw union — z.bigint is retired (exact is a safe-integer
+  // ratio of `number`s per docs/working-proposals/arrival-one-number-rework.md §2.3).
+  it("prints the numeric tower as exact=number / inexact=number", () => {
+    // v2 makes these codecs/unions; the name-keyed image (bigint/exact/inexact→number) prints
+    // them once, not the raw union OUT schema (which would be `number | number`).
+    expect(printType(z.bigint)).toBe("number");
     expect(printType(z.inexact)).toBe("number");
   });
   // INVARIANT: symbol/bytevector/nil/boolean/char each print their documented plain-TS
@@ -55,8 +56,9 @@ describe("printType — native identity primitives (scheme primitive → plain-T
   });
   // INVARIANT: a union of primitives prints as "A | B" with the name-override applied per member.
   it("prints a union of primitives as 'A | B' (override fires per-member)", () => {
-    // schemeNumber has no name-image → composed per-member; exact→bigint, inexact→number.
-    expect(printType(z.schemeNumber)).toBe("bigint | number");
+    // schemeNumber has no name-image → composed per-member; exact and inexact both print
+    // "number" now (z.bigint retired) — undeduped, the same known gap as z.vector below.
+    expect(printType(z.schemeNumber)).toBe("number | number");
   });
   // REBASELINE (fe2c848ee7): pair no longer carries the "pair"→List-style name; the union
   // composes structurally, member-by-member, same as any other union of a non-list codec + nil.
@@ -91,17 +93,19 @@ describe("printType — rosetta codecs (decoded JS side, io:output)", () => {
     expect(printType(z.boolean)).toBe("boolean");
     expect(printType(z.char)).toBe("string");
   });
-  // INVARIANT: the number-codec family (number/integer/bigint) prints by its declared JS type.
+  // INVARIANT: the number-codec family (number/integer/bigint) prints by its declared JS type —
+  // z.bigint's face is "number" too (retired; exact is a safe-integer ratio of `number`s).
   it("prints the number-codec family by its declared JS type", () => {
     expect(printType(z.number)).toBe("number");
     expect(printType(z.integer)).toBe("number");
-    expect(printType(z.bigint)).toBe("bigint");
+    expect(printType(z.bigint)).toBe("number");
   });
   // INVARIANT: looseNumber / looseAnyNumber print by decoded JS type (IMAGE_BY_NAME).
   // Without images their OUT z.custom leaf would harvest as unknown — floor/abs collapse.
+  // looseAnyNumber's face is plain "number" now too (z.bigint retired — no more bigint arm).
   it("prints the loose number-codec family by its decoded JS type", () => {
     expect(printType(z.looseNumber)).toBe("number");
-    expect(printType(z.looseAnyNumber)).toBe("number | bigint");
+    expect(printType(z.looseAnyNumber)).toBe("number");
   });
 });
 

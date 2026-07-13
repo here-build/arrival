@@ -25,19 +25,21 @@ export function sym(name: string): ASymbol {
 
 /**
  * Create a Scheme number (exact for integers, inexact for floats)
+ *
+ * RE-PINNED (one-number rework, RATIO — docs/working-proposals/arrival-one-number-rework.md
+ * §0.2): AExact's payload is a safe-int `number` now, not `bigint` — the `bigint` overload
+ * dropped (a raw host bigint is an opaque pass-through post-rework, §2.3, never a scheme
+ * number a test helper should silently adopt as one).
  */
-export function num(n: number | bigint): AExact | AInexact {
-  if (typeof n === "bigint") {
-    return new AExact(CONSTANT_CTX, n);
-  }
-  return Number.isInteger(n) ? new AExact(CONSTANT_CTX, BigInt(n)) : new AInexact(CONSTANT_CTX, n);
+export function num(n: number): AExact | AInexact {
+  return Number.isInteger(n) ? new AExact(CONSTANT_CTX, n) : new AInexact(CONSTANT_CTX, n);
 }
 
 /**
  * Create an exact number (rational)
  */
-export function exact(num: number | bigint, denom: number | bigint = 1): AExact {
-  return new AExact(CONSTANT_CTX, BigInt(num), BigInt(denom));
+export function exact(num: number, denom: number = 1): AExact {
+  return new AExact(CONSTANT_CTX, num, denom);
 }
 
 /**

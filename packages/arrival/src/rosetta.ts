@@ -14,7 +14,6 @@ import { type RunContext } from "./values/primitives/RunContext.js";
 import { deepProvenance } from "./values/deep-provenance.js";
 import { AJSArray } from "./values/primitives/AJSArray.js";
 import { AJSObject } from "./values/primitives/AJSObject.js";
-import { AExact } from "./values/primitives/AExact.js";
 import { ANil, nil } from "./values/primitives/ANil.js";
 import { theVoid } from "./values/primitives/AVoid.js";
 import { ASymbol } from "./values/primitives/ASymbol.js";
@@ -47,7 +46,11 @@ interface RosettaOptions {
   // NOTE: a new field here must be classified in `modeKeyOf` below (projection-
   // affecting ⇒ new EgressMode member; wrapper-call-only ⇒ the Exclude list) — the
   // `_modeKeyExhaustive` type guard turns forgetting into a compile error.
-  forceBigInt?: boolean;
+  //
+  // `forceBigInt` RETIRED (docs/working-proposals/arrival-one-number-rework.md §2.3):
+  // bigint is now an opaque host value, not a scheme number — there is no numeric
+  // projection left to force. The scout confirmed no production setter ever existed,
+  // so this is a pure simplification, zero production behavior change.
   returnEither?: boolean;
   /**
    * When true, attaches `this.argProvenance` (flat `CallCtx`, not nested `ctx.…`) — one DEEP provenance set per scheme arg (union of every reachable AValue). Needed: `(list a b c)` carries no spine provenance, only elements — shallow `arg.provenance` misses per-element origins. Computed before schemeToJs strips AValue identity.
@@ -55,25 +58,25 @@ interface RosettaOptions {
   argProvenance?: boolean;
 }
 
-/** The membrane-crossing cache mode for `options` — `forceBigInt` is the ONE field
- *  that changes element projection (`returnEither`/`argProvenance` are read only
- *  inside createRosettaWrapper's call packaging, never by schemeToJsImpl or inbound
- *  jsToScheme — triad+Fable-verified). Feeds both the (box, mode, scope) container
- *  slots (egress-proxy) and the (callable, mode, scope) wrapper slots below. */
-export function modeKeyOf(options: RosettaOptions): EgressMode {
-  return options.forceBigInt ? "mem:1" : "mem:0";
+/** The membrane-crossing cache mode for `options` — historically split `mem:0`/`mem:1`
+ *  on `forceBigInt` (the one field that ever changed element projection); now retired
+ *  (§2.3 — bigint is an opaque host value, no longer a numeric-projection choice), so
+ *  every crossing resolves to the single non-bare mode. `returnEither`/`argProvenance`
+ *  are read only inside createRosettaWrapper's call packaging, never by schemeToJsImpl
+ *  or inbound jsToScheme — triad+Fable-verified. Feeds both the (box, mode, scope)
+ *  container slots (egress-proxy) and the (callable, mode, scope) wrapper slots below.
+ *  Kept as a function (not collapsed to the `EgressMode` constant `"mem"` at call
+ *  sites) so a FUTURE projection-affecting option still has exactly one place to key
+ *  from — see `_modeKeyExhaustive` below. */
+export function modeKeyOf(_options: RosettaOptions): EgressMode {
+  return "mem";
 }
 
 /** Type-level exhaustiveness: a NEW RosettaOptions field makes this `never` and the
  *  assignment a compile error, forcing the author to classify it (see modeKeyOf).
  *  (A destructure or `satisfies` does NOT do this — destructuring is never
  *  exhaustiveness-checked.) */
-type _ModeKeyHandles = Exclude<
-  keyof RosettaOptions,
-  "forceBigInt" | "returnEither" | "argProvenance"
-> extends never
-  ? true
-  : never;
+type _ModeKeyHandles = Exclude<keyof RosettaOptions, "returnEither" | "argProvenance"> extends never ? true : never;
 const _modeKeyExhaustive: _ModeKeyHandles = true;
 void _modeKeyExhaustive;
 
@@ -183,20 +186,11 @@ export function schemeToJsUnrecognizedDoor(value: object): Error {
 
 /**
  * Recursive body behind `schemeToJs`. `unknown`-typed, not `any`: recursion crosses raw JS intermediates no single generic can describe (raw array element, plain object field) — see `schemeToJs` doc for narrowing at public boundary.
- * LAZY: every boxed shape delegates to own `arrival/toJS` (one protocol, class-owned — P7). Containers egress as lazy readonly proxies (egress-proxy.ts); borrowed AJSObject/AJSArray unwrap to `source` IDENTITY (the borrowed-identity law); callables become inverse-rosetta region wrappers. Former ~90-line eager instanceof chain dissolved. HERE: only rosetta-specific surface protocol doesn't know: `forceBigInt`, elementwise crossing of RAW JS containers (elements may be boxed), sequence-op-term preserve, FFI allow-list, P5 door.
+ * LAZY: every boxed shape delegates to own `arrival/toJS` (one protocol, class-owned — P7). Containers egress as lazy readonly proxies (egress-proxy.ts); borrowed AJSObject/AJSArray unwrap to `source` IDENTITY (the borrowed-identity law); callables become inverse-rosetta region wrappers. Former ~90-line eager instanceof chain dissolved. HERE: only rosetta-specific surface protocol doesn't know: elementwise crossing of RAW JS containers (elements may be boxed), sequence-op-term preserve, FFI allow-list, P5 door.
  */
 function schemeToJsImpl(value: unknown, options: RosettaOptions): unknown {
   // null/undefined echo back unchanged (matches AUnwrap non-SchemeValue arm).
   if (value == null) return value;
-
-  // Rosetta-only numeric option — decided BEFORE protocol dispatch: overrides AExact `arrival/toJS` (safe-range number-else-bigint), applies to raw numbers too.
-  if (options.forceBigInt) {
-    if (value instanceof AExact) {
-      const val = value.valueOf();
-      return typeof val === "bigint" ? val : BigInt(Math.round(val as number));
-    }
-    if (typeof value === "number") return BigInt(value);
-  }
 
   // Scheme callable crossing OUT → region-scoped JS wrapper (reverse-membrane). Checked BEFORE protocol dispatch (callable IS AValue) so rosetta face threads OPTIONS into wrapper re-entry marshalling; protocol `arrival/toJS` on ACallable (options-less, plain `toJS`/exec) builds same wrapper with defaults.
   if (is_callable_value(value)) {
@@ -204,7 +198,7 @@ function schemeToJsImpl(value: unknown, options: RosettaOptions): unknown {
   }
 
   // Other boxed shapes: containers via `arrival/toJSMembrane` (full recursive
-  // projection — nested callables/forceBigInt/containers all honor `options`), the
+  // projection — nested callables/containers all honor `options`), the
   // rest via `arrival/toJS` — one dispatch, `egressAValue` (shared with membrane.toJS
   // so the two exits can't drift). Scalars unwrap, containers egress as lazy readonly
   // proxies (egress-proxy.ts — identity per (box, mode, scope) for membrane, per box
@@ -249,7 +243,10 @@ function schemeToJsImpl(value: unknown, options: RosettaOptions): unknown {
     throw schemeToJsUnrecognizedDoor(value);
   }
 
-  // Bare scalar (string/number/boolean/bigint under !forceBigInt) never boxed — already JS, returned as-is.
+  // Bare scalar (string/number/boolean/bigint) never boxed — already JS, returned as-is.
+  // bigint specifically: an opaque host value (§2.3), never reinterpreted as a scheme
+  // number — this fallthrough IS its identity pass-through, the same as the raw
+  // Uint8Array/ArrayBuffer/DataView/Promise arm above.
   return value;
 }
 
@@ -318,17 +315,22 @@ export interface InboundClaim {
  *  3. arrays claim BEFORE plain objects (an array is `typeof "object"` too);
  *  4. a plain-prototype object claims BEFORE the promise row, so a plain THENABLE
  *     stays a dict-shaped borrow (the historical behavior);
- *  5. scalars route to the boxer table (boxing.ts — the primitives' claim table);
+ *  5. scalars (string/number/boolean) route to the boxer table (boxing.ts — the
+ *     primitives' claim table); `bigint` is NOT among them (see row 10 below);
  *  6. non-AValue scheme orphans (EOF / Values / R7RSError) pass by identity — they
  *     ARE scheme values, formerly smuggled through the exotic passthrough;
- *  7. the binary FFI passthrough is the one DECLARED raw identity (named superset,
+ *  7. the binary FFI passthrough is one DECLARED raw identity (named superset,
  *     mirrors the outbound allow-list's own raw-passthrough treatment in schemeToJsImpl);
  *  8. a bare Promise DOORS (see jsToSchemeAsyncDoor — container entries settle
  *     lazily instead);
  *  9. every remaining object (class instance, Map, Date, Error, …) re-presents as a
  *     borrowed AJSObject, LOUDLY — the old silent raw-exotic leak is closed; member
  *     reads keep working through the interop policy, and the wrapper round-trips to
- *     source identity on exit.
+ *     source identity on exit;
+ *  10. `bigint` is the OTHER declared raw identity (docs/working-proposals/
+ *      arrival-one-number-rework.md §2.3): an opaque HOST value, not a scheme number
+ *      — never boxed into an `AExact`, rides the same raw pass-through lane as the
+ *      binary FFI row (7), placed adjacent to it.
  *
  * NOTE the registry-vs-switch history in boxing.ts: what that header rejects is
  * SELF-REGISTRATION (order by import accident). This is the opposite construction —
@@ -390,13 +392,15 @@ export const INBOUND_CLAIMS: readonly InboundClaim[] = [
     },
   },
   {
-    // JS primitives → the boxer table (boxing.ts): number/bigint → exact/inexact,
-    // boolean → ABool flyweights, string → AString — never raw, the sandbox only holds
-    // boxed AValues.
+    // JS primitives → the boxer table (boxing.ts): number → exact/inexact, boolean →
+    // ABool flyweights, string → AString — never raw, the sandbox only holds boxed
+    // AValues. `bigint` is deliberately EXCLUDED here — it's an opaque host value
+    // (row below, not the boxer table): claiming it here would let boxing.ts's fromJs
+    // mint it into an AExact, exactly the silent reinterpretation §2.3 forbids.
     name: "scalar → boxer table (fromJs)",
     claims: (v) => {
       const tag = typeof v;
-      return tag === "string" || tag === "number" || tag === "boolean" || tag === "bigint";
+      return tag === "string" || tag === "number" || tag === "boolean";
     },
     box: (ctx, v, p) => fromJs(ctx, v, p),
   },
@@ -431,7 +435,18 @@ export const INBOUND_CLAIMS: readonly InboundClaim[] = [
     box: (_ctx, v) => v,
   },
   {
-    // The one DECLARED raw passthrough (named superset: FFI identity) — mirrors the
+    // Opaque HOST value — not a scheme number (docs/working-proposals/
+    // arrival-one-number-rework.md §2.3): `number?` answers #f on it and arithmetic
+    // coercion doors (op-helpers.ts's `coerceNumeric`), so it must never be claimed by
+    // the scalar row above and boxed into an `AExact`. Rides the same raw identity
+    // lane as the binary FFI row below — the explicit, safe-range-checked door OUT of
+    // this opacity is `bigintToNumber` (this file).
+    name: "bigint → raw passthrough (opaque host value, not a scheme number)",
+    claims: (v) => typeof v === "bigint",
+    box: (_ctx, v) => v,
+  },
+  {
+    // The other DECLARED raw passthrough (named superset: FFI identity) — mirrors the
     // outbound allow-list's own raw-passthrough treatment in schemeToJsImpl.
     name: "binary (Uint8Array/ArrayBuffer/DataView/Buffer) → raw passthrough (declared)",
     claims: (v) =>
@@ -509,8 +524,8 @@ function jsToSchemeImpl(
  * outer wrapper already carries the stamp, so the cycle re-enters that wrapper, not an
  * infinite spine).
  * `options` is accepted for signature stability but the INBOUND crossing reads none of
- * it (`forceBigInt` is an outbound concern — it always was; the old impl only threaded
- * it, never read it).
+ * it (RosettaOptions is entirely an outbound/wrapper-call concern; the old impl only
+ * threaded it, never read it).
  * Honestly typed via `AWrap<T>` (values/types.ts): the caller's static JS input type
  * determines the exact AValue shape returned. This wrapper is the ONE sanctioned
  * narrowing (P3): the cast target is the exact conditional type the contract promises,
@@ -524,6 +539,34 @@ export function jsToScheme<T>(
   seen: WeakSet<object> = new WeakSet(),
 ): AWrap<T> {
   return jsToSchemeImpl(ctx, value, provenance, seen) as AWrap<T>;
+}
+
+/**
+ * The ONE explicit, safe-range-checked door out of an opaque host `bigint` (the
+ * INBOUND_CLAIMS "bigint → raw passthrough" row above) into a plain JS `number` a
+ * caller can then hand to `fromJs`/`mintNumeric` to become a genuine scheme exact.
+ * §2.3's opaque-host-value law: a bigint never SILENTLY becomes a scheme number
+ * (`coerceNumeric` doors on it); this is the sanctioned, explicit alternative —
+ * throws rather than losing precision on an out-of-range value, mirroring every
+ * other ingress gate in the one-number rework (values/mint-numeric.ts's
+ * crash-on-overflow law).
+ *
+ * PLACEMENT NOTE for the sweep that wires this up as a callable scheme verb
+ * (`bigint->number`): this function is the JS-level conversion only. Binding it as
+ * a `symbol.native` (the scheme-visible surface) belongs in whichever env/r7rs
+ * cluster owns numeric verbs (env/r7rs/numeric.ts is the natural home, alongside
+ * `exact->inexact`/`inexact->exact`) — that file is outside this sweep's scope, so
+ * it is not wired here; see this sweep's own report for the exact call shape.
+ */
+export function bigintToNumber(value: bigint): number {
+  if (value > BigInt(Number.MAX_SAFE_INTEGER) || value < BigInt(Number.MIN_SAFE_INTEGER)) {
+    throw new TypeError(
+      `bigint->number: ${value} exceeds safe-integer range — arrival's exact numbers are safe-integer ` +
+        "ratios (docs/working-proposals/arrival-one-number-rework.md), so this host bigint cannot convert " +
+        "without precision loss",
+    );
+  }
+  return Number(value);
 }
 
 export const createRosettaWrapper = ({ fn, options = {}, pure = false }: RosettaFunction) => {

@@ -3,13 +3,13 @@
 // returns the boxed value. Numeric-grammar helpers originate from the LIPS reader.
 import invariant from "tiny-invariant";
 import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
-import { is_int } from "../eval/guards.js";
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
 import { complexDoor } from "../values/numbers.js";
+import { mintExact } from "../values/mint-numeric.js";
 import { ParseError, strictGate } from "../errors.js";
 import {
   char_re,
@@ -38,6 +38,44 @@ function parseBigInt(str: string, radix: number = 10): bigint {
     result = result * base + BigInt(digit);
   }
   return negative ? -result : result;
+}
+
+// Safe-integer gate for exact literals (one-number-rework §0.3/§2.5): a source literal
+// whose exact magnitude would leave `Number.isSafeInteger` range THROWS a teaching
+// ParseError rather than silently truncating or minting an impossible AExact component
+// — the RATIO design has no bignum escape hatch, unlike the old bigint-backed AExact.
+// This is the reader's own twin of `values/numbers.ts`'s private `parseSafeIntLiteral`:
+// same law, duplicated rather than imported, because that helper belongs to
+// `parseNumber` — a deliberately separate, non-dual-use host utility (see that file's
+// header) — while parse_rational/parse_integer/parse_float here are the reader's LIVE
+// path (also called by `string->number`, env/r7rs/strings.ts).
+const PARSE_SAFE_MAX = BigInt(Number.MAX_SAFE_INTEGER);
+const PARSE_SAFE_MIN = BigInt(Number.MIN_SAFE_INTEGER);
+
+function exactOverflowInLiteral(original: string): never {
+  throw new ParseError(
+    `exact literal ${original} exceeds safe-integer range — write it inexact (use #i, or an inexact form) if approximation is acceptable`,
+    undefined,
+    "E-NUMERIC-OVERFLOW",
+  );
+}
+
+// Gates a magnitude read EXACTLY via `parseBigInt` (arbitrarily many source digits, no
+// per-digit float rounding) before it is ever narrowed to a `number` — sound because a
+// bigint magnitude outside [PARSE_SAFE_MIN, PARSE_SAFE_MAX] can never round back INTO
+// that range on conversion (same argument as AExact.cmp's overflow fallback: rounding
+// only ever lands on a representable neighbor of equal-or-greater distance from zero).
+function toSafeExactComponent(magnitude: bigint, original: string): number {
+  if (magnitude > PARSE_SAFE_MAX || magnitude < PARSE_SAFE_MIN) exactOverflowInLiteral(original);
+  return Number(magnitude);
+}
+
+// Gates a magnitude that is already a JS `number` (from Number.parseFloat/Math.round) —
+// the float-literal arms below, where the value started life as an IEEE double rather
+// than a hand-parsed digit string.
+function assertSafeExactComponent(value: number, original: string): number {
+  if (!Number.isSafeInteger(value)) exactOverflowInLiteral(original);
+  return value;
 }
 
 // ref: https://github.com/bestiejs/punycode.js/blob/master/punycode.js
@@ -108,12 +146,20 @@ export function parse_rational(arg: string, radix = 10, ctx: RunContext = CONSTA
   const parse = num_pre_parse(arg);
   const parts = parse.number!.split("/");
   const r = parse.radix || radix;
-  const num = parseBigInt(parts[0], r);
-  const denom = parseBigInt(parts[1], r);
+  const numBig = parseBigInt(parts[0], r);
+  const denomBig = parseBigInt(parts[1], r);
   if (parse.inexact) {
-    return new AInexact(ctx, Number(num) / Number(denom));
+    return new AInexact(ctx, Number(numBig) / Number(denomBig));
   }
-  return new AExact(ctx, num, denom);
+  // Components gated BEFORE the mint (never decline-to-parse: a rejected rational token
+  // must throw, not fall through to `parse_symbol` — one-number-rework §1's named hazard).
+  return mintExact(
+    ctx,
+    toSafeExactComponent(numBig, arg),
+    toSafeExactComponent(denomBig, arg),
+    undefined,
+    "parse rational",
+  );
 }
 
 export function parse_integer(arg: string, radix = 10, ctx: RunContext = CONSTANT_CTX): AExact | AInexact {
@@ -122,7 +168,7 @@ export function parse_integer(arg: string, radix = 10, ctx: RunContext = CONSTAN
   if (parse.inexact) {
     return new AInexact(ctx, Number.parseInt(parse.number!, r));
   }
-  return new AExact(ctx, parseBigInt(parse.number!, r));
+  return mintExact(ctx, toSafeExactComponent(parseBigInt(parse.number!, r), arg), 1, undefined, "parse integer");
 }
 
 function parse_character(arg: string, ctx: RunContext): ACharacter {
@@ -141,27 +187,6 @@ function parse_character(arg: string, ctx: RunContext): ACharacter {
   return new ACharacter(ctx, char);
 }
 
-function parse_big_int(str: string): {
-  exponent: number | undefined;
-  mantisa: bigint | undefined;
-} {
-  const num_match = str.match(/^(([-+]?\d*)(?:\.(\d+))?)e([-+]?\d+)/i);
-  let exponent: number | undefined;
-  let mantisa: bigint | undefined;
-  if (num_match) {
-    exponent = Number.parseInt(num_match[4], 10);
-    const digits = num_match[1].replace(/[-+]?(\d*)\..+$/, "$1").length;
-    const decimal_points = num_match[3]?.length;
-    if (digits < Math.abs(exponent)) {
-      mantisa = parseBigInt(num_match[1].replace(/\./, ""), 10);
-      if (decimal_points) {
-        exponent -= decimal_points;
-      }
-    }
-  }
-  return { exponent, mantisa };
-}
-
 function string_to_float(str: string): number {
   return Number.parseFloat(str);
 }
@@ -172,40 +197,38 @@ export function parse_float(arg: string, ctx: RunContext = CONSTANT_CTX): AExact
   const simple_number = (parse.number!.match(/\.0$/) || !/\./.test(parse.number!)) && !/e/i.test(parse.number!);
   if (!parse.inexact) {
     if (parse.exact && simple_number) {
-      return new AExact(ctx, BigInt(Math.round(value)));
+      return mintExact(ctx, assertSafeExactComponent(Math.round(value), arg), 1, undefined, "parse float");
     }
-    // positive big num that eval to int e.g.: 1.2e+20
-    if (is_int(value) && Number.isSafeInteger(value) && /e\+?\d/i.test(parse.number!)) {
-      return new AExact(ctx, BigInt(Math.round(value)));
-    }
-    // Calculate big int and big fraction by hand — doesn't fit in a JS float.
-    const { mantisa, exponent } = parse_big_int(parse.number!);
-    if (mantisa !== undefined && exponent !== undefined) {
-      const expAbs = Math.abs(exponent);
-      const factorBigInt = 10n ** BigInt(expAbs);
-      if (parse.exact && exponent < 0) {
-        return new AExact(ctx, mantisa, factorBigInt);
-      } else if (exponent > 0 && (parse.exact || !/\./.test(parse.number!))) {
-        return new AExact(ctx, mantisa * factorBigInt);
-      }
-    }
+    // An EXPONENT numeral (e.g. "1e2") defaults to INEXACT regardless of magnitude
+    // (R7RS §7.1.1: only a decimal-point-free, exponent-free numeral defaults exact) —
+    // an explicit #e is required to reach the exact arm at all, and that arm (below,
+    // "approximate as a rational via its decimal string") already handles any
+    // integer-valued float uniformly, whether it came from decimal or exponent form. A
+    // magnitude too big for a safe-int component ParseErrors there instead of
+    // constructing an unbounded rational — there is no bignum fallback under RATIO.
   }
   // Inexact float, but exact was requested — approximate as a rational via its decimal string.
   if (parse.exact) {
     const floatVal = value;
     if (Number.isInteger(floatVal)) {
-      return new AExact(ctx, BigInt(Math.round(floatVal)));
+      return mintExact(ctx, assertSafeExactComponent(Math.round(floatVal), arg), 1, undefined, "parse float");
     }
     const str = floatVal.toString();
     const decimalIndex = str.indexOf(".");
     if (decimalIndex !== -1) {
       const decimals = str.length - decimalIndex - 1;
-      const denom = 10n ** BigInt(decimals);
-      const num = BigInt(str.replace(".", "").replace("-", ""));
-      const sign = floatVal < 0 ? -1n : 1n;
-      return new AExact(ctx, sign * num, denom);
+      const denom = 10 ** decimals;
+      const num = Number(str.replace(".", "").replace("-", ""));
+      const sign = floatVal < 0 ? -1 : 1;
+      return mintExact(
+        ctx,
+        assertSafeExactComponent(sign * num, arg),
+        assertSafeExactComponent(denom, arg),
+        undefined,
+        "parse float",
+      );
     }
-    return new AExact(ctx, BigInt(Math.round(floatVal)));
+    return mintExact(ctx, assertSafeExactComponent(Math.round(floatVal), arg), 1, undefined, "parse float");
   }
   return new AInexact(ctx, value);
 }

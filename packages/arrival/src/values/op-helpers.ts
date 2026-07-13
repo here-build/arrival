@@ -339,17 +339,25 @@ export function coerceNumeric(value: unknown, ctx: RunContext = CONSTANT_CTX): A
     case value instanceof AInexact:
       return value;
     case typeof value === "bigint":
-      return new AExact(ctx, value);
+      // §2.3's opaque-host-value law (docs/working-proposals/arrival-one-number-rework.md):
+      // a bigint is NOT a scheme number — never silently minted into a (possibly
+      // out-of-range) exact. Door here, the arithmetic-coercion entry point, naming the
+      // explicit escape hatch (`bigint->number`, the safe-range-checked conversion).
+      throw new TypeError(
+        "host bigint is not a scheme number — use bigint->number (safe-range checked) to convert explicitly",
+      );
     // Safe ints exact (likely Scheme int literals); non-safe + floats inexact
     case typeof value === "number":
-      return Number.isSafeInteger(value) ? new AExact(ctx, BigInt(value)) : new AInexact(ctx, value);
+      return Number.isSafeInteger(value) ? new AExact(ctx, value) : new AInexact(ctx, value);
     case value && typeof value === "object" && "valueOf" in value && typeof value.valueOf === "function": {
       const val = value.valueOf();
       switch (true) {
         case typeof val === "bigint":
-          return new AExact(ctx, val);
+          throw new TypeError(
+            "host bigint is not a scheme number — use bigint->number (safe-range checked) to convert explicitly",
+          );
         case typeof val === "number":
-          return Number.isSafeInteger(val) ? new AExact(ctx, BigInt(val)) : new AInexact(ctx, val);
+          return Number.isSafeInteger(val) ? new AExact(ctx, val) : new AInexact(ctx, val);
         default:
           throw new TypeError(`Cannot convert to SchemeNumeric: ${val}`);
       }

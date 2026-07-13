@@ -43,11 +43,11 @@ describe("Wrapper Layer", () => {
 
     // INVARIANT: native AValue subtypes (AExact, AInexact, AString, ASymbol, APair) are recognized as scheme values
     it("recognizes native Scheme types", () => {
-      expect(isSchemeValue(new AExact(CONSTANT_CTX, 42n))).toBe(true);
+      expect(isSchemeValue(new AExact(CONSTANT_CTX, 42))).toBe(true);
       expect(isSchemeValue(new AInexact(CONSTANT_CTX, 3.14))).toBe(true);
       expect(isSchemeValue(new AString(CONSTANT_CTX, "hello"))).toBe(true);
       expect(isSchemeValue(new ASymbol(CONSTANT_CTX, "foo"))).toBe(true);
-      expect(isSchemeValue(new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n)))).toBe(true);
+      expect(isSchemeValue(new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2)))).toBe(true);
     });
 
     // INVARIANT: wrapper types (AJSObject) are recognized as scheme values
@@ -95,27 +95,36 @@ describe("Wrapper Layer", () => {
       expect(fromJS(undefined)).toBe(theVoid);
     });
 
-    // INVARIANT: JS primitives (bool/number/string/bigint) materialize into boxed AValue subtypes,
-    // never a raw leak; a registered symbol (Symbol.for) materializes to ASymbol, a unique symbol to #void
+    // INVARIANT: JS primitives (bool/number/string) materialize into boxed AValue subtypes,
+    // never a raw leak; a registered symbol (Symbol.for) materializes to ASymbol, a unique symbol
+    // to #void. bigint is the one exception — see the dedicated test right below.
     it("MATERIALIZES primitives to boxed AValues (host-agnostic — never a raw leak)", () => {
       expect(fromJS(true)).toBeInstanceOf(ABool);
       expect(fromJS(42)).toBeInstanceOf(AExact);
       expect(fromJS("hello")).toBeInstanceOf(AString);
-      expect(fromJS(42n)).toBeInstanceOf(AExact);
       // a UNIQUE symbol has no portable identity → #void; a REGISTERED one → the keyword :test
       expect(fromJS(Symbol("test"))).toBe(theVoid);
       expect(fromJS(Symbol.for("test"))).toBeInstanceOf(ASymbol);
+    });
+
+    // INVARIANT: bigint is an opaque host value (docs/working-proposals/
+    // arrival-one-number-rework.md §2.3) — NOT a scheme number — and rides the raw
+    // pass-through lane unboxed (never an AExact; arithmetic coercion doors instead,
+    // see coerce-numeric.spec.ts).
+    it("bigint stays raw — opaque host value, never boxed into an exact", () => {
+      expect(fromJS(42n)).toBe(42n);
+      expect(isSchemeValue(fromJS(42n))).toBe(false);
     });
 
     // INVARIANT: fromJS refuses an already-boxed scheme value, throwing "already-boxed" (pins implementation, not behavior)
     it("refuses an already-boxed scheme value (strict one-way door)", () => {
       // fromJS is the JS→Scheme entry; an interpreter-minted value never crosses
       // it. The old pass-through masked which-side-am-I-on confusion in callers.
-      const exact = new AExact(CONSTANT_CTX, 42n);
+      const exact = new AExact(CONSTANT_CTX, 42);
       // @ts-expect-error type-level: an AValue argument resolves to never
       expect(() => fromJS(exact)).toThrow(/already-boxed/);
 
-      const pair = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n));
+      const pair = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2));
       // @ts-expect-error type-level: an AValue argument resolves to never
       expect(() => fromJS(pair)).toThrow(/already-boxed/);
     });
@@ -218,7 +227,7 @@ describe("Wrapper Layer", () => {
     // INVARIANT: AExact (safe integer) converts to a JS number
     it("converts SchemeExact to number (safe integers)", () => {
       // SchemeExact.valueOf() returns number for safe integers
-      expect(toJS(new AExact(CONSTANT_CTX, 42n))).toBe(42);
+      expect(toJS(new AExact(CONSTANT_CTX, 42))).toBe(42);
     });
 
     // INVARIANT: AInexact converts to a JS number
@@ -228,7 +237,7 @@ describe("Wrapper Layer", () => {
 
     // INVARIANT: primitives (AExact/AString/ABool) pass through toJS with unchanged value
     it("passes through primitives", () => {
-      expect(toJS(new AExact(CONSTANT_CTX, 42n))).toBe(42);
+      expect(toJS(new AExact(CONSTANT_CTX, 42))).toBe(42);
       expect(toJS(new AString(CONSTANT_CTX, "hello"))).toBe("hello");
       expect(toJS(new ABool(CONSTANT_CTX, true))).toBe(true);
     });
@@ -244,7 +253,7 @@ describe("Wrapper Layer", () => {
 
     // INVARIANT: APair converts to a JS array
     it("keeps Pair as-is", () => {
-      const pair = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1n), new AExact(CONSTANT_CTX, 2n));
+      const pair = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2));
       expect(toJS(pair)).toEqual([1, 2]);
     });
   });
@@ -279,7 +288,7 @@ describe("Wrapper Layer", () => {
     it("rejects writes — the membrane is read-only (pure-dataflow sandbox)", () => {
       const source: any = { a: 1 };
       const obj = new AJSObject(CONSTANT_CTX, source);
-      expect(() => obj.set("a", new AExact(CONSTANT_CTX, 42n))).toThrow(/writes are banned/);
+      expect(() => obj.set("a", new AExact(CONSTANT_CTX, 42))).toThrow(/writes are banned/);
       expect(source.a).toBe(1); // nothing crossed the boundary
       expect(() => obj.delete("a")).toThrow(/mutations are banned/);
       expect(source.a).toBe(1);

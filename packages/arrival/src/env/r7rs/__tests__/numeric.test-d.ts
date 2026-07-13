@@ -16,17 +16,20 @@
 // static erasure above makes it type-unobservable — lives in the sibling
 // `numeric-contract-precision.test.ts`.
 //
-// AnyNum has no single scheme-zod schema (number-only / bigint-only don't cover the union), so
-// the pack's codec bridge maps it to an inline `z.union([z.number, z.bigint])` — decodes to
-// `number | bigint`. That inline union is mirrored here as `numOrBig`.
+// Per docs/working-proposals/arrival-one-number-rework.md §2.3, the numeric pack's own
+// NumSpecs have converged onto `z.schemeNumber` (the "scheme" face decodes to `ANumeric`,
+// i.e. `AExact | AInexact`) for essentially every op below, INCLUDING quotient/abs/zero? —
+// there is no surviving "AnyNum, plain number|bigint" shape in the live pack; the inline
+// `z.union([z.number, z.bigint])` pairing this file used to mirror is gone along with the
+// ops that used it. `z.bigint` itself still exists in scheme-zod.ts, but only as a KEPT
+// (deliberately not deleted) legacy compat export for consumers outside this sweep's scope
+// (chars.ts/strings.ts/srfi-13.ts) — the numeric pack's own contracts no longer reference
+// it at all, so it has no remaining "face" to prove here.
 
 import { describe, expectTypeOf, test } from "vitest";
 import * as z from "../../../common/scheme-zod.js";
 import type { DecodedArgs, DecodedArgsWithRest, DecodedReturn } from "../../../common/symbol.js";
 import type { ANumeric } from "../../../values/numbers.js";
-
-// AnyNum's inline pairing (numeric.ts CODEC_SCHEMA) — decodes to `number | bigint`.
-const numOrBig = z.union([z.number, z.bigint]);
 
 describe("numeric Contract precision — representative NumSpec shapes decode precisely", () => {
   // INVARIANT: pure-variadic ops (+) decode rest args and return as ANumeric
@@ -42,23 +45,29 @@ describe("numeric Contract precision — representative NumSpec shapes decode pr
     >();
   });
 
-  // INVARIANT: fixed-2-arity ops (quotient) decode args/return as bigint
-  test("fixed-2-arity (quotient): in:[Int,Int], out:Int — args are bigint, return bigint (matches quotientFn's (a: bigint, b: bigint) => bigint)", () => {
-    expectTypeOf<DecodedArgs<[typeof z.bigint, typeof z.bigint]>>().toEqualTypeOf<[bigint, bigint]>();
-    expectTypeOf<DecodedReturn<[typeof z.bigint]>>().toEqualTypeOf<bigint>();
+  // INVARIANT: fixed-2-arity ops (quotient) decode args/return as ANumeric, never bigint — quotient's
+  // own contract has moved OFF z.bigint entirely onto z.schemeNumber (numeric.ts's quotientSpec),
+  // matching quotientFn's real (a: ANumeric, b: ANumeric) => ANumeric.
+  test("fixed-2-arity (quotient): in:[SchemeNum,SchemeNum], out:SchemeNum — args/return are ANumeric, not bigint (matches quotientFn's (a: ANumeric, b: ANumeric) => ANumeric)", () => {
+    expectTypeOf<DecodedArgs<[typeof z.schemeNumber, typeof z.schemeNumber], "scheme">>().toEqualTypeOf<
+      [ANumeric, ANumeric]
+    >();
+    expectTypeOf<DecodedReturn<[typeof z.schemeNumber], "scheme">>().toEqualTypeOf<ANumeric>();
   });
 
-  // INVARIANT: fixed-1-arity-over-AnyNum ops (abs) decode as number|bigint, not unknown
-  test("fixed-1-arity over AnyNum (abs): in:[AnyNum], out:AnyNum — number|bigint, NOT unknown (matches absFn's (x: number|bigint) => number|bigint)", () => {
-    // AnyNum has no pre-existing single zod schema (number/integer/bigint each cover only ONE
-    // side of the number|bigint union) — the pack inlines `z.union([z.number, z.bigint])`.
-    expectTypeOf<DecodedArgs<[typeof numOrBig]>>().toEqualTypeOf<[number | bigint]>();
-    expectTypeOf<DecodedReturn<[typeof numOrBig]>>().toEqualTypeOf<number | bigint>();
+  // INVARIANT: fixed-1-arity ops (abs) decode as ANumeric, not unknown — the old "AnyNum, plain
+  // number|bigint" shape is retired along with the ops that used it; abs's own contract is
+  // z.schemeNumber too (numeric.ts's absSpec), matching schemeAbs's real (x: ANumeric) => ANumeric.
+  test("fixed-1-arity (abs): in:[SchemeNum], out:SchemeNum — ANumeric, NOT unknown (matches schemeAbs's (x: ANumeric) => ANumeric)", () => {
+    expectTypeOf<DecodedArgs<[typeof z.schemeNumber], "scheme">>().toEqualTypeOf<[ANumeric]>();
+    expectTypeOf<DecodedReturn<[typeof z.schemeNumber], "scheme">>().toEqualTypeOf<ANumeric>();
   });
 
-  // INVARIANT: boolean-output predicates (zero?) decode return as boolean, not unknown
-  test("boolean-output predicate (zero?): in:[AnyNum], out:Bool — return boolean, not unknown (matches isZeroFn's (x: number|bigint) => boolean)", () => {
-    expectTypeOf<DecodedArgs<[typeof numOrBig]>>().toEqualTypeOf<[number | bigint]>();
+  // INVARIANT: boolean-output predicates (zero?) decode args as ANumeric, return as boolean, not
+  // unknown — zero?'s input is z.schemeNumber too (numeric.ts's zeroSpec), matching isZeroFn's
+  // real (x: ANumeric) => boolean.
+  test("boolean-output predicate (zero?): in:[SchemeNum], out:Bool — args ANumeric, return boolean, not unknown (matches isZeroFn's (x: ANumeric) => boolean)", () => {
+    expectTypeOf<DecodedArgs<[typeof z.schemeNumber], "scheme">>().toEqualTypeOf<[ANumeric]>();
     expectTypeOf<DecodedReturn<[typeof z.boolean]>>().toEqualTypeOf<boolean>();
   });
 
@@ -72,8 +81,8 @@ describe("numeric Contract precision — regression guard: the shared mechanism 
   // additions (pins implementation, not behavior)
   test("apply's own declared shape (lists.ts) is untouched by anything added here — same proof symbol.test-d.ts already carries", () => {
     // Mirrors symbol.test-d.ts's own "apply's own declared shape" test byte-for-byte — a
-    // canary that the numeric-pack-local additions (CODEC_SCHEMA, contractFromSpec, the inline
-    // z.union([z.number, z.bigint]) AnyNum pairing) cannot have perturbed the shared inputRest mechanism itself.
+    // canary that the numeric-pack-local additions (CODEC_SCHEMA, contractFromSpec, the
+    // z.schemeNumber-based NumSpecs above) cannot have perturbed the shared inputRest mechanism itself.
     expectTypeOf<DecodedArgsWithRest<[typeof z.value], typeof z.value>>().toEqualTypeOf<
       [import("../../../values/types.js").SchemeValue, ...import("../../../values/types.js").SchemeValue[]]
     >();

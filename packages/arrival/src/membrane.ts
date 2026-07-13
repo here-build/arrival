@@ -111,10 +111,16 @@ export type BoxedSchemeValue =
  *     preserving; membrane.spec pins "preserves Uint8Array identity"), for the
  *     polymorphic bytevector ops rather than an owned `ABytevector` copy;
  *   • `Promise<unknown>` — stays raw for the evaluator trampoline to await.
+ *   • `bigint` — an opaque HOST value (docs/working-proposals/
+ *     arrival-one-number-rework.md §2.3), NOT a scheme number: never boxed into an
+ *     `AExact` (arithmetic on it doors — op-helpers.ts's `coerceNumeric` — and
+ *     `number?` answers #f), rides the same raw identity lane as the binary FFI row
+ *     above. `bigintToNumber` (rosetta.ts) is the explicit, safe-range-checked door
+ *     out of this opacity.
  * These carriers are NOT value-intent, so they stay out of `SchemeValue`
  * (values/types.ts) — this boundary type is the seam that holds them.
  */
-type FromJSResult = BoxedSchemeValue | Uint8Array | ArrayBuffer | DataView | Promise<unknown>;
+type FromJSResult = BoxedSchemeValue | Uint8Array | ArrayBuffer | DataView | Promise<unknown> | bigint;
 
 /**
  * Check if a value is already a Scheme value (prevents double-wrapping).
@@ -191,6 +197,13 @@ const jsToWrapper = new DefaultedWeakMap<object, AJSArray | AJSObject>((key) =>
  *  passing through. Type-level: an `AValue`-typed argument resolves to `never`. */
 export function fromJS<T>(value: [T] extends [AValue] ? never : T): FromJSResult {
   if (isSchemeValue(value)) throw new RedundantCrossingError("fromJS");
+
+  // Opaque host value (§2.3) — not a scheme number, never boxed into an AExact. Same
+  // raw-identity treatment as the binary/Promise arms below, checked first since a
+  // bigint is a JS primitive (would otherwise fall to the leaf jsToScheme call, which
+  // already agrees via INBOUND_CLAIMS's own "bigint → raw passthrough" row — this
+  // early return is for clarity/perf, not a different law).
+  if (typeof value === "bigint") return value;
 
   // Containers get membrane-specific handling: array → borrowed AJSArray vector (JS array IS an
   // R7RS vector); binary stays raw (FFI identity, membrane.spec pins it); Promise stays raw (the

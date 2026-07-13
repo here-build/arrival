@@ -75,9 +75,9 @@ describe("equality contract — boxed ≡ unboxed (representation-blind)", () =>
   // SchemeExact(1) ≡ plain-1 ≡ SchemeInexact(1.0) by transitivity, collapsing the grade. That's a
   // deferred design question (V). Strings/booleans have no grade, so they ARE representation-blind.
   it("number: boxed ≡ boxed, exact ≠ inexact (grade survives)", () => {
-    expect(eq(new AExact(CONSTANT_CTX, 1n, 1n), new AExact(CONSTANT_CTX, 1n, 1n))).toBe(true);
-    expect(eq(new AExact(CONSTANT_CTX, 1n, 1n), new AExact(CONSTANT_CTX, 2n, 1n))).toBe(false);
-    expect(eq(new AExact(CONSTANT_CTX, 1n, 1n), new AInexact(CONSTANT_CTX, 1))).toBe(false); // 1 ≠ 1.0 (grade-strict)
+    expect(eq(new AExact(CONSTANT_CTX, 1, 1), new AExact(CONSTANT_CTX, 1, 1))).toBe(true);
+    expect(eq(new AExact(CONSTANT_CTX, 1, 1), new AExact(CONSTANT_CTX, 2, 1))).toBe(false);
+    expect(eq(new AExact(CONSTANT_CTX, 1, 1), new AInexact(CONSTANT_CTX, 1))).toBe(false); // 1 ≠ 1.0 (grade-strict)
   });
 
   // CHARACTERS & SYMBOLS — always boxed in practice (no plain-JS counterpart), so boxed-vs-boxed
