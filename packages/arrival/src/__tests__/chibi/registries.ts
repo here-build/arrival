@@ -191,19 +191,23 @@ export const EXCLUDED: readonly Exclusion[] = [
     feature: "helper (test-exception-handler-1) defined via call-with-current-continuation — sandbox omits continuations",
     note: "sibling test-exception-handler-2 uses `guard` instead and is NOT excluded — matches v1",
   },
-  {
-    match: { kind: "symbols", anyOf: ["exact-integer-sqrt", "rationalize", "square"] },
-    feature: "numeric procedure not yet implemented",
-  },
+  // square / exact-integer-sqrt / rationalize are implemented in r7rs/numeric (product pair
+  // for isqrt). Cascade form exclusions below still skip chibi rows that bind via let*-values
+  // (multi-return binder is purity-doored).
   {
     match: { kind: "form", exact: normalizeText(`(test 35 (* root rem))`) },
-    feature: "numeric procedure not yet implemented — cascading: `root`/`rem` come from `exact-integer-sqrt` in the enclosing `let*-values`",
-    note: "block-member symbol-visibility gap (manifest.ts blockMembers): `exact-integer-sqrt` sits in the block's OWN binding head, not this member's datum",
+    feature: "exact-integer-sqrt product used via let*-values (multi-return binder doored) — cascading",
+    note: "block-member symbol-visibility gap; isqrt itself is implemented as (s . r) pair",
   },
   {
     match: { kind: "form", exact: normalizeText(`(test 0 rem)`) },
-    feature: "numeric procedure not yet implemented — cascading: `rem` comes from `exact-integer-sqrt` in the enclosing `let*-values`",
-    note: "same block-member symbol-visibility gap as the row above",
+    feature: "exact-integer-sqrt product used via let*-values (multi-return binder doored) — cascading",
+    note: "same block-member gap as the row above",
+  },
+  {
+    match: { kind: "form", exact: normalizeText(`(test (expt 2 140) (square root))`) },
+    feature: "exact-integer-sqrt product used via let*-values (multi-return binder doored) — cascading",
+    note: "2^140 block sibling of (test 0 rem); root unbound when let*-values is doored",
   },
   {
     match: {

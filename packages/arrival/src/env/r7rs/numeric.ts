@@ -527,6 +527,54 @@ const denominatorFn = (x: ANumeric): ANumeric => {
   return new AInexact(x.ctx, Number(denom));
 };
 
+// ── R7RS S2 gaps: square / exact-integer-sqrt / rationalize ─────────────────────────
+
+const squareFn = (x: ANumeric): ANumeric => schemeMul(x, x);
+
+/** R7RS exact-integer-sqrt: (s . r) with s² ≤ n < (s+1)² and n = s² + r. Product pair. */
+const exactIntegerSqrtFn = function (this: CallCtx, n: unknown): APair<AExact, AExact> {
+  const a = coerceNumeric(n, this.runCtx);
+  invariant(a instanceof AExact && a.denom === 1n, "exact-integer-sqrt: exact integer required");
+  invariant(a.num >= 0n, "exact-integer-sqrt: non-negative integer required");
+  const s = bigintISqrt(a.num);
+  const r = a.num - s * s;
+  return new APair(this.runCtx, new AExact(this.runCtx, s), new AExact(this.runCtx, r));
+};
+
+/** Simplest rational in [x, y] (x ≤ y). R7RS-style recursive invert of fractional parts. */
+function simplestInRange(x: number, y: number): { num: bigint; denom: bigint } {
+  if (y < x) return simplestInRange(y, x);
+  if (x <= 0 && y >= 0) return { num: 0n, denom: 1n };
+  if (y < 0) {
+    const n = simplestInRange(-y, -x);
+    return { num: -n.num, denom: n.denom };
+  }
+  if (x < 0) return simplestInRange(0, y);
+  const fx = Math.floor(x);
+  const fy = Math.floor(y);
+  // x is integer (at left bound)
+  if (fx >= x) return { num: BigInt(fx), denom: 1n };
+  // an integer lies strictly between x and y
+  if (fx + 1 <= y) return { num: BigInt(fx + 1), denom: 1n };
+  // same integer part: n + 1/q where q is simplest in inverted fractional range
+  const inv = simplestInRange(1 / (y - fx), 1 / (x - fx));
+  // n + 1/(p/q) = n + q/p = (n*p + q)/p
+  return { num: BigInt(fx) * inv.num + inv.denom, denom: inv.num };
+}
+
+const rationalizeFn = function (this: CallCtx, x: unknown, e: unknown): ANumeric {
+  const xv = coerceNumeric(x, this.runCtx);
+  const ev = coerceNumeric(e, this.runCtx);
+  const xr = toReal(xv);
+  const er = Math.abs(toReal(ev));
+  invariant(Number.isFinite(xr) && Number.isFinite(er), "rationalize: finite reals required");
+  const { num, denom } = simplestInRange(xr - er, xr + er);
+  if (xv instanceof AExact && ev instanceof AExact) {
+    return new AExact(this.runCtx, num, denom);
+  }
+  return new AInexact(this.runCtx, Number(num) / Number(denom));
+};
+
 // ── Transcendentals ─────────────────────────────────────────────────────────────────
 
 const sqrtFn = (x: ANumeric): ANumeric => {
@@ -929,6 +977,7 @@ const truncateQuotientSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], ou
 const truncateRemainderSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: truncateRemainderFn };
 const numeratorSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: numeratorFn };
 const denominatorSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: denominatorFn };
+const squareSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: squareFn };
 const makeRectangularSpec: NumSpec = { in: [z.looseNumber, z.looseNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
 const makePolarSpec: NumSpec = { in: [z.looseNumber, z.looseNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
 const realPartSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
@@ -976,6 +1025,12 @@ const PREDICATE_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = { input: 
 /** floor/ truncate/ → (q . r); input schemeNumber. */
 const QUOTIENT_REMAINDER_PRODUCT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber, z.schemeNumber],
+  output: [z.pair],
+};
+
+/** exact-integer-sqrt → (s . r); one non-neg exact integer input. */
+const EXACT_ISQRT_PRODUCT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
+  input: [z.schemeNumber],
   output: [z.pair],
 };
 
@@ -1067,6 +1122,15 @@ export default new EnvCapability("scheme/numeric", {
     denominator: symbol.native`denominator: denominator of a rational`(
       contractFromSpec(denominatorSpec),
       nativeNumericOp("denominator", denominatorSpec),
+    ),
+    square: symbol.native`square: n * n`(contractFromSpec(squareSpec), nativeNumericOp("square", squareSpec)),
+    "exact-integer-sqrt": symbol.native`exact-integer-sqrt: (s . r) with s² ≤ n < (s+1)² and n = s² + r`(
+      EXACT_ISQRT_PRODUCT_CONTRACT,
+      exactIntegerSqrtFn as (...args: unknown[]) => unknown,
+    ),
+    rationalize: symbol.native`rationalize: simplest rational within e of x`(
+      TWO_ARG_NUM_OUTPUT_CONTRACT,
+      rationalizeFn as (...args: unknown[]) => unknown,
     ),
     "make-rectangular": symbol.native`make-rectangular: DOORED (complex unsupported)`(
       contractFromSpec(makeRectangularSpec),
