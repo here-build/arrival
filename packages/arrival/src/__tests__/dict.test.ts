@@ -28,8 +28,10 @@ describe("dict constructor", () => {
 
   it("(dict) with no pairs is an empty object", async () => {
     const [n] = await exec(`(:missing (dict))`, { env });
-    // accessor on an absent key returns nil
-    expect(n == null || (n as { valueOf?: () => unknown })?.valueOf?.() == null).toBe(true);
+    // accessor on an absent key returns nil — whose JS face is [] (nil-as-array,
+    // V 2026-07-13); accept the boxed ANil (valueOf → undefined) or the [] face.
+    const face = (n as { valueOf?: () => unknown })?.valueOf?.() ?? n;
+    expect(face == null || (Array.isArray(face) && face.length === 0)).toBe(true);
   });
 });
 

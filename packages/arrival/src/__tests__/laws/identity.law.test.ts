@@ -68,7 +68,7 @@ describe("nil-clone witness sanity (NOT a bug — guards the test fixture)", () 
     expect([...cloneNil(7).provenance]).toEqual([7]);
   });
   it("clone serializes the same as nil", () => {
-    expect(cloneNil()["arrival/toJS"]()).toBe(null);
+    expect(cloneNil()["arrival/toJS"]()).toEqual([]); // nil-as-array (V 2026-07-13)
     expect(cloneNil().toString()).toBe("()");
   });
 });
@@ -77,18 +77,18 @@ describe("membrane.ts — `=== nil` identity-equality sites", () => {
   it("isSchemeValue(nil-clone) — is true (membrane.ts, instanceof AValue dispatch)", () => {
     expect(isSchemeValue(cloneNil())).toBe(true);
   });
-  it("toJS(nil-clone) — is null (membrane.ts, full protocol dispatch)", () => {
-    expect(toJS(cloneNil())).toBe(null);
+  it("toJS(nil-clone) — is [] (membrane.ts, full protocol dispatch; nil-as-array)", () => {
+    expect(toJS(cloneNil())).toEqual([]);
   });
 });
 
 describe("rosetta.ts — `=== nil` identity-equality sites", () => {
-  // Both exit as JS `null` now — schemeToJs delegates to arrival/toJS (the lazy
-  // membrane-accessor rework, 2026-07-09); ANil's toJS returns null whether the
-  // clone carries provenance or not, so the singleton and a clone agree.
-  it("schemeToJs(nil-clone) — returns null, same as the singleton (via arrival/toJS)", () => {
+  // Both exit as JS `[]` now — schemeToJs delegates to arrival/toJS (nil-as-array,
+  // V 2026-07-13); ANil's toJS returns [] whether the clone carries provenance or
+  // not, so the singleton and a clone agree.
+  it("schemeToJs(nil-clone) — returns [], same as the singleton (via arrival/toJS)", () => {
     const singletonResult = schemeToJs(nil);
-    expect(singletonResult).toBeNull();
+    expect(singletonResult).toEqual([]);
     expect(schemeToJs(cloneNil())).toEqual(singletonResult);
   });
 

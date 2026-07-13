@@ -57,8 +57,15 @@ export class ANil extends AValue {
     return [];
   }
 
-  ["arrival/toJS"](): null {
-    return null;
+  ["arrival/toJS"](): never[] {
+    // '()'s JS face is [] — the empty case of the ONE list projection (a proper list
+    // egresses as an array; emptiness must not flip the JS type to `null`). Ruled by V
+    // 2026-07-13 ("nil-as-array"); this also matches what the compiled world emits for
+    // '(), so interpreter face and compiled face agree (the differential oracle compares
+    // through this face). Ingress stays permissive: JS null → nil, JS arrays → borrowed
+    // vectors — egress is canonical, ingress is forgiving; the container round trip is
+    // projection∘borrow, not identity.
+    return [];
   }
 
   withProvenance(p: ReadonlySet<number>): ANil {

@@ -26,7 +26,7 @@ export const CROSSINGS: readonly CrossingRow[] = [
   { type: "float number", entryForm: "AInexact", exitForm: "number", roundTrip: true },
   { type: "bigint", entryForm: "AExact", exitForm: "number in safe range, else bigint", roundTrip: false }, // normalizes to number in-range
   { type: "string", entryForm: "AString", exitForm: "string", roundTrip: true },
-  { type: "null", entryForm: "ANil (nil)", exitForm: "null", roundTrip: false }, // known asymmetry, [fails]-ledgered
+  { type: "null", entryForm: "ANil (nil)", exitForm: "[] (the empty list's array face)", roundTrip: false }, // asymmetric BY LAW: ingress permissive (null→nil), egress canonical (nil→[]) — V ruling 2026-07-13
   { type: "undefined", entryForm: "AVoid", exitForm: "undefined", roundTrip: true },
   { type: "registered symbol (Symbol.for)", entryForm: "ASymbol", exitForm: "opaque symbol mapping (design pending, todo-ledgered)", roundTrip: false },
   { type: "unique symbol", entryForm: "VOID (refused, warn)", exitForm: "n/a", roundTrip: false },

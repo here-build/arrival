@@ -251,14 +251,13 @@ describe("jsToScheme → schemeToJs round-trip", () => {
     expect(result).toEqual({ outer: { inner: 42 } });
   });
 
-  // null → nil (jsToScheme), and schemeToJs(nil) → null: the reverse now
-  // delegates to arrival/toJS (ANil's toJS returns null), closing the round
-  // trip exactly. The old rosetta-surface asymmetry (nil singleton, not null)
-  // is gone — the lazy membrane-accessor rework, 2026-07-09.
-  // INVARIANT: null round-trips symmetrically through nil back to null (the historical
-  // jsToScheme(null)→nil / schemeToJs(nil)→nil-singleton asymmetry is fixed, not live)
-  it("null round-trips to null (jsToScheme null → nil, schemeToJs nil → null)", () => {
-    expect(schemeToJs(jsToScheme(CONSTANT_CTX, null))).toBeNull();
+  // null → nil (jsToScheme); schemeToJs(nil) → [] — the reverse delegates to
+  // arrival/toJS, whose face is the empty list's ARRAY (nil-as-array, V ruling
+  // 2026-07-13: emptiness must not flip a list's JS type to null; matches the
+  // compiled world's '() representation). The round trip is asymmetric BY LAW:
+  // ingress permissive (null → nil), egress canonical (nil → []).
+  it("null enters as nil and exits as [] (ingress permissive, egress canonical)", () => {
+    expect(schemeToJs(jsToScheme(CONSTANT_CTX, null))).toEqual([]);
   });
 });
 
@@ -372,11 +371,12 @@ describe("membrane fromJS / toJS — round-trip + wrapper-cache identity", () =>
     expect(toJS(fromJS(10n))).toBe(10);
   });
 
-  // INVARIANT: null round-trips through nil to null
-  it("null round-trips through nil", () => {
-    // fromJS(null) → nil (the singleton). toJS(nil) → null via `value === nil`.
+  // LAW (nil-as-array, V 2026-07-13): null enters as nil; nil exits as [] — the
+  // empty list's array face. Asymmetric by design (ingress permissive, egress canonical).
+  it("null enters as nil; nil exits as []", () => {
+    // fromJS(null) → nil (the singleton). toJS(nil) → [] via ANil's arrival/toJS.
     // @ts-expect-error fromJS returns `FromJSResult` (wider than `SchemeValue`); see above.
-    expect(toJS(fromJS(null))).toBe(null);
+    expect(toJS(fromJS(null))).toEqual([]);
   });
 
   // INVARIANT: an object round-trips through AJSObject preserving the exact source reference

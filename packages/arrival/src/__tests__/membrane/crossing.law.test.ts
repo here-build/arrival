@@ -211,20 +211,24 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         expect(fromJS(null)).toBe(nil);
       });
       it(exitTitle, () => {
-        expect(toJS(nil)).toBe(null);
+        // nil-as-array (V ruling 2026-07-13): '()'s JS face is [] — the empty case of
+        // the ONE list projection; emptiness must not flip the list's JS type to null.
+        expect(toJS(nil)).toEqual([]);
       });
-      // Round-trip is now EXACT: schemeToJs delegates to arrival/toJS (the lazy
-      // membrane-accessor rework, 2026-07-09), so schemeToJs(nil) → JS `null`
-      // like toJS(nil), and jsToScheme(null) → nil closes the loop. The old
-      // rosetta-surface asymmetry (schemeToJs(nil) → the nil singleton) is gone.
+      // Round-trip is asymmetric BY LAW: ingress is permissive (null → nil), egress is
+      // canonical (nil → []). null → nil → [] — a JS null re-emerges as the empty
+      // list's array face, matching what a non-empty list does and what the compiled
+      // world emits for '() (the differential oracle compares through this face).
       it(roundTripTitle, () => {
-        expect(schemeToJs(jsToScheme(CONSTANT_CTX, null))).toBeNull();
+        expect(schemeToJs(jsToScheme(CONSTANT_CTX, null))).toEqual([]);
       });
       it(provenanceTitle, () => {
         const stamped = jsToScheme(CONSTANT_CTX, null, {}, PROV);
         expect(stamped).toBeInstanceOf(ANil);
         expect([...stamped.provenance]).toEqual([...PROV]);
-        expect(toJS(stamped)).toBe(null);
+        const out = toJS(stamped);
+        expect(out).toEqual([]);
+        expectNoProvenanceProperty(out);
       });
       break;
     }
@@ -566,15 +570,15 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         expectNoProvenanceProperty(out);
         expectNoProvenanceProperty(out[0]);
       });
-      // Carried from rosetta-environment.test.ts (docs/test-suite-v2/REMOVAL-MANIFEST.md
-      // §A) as a design-pending stub, not dropped: `(list)` evaluates to the `nil`
-      // singleton, and today `schemeToJs(nil)` exits per the "null" row above (JS `null`),
-      // not `[]`. Whether the EMPTY list should instead exit as an empty array (matching a
-      // non-empty proper list's array shape) is an open design question — it needs a
-      // second nil-like marker distinguishing "empty list" from "not a list at all" to
-      // preserve that metadata on the reverse conversion. Original v1 comment: "this one
-      // is tricky and will probably require deep rewrite of runtime."
-      it.todo("exit: (list) — the empty list — as an empty array, not null (open design question)");
+      // RESOLVED (V ruling 2026-07-13, "nil-as-array"): the open design question closed —
+      // the empty list exits as [] like every proper list exits as an array; emptiness no
+      // longer flips the JS type. The feared "deep rewrite of runtime" was one method
+      // (ANil["arrival/toJS"]). Reverse metadata is NOT preserved by design: ingress stays
+      // permissive/borrowing (null → nil, [] → borrowed vector) — projection∘borrow, not id.
+      it("exit: (list) — the empty list — as an empty array, not null (resolved: nil-as-array)", () => {
+        expect(toJS(nil)).toEqual([]);
+        expect(schemeToJs(nil)).toEqual([]);
+      });
       break;
     }
 
