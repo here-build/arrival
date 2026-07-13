@@ -22,7 +22,11 @@ import { EnvCapability } from "../../common/capability.js";
 
 export default new EnvCapability("scheme/chars", {
   symbols: {
-    "char?": symbol.taglessGuard`char?: #t iff obj is a character`,
+    // Char harvest image is string (single-char); no separate ambient Char carrier.
+    "char?": {
+      ...symbol.taglessGuard`char?: #t iff obj is a character`,
+      type: "(x: unknown) => x is string",
+    },
 
     "char=?": symbol.native`char=?: typed equivalence over characters`(
       { input: [], inputRest: z.char, output: [z.boolean] },

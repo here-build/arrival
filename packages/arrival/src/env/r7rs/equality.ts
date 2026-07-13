@@ -119,7 +119,12 @@ export default new EnvCapability("scheme/equality", {
     ),
 
     "procedure?": symbol.native`procedure?: callable, excluding macros`(
-      { input: [z.lambda], output: [z.boolean] },
+      // Total type predicate: any value in, #f on non-callables. Harvest is a TS type guard.
+      {
+        input: [z.value],
+        output: [z.boolean],
+        type: "(x: unknown) => x is (...args: unknown[]) => unknown",
+      },
       // A procedure is any callable EXCEPT a macro — this includes a membrane SchemeJSFunction
       // (typeof "object"), which the old `typeof obj === "function"` test wrongly excluded.
       function (this: CallCtx, obj) { return new ABool(ctxOf(obj), is_callable(obj) && !is_macro(obj)); },
@@ -170,17 +175,24 @@ export default new EnvCapability("scheme/equality", {
     ),
 
     // ── R7RS type predicates ──────────────────────────────────────────────────
-    // Representation-blind like the equivalence predicates above: each accepts a
-    // boxed AValue OR a raw JS value that crossed the rosetta membrane.
-    "string?": symbol.native`string?: boxed-or-raw string test`({ input: [z.value], output: [z.boolean] }, function (this: CallCtx, obj) { return bool(obj instanceof AString); },
+    // Runtime: representation-blind (boxed AValue OR raw membrane value).
+    // Harvest: TS type-guards via `type:` — lens dialect is plain JS + List/Pair
+    // (carriers.ts). Arrow form `(x: unknown) => x is T` so prelude
+    // `declare const p?: SIG` accepts a type-predicate function type.
+    "string?": symbol.native`string?: boxed-or-raw string test`(
+      { input: [z.value], output: [z.boolean], type: "(x: unknown) => x is string" },
+      function (this: CallCtx, obj) { return bool(obj instanceof AString); },
     ),
 
     // `(pair? x)` asks the receiver's own `arrival/tagless-final/pair?` (APair answers #t); the
     // guard's graceful default (#f) covers everything else — no `instanceof APair` reach-around.
-    "pair?": symbol.taglessGuard`pair?: #t iff obj is a pair (cons cell)`,
+    "pair?": {
+      ...symbol.taglessGuard`pair?: #t iff obj is a pair (cons cell)`,
+      type: "(x: unknown) => x is Pair<unknown, unknown>",
+    },
 
     "null?": symbol.native`null?: empty-list test`(
-      { input: [z.value], output: [z.boolean] },
+      { input: [z.value], output: [z.boolean], type: "(x: unknown) => x is null" },
       // The empty list is the ANil singleton (and its provenance clones). Raw JS
       // null/undefined no longer reach here — the membrane boxes JS null→nil and
       // undefined→theVoid before any value enters the language — so the legacy
@@ -189,13 +201,17 @@ export default new EnvCapability("scheme/equality", {
     ),
 
     "boolean?": symbol.native`boolean?: boxed-or-raw boolean test`(
-      { input: [z.value], output: [z.boolean] },
+      { input: [z.value], output: [z.boolean], type: "(x: unknown) => x is boolean" },
       // L1 boxes parser literals as SchemeBool — JS `typeof` no longer catches them.
       // Mirrors the `number?` / `string?` pattern of accepting both raw and boxed forms.
       function (this: CallCtx, obj) { return bool(obj instanceof ABool); },
     ),
 
-    "symbol?": symbol.taglessGuard`symbol?: #t iff obj is an interned symbol`,
+    // Symbol prints as string in the harvest image (no separate ambient Symbol carrier).
+    "symbol?": {
+      ...symbol.taglessGuard`symbol?: #t iff obj is an interned symbol`,
+      type: "(x: unknown) => x is string",
+    },
 
     // `dict?` — Racket's dict predicate, the missing counterpart to our native `{…}` /
     // `(dict …)` open-key map (polyglot.ts). We ship the type but had no predicate for
@@ -208,7 +224,11 @@ export default new EnvCapability("scheme/equality", {
     // non-object foreign value is not a dict.
     "dict?":
       symbol.native`dict?: #t iff obj is a dict — a native open-key record ({…} / (dict …)), not a list, string, vector, or foreign class instance`(
-        { input: [z.value], output: [z.boolean] },
+        {
+          input: [z.value],
+          output: [z.boolean],
+          type: "(x: unknown) => x is Record<string, unknown>",
+        },
         // `obj` is the honest `SchemeValue` union, which includes non-AValue arms (EOF, Values,
         // a bare fn) with no `.ctx` — `ctxOf` (already imported) is the narrowing read: an AValue
         // yields its own ctx, anything else falls back to CONSTANT_CTX.
@@ -216,7 +236,7 @@ export default new EnvCapability("scheme/equality", {
       ),
 
     "list?": symbol.native`list?: proper-list test (cycle-safe)`(
-      { input: [z.value], output: [z.boolean] },
+      { input: [z.value], output: [z.boolean], type: "(x: unknown) => x is List<unknown>" },
       // A circular list is NOT a proper list (R7RS); detect runtime cycles too
       // (have_cycles below only catches reader #0= cycles).
       function (this: CallCtx, obj) {

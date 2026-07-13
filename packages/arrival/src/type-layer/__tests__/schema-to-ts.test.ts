@@ -182,6 +182,23 @@ describe("signatureOf — the args-vector → function-signature composer", () =
     expect(signatureOf(def)).toBe("(ip: SchemeIP) => SchemeIP");
   });
 
+  // INVARIANT: `?` type predicates harvest as TS type-guards (arrow form for declare const).
+  it("honors a type-guard `type` on a native type predicate (x is T)", () => {
+    const def = symbol.native`string?: proof`(
+      { input: [z.value], output: [z.boolean], type: "(x: unknown) => x is string" },
+      () => true,
+    );
+    expect(signatureOf(def)).toBe("(x: unknown) => x is string");
+  });
+
+  it("honors a type-guard `type` on a taglessGuard type predicate", () => {
+    const def = {
+      ...symbol.taglessGuard`vector?: proof`,
+      type: "(x: unknown) => x is readonly unknown[]",
+    };
+    expect(signatureOf(def)).toBe("(x: unknown) => x is readonly unknown[]");
+  });
+
   // INVARIANT: a native def composes as scheme-value args with a synchronous (non-Promise) return.
   it("composes a native def: scheme-value args, sync return, single-value output", () => {
     const def = symbol.native`cons: build a pair`(

@@ -416,6 +416,13 @@ export interface TaglessGuardSymbolDef {
   readonly run: (...schemeArgs: unknown[]) => Promise<unknown>;
   /** Always `"pipe"` — same rationale as `TaglessSymbolDef.provenance`. */
   readonly provenance: ProvenanceRole;
+  /**
+   * Author-asserted harvest signature — same role as `Contract.type` on native/rosetta.
+   * Tagless guards have no Contract bag; type predicates set this so the lens sees a TS
+   * type-guard (`(x: unknown) => x is T`) instead of the shapeless `(...args: unknown[]) => unknown`
+   * that `z.array(z.value)`/`z.value` would print.
+   */
+  readonly type?: string;
   /** See `TaglessSymbolDef.callbackRoles` — same shapeless-contract rationale. */
   readonly callbackRoles?: CallbackRoles;
   /** Extension bag — see `MetadataRecord` (kind-agnostic; every def carries the slot). */

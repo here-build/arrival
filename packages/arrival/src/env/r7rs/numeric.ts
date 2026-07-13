@@ -1016,11 +1016,17 @@ const bitwiseXorSpec: NumSpec = { in: [], inRest: z.bigint, out: z.bigint, fn: b
 // `lcmSpec` describes that INTERNAL step, not `lcmFn`'s real `(...unknown[]) => ANumeric`
 // signature, so it is not reused here.) ─────────────────────────────────────────────
 
-/** `complex?`/`real?`/`rational?`/`integer?`/`exact?`/`inexact?`/`exact-integer?`/
- *  `finite?`/`infinite?`/`nan?`/`number?` — all `(value: unknown) => boolean`, TOTAL
- *  over the value domain (never throws, a non-number is simply `#f`). Representation-
- *  blind input (matches `lists.ts`'s own convention for "genuinely could be anything"). */
-const PREDICATE_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = { input: [z.value], output: [z.boolean] };
+/** Type-predicate harvest helper — total boolean at runtime; `type:` is a TS type-guard.
+ *  Tower images: exact → bigint, inexact → number, schemeNumber → number | bigint. */
+const typePred = (narrow: string): Contract<VectorSpec, VectorSpec, RestSpec> => ({
+  input: [z.value],
+  output: [z.boolean],
+  type: `(x: unknown) => x is ${narrow}`,
+});
+
+const NUMBER_GUARD = typePred("number | bigint");
+const EXACT_GUARD = typePred("bigint");
+const INEXACT_GUARD = typePred("number");
 
 /** floor/ truncate/ → (q . r); input schemeNumber. */
 const QUOTIENT_REMAINDER_PRODUCT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
@@ -1195,44 +1201,46 @@ export default new EnvCapability("scheme/numeric", {
     "even?": symbol.native`even?: #t iff n is even`(contractFromSpec(evenSpec), nativeNumericOp("even?", evenSpec)),
 
     // ── R7RS tower-type predicates (total — a non-number is #f, not an error) ─────
+    // type: guards — complex/real/rational/integer all live in the number tower image.
     "complex?": symbol.native`complex?: #t for any number`(
-      PREDICATE_CONTRACT,
+      NUMBER_GUARD,
       nativeTypePredicate("complex?", (n) => n.isComplex),
     ),
     "real?": symbol.native`real?: #t for any number (reals-only tower)`(
-      PREDICATE_CONTRACT,
+      NUMBER_GUARD,
       nativeTypePredicate("real?", (n) => n.isReal),
     ),
     "rational?": symbol.native`rational?: #t for finite reals`(
-      PREDICATE_CONTRACT,
+      NUMBER_GUARD,
       nativeTypePredicate("rational?", (n) => n.isRational),
     ),
     "integer?": symbol.native`integer?: #t for integer values (exact or inexact)`(
-      PREDICATE_CONTRACT,
+      NUMBER_GUARD,
       nativeTypePredicate("integer?", (n) => n.isInteger),
     ),
     "exact?": symbol.native`exact?: #t for exact numbers`(
-      PREDICATE_CONTRACT,
+      EXACT_GUARD,
       nativeTypePredicate("exact?", (n) => n.isExact),
     ),
     "inexact?": symbol.native`inexact?: #t for inexact numbers`(
-      PREDICATE_CONTRACT,
+      INEXACT_GUARD,
       nativeTypePredicate("inexact?", (n) => !n.isExact),
     ),
     "exact-integer?": symbol.native`exact-integer?: #t for exact integers`(
-      PREDICATE_CONTRACT,
+      EXACT_GUARD,
       nativeTypePredicate("exact-integer?", (n) => n.isExact && n.isInteger),
     ),
+    // finite?/infinite?/nan? refine among numbers; harvest as number|bigint (same tower).
     "finite?": symbol.native`finite?: #t for finite numbers`(
-      PREDICATE_CONTRACT,
+      NUMBER_GUARD,
       nativeTypePredicate("finite?", (n) => n.isFinite),
     ),
     "infinite?": symbol.native`infinite?: #t for ±infinity`(
-      PREDICATE_CONTRACT,
+      INEXACT_GUARD, // ±inf are inexact only in our tower
       nativeTypePredicate("infinite?", (n) => !n.isFinite && !n.isNaN),
     ),
     "nan?": symbol.native`nan?: #t for NaN`(
-      PREDICATE_CONTRACT,
+      INEXACT_GUARD,
       nativeTypePredicate("nan?", (n) => n.isNaN),
     ),
 
@@ -1304,7 +1312,7 @@ export default new EnvCapability("scheme/numeric", {
     // R8 mint: boxes + forwards the operand's provenance (see nativeTypePredicate's doc
     // for why an unboxed native return is a P4 violation). Rest-param shape matches Impl's
     // variadic contract — no arity-erasing cast needed.
-    "number?": symbol.native`number?: #t for any number`(PREDICATE_CONTRACT, function (this: CallCtx, ...args: unknown[]): ABool {
+    "number?": symbol.native`number?: #t for any number`(NUMBER_GUARD, function (this: CallCtx, ...args: unknown[]): ABool {
       const [value] = args;
       return mintVerdict([value], isSchemeNumber(value));
     }),

@@ -317,11 +317,9 @@ export function signatureOf(def: AEntity): string {
   if (def.kind === "door" || def.kind === "keyword" || def.kind === "macro" || def.kind === "define-syntax") {
     return "never";
   }
-  // `Contract.type` — an author-asserted override, decoupled from the zod-derived computation
-  // below (see its doc comment). Present ⇒ the author's word is final; absent (the common case,
-  // and the ONLY option for tagless/tagless-guard, which carry no Contract) ⇒ fall through to
-  // computing from the contract's own `in`/`out`, unchanged. `"type" in def` (not `def.type`)
-  // because tagless/tagless-guard don't have the field at all, not even as `undefined`.
+  // Author-asserted `type` override (Contract.type on native/rosetta/sequence/define, or
+  // TaglessGuardSymbolDef.type on type-predicate guards). Present ⇒ final for the harvest;
+  // absent ⇒ derive from in/out. `"type" in def` so pure-tagless (no field) falls through.
   if ("type" in def && def.type !== undefined) return def.type;
   try {
     // A `symbol.define` CONSTANT (`callable: false`) is a plain VALUE, not a call

@@ -26,7 +26,7 @@ import { EnvCapability } from "../../common/capability.js";
 export default new EnvCapability("scheme/bytevectors", {
   symbols: {
     "bytevector?": symbol.native`bytevector?: #t iff the object is a bytevector (boxed or raw binary)`(
-      { input: [z.value], output: [z.boolean] },
+      { input: [z.value], output: [z.boolean], type: "(x: unknown) => x is Uint8Array" },
       function (this: CallCtx, obj) {
         // Polymorphic by design: scheme producers mint SchemeBytevector, but raw
         // binary legitimately flows from FFI through the membrane unboxed (it

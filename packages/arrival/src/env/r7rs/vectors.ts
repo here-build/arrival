@@ -95,7 +95,11 @@ export default new EnvCapability("scheme/vectors", {
     // boxed SchemeVector and a borrowed AJSArray return #t; everything else declares no such
     // method, so the guard's graceful default (#f) is the answer. No `instanceof AVector`
     // reach-around in the builtin (the Family-2 "reached around the box" dissolution).
-    "vector?": symbol.taglessGuard`vector?: #t iff obj is a vector`,
+    "vector?": {
+      ...symbol.taglessGuard`vector?: #t iff obj is a vector`,
+      // Vector = native TS array in the harvest dialect (carriers: vector ≡ readonly T[]).
+      type: "(x: unknown) => x is readonly unknown[]",
+    },
 
     "vector-length": symbol.native`vector-length: number of elements in vec`(
       { input: [z.vector(z.value)], output: [z.number] },
