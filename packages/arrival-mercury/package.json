@@ -1,0 +1,53 @@
+{
+  "name": "@inhuman.tools/arrival-mercury",
+  "version": "0.1.0",
+  "description": "The mercury differential-oracle harness: interpreter (arrival-run session) vs compiled (mercury run-view executed via tsx tsImport), compared as black-box source-in/value-out outcomes. Owns the ErrorClass taxonomy, oracleEqual comparator, and the 3-way corpus check (oracle-harness.md §2-§4).",
+  "keywords": [
+    "arrival",
+    "mercury",
+    "oracle",
+    "differential-testing"
+  ],
+  "license": "UNLICENSED",
+  "private": true,
+  "author": "here.build",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "src",
+    "!**/__tests__",
+    "!**/__research__",
+    "!**/__benchmarks__",
+    "!**/__custdev__",
+    "!**/__visual__",
+    "!**/*.test.*",
+    "!**/*.stories.*"
+  ],
+  "scripts": {
+    "build": "tsc --build --force",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@here.build/arrival": "workspace:^",
+    "@inhuman.tools/arrival-run": "workspace:^",
+    "@inhuman.tools/mercury": "workspace:^",
+    "tsx": "4.22.4",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@here.build/tsconfig": "workspace:^",
+    "@types/node": "24.0.0",
+    "typescript": "6.0.2",
+    "vitest": "4.1.0"
+  }
+}
