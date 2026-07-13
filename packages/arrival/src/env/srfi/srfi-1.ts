@@ -9,7 +9,8 @@
 //   • Live: take/drop/take-while/drop-while, span/break/partition as (list a b),
 //     first…tenth, last/last-pair, find/find-tail, filter/remove/delete*,
 //     fold-right/reduce/reduce-right, concatenate/append-reverse, iota, zip,
-//     some (+ any alias)/every, list-index, count, filter-map, append-map,
+//     any?/every?/some (honest booleans) + any/every (SRFI value-returning —
+//     see DEVIATIONS), list-index, count, filter-map, append-map,
 //     length+, list-tabulate, unfold (HISTORICAL protocol — see DEVIATIONS).
 //   • Doored: remaining official exports — linear-update `!` purity doors; pure
 //     unshipped names as subset doors; bare `fold` → reduce / fold-right.
@@ -19,8 +20,12 @@
 //
 // DEVIATIONS FROM SRFI-1 (read before porting):
 //   • Multi-return doored on binding; span/break/partition products are (list a b).
-//   • some is SRFI any (Ramda-familiar name); `any` aliases it. both some and every
-//     return #t/#f only (not last-pred-value).
+//   • (resolved 2026-07-13) any/every now split by name: `?`-suffixed (any?/every?)
+//     are the HONEST boolean predicates (the old #t/#f-only behavior, relocated
+//     here); bare any/every are SRFI-1's OWN value-returning quantifiers — any →
+//     first truthy predicate RESULT or #f; every → LAST predicate RESULT if every
+//     element-tuple is truthy, #t on empty, #f on first falsy. `some` (Ramda-
+//     familiar name) aliases any? exactly, staying boolean.
 //   • (fixed 2026-07-13) find miss → #f per SRFI-1; predicate verdicts use R7RS
 //     truthiness (only #f is false — '() counts as a match, same as some/every/if).
 //   • unfold is NOT SRFI's (p f g seed); historical (fn init) pair-or-#f protocol.
@@ -46,15 +51,17 @@
 //     (drop/drop-while/append-reverse/concatenate): `z.value` when embedding caller tails.
 //   - counts/indices: `z.exact` from exact arithmetic; `z.schemeNumber` when re-exporting
 //     another verb's numeric output (count ← length).
-//   - some/every: `z.boolean` — #t/#f only, not SRFI last-pred-value.
+//   - any?/every?/some: `z.boolean` — HONEST #t/#f predicates. Bare any/every:
+//     `z.value` — SRFI-1's own value-returning result (see DEVIATIONS).
 //
 // PERF PROTOCOL: contract costs one decode + async hop PER BOUND CALL. Named-let
 // recursion never re-crosses the boundary (one cold decode per outer call). %list-nth /
-// %any-null? / %some / %every / zip use that idiom. take/drop are tagless dispatchers.
-// validate:false unused — evidence-gated only.
+// %any-null? / %some / %any / %every / %every-value / zip use that idiom. take/drop are
+// tagless dispatchers. validate:false unused — evidence-gated only.
 import { type CallCtx, type MaybePromise, resolveMethod, symbol, withCallbackRoles } from "../../common/symbol.js";
 import dedent from "dedent";
 import { EnvCapability } from "../../common/capability.js";
+import { attachOffendingValue } from "../../errors.js";
 import { is_false } from "../../eval/guards.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import { schemeFalse } from "../../values/primitives/ABool.js";
@@ -229,8 +236,11 @@ export default new EnvCapability("scheme/srfi-1", {
           const [pred, seq] = args;
           const m = resolveMethod(seq, tf("filter"));
           if (m === undefined) {
-            throw new TypeError(
-              `filter: the ${seq == null ? String(seq) : typeof seq} operand does not support filter (no ${(tf("filter"))}).`,
+            throw attachOffendingValue(
+              new TypeError(
+                `filter: the ${seq == null ? String(seq) : typeof seq} operand does not support filter (no ${(tf("filter"))}).`,
+              ),
+              seq,
             );
           }
           // `resolveMethod`'s own return type is `unknown` (it's a bare tagless-final term
@@ -359,8 +369,11 @@ export default new EnvCapability("scheme/srfi-1", {
         const [xs, n] = args;
         const m = resolveMethod(xs, tf("take"));
         if (m === undefined) {
-          throw new TypeError(
-            `take: the ${xs == null ? String(xs) : typeof xs} operand does not support take (no ${tf("take")}).`,
+          throw attachOffendingValue(
+            new TypeError(
+              `take: the ${xs == null ? String(xs) : typeof xs} operand does not support take (no ${tf("take")}).`,
+            ),
+            xs,
           );
         }
         const k = typeof n === "number" ? n : (n as { valueOf(): number }).valueOf();
@@ -384,8 +397,11 @@ export default new EnvCapability("scheme/srfi-1", {
         const [xs, n] = args;
         const m = resolveMethod(xs, tf("drop"));
         if (m === undefined) {
-          throw new TypeError(
-            `drop: the ${xs == null ? String(xs) : typeof xs} operand does not support drop (no ${tf("drop")}).`,
+          throw attachOffendingValue(
+            new TypeError(
+              `drop: the ${xs == null ? String(xs) : typeof xs} operand does not support drop (no ${tf("drop")}).`,
+            ),
+            xs,
           );
         }
         const k = typeof n === "number" ? n : (n as { valueOf(): number }).valueOf();
@@ -872,18 +888,24 @@ export default new EnvCapability("scheme/srfi-1", {
          (apply append (apply map fn lists)))`,
     ),
 
-    // some / every — existence and universal quantifiers over parallel lists. (some is
-    // SRFI-1's `any`, kept under the Ramda-familiar name; both return #t/#f, arrival's
-    // historical deviation from SRFI's last-pred-value, preserved 1:1.) %any-null?/
-    // %some/%every are private helpers; some must precede zip and list-index, which
-    // call it (forward references across defines in the same capability are legal —
-    // checked eagerly, not by textual order). Bodies use the #t/#f LITERALS
-    // directly, not core's `true`/`false` constant names — referencing those names
-    // would add a `deps: [core]` edge on the C3 precedence FLOOR (core leads
-    // BASE_PACKS; a tail-block repositioning of core is semantically absurd).
-    // Named-let idiom on all three % helpers (see the file header's PERF
-    // PROTOCOL note); enforcement stays on.
-    "%any-null?": symbol.define`%any-null?: #t iff any of the parallel lists is exhausted (private helper for %some/%every)`(
+    // any?/every? — HONEST boolean quantifiers over parallel lists (arrival's
+    // ?-naming convention); bare any/every are SRFI-1's OWN value-returning
+    // quantifiers (2026-07-13 ruling — see the file header's DEVIATIONS). `some`
+    // is the Ramda-familiar name for SRFI-1's `any`, kept boolean: it aliases any?
+    // exactly (symbol.alias — a byte-identical duplicate binding, never a wrapper).
+    // %any-null?/%some/%any/%every/%every-value are private helpers; any?/some must
+    // precede zip and list-index, which call `some` (forward references across
+    // defines in the same capability are legal — checked eagerly, not by textual
+    // order). Bodies use the #t/#f LITERALS directly, not core's `true`/`false`
+    // constant names — referencing those names would add a `deps: [core]` edge on
+    // the C3 precedence FLOOR (core leads BASE_PACKS; a tail-block repositioning of
+    // core is semantically absurd). Named-let idiom on all helpers (see the file
+    // header's PERF PROTOCOL note); enforcement stays on. The value-returning
+    // helpers (%any/%every-value) BIND the predicate's result in a `let` instead of
+    // collapsing it to a literal #t — R7RS truthiness (only #f is false) means a
+    // '()-returning predicate is a TRUTHY result, so `(if r r (loop ...))`
+    // propagates '() itself, not #t (see the DEVIATIONS find-fix note).
+    "%any-null?": symbol.define`%any-null?: #t iff any of the parallel lists is exhausted (private helper for %some/%any/%every/%every-value)`(
       { input: [listAlike], output: [z.boolean] },
       `(lambda (lst)
          (let loop ((lst lst))
@@ -894,7 +916,7 @@ export default new EnvCapability("scheme/srfi-1", {
                    (loop (cdr lst))))))`,
     ),
 
-    "%some": symbol.define`%some: #t iff fn holds for some element-tuple of the parallel lists (private helper for some)`(
+    "%some": symbol.define`%some: #t iff fn holds for some element-tuple of the parallel lists (private helper for any?, aliased as some)`(
       { input: [z.lambda, listAlike], output: [z.boolean] },
       `(lambda (fn lists)
          (let loop ((lists lists))
@@ -905,7 +927,7 @@ export default new EnvCapability("scheme/srfi-1", {
                    (loop (map cdr lists))))))`,
     ),
 
-    some: symbol.define`some: #t iff pred holds for some element-tuple across the parallel lists (SRFI-1 any, Ramda-familiar name, #t/#f result)`(
+    "any?": symbol.define`any?: #t iff pred holds for some element-tuple across the parallel lists (HONEST boolean predicate — SRFI-1's own \`any\` returns the predicate's truthy RESULT instead; see bare \`any\`)`(
       { input: [z.lambda], inputRest: listAlike, output: [z.boolean], type: dedent`
           {
             <T>(p: (x: T) => unknown, xs: List<T>): boolean;
@@ -916,10 +938,38 @@ export default new EnvCapability("scheme/srfi-1", {
       `(lambda (fn . lists)
          (%some fn lists))`,
     ),
-    // Spec name; same binding as some (boolean-only subset deviation shared).
-    any: symbol.alias`some`,
+    // Ramda-familiar name for any? — #t/#f, arrival's historical shape for this verb
+    // (2026-07-13: any? is now the honestly-named primary def; `some` — which used
+    // to BE the primary def, pre-split — dissolves to it byte-for-byte via
+    // symbol.alias).
+    some: symbol.alias`any?`,
 
-    "%every": symbol.define`%every: #t iff fn holds for every element-tuple of the parallel lists (private helper for every)`(
+    "%any": symbol.define`%any: first truthy predicate RESULT across the parallel lists, or #f (private helper for any)`(
+      { input: [z.lambda, listAlike], output: [z.value] },
+      `(lambda (fn lists)
+         (let loop ((lists lists))
+           (if (or (null? lists) (%any-null? lists))
+               #f
+               (let ((r (apply fn (map car lists))))
+                 (if r r (loop (map cdr lists)))))))`,
+    ),
+
+    // 2026-07-13 ruling: bare `any` is SRFI-1's OWN `any` — the first truthy
+    // predicate RESULT (not the element, not a collapsed #t), or #f. See any?/some
+    // for the honest boolean twin.
+    any: symbol.define`any: SRFI-1's \`any\` — the first truthy predicate RESULT across the parallel lists (not the element!), or #f; R7RS truthiness means a '()-returning predicate yields '() itself (see any? / some for the honest boolean)`(
+      { input: [z.lambda], inputRest: listAlike, output: [z.value], type: dedent`
+          {
+            <T, R>(p: (x: T) => R, xs: List<T>): R | false;
+            <A, B, R>(p: (a: A, b: B) => R, as: List<A>, bs: List<B>): R | false;
+            <A, B, C, R>(p: (a: A, b: B, c: C) => R, as: List<A>, bs: List<B>, cs: List<C>): R | false;
+          }
+        ` },
+      `(lambda (fn . lists)
+         (%any fn lists))`,
+    ),
+
+    "%every": symbol.define`%every: #t iff fn holds for every element-tuple of the parallel lists (private helper for every?)`(
       { input: [z.lambda, listAlike], output: [z.boolean] },
       `(lambda (fn lists)
          (let loop ((lists lists))
@@ -930,7 +980,7 @@ export default new EnvCapability("scheme/srfi-1", {
                    #f))))`,
     ),
 
-    every: symbol.define`every: #t iff pred holds for every element-tuple across the parallel lists (#t/#f result; vacuously #t on empty)`(
+    "every?": symbol.define`every?: #t iff pred holds for every element-tuple across the parallel lists (HONEST boolean predicate; vacuously #t on empty — SRFI-1's own \`every\` returns the LAST predicate's RESULT instead; see bare \`every\`)`(
       { input: [z.lambda], inputRest: listAlike, output: [z.boolean], type: dedent`
           {
             <T>(p: (x: T) => unknown, xs: List<T>): boolean;
@@ -940,6 +990,34 @@ export default new EnvCapability("scheme/srfi-1", {
         ` },
       `(lambda (fn . lists)
          (%every fn lists))`,
+    ),
+
+    "%every-value": symbol.define`%every-value: the LAST predicate RESULT if every element-tuple is truthy, #t on the empty list, #f on the first falsy result (private helper for every)`(
+      { input: [z.lambda, listAlike], output: [z.value] },
+      `(lambda (fn lists)
+         (let loop ((lists lists) (last #t))
+           (if (or (null? lists) (%any-null? lists))
+               last
+               (let ((r (apply fn (map car lists))))
+                 (if r
+                     (loop (map cdr lists) r)
+                     #f)))))`,
+    ),
+
+    // 2026-07-13 ruling: bare `every` is SRFI-1's OWN `every` — the LAST predicate
+    // RESULT once every element-tuple has been truthy, #t on the empty list
+    // (vacuous truth, matches every?), #f on the first falsy result (short-
+    // circuits, same as every?). See every? for the honest boolean twin.
+    every: symbol.define`every: SRFI-1's \`every\` — the LAST predicate RESULT if every element-tuple across the parallel lists is truthy, #t on the empty list, #f on the first falsy result (see every? for the honest boolean)`(
+      { input: [z.lambda], inputRest: listAlike, output: [z.value], type: dedent`
+          {
+            <T, R>(p: (x: T) => R, xs: List<T>): R | boolean;
+            <A, B, R>(p: (a: A, b: B) => R, as: List<A>, bs: List<B>): R | boolean;
+            <A, B, C, R>(p: (a: A, b: B, c: C) => R, as: List<A>, bs: List<B>, cs: List<C>): R | boolean;
+          }
+        ` },
+      `(lambda (fn . lists)
+         (%every-value fn lists))`,
     ),
 
     // Named-let idiom (see the file header's PERF PROTOCOL note) — a

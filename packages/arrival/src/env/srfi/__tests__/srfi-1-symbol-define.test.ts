@@ -24,7 +24,9 @@
 //   5. bake FV law — free `values` with no binding dep still throws DefineLocalityError
 //      (historical multi-return shape, still a valid locality repro).
 //   6. base-packs C3 — exceptions/lists appear after scheme/srfi-1.
-//   7. implement-or-door — any aliases some; ! / pure-unshipped names are doors.
+//   7. implement-or-door — 2026-07-13 ruling: any?/every? are the honest booleans,
+//      some aliases any?, bare any/every are SRFI value-returning; ! / pure-
+//      unshipped names are doors.
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../../AmbientRuntime.js";
 import * as z from "../../../common/scheme-zod.js";
@@ -113,22 +115,56 @@ describe("scheme/srfi-1 — behavior equivalence (§4.2 gate), weighted toward t
     await expect(execState("(third '(1 2))", { env })).rejects.toThrow(/third: list has fewer than 3 elements/);
   });
 
-  it("some / every / %any-null? (named-let normalized) — #t/#f results, vacuous truths, parallel lists", async () => {
+  it("any? / every? / some / %any-null? (named-let normalized) — HONEST #t/#f results, vacuous truths, parallel lists (2026-07-13 ruling: bare any/every are SRFI value-returning now — see the dedicated describe block below)", async () => {
     const env = await freshEnv();
     const [someT] = await exec("(some odd? '(2 4 5))", { env });
     const [someF] = await exec("(some odd? '(2 4 6))", { env });
     const [someEmpty] = await exec("(some odd? '())", { env });
-    const [everyT] = await exec("(every odd? '(1 3 5))", { env });
-    const [everyF] = await exec("(every odd? '(1 3 4))", { env });
-    const [everyEmpty] = await exec("(every odd? '())", { env });
+    const [anyQT] = await exec("(any? odd? '(2 4 5))", { env });
+    const [anyQF] = await exec("(any? odd? '(2 4 6))", { env });
+    const [anyQEmpty] = await exec("(any? odd? '())", { env });
+    const [everyQT] = await exec("(every? odd? '(1 3 5))", { env });
+    const [everyQF] = await exec("(every? odd? '(1 3 4))", { env });
+    const [everyQEmpty] = await exec("(every? odd? '())", { env });
     const [parallel] = await exec("(some (lambda (a b) (= (+ a b) 5)) '(1 2 3) '(9 3 9))", { env });
     expect(someT).toBe(true);
     expect(someF).toBe(false);
     expect(someEmpty).toBe(false);
-    expect(everyT).toBe(true);
-    expect(everyF).toBe(false);
-    expect(everyEmpty).toBe(true);
+    expect(anyQT).toBe(true);
+    expect(anyQF).toBe(false);
+    expect(anyQEmpty).toBe(false);
+    expect(everyQT).toBe(true);
+    expect(everyQF).toBe(false);
+    expect(everyQEmpty).toBe(true);
     expect(parallel).toBe(true);
+  });
+
+  it("any / every (2026-07-13 ruling) — SRFI-1 value-returning: any → first truthy predicate RESULT or #f; every → LAST predicate result if all truthy, #t on empty, #f on first falsy", async () => {
+    const env = await freshEnv();
+    // any: the predicate RESULT propagates, not a collapsed #t — assv returns the
+    // matched (key . value) pair, and that pair IS any's return value.
+    expect(await printed(env, "(any (lambda (x) (assv x '((1 . a)))) '(0 1))")).toBe("(1 . a)");
+    // any: no element's result is truthy → #f, same shape as any?/some.
+    const [anyMiss] = await exec("(any odd? '(2 4))", { env });
+    expect(anyMiss).toBe(false);
+    // every: once every element-tuple is truthy, the LAST predicate result wins —
+    // (* 2 2) = 4 is the value every returns, not #t.
+    const [everyLast] = await exec("(every (lambda (x) (* x 2)) '(1 2))", { env });
+    expect(everyLast).toBe(4);
+    // every: a predicate that only ever answers #t/#f (odd?) still surfaces that
+    // #t/#f as the LAST result — every and every? coincide for boolean-only preds.
+    const [everyBoolLast] = await exec("(every odd? '(1 3 5))", { env });
+    expect(everyBoolLast).toBe(true);
+    // empty-list rows: any is #f (no element to be truthy); every is #t (vacuous
+    // truth, same base case as every?).
+    const [anyEmpty] = await exec("(any odd? '())", { env });
+    const [everyEmpty] = await exec("(every odd? '())", { env });
+    expect(anyEmpty).toBe(false);
+    expect(everyEmpty).toBe(true);
+    // R7RS truthiness (only #f is false — arrival's own fix, commits c16dfd2ef7):
+    // a '()-returning predicate is a TRUTHY match, so any returns '() itself — the
+    // `(if r r (loop ...))` bind-the-result idiom must not collapse it to #t.
+    expect(await printed(env, "(any (lambda (x) '()) '(1))")).toBe("()");
   });
 
   it("zip (named-let normalized) — transpose, stops at the shortest, () on empty", async () => {
@@ -287,12 +323,16 @@ describe("scheme/srfi-1 — base-packs C3 positioning for declared deps (excepti
   });
 });
 
-describe("scheme/srfi-1 — implement-or-door + any alias", () => {
-  it("any is the SRFI name for some (boolean-only subset)", async () => {
+describe("scheme/srfi-1 — implement-or-door + the any?/every?/some split (2026-07-13 ruling)", () => {
+  it("any is NO LONGER the SRFI name for some — it's SRFI-1's own value-returning quantifier; some aliases any? instead", async () => {
     const env = await freshEnv();
-    const [a] = await exec("(any odd? '(2 4 5))", { env });
+    // A predicate returning a non-#t truthy VALUE makes the split concrete: any
+    // propagates that value; any?/some collapse it to the honest #t.
+    const [a] = await exec("(any (lambda (x) (if (odd? x) 99 #f)) '(2 4 5))", { env });
+    const [anyQ] = await exec("(any? odd? '(2 4 5))", { env });
     const [s] = await exec("(some odd? '(2 4 5))", { env });
-    expect(a).toBe(true);
+    expect(a).toBe(99);
+    expect(anyQ).toBe(true);
     expect(s).toBe(true);
     const [none] = await exec("(any odd? '(2 4))", { env });
     expect(none).toBe(false);
@@ -306,5 +346,9 @@ describe("scheme/srfi-1 — implement-or-door + any alias", () => {
     // live family still live
     expect(symbols.take?.kind).not.toBe("door");
     expect(symbols.some?.kind).not.toBe("door");
+    expect(symbols["any?"]?.kind).not.toBe("door");
+    expect(symbols["every?"]?.kind).not.toBe("door");
+    expect(symbols.any?.kind).not.toBe("door");
+    expect(symbols.every?.kind).not.toBe("door");
   });
 });
