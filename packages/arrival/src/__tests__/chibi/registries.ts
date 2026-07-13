@@ -206,8 +206,11 @@ export const EXCLUDED: readonly Exclusion[] = [
     note: "same block-member symbol-visibility gap as the row above",
   },
   {
-    match: { kind: "symbols", anyOf: ["let-values", "let*-values", "call-with-values", "values"] },
-    feature: "multiple values (R7RS §6.10) — not fully supported",
+    match: {
+      kind: "symbols",
+      anyOf: ["let-values", "let*-values", "call-with-values", "values", "define-values", "receive"],
+    },
+    feature: "multiple values (R7RS §6.10 / SRFI-8) — omitted by design (continuation family)",
   },
   // NOTE: v1 also excluded "define-record-type" — dropped here rather than transcribed. It is
   // structurally DEAD as a symbols-Exclusion: `define-record-type` only ever heads a `setup`

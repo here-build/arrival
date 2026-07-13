@@ -450,12 +450,12 @@ describe("V2 — declaration-driven classifier (§2; PROVENANCE-PLAN.md Q3)", ()
       expect(rolesOf(strings, "string-map")).toEqual(["element-transformer"]);
 
       // UNDERDETERMINED + UNDECLARED = honest holes, never guesses:
-      // call-with-values' producer/consumer fit none of the four roles — both arms
-      // resolve undefined.
-      expect(rolesOf(binding, "call-with-values")).toEqual([undefined, undefined]);
-      // procedure? takes a z.lambda it NEVER INVOKES (an introspection subject, not a
-      // callback) and returns a boolean — a host-boolean-return rule would door it as a
-      // decision callback, which is exactly the guess extraction refuses to make.
+      // call-with-values was the classic two-lambda underdetermined host — multi-return
+      // is now a purity door (no contract/callbackRoles). procedure? remains the pin:
+      // a z.lambda it NEVER INVOKES (introspection subject, not a callback) returns a
+      // boolean — a host-boolean-return rule would door it as a decision callback, which
+      // is exactly the guess extraction refuses to make.
+      expect(rolesOf(binding, "call-with-values")).toBeUndefined(); // door — no arms
       expect(rolesOf(equality, "procedure?")).toEqual([undefined]);
 
       // No z.lambda arm at all ⇒ no callbackRoles field content (undefined, not []).

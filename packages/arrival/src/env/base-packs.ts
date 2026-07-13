@@ -33,9 +33,11 @@
 //                lists (the shared core all three dialect packs sit on top of —
 //                see polyglot.ts).
 //   srfi1      — depended on by polyglot/clojure/lisp; depends on
-//                binding/exceptions/lists.
-//   binding    — depended on by srfi-1; no ordering relationship of its own to
-//                exceptions/lists (leading them is the zero-collateral choice).
+//                exceptions/lists (multi-return binding surface is purity-doored;
+//                span/partition use list products, no binding dep).
+//   binding    — multi-return + set! doors only; no pack depends on it for FV
+//                anymore. Kept in the tail as zero-collateral placement next to
+//                the other repositioned R7RS packs.
 //   exceptions — depended on by srfi-189, srfi-1, racket; leads lists (srfi-189's
 //                and srfi-1's deps orders both say so).
 //   lists      — depended on by srfi-235, srfi-128, srfi-189, srfi-1, polyglot,

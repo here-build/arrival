@@ -60,9 +60,12 @@ describe("@here.build/arrival/srfi", () => {
     const num = await withCap(srfi26, "s26");
     expect(await num("((cut + 1 <>) 5)")).toBe(6);
   });
-  it("SRFI-8 receive (define-syntax — may not survive the sandbox)", async () => {
-    const num = await withCap(srfi8, "s8");
-    expect(await num("(receive (a b) (values 1 2) (+ a b))")).toBe(3);
+  it("SRFI-8 receive is a multi-return purity door", async () => {
+    const env = mintFrame(sandboxedEnv, "s8");
+    await assembleEnv(env as unknown as SchemeEnv, [srfi8.lower({ evalScheme }) as never]);
+    await expect(exec("(receive 1 2)", { env })).rejects.toThrow(
+      /multiple-value returns are omitted|continuation arity|not available/,
+    );
   });
   it("SRFI-2 and-let* (define-syntax — may not survive the sandbox)", async () => {
     const num = await withCap(srfi2, "s2");

@@ -19,14 +19,12 @@ describe("SRFI-1 — list library", () => {
     expect(await run("(take-while even? '(2 4 6 1 8))")).toBe("(2 4 6)");
     expect(await run("(drop-while even? '(2 4 6 1 8))")).toBe("(1 8)");
   });
-  it("partition returns two values", async () => {
-    expect(await run("(call-with-values (lambda () (partition even? '(1 2 3 4 5 6))) list)")).toBe(
-      "((2 4 6) (1 3 5))",
-    );
+  it("partition returns a two-list product", async () => {
+    expect(await run("(partition even? '(1 2 3 4 5 6))")).toBe("((2 4 6) (1 3 5))");
   });
   it("span / break", async () => {
-    expect(await run("(call-with-values (lambda () (span even? '(2 4 1 3))) list)")).toBe("((2 4) (1 3))");
-    expect(await run("(call-with-values (lambda () (break odd? '(2 4 1 3))) list)")).toBe("((2 4) (1 3))");
+    expect(await run("(span even? '(2 4 1 3))")).toBe("((2 4) (1 3))");
+    expect(await run("(break odd? '(2 4 1 3))")).toBe("((2 4) (1 3))");
   });
   it("last / last-pair / find-tail", async () => {
     expect(await run("(last '(1 2 3))")).toBe("3");
@@ -96,9 +94,8 @@ describe("SRFI-8 receive + SRFI-2 and-let* (expression macros)", () => {
   // sibling define-macro forms. Definition macros (define-record-type /
   // define-values) stay BLOCKED on a separate gap: macro-introduced
   // (begin (define …)) doesn't splice into the enclosing scope.
-  it("receive binds the values of a producer", async () => {
-    expect(await run("(receive (a b) (values 1 2) (list a b))")).toBe("(1 2)");
-    expect(await run("(receive (a . rest) (values 1 2 3) (list a rest))")).toBe("(1 (2 3))");
+  it("receive is a multi-return purity door", async () => {
+    await expect(run("(receive 1 2)")).rejects.toThrow(/multiple-value returns are omitted|continuation arity|not available/);
   });
   it("and-let* binds + short-circuits", async () => {
     expect(await run("(and-let* ((x 5) (y (* x 2))) (+ x y))")).toBe("15");

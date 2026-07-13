@@ -35,6 +35,14 @@ describe("purity doors — dynamics are omitted", () => {
     ["force", "(force 1)"],
     ["make-promise", "(make-promise 1)"],
     ["delay-force", "(delay-force (delay 1))"],
+    // Multi-return family — scheme/r7rs/binding (same purity family as call/cc).
+    // Former macros/special-form shapes: call as procedures with self-evaluating
+    // args so operand eval cannot throw Unbound before the door fires.
+    ["values", "(values 1 2)"],
+    ["call-with-values", "(call-with-values (lambda () 1) list)"],
+    ["let-values", "(let-values 1 2)"],
+    ["let*-values", "(let*-values 1 2)"],
+    ["define-values", "(define-values 1 2)"],
   ] as const) {
     it(`${name} → purity door`, async () => {
       const { purity, message } = await door(src);

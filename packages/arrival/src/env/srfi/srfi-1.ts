@@ -14,14 +14,10 @@
 // DEPS: the define bodies below freely reference
 //   • `not`/`equal?`/`eq?`/`pair?`/`null?`  → scheme/equality   (NATIVE_PACKS)
 //   • `<=`/`<`/`>=`/`=`/`+`/`-`/`*`         → scheme/numeric    (NATIVE_PACKS)
-//   • `values`                              → scheme/binding    (BASE_PACKS)
 //   • `error`                               → scheme/exceptions (BASE_PACKS)
-//   • `cons`/`reverse`/`append`/`member`/`length`/`map`/`apply` → scheme/lists (BASE_PACKS)
-// `deps: [equality, numeric, binding, exceptions, lists]` is the complete set.
-// `binding` is one of the BASE_PACKS members needing C3 tail-block repositioning
-// (alongside `lists`/`polyglot`/`exceptions`) — see base-packs.ts's header; the
-// deps array order here (`binding` before `exceptions` before `lists`) matches
-// the tail block's order so the two C3 merge inputs never contradict.
+//   • `cons`/`reverse`/`append`/`member`/`length`/`map`/`apply`/`list` → scheme/lists (BASE_PACKS)
+// `deps: [equality, numeric, exceptions, lists]`.
+// span/break/partition return `(list a b)` (multi-return doored on binding).
 // `car`/`cdr`/`cadr` need no edge: the cxr synth family is a kernel resolver, in
 // the bake allowlist by construction (define-bake.ts's CXR_RE).
 //
@@ -40,13 +36,7 @@
 //     but for a different reason now — see the tagless-final dispatcher convention
 //     note below; SRFI-1's own any-value-at-n=0 tolerance is deliberately NOT
 //     preserved there anymore.)
-//   - multi-value outputs (span/break/partition — `(values a b)`): `output: [z.values]`.
-//     A multi-value return is ONE `Values` box at this seam (binding.ts's own `values`
-//     native returns `Values.from(args)`); declaring `output: [A, B]` would make the
-//     wrapper decode the box AS a 2-array and throw on every call — and `z.value`
-//     rejects it too (`Values` is a non-AValue orphan its `instanceof AValue`
-//     predicate misses despite the SchemeValue union declaring it). `z.values` is the
-//     dedicated orphan schema for exactly this shape.
+//   - two-list products (span/break/partition): `output: [listAlike]` — `(list a b)`.
 //   - fresh-list outputs built via `reverse`/`cons` chains: `z.union([z.pair, z.nil])`.
 //     Tail-returning outputs (drop/drop-while/append-reverse/concatenate — the result
 //     embeds a caller-supplied tail the shallow input contract cannot promise is
@@ -78,14 +68,12 @@ import { type CallCtx, type MaybePromise, resolveMethod, symbol, withCallbackRol
 import { EnvCapability } from "../../common/capability.js";
 import { is_false } from "../../eval/guards.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
-import type { APair } from "../../values/primitives/APair.js";
 import { maybeThen } from "../../utils/promises.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
 import { type RunContext } from "../../values/primitives/RunContext.js";
 import * as z from "../../common/scheme-zod.js";
 import { tf } from "../../values/tagless-final.js";
-import type { AList, AListAlike, SchemeValue } from "../../values/types.js";
-import binding from "../r7rs/binding.js";
+import type { AListAlike, SchemeValue } from "../../values/types.js";
 import equality from "../r7rs/equality.js";
 import exceptions from "../r7rs/exceptions.js";
 import lists from "../r7rs/lists.js";
@@ -134,9 +122,8 @@ function findImpl(arg: (...args: unknown[]) => unknown, list: AListAlike, runCtx
 
 export default new EnvCapability("scheme/srfi-1", {
   // See the file header: the complete cross-capability free-name set of the define
-  // bodies below, order-matched to base-packs.ts's C3 tail block (binding, exceptions,
-  // lists — the three BASE_PACKS members) so the two merge inputs never contradict.
-  deps: [equality, numeric, binding, exceptions, lists],
+  // bodies below, order-matched to base-packs.ts's C3 tail (exceptions, lists).
+  deps: [equality, numeric, exceptions, lists],
   symbols: {
     // input is a plain FIXED 2-tuple (pred, seq) — NOT z.tuple([z.value], z.value)'s
     // unbounded rest (filter's impl is strictly binary: `const [pred, seq] = args`, always
@@ -292,32 +279,29 @@ export default new EnvCapability("scheme/srfi-1", {
       },
     ),
 
-    // Multi-value output — ONE Values box at the seam (CONTRACT CONVENTIONS above).
-    // `values` is scheme/binding's — the dep edge that forced base-packs' third
-    // tail-block repositioning.
-    span: symbol.define`span: (values (take-while pred xs) (drop-while pred xs)) in one pass`(
-      { input: [z.lambda, listAlike], output: [z.values] },
+    span: symbol.define`span: (list (take-while pred xs) (drop-while pred xs)) in one pass`(
+      { input: [z.lambda, listAlike], output: [listAlike] },
       `(lambda (pred xs)
          (let loop ((xs xs) (acc '()))
            (if (and (pair? xs) (pred (car xs)))
                (loop (cdr xs) (cons (car xs) acc))
-               (values (reverse acc) xs))))`,
+               (list (reverse acc) xs))))`,
     ),
 
-    break: symbol.define`break: span on the negation of pred — (values prefix-failing-pred rest)`(
-      { input: [z.lambda, listAlike], output: [z.values] },
+    break: symbol.define`break: span on the negation of pred — (list prefix-failing-pred rest)`(
+      { input: [z.lambda, listAlike], output: [listAlike] },
       `(lambda (pred xs)
          (let loop ((xs xs) (acc '()))
            (if (and (pair? xs) (not (pred (car xs))))
                (loop (cdr xs) (cons (car xs) acc))
-               (values (reverse acc) xs))))`,
+               (list (reverse acc) xs))))`,
     ),
 
-    partition: symbol.define`partition: (values yes no) splitting xs by pred, order-preserving`(
-      { input: [z.lambda, listAlike], output: [z.values] },
+    partition: symbol.define`partition: (list yes no) splitting xs by pred, order-preserving`(
+      { input: [z.lambda, listAlike], output: [listAlike] },
       `(lambda (pred xs)
          (let loop ((xs xs) (yes '()) (no '()))
-           (cond ((null? xs) (values (reverse yes) (reverse no)))
+           (cond ((null? xs) (list (reverse yes) (reverse no)))
                  ((pred (car xs)) (loop (cdr xs) (cons (car xs) yes) no))
                  (else (loop (cdr xs) yes (cons (car xs) no))))))`,
     ),

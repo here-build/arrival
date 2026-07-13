@@ -32,6 +32,7 @@ import numericPack from "../numeric.js";
 import type { AEntity } from "../../../common/symbol.js";
 import { AExact } from "../../../values/primitives/AExact.js";
 import { AInexact } from "../../../values/primitives/AInexact.js";
+import { APair } from "../../../values/primitives/APair.js";
 import { CONSTANT_CTX } from "../../../values/primitives/RunContext.js";
 
 const symbols = numericPack.spec.symbols as Record<string, AEntity>;
@@ -94,19 +95,19 @@ describe("numeric Contract precision — the real exported ops reject wrongly-ty
     expect(def.out.safeEncode(["not a bool"]).success).toBe(false);
   });
 
-  // INVARIANT: floor/'s output is a genuine 2-tuple of scheme numbers, rejecting wrong
-  // arity or element type
-  it("floor/ (multi-value output): a 2-tuple of scheme numbers, not a 1-tuple of z.unknown()", () => {
+  // INVARIANT: floor/ returns a single pair product (q . r), not multi-return Values
+  it("floor/ (pair product): output is a pair of scheme numbers", () => {
     const def = nativeDef("floor/");
-    expect(def.out.safeParse([exact(1), exact(2)]).success).toBe(true);
-    expect(def.out.safeParse([exact(1)]).success).toBe(false); // wrong ARITY — only 1 of 2
-    expect(def.out.safeParse(["x", "y"]).success).toBe(false); // wrong element type
+    const product = new APair(CONSTANT_CTX, exact(1), exact(2));
+    expect(def.out.safeParse([product]).success).toBe(true);
+    expect(def.out.safeParse([exact(1)]).success).toBe(false);
+    expect(def.out.safeParse(["x"]).success).toBe(false);
   });
 
-  // INVARIANT: truncate/ shares floor/'s 2-tuple output shape
-  it("truncate/ (multi-value output): same 2-tuple shape as floor/", () => {
+  it("truncate/ (pair product): same pair shape as floor/", () => {
     const def = nativeDef("truncate/");
-    expect(def.out.safeParse([exact(1), exact(2)]).success).toBe(true);
+    const product = new APair(CONSTANT_CTX, exact(3), exact(1));
+    expect(def.out.safeParse([product]).success).toBe(true);
     expect(def.out.safeParse([exact(1)]).success).toBe(false);
   });
 

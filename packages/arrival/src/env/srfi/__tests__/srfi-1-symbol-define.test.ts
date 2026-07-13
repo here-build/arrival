@@ -215,14 +215,12 @@ describe("scheme/srfi-1 — behavior equivalence (§4.2 gate), weighted toward t
   });
 });
 
-describe("scheme/srfi-1 — multi-values cross the boundary as ONE Values box (z.values, the z.error-precedent orphan schema)", () => {
-  it("partition / span / break — (values a b), consumed via call-with-values", async () => {
+describe("scheme/srfi-1 — two-list products (single value; multi-return is doored)", () => {
+  it("partition / span / break return (list a b)", async () => {
     const env = await freshEnv();
-    expect(await printed(env, "(call-with-values (lambda () (partition even? '(1 2 3 4 5 6))) list)")).toBe(
-      "((2 4 6) (1 3 5))",
-    );
-    expect(await printed(env, "(call-with-values (lambda () (span even? '(2 4 1 3))) list)")).toBe("((2 4) (1 3))");
-    expect(await printed(env, "(call-with-values (lambda () (break even? '(1 3 2 4))) list)")).toBe("((1 3) (2 4))");
+    expect(await printed(env, "(partition even? '(1 2 3 4 5 6))")).toBe("((2 4 6) (1 3 5))");
+    expect(await printed(env, "(span even? '(2 4 1 3))")).toBe("((2 4) (1 3))");
+    expect(await printed(env, "(break even? '(1 3 2 4))")).toBe("((1 3) (2 4))");
   });
 });
 
@@ -231,11 +229,8 @@ describe("scheme/srfi-1 — the dep edges are real (§2.1's undeclared-dep bug c
     await initBridge();
     const env = mintFrame(global_env, "test-srfi1-standalone-unbound");
     await srfi1.lower({ evalScheme }).apply(env, undefined as never);
-    // NATIVE_PACKS names (pair?, null?, =) exist on global_env — but the BASE_PACKS-
-    // only class (`cons`/`reverse` @ scheme/lists, `values` @ scheme/r7rs/binding,
-    // `error` @ scheme/r7rs/exceptions) does not: the assembly-order luck the static
-    // FV law refuses to consult, demonstrated at runtime (partition's body dies at
-    // its first BASE_PACKS-only lookup, `cons`).
+    // NATIVE_PACKS names exist on global_env — BASE_PACKS-only (`cons`/`list` @ lists,
+    // `error` @ exceptions) do not without assembleEnv. partition uses `list`/`cons`.
     await expect(execState("(partition odd? '(1 2))", { env: env as unknown as ResolvingAmbient })).rejects.toThrow(
       /Unbound variable/,
     );
@@ -246,9 +241,7 @@ describe("scheme/srfi-1 — the dep edges are real (§2.1's undeclared-dep bug c
     const env = mintFrame(global_env, "test-srfi1-assembleEnv-ok") as unknown as SchemeEnv;
     await assembleEnv(env, [srfi1.lower({ evalScheme })]);
     const typedEnv = env as unknown as ResolvingAmbient;
-    expect(await printed(typedEnv, "(call-with-values (lambda () (partition odd? '(1 2 3))) list)")).toBe(
-      "((1 3) (2))",
-    );
+    expect(await printed(typedEnv, "(partition odd? '(1 2 3))")).toBe("((1 3) (2))");
     const [second] = await exec("(second '(1 2 3))", { env: typedEnv });
     expect(second).toBe(2);
   });
@@ -298,13 +291,14 @@ describe("scheme/srfi-1 — the §2.1 bake FV law passes AS MIGRATED", () => {
   });
 });
 
-describe("scheme/srfi-1 — base-packs C3 positioning for the binding repositioning", () => {
-  it("scheme/r7rs/binding appears exactly once, AFTER scheme/srfi-1 (the C3 'dependency ranks below its dependent' requirement) — shape-free so sibling tail-block additions never touch this row", () => {
+describe("scheme/srfi-1 — base-packs C3 positioning for declared deps (exceptions, lists)", () => {
+  it("exceptions and lists appear exactly once each, AFTER scheme/srfi-1", () => {
     const names = BASE_PACKS.map((pack) => pack.name);
-    expect(names.filter((n) => n === "scheme/r7rs/binding")).toHaveLength(1);
-    const bindingIndex = names.indexOf("scheme/r7rs/binding");
     const srfi1Index = names.indexOf("scheme/srfi-1");
     expect(srfi1Index).toBeGreaterThan(-1);
-    expect(bindingIndex).toBeGreaterThan(srfi1Index);
+    for (const dep of ["scheme/r7rs/exceptions", "scheme/lists"] as const) {
+      expect(names.filter((n) => n === dep)).toHaveLength(1);
+      expect(names.indexOf(dep)).toBeGreaterThan(srfi1Index);
+    }
   });
 });

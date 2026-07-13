@@ -1,42 +1,32 @@
-// binding-contract-precision.test.ts — HARVEST/type-surface proof for the `scheme/r7rs/binding`
-// capability's `Contract.type` override on `call-with-values`. Mirrors the sibling contract-
-// precision suites' established pattern, but for the SIGNATURE harvest (`signatureOf`) rather
-// than runtime `safeParse`: `call-with-values` declares two `z.custom<SchemeFunction>()` params,
-// which are UNREPRESENTABLE to the harvest printer (it throws `Schemas of type "custom" cannot be
-// represented in TypeScript`), collapsing the whole signature to the catch-all degrade path
-// `(...args: unknown[]) => unknown`. `Contract.type` author-asserts the real shape — same trust
-// model + same this-session convention as the sibling srfi curry/find/sort overrides (a callable
-// renders as `(...args: unknown[]) => unknown`).
+// binding-contract-precision.test.ts — structural pin: scheme/r7rs/binding is a
+// doors-only pack for set! + the multi-return family (impl-or-door R7RS law).
+// No harvest signature proofs: doors carry no Contract.type / in/out surface.
 import { describe, expect, it } from "vitest";
 import bindingPack from "../binding.js";
-import { signatureOf } from "../../../type-layer/schema-to-ts.js";
 import type { AEntity } from "../../../common/symbol.js";
 
 const symbols = bindingPack.spec.symbols as Record<string, AEntity>;
 
-function nativeDef(name: string) {
-  const def = symbols[name];
-  if (def === undefined) throw new Error(`binding pack: no symbol named ${name}`);
-  if (def.kind !== "native") throw new Error(`binding pack: ${name} is not a native def (got ${def.kind})`);
-  return def;
-}
+const DOOR_NAMES = ["set!", "values", "call-with-values", "let-values", "let*-values", "define-values"] as const;
 
-describe("scheme/r7rs/binding Contract.type override — the harvest signature for the two-procedure `call-with-values` (its z.custom<SchemeFunction> params are unrepresentable to the printer)", () => {
-  // INVARIANT: call-with-values's harvested signature names producer/consumer params via
-  // Contract.type override, not the unknown catch-all (pins implementation, not behavior)
-  it("call-with-values: producer + consumer procedures → whatever the consumer returns", () => {
-    expect(signatureOf(nativeDef("call-with-values"))).toBe(
-      "(producer: (...args: unknown[]) => unknown, consumer: (...args: unknown[]) => unknown) => unknown",
-    );
+describe("scheme/r7rs/binding — multi-return + set! are purity doors (R7RS implement-or-door)", () => {
+  it("exports exactly the purity-door surface (no silent R7RS gaps, no live multi-return)", () => {
+    expect(Object.keys(symbols).sort()).toEqual([...DOOR_NAMES].sort());
   });
 
-  // INVARIANT: values carries no type override — its degraded signature is honest, not a
-  // degrade artifact (pins implementation, not behavior)
-  it("values: genuinely variadic over any scheme value — left as the honest `(...args: unknown[]) => unknown` (NOT a catch-all degrade; z.array(z.value) renders faithfully), no override added", () => {
-    // Regression guard for the LEAVE-ALONE decision: `values` packages 0+ arbitrary scheme values,
-    // so its `(...args: unknown[]) => unknown` is honest, not the degrade path — no `type` override.
-    const def = nativeDef("values");
-    expect("type" in def && def.type !== undefined).toBe(false);
-    expect(signatureOf(def)).toBe("(...args: unknown[]) => unknown");
+  it.each(DOOR_NAMES)("%s is kind door with a teaching reason", (name) => {
+    const def = symbols[name];
+    if (def === undefined) throw new Error(`binding pack: no symbol named ${name}`);
+    expect(def.kind).toBe("door");
+    if (def.kind !== "door") throw new Error("unreachable");
+    expect(def.reason.length).toBeGreaterThan(20);
+  });
+
+  it("multi-return doors name the continuation-family purity excuse", () => {
+    for (const name of ["values", "call-with-values", "let-values", "let*-values", "define-values"] as const) {
+      const def = symbols[name];
+      if (def?.kind !== "door") throw new Error(`expected door: ${name}`);
+      expect(def.reason).toMatch(/multiple-value returns are omitted from arrival by design|continuation arity|call\/cc/);
+    }
   });
 });

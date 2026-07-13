@@ -31,7 +31,8 @@ import type { ABool } from "../../values/primitives/ABool.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
 import { AString } from "../../values/primitives/AString.js";
-import { Values } from "../../values/primitives/Values.js";
+import { APair } from "../../values/primitives/APair.js";
+import type { SchemeValue } from "../../values/types.js";
 import { type ANumeric, bigintISqrt, complexDoor, schemeCompare, toReal } from "../../values/numbers.js";
 import {
   coerceNumeric,
@@ -741,16 +742,15 @@ const lcmSpec: NumSpec = { in: [], inRest: z.bigint, out: z.bigint, fn: lcmCoreF
 // param, completing op-helpers.ts's own confessed THREADING GAP (its doc comment:
 // "every current caller… lives in the env/r7rs cluster… does not yet pass one" —
 // that cluster is this file).
+// (q . r) product — multi-return is doored on binding.
 const floorSlashFn = function (this: CallCtx, n1: unknown, n2: unknown): unknown {
   const a = coerceNumeric(n1, this.runCtx);
   const b = coerceNumeric(n2, this.runCtx);
   const aExact = a instanceof AExact ? a : new AExact(a.ctx, BigInt(Math.trunc(a.real)));
   const bExact = b instanceof AExact ? b : new AExact(b.ctx, BigInt(Math.trunc(b.real)));
-  // Both operands AExact → floorQuotient/floorRemainder take the bothExact branch,
-  // return AExact — no reconstruction.
   const q = floorQuotientFn(aExact, bExact);
   const r = floorRemainderFn(aExact, bExact);
-  return Values.from([q, r]);
+  return new APair(this.runCtx, q as SchemeValue, r as SchemeValue);
 };
 
 const truncateSlashFn = function (this: CallCtx, n1: unknown, n2: unknown): unknown {
@@ -758,11 +758,9 @@ const truncateSlashFn = function (this: CallCtx, n1: unknown, n2: unknown): unkn
   const b = coerceNumeric(n2, this.runCtx);
   const aExact = a instanceof AExact ? a : new AExact(a.ctx, BigInt(Math.trunc(a.real)));
   const bExact = b instanceof AExact ? b : new AExact(b.ctx, BigInt(Math.trunc(b.real)));
-  // Both operands AExact → truncateQuotient/truncateRemainder take the bothExact
-  // branch, return AExact — no reconstruction.
   const q = truncateQuotientFn(aExact, bExact);
   const r = truncateRemainderFn(aExact, bExact);
-  return Values.from([q, r]);
+  return new APair(this.runCtx, q as SchemeValue, r as SchemeValue);
 };
 
 const lcmFn = function (this: CallCtx, ...args: unknown[]): ANumeric {
@@ -975,18 +973,13 @@ const bitwiseXorSpec: NumSpec = { in: [], inRest: z.bigint, out: z.bigint, fn: b
  *  blind input (matches `lists.ts`'s own convention for "genuinely could be anything"). */
 const PREDICATE_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = { input: [z.value], output: [z.boolean] };
 
-/** `floor/`/`truncate/` — `(n1: unknown, n2: unknown) => Values` of TWO scheme numbers.
- *  Input `z.schemeNumber` (not `z.value`): both impls `coerceNumeric` each operand first —
- *  the contract states the SCHEME-LEVEL domain, matching every sibling `NumSpec`-driven
- *  contract above; the wider JS-side coercion (raw bigint/number, valueOf()-able object)
- *  is an internal leniency, not a documented caller contract. */
-const TWO_VALUE_OUTPUT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
+/** floor/ truncate/ → (q . r); input schemeNumber. */
+const QUOTIENT_REMAINDER_PRODUCT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber, z.schemeNumber],
-  output: [z.schemeNumber, z.schemeNumber],
+  output: [z.pair],
 };
 
-/** `1+`/`1-` — `(n: unknown) => ANumeric`. Input `z.schemeNumber` (see
- *  `TWO_VALUE_OUTPUT_CONTRACT` for why). */
+/** `1+`/`1-` — `(n: unknown) => ANumeric`. Input `z.schemeNumber`. */
 const ONE_ARG_NUM_OUTPUT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber],
   output: [z.schemeNumber],
@@ -1010,7 +1003,7 @@ const LCM_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
 
 /** `inexact`/`exact->inexact` — `(z: unknown) => AInexact` (narrower than the generic
  *  scheme-number union, matching `inexactFn`'s declared return). Input `z.schemeNumber`
- *  (`inexactFn` `coerceNumeric`s first — see `TWO_VALUE_OUTPUT_CONTRACT`). */
+ *  (`inexactFn` `coerceNumeric`s first). */
 const INEXACT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber],
   output: [z.inexact],
@@ -1018,7 +1011,7 @@ const INEXACT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
 
 /** `exact`/`inexact->exact` — `(z: unknown) => AExact` (narrower than the generic
  *  scheme-number union, matching `exactFn`'s declared return). Input `z.schemeNumber`
- *  (`exactFn` `coerceNumeric`s first — see `TWO_VALUE_OUTPUT_CONTRACT`). */
+ *  (`exactFn` `coerceNumeric`s first). */
 const EXACT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber],
   output: [z.exact],
@@ -1235,12 +1228,12 @@ export default new EnvCapability("scheme/numeric", {
     // satisfy the loose `Contract<VectorSpec,VectorSpec,RestSpec>` without erasing the
     // arity first — same boundary as rosetta.ts/sequence.ts's `run` cross, cast once
     // per declaration.
-    "floor/": symbol.native`floor/: floor quotient and remainder (two values)`(
-      TWO_VALUE_OUTPUT_CONTRACT,
+    "floor/": symbol.native`floor/: floor quotient and remainder as pair (q . r)`(
+      QUOTIENT_REMAINDER_PRODUCT_CONTRACT,
       floorSlashFn as (...args: unknown[]) => unknown,
     ),
-    "truncate/": symbol.native`truncate/: truncate quotient and remainder (two values)`(
-      TWO_VALUE_OUTPUT_CONTRACT,
+    "truncate/": symbol.native`truncate/: truncate quotient and remainder as pair (q . r)`(
+      QUOTIENT_REMAINDER_PRODUCT_CONTRACT,
       truncateSlashFn as (...args: unknown[]) => unknown,
     ),
     lcm: symbol.native`lcm: least common multiple (non-negative)`(LCM_CONTRACT, lcmFn),

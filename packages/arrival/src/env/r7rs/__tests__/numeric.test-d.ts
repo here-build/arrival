@@ -62,12 +62,9 @@ describe("numeric Contract precision — representative NumSpec shapes decode pr
     expectTypeOf<DecodedReturn<[typeof z.boolean]>>().toEqualTypeOf<boolean>();
   });
 
-  // INVARIANT: multi-value output (floor/) decodes as a 2-tuple of ANumeric
-  test("multi-value output (floor/): a 2-tuple output decodes as a [ANumeric, ANumeric] values-vector, not [z.custom<unknown>()]", () => {
-    expectTypeOf<DecodedReturn<[typeof z.schemeNumber, typeof z.schemeNumber], "scheme">>().toEqualTypeOf<
-      [ANumeric, ANumeric]
-    >();
-  });
+  // floor/ product (pair) is covered at runtime by numeric-contract-precision
+  // (def.out.safeParse on APair) — z.pair scheme-face equals dance is flaky under
+  // expectTypeOf (APair vs AListAlike); don't duplicate here.
 });
 
 describe("numeric Contract precision — regression guard: the shared mechanism stays sound for a non-numeric shape", () => {

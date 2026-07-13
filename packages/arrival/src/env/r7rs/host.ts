@@ -1,72 +1,86 @@
-// @here.build/arrival/r7rs/host — the host-interface OMISSIONS (§6.13, §6.14).
-//
-// Lineage: R7RS-small (Shinn, Cowan & Gleckler, eds., 2013) — §6.13 Input and
-// output (ports, read/write/display, EOF objects) and §6.14 System interface
-// (clock, environment variables, command line, exit).
-//
-// A DOORS-ONLY capability. arrival is a PURE INFERENCE PLANE: it ships NO IO surface
-// and NO ambient system interface, because both are EFFECTS with no value-
-// construction site for provenance to root at (IO is ambient; the clock / env /
-// exit are non-deterministic). They are omitted BY DESIGN; each door (errors-as-
-// doors) teaches the why and routes the caller back to pure dataflow.
-//
-// §6.13 and §6.14 are WHOLE-section omissions — arrival ships no ports or system
-// subsystem, so no existing pack "owns" them. They share one rationale (host effects
-// have no construction-site), so they get ONE dedicated host pack here rather than
-// being scattered across unrelated packs.
-//
-// SINGLE SOURCE: `r7rs/index.ts` adds this to `allR7rs`, so `base-packs.ts`
-// assembles it into the base env.
-
+// @here.build/arrival/r7rs/host — R7RS §6.13 / §6.14 doors-only.
+// Pure inference plane: no ports, no ambient system. implement-or-door totalized.
+// call-with-input-string lives in srfi-stubs (SRFI-6).
 import { EnvCapability } from "../../common/capability.js";
 import { symbol } from "../../common/symbol.js";
 
-// §6.13 — no IO surface in the inference plane (an ambient effect, no construction-site).
-const IO_REASON =
+const IO =
   "ports & IO are omitted from arrival by design — it is a pure inference plane with no IO surface; an ambient read/write has no value-construction site for provenance. Return the value from your dataflow instead of streaming it out";
-
-// §6.14 — ambient / non-deterministic, no place in a provenance-grounded plane.
-const SYSTEM_REASON =
-  "the system interface is omitted from arrival by design — clock, environment, command line and exit are ambient and non-deterministic, with no construction-site to root a value's lineage at; pass any context you need in explicitly";
-
-// §6.13.1 — the FILE operations (call-with-input-file … open-output-file), relocated
-// here from env/srfi/srfi-stubs.ts (the registry-dissolution sweep: each stub beside
-// its family — these are R7RS-small §6.13.1 verbs, so they belong with the §6.13 port
-// doors below, not in the SRFI section). Same omission, one step earlier: the PORT
-// these openers would produce doesn't exist. Unlike IO_REASON's "return the value"
-// redirect, files have a real route — the filesystem TOOLS.
-const FILE_PORT_REASON =
+const SYSTEM =
+  "the system interface is omitted from arrival by design — clock, environment, command line, features and exit are ambient and non-deterministic, with no construction-site to root a value's lineage at; pass any context you need in explicitly";
+const FILE =
   'no file ports in this sandbox — files arrive through tools, not streams; call the filesystem tool bound in this environment (e.g. (filesystem/read_file :path "...")) and use the returned value directly';
 
-export default new EnvCapability("scheme/r7rs/host", {
-  symbols: {
-    "current-output-port": symbol.notImplemented`current-output-port: ${IO_REASON}`,
-    "current-input-port": symbol.notImplemented`current-input-port: ${IO_REASON}`,
-    "current-error-port": symbol.notImplemented`current-error-port: ${IO_REASON}`,
-    "open-input-string": symbol.notImplemented`open-input-string: ${IO_REASON}`,
-    "open-output-string": symbol.notImplemented`open-output-string: ${IO_REASON}`,
-    read: symbol.notImplemented`read: ${IO_REASON}`,
-    "read-char": symbol.notImplemented`read-char: ${IO_REASON}`,
-    "write-char": symbol.notImplemented`write-char: ${IO_REASON}`,
-    "write-string": symbol.notImplemented`write-string: ${IO_REASON}`,
-    write: symbol.notImplemented`write: ${IO_REASON}`,
-    display: symbol.notImplemented`display: ${IO_REASON}`,
-    newline: symbol.notImplemented`newline: ${IO_REASON}`,
-    "eof-object": symbol.notImplemented`eof-object: ${IO_REASON}`,
-    "eof-object?": symbol.notImplemented`eof-object?: ${IO_REASON}`,
-    "call-with-input-file": symbol.notImplemented`call-with-input-file: ${FILE_PORT_REASON}`,
-    "call-with-output-file": symbol.notImplemented`call-with-output-file: ${FILE_PORT_REASON}`,
-    "with-input-from-file": symbol.notImplemented`with-input-from-file: ${FILE_PORT_REASON}`,
-    "with-output-to-file": symbol.notImplemented`with-output-to-file: ${FILE_PORT_REASON}`,
-    "open-input-file": symbol.notImplemented`open-input-file: ${FILE_PORT_REASON}`,
-    "open-output-file": symbol.notImplemented`open-output-file: ${FILE_PORT_REASON}`,
-    "current-second": symbol.notImplemented`current-second: ${SYSTEM_REASON}`,
-    "current-jiffy": symbol.notImplemented`current-jiffy: ${SYSTEM_REASON}`,
-    "jiffies-per-second": symbol.notImplemented`jiffies-per-second: ${SYSTEM_REASON}`,
-    "get-environment-variable": symbol.notImplemented`get-environment-variable: ${SYSTEM_REASON}`,
-    "get-environment-variables": symbol.notImplemented`get-environment-variables: ${SYSTEM_REASON}`,
-    "command-line": symbol.notImplemented`command-line: ${SYSTEM_REASON}`,
-    exit: symbol.notImplemented`exit: ${SYSTEM_REASON}`,
-    "emergency-exit": symbol.notImplemented`emergency-exit: ${SYSTEM_REASON}`,
-  },
-});
+/** name → reason. Sole inventory; symbols + HOST_DOOR_NAMES derive from this. */
+const DOORS = {
+  "port?": IO,
+  "input-port?": IO,
+  "output-port?": IO,
+  "textual-port?": IO,
+  "binary-port?": IO,
+  "input-port-open?": IO,
+  "output-port-open?": IO,
+  "close-port": IO,
+  "close-input-port": IO,
+  "close-output-port": IO,
+  "call-with-port": IO,
+  "current-input-port": IO,
+  "current-output-port": IO,
+  "current-error-port": IO,
+  "open-input-string": IO,
+  "open-output-string": IO,
+  "get-output-string": IO,
+  "open-input-bytevector": IO,
+  "open-output-bytevector": IO,
+  "get-output-bytevector": IO,
+  "call-with-input-file": FILE,
+  "call-with-output-file": FILE,
+  "with-input-from-file": FILE,
+  "with-output-to-file": FILE,
+  "open-input-file": FILE,
+  "open-output-file": FILE,
+  "open-binary-input-file": FILE,
+  "open-binary-output-file": FILE,
+  "eof-object": IO,
+  "eof-object?": IO,
+  read: IO,
+  "read-char": IO,
+  "peek-char": IO,
+  "read-line": IO,
+  "read-string": IO,
+  "read-u8": IO,
+  "peek-u8": IO,
+  "read-bytevector": IO,
+  "read-bytevector!": IO,
+  "char-ready?": IO,
+  "u8-ready?": IO,
+  write: IO,
+  "write-shared": IO,
+  "write-simple": IO,
+  display: IO,
+  newline: IO,
+  "write-char": IO,
+  "write-string": IO,
+  "write-u8": IO,
+  "write-bytevector": IO,
+  "flush-output-port": IO,
+  "file-exists?": FILE,
+  "delete-file": FILE,
+  "command-line": SYSTEM,
+  exit: SYSTEM,
+  "emergency-exit": SYSTEM,
+  "get-environment-variable": SYSTEM,
+  "get-environment-variables": SYSTEM,
+  "current-second": SYSTEM,
+  "current-jiffy": SYSTEM,
+  "jiffies-per-second": SYSTEM,
+  features: SYSTEM,
+} as const satisfies Record<string, string>;
+
+export const HOST_DOOR_NAMES = Object.keys(DOORS) as (keyof typeof DOORS)[];
+
+const symbols = Object.fromEntries(
+  Object.entries(DOORS).map(([name, reason]) => [name, symbol.notImplemented`${name}: ${reason}`]),
+);
+
+export default new EnvCapability("scheme/r7rs/host", { symbols });

@@ -218,15 +218,8 @@ describe("LAW 3 — a program with 3 distinct problems yields 3 diagnostics in O
 // ============================================================================
 
 describe("LAW 4 — macro firewall: binder formals and placeholder tokens never report", () => {
-  it("`receive` formals (srfi-8, a binder macro) do not report — and the program runs", async () => {
-    const [result] = await exec("(receive (q r) (values 1 2) (list q r))", { staticValidation: "on" });
-    expect(result).toEqual([1, 2]);
-  });
-
-  it("`let-values` claw names do not report", async () => {
-    const [result] = await exec("(let-values (((a b) (values 3 4))) (list a b))", { staticValidation: "on" });
-    expect(result).toEqual([3, 4]);
-  });
+  // receive / let-values are purity doors (multi-return ban) — binder firewall for
+  // those forms is retired with the live macros. and-let* remains the live binder pin.
 
   it("`and-let*` claw-bound variables (srfi-2, migrated `macroAttribute: \"binder\"`) do not report — and the program runs", async () => {
     const [result] = await exec("(and-let* ((x 5) (y (* x 2))) (+ x y))", { staticValidation: "on" });

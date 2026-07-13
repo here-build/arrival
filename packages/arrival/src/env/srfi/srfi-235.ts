@@ -67,10 +67,11 @@ export default new EnvCapability("scheme/srfi-235", {
     // binding (already bound — declared first, just above), never invoked here,
     // so the contract is the single value schema `z.lambda` (the value IS a
     // procedure), not a `Contract<I,O>` record.
-    always: symbol.define`always: arrival's historical name for constantly, kept as a back-compat alias (NOT SRFI-235's own always)`(
-      z.lambda,
-      `constantly`,
-    ),
+    always:
+      symbol.define`always: arrival's historical name for constantly, kept as a back-compat alias (NOT SRFI-235's own always)`(
+        z.lambda,
+        `constantly`,
+      ),
 
     // curry — arrival's arity-aware partial application (NOT SRFI-235 itself, combinator kin).
     // Accumulates `args` across successive calls until `(length args)` reaches fn's minimum
@@ -84,12 +85,7 @@ export default new EnvCapability("scheme/srfi-235", {
     // the output stays the honest shapeless `z.value` (a SRFI-235-adjacent polyglot alias,
     // not a fixed-shape procedure — some polyglot aliases ARE genuinely shapeless).
     curry: symbol.define`curry: arrival's arity-aware partial application (combinator kin, not SRFI-235 itself)`(
-      // OUTPUT is `z.union([z.value, z.values])`: on the arity-met path curry tail-returns
-      // `(apply fn args)`, and `fn` is ANY procedure — including a multi-value one like
-      // `(curry values 1 2)` — whose `Values` box `z.value` rejects at the decode boundary
-      // (the srfi-1 span/break/partition precedent; scheme-zod's `values` doc). The lambda-
-      // continuation path returns an ordinary procedure, already covered by `z.value`.
-      { input: [z.lambda], inputRest: z.value, output: [z.union([z.value, z.values])] },
+      { input: [z.lambda], inputRest: z.value, output: [z.value] },
       `(lambda (fn . args)
          (if (>= (length args) (procedure-min-arity fn))
              (apply fn args)

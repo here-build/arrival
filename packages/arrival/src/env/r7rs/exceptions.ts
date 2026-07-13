@@ -228,12 +228,7 @@ export default new EnvCapability("scheme/r7rs/exceptions", {
     // returned to the call site of raise-continuable. Restore the stack on the way
     // out so the value flows back into the original dynamic environment.
     "raise-continuable": symbol.define`raise-continuable: like raise, but the handler's return value flows back to raise-continuable's own call site (R7RS §6.11)`(
-      // OUTPUT widened with `z.values` (the srfi-1 span/break/partition precedent):
-      // the handler is arbitrary user code and may legally return via `(values …)`, whose
-      // `Values` box is a non-AValue orphan `z.value`/`z.error` both reject at the decode
-      // boundary (scheme-zod's `values` doc). INPUT stays `raisable` — you cannot *raise*
-      // multiple values, so the raise domain must not widen; only the return path does.
-      { input: [raisable], output: [z.union([z.value, z.error, z.values])] },
+      { input: [raisable], output: [z.union([z.value, z.error])] },
       `(lambda (obj)
          (if (%handlers-empty? (%current-handlers))
              (%raise obj)
@@ -251,10 +246,7 @@ export default new EnvCapability("scheme/r7rs/exceptions", {
     // re-raising would re-deliver an exception the inner handler already saw to the
     // outer handler (double delivery).
     "with-exception-handler": symbol.define`with-exception-handler: install handler for the dynamic extent of thunk, removed on the way out (R7RS §6.11)`(
-      // OUTPUT is `z.union([z.value, z.values])`: R7RS returns "the results of invoking
-      // thunk", and thunk is arbitrary user code that may return via `(values …)` — the
-      // same `Values`-orphan gap `z.value` misses (srfi-1 span/break/partition precedent).
-      { input: [z.lambda, z.lambda], output: [z.union([z.value, z.values])] },
+      { input: [z.lambda, z.lambda], output: [z.value] },
       `(lambda (handler thunk)
          (let ((old-handlers (%current-handlers)))
            (%set-handlers! (%push-handler handler old-handlers))

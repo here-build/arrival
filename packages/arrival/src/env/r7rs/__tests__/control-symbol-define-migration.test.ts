@@ -31,15 +31,10 @@
 //     `exports()` (§2.2) still derives the correct 10-name surface purely from
 //     `spec.symbols` keys (the `macroAwareDefineNames(spec.prelude)` half of the
 //     union is vacuous — no prelude to parse).
-//   ROW 5 — the §6.10 boundary check the task names explicitly: `map`/`for-each`
-//     (R7RS §6.10 control features) do NOT live in this pack — they are
-//     `symbol.native` entries in `r7rs/lists.ts` with real (already-enforced,
-//     pre-existing) contracts. `call-with-values`/`values` (also §6.10) live in
-//     `r7rs/binding.ts`. This pack owns exactly the SUBSET of §6.10/§4.2.5/§4.2.6
-//     arrival omits by design (call/cc, dynamic-wind, make-parameter,
-//     parameterize, delay, force, make-promise, delay-force, promise?) — ten
-//     names, no more, no less (promise? doored W4-H4: with every promise
-//     constructor doored, no promise value exists for it to recognize).
+//   ROW 5 — the §6.10 boundary check: `map`/`for-each` live as natives in
+//     r7rs/lists.ts; multi-return (`values`/`call-with-values`/…) is doored on
+//     r7rs/binding (same purity family as call/cc). This pack owns first-class
+//     continuations + dynamic binding + delayed evaluation only — ten names.
 //   ROW 6 — chibi conformance cross-check: every door this pack declares is
 //     covered by a `registries.ts` Exclusion `anyOf` rule (two of which cite
 //     "r7rs/control.ts's notImplemented doors" by name in their `feature` text) —
@@ -189,12 +184,10 @@ describe("ROW 5 — §6.10 boundary: map/for-each/values/call-with-values live O
     }
   });
 
-  it("call-with-values/values resolve as symbol.native from r7rs/binding, not as doors from this pack", async () => {
+  it("multi-return names resolve as DoorProcedure from r7rs/binding (not this pack)", async () => {
     const env = await freshEnv();
-    for (const name of ["call-with-values", "values"]) {
-      const bound = env.get(name);
-      expect(bound).toBeDefined();
-      expect(bound).not.toBeInstanceOf(DoorProcedure);
+    for (const name of ["values", "call-with-values", "let-values", "let*-values", "define-values"]) {
+      expect(env.get(name)).toBeInstanceOf(DoorProcedure);
     }
   });
 });

@@ -24,17 +24,8 @@
 // `symbol.define`, zero `symbol.defineSyntax` — and a door is contract-free by
 // construction, so there is no bake/FV machinery here to interact with.
 //
-// §6.10 boundary: R7RS §6.10 "control features" also names `map`/`for-each`/
-// `string-map`/`vector-map`/`string-for-each`/`vector-for-each` (implemented,
-// `symbol.native`, `r7rs/lists.ts`) and `values`/`call-with-values` (implemented,
-// `symbol.native`, `r7rs/binding.ts`) — this pack owns exactly arrival's
-// SUPPORTED-vs-omitted split of §6.10, not the whole section: the nine names
-// below are the omitted subset, full stop.
-//
-// `promise?` (§4.2.5) is doored alongside its whole delayed-evaluation family
-// (`delay`/`force`/`make-promise`/`delay-force`): with every promise-constructing
-// verb doored, no promise value can ever exist, so the predicate has nothing to
-// recognize.
+// §6.10: map/for-each live in lists; multi-return doored on binding. This pack:
+// call/cc + parameters + delay. promise? doored with its constructors (nothing to test).
 
 import { EnvCapability } from "../../common/capability.js";
 import { symbol } from "../../common/symbol.js";
@@ -48,11 +39,11 @@ export default new EnvCapability("scheme/r7rs/control", {
 
     // §4.2.6 Dynamic bindings — identity tied to call-time extent, not construction.
     "make-parameter": symbol.notImplemented`make-parameter: dynamic binding is omitted from arrival by design — it ties a value's identity to call-time extent, not to where it was constructed; pass the value explicitly / thread it through your dataflow`,
-    "parameterize": symbol.notImplemented`parameterize: dynamic binding is omitted from arrival by design — it ties a value's identity to call-time extent, not to where it was constructed; pass the value explicitly / thread it through your dataflow`,
+    parameterize: symbol.notImplemented`parameterize: dynamic binding is omitted from arrival by design — it ties a value's identity to call-time extent, not to where it was constructed; pass the value explicitly / thread it through your dataflow`,
 
     // §4.2.5 Delayed evaluation — identity deferred to force-time, not construction.
-    "delay": symbol.notImplemented`delay: delayed evaluation is omitted from arrival by design — it defers a value's identity to force-time and the dynamic extent alive then, not to where it was constructed; compute the value where you need it`,
-    "force": symbol.notImplemented`force: delayed evaluation is omitted from arrival by design — it defers a value's identity to force-time and the dynamic extent alive then, not to where it was constructed; compute the value where you need it`,
+    delay: symbol.notImplemented`delay: delayed evaluation is omitted from arrival by design — it defers a value's identity to force-time and the dynamic extent alive then, not to where it was constructed; compute the value where you need it`,
+    force: symbol.notImplemented`force: delayed evaluation is omitted from arrival by design — it defers a value's identity to force-time and the dynamic extent alive then, not to where it was constructed; compute the value where you need it`,
     "make-promise": symbol.notImplemented`make-promise: delayed evaluation is omitted from arrival by design — it defers a value's identity to force-time and the dynamic extent alive then, not to where it was constructed; compute the value where you need it`,
     "delay-force": symbol.notImplemented`delay-force: delayed evaluation is omitted from arrival by design — it defers a value's identity to force-time and the dynamic extent alive then, not to where it was constructed; compute the value where you need it`,
     "promise?": symbol.notImplemented`promise?: delayed evaluation is omitted from arrival by design — with delay/force/make-promise/delay-force all doored (§4.2.5), no promise value can exist to test; there is nothing for this predicate to recognize`,
