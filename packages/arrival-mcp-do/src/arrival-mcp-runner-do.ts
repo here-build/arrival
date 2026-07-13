@@ -54,6 +54,17 @@ import { createDoSessionRunStore } from "./session-run-store.js";
  *  worker). */
 export const INTERNAL_SUB_HEADER = "x-internal-sub";
 
+/** Internal header carrying the session's leg-2 SECRET, stamped by the (privileged) worker
+ *  edge on EVERY request after it get-or-extends the credential at the api's JWT-only door
+ *  (the SLIDE model — `mcp-session-native-credential.md` §Credential). Like
+ *  {@link INTERNAL_SUB_HEADER} it is set unconditionally at the edge (any inbound value is
+ *  overwritten), so it is unspoofable. The runner holds the stamped value IN-MEMORY only —
+ *  it never persists it (`#sessionSecret`), and mints/revokes nothing: the credential's
+ *  lifetime is the api's, sliding with each request. Optional on the wire: a deployment that
+ *  has not yet moved its edge to the stamped-secret flow simply doesn't send it, and the
+ *  runner's `sessionSecret()` stays `undefined`. */
+export const INTERNAL_SESSION_SECRET_HEADER = "x-internal-session-secret";
+
 /** Session idle TTL before the alarm reaps (ms), absent an env override. */
 const DEFAULT_TTL_MS = 30 * 60_000;
 
@@ -150,6 +161,31 @@ export abstract class ArrivalMcpRunnerDO<Env extends ArrivalMcpRunnerEnv> extend
    *  revoked credential. In-memory suffices: a recycled isolate has no in-flight fetch. */
   #gen = 0;
 
+  /** The session's leg-2 secret, as stamped on the CURRENT request's
+   *  {@link INTERNAL_SESSION_SECRET_HEADER} by the worker edge. IN-MEMORY ONLY — never
+   *  persisted (the credential is re-derivable per request: the edge slides + re-stamps it
+   *  every time), so a `getSessionToken`-style storage read can't leak it and a swept
+   *  session carries none. `undefined` until the first request stamps one (or forever, for a
+   *  deployment whose edge doesn't stamp yet). Read by the subclass via `sessionSecret()` to
+   *  arm its capability plane. */
+  #sessionSecret?: string;
+  /** In-memory subject pin, set by the FIRST request of this wake AFTER the fixation guard
+   *  passes. Covers the window before the handshake meta exists (`meta.userSub` is written
+   *  only by `onsessioninitialized`): without it, two interleaved pre-init requests from
+   *  different principals would both pass `sessionPrincipal(undefined) === undefined` and the
+   *  second could overwrite the first's in-memory secret. With it, request 2's subject must
+   *  match request 1's or it 401s (store-after-guard, A3). Redundant once meta is written
+   *  (the durable pin subsumes it); harmless to keep. */
+  #pinnedSub?: string;
+
+  /** The session's current leg-2 secret (the stamped credential), or `undefined` if the edge
+   *  hasn't stamped one. The subclass's `buildTools` reads this — through a live closure, not
+   *  a captured value — so its api client always presents the freshest stamp (under SLIDE the
+   *  string is stable for the session's life, but the closure keeps it correct regardless). */
+  protected sessionSecret(): string | undefined {
+    return this.#sessionSecret;
+  }
+
   #ttlMs(): number {
     const raw = Number(this.env.MCP_SESSION_TTL_MS);
     return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_TTL_MS;
@@ -186,11 +222,21 @@ export abstract class ArrivalMcpRunnerDO<Env extends ArrivalMcpRunnerEnv> extend
     const meta = await this.ctx.storage.get<SessionMeta>(this.metaKey);
 
     // Fixation guard: a valid credential for user A never rides user B's session id. The
-    // worker verified the token; the DO pins the subject the session belongs to.
-    const principal = await this.sessionPrincipal(meta);
-    if (principal !== undefined && principal !== sub) {
+    // worker verified the token; the DO pins the subject the session belongs to — from the
+    // durable handshake meta (`sessionPrincipal`) OR, before that exists, from the in-memory
+    // pin the first request of this wake set (`#pinnedSub`), closing the pre-init window.
+    const durablePrincipal = await this.sessionPrincipal(meta);
+    const pinned = durablePrincipal ?? this.#pinnedSub;
+    if (pinned !== undefined && pinned !== sub) {
       return Response.json({ error: "session does not belong to this principal" }, { status: 401 });
     }
+
+    // Store-after-guard (A3): only now that this request's subject is authorized do we retain
+    // its stamped leg-2 secret and pin the session's subject in memory. Retaining BEFORE the
+    // guard would let user B's 401'd request poison user A's session with B's credential.
+    const stampedSecret = request.headers.get(INTERNAL_SESSION_SECRET_HEADER);
+    if (stampedSecret) this.#sessionSecret = stampedSecret;
+    this.#pinnedSub ??= sub;
 
     // First request of a fresh session: capture the initialize params for the durable
     // handshake meta (consumed by onsessioninitialized; undefined on a non-init body).
@@ -261,6 +307,10 @@ export abstract class ArrivalMcpRunnerDO<Env extends ArrivalMcpRunnerEnv> extend
       await this.onClose();
       await this.ctx.storage.deleteAlarm();
       await this.ctx.storage.deleteAll();
+      // Session fully gone: drop the in-memory credential + subject pin too, so nothing
+      // survives the wipe in this isolate (a recycle would lose them regardless).
+      this.#sessionSecret = undefined;
+      this.#pinnedSub = undefined;
     });
   }
 
