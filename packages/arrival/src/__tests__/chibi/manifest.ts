@@ -158,7 +158,11 @@ function listForms(list: SchemeValue): SchemeValue[] {
   return out;
 }
 
-function headSymbolName(form: SchemeValue): string | undefined {
+/** Exported for corpora whose top-level shape needs unwrapping before the classifier below
+ *  can run (e.g. chibi's own SRFI-1 `test.sld`, wrapped in `define-library`/`begin`/
+ *  `define` — see `srfi1-manifest.ts`): the same reader-based head-symbol check this module
+ *  uses everywhere else, never a text/content match. */
+export function headSymbolName(form: SchemeValue): string | undefined {
   if (!(form instanceof APair)) return undefined;
   const head = form.car;
   if (head instanceof ASymbol && typeof head.__name__ === "string") return head.__name__;
@@ -490,10 +494,23 @@ export function splitTopLevelForms(text: string): RawForm[] {
 
 // ── manifest builder (§9) ───────────────────────────────────────────────────────────────────
 
+/** Whole-file corpus (r7rs-tests.scm): read + structurally split at the top level, then
+ *  delegate to the shared classifier below. */
 export async function buildManifest(corpusPath: string): Promise<Manifest> {
   const text = fs.readFileSync(corpusPath, "utf-8");
   const rawForms = splitTopLevelForms(text);
+  return buildManifestFromForms(corpusPath, rawForms);
+}
 
+/** The classifier core, shared by `buildManifest` (whole-file corpora) and any corpus that
+ *  must first extract its own ordered top-level form list from a non-top-level wrapper —
+ *  e.g. chibi's own SRFI-1 `test.sld`, whose test forms sit inside
+ *  `(define-library … (begin (define (run-tests) …)))` rather than at the file's own top
+ *  level (see `srfi1-manifest.ts`'s `extractSrfi1Body`, which produces exactly this
+ *  `RawForm[]` shape via the same structural splitter before handing off here). Identical
+ *  head-symbol classification either way — a wrapper's extracted body is indistinguishable
+ *  from a genuine top level once it's a `RawForm[]`. */
+export async function buildManifestFromForms(corpusPath: string, rawForms: readonly RawForm[]): Promise<Manifest> {
   const steps: Step[] = [];
   const tests: TestStep[] = [];
   const sectionStack: string[] = [];

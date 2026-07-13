@@ -209,6 +209,33 @@ export const EXCLUDED: readonly Exclusion[] = [
     feature: "exact-integer-sqrt product used via let*-values (multi-return binder doored) — cascading",
     note: "2^140 block sibling of (test 0 rem); root unbound when let*-values is doored",
   },
+  // (means ton) (r7rs-tests.scm:182-198, "4.2 Derived expression types") returns its three
+  // Pythagorean-mean-style results via `(values …)`; the immediately-following block
+  // (line 199) destructures them with `(let*-values (((a b c) (means …))) (test 27 a) …)`.
+  // let*-values doors (multi-return, R7RS §6.10 omitted by design) WITHOUT throwing at the
+  // binder head itself — verified directly (chibi-r7rs-v2.spec.ts run): the block aborts
+  // with "Unbound variable `a'" (not a notImplemented door message), i.e. the doored binder
+  // never introduces a/b/c, and the block's first body form is the one that discovers this.
+  // Same block-member symbol-visibility gap as the exact-integer-sqrt trio directly above:
+  // each member's OWN datum is just `(test N a)`/`(test N b)`/`(test N c)` — the enclosing
+  // `let*-values`/`values`/`means` tokens live only in the BLOCK's own head, invisible to
+  // `datumSymbols` on the individual member — so the general multi-values rule below can't
+  // catch these three, and they need their own cascade rows.
+  {
+    match: { kind: "form", exact: normalizeText(`(test 27 a)`) },
+    feature: "means's (values …) result destructured via let*-values (multi-return binder doored) — cascading",
+    note: "block-member symbol-visibility gap; means/values/let*-values are in the block's own head, not this member's datum",
+  },
+  {
+    match: { kind: "form", exact: normalizeText(`(test 9.728 b)`) },
+    feature: "means's (values …) result destructured via let*-values (multi-return binder doored) — cascading",
+    note: "same block-member gap as (test 27 a) above",
+  },
+  {
+    match: { kind: "form", exact: normalizeText(`(test 1800/497 c)`) },
+    feature: "means's (values …) result destructured via let*-values (multi-return binder doored) — cascading",
+    note: "same block-member gap as (test 27 a) above",
+  },
   {
     match: {
       kind: "symbols",
@@ -616,14 +643,6 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
 
 export const STAGED: readonly Staged[] = [];
 
-export function verdictFor(step: TestStep): Verdict {
-  for (const rule of EXCLUDED) if (matchesRule(rule.match, step)) return { run: "skip", feature: rule.feature };
-  for (const rule of EXPECTED_FAILURES)
-    if (matchesRule(rule.match, step)) return { run: "fails", reason: rule.reason, gate: rule.gate };
-  for (const rule of STAGED) if (matchesRule(rule.match, step)) return { run: "todo", spec: rule.spec };
-  return { run: "it" };
-}
-
 function describeMatch(match: Matcher): string {
   switch (match.kind) {
     case "symbols":
@@ -635,29 +654,56 @@ function describeMatch(match: Matcher): string {
   }
 }
 
-/** P16 harness self-check (§4): dead-rule alarm (a rule matching zero manifest rows — orphaned
- *  by an upstream fix, must be deleted) + over-match alarm (an ExpectedFailure exceeding its
- *  declared `maxMatches`, protecting a sibling test that should stay green). Returns a list of
- *  human-readable findings; empty means coherent. */
-export function registryCoherenceFindings(manifest: Manifest): string[] {
-  const findings: string[] = [];
-  const countMatches = (match: Matcher): number => manifest.tests.reduce((n, t) => n + (matchesRule(match, t) ? 1 : 0), 0);
+/** The generic engine behind `verdictFor`/`registryCoherenceFindings`, factored out so a
+ *  SECOND corpus with its own rule tables (e.g. chibi's own SRFI-1 `test.sld` —
+ *  `registries-srfi1.ts`) gets the identical precedence/self-check machinery instead of a
+ *  re-implementation that could drift from this one. The main corpus's own `verdictFor`/
+ *  `registryCoherenceFindings` below are just this factory applied to `EXCLUDED`/
+ *  `EXPECTED_FAILURES`/`STAGED` — zero behavior change from before this factoring. */
+export function makeRegistry(
+  excluded: readonly Exclusion[],
+  expectedFailures: readonly ExpectedFailure[],
+  staged: readonly Staged[],
+): { verdictFor: (step: TestStep) => Verdict; registryCoherenceFindings: (manifest: Manifest) => string[] } {
+  function verdictFor(step: TestStep): Verdict {
+    for (const rule of excluded) if (matchesRule(rule.match, step)) return { run: "skip", feature: rule.feature };
+    for (const rule of expectedFailures)
+      if (matchesRule(rule.match, step)) return { run: "fails", reason: rule.reason, gate: rule.gate };
+    for (const rule of staged) if (matchesRule(rule.match, step)) return { run: "todo", spec: rule.spec };
+    return { run: "it" };
+  }
 
-  for (const rule of EXCLUDED) {
-    const n = countMatches(rule.match);
-    if (n === 0) findings.push(`dead Exclusion rule (0 matches): ${describeMatch(rule.match)} — ${rule.feature}`);
+  // P16 harness self-check (§4): dead-rule alarm (a rule matching zero manifest rows —
+  // orphaned by an upstream fix, must be deleted) + over-match alarm (an ExpectedFailure
+  // exceeding its declared `maxMatches`, protecting a sibling test that should stay green).
+  // Returns a list of human-readable findings; empty means coherent.
+  function registryCoherenceFindings(manifest: Manifest): string[] {
+    const findings: string[] = [];
+    const countMatches = (match: Matcher): number =>
+      manifest.tests.reduce((n, t) => n + (matchesRule(match, t) ? 1 : 0), 0);
+
+    for (const rule of excluded) {
+      const n = countMatches(rule.match);
+      if (n === 0) findings.push(`dead Exclusion rule (0 matches): ${describeMatch(rule.match)} — ${rule.feature}`);
+    }
+    for (const rule of expectedFailures) {
+      const n = countMatches(rule.match);
+      if (n === 0) findings.push(`dead ExpectedFailure rule (0 matches): ${describeMatch(rule.match)} — ${rule.reason}`);
+      if (rule.maxMatches !== undefined && n > rule.maxMatches)
+        findings.push(
+          `over-match ExpectedFailure rule (${n} > maxMatches ${rule.maxMatches}): ${describeMatch(rule.match)} — ${rule.reason}`,
+        );
+    }
+    for (const rule of staged) {
+      const n = countMatches(rule.match);
+      if (n === 0) findings.push(`dead Staged rule (0 matches): ${describeMatch(rule.match)} — ${rule.spec}`);
+    }
+    return findings;
   }
-  for (const rule of EXPECTED_FAILURES) {
-    const n = countMatches(rule.match);
-    if (n === 0) findings.push(`dead ExpectedFailure rule (0 matches): ${describeMatch(rule.match)} — ${rule.reason}`);
-    if (rule.maxMatches !== undefined && n > rule.maxMatches)
-      findings.push(
-        `over-match ExpectedFailure rule (${n} > maxMatches ${rule.maxMatches}): ${describeMatch(rule.match)} — ${rule.reason}`,
-      );
-  }
-  for (const rule of STAGED) {
-    const n = countMatches(rule.match);
-    if (n === 0) findings.push(`dead Staged rule (0 matches): ${describeMatch(rule.match)} — ${rule.spec}`);
-  }
-  return findings;
+
+  return { verdictFor, registryCoherenceFindings };
 }
+
+const mainRegistry = makeRegistry(EXCLUDED, EXPECTED_FAILURES, STAGED);
+export const verdictFor = mainRegistry.verdictFor;
+export const registryCoherenceFindings = mainRegistry.registryCoherenceFindings;
