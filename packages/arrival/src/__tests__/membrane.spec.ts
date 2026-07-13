@@ -197,9 +197,10 @@ describe("Wrapper Layer", () => {
   });
 
   describe("toJS", () => {
-    // INVARIANT: nil converts to null
-    it("converts nil to null", () => {
-      expect(toJS(nil)).toBe(null);
+    // LAW (nil-as-array, V 2026-07-13): nil's JS face is [] — the empty case of the one
+    // list projection (egress canonical; ingress stays permissive with null → nil).
+    it("converts nil to []", () => {
+      expect(toJS(nil)).toEqual([]);
     });
 
     // INVARIANT: AJSObject unwraps to its exact source object

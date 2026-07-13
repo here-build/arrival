@@ -423,7 +423,14 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   }
 
   // Indexed access — `(vector-ref vec k)` dispatches here (the builtin forwards the index k).
+  // Bounds-checked (R7RS §6.8: "it is an error if k is not a valid index"): an OOB read
+  // used to leak a raw JS `undefined` past the interop boundary — the silent-wrong-value
+  // class the 2026-07-13 conformance sweep flagged as its top fix. Clean, catchable error,
+  // same quality bar as list-ref's.
   ["arrival/tagless-final/vector-ref"](k: number): SchemeValue {
+    if (!Number.isInteger(k) || k < 0 || k >= this.__vector__.length) {
+      throw new RangeError(`vector-ref: index ${k} out of range for a vector of length ${this.__vector__.length}`);
+    }
     return this.__vector__[k];
   }
 

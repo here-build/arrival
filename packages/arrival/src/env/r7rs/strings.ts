@@ -91,10 +91,18 @@ export default new EnvCapability("scheme/strings", {
 
     "string-ref": symbol.native`string-ref: the character at index k`(
       { input: [z.string, z.schemeNumber], output: [z.char] },
-      function (this: CallCtx, str, k) { return withInputProvenance(
-          [str, k],
-          new ACharacter(this.runCtx, [...stringValue(str)][Number(coerceNumeric(k).valueOf())]),
-        ); },
+      function (this: CallCtx, str, k) {
+        // Bounds-checked (R7RS §6.7: "k must be a valid index"): OOB used to construct
+        // ACharacter(undefined) and crash later with a leaky internal error ("charValue
+        // is not iterable") — now a clean, catchable error at the call (2026-07-13 sweep,
+        // parity with list-ref's quality bar). Code-point indexing (the spread), not UTF-16.
+        const chars = [...stringValue(str)];
+        const idx = Number(coerceNumeric(k).valueOf());
+        if (!Number.isInteger(idx) || idx < 0 || idx >= chars.length) {
+          throw new RangeError(`string-ref: index ${idx} out of range for a string of length ${chars.length}`);
+        }
+        return withInputProvenance([str, k], new ACharacter(this.runCtx, chars[idx]));
+      },
     ),
 
     // ── PURITY DOORS — string mutators OMITTED by design (R7RS §6.7) ─────────────
