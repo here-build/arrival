@@ -1,12 +1,12 @@
 # SRFI-13 — Immutable subset + implement-or-door plan
 
-**Status:** audit + plan only (no production code in this doc’s commit).  
+**Status:** **PR1–3 landed** (`126d370ddd`) — official left trim + `string-trim-both`, purity/subset doors in pack, `string-filter` moved out of stubs. Residual roadmap: optional P1+ live promotes (`string-filter`/`string-delete`/skip/index-right, …).  
 **Policy:** Arrival strings are **immutable**. Every official SRFI-13 export is either **live** or a **door**. Silent absence is a bug. We do **not** implement the whole of SRFI-13; we implement a pure subset and door the rest with teaching reasons.  
 **Sources of truth:**
 - Official index: [SRFI 13](https://srfi.schemers.org/srfi-13/srfi-13.html) (Procedure Index)
 - Pack: `src/env/srfi/srfi-13.ts` (`scheme/srfi-13`)
-- Related doors: `src/env/srfi/srfi-stubs.ts`, `src/env/r7rs/strings.ts` (`scheme/strings`)
-- Prior inventory: `docs/srfi-completeness-audit.md` § SRFI-13
+- Related doors: `src/env/r7rs/strings.ts` (R7RS mutators); char-sets stay `srfi-stubs` (SRFI-14)
+- Inventory score: [`docs/srfi-completeness-audit.md`](./srfi-completeness-audit.md) § SRFI-13
 
 ---
 

@@ -1,10 +1,10 @@
 # SRFI-1 — Immutable subset + implement-or-door plan
 
 **Pack:** [`src/env/srfi/srfi-1.ts`](../src/env/srfi/srfi-1.ts) (`scheme/srfi-1`)  
-**Policy:** Arrival is an **immutable** Scheme subset. Every official SRFI-1 export is either **live** (correct enough for our subset) or a **`symbol.notImplemented` door** with a teaching reason. Silent absence is a bug. Header claiming "whole surface" without doors is a lie.  
+**Policy:** Arrival is an **immutable** Scheme subset. Every official SRFI-1 export is either **live** (correct enough for our subset) or a **`symbol.notImplemented` door** with a teaching reason. Silent absence is a bug.  
 **Date:** 2026-07-13  
-**Scope of this doc:** inventory + plan only — no production code edits.  
-**Related:** broader pack audit in [`docs/srfi-completeness-audit.md`](./srfi-completeness-audit.md) (partially stale on multi-return: span/break/partition already return `(list a b)`).
+**Status:** **PR1 landed** (`a52dd60f99`) — honest header, purity + subset doors, `any` alias of `some`. This doc remains the inventory / residual roadmap (find → `#f`, SRFI-shaped `unfold`, optional pure promotes).  
+**Related:** [`docs/srfi-completeness-audit.md`](./srfi-completeness-audit.md) (score COMPLETE under implement-or-door).
 
 **Official index:** [SRFI-1 Procedure Index](https://srfi.schemers.org/srfi-1/srfi-1.html#ProcedureIndex).
 
