@@ -446,14 +446,30 @@ export default new EnvCapability("scheme/srfi-1", {
     // out-of-domain call that fails at the contract boundary with a clear
     // message, never mid-body.
     "last-pair": symbol.define`last-pair: the last pair of a non-empty (possibly dotted) list`(
-      { input: [z.pair], output: [z.pair] },
+      {
+        input: [z.pair],
+        output: [z.pair],
+        type: dedent`
+          {
+            <T>(xs: List<T>): Pair<T, List<T> | T>;
+          }
+        `,
+      },
       `(lambda (xs)
          (let loop ((xs xs))
            (if (pair? (cdr xs)) (loop (cdr xs)) xs)))`,
     ),
 
     last: symbol.define`last: the last element of a non-empty proper list`(
-      { input: [z.pair], output: [z.value] },
+      {
+        input: [z.pair],
+        output: [z.value],
+        type: dedent`
+          {
+            <T>(xs: List<T>): T;
+          }
+        `,
+      },
       `(lambda (xs) (car (last-pair xs)))`,
     ),
 
@@ -476,44 +492,125 @@ export default new EnvCapability("scheme/srfi-1", {
     // stamp provenance (cf. `find`, which returns its match unchanged). Input is
     // listAlike (not z.pair): '() must REACH %list-nth so the teaching message
     // ("first: list has no elements") stays the error surface, not a zod boundary.
+    // first…tenth share List<T> → T harvest (positional list-ref with teaching errors).
     first: symbol.define`first: the 1st element of a proper list (errors if too short)`(
-      { input: [listAlike], output: [z.value] },
+      {
+        input: [listAlike],
+        output: [z.value],
+        type: dedent`
+          {
+            <T>(xs: List<T>): T;
+          }
+        `,
+      },
       `(lambda (xs) (%list-nth xs 0 "first: list has no elements"))`,
     ),
     second: symbol.define`second: the 2nd element of a proper list (errors if too short)`(
-      { input: [listAlike], output: [z.value] },
+      {
+        input: [listAlike],
+        output: [z.value],
+        type: dedent`
+          {
+            <T>(xs: List<T>): T;
+          }
+        `,
+      },
       `(lambda (xs) (%list-nth xs 1 "second: list has fewer than 2 elements"))`,
     ),
     third: symbol.define`third: the 3rd element of a proper list (errors if too short)`(
-      { input: [listAlike], output: [z.value] },
+      {
+        input: [listAlike],
+        output: [z.value],
+        type: dedent`
+          {
+            <T>(xs: List<T>): T;
+          }
+        `,
+      },
       `(lambda (xs) (%list-nth xs 2 "third: list has fewer than 3 elements"))`,
     ),
     fourth: symbol.define`fourth: the 4th element of a proper list (errors if too short)`(
-      { input: [listAlike], output: [z.value] },
+      {
+        input: [listAlike],
+        output: [z.value],
+        type: dedent`
+          {
+            <T>(xs: List<T>): T;
+          }
+        `,
+      },
       `(lambda (xs) (%list-nth xs 3 "fourth: list has fewer than 4 elements"))`,
     ),
     fifth: symbol.define`fifth: the 5th element of a proper list (errors if too short)`(
-      { input: [listAlike], output: [z.value] },
+      {
+        input: [listAlike],
+        output: [z.value],
+        type: dedent`
+          {
+            <T>(xs: List<T>): T;
+          }
+        `,
+      },
       `(lambda (xs) (%list-nth xs 4 "fifth: list has fewer than 5 elements"))`,
     ),
     sixth: symbol.define`sixth: the 6th element of a proper list (errors if too short)`(
-      { input: [listAlike], output: [z.value] },
+      {
+        input: [listAlike],
+        output: [z.value],
+        type: dedent`
+          {
+            <T>(xs: List<T>): T;
+          }
+        `,
+      },
       `(lambda (xs) (%list-nth xs 5 "sixth: list has fewer than 6 elements"))`,
     ),
     seventh: symbol.define`seventh: the 7th element of a proper list (errors if too short)`(
-      { input: [listAlike], output: [z.value] },
+      {
+        input: [listAlike],
+        output: [z.value],
+        type: dedent`
+          {
+            <T>(xs: List<T>): T;
+          }
+        `,
+      },
       `(lambda (xs) (%list-nth xs 6 "seventh: list has fewer than 7 elements"))`,
     ),
     eighth: symbol.define`eighth: the 8th element of a proper list (errors if too short)`(
-      { input: [listAlike], output: [z.value] },
+      {
+        input: [listAlike],
+        output: [z.value],
+        type: dedent`
+          {
+            <T>(xs: List<T>): T;
+          }
+        `,
+      },
       `(lambda (xs) (%list-nth xs 7 "eighth: list has fewer than 8 elements"))`,
     ),
     ninth: symbol.define`ninth: the 9th element of a proper list (errors if too short)`(
-      { input: [listAlike], output: [z.value] },
+      {
+        input: [listAlike],
+        output: [z.value],
+        type: dedent`
+          {
+            <T>(xs: List<T>): T;
+          }
+        `,
+      },
       `(lambda (xs) (%list-nth xs 8 "ninth: list has fewer than 9 elements"))`,
     ),
     tenth: symbol.define`tenth: the 10th element of a proper list (errors if too short)`(
-      { input: [listAlike], output: [z.value] },
+      {
+        input: [listAlike],
+        output: [z.value],
+        type: dedent`
+          {
+            <T>(xs: List<T>): T;
+          }
+        `,
+      },
       `(lambda (xs) (%list-nth xs 9 "tenth: list has fewer than 10 elements"))`,
     ),
 
@@ -558,21 +655,45 @@ export default new EnvCapability("scheme/srfi-1", {
     // Output z.value: append's R7RS contract lets the LAST list be improper (the
     // result then embeds that tail) — the shallow input union can't rule it out.
     concatenate: symbol.define`concatenate: append a list of lists into one list`(
-      { input: [listAlike], output: [z.value] },
+      {
+        input: [listAlike],
+        output: [z.value],
+        type: dedent`
+          {
+            <T>(lists: List<List<T>>): List<T>;
+          }
+        `,
+      },
       `(lambda (lists) (apply append lists))`,
     ),
 
     // Output z.value: the result is (reverse rev) grafted onto the caller's tail —
     // tail-typed, and SRFI-1 allows any tail object.
     "append-reverse": symbol.define`append-reverse: (append (reverse rev) tail), accumulator-friendly`(
-      { input: [listAlike, z.value], output: [z.value] },
+      {
+        input: [listAlike, z.value],
+        output: [z.value],
+        type: dedent`
+          {
+            <T, U>(rev: List<T>, tail: U): List<T> | U;
+          }
+        `,
+      },
       `(lambda (rev tail)
          (let loop ((rev rev) (tail tail))
            (if (null? rev) tail (loop (cdr rev) (cons (car rev) tail)))))`,
     ),
 
     delete: symbol.define`delete: remove all elements equal? to x from xs, as a fresh list`(
-      { input: [z.value, listAlike], output: [listAlike] },
+      {
+        input: [z.value, listAlike],
+        output: [listAlike],
+        type: dedent`
+          {
+            <T>(x: T, xs: List<T>): List<T>;
+          }
+        `,
+      },
       `(lambda (x xs)
          (let loop ((xs xs) (acc '()))
            (cond ((null? xs) (reverse acc))
@@ -612,18 +733,42 @@ export default new EnvCapability("scheme/srfi-1", {
     // derivation, which would mask a genuinely-falsy first element.) xs is z.value — TOTAL
     // tolerance (any non-pair → the sentinel) is the whole point, so it is the contract.
     "first?": symbol.define`first?: the head of xs, or #f (falsy!) when xs is not a pair — the safe guard twin of first`(
-      { input: [z.value], output: [z.value] },
+      {
+        input: [z.value],
+        output: [z.value],
+        type: dedent`
+          {
+            <T>(xs: List<T> | unknown): T | false;
+          }
+        `,
+      },
       `(lambda (xs) (if (pair? xs) (car xs) #f))`,
     ),
     "first-or": symbol.define`first-or: the head of xs, or default when xs is not a pair — the defaulted twin of first?`(
-      { input: [z.value, z.value], output: [z.value] },
+      {
+        input: [z.value, z.value],
+        output: [z.value],
+        type: dedent`
+          {
+            <T, D>(xs: List<T> | unknown, default: D): T | D;
+          }
+        `,
+      },
       `(lambda (xs default) (if (pair? xs) (car xs) default))`,
     ),
 
     // The shallow listAlike input is LOAD-BEARING here: z.list's spine-walking decode
     // would throw on exactly the circular lists this verb exists to answer.
     "length+": symbol.define`length+: list length, or #f for a circular list (Floyd cycle detection)`(
-      { input: [listAlike], output: [z.union([z.exact, z.booleanFalse])] },
+      {
+        input: [listAlike],
+        output: [z.union([z.exact, z.booleanFalse])],
+        type: dedent`
+          {
+            (xs: List<unknown>): number | false;
+          }
+        `,
+      },
       `(lambda (xs)
          (let loop ((slow xs) (fast xs) (n 0))
            (cond ((null? fast) n)
@@ -644,7 +789,16 @@ export default new EnvCapability("scheme/srfi-1", {
     // are (+ start (* i step)) — inexact whenever start/step are ⇒ the honest element
     // is a number, but the LIST shape is guaranteed fresh-proper.
     iota: symbol.define`iota: (iota count [start step]) — a list of count numbers from start by step`(
-      { input: [z.schemeNumber], inputRest: z.schemeNumber, output: [listAlike] },
+      {
+        input: [z.schemeNumber],
+        inputRest: z.schemeNumber,
+        output: [listAlike],
+        type: dedent`
+          {
+            (count: number, start?: number, step?: number): List<number>;
+          }
+        `,
+      },
       `(lambda (count . rest)
          (let ((start (if (null? rest) 0 (car rest)))
                (step (if (or (null? rest) (null? (cdr rest))) 1 (cadr rest))))
@@ -656,7 +810,15 @@ export default new EnvCapability("scheme/srfi-1", {
     // range — arrival's [0, stop) integer list: exactly (iota stop). The single-arg form
     // is the only one used in practice (every spec site calls (range n)).
     range: symbol.define`range: arrival's [0, stop) integer list — exactly (iota stop)`(
-      { input: [z.schemeNumber], output: [listAlike] },
+      {
+        input: [z.schemeNumber],
+        output: [listAlike],
+        type: dedent`
+          {
+            (stop: number): List<number>;
+          }
+        `,
+      },
       `(lambda (stop) (iota stop))`,
     ),
 
