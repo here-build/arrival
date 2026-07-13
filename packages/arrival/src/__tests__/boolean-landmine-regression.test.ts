@@ -32,8 +32,32 @@ describe("boolean landmine — find/filter (stdlib, THE documented landmine)", (
   it("find returns the first match under a SchemeBool predicate", async () => {
     expect(await run(`(find ${EVEN_SB} '(1 2 3 4))`)).toBe("2");
   });
-  it("find returns nil when the SchemeBool predicate is #f for all (arrival not-found = ())", async () => {
-    expect(await run(`(find (lambda (x) #f) '(1 2 3))`)).toBe("()");
+  it("find returns #f when the SchemeBool predicate is #f for all (SRFI-1 not-found = #f)", async () => {
+    // Was '()' — an arrival deviation, fixed 2026-07-13 (V: "definitely fix").
+    expect(await run(`(find (lambda (x) #f) '(1 2 3))`)).toBe("#f");
+  });
+});
+
+describe("nil truthiness — R7RS: only #f is false; '() is a TRUTHY verdict everywhere", () => {
+  // THE split this suite existed to prevent, finally pinned: filter/find/take-while
+  // once treated a '()-returning predicate as false while some/every/if treated it
+  // truthy — same predicate, opposite verdicts (the private `instanceof ANil` forks,
+  // deleted 2026-07-13). These rows keep the HOF family in agreement forever.
+  const NIL_PRED = "(lambda (x) '())"; // returns '() for every element — truthy per R7RS
+  it("filter keeps every element under a '()-returning predicate", async () => {
+    expect(await run(`(filter ${NIL_PRED} '(1 2 3))`)).toBe("(1 2 3)");
+  });
+  it("find matches the FIRST element under a '()-returning predicate", async () => {
+    expect(await run(`(find ${NIL_PRED} '(1 2 3))`)).toBe("1");
+  });
+  it("some agrees (was already truthy — the reference behavior)", async () => {
+    expect(await run(`(some ${NIL_PRED} '(1 2 3))`)).toBe("#t");
+  });
+  it("take-while takes everything under a '()-returning predicate", async () => {
+    expect(await run(`(take-while ${NIL_PRED} '(1 2 3))`)).toBe("(1 2 3)");
+  });
+  it("drop-while drops everything under a '()-returning predicate", async () => {
+    expect(await run(`(drop-while ${NIL_PRED} '(1 2 3))`)).toBe("()");
   });
 });
 

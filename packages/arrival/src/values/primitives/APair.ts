@@ -656,7 +656,9 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     // Wave 1 (see map above) — `runCtx` required, confession closed; `env/srfi/srfi-1.ts`'s
     // `filter` dispatcher already threads a live `this.runCtx` on every real call.
     const verdicts = elements.map((x) => applyCallback(pred, [x], runCtx));
-    const kept = (verdict: unknown): boolean => !is_false(verdict) && !(verdict instanceof ANil);
+    // R7RS truthiness: ONLY #f is false — a '()-returning predicate KEEPS the element
+    // (nil-as-false here was a private truthiness fork; some/every/if never had it).
+    const kept = (verdict: unknown): boolean => !is_false(verdict);
     // RULINGS.md R2: filter is LENGTH-CHANGING — the container's own grouping/
     // length-fact stamp is PROVENANCED, minted fresh as the union of (a) the INPUT
     // container's own top-level stamp and (b) the decision lineage that changed the
@@ -781,7 +783,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     while (node instanceof APair) {
       if (node.car === undefined && node.cdr instanceof ANil) break; // empty-pair sentinel
       const verdict = await applyCallback(pred, [node.car], runCtx);
-      if (is_false(verdict) || verdict instanceof ANil) break;
+      if (is_false(verdict)) break; // R7RS: only #f is false — nil verdicts continue
       out.push(node.car);
       node = node.cdr;
     }
@@ -800,7 +802,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     while (node instanceof APair) {
       if (node.car === undefined && node.cdr instanceof ANil) return node.cdr; // empty-pair sentinel
       const verdict = await applyCallback(pred, [node.car], runCtx);
-      if (is_false(verdict) || verdict instanceof ANil) return node;
+      if (is_false(verdict)) return node; // R7RS: only #f is false
       node = node.cdr as SchemeValue;
     }
     return node;

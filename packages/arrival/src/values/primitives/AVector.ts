@@ -271,7 +271,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
       // Wave 1 (see map above) — `runCtx` required, confession closed; `env/srfi/srfi-1.ts`'s
       // `filter` dispatcher already threads a live `this.runCtx` on every real call.
       const verdict = await applyCallback(pred, [v], runCtx);
-      if (!is_false(verdict) && !(verdict instanceof ANil)) out.push(v);
+      if (!is_false(verdict)) out.push(v); // R7RS: only #f is false — nil verdicts keep
     }
     // filter is LENGTH-CHANGING — the container's own grouping/length-fact stamp is
     // PROVENANCED, minted fresh as the union of (a) the INPUT container's own top-level
@@ -374,7 +374,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     const out: SchemeValue[] = [];
     for (const v of this.__vector__) {
       const verdict = await applyCallback(pred, [v], runCtx);
-      if (is_false(verdict) || verdict instanceof ANil) break;
+      if (is_false(verdict)) break; // R7RS: only #f is false
       out.push(v);
     }
     chargeHeap(runCtx, out.length);
@@ -396,7 +396,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     let i = 0;
     for (; i < this.__vector__.length; i++) {
       const verdict = await applyCallback(pred, [this.__vector__[i]], runCtx);
-      if (is_false(verdict) || verdict instanceof ANil) break;
+      if (is_false(verdict)) break; // R7RS: only #f is false
     }
     const out = this.__vector__.slice(i);
     chargeHeap(runCtx, out.length);

@@ -47,7 +47,7 @@ import { collapseProvenance, taintString } from "../../provenance-collapse.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { APair } from "../../values/primitives/APair.js";
-import { ANil, nil } from "../../values/primitives/ANil.js";
+import { nil } from "../../values/primitives/ANil.js";
 import { ACharacter } from "../../values/primitives/ACharacter.js";
 import { is_false, is_promise } from "../../eval/guards.js";
 import { promise_all } from "../../utils/promises.js";
@@ -177,7 +177,7 @@ function criterionFlags(
   }
   // Seam-routed: the criterion predicate is a callable VALUE now, not a bare fn.
   const results = chars.map((c) => applyCallback(criterion, [new ACharacter(runCtx, c)], runCtx));
-  const collapse = (rs: unknown[]) => rs.map((v) => !is_false(v) && !(v instanceof ANil));
+  const collapse = (rs: unknown[]) => rs.map((v) => !is_false(v)); // R7RS: only #f is false
   // pred may be an async membrane callback → await before deciding (see string-map).
   if (results.some(is_promise)) {
     return (promise_all(results) as Promise<unknown[]>).then(collapse);

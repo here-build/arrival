@@ -21,7 +21,8 @@
 //   • Multi-return doored on binding; span/break/partition products are (list a b).
 //   • some is SRFI any (Ramda-familiar name); `any` aliases it. both some and every
 //     return #t/#f only (not last-pred-value).
-//   • find miss → nil (truthy ANil), not #f — known; fix tracked separately.
+//   • (fixed 2026-07-13) find miss → #f per SRFI-1; predicate verdicts use R7RS
+//     truthiness (only #f is false — '() counts as a match, same as some/every/if).
 //   • unfold is NOT SRFI's (p f g seed); historical (fn init) pair-or-#f protocol.
 //   • take/drop/filter/reduce may be representation-polymorphic; SRFI is list-only.
 //     take/drop reject non-collection receivers even at n=0.
@@ -56,6 +57,7 @@ import dedent from "dedent";
 import { EnvCapability } from "../../common/capability.js";
 import { is_false } from "../../eval/guards.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
+import { schemeFalse } from "../../values/primitives/ABool.js";
 import { maybeThen } from "../../utils/promises.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
 import { type RunContext } from "../../values/primitives/RunContext.js";
@@ -172,11 +174,13 @@ const listAlike = z.union([z.pair, z.nil]);
 // below is the thin dispatch-bound wrapper that supplies it from `this.runCtx`.
 function findImpl(arg: (...args: unknown[]) => unknown, list: AListAlike, runCtx: RunContext): SchemeValue {
   if (list instanceof ANil) {
-    return nil;
+    return schemeFalse; // SRFI-1: `find` returns #f on no-match — never '() (was a spec break)
   }
   // Seam-routed: `arg` is a callable VALUE now (ANativeProcedure), not a bare fn.
   return maybeThen(applyCallback(arg, [list.car], runCtx), function (value) {
-    if (!is_false(value) && !(value instanceof ANil)) {
+    // R7RS truthiness: only #f is false — a '()-returning predicate IS a match
+    // (matches some/every/if; the nil-as-false clause here was a private fork).
+    if (!is_false(value)) {
       return list.car;
     }
     return findImpl(arg, list.cdr as AListAlike, runCtx);
