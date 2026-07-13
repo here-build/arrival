@@ -67,10 +67,12 @@ describe("scheme/srfi-235 — combinator behavior equivalence (semantic-equivale
     expect(result).toBe(42);
   });
 
-  it("always: an alias of constantly — same behavior, NOT SRFI-235's own `always`", async () => {
+  it("always / never: SRFI-235 — ignore args, return #t / #f (not constantly)", async () => {
     const env = await freshEnv();
-    const [result] = await exec("((always 7))", { env });
-    expect(result).toBe(7);
+    const [t] = await exec("(always 7 8 9)", { env });
+    const [f] = await exec("(never 7 8 9)", { env });
+    expect(t).toBe(true);
+    expect(f).toBe(false);
   });
 
   it("curry: accumulates args across calls until fn's min arity, then applies", async () => {

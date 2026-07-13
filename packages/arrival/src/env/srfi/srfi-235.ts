@@ -10,23 +10,10 @@
 //
 // The combinator survivors relocated from arrival-extensions:
 //   • complement  — SRFI-235: the boolean negation of a predicate.
-//   • constantly  — SRFI-235: the K combinator (ignore args, return the constant).
-//   • always      — arrival's historical name for `constantly`, kept as an alias.
-//   • curry       — NOT SRFI-235, but combinator kin; arrival's arity-aware partial
-//                   application, a pure recursive scheme combinator (below) plus one
-//                   native, `procedure-min-arity` (arity introspection off
-//                   `ACallable.arity` is a host-level read, not itself expressible in
-//                   scheme — it just reads `fn.arity.min`). curry's own recursive
-//                   accumulate-and-apply logic needs no nativeness of its own: a
-//                   scheme `lambda` gets the reverse membrane for free —
-//                   `evalLambda` mints a real ALambda (ctx/trampoline/dynamic-call-site
-//                   provenance, an honest `arrival/print` repr) — where a bare JS arrow
-//                   closure would be exactly the bare-fn-into-value-space leak the
-//                   membrane forbids.
-//
-// NAMING HAZARD: SRFI-235's own `always` is a DIFFERENT procedure. Arrival's `always`
-// has always meant `constantly`, so the spec-faithful name is `constantly` and `always`
-// is preserved only as a back-compat alias (a type-lens probe references it by name).
+//   • constantly  — SRFI-235: K combinator (ignore args, return constant).
+//   • always      — SRFI-235: ignore args, return #t (NOT constantly).
+//   • never       — SRFI-235: ignore args, return #f.
+//   • curry       — not SRFI-235; arity-aware partial application + procedure-min-arity.
 import { EnvCapability } from "../../common/capability.js";
 import { symbol, type CallCtx } from "../../common/symbol.js";
 import * as z from "../../common/scheme-zod.js";
@@ -61,17 +48,9 @@ export default new EnvCapability("scheme/srfi-235", {
       `(lambda (x) (lambda args x))`,
     ),
 
-    // always — arrival's historical name for constantly. Kept as an alias for back-compat
-    // (and the type-lens probe that references `always` by name). NOT SRFI-235's own `always`.
-    // A CONSTANT define: its RHS is a plain reference to the sibling `constantly`
-    // binding (already bound — declared first, just above), never invoked here,
-    // so the contract is the single value schema `z.lambda` (the value IS a
-    // procedure), not a `Contract<I,O>` record.
-    always:
-      symbol.define`always: arrival's historical name for constantly, kept as a back-compat alias (NOT SRFI-235's own always)`(
-        z.lambda,
-        `constantly`,
-      ),
+    // SRFI-235 always / never — the binding IS the predicate (not a constructor).
+    always: symbol.define`always: SRFI-235 — ignore args, return #t`(z.lambda, `(lambda args #t)`),
+    never: symbol.define`never: SRFI-235 — ignore args, return #f`(z.lambda, `(lambda args #f)`),
 
     // curry — arrival's arity-aware partial application (NOT SRFI-235 itself, combinator kin).
     // Accumulates `args` across successive calls until `(length args)` reaches fn's minimum

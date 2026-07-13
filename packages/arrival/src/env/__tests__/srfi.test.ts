@@ -72,10 +72,12 @@ describe("@here.build/arrival/srfi", () => {
     expect(await num("(and-let* ((x 5)) (+ x 1))")).toBe(6);
   });
 
-  it("SRFI-235 combinators (constantly / always alias)", async () => {
+  it("SRFI-235 combinators (constantly / always / never)", async () => {
     const num = await withCap(srfi235, "s235");
     expect(await num("((constantly 7) 1 2 3)")).toBe(7);
-    expect(await num("((always 7) 1 2 3)")).toBe(7);
+    // always is SRFI-235 (always #t), not an alias of constantly
+    expect(await num("(if (always 1 2 3) 1 0)")).toBe(1);
+    expect(await num("(if (never 1 2 3) 1 0)")).toBe(0);
   });
 
   // INVARIANT: allSrfi exposes the whole set of 13 capabilities, including
