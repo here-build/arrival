@@ -1,0 +1,1 @@
+(filter (lambda (x) x) (list 0 1 #f))

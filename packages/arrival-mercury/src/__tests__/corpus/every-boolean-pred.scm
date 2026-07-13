@@ -1,0 +1,1 @@
+(every odd? (list 1 3 5))

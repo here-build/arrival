@@ -15,5 +15,6 @@ export {
   type OracleVerdict,
   type Outcome,
   runOracle,
+  show,
 } from "./oracle/harness.js";
 export { type CorpusVerdict, type ExpectedOutcome, outcomeMatches, runCorpusCase } from "./oracle/expected.js";

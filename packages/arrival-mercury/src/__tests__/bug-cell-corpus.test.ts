@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { cleanupOracleScratch, openOracleSession, oracleEqual, runOracle } from "../index.js";
+import { cleanupOracleScratch, openOracleSession, oracleEqual, runOracle, show } from "../index.js";
 import type { ExpectedOutcome, OracleSession, Outcome } from "../index.js";
 
 const corpusDir = fileURLToPath(new URL("corpus/", import.meta.url));
@@ -58,6 +58,10 @@ const KNOWN_RED: Readonly<Record<string, string>> = {
     "compiled eqv? emits `===` (-0.0 === 0.0 → true); interpreter Object.is → #f; same eqv? cell as nan-eqv",
   "symbol-face":
     "representation-law gap: mercury lowers 'hello to the interned-name face \"hello\" while rosetta egress is \"'hello\" (ASymbol arrival/toJS) — reconciliation unowned by any current phase",
+  "every-last-value":
+    "SRFI every is value-RETURNING (last predicate result, 2); compiled .every folds to a boolean — the value-shape residual is Phase 1/2 (the predicate-boundary truthiness half is already fixed)",
+  "any-witness":
+    "SRFI any returns the first truthy predicate RESULT; mercury has no `any` emitter — unbound identifier in the artifact; per-symbol residual is Phase 1/2",
 };
 
 function describeOutcome(o: Outcome): string {
@@ -80,7 +84,7 @@ function checkSide(side: "interpreter" | "compiled", outcome: Outcome, expected:
     }
     return;
   }
-  const want = JSON.stringify(expected.value);
+  const want = show(expected.value); // JSON.stringify(undefined) is undefined-the-value — garbled message
   expect(outcome.kind, `${side}: expected value ${want}, got ${describeOutcome(outcome)}`).toBe("value");
   if (outcome.kind === "value") {
     expect(
@@ -126,7 +130,10 @@ describe("bug-cell corpus — interpreter ≡ expected ≡ compiled", () => {
         if (expected.divergent !== undefined) {
           checkSide("interpreter", verdict.interpreter, expected.divergent.interpreter);
           checkSide("compiled", verdict.compiled, expected.divergent.compiled);
-          return; // divergence-by-design: interpreter ≡ compiled is never asserted
+          // The row exists BECAUSE the sides disagree — if they ever converge,
+          // the divergence is stale and the row must become a plain value row.
+          expect(verdict.agree, `divergence-by-design row unexpectedly AGREES — promote to a plain row`).toBe(false);
+          return;
         }
 
         checkSide("interpreter", verdict.interpreter, expected);

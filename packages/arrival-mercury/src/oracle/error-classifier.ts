@@ -79,11 +79,23 @@ export function classifyInterpreterError(e: unknown): ErrorClass {
 export function classifyCompiledError(e: unknown): ErrorClass {
   const name = nameOf(e);
   if (name === "OracleUserError") return "user-error";
-  if (e instanceof ReferenceError) return "unbound-variable";
-  if (e instanceof TypeError) return "type-mismatch";
   const message = messageOf(e);
-  if (/set!|call\/cc|call-with-current-continuation|dynamic-wind|prohibited-dynamics/.test(message))
-    return "prohibited-dynamics";
+  // Gated on V8's actual unbound-identifier shape: a TDZ ReferenceError
+  // ("Cannot access 'x' before initialization") or a future emitter bug must
+  // land "other" (loud, never agrees), not false-agree as unbound-variable.
+  if (e instanceof ReferenceError) return / is not defined/.test(message) ? "unbound-variable" : "other";
+  // TypeError stays deliberately coarse (not-callable, bad-property-access):
+  // a known both-throw false-agree seam. Phase-1's fuzzer stresses it;
+  // tighten to message-shape tokens if it ever greens a real divergence.
+  if (e instanceof TypeError) return "type-mismatch";
+  // Scheme-identifier-bounded match: `-` and `!` are identifier characters in
+  // Scheme, so a bare /set!/ would swallow `reset!`/`subset!` messages. The
+  // boundary is "start-of-string or a non-identifier character" on both sides.
+  const notIdent = String.raw`[^A-Za-z0-9!$%&*/:<=>?^_~+.@-]`;
+  const dynamicsRe = new RegExp(
+    String.raw`(?:^|${notIdent})(?:set!|set-car!|set-cdr!|call/cc|call-with-current-continuation|dynamic-wind)(?=$|${notIdent})|prohibited-dynamics`,
+  );
+  if (dynamicsRe.test(message)) return "prohibited-dynamics";
   if (/not yet desugared|unsupported|not supported/i.test(message)) return "unsupported-form";
   if (/division by zero/i.test(message)) return "division-by-zero";
   return "other";

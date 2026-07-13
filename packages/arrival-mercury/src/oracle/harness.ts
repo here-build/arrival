@@ -192,7 +192,12 @@ const bigintEqualsNumber = (big: bigint, num: unknown): boolean =>
   typeof num === "number" && Number.isInteger(num) && BigInt(num) === big;
 
 function isPlainObjectLike(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
+  // Dict faces are plain objects (or null-proto). A Date/RegExp/class instance
+  // must NOT compare as an (often empty) key-set — that greened `new Date(0)`
+  // vs `new Date(1)`. Non-plain objects fall through to identity (Object.is).
+  const proto: unknown = Object.getPrototypeOf(v);
+  return proto === Object.prototype || proto === null;
 }
 
 function sameKeysDeep(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
@@ -221,10 +226,21 @@ export function oracleEqual(a: unknown, b: unknown): boolean {
   return Object.is(a, b);
 }
 
-/** Render a value for a verdict/failure message — never throws (bigint-safe). */
+/** Render a value for a verdict/failure message — never throws; bigint-safe and
+ *  sentinel-faithful (`JSON.stringify` would silently print NaN as `null` and
+ *  −0 as `0` — exactly the values the eqv?-sentinel rows exist to distinguish). */
 export function show(v: unknown): string {
+  if (typeof v === "number" && Number.isNaN(v)) return "NaN";
+  if (typeof v === "number" && Object.is(v, -0)) return "-0";
   try {
-    return JSON.stringify(v, (_k, x: unknown) => (typeof x === "bigint" ? `${x}n` : x)) ?? String(v);
+    return (
+      JSON.stringify(v, (_k, x: unknown) =>
+        typeof x === "bigint" ? `${x}n`
+        : typeof x === "number" && Number.isNaN(x) ? "NaN"
+        : typeof x === "number" && Object.is(x, -0) ? "-0"
+        : x,
+      ) ?? String(v)
+    );
   } catch {
     return String(v);
   }
