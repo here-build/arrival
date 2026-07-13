@@ -306,7 +306,17 @@ export default new EnvCapability("scheme/lists", {
     cons: symbol.native`cons: a pair (car . cdr) — the fundamental list constructor`(
       // car/cdr are any scheme value — the whole point of cons is to hold arbitrary
       // scheme values, so z.value (SchemeValue identity) is the honest domain.
-      { input: [z.value, z.value], output: [z.pair] },
+      {
+        input: [z.value, z.value],
+        output: [z.pair],
+        // Harvest mirrors carriers.ts: list-prepend vs dotted pair.
+        type: dedent`
+          {
+            <H, T>(h: H, t: List<T>): List<H | T>;
+            <H, T>(h: H, t: T): Pair<H, T>;
+          }
+        `,
+      },
       // A constructor: unions both inputs' provenance over the produced cell
       // (parallel to make-list / list, which stamp only the produced Pair).
       function (this: CallCtx, car, cdr) { return withInputProvenance([car, cdr], new APair(this.runCtx, car as SchemeValue, cdr as SchemeValue)); },
@@ -316,7 +326,15 @@ export default new EnvCapability("scheme/lists", {
     // like cons and make-list — it unions the inputs' provenance over the produced
     // head only.
     list: symbol.native`list: a proper list of its arguments`(
-      { input: z.array(z.value), output: [z.value] },
+      {
+        input: z.array(z.value),
+        output: [z.value],
+        type: dedent`
+          {
+            <T>(...xs: T[]): List<T>;
+          }
+        `,
+      },
       function (this: CallCtx, ...args: SchemeValue[]): SchemeValue {
         const result = args.reduceRight((list, item) => new APair(this.runCtx, item, list), nil);
         return withInputProvenance(args, result);
@@ -335,7 +353,16 @@ export default new EnvCapability("scheme/lists", {
     // z.schemeNumber: length always returns a settled AExact/AInexact, never a
     // still-filling speculative carrier.
     length: symbol.native`length: the number of elements in a proper list (or any .length carrier)`(
-      { input: [z.value], output: [z.schemeNumber] },
+      {
+        input: [z.value],
+        output: [z.schemeNumber],
+        // carriers.ts length over List | vector | string.
+        type: dedent`
+          {
+            (xs: List<unknown> | readonly unknown[] | string): number;
+          }
+        `,
+      },
       lengthImpl,
     ),
 
@@ -377,7 +404,15 @@ export default new EnvCapability("scheme/lists", {
       // unlike list-tail/list-copy (which can inherit an improper tail from their INPUT) or
       // list-ref (which extracts a single element), so pair|nil is the honest, runtime-
       // testable ceiling (see lists-contract-precision.test.ts).
-      { input: [z.schemeNumber, z.value.optional()], output: [z.union([z.pair, z.nil])] },
+      {
+        input: [z.schemeNumber, z.value.optional()],
+        output: [z.union([z.pair, z.nil])],
+        type: dedent`
+          {
+            <T>(k: number, fill?: T): List<T>;
+          }
+        `,
+      },
       function (this: CallCtx, k: unknown, fill?: unknown): AListAlike {
         const count = typeof k === "number" ? k : (k as { valueOf(): number }).valueOf();
         // The default fill is #f — the flyweight ABool (Face split), not a raw JS false.
@@ -397,7 +432,16 @@ export default new EnvCapability("scheme/lists", {
       // Output is z.value, NOT narrowed to z.union([z.pair, z.nil]): the walked-to position
       // can be an IMPROPER list's dangling tail (e.g. (list-tail '(1 2 . 3) 2) => 3, a bare
       // number), so z.value is the honest ceiling (matches list-ref/list-copy below).
-      { input: [z.union([z.pair, z.nil]), z.schemeNumber], output: [z.value] },
+      // Harvest models the proper-list case (List<T>); improper tails stay a runtime residue.
+      {
+        input: [z.union([z.pair, z.nil]), z.schemeNumber],
+        output: [z.value],
+        type: dedent`
+          {
+            <T>(xs: List<T>, k: number): List<T>;
+          }
+        `,
+      },
       function (list, k) {
         const count = k.valueOf();
         let current: SchemeValue = list;
@@ -412,7 +456,15 @@ export default new EnvCapability("scheme/lists", {
     "list-ref": symbol.native`list-ref: the element at index k`(
       // Output is z.value: the element at an index is any scheme value (e.g.
       // (list-ref '(1 2 3) 0) => 1, a bare number, not a list), not a pair|nil union.
-      { input: [z.union([z.pair, z.nil]), z.schemeNumber], output: [z.value] },
+      {
+        input: [z.union([z.pair, z.nil]), z.schemeNumber],
+        output: [z.value],
+        type: dedent`
+          {
+            <T>(xs: List<T>, k: number): T;
+          }
+        `,
+      },
       function (this: CallCtx, list, k) {
         const count = k.valueOf();
         let current: SchemeValue = list;
@@ -433,7 +485,15 @@ export default new EnvCapability("scheme/lists", {
     "list-copy": symbol.native`list-copy: a fresh copy of the list spine (R7RS freshness)`(
       // Output is z.value: like list-tail, list-copy explicitly tolerates an IMPROPER
       // list (the !(lst instanceof APair) branch below returns the dangling tail as-is).
-      { input: [z.union([z.pair, z.nil])], output: [z.value] },
+      {
+        input: [z.union([z.pair, z.nil])],
+        output: [z.value],
+        type: dedent`
+          {
+            <T>(xs: List<T>): List<T>;
+          }
+        `,
+      },
       function (this: CallCtx, list) {
         // === nil would miss Nil CLONES (singletons minted via withProvenance by the
         // evaluator's control-flow provenance pass): a clone would bypass this guard,
@@ -465,7 +525,16 @@ export default new EnvCapability("scheme/lists", {
     memq: symbol.native`memq: first sublist whose car is eq? to obj, else #f`(
       // obj stays z.value BY DESIGN: eq?'s raw === identity compare is the canonical
       // representation-blind case — not imprecision to fix.
-      { input: [z.value], inputRest: z.pair, output: [z.union([z.pair, z.booleanFalse])] },
+      {
+        input: [z.value],
+        inputRest: z.pair,
+        output: [z.union([z.pair, z.booleanFalse])],
+        type: dedent`
+          {
+            <T>(obj: T, list: List<T>): List<T> | false;
+          }
+        `,
+      },
       function (this: CallCtx, obj, list) {
         let current: unknown = list;
         TypeError.invariant(!isCircularList(list), "memq: circular list");
@@ -481,7 +550,15 @@ export default new EnvCapability("scheme/lists", {
     memv: symbol.native`memv: first sublist whose car is eqv? to obj, else #f`(
       // `eqv` compares Scheme values, so the search key is `z.value` — the same
       // schema memq declares, there read representation-blind for its `===` identity test.
-      { input: [z.value, z.union([z.pair, z.nil])], output: [z.union([z.value, z.booleanFalse])] },
+      {
+        input: [z.value, z.union([z.pair, z.nil])],
+        output: [z.union([z.value, z.booleanFalse])],
+        type: dedent`
+          {
+            <T>(obj: T, list: List<T>): List<T> | false;
+          }
+        `,
+      },
       function (this: CallCtx, obj, list) {
         let current: unknown = list;
         // `list` decodes to the honest `AListAlike` (ANil | APair) — isCircularList only
@@ -498,7 +575,15 @@ export default new EnvCapability("scheme/lists", {
 
     assq: symbol.native`assq: first alist entry whose car is eq? to obj, else #f`(
       // obj stays z.value BY DESIGN — same eq? reasoning as memq above.
-      { input: [z.value, z.union([z.pair, z.nil])], output: [z.union([z.value, z.booleanFalse])] },
+      {
+        input: [z.value, z.union([z.pair, z.nil])],
+        output: [z.union([z.value, z.booleanFalse])],
+        type: dedent`
+          {
+            <K, V>(obj: K, alist: List<[K, V]>): [K, V] | false;
+          }
+        `,
+      },
       function (this: CallCtx, obj, alist) {
         let current: unknown = alist;
         // Same ANil-short-circuit reasoning as memv above — isCircularList needs a Pair.
@@ -514,7 +599,15 @@ export default new EnvCapability("scheme/lists", {
 
     assv: symbol.native`assv: first alist entry whose car is eqv? to obj, else #f`(
       // `eqv` compares Scheme values → the search key is `z.value` (cf. assq's `===`).
-      { input: [z.value, z.union([z.pair, z.nil])], output: [z.union([z.value, z.booleanFalse])] },
+      {
+        input: [z.value, z.union([z.pair, z.nil])],
+        output: [z.union([z.value, z.booleanFalse])],
+        type: dedent`
+          {
+            <K, V>(obj: K, alist: List<[K, V]>): [K, V] | false;
+          }
+        `,
+      },
       function (this: CallCtx, obj, alist) {
         let current: unknown = alist;
         // Same ANil-short-circuit reasoning as memv above — isCircularList needs a Pair.
@@ -609,7 +702,17 @@ export default new EnvCapability("scheme/lists", {
     ),
 
     append: symbol.native`append: a fresh list splicing all argument lists (R7RS, last arg may be improper)`(
-      { input: z.array(z.value), output: [z.value] },
+      {
+        input: z.array(z.value),
+        output: [z.value],
+        // Proper-list zip is List<T>; improper last arg is the R7RS residue (second arm).
+        type: dedent`
+          {
+            <T>(...lists: List<T>[]): List<T>;
+            <T, U>(...lists: [...List<T>[], U]): List<T> | U;
+          }
+        `,
+      },
       function (this: CallCtx, ...items: SchemeValue[]): SchemeValue {
         // `append` builds a FRESH list (pure): it clones every segment first, then splices
         // the CLONES together. Because every cell touched is a clone, no caller-visible
@@ -654,7 +757,15 @@ export default new EnvCapability("scheme/lists", {
       // pair | nil ONLY — the impl below has no raw-array branch (unlike nth/array->list),
       // so z.union([z.nil, z.pair]) is the honest input domain, not a representation-blind
       // z.value; a bare array throws (the impl's own final `else` branch).
-      { input: [z.union([z.nil, z.pair])], output: [z.value] },
+      {
+        input: [z.union([z.nil, z.pair])],
+        output: [z.value],
+        type: dedent`
+          {
+            <T>(xs: List<T>): List<T>;
+          }
+        `,
+      },
       function (this: CallCtx, arg) {
         if (arg instanceof ANil) {
           return nil;
