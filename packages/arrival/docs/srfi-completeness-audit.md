@@ -1,6 +1,6 @@
 # SRFI Pack Completeness Audit
 
-**As of:** 2026-07-13 / after multi-return cut + host totalize + numeric S2 + SRFI-235 `always` fix.  
+**As of:** 2026-07-13 / after multi-return cut + host totalize + numeric S2 + SRFI-235 `always` fix + SRFI-1/13 implement-or-door batches.  
 **Policy (immutable subset + implement-or-door):** For every SRFI shipped as an `EnvCapability` under `src/env/srfi/`, every official export is either **(a) live** or **(b) a teaching door**. Silent absence is a bug.  
 We do **not** aim for full mutable R7RS/SRFI. Mutators / multi-return / dynamics: **door with reason**. Partial live surface without doors for the rest is still a bug.
 
@@ -35,10 +35,10 @@ Kinds abbreviated: `nat` native · `def` define · `stx` defineSyntax · `seq` s
 ## SRFI-1 — List Library (`srfi-1.ts`)
 
 **Capability:** `scheme/srfi-1`  
-**Header claim:** *"the whole SRFI-1 surface lives here"* — **overclaim**. Body is a completion set + parallel-list utilities + arrival extras; large SRFI-1 surface is silent-absent.  
-**Explicit subset excuse:** **No** (header asserts whole surface; contradicts inventory).  
+**Header claim:** honest **immutable subset** + implement-or-door (post `a52dd60f99`).  
+**Explicit subset excuse:** **Yes** — live completion set; remaining official exports are purity / subset doors; peers in `scheme/lists`.  
 **Deps:** `equality`, `numeric`, `exceptions`, `lists` (no binding)  
-**Score:** **PARTIAL** (worst gap by volume)
+**Score:** **COMPLETE** under implement-or-door (pack keys cover official index; R5RS peers documented as live-elsewhere; residual: `find` miss → nil not `#f`, historical `unfold` protocol)
 
 ### Pack symbols (all keys)
 
@@ -77,7 +77,8 @@ Kinds abbreviated: `nat` native · `def` define · `stx` defineSyntax · `seq` s
 | `count` | def | Live |
 | `append-map` | def | Live |
 | `%any-null?` / `%some` / `%every` | def/priv | Extra (private) |
-| `some` | def | Live under **non-SRFI name** of `any`; returns `#t`/`#f` not last-pred-value |
+| `some` | def | Live under Ramda-familiar name of SRFI `any`; returns `#t`/`#f` not last-pred-value |
+| `any` | alias | **Alias of `some`** (spec name) |
 | `every` | def | Live; `#t`/`#f` not last-pred-value (documented deviation) |
 | `zip` | def | Live |
 | `list-index` | def | Live |
@@ -95,18 +96,7 @@ These are SRFI-1 exports that exist in the base env under other packs (so agents
 
 ### Missing (official SRFI-1, silent in pack)
 
-Grouped by SRFI-1 section. **~70+ names** with no door.
-
-**Constructors:** `xcons`, `cons*`, `circular-list`  
-**Predicates:** `proper-list?`, `circular-list?`, `dotted-list?`, `not-pair?`, `null-list?`, `list=`  
-**Selectors:** `car+cdr`, `take-right`, `drop-right`, `take!`, `drop-right!`, `split-at`, `split-at!`  
-**Misc:** `concatenate!`, `reverse!`, `append-reverse!`, `unzip1`…`unzip5`  
-**Fold/map:** `pair-fold`, `pair-fold-right`, `unfold-right`, `append-map!`, `map!`, `pair-for-each`, `map-in-order`, **`any`** (name — only `some` bound)  
-**Filter:** `filter!`, `partition!`, `remove!`  
-**Search:** `take-while!`, `span!`, `break!`  
-**Delete:** `delete!`, `delete-duplicates!`  
-**Alist:** `alist-cons`, `alist-copy`, `alist-delete`, `alist-delete!`  
-**List-sets:** `lset<=`, `lset=`, `lset-adjoin`, `lset-union`, `lset-union!`, `lset-intersection`, `lset-intersection!`, `lset-difference`, `lset-difference!`, `lset-xor`, `lset-xor!`, `lset-diff+intersection`, `lset-diff+intersection!`
+**None** after door batch (`a52dd60f99`). Former silent names are purity / subset doors (see `DOORS` in `srfi-1.ts`). Remaining work is optional **implement** promotions (take-right/drop-right/split-at/cons*/…) and semantic bugs (`find` → `#f`, SRFI-shaped `unfold`).
 
 Linear-update (`!`) family could honestly door with the same purity reason as `append!`/`set-car!` — today they are **silent**.
 
@@ -126,11 +116,11 @@ Linear-update (`!`) family could honestly door with the same purity reason as `a
 ## SRFI-13 — String Libraries (`srfi-13.ts`)
 
 **Capability:** `scheme/srfi-13`  
-**Header claim:** Completes grain for agent-reached subset; **explicit scope narrowing** (no char-sets; no start/end; `string-split` from SRFI-152).  
-**Explicit subset excuse:** **Yes** (documented deltas). Still **PARTIAL** under all-or-nothing.  
-**Score:** **PARTIAL**
+**Header claim:** Completes grain for agent-reached subset; **explicit scope narrowing** (no char-sets; no start/end; `string-split` from SRFI-152) + implement-or-door for the rest.  
+**Explicit subset excuse:** **Yes**.  
+**Score:** **COMPLETE** under implement-or-door (post `126d370ddd`)
 
-### Pack symbols
+### Pack symbols (live)
 
 | Symbol | Kind | Notes |
 |--------|------|-------|
@@ -140,20 +130,21 @@ Linear-update (`!`) family could honestly door with the same purity reason as `a
 | `string-index` | nat | Live (char or 1-arg pred; no char-set; no start/end) |
 | `string-count` | nat | Live (same criterion limits) |
 | `string-take` / `string-drop` / `string-take-right` / `string-drop-right` | nat | Live |
-| `string-trim` | nat | **Naming/semantics mismatch** — pack trims **both** ends; official `string-trim` is **left-only** |
-| `string-trim-left` | nat | **Extra name** ≈ official `string-trim` |
+| `string-trim` | nat | **Official left-only** |
+| `string-trim-both` | nat | Official both-ends |
+| `string-trim-left` | alias | Non-index synonym of `string-trim` |
 | `string-trim-right` | nat | Live (matches official) |
 | `string-pad` / `string-pad-right` | nat | Live (no start/end) |
-| `string-reverse` | nat | Live (no `!` mutator) |
+| `string-reverse` | nat | Live |
 | `string-join` | nat | Live (default space delimiter; no `grammar` arg) |
 | `string-tokenize` | nat | Live (no char-set; default non-whitespace) |
 | `string-split` | nat | **Extra** — SRFI-**152**, intentional |
+| *(remaining index)* | door | Purity / subset / shared / KMP / compare-name doors in pack `DOORS` |
 
 ### Doored elsewhere (related, not this pack)
 
 | Symbol | Where |
 |--------|-------|
-| `string-filter` | `srfi-stubs` door with compositional redirect |
 | `string-set!` / `string-fill!` / `string-copy!` | `r7rs/strings` purity doors |
 | Char-set API used by SRFI-13 criteria | `srfi-stubs` (SRFI-14 doors) |
 
@@ -161,32 +152,15 @@ Linear-update (`!`) family could honestly door with the same purity reason as `a
 
 Live elsewhere: `string?`, `make-string`, `string`, `string-length`, `string-ref`, `string-append`, `string-copy`, `string->list`, `list->string`, `string-map`, `string-for-each`, `string-upcase`/`downcase`/`foldcase`, comparisons (`string=?`… + ci), `string-contains` (+ arrival `string-contains?`).
 
-### Missing (silent) — major families
+### Missing (silent)
 
-Rough full official index is **~100** procedures (incl. R5RS overlaps + low-level KMP). Beyond what R7RS already binds, notable **silent** SRFI-13-only gaps:
+**None** for official SRFI-13 index names after door batch. Optional next: promote P1 live implementations (`string-filter`/`string-delete`/`string-index-right`/…).
 
-**Predicates:** `string-every`, `string-any`  
-**Constructors:** `string-tabulate`  
-**Conversion:** `reverse-list->string`  
-**Selection:** `substring/shared`, official `string-trim-both` (pack renames)  
-**Comparison:** `string-compare`, `string-compare-ci`, `string<>`, hash (`string-hash`, `string-hash-ci`) — many `string=?` family names differ from R7RS `string=?` optional-start form  
-**Prefixes:** `string-prefix-length`, `string-suffix-length`, `*-ci` variants, `string-prefix-ci?`, `string-suffix-ci?`  
-**Search:** `string-index-right`, `string-skip`, `string-skip-right`, `string-contains-ci`  
-**Case:** `string-titlecase`, `string-titlecase!`, `string-upcase!`, `string-downcase!`  
-**Append/concat:** `string-concatenate`, `string-concatenate/shared`, `string-append/shared`, `string-concatenate-reverse`(+`/shared`)  
-**Fold/map:** `string-fold`, `string-fold-right`, `string-unfold`, `string-unfold-right`, `string-map!`, `string-for-each-index`  
-**Replicate:** `xsubstring`, `string-xcopy!`  
-**Misc:** `string-replace`  
-**Filter:** `string-delete` (filter doored only as stub)  
-**Low-level KMP / parse utils:** entire suite  
-**Mutators:** `string-reverse!` (should door under purity)
+### Documented partials (not silent gaps)
 
-### Purity / contract partials
-
-1. **Trim naming bug / dialect:** `string-trim` ≠ SRFI-13; agents trained on SRFI will left-trim with a both-trim op.  
-2. **No start/end** on any op (documented).  
-3. **Criteria:** char or pred only — char-sets doored in stubs, good; but `string-every`/`string-any`/`string-skip*` still silent.  
-4. **`string-filter`** doored in stubs (good teaching door) while siblings remain silent.
+1. **No start/end** on any op (documented).  
+2. **Criteria:** char or pred only — char-sets doored in stubs.  
+3. **`string-join`** no `grammar` arg.
 
 ---
 
@@ -426,11 +400,10 @@ syntax-like procedure forms, `boolean`, … (rest of SRFI-235).
 | SRFI-27 random | `random-integer`, `random-real`, `random-source-make-integers` |
 | SRFI-14 char-sets | `char-set`, `char-set?`, `char-set-contains?`, `string->char-set`, `char-set:whitespace`, `char-set:alphabetic`, `char-set:numeric` |
 | SRFI-19 time | `current-date`, `current-time`, `date->string`, `string->date`, `time-utc->date`, `current-julian-day` |
-| SRFI-13 gap | `string-filter` (compositional redirect) |
 | SRFI-113 sets | `list->set`, `set-contains?` |
 | SRFI-6 string ports | `call-with-input-string` |
 
-**Score:** **STUBS-ONLY** (by design). Not a completeness failure of SRFI-1/13/etc., except that parking `string-filter` here while other SRFI-13 gaps stay silent is **asymmetric** under the all-or-nothing policy for the shipped `scheme/srfi-13` pack.
+**Score:** **STUBS-ONLY** (by design). Cross-family only — SRFI-13 pure gaps live in `scheme/srfi-13` now.
 
 ---
 
@@ -438,14 +411,14 @@ syntax-like procedure forms, `boolean`, … (rest of SRFI-235).
 
 | Rank | Pack | Score | Severity | Headline |
 |------|------|-------|----------|----------|
-| 1 | **SRFI-1** | PARTIAL | Critical | Header overclaim; ~70+ silent; only `fold` doored; see `srfi-1-immutable-door-plan.md` |
-| 2 | **SRFI-13** | PARTIAL | Critical | ~15 live; majority silent; trim semantics; see `srfi-13-immutable-door-plan.md` |
-| 3 | **SRFI-189** | PARTIAL | High | Core Maybe/Either subset; rest silent |
-| 4 | **SRFI-128** | PARTIAL | High | Comparator core; hash/constructor surface silent |
-| 5 | **SRFI-151** | PARTIAL | High | Explicit thin subset; rest silent |
-| 6 | **SRFI-43** | PARTIAL | Medium-High | Pure ops only; mutators undooored in pack |
-| 7 | **SRFI-235** | PARTIAL | Medium | `always`/`never` fixed; rest of combinators silent |
-| 8 | **SRFI-95** | PARTIAL | Medium | Only `sort`; mutators/siblings silent |
+| 1 | **SRFI-189** | PARTIAL | High | Core Maybe/Either subset; rest silent |
+| 2 | **SRFI-128** | PARTIAL | High | Comparator core; hash/constructor surface silent |
+| 3 | **SRFI-151** | PARTIAL | High | Explicit thin subset; rest silent |
+| 4 | **SRFI-43** | PARTIAL | Medium-High | Pure ops only; mutators undooored in pack |
+| 5 | **SRFI-235** | PARTIAL | Medium | `always`/`never` fixed; rest of combinators silent |
+| 6 | **SRFI-95** | PARTIAL | Medium | Only `sort`; mutators/siblings silent |
+| 7 | **SRFI-1** | COMPLETE | Low | Subset + doors; residual `find`/`unfold` semantics |
+| 8 | **SRFI-13** | COMPLETE | Low | Trim fixed; purity/subset doors; peers in strings |
 | 9 | **SRFI-8** | COMPLETE | Low | Doors-only `receive` |
 | 10 | **SRFI-28** | COMPLETE | Low | `format` live |
 | 11 | **SRFI-26** | COMPLETE | Low | `cut`/`cute` live |
@@ -454,14 +427,14 @@ syntax-like procedure forms, `boolean`, … (rest of SRFI-235).
 
 ### Top actionable gaps (immutable subset)
 
-1. **SRFI-1:** Door silent exports (purity for `!` family; “not in subset” for the rest); retract “whole surface” header; fix `find` → `#f`, `any` name.  
-2. **SRFI-13:** Same door pass; fix trim naming/semantics; pack-local `string-filter` door.  
-3. **Other PARTIAL packs:** door non-goals (mutators purity; pure-unshipped “not in subset”).  
+1. **Other PARTIAL packs:** door non-goals (mutators purity; pure-unshipped “not in subset”).  
+2. **SRFI-1 residual semantics:** `find` miss → `#f`; optional SRFI-shaped `unfold` / promote take-right/split-at.  
+3. **SRFI-13 residual:** optional P1 live (`string-filter`/`string-delete`/skip/index-right).  
 4. **Multi-return:** resolved — do not re-open.
 
 ### Packs that satisfy all-or-nothing
 
-- **SRFI-2**, **SRFI-26**, **SRFI-28**, **SRFI-8** (doors-only).
+- **SRFI-1**, **SRFI-13** (subset + doors), **SRFI-2**, **SRFI-26**, **SRFI-28**, **SRFI-8** (doors-only).
 
 ### Method notes
 
