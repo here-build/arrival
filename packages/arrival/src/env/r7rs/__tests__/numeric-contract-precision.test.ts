@@ -166,9 +166,10 @@ describe("numeric Contract precision — the real exported ops reject wrongly-ty
     expect(nativeDef("==").impl).not.toBe(nativeDef("=").impl);
   });
 
-  // INVARIANT: the numeric pack exports exactly 81 symbols (deliberate drift alarm — forces
-  // a reviewer to touch this test when a symbol is added/removed)
-  it("sanity: the pack exports exactly 81 symbols (the scope this fix must cover)", () => {
-    expect(Object.keys(symbols)).toHaveLength(81);
+  // INVARIANT: the numeric pack exports exactly 84 symbols (deliberate drift alarm — forces
+  // a reviewer to touch this test when a symbol is added/removed). S2 added square,
+  // exact-integer-sqrt, rationalize on top of the prior 81.
+  it("sanity: the pack exports exactly 84 symbols (the scope this fix must cover)", () => {
+    expect(Object.keys(symbols)).toHaveLength(84);
   });
 });
