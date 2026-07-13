@@ -51,7 +51,16 @@ import { tf } from "../../values/tagless-final.js";
 export default new EnvCapability("scheme/vectors", {
   symbols: {
     "make-vector": symbol.native`make-vector: a vector of length k, each slot fill`(
-      { input: [z.schemeNumber, z.value.optional()], output: [z.vector(z.value)] },
+      {
+        input: [z.schemeNumber, z.value.optional()],
+        output: [z.vector(z.value)],
+        // Harvest: fill T → readonly T[] (zod prints undeduped unknown[] | unknown[]).
+        type: dedent`
+          {
+            <T>(k: number, fill?: T): readonly T[];
+          }
+        `,
+      },
       function (this: CallCtx, k: unknown, fill?: SchemeValue): AVector {
         const len = Number(typeof k === "number" ? k : (k as AExact).valueOf());
         // O(1) cap check BEFORE Array.from materializes \`len\` slots — see
@@ -75,7 +84,15 @@ export default new EnvCapability("scheme/vectors", {
     vector: symbol.native`vector: a vector of the given objects`(
       // Elements are scheme values by design (any object may sit in a vector slot) — the
       // typed z.value replacement, matching make-vector's own fill-slot convention.
-      { input: z.array(z.value), output: [z.vector(z.value)] },
+      {
+        input: z.array(z.value),
+        output: [z.vector(z.value)],
+        type: dedent`
+          {
+            <T>(...xs: T[]): readonly T[];
+          }
+        `,
+      },
       function (this: CallCtx, ...objs: SchemeValue[]): AVector {
         return withInputProvenance(objs, new AVector(this.runCtx, [...objs]));
       },
@@ -84,7 +101,16 @@ export default new EnvCapability("scheme/vectors", {
     "vector-append": symbol.native`vector-append: concatenation of the given vectors`(
       // Args are vectors, not representation-blind values — z.vector(z.value), matching every other
       // accessor in this file (vector-length/vector-copy/vector->string/…).
-      { input: z.array(z.vector(z.value)), output: [z.vector(z.value)] },
+      {
+        input: z.array(z.vector(z.value)),
+        output: [z.vector(z.value)],
+        // Homogeneous concat — vectors have no dotted-tail residue (unlike list append).
+        type: dedent`
+          {
+            <T>(...vs: (readonly T[])[]): readonly T[];
+          }
+        `,
+      },
       // v2 vector() decodes the scheme face to AVector | AJSArray (borrowed array), not AVector only.
       function (this: CallCtx, ...vectors: (AVector | AJSArray)[]): AVector {
         const arrays = vectors.map((v) => asVector(v, "vector-append"));
@@ -108,7 +134,16 @@ export default new EnvCapability("scheme/vectors", {
     },
 
     "vector-length": symbol.native`vector-length: number of elements in vec`(
-      { input: [z.vector(z.value)], output: [z.number] },
+      {
+        input: [z.vector(z.value)],
+        output: [z.number],
+        // Monomorphic; override mainly kills unknown[] | unknown[] printer gap + readonly.
+        type: dedent`
+          {
+            (v: readonly unknown[]): number;
+          }
+        `,
+      },
       function (this: CallCtx, vec: unknown): AExact {
         return new AExact(this.runCtx, BigInt(asVector(vec, "vector-length").length));
       },
@@ -118,7 +153,15 @@ export default new EnvCapability("scheme/vectors", {
       // vec is a vector (z.vector(z.value)); the returned element is a scheme value,
       // representation-blind by design (z.value) — same precision as vector->list's
       // element output.
-      { input: [z.vector(z.value), z.schemeNumber], output: [z.value] },
+      {
+        input: [z.vector(z.value), z.schemeNumber],
+        output: [z.value],
+        type: dedent`
+          {
+            <T>(v: readonly T[], k: number): T;
+          }
+        `,
+      },
       // Dispatch to the operand's own arrival/tagless-final/vector-ref (a SchemeVector or a
       // borrowed AJSArray) — no asVector/instanceof reach-around. `vec` stays `unknown`
       // (not narrowed to AVector) deliberately: the protocol admits a borrowed AJSArray
@@ -145,7 +188,15 @@ export default new EnvCapability("scheme/vectors", {
     "vector->list": symbol.native`vector->list: a list of vec's elements in [start, end)`(
       // A list of scheme values, representation-blind by design — z.value, matching
       // vector-ref's own element-output convention.
-      { input: [z.vector(z.value), z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.value] },
+      {
+        input: [z.vector(z.value), z.schemeNumber.optional(), z.schemeNumber.optional()],
+        output: [z.value],
+        type: dedent`
+          {
+            <T>(v: readonly T[], start?: number, end?: number): List<T>;
+          }
+        `,
+      },
       function (this: CallCtx, vec: unknown, start?: unknown, end?: unknown): SchemeValue {
         const arr = asVector(vec, "vector->list");
         const s = start === undefined ? 0 : toIndex(start);
@@ -159,7 +210,15 @@ export default new EnvCapability("scheme/vectors", {
     ),
 
     "list->vector": symbol.native`list->vector: a vector of the list's elements`(
-      { input: [z.union([z.pair, z.nil])], output: [z.vector(z.value)] },
+      {
+        input: [z.union([z.pair, z.nil])],
+        output: [z.vector(z.value)],
+        type: dedent`
+          {
+            <T>(xs: List<T>): readonly T[];
+          }
+        `,
+      },
       function (this: CallCtx, list: unknown): AVector {
         const result: SchemeValue[] = [];
         let current = list;
@@ -172,7 +231,16 @@ export default new EnvCapability("scheme/vectors", {
     ),
 
     "vector->string": symbol.native`vector->string: a string from vec's character elements in [start, end)`(
-      { input: [z.vector(z.value), z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.string] },
+      {
+        input: [z.vector(z.value), z.schemeNumber.optional(), z.schemeNumber.optional()],
+        output: [z.string],
+        // Char face is string in the carrier vocab (same as z.char / printType).
+        type: dedent`
+          {
+            (v: readonly string[], start?: number, end?: number): string;
+          }
+        `,
+      },
       function (this: CallCtx, vec: unknown, start?: unknown, end?: unknown): AString {
         const arr = asVector(vec, "vector->string");
         const s = start === undefined ? 0 : toIndex(start);
@@ -187,7 +255,15 @@ export default new EnvCapability("scheme/vectors", {
     ),
 
     "string->vector": symbol.native`string->vector: a vector of str's characters in [start, end)`(
-      { input: [z.string, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.vector(z.value)] },
+      {
+        input: [z.string, z.schemeNumber.optional(), z.schemeNumber.optional()],
+        output: [z.vector(z.value)],
+        type: dedent`
+          {
+            (s: string, start?: number, end?: number): readonly string[];
+          }
+        `,
+      },
       function (this: CallCtx, str: unknown, start?: unknown, end?: unknown): AVector {
         const s_str = stringValue(str);
         const s = start === undefined ? 0 : toIndex(start);
@@ -201,7 +277,15 @@ export default new EnvCapability("scheme/vectors", {
     ),
 
     "vector-copy": symbol.native`vector-copy: a fresh copy of vec over [start, end)`(
-      { input: [z.vector(z.value), z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.vector(z.value)] },
+      {
+        input: [z.vector(z.value), z.schemeNumber.optional(), z.schemeNumber.optional()],
+        output: [z.vector(z.value)],
+        type: dedent`
+          {
+            <T>(v: readonly T[], start?: number, end?: number): readonly T[];
+          }
+        `,
+      },
       function (this: CallCtx, vec: unknown, start?: unknown, end?: unknown): AVector {
         const arr = asVector(vec, "vector-copy");
         const s = start === undefined ? 0 : toIndex(start);

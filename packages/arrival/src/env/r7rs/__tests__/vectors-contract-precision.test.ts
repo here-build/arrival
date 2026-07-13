@@ -98,6 +98,99 @@ describe("scheme/vectors Contract precision — sanity: the six fixed ops still 
   });
 });
 
+describe("scheme/vectors Contract.type overrides — product ops (element recovery + container bifunctors; zod alone loses T / prints unknown[] | unknown[])", () => {
+  it("make-vector: fill T → readonly T[]", () => {
+    expect(norm(signatureOf(nativeDef("make-vector")))).toBe(
+      norm(dedent`
+        {
+          <T>(k: number, fill?: T): readonly T[];
+        }
+      `),
+    );
+  });
+  it("vector: variadic T → readonly T[]", () => {
+    expect(norm(signatureOf(nativeDef("vector")))).toBe(
+      norm(dedent`
+        {
+          <T>(...xs: T[]): readonly T[];
+        }
+      `),
+    );
+  });
+  it("vector-length: readonly unknown[] → number", () => {
+    expect(norm(signatureOf(nativeDef("vector-length")))).toBe(
+      norm(dedent`
+        {
+          (v: readonly unknown[]): number;
+        }
+      `),
+    );
+  });
+  it("vector-ref: element recovery", () => {
+    expect(norm(signatureOf(nativeDef("vector-ref")))).toBe(
+      norm(dedent`
+        {
+          <T>(v: readonly T[], k: number): T;
+        }
+      `),
+    );
+  });
+  it("vector->list: vector T → List<T>", () => {
+    expect(norm(signatureOf(nativeDef("vector->list")))).toBe(
+      norm(dedent`
+        {
+          <T>(v: readonly T[], start?: number, end?: number): List<T>;
+        }
+      `),
+    );
+  });
+  it("list->vector: List<T> → readonly T[]", () => {
+    expect(norm(signatureOf(nativeDef("list->vector")))).toBe(
+      norm(dedent`
+        {
+          <T>(xs: List<T>): readonly T[];
+        }
+      `),
+    );
+  });
+  it("vector->string: char vector → string", () => {
+    expect(norm(signatureOf(nativeDef("vector->string")))).toBe(
+      norm(dedent`
+        {
+          (v: readonly string[], start?: number, end?: number): string;
+        }
+      `),
+    );
+  });
+  it("string->vector: string → char vector", () => {
+    expect(norm(signatureOf(nativeDef("string->vector")))).toBe(
+      norm(dedent`
+        {
+          (s: string, start?: number, end?: number): readonly string[];
+        }
+      `),
+    );
+  });
+  it("vector-copy: slice preserves T", () => {
+    expect(norm(signatureOf(nativeDef("vector-copy")))).toBe(
+      norm(dedent`
+        {
+          <T>(v: readonly T[], start?: number, end?: number): readonly T[];
+        }
+      `),
+    );
+  });
+  it("vector-append: homogeneous concat", () => {
+    expect(norm(signatureOf(nativeDef("vector-append")))).toBe(
+      norm(dedent`
+        {
+          <T>(...vs: (readonly T[])[]): readonly T[];
+        }
+      `),
+    );
+  });
+});
+
 describe("scheme/vectors Contract.type overrides — the harvest signature for the two HOFs whose z.custom callable HEAD is UNREPRESENTABLE (printer throws, degrading the whole signature to `(...args: unknown[]) => unknown` and losing the vector rest + the vector/void return)", () => {
   // vector-map/vector-for-each declare `input: [z.custom<callable>()], inputRest: z.svector`. The
   // callable head is unrepresentable to the harvest printer, so the WHOLE signature degrades to
