@@ -1,46 +1,30 @@
 // srfi-1-symbol-define.test.ts — W4/H3 pack migration rows for `scheme/srfi-1`
 // (docs/working-proposals/symbol-define-static-program-validation.md §1/§2.1/§4/§4.5).
 //
-// BOTH luck classes at once (srfi-1.ts's header): the 37 former prelude defines
-// freely referenced `not`/`equal?`/`eq?`/`pair?`/`null?` (equality), `<=`/`<`/`>=`/
-// `=`/`+`/`-`/`*` (numeric) — the NATIVE_PACKS runtime-guarantee class srfi-43
-// found — AND `values` (binding), `error` (exceptions), `cons`/`reverse`/`append`/
-// `member`/`length`/`map`/`apply` (lists) — the BASE_PACKS assembly-order class
-// srfi-235 found. `deps: [equality, numeric, binding, exceptions, lists]` converts
-// all of it into declared, bake-checked edges; `binding` is the FOURTH BASE_PACKS
-// tail-block repositioning (base-packs.ts's header).
+// Dep edges (current pack): `deps: [equality, numeric, exceptions, lists]` —
+// NATIVE free names (`not`/`equal?`/`pair?`/`null?`, `+`/`-`/…) + BASE free names
+// (`error`, `cons`/`reverse`/`append`/`member`/`length`/`map`/`apply`/`list`).
+// Multi-return is doored on binding; this pack does NOT depend on binding —
+// span/break/partition return `(list a b)` products, not `values`.
 //
-// §4.5 PERF LEDGER (the hot-path pack's measured protocol — median of 5 after
-// warmup, same machine, prelude-era HEAD vs this migration, enforcement ON):
+// §4.5 PERF LEDGER (historical migration pin — median of 5 after warmup):
 //   (partition odd? (iota 2000))                    381.5ms → 361.4ms   (≈equal)
 //   (take (iota 2000) 1000)                         235.9ms → 226.3ms   (≈equal)
 //   (zip (iota 150) (iota 150))                      24.7ms →  27.3ms   (+10%)
 //   (every (lambda (x) (< x 999999)) (iota 500))     46.1ms →  42.7ms   (≈equal)
 //   (map first (map list (iota 1000)))               40.1ms →  46.4ms   (+16%)
-// Verdict: boundary decode is noise-to-16% against interpretation cost. The seven
-// prelude-era DIRECT self-recursers (take, drop, %list-nth, %any-null?, %some,
-// %every, zip) were normalized to the file's dominant named-let idiom so recursion
-// never re-crosses the contract boundary — enforcement stays ON for all 37 defines
-// and the §1.2 `validate:false` valve is UNUSED (evidence-gated, per §4.5; the
-// numbers above are the evidence it is not needed).
+// Verdict: boundary decode is noise-to-16% against interpretation cost. Named-let
+// bodies keep recursion off the contract boundary; `validate:false` unused.
 //
 // Row families:
-//   1. behavior equivalence (§4.2 semantic-equivalence gate) — the existing
-//      srfi.test.ts baseline plus direct rows here, weighted toward the seven
-//      named-let-normalized bodies and the SRFI-blessed edge shapes (dotted-tail
-//      take/drop, length+ on a dotted list, empty-list vacuous truths).
-//   2. multi-values — span/break/partition return ONE `Values` box; the new
-//      `z.values` orphan schema (scheme-zod.ts, the z.error precedent) validates it.
-//   3. dep edges are real — standalone .apply() (no C3 dep-walk) leaves the
-//      BASE_PACKS-only names (`values`) genuinely unbound; assembleEnv works.
-//   4. contract enforcement fires on COLD entries — boundary rejection before the
-//      body runs — AND the teaching surfaces deliberately kept BELOW the boundary
-//      (first on '() still says "first: list has no elements"; first? stays total).
-//   5. the §2.1 bake FV law passes as migrated; a local repro of the pre-fix shape
-//      (free `values` reference, no deps) throws DefineLocalityError.
-//   6. base-packs C3 positioning — `binding` sits AFTER `scheme/srfi-1` (the actual
-//      C3 requirement its repositioning exists to satisfy), pinned shape-free so
-//      sibling migrations can extend the tail block without touching this row.
+//   1. behavior equivalence — srfi.test.ts baseline + dotted-tail take/drop, etc.
+//   2. two-list products — span/break/partition return `(list a b)` (not multi-values).
+//   3. dep edges are real — standalone .apply() leaves BASE-only names unbound.
+//   4. contract enforcement on cold entries; first/first? teaching below the boundary.
+//   5. bake FV law — free `values` with no binding dep still throws DefineLocalityError
+//      (historical multi-return shape, still a valid locality repro).
+//   6. base-packs C3 — exceptions/lists appear after scheme/srfi-1.
+//   7. implement-or-door — any aliases some; ! / pure-unshipped names are doors.
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../../AmbientRuntime.js";
 import * as z from "../../../common/scheme-zod.js";
