@@ -1,5 +1,6 @@
 export {
   ArrivalMcpRunnerDO,
+  INTERNAL_SESSION_SECRET_HEADER,
   INTERNAL_SUB_HEADER,
   type ArrivalMcpRunnerEnv,
   type SessionMeta,
