@@ -960,15 +960,27 @@ function typeNameOf(v: unknown): string {
 // touched (it already flowed into scheme dataflow); the note is pure advice to stop retrying.
 
 /** TRIGGER 1 — a tool's last 3 calls returned effectively the same result despite ≥2 distinct
- *  argument sets: the tool is insensitive to input (degraded / rate-limited / bot-walled). */
+ *  argument sets: the tool MAY be insensitive to input (degraded / rate-limited / bot-walled) —
+ *  or it may be truthfully, repeatedly answering "nothing here" (measured: ~60% of real firings
+ *  were exactly this — a working tool returning a legitimate empty result, e.g. met-museum's
+ *  "No objects found", an empty memory search).
+ *
+ *  C2/B2 (benchmark-defect-register.md §C + ADDENDUM) — V RULING: report the FACT, frame the
+ *  interpretation CONDITIONALLY, prescribe NOTHING. The old text asserted degradation as fact and
+ *  scripted "give your best final answer" — an outcome-fine-tuning imperative (load-bearing
+ *  constraint #6) that pushed models to abandon a recoverable search and confabulate; one
+ *  observed trajectory had the model propose the WINNING query and this door veto it. Never ship
+ *  a diagnosis this door cannot actually know. */
 export function futileRetryDoor(qualifiedName: string): Door {
   return {
     code: "envelope/futile-retry",
     tier: "explain-route",
-    fact: `the last 3 calls to ${qualifiedName} returned effectively the same result despite different arguments`,
-    reason: "the tool looks degraded or rate-limited right now — more retries will not change the outcome",
-    script: `stop retrying ${qualifiedName}; work from the evidence you already gathered, take a different tool/route, or give your best final answer.`,
-    terse: `${qualifiedName} is still returning the same result regardless of arguments — stop retrying it and work from what you have.`,
+    fact: `the last 3 calls to ${qualifiedName} returned the same result despite different arguments`,
+    reason:
+      "if that is not the result you expected, the tool may be degraded — retrying it unchanged is unlikely to help. " +
+      "If it IS a real (e.g. empty) answer, the tool is working and the arguments are what need to change.",
+    script: `either change the arguments to ${qualifiedName} materially, or take a different route.`,
+    terse: `${qualifiedName} is still returning the same result — if that's not what you expected, change the arguments materially or take a different route.`,
   };
 }
 

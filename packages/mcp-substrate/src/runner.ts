@@ -9,7 +9,16 @@
 // teaching state survives world rebuilds (e.g. tools/listChanged). It is env-lifecycle-agnostic
 // and model-agnostic.
 
-import { APair, execState, parse, theVoid, tokenize, type LexicalScope, type SchemeValue } from "@here.build/arrival";
+import {
+  APair,
+  AVoid,
+  execState,
+  parse,
+  tokenize,
+  type EvalTap,
+  type LexicalScope,
+  type SchemeValue,
+} from "@here.build/arrival";
 import type { AssembledAmbient } from "@here.build/arrival/env";
 import { toSExprString, toSExprStringWithElisions, type ElisionRecord } from "@here.build/arrival-serializer";
 
@@ -147,24 +156,32 @@ function isLibraryEnriched(raw: string, name: string): boolean {
   return raw.startsWith(bareWall) && raw.length > bareWall.length;
 }
 
-/** The trailing `;; Note:` block for a call that middle-elided one or more arrays/entries
- *  (serializer-elision plan §6) — ONE block per `run()` call, one line per elided collection,
- *  emitted regardless of how many forms/observations contributed. Wording is contractual:
- *  say "not rendered", never "compacted"/"truncated" — the whole point is that the model
- *  must not read the shown sample as complete. */
-function renderElisionNote(elisions: readonly ElisionRecord[]): string {
-  const lines = elisions.map((e) => {
-    const shown = e.total - e.notRendered;
-    const same = e.shownShape === e.hiddenShape ? " (same shape as shown)" : "";
-    return (
-      `;;   array of ${e.total} items: ${e.notRendered} not rendered (${shown} shown). ` +
-      `shown: ${e.shownShape}; not rendered: ${e.hiddenShape}${same}`
-    );
-  });
-  return [
-    ";; Note: arrays were shortened for display — the shown items are NOT the full result.",
-    ...lines,
-  ].join("\n");
+/** The environment-notes channel's preamble label (E3, benchmark-defect-register.md §E) — makes
+ *  the trailing block unmistakably not part of the answer. */
+const NOTES_HEADER = "── environment notes ──";
+
+/** Wrap the accumulated note LINES into ONE trailing content block: a `#| ... |#` reader block
+ *  comment (parses to zero forms — pasting it back is a harmless no-op, the same round-trip
+ *  invariant the retired `#|introduced ...|#` note relied on) carrying the labelled header plus
+ *  one line per contributing producer. */
+function renderEnvironmentNotes(notes: readonly string[]): string {
+  return [`#| ${NOTES_HEADER}`, ...notes, "|#"].join("\n");
+}
+
+/** ONE line for a call that middle-elided one or more arrays/entries (serializer-elision plan
+ *  §6), regardless of how many collections/forms contributed — E2/S5 (benchmark-defect-register.md
+ *  §E/ADDENDUM). The OLD per-collection enumeration (1805 lines / 171 blocks / 67 files measured
+ *  across one benchmark run, one file at 125,571 bytes = 33% of the file) was 100% redundant —
+ *  arrival-serializer already emits an inline `#| N similar items were not rendered… |#` marker at
+ *  the exact elision site, strictly better placement — and worse, it READ AS DATA LOSS: both
+ *  models in the corpus concluded the VALUE itself had been cut and permanently abandoned the REPL
+ *  for python. This line's only job is the one fact that actually matters: the value is intact. */
+function renderElisionNote(elisions: readonly ElisionRecord[]): string | undefined {
+  if (elisions.length === 0) return undefined;
+  return (
+    "large results were sampled for display — the full value is intact in the session; " +
+    "bind it and filter/aggregate in-program rather than reading it all."
+  );
 }
 
 export interface RunInput {
@@ -199,6 +216,26 @@ export interface RunInput {
    *  regression this field avoids. Defaults to `tools.keys()` when omitted — a caller that
    *  passes a real `tools` registry needs nothing extra. */
   knownToolNames?: Iterable<string>;
+  /** Optional per-form evaluation tap (e.g. an `EvalTrace` — see @here.build/arrival's
+   *  `provenance/trace.ts`), threaded straight into every `execState` call this run makes.
+   *  The runner is per-CALL and never constructs one: a caller wanting provenance points
+   *  to resolve ACROSS calls (a value minted in call 1, read back in call 3) must pass the
+   *  SAME tap instance every time — provenance-point ids are minted by the tap itself
+   *  (monotonic per tap instance, never global), so a fresh tap per call would both lose
+   *  cross-call resolution and risk id collisions with a prior tap's ids read out of
+   *  stale values. Absent ⇒ `ctx.currentInvocation` never populates and rosetta wrappers
+   *  never mint provenance points (today's behavior, unarmed). */
+  tap?: EvalTap;
+  /** OPTIONAL, ADDITIVE, substrate-agnostic hook — consulted for every eval error this
+   *  call catches, AFTER the built-in doors (unbound-variable / args-misuse) have already
+   *  built their teaching text. A returned string is APPENDED to the error observation,
+   *  separated by a newline; `undefined` appends nothing (today's behavior, unarmed).
+   *  Wrapped in try/catch here — an enricher crash must NEVER mask the real error the
+   *  runner is already reporting. The runner stays normalizer-agnostic: this is the one
+   *  seam a caller (e.g. arrival-manifold's stringly-collection hint) uses to teach
+   *  something about the THROWN error without the substrate knowing what a "collection
+   *  op" or a "response format" is. */
+  errorEnricher?: (error: unknown) => string | undefined;
 }
 
 export interface RunResult {
@@ -295,6 +332,10 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
 
     const thisCallIndex = ++callCounter;
     attachmentSink.beginCall(input.attachmentQuota);
+    // C1b (futility trigger surgery) — mark the call boundary so FutilityTracker can tell
+    // "several statements this ONE program wrote, blind to each other's results" apart from
+    // "several genuinely separate, model-observed retries" (futility.ts's `beginCall` doc).
+    tracker?.beginCall();
 
     const expr = input.expr;
     if (expr.trim() === "") {
@@ -402,6 +443,7 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
             budgetMs: remaining,
             heapBudget: calibration.heapBudgetPerForm,
             signal: controller.signal,
+            tap: input.tap,
           });
           const raced = await Promise.race([running, parked]);
           if (raced === "timeout") {
@@ -411,7 +453,14 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
           }
           const facts = statementFacts[index]!;
           for (const r of raced.values) {
-            if (r === theVoid) continue;
+            // instance-aware, NOT `=== theVoid` — `AVoid.withProvenance()` mints a fresh heap
+            // object (AVoid.ts:48-50), so a void re-stamped crossing a tap (provenance tracing)
+            // is no longer identity-equal to the singleton. Matches AVoid's own Setoid
+            // (`arrival/tagless-final/equals`: `other instanceof AVoid`) and the documented trap
+            // in `values/structural-equal.ts` ("provenance-clone trap... use instance-aware
+            // checks"). A void that slips through here renders as the JS-unwrapped literal text
+            // "undefined" — 442 occurrences across a benchmark run before this fix.
+            if (r instanceof AVoid) continue;
             const { text, elisions } = render(r, callMaxTotalChars);
             blocks.push({ type: "text", text });
             allElisions.push(...elisions);
@@ -492,35 +541,53 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
               }
             }
           }
+          // GENERIC ERROR-ENRICHER HOOK (RunInput.errorEnricher) — consulted last, after
+          // every built-in door has already had its say, so a hint rider never displaces
+          // the unbound-variable/args-misuse teaching (both are additive on `text`
+          // already; this is one more addition, never a replacement). Never throws: an
+          // enricher crash must not mask the real error this catch is already reporting.
+          if (input.errorEnricher) {
+            try {
+              const hint = input.errorEnricher(error);
+              if (hint) text += `\n${hint}`;
+            } catch {
+              // Swallow — see comment above.
+            }
+          }
           blocks.push({ type: "text", text });
           failures += 1;
         }
       }
 
-      // Lead with the persistence note when this program bound anything into session scope
-      // (see `introduced` above). A `#|…|#` reader block comment: inert if pasted back (the
-      // "a printed result is valid input again" invariant holds), and it renders the binding
-      // FACT even when every bound form was a void `define` with no other observation — the
-      // void-result-trap fix. Deduped, declared order.
+      // E3 (benchmark-defect-register.md §E) — every note-shaped producer (previously pushed as
+      // PEER TEXT BLOCKS interleaved with real data) accumulates here instead, and renders as
+      // exactly ONE trailing block (`renderEnvironmentNotes`, below). Order is declaration order
+      // — introduced-binding first, then elision, then futility/duplicate advisories, then the
+      // attachment sink's note.
+      const notes: string[] = [];
+
+      // The persistence note when this program bound anything into session scope (see
+      // `introduced` above) — renders the binding FACT even when every bound form was a void
+      // `define` with no other observation (the void-result-trap fix). Deduped, declared order.
+      // B3 (ADDENDUM) — when NOTHING else was observed this call (no value, no error — every
+      // statement was a bare binding), say so explicitly: a model previously read the bare
+      // banner as success and lost a round assuming something had executed.
       if (introduced.length > 0) {
         const names = [...new Set(introduced)].join(", ");
-        blocks.unshift({
-          type: "text",
-          text: `#|introduced ${names}; now available for the rest of this session|#`,
-        });
+        const nothingElseRan = blocks.length === 0 ? " (nothing was executed — these are bindings only)" : "";
+        notes.push(`${names} — also available in subsequent calls.${nothingElseRan}`);
       }
 
-      // ONE trailing note for every array/entries collection middle-elided this call (any
-      // form, any observation) — placed AFTER the form results, BEFORE the futility doors
-      // below (serializer-elision plan §6). Never emitted when nothing elided (the
-      // `observationElision` calibration knob is off, or every observation fit).
-      if (allElisions.length > 0) {
-        blocks.push({ type: "text", text: renderElisionNote(allElisions) });
-      }
+      // ONE line for every array/entries collection middle-elided this call (any form, any
+      // observation) — serializer-elision plan §6, reworded per E2/S5. Never emitted when
+      // nothing elided (the `observationElision` calibration knob is off, or every observation
+      // fit).
+      const elisionLine = renderElisionNote(allElisions);
+      if (elisionLine !== undefined) notes.push(elisionLine);
 
       if (tracker) {
         for (const { tool, door } of tracker.drainPending()) {
-          blocks.push({ type: "text", text: session.renderNote(door, tool) });
+          notes.push(session.renderNote(door, tool));
         }
       }
 
@@ -537,12 +604,18 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
           isLatest: () => callSeq === generation,
           logTelemetry: (event) => session.logTypeHint(event),
         });
+        // Substantive per-statement type teaching, not bookkeeping — stays as its own block(s),
+        // ahead of the environment-notes footer (like real attachment content, below).
         for (const block of trailing) blocks.push(block);
       }
 
-      const note = attachmentSink.drainNote();
-      if (note !== undefined) blocks.push({ type: "text", text: note });
       for (const block of attachmentSink.drainBlocks()) blocks.push(block);
+      // The attachment sink's own note (e.g. "N binary attachments captured") joins the
+      // consolidated channel — it is bookkeeping about this call, exactly like the others above.
+      const attachmentNote = attachmentSink.drainNote();
+      if (attachmentNote !== undefined) notes.push(attachmentNote);
+
+      if (notes.length > 0) blocks.push({ type: "text", text: renderEnvironmentNotes(notes) });
 
       if (failures === forms.length) return { content: blocks, isError: true };
       session.observeSuccess(expr);

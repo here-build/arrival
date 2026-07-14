@@ -220,20 +220,29 @@ describe("createDoorsRunner(...).run(...) — the import-form door (doors.ts's i
   // The void-result-trap fix (MCP-Atlas 2026-07-11 forensics, task …c909): a program whose
   // only top-level result is a void `define` used to render NOTHING — the model read the empty
   // observation as "the tool returned no data" and confabulated an empty result. Every program
-  // that binds into session scope now LEADS with a persistence note, so a define is never a
-  // silent success.
-  describe("introduced-names persistence note (void-result-trap fix)", () => {
-    it("a define-only program leads with the #|introduced …|# note instead of an empty response", async () => {
+  // that binds into session scope now gets a persistence note, so a define is never a silent
+  // success.
+  //
+  // E3 (benchmark-defect-register.md §E) consolidated this into the trailing
+  // `── environment notes ──` block (it moved from LEADING to TRAILING, alongside the elision/
+  // futility/attachment notes — one labelled footer, not a peer block next to the data) and
+  // reworded it per V away from the `#|introduced X; now available...|#` block-comment phrasing.
+  describe("introduced-names persistence note (void-result-trap fix, consolidated by E3)", () => {
+    it("a define-only program's environment notes announce the binding AND that nothing else executed (B3)", async () => {
       const runner = makeRunner();
       const scope = freshScope("runner-introduced-define-only");
       const result = await runner.run({ expr: "(define x 41)", ambient, scope, tools: noTools });
       expect(result.isError).not.toBe(true);
-      const first = result.content[0];
-      expect(first?.type).toBe("text");
-      expect((first as { text: string }).text).toBe("#|introduced x; now available for the rest of this session|#");
+      expect(result.content).toHaveLength(1);
+      const text = (result.content[0] as { text: string }).text;
+      expect(text).toContain("── environment notes ──");
+      expect(text).toContain("x — also available in subsequent calls.");
+      // B3 (ADDENDUM) — a define-only program's bare banner used to read as "success"; a model
+      // lost a round assuming something had run. Name explicitly that nothing executed.
+      expect(text).toContain("nothing was executed — these are bindings only");
     });
 
-    it("the note LEADS the value observations and lists every bound name once, in declared order", async () => {
+    it("the note TRAILS the value observations (after the data, not leading) and lists every bound name once, in declared order", async () => {
       const runner = makeRunner();
       const scope = freshScope("runner-introduced-mixed");
       const result = await runner.run({
@@ -243,25 +252,33 @@ describe("createDoorsRunner(...).run(...) — the import-form door (doors.ts's i
         tools: noTools,
       });
       const texts = result.content.map((b) => (b.type === "text" ? b.text : ""));
-      expect(texts[0]).toBe("#|introduced a, b; now available for the rest of this session|#");
-      // the value observation (b = 15) still rides after the note
-      expect(texts.slice(1).join("\n")).toContain("15");
+      // the value observation (b = 15) rides BEFORE the trailing notes block now.
+      expect(texts.slice(0, -1).join("\n")).toContain("15");
+      const notes = texts.at(-1)!;
+      expect(notes).toContain("── environment notes ──");
+      expect(notes).toContain("a, b — also available in subsequent calls.");
+      // a real value WAS observed (b = 15) — the "nothing executed" clause must not appear.
+      expect(notes).not.toContain("nothing was executed");
     });
 
-    it("a program that binds NOTHING emits no note (pure expressions are unaffected)", async () => {
+    it("a program that binds NOTHING emits no environment-notes block (pure expressions are unaffected)", async () => {
       const runner = makeRunner();
       const scope = freshScope("runner-introduced-none");
       const result = await runner.run({ expr: "(+ 1 2)", ambient, scope, tools: noTools });
       const texts = result.content.map((b) => (b.type === "text" ? b.text : ""));
-      expect(texts.join("\n")).not.toContain("introduced");
+      expect(texts.join("\n")).not.toContain("environment notes");
       expect(texts.join("\n")).toContain("3");
     });
 
-    it("the note is a valid reader block comment — inert if pasted back (round-trip invariant)", async () => {
+    it("the notes block is a valid reader block comment — inert if pasted back (round-trip invariant)", async () => {
       const { parse } = await import("@here.build/arrival");
-      const note = "#|introduced x, y; now available for the rest of this session|#";
+      const runner = makeRunner();
+      const scope = freshScope("runner-introduced-roundtrip");
+      const result = await runner.run({ expr: "(define x 41)", ambient, scope, tools: noTools });
+      const notes = (result.content[0] as { text: string }).text;
       // A block comment parses to ZERO forms — pasting it back is a harmless no-op, never data.
-      expect((await parse(note)).length).toBe(0);
+      const forms = await parse(notes);
+      expect(forms.length).toBe(0);
     });
   });
 });
