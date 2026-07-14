@@ -55,3 +55,48 @@ export function createNoteSink(): NoteSink {
     },
   };
 }
+
+
+// ─── DISPLAY ─────────────────────────────────────────────────────────────────────────────────
+//
+// `display` does NOT exist in arrival, and must not: ports and IO are omitted by design — this is a
+// pure inference plane, and an ambient write has no value-construction site for provenance. That
+// law is not bending.
+//
+// But a model writes `(display x)` constantly — it is the natural Scheme idiom for "show me this" —
+// and in the 89-task corpus it cost a door and a wasted round on 32% of tasks. The verb is a
+// reflex, not a request for IO. The model wants the VALUE; it reaches for the only spelling it
+// knows.
+//
+// So the MCP RUNNER binds it (mcp-substrate/src/display.ts) — a host affordance, not a language
+// feature. It is identity + a side effect into this sink: the value flows on untouched, so
+// composition is unaffected, and the runner renders what was displayed alongside the answer. The
+// intent is honored without the language acquiring an IO surface.
+//
+// This sink rides `RunContext.display`, the same per-run hermetic seam as `notes`/`cache`/`effects`,
+// so a display in one run can never surface in another.
+
+/** One `(display …)` occurrence: the ORIGINAL source of the call, and the value it saw. */
+export interface DisplayRecord {
+  readonly src: string;
+  readonly value: unknown;
+}
+
+export interface DisplaySink {
+  push(record: DisplayRecord): void;
+  drain(): readonly DisplayRecord[];
+}
+
+export function createDisplaySink(): DisplaySink {
+  const records: DisplayRecord[] = [];
+  return {
+    push(record: DisplayRecord): void {
+      records.push(record);
+    },
+    drain(): readonly DisplayRecord[] {
+      const out = records.slice();
+      records.length = 0;
+      return out;
+    },
+  };
+}

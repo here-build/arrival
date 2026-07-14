@@ -9,7 +9,8 @@
 // teaching state survives world rebuilds (e.g. tools/listChanged). It is env-lifecycle-agnostic
 // and model-agnostic.
 
-import { createNoteSink,
+import { createDisplaySink,
+  createNoteSink,
   APair,
   AVoid,
   execState,
@@ -29,6 +30,7 @@ import type { AttachmentSink } from "./attachment-sink.js";
 import type { BoundTool, ToolNaming } from "./bound-tool.js";
 import { type CalibrationOptions, DEFAULT_CALIBRATION } from "./calibration.js";
 import type { ContentBlock } from "./content-block.js";
+import { stripTopLevelDisplay } from "./display.js";
 import {
   DoorSession,
   emptyExprDoor,
@@ -439,6 +441,11 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
       // interpreter (the kwargs drop, today) can reach the consolidated footer — the only reason
       // that note was invisible before is that it had nowhere to go.
       const noteSink = createNoteSink();
+      // The DISPLAY channel (display.ts). A model writes `(display x)` reflexively — it is the
+      // natural Scheme spelling of "show me this" — and it used to eat a hard door and a wasted
+      // round on 32% of benchmark tasks. Arrival still has no IO (the door is intact for a bare
+      // `display` used as a VALUE); the HOST honors the intent instead.
+      const displaySink = createDisplaySink();
       for (const line of input.seedNotes ?? []) noteSink.push(line);
 
       for (const [index, form] of forms.entries()) {
@@ -452,7 +459,10 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
           // spurious observation) and the serializer's provenance-aware rendering
           // (ASymbol/AString/Values duck-typing sees plain JS instead of boxed values).
           // `execState` hands back the boxed per-form values this loop actually renders.
-          const running = execState(form, {
+          // TOP-LEVEL `(display X)` → X (pass-through: the model asked to see X, and X becomes the
+          // answer). NESTED `(display X)` → identity + a recorded echo. A form with no display at
+          // all is returned BY IDENTITY, so the common case costs nothing.
+          const running = execState(stripTopLevelDisplay(form), {
             ambient: input.ambient,
             scope: input.scope,
             budgetMs: remaining,
@@ -463,6 +473,7 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
             // tolerance that fires in statement 1 and again in statement 3 is reported ONCE (the
             // sink dedupes) — the model needs the fact, not a tally.
             notes: noteSink,
+            display: displaySink,
           });
           const raced = await Promise.race([running, parked]);
           if (raced === "timeout") {
@@ -483,6 +494,21 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
             const { text, elisions } = render(r, callMaxTotalChars);
             blocks.push({ type: "text", text });
             allElisions.push(...elisions);
+          }
+          // THE DISPLAY ECHO — after THIS statement's own result, because that is when the display
+          // happened. A NESTED `(display X)` returned X untouched (composition unaffected) and
+          // recorded what it saw; here we show the model what it asked to see, carrying the ORIGINAL
+          // EXPRESSION so several displays in one statement stay distinguishable:
+          //
+          //     #| (display (list 1 2 3)):  (1 2 3) |#
+          //
+          // A TOP-LEVEL `(display X)` produces NOTHING here — the wrap was stripped before eval, so
+          // X's value IS the statement's result above. Echoing it beside itself would be noise.
+          // Rendered inside `#| … |#`, a reader comment that parses to ZERO forms: the model can
+          // paste the whole observation back and it remains a no-op.
+          for (const rec of displaySink.drain()) {
+            const shown = render(rec.value as SchemeValue, callMaxTotalChars).text;
+            blocks.push({ type: "text", text: `#| ${rec.src}:  ${shown} |#` });
           }
           if (facts.definedName !== undefined) {
             history.push(facts.definedName, statementText);

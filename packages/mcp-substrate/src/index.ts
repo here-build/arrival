@@ -19,3 +19,8 @@ export * from "./statement-facts.js";
 export * from "./strategies.js";
 export * from "./tool-schema.js";
 export * from "./type-hints/index.js";
+
+// The `display` affordance — a HOST verb, not a language feature (arrival has no IO by design).
+// The runner rewrites `(display …)` call forms; the composing host must BIND `displaySymbol()` into
+// its capability, or the rewrite targets a name nothing declares.
+export { displaySymbol, stripTopLevelDisplay, DISPLAY, DISPLAY_INTERNAL } from "./display.js";

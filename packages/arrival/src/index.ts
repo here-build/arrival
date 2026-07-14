@@ -262,4 +262,4 @@ export { AutoBindings, slotsOf } from "./values/lineage-auto-bindings.js";
 export { deepProvenance } from "./values/deep-provenance.js";
 
 // The per-run model-facing note channel — a renderer (mcp-substrate) mints one and drains it.
-export { createNoteSink, type NoteSink } from "./values/note-sink.js";
+export { createNoteSink, createDisplaySink, type NoteSink, type DisplaySink, type DisplayRecord } from "./values/note-sink.js";

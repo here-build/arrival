@@ -41,7 +41,7 @@ import { vocabularyFromChain } from "../static-validation/vocabulary.js";
 import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
 import { classify, type LineageNode } from "../values/lineage.js";
 import { makeRunContext, type RunContext } from "../values/primitives/RunContext.js";
-import type { NoteSink } from "../values/note-sink.js";
+import type { DisplaySink, NoteSink } from "../values/note-sink.js";
 import type { RunCache } from "../values/run-cache.js";
 import type { EffectLog } from "../values/effect-log.js";
 import type { ReadGuard } from "../values/read-guard.js";
@@ -411,6 +411,7 @@ export function instantiate(
     effects?: EffectLog;
     reads?: ReadGuard;
     notes?: NoteSink;
+    display?: DisplaySink;
   },
 ): ExecInstance {
   const runCtx = makeRunContext({
@@ -425,6 +426,7 @@ export function instantiate(
     // the branch every real session takes (the MCP runner passes `ambient`). Missing it is why the
     // note channel was threaded and still arrived empty.
     notes: opts.notes,
+    display: opts.display,
   });
   const resolver = new Resolver(opts.scope.env, Capabilities.assembled(ambientBase(ambient)));
   return { ambient, scope: resolver.scope, runCtx, resolver };

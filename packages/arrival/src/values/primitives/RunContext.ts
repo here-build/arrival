@@ -24,7 +24,7 @@
  */
 
 import type { RunCache } from "../run-cache.js";
-import type { NoteSink } from "../note-sink.js";
+import type { DisplaySink, NoteSink } from "../note-sink.js";
 import type { EffectLog } from "../effect-log.js";
 import type { ReadGuard } from "../read-guard.js";
 import type { SourceLocation } from "../../errors.js";
@@ -87,6 +87,10 @@ export interface RunContext {
    *  which is why the kwargs tolerance's old WeakMap (keyed on the decoded argument object) could
    *  never be drained by the renderer — the renderer never sees that object. */
   readonly notes: NoteSink | undefined;
+  /** The run's DISPLAY channel (values/note-sink.ts) — where the MCP runner's `display` affordance
+   *  records what a model asked to see. `undefined` ⇒ no display verb is bound (arrival itself has
+   *  none, and never will: ports/IO are omitted by design). Sibling of `notes`, same per-run seam. */
+  readonly display: DisplaySink | undefined;
   /** Origin discriminant. `"parse"` marks the parse-time family (`PARSE_CTX` /
    *  `makeParseCtx`): run-neutral like CONSTANT_CTX, but a STATED fact ("minted by the
    *  reader") instead of a fallback. Absent on live-run ctxs and CONSTANT_CTX. */
@@ -111,6 +115,7 @@ export function makeRunContext(
     effects?: EffectLog;
     reads?: ReadGuard;
     notes?: NoteSink;
+    display?: DisplaySink;
   } = {},
 ): RunContext {
   return {
@@ -122,6 +127,7 @@ export function makeRunContext(
     effects: opts.effects,
     reads: opts.reads,
     notes: opts.notes,
+    display: opts.display,
   };
 }
 
@@ -141,6 +147,7 @@ export const CONSTANT_CTX: RunContext = Object.freeze({
   // outlives every run can have nowhere to put one. Notes minted under CONSTANT_CTX are dropped —
   // which is correct, not a gap: nobody is listening.
   notes: undefined,
+  display: undefined,
   cache: undefined,
   effects: undefined,
   reads: undefined,

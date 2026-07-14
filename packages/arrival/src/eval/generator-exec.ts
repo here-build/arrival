@@ -38,7 +38,7 @@ import {
   type ParsedProgram,
 } from "./exec-phases.js";
 import { makeRunContext, type RunContext } from "../values/primitives/RunContext.js";
-import type { NoteSink } from "../values/note-sink.js";
+import type { DisplaySink, NoteSink } from "../values/note-sink.js";
 import type { RunCache } from "../values/run-cache.js";
 import type { EffectLog } from "../values/effect-log.js";
 import type { ReadGuard } from "../values/read-guard.js";
@@ -211,6 +211,10 @@ export interface ExecOptions {
    *  same per-run seam `cache`/`effects`/`reads` use. A caller that RENDERS an observation (the MCP
    *  runner) mints one and drains it after the call; everyone else omits it and notes are dropped. */
   notes?: NoteSink;
+  /** The run's DISPLAY channel — where the MCP runner's `display` affordance records what a model
+   *  asked to see. Arrival binds no `display` verb (ports/IO are omitted by design); this is the
+   *  seam a HOST uses to offer one without the language acquiring an IO surface. */
+  display?: DisplaySink;
   /**
    * GLASS — custom base env. When set, the resolver wraps it directly: defines
    * land in it, builtins resolve up its `__parent__` chain (byte-identical to
@@ -552,6 +556,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     effects,
     reads,
     notes,
+    display,
     strict,
     freezeRosettaReturns,
     staticValidation,
@@ -647,6 +652,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
         effects,
         reads,
         notes,
+        display,
       });
     } else {
       const lexicalScope = scope ?? LexicalScope.for(defaultLexicalRoot());
@@ -666,6 +672,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
         effects,
         reads,
         notes,
+        display,
       });
       runResolver = instance.resolver;
       runCtx = instance.runCtx;
