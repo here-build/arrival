@@ -14,8 +14,8 @@
  *
  * Compiled side — SUBJECT-ROUTED (constitution §9 "the dual-path rule"): the
  * gate subject is `"greenfield"` (default) — the NEW pipeline end to end,
- * classify → extractFacts → walk(overlay registry) → ASYNC-IFY → FRAME →
- * render, with `RuntimeRef` shims resolved against the stage-0 runtime module
+ * classify → extractFacts → PEEPHOLES → walk(overlay registry) → LEGIBILITY →
+ * ASYNC-IFY → FRAME → render, with `RuntimeRef` shims resolved against the stage-0 runtime module
  * (a shim is a legitimate residual; Law F says so). `"legacy"` keeps the
  * mercury string path callable for A/B — a production bridge, never
  * gate-authoritative. Both subjects export the program's trailing value as
@@ -46,6 +46,8 @@ import { classify } from "../coreform/index.js";
 import { desugar } from "../front/desugar.js";
 import { parseSexprs } from "../front/parse.js";
 import { frame } from "../frame/index.js";
+import { legibility } from "../legibility/index.js";
+import { peephole } from "../peepholes/index.js";
 import { emitRegistryOf } from "../registry/index.js";
 import { render } from "../residual/render.js";
 import type { CompilationUnit } from "../residual/types.js";
@@ -308,7 +310,36 @@ function exportUnitResult(unit: CompilationUnit): CompilationUnit {
 /**
  * The greenfield pipeline, source → module text:
  *
- *   wrap → classify → extractFacts → walk → exportResult → ASYNC-IFY → FRAME → render
+ *   wrap → classify → extractFacts → PEEPHOLES → walk → exportResult → LEGIBILITY
+ *     → ASYNC-IFY → FRAME → render
+ *
+ * PEEPHOLES (constitution §3.1/§3.5, Law C) runs AFTER the type pass/TypeFacts
+ * extraction and BEFORE the emit pass — the constitution's own ordering (§3.1's
+ * diagram): the two analysis branches (type pass, TCO/liveness) sit ABOVE
+ * PEEPHOLES, which sits ABOVE the emit pass. Concretely, this means:
+ *   - extractFacts sees the ORIGINAL `car`/`infer` nodes — both real,
+ *     type-annotated registry symbols the type-lens's ambient prelude already
+ *     knows about. Running PEEPHOLES first would feed the virtual-TS an
+ *     invented head name (`infer/scalar`) the prelude has never heard of.
+ *   - the handful of nodes PEEPHOLES mints (scalar-fold's fused App) or trims
+ *     (cache-key-elide's shortened arg list) simply have no entry in
+ *     `extraction.facts` — Law F's "absence of a fact ⇒ the conservative
+ *     residual" already covers this; no rule in `phase1Rules` reads facts on
+ *     an infer-family node, so today this is a non-issue in practice, not just
+ *     in theory.
+ *
+ * LEGIBILITY (constitution §3.5's third invention — implicit destruction +
+ * element-name singularization + pure-region CSE) runs on the finished Residual
+ * tree, BEFORE ASYNC-IFY — a documented DEVIATION from the constitution's §3.1
+ * diagram and §3.5 table, which both draw it after. See
+ * `../legibility/legibility.ts`'s header for the full reasoning; the short
+ * version: CSE hoists duplicate `Call`s into an ordinary sync-shaped `Const`
+ * BEFORE asyncness exists, so ASYNC-IFY's ordinary Const-handling (await the
+ * init iff seeded; every `Ref` read is unconditionally sync) awaits the ONE
+ * hoisted call correctly with zero changes to either pass. Running LEGIBILITY
+ * after ASYNC-IFY would force CSE to see through `Await` nodes — a Promise-aware
+ * code path Law W (rules/walker output is async-BLIND) has no other reason to
+ * introduce.
  *
  * THE WRAP: the whole program compiles as one `(define (__oracle-main) …)` body
  * plus a trailing `(__oracle-main)` call. The walker's top level discards
@@ -348,8 +379,10 @@ export function compileGreenfield(session: OracleSession, source: string): strin
     );
   }
   const extraction = extractFacts({ source: wrapped, classified }, { narrowsMembers });
-  const sync = walk(classified, { registry, facts: extraction.facts, register: "run" });
-  const asyncified = asyncIfy(exportUnitResult(sync), { asyncSeeds: inferAsyncSeeds });
+  const peepholed = peephole(classified);
+  const sync = walk(peepholed, { registry, facts: extraction.facts, register: "run" });
+  const legible = legibility(exportUnitResult(sync), { registry });
+  const asyncified = asyncIfy(legible, { asyncSeeds: inferAsyncSeeds });
   const framed = frame(asyncified, { runtimeModule: `./${STAGE0_BASENAME}` });
   return render(framed);
 }

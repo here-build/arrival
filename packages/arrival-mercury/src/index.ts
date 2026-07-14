@@ -72,6 +72,18 @@ export { runtimeRefsOf, walk, WalkDoorError, type WalkOptions } from "./walker/i
 // ── the ASYNC-IFY pass — post-emit {sync, promise} dataflow (Law W §5.2; async-await-plane.md) ──
 export { AsyncIfyDoorError, asyncIfy, type AsyncIfyOptions } from "./async-ify/index.js";
 
+// ── LEGIBILITY — the third-invention pass (constitution §3.5): implicit destruction +
+//    element-name singularization + pure-region CSE. Runs PRE-ASYNC-IFY (a documented
+//    deviation from the constitution's pipeline diagram — see legibility.ts's header). ──
+export {
+  destructureParams,
+  elementNameOf,
+  legibility,
+  type LegibilityOptions,
+  pureRegionCse,
+  singularizeHofParams,
+} from "./legibility/index.js";
+
 // ── minimal FRAME — the RuntimeRef→import materializer (constitution §3.4/§9 Phase 1) ──
 export { frame, FrameDoorError, type FrameOptions } from "./frame/index.js";
 

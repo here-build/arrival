@@ -28,6 +28,7 @@ import * as applyMapTranspose from "./fixtures/gate3/apply-map-transpose.golden.
 import * as applyPlus from "./fixtures/gate3/apply-plus.golden.js";
 import * as asyncMapPromiseAll from "./fixtures/gate3/async-map-promise-all.golden.js";
 import * as firstClassCarHof from "./fixtures/gate3/first-class-car-hof.golden.js";
+import * as legibilityDestructure from "./fixtures/gate3/legibility-destructure.golden.js";
 import * as multiListMap from "./fixtures/gate3/multi-list-map.golden.js";
 import * as shortCircuitOr from "./fixtures/gate3/short-circuit-or.golden.js";
 
@@ -38,6 +39,7 @@ const CASES = [
   { name: "apply patterns: apply-map-transpose", fixture: applyMapTranspose },
   { name: "short-circuit or-chain (guarded cascade, nested)", fixture: shortCircuitOr },
   { name: "first-class car in HOF position (eta degrades to shim, today)", fixture: firstClassCarHof },
+  { name: "LEGIBILITY: implicit destruction (constitution §3.5's worked example)", fixture: legibilityDestructure },
 ] as const;
 
 describe("Gate 3 — full-pipeline emitted TEXT goldens", () => {
@@ -62,5 +64,6 @@ describe("Gate 3 — full-pipeline emitted TEXT goldens", () => {
     expect(applyMapTranspose.golden).toContain("...list(");
     expect(shortCircuitOr.golden).toContain("!== false ?");
     expect(firstClassCarHof.golden).toContain(".map(car)");
+    expect(legibilityDestructure.golden).toContain("([first, second]) => first + second");
   });
 });

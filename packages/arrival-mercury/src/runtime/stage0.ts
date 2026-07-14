@@ -186,6 +186,37 @@ export async function infer(..._args: unknown[]): Promise<unknown> {
   );
 }
 
+/**
+ * `infer/scalar` / `infer/chat/scalar` — the infer-scalar-fold PEEPHOLE's targets
+ * (../peepholes/infer.ts; `phase1.ts`'s `inferRule("infer/scalar")` /
+ * `inferRule("infer/chat/scalar")` rows): `(car (infer m p))` folds at compile
+ * time to `App(infer/scalar, [m, p])`, so — exactly like the bare `infer` export
+ * above — FRAME needs a manifest row for the FOLDED name to resolve at all,
+ * independent of which framework eventually answers the call. Same placeholder
+ * discipline as `infer`: honestly async (both fold-targets are `inferAsyncSeeds`
+ * members — the ASYNC-IFY seed contract needs a real Promise-returning target),
+ * throws rather than fabricating a response. The one thing that WILL differ once
+ * the real framework dispatch lands (phase1.ts's TODO): these two return the bare
+ * completion directly, never `infer`'s one-element list wrap — the peephole's own
+ * doc calls this out as "the SYMBOL NAME already carries that fact," i.e. the
+ * future dispatch body reads its own export name to decide unwrap-vs-wrap, no
+ * compiler-side branching needed. Not built here; these stay throwing stubs until
+ * that TODO lands.
+ */
+export async function inferScalar(..._args: unknown[]): Promise<unknown> {
+  throw new Error(
+    "infer/scalar: stage-0 has no inference backend yet — the framework axis (vercel/langchain) " +
+      "is deferred past Phase 1 (constitution §4.3; phase1.ts's config.framework TODO).",
+  );
+}
+
+export async function inferChatScalar(..._args: unknown[]): Promise<unknown> {
+  throw new Error(
+    "infer/chat/scalar: stage-0 has no inference backend yet — the framework axis (vercel/langchain) " +
+      "is deferred past Phase 1 (constitution §4.3; phase1.ts's config.framework TODO).",
+  );
+}
+
 // ─── car / cdr in VALUE position (§2.1 representation collapse) ──────────────────────
 // Call position NEVER reaches here — the `car`/`cdr` emit rules fold inline to
 // `xs[0]` / `xs.slice(1)` unconditionally (constitution §4.3: "No guard, no shim,
@@ -265,4 +296,6 @@ export const STAGE0: Readonly<Record<string, string>> = {
   car: "car",
   cdr: "cdr",
   infer: "infer",
+  "infer/scalar": "inferScalar",
+  "infer/chat/scalar": "inferChatScalar",
 };

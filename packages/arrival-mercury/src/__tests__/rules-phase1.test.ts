@@ -144,37 +144,19 @@ describe("+ - * / — plain left folds (§7: the platform's arithmetic IS the se
   });
 });
 
-// ── = — chained === ────────────────────────────────────────────────────────────────────
-
-describe("= — chained === (natively correct under §7)", () => {
-  it("2-ary → one Bin", () => {
-    expect(emit(`(define (f a b) (= a b))`)).toBe(`function f(a, b) {\n    return a === b;\n}\n`);
-  });
-
-  it("n-ary → the And-chain a === b && b === c", () => {
-    expect(emit(`(define (f a b c) (= a b c))`)).toBe(`function f(a, b, c) {\n    return a === b && b === c;\n}\n`);
-  });
-});
-
-// ── operator-identity residuals: quotient / modulo (Appendix B) ───────────────────────
-
-describe("quotient / modulo — fixed operator-identity algorithms", () => {
-  it("quotient → Math.trunc(a / b), and truncates toward zero like Scheme", () => {
-    const ts = emit(`(define (f a b) (quotient a b))`);
-    expect(ts).toBe(`function f(a, b) {\n    return Math.trunc(a / b);\n}\n`);
-    const f = new Function(`${ts}return f;`)() as (a: number, b: number) => number;
-    expect(f(-7, 2)).toBe(-3); // scheme (quotient -7 2) = -3; a floor would give -4
-  });
-
-  it("modulo → ((a % n) + n) % n, sign-correct on negative operands (the modulo-neg golden)", () => {
-    const ts = emit(`(define (f a n) (modulo a n))`);
-    expect(ts).toBe(`function f(a, n) {\n    return (a % n + n) % n;\n}\n`);
-    const f = new Function(`${ts}return f;`)() as (a: number, n: number) => number;
-    expect(f(-7, 3)).toBe(2); // scheme (modulo -7 3) = 2; JS -7 % 3 = -1 (remainder, sign-of-dividend)
-    expect(f(7, -3)).toBe(-2); // scheme (modulo 7 -3) = -2 (sign-of-divisor)
-    expect(f(7, 3)).toBe(1); // agreeing signs unchanged
-  });
-});
+// ── = / quotient / modulo — RELOCATED (Phase-2 relocation drill, constitution §9) ─────
+// These three no longer live in `phase1Rules` — they're now the `emit` field of their
+// own Contract in foundations/arrival/arrival/src/env/r7rs/numeric.ts, so this file's
+// EMPTY-based registry (`withRules(EMPTY, phase1Rules)`, above) can no longer resolve
+// them at all (there is neither a table row nor a base row to fall through to). Their
+// coverage now lives in two places: the Contract-level rule-shape proof
+// (foundations/arrival/arrival/src/env/r7rs/__tests__/numeric-emit.test.ts, calling
+// `emit.call` directly against a synthetic ctx) and the full-pipeline proof through the
+// REAL harvest — cross-pass-fixtures.test.ts's quotient-neg/modulo-neg byte-level
+// goldens and bug-cell-corpus.test.ts's quotient-neg/modulo-neg/exact-vs-inexact-eq
+// value-level oracle rows, both of which build their registry via
+// `withRules(emitRegistryOf(session.ambient), phase1Rules)` — the harvested Contract
+// row, not this file's stand-in table.
 
 // ── map — the arity bridge, sync-shaped always (Law W) ────────────────────────────────
 
@@ -292,7 +274,9 @@ describe("withRules — table-first lookup, base enrichment, names union", () =>
   });
 
   it("a table-only name synthesizes a row (capability «phase1-rules», kind native)", () => {
-    const row = overlaid.lookup("modulo");
+    // "filter" (not "modulo" — modulo relocated onto its own Contract this wave, see
+    // the file-level relocation note above; any name still IN the table works here).
+    const row = overlaid.lookup("filter");
     expect(row?.capability).toBe("«phase1-rules»");
     expect(row?.kind).toBe("native");
     expect(row?.refPolicy).toBe("shim");
@@ -300,7 +284,7 @@ describe("withRules — table-first lookup, base enrichment, names union", () =>
 
   it("names is the union", () => {
     expect(overlaid.names.has("reverse")).toBe(true);
-    expect(overlaid.names.has("modulo")).toBe(true);
+    expect(overlaid.names.has("filter")).toBe(true);
     expect(overlaid.names.size).toBe(base.names.size + Object.keys(phase1Rules).length - 1); // "car" overlaps
   });
 

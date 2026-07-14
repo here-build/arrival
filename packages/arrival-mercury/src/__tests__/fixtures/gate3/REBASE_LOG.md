@@ -39,3 +39,46 @@ No prior baseline existed — this is Gate 3's first landing, not a rebase of a
 previous epoch. The one WATCHED future flip: `first-class-car-hof`'s golden
 comment names the exact upgrade (`car`'s row growing a `.ref` that reads
 `callable` facts) that will change its bytes on purpose.
+
+## goldenEpoch 1 — new fixture added, no existing golden changed (2026-07-14)
+
+LEGIBILITY (constitution §3.5's third invention — implicit destruction,
+element-name singularization, pure-region CSE) wired into `compileGreenfield`
+between `walk()`/`exportUnitResult` and `asyncIfy` (a documented deviation from
+the constitution's §3.1/§3.5 pipeline-diagram ordering — see
+`../../legibility/legibility.ts`'s header for the full reasoning: CSE hoists
+duplicate calls into an ordinary sync-shaped `Const` BEFORE asyncness exists,
+so ASYNC-IFY's ordinary Const-handling awaits it correctly with zero changes
+to either pass).
+
+**None of the six existing goldens changed a single byte.** Checked directly
+(full `compileGreenfield` re-run against each fixture's `source`, byte-compared
+against the committed `golden`): none of `multi-list-map`,
+`async-map-promise-all`, `apply-plus`, `apply-map-transpose`,
+`short-circuit-or`, `first-class-car-hof` happens to contain a destructure-
+eligible tuple access, a multi-list map with a NAMED (`Ref`-shaped) driving
+collection, or a duplicate pure call — the three shapes LEGIBILITY acts on.
+(`multi-list-map`'s receiver is `list(1, 2, 3)` — a `Call`, not a `Ref` —  so it
+has no derivable collection name for singularization either; a `Call`-shaped
+receiver only yields a name when its OWN callee resolves to a registered
+symbol, and `pluralize.singular("list") === "list"`, already singular, in any
+case.)
+
+**One new fixture added** — `legibility-destructure.golden.ts` — to give Gate 3
+concrete, oracle-agreeing coverage of the constitution's own worked example
+(`(lambda (pair) (+ (car pair) (cadr pair)))` → `([first, second]) => first +
+second`, spelled `(car (cdr pair))` since `cadr` is not yet a bound registry
+symbol — see the fixture's own header). Generated the same way every other
+fixture in this file was: running the real `compileGreenfield(session, source)`
+and committing the observed bytes verbatim; `runOracle` on the same source
+agrees with the interpreter (checked, not asserted in this fixture file itself
+— see `../legibility.test.ts`'s oracle-session describe block for the
+committed oracle-agreement assertion on this exact transformation).
+
+Singularization and CSE are NOT separately added as gate3 fixtures (the
+existing six had no natural, uncontrived slot for either without forcing an
+artificial-looking source program); both are covered — with oracle agreement
+checked, not just byte-pinned — end to end through the real `compileGreenfield`
+pipeline in `../legibility.test.ts`'s own "wired into compileGreenfield"
+`describe` block instead. That suite is this landing's de facto second golden
+set for the pass; nothing here contradicts it.
