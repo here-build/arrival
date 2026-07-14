@@ -1,0 +1,81 @@
+{
+  "goldenEpoch": 1,
+  "row": "filter-truthy-zero",
+  "source": "(filter (lambda (x) x) (list 0 1 #f))",
+  "virtualTs": "__arr.filter((x) => x, __arr.list(0, 1, false));\nexport {};\n",
+  "facts": [
+    {
+      "span": [
+        0,
+        37
+      ],
+      "text": "(filter (lambda (x) x) (list 0 1 #f))",
+      "kind": "App",
+      "fact": {
+        "list": true,
+        "elementFacts": {
+          "numeric": true
+        }
+      }
+    },
+    {
+      "span": [
+        20,
+        21
+      ],
+      "text": "x",
+      "kind": "Ref",
+      "fact": {
+        "numeric": true
+      }
+    },
+    {
+      "span": [
+        23,
+        36
+      ],
+      "text": "(list 0 1 #f)",
+      "kind": "App",
+      "fact": {
+        "list": true,
+        "elementFacts": {
+          "numeric": true
+        }
+      }
+    },
+    {
+      "span": [
+        29,
+        30
+      ],
+      "text": "0",
+      "kind": "Lit",
+      "fact": {
+        "numeric": true
+      }
+    },
+    {
+      "span": [
+        31,
+        32
+      ],
+      "text": "1",
+      "kind": "Lit",
+      "fact": {
+        "numeric": true
+      }
+    },
+    {
+      "span": [
+        33,
+        35
+      ],
+      "text": "#f",
+      "kind": "Lit",
+      "fact": {
+        "boolean": true
+      }
+    }
+  ],
+  "residual": "list(0, 1, false).filter(__x => (x => x)(__x) !== false);\n"
+}

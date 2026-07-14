@@ -101,6 +101,16 @@ export {
   type SymbolRuleTable,
   withRules,
 } from "./rules/index.js";
+
+// ── the schema-driven fuzzer (oracle-harness.md §4.4; constitution §5.4/Law N) ──
+export {
+  arbitrarySchemeValue,
+  PREDICATE_CONSUMERS,
+  renderSchemeLiteral,
+  type SchemeSample,
+  synthesizeSingleWitnessProgram,
+  witnessesMissingConsumers,
+} from "./fuzz/index.js";
 export {
   type And,
   type App,

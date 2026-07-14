@@ -164,6 +164,42 @@ export function any(pred: (...xs: unknown[]) => unknown, ...lists: readonly (rea
   return false;
 }
 
+// ─── infer — placeholder ONLY (the framework axis is a later phase) ──────────────────
+/**
+ * `infer` — the call-position emit rule (`phase1.ts`'s `inferRule`) always emits
+ * `Call(RuntimeRef("infer"), args)`, so FRAME needs a manifest row for this symbol
+ * to resolve at all, independent of which framework eventually answers the call.
+ * The real per-framework residual (`ctx.config.framework === "vercel" ? … :
+ * langchain …`) is an explicit TODO in `phase1.ts` ("do NOT land in this wave —
+ * the stage-0 runtime shim owns the framework axis: one `infer` export whose
+ * body dispatches"): that dispatch is NOT built here. This export exists solely
+ * so async-seeded programs (`inferAsyncSeeds` — Gate-3's async-map golden) can
+ * compile and render end to end; it is honestly async (satisfying ASYNC-IFY's
+ * seed contract — the symbol's runtime target DOES return a Promise) and throws
+ * rather than pretending to answer, so nothing silently fabricates a model
+ * response. Replace with the real framework dispatch when phase1.ts's TODO lands.
+ */
+export async function infer(..._args: unknown[]): Promise<unknown> {
+  throw new Error(
+    "infer: stage-0 has no inference backend yet — the framework axis (vercel/langchain) " +
+      "is deferred past Phase 1 (constitution §4.3; phase1.ts's config.framework TODO).",
+  );
+}
+
+// ─── car / cdr in VALUE position (§2.1 representation collapse) ──────────────────────
+// Call position NEVER reaches here — the `car`/`cdr` emit rules fold inline to
+// `xs[0]` / `xs.slice(1)` unconditionally (constitution §4.3: "No guard, no shim,
+// no mode"). These shims exist ONLY for first-class use as a bare HOF argument
+// (`(map car xss)`) — `refPolicy: "eta"` degrades to a `RuntimeRef` shim until the
+// instantiated-signature facts feed value position (walker's own module header,
+// "this wave's 'eta'"), so the symbol must resolve to a real export or FRAME doors.
+
+/** `car` in VALUE position (`(map car xss)`). */
+export const car = (xs: readonly unknown[]): unknown => xs[0];
+
+/** `cdr` in VALUE position (`(map cdr xss)`). */
+export const cdr = (xs: readonly unknown[]): unknown[] => xs.slice(1);
+
 // ─── numeric tail (corpus-driven; §7 one-number — plain JS arithmetic) ────────────────
 
 /** `odd?` — integer parity, sign-safe (`(odd? -7)` → `#t`). */
@@ -200,7 +236,18 @@ export function map(f: (...xs: unknown[]) => unknown, ...lists: readonly (readon
  * unreachable and a row without an export is a loud import-time error — the two
  * stay in lockstep by construction of this one file.
  */
+
+/** `null?`'s total semantics — the shim rung for an UNPROVEN argument (Law F):
+ *  only the empty LIST is null; a string (which also carries `.length`) is not.
+ *  The clean `xs.length === 0` form emits only under a proven list fact. */
+export const nullP = (v: unknown): boolean => Array.isArray(v) && v.length === 0;
+
+/** `pair?`'s total semantics — see `nullP`; a non-empty ARRAY, nothing else. */
+export const pairP = (v: unknown): boolean => Array.isArray(v) && v.length > 0;
+
 export const STAGE0: Readonly<Record<string, string>> = {
+  "null?": "nullP",
+  "pair?": "pairP",
   "eq?": "eqP",
   "eqv?": "eqvP",
   "equal?": "equalP",
@@ -215,4 +262,7 @@ export const STAGE0: Readonly<Record<string, string>> = {
   ">": "gt",
   "+": "plus",
   map: "map",
+  car: "car",
+  cdr: "cdr",
+  infer: "infer",
 };

@@ -59,7 +59,7 @@ const KNOWN_RED: Readonly<Record<string, string>> = {
   // harvested define-kind registry row (rung-3 shim) → FRAME → stage-0 `error`
   // (SchemeUserError), so the taken-branch raise classifies user-error on both sides;
   // the legacy path's COMPILED_PREAMBLE shim serves only legacy A/B runs.
-  };
+};
 
 function describeOutcome(o: Outcome): string {
   if (o.kind === "value") {

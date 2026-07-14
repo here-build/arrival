@@ -1,0 +1,76 @@
+{
+  "goldenEpoch": 1,
+  "row": "apply-plus",
+  "source": "(apply + (list 1 2 3))\n",
+  "virtualTs": "__arr.apply(_, __arr.list(1, 2, 3));\nexport {};\n",
+  "facts": [
+    {
+      "span": [
+        0,
+        22
+      ],
+      "text": "(apply + (list 1 2 3))",
+      "kind": "App",
+      "hole": "any-or-unknown"
+    },
+    {
+      "span": [
+        7,
+        8
+      ],
+      "text": "+",
+      "kind": "Ref",
+      "fact": {
+        "callable": {}
+      }
+    },
+    {
+      "span": [
+        9,
+        21
+      ],
+      "text": "(list 1 2 3)",
+      "kind": "App",
+      "fact": {
+        "list": true,
+        "elementFacts": {
+          "numeric": true
+        }
+      }
+    },
+    {
+      "span": [
+        15,
+        16
+      ],
+      "text": "1",
+      "kind": "Lit",
+      "fact": {
+        "numeric": true
+      }
+    },
+    {
+      "span": [
+        17,
+        18
+      ],
+      "text": "2",
+      "kind": "Lit",
+      "fact": {
+        "numeric": true
+      }
+    },
+    {
+      "span": [
+        19,
+        20
+      ],
+      "text": "3",
+      "kind": "Lit",
+      "fact": {
+        "numeric": true
+      }
+    }
+  ],
+  "residual": "list(1, 2, 3).reduce((__acc, __item) => __acc + __item, 0);\n"
+}

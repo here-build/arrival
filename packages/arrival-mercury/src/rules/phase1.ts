@@ -20,9 +20,12 @@
  *  - §7 one-number — `+ - * / = quotient modulo` are plain folds/operators over JS
  *    numbers. No exactness dispatch EXISTS: not a fact, not a shim, not a branch.
  *  - §2.1 representation collapse + Law U — lists/pairs are arrays; `car`/`cdr`/
- *    `cons`/`null?`/`pair?` are syntax over that representation. `(car '())` is
- *    outside the compilation contract (the lens warns at compile time; the artifact
- *    stays clean — no guard, no shim, no mode).
+ *    `cons` are syntax over that representation. `(car '())` is outside the
+ *    compilation contract (the lens warns at compile time; the artifact stays
+ *    clean — no guard, no shim, no mode). `null?`/`pair?` are DIFFERENT: total
+ *    predicates over any value (defined behavior, not UB), so their clean
+ *    `.length` form is fact-gated and the shim is the unproven default (Law F —
+ *    the fuzzer proved the unconditional form wrong on strings).
  *
  * Arity: fixed-arity rules refuse a mis-arity call site via `ctx.door` (a compile
  * diagnostic — totality: every form compiles or doors, never crashes the walker on an
@@ -31,10 +34,10 @@
  * the class a compiler front gate exists to catch.
  *
  * Known deferred hazards (documented, not landed — report-tracked for later waves):
- *  - `null?`/`pair?` read `.length` bare. Under `tsc --strict`, a TUPLE-typed argument
- *    makes `.length` a numeric literal type and the `=== 0` comparison a TS2367 error;
- *    phase1-symbol-rules.md §2 prescribes a `Un("+", …)` widen. The wave plan pins the
- *    bare shape; the widen lands with the tsc-on-output gate that can observe it.
+ *  - `null?`/`pair?`'s FACT-GATED clean form can still hit TS2367 under a TUPLE-typed
+ *    proven argument (`.length` narrows to a numeric literal; `=== 0` is a no-overlap
+ *    comparison); phase1-symbol-rules.md §2 prescribes a `Un("+", …)` widen. Rarer now
+ *    (the clean form needs a proven list fact at all), lands with the widen sweep.
  *  - `quotient` references the global `Math` via a minted binding (precedent: the
  *    walker's door throws reference global `Error` the same way). The walker's module
  *    JS frame pre-seeds "Error"/"Math"/"Promise" (landed with the FRAME wave), so a
@@ -108,17 +111,34 @@ const notRule: EmitRule<R> = {
   },
 };
 
-// ─── null? / pair? — total .length reads, Law-N self-witnessed ────────────────────────
-// Both are TOTAL over the array representation (never throw); the `.length` read is
-// unconditional — no guarded branch, no register branch (the wave-plan shape; the
-// TS2367 tuple-length widen is a deferred hazard, see the module header).
+// ─── null? / pair? — FACT-GATED .length reads, Law-N self-witnessed ──────────────────
+// Both are TOTAL predicates over ANY value — which is exactly why the bare `.length`
+// read was wrong-code, not a deferred hazard: a JS string carries `.length` too, so
+// `(null? "")` compiled to `true` where the interpreter says `#f`. The fuzzer found
+// it on its first run (narrows-{null,pair}-string-collision corpus rows). Law F
+// applied properly: the clean `.length` form emits only when argFacts PROVE the
+// array representation; anything unproven rides the stage-0 shim, whose
+// Array.isArray test is the honest total semantics.
+
+const provesArray = (f: { list?: true; pair?: true; nonEmptyList?: true } | undefined): boolean =>
+  f?.list === true || f?.pair === true || f?.nonEmptyList === true;
 
 const nullQRule: EmitRule<R> = {
-  call: (args, ctx) => Bin("===", Member(exactly(ctx, "null?", args, 1)[0]!, "length"), Lit(0)),
+  call: (args, ctx) => {
+    const [xs] = exactly(ctx, "null?", args, 1);
+    return provesArray(ctx.argFacts[0])
+      ? Bin("===", Member(xs!, "length"), Lit(0))
+      : Call(ctx.runtime("null?"), [xs!]);
+  },
 };
 
 const pairQRule: EmitRule<R> = {
-  call: (args, ctx) => Bin(">", Member(exactly(ctx, "pair?", args, 1)[0]!, "length"), Lit(0)),
+  call: (args, ctx) => {
+    const [xs] = exactly(ctx, "pair?", args, 1);
+    return provesArray(ctx.argFacts[0])
+      ? Bin(">", Member(xs!, "length"), Lit(0))
+      : Call(ctx.runtime("pair?"), [xs!]);
+  },
 };
 
 // ─── §7 one-number: + - * / — plain left folds, zero ctx reads ───────────────────────

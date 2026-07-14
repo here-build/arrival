@@ -1,0 +1,110 @@
+{
+  "goldenEpoch": 1,
+  "row": "multi-list-map",
+  "source": "(map + (list 1 2) (list 10 20))\n",
+  "virtualTs": "__arr.map(_, __arr.list(1, 2), __arr.list(10, 20));\nexport {};\n",
+  "facts": [
+    {
+      "span": [
+        0,
+        31
+      ],
+      "text": "(map + (list 1 2) (list 10 20))",
+      "kind": "App",
+      "fact": {
+        "list": true
+      }
+    },
+    {
+      "span": [
+        5,
+        6
+      ],
+      "text": "+",
+      "kind": "Ref",
+      "fact": {
+        "callable": {
+          "arity": 1,
+          "paramFacts": [
+            {
+              "numeric": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "span": [
+        7,
+        17
+      ],
+      "text": "(list 1 2)",
+      "kind": "App",
+      "fact": {
+        "list": true,
+        "elementFacts": {
+          "numeric": true
+        }
+      }
+    },
+    {
+      "span": [
+        13,
+        14
+      ],
+      "text": "1",
+      "kind": "Lit",
+      "fact": {
+        "numeric": true
+      }
+    },
+    {
+      "span": [
+        15,
+        16
+      ],
+      "text": "2",
+      "kind": "Lit",
+      "fact": {
+        "numeric": true
+      }
+    },
+    {
+      "span": [
+        18,
+        30
+      ],
+      "text": "(list 10 20)",
+      "kind": "App",
+      "fact": {
+        "list": true,
+        "elementFacts": {
+          "numeric": true
+        }
+      }
+    },
+    {
+      "span": [
+        24,
+        26
+      ],
+      "text": "10",
+      "kind": "Lit",
+      "fact": {
+        "numeric": true
+      }
+    },
+    {
+      "span": [
+        27,
+        29
+      ],
+      "text": "20",
+      "kind": "Lit",
+      "fact": {
+        "numeric": true
+      }
+    }
+  ],
+  "residual": "list(1, 2).map((__item, __i) => +(__item, list(10, 20)[__i]));\n"
+}

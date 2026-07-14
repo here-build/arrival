@@ -93,15 +93,21 @@ describe("not — Law T on the operand (§5.2)", () => {
   });
 });
 
-// ── null? / pair? — total .length reads ───────────────────────────────────────────────
+// ── null? / pair? — FACT-GATED .length (the fuzzer's string-collision fix) ────────────
 
-describe("null? / pair? — .length over the collapsed representation", () => {
-  it("null? → xs.length === 0", () => {
-    expect(emit(`(define (f xs) (null? xs))`)).toBe(`function f(xs) {\n    return xs.length === 0;\n}\n`);
+describe("null? / pair? — fact-gated clean form, shim for the unproven (Law F)", () => {
+  it("no facts → the stage-0 shim (a string also carries .length — the fuzzer's find)", () => {
+    expect(emit(`(define (f xs) (null? xs))`)).toBe(`function f(xs) {\n    return null?(xs);\n}\n`);
+    expect(emit(`(define (f xs) (pair? xs))`)).toBe(`function f(xs) {\n    return pair?(xs);\n}\n`);
   });
 
-  it("pair? → xs.length > 0", () => {
-    expect(emit(`(define (f xs) (pair? xs))`)).toBe(`function f(xs) {\n    return xs.length > 0;\n}\n`);
+  it("proven list fact → the clean .length form", () => {
+    expect(emitWithArgFacts(`(define (f xs) (null? xs))`, 0, { list: true })).toBe(
+      `function f(xs) {\n    return xs.length === 0;\n}\n`,
+    );
+    expect(emitWithArgFacts(`(define (f xs) (pair? xs))`, 0, { list: true })).toBe(
+      `function f(xs) {\n    return xs.length > 0;\n}\n`,
+    );
   });
 });
 

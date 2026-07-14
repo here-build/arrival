@@ -1,0 +1,115 @@
+{
+  "note": "Gate 1 measures type availability, register \"run\", over the committed gate1-corpus manifest. This module does not interpret the number against the 25% band — that readout belongs to the gate agent and V (constitution §9's ⚖️-ruled threshold).",
+  "perProgram": [
+    {
+      "name": "inhuman-gepa-full",
+      "sourcePath": "src/__tests__/fixtures/gate1-corpus/inhuman-gepa-full.scm",
+      "doors": 0,
+      "carFamily": {
+        "sites": 19,
+        "clean": 14,
+        "bySymbol": {
+          "cdr": {
+            "sites": 4,
+            "clean": 4
+          },
+          "car": {
+            "sites": 10,
+            "clean": 10
+          },
+          "cadr": {
+            "sites": 4,
+            "clean": 0
+          },
+          "caddr": {
+            "sites": 1,
+            "clean": 0
+          }
+        }
+      },
+      "if": {
+        "sites": 16,
+        "clean": 15
+      },
+      "map": {
+        "sites": 6,
+        "clean": 6
+      },
+      "filter": {
+        "sites": 2,
+        "clean": 0
+      }
+    },
+    {
+      "name": "mercury-fixture-gepa",
+      "sourcePath": "src/__tests__/fixtures/gate1-corpus/mercury-fixture-gepa.scm",
+      "doors": 0,
+      "carFamily": {
+        "sites": 1,
+        "clean": 0,
+        "bySymbol": {
+          "cadr": {
+            "sites": 1,
+            "clean": 0
+          }
+        }
+      },
+      "if": {
+        "sites": 1,
+        "clean": 1
+      },
+      "map": {
+        "sites": 4,
+        "clean": 4
+      },
+      "filter": {
+        "sites": 2,
+        "clean": 0
+      }
+    },
+    {
+      "name": "ai-winter-ebl-investigation",
+      "sourcePath": "src/__tests__/fixtures/gate1-corpus/ai-winter-ebl-investigation.scm",
+      "doors": 0,
+      "carFamily": {
+        "sites": 1,
+        "clean": 1,
+        "bySymbol": {
+          "car": {
+            "sites": 1,
+            "clean": 1
+          }
+        }
+      },
+      "if": {
+        "sites": 0,
+        "clean": 0
+      },
+      "map": {
+        "sites": 1,
+        "clean": 1
+      },
+      "filter": {
+        "sites": 1,
+        "clean": 0
+      }
+    }
+  ],
+  "totals": {
+    "carSites": 21,
+    "carClean": 15,
+    "ifSites": 17,
+    "ifClean": 16,
+    "cleanPct": 81.57894736842105,
+    "mapSites": 11,
+    "mapClean": 11,
+    "filterSites": 5,
+    "filterClean": 0
+  },
+  "sampleSizeGuard": {
+    "threshold": 20,
+    "measured": 38,
+    "passed": true
+  },
+  "lensWarnedUBExcluded": 0
+}
