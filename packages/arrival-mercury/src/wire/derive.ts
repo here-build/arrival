@@ -19,18 +19,56 @@
  * module's walk is the part that is truly static regardless of which registry is
  * assembled.
  */
-import type { App, Binding, ClassifyResult, CoreForm, KwEntry } from "../coreform/types.js";
+import type { App, Binding, ClassifyResult, CoreForm, KwEntry, Let, LetKind, NamedLet } from "../coreform/types.js";
 
 import type { LeafDescriptor, LeafPath, WireArg, WireDescriptor, WireStep } from "./types.js";
 
-/** Local bindings this walk can see PAST — name → the expression that produces the
- *  bound value. Never mutated; each nested scope is its own map layered on the
- *  parent's entries at construction time (immutability's own discipline, applied to
- *  this walk's own state, not just arrival's). A name ABSENT here is exactly a free
- *  reference — the boundary-in anchor. */
-type Scope = ReadonlyMap<string, CoreForm>;
+/** A bound value = the init expression PLUS the scope it was written in. Carrying the
+ *  defining scope is what makes a later `Ref` resolve at the BINDING site, not the
+ *  reference site — the difference between R7RS parallel-`let` (an init sees the
+ *  OUTER scope) and the walk's old bug (every init saw every sibling, i.e. letrec*). */
+type BoundValue = { readonly expr: CoreForm; readonly scope: Scope };
+/** Local bindings this walk can see PAST — name → its defining `BoundValue`. Never
+ *  mutated after construction; each nested scope is its own map. A name ABSENT here
+ *  is exactly a free reference — the boundary-in anchor. */
+type Scope = ReadonlyMap<string, BoundValue>;
 
 const holeDescriptor = (reason: string): WireDescriptor => ({ source: { kind: "Hole", reason }, steps: [] });
+
+/**
+ * Layer a `let`'s bindings onto `outer`, honoring `letKind` — each bound value
+ * carries the scope ITS INIT WAS WRITTEN IN, so a later `Ref` resolves the init at
+ * its binding site (the whole point of finding 2: the walk used to layer every
+ * binding eagerly, giving every `let` letrec*-ish semantics and mis-reading
+ * parallel-`let` inits as seeing their siblings).
+ *   - `let` (and a `NamedLet`, whose value bindings are parallel): every init sees
+ *     `outer` ONLY; the body sees all bindings.
+ *   - `let*`: init i sees `outer` + bindings 0..i-1 (a chain of scopes).
+ *   - `letrec` / `letrec*`: every init sees the fully-extended scope (a
+ *     self-referential map — resolved lazily; the cycle guard stops genuine knots).
+ *     letrec vs letrec* differ only in init-time strictness, invisible to a
+ *     non-evaluating static walk.
+ * The `NamedLet` loop name is intentionally NOT bound (unfolding the loop is a
+ * fixpoint question, left to a later mechanism — see `reduceToValue`'s header).
+ */
+function extendForLet(node: Let | NamedLet, outer: Scope): Scope {
+  const bindings = node.bindings as readonly Binding[];
+  const kind: LetKind = node.kind === "Let" ? node.letKind : "let";
+  if (kind === "let*") {
+    let acc: Scope = outer;
+    for (const b of bindings) {
+      const next = new Map(acc);
+      next.set(b.name, { expr: b.init, scope: acc });
+      acc = next;
+    }
+    return acc;
+  }
+  const ext = new Map<string, BoundValue>(outer);
+  // `let` → inits see `outer`; `letrec`/`letrec*` → inits see the extended map itself.
+  const initScope: Scope = kind === "let" ? outer : ext;
+  for (const b of bindings) ext.set(b.name, { expr: b.init, scope: initScope });
+  return ext;
+}
 
 const pathEquals = (a: LeafPath, b: LeafPath): boolean => a.length === b.length && a.every((seg, i) => seg === b[i]);
 
@@ -73,16 +111,15 @@ function reduceToValue(expr: CoreForm, scope: Scope): { readonly ok: true; reado
     if (cur.kind === "Ref") {
       const bound = sc.get(cur.name);
       if (bound === undefined) return { ok: true, expr: cur, scope: sc }; // free — the boundary
-      if (seen.has(bound)) return { ok: false, reason: "cyclic-binding" };
-      seen.add(bound);
-      cur = bound;
+      if (seen.has(bound.expr)) return { ok: false, reason: "cyclic-binding" };
+      seen.add(bound.expr);
+      cur = bound.expr;
+      sc = bound.scope; // resolve the init in ITS defining scope, not the reference site
       continue;
     }
     if (cur.kind === "Let" || cur.kind === "NamedLet") {
       if (cur.body.length === 0) return { ok: false, reason: "empty-body" };
-      const extended = new Map(sc);
-      for (const b of cur.bindings as readonly Binding[]) extended.set(b.name, b.init);
-      sc = extended;
+      sc = extendForLet(cur, sc);
       cur = cur.body[cur.body.length - 1]!;
       continue;
     }
@@ -267,9 +304,12 @@ function enumerateLeaves(expr: CoreForm, scope: Scope, path: LeafPath): readonly
  *  resolves against. Last-write-wins on a repeated name, mirroring ordinary
  *  top-level re-`define` shadowing. */
 function topLevelScope(classified: ClassifyResult): Scope {
-  const scope = new Map<string, CoreForm>();
+  // Top-level defines are mutually visible (a define body may reference any other
+  // top-level name) — letrec*-like, so every entry's defining scope is the whole
+  // top-level map itself (self-referential; resolved lazily, cycle guard stops knots).
+  const scope = new Map<string, BoundValue>();
   for (const form of classified.forms) {
-    if (form.kind === "Define") scope.set(form.name, form.value);
+    if (form.kind === "Define") scope.set(form.name, { expr: form.value, scope });
   }
   return scope;
 }

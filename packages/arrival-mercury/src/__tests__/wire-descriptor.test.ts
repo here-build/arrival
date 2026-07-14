@@ -218,4 +218,21 @@ describe("Fable review — Tier-1 soundness", () => {
     expect(leaves[0]!.descriptor.source).toEqual({ kind: "Hole", reason: "kwargs-only-call" });
     expect(dataShaped(leaves[0]!.descriptor)).toBe(false);
   });
+
+  it("finding 2: parallel-let respects binding-site scope — (let ((x (:id e)) (y x)) y) has y = the OUTER literal, not the crossing", () => {
+    // R7RS parallel `let`: `y`'s init `x` is the outer `(define x 1)`, NOT the let's
+    // own `x`. The walk used to layer all bindings eagerly and derive y → PVertice(e)
+    // — a static false "clean content." The probe rescued the seal today, but wireOf/
+    // transferOf consumers (LSP, flow audit) get no probe, so the wrong answer would ship.
+    const parallel = derive(cf(`(define x 1) (let ((x (:id e)) (y x)) y)`));
+    expect(parallel).toHaveLength(1);
+    expect(parallel[0]!.descriptor.source.kind).toBe("Literal"); // y = 1, the outer constant
+    expect(dataShaped(parallel[0]!.descriptor)).toBe(false);
+
+    // let* is sequential — there `y`'s init DOES see the let's own crossing-bound x.
+    const sequential = derive(cf(`(define x 1) (let* ((x (:id e)) (y x)) y)`));
+    expect(sequential[0]!.descriptor.source.kind).toBe("PVertice");
+    expect((sequential[0]!.descriptor.source as PVertice).anchorName).toBe("e");
+    expect(dataShaped(sequential[0]!.descriptor)).toBe(true);
+  });
 });
