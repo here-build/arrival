@@ -3,8 +3,9 @@
 // shared types + helpers live in `./_bake.js`.
 
 import * as z from "../scheme-zod.js";
-import { ZodType } from "zod";
+import { ZodError, ZodType } from "zod";
 import { decodeKwargsStrict } from "../kwargs-rejection.js";
+import { formatPositionalRejection } from "./positional-rejection.js";
 import { attestDeep, freshIfSingleton } from "../../values/attestation.js";
 import { AValue, pointProvenance, unionProvenance } from "../../values/primitives/AValue.js";
 import { jsToScheme } from "../../rosetta.js";
@@ -226,8 +227,23 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
         // STRICT + humanized (kwargs-rejection.ts, args-error-reporting-v2.md §2.5): unknown
         // keys reject instead of silently stripping, and a ZodError rethrows in the frozen
         // `<name>: arguments rejected — N problem(s):` grammar.
-        const decode = (): readonly unknown[] =>
-          kwargsShape ? [decodeKwargsStrict(name, kwargsShape, collectKwargsObject(args))] : z.decode(inSchema, args);
+        //
+        // B4 (benchmark-defect-register.md): the POSITIONAL arm used to let a raw `ZodError`
+        // propagate — zod v4's `ZodError.message` IS the pretty-printed JSON of `.issues`, a
+        // 25-line nested-union dump naming no verb and no argument (one model in the 89x2
+        // corpus misread it as an invented `:limit max 500` schema constraint and voluntarily
+        // shrank its dataset 388→80). Humanized the same way the kwargs arm already is, via
+        // `positional-rejection.ts` (this arm's own sibling of kwargs-rejection.ts's
+        // `issueLines`, keyed on arg INDEX instead of kwarg NAME).
+        const decode = (): readonly unknown[] => {
+          if (kwargsShape) return [decodeKwargsStrict(name, kwargsShape, collectKwargsObject(args))];
+          try {
+            return z.decode(inSchema, args);
+          } catch (e) {
+            if (e instanceof ZodError) throw new Error(formatPositionalRejection(name, e, args, inSchema));
+            throw e;
+          }
+        };
         // Wrapped in `withRegionScope` when a scope is open — the SYNCHRONOUS window a
         // `z.procedure` arm's decode reads via `currentRegionScope()` (scheme-zod.ts), so the
         // minted host-fn wrapper closes over THIS scope instead of falling back to the shared
@@ -364,6 +380,11 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       callbackRoles,
       type: contract.type,
       preludeOnly: contract.preludeOnly,
+      // Compiler-facing fields (constitution §4.1) — carried through AUTHORED (the
+      // harvest row resolves refPolicy's "shim" default); inert to the interpreter.
+      emit: contract.emit,
+      narrows: contract.narrows,
+      refPolicy: contract.refPolicy,
       // The extension bag (BakeRuntimeOpts.metadata → RosettaSymbolDef.metadata). Stamped
       // as DATA only — dynamic (fn-valued) fields are NEVER invoked here (bake must not
       // resolve metadata: resolution is read-time, against the assembly's activation —

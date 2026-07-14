@@ -46,6 +46,10 @@ import { CacheClassShapeError, KeywordPairingError, ProvenanceRoleShapeError } f
 // module's values): the per-env binding context a DYNAMIC metadata field resolves
 // against. Same erased-import posture kernel.ts takes for `DegradedCapability`.
 import type { Activation } from "../capability.js";
+// TYPE-ONLY, one-directional (`common/symbols` → `emit`; emit-rule.ts imports nothing
+// back from this tree): the compiler-facing rule surface a Contract may carry.
+// Constitution §4.1/§4.5 (arrival-ts-transpiler-design.md) + registry-emit.md.
+import type { EmitRule, RefPolicy } from "../../emit/emit-rule.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. The args-vector spec + decoded-type inference
@@ -273,6 +277,24 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest exten
    *  A prelude bridges a preludeOnly value to runtime by capturing the call's RESULT in an
    *  ordinary define, never the verb itself. */
   readonly preludeOnly?: boolean;
+  /** The idiomatic-residual rewrite for the compiler (the fifth reader of this record —
+   *  constitution §4.1). Absent ⇒ the fallback ladder's rung 3 (the RuntimeRef shim);
+   *  silence is impossible by construction (§4.2). STATIC data by law: a builder-form
+   *  capability whose rule depends on activation state is a harvest-time error (§4.5).
+   *  INERT everywhere except the compiler's harvest — the interpreter never reads it. */
+  readonly emit?: EmitRule;
+  /** This symbol's leaf narrows (is-predicate / non-empty overload); `witness` names the
+   *  registered symbol whose runtime behavior PROVES it (Law N — enforcement is CI, not
+   *  culture: the harvest's witness-registry check red-builds a narrows row whose witness
+   *  is not itself a harvested symbol). Consumed SOLELY by the TYPE PASS's narrowing-form
+   *  grammar (§5.3) — entirely independent of whether this Contract also carries `emit`:
+   *  a shim-resolved symbol may be narrows-flagged purely to earn Law T's narrowing
+   *  exemption. */
+  readonly narrows?: { readonly witness: string };
+  /** Value-position behavior — see `RefPolicy` (emit/emit-rule.ts). DEFAULT `"shim"`,
+   *  resolved at the compiler's harvest (the row carries the resolved value; this field
+   *  stores only what the author declared). */
+  readonly refPolicy?: RefPolicy;
 }
 
 // CallCtx/makeCallCtx moved to values/primitives/CallCtx.ts: ACallable.ts needs makeCallCtx
@@ -330,6 +352,14 @@ export interface NativeSymbolDef {
    *  override; see `Contract.callbackRoles`). `undefined` when the contract has no z.lambda
    *  arm. capability.ts stamps this onto the bound callable beside `provenanceRole`. */
   readonly callbackRoles?: CallbackRoles;
+  /** See `Contract.emit` — carried through verbatim (flattened top-level, like
+   *  `cacheClass`; never a `.contract` sub-object), read only by the compiler's harvest. */
+  readonly emit?: EmitRule;
+  /** See `Contract.narrows`. */
+  readonly narrows?: { readonly witness: string };
+  /** See `Contract.refPolicy` — the AUTHORED value; the harvest row resolves the
+   *  `"shim"` default. */
+  readonly refPolicy?: RefPolicy;
   /** Extension bag — see `MetadataRecord` (kind-agnostic; every def carries the slot). */
   readonly metadata?: MetadataRecord;
 }
@@ -371,6 +401,12 @@ export interface RosettaSymbolDef<
   readonly type?: string;
   /** See `Contract.preludeOnly`. */
   readonly preludeOnly?: boolean;
+  /** See `NativeSymbolDef.emit`. */
+  readonly emit?: EmitRule;
+  /** See `Contract.narrows`. */
+  readonly narrows?: { readonly witness: string };
+  /** See `NativeSymbolDef.refPolicy`. */
+  readonly refPolicy?: RefPolicy;
   /** Extra data carried by this symbol (MCP tool annotations, etc.) — the same
    *  kind-agnostic slot every def carries (see `MetadataRecord`); rosetta keeps its
    *  generic `M` so a higher layer can type its own bag (`RosettaSymbolDef<M>`).
@@ -405,6 +441,14 @@ export interface TaglessSymbolDef {
    *  channel (srfi-1's `reduce` declares its acc chain through it — the "fold declares acc
    *  chain" case). */
   readonly callbackRoles?: CallbackRoles;
+  /** See `NativeSymbolDef.emit`. A tagless def has no Contract bag — like `type` above,
+   *  this lands by plain object spread at the declaration site
+   *  (`{ ...symbol.tagless…, emit: … }`); `tagless()` itself never sets it. */
+  readonly emit?: EmitRule;
+  /** See `Contract.narrows` — declaration-site spread, same as `emit`. */
+  readonly narrows?: { readonly witness: string };
+  /** See `NativeSymbolDef.refPolicy` — declaration-site spread, same as `emit`. */
+  readonly refPolicy?: RefPolicy;
   /** Extension bag — see `MetadataRecord` (kind-agnostic; every def carries the slot). */
   readonly metadata?: MetadataRecord;
 }
@@ -431,6 +475,13 @@ export interface TaglessGuardSymbolDef {
   readonly type?: string;
   /** See `TaglessSymbolDef.callbackRoles` — same shapeless-contract rationale. */
   readonly callbackRoles?: CallbackRoles;
+  /** See `TaglessSymbolDef.emit` — declaration-site spread; the guard factory never sets it. */
+  readonly emit?: EmitRule;
+  /** See `Contract.narrows` — declaration-site spread. The proven idiom for a
+   *  self-witnessing predicate (`pair?` whose own runtime behavior IS the proof). */
+  readonly narrows?: { readonly witness: string };
+  /** See `NativeSymbolDef.refPolicy` — declaration-site spread. */
+  readonly refPolicy?: RefPolicy;
   /** Extension bag — see `MetadataRecord` (kind-agnostic; every def carries the slot). */
   readonly metadata?: MetadataRecord;
 }
@@ -455,6 +506,12 @@ export interface SequenceSymbolDef {
   readonly cacheClass?: CacheClass;
   /** RESOLVED per-lambda-arm callback roles — see `NativeSymbolDef.callbackRoles`. */
   readonly callbackRoles?: CallbackRoles;
+  /** See `NativeSymbolDef.emit`. */
+  readonly emit?: EmitRule;
+  /** See `Contract.narrows`. */
+  readonly narrows?: { readonly witness: string };
+  /** See `NativeSymbolDef.refPolicy`. */
+  readonly refPolicy?: RefPolicy;
   /** Extension bag — see `MetadataRecord` (kind-agnostic; every def carries the slot). */
   readonly metadata?: MetadataRecord;
 }
@@ -594,6 +651,15 @@ export interface DefineSymbolDef {
    *  `BakeRuntimeOpts.validate`, resolved to a concrete boolean at bake (default
    *  `true`) since the wrapper is built once the evaluated closure is available. */
   readonly validate: boolean;
+  /** See `NativeSymbolDef.emit`. Meaningful for PROCEDURE defines only (`callable:
+   *  true`) — the Stage-2 hand-polish escape hatch (constitution §4.4): a self-hosted
+   *  define's body compiles ordinarily through CoreForm, so this override is optional
+   *  in practice. */
+  readonly emit?: EmitRule;
+  /** See `Contract.narrows`. */
+  readonly narrows?: { readonly witness: string };
+  /** See `NativeSymbolDef.refPolicy`. */
+  readonly refPolicy?: RefPolicy;
   /** Extension bag — see `MetadataRecord` (kind-agnostic; every def carries the slot). */
   readonly metadata?: MetadataRecord;
 }

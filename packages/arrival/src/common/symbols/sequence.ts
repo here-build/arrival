@@ -59,6 +59,11 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
       provenance,
       cacheClass,
       callbackRoles,
+      // Compiler-facing fields (constitution §4.1) — carried through AUTHORED (the
+      // harvest row resolves refPolicy's "shim" default); inert to the interpreter.
+      emit: contract.emit,
+      narrows: contract.narrows,
+      refPolicy: contract.refPolicy,
       // The extension bag — data only; dynamic fields resolve at read time, never at bake.
       metadata: opts.metadata,
     };

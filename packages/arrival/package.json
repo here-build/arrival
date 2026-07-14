@@ -51,6 +51,10 @@
       "types": "./dist/common/symbol.d.ts",
       "default": "./dist/common/symbol.js"
     },
+    "./emit": {
+      "types": "./dist/emit/index.d.ts",
+      "default": "./dist/emit/index.js"
+    },
     "./scheme-zod": {
       "types": "./dist/common/scheme-zod.d.ts",
       "default": "./dist/common/scheme-zod.js"
