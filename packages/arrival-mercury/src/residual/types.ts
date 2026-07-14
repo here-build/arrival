@@ -5,8 +5,10 @@
  * below (never raw object literals) and never touch `ts.factory`, parenthesization, or
  * comment placement. Every "how does this print" question terminates in ./render.ts, once.
  *
- * Frozen small (~28 R constructors + 6 Decl constructors): additions require a
- * demonstrated emit-rule need + renderer support + oracle coverage.
+ * Frozen small (~29 R constructors + 6 Decl constructors): additions require a
+ * demonstrated emit-rule need + renderer support + oracle coverage. (The 29th, the
+ * statement-position `If`, landed with the engine walker under exactly that rule —
+ * see its constructor's doc for the demonstrated need.)
  */
 
 /** coreform-ir.md's branded pre-order node id. Carried opaquely — never constructed,
@@ -127,6 +129,7 @@ export type R =
   | (Base & { t: "While"; test: R; body: Extract<R, { t: "Block" }> })
   | (Base & { t: "ForOf"; pattern: Pattern; iterable: R; body: Extract<R, { t: "Block" }> })
   | (Base & { t: "Continue" }) // no label — innermost loop, by construction
+  | (Base & { t: "If"; test: R; then: Extract<R, { t: "Block" }>; else?: R }) // statement-only; `else` is a Block or a chained If (render-asserted)
   | (Base & { t: "Throw"; value: R })
   | (Base & { t: "Comment"; text: string; node: R }) // LEADING block comment only
   | (Base & { t: "Annotated"; value: R; type: TsType }); // legal shapes pinned in render.ts
@@ -291,6 +294,22 @@ export function ForOf(pattern: Pattern, iterable: R, body: Extract<R, { t: "Bloc
 
 export function Continue(): R {
   return { t: "Continue" };
+}
+
+/**
+ * Statement-position conditional — engine-minted TCO/loop machinery only, like
+ * `Let`/`Assign` above. Demonstrated need (the §3.4 amendment rule): the constitution's
+ * §6 ledger requires named-let→while with a `continue` loop step and a `return` base
+ * case — both statements, so the branch between them structurally cannot ride the
+ * expression `Cond` (a `continue` inside a Block-as-IIFE arm would be a SyntaxError).
+ * `While`/`Continue`/`Assign` entered the algebra for exactly this rewrite; without a
+ * statement branch, `Continue` is unreachable from a `While(Lit(true), …)` body at all.
+ * `elseBranch` must be a `Block` or another `If` (else-if chain) — render-asserted.
+ * Emit rules never mint one (rules return expressions; statement shapes are the
+ * walker's own).
+ */
+export function If(test: R, then: Extract<R, { t: "Block" }>, elseBranch?: R): R {
+  return { t: "If", test, then, else: elseBranch };
 }
 
 export function Throw(value: R): R {

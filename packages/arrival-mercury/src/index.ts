@@ -36,6 +36,37 @@ export {
 } from "./front/nodes.js";
 export { parseSexprs } from "./front/parse.js";
 
+// ── the TYPE pass — Law T + the §5.3 narrowing-form grammar (type-emit-lawt.md) ──
+export {
+  emitTypes,
+  type EmitTypesOptions,
+  type EmitTypesResult,
+  type Mapping,
+  narrowsMembersOf,
+} from "./type-emit/index.js";
+
+// ── the TYPEFACTS extraction — the tsc→facts membrane (typefacts-extraction.md;
+//    constitution §3.3/§5.3). `TypeFacts` re-exports @here.build/arrival/emit's
+//    canonical vocabulary — one type, two readers, no adaptation layer. ──
+export {
+  type ClassifiedSource,
+  type DeriveContext,
+  deriveFacts,
+  extractFacts,
+  type ExtractFactsOptions,
+  type FactsExtraction,
+  hasFacts,
+  type HoleReason,
+  litFacts,
+  quoteFacts,
+  type TypeFacts,
+} from "./typefacts/index.js";
+
+// ── the engine walker (engine-walker.md; constitution §3.5/§4.2/§5.2) ──
+export { runtimeRefsOf, walk, WalkDoorError, type WalkOptions } from "./walker/index.js";
+export { render } from "./residual/render.js";
+export type { CompilationUnit } from "./residual/types.js";
+
 // ── the Contract.emit registry harvest (constitution §4.1/§4.5; registry-emit.md) ──
 export {
   assertNarrowsWitnessed,

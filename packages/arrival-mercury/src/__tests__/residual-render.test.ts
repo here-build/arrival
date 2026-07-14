@@ -28,6 +28,7 @@ import {
   Export,
   FnDecl,
   ForOf,
+  If,
   Import,
   ImportType,
   Index,
@@ -120,6 +121,17 @@ describe("every R constructor renders", () => {
       "[a, b] = [x, y];\n",
     ],
     ["While + Continue", While(Lit(true), Block([Continue()])), "while (true) {\n    continue;\n}\n"],
+    [
+      "If — the statement-position TCO branch (then/else blocks)",
+      If(Ref(t), Block([Assign(a, Lit(1)), Continue()]), Block([Return(Ref(a))])),
+      "if (t) {\n    a = 1;\n    continue;\n}\nelse {\n    return a;\n}\n",
+    ],
+    [
+      "If — else-if chain (else may be another If)",
+      If(Ref(t), Block([Return(Lit(1))]), If(Ref(p), Block([Return(Lit(2))]))),
+      "if (t) {\n    return 1;\n}\nelse if (p) {\n    return 2;\n}\n",
+    ],
+    ["If — no else", If(Ref(t), Block([Return(Lit(1))])), "if (t) {\n    return 1;\n}\n"],
     [
       "ForOf",
       ForOf(n, Ref(xs), Block([Method(RuntimeRef("console"), "log", [Ref(n)])])),
@@ -317,6 +329,11 @@ describe("renderer assertions fail loudly, never miscompile", () => {
     expect(() => one(Call(Ref(f), [Return(Lit(1))]))).toThrow(/statement-only node Return/);
     expect(() => one(Call(Ref(f), [While(Lit(true), Block([]))]))).toThrow(/statement-only node While/);
     expect(() => one(Call(Ref(f), [Throw(Ref(e))]))).toThrow(/statement-only node Throw/);
+    expect(() => one(Call(Ref(f), [If(Ref(t), Block([]))]))).toThrow(/statement-only node If/);
+  });
+
+  it("If.else must be a Block or a chained If", () => {
+    expect(() => one(If(Ref(t), Block([]), Lit(1)))).toThrow(/If\.else must be a Block or a chained If/);
   });
 });
 

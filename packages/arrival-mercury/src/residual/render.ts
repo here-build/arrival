@@ -124,6 +124,18 @@ function renderStmt(node: R, insideAsync: boolean): ts.Statement {
       return f.createContinueStatement(); // no label, ever — one while per named-let
     case "Throw":
       return f.createThrowStatement(renderExpr(node.value, insideAsync));
+    case "If": {
+      // Statement-only (the TCO loop branch). `else` is a Block or a chained If —
+      // anything else is a walker bug, refused loudly like every other malformed tree.
+      if (node.else !== undefined && node.else.t !== "Block" && node.else.t !== "If") {
+        throw new ResidualRenderError(`If.else must be a Block or a chained If, got ${node.else.t}`, node.origin);
+      }
+      return f.createIfStatement(
+        renderExpr(node.test, insideAsync),
+        renderBlock(node.then, insideAsync),
+        node.else === undefined ? undefined : renderStmt(node.else, insideAsync),
+      );
+    }
     case "Comment":
       return leadingComment(renderStmt(node.node, insideAsync), node.text);
     default:
@@ -246,6 +258,7 @@ function renderExpr(node: R, insideAsync: boolean): ts.Expression {
     case "ForOf":
     case "Continue":
     case "Throw":
+    case "If":
       // Statement-only kinds with no ts.Expression encoding. Structurally unreachable
       // given the position-pinned dispatch above — asserted anyway (defense-in-depth).
       throw new ResidualRenderError(`statement-only node ${node.t} in expression position`, node.origin);
@@ -342,6 +355,8 @@ function rChildren(node: R): readonly R[] {
       return [node.test, node.body];
     case "ForOf":
       return [node.iterable, node.body];
+    case "If":
+      return node.else === undefined ? [node.test, node.then] : [node.test, node.then, node.else];
     case "Comment":
       return [node.node];
     case "Annotated":

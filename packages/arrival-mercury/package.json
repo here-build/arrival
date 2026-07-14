@@ -39,7 +39,9 @@
   },
   "dependencies": {
     "@here.build/arrival": "workspace:^",
+    "@here.build/lexical-namer": "workspace:^",
     "@inhuman.tools/arrival-run": "workspace:^",
+    "@inhuman.tools/arrival-type-lens": "workspace:^",
     "@inhuman.tools/mercury": "workspace:^",
     "tsx": "4.22.4",
     "typescript": "6.0.2",
