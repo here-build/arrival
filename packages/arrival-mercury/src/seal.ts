@@ -55,12 +55,19 @@ const notAttestable = (reason: string): SealVerdict => ({ kind: "not-attestable"
  *                       Pass `"indeterminate"` when no probe ran (fail closed).
  * @param role           the declared role the leaf is being sealed against.
  *
- * The two verdicts MUST describe the SAME leaf — the caller is responsible for
- * pairing them by leaf path (the static `LeafPath` ↔ dynamic `LeafPath`
- * correspondence). This function trusts that pairing and does not re-check it;
- * a mispaired call is a caller bug, not a seal a mismatch could forge (both
- * planes still have to independently pass, so a wrong pairing can only ever
- * DOWNGRADE, never upgrade).
+ * The two verdicts MUST describe the SAME leaf — the caller pairs them by leaf
+ * path (static `LeafPath` ↔ dynamic `LeafPath`). This pairing is PART OF THE
+ * TRUSTED BASE, and it is NOT self-defending: a mispairing can UPGRADE, not only
+ * downgrade. Counterexample from the corpus — leaf `(- (:v e) (:v e))` is
+ * statically data-shaped (its flow structurally reaches `e`) but its probe
+ * verdict is `ungrounded` (the value cancels); leaf `(:id e)` has probe verdict
+ * `content`. Correctly paired, the first seals `not-attestable`. Cross-paired —
+ * the first's static with the second's probe — both halves "independently pass"
+ * but for DIFFERENT leaves, and the seal returns `content-attested`: cancelled
+ * flow signed as data. So the caller MUST supply a mechanical, verified
+ * path-correspondence (the bridge is unbuilt — synthesis §2; today it is
+ * hand-written per call site). This function trusts the pairing and cannot
+ * re-check it: it holds no leaf identity, only two verdicts.
  */
 export function seal(staticVerdict: WireVerdict, probeVerdict: LeafVerdictKind, role: LeafRole): SealVerdict {
   if (role.role === "data") {

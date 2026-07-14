@@ -62,10 +62,19 @@ const calleeName = (fn: CoreForm): string | undefined => (fn.kind === "Ref" ? fn
 function reduceToValue(expr: CoreForm, scope: Scope): { readonly ok: true; readonly expr: CoreForm; readonly scope: Scope } | { readonly ok: false; readonly reason: string } {
   let cur = expr;
   let sc = scope;
+  // Cycle guard: a `Ref` chain that resolves back to a node it already followed is a
+  // cyclic binding (`(define x x)`, mutual `(define a b) (define b a)`, a `letrec`
+  // self-knot). This walk has NO fuel bound (the probe's `budgetMs` is the dynamic
+  // plane; this is static), and the threat model is "the model writes the program" —
+  // so a degenerate-but-classifiable input must terminate as an honest Hole, never
+  // hang the analyzer. Object identity: a bound value is one stored node, revisited.
+  const seen = new Set<CoreForm>();
   for (;;) {
     if (cur.kind === "Ref") {
       const bound = sc.get(cur.name);
       if (bound === undefined) return { ok: true, expr: cur, scope: sc }; // free — the boundary
+      if (seen.has(bound)) return { ok: false, reason: "cyclic-binding" };
+      seen.add(bound);
       cur = bound;
       continue;
     }
@@ -106,7 +115,7 @@ function reduceToValue(expr: CoreForm, scope: Scope): { readonly ok: true; reado
  *  argument position is recorded as `otherArgs`, each with its OWN descriptor — the
  *  residue policy.ts checks for is exactly a `Literal`-sourced entry there. */
 function deriveApp(expr: App, scope: Scope): WireDescriptor {
-  if (expr.fn.kind === "Lit" && expr.fn.value.kind === "keyword" && expr.positionalArgs.length === 1) {
+  if (expr.fn.kind === "Lit" && expr.fn.value.kind === "keyword" && expr.positionalArgs.length === 1 && expr.kwargs.length === 0) {
     const inner = deriveScalar(expr.positionalArgs[0]!, scope);
     const step: WireStep = { op: expr.fn.value.name, argIndex: 0, otherArgs: [] };
     return { source: inner.source, steps: [...inner.steps, step] };
@@ -120,15 +129,33 @@ function deriveApp(expr: App, scope: Scope): WireDescriptor {
   // explicitly per the design doc's own list ("computed key, filter survivor,
   // computed callee").
   if (head === "filter") return holeDescriptor("filter-survivor");
-  if (expr.positionalArgs.length === 0) return holeDescriptor("nullary-call");
+
+  // kwargs (`App.kwargs`, spec §4.7 — value-bearing, engine-walker collapses them
+  // into the trailing object at runtime) are SIBLING arguments exactly like extra
+  // positionals: a literal passed as `:suffix "FAKE"` reaches the output value, so
+  // it MUST enter `otherArgs` or `isCleanContent`'s "every reachable sub-descriptor"
+  // contract is a lie and the residue channel is invisible to BOTH planes (the
+  // static walk skips it; the probe checks marks, not residue). Numbered after the
+  // positionals; the residue policy is key-agnostic (it reads the descriptor, not
+  // the arg's name), so a synthetic index is enough.
+  const kwArgs: readonly WireArg[] = expr.kwargs.map((kw, i) => ({ argIndex: expr.positionalArgs.length + i, descriptor: deriveScalar(kw.value, scope) }));
+
+  if (expr.positionalArgs.length === 0) {
+    // No positional value to trace forward. A bare nullary call is an opaque source;
+    // a kwargs-only call is the same (its kwargs have no traced position to sit
+    // beside) — either way an honest Hole, fail closed. The kwargs cannot be
+    // silently lost because the whole call is un-anchored regardless.
+    return holeDescriptor(expr.kwargs.length > 0 ? "kwargs-only-call" : "nullary-call");
+  }
 
   const argDescs = expr.positionalArgs.map((a) => deriveScalar(a, scope));
   let mainIdx = argDescs.findIndex((d) => d.source.kind !== "Literal");
   if (mainIdx === -1) mainIdx = 0;
   const inner = argDescs[mainIdx]!;
-  const otherArgs: WireArg[] = argDescs
-    .map((descriptor, argIndex): WireArg => ({ argIndex, descriptor }))
-    .filter((arg) => arg.argIndex !== mainIdx);
+  const otherArgs: WireArg[] = [
+    ...argDescs.map((descriptor, argIndex): WireArg => ({ argIndex, descriptor })).filter((arg) => arg.argIndex !== mainIdx),
+    ...kwArgs,
+  ];
   const step: WireStep = { op: head, argIndex: mainIdx, otherArgs };
   return { source: inner.source, steps: [...inner.steps, step] };
 }

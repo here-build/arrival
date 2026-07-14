@@ -171,3 +171,51 @@ describe("and/or as value-returning control (craft-review #2 — was a Hole)", (
     expect(dataShaped(descriptor)).toBe(true); // no literal alternative
   });
 });
+
+describe("Fable review — Tier-1 soundness", () => {
+  it("finding 1: a cyclic binding TERMINATES as an honest Hole, never hangs the static walk", () => {
+    // (define x x) x — the reference resolves to itself forever. The static plane
+    // has no fuel bound; the threat model is "the model writes the program", so this
+    // must fail closed, not hang. (If the cycle guard regressed, this test would
+    // time out rather than fail — that IS the signal.)
+    const leaves = derive(cf(`(define x x) x`));
+    expect(leaves).toHaveLength(1);
+    expect(leaves[0]!.descriptor.source).toEqual({ kind: "Hole", reason: "cyclic-binding" });
+    expect(dataShaped(leaves[0]!.descriptor)).toBe(false);
+
+    // Mutual recursion is the same class.
+    const mutual = derive(cf(`(define a b) (define b a) a`));
+    expect(mutual[0]!.descriptor.source).toEqual({ kind: "Hole", reason: "cyclic-binding" });
+  });
+
+  it("finding 3: a literal passed via a KWARG becomes visible residue — dataShaped FAILS (was a silent forge channel)", () => {
+    // `:verdict "FAKE"` reaches the output value but deriveApp used to read only
+    // positionalArgs, so the wire said clean-content while the leaf carried a
+    // fabricated constant — invisible to BOTH planes. Now the kwarg's descriptor
+    // enters otherArgs, so the residue policy rejects it.
+    const leaves = derive(cf(`(make-rec (:id e) :verdict "FAKE")`));
+    expect(leaves).toHaveLength(1);
+    const { descriptor } = leaves[0]!;
+    expect(descriptor.source.kind).toBe("PVertice"); // main traced arg is the crossing
+    expect((descriptor.source as PVertice).anchorName).toBe("e");
+    const step = descriptor.steps.at(-1)!;
+    // the kwarg literal is an otherArg (numbered after the single positional)
+    const kwResidue = step.otherArgs.find((a) => a.descriptor.source.kind === "Literal");
+    expect(kwResidue).toBeDefined();
+    expect((kwResidue!.descriptor.source as Literal).lit.value).toEqual({ kind: "string", value: "FAKE" });
+    expect(dataShaped(descriptor)).toBe(false); // fail closed
+  });
+
+  it("finding 3 dual: a call whose kwargs are ALL crossing-derived stays dataShaped (no false rejection)", () => {
+    const leaves = derive(cf(`(make-rec (:id e) :name (:name e))`));
+    const { descriptor } = leaves[0]!;
+    expect(descriptor.source.kind).toBe("PVertice");
+    expect(dataShaped(descriptor)).toBe(true); // no literal residue anywhere
+  });
+
+  it("finding 3: a kwargs-only call (no positional to trace) is an honest Hole", () => {
+    const leaves = derive(cf(`(make-rec :verdict "FAKE")`));
+    expect(leaves[0]!.descriptor.source).toEqual({ kind: "Hole", reason: "kwargs-only-call" });
+    expect(dataShaped(leaves[0]!.descriptor)).toBe(false);
+  });
+});
