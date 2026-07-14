@@ -219,6 +219,46 @@ describe("Fable review — Tier-1 soundness", () => {
     expect(dataShaped(leaves[0]!.descriptor)).toBe(false);
   });
 
+  it("finding 6a: a Hole under role:data is NOT-ATTESTABLE, not a zero-residue 'fabrication'", () => {
+    // A bare Hole (filter survivor, computed callee, cyclic binding) is UNPROVEN, not
+    // an accusation of fabrication — reporting it as fabrication falsely accuses.
+    const holeLeaf = derive(cf(`(filter pred lst)`))[0]!;
+    expect(holeLeaf.descriptor.source.kind).toBe("Hole");
+    expect(verdictFor(holeLeaf.descriptor, { role: "data" })).toEqual({ kind: "not-attestable" });
+  });
+
+  it("finding 6c: a judgment fabrication reports ONLY the undeclared constants", () => {
+    // vocabulary declares GUILTY/INNOCENT; the program emits GUILTY or MADEUP. Only
+    // MADEUP is the fabrication — GUILTY is a legitimate declared member.
+    const { descriptor } = derive(cf(`(if (:g e) "GUILTY" "MADEUP")`))[0]!;
+    const v = verdictFor(descriptor, { role: "judgment", vocabulary: new Set(["GUILTY", "INNOCENT"]) });
+    expect(v.kind).toBe("fabrication");
+    if (v.kind === "fabrication") {
+      expect(v.residue.map((l) => (l.value.kind === "string" ? l.value.value : null))).toEqual(["MADEUP"]);
+    }
+  });
+
+  it("finding 8: a data-role fabrication residue EXCLUDES the guard constant and never double-counts or/and", () => {
+    // The `7` sits in the guard (selection), not the content — it must not be reported.
+    const guard = derive(cf(`(if (= (:v e) 7) "A" "B")`))[0]!;
+    const gv = verdictFor(guard.descriptor, { role: "data" });
+    expect(gv.kind).toBe("fabrication");
+    if (gv.kind === "fabrication") {
+      const strings = gv.residue.flatMap((l) => (l.value.kind === "string" ? [l.value.value] : []));
+      const numbers = gv.residue.flatMap((l) => (l.value.kind === "number" ? [l.value.text] : []));
+      expect(strings.toSorted()).toEqual(["A", "B"]); // the alts
+      expect(numbers).toEqual([]); // NOT the guard's 7
+    }
+
+    // (or "A" (:x e)) aliases descA as cond AND alts[0]; residue must list "A" once.
+    const orLeaf = derive(cf(`(or "A" (:x e))`))[0]!;
+    const ov = verdictFor(orLeaf.descriptor, { role: "data" });
+    if (ov.kind === "fabrication") {
+      const as = ov.residue.flatMap((l) => (l.value.kind === "string" && l.value.value === "A" ? [1] : []));
+      expect(as).toEqual([1]); // exactly once, not twice
+    }
+  });
+
   it("finding 2: parallel-let respects binding-site scope — (let ((x (:id e)) (y x)) y) has y = the OUTER literal, not the crossing", () => {
     // R7RS parallel `let`: `y`'s init `x` is the outer `(define x 1)`, NOT the let's
     // own `x`. The walk used to layer all bindings eagerly and derive y → PVertice(e)

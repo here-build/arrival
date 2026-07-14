@@ -15,16 +15,28 @@ import type { Lit } from "../coreform/types.js";
 
 import type { Literal, WireDescriptor } from "./types.js";
 
-/** A descriptor that is JUST a program constant — no crossing anywhere in it. The
- *  narrowing target for both checks below: `alts`/other-argument positions must be
- *  exactly this shape to count as "the program's own constants," not merely
- *  "currently resolves to a Literal at the top" (a `Literal` with steps on top of
- *  it would mean further operations ran on a constant, which is still a constant,
- *  but is never produced by this walk — `deriveScalar` never appends a step onto a
- *  bare literal source. Checking `steps.length === 0` here is therefore a genuine
- *  invariant check, not decoration). */
+/** A descriptor that is JUST a program constant — a `Literal` source with NO steps.
+ *  The `steps.length === 0` guard is LOAD-BEARING, not decoration: `deriveApp`'s
+ *  all-literal fallback DOES produce a Literal-source-with-steps — `(string-append
+ *  "A" "B")` derives `{source: Literal("A"), steps: [string-append]}`, whose runtime
+ *  value is `"AB"`, not `"A"`. So a judgment alt like `(if c (string-upcase "yes")
+ *  "no")` against vocabulary `{"yes","no"}` MUST be rejected — its runtime value is
+ *  `"YES"`, an undeclared constant — and this guard is exactly what rejects it. Only
+ *  a bare, unprocessed literal is "the program's own constant" in the simple sense
+ *  the judgment check licenses. */
 function isBareLiteral(desc: WireDescriptor): desc is WireDescriptor & { readonly source: Literal } {
   return desc.source.kind === "Literal" && desc.steps.length === 0;
+}
+
+/** The alternatives of a `Case` whose alts are ALL bare literals, else `null` — the
+ *  shared narrowing `judgmentShaped` and `verdictFor`'s judgment branch both need
+ *  (they used to duplicate these guards, then re-run them). A `null` return means
+ *  "not a bare-literal Case," i.e. not judgment-shaped in any vocabulary. */
+function bareLiteralAlts(desc: WireDescriptor): readonly (WireDescriptor & { readonly source: Literal })[] | null {
+  if (desc.source.kind !== "Case") return null;
+  const { alts } = desc.source;
+  if (alts.length === 0 || !alts.every(isBareLiteral)) return null;
+  return alts.filter(isBareLiteral);
 }
 
 /**
@@ -70,10 +82,8 @@ export function dataShaped(desc: WireDescriptor): boolean {
  *  `Case` of bare literals outside `vocabulary` is an undeclared constant in a
  *  judgment slot — a fabrication wearing a judgment's shape. */
 export function judgmentShaped(desc: WireDescriptor, vocabulary: ReadonlySet<string>): boolean {
-  if (desc.source.kind !== "Case") return false;
-  const { alts } = desc.source;
-  if (alts.length === 0 || !alts.every(isBareLiteral)) return false;
-  return alts.every((alt) => vocabulary.has(literalKey(alt.source.lit)));
+  const alts = bareLiteralAlts(desc);
+  return alts !== null && alts.every((alt) => vocabulary.has(literalKey(alt.source.lit)));
 }
 
 /** A comparable key for a literal's scalar value — string/boolean stringify to
@@ -106,7 +116,12 @@ function literalResidueOf(desc: WireDescriptor): readonly Lit[] {
   const walk = (d: WireDescriptor): void => {
     if (d.source.kind === "Literal") out.push(d.source.lit);
     if (d.source.kind === "Case") {
-      walk(d.source.cond);
+      // alts ONLY — the cond is SELECTION (a guard reading a crossing), not content.
+      // `isCleanContent` skips the cond too, so the residue (what made the CONTENT
+      // check fail) must not report guard constants like the `7` in `(= (:v e) 7)`.
+      // Skipping cond also de-duplicates `or`/`and`, whose lowering aliases the first
+      // descriptor as BOTH the cond and an alt (derive.ts) — walking cond would
+      // count it twice.
       for (const alt of d.source.alts) walk(alt);
     }
     for (const step of d.steps) for (const arg of step.otherArgs) walk(arg.descriptor);
@@ -133,11 +148,19 @@ export type WireVerdict =
 
 export function verdictFor(desc: WireDescriptor, expectation: LeafRole): WireVerdict {
   if (expectation.role === "data") {
-    return dataShaped(desc) ? { kind: "data-shaped" } : { kind: "fabrication", residue: literalResidueOf(desc) };
+    if (dataShaped(desc)) return { kind: "data-shaped" };
+    const residue = literalResidueOf(desc);
+    // A leaf with NO literal residue is UNPROVEN, not fabricated: a bare `Hole`
+    // (computed callee, filter survivor, cyclic binding) is `not-attestable`, full
+    // stop (design §3 — "the probe cannot upgrade it"). Only actual program constants
+    // in a content slot are the fabrication.
+    return residue.length > 0 ? { kind: "fabrication", residue } : { kind: "not-attestable" };
   }
-  if (desc.source.kind !== "Case") return { kind: "not-attestable" };
-  const { alts } = desc.source;
-  if (alts.length === 0 || !alts.every(isBareLiteral)) return { kind: "not-attestable" };
+  const alts = bareLiteralAlts(desc);
+  if (alts === null) return { kind: "not-attestable" };
   if (judgmentShaped(desc, expectation.vocabulary)) return { kind: "judgment-shaped" };
-  return { kind: "fabrication", residue: alts.filter(isBareLiteral).map((alt) => alt.source.lit) };
+  // Only the UNDECLARED constants are the fabrication — a declared-vocabulary member
+  // sitting in another alt is legitimate, so it must NOT appear in the residue.
+  const undeclared = alts.filter((alt) => !expectation.vocabulary.has(literalKey(alt.source.lit))).map((alt) => alt.source.lit);
+  return { kind: "fabrication", residue: undeclared };
 }
