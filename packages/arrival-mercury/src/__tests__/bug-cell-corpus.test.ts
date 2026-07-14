@@ -59,11 +59,7 @@ const KNOWN_RED: Readonly<Record<string, string>> = {
   // harvested define-kind registry row (rung-3 shim) → FRAME → stage-0 `error`
   // (SchemeUserError), so the taken-branch raise classifies user-error on both sides;
   // the legacy path's COMPILED_PREAMBLE shim serves only legacy A/B runs.
-  "symbol-face":
-    "representation-law gap (parked V ruling): the greenfield walker lowers 'hello to the interned-name face " +
-    '"hello" (walk.ts datumToR: symbol → Lit(d.name)) while rosetta egress renders the symbol face "\'hello" ' +
-    "(ASymbol arrival/toJS) — reconciliation unowned by any current phase",
-};
+  };
 
 function describeOutcome(o: Outcome): string {
   if (o.kind === "value") {
