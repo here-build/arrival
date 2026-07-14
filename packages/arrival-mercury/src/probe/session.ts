@@ -162,6 +162,12 @@ export interface ProbeSession extends AsyncDisposable {
  */
 interface InferRouter {
   current?: InferFn;
+  /** Single-flight guard. The router is shared mutable state; a concurrent
+   *  `recordRun`/`probe` would clobber `current` mid-run and silently corrupt a
+   *  verdict. This is a SECURITY harness, so silent corruption is the worst
+   *  failure class — re-entry throws loudly instead. (Sequential use is the
+   *  contract; open a second session for concurrent work.) */
+  busy?: boolean;
 }
 
 const routerOf = new WeakMap<ProbeSession, InferRouter>();
@@ -217,7 +223,13 @@ async function runWithTable(
   target: { readonly index: number; readonly witness: unknown } | undefined,
 ): Promise<{ value: unknown; calls: RecordedCall[] }> {
   const router = routerFor(session);
+  if (router.busy) {
+    throw new Error(
+      "probe session is single-flight — a recordRun/probe is already in progress on this session; open a second session for concurrent work",
+    );
+  }
   const calls: RecordedCall[] = [];
+  router.busy = true;
   router.current = tableBackedInfer(table, calls, target);
   try {
     const scope = LexicalScope.fresh(`probe-${scopeCounter++}`);
@@ -233,6 +245,7 @@ async function runWithTable(
     return { value: schemeToJsUntyped(last, {}), calls };
   } finally {
     router.current = undefined; // never leave a stale resolver armed for an unrelated later call
+    router.busy = false;
   }
 }
 

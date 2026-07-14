@@ -154,9 +154,41 @@ function deriveReduced(expr: CoreForm, scope: Scope): WireDescriptor {
       };
     case "App":
       return deriveApp(expr, scope);
+    // `and`/`or` are value-returning CONTROL, so they are `Case`s, not holes —
+    // the same selection-vs-content distinction `if` draws. `(or a b)` returns
+    // `a` when `a` is truthy else `b` ⇒ Case(cond=a, alts=[a, rest]); `(and a b)`
+    // returns `a` (=#f) when `a` is falsy else `b` ⇒ Case(cond=a, alts=[rest, a]).
+    // Modelling them keeps the static wire from abstaining on the short-circuit
+    // control that real programs use constantly — `(or (:cached e) "DEFAULT")` is
+    // exactly a selection between a vertex value and a literal, which the seal
+    // must see. n-ary folds right.
+    case "Or":
+      return deriveOrOr(expr.args, scope);
+    case "And":
+      return deriveAndAnd(expr.args, scope);
     default:
       return holeDescriptor(`unsupported-form:${expr.kind}`);
   }
+}
+
+/** `(or a b c…)` ≡ `(if a a (or b c…))` — a right fold of `Case(cond=a, alts=[a, rest])`.
+ *  Empty `(or)` ≡ `#f` is a constant with no source node; hole it (never reached
+ *  in real programs — the classifier folds it to a boolean literal upstream). */
+function deriveOrOr(args: readonly CoreForm[], scope: Scope): WireDescriptor {
+  if (args.length === 0) return holeDescriptor("empty-or");
+  const [first, ...rest] = args;
+  const firstDesc = deriveScalar(first!, scope);
+  if (rest.length === 0) return firstDesc;
+  return { source: { kind: "Case", cond: firstDesc, alts: [firstDesc, deriveOrOr(rest, scope)] }, steps: [] };
+}
+
+/** `(and a b c…)` ≡ `(if a (and b c…) a)` — a right fold of `Case(cond=a, alts=[rest, a])`. */
+function deriveAndAnd(args: readonly CoreForm[], scope: Scope): WireDescriptor {
+  if (args.length === 0) return holeDescriptor("empty-and");
+  const [first, ...rest] = args;
+  const firstDesc = deriveScalar(first!, scope);
+  if (rest.length === 0) return firstDesc;
+  return { source: { kind: "Case", cond: firstDesc, alts: [deriveAndAnd(rest, scope), firstDesc] }, steps: [] };
 }
 
 /** The recursive entry for a SCALAR position (a position that is not, itself,

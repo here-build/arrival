@@ -149,3 +149,25 @@ describe("derive() — the backward walk", () => {
     expect(dataShaped(cdr.descriptor)).toBe(false);
   });
 });
+
+describe("and/or as value-returning control (craft-review #2 — was a Hole)", () => {
+  it('(or (:cached e) "DEFAULT") is a Case selecting a vertex value or a literal — NOT dataShaped', () => {
+    const leaves = derive(cf(`(or (:cached e) "DEFAULT")`));
+    const { descriptor } = leaves[0]!;
+    expect(descriptor.source.kind).toBe("Case"); // was "Hole" before the fix
+    if (descriptor.source.kind === "Case") {
+      // one alternative is a vertex value, one is the "DEFAULT" literal
+      expect(descriptor.source.alts.some((a) => a.source.kind === "PVertice")).toBe(true);
+      expect(descriptor.source.alts.some((a) => a.source.kind === "Literal")).toBe(true);
+    }
+    // a leaf that might be the literal "DEFAULT" is selection, not pure content
+    expect(dataShaped(descriptor)).toBe(false);
+  });
+
+  it("(and (:a e) (:b e)) is a Case with both alts vertex-derived ⇒ dataShaped (content either way)", () => {
+    const leaves = derive(cf(`(and (:a e) (:b e))`));
+    const { descriptor } = leaves[0]!;
+    expect(descriptor.source.kind).toBe("Case");
+    expect(dataShaped(descriptor)).toBe(true); // no literal alternative
+  });
+});

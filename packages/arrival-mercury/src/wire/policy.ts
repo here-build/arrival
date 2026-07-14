@@ -38,6 +38,15 @@ function isBareLiteral(desc: WireDescriptor): desc is WireDescriptor & { readonl
  * exactly as fabricated as a bare literal there.
  */
 function isCleanContent(desc: WireDescriptor): boolean {
+  // A `Case` is clean content iff EVERY alternative is — the leaf is a real
+  // value in every branch it could take, so there is no run where it is a
+  // literal. The condition is selection (why), not content (where), and does
+  // not bear on cleanness. This is a PROOF (dataShaped is a positive claim):
+  // `(and (:a e) (:b e))` is content either way; `(if c "A" "B")` is NOT
+  // (literal alts ⇒ not clean ⇒ fabrication-in-the-middle stays rejected).
+  if (desc.source.kind === "Case") {
+    return desc.source.alts.every((alt) => isCleanContent(alt)) && desc.steps.every((s) => s.otherArgs.every((a) => isCleanContent(a.descriptor)));
+  }
   if (desc.source.kind !== "PVertice") return false;
   return desc.steps.every((step) => step.otherArgs.every((arg) => isCleanContent(arg.descriptor)));
 }
