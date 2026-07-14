@@ -1,0 +1,170 @@
+import { lt, le, gt, ge, equalP, evenP, every, length_, list, listRef, map, max_, nullP, zeroP } from "./stage0.mts";
+function OracleMain() {
+    throw new Error("unsupported-form/require: `(require \"metric.scm\")` \u2014 module loading is not compiled in this slice (the loader/FRAME wave owns import planning).");
+    const examples = (() => {
+        throw new Error("unsupported-form/require: `(require \"examples.json\")` \u2014 module loading is not compiled in this slice (the loader/FRAME wave owns import planning).");
+    })();
+    const runAnalyze = (() => {
+        throw new Error("unsupported-form/require: `(require \"analyze.prompt\")` \u2014 module loading is not compiled in this slice (the loader/FRAME wave owns import planning).");
+    })();
+    const runDecide = (() => {
+        throw new Error("unsupported-form/require: `(require \"decide.prompt\")` \u2014 module loading is not compiled in this slice (the loader/FRAME wave owns import planning).");
+    })();
+    const runReflect = (() => {
+        throw new Error("unsupported-form/require: `(require \"reflect.prompt\")` \u2014 module loading is not compiled in this slice (the loader/FRAME wave owns import planning).");
+    })();
+    const paretoset = examples;
+    const trace = (analyze, decide, ex) => {
+        const message = ex["input"];
+        const analysis = runAnalyze(list(analyze, message), { instruction: analyze, message: message });
+        const label = runDecide(list(decide, message, analysis), { instruction: decide, message: message, analysis: analysis });
+        return { id: ex["id"], input: message, analysis: analysis, prediction: label, expected: ex["expected"] };
+    };
+    const evaluate = (analyze, decide, set) => set.map(it => trace(analyze, decide, it));
+    const recScore = rec => {
+        throw new Error("unsupported-form/unresolved-identifier: `metric` is not lexically bound and is not a registry symbol.");
+    };
+    const scoresOf = recs => recs.map(recScore);
+    const failuresOf = recs => recs.filter(__x => (rec => zeroP(recScore(rec)))(__x) !== false);
+    const candidate = (analyze, decide, via, recs) => ({ analyze: analyze, decide: decide, via: via, recs: recs });
+    const instrOf = (c, stage) => equalP(stage, "analyze") ? c["analyze"] : c["decide"];
+    const assess = (analyze, decide, via) => candidate(analyze, decide, via, evaluate(analyze, decide, paretoset));
+    const scores = c => scoresOf(c["recs"]);
+    const total = c => scores(c).reduce((__acc, __item) => __acc + __item, 0);
+    const dominates = (a, b) => every(ge, scores(a), scores(b)) && (() => {
+        throw new Error("unsupported-form/unresolved-identifier: `some` is not lexically bound and is not a registry symbol.");
+    })();
+    const frontier = pool => pool.filter(__x2 => (c => !(() => {
+        throw new Error("unsupported-form/unresolved-identifier: `some` is not lexically bound and is not a registry symbol.");
+    })())(__x2) !== false);
+    const stageFor = iter => evenP(iter) ? "analyze" : "decide";
+    const propose = (c, batch, iter) => {
+        const stage = stageFor(iter);
+        const current = instrOf(c, stage);
+        const fails = failuresOf(batch);
+        return fails.length === 0 ? false : (() => {
+            const improved = runReflect(list(stage, current, fails), { stage: stage, instruction: current, failures: fails });
+            return equalP(stage, "analyze") ? list(improved, c["decide"], "analyze") : list(c["analyze"], improved, "decide");
+        })();
+    };
+    const complementary = (a, b) => equalP(a["via"], "analyze") && equalP(b["via"], "decide") || equalP(a["via"], "decide") && equalP(b["via"], "analyze");
+    const merge = (a, b) => equalP(a["via"], "analyze") ? assess(a["analyze"], b["decide"], "merge") : assess(b["analyze"], a["decide"], "merge");
+    const findMerge = pool => {
+        const outer = as => nullP(as) ? false : (() => {
+            let bs = pool;
+            /*[ts-base/self-tail-loop] named let `inner` → while*/
+            while (true) {
+                if (nullP(bs)) {
+                    return outer(as.slice(1));
+                }
+                else {
+                    if (complementary(as[0], bs[0])) {
+                        return list(as[0], bs[0]);
+                    }
+                    else {
+                        bs = bs.slice(1);
+                        continue;
+                    }
+                }
+            }
+        })();
+        return outer(pool);
+    };
+    const columnMaxima = pool => map(list, ...pool.map(scores)).map(it => max_(...it));
+    const paretoWeight = (c, maxima) => scores(c).map((score, __i) => ((s, m) => ge(s, m) ? 1 : 0)(score, maxima[__i])).reduce((__acc2, __item3) => __acc2 + __item3, 0);
+    const rngNext = state => (state * 16807 % 2147483647 + 2147483647) % 2147483647;
+    const rngInt = (state, n) => (state % max_(n, 1) + max_(n, 1)) % max_(n, 1);
+    const weightedIndex = (weights, target) => {
+        let ws = weights;
+        let i = 0;
+        let acc = 0;
+        /*[ts-base/self-tail-loop] named let `walk` → while*/
+        while (true) {
+            if (ws.slice(1).length === 0 || lt(target, acc + ws[0])) {
+                return i;
+            }
+            else {
+                [ws, i, acc] = [ws.slice(1), i + 1, acc + ws[0]];
+                continue;
+            }
+        }
+    };
+    const select = (pool, state) => {
+        const maxima = columnMaxima(pool);
+        const weights = pool.map(it => paretoWeight(it, maxima));
+        const target = rngInt(state, weights.reduce((__acc3, __item4) => __acc3 + __item4, 0));
+        return list(listRef(pool, weightedIndex(weights, target)), rngNext(state));
+    };
+    const picked = (ex, batch) => {
+        throw new Error("unsupported-form/unresolved-identifier: `some` is not lexically bound and is not a registry symbol.");
+    };
+    const sampleBatch = (set, k, state) => {
+        let picked_2 = list();
+        let tries = 3 * k;
+        let s = state;
+        /*[ts-base/self-tail-loop] named let `loop` → while*/
+        while (true) {
+            if (zeroP(tries) || ge(length_(picked_2), k) || ge(length_(picked_2), length_(set))) {
+                return list(picked_2, s);
+            }
+            else {
+                {
+                    const ex = listRef(set, rngInt(s, length_(set)));
+                    [picked_2, tries, s] = [picked(ex, picked_2) ? picked_2 : [ex, ...picked_2], tries - 1, rngNext(s)];
+                    continue;
+                }
+            }
+        }
+    };
+    const proposalBatchScore = (analyze, decide, batch) => scoresOf(evaluate(analyze, decide, batch)).reduce((__acc4, __item5) => __acc4 + __item5, 0);
+    const parentBatchScore = batch => scoresOf(batch).reduce((__acc5, __item6) => __acc5 + __item6, 0);
+    const BATCH = 4;
+    const MERGEEVERY = 3;
+    const evolve = (pool, budget, rng, iter) => le(budget, 0) ? pool : (() => {
+        const pair = (() => {
+            const __and = zeroP((iter % MERGEEVERY + MERGEEVERY) % MERGEEVERY);
+            return __and === false ? __and : findMerge(frontier(pool));
+        })();
+        return pair !== false ? evolve(frontier([merge(pair[0], (() => {
+                throw new Error("unsupported-form/unresolved-identifier: `cadr` is not lexically bound and is not a registry symbol.");
+            })()), ...pool]), budget - length_(paretoset), rngNext(rng), iter + 1) : (() => {
+            const sel = select(pool, rng);
+            const parent = sel[0];
+            const rng1 = (() => {
+                throw new Error("unsupported-form/unresolved-identifier: `cadr` is not lexically bound and is not a registry symbol.");
+            })();
+            const smp = sampleBatch(parent["recs"], BATCH, rng1);
+            const batch = smp[0];
+            const rng2 = (() => {
+                throw new Error("unsupported-form/unresolved-identifier: `cadr` is not lexically bound and is not a registry symbol.");
+            })();
+            const prop = propose(parent, batch, iter);
+            return prop === false ? evolve(pool, budget - BATCH, rng2, iter + 1) : (() => {
+                const pAnalyze = prop[0];
+                const pDecide = (() => {
+                    throw new Error("unsupported-form/unresolved-identifier: `cadr` is not lexically bound and is not a registry symbol.");
+                })();
+                const pVia = (() => {
+                    throw new Error("unsupported-form/unresolved-identifier: `caddr` is not lexically bound and is not a registry symbol.");
+                })();
+                const propScore = proposalBatchScore(pAnalyze, pDecide, batch);
+                const parentScore = parentBatchScore(batch);
+                return gt(propScore, parentScore) ? evolve(frontier([assess(pAnalyze, pDecide, pVia), ...pool]), budget - BATCH - length_(paretoset), rng2, iter + 1) : evolve(pool, budget - BATCH, rng2, iter + 1);
+            })();
+        })();
+    })();
+    const BUDGET = 100;
+    const SEEDRNG = 4;
+    const gepa = () => {
+        const seed = assess((() => {
+            throw new Error("unsupported-form/require: `(require \"analyze-seed.txt\")` \u2014 module loading is not compiled in this slice (the loader/FRAME wave owns import planning).");
+        })(), (() => {
+            throw new Error("unsupported-form/require: `(require \"decide-seed.txt\")` \u2014 module loading is not compiled in this slice (the loader/FRAME wave owns import planning).");
+        })(), "seed");
+        const final = evolve(list(seed), BUDGET - length_(paretoset), SEEDRNG, 0);
+        throw new Error("unsupported-form/unresolved-identifier: `max-by` is not lexically bound and is not a registry symbol.");
+    };
+    return gepa();
+}
+export { __oracleResult };
+const __oracleResult = OracleMain();

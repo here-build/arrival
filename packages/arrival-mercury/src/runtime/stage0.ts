@@ -276,7 +276,31 @@ export const nullP = (v: unknown): boolean => Array.isArray(v) && v.length === 0
 /** `pair?`'s total semantics — see `nullP`; a non-empty ARRAY, nothing else. */
 export const pairP = (v: unknown): boolean => Array.isArray(v) && v.length > 0;
 
+
+// ── Corpus-driven growth (constitution §4.4): the gate1 real programs' FRAME
+// doors named these exact exports. Comparisons/predicates are shim-tier today;
+// the hot ones graduate to Contract emit rules with the next relocation batch. ──
+
+export const lt = (a: number, b: number): boolean => a < b;
+export const le = (a: number, b: number): boolean => a <= b;
+export const ge = (a: number, b: number): boolean => a >= b;
+export const zeroP = (n: number): boolean => n === 0;
+export const evenP = (n: number): boolean => Math.abs(n % 2) === 0;
+export const length_ = (xs: readonly unknown[]): number => xs.length;
+export const listRef = (xs: readonly unknown[], k: number): unknown => xs[k];
+export const max_ = (...ns: number[]): number => Math.max(...ns);
+export const append_ = (...xss: readonly unknown[][]): unknown[] => xss.flat(1) as unknown[];
+
 export const STAGE0: Readonly<Record<string, string>> = {
+  "<": "lt",
+  "<=": "le",
+  ">=": "ge",
+  "zero?": "zeroP",
+  "even?": "evenP",
+  length: "length_",
+  "list-ref": "listRef",
+  max: "max_",
+  append: "append_",
   "null?": "nullP",
   "pair?": "pairP",
   "eq?": "eqP",
