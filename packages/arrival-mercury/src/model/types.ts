@@ -7,11 +7,15 @@
  * the editor phase; nothing here may preclude it (no module-level mutable
  * state, no ambient caches keyed by anything but the model instance).
  *
- * Ontology (design §1): Anchor (static site where data is born/preserved/
- * surrendered) · Chain (pure segment; interior DARK by design) · one program
- * per chain, two algebras (value → slice, provenance → transfer) · Marker
- * (runtime token — NOT in this package's v1; the interpreter wiring phase
- * owns handoff).
+ * Ontology (design §1, POST-PERTURBATION): Anchor (static site where data is
+ * born/preserved/surrendered) · Chain (pure segment; interior DARK by design) ·
+ * one program per chain, two algebras (value → slice, provenance → the wire
+ * descriptor). There is NO carried Marker — the carrier design was retired by
+ * `provenance-by-perturbation.md`: provenance is a PROBE over stored crossings,
+ * never a runtime token handed along. The static wire (src/wire/) IS the
+ * provenance reading; the probe (src/probe/) is its dynamic validator, attaching
+ * via a run and never a model member (interior darkness). `Transfer` below is a
+ * fold of the wire descriptor — same structure, chain granularity.
  */
 import type { CoreForm, NodeId, Span } from "../coreform/types.js";
 
@@ -137,8 +141,12 @@ export interface DemandGraph {
 
 export interface RunnableSlice {
   /** The value-algebra reading of the chain program: scheme source that, run
-   *  with the input anchors' recorded values bound to `params`, reproduces
-   *  the chain's output value (law L2 — grounding by reconstruction). */
+   *  with the input anchors' recorded values bound to `params`, reproduces the
+   *  chain's output value. NOTE (post-perturbation): "grounding by
+   *  reconstruction" was RETIRED as unsound — the slice contains its own
+   *  literals, so re-running it proves nothing about grounding. Grounding is a
+   *  PROBE (perturb + validate), not a reconstruction. This slice is the
+   *  re-derivation substrate the probe perturbs, not a grounding proof itself. */
   readonly source: string;
   readonly params: readonly string[];
 }
