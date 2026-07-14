@@ -19,7 +19,7 @@
  * module's walk is the part that is truly static regardless of which registry is
  * assembled.
  */
-import type { App, Binding, ClassifyResult, CoreForm, KwEntry, Let, LetKind, NamedLet } from "../coreform/types.js";
+import type { App, Binding, ClassifyResult, CoreForm, DefineFn, KwEntry, Lambda, Let, LetKind, NamedLet } from "../coreform/types.js";
 
 import type { LeafDescriptor, LeafPath, WireArg, WireDescriptor, WireStep } from "./types.js";
 
@@ -132,8 +132,49 @@ function reduceToValue(expr: CoreForm, scope: Scope): { readonly ok: true; reado
       cur = cur.value;
       continue;
     }
+    if (cur.kind === "App") {
+      // A call whose callee is a USER-DEFINED function must be BETA-REDUCED, not
+      // treated as an opaque forwarding step — else any guard in the body is hidden
+      // (the reopened guard-swap forge: `(define (f x) (if (> x 5) "SAFE" x))
+      // (f (:score e))` would derive as clean content on the crossing while the
+      // baseline value is the constant "SAFE"). Args bind in the CALLER's scope;
+      // the body runs in the function's closure extended with the params. A builtin
+      // callee (`resolveCallee` → null) falls through to `deriveApp`'s forwarding step.
+      const app = cur;
+      const callee = resolveCallee(app.fn, sc);
+      if (callee !== null) {
+        const { fn } = callee;
+        if (seen.has(fn)) return { ok: false, reason: "cyclic-binding" }; // recursion — no static unfold
+        seen.add(fn);
+        if (fn.body.length === 0) return { ok: false, reason: "empty-fn-body" };
+        // A rest-param or an arity mismatch is beyond this static beta-reducer — fail closed.
+        if (fn.params.some((p) => p.rest) || fn.params.length !== app.positionalArgs.length) {
+          return { ok: false, reason: "callee-arity" };
+        }
+        const bodyScope = new Map<string, BoundValue>(callee.scope);
+        fn.params.forEach((p, i) => bodyScope.set(p.name, { expr: app.positionalArgs[i]!, scope: sc }));
+        sc = bodyScope;
+        cur = fn.body[fn.body.length - 1]!;
+        continue;
+      }
+    }
     return { ok: true, expr: cur, scope: sc };
   }
+}
+
+/** Resolve a call's callee to a USER-DEFINED function (a `DefineFn` or a `Lambda`),
+ *  with the scope its body closes over — the trigger for beta-reduction. Returns
+ *  null for a builtin (a free `Ref` like `string-append`/`cons`, not bound to a
+ *  function here), an accessor keyword head, or a computed callee (`(pick-fn)`) —
+ *  all of which `deriveApp` handles without inlining. This is what tells a
+ *  pure-forwarding builtin apart from a helper that might hide a guard. */
+function resolveCallee(fn: CoreForm, scope: Scope): { readonly fn: DefineFn | Lambda; readonly scope: Scope } | null {
+  if (fn.kind === "Lambda") return { fn, scope };
+  if (fn.kind === "Ref") {
+    const bound = scope.get(fn.name);
+    if (bound && (bound.expr.kind === "DefineFn" || bound.expr.kind === "Lambda")) return { fn: bound.expr, scope: bound.scope };
+  }
+  return null;
 }
 
 /** The generic `App` case: an ordinary (or accessor) call. Accessor syntax
@@ -310,6 +351,10 @@ function topLevelScope(classified: ClassifyResult): Scope {
   const scope = new Map<string, BoundValue>();
   for (const form of classified.forms) {
     if (form.kind === "Define") scope.set(form.name, { expr: form.value, scope });
+    // A `DefineFn` IS the callable — stored so `resolveCallee` can beta-reduce a
+    // call to it. (Previously omitted entirely, which is why a named helper's guard
+    // stayed invisible.)
+    else if (form.kind === "DefineFn") scope.set(form.name, { expr: form, scope });
   }
   return scope;
 }

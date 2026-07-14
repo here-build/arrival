@@ -19,12 +19,23 @@
  *     static plane (a Hole/Case leaf, or a leaf whose "vertex" carries a literal
  *     residue, never reaches a content verdict no matter what the probe saw).
  *
- * The static gate SUBSUMES the same-path requirement: a branch-swap-forgeable
- * leaf is never statically clean content — it is a `Hole` (opaque dispatch the
- * static walk cannot see through) or a `Case` (a visible guard). So excluding
- * non-`data-shaped` descriptors excludes every forge the probe could
- * manufacture; where the static plane is BLIND (a `Hole`), `not-attestable` is
- * the fail-closed answer and the probe cannot upgrade it.
+ * The static gate SUBSUMES the same-path requirement — but this is a CONTINGENT
+ * property of `derive`, not a self-evident truth, and it was already reopened once:
+ * a branch-swap forge is caught only if the walk lowers its guard to a visible
+ * `Case` or fails closed to a `Hole`. The neutral review found a guard hidden
+ * inside a NAMED helper (`(define (f x) (if … "SAFE" x)) (f (:score e))`) that the
+ * walk was treating as an opaque forwarding step — neither Case nor Hole — so the
+ * gate passed a fabrication. `derive` now BETA-REDUCES user-defined callees, so a
+ * helper's guard lowers to `Case` like an inline one, and the only un-inlined
+ * callees (recursive / variadic / computed) all fail closed to `Hole`. The
+ * invariant the seal depends on is therefore: **`derive` lowers every guard to a
+ * `Case` or fails it closed to a `Hole`.** That is maintained BY the walk and
+ * checked by the adversarial corpus (probe-adversarial.test.ts) — a future
+ * construct that hides a guard as neither would reopen this gap, so the corpus is
+ * the guard, not this comment.
+ *
+ * Where the static plane is BLIND (a `Hole`), `not-attestable` is the fail-closed
+ * answer and the probe cannot upgrade it.
  *
  * Seal = static ∧ probe, fail closed on ANY disagreement or indeterminacy.
  */

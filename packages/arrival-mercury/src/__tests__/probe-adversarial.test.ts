@@ -527,6 +527,45 @@ describe("provenance by perturbation — THE ADVERSARIAL CORPUS (security review
     },
   );
 
+  it(
+    'row 9 (AUDIT Q2): (define (f x) (if (> x 5) "SAFE" x)) (f (:score e)) — the guard-swap forge HIDDEN IN A NAMED HELPER — probe ALONE forges content, the SEAL rejects',
+    { timeout: 30_000 },
+    async () => {
+      // The guard is inside a user-defined helper, exposed as NEITHER a Case nor a
+      // Hole until the walk beta-reduces it. Baseline score = 10 (> 5) → the helper
+      // returns the constant "SAFE" — a fabrication. A witness that pushes score ≤ 5
+      // routes through the other arm (returns the perturbed score) and leaks the mark.
+      const staticSrc = `(define (f x) (if (> x 5) "SAFE" x)) (f (:score e))`;
+      const { descriptor } = derive(cf(staticSrc))[0]!;
+      // eslint-disable-next-line no-console
+      console.log(`row 9 static wire (post beta-reduction):\n${renderWire(descriptor)}`);
+      // STATIC now sees the guard: beta-reduction exposes the Case with a "SAFE"
+      // literal alt — dataShaped FAILS (the fix). Before the fix this was `true`.
+      expect(dataShaped(descriptor)).toBe(false);
+      const staticVerdict = verdictFor(descriptor, { role: "data" });
+      expect(staticVerdict.kind).toBe("fabrication");
+
+      const table: ProbeTable = [{ call: { model: "m", prompt: "score", schema: null, cacheKey: null }, result: 10 }];
+      const execSrc = `(define (f x) (if (> x 5) "SAFE" x)) (let ((e (list (cons 'score (car (infer "m" "score")))))) (f (:score e)))`;
+      const baseline = await recordRun(session, execSrc, table);
+      expect(baseline.value).toBe("SAFE"); // the attested output IS the fabricated constant
+
+      const target = baseline.calls[0]!.ref;
+      const witnesses = witnessesFor(10); // shape witness = negative sentinel ≤ -1e6, routes through the else arm
+      const attempts = await attemptAll(session, execSrc, table, target, witnesses);
+      const probeVerdict = leafVerdicts(baseline.value, attempts)[0]!.verdict;
+      // eslint-disable-next-line no-console
+      console.log("row 9 probe-ALONE verdict:", probeVerdict);
+      expect(probeVerdict).toBe("content"); // ← the forge: the probe by itself is deceived across the hidden branch
+
+      // THE SEAL (static ∧ probe): the static plane now vetoes.
+      const sealed = seal(staticVerdict, probeVerdict, { role: "data" });
+      // eslint-disable-next-line no-console
+      console.log("row 9 SEALED verdict:", sealed);
+      expect(sealed.kind).toBe("not-attestable");
+    },
+  );
+
   it("row 8b: the seal admits a GENUINE content leaf both planes agree on — (string-append (:id e) (:name e))", { timeout: 30_000 }, async () => {
     // The dual of row 8: when there is no fabrication, the seal must not be so
     // paranoid it rejects real evidence. Both branches of a two-crossing

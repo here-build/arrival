@@ -219,6 +219,26 @@ describe("Fable review — Tier-1 soundness", () => {
     expect(dataShaped(leaves[0]!.descriptor)).toBe(false);
   });
 
+  it("audit Q2: a NAMED helper hiding a guard must NOT derive as clean content (the reopened guard-swap forge)", () => {
+    // `(define (f x) (if (> x 5) "SAFE" x)) (f (:score e))` — the baseline value is
+    // the constant "SAFE", but the guard is hidden inside the user helper `f`. The
+    // walk used to treat `(f arg)` as an opaque FORWARDING step (source = arg's
+    // PVertice, steps = [f]) → dataShaped TRUE, and the seal would content-attest a
+    // fabricated constant. The named `f` and its inline-lambda twin (caught as a Hole)
+    // must not disagree. Fix: resolve the user-defined callee body.
+    const { descriptor } = derive(cf(`(define (f x) (if (> x 5) "SAFE" x)) (f (:score e))`))[0]!;
+    expect(dataShaped(descriptor)).toBe(false);
+
+    // The inline-lambda twin — same program, must reach the SAME verdict.
+    const twin = derive(cf(`((lambda (x) (if (> x 5) "SAFE" x)) (:score e))`))[0]!;
+    expect(dataShaped(twin.descriptor)).toBe(false);
+
+    // A genuinely clean user helper still attests (no false rejection).
+    const clean = derive(cf(`(define (g x) (string-upcase x)) (g (:id e))`))[0]!;
+    expect(clean.descriptor.source.kind).toBe("PVertice");
+    expect(dataShaped(clean.descriptor)).toBe(true);
+  });
+
   it("finding 6a: a Hole under role:data is NOT-ATTESTABLE, not a zero-residue 'fabrication'", () => {
     // A bare Hole (filter survivor, computed callee, cyclic binding) is UNPROVEN, not
     // an accusation of fabrication — reporting it as fabrication falsely accuses.
