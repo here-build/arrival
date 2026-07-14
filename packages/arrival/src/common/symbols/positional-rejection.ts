@@ -104,9 +104,23 @@ function positionalIssueLine(issue: ZodError["issues"][number], args: readonly u
   if (issue.code === "invalid_type") {
     return `  ${full} — expected ${issue.expected}, got ${kindOf(sentVal)}: ${previewOf(faceOf(sentVal))}`;
   }
-  // A codec-union miss ("Invalid input", no `expected` field) — name the declared type
-  // from the slot's own schema, same as kwargs-rejection.ts's union branch.
-  if (issue.code === "invalid_union") {
+  // A codec-union miss OR a custom-predicate miss — both surface as a bare "Invalid input" with
+  // no `expected` field, so name the declared type from the slot's OWN schema (via the `named()`
+  // registry) and show the value that was actually sent.
+  //
+  // The `custom` arm is not a nicety. The predicate primitives in this vocabulary are `z.custom`
+  // — `z.lambda` above all, and now `z.listAlike` too — so WITHOUT it every "you passed a vector
+  // where a predicate goes" degrades to the single least useful string in the language:
+  //
+  //   (count parsed)   =>   count: arguments rejected — 1 problem(s):
+  //                           arg 1 — Invalid input
+  //
+  // which names the slot but not the fault, and leaves the model to guess. `count` is
+  // `(count pred . lists)`; the model wrote `(count <vector>)`. That is an ordinary, teachable
+  // mistake and the error should say so:
+  //
+  //   arg 1 — expected lambda, got vector: [{:name "Alice" …} …]
+  if (issue.code === "invalid_union" || issue.code === "custom") {
     const declared = argIndex === undefined ? "the declared type" : declaredTypeAt(inSchema, argIndex);
     return `  ${full} — expected ${declared}, got ${kindOf(sentVal)}: ${previewOf(faceOf(sentVal))}`;
   }

@@ -15,7 +15,9 @@
 // satisfy them structurally.
 
 import invariant from "tiny-invariant";
+import { ZodError } from "zod";
 import * as z from "../scheme-zod.js";
+import { formatPositionalRejection } from "./positional-rejection.js";
 import { parse as readerParse } from "../../reader/parse.js";
 import { freeVars } from "../../provenance/wireframe/free-vars.js";
 import type { Classifier, DeclaredRole } from "../../values/lineage.js";
@@ -419,7 +421,32 @@ function buildDefineProcedure(verb: string, def: DefineSymbolDef, closureValue: 
       // Adoption is a REPRESENTATION choice on the SCHEME plane: AValue in, AValue out, O(1), same
       // backing store. Nothing crosses out.
       const args = def.adoptArgs === undefined ? rawArgs : (def.adoptArgs(rawArgs) as typeof rawArgs);
-      if (def.validate) z.decode(def.in, args);
+      // A REJECTION IS A DOOR, ON EVERY BOUNDARY — not just the tool-call one.
+      //
+      // This decode used to let a raw `ZodError` propagate. Zod v4's `ZodError.message` IS the
+      // pretty-printed JSON of `.issues` — a nested-union dump that names no verb, no argument, and
+      // no value:
+      //
+      //   (count parsed)
+      //   => Error: [ { "code": "custom", "path": [ 0 ], "message": "Invalid input" } ]
+      //
+      // The model cannot act on that. (It reads as a schema constraint, not a mistake: one model in
+      // the 89×2 corpus misread such a dump as an invented `:limit max 500` rule and voluntarily
+      // shrank its own dataset 388→80 records.) The actual fault was ordinary and teachable —
+      // SRFI-1's `count` is `(count pred . lists)`, and `parsed` is a vector, not a predicate.
+      //
+      // `symbol.rosetta` has humanized this since B4 (rosetta.ts's positional arm). `symbol.define`
+      // — which is EVERY R7RS/SRFI builtin (`count`, `some`, `any?`, `last`, `filter`, …) — never
+      // got the same treatment, so the whole stdlib surface still dumped raw zod at the model while
+      // the tool-call surface taught. Same formatter, same grammar, both boundaries now.
+      if (def.validate) {
+        try {
+          z.decode(def.in, args);
+        } catch (e) {
+          if (e instanceof ZodError) throw new Error(formatPositionalRejection(def.name, e, args, def.in));
+          throw e;
+        }
+      }
       return (async (): Promise<SchemeValue> => {
         // `unknown`, not `SchemeValue`, until validated below: the multi-value arm
         // needs to read it as an array, which `SchemeValue` doesn't overlap directly

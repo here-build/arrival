@@ -47,6 +47,7 @@ import { attachOffendingValue, CarrierMismatchError } from "../../errors.js";
 import { eqv, structuralEqual } from "../../values/structural-equal.js";
 import { to_array } from "../pack-helpers.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
+import { printValue } from "../../values/print.js";
 import { type AVoid, theVoid } from "../../values/primitives/AVoid.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
@@ -80,6 +81,42 @@ const listToArray = to_array("list->array");
 
 function arrayToList(ctx: RunContext, array: SchemeValue[]): SchemeValue {
   return APair.fromArray(ctx, array);
+}
+
+/**
+ * The search family's list guard — memq / memv / member / assq / assv / assoc.
+ *
+ * EVERY "NOTHING HERE" MUST NAME WHICH NOTHING IT IS (benchmark-defect-register.md, the governing
+ * diagnosis). These six verbs all walk `while (current instanceof APair) { … } return #f`, so a
+ * NON-LIST argument makes the loop body never execute and the verb answers **`#f`** — which is the
+ * same answer it gives for "I walked the entire list and it isn't there."
+ *
+ * Two completely different facts, one indistinguishable reply:
+ *   (a) empty-and-true      — the list really does not contain it     → `#f` is correct
+ *   (c) your-access-was-wrong — you did not hand me a list at all      → `#f` is A LIE
+ *
+ * `(member x results)` answering "not found" about a value that IS there — or about a thing that
+ * was never a list — is the single most expensive shape of failure in this medium, because the
+ * model has no way to detect it. It does not retry. It reports the wrong answer, confidently.
+ *
+ * `symbol.native` contracts are type-only (never validated at runtime — `_bake.ts`'s doctrine), so
+ * the declared `z.listAlike` slot does NOT stop a number from arriving here. Adoption has already
+ * run by this point (a borrowed JS array is a spine view, so a tool result passes), which means
+ * anything still failing this check is a genuine type error — never a representation mismatch.
+ *
+ * A door costs one `instanceof` on the happy path and converts a silent lie into a teachable
+ * mistake. That trade is not close.
+ */
+function requireListArg(verb: string, list: unknown): void {
+  if (list instanceof APair || list instanceof ANil) return;
+  throw attachOffendingValue(
+    new TypeError(
+      `${verb}: expected a list, got ${type(list)}: ${String(printValue(list as SchemeValue)).slice(0, 60)}. ` +
+        `(${verb} returns #f for "not found" — so a non-list here would have silently answered "not found" ` +
+        `about a value it never searched.)`,
+    ),
+    list,
+  );
 }
 
 function isProperList(obj: SchemeValue): boolean {
@@ -544,6 +581,7 @@ export default new EnvCapability("scheme/lists", {
       },
       function (this: CallCtx, obj, list) {
         let current: unknown = list;
+        requireListArg("memq", list);
         TypeError.invariant(!isCircularList(list), "memq: circular list");
         while (current instanceof APair) {
           // eq? comparison (object identity)
@@ -571,6 +609,7 @@ export default new EnvCapability("scheme/lists", {
         // `list` decodes to the honest `AListAlike` (ANil | APair) — isCircularList only
         // accepts a Pair (an ANil head can never be circular), so the ANil arm short-circuits
         // the check to `false`, matching the prior behavior exactly.
+        requireListArg("memv", list);
         TypeError.invariant(!(list instanceof APair && isCircularList(list)), "memv: circular list");
         while (current instanceof APair) {
           if (eqv(current.car, obj)) return current;
@@ -595,8 +634,25 @@ export default new EnvCapability("scheme/lists", {
         let current: unknown = alist;
         // Same ANil-short-circuit reasoning as memv above — isCircularList needs a Pair.
         TypeError.invariant(!(alist instanceof APair && isCircularList(alist)), "assq: circular list");
+        requireListArg("assq", alist);
         while (current instanceof APair) {
-          const pair = current.car;
+          // ENTRY ADOPTION — the alist affordance, at the point of use.
+          //
+          // An alist that came from a tool is a JSON ARRAY OF 2-ELEMENT ARRAYS. Each entry is
+          // therefore an `AJSArray` (the vector chart), NOT an `APair` — so the `instanceof APair`
+          // test below failed on EVERY entry, each one was skipped in silence, and the walk fell off
+          // the end into `#f`. "Not found" about an alist it could not read a single entry of.
+          //
+          // That is the same silent lie `requireListArg` closes one level up, hiding one level down.
+          // `adoptSpine` projects a borrowed array onto its spine chart (O(1), same backing store)
+          // and passes everything else through by identity — so a genuine cons-cell entry is
+          // untouched, and a non-pair entry (a bare number in an alist) is still skipped, which is
+          // R7RS's own leniency, not ours.
+          //
+          // This is V's alist ruling applied where it belongs: teach the system to READ an alist as
+          // a dict — tolerance and affordance at the point of use. It does NOT promote alists, and
+          // it does NOT teach dicts to be lists.
+          const pair = adoptSpine(current.car) as SchemeValue;
           if (pair instanceof APair && pair.car === obj) return pair;
           current = current.cdr;
         }
@@ -619,8 +675,25 @@ export default new EnvCapability("scheme/lists", {
         let current: unknown = alist;
         // Same ANil-short-circuit reasoning as memv above — isCircularList needs a Pair.
         TypeError.invariant(!(alist instanceof APair && isCircularList(alist)), "assv: circular list");
+        requireListArg("assv", alist);
         while (current instanceof APair) {
-          const pair = current.car;
+          // ENTRY ADOPTION — the alist affordance, at the point of use.
+          //
+          // An alist that came from a tool is a JSON ARRAY OF 2-ELEMENT ARRAYS. Each entry is
+          // therefore an `AJSArray` (the vector chart), NOT an `APair` — so the `instanceof APair`
+          // test below failed on EVERY entry, each one was skipped in silence, and the walk fell off
+          // the end into `#f`. "Not found" about an alist it could not read a single entry of.
+          //
+          // That is the same silent lie `requireListArg` closes one level up, hiding one level down.
+          // `adoptSpine` projects a borrowed array onto its spine chart (O(1), same backing store)
+          // and passes everything else through by identity — so a genuine cons-cell entry is
+          // untouched, and a non-pair entry (a bare number in an alist) is still skipped, which is
+          // R7RS's own leniency, not ours.
+          //
+          // This is V's alist ruling applied where it belongs: teach the system to READ an alist as
+          // a dict — tolerance and affordance at the point of use. It does NOT promote alists, and
+          // it does NOT teach dicts to be lists.
+          const pair = adoptSpine(current.car) as SchemeValue;
           if (pair instanceof APair && eqv(pair.car, obj)) return pair;
           current = current.cdr;
         }
@@ -659,6 +732,7 @@ export default new EnvCapability("scheme/lists", {
       function (this: CallCtx, obj, list, compare = defaultCompare) {
         let current: unknown = list;
         // Same ANil-short-circuit reasoning as memv above — isCircularList needs a Pair.
+        requireListArg("member", list);
         TypeError.invariant(!(list instanceof APair && isCircularList(list)), "member: circular list");
         while (current instanceof APair) {
           // `compare` is a callable VALUE when user-supplied (ANativeProcedure/ALambda), not
@@ -696,8 +770,25 @@ export default new EnvCapability("scheme/lists", {
         let current: unknown = alist;
         // Same ANil-short-circuit reasoning as memv above — isCircularList needs a Pair.
         TypeError.invariant(!(alist instanceof APair && isCircularList(alist)), "assoc: circular list");
+        requireListArg("assoc", alist);
         while (current instanceof APair) {
-          const pair = current.car;
+          // ENTRY ADOPTION — the alist affordance, at the point of use.
+          //
+          // An alist that came from a tool is a JSON ARRAY OF 2-ELEMENT ARRAYS. Each entry is
+          // therefore an `AJSArray` (the vector chart), NOT an `APair` — so the `instanceof APair`
+          // test below failed on EVERY entry, each one was skipped in silence, and the walk fell off
+          // the end into `#f`. "Not found" about an alist it could not read a single entry of.
+          //
+          // That is the same silent lie `requireListArg` closes one level up, hiding one level down.
+          // `adoptSpine` projects a borrowed array onto its spine chart (O(1), same backing store)
+          // and passes everything else through by identity — so a genuine cons-cell entry is
+          // untouched, and a non-pair entry (a bare number in an alist) is still skipped, which is
+          // R7RS's own leniency, not ours.
+          //
+          // This is V's alist ruling applied where it belongs: teach the system to READ an alist as
+          // a dict — tolerance and affordance at the point of use. It does NOT promote alists, and
+          // it does NOT teach dicts to be lists.
+          const pair = adoptSpine(current.car) as SchemeValue;
           // Same seam-routing as member above — `compare` is a callable VALUE when
           // user-supplied, invoked via `call_function`, not a raw JS call. Its result may
           // be a boxed SchemeBool post-L1 (a truthy JS object) → route through is_false.
