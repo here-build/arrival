@@ -38,6 +38,7 @@ import {
   type ParsedProgram,
 } from "./exec-phases.js";
 import { makeRunContext, type RunContext } from "../values/primitives/RunContext.js";
+import type { NoteSink } from "../values/note-sink.js";
 import type { RunCache } from "../values/run-cache.js";
 import type { EffectLog } from "../values/effect-log.js";
 import type { ReadGuard } from "../values/read-guard.js";
@@ -206,6 +207,10 @@ function defaultAmbient(): AssembledAmbient {
 }
 
 export interface ExecOptions {
+  /** The run's MODEL-FACING NOTE CHANNEL (values/note-sink.ts). Rides onto `RunContext.notes`, the
+   *  same per-run seam `cache`/`effects`/`reads` use. A caller that RENDERS an observation (the MCP
+   *  runner) mints one and drains it after the call; everyone else omits it and notes are dropped. */
+  notes?: NoteSink;
   /**
    * GLASS — custom base env. When set, the resolver wraps it directly: defines
    * land in it, builtins resolve up its `__parent__` chain (byte-identical to
@@ -546,6 +551,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     cache,
     effects,
     reads,
+    notes,
     strict,
     freezeRosettaReturns,
     staticValidation,
@@ -640,6 +646,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
         cache,
         effects,
         reads,
+        notes,
       });
     } else {
       const lexicalScope = scope ?? LexicalScope.for(defaultLexicalRoot());
@@ -658,6 +665,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
         cache,
         effects,
         reads,
+        notes,
       });
       runResolver = instance.resolver;
       runCtx = instance.runCtx;

@@ -24,6 +24,7 @@
  */
 
 import type { RunCache } from "../run-cache.js";
+import type { NoteSink } from "../note-sink.js";
 import type { EffectLog } from "../effect-log.js";
 import type { ReadGuard } from "../read-guard.js";
 import type { SourceLocation } from "../../errors.js";
@@ -80,6 +81,12 @@ export interface RunContext {
    *  either: a run may track reads with no effect log at all (inert), gather effects
    *  with no tracker (no guard, no crash — an opt-out, not a lie), or carry both. */
   readonly reads: ReadGuard | undefined;
+  /** The run's MODEL-FACING NOTE CHANNEL (values/note-sink.ts), if any; `undefined` ⇒ notes are
+   *  dropped (the default — only a session run that RENDERS an observation opts in). Sibling of
+   *  `cache`/`effects`/`reads`, riding the same per-run hermetic seam: a note belongs to the RUN,
+   *  which is why the kwargs tolerance's old WeakMap (keyed on the decoded argument object) could
+   *  never be drained by the renderer — the renderer never sees that object. */
+  readonly notes: NoteSink | undefined;
   /** Origin discriminant. `"parse"` marks the parse-time family (`PARSE_CTX` /
    *  `makeParseCtx`): run-neutral like CONSTANT_CTX, but a STATED fact ("minted by the
    *  reader") instead of a fallback. Absent on live-run ctxs and CONSTANT_CTX. */
@@ -103,6 +110,7 @@ export function makeRunContext(
     cache?: RunCache;
     effects?: EffectLog;
     reads?: ReadGuard;
+    notes?: NoteSink;
   } = {},
 ): RunContext {
   return {
@@ -113,6 +121,7 @@ export function makeRunContext(
     cache: opts.cache,
     effects: opts.effects,
     reads: opts.reads,
+    notes: opts.notes,
   };
 }
 
@@ -128,6 +137,10 @@ export const CONSTANT_CTX: RunContext = Object.freeze({
   heapMeter: undefined,
   freezeRosettaReturns: true,
   signal: undefined,
+  // Run-NEUTRAL by definition: a note is addressed to the model watching ONE run, so a context that
+  // outlives every run can have nowhere to put one. Notes minted under CONSTANT_CTX are dropped —
+  // which is correct, not a gap: nobody is listening.
+  notes: undefined,
   cache: undefined,
   effects: undefined,
   reads: undefined,

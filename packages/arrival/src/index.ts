@@ -260,3 +260,6 @@ export { AutoBindings, slotsOf } from "./values/lineage-auto-bindings.js";
 // (pair spine, vector, JS array elements). Containers are provenance-transparent, so this
 // is THE read for "which points fed this packed value" (a pool of candidates, a list arg).
 export { deepProvenance } from "./values/deep-provenance.js";
+
+// The per-run model-facing note channel — a renderer (mcp-substrate) mints one and drains it.
+export { createNoteSink, type NoteSink } from "./values/note-sink.js";

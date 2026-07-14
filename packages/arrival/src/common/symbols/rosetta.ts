@@ -4,7 +4,7 @@
 
 import * as z from "../scheme-zod.js";
 import { ZodError, ZodType } from "zod";
-import { decodeKwargsStrict } from "../kwargs-rejection.js";
+import { decodeKwargsStrict, drainDroppedKwargNotes } from "../kwargs-rejection.js";
 import { formatPositionalRejection } from "./positional-rejection.js";
 import { attestDeep, freshIfSingleton } from "../../values/attestation.js";
 import { AValue, pointProvenance, unionProvenance } from "../../values/primitives/AValue.js";
@@ -236,7 +236,31 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
         // `positional-rejection.ts` (this arm's own sibling of kwargs-rejection.ts's
         // `issueLines`, keyed on arg INDEX instead of kwarg NAME).
         const decode = (): readonly unknown[] => {
-          if (kwargsShape) return [decodeKwargsStrict(name, kwargsShape, collectKwargsObject(args))];
+          if (kwargsShape) {
+            const decoded = decodeKwargsStrict(name, kwargsShape, collectKwargsObject(args));
+            // DRAIN THE TOLERANCE NOTE INTO THE RUN'S NOTE CHANNEL.
+            //
+            // The B5 tolerance drops a far-unknown kwarg key and lets the call PROCEED — right,
+            // because a model writing `(memory/search_nodes :query "x" :limit 10)` against a tool
+            // with no `:limit` should not eat a hard rejection over an argument that changes nothing.
+            // Before the tolerance that was a CRASH.
+            //
+            // But the note explaining what was ignored was produced and then never surfaced —
+            // `drainDroppedKwargNotes` had ZERO production callers, so the notes sat in a WeakMap
+            // forever, and the model went from an unexplained crash to an unexplained SILENT DROP.
+            // It still believed `:limit 10` was honored, and would reasonably conclude the tool
+            // ignores limits, or that its own result set had been capped. A silent drop is a lie of
+            // omission, and the whole diagnosis of this medium is that the return channel must not
+            // lie: EVERY "nothing happened" must name WHICH nothing it is.
+            //
+            // This is the last inch. The note existed; nobody read it.
+            const dropped = drainDroppedKwargNotes(decoded);
+            if (dropped !== undefined) {
+              const sink = this.runCtx.notes;
+              for (const line of dropped) sink?.push(`${name}: ${line}`);
+            }
+            return [decoded];
+          }
           try {
             return z.decode(inSchema, args);
           } catch (e) {

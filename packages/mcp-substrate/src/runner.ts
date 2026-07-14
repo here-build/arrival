@@ -9,7 +9,7 @@
 // teaching state survives world rebuilds (e.g. tools/listChanged). It is env-lifecycle-agnostic
 // and model-agnostic.
 
-import {
+import { createNoteSink,
   APair,
   AVoid,
   execState,
@@ -425,6 +425,11 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
       // Elisions collected across EVERY rendered observation this call, from every form —
       // rendered as ONE trailing `;; Note:` block below (never per-array, never per-form).
       const allElisions: ElisionRecord[] = [];
+      // The run's MODEL-FACING NOTE CHANNEL (arrival's values/note-sink.ts). Minted PER CALL and
+      // handed to every statement's `execState`, so a tolerance that fires deep inside the
+      // interpreter (the kwargs drop, today) can reach the consolidated footer — the only reason
+      // that note was invisible before is that it had nowhere to go.
+      const noteSink = createNoteSink();
 
       for (const [index, form] of forms.entries()) {
         const statementText = displayText[index]!;
@@ -444,6 +449,10 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
             heapBudget: calibration.heapBudgetPerForm,
             signal: controller.signal,
             tap: input.tap,
+            // The run's MODEL-FACING NOTE CHANNEL. Shared across every statement of this call, so a
+            // tolerance that fires in statement 1 and again in statement 3 is reported ONCE (the
+            // sink dedupes) — the model needs the fact, not a tally.
+            notes: noteSink,
           });
           const raced = await Promise.race([running, parked]);
           if (raced === "timeout") {
@@ -614,6 +623,10 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
       // consolidated channel — it is bookkeeping about this call, exactly like the others above.
       const attachmentNote = attachmentSink.drainNote();
       if (attachmentNote !== undefined) notes.push(attachmentNote);
+
+      // Interpreter-side notes (the kwargs tolerance's dropped-key note). Bookkeeping ABOUT the
+      // call, not a result OF it — so it joins the consolidated channel exactly like the others.
+      for (const line of noteSink.drain()) notes.push(line);
 
       if (notes.length > 0) blocks.push({ type: "text", text: renderEnvironmentNotes(notes) });
 

@@ -41,6 +41,7 @@ import { vocabularyFromChain } from "../static-validation/vocabulary.js";
 import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
 import { classify, type LineageNode } from "../values/lineage.js";
 import { makeRunContext, type RunContext } from "../values/primitives/RunContext.js";
+import type { NoteSink } from "../values/note-sink.js";
 import type { RunCache } from "../values/run-cache.js";
 import type { EffectLog } from "../values/effect-log.js";
 import type { ReadGuard } from "../values/read-guard.js";
@@ -409,6 +410,7 @@ export function instantiate(
     cache?: RunCache;
     effects?: EffectLog;
     reads?: ReadGuard;
+    notes?: NoteSink;
   },
 ): ExecInstance {
   const runCtx = makeRunContext({
@@ -419,6 +421,10 @@ export function instantiate(
     cache: opts.cache,
     effects: opts.effects,
     reads: opts.reads,
+    // The AMBIENT path mints its runCtx HERE, not in generator-exec's `env` branch — and this is
+    // the branch every real session takes (the MCP runner passes `ambient`). Missing it is why the
+    // note channel was threaded and still arrived empty.
+    notes: opts.notes,
   });
   const resolver = new Resolver(opts.scope.env, Capabilities.assembled(ambientBase(ambient)));
   return { ambient, scope: resolver.scope, runCtx, resolver };
