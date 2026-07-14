@@ -6,6 +6,7 @@ import type { SchemeStringLike, SchemeValue } from "../types.js";
 import { isSchemeString, isString } from "../types.js";
 import { nil } from "./ANil.js";
 import type { CallResult } from "./ACallable.js";
+import { attachOffendingValue } from "../../errors.js";
 
 /**
  * Provenance × interning invariant: `SchemeSymbol.list[name]` is the canonical
@@ -177,8 +178,16 @@ export class ASymbol extends AValue {
   }
 
   ["arrival/toJS"](): string {
-    // Apostrophe-prefix indicates "this is a scheme symbol, not a string."
-    return `'${isString(this.__name__) ? this.__name__ : symbol_to_string(this.__name__ as symbol)}`;
+    // ⚖️ Ruled 2026-07-14 (compiler campaign, representation law §2.1): symbol →
+    // the INTERNED NAME, plain. The former apostrophe prefix ("'hello") kept
+    // symbols distinguishable from strings on the JS face, but it leaked
+    // interpreter texture into every egress consumer (compiled artifacts, cache
+    // keys, infer args — llm-plane's stripSymbolMarker existed solely to undo
+    // it, and wrongly stripped user strings that legitimately start with an
+    // apostrophe). Symbol-vs-string distinguishability lives in the boxed world
+    // (symbol?/eq?); egress is a one-way fold, same family as nil→[] and
+    // dotted-pair→2-list: round trip = projection∘borrow, not identity.
+    return isString(this.__name__) ? this.__name__ : symbol_to_string(this.__name__ as symbol);
   }
 
   /** See UNINTERNED sentinel doc. */
@@ -204,7 +213,31 @@ export class AKeywordSymbol extends ASymbol {
     if (args.length === 0) return this;
     const target = args[0] as unknown as Record<string, unknown> | null | undefined;
     const getter = target?.["arrival/tagless-final/get"];
-    return typeof getter === "function" ? (getter.call(target, this, runCtx) as CallResult) : nil;
+    if (typeof getter === "function") return getter.call(target, this, runCtx) as CallResult;
+    // B2 (benchmark-defect-register.md): a receiver with NO `arrival/tagless-final/get`
+    // term used to fall through to `nil` unconditionally, conflating two different
+    // facts. Split them:
+    //   • nil (kind "nil", or a raw JS null/undefined reaching here) is a legitimate
+    //     ABSENT receiver — `(:key nil)` stays nil (pinned by
+    //     projection-nil-tolerance.test.ts and keyword-accessor-leaf-door.test.ts).
+    //   • anything else lacking `get` (string/number/boolean/character/symbol/vector —
+    //     no member protocol at all) is a TYPE ERROR wearing absence's clothes: the
+    //     met-museum trajectory called `:title` on an unparsed string 20 times, read
+    //     `nil` every time, and burned 45 rounds guessing why every field came back
+    //     empty. Door instead, naming the kind and routing to the manifold's own
+    //     parser prelude (mirrors unbound-variable.ts's NEEDS_PARSING_HINT phrasing).
+    if (target == null || (target as unknown as AValue).kind === "nil") return nil;
+    const kind = target instanceof AValue ? target.kind : typeof target;
+    // OFFENDING_VALUE (errors.ts): names the receiver a downstream door can read off
+    // `.provenance` — same discipline as op-helpers.ts's `stringValue` door (B1) and
+    // `arrival-manifold/bind.ts`'s ARGS_REJECTION.
+    throw attachOffendingValue(
+      new TypeError(
+        `${String(this.__name__)} on a ${kind} — a ${kind} has no members to read (it declares no ` +
+          `arrival/tagless-final/get). If this is text that should be parsed first, try (detect-parse s).`,
+      ),
+      target,
+    );
   }
 }
 

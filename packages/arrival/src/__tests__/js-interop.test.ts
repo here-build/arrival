@@ -85,14 +85,16 @@ describe("JS-interop: characters", () => {
 describe("JS-interop: symbols", () => {
   // REBASELINED (RULINGS.md R1): ASymbol's toJS is apostrophe-prefixed (its own
   // deferred opaque-exit marker — two-tier-exec-api.md §9, unchanged by this
-  // migration) — `exec`'s plain-JS exit hands back "'foo", not the boxed
-  // `.toString()`'s bare "foo".
-  it("symbol coerces to its apostrophe-prefixed name in a template literal", async () => {
+  // migration) — ⚖️ 2026-07-14 symbol-egress ruling (constitution §2.1): the
+  // apostrophe marker died; a symbol's JS face IS the plain interned name.
+  it("symbol coerces to its plain interned name in a template literal", async () => {
     const sym = await one("'foo");
-    expect(`${sym}`).toBe("'foo");
+    expect(`${sym}`).toBe("foo");
   });
 
-  it.fails("schemeToJs(symbol) SHOULD unwrap to a string (BROKEN: returns the internal struct)", async () => {
+  // Promoted from it.fails ("BROKEN: returns the internal struct") by the same
+  // ruling — the plain-name egress unwraps exactly as this test always demanded.
+  it("schemeToJs(symbol) unwraps to the plain name string", async () => {
     const sym = await one("'foo");
     expect(schemeToJs(sym, {})).toBe("foo");
   });

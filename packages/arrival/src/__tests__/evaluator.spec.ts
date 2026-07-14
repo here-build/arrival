@@ -702,7 +702,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       // `execSource` (generator-exec `exec`, RULINGS.md R1) is the SIMPLE-tier
       // plain-JS exit: a symbol's toJS is apostrophe-prefixed (ASymbol's
       // documented, deferred opaque-exit marker — two-tier-exec-api.md §9).
-      expect(String(result)).toBe("'done");
+      expect(String(result)).toBe("done"); // symbol egress = plain interned name (⚖️ 2026-07-14, constitution §2.1)
     }, 15000);
   });
 });

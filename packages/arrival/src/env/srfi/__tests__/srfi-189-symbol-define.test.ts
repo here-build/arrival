@@ -104,7 +104,7 @@ describe("scheme/srfi-189 — Maybe accessors/combinators", () => {
     const [unwrapped] = await exec("(maybe-ref (just 7))", { env });
     const [viaFailure] = await exec("(maybe-ref (nothing) (lambda () 'fallback))", { env });
     expect(unwrapped).toBe(7);
-    expect(String(viaFailure)).toBe("'fallback"); // ASymbol print repr — the quote is the print convention, not a bug
+    expect(String(viaFailure)).toBe("fallback"); // ASymbol print repr — the quote is the print convention, not a bug
   });
 
   it("maybe-ref: errors on Nothing with no failure thunk (default behavior unchanged)", async () => {
@@ -155,7 +155,7 @@ describe("scheme/srfi-189 — Maybe accessors/combinators", () => {
     const [leftValue] = await exec("(either-ref/default (maybe->either (nothing) 'no-just) 'unused)", { env });
     expect(fromJust).toBe(true);
     expect(fromNothing).toBe(true);
-    expect(String(leftValue)).toBe("'unused"); // left? path, so either-ref/default falls to `default` — pinning the branch taken
+    expect(String(leftValue)).toBe("unused"); // left? path, so either-ref/default falls to `default` — pinning the branch taken
   });
 });
 
@@ -165,7 +165,7 @@ describe("scheme/srfi-189 — Either accessors/combinators", () => {
     const [unwrapped] = await exec("(either-ref (right 7))", { env });
     const [viaFailure] = await exec("(either-ref (left 'boom) (lambda (v) v))", { env });
     expect(unwrapped).toBe(7);
-    expect(String(viaFailure)).toBe("'boom"); // ASymbol print repr
+    expect(String(viaFailure)).toBe("boom"); // ASymbol print repr
   });
 
   it("either-ref: errors on Left with no failure procedure (default behavior unchanged)", async () => {
@@ -304,7 +304,7 @@ describe("scheme/srfi-189 — faithfulness: `error`'s handler-stack integration 
   it("either-swap's non-Either error path is likewise a real raise, catchable by guard", async () => {
     const env = await freshEnv();
     const [caught] = await exec(`(guard (exn (#t 'caught)) (either-swap 42))`, { env });
-    expect(String(caught)).toBe("'caught"); // ASymbol print repr
+    expect(String(caught)).toBe("caught"); // symbol egress = plain interned name (⚖️ 2026-07-14, constitution §2.1)
   });
 });
 

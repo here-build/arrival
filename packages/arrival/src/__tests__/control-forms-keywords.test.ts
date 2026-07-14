@@ -47,7 +47,7 @@ describe("cond/case/when/unless — special forms that are first-class keywords"
         (syntax-rules ()
           ((classify n) (cond ((< n 0) 'neg) ((= n 0) 'zero) (else 'pos)))))
       (classify 5)`;
-    expect(repr(await exec(src, { env: mintFrame(sandboxedEnv, "cf4") }))).toBe("'pos");
+    expect(repr(await exec(src, { env: mintFrame(sandboxedEnv, "cf4") }))).toBe("pos");
   });
 
   it("user macro expanding to `case` with => and else — both auxiliary keywords survive hygiene", async () => {

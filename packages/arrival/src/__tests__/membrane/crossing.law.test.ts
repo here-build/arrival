@@ -282,7 +282,11 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
       it(`${roundTripTitle} — a symbol exits as a string, never the original JS Symbol`, () => {
         const out = exitJS(fromJS(Symbol.for("test")));
         expect(typeof out).toBe("string");
-        expect(out).toBe("':test");
+        // ⚖️ 2026-07-14 representation ruling (compiler campaign, constitution §2.1):
+        // symbol egress = the INTERNED NAME, plain — the apostrophe marker died
+        // (it leaked interpreter texture into compiled artifacts and cache keys).
+        // One-way fold stays total and honest; distinguishability lives boxed-side.
+        expect(out).toBe(":test");
       });
       it(provenanceTitle, () => {
         // A DISTINCT name from the entry test above, deliberately: ASymbol's flyweight

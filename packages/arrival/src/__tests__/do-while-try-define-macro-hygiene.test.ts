@@ -52,7 +52,7 @@ describe("do/while/try/define-macro — hygiene-renamed heads resolve via symbol
     // val()/schemeToJs unwraps a symbol result to an apostrophe-prefixed string
     // (ASymbol's documented opaque-exit marker — see control-forms-keywords.test.ts's
     // `repr` helper for the same convention).
-    expect(String(val(await exec(src, { env: mintFrame(sandboxedEnv, "dw3") })))).toBe("'caught");
+    expect(String(val(await exec(src, { env: mintFrame(sandboxedEnv, "dw3") })))).toBe("caught");
   });
 
   it("user syntax-rules macro expanding to `define-macro` resolves the keyword", async () => {
