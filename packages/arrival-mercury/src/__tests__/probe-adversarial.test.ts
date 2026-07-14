@@ -41,6 +41,7 @@ import { classify } from "../coreform/index.js";
 import type { ClassifyResult } from "../coreform/index.js";
 import { desugar } from "../front/desugar.js";
 import { parseSexprs } from "../front/parse.js";
+import { seal } from "../seal.js";
 import { openProbeSession, probe, recordRun, type CallRef, type ProbeSession, type ProbeTable } from "../probe/session.js";
 import { leafVerdicts, type ProbeAttempt } from "../probe/verdict.js";
 import { witnessesFor, type Witness } from "../probe/witness.js";
@@ -469,4 +470,92 @@ describe("provenance by perturbation — THE ADVERSARIAL CORPUS (security review
       expect(bothVerdicts[0]!.marks).toBeUndefined();
     },
   );
+
+  it(
+    'row 8 (RED-TEAM, Finding 1): (if (< (:v e) 1000) "SAFE" (number->string (:v e))) — the GUARD-SWAP forge — probe ALONE says "content", the SEAL says not-attestable',
+    { timeout: 30_000 },
+    async () => {
+      // The attack: the ATTESTED (baseline) output is the hand-written constant
+      // "SAFE". A witness that pushes (:v e) over the guard routes the probe
+      // down the OTHER branch — (number->string (:v e)) — which legitimately
+      // contains the mark. The DYNAMIC plane alone therefore cries "content"
+      // and would sign "SAFE" as evidence-grounded. This is the v2-law forge.
+      const staticSrc = `(if (< (:v e) 1000) "SAFE" (number->string (:v e)))`;
+      const leaves = derive(cf(staticSrc));
+      expect(leaves).toHaveLength(1);
+      const { descriptor } = leaves[0]!;
+      // eslint-disable-next-line no-console
+      console.log(`row 8 static wire:\n${renderWire(descriptor)}`);
+
+      // ── STATIC catches it: a Case whose cond reads the guard crossing and
+      //    whose FIRST alt is the fabricated "SAFE" literal. A Case with any
+      //    non-clean alt is never dataShaped — the static gate SUBSUMES the
+      //    same-branch requirement, because every guard-swap forge must expose
+      //    exactly this visible guard + literal-fabrication shape. ──
+      expect(descriptor.source.kind).toBe("Case");
+      const caseSrc = descriptor.source as Case;
+      expect(caseSrc.cond.source.kind).toBe("PVertice"); // (:v e) in the guard
+      expect(caseSrc.alts[0]!.source.kind).toBe("Literal"); // "SAFE" — the fabrication
+      expect((caseSrc.alts[0]!.source as Literal).lit.value).toEqual({ kind: "string", value: "SAFE" });
+      expect(dataShaped(descriptor)).toBe(false); // the STATIC gate rejects
+      const staticVerdict = verdictFor(descriptor, { role: "data" });
+      expect(staticVerdict.kind).toBe("fabrication");
+
+      // ── DYNAMIC alone IS fooled: perturbing (:v e) over the guard swaps the
+      //    branch, and the else branch's material contains the mark. ──
+      const table: ProbeTable = [{ call: { model: "m", prompt: "v", schema: null, cacheKey: null }, result: 100 }];
+      const execSrc = `(let ((e (list (cons 'v (car (infer "m" "v")))))) (if (< (:v e) 1000) "SAFE" (number->string (:v e))))`;
+      const baseline = await recordRun(session, execSrc, table);
+      expect(baseline.value).toBe("SAFE"); // the attested output IS the constant
+
+      const target = baseline.calls[0]!.ref;
+      const witnesses = witnessesFor(100); // content witness = large positive sentinel (≥ 1e6) — over the guard
+      const attempts = await attemptAll(session, execSrc, table, target, witnesses);
+      const verdicts = leafVerdicts(baseline.value, attempts);
+      expect(verdicts).toHaveLength(1);
+      const probeVerdict = verdicts[0]!.verdict;
+      // eslint-disable-next-line no-console
+      console.log("row 8 probe-ALONE verdict (the forge):", verdicts[0]);
+      expect(probeVerdict).toBe("content"); // ← THE FORGE: the probe by itself is deceived
+
+      // ── THE SEAL (static ∧ probe) catches it: the static plane vetoes. ──
+      const sealed = seal(staticVerdict, probeVerdict, { role: "data" });
+      // eslint-disable-next-line no-console
+      console.log("row 8 SEALED verdict:", sealed);
+      expect(sealed.kind).toBe("not-attestable"); // fabricated "SAFE" is NEVER signed
+      if (sealed.kind === "not-attestable") expect(sealed.reason).toMatch(/static plane did not certify/i);
+    },
+  );
+
+  it("row 8b: the seal admits a GENUINE content leaf both planes agree on — (string-append (:id e) (:name e))", { timeout: 30_000 }, async () => {
+    // The dual of row 8: when there is no fabrication, the seal must not be so
+    // paranoid it rejects real evidence. Both branches of a two-crossing
+    // append are content; static says data-shaped, probe says content, seal
+    // signs. (Guards against a seal that trivially fails everything closed.)
+    const staticSrc = `(string-append (:id e) (:name e))`;
+    const { descriptor } = derive(cf(staticSrc))[0]!;
+    expect(dataShaped(descriptor)).toBe(true);
+    const staticVerdict = verdictFor(descriptor, { role: "data" });
+    expect(staticVerdict.kind).toBe("data-shaped");
+
+    const table: ProbeTable = [
+      { call: { model: "m", prompt: "id", schema: null, cacheKey: null }, result: "ID-alpha" },
+      { call: { model: "m", prompt: "name", schema: null, cacheKey: null }, result: "NAME-beta" },
+    ];
+    const execSrc = `(let ((e (list (cons 'id (car (infer "m" "id"))) (cons 'name (car (infer "m" "name")))))) (string-append (:id e) (:name e)))`;
+    const baseline = await recordRun(session, execSrc, table);
+    expect(baseline.value).toBe("ID-alphaNAME-beta");
+
+    // Perturb the FIRST crossing (id); its mark must survive into the append.
+    const target = baseline.calls.find((c) => c.signature.prompt === "id")!.ref;
+    const witnesses = witnessesFor("ID-alpha");
+    const attempts = await attemptAll(session, execSrc, table, target, witnesses);
+    const verdicts = leafVerdicts(baseline.value, attempts);
+    expect(verdicts[0]!.verdict).toBe("content");
+
+    const sealed = seal(staticVerdict, verdicts[0]!.verdict, { role: "data" });
+    // eslint-disable-next-line no-console
+    console.log("row 8b SEALED verdict (genuine content):", sealed);
+    expect(sealed.kind).toBe("content-attested"); // real evidence IS signed
+  });
 });
