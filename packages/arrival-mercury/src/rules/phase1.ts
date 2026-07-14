@@ -17,8 +17,10 @@
  *    clean/conservative split (`not`, `filter`), fact absence takes the conservative
  *    form in the run register; the read register short-circuits to the clean form
  *    (glass is never executed — mirrors the walker's own `truthTest`).
- *  - §7 one-number — `+ - * / = quotient modulo` are plain folds/operators over JS
- *    numbers. No exactness dispatch EXISTS: not a fact, not a shim, not a branch.
+ *  - §7 one-number — `+ - * /` are plain folds/operators over JS numbers. No exactness
+ *    dispatch EXISTS: not a fact, not a shim, not a branch. (`=`/`quotient`/`modulo`
+ *    obeyed the SAME law from this table; they now obey it from their own Contracts —
+ *    see the relocation note below.)
  *  - §2.1 representation collapse + Law U — lists/pairs are arrays; `car`/`cdr`/
  *    `cons` are syntax over that representation. `(car '())` is outside the
  *    compilation contract (the lens warns at compile time; the artifact stays
@@ -38,10 +40,16 @@
  *    proven argument (`.length` narrows to a numeric literal; `=== 0` is a no-overlap
  *    comparison); phase1-symbol-rules.md §2 prescribes a `Un("+", …)` widen. Rarer now
  *    (the clean form needs a proven list fact at all), lands with the widen sweep.
- *  - `quotient` references the global `Math` via a minted binding (precedent: the
- *    walker's door throws reference global `Error` the same way). The walker's module
- *    JS frame pre-seeds "Error"/"Math"/"Promise" (landed with the FRAME wave), so a
- *    user binding cleaning to `Math` disambiguates instead of shadowing the global.
+ *
+ * RELOCATED (Phase-2 relocation drill, constitution §9): `=`/`quotient`/`modulo` moved
+ * off this table onto their own Contract's `emit` field —
+ * foundations/arrival/arrival/src/env/r7rs/numeric.ts now carries
+ * `numEqEmitRule`/`quotientEmitRule`/`moduloEmitRule` directly, byte-identical to the
+ * rules this file used to hold (verified: the oracle's bug-cell rows quotient-neg/
+ * modulo-neg/exact-vs-inexact-eq and the cross-pass goldens quotient-neg/modulo-neg
+ * are unchanged). No table row remains for these three — `withRules`' fallthrough to
+ * the harvested base row is what resolves them now. This is the pattern the remaining
+ * table rows will each follow, one package deal at a time.
  */
 import type { EmitCtx, EmitRule } from "@here.build/arrival/emit";
 
@@ -50,7 +58,6 @@ import {
   ArrayLit,
   Arrow,
   Bin,
-  Binding as mkBinding,
   Call,
   Index,
   Lit,
@@ -178,45 +185,11 @@ const divideRule: EmitRule<R> = {
         : foldBin("/", args),
 };
 
-// ─── = — chained ===, natively correct under §7 ───────────────────────────────────────
-// `(= 1 1.0)` → `1 === 1.0` → true = Scheme's #t (Appendix B: "natively correct").
-// Not a Law-N predicate (a value comparison narrows no type) — no `narrows` field.
-
-const numEqRule: EmitRule<R> = {
-  call: (args) => {
-    // R7RS: a 0/1-ary comparison is vacuously true. (Degenerate — a lowered operand
-    // residual is discarded here; sound for the pure slice corpus, and the shape is
-    // the component spec's own chainCompare verbatim.)
-    if (args.length < 2) return Lit(true);
-    if (args.length === 2) return Bin("===", args[0]!, args[1]!);
-    // n-ary: a === b && b === c — middle operands appear twice; §2.2 licenses pure
-    // double-evaluation (a perf note, not a correctness bug; temps are effect-discipline).
-    let chain = Bin("===", args[0]!, args[1]!);
-    for (let i = 2; i < args.length; i++) chain = Bin("&&", chain, Bin("===", args[i - 1]!, args[i]!));
-    return chain;
-  },
-};
-
-// ─── quotient / modulo — Appendix B operator-identity residuals ───────────────────────
-// Fixed per-symbol algorithms, never type-directed: truncating division and the
-// sign-correct (sign-of-divisor) modulo. JS's `%` is a REMAINDER (sign-of-dividend);
-// `((a % n) + n) % n` is the one correct modulo algorithm over it.
-
-const quotientRule: EmitRule<R> = {
-  call: (args, ctx) => {
-    const [a, b] = exactly(ctx, "quotient", args, 2);
-    // Global `Math` via a minted binding — the walker's `Error` door-throw precedent
-    // (see the module header's seeding note).
-    return Method(Ref(mkBinding("Math")), "trunc", [Bin("/", a!, b!)]);
-  },
-};
-
-const moduloRule: EmitRule<R> = {
-  call: (args, ctx) => {
-    const [a, n] = exactly(ctx, "modulo", args, 2);
-    return Bin("%", Bin("+", Bin("%", a!, n!), n!), n!);
-  },
-};
+// ─── = / quotient / modulo — RELOCATED (see the module header's relocation note) ─────
+// These three rules (chained === for `=`; the Math.trunc/divisor-sign residuals for
+// quotient/modulo — Appendix B's operator-identity algorithms) now live on their own
+// Contract's `emit` field in foundations/arrival/arrival/src/env/r7rs/numeric.ts. No
+// rule body or table row remains here.
 
 // ─── map — the arity bridge, sync-shaped ALWAYS (Law W) ───────────────────────────────
 // Constitution §4.3 verbatim: single-list rides `Array.prototype.map`; multi-list is
@@ -327,9 +300,8 @@ export const phase1Rules: SymbolRuleTable = {
   "-": { emit: minusRule },
   "*": { emit: timesRule },
   "/": { emit: divideRule },
-  "=": { emit: numEqRule },
-  quotient: { emit: quotientRule },
-  modulo: { emit: moduloRule },
+  // "=" / quotient / modulo — RELOCATED onto their own Contracts (module header's
+  // relocation note); no table row remains.
   map: { emit: mapRule },
   filter: { emit: filterRule },
   apply: { emit: applyRule },
@@ -348,15 +320,26 @@ export const phase1Rules: SymbolRuleTable = {
   "infer/chat/system": { emit: inferRule("infer/chat/system") },
   "infer/chat/user": { emit: inferRule("infer/chat/user") },
   "infer/chat/assistant": { emit: inferRule("infer/chat/assistant") },
+  // The infer-scalar-fold peephole's targets (../peepholes/infer.ts): the SAME
+  // sync-shaped `inferRule` factory, under the distinguished head the peephole
+  // rewrites `(car (infer …))` / `(car (infer/chat …))` onto. No new Residual
+  // shape, no walker change — the peephole's whole integration cost is this row
+  // plus the matching `inferAsyncSeeds` entry below.
+  "infer/scalar": { emit: inferRule("infer/scalar") },
+  "infer/chat/scalar": { emit: inferRule("infer/chat/scalar") },
 };
 
 /**
  * ASYNC-IFY's seed set for programs compiled under these rules (`AsyncIfyOptions.
  * asyncSeeds`): the `RuntimeRef` symbols whose runtime target returns a promise.
- * Only the two INFERRING verbs — `infer/chat/{system,user,assistant}` construct
- * message values synchronously and must NOT seed (a constructor seed would wrap
- * every message list in a needless `Promise.all`). Colocated with the rules table
- * because this file is where the infer family's verbs are enumerated; the runtime-
- * shim registration owns the set once stage-1 shims land (async-await-plane.md).
+ * `infer/scalar` / `infer/chat/scalar` are the SAME underlying inference call as
+ * `infer` / `infer/chat` (the peephole only changes whether the one-element list
+ * wrapper survives to the runtime call, never the asyncness) — both fold-targets
+ * seed exactly like their un-folded counterparts. `infer/chat/{system,user,
+ * assistant}` construct message values synchronously and must NOT seed (a
+ * constructor seed would wrap every message list in a needless `Promise.all`).
+ * Colocated with the rules table because this file is where the infer family's
+ * verbs are enumerated; the runtime-shim registration owns the set once stage-1
+ * shims land (async-await-plane.md).
  */
-export const inferAsyncSeeds: ReadonlySet<string> = new Set(["infer", "infer/chat"]);
+export const inferAsyncSeeds: ReadonlySet<string> = new Set(["infer", "infer/chat", "infer/scalar", "infer/chat/scalar"]);

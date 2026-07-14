@@ -10,3 +10,11 @@
 
 export type { TypeFacts } from "./type-facts.js";
 export type { EmitConfig, EmitCtx, EmitRule, RefPolicy } from "./emit-rule.js";
+
+// residual-lite — the Phase-2 relocation drill's minimal residual-builder surface
+// (constitution §4.5's "residual types in arrival core" direction, seeded). `Binding`
+// merges a type and a value (the constructor) under one name, mirroring
+// residual/types.ts's own merge; the plain `export { Binding }` below re-exports both
+// facets, so no separate `export type { Binding }` line is needed.
+export type { BinOp, LitValue, NodeId, R } from "./residual-lite.js";
+export { Bin, Binding, Lit, Method, Ref } from "./residual-lite.js";

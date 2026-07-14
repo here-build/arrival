@@ -25,6 +25,8 @@ import invariant from "tiny-invariant";
 import "@here.build/error-invariant";
 import { symbol, type Contract, type RestSpec, type VectorSpec } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
+import type { EmitCtx, EmitRule } from "../../emit/emit-rule.js";
+import { Bin, Binding, Lit, Method, Ref, type R } from "../../emit/residual-lite.js";
 import { type RunContext } from "../../values/primitives/RunContext.js";
 import { CallCtx } from "../../common/symbols/_bake.js";
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "../../values/primitives/AValue.js";
@@ -1132,6 +1134,69 @@ const NUMBER_TO_STRING_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   output: [z.string],
 };
 
+// ════════════════════════════════════════════════════════════════════════════
+// Contract.emit — THE PHASE-2 RELOCATION DRILL (constitution §9): quotient / modulo
+// / = move here from the compiler-side phase1 table (`inhuman/foundations/
+// arrival-mercury/src/rules/phase1.ts`) onto their OWN Contract's `emit` field — the
+// pattern every remaining table row's relocation will follow. Residual shapes are
+// BYTE-FOR-BYTE identical to the table rules they replace (verified by diffing
+// against phase1.ts's pre-relocation `quotientRule`/`moduloRule`/`numEqRule` — see
+// that file's git history), built via `@here.build/arrival/emit`'s residual-lite
+// constructors (§4.5's seed of "residual types belong in arrival core eventually";
+// arrival core cannot import the compiler's OWN residual constructors — the
+// dependency runs the other way).
+//
+// Law W (rules are sync-shaped, never mint Await) and Law A (residual selection keys
+// on ARGUMENT facts, never result types) both hold trivially: none of these three
+// branch on `ctx.argFacts` at all — Appendix B's operator-identity ruling fixes the
+// algorithm per symbol; there is no type-directed choice to make.
+// ════════════════════════════════════════════════════════════════════════════
+
+/** Fixed-arity refusal — verbatim relocation of phase1.ts's own `exactly` helper: a
+ *  fixed-arity builtin called wrong is a static defect, caught here (a compile
+ *  diagnostic via `ctx.door`) rather than left to crash the walker on an `undefined`
+ *  operand. Generic over the residual so it composes with residual-lite's `R`. */
+function exactly<T>(ctx: EmitCtx<R>, sym: string, args: readonly T[], n: number): readonly T[] {
+  if (args.length !== n) ctx.door(`\`${sym}\` wants exactly ${n} argument${n === 1 ? "" : "s"}, got ${args.length}`);
+  return args;
+}
+
+const quotientEmitRule: EmitRule<R> = {
+  call: (args, ctx) => {
+    const [a, b] = exactly(ctx, "quotient", args, 2);
+    // Global `Math` via a minted binding (relocated verbatim — precedent: the
+    // walker's door-throw references the global `Error` the same way). The walker's
+    // module JS frame pre-seeds "Error"/"Math"/"Promise" (the FRAME wave), so a user
+    // binding named `Math` disambiguates instead of shadowing the global.
+    return Method(Ref(Binding("Math")), "trunc", [Bin("/", a!, b!)]);
+  },
+};
+
+const moduloEmitRule: EmitRule<R> = {
+  call: (args, ctx) => {
+    const [a, n] = exactly(ctx, "modulo", args, 2);
+    // JS `%` is a REMAINDER (sign-of-dividend); `((a % n) + n) % n` is the one
+    // correct sign-of-divisor modulo algorithm over it (Appendix B).
+    return Bin("%", Bin("+", Bin("%", a!, n!), n!), n!);
+  },
+};
+
+const numEqEmitRule: EmitRule<R> = {
+  call: (args) => {
+    // R7RS: a 0/1-ary comparison is vacuously true (degenerate — a lowered operand
+    // residual is discarded here; sound for the pure slice corpus).
+    if (args.length < 2) return Lit(true);
+    if (args.length === 2) return Bin("===", args[0]!, args[1]!);
+    // n-ary: a === b && b === c — middle operands appear twice; §2.2 licenses pure
+    // double-evaluation (a perf note, not a correctness bug; temps are effect-
+    // discipline, not mutation-discipline). `(= 1 1.0)` → `1 === 1.0` → true, natively
+    // correct under the one-number representation (Appendix B).
+    let chain: R = Bin("===", args[0]!, args[1]!);
+    for (let i = 2; i < args.length; i++) chain = Bin("&&", chain, Bin("===", args[i - 1]!, args[i]!));
+    return chain;
+  },
+};
+
 export default new EnvCapability("scheme/numeric", {
   symbols: {
     // ── Arithmetic ──────────────────────────────────────────────────────────────
@@ -1140,12 +1205,12 @@ export default new EnvCapability("scheme/numeric", {
     "*": symbol.native`*: variadic product (1 with no args)`(contractFromSpec(mulSpec), nativeNumericOp("*", mulSpec)),
     "/": symbol.native`/: division; unary is reciprocal`(contractFromSpec(divSpec), nativeNumericOp("/", divSpec)),
     quotient: symbol.native`quotient: integer quotient truncated toward zero`(
-      contractFromSpec(quotientSpec),
+      { ...contractFromSpec(quotientSpec), emit: quotientEmitRule },
       nativeNumericOp("quotient", quotientSpec),
     ),
     remainder: symbol.native`remainder: remainder of truncating division`(contractFromSpec(remainderSpec), remainderOp),
     modulo: symbol.native`modulo: modulo (sign of divisor)`(
-      contractFromSpec(moduloSpec),
+      { ...contractFromSpec(moduloSpec), emit: moduloEmitRule },
       nativeNumericOp("modulo", moduloSpec),
     ),
     "floor-quotient": symbol.native`floor-quotient: quotient toward negative infinity`(
@@ -1225,7 +1290,10 @@ export default new EnvCapability("scheme/numeric", {
     ),
 
     // ── Comparison (numeric core + FL-Ord fallback + nil-tolerant overlay) ────────
-    "=": symbol.native`=: numeric equality (nil-tolerant)`(contractFromSpec(numEqSpec), looseCompare("=", numEqOp)),
+    "=": symbol.native`=: numeric equality (nil-tolerant)`(
+      { ...contractFromSpec(numEqSpec), emit: numEqEmitRule },
+      looseCompare("=", numEqOp),
+    ),
     "<": symbol.native`<: strictly increasing (FL-Ord fallback, nil-tolerant)`(
       contractFromSpec(ltSpec),
       looseCompare("<", wrapOrd(ltOp, "<")),
