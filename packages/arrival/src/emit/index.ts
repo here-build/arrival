@@ -16,5 +16,5 @@ export type { EmitConfig, EmitCtx, EmitRule, RefPolicy } from "./emit-rule.js";
 // merges a type and a value (the constructor) under one name, mirroring
 // residual/types.ts's own merge; the plain `export { Binding }` below re-exports both
 // facets, so no separate `export type { Binding }` line is needed.
-export type { BinOp, LitValue, NodeId, R } from "./residual-lite.js";
-export { Bin, Binding, Lit, Method, Ref } from "./residual-lite.js";
+export type { BinOp, LitValue, NodeId, R, UnOp } from "./residual-lite.js";
+export { ArrayLit, Bin, Binding, Call, Lit, Member, Method, Ref, Spread, Un } from "./residual-lite.js";

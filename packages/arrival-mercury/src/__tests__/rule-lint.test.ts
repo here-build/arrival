@@ -11,15 +11,16 @@
  *     `Required<EmitCtx<R>>` object literal, which forces this file to enumerate
  *     every field EmitCtx has — so a new field (parent-shaped or not) fails THIS
  *     file's own `tsc --strict` pass until reviewed here, never silently.
- *  2. RUNTIME: every `phase1Rules` emit rule, plus the three RELOCATED Contract
- *     rules (`=`, `quotient`, `modulo` — foundations/arrival/arrival/src/env/
- *     r7rs/numeric.ts, moved off this table per rules/phase1.ts's own relocation
- *     note), is executed — across a spread of arities, so every `exactly()`-
- *     gated branch gets a turn — against a Proxy-wrapped ctx that records every
- *     property GET. Every recorded key must be in the documented-safe set: this
- *     catches a hypothetical `(ctx as any).parentOf(...)` escape a pure
- *     type-level check cannot (a cast bypasses `tsc`, never a runtime property
- *     read) — "cheap but real" per the mission's own framing.
+ *  2. RUNTIME: every `phase1Rules` emit rule, plus the eight RELOCATED Contract rules
+ *     (`=`/`quotient`/`modulo` in foundations/arrival/arrival/src/env/r7rs/numeric.ts
+ *     Wave 1; `+`/`-`/`*`/`/` joining them there, `cons` in .../lists.ts, and
+ *     `not`/`null?`/`pair?` in .../equality.ts, Wave 2 — all moved off this table per
+ *     rules/phase1.ts's own relocation note), is executed — across a spread of
+ *     arities, so every `exactly()`-gated branch gets a turn — against a Proxy-wrapped
+ *     ctx that records every property GET. Every recorded key must be in the
+ *     documented-safe set: this catches a hypothetical `(ctx as any).parentOf(...)`
+ *     escape a pure type-level check cannot (a cast bypasses `tsc`, never a runtime
+ *     property read) — "cheap but real" per the mission's own framing.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -146,16 +147,22 @@ describe("rule-lint — Law C's boundary: no emit rule inspects parent CoreForm"
       expectOnlySafeKeys(accessed, `phase1Rules["${name}"]`);
     }
     // A sweep over an accidentally-empty table would pass vacuously — assert it
-    // actually exercised a non-trivial number of rules (today's table: ~20 rows,
-    // ~17 carry an `emit`; `every`/`any` are registry-presence-only, no rule).
-    expect(checked).toBeGreaterThan(10);
+    // actually exercised a non-trivial number of rules (today's table: ~14 rows, ~12
+    // carry an `emit`; `every`/`any` are registry-presence-only, no rule). The bound
+    // stays well below today's count deliberately — each future relocation wave
+    // shrinks this table further, and a bound pinned to the exact count would need
+    // touching every wave for no safety gain.
+    expect(checked).toBeGreaterThan(8);
   });
 
-  it("the three RELOCATED Contract rules (=, quotient, modulo) only read the documented EmitCtx surface", async () => {
+  it("the eight RELOCATED Contract rules (=, quotient, modulo, +, -, *, /, cons, not, null?, pair?) only read the documented EmitCtx surface", async () => {
     const session = await openOracleSession();
     try {
       const registry = emitRegistryOf(session.ambient);
-      for (const name of ["=", "quotient", "modulo"]) {
+      // Wave 1 (=, quotient, modulo — numeric.ts) + Wave 2 (+, -, *, / — numeric.ts;
+      // cons — lists.ts; not, null?, pair? — equality.ts). Eleven names, eight
+      // symbols moved so far across the two waves (= counts once).
+      for (const name of ["=", "quotient", "modulo", "+", "-", "*", "/", "cons", "not", "null?", "pair?"]) {
         const rule = registry.lookup(name)?.emit;
         expect(rule, `expected a relocated emit rule for "${name}" on its own Contract — has it moved again?`).toBeDefined();
         const accessed = accessedCtxKeysAcrossArities(rule!);

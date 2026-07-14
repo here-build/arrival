@@ -39,6 +39,80 @@ import { schemeBool as bool, mintVerdict, stringValue, withInputProvenance } fro
 import { ctxOf } from "../../values/primitives/AValue.js";
 import { printValue } from "../../values/print.js";
 import { SchemeValue } from "../../values/types.js";
+// TYPE-ONLY, one-directional (`common/symbols` → `emit`; emit-rule.ts imports nothing
+// back from this tree): the compiler-facing rule surface a Contract may carry.
+// Constitution §4.1/§4.5 (arrival-ts-transpiler-design.md) + registry-emit.md.
+import type { EmitCtx, EmitRule } from "../../emit/emit-rule.js";
+import { Bin, Call, Lit, Member, Un, type R } from "../../emit/residual-lite.js";
+
+// ════════════════════════════════════════════════════════════════════════════
+// Contract.emit — THE PHASE-2 RELOCATION DRILL (constitution §9): not / null? /
+// pair? move here from the compiler-side phase1 table (`inhuman/foundations/
+// arrival-mercury/src/rules/phase1.ts`) onto their OWN Contract's `emit` field — the
+// same pattern numeric.ts's quotient/modulo/=/+/-/*// relocation and lists.ts's cons
+// relocation established. Residual shapes are BYTE-FOR-BYTE identical to the table
+// rules they replace (verified by diffing against phase1.ts's pre-relocation
+// `notRule`/`nullQRule`/`pairQRule`), built via `@here.build/arrival/emit`'s
+// residual-lite constructors (§4.5's seed of "residual types belong in arrival core
+// eventually").
+//
+// `null?`/`pair?` carry the FULL package deal (constitution §5.3/Law N): the
+// `narrows`/`refPolicy` fields move WITH the rule, not just the residual shape — the
+// harvest now carries them (`registry/harvest.ts`'s `toRow` reads any baked def's
+// `emit`/`narrows`/`refPolicy` uniformly, capability-agnostic), so
+// `narrowsMembersOf(registry)` still returns `{null?, pair?}` once the phase1 table
+// row is deleted (verified: `withRules`' fallthrough to the harvested base row).
+// `pair?` is a `tagless-guard` def (no `Contract` param to thread these through) —
+// its fields land via the SAME declaration-site object-spread `type` already uses.
+// ════════════════════════════════════════════════════════════════════════════
+
+/** Fixed-arity refusal — verbatim relocation of phase1.ts's own `exactly` helper (see
+ *  numeric.ts's own copy of this same helper for the full rationale). */
+function exactly<T>(ctx: EmitCtx<R>, sym: string, args: readonly T[], n: number): readonly T[] {
+  if (args.length !== n) ctx.door(`\`${sym}\` wants exactly ${n} argument${n === 1 ? "" : "s"}, got ${args.length}`);
+  return args;
+}
+
+// ─── Law T: not ────────────────────────────────────────────────────────────────────────
+// Constitution §5.2: `!c` when the operand is provably boolean, `c === false` otherwise
+// (exact Scheme truthiness — only `#f` is false; `0`/`""` are truthy).
+const notEmitRule: EmitRule<R> = {
+  call: (args, ctx) => {
+    const [c] = exactly(ctx, "not", args, 1);
+    return ctx.config.register === "read" || ctx.argFacts[0]?.boolean === true
+      ? Un("!", c!)
+      : Bin("===", c!, Lit(false));
+  },
+};
+
+// ─── null? / pair? — FACT-GATED .length reads, Law-N self-witnessed ──────────────────
+// Both are TOTAL predicates over ANY value — which is exactly why the bare `.length`
+// read was wrong-code, not a deferred hazard: a JS string carries `.length` too, so
+// `(null? "")` compiled to `true` where the interpreter says `#f`. The fuzzer found
+// it on its first run (narrows-{null,pair}-string-collision corpus rows). Law F
+// applied properly: the clean `.length` form emits only when argFacts PROVE the
+// array representation; anything unproven rides the stage-0 shim, whose
+// Array.isArray test is the honest total semantics.
+const provesArray = (f: { list?: true; pair?: true; nonEmptyList?: true } | undefined): boolean =>
+  f?.list === true || f?.pair === true || f?.nonEmptyList === true;
+
+const nullQEmitRule: EmitRule<R> = {
+  call: (args, ctx) => {
+    const [xs] = exactly(ctx, "null?", args, 1);
+    return provesArray(ctx.argFacts[0])
+      ? Bin("===", Member(xs!, "length"), Lit(0))
+      : Call(ctx.runtime("null?"), [xs!]);
+  },
+};
+
+const pairQEmitRule: EmitRule<R> = {
+  call: (args, ctx) => {
+    const [xs] = exactly(ctx, "pair?", args, 1);
+    return provesArray(ctx.argFacts[0])
+      ? Bin(">", Member(xs!, "length"), Lit(0))
+      : Call(ctx.runtime("pair?"), [xs!]);
+  },
+};
 
 export default new EnvCapability("scheme/equality", {
   symbols: {
@@ -170,7 +244,8 @@ export default new EnvCapability("scheme/equality", {
     // the scheme/core prelude that calls `not` at macro-define time, so the
     // binding order is load-order-safe.
     not: symbol.native`not: #t iff value is #f (the only scheme-falsy)`(
-      { input: [z.value], output: [z.boolean] },
+      // Compiler-facing (constitution §4.1) — the Phase-2 relocation drill.
+      { input: [z.value], output: [z.boolean], emit: notEmitRule },
       // R7RS: only #f is falsy. Post-L1 `#f` parses to `SchemeBool(false)`
       // (a truthy object in JS), so `!value` would wrongly return false here.
       // `is_false` is the canonical scheme-falsy predicate (`guards.ts`).
@@ -201,15 +276,31 @@ export default new EnvCapability("scheme/equality", {
             <T>(x: T): x is Extract<T, Pair<any, any>>;
           }
         `,
+      // Compiler-facing (constitution §4.1) — the Phase-2 relocation drill. Declaration-
+      // site spread (a tagless-guard def has no `Contract` param to thread these
+      // through — see `TaglessGuardSymbolDef.emit`/`.narrows` in _bake.ts). `pair?` is
+      // its own Law-N witness — its runtime behavior PROVES the narrowing.
+      emit: pairQEmitRule,
+      narrows: { witness: "pair?" },
+      refPolicy: "eta",
     },
 
     "null?": symbol.native`null?: empty-list test`(
-      { input: [z.value], output: [z.boolean], type: dedent`
+      {
+        input: [z.value],
+        output: [z.boolean],
+        type: dedent`
           {
             (x: unknown): x is null;
             <T>(x: T): x is Extract<T, null>;
           }
-        ` },
+        `,
+        // Compiler-facing (constitution §4.1) — the Phase-2 relocation drill. `null?`
+        // is its own Law-N witness — its runtime behavior PROVES the narrowing.
+        emit: nullQEmitRule,
+        narrows: { witness: "null?" },
+        refPolicy: "eta",
+      },
       // The empty list is the ANil singleton (and its provenance clones). Raw JS
       // null/undefined no longer reach here — the membrane boxes JS null→nil and
       // undefined→theVoid before any value enters the language — so the legacy

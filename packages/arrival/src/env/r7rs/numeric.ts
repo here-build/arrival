@@ -26,7 +26,7 @@ import "@here.build/error-invariant";
 import { symbol, type Contract, type RestSpec, type VectorSpec } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import type { EmitCtx, EmitRule } from "../../emit/emit-rule.js";
-import { Bin, Binding, Lit, Method, Ref, type R } from "../../emit/residual-lite.js";
+import { Bin, Binding, Lit, Method, Ref, Un, type BinOp, type R } from "../../emit/residual-lite.js";
 import { type RunContext } from "../../values/primitives/RunContext.js";
 import { CallCtx } from "../../common/symbols/_bake.js";
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "../../values/primitives/AValue.js";
@@ -1135,21 +1135,23 @@ const NUMBER_TO_STRING_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-// Contract.emit — THE PHASE-2 RELOCATION DRILL (constitution §9): quotient / modulo
-// / = move here from the compiler-side phase1 table (`inhuman/foundations/
-// arrival-mercury/src/rules/phase1.ts`) onto their OWN Contract's `emit` field — the
-// pattern every remaining table row's relocation will follow. Residual shapes are
-// BYTE-FOR-BYTE identical to the table rules they replace (verified by diffing
-// against phase1.ts's pre-relocation `quotientRule`/`moduloRule`/`numEqRule` — see
+// Contract.emit — THE PHASE-2 RELOCATION DRILL (constitution §9): + / - / * / / /
+// quotient / modulo / = move here from the compiler-side phase1 table
+// (`inhuman/foundations/arrival-mercury/src/rules/phase1.ts`) onto their OWN
+// Contract's `emit` field — the pattern every remaining table row's relocation
+// follows. Residual shapes are BYTE-FOR-BYTE identical to the table rules they
+// replace (verified by diffing against phase1.ts's pre-relocation `plusRule`/
+// `minusRule`/`timesRule`/`divideRule`/`quotientRule`/`moduloRule`/`numEqRule` — see
 // that file's git history), built via `@here.build/arrival/emit`'s residual-lite
 // constructors (§4.5's seed of "residual types belong in arrival core eventually";
 // arrival core cannot import the compiler's OWN residual constructors — the
 // dependency runs the other way).
 //
 // Law W (rules are sync-shaped, never mint Await) and Law A (residual selection keys
-// on ARGUMENT facts, never result types) both hold trivially: none of these three
-// branch on `ctx.argFacts` at all — Appendix B's operator-identity ruling fixes the
-// algorithm per symbol; there is no type-directed choice to make.
+// on ARGUMENT facts, never result types) both hold trivially: none of these seven
+// branch on `ctx.argFacts` at all — §7's one-number law and Appendix B's
+// operator-identity ruling fix the algorithm per symbol; there is no type-directed
+// choice to make.
 // ════════════════════════════════════════════════════════════════════════════
 
 /** Fixed-arity refusal — verbatim relocation of phase1.ts's own `exactly` helper: a
@@ -1160,6 +1162,44 @@ function exactly<T>(ctx: EmitCtx<R>, sym: string, args: readonly T[], n: number)
   if (args.length !== n) ctx.door(`\`${sym}\` wants exactly ${n} argument${n === 1 ? "" : "s"}, got ${args.length}`);
   return args;
 }
+
+// ── §7 one-number: + - * / — plain left folds, zero ctx reads ───────────────────────
+// Verbatim relocation of phase1.ts's own `foldBin`/`plusRule`/`timesRule`/`minusRule`/
+// `divideRule`. The platform's arithmetic IS the semantics (§7: one JS `number`
+// payload, no exactness dispatch for any branch to key on) — left folds print flat
+// (`a + b + c`) because same-precedence left-nesting needs no parens (the renderer's
+// parenthesizer is structural).
+const foldBin = (op: BinOp, args: readonly R[]): R => args.reduce((acc, a) => Bin(op, acc, a));
+
+const plusEmitRule: EmitRule<R> = {
+  // (+) → 0 (the additive identity); (+ x) → x itself — no operator node emitted.
+  call: (args) => (args.length === 0 ? Lit(0) : foldBin("+", args)),
+};
+
+const timesEmitRule: EmitRule<R> = {
+  call: (args) => (args.length === 0 ? Lit(1) : foldBin("*", args)),
+};
+
+const minusEmitRule: EmitRule<R> = {
+  // R7RS `-` wants ≥ 1 argument; unary is negation.
+  call: (args, ctx) =>
+    args.length === 0
+      ? ctx.door("`-` wants at least 1 argument")
+      : args.length === 1
+        ? Un("-", args[0]!)
+        : foldBin("-", args),
+};
+
+const divideEmitRule: EmitRule<R> = {
+  // `/` is plain JS division (§7 — the interpreter's exact-rational richness is
+  // interpreter-plane; the artifact divides). Unary is the R7RS reciprocal: (/ x) → 1 / x.
+  call: (args, ctx) =>
+    args.length === 0
+      ? ctx.door("`/` wants at least 1 argument")
+      : args.length === 1
+        ? Bin("/", Lit(1), args[0]!)
+        : foldBin("/", args),
+};
 
 const quotientEmitRule: EmitRule<R> = {
   call: (args, ctx) => {
@@ -1200,10 +1240,22 @@ const numEqEmitRule: EmitRule<R> = {
 export default new EnvCapability("scheme/numeric", {
   symbols: {
     // ── Arithmetic ──────────────────────────────────────────────────────────────
-    "+": symbol.native`+: variadic sum (0 with no args)`(contractFromSpec(addSpec), nativeNumericOp("+", addSpec)),
-    "-": symbol.native`-: difference; unary negates`(contractFromSpec(subSpec), nativeNumericOp("-", subSpec)),
-    "*": symbol.native`*: variadic product (1 with no args)`(contractFromSpec(mulSpec), nativeNumericOp("*", mulSpec)),
-    "/": symbol.native`/: division; unary is reciprocal`(contractFromSpec(divSpec), nativeNumericOp("/", divSpec)),
+    "+": symbol.native`+: variadic sum (0 with no args)`(
+      { ...contractFromSpec(addSpec), emit: plusEmitRule },
+      nativeNumericOp("+", addSpec),
+    ),
+    "-": symbol.native`-: difference; unary negates`(
+      { ...contractFromSpec(subSpec), emit: minusEmitRule },
+      nativeNumericOp("-", subSpec),
+    ),
+    "*": symbol.native`*: variadic product (1 with no args)`(
+      { ...contractFromSpec(mulSpec), emit: timesEmitRule },
+      nativeNumericOp("*", mulSpec),
+    ),
+    "/": symbol.native`/: division; unary is reciprocal`(
+      { ...contractFromSpec(divSpec), emit: divideEmitRule },
+      nativeNumericOp("/", divSpec),
+    ),
     quotient: symbol.native`quotient: integer quotient truncated toward zero`(
       { ...contractFromSpec(quotientSpec), emit: quotientEmitRule },
       nativeNumericOp("quotient", quotientSpec),

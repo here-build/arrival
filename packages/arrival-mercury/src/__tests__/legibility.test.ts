@@ -10,9 +10,11 @@
  */
 import { describe, expect, it, afterAll, beforeAll } from "vitest";
 
+import type { EmitRule } from "@here.build/arrival/emit";
+
 import type { EmitRegistry, EmitRegistryRow } from "../registry/index.js";
 import { render } from "../residual/render.js";
-import type { CompilationUnit } from "../residual/types.js";
+import { Bin, Lit, type CompilationUnit, type R } from "../residual/types.js";
 import { phase1Rules } from "../rules/index.js";
 import { walk } from "../walker/index.js";
 import { classify } from "../coreform/index.js";
@@ -38,13 +40,24 @@ const registryOf = (...rows: EmitRegistryRow[]): EmitRegistry => {
   return { lookup: (n) => m.get(n), names: new Set(m.keys()) };
 };
 
+// `+`'s real Contract now lives on foundations/arrival/arrival/src/env/r7rs/
+// numeric.ts (Phase-2 relocation, Wave 2) — this package cannot deep-import arrival
+// core's internal env/r7rs files (only its declared public subpaths), and spinning up
+// a real harvest session (openOracleSession) just for this fast, hand-rolled registry
+// would defeat the whole convention this file documents. A byte-verified LOCAL mirror
+// of numeric.ts's own `plusEmitRule` (see that file, and its own
+// numeric-emit.test.ts proof) — 2-ary only, which is all this suite ever constructs.
+const plusEmitRuleMirror: EmitRule<R> = {
+  call: (args) => (args.length === 0 ? Lit(0) : args.reduce((acc, a) => Bin("+", acc, a))),
+};
+
 // car/cdr/map ride the REAL Phase-1 rules (phase1.ts) so the residual shapes this
 // suite destructures/singularizes/dedupes against are exactly what the gate-
 // authoritative pipeline itself produces — never a hand-approximated stand-in.
 const testRegistry = registryOf(
   row("car", { emit: phase1Rules.car!.emit }),
   row("cdr", { emit: phase1Rules.cdr!.emit }),
-  row("+", { emit: phase1Rules["+"]!.emit }),
+  row("+", { emit: plusEmitRuleMirror }),
   row("map", { emit: phase1Rules.map!.emit }),
   row("combine"), // bare shim — a value-position callback with no interesting rule
   row("list"), // bare shim — a plain, already-singular collection constructor

@@ -54,9 +54,9 @@ const emitWithArgFacts = (src: string, argIndex: number, argFacts: TypeFacts): s
   return render(walk(classified, { registry, register: "run", facts: new Map<NodeId, TypeFacts>([[id, argFacts]]) }));
 };
 
-// ── §2.1 representation collapse: car / cdr / cons ─────────────────────────────────────
+// ── §2.1 representation collapse: car / cdr ─────────────────────────────────────────────
 
-describe("car / cdr / cons — syntax over the array representation (§4.3, Law U)", () => {
+describe("car / cdr — syntax over the array representation (§4.3, Law U)", () => {
   it("car → xs[0], unconditionally (no guard, no shim, no mode)", () => {
     expect(emit(`(define (f xs) (car xs))`)).toBe(`function f(xs) {\n    return xs[0];\n}\n`);
   });
@@ -65,86 +65,37 @@ describe("car / cdr / cons — syntax over the array representation (§4.3, Law 
     expect(emit(`(define (f xs) (cdr xs))`)).toBe(`function f(xs) {\n    return xs.slice(1);\n}\n`);
   });
 
-  it("cons → [x, ...xs] (the spread golden)", () => {
-    expect(emit(`(define (f x xs) (cons x xs))`)).toBe(`function f(x, xs) {\n    return [x, ...xs];\n}\n`);
-  });
-
   it("fixed-arity mis-call doors at compile time (totality, never a walker crash)", () => {
-    expect(() => emit(`(define (f x) (cons x))`)).toThrow(WalkDoorError);
+    expect(() => emit(`(define (f) (car))`)).toThrow(WalkDoorError);
     expect(() => emit(`(define (f) (car))`)).toThrow(/wants exactly 1 argument/);
   });
 });
 
-// ── Law T: not ─────────────────────────────────────────────────────────────────────────
+// ── cons / not / null? / pair? / + / - / * / / — RELOCATED (Phase-2 relocation drill,
+// constitution §9, Wave 2) ──────────────────────────────────────────────────────────────
+// None of these eight carry a RULE in `phase1Rules` anymore — each is now the `emit`
+// field of its own Contract (cons: foundations/arrival/arrival/src/env/r7rs/lists.ts;
+// not/null?/pair?: .../equality.ts; +/-/*//: .../numeric.ts), so this file's
+// EMPTY-based registry (`withRules(EMPTY, phase1Rules)`, above) can no longer resolve
+// any of their APPLICATION-position residuals (there is neither a table rule nor a
+// base row to fall through to) — `-`/`/` have no table row left at all; `+`/`*` keep
+// a bare, ruleless PRESENCE row (see phase1.ts's own note on it) purely so the
+// `apply` describe block below can still exercise `applyRule`'s FOLD_OPS structural
+// recognition, which depends on a value-position `+`/`*` resolving to `RuntimeRef`
+// even under this base-less overlay. Their coverage now lives in two places: the
+// Contract-level rule-shape proof
+// (foundations/arrival/arrival/src/env/r7rs/__tests__/lists-emit.test.ts,
+// equality-emit.test.ts, numeric-emit.test.ts, calling `emit.call` directly against a
+// synthetic ctx) and the full-pipeline proof through the REAL harvest — cross-pass-
+// fixtures.test.ts's/gate3-goldens.test.ts's byte-level goldens and bug-cell-corpus
+// .test.ts's value-level oracle rows, both of which build their registry via
+// `withRules(emitRegistryOf(session.ambient), phase1Rules)` — the harvested Contract
+// row, not this file's stand-in table. (Arithmetic/cons/not/null?/pair? have no
+// dedicated bug-cell row of their own, unlike quotient/modulo/= below, but are
+// exercised pervasively across the existing corpus — also unchanged.)
 
-describe("not — Law T on the operand (§5.2)", () => {
-  const src = `(define (f x) (not x))`;
-
-  it("no facts → the exact-Scheme guard `x === false` (Law F)", () => {
-    expect(emit(src)).toBe(`function f(x) {\n    return x === false;\n}\n`);
-  });
-
-  it("argFacts[0].boolean → the clean `!x` (the flip)", () => {
-    expect(emitWithArgFacts(src, 0, { boolean: true })).toBe(`function f(x) {\n    return !x;\n}\n`);
-  });
-
-  it("read register → clean unconditionally (glass is never executed, §1)", () => {
-    expect(emit(src, { register: "read" })).toBe(`function f(x) {\n    return !x;\n}\n`);
-  });
-});
-
-// ── null? / pair? — FACT-GATED .length (the fuzzer's string-collision fix) ────────────
-
-describe("null? / pair? — fact-gated clean form, shim for the unproven (Law F)", () => {
-  it("no facts → the stage-0 shim (a string also carries .length — the fuzzer's find)", () => {
-    expect(emit(`(define (f xs) (null? xs))`)).toBe(`function f(xs) {\n    return null?(xs);\n}\n`);
-    expect(emit(`(define (f xs) (pair? xs))`)).toBe(`function f(xs) {\n    return pair?(xs);\n}\n`);
-  });
-
-  it("proven list fact → the clean .length form", () => {
-    expect(emitWithArgFacts(`(define (f xs) (null? xs))`, 0, { list: true })).toBe(
-      `function f(xs) {\n    return xs.length === 0;\n}\n`,
-    );
-    expect(emitWithArgFacts(`(define (f xs) (pair? xs))`, 0, { list: true })).toBe(
-      `function f(xs) {\n    return xs.length > 0;\n}\n`,
-    );
-  });
-});
-
-// ── §7 one-number: + - * / — plain folds, no dispatch ─────────────────────────────────
-
-describe("+ - * / — plain left folds (§7: the platform's arithmetic IS the semantics)", () => {
-  it("+ variadic → flat left fold", () => {
-    expect(emit(`(define (f a b c) (+ a b c))`)).toBe(`function f(a, b, c) {\n    return a + b + c;\n}\n`);
-  });
-
-  it("(+) → 0, (+ x) → x, (*) → 1 (fold identities, no operator node)", () => {
-    expect(emit(`(define (f) (+))`)).toBe(`function f() {\n    return 0;\n}\n`);
-    expect(emit(`(define (f a) (+ a))`)).toBe(`function f(a) {\n    return a;\n}\n`);
-    expect(emit(`(define (f) (*))`)).toBe(`function f() {\n    return 1;\n}\n`);
-  });
-
-  it("* binary", () => {
-    expect(emit(`(define (f a b) (* a b))`)).toBe(`function f(a, b) {\n    return a * b;\n}\n`);
-  });
-
-  it("- unary → negate; n-ary → left fold", () => {
-    expect(emit(`(define (f a) (- a))`)).toBe(`function f(a) {\n    return -a;\n}\n`);
-    expect(emit(`(define (f a b c) (- a b c))`)).toBe(`function f(a, b, c) {\n    return a - b - c;\n}\n`);
-  });
-
-  it("/ is plain JS division; unary is the R7RS reciprocal", () => {
-    expect(emit(`(define (f a b) (/ a b))`)).toBe(`function f(a, b) {\n    return a / b;\n}\n`);
-    expect(emit(`(define (f a) (/ a))`)).toBe(`function f(a) {\n    return 1 / a;\n}\n`);
-  });
-
-  it("nullary - and / door (R7RS wants ≥ 1 argument)", () => {
-    expect(() => emit(`(define (f) (-))`)).toThrow(WalkDoorError);
-    expect(() => emit(`(define (f) (/))`)).toThrow(WalkDoorError);
-  });
-});
-
-// ── = / quotient / modulo — RELOCATED (Phase-2 relocation drill, constitution §9) ─────
+// ── = / quotient / modulo — RELOCATED (Phase-2 relocation drill, constitution §9,
+// Wave 1) ────────────────────────────────────────────────────────────────────────────
 // These three no longer live in `phase1Rules` — they're now the `emit` field of their
 // own Contract in foundations/arrival/arrival/src/env/r7rs/numeric.ts, so this file's
 // EMPTY-based registry (`withRules(EMPTY, phase1Rules)`, above) can no longer resolve
@@ -301,12 +252,28 @@ describe("withRules — table-first lookup, base enrichment, names union", () =>
 });
 
 describe("withRules — narrows carriage (Law N) and the doorCategory seam", () => {
+  // `null?`/`pair?` used to be this test's live examples, but the Phase-2 relocation
+  // (Wave 2) moved their `narrows` declaration onto their own Contracts (equality.ts),
+  // so `phase1Rules` no longer carries ANY narrows-flagged row — this file's
+  // EMPTY-based registry can no longer demonstrate the mechanism off a real table
+  // entry. A synthetic self-witnessing table (same convention the "unregistered
+  // witness" test below already uses) proves the SAME overlay mechanism —
+  // narrowsMembersOf's real-registry reduction (with `null?`/`pair?` resolved via the
+  // harvested Contract) is covered by narrows-fuzz.test.ts and type-emit.test.ts.
   it("table narrows surface on rows and feed the type-emit grammar's key set", () => {
-    expect(registry.lookup("null?")?.narrows).toEqual({ witness: "null?" });
-    expect(registry.lookup("pair?")?.narrows).toEqual({ witness: "pair?" });
+    const synthetic = withRules(EMPTY, {
+      "foo?": { emit: phase1Rules["car"]!.emit, narrows: { witness: "foo?" } },
+      "bar?": { emit: phase1Rules["cdr"]!.emit, narrows: { witness: "bar?" } },
+    });
+    expect(synthetic.lookup("foo?")?.narrows).toEqual({ witness: "foo?" });
+    expect(synthetic.lookup("bar?")?.narrows).toEqual({ witness: "bar?" });
     // narrowsMembersOf is the SAME reduction type-emit consumes (§5.3's NForm gate) —
     // overlay rows must be indistinguishable from Contract-carried ones here.
-    expect(narrowsMembersOf(registry)).toEqual(new Set(["null?", "pair?"]));
+    expect(narrowsMembersOf(synthetic)).toEqual(new Set(["foo?", "bar?"]));
+  });
+
+  it("phase1Rules itself carries zero narrows-flagged rows post-relocation (car/cdr/map/filter/apply/infer* declare none)", () => {
+    expect(narrowsMembersOf(registry)).toEqual(new Set());
   });
 
   it("an unregistered witness fails the overlay's Law-N gate (teaching throw)", () => {

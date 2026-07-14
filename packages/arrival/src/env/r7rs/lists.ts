@@ -59,6 +59,11 @@ import { call_function } from "../../eval/call-function.js";
 import { promise_all } from "../../utils/promises.js";
 import { tf } from "../../values/tagless-final.js";
 import type { AList, AListAlike, AProcedure, SchemeValue } from "../../values/types.js";
+// TYPE-ONLY, one-directional (`common/symbols` → `emit`; emit-rule.ts imports nothing
+// back from this tree): the compiler-facing rule surface a Contract may carry.
+// Constitution §4.1/§4.5 (arrival-ts-transpiler-design.md) + registry-emit.md.
+import type { EmitCtx, EmitRule } from "../../emit/emit-rule.js";
+import { ArrayLit, Spread, type R } from "../../emit/residual-lite.js";
 
 // A JS value used as a Scheme procedure IS the SchemeValue function member
 // `(...args: SchemeValue[]) => SchemeValue` (types.ts). `is_function`/`typeof`
@@ -257,6 +262,41 @@ function mapImpl(
   return APair.fromArray(ctxOf(lists[0]), results);
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// Contract.emit — THE PHASE-2 RELOCATION DRILL (constitution §9): cons moves here
+// from the compiler-side phase1 table (`inhuman/foundations/arrival-mercury/src/
+// rules/phase1.ts`) onto its OWN Contract's `emit` field — the same pattern
+// numeric.ts's quotient/modulo/=/+/-/*// relocation established. The residual shape
+// is BYTE-FOR-BYTE identical to the table rule it replaces (verified by diffing
+// against phase1.ts's pre-relocation `consRule`), built via `@here.build/arrival/
+// emit`'s residual-lite constructors (§4.5's seed of "residual types belong in
+// arrival core eventually").
+//
+// Law A holds trivially: the rule never branches on `ctx.argFacts` — §2.1's
+// representation-collapse ruling (lists/pairs/vectors all lower to arrays) fixes the
+// residual unconditionally; there is no type-directed choice to make.
+// ════════════════════════════════════════════════════════════════════════════
+
+/** Fixed-arity refusal — verbatim relocation of phase1.ts's own `exactly` helper (see
+ *  numeric.ts's own copy of this same helper for the full rationale): a fixed-arity
+ *  builtin called wrong is a static defect, caught here (a compile diagnostic via
+ *  `ctx.door`) rather than left to crash the walker on an `undefined` operand. */
+function exactly<T>(ctx: EmitCtx<R>, sym: string, args: readonly T[], n: number): readonly T[] {
+  if (args.length !== n) ctx.door(`\`${sym}\` wants exactly ${n} argument${n === 1 ? "" : "s"}, got ${args.length}`);
+  return args;
+}
+
+// ── §2.1 representation collapse: cons ──────────────────────────────────────────────
+// Constitution §4.3 verbatim: syntax over the array representation, not a library
+// call. No guard, no shim, no register branch — `[x, ...xs]` regardless of register
+// or facts (matching car/cdr's own unconditional residual, still table-resident).
+const consEmitRule: EmitRule<R> = {
+  call: (args, ctx) => {
+    const [x, xs] = exactly(ctx, "cons", args, 2);
+    return ArrayLit([x!, Spread(xs!)]);
+  },
+};
+
 export default new EnvCapability("scheme/lists", {
   symbols: {
     // R7RS 6.10 — map. A combinator: ONE list dispatches to the operand's own arrival/tagless-final/
@@ -360,6 +400,8 @@ export default new EnvCapability("scheme/lists", {
             <H, T>(h: H, t: T): Pair<H, T>;
           }
         `,
+        // Compiler-facing (constitution §4.1) — the Phase-2 relocation drill.
+        emit: consEmitRule,
       },
       // A constructor: unions both inputs' provenance over the produced cell
       // (parallel to make-list / list, which stamp only the produced Pair).

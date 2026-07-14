@@ -14,20 +14,24 @@
  *  - Law A — fact-directed branches key on `ctx.argFacts` (argument facts), never on
  *    result types or parent nodes (cross-node idioms are Law-C engine peepholes).
  *  - Law F + the read register (constitution §1) — where a rule has a fact-directed
- *    clean/conservative split (`not`, `filter`), fact absence takes the conservative
- *    form in the run register; the read register short-circuits to the clean form
- *    (glass is never executed — mirrors the walker's own `truthTest`).
- *  - §7 one-number — `+ - * /` are plain folds/operators over JS numbers. No exactness
- *    dispatch EXISTS: not a fact, not a shim, not a branch. (`=`/`quotient`/`modulo`
- *    obeyed the SAME law from this table; they now obey it from their own Contracts —
- *    see the relocation note below.)
- *  - §2.1 representation collapse + Law U — lists/pairs are arrays; `car`/`cdr`/
- *    `cons` are syntax over that representation. `(car '())` is outside the
- *    compilation contract (the lens warns at compile time; the artifact stays
- *    clean — no guard, no shim, no mode). `null?`/`pair?` are DIFFERENT: total
- *    predicates over any value (defined behavior, not UB), so their clean
- *    `.length` form is fact-gated and the shim is the unproven default (Law F —
- *    the fuzzer proved the unconditional form wrong on strings).
+ *    clean/conservative split (`filter`), fact absence takes the conservative form in
+ *    the run register; the read register short-circuits to the clean form (glass is
+ *    never executed — mirrors the walker's own `truthTest`). (`not` obeyed the SAME
+ *    law from this table; it now obeys it from its own Contract — see the relocation
+ *    note below.)
+ *  - §7 one-number — was `+ - * /` are plain folds/operators over JS numbers; no
+ *    exactness dispatch EXISTS: not a fact, not a shim, not a branch. (`=`/`quotient`/
+ *    `modulo`/`+`/`-`/`*`/`/` all obeyed this law from this table; they now obey it
+ *    from their own Contracts — see the relocation note below.)
+ *  - §2.1 representation collapse + Law U — `car`/`cdr` are syntax over the array
+ *    representation. `(car '())` is outside the compilation contract (the lens warns
+ *    at compile time; the artifact stays clean — no guard, no shim, no mode). (`cons`
+ *    obeyed the SAME representation-collapse law from this table; `null?`/`pair?`
+ *    obeyed the Law-F fact-gated variant of it — total predicates over any value,
+ *    defined behavior not UB, so their clean `.length` form is fact-gated and the
+ *    shim is the unproven default, the fuzzer having proved the unconditional form
+ *    wrong on strings; all three now obey these laws from their own Contracts — see
+ *    the relocation note below.)
  *
  * Arity: fixed-arity rules refuse a mis-arity call site via `ctx.door` (a compile
  * diagnostic — totality: every form compiles or doors, never crashes the walker on an
@@ -36,37 +40,39 @@
  * the class a compiler front gate exists to catch.
  *
  * Known deferred hazards (documented, not landed — report-tracked for later waves):
- *  - `null?`/`pair?`'s FACT-GATED clean form can still hit TS2367 under a TUPLE-typed
- *    proven argument (`.length` narrows to a numeric literal; `=== 0` is a no-overlap
- *    comparison); phase1-symbol-rules.md §2 prescribes a `Un("+", …)` widen. Rarer now
- *    (the clean form needs a proven list fact at all), lands with the widen sweep.
+ *  - `null?`/`pair?`'s FACT-GATED clean form (now on their own Contracts —
+ *    foundations/arrival/arrival/src/env/r7rs/equality.ts) can still hit TS2367 under
+ *    a TUPLE-typed proven argument (`.length` narrows to a numeric literal; `=== 0` is
+ *    a no-overlap comparison); phase1-symbol-rules.md §2 prescribes a `Un("+", …)`
+ *    widen. Rarer now (the clean form needs a proven list fact at all), lands with the
+ *    widen sweep wherever the rule lives.
  *
- * RELOCATED (Phase-2 relocation drill, constitution §9): `=`/`quotient`/`modulo` moved
- * off this table onto their own Contract's `emit` field —
- * foundations/arrival/arrival/src/env/r7rs/numeric.ts now carries
- * `numEqEmitRule`/`quotientEmitRule`/`moduloEmitRule` directly, byte-identical to the
- * rules this file used to hold (verified: the oracle's bug-cell rows quotient-neg/
- * modulo-neg/exact-vs-inexact-eq and the cross-pass goldens quotient-neg/modulo-neg
- * are unchanged). No table row remains for these three — `withRules`' fallthrough to
- * the harvested base row is what resolves them now. This is the pattern the remaining
- * table rows will each follow, one package deal at a time.
+ * RELOCATED (Phase-2 relocation drill, constitution §9), one package deal at a time:
+ *  - Wave 1: `=`/`quotient`/`modulo` moved onto their own Contract's `emit` field —
+ *    foundations/arrival/arrival/src/env/r7rs/numeric.ts carries
+ *    `numEqEmitRule`/`quotientEmitRule`/`moduloEmitRule`.
+ *  - Wave 2: `+`/`-`/`*`/`/` joined them on the SAME numeric.ts Contracts
+ *    (`plusEmitRule`/`minusEmitRule`/`timesEmitRule`/`divideEmitRule`); `cons` moved
+ *    onto its own Contract in foundations/arrival/arrival/src/env/r7rs/lists.ts
+ *    (`consEmitRule`); `not`/`null?`/`pair?` moved onto their own Contracts in
+ *    foundations/arrival/arrival/src/env/r7rs/equality.ts (`notEmitRule`/
+ *    `nullQEmitRule`/`pairQEmitRule` — `null?`/`pair?`'s `narrows`/`refPolicy` moved
+ *    WITH the rule, the full Law-N package deal).
+ *  All eight are byte-identical to the rules this file used to hold (verified: the
+ *  oracle's bug-cell rows quotient-neg/modulo-neg/exact-vs-inexact-eq and the
+ *  cross-pass/gate3 goldens are unchanged; arithmetic/cons/not/null?/pair? have no
+ *  dedicated bug-cell row of their own but are exercised pervasively across the
+ *  existing corpus, also unchanged). No RULE-bearing table row remains for any of the
+ *  eight — `withRules`' fallthrough to the harvested base row is what resolves them
+ *  now. (`+`/`*` keep a bare, ruleless PRESENCE row — see the table below's own note —
+ *  needed only by this package's OWN base-less overlay test convention, a no-op
+ *  against the real harvest.) This is the pattern the remaining table rows will each
+ *  follow.
  */
 import type { EmitCtx, EmitRule } from "@here.build/arrival/emit";
 
 import type { Binding, BinOp, R } from "../residual/types.js";
-import {
-  ArrayLit,
-  Arrow,
-  Bin,
-  Call,
-  Index,
-  Lit,
-  Member,
-  Method,
-  Ref,
-  Spread,
-  Un,
-} from "../residual/types.js";
+import { Arrow, Bin, Call, Index, Lit, Method, Ref, Spread } from "../residual/types.js";
 import type { SymbolRuleTable } from "./overlay.js";
 
 /**
@@ -84,7 +90,7 @@ function exactly(ctx: EmitCtx<R>, sym: string, args: readonly R[], n: number): r
   return args;
 }
 
-// ─── §2.1 representation collapse: car / cdr / cons ───────────────────────────────────
+// ─── §2.1 representation collapse: car / cdr ──────────────────────────────────────────
 // Constitution §4.3 verbatim: syntax over the array representation, not library
 // symbols. No guard, no shim, no register branch (the component spec's guarded-branch
 // draft predates the representation-collapse ruling and is superseded by §4.3).
@@ -97,99 +103,21 @@ const cdrRule: EmitRule<R> = {
   call: (args, ctx) => Method(exactly(ctx, "cdr", args, 1)[0]!, "slice", [Lit(1)]),
 };
 
-const consRule: EmitRule<R> = {
-  call: (args, ctx) => {
-    const [x, xs] = exactly(ctx, "cons", args, 2);
-    return ArrayLit([x!, Spread(xs!)]);
-  },
-};
-
-// ─── Law T: not ────────────────────────────────────────────────────────────────────────
-// Constitution §5.2: `!c` when the operand is provably boolean, `c === false` otherwise
-// (exact Scheme truthiness — only `#f` is false; `0`/`""` are truthy). `not` stays an
-// ordinary registry symbol (§3.2) — the NForm grammar recognizes it structurally.
-
-const notRule: EmitRule<R> = {
-  call: (args, ctx) => {
-    const [c] = exactly(ctx, "not", args, 1);
-    return ctx.config.register === "read" || ctx.argFacts[0]?.boolean === true
-      ? Un("!", c!)
-      : Bin("===", c!, Lit(false));
-  },
-};
-
-// ─── null? / pair? — FACT-GATED .length reads, Law-N self-witnessed ──────────────────
-// Both are TOTAL predicates over ANY value — which is exactly why the bare `.length`
-// read was wrong-code, not a deferred hazard: a JS string carries `.length` too, so
-// `(null? "")` compiled to `true` where the interpreter says `#f`. The fuzzer found
-// it on its first run (narrows-{null,pair}-string-collision corpus rows). Law F
-// applied properly: the clean `.length` form emits only when argFacts PROVE the
-// array representation; anything unproven rides the stage-0 shim, whose
-// Array.isArray test is the honest total semantics.
-
-const provesArray = (f: { list?: true; pair?: true; nonEmptyList?: true } | undefined): boolean =>
-  f?.list === true || f?.pair === true || f?.nonEmptyList === true;
-
-const nullQRule: EmitRule<R> = {
-  call: (args, ctx) => {
-    const [xs] = exactly(ctx, "null?", args, 1);
-    return provesArray(ctx.argFacts[0])
-      ? Bin("===", Member(xs!, "length"), Lit(0))
-      : Call(ctx.runtime("null?"), [xs!]);
-  },
-};
-
-const pairQRule: EmitRule<R> = {
-  call: (args, ctx) => {
-    const [xs] = exactly(ctx, "pair?", args, 1);
-    return provesArray(ctx.argFacts[0])
-      ? Bin(">", Member(xs!, "length"), Lit(0))
-      : Call(ctx.runtime("pair?"), [xs!]);
-  },
-};
-
-// ─── §7 one-number: + - * / — plain left folds, zero ctx reads ───────────────────────
-// The platform's arithmetic IS the semantics; no exactness dispatch exists for any
-// branch to key on. Left folds print flat (`a + b + c`) because same-precedence
-// left-nesting needs no parens — the renderer's parenthesizer is structural.
-
-const foldBin = (op: BinOp, args: readonly R[]): R => args.reduce((acc, a) => Bin(op, acc, a));
-
-const plusRule: EmitRule<R> = {
-  // (+) → 0 (the additive identity); (+ x) → x itself — no operator node emitted.
-  call: (args) => (args.length === 0 ? Lit(0) : foldBin("+", args)),
-};
-
-const timesRule: EmitRule<R> = {
-  call: (args) => (args.length === 0 ? Lit(1) : foldBin("*", args)),
-};
-
-const minusRule: EmitRule<R> = {
-  // R7RS `-` wants ≥ 1 argument; unary is negation.
-  call: (args, ctx) =>
-    args.length === 0
-      ? ctx.door("`-` wants at least 1 argument")
-      : args.length === 1
-        ? Un("-", args[0]!)
-        : foldBin("-", args),
-};
-
-const divideRule: EmitRule<R> = {
-  // `/` is plain JS division (§7 — the interpreter's exact-rational richness is
-  // interpreter-plane; the artifact divides). Unary is the R7RS reciprocal: (/ x) → 1 / x.
-  call: (args, ctx) =>
-    args.length === 0
-      ? ctx.door("`/` wants at least 1 argument")
-      : args.length === 1
-        ? Bin("/", Lit(1), args[0]!)
-        : foldBin("/", args),
-};
-
-// ─── = / quotient / modulo — RELOCATED (see the module header's relocation note) ─────
-// These three rules (chained === for `=`; the Math.trunc/divisor-sign residuals for
-// quotient/modulo — Appendix B's operator-identity algorithms) now live on their own
-// Contract's `emit` field in foundations/arrival/arrival/src/env/r7rs/numeric.ts. No
+// ─── cons / not / null? / pair? / + / - / * / / — RELOCATED (see the module header's
+// relocation note, Wave 2). `cons`'s ArrayLit/Spread constructor, `not`'s Law-T guard,
+// `null?`/`pair?`'s fact-gated `.length` reads (narrows + refPolicy moved WITH them),
+// and the four arithmetic folds now live on their own Contract's `emit` field —
+// foundations/arrival/arrival/src/env/r7rs/lists.ts (`consEmitRule`),
+// foundations/arrival/arrival/src/env/r7rs/equality.ts (`notEmitRule`/
+// `nullQEmitRule`/`pairQEmitRule`), and foundations/arrival/arrival/src/env/r7rs/
+// numeric.ts (`plusEmitRule`/`minusEmitRule`/`timesEmitRule`/`divideEmitRule`). No
 // rule body or table row remains here.
+
+// ─── = / quotient / modulo — RELOCATED (see the module header's relocation note, Wave
+// 1). These three rules (chained === for `=`; the Math.trunc/divisor-sign residuals
+// for quotient/modulo — Appendix B's operator-identity algorithms) now live on their
+// own Contract's `emit` field in foundations/arrival/arrival/src/env/r7rs/numeric.ts.
+// No rule body or table row remains here.
 
 // ─── map — the arity bridge, sync-shaped ALWAYS (Law W) ───────────────────────────────
 // Constitution §4.3 verbatim: single-list rides `Array.prototype.map`; multi-list is
@@ -283,25 +211,29 @@ const inferRule = (verb: string): EmitRule<R> => ({
 
 // ─── the table ────────────────────────────────────────────────────────────────────────
 // refPolicy annotations mirror phase1-symbol-rules.md §0: `eta` for the fixed-arity
-// structural rules (car/cdr/null?/pair?) — declarative this wave (the walker degrades
-// eta to shim until instantiated-signature facts land), `shim` (the default) for the
-// variadics and HOFs. `narrows` self-witnesses (`null?`/`pair?` ARE their own runtime
-// proof — phase1-symbol-rules.md Open Q 3, inherited): the witness names the
-// REGISTERED symbol, never the stage-0 shim export.
+// structural rules (car/cdr) — declarative this wave (the walker degrades eta to shim
+// until instantiated-signature facts land), `shim` (the default) for the variadics and
+// HOFs.
 
 export const phase1Rules: SymbolRuleTable = {
   car: { emit: carRule, refPolicy: "eta" },
   cdr: { emit: cdrRule, refPolicy: "eta" },
-  cons: { emit: consRule },
-  not: { emit: notRule },
-  "null?": { emit: nullQRule, narrows: { witness: "null?" }, refPolicy: "eta" },
-  "pair?": { emit: pairQRule, narrows: { witness: "pair?" }, refPolicy: "eta" },
-  "+": { emit: plusRule },
-  "-": { emit: minusRule },
-  "*": { emit: timesRule },
-  "/": { emit: divideRule },
-  // "=" / quotient / modulo — RELOCATED onto their own Contracts (module header's
-  // relocation note); no table row remains.
+  // cons / not / null? / pair? / - / / / = / quotient / modulo — RELOCATED onto their
+  // own Contracts (module header's relocation note); no table row remains for any of
+  // them.
+  //
+  // "+" / "*" — REGISTRY PRESENCE ONLY (no emit rule — the real one lives on their
+  // own Contract, same relocation as above). Unlike every/any below, the harvest DOES
+  // see these two; this bare row exists solely so `applyRule`'s FOLD_OPS structural
+  // recognition (below) keeps a value-position "+"/"*" resolvable to `RuntimeRef`
+  // under a base-less overlay (`withRules(EMPTY, phase1Rules)`, the convention
+  // rules-phase1.test.ts's fast unit tests use). Harmless against a REAL harvested
+  // base: `withRules`'s merge always prefers the base row's `emit`/`refPolicy` when
+  // this entry sets neither (`entry.emit ?? b?.emit`), so overlaying this bare row
+  // onto the harvested Contract row is a no-op in production — identical to not
+  // having the row at all.
+  "+": {},
+  "*": {},
   map: { emit: mapRule },
   filter: { emit: filterRule },
   apply: { emit: applyRule },

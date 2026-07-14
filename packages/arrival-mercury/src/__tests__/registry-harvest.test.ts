@@ -66,12 +66,21 @@ describe("emitRegistryOf over the real oracle ambient", () => {
     expect(a.lookup("infer")).toEqual(b.lookup("infer"));
   });
 
-  it("Law N gate is wired and vacuously green over the real env (no narrows rows yet)", () => {
+  it("Law N gate is wired and green over the real env (null?/pair? carry narrows, self-witnessed)", () => {
     // emitRegistryOf runs assertNarrowsWitnessed internally — reaching here without a
-    // throw IS the vacuous-green claim; the red paths are pinned synthetically below.
+    // throw IS the green claim; the red paths are pinned synthetically below.
+    // `null?`/`pair?` moved their `narrows` declaration onto their own Contracts in
+    // the Phase-2 relocation (foundations/arrival/arrival/src/env/r7rs/equality.ts) —
+    // today's only two narrows-flagged rows in the real env, each self-witnessed (its
+    // own runtime behavior PROVES the narrowing). Every OTHER harvested symbol still
+    // carries none — this loop stays a tight assertion, not a vacuous one.
     const registry = emitRegistryOf(session.ambient);
+    const KNOWN_NARROWS: Readonly<Record<string, { readonly witness: string }>> = {
+      "null?": { witness: "null?" },
+      "pair?": { witness: "pair?" },
+    };
     for (const name of registry.names) {
-      expect(registry.lookup(name)?.narrows, name).toBeUndefined();
+      expect(registry.lookup(name)?.narrows, name).toEqual(KNOWN_NARROWS[name]);
     }
   });
 });
