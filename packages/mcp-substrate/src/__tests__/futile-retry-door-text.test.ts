@@ -17,11 +17,37 @@ import { futileRetryDoor } from "../doors.js";
 describe("futileRetryDoor — fact-only, conditionally-framed, no outcome prescription (C2/B2)", () => {
   const door = futileRetryDoor("srv_search");
 
-  it("never asserts degradation as FACT, and never tells the model to give its best final answer", () => {
+  // A NEGATIVE-ONLY TEST IS A WEAK TEST — flagged by an adversarial review (2026-07-14).
+  //
+  // This test used to assert ONLY what the door must NOT say (three `not.toContain`). An EMPTY door
+  // would have satisfied every one of them. The file as a whole is still a gate — its siblings below
+  // assert positively on `fact` and `reason`, so a door that said nothing would fail those — but
+  // THIS test, the one guarding the exact wording change that was asked for, could not tell a
+  // correctly-reworded door from a deleted one.
+  //
+  // Absence of a lie is not the presence of the truth. So it now asserts BOTH: the removed
+  // over-claims stay removed, AND the conditional framing that replaced them is actually there.
+  it("says the RIGHT thing (conditional, fact-first) and not the wrong thing (diagnosis, outcome-prescription)", () => {
     const rendered = `${door.fact} ${door.reason} ${door.script}`.toLowerCase();
-    expect(rendered).not.toContain("give your best final answer");
+
+    // WHAT IT MUST NOT SAY — the two over-claims that were removed.
+    // "the tool looks degraded" ASSERTED a diagnosis the medium cannot make: a tool returning the
+    // same result may be perfectly healthy and simply have nothing to give.
     expect(rendered).not.toContain("the tool looks degraded");
     expect(rendered).not.toContain("the tool is degraded");
+    // "give your best final answer" was OUTCOME FINE-TUNING — steering the model to stop working and
+    // guess, which is not teaching, it is nudging toward a plausible-sounding surrender.
+    expect(rendered).not.toContain("give your best final answer");
+
+    // WHAT IT MUST SAY — the replacement, positively pinned. Deleting the door's text entirely (or
+    // reverting to a bare refusal) now FAILS here rather than passing on an absence.
+    expect(rendered).toContain("if"); // conditional, never a diagnosis stated as fact
+    expect(rendered).toContain("degraded"); // the possibility is still named — it is a real one
+    // ...and so is the OTHER possibility, which is the whole point of the rewording: an empty result
+    // is very often the true answer, and the medium must not tell the model otherwise.
+    expect(rendered).toMatch(/real|working/);
+    // It must still hand back a usable next move rather than a verdict.
+    expect(rendered).toMatch(/change the argument|different route|arguments/);
   });
 
   it("fact names only the observable: same result, different arguments — no diagnosis", () => {
