@@ -87,7 +87,14 @@ const GAPS: readonly LedgerRow[] = [
   // and ADict (`dict`'s `new ADict(CONSTANT_CTX, ...)`, env/polyglot.ts) never stamp
   // their OWN top-level provenance with the R2 grouping-fact union at construction —
   // independent of R8, un-implemented (R2 is its own, later design item).
-  { id: "AJSArray/ADict container carries no grouping-fact provenance", gate: "R2 container-provenance ruling", replacedBy: "laws/term-carrier equals cells (AJSArray/ADict)" },
+  // NARROWED to ADict (2026-07-14). It never applied to AJSArray: production DOES stamp a borrowed
+  // container with the crossing's provenance (rosetta's inbound `array → borrowed AJSArray` claim,
+  // `new AJSArray(ctx, v, p)`). The apparent gap was a FIXTURE artifact — `borrow-array` minted
+  // through `fromJS`, which deliberately drops provenance (CONSTANT_CTX / EMPTY_PROVENANCE), so the
+  // test was building a container production never builds and then ticketing the absence as a code
+  // gap. With the fixture crossing its args honestly (V's hygiene law), AJSArray's cells pass on
+  // their own merits. ADict's gap is real and stays open.
+  { id: "ADict container carries no grouping-fact provenance", gate: "R2 container-provenance ruling", replacedBy: "laws/term-carrier equals cells (ADict)" },
   // Carried from clone-identity.test.ts (docs/test-suite-v2/REMOVAL-MANIFEST.md §A) — the
   // one still-open site of the `=== nil` identity-equality sweep (docs/archaeology/
   // nil-clone-sweep.md). `schemeToJs`'s entry point special-cases `value === nil` instead

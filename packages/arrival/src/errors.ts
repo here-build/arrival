@@ -710,9 +710,16 @@ export class UnboundVariableError extends ArrivalError {
     public readonly variable: string,
     /** Near vocabulary matches, best first (empty ⇒ the plain wall, no hint). */
     public readonly suggestions: readonly string[] = [],
+    /** A ROUTING hint for a known dead-end idiom (Racket `#:kwargs`, `require`, …) — full
+     *  prose, rendered in place of (never alongside) a "did you mean" suggestion list. This
+     *  is a DISJOINT gate from `suggestions`: an idiom match is a name-exact hit against a
+     *  small hardcoded table (unbound-variable.ts's idiom routes), not a fuzzy vocabulary
+     *  near-miss — the two never fire on the same name. See benchmark-defect-register.md B8. */
+    routingHint?: string,
   ) {
     const hint =
-      suggestions.length === 0 ? undefined : `did you mean ${suggestions.map((s) => `\`${s}\``).join(" or ")}?`;
+      routingHint ??
+      (suggestions.length === 0 ? undefined : `did you mean ${suggestions.map((s) => `\`${s}\``).join(" or ")}?`);
     super(hint ? `Unbound variable \`${variable}' — ${hint}` : `Unbound variable \`${variable}'`);
     this.publicMessage = hint
       ? `symbol ${variable} does not exist - look at list of available functions at tool description (${hint})`
@@ -1257,6 +1264,68 @@ export class CarrierMismatchError extends ArrivalError {
           `splices list spines, not this carrier`,
     );
   }
+}
+
+// -------------------------------------------------------------------------
+// :: OFFENDING_VALUE — symbol-keyed metadata on a collection-type-error: the value a
+// collection op (take/drop/filter/map/sort/length/car/cdr/vector-ref/…) refused because
+// it wasn't a collection at all (classically: a STRING that is actually a serialized
+// payload a model forgot to parse). Same discipline as arrival-manifold/bind.ts's
+// ARGS_REJECTION — SYMBOL-KEYED metadata rides the error OBJECT, `error.message` is
+// NEVER touched (a downstream door reads the value's `.provenance` — an AValue names the
+// invocation that produced it — and teaches the right parser; the message stays the
+// stable, already-tested string it always was).
+//
+// Consumers read it ONLY through {@link offendingValueOf}: arrival's evaluator
+// (`eval/evaluator.ts`'s `failAndWrap`) wraps every propagating native throw in a fresh
+// `ArrivalError` whose OWN symbol-keyed properties are necessarily empty (`message` is
+// copied, the original error rides `.cause`) — a top-level-only symbol read comes back
+// `undefined` through every real `exec()`/`execState()` path.
+// -------------------------------------------------------------------------
+
+/** Symbol-keyed metadata key for {@link attachOffendingValue}/{@link offendingValueOf}. */
+export const OFFENDING_VALUE = Symbol("arrival/offending-value");
+
+/** Wrapper layers between a door-layer consumer and the throw site: at most one today
+ *  (`failAndWrap`'s `ArrivalError`, riding `.cause`) — bounded the same as
+ *  ARGS_REJECTION's walk so a pathological/cyclic `cause` chain can never spin. */
+const OFFENDING_VALUE_MAX_CAUSE_DEPTH = 4;
+
+/** Attach the offending VALUE to a collection-type-error, mirroring
+ *  `arrival-manifold/bind.ts`'s `attachArgsRejection`: metadata rides the error OBJECT via
+ *  a plain symbol-keyed assignment (own, enumerable, configurable — the same shape
+ *  `attachArgsRejection` uses; NOT a hidden `Object.defineProperty`, so
+ *  `Object.getOwnPropertySymbols`/`Reflect.ownKeys` see it same as any other own prop),
+ *  never `error.message`. Wrapped in try/catch — a frozen/sealed error object must never
+ *  make the ATTACHER throw and mask the real error the caller is already raising; on
+ *  failure the error still propagates, just without the metadata. Returns the same error
+ *  (by reference) so a call site can wrap inline: `throw attachOffendingValue(new
+ *  TypeError(msg), receiver)`. */
+export function attachOffendingValue<E>(error: E, value: unknown): E {
+  try {
+    (error as unknown as Record<symbol, unknown>)[OFFENDING_VALUE] = value;
+  } catch {
+    // Never let metadata attachment mask the real error being thrown.
+  }
+  return error;
+}
+
+/** THE one supported read path for {@link OFFENDING_VALUE} — walk `error` and its
+ *  `Error.cause` chain (bounded) for the metadata, exactly like ARGS_REJECTION's
+ *  `findArgsRejection`. `undefined` when the error never carried one (e.g. an unbound-
+ *  variable error, or any error a throw site never annotated). */
+export function offendingValueOf(error: unknown): unknown | undefined {
+  let node: unknown = error;
+  for (
+    let depth = 0;
+    depth < OFFENDING_VALUE_MAX_CAUSE_DEPTH && typeof node === "object" && node !== null;
+    depth++
+  ) {
+    const value = (node as Record<symbol, unknown>)[OFFENDING_VALUE];
+    if (value !== undefined) return value;
+    node = (node as { cause?: unknown }).cause;
+  }
+  return undefined;
 }
 
 // NOTE: KwargsRejectionError is NOT here — it's colocated in

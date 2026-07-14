@@ -26,7 +26,7 @@
  */
 import type { RunContext } from "./RunContext.js";
 import type { SchemeValue } from "../types.js";
-import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
+import { AValue, EMPTY_PROVENANCE, mergeProvenance } from "./AValue.js";
 import { theVoid } from "./AVoid.js";
 import { ANil, nil } from "./ANil.js";
 import { warnMembrane } from "../../membrane-warn.js";
@@ -61,6 +61,12 @@ export function reStampChild(
   if (!(child instanceof AValue)) return child;
   // Same-provenance fast path preserves identity (mirrors the router's AValue claim).
   if (p === EMPTY_PROVENANCE || p === child.provenance) return child;
+  // ADDITIVE, never destructive: the crossing's ids are UNIONED onto what the child already knew
+  // about its own origin, never substituted for it (see `mergeProvenance` in AValue.ts — a crossing
+  // may ADD an edge, but erasing an id makes the value's origin set a non-superset of its true
+  // dependency set, which silently breaks `uneval`'s slicing soundness).
+  const merged = mergeProvenance(child.provenance, p);
+  if (merged === child.provenance) return child;
   const deep = child["arrival/withProvenanceDeep"];
-  return deep === undefined ? child.withProvenance(p) : deep.call(child, ctx, p, seen);
+  return deep === undefined ? child.withProvenance(merged) : deep.call(child, ctx, p, seen);
 }

@@ -46,6 +46,7 @@ import {
 } from "../../values/op-helpers.js";
 
 import { EnvCapability } from "../../common/capability.js";
+import { attachOffendingValue } from "../../errors.js";
 import { tf } from "../../values/tagless-final.js";
 
 export default new EnvCapability("scheme/vectors", {
@@ -170,7 +171,10 @@ export default new EnvCapability("scheme/vectors", {
       function (this: CallCtx, vec: unknown, k: unknown): SchemeValue {
         const m = (vec as Record<string, unknown> | null | undefined)?.[tf("vector-ref")];
         if (typeof m !== "function") {
-          throw new TypeError(`vector-ref: arg 1 is not a vector (declares no arrival/tagless-final/vector-ref)`);
+          throw attachOffendingValue(
+            new TypeError(`vector-ref: arg 1 is not a vector (declares no arrival/tagless-final/vector-ref)`),
+            vec,
+          );
         }
         const idx = typeof k === "number" ? k : (k as AExact).valueOf();
         return (m as (i: number) => SchemeValue).call(vec, idx as number);
@@ -211,7 +215,7 @@ export default new EnvCapability("scheme/vectors", {
 
     "list->vector": symbol.native`list->vector: a vector of the list's elements`(
       {
-        input: [z.union([z.pair, z.nil])],
+        input: [z.listAlike],
         output: [z.vector(z.value)],
         type: dedent`
           {

@@ -17,6 +17,7 @@
 // define-bake.ts for the full two-phase binding contract).
 
 import { ZodType } from "zod";
+import { buildSlotAdopter } from "../../values/adopt-spine.js";
 import * as z from "../scheme-zod.js";
 import {
   isSingleOutput,
@@ -131,6 +132,8 @@ export function define(tpl: TemplateStringsArray, ...sub: unknown[]): DefineFact
       // same "never mutate the shared declaration" convention `capability.ts`'s
       // door bind arm already follows for `DoorCause`).
       provenance: "pipe",
+      // A constant has no argument slots to adopt; a procedure adopts per its AUTHORED input list.
+      adoptArgs: isConstant ? undefined : buildSlotAdopter(procedureContract!.input, procedureContract!.inputRest),
       declaredProvenance: procedureContract?.provenance,
       type: procedureContract?.type,
       preludeOnly: procedureContract?.preludeOnly,

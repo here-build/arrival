@@ -23,6 +23,10 @@ import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 
 export const EMPTY_PROVENANCE: ReadonlySet<number> = new Set<number>();
 
+/** The `arrival/provenanceChildren` default — a shared frozen empty, so the common case (every
+ *  scalar) allocates nothing on a deep walk. */
+const EMPTY_CHILDREN: readonly unknown[] = Object.freeze([]);
+
 /**
  * The run-context of a maybe-boxed operand. At the membrane an operand often
  * arrives typed `unknown` (scheme-zod decode); when it IS an AValue its ctx is
@@ -111,6 +115,25 @@ export abstract class AValue {
    *  `seen` terminates cyclic spines — both exactly the dissolved jsToSchemeImpl arms'
    *  behavior, byte-stable. */
   ["arrival/withProvenanceDeep"]?(ctx: RunContext, p: ReadonlySet<number>, seen?: WeakSet<object>): SchemeValue;
+
+  /**
+   * The READ-side twin of `withProvenanceDeep`: the values this one REACHES, for the deep
+   * provenance union (`collapseProvenance`). A carrier that holds AValues must answer with them,
+   * or its members are invisible to the trace and a wiring edge is silently lost.
+   *
+   * Concrete, not optional, and it lives HERE rather than as an `instanceof` ladder inside
+   * provenance-collapse.ts (which is what it replaced) for two reasons: P7 — the class is the sole
+   * authority on its own representation, and the write direction already obeys that, so the read
+   * direction drifting away from it was a latent bug; and because the `instanceof` ladder forced
+   * provenance-collapse to import every value class, which closed a module-init cycle the moment
+   * a value class needed to `extends APair` (AJSArrayList does).
+   *
+   * DEFAULT: reaches nothing. Correct for every scalar, and the deliberate answer for AJSObject —
+   * a dict's own point is collected, but its members are not a wiring path (access one first).
+   */
+  ["arrival/provenanceChildren"](): Iterable<unknown> {
+    return EMPTY_CHILDREN;
+  }
 
   // ── The tagless-final algebra — declared OPTIONAL on AValue, the single source of truth ──────
   // Every AValue (and subclass) MAY carry these `arrival/tagless-final/<op>` members; an entity
@@ -266,6 +289,56 @@ export function unionProvenance(args: readonly AValue[]): ReadonlySet<number> {
       return merged;
     }
   }
+}
+
+/**
+ * ADD an origin, never REPLACE one — the inbound membrane's stamping rule.
+ *
+ * ─── WHY THE MEMBRANE MUST BE ADDITIVE (V, 2026-07-14) ──────────────────────────────────────
+ *
+ * A crossing is entitled to make a HOLISTIC claim — "the output is caused by the inputs, as a
+ * whole" — because a JS impl is opaque and we cannot see that it didn't mix them. That claim is an
+ * EDGE. What a crossing is NOT entitled to do is ERASE what the value already knew about its own
+ * origin. Holistic means ADD AN EDGE, never REPLACE THE GRAPH.
+ *
+ * The membrane used to REPLACE (`withProvenanceDeep` re-stamped every node with the crossing's set).
+ * That is not merely lossy — it can make a value's origin set NOT A SUPERSET of its true dependency
+ * set, and THAT breaks the theorem the whole provenance layer stands on. `uneval` (provenance/
+ * uneval.ts) reverse-slices a trace BY a value's provenance, and its soundness is stated in its own
+ * header: "the language is pure dataflow with on-value provenance, so the effective value's origin
+ * set IS its dependency set" (Galois slicing, Perera–Cheney). Drop an id and the slice is silently
+ * TOO SMALL: the form that produced it is omitted, and the re-run cannot reproduce the value.
+ *
+ * The asymmetry is the whole point. OVER-approximation is safe — a larger sound slice still
+ * re-derives, you merely lose minimality. UNDER-approximation is fatal, and silent. So the membrane
+ * must be MONOTONE, and union is what makes `origin ⊇ dependencies` hold by construction.
+ *
+ * Measured before the fix: a value that NEVER CHANGED, passed through an ordinary TWO-input
+ * crossing, came back with its elements' ids `{1},{2}` overwritten by the container-level union
+ * `{10,20}` — `1` and `2` erased outright. It survived on ONE input only by accident:
+ * `unionProvenance` returns the input's own Set OBJECT when there is a single distinct set, and the
+ * inbound claim short-circuits on `p === v.provenance` — REFERENCE IDENTITY. An optimization that
+ * happened to preserve. Not a law.
+ *
+ * (Granularity is NOT what this protects — that is reconstructed from the WIRING, not stored on the
+ * value: the trace's `carrier-fields` classifies which field sub-expressions consumed which
+ * producer, and `uneval` re-derives the access path on demand. The value carries only the point set.
+ * What union protects is that point set's SOUNDNESS as a dependency set.)
+ */
+export function mergeProvenance(own: ReadonlySet<number>, added: ReadonlySet<number>): ReadonlySet<number> {
+  if (added.size === 0 || own === added) return own;
+  if (own.size === 0) return added;
+  // Already subsumed — keep the existing SET OBJECT, so the identity fast paths downstream
+  // (`p === v.provenance`) keep hitting and a re-crossing stays allocation-free and idempotent.
+  let subsumed = true;
+  for (const id of added) {
+    if (!own.has(id)) {
+      subsumed = false;
+      break;
+    }
+  }
+  if (subsumed) return own;
+  return new Set([...own, ...added]);
 }
 
 export function pointProvenance(callId: number): ReadonlySet<number> {

@@ -400,7 +400,25 @@ function buildDefineProcedure(verb: string, def: DefineSymbolDef, closureValue: 
     // later concern) — so this only matters once the closure's OWN definition-time
     // `ctx.runCtx` is itself consistent across sibling `symbol.define` bodies. See
     // `evaluateBodies`'s comment (this file, above) for that half of the fix.
-    impl: (args, runCtx) => {
+    impl: (rawArgs, runCtx) => {
+      // SPINE ADOPTION runs BEFORE validation — the chart is chosen, THEN the gate judges it.
+      //
+      // The order is load-bearing, not incidental. A slot declared `z.pair` means "a non-empty
+      // spine"; a borrowed JS array READ AS A SPINE satisfies that, but only once it has been
+      // projected. Validate first and `z.pair` rejects the raw array before adoption can ever run —
+      // which is exactly how `(last (some-tool …))` died, on a ZodError, for a list it could have
+      // walked perfectly. Adopt first and the gate sees the value the body will actually get, so it
+      // judges the truth: a non-empty array passes `z.pair`, and an EMPTY one adopts to `nil` and is
+      // correctly rejected ("last: requires a non-empty list").
+      //
+      // And note adoption is NOT the decode below. `z.decode` is the PLANE crossing (scheme → JS),
+      // and its result is discarded here ON PURPOSE: a scheme body must never receive a
+      // JS-marshalled value. That is why the first attempt at this fix — making the list schema a
+      // `z.codec` that materialized an APair chain — was dead code: it eagerly copied every tool
+      // array and threw the copy away, while the raw array sailed on to the body and hung it.
+      // Adoption is a REPRESENTATION choice on the SCHEME plane: AValue in, AValue out, O(1), same
+      // backing store. Nothing crosses out.
+      const args = def.adoptArgs === undefined ? rawArgs : (def.adoptArgs(rawArgs) as typeof rawArgs);
       if (def.validate) z.decode(def.in, args);
       return (async (): Promise<SchemeValue> => {
         // `unknown`, not `SchemeValue`, until validated below: the multi-value arm

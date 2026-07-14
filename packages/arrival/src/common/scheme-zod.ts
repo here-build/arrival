@@ -16,6 +16,7 @@ import { AValue, ctxOf } from "../values/primitives/AValue.js";
 import { ADict, isDictShaped, type DictKey } from "../values/primitives/ADict.js";
 import { AJSObject } from "../values/primitives/AJSObject.js";
 import { AJSArray } from "../values/primitives/AJSArray.js";
+import { markSpineAdopting } from "./spine-adoption.js";
 import { Values } from "../values/primitives/Values.js";
 import { ArrivalError, CodecFidelityError, R7RSError } from "../errors.js";
 import { chargeHeap, heapBudgetMessage } from "../heap-budget.js";
@@ -680,7 +681,61 @@ export function cons<C extends z.ZodTypeAny, D extends z.ZodTypeAny>(carE: C, cd
 // interpreter internals" failure the whole codec vocabulary exists to prevent). The scheme
 // face (z.input) stays `z.instanceof(APair)`, so a scheme-face consumer is unaffected; only a
 // rosetta contract's decoded shape changes, from raw APair to a real [car, cdr] tuple.
-export const pair = cons(value, value);
+// Spine-adopting, for the same reason `listAlike` is: a slot declared `z.pair` means "a NON-EMPTY
+// spine", and a borrowed JS array read as a spine is one. Adoption runs BEFORE validation
+// (define-bake.ts), so the gate judges the projected view — a non-empty array passes, and an empty
+// one adopts to `nil` and is correctly rejected. Without the mark, `(last (some-tool …))` died on a
+// ZodError against a list it could have walked.
+export const pair = markSpineAdopting(cons(value, value));
+
+/**
+ * `listAlike` — the LIST IDENTITY of an argument: "I read this as a SPINE."
+ *
+ * The exact twin of `vector` below. `vector` is the representation-blind *indexed* reading
+ * (`AVector | AJSArray`); this is the representation-blind *spine* reading. One backing value, two
+ * charts, and the CONTRACT is what picks which one the body sees — that is the whole design (see
+ * `values/primitives/AJSArrayList.ts`).
+ *
+ * Marked spine-adopting, so the bake layer projects a matching argument onto its list chart before
+ * the impl runs: a borrowed `AJSArray` becomes an `AJSArrayList` view over the SAME array with the
+ * SAME provenance (O(1), no copy), and an EMPTY array becomes `nil` — which is the only thing that
+ * can make `(null? xs)` honest, since `null?` is `instanceof ANil` and not a term.
+ *
+ * USE IT ON INPUTS ONLY. An output slot that produces a fresh list is a genuine `APair` and should
+ * keep declaring `z.union([z.pair, z.nil])` — widening an output to `listAlike` would claim the verb
+ * might return a borrowed view when it never does.
+ *
+ * The predecessor of this schema was `z.union([z.pair, z.nil])`, spelled out ~14 times across
+ * lists/strings/vectors/srfi. `symbol.native` contracts are type-only (never validated at runtime),
+ * so a tool-returned array sailed straight past those unenforced unions into impls that field-read
+ * `.car`/`.cdr` — and `member` answered `#f` about lists that contained the element, `list->vector`
+ * answered `[]`, `find` threw on void. That the old union's own comment already called it "SHALLOW
+ * pair-or-nil (listAlike)" is the tell: the two had been the same idea in prose long before they
+ * diverged in the code.
+ */
+/**
+ * The type face is deliberately ASYMMETRIC, and it is the adoption guarantee written down:
+ *
+ *   • the RUNTIME predicate ADMITS a borrowed array (`AJSArray`) — it must, or the gate rejects
+ *     every tool result before adoption can ever run;
+ *   • the TYPESCRIPT type is `AListAlike` (`APair | ANil`) — NARROW — because by the time any impl
+ *     or scheme body sees the argument, adoption has already projected it onto its spine chart. An
+ *     impl typed `AListAlike` is therefore telling the truth, not being cast into it.
+ *
+ * That asymmetry is exactly what a `z.union([pair, nil, AJSArray])` could NOT express: the union's
+ * `z.input` would be the wide type, and every list impl in the tree would have to widen its
+ * signature to a case it can never actually receive — importing the borrowed-array case into ~14
+ * impls that adoption exists to keep it out of. The `z.custom` says the honest thing once, here.
+ *
+ * SCHEME FACE ONLY — no codec, so do not put this on a `symbol.rosetta` contract (which decodes to
+ * JS). Its consumers are `symbol.native` (no decode) and `symbol.define` (decode discarded).
+ */
+export const listAlike = markSpineAdopting(
+  named(
+    "listAlike",
+    z.custom<AListAlike>((v) => v instanceof APair || v instanceof ANil || v instanceof AJSArray),
+  ),
+);
 
 // `vector` — representation-blind `AVector | AJSArray` union codec; encode canonically
 // produces AVector (first union branch).
@@ -699,12 +754,48 @@ export function vector<E extends z.ZodTypeAny = typeof value>(element: E = value
           return new AVector(ctx, arr as SchemeValue[]);
         },
       }),
+      // The borrowed arm is DECODE-ONLY, and its `encode` is a door rather than a mint.
+      //
+      // A borrowed array is minted by the MEMBRANE, from a real JS array that already lives in the
+      // JS world (rosetta's inbound `array → borrowed AJSArray` claim). Encoding one FROM scheme
+      // values is the crossing backwards: it would push boxed AValues into a store whose contract
+      // (V's hygiene law — see AJSArray's `boxElement`) is JS-world values ONLY, and the flip would
+      // go unobserved. `firstCtx(arr)` in the old body is the tell — it was reading a RunContext off
+      // the very scheme values it was about to bury in a JS store.
+      //
+      // Unreachable in practice (a union encodes through its FIRST matching arm, which is the
+      // AVector codec above — the canonical encode target, as its comment says), so this was a
+      // loaded gun rather than a live bug. It stays a door so it cannot be re-aimed.
       z.codec(z.instanceof(AJSArray), z.array(element), {
-        decode: (v) => v.source as z.input<E>[],
-        encode: (arr) => {
-          const ctx = firstCtx(arr as SchemeValue[]);
-          chargeHeap(ctx, arr.length);
-          return new AJSArray(ctx, arr as SchemeValue[]);
+        // Decodes to the BOXED elements (`__vector__`), NOT the raw `.source` — so both arms of this
+        // union present the SAME scheme face, which is the only way it is actually
+        // representation-blind rather than merely claiming to be.
+        //
+        // The raw-`source` form was a live bug, and a loud one: the element schema is a SCHEME-face
+        // codec (`z.value` demands an AValue; `z.number` demands an AExact), so raw JSON elements
+        // failed validation every single time. Every `symbol.define` verb contracted on `z.vector`
+        // — SRFI-43's `vector-fold` / `vector-fold-right` / `vector-count` / `vector-index` /
+        // `vector-any` / `vector-binary-search` — therefore threw a raw ZodError on ANY tool-returned
+        // JSON array, while working fine on a `#(1 2 3)` literal. (`symbol.define` decodes for its
+        // throw side-effect; `symbol.native` never validates, which is why the vector NATIVES —
+        // vector-ref/vector-length/vector-map — kept working and hid the split.)
+        //
+        // It stayed green because the law fixture put boxed AStrings in a borrowed `source` — a value
+        // production cannot construct (V's hygiene law). The illegal fixture was masking the bug: the
+        // ONE arrangement under which this decode succeeds is the one arrangement that cannot exist.
+        //
+        // Cost, named: this materializes the borrowed array (`vec()`, cached) at decode. That is the
+        // declared crossing, and only `symbol.define`'s validation walks it — a native still never
+        // boxes. Any verb that decodes a vector is about to fold over every element anyway.
+        decode: (v) => v.__vector__ as z.input<E>[],
+        encode: () => {
+          throw new CodecFidelityError(
+            "vector",
+            "cannot ENCODE a borrowed AJSArray — a borrowed array is minted by the MEMBRANE from a JS-world " +
+              "array (with the crossing's ctx + provenance), never assembled from scheme values. A codec's " +
+              "`encode` has neither, which is exactly why this direction cannot carry lineage. Encode produces " +
+              "an AVector (the canonical first arm of this union).",
+          );
         },
       }),
     ]),

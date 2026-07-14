@@ -127,6 +127,49 @@ export type SchemeValue =
 // letting the chain distribute into an unreadable union of every arm.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// JSWorldValue / JSWorldArray — the JS side of the membrane, AT THE TYPE LEVEL.
+//
+// V's hygiene law (2026-07-14): "Each membrane penetration should be tracked and
+// explicit. We should never accept both a monadic AValue and a primitive JSValue.
+// That is the hygienic discipline that makes every flip between a Scheme entity and
+// a native JS entity OBSERVED — the only way to have hygiene when the host is both
+// the interpreter runner and a Graal-style parallel world."
+//
+// A borrowed store (`AJSArray.source`, and the same rule for AJSObject) holds JS-WORLD
+// VALUES ONLY: primitives, plain objects/arrays, and reverse-membraned egress proxies.
+// The proxy carve-out needs no clause — an egress proxy is a Proxy over a plain target,
+// so it is not an `AValue` and passes on its own merits. It IS a JS-world value; that is
+// what the reverse membrane is for (matryoshka: a scheme value presented to JS, handed
+// back in, still a JS-world citizen).
+//
+// This is stated as a TYPE and not (only) as a runtime invariant on purpose: a throw
+// catches the one path someone happens to execute, while a type catches EVERY violator
+// at once, in tsc, including the ones no test covers. The breakage IS the audit.
+//
+// The limit is honest and worth naming: a caller holding a bare `unknown[]` still passes,
+// because `unknown` genuinely might be a JS value — nothing better is knowable there. What
+// this DOES catch is every caller that statically knows it holds scheme values and buries
+// them in a JS store anyway (`arr as SchemeValue[]` — the real violators).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** `any` detector (the `0 extends (1 & T)` idiom): `any` absorbs every `Extract`, so without
+ *  this an `any[]` — an honest untyped JSON payload — would collapse to `never` and lock out the
+ *  membrane's real callers. `any` means "origin unknown", which is a claim we cannot refute. */
+type IsAny<T> = 0 extends 1 & T ? true : false;
+
+/** `never` iff T is known to carry a boxed scheme value; T otherwise. Tuple-wrapped so a union T
+ *  stays opaque instead of distributing (the AListAlike TS2589 lesson, above). */
+export type JSWorldValue<T> =
+  IsAny<T> extends true ? T : [Extract<T, AValue>] extends [never] ? T : never;
+
+/** A store that may back a borrowed container: an array whose ELEMENT type carries no boxed scheme
+ *  value. `unknown[]` / `any[]` pass (nothing better is knowable at that site); `SchemeValue[]` /
+ *  `AValue[]` collapse to `never`, so the call site FAILS TO COMPILE. Those are the real violators:
+ *  a caller that statically knows it holds scheme values and buries them in a JS store anyway. */
+export type JSWorldArray<T extends readonly unknown[]> =
+  IsAny<T[number]> extends true ? T : [Extract<T[number], AValue>] extends [never] ? T : never;
+
 /**
  * `jsToScheme<T>(ctx, value: T, …)`'s honest return type — the AValue shape a
  * JS value of static type T boxes into. Mirrors jsToScheme's INBOUND_CLAIMS

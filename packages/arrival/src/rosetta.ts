@@ -8,7 +8,7 @@
  * playback frame are its only two producers now).
  */
 
-import { AValue, EMPTY_PROVENANCE, pointProvenance, unionProvenance } from "./values/primitives/AValue.js";
+import { AValue, EMPTY_PROVENANCE, mergeProvenance, pointProvenance, unionProvenance } from "./values/primitives/AValue.js";
 import { fromJs } from "./values/primitives/boxing.js";
 import { type RunContext } from "./values/primitives/RunContext.js";
 import { deepProvenance } from "./values/deep-provenance.js";
@@ -364,8 +364,27 @@ export const INBOUND_CLAIMS: readonly InboundClaim[] = [
     box: (ctx, v, p, seen) => {
       invariant(v instanceof AValue, "inbound claim 'AValue': box called off its predicate");
       if (p === EMPTY_PROVENANCE || p === v.provenance) return v;
+      // ADDITIVE (V's ruling, 2026-07-14): a crossing may ADD its origin, never ERASE the value's.
+      //
+      // A rosetta promises HOLISTIC causation — input-as-a-whole causes output-as-a-whole — because
+      // a JS impl is opaque and we cannot see that it did not mix its inputs. That is an EDGE we are
+      // entitled to add. It is NOT a licence to overwrite what the value already knew about itself.
+      //
+      // This used to REPLACE, and the failure was silent and structural: a value's origin set could
+      // stop being a SUPERSET of its true dependency set, which is the exact precondition `uneval`'s
+      // Galois slicing rests on (provenance/uneval.ts: "the effective value's origin set IS its
+      // dependency set"). The slice then omits the form that produced the dropped id, and the re-run
+      // cannot reproduce the value. Over-approximation is safe (a bigger sound slice still derives);
+      // under-approximation is fatal. Union makes `origin ⊇ dependencies` hold by construction.
+      //
+      // It even covers a SOURCE that hands back an already-provenanced value: the fresh point records
+      // "this value was explicitly CHOSEN by the source" and the value's own origin records where it
+      // came from. Both edges are real. (Rare to the point of never — but it is now sound rather than
+      // accidentally sound.)
+      const merged = mergeProvenance(v.provenance, p);
+      if (merged === v.provenance) return v;
       const deep = v["arrival/withProvenanceDeep"];
-      return deep === undefined ? v.withProvenance(p) : deep.call(v, ctx, p, seen);
+      return deep === undefined ? v.withProvenance(merged) : deep.call(v, ctx, p, seen);
     },
   },
   {

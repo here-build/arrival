@@ -22,9 +22,18 @@
  * nil` — a nil car is a legitimate element), and the empty-pair sentinel.
  */
 
+// NOTE (2026-07-14): these cycles are tied through `__tieKnot`, the designed door, rather than by
+// raw `p.cdr = p` assignment. `APair`'s car/cdr became prototype GETTERS (so `AJSArrayList`, the
+// lazy spine view over a borrowed JS array, can override them) — and a getter-only property cannot
+// be assigned, so the old raw writes now throw `TypeError: Cannot set property cdr`.
+//
+// That they threw is the useful part: these tests were the ONLY code in the tree still tying knots
+// outside the door. `__tieKnot`'s doc has always said it is "the ONE mutation path through APair's
+// readonly slots" — the tests just quietly weren't using it, and nothing could tell. The getters
+// made the fence real.
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { APair } from "../values/primitives/APair.js";
+import { __tieKnot, APair } from "../values/primitives/APair.js";
 import { nil } from "../values/primitives/ANil.js";
 import { AExact } from "../values/primitives/AExact.js";
 
@@ -66,7 +75,7 @@ describe("APair[Symbol.iterator]", () => {
   it("throws on a cyclic spine", () => {
     const p = new APair(CONSTANT_CTX, num(1), nil);
     // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
-    p.cdr = p;
+    __tieKnot(p, "cdr", p);
     expect(() => [...p]).toThrow(/cycle/i);
   });
 });
@@ -75,7 +84,7 @@ describe("Pair.toJS — one-way array conversion", () => {
   it("throws on a self-cycle (cdr points at the head)", () => {
     const p = new APair(CONSTANT_CTX, num(1), nil);
     // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
-    p.cdr = p;
+    __tieKnot(p, "cdr", p);
     expect(() => p["arrival/toJS"]()).toThrow(/cycle/i);
   });
 
@@ -83,9 +92,9 @@ describe("Pair.toJS — one-way array conversion", () => {
     const a = new APair(CONSTANT_CTX, num(1), nil);
     const b = new APair(CONSTANT_CTX, num(2), nil);
     // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
-    a.cdr = b;
+    __tieKnot(a, "cdr", b);
     // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
-    b.cdr = a;
+    __tieKnot(b, "cdr", a);
     expect(() => a["arrival/toJS"]()).toThrow(/cycle/i);
   });
 
@@ -94,7 +103,7 @@ describe("Pair.toJS — one-way array conversion", () => {
   it("throws on a mark_cycles-annotated cycle too (metadata does not exempt)", () => {
     const p = new APair(CONSTANT_CTX, num(1), nil);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (p as any).cdr = p;
+    __tieKnot(p, "cdr", p);
     p.mark_cycles();
     expect(p.have_cycles()).toBe(true);
     expect(() => p["arrival/toJS"]()).toThrow(/cycle/i);
@@ -127,7 +136,7 @@ describe("Pair.toString cycle handling (uses ref-marker notation — fundamental
   it("does NOT throw on a self-cycle (renders via #0= / #0# markers)", () => {
     const p = new APair(CONSTANT_CTX, num(1), nil);
     // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
-    p.cdr = p;
+    __tieKnot(p, "cdr", p);
     p.mark_cycles();
     expect(() => p.toString()).not.toThrow();
     const rendered = p.toString();
@@ -138,9 +147,9 @@ describe("Pair.toString cycle handling (uses ref-marker notation — fundamental
     const a = new APair(CONSTANT_CTX, num(1), nil);
     const b = new APair(CONSTANT_CTX, num(2), nil);
     // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
-    a.cdr = b;
+    __tieKnot(a, "cdr", b);
     // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
-    b.cdr = a;
+    __tieKnot(b, "cdr", a);
     a.mark_cycles();
     expect(() => a.toString()).not.toThrow();
   });

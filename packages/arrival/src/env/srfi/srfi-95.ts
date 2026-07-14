@@ -15,6 +15,7 @@ import * as z from "../../common/scheme-zod.js";
 import dedent from "dedent";
 import { resolveMethod, symbol, type MaybePromise } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
+import { attachOffendingValue } from "../../errors.js";
 import { tf } from "../../values/tagless-final.js";
 import type { SchemeValue } from "../../values/types.js";
 
@@ -58,8 +59,11 @@ export default new EnvCapability("scheme/srfi-95", {
         const [seq, comparator] = args;
         const m = resolveMethod(seq, tf("sort"));
         if (m === undefined) {
-          throw new TypeError(
-            `sort: the ${seq == null ? String(seq) : typeof seq} operand does not support sort (no ${tf("sort")}).`,
+          throw attachOffendingValue(
+            new TypeError(
+              `sort: the ${seq == null ? String(seq) : typeof seq} operand does not support sort (no ${tf("sort")}).`,
+            ),
+            seq,
           );
         }
         // The per-primitive sort term algebra (module header) declares a SchemeValue return —

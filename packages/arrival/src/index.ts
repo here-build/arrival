@@ -142,6 +142,13 @@ export { coerceNumeric } from "./values/op-helpers.js";
 export { wrappedOps } from "./env/r7rs/error-objects.js";
 export { ensureBaseAssembled as initBridge } from "./eval/generator-exec.js";
 
+// OFFENDING_VALUE (errors.ts) — symbol-keyed metadata a collection-type-error (take/
+// map/vector-ref/reduce/car/…) carries naming the value it refused because it wasn't a
+// collection at all. `offendingValueOf` is the one supported read path (bounded `.cause`
+// walk); root-surfaced so a downstream teaching door (e.g. arrival-manifold's
+// stringly-collection hint) can read it without a private subpath into errors.ts.
+export { attachOffendingValue, offendingValueOf, OFFENDING_VALUE } from "./errors.js";
+
 // Generator-based evaluator: flat trampoline for stack safety and performance.
 export {
   evaluate as evaluateGenerator,

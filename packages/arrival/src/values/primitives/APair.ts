@@ -17,17 +17,17 @@ import { CLASS, CYCLES, DATA, LOCATION, REF } from "../../well-known-symbols.js"
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { applyCallback } from "./ACallable.js";
 import invariant from "tiny-invariant";
-import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
+import { AValue, EMPTY_PROVENANCE, mergeProvenance } from "./AValue.js";
 import { deriveSortCompare, withInputProvenance } from "../op-helpers.js";
 import { type SeenMap, structuralEqual } from "../structural-equal.js";
 import { type SourceLocation } from "../../errors.js";
 import { is_false, is_plain_object } from "../value-guards.js";
 import { is_promise } from "../../eval/guards.js";
 import { promise_all } from "../../utils/promises.js";
-// Circular import (benign — same pattern AVector/AJSArray already document): collapseProvenance
-// deep-walks APair among other carriers, so provenance-collapse.ts imports APair back. Both
-// directions are referenced only inside function bodies (concatPair/cdr here; the walk closure
-// there), never at module-eval time, so the cycle never bites.
+// NO LONGER a cycle: provenance-collapse.ts is now a leaf (it dispatches on the
+// `arrival/provenanceChildren` term instead of importing every value class to instanceof them).
+// That matters structurally — the old cycle made it impossible for any value class to `extends
+// APair`, which AJSArrayList must do.
 import { collapseProvenance } from "../../provenance-collapse.js";
 import { reStampChild } from "./deep-restamp.js";
 import { egressContainerProxy } from "../egress-proxy.js";
@@ -177,7 +177,37 @@ function mark_cycles(pair: APair<any, any>): void {
  * door, never ad-hoc mutation). The ugly name IS the fence; not exported from the package index.
  */
 export function __tieKnot(pair: AListAlike, slot: "car" | "cdr", v: SchemeValue): void {
-  (pair as unknown as { car: SchemeValue; cdr: SchemeValue })[slot] = v;
+  // Writes the protected SLOT, not the accessor (which has no setter — see the getters on APair).
+  // A knot can only be tied into a value that STORES its spine, so this is also the reason the
+  // door must never be pointed at a lazy view (`AJSArrayList`): a view computes car/cdr from its
+  // backing array and would silently swallow the write. All three consumers (clone, the reader's
+  // datum-label resolution, syntax-rules' ellipsis surgery) target cells they minted themselves,
+  // so this cannot arise today; the invariant below makes that structural rather than incidental.
+  Error.invariant(
+    !(pair instanceof APair) || Object.getPrototypeOf(pair) === APair.prototype,
+    "__tieKnot: refusing to tie a knot into a lazy pair view — only a stored cons cell can hold one",
+  );
+  (pair as unknown as { _car: SchemeValue; _cdr: SchemeValue })[slot === "car" ? "_car" : "_cdr"] = v;
+}
+
+// B2 PLUS support (`arrival/tagless-final/get` below) — small LOCAL fold helpers, not
+// imported from AJSObject.ts's `foldMemberName` (same `:`-strip idea) to avoid pulling
+// that file's heavier import graph (interop-access.ts, rosetta.ts) into this leaf-ish
+// primitive; APair is already reached from rosetta.ts's build path (jsToScheme →
+// APair.fromArray), so an APair → AJSObject → rosetta.ts import would risk a real cycle,
+// not just a benign one. Two lines duplicated on purpose.
+function foldAlistKeyName(key: SchemeValue | string): string {
+  const raw = typeof key === "string" ? key : String((key as { valueOf?: () => unknown } | null | undefined)?.valueOf?.() ?? key);
+  return raw.startsWith(":") ? raw.slice(1) : raw;
+}
+
+/** An alist entry's key name, iff `entryCar` is itself a symbol/keyword-symbol or
+ *  string (the only key shapes `:key` can ever be asked to match) — `undefined` for
+ *  anything else (a numeric or pair key means this entry is never a `:key` candidate). */
+function alistEntryKeyName(entryCar: SchemeValue): string | undefined {
+  if (entryCar instanceof ASymbol) return foldAlistKeyName(entryCar.valueOf() as string);
+  if (entryCar instanceof AString) return entryCar.valueOf();
+  return undefined;
 }
 
 export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AValue {
@@ -192,13 +222,32 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   [CYCLES]?: { car?: string | AListAlike; cdr?: string | AListAlike };
   [REF]?: string;
 
-  constructor(
-    ctx: RunContext,
-    public readonly car: Car,
-    public readonly cdr: Cdr,
-    provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
-  ) {
+  // `car`/`cdr` are PROTOTYPE ACCESSORS over protected slots, not own data fields — and the
+  // difference is load-bearing, not stylistic. A subclass cannot lazily override an own data
+  // field: an own property shadows a prototype accessor, so a subclass's `get cdr()` would never
+  // be consulted once `super()` had assigned `this.cdr`. The accessor form is what lets a value
+  // BE a pair without STORING a spine — see `AJSArrayList`, the O(1) spine view over a borrowed
+  // JS array, whose `cdr` is computed from an offset and never materialized.
+  //
+  // The readonly CONTRACT is unchanged (getter, no setter) — and is now enforced more honestly
+  // than before, since the old `public readonly` was already being written through a cast by
+  // `__tieKnot` (the knot-tying door, above). That door now writes the slots directly; it remains
+  // the ONE mutation path, and it is the only code in the tree that may touch `_car`/`_cdr`.
+  protected _car: Car;
+  protected _cdr: Cdr;
+
+  get car(): Car {
+    return this._car;
+  }
+
+  get cdr(): Cdr {
+    return this._cdr;
+  }
+
+  constructor(ctx: RunContext, car: Car, cdr: Cdr, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
     super(ctx, provenance);
+    this._car = car;
+    this._cdr = cdr;
   }
 
   // Static methods
@@ -442,6 +491,11 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     return this["arrival/print"]();
   }
 
+  /** The spine's children: car and cdr (the read-side twin of withProvenanceDeep — see AValue). */
+  override ["arrival/provenanceChildren"](): Iterable<unknown> {
+    return [this.car, this.cdr];
+  }
+
   ["arrival/print"](): string {
     this.mark_cycles();
     const parts: string[] = [];
@@ -497,7 +551,11 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // as the last element, per the one-way list→array projection. A cyclic SPINE
   // still throws the iterator's taught invariant — an infinite list has no finite
   // array projection; cycles THROUGH elements terminate via the proxy tracker.
-  ["arrival/toJS"](): unknown[] {
+  // `readonly`: a pair's egress array is a SNAPSHOT, never a handle to mutate the spine through.
+  // It is also what lets `AJSArrayList` return its BORROWED source BY IDENTITY — a mutable return
+  // type would have forced a cast there, laundering the borrow away and breaking the round-trip
+  // law (`schemeToJs(adopt(arr)) === arr`).
+  ["arrival/toJS"](): readonly unknown[] {
     const spine: SchemeValue[] = [...this];
     return egressContainerProxy(this, "array", {
       keys: () => spine.map((_, i) => String(i)),
@@ -532,6 +590,33 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     );
   }
 
+  // B2 PLUS (benchmark-defect-register.md) — READ-side tolerance only: `:key` (the
+  // keyword accessor, ASymbol.ts's AKeywordSymbol) now finds an entry when THIS pair's
+  // spine is alist-shaped (`((a . 1) (b . 2) …)`), the same way it already reads a
+  // dict/object. Walks the spine looking for a sub-pair whose car names `key`; the FIRST
+  // match wins (alist shadowing semantics, same as `assq`/`assoc`). No match (either the
+  // key isn't present, or this pair isn't alist-shaped at all — an element that isn't
+  // itself a pair is simply never a candidate) reads as nil, identical to a dict's
+  // missing-key answer — this method never THROWS, it only ever finds-or-doesn't.
+  // LOAD-BEARING per the register: nothing is converted or promoted here — the pair
+  // stays a pair, `car`/`cdr`/every other pair op is completely unaffected; this is one
+  // extra capability offered ONLY when explicitly asked for via `:key`, never
+  // shape-sniffing applied unprompted (an array of 2-tuples that ISN'T meant as a lookup
+  // table is never touched by anything else in the pair algebra).
+  ["arrival/tagless-final/get"](key: SchemeValue | string): SchemeValue {
+    const wanted = foldAlistKeyName(key);
+    let node: SchemeValue = this;
+    while (node instanceof APair) {
+      const entry = node.car;
+      if (entry instanceof APair) {
+        const entryName = alistEntryKeyName(entry.car);
+        if (entryName !== undefined && entryName === wanted) return entry.cdr;
+      }
+      node = node.cdr;
+    }
+    return nil;
+  }
+
   /**
    * Parser/macro-attached metadata (`LOCATION`, `CYCLES`, `REF` — well-known-symbols.ts)
    * must survive — losing it breaks stack traces and reader-cycle reconstruction.
@@ -558,7 +643,13 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     seen: WeakSet<object> = new WeakSet(),
   ): APair<SchemeValue, SchemeValue> {
     seen.add(this);
-    return new APair(ctx, reStampChild(this.car, ctx, p, seen), reStampChild(this.cdr, ctx, p, seen), p);
+    return new APair(
+      ctx,
+      reStampChild(this.car, ctx, p, seen),
+      reStampChild(this.cdr, ctx, p, seen),
+      // UNION, not replace — the crossing ADDS its origin to what this cell already knew.
+      mergeProvenance(this.provenance, p),
+    );
   }
 
   // ----------------------------------------------------------------------
@@ -960,4 +1051,221 @@ function countPairElements(head: APair<any, any> | ANil): number {
     node = node.cdr;
   }
   return n;
+}
+
+// AJSArrayList — the SPINE reading of a borrowed JS array. Zero-copy, O(1) per step.
+//
+// ─── THE LAW THIS IMPLEMENTS (V, 2026-07-14) ─────────────────────────────────────────────────
+//
+//   "The membrane has a nature similar to the manifold. Its design purpose is to provide a
+//    seamless experience, with adjustments and attunements unnoticeable, in multiple layers of
+//    computation."
+//
+// A manifold is CHARTS + TRANSITION MAPS: each chart is locally an ordinary, total coordinate
+// system, and moving between charts is invisible. So a borrowed JS array is ONE POINT (the backing
+// `source` + its provenance) with TWO CHARTS over it:
+//
+//   AJSArray  (the INDEXED chart) — `vector?` #t, vector-ref/length/map/…, prints `#(1 2 3)`
+//   AJSArrayList (the SPINE chart) — `pair?` #t, car/cdr, terminates in ANil, prints `(1 2 3)`
+//
+// Asking for the spine reading does NOT convert the value, any more than asking for polar
+// coordinates moves the point. There is no copy here and no codec: the view holds the SAME
+// `source` reference and the SAME provenance set, and `cdr` is an offset bump.
+//
+// The four rules this file exists to honor:
+//   1. ONE identity (backing store + provenance), MANY charts.
+//   2. The CONSUMER'S CONTRACT selects the chart (see `listAlike` adoption) — never the membrane.
+//   3. EVERY CHART IS TOTAL OVER ITS OWN ALGEBRA. ← the bug that started this. See below.
+//   4. Transitions are O(1), lossless, provenance-preserving. A copy is not a transition.
+//
+// ─── WHY EXHAUSTION IS DECIDED AT MINT, NOT AT READ ──────────────────────────────────────────
+//
+// This is the whole bug, and the reason `at()` is the only way to build one.
+//
+// `null?` is NOT a term — it is `obj instanceof ANil`, hard-wired (env/r7rs/equality.ts:205-216).
+// So the ONLY value that can terminate a scheme list walk is the ANil singleton (or a provenance
+// clone of it). No amount of term-level tolerance can fake that: a container that answers "I am
+// empty" is still not `instanceof ANil`, and `(if (null? xs) base (loop (cdr xs)))` will not stop.
+//
+// The predecessor bug: `AVector`'s loose `cdr` returned `new AVector(slice(1))`, so exhaustion
+// produced the EMPTY VECTOR — a fixpoint that `null?` can never see. Every `listAlike` verb spun
+// forever on any tool-returned JSON array. The stopgap (`cdr` → nil at exhaustion, on AVector)
+// terminated the walk but did it by BENDING THE VECTOR CHART — a vector whose cdr is nil is a
+// chimera, and it manufactured a fresh defect (`find-tail` with a match returned an AVector tail,
+// which its own `z.union([z.pair, z.nil])` OUTPUT contract then rejected with a raw ZodError).
+//
+// The honest fix is not a terminator bolted onto the wrong chart — it is that THE SPINE CHART IS
+// BORN NORMALIZED. `at()` never constructs a view at or past the end; it returns `nil`. So:
+//   • a view is ALWAYS a genuine, non-empty pair — `car` and `cdr` are total on it, no guards;
+//   • an EMPTY borrowed array adopts to `nil` ITSELF, which is the only thing that can ever make
+//     `(null? xs)` honest — and no term-level tolerance could have.
+//
+// ─── WHY IT EXTENDS APair (nominal, not structural) ──────────────────────────────────────────
+//
+// Pair-ness in this tree is NOMINAL — `is_pair` is `instanceof APair` (value-guards.ts:50), `z.pair`
+// is `z.instanceof(APair)`, ~378 sites read it, and several native impls FIELD-READ `.car`/`.cdr`
+// (findImpl, srfi-1.ts:208-221). And it is RIGHT that it is nominal: the car/cdr TERMS are
+// deliberately over-provided as tolerance — `ANil` answers both (nil-tolerance) and is not a pair;
+// `AVector` answers both loosely (strict-gated) and MUST report `pair?` #f (R7RS disjointness). So
+// "answers car/cdr" ≠ "is a pair". Pair-ness is IDENTITY, not capability. The honest way for a new
+// value to gain pair identity is therefore to JOIN THE CLASS — which is exactly what this does, and
+// which is why every one of those 378 sites keeps working untouched.
+//
+// (Consequence, and the one prerequisite: APair's `car`/`cdr` had to become prototype getters over
+// protected slots. An own data field cannot be lazily overridden — it shadows the accessor.)
+/** The BORROWED-ARRAY container a spine view is projected from. Structural, not `AJSArray` by
+ *  name, purely to keep this module free of an import edge back to AJSArray.ts (which imports
+ *  APair). `AJSArray` is its only implementor. */
+export interface BorrowedArray {
+  readonly ctx: RunContext;
+  readonly provenance: ReadonlySet<number>;
+  readonly source: readonly unknown[];
+  /** THE declared membrane penetration for this container's elements — the ONE place a raw JS
+   *  element crosses into the scheme world. The view does not reimplement it, it ASKS. */
+  elementAt(i: number): SchemeValue;
+  /** Re-stamping a view means re-stamping its OWNER and re-projecting — the store is shared, so
+   *  the stamp lives on the store. */
+  withProvenance(p: ReadonlySet<number>): BorrowedArray;
+}
+
+export class AJSArrayList extends APair<SchemeValue, SchemeValue> {
+  // Interop-boundary brand (the family rule in `isInteropBoundary`): an own [CLASS] static makes
+  // this an arrival value class, so the prototype walk stops here and the view's host-side
+  // internals (`owner`, `offset`) are never reachable from scheme via member auto-resolution.
+  static [CLASS] = "js-array-list";
+
+  // `kind` stays "pair" (inherited). The kind IS the chart: this value's identity is the spine.
+
+  private carBox?: SchemeValue;
+  private cdrCell?: AJSArrayList | ANil;
+
+  /**
+   * The view holds its OWNER, not a bare element array — and that is the hygiene, not a detail.
+   *
+   * V's law: "each membrane penetration should be tracked and explicit; never accept both a monadic
+   * AValue and a primitive JSValue — that is the only way every flip between a Scheme entity and a
+   * native JS entity is OBSERVED, when the host is both the interpreter runner and a Graal-style
+   * parallel world."
+   *
+   * A view that took a bare `readonly unknown[]` would be a second, independent boxing policy over
+   * somebody else's store — and it could be pointed at ANY array-shaped thing, which is exactly how
+   * an earlier cut came to project it over `AVector.__vector__` (already-boxed elements). There was
+   * no error: `jsToScheme` merely RE-STAMPED each element with the container's provenance, and
+   * per-element lineage was destroyed silently on every vector spine-walk. Only the term-carrier law
+   * noticed.
+   *
+   * Holding the owner makes that unrepresentable. There is exactly ONE backing store, exactly ONE
+   * crossing (`owner.elementAt`), and it belongs to the class that owns the store (P7). The view
+   * cannot invent a second reading of the membrane because it does not have one.
+   */
+  private constructor(
+    readonly owner: BorrowedArray,
+    readonly offset: number,
+  ) {
+    // The `nil, nil` placeholders are never read: both accessors are overridden below, and
+    // `__tieKnot` — the one path that could write the underlying slots — refuses a view by
+    // invariant. They exist only to satisfy APair's constructor.
+    super(owner.ctx, nil, nil, owner.provenance);
+  }
+
+  /**
+   * THE mint door — and the normalizer. Exhaustion is decided HERE, once, at construction:
+   * an offset at or past the end is not an empty view, it is `nil`. Nothing downstream needs an
+   * emptiness guard, because an empty view cannot exist — which is what makes `car`/`cdr` total.
+   *
+   * The terminal `nil` carries the container's provenance (conservation: that a walk ENDED is
+   * itself grounded in the tool result that ended it) — the stopgap dropped to the bare singleton
+   * here and lost the stamp.
+   */
+  static at(owner: BorrowedArray, offset: number): AJSArrayList | ANil {
+    if (offset >= owner.source.length) {
+      return owner.provenance.size > 0 ? (nil.withProvenance(owner.provenance) as ANil) : nil;
+    }
+    return new AJSArrayList(owner, offset);
+  }
+
+  // ── the two accessors that ARE the chart ───────────────────────────────────────────────────
+  // Memoized so a re-walk of the same spine is allocation-free and `(eq? (car xs) (car xs))` holds.
+  // Total by construction: `at()` guarantees `offset` is a live index.
+
+  override get car(): SchemeValue {
+    return (this.carBox ??= this.owner.elementAt(this.offset));
+  }
+
+  override get cdr(): AJSArrayList | ANil {
+    return (this.cdrCell ??= AJSArrayList.at(this.owner, this.offset + 1));
+  }
+
+  // ── terms ─────────────────────────────────────────────────────────────────────────────────
+  // Everything NOT overridden here is inherited from APair and is already correct, because every
+  // APair method reads `this.car`/`this.cdr` — which are now the accessors above. map/filter/
+  // reduce/sort/take/drop/print/equals/iterator all walk the view and re-cons genuine spines, so
+  // views never propagate virally into results. That containment is free, by inheritance.
+
+  /** Inherits APair's semantics (the element's OWN provenance, never the container's) — but
+   *  reads through the memoized accessor instead of a stored slot. */
+  override ["arrival/tagless-final/car"](): SchemeValue {
+    const car = this.car;
+    return withInputProvenance([car], car);
+  }
+
+  /**
+   * MANDATORY override — inheriting APair's `cdr` term would be O(n²).
+   *
+   * APair's version calls `collapseProvenance(cdr)`, a DEEP walk of the tail, to repair the
+   * "rebuild therefore drops" bug: when a spine is consed, only the outer head gets stamped, so a
+   * projected sub-spine has an empty stamp of its own and must be re-grounded from what it reaches.
+   *
+   * That repair is BOTH ruinous and unnecessary here:
+   *   • ruinous — the tail is a lazy view, so walking it to collapse provenance would force the
+   *     crossing of every remaining element, ON EVERY `cdr` STEP. Quadratic, and it would defeat the
+   *     entire point of a zero-copy view.
+   *   • unnecessary — the bug it repairs cannot arise. A view's tail is minted WITH the owner's
+   *     provenance already on it (it shares the owner), so the sub-spine's stamp is correct by
+   *     construction. There is nothing to re-derive.
+   */
+  override ["arrival/tagless-final/cdr"](): AJSArrayList | ANil {
+    return this.cdr;
+  }
+
+  /** O(1) — the backing store knows its own size, and a view's spine is `length - offset` by
+   *  construction. (APair's version walks the spine and runs a cycle check; a view's offset
+   *  strictly increases, so it cannot cycle, and it need not walk to count.) */
+  override ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
+    return withInputProvenance([this], this.owner.source.length - this.offset);
+  }
+
+  /**
+   * Crossing OUT. At offset 0 the view returns the RAW BORROWED SOURCE — so borrowed-identity
+   * survives a round trip through the spine reading (`schemeToJs(adopt(arr)) === arr`), the
+   * round-tripping-bifunctor law the membrane rests on.
+   *
+   * Past offset 0, the tail of a borrowed array has no JS identity to borrow — no object in the
+   * host IS that suffix — so the exit is an honest raw `slice`. Named as a cost, not hidden: it
+   * copies the suffix's references (it does NOT cross them, which is already better than APair's
+   * exit, whose iterator snapshot boxes every element).
+   */
+  override ["arrival/toJS"](): readonly unknown[] {
+    return this.offset === 0 ? this.owner.source : this.owner.source.slice(this.offset);
+  }
+
+  override valueOf(): readonly unknown[] {
+    return this["arrival/toJS"]();
+  }
+
+  /** The remaining BORROWED elements, raw and uncrossed. The collapse walk only collects
+   *  provenance off values that already ARE AValues, so this forces no crossing. Overriding
+   *  APair's `[car, cdr]` answer is what keeps that true — the inherited one would walk the view
+   *  chain and cross every element on the way. */
+  override ["arrival/provenanceChildren"](): Iterable<unknown> {
+    return this.offset === 0 ? this.owner.source : this.owner.source.slice(this.offset);
+  }
+
+  /** A view is a projection of its owner; re-stamping it means re-stamping the OWNER and
+   *  re-projecting — never rebuilding a spine, never minting a fresh origin. Re-stamping cannot
+   *  change the store's LENGTH, so `offset` stays live and the result is always a view, never nil
+   *  (which is why this constructs directly rather than going through `at`). */
+  override withProvenance(p: ReadonlySet<number>): AJSArrayList {
+    return new AJSArrayList(this.owner.withProvenance(p), this.offset);
+  }
 }

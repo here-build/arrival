@@ -45,8 +45,14 @@ describe("collapseProvenance — sound over every structured carrier", () => {
     expect(sorted(collapseProvenance(vec))).toEqual([1, 2]);
   });
 
-  it("deep-walks a AJSArray's source (now an AValue; its source elements are still deep-walked)", () => {
-    const arr = new AJSArray(CONSTANT_CTX, [stamped("a", 1), stamped("b", 2)]);
+  // A BORROWED array's source holds JS-WORLD VALUES ONLY (V's hygiene law — `JSWorldArray`,
+  // values/types.ts), so its elements carry NO lineage of their own: the container's own provenance
+  // — the crossing that made it — is the whole signal, and the deep walk finds nothing further.
+  // (The old form put boxed AStrings in the store and asserted their per-element ids. Production
+  // cannot construct that value, and reading such an element would have had `jsToScheme` re-stamp it
+  // with the container's provenance anyway — so the ids it pinned were a fiction.)
+  it("a borrowed array grounds in its CONTAINER's provenance — raw JS elements have none of their own", () => {
+    const arr = new AJSArray(CONSTANT_CTX, ["a", "b"], new Set([1, 2]));
     expect(sorted(collapseProvenance(arr))).toEqual([1, 2]);
   });
 

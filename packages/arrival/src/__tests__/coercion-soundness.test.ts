@@ -103,7 +103,17 @@ const cmp = (a: unknown, b: unknown) => String((a as AString).valueOf()).localeC
 
 const mkPair = () => new APair(CONSTANT_CTX, el("a", 100), new APair(CONSTANT_CTX, el("b", 101), nil)).withProvenance(new Set([7]));
 const mkVec = () => new AVector(CONSTANT_CTX, [el("a", 100), el("b", 101)], new Set([7]));
-const mkArr = () => new AJSArray(CONSTANT_CTX, [el("a", 100), el("b", 101)]);
+// A BORROWED array holds JS-world values only (V's hygiene law, 2026-07-14 — `JSWorldArray` in
+// values/types.ts), so its elements are RAW and carry no lineage of their own. It therefore has
+// exactly ONE origin — the crossing that made it — and every element inherits THAT on the way back
+// in (AJSArray's Option-C discipline). Per-element ids on a borrowed array were always a fiction:
+// a tool returns one JSON payload from one call, and there is no second source to attribute to.
+//
+// The old fixture minted `new AJSArray(ctx, [el("a",100), el("b",101)])` — boxed AValues buried in a
+// JS store — which production cannot construct and which `jsToScheme` would silently re-stamp anyway.
+// Container id 7 matches mkPair/mkVec above; unlike those OWNED carriers, the elements share it.
+const ARR_ORIGIN = 7;
+const mkArr = () => new AJSArray(CONSTANT_CTX, ["a", "b"], new Set([ARR_ORIGIN]));
 
 // ════════════════════════════════════════════════════════════════════════════
 // STRATUM 1 — SOUND: per-element provenance survives the structure-preserving
@@ -154,15 +164,16 @@ describe("G6 sound — collectElements over a SchemeVector (repaired)", () => {
     expect(provOf(r)).toEqual([7]);
   });
 
-  it("length(AJSArray) reads the CONTAINER's own stamp — empty here, a separate ticketed gap (mkArr mints no container-level provenance)", async () => {
+  it("length(AJSArray) reads the CONTAINER's own stamp — mkArr's borrowed container carries {7} (the crossing's provenance), so C4's flat read surfaces it", async () => {
     const r = await force(listOps.length(mkArr()));
     expect(Number((r as { valueOf(): unknown }).valueOf())).toBe(2);
-    // AJSArray's own top-level provenance is empty by construction here — the R2 grouping-
-    // fact mint for AJSArray/ADict is a separate, already-ticketed gap
-    // (term-carrier.law.test.ts's `equalsContainerHasNoGroupingFact`); C4 correctly reads
-    // THAT empty stamp rather than deep-unioning the elements, so the count comes back
-    // with no provenance box at all.
-    expect(provOf(r)).toEqual([]);
+    // Hygiene law (V, 2026-07-14): mkArr() is minted `new AJSArray(ctx, ["a","b"], new
+    // Set([ARR_ORIGIN]))` — the CONTAINER's own top-level provenance is no longer empty (unlike
+    // the old, now-illegal fixture that stamped nothing at the container level and buried boxed
+    // AValues in the raw store instead). C4 reads that flat stamp directly — not a deep union of
+    // the (now-unboxed, ungrounded) elements — so the count carries the container's {7}, the same
+    // shape as mkVec's row above.
+    expect(provOf(r)).toEqual([ARR_ORIGIN]);
   });
 });
 
@@ -280,7 +291,7 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
   });
   it("car(AJSArray): loose projects index 0 WITH its box; strict throws (a vector is not a pair)", async () => {
     expect(tf("car") in mkArr()).toBe(true);
-    expect(provOf(await force(mkArr()[tf("car")](CONSTANT_CTX)))).toEqual([100]);
+    expect(provOf(await force(mkArr()[tf("car")](CONSTANT_CTX)))).toEqual([ARR_ORIGIN]);
     expect(() => mkArr()[tf("car")](makeRunContext({ strict: true }))).toThrow(PortabilityError);
   });
   it("cdr(Pair): the tail spine carries the remaining element's box", async () => {
@@ -288,7 +299,7 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
   });
   it("cdr(AJSArray): loose returns the rest as a vector (boxes preserved); strict throws", async () => {
     expect(tf("cdr") in mkArr()).toBe(true);
-    expect(elemProvs(await force(mkArr()[tf("cdr")](CONSTANT_CTX)))).toEqual([[101]]);
+    expect(elemProvs(await force(mkArr()[tf("cdr")](CONSTANT_CTX)))).toEqual([[ARR_ORIGIN]]);
     expect(() => mkArr()[tf("cdr")](makeRunContext({ strict: true }))).toThrow(PortabilityError);
   });
   it("assoc(key, alist): the matched pair's key + value boxes both survive", async () => {
@@ -337,8 +348,12 @@ describe("vector? / vector-ref dispatch via the tagless protocol (no instanceof 
     expect(((await vectorSymbols["vector?"].run!(mkPair())) as ABool).valueOf()).toBe(false);
     expect(((await vectorSymbols["vector?"].run!(el("x", 1))) as ABool).valueOf()).toBe(false);
   });
-  it("vector-ref dispatches to the operand's method — borrowed array boxes element k lazily", () => {
-    expect(provOf(vectorSymbols["vector-ref"].impl!(mkArr(), 1))).toEqual([101]);
+  it("vector-ref dispatches to the operand's method — borrowed array's element inherits the CONTAINER's provenance (no per-element id survives the raw store)", () => {
+    // Hygiene law (V, 2026-07-14): mkArr()'s source is raw JS ("a","b") with no lineage of its
+    // own — AJSArray.boxElement stamps every lazy read with the CONTAINER's own provenance
+    // ({ARR_ORIGIN}), not a distinct per-index id. mkVec's elements are individually boxed (an
+    // OWNED carrier), so index 0 still projects its own minted id.
+    expect(provOf(vectorSymbols["vector-ref"].impl!(mkArr(), 1))).toEqual([ARR_ORIGIN]);
     expect(provOf(vectorSymbols["vector-ref"].impl!(mkVec(), 0))).toEqual([100]);
   });
   it("vector-ref on a non-vector throws (the operation form — unlike vector?'s #f)", () => {
@@ -349,11 +364,31 @@ describe("vector? / vector-ref dispatch via the tagless protocol (no instanceof 
   it("the whole vector family works on a borrowed array via asVector's protocol dispatch", () => {
     // vector-length boxes its count now (AExact — the scheme face of z.number's output).
     expect(Number((vectorSymbols["vector-length"].impl!(mkArr()) as { valueOf(): unknown }).valueOf())).toBe(2);
-    expect(elemProvs(vectorSymbols["vector->list"].impl!(mkArr()))).toEqual([[100], [101]]);
+    // Hygiene law: every element materialized off a borrowed array inherits the CONTAINER's own
+    // provenance ({ARR_ORIGIN}) — there is no per-element id left to carry (raw JS never had one).
+    expect(elemProvs(vectorSymbols["vector->list"].impl!(mkArr()))).toEqual([[ARR_ORIGIN], [ARR_ORIGIN]]);
     expect(vectorSymbols["vector-copy"].impl!(mkArr())).toBeInstanceOf(AVector);
   });
   it("z.vector accepts a borrowed AJSArray as well as a boxed AVector (the union codec), rejects a pair", () => {
-    // v2 vector(value) is the AVector|AJSArray union codec — a borrowed AJSArray decodes too.
+    // This assertion is the one that surfaced a LIVE, PRE-EXISTING BUG — worth recording, because it
+    // is the same shape as every other defect this session.
+    //
+    // `z.vector` is a union of two codecs, and they used to decode into DIFFERENT WORLDS: the
+    // AVector arm yielded `__vector__` (BOXED elements, which the element codec can then decode),
+    // while the AJSArray arm yielded the RAW `.source`. The element schema is a SCHEME-face codec
+    // (`value` demands an AValue; `z.number` demands an AExact), so raw JSON elements failed
+    // validation every single time. Every `symbol.define` verb contracted on `z.vector` — SRFI-43's
+    // vector-fold / vector-fold-right / vector-count / vector-index / vector-any — therefore threw a
+    // raw ZodError on ANY tool-returned JSON array, while working fine on a `#(1 2 3)` literal.
+    // (The vector NATIVES kept working because `symbol.native` never validates — which is exactly
+    // what hid the split.)
+    //
+    // It stayed GREEN only because the old fixture put boxed AStrings in a borrowed `source` — a
+    // value production cannot construct (the hygiene law). The single arrangement under which that
+    // decode succeeded was the single arrangement that cannot exist: the illegal fixture was masking
+    // the bug. The borrowed arm now decodes to `__vector__` like its sibling, so the union is
+    // genuinely representation-blind and this row is true again, for the right reason.
+    // Pinned end-to-end in `listalike-divergence.law.test.ts` (the vector-surface block).
     expect(vector(value).safeParse(mkArr()).success).toBe(true);
     expect(vector(value).safeParse(mkVec()).success).toBe(true);
     expect(vector(value).safeParse(mkPair()).success).toBe(false);

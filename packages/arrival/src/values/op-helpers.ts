@@ -22,10 +22,11 @@ import { AString } from "./primitives/AString.js";
 import { AExact } from "./primitives/AExact.js";
 import { AInexact } from "./primitives/AInexact.js";
 import { is_false } from "./value-guards.js";
+import { is_promise } from "../eval/guards.js";
 import { type ANumeric } from "./numbers.js";
 import { type SchemeValue } from "./types.js";
 import { ACharacter } from "./primitives/ACharacter.js";
-import { ComparatorRequiredError } from "../errors.js";
+import { attachOffendingValue, ComparatorRequiredError } from "../errors.js";
 import { tf } from "./tagless-final.js";
 
 // Eager-stamp oracle flag: `withInputProvenance`/`mintVerdict` below are the
@@ -123,13 +124,63 @@ export function assertAllocatable(len: number, fnName: string): void {
 // Value-type coercion
 
 /** Unwrap SchemeCharacter → string */
+/**
+ * Unwrap an `ACharacter`. Refuses anything else — it does NOT silently mint a wrong value.
+ *
+ * B1-SIBLING (found by the cross-chart divergence gate, 2026-07-14). This was a BLIND CAST:
+ * `(char as ACharacter).__char__`. Handed anything that is not a character — an `AString`, a
+ * number, `nil` — it read `undefined` off a value that has no such field, and the caller then
+ * did `chars.join("")`, which turns `undefined` into `""` and swallows the evidence whole. So
+ * `(list->string '(1 2))` answered `""`. Not an error. Not a wrong string. THE EMPTY STRING —
+ * indistinguishable from a correct answer over an empty list.
+ *
+ * It is exactly the failure `stringValue` above was hardened against a few hours earlier — a
+ * coercion helper minting a plausible-looking wrong value instead of a door — and it survived that
+ * audit because the audit swept `stringValue`'s call sites and never turned to look at its
+ * neighbour. The class, not the instance, is the thing to fix: a coercion helper in this tree may
+ * never answer with a value it had to invent.
+ */
 export function charValue(char: unknown): string {
-  return (char as ACharacter).__char__;
+  if (char instanceof ACharacter) return char.__char__;
+  throw attachOffendingValue(
+    new TypeError(`expected a character, got ${char instanceof AValue ? char.kind : typeof char}: ${previewOf(char)}`),
+    char,
+  );
 }
 
-/** Unwrap AString.valueOf() or String(str) */
+// B1 (benchmark-defect-register.md) — container/nil kinds `stringValue` refuses to
+// silently coerce. `String(nil)` → `"()"` (a plausible-looking but WRONG string)
+// propagated through all 51 string ops (`(string-length nil)` → 2, `(string-append "x"
+// nil)` → `"x()"`, `(string=? nil "()")` → `#t`); one model saw the length-2 result,
+// concluded "probably truncated," and fled to Python. AUDITED (all ~40 call sites in
+// strings.ts/srfi-13.ts/srfi-28.ts/bytevectors.ts/vectors.ts/equality.ts): every one
+// declares a `z.string`-typed argument and expects a genuine AString — none depends on
+// coercing a container. `symbol.native`'s contracts are TYPE-ONLY (never runtime-
+// validated, `_bake.ts`'s own doctrine) — a container reaching here is exactly the
+// unchecked-native-tier hole the register calls out, not a caller doing it on purpose.
+// Leaf/scalar kinds (character, symbol, number, boolean) KEEP the `String(x)` fallback —
+// narrower than "throw on anything non-AString" per the register's explicit ruling.
+const STRING_COERCION_REFUSED_KINDS = new Set(["pair", "nil", "vector", "object", "dict"]);
+
+/** Best-effort short preview for a door message — never throws, truncated. */
+function previewOf(v: unknown): string {
+  let s: string;
+  try {
+    s = String(v);
+  } catch {
+    s = "<unprintable>";
+  }
+  return s.length > 40 ? `${s.slice(0, 40)}…` : s;
+}
+
+/** Unwrap AString.valueOf(); String(str) for leaf/scalar kinds; throws for container/nil
+ *  kinds instead of minting a plausible-looking wrong string (B1). */
 export function stringValue(str: unknown): string {
-  return str instanceof AString ? str.valueOf() : String(str);
+  if (str instanceof AString) return str.valueOf();
+  if (str instanceof AValue && STRING_COERCION_REFUSED_KINDS.has(str.kind)) {
+    throw attachOffendingValue(new TypeError(`expected a string, got ${str.kind}: ${previewOf(str)}`), str);
+  }
+  return String(str);
 }
 
 /** Coerce to index number for vector/string ops */
@@ -161,7 +212,7 @@ export function asVector(obj: unknown, fnName: string): SchemeValue[] {
     return obj.__vector__;
   }
   if (Array.isArray(obj)) return obj; // transitional raw-array tolerance (S10 will remove this)
-  throw new TypeError(`${fnName}: expected vector`);
+  throw attachOffendingValue(new TypeError(`${fnName}: expected vector`), obj);
 }
 
 /**
@@ -187,7 +238,7 @@ export function asBytevector(obj: unknown, fnName: string): Uint8Array {
     case typeof Buffer !== "undefined" && obj instanceof Buffer:
       return new Uint8Array(obj.buffer, obj.byteOffset, obj.byteLength);
     default:
-      throw new TypeError(`${fnName}: expected bytevector, got ${typeof obj}`);
+      throw attachOffendingValue(new TypeError(`${fnName}: expected bytevector, got ${typeof obj}`), obj);
   }
 }
 
@@ -296,6 +347,23 @@ export function deriveSortCompare(
     let callOrdinal = 0;
     return (a, b) => {
       const v = call(a, b);
+      // S1 (benchmark-defect-register.md) — a LAMBDA comparator's settled value is a
+      // Promise (lambda bodies run through the trampolined async evaluator; a native/
+      // rosetta comparator never is). None of the three verdict branches below recognize
+      // a Promise, so the `is_false` fallthrough minted a CONSTANT -1 for every pair —
+      // TimSort then emits a deterministic wrong order (= reverse(input)) with NO error.
+      // Interim honest door (full async threading is a Wave-4-sized rework of `sort`'s
+      // own term algebra — see the register): throw instead of silently mis-sorting.
+      if (is_promise(v)) {
+        throw attachOffendingValue(
+          new TypeError(
+            "sort: a lambda comparator is not supported yet (its result resolves " +
+              "asynchronously) — use a native comparator directly, e.g. `(sort xs <)`, " +
+              "or sort by a derived key instead of comparing with a lambda.",
+          ),
+          v,
+        );
+      }
       let verdict: number;
       if (typeof v === "number") verdict = v;
       else if (v instanceof AExact || v instanceof AInexact) verdict = Number(v.valueOf());
@@ -338,11 +406,11 @@ export function coerceNumeric(value: unknown, ctx: RunContext = CONSTANT_CTX): A
     case value instanceof AExact:
     case value instanceof AInexact:
       return value;
+    // §2.3's opaque-host-value law (docs/working-proposals/arrival-one-number-rework.md):
+    // a bigint is NOT a scheme number — never silently minted into a (possibly
+    // out-of-range) exact. Door here, the arithmetic-coercion entry point, naming the
+    // explicit escape hatch (`bigint->number`, the safe-range-checked conversion).
     case typeof value === "bigint":
-      // §2.3's opaque-host-value law (docs/working-proposals/arrival-one-number-rework.md):
-      // a bigint is NOT a scheme number — never silently minted into a (possibly
-      // out-of-range) exact. Door here, the arithmetic-coercion entry point, naming the
-      // explicit escape hatch (`bigint->number`, the safe-range-checked conversion).
       throw new TypeError(
         "host bigint is not a scheme number — use bigint->number (safe-range checked) to convert explicitly",
       );

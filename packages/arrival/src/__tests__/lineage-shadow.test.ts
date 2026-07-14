@@ -49,6 +49,7 @@ import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
 import { fromJs } from "../values/primitives/boxing.js";
 import { APair } from "../values/primitives/APair.js";
+import { ANil } from "../values/primitives/ANil.js";
 import type { SchemeValue } from "../values/types.js";
 import { classify, fullCone } from "../values/lineage.js";
 import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
@@ -342,7 +343,13 @@ describe("SHADOW SKIP — macro-head / keyword-projection forms abstain (no thro
     // (v0.2/B2). exec under the flag must not throw — the form is recorded uncovered.
     await initBridge();
     const env = mintFrame(inferenceEnv, `shadow-skip-${seq++}`);
-    bindValue(env, "a", sStr("hello", 100));
+    // `a` is `nil` (was a bound string) — since benchmark-defect-register.md's B2, a
+    // keyword accessor on a LEAF kind with no member protocol (a string included)
+    // throws instead of silently returning nil; nil→nil is the one receiver shape
+    // guaranteed to stay silent (legitimate absence). This test's own point is the
+    // SHADOW mechanism's abstention for a `:`-prefixed head, not keyword-accessor
+    // type-safety, so any non-throwing receiver preserves its intent.
+    bindValue(env, "a", new ANil(CONSTANT_CTX, new Set([100])));
     // `(:length a)` resolves via the keyword-accessor membrane pluck; whatever its
     // value/cone, shadow abstains because the head starts with ':'.
     await expect(exec(`(:length a)`, { env, irLineage: true })).resolves.toBeDefined();

@@ -164,18 +164,34 @@ describe("CRITICAL: sandbox escape vectors", () => {
 // boundary-crossing inherited props collapse to nil/undefined.
 // ============================================================================
 
+// Since benchmark-defect-register.md's B2, a receiver with no `arrival/tagless-final/get`
+// term (a lambda declares none) THROWS instead of silently returning nil
+// (ASymbol.ts's AKeywordSymbol — see keyword-accessor-leaf-door.test.ts). Both outcomes
+// are equally SAFE for this security invariant: neither a thrown error nor a boxed nil
+// is `Function`/`Function.prototype`. `pluck` below tolerates either so these tests keep
+// asserting the actual invariant (no leak) rather than which of the two safe shapes the
+// no-member-protocol door takes.
+async function pluck(src: string): Promise<unknown> {
+  try {
+    const [v] = await exec(src, { env: inferenceEnv });
+    return v;
+  } catch (e) {
+    return e; // a throw is a safe, non-leaking outcome too
+  }
+}
+
 describe("CRITICAL: accessor isolation leaks", () => {
   it(":keyword plucking 'constructor' off a lambda does not leak Function", async () => {
     await initBridge();
-    const [fromLambda] = await exec("(:constructor (lambda (x) x))", { env: inferenceEnv });
-    // Pre-fix: === Function (RCE primitive). Post-fix: nil.
+    const fromLambda = await pluck("(:constructor (lambda (x) x))");
+    // Pre-fix: === Function (RCE primitive). Post-fix: a door (throws) — either way, never Function.
     expect(fromLambda).not.toBe(Function);
   });
 
   it(":keyword plucking '__proto__' / 'prototype' off a lambda is blocked", async () => {
     await initBridge();
-    const [proto] = await exec("(:prototype (lambda (x) x))", { env: inferenceEnv });
-    const [dunder] = await exec("(:__proto__ (lambda (x) x))", { env: inferenceEnv });
+    const proto = await pluck("(:prototype (lambda (x) x))");
+    const dunder = await pluck("(:__proto__ (lambda (x) x))");
     expect(proto).not.toBe(Function.prototype);
     // __proto__ must not hand back Function.prototype (→ chains to constructor).
     expect(dunder).not.toBe(Object.getPrototypeOf(() => {}));

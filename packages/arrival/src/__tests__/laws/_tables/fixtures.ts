@@ -25,7 +25,9 @@ import { APair } from "../../../values/primitives/APair.js";
 import { AVector } from "../../../values/primitives/AVector.js";
 import { AJSArray } from "../../../values/primitives/AJSArray.js";
 import { ADict } from "../../../values/primitives/ADict.js";
+import { CONSTANT_CTX } from "../../../values/primitives/RunContext.js";
 import { collapseProvenance } from "../../../provenance-collapse.js";
+import { schemeToJs } from "../../../rosetta.js";
 import * as z from "../../../common/scheme-zod.js";
 import type { ResolvingAmbient } from "../../../AmbientRuntime.js";
 import type { SchemeValue } from "../../../values/types.js";
@@ -75,11 +77,11 @@ export interface LawEnv {
  *    character carrier's elements. Binding bare sidesteps the unwrap entirely —
  *    `stampFresh`'s `raw instanceof AValue` arm always fires, preserving the
  *    original element's exact class.
- *  - `borrow-array`: handing the raw JS array of already-boxed args straight to
- *    `fromJS` (membrane.ts) is exactly the "fromJS on a JS array of boxed
- *    elements" idiom: `fromJS`'s array branch (`new AJSArray(CONSTANT_CTX,
- *    value)`) keeps the array's members exactly as given — each `src`-minted box
- *    survives.
+ *  - `borrow-array`: CROSSES each already-boxed arg out to the JS world (`schemeToJs`) before
+ *    borrowing the resulting JS array, and unions the consumed args' provenance onto the
+ *    CONTAINER. A borrowed store holds JS-world values only (V's hygiene law) — see the binding
+ *    below for why the old "fromJS on a JS array of boxed elements" idiom was minting a value
+ *    production cannot construct.
  */
 export async function withLawEnv(): Promise<LawEnv> {
   const env = await freshEnv();
@@ -90,7 +92,34 @@ export async function withLawEnv(): Promise<LawEnv> {
     mintedIds.push(id);
     return stampFresh(raw, id);
   });
-  bindValue(env, "borrow-array", (...args: SchemeValue[]) => fromJS(args));
+  // `borrow-array` CROSSES its arguments into the JS world, then borrows the result.
+  //
+  // It used to hand the raw JS array of ALREADY-BOXED args straight to `fromJS`, producing an
+  // AJSArray whose `source` held AValues. That is illegal under the hygiene law (V, 2026-07-14):
+  // a borrowed store holds JS-WORLD VALUES ONLY — primitives, plain objects/arrays, and
+  // reverse-membraned egress proxies. `AJSArray`'s store type (`JSWorldArray`, values/types.ts)
+  // now refuses it at compile time, and its element crossing refuses it at runtime.
+  //
+  // It was not a harmless fiction. `jsToScheme` DEEP-RE-STAMPS an AValue with the provenance it is
+  // handed, so a boxed element buried in a borrowed store gets its own lineage overwritten with the
+  // container's the moment anything reads it. The fixture was minting a value production cannot
+  // make, and pinning per-element ids that a borrowed array is incapable of carrying.
+  //
+  // The honest shape is exactly AString's, one row above in CARRIERS: three `src`-stamped boxes are
+  // CONSUMED by the constructor, their provenance UNIONS onto the container, and the elements
+  // themselves land ungrounded (raw JS has no lineage — it acquires the container's on the way back
+  // in, which is AJSArray's documented Option-C discipline). So `elementBoxes` answers `null` for
+  // this carrier now (see its doc), and the container's own provenance ⊇ {1,2,3} is the signal.
+  bindValue(
+    env,
+    "borrow-array",
+    (...args: SchemeValue[]) =>
+      new AJSArray(
+        CONSTANT_CTX,
+        args.map((a) => schemeToJs(a, {})),
+        collapseProvenance(...args),
+      ),
+  );
   return { env, mintedIds };
 }
 
@@ -158,8 +187,17 @@ export function elementBoxes(value: unknown): readonly (readonly number[])[] | n
   if (value instanceof AVector) {
     return value.__vector__.map((e) => [...(e instanceof AValue ? e.provenance : [])].sort((a, b) => a - b));
   }
+  // AJSArray answers `null` — the same class as AString/ABytevector, and for the same reason.
+  // A BORROWED store holds JS-world values only (V's hygiene law; `JSWorldArray` in values/types.ts),
+  // and a raw JS value carries NO lineage of its own — it inherits the CONTAINER's at the crossing
+  // (AJSArray's Option-C discipline). So a borrowed array has no per-element ids to report, and the
+  // container's own `.provenance` is its only provenance signal.
+  //
+  // This reader used to map over `source` looking for boxed elements. It could only ever find any
+  // in a value production cannot construct — which is precisely what the old `borrow-array` fixture
+  // was illegally minting (see withLawEnv).
   if (value instanceof AJSArray) {
-    return value.source.map((e) => [...(e instanceof AValue ? e.provenance : [])].sort((a, b) => a - b));
+    return null;
   }
   if (value instanceof ADict) {
     return value.keys().map((k) => {

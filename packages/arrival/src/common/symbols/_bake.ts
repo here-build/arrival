@@ -610,6 +610,12 @@ export interface DefineSymbolDef {
   readonly doc?: string;
   readonly in: z.ZodTypeAny;
   readonly out: z.ZodTypeAny;
+  /** Spine adoption (values/adopt-spine.ts) — precomputed at BAKE from the AUTHORED slot list,
+   *  because the normalized `in` schema above has already lost the per-slot identity the mark is
+   *  keyed on. `undefined` when no slot declares `z.listAlike`, which is the common case and
+   *  costs the call path nothing. Applied by define-bake.ts BEFORE the scheme body runs: the body
+   *  walks a real spine (car/cdr/null?), never a borrowed vector it cannot terminate on. */
+  readonly adoptArgs?: (args: readonly unknown[]) => unknown[];
   /** See the class doc above. */
   readonly callable: boolean;
   /** Is the call boundary's RETURN a single value (`isSingleOutput`'s reading of the

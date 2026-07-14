@@ -24,6 +24,7 @@ import * as z from "./scheme-zod.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { ArrivalError } from "../errors.js";
 import { CLASS } from "../well-known-symbols.js";
+import { suggestFromVocabulary } from "../unbound-variable.js";
 
 /** Same convention as arrival-manifold bind.ts's `previewOf` (design doc §2.5). */
 const PREVIEW_MAX = 60;
@@ -82,9 +83,17 @@ function issueLines(
 ): ProblemLine[] {
   const path = issue.path.map(String).join(".");
   // unrecognized_keys carries an EMPTY path and its own key list — render one line PER
-  // key so every line keeps the `:<param> —` head the own-decode clue family parses.
+  // key so every line keeps the `:<param> —` head the own-decode clue family parses. A key
+  // NEAR a declared param (edit distance / canonical-form, via the same vocabulary-sourced
+  // machinery unbound-variable.ts uses for symbol typos) gets a did-you-mean suffix — this
+  // is the reject-and-hard-error PATH; a key with no near declared param never reaches here
+  // at all when it's the ONLY problem (see `tryDropFarUnknownKeys` below, B5's tolerance).
   if (issue.code === "unrecognized_keys") {
-    return issue.keys.map((k) => `  :${k} — unknown key`);
+    const declaredKeys = Object.keys(shape);
+    return issue.keys.map((k) => {
+      const [suggestion] = suggestFromVocabulary(k, declaredKeys);
+      return suggestion ? `  :${k} — unknown key (did you mean :${suggestion}?)` : `  :${k} — unknown key`;
+    });
   }
   const sentVal = valueAtPath(sent, issue.path);
   // Absent input reads as "missing (required)" whatever shape the schema takes —
@@ -156,11 +165,96 @@ function schemaFaceProblems(shape: ZodRawShape, sent: Record<string, unknown>): 
   return problems;
 }
 
+// ─── B5 tolerance — far-unknown-key drop-with-note ─────────────────────────────────
+// benchmark-defect-register.md B5: an unknown kwarg key is either a TYPO (near a
+// declared param — keep the hard door, above) or genuine NOISE (far from every param —
+// a model flattening a nested-object field, an invented arg, a stray envelope name).
+// Only the SECOND case tolerates: dropped from `sent`, the call proceeds, and a NOTE
+// says what was ignored. Load-bearing (register constraint #7): the split runs BEFORE
+// throwing, and a call is only ever tolerated when unrecognized_keys is its ONLY
+// problem AND every one of those keys is far — one near key, or any co-occurring real
+// issue (missing required, invalid_type, a scheme-face mismatch), still hard-rejects
+// with every problem listed, unchanged from before this fix.
+
+/** The manifold's per-call envelope args (mirrors arrival-manifold/src/names.ts's
+ *  RESPONSE_SIZE_ARG_NAME / RESPONSE_ATTACHMENTS_ARG_NAME / EVAL_TIMEOUT_ARG_NAME) —
+ *  duplicated as leaf string literals, not imported: arrival-manifold depends on this
+ *  package, never the reverse, so this core module cannot reach up to name theirs.
+ *  Tier C (register): both benchmark models independently invented `:response-size` on
+ *  an INNER tool call, meaning "cap this result" — it's a real arg, just one level up
+ *  (the REPL tool's own envelope), not this tool's. Naming the mixup here beats a bare
+ *  "not a parameter of this tool." */
+const ENVELOPE_ARG_NAMES: ReadonlySet<string> = new Set(["response-size", "response-attachments", "eval-timeout-ms"]);
+
+function noteForDroppedKey(key: string): string {
+  if (ENVELOPE_ARG_NAMES.has(key)) {
+    return (
+      `:${key} is not a parameter of this tool — it's an argument of the REPL tool ` +
+      `itself (the manifold envelope wrapping every call), not this inner tool call.`
+    );
+  }
+  return `:${key} is not a parameter of this tool — it was ignored.`;
+}
+
+/** Dropped-far-unknown-kwarg notes, keyed by the exact decoded object `decodeKwargsStrict`
+ *  returns. THIS IS A DISCOVERY SEAM, not a wired channel: kwargs-rejection.ts sits below
+ *  the observation/metadata layer (mcp-substrate's runner.ts / AttachmentSink, register §E)
+ *  and must not depend upward on it. A caller holding the returned object (rosetta.ts's
+ *  `[decodeKwargsStrict(...)]` call site, or a layer above it) drains via
+ *  `drainDroppedKwargNotes(value)` and forwards the notes into the observation's metadata
+ *  channel — until that wiring lands, notes are produced correctly but not yet surfaced to
+ *  the model. Drains ONCE (delete-on-read) so a re-render never re-notes the same drop. */
+const droppedKwargNotes = new WeakMap<object, readonly string[]>();
+
+export function drainDroppedKwargNotes(value: unknown): readonly string[] | undefined {
+  if (value === null || (typeof value !== "object" && typeof value !== "function")) return undefined;
+  const notes = droppedKwargNotes.get(value as object);
+  if (notes !== undefined) droppedKwargNotes.delete(value as object);
+  return notes;
+}
+
+/** Attempts the B5 tolerance path for a caught ZodError: returns `{ value }` when EVERY
+ *  problem in `error` is an `unrecognized_keys` issue AND every one of those keys is FAR
+ *  (no near declared param) — the far keys are stripped from `sent` and the shape is
+ *  re-decoded. Returns `undefined` (caller falls back to the hard door) for every other
+ *  shape: a mixed near/far set, any co-occurring non-unrecognized_keys issue, or a
+ *  filtered re-decode that still fails for some other reason. */
+function tryDropFarUnknownKeys(
+  shape: ZodRawShape,
+  sent: Record<string, unknown>,
+  error: ZodError,
+): { value: unknown } | undefined {
+  const unrecognizedIssues = error.issues.filter(
+    (i): i is ZodError["issues"][number] & { keys: string[] } => i.code === "unrecognized_keys",
+  );
+  if (unrecognizedIssues.length !== error.issues.length || unrecognizedIssues.length === 0) return undefined;
+
+  const declaredKeys = Object.keys(shape);
+  const unknownKeys = unrecognizedIssues.flatMap((i) => i.keys);
+  const anyNear = unknownKeys.some((k) => suggestFromVocabulary(k, declaredKeys).length > 0);
+  if (anyNear) return undefined; // a typo among them — keep the hard door (load-bearing #7)
+
+  const filtered: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(sent)) {
+    if (!unknownKeys.includes(k)) filtered[k] = v;
+  }
+  let value: unknown;
+  try {
+    value = z.decode(z.strictObject(shape) as unknown as ZodType, filtered);
+  } catch {
+    return undefined; // dropping didn't actually resolve it — fall back to the hard door
+  }
+  if (value !== null && (typeof value === "object" || typeof value === "function")) {
+    droppedKwargNotes.set(value as object, unknownKeys.map(noteForDroppedKey));
+  }
+  return { value };
+}
+
 /**
  * The kwargs decode chokepoint (rosetta.ts's record-shaped `inputRest` path): STRICT
  * (unknown keys reject — never silently strip) + the scheme-face guard + the §2.5
- * humanizer. Throws a plain `Error` carrying the frozen grammar; non-Zod errors from
- * the decode propagate untouched.
+ * humanizer + B5's far-unknown-key tolerance. Throws a plain `Error` carrying the frozen
+ * grammar; non-Zod errors from the decode propagate untouched.
  */
 export function decodeKwargsStrict(
   qualifiedName: string,
@@ -175,6 +269,8 @@ export function decodeKwargsStrict(
     return z.decode(z.strictObject(shape) as unknown as ZodType, sent);
   } catch (e) {
     if (e instanceof ZodError) {
+      const dropped = tryDropFarUnknownKeys(shape, sent, e);
+      if (dropped !== undefined) return dropped.value;
       const problems = e.issues.flatMap((issue) => issueLines(issue, sent, shape));
       throw new KwargsRejectionError(qualifiedName, problems);
     }

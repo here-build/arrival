@@ -21,7 +21,7 @@ import { chargeHeap } from "../../heap-budget.js";
 import { is_promise } from "../../eval/guards.js";
 import { is_false } from "../value-guards.js";
 import { promise_all } from "../../utils/promises.js";
-import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
+import { AValue, EMPTY_PROVENANCE, mergeProvenance } from "./AValue.js";
 import { egressContainerProxy } from "../egress-proxy.js";
 import { ANil, nil } from "./ANil.js";
 import { strictGate } from "../../errors.js";
@@ -137,7 +137,8 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     return new AVector(
       ctx,
       this.__vector__.map((el) => reStampChild(el, ctx, p, seen)),
-      p,
+      // UNION, not replace — the crossing ADDS its origin to what this container already knew.
+      mergeProvenance(this.provenance, p),
     );
   }
 
@@ -173,8 +174,8 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     const a = this.__vector__;
     const b = other.__vector__;
     if (a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) {
-      if (!structuralEqual(a[i], b[i], seen)) return false;
+    for (const [i, element] of a.entries()) {
+      if (!structuralEqual(element, b[i], seen)) return false;
     }
     return true;
   }
@@ -184,11 +185,21 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     return new AVector(this.ctx, [...this.__vector__, ...other.__vector__]);
   }
 
-  // STRICT divergence: car/cdr are PAIR ops in R7RS — a vector is not a pair. LOOSE mode treats
-  // a vector list-like (car → element 0; cdr → the rest AS A VECTOR slice), so
-  // `(car borrowed-array)` keeps working and cXr composes. STRICT flags it non-portable,
-  // pointing at vector-ref/slicing — same tolerant-loose/faithful-strict split as map/filter.
-  // Mirrors ANil's nil-tolerance.
+  // STRICT divergence: car/cdr are PAIR ops in R7RS — a vector is not a pair. STRICT flags it
+  // non-portable, pointing at vector-ref/slicing. LOOSE mode tolerates it — and what LOOSE MEANS
+  // is now stated exactly: asking a vector for `car`/`cdr` IS asking for its SPINE READING, so
+  // that is what it hands back — an `AJSArrayList` view over the same elements (see that file's
+  // header for the chart law). The vector does not become a list; it PROJECTS one, O(1), sharing
+  // the backing store and the provenance.
+  //
+  // This replaces a stopgap that answered `cdr` with an `AVector` SLICE — which made loose mode a
+  // lie in two directions at once: the slice was not a pair (so `pair?` stayed #f mid-walk and
+  // `z.union([z.pair, z.nil])` output contracts rejected it — `find-tail` on a match threw a raw
+  // ZodError), and the empty slice was not `ANil` (so `null?` — which is `instanceof ANil`, hard —
+  // could never fire, and every `(if (null? xs) base (loop (cdr xs)))` body spun forever). The
+  // view fixes both at the root: it IS an APair, and its exhaustion IS nil, decided at mint.
+  //
+  // Vector OPERATIONS (vector-ref/length/slice/map/…) are untouched. This is only the spine chart.
   ["arrival/tagless-final/car"](runCtx?: RunContext): SchemeValue {
     strictGate(runCtx, {
       op: "car",
@@ -199,17 +210,42 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     return this.__vector__.length > 0 ? this.__vector__[0] : nil;
   }
 
-  ["arrival/tagless-final/cdr"](runCtx?: RunContext): AVector {
+  ["arrival/tagless-final/cdr"](runCtx?: RunContext): AVector | ANil {
     strictGate(runCtx, {
       op: "cdr",
       rule: "R7RS `cdr` requires a pair; a vector is not a pair",
       alternative: "use vector slicing or `(vector->list v)`",
     });
-    // loose: the rest as a VECTOR slice (index 1..) — empty/singleton → the empty vector
+    // loose: the rest AS A VECTOR SLICE — a genuine vector stays a genuine vector.
+    //
+    // This is deliberately NOT an `AJSArrayList` spine view, and the reason is the whole lesson of
+    // the B3 rework. The infinite-loop bug was never about genuine vectors: a scheme vector literal
+    // `#(1 2 3)` is never produced by an MCP tool — every tool result arrives as an `AJSArray`. The
+    // hang came from `AJSArray` DELEGATING its car/cdr into `vec()` and landing here, so the fix
+    // belongs there (AJSArray now projects its own spine view straight off its borrowed `source`),
+    // not here. A stopgap that made THIS `cdr` terminate in `nil` was patching the wrong type — it
+    // taught vectors to lie about being lists to fix a bug that lived in the borrowed array.
+    //
+    // Keeping the view out of here also keeps `AJSArrayList` honest: its backing store is then
+    // ALWAYS raw JSON from a tool, so its `car` is always a genuine (lazy) plane crossing. Pointing
+    // it at an OWNED vector's already-boxed elements would have fused two different arrows into one
+    // class — a plane crossing and a pure reading — and forced a runtime `instanceof AValue` test to
+    // tell them apart. (It also silently re-stamped those elements with the container's provenance,
+    // which the term-carrier law caught.)
+    //
+    // Residual, named rather than papered over: a hand-written `null?`-terminated walk over a
+    // VECTOR LITERAL still will not terminate, because the exhausted slice is `#()` and `null?` is
+    // ANil-only. That predates this work, only bites values a tool cannot produce, and strict mode
+    // doors it. The honest fix, if it ever bites, is `(vector->list v)` — not a chart that lies.
     return new AVector(this.ctx, this.__vector__.slice(1), this.provenance);
   }
 
   // Print protocol — R7RS external repr `#(elem …)`, each element via `printValue`.
+  /** Elements ground the vector; the vector itself does not stamp from them (see AValue). */
+  override ["arrival/provenanceChildren"](): Iterable<unknown> {
+    return this.__vector__;
+  }
+
   ["arrival/print"](): string {
     return `#(${this.__vector__.map((el) => printValue(el)).join(" ")})`;
   }
@@ -317,7 +353,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     runCtx: RunContext,
   ): AVector {
     chargeHeap(runCtx, this.__vector__.length);
-    const out = this.__vector__.slice();
+    const out = [...this.__vector__];
     // `runCtx` threaded (Wave 1 — see APair's sort for the full note): the comparator now
     // runs under THIS invocation's live ctx, not CONSTANT_CTX.
     out.sort(deriveSortCompare(comparator as ((a: unknown, b: unknown) => unknown) | undefined, runCtx));

@@ -258,7 +258,7 @@ export default new EnvCapability("scheme/strings", {
     ),
 
     "list->string": symbol.native`list->string: string built from a list of characters`(
-      { input: [z.union([z.pair, z.nil])], output: [z.string] },
+      { input: [z.listAlike], output: [z.string] },
       function (this: CallCtx, list) {
         const chars: string[] = [];
         let current: SchemeValue = list;
@@ -415,7 +415,7 @@ export default new EnvCapability("scheme/strings", {
     ),
 
     join: symbol.native`join: the list elements folded to one string with a separator (LIPS extension)`(
-      { input: [z.string, z.union([z.pair, z.nil])], output: [z.union([z.string, z.string])] },
+      { input: [z.string, z.listAlike], output: [z.union([z.string, z.string])] },
       function (this: CallCtx, separator: SchemeValue, list: SchemeValue): AString {
         // Collapsing op: fold the list to one string, then re-stamp the DEEP union of
         // every element's lineage (+ the separator's) — else `(join sep inferred-list)`

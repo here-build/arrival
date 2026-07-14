@@ -81,7 +81,14 @@ describe.each([false, true])("non-list non-absent args throw in BOTH modes — s
 
 // A vector is not a pair, but LOOSE mode reads it list-like (car → index 0, cdr → a vector
 // slice) — the tolerant-loose / faithful-strict split, same as map/filter on a vector. STRICT
-// throws (a vector is not a pair → vector-ref). So `(car borrowed-array)` keeps working loose.
+// throws (a vector is not a pair → vector-ref).
+//
+// A GENUINE VECTOR STAYS A GENUINE VECTOR here, deliberately (see AVector's `cdr`). The B3 hang
+// was never about vectors: no MCP tool can produce a `#(1 2 3)` — every tool result arrives as an
+// `AJSArray`, which now projects its OWN spine view off its borrowed source and terminates in nil.
+// A stopgap that made THIS `cdr` terminate was patching the wrong type, and pointing the borrowed
+// array's view at an owned vector's already-boxed elements would have fused a plane crossing with
+// a pure reading (and silently re-stamped every element's provenance — see boxElement's invariant).
 describe("car/cdr on a vector — loose reads it list-like, strict throws", () => {
   it("loose: (car #(1 2 3)) → 1 and (cdr #(1 2 3)) → #(2 3)", async () => {
     expect(is_false((await run("(equal? (car #(1 2 3)) 1)", false))[0])).toBe(false);

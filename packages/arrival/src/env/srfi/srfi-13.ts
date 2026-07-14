@@ -399,7 +399,7 @@ export default new EnvCapability("scheme/srfi-13", {
     "string-join":
       symbol.native`string-join: the list of strings folded to one with a delimiter (default single space) (SRFI-13)`(
         {
-          input: [z.union([z.pair, z.nil]), z.string.optional()],
+          input: [z.listAlike, z.string.optional()],
           output: [z.union([z.string, z.string])],
           // scheme-zod has no element-typed list schema, so the list input is `z.value` (→ `unknown`)
           // and the output union images to the redundant `string | string`. Author-assert what the

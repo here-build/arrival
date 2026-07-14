@@ -170,8 +170,19 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
           const result = await run1(env, value, `(map (lambda (x) x) c)`);
           const before = elementBoxes(value);
           const after = elementBoxes(result);
-          expect(before).toEqual([[ids[0]], [ids[1]], [ids[2]]]);
-          expect(after).toEqual(before);
+          if (before !== null) {
+            expect(before).toEqual([[ids[0]], [ids[1]], [ids[2]]]);
+            expect(after).toEqual(before);
+          } else {
+            // AJSArray (borrowed, hygiene law V 2026-07-14): `elementBoxes` answers null —
+            // the raw source has no per-element boxes to preserve, mirroring AString/
+            // ABytevector (fixtures.ts's doc). map materializes through `vec()`, so every
+            // element inherits the CONTAINER's own stamp rather than a distinct per-index
+            // id; the deep conservation signal (P10) is the honest check, same fallback as
+            // concat's boxesBody below.
+            const deep = deepIds(result);
+            for (const id of ids) expect(deep.has(id)).toBe(true);
+          }
         };
         const provBody = async () => {
           const { env, value, ids } = await mint3(carrier);
@@ -205,7 +216,19 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
         it(`boxes: ${term.boxDiscipline} — every consumed element's box obeys the declared discipline`, async () => {
           const { env, value, ids } = await mint3(carrier);
           const result = await run1(env, value, `(filter (lambda (x) #t) c)`);
-          expect(elementBoxes(result)).toEqual([[ids[0]], [ids[1]], [ids[2]]]);
+          // The INPUT's own per-element capability is the branch signal, not the (always
+          // materialized-AVector, so never-null) result's — mirrors AString/ABytevector's
+          // "no per-element boxes on this carrier" reading (fixtures.ts's elementBoxes doc).
+          if (elementBoxes(value) !== null) {
+            expect(elementBoxes(result)).toEqual([[ids[0]], [ids[1]], [ids[2]]]);
+          } else {
+            // AJSArray (borrowed, hygiene law V 2026-07-14): the SOURCE has no per-element
+            // boxes to keep — filter materializes through `vec()`, whose elements all
+            // inherit the CONTAINER's stamp instead of a distinct per-index id; the deep
+            // conservation signal (P10) is the honest check.
+            const deep = deepIds(result);
+            for (const id of ids) expect(deep.has(id)).toBe(true);
+          }
         });
 
         it("provenance: deep-collapsed result provenance ⊇ union of consumed elements' (conservation, P10)", async () => {
@@ -247,27 +270,51 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
       }
 
       case "arrival/tagless-final/sort": {
+        // S1 (second-foundation/arrival-manifold/docs/benchmark-defect-register.md):
+        // `deriveSortCompare` (values/op-helpers.ts) now throws an honest door the
+        // instant a comparator's return resolves through a Promise — true of every
+        // LAMBDA comparator (its body runs through the trampolined async evaluator),
+        // never of a bare NATIVE procedure like `>`. This cell used `(lambda (x y) (>
+        // x y))` before; on the pre-fix bug that comparator produced a CONSTANT -1
+        // verdict for every pair, and — by pure coincidence of how the underlying
+        // sort algorithm behaves under a constant comparator — that happened to equal
+        // `reverse(input)` for THIS fixture's specific 3-element case, so this law
+        // cell was passing for the wrong reason (see sort-lambda-comparator.test.ts's
+        // header for the full mechanism). `>` bare is the real, correctly-dispatching
+        // descending comparator for these carriers (mint3's elements are numbers).
         it("value: sort with a DESCENDING comparator actually reorders the ascending-minted input", async () => {
           const { env, value } = await mint3(carrier);
-          const result = await run1(env, value, `(sort c (lambda (x y) (> x y)))`);
+          const result = await run1(env, value, `(sort c >)`);
           expect(toPlain(result)).toEqual([...(toPlain(value) as unknown[])].reverse());
         });
 
         it(`boxes: ${term.boxDiscipline} — every consumed element's box obeys the declared discipline (reordered, not rebuilt)`, async () => {
           const { env, value, ids } = await mint3(carrier);
-          const result = await run1(env, value, `(sort c (lambda (x y) (> x y)))`);
-          expect(elementBoxes(result)).toEqual([[ids[2]], [ids[1]], [ids[0]]]);
+          const result = await run1(env, value, `(sort c >)`);
+          // The INPUT's own per-element capability is the branch signal, not the (always
+          // materialized-AVector, so never-null) result's — mirrors AString/ABytevector's
+          // "no per-element boxes on this carrier" reading (fixtures.ts's elementBoxes doc).
+          if (elementBoxes(value) !== null) {
+            expect(elementBoxes(result)).toEqual([[ids[2]], [ids[1]], [ids[0]]]);
+          } else {
+            // AJSArray (borrowed, hygiene law V 2026-07-14): the SOURCE has no per-element
+            // boxes to reorder — sort materializes through `vec()` first, so "reordered,
+            // not rebuilt" has no per-element identity to distinguish at this carrier; the
+            // deep conservation signal (P10) is the honest check.
+            const deep = deepIds(result);
+            for (const id of ids) expect(deep.has(id)).toBe(true);
+          }
         });
 
         it("provenance: deep-collapsed result provenance ⊇ union of consumed elements' (conservation, P10)", async () => {
           const { env, value, ids } = await mint3(carrier);
-          const result = await run1(env, value, `(sort c (lambda (x y) (> x y)))`);
+          const result = await run1(env, value, `(sort c >)`);
           const deep = deepIds(result);
           for (const id of ids) expect(deep.has(id)).toBe(true);
         });
         it("container box: PROXIED — sort is length-preserving, the container's own grouping-fact stamp threads through unchanged (R2/C2, P8 — closes the old Pair-drops/Vector-preserves divergence)", async () => {
           const { env, value } = await mint3(carrier);
-          const result = await run1(env, value, `(sort c (lambda (x y) (> x y)))`);
+          const result = await run1(env, value, `(sort c >)`);
           expect(containerProv(result)).toEqual(containerProv(value));
         });
         break;
@@ -291,7 +338,14 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
         };
         const verb = concatVerb[carrier.carrier];
         const isString = carrier.carrier === "AString";
-        const noDedicatedConcatVerb = carrier.carrier === "AJSArray" || carrier.carrier === "ADict";
+        // AJSArray LEFT this set on 2026-07-14 (the AJSArrayList rework). `append` now takes the
+        // SPINE READING of every operand but the last (adopt-spine.ts), so a borrowed JS array IS a
+        // list to it and splices correctly: `(append tool-arr-a tool-arr-b)` → a proper list. The
+        // P5 door was refusing a value that genuinely is a list under the reading `append` demands —
+        // and refusing it for the most ordinary thing a model can hold, two tool results.
+        //
+        // ADict stays: a dict is not a list under ANY reading, so the door is still the right answer.
+        const noDedicatedConcatVerb = carrier.carrier === "ADict";
 
         if (noDedicatedConcatVerb) {
           it(`unsupported by design — doors with: no dedicated concat verb for this carrier; append's P5 door refuses a non-pair, non-last operand rather than silently discarding it`, async () => {
@@ -353,35 +407,26 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
         // top-level stamp is ALREADY the union of the 3 minted ids — so these two rows still
         // pass, for a different reason than before: not because length unions elements, but
         // because the container's own stamp happens to equal that union at construction time.
-        const boxesTitle = "container box: the count reads the CONTAINER's own grouping-fact stamp (C4) — equals the elements' union here because `mint3`'s constructor MINTED it that way";
-        const boxesBody = async () => {
+        // AJSArray joins the plain-it() rows below (hygiene law, V 2026-07-14): fixtures.ts's
+        // `borrow-array` now CROSSES its args to JS and unions their provenance onto the
+        // CONTAINER (`collapseProvenance(...args)`) — the R2 gap this carrier used to have (an
+        // empty container-level stamp) is closed for this fixture, so its own top-level
+        // provenance legitimately equals the consumed ids' union too, the same shape as the
+        // other MINTED carriers. (ADict, in the `equals` case below, is a genuinely separate
+        // constructor that still stamps an empty container — that half of the gap stays
+        // ticketed; ADict doesn't support `length` at all, so it never reaches this cell.)
+        it("container box: the count reads the CONTAINER's own grouping-fact stamp (C4) — equals the elements' union here because `mint3`'s constructor MINTED it that way", async () => {
           const { env, value, ids } = await mint3(carrier);
           const result = await run1(env, value, `(length c)`);
           const deep = deepIds(result);
           for (const id of ids) expect(deep.has(id)).toBe(true);
-        };
-        const provTitle = "provenance: deep-collapsed result provenance ⊇ union of consumed elements' (conservation, P10)";
-        const provBody = async () => {
+        });
+        it("provenance: deep-collapsed result provenance ⊇ union of consumed elements' (conservation, P10)", async () => {
           const { env, value, ids } = await mint3(carrier);
           const result = await run1(env, value, `(length c)`);
           const deep = deepIds(result);
           for (const id of ids) expect(deep.has(id)).toBe(true);
-        };
-        // AJSArray's OWN top-level provenance is empty by construction (`borrow-array`'s
-        // `fromJS` mints no container-level grouping fact) — the SAME pre-existing,
-        // already-ticketed gap the `equals` case above gates as
-        // `equalsContainerHasNoGroupingFact`. C4 correctly reads that empty stamp, so these
-        // two rows (which assume a populated container stamp) now fail for AJSArray — not a
-        // NEW regression, the same R2 container-provenance gap surfacing at a second term.
-        if (carrier.carrier === "AJSArray") {
-          // @ledger: AJSArray/ADict container carries no grouping-fact provenance
-          it.fails(`${boxesTitle} [TICKETED GAP: R2 container-provenance]`, boxesBody);
-          // @ledger: AJSArray/ADict container carries no grouping-fact provenance
-          it.fails(`${provTitle} [TICKETED GAP: R2 container-provenance]`, provBody);
-        } else {
-          it(boxesTitle, boxesBody);
-          it(provTitle, provBody);
-        }
+        });
         break;
       }
 
@@ -398,15 +443,20 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
         // (op-helpers.ts) — stamped operands' union rides the verdict. GAPS row
         // "equal? verdict is empty-provenance flyweight" retired (ledger/index.law).
         //
-        // AJSArray/ADict are a SEPARATE, pre-existing gap this fix does not touch:
-        // `mintVerdict` faithfully forwards whatever provenance the operand's OWN
-        // top-level `.provenance` carries — for APair/AVector/AString/ABytevector that
-        // already IS the R2 grouping-fact union (their constructors stamp it), but
-        // `borrow-array`'s `fromJS(args)` and `dict`'s `new ADict(CONSTANT_CTX, ...)`
-        // (env/polyglot.ts) construct with an EMPTY top-level provenance — the R2
-        // ruling's container-grouping-fact is un-implemented for these two carriers,
-        // independent of R8. Ticketed rather than silently green.
-        const equalsContainerHasNoGroupingFact = carrier.carrier === "AJSArray" || carrier.carrier === "ADict";
+        // ADict is a SEPARATE, pre-existing gap this fix does not touch: `mintVerdict`
+        // faithfully forwards whatever provenance the operand's OWN top-level `.provenance`
+        // carries — for APair/AVector/AString/ABytevector that already IS the R2
+        // grouping-fact union (their constructors stamp it), but `dict`'s
+        // `new ADict(CONSTANT_CTX, ...)` (env/polyglot.ts) constructs with an EMPTY
+        // top-level provenance — the R2 ruling's container-grouping-fact is un-implemented
+        // for this carrier, independent of R8. Ticketed rather than silently green.
+        //
+        // AJSArray CLOSED its half of this gap (hygiene law, V 2026-07-14): fixtures.ts's
+        // `borrow-array` now unions its consumed args' provenance onto the CONTAINER
+        // (`collapseProvenance(...args)`), so its own top-level stamp legitimately equals
+        // the consumed ids' union too — it joins the plain-it() rows below, the same shape
+        // as the other MINTED carriers.
+        const equalsContainerHasNoGroupingFact = carrier.carrier === "ADict";
         const boxesTitle = `boxes: ${term.boxDiscipline} — the verdict carries the consumed elements' unioned provenance`;
         const boxesBody = async () => {
           const { env, value, ids } = await mint3(carrier);
@@ -422,9 +472,9 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
           for (const id of ids) expect(deep.has(id)).toBe(true);
         };
         if (equalsContainerHasNoGroupingFact) {
-          // @ledger: AJSArray/ADict container carries no grouping-fact provenance
+          // @ledger: ADict container carries no grouping-fact provenance
           it.fails(`${boxesTitle} [TICKETED GAP: R2 container-provenance]`, boxesBody);
-          // @ledger: AJSArray/ADict container carries no grouping-fact provenance
+          // @ledger: ADict container carries no grouping-fact provenance
           it.fails(`${provTitle} [TICKETED GAP: R2 container-provenance]`, provBody);
         } else {
           it(boxesTitle, boxesBody);
@@ -443,7 +493,16 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
         it(`boxes: ${term.boxDiscipline} — the result IS the first element, box intact`, async () => {
           const { env, value, ids } = await mint3(carrier);
           const result = await run1(env, value, `(car c)`);
-          expect([...((result as AValue).provenance)].sort()).toEqual([ids[0]]);
+          const prov = [...((result as AValue).provenance)].sort((a, b) => a - b);
+          if (carrier.carrier === "AJSArray") {
+            // Borrowed array (hygiene law, V 2026-07-14): car projects index 0 via
+            // AJSArray.boxElement, which stamps the CONTAINER's own provenance (the union of
+            // all 3 consumed ids) — there is no distinct per-element id left to
+            // intact-project, since the raw source never had one of its own.
+            expect(prov).toEqual([...ids].sort((a, b) => a - b));
+          } else {
+            expect(prov).toEqual([ids[0]]);
+          }
         });
 
         it("provenance: deep-collapsed result provenance ⊇ union of consumed elements' (conservation, P10)", async () => {
@@ -464,7 +523,16 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
         it(`boxes: ${term.boxDiscipline} — the remaining elements' boxes survive intact`, async () => {
           const { env, value, ids } = await mint3(carrier);
           const result = await run1(env, value, `(cdr c)`);
-          expect(elementBoxes(result)).toEqual([[ids[1]], [ids[2]]]);
+          if (carrier.carrier === "AJSArray") {
+            // Borrowed array (hygiene law, V 2026-07-14): cdr slices via `vec()`
+            // materialization (a fresh AVector) — every surviving element inherits the
+            // CONTAINER's own stamp (the union of all 3 consumed ids), not a distinct
+            // per-element id, since the raw source never carried one.
+            const union = [...ids].sort((a, b) => a - b);
+            expect(elementBoxes(result)).toEqual([union, union]);
+          } else {
+            expect(elementBoxes(result)).toEqual([[ids[1]], [ids[2]]]);
+          }
         });
 
         it("provenance: deep-collapsed result provenance ⊇ union of consumed elements' (conservation, P10)", async () => {

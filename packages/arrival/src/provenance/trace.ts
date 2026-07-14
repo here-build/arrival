@@ -18,6 +18,7 @@ import invariant from "tiny-invariant";
 import { TraceBudgetError } from "../errors.js";
 
 import { AValue, EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
+import { AString } from "../values/primitives/AString.js";
 import { AutoBindings } from "../values/lineage-auto-bindings.js";
 import type { EvalTap } from "../eval/evaluator.js";
 import { APair } from "../values/primitives/APair.js";
@@ -183,6 +184,11 @@ export class NodeRecord {
  *  Override via `ARRIVAL_TRACE_MAX`; pass `Infinity` for unbounded. */
 export const DEFAULT_TRACE_CAP = 500_000;
 
+/** Flat per-retained-point overhead estimate (id/state/parent-pointer/child-array/Set header
+ *  weight) used by {@link EvalTrace.stats}'s `retainedValueBytes` — see that method's docstring
+ *  for why this is an approximation, not a measurement. */
+const STATS_PER_ENTRY_OVERHEAD_BYTES = 128;
+
 export class EvalTrace implements EvalTap {
   readonly records = new Map<APair<SchemeValue, SchemeValue>, NodeRecord>();
   /** Task-creating invocations indexed by produced task. Lets monitor walk from live pipe → AST provenance.
@@ -232,9 +238,12 @@ export class EvalTrace implements EvalTap {
   }
 
   /**
-   * Flat append-ordered log of every invocation in `enter` order (= ascending gap-free id — only `enter`
-   * pushes here, only `enter` consumes `#nextId`). Region fold slices off tail by index cursor — O(Δ) per
-   * tick — instead of re-scanning records bindings. Pointer array only: Invocations live in `records`.
+   * Flat append-ordered log of every invocation in `enter` order (= ascending gap-free id, relative to
+   * `#logBaseId` — see {@link clear}). Region fold slices off tail by index cursor — O(Δ) per tick —
+   * instead of re-scanning records bindings. Pointer array only: Invocations live in `records`.
+   *
+   * `clear()` truncates this array (see its docstring) while `#nextId` keeps climbing — a position-based
+   * cursor held across a `clear()` call is invalidated; the holder is responsible for resetting it.
    */
   readonly #invocationLog: Invocation[] = [];
   get invocationLog(): readonly Invocation[] {
@@ -293,7 +302,20 @@ export class EvalTrace implements EvalTap {
    *  is enter-ordered and gap-free, so the id doubles as the index). `undefined` for an id this
    *  trace never minted. */
   invocationById(provenanceId: number): Invocation | undefined {
-    return this.#invocationLog[provenanceId];
+    const idx = provenanceId - this.#logBaseId;
+    return idx >= 0 ? this.#invocationLog[idx] : undefined;
+  }
+
+  /**
+   * Enumerate provenance-point invocations — the read surface a consumer walks BEFORE calling
+   * {@link clear} to pull whatever it wants (tool name, the retained value, …) out of the graph
+   * that's about to be dropped. Lazy generator over `#invocationLog` (append/enter order) so a
+   * caller building its own summary can bail early without materializing every point up front.
+   */
+  *points(): IterableIterator<{ id: number; toolName: string | undefined; invocation: Invocation }> {
+    for (const inv of this.#invocationLog) {
+      if (inv.isProvenancePoint) yield { id: inv.id, toolName: this.toolNameFor(inv.id), invocation: inv };
+    }
   }
 
   /** The verb name that minted provenance id `provenanceId` — answers "which tool produced this
@@ -314,15 +336,47 @@ export class EvalTrace implements EvalTap {
   // `enter`/`exit`/`markProvenancePoint` mutate plain fields — see the de-MobXed note at the top of
   // this file for how `arrival-provenance`'s `ObservableEvalTrace` wraps `enter` in `action(...)`.
 
-  /** Cap on total trace entries (one per invocation — `enter` mints only `#nextId`). Invocation retained PER
-   *  reduction (value/children) — monotonic, never GC'd — so long/runaway loop grows trace unboundedly. `enter`
-   *  throws at cap: run aborts with partial trace, instead of OOMing isolate or freezing canvas. DEFAULTS to a
-   *  bound (the safe default IS the default — `new EvalTrace()` protected even if caller forgets). Pass `Infinity`
-   *  for unbounded full-fidelity capture. */
-  constructor(readonly maxEntries: number = DEFAULT_TRACE_CAP) {}
+  /** Id of `#invocationLog[0]` — `startId` at construction; bumped forward to `#nextId` by
+   *  {@link clear}, so `invocationById`'s `id - #logBaseId` index math keeps working after a
+   *  clear resets the log's contents but not the id counter. */
+  #logBaseId: number;
+
+  /** Invocations minted since construction or the last {@link clear} — what `enter`'s cap check
+   *  compares against `maxEntries`, DELIBERATELY separate from `#nextId` (which never resets).
+   *  Coupling the cap to the raw id would make `clear()` pointless for a long-lived, periodically
+   *  compacted trace (id keeps climbing past `maxEntries` even though the retained graph is empty)
+   *  and would make a nonzero `startId` trip the cap on invocation one. */
+  #mintedSinceReset = 0;
+
+  /** Invocations entered but not yet exited, anywhere in the call tree — the "is a run mid-flight"
+   *  signal {@link clear} guards on. Incremented in `enter`, decremented at the top of `exit`
+   *  (every entered invocation exits exactly once — success or rejection — per the `EvalTap`
+   *  contract this class implements). */
+  #openCount = 0;
+
+  /** Cap on invocations retained since construction/last-{@link clear} (one per invocation — `enter`
+   *  mints only `#nextId`, `#mintedSinceReset` counts against the cap). Invocation retained PER
+   *  reduction (value/children) — monotonic, never GC'd until `clear()` — so long/runaway loop
+   *  grows trace unboundedly. `enter` throws at cap: run aborts with partial trace, instead of
+   *  OOMing isolate or freezing canvas. DEFAULTS to a bound (the safe default IS the default —
+   *  `new EvalTrace()` protected even if caller forgets). Pass `Infinity` for unbounded
+   *  full-fidelity capture.
+   *
+   *  `startId` floors the id counter — the process-restart seam: a fresh `EvalTrace` built after
+   *  a worker restart can be told "the previous instance last minted id N", so ids stay globally
+   *  monotonic across the restart instead of colliding back at 0. Ids below `startId` were never
+   *  minted by THIS instance and always resolve as unminted (`invocationById` returns `undefined`). */
+  constructor(
+    readonly maxEntries: number = DEFAULT_TRACE_CAP,
+    startId = 0,
+  ) {
+    invariant(Number.isInteger(startId) && startId >= 0, "EvalTrace startId must be a non-negative integer");
+    this.#nextId = startId;
+    this.#logBaseId = startId;
+  }
 
   enter = (node: AListAlike, parent: unknown, tailPosition?: boolean): Invocation => {
-    if (this.#nextId >= this.maxEntries) {
+    if (this.#mintedSinceReset >= this.maxEntries) {
       // "budget exceeded" in message so run-isolated's detector returns partial handle.
       throw new TraceBudgetError(this.maxEntries);
     }
@@ -330,6 +384,8 @@ export class EvalTrace implements EvalTap {
     // header: atoms/bare symbols/quoted/macro-Pairs not tracked). Assert real invariant, don't widen `node`'s type.
     invariant(node instanceof APair, "EvalTap.enter node must be a Pair");
     const inv = new Invocation(this.#nextId++, node, parent as Invocation | null);
+    this.#mintedSinceReset++;
+    this.#openCount++;
     if (tailPosition) inv.tailPosition = true;
     let rec = this.records.get(node);
     if (!rec) {
@@ -344,6 +400,7 @@ export class EvalTrace implements EvalTap {
   };
 
   exit = (inv: Invocation, result: Parameters<EvalTap["exit"]>[1]): ReturnType<EvalTap["exit"]> => {
+    this.#openCount--;
     if (!("value" in result)) {
       inv.state = "rejected";
       inv.error = result.error;
@@ -410,6 +467,75 @@ export class EvalTrace implements EvalTap {
       // parent RETURNS child's value it holds its own reference — clearing here frees only unneeded values.
       child.value = undefined;
     }
+  }
+
+  /**
+   * Explicit provenance GC — drops the ENTIRE invocation graph (`records`, `invocationByTask`,
+   * `#invocationLog`, and every retained `Invocation`'s children/value/provenance Set reachable
+   * only through them) while PRESERVING `#nextId`: ids minted so far, including a provenance
+   * point's, are NEVER reused — a scheme value still alive elsewhere (bound in a `define`, held
+   * by caller code) may carry a provenance id that must keep meaning "nothing new has claimed
+   * this number" even though its originating `Invocation` is gone.
+   *
+   * This is the fix for the OOM driver: a provenance-point Invocation is the one case
+   * {@link #pruneChildProvenance} deliberately EXEMPTS from per-exit value cleanup (points must
+   * stay walkable for `invocationById`/`toolNameFor`/{@link points}), so a long task with
+   * multi-MB tool responses pins the full boxed result of every point for the trace's lifetime.
+   * `clear()` is the explicit release valve: call {@link points} first to extract whatever a
+   * consumer needs (tool name, a capped value prefix, …) into its OWN storage, then `clear()`.
+   *
+   * GUARD: only legal BETWEEN evals. Throws (does not silently no-op) if any invocation entered
+   * so far hasn't exited yet (`#openCount > 0`) — clearing mid-eval would null out a value a
+   * still-running ancestor invocation's `computeProvenance`/`exit` is about to read, corrupting
+   * the in-flight run instead of just losing history. A throw surfaces caller misuse immediately;
+   * a silent no-op would hide it as "GC happened" when it didn't.
+   *
+   * `symbolValues` (WeakMap<Invocation, …>) and `#authoritativeProvenance` (WeakSet<Set>) are not
+   * touched directly — neither type exposes `.clear()`, and neither holds a STRONG reference of
+   * its own, so once the graph above drops the last strong reference to an `Invocation`/`Set`, GC
+   * reclaims the weak-collection entry too.
+   *
+   * CAVEAT for other analysis consumers: a position-based cursor into `invocationLog` held across
+   * a `clear()` call (e.g. `TraceRegionFold`'s `#logCursor`) is invalidated — `clear()` truncates
+   * the array out from under it. This class has no such cursor; a consumer that keeps one is
+   * responsible for resetting it (or simply not calling `clear()` while one is live).
+   */
+  clear(): void {
+    invariant(
+      this.#openCount === 0,
+      "EvalTrace.clear() called while an invocation is still running — only legal between evals " +
+        "(call it after a run's exec/execState promise resolves, not from inside a tap callback).",
+    );
+    this.records.clear();
+    this.invocationByTask.clear();
+    this.#invocationLog.length = 0;
+    this.#logBaseId = this.#nextId;
+    this.#mintedSinceReset = 0;
+  }
+
+  /**
+   * Honest memory estimate over the CURRENTLY RETAINED graph — no `sizeof` exists in JS, so this
+   * is a documented approximation, not a measurement: `entries`/`points` count live invocations
+   * (from `#invocationLog`, so both read 0 right after {@link clear}); `retainedValueBytes` sums,
+   * over provenance-POINT invocations only (the ones {@link #pruneChildProvenance} exempts from
+   * value cleanup — everything else's `.value` is already `undefined`), a flat per-entry overhead
+   * constant plus 2 bytes per UTF-16 code unit for a string-valued (`AString` or plain JS string)
+   * point. A non-string point's boxed value contributes only the flat overhead — its real
+   * footprint is real but not estimated here (no generic byte-size walk over an arbitrary AValue
+   * graph; string dominance is the actual OOM driver this exists to surface).
+   */
+  stats(): { entries: number; points: number; retainedValueBytes: number } {
+    let points = 0;
+    let retainedValueBytes = 0;
+    for (const inv of this.#invocationLog) {
+      if (!inv.isProvenancePoint) continue;
+      points++;
+      retainedValueBytes += STATS_PER_ENTRY_OVERHEAD_BYTES;
+      const text =
+        inv.value instanceof AString ? inv.value.valueOf() : typeof inv.value === "string" ? inv.value : undefined;
+      if (text !== undefined) retainedValueBytes += text.length * 2;
+    }
+    return { entries: this.#invocationLog.length, points, retainedValueBytes };
   }
 
   /** Flag invocation as provenance point. Called by rosetta wrappers (`provenance: true`) + sandbox overrides.

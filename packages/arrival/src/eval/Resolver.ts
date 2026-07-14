@@ -31,6 +31,7 @@ import { LexicalScope } from "./LexicalScope.js";
 import { Capabilities } from "./Capabilities.js";
 import type { CompiledResolutionChain } from "./CompiledResolutionChain.js";
 import { unboundVariableError } from "../unbound-variable.js";
+import { attachOffendingValue } from "../errors.js";
 import { tf } from "../values/tagless-final.js";
 
 // ============================================================================
@@ -72,8 +73,11 @@ function cxrUnfold(name: string): ANativeProcedure | undefined {
         // reads like an engine bug rather than a program mistake (see the not-callable
         // doors note in evaluator.ts).
         if (typeof m !== "function") {
-          throw new TypeError(
-            `${name}: the ${v instanceof AValue ? v.kind : v == null ? String(v) : typeof v} primitive does not support ${t === "a" ? "car" : "cdr"} (no ${t === "a" ? "arrival/tagless-final/car" : "arrival/tagless-final/cdr"}).`,
+          throw attachOffendingValue(
+            new TypeError(
+              `${name}: the ${v instanceof AValue ? v.kind : v == null ? String(v) : typeof v} primitive does not support ${t === "a" ? "car" : "cdr"} (no ${t === "a" ? "arrival/tagless-final/car" : "arrival/tagless-final/cdr"}).`,
+            ),
+            v,
           );
         }
         v = (m as (...a: unknown[]) => unknown).call(v, runCtx);

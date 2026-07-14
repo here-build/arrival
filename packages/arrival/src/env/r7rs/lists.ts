@@ -26,6 +26,7 @@
 // Installs the global \`TypeError.invariant\` assertion helper used by the
 // list-bounds and circular-list guards below (side-effect import).
 import "@here.build/error-invariant";
+import { adoptSpine } from "../../values/adopt-spine.js";
 import dedent from "dedent";
 import { type RunContext } from "../../values/primitives/RunContext.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
@@ -42,7 +43,7 @@ import { is_callable_value } from "../../values/value-guards.js";
 import { type, typeErrorMessage } from "../../utils/typecheck.js";
 import { heapBudgetMessage } from "../../heap-budget.js";
 import { ArrivalError } from "../../eval/evaluator.js";
-import { CarrierMismatchError } from "../../errors.js";
+import { attachOffendingValue, CarrierMismatchError } from "../../errors.js";
 import { eqv, structuralEqual } from "../../values/structural-equal.js";
 import { to_array } from "../pack-helpers.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
@@ -136,7 +137,10 @@ const lengthImpl = function (this: CallCtx, obj: unknown): AExact | AInexact {
     const len = obj.length;
     if (typeof len === "number") return withInputProvenance([obj], new AExact(this.runCtx, len));
   }
-  throw new TypeError(`length: the ${typeof obj} operand does not support length (no arrival/tagless-final/length).`);
+  throw attachOffendingValue(
+    new TypeError(`length: the ${typeof obj} operand does not support length (no arrival/tagless-final/length).`),
+    obj,
+  );
 };
 
 // Multi-list `map` is a ZIP (not a Functor op): apply fn to corresponding elements
@@ -254,8 +258,11 @@ export default new EnvCapability("scheme/lists", {
           const seq = lists[0];
           const m = resolveMethod(seq, tf("map"));
           if (m === undefined) {
-            throw new TypeError(
-              `map: the ${seq == null ? String(seq) : typeof seq} operand does not support map (no ${tf("map")}).`,
+            throw attachOffendingValue(
+              new TypeError(
+                `map: the ${seq == null ? String(seq) : typeof seq} operand does not support map (no ${tf("map")}).`,
+              ),
+              seq,
             );
           }
           // The tagless-final map/vector-map term algebra declares SchemeValue | Promise<SchemeValue>
@@ -278,7 +285,7 @@ export default new EnvCapability("scheme/lists", {
       // vector-for-each.
       {
         input: [z.lambda],
-        inputRest: z.union([z.pair, z.nil]),
+        inputRest: z.listAlike,
         output: [z.undefinedResult],
         type: dedent`
           {
@@ -434,7 +441,7 @@ export default new EnvCapability("scheme/lists", {
       // number), so z.value is the honest ceiling (matches list-ref/list-copy below).
       // Harvest models the proper-list case (List<T>); improper tails stay a runtime residue.
       {
-        input: [z.union([z.pair, z.nil]), z.schemeNumber],
+        input: [z.listAlike, z.schemeNumber],
         output: [z.value],
         type: dedent`
           {
@@ -457,7 +464,7 @@ export default new EnvCapability("scheme/lists", {
       // Output is z.value: the element at an index is any scheme value (e.g.
       // (list-ref '(1 2 3) 0) => 1, a bare number, not a list), not a pair|nil union.
       {
-        input: [z.union([z.pair, z.nil]), z.schemeNumber],
+        input: [z.listAlike, z.schemeNumber],
         output: [z.value],
         type: dedent`
           {
@@ -486,7 +493,7 @@ export default new EnvCapability("scheme/lists", {
       // Output is z.value: like list-tail, list-copy explicitly tolerates an IMPROPER
       // list (the !(lst instanceof APair) branch below returns the dangling tail as-is).
       {
-        input: [z.union([z.pair, z.nil])],
+        input: [z.listAlike],
         output: [z.value],
         type: dedent`
           {
@@ -551,7 +558,7 @@ export default new EnvCapability("scheme/lists", {
       // `eqv` compares Scheme values, so the search key is `z.value` — the same
       // schema memq declares, there read representation-blind for its `===` identity test.
       {
-        input: [z.value, z.union([z.pair, z.nil])],
+        input: [z.value, z.listAlike],
         output: [z.union([z.value, z.booleanFalse])],
         type: dedent`
           {
@@ -576,7 +583,7 @@ export default new EnvCapability("scheme/lists", {
     assq: symbol.native`assq: first alist entry whose car is eq? to obj, else #f`(
       // obj stays z.value BY DESIGN — same eq? reasoning as memq above.
       {
-        input: [z.value, z.union([z.pair, z.nil])],
+        input: [z.value, z.listAlike],
         output: [z.union([z.value, z.booleanFalse])],
         type: dedent`
           {
@@ -600,7 +607,7 @@ export default new EnvCapability("scheme/lists", {
     assv: symbol.native`assv: first alist entry whose car is eqv? to obj, else #f`(
       // `eqv` compares Scheme values → the search key is `z.value` (cf. assq's `===`).
       {
-        input: [z.value, z.union([z.pair, z.nil])],
+        input: [z.value, z.listAlike],
         output: [z.union([z.value, z.booleanFalse])],
         type: dedent`
           {
@@ -628,7 +635,7 @@ export default new EnvCapability("scheme/lists", {
     // as a raw JS boolean.
     member: symbol.native`member: first sublist whose car is equal? to obj (or per compare), else #f`(
       {
-        input: [z.value, z.union([z.pair, z.nil]), z.lambda.optional()],
+        input: [z.value, z.listAlike, z.lambda.optional()],
         output: [z.union([z.value, z.booleanFalse])],
         // The optional z.custom compare collapses signatureOf to the catch-all; `type` restores
         // the real shape — same as the non-degraded memq/memv siblings (obj + `Cons<unknown> |
@@ -671,7 +678,7 @@ export default new EnvCapability("scheme/lists", {
     // structural-equality member of the trio, not a LIPS extension.
     assoc: symbol.native`assoc: first alist entry whose car is equal? to obj (or per compare), else #f`(
       {
-        input: [z.value, z.union([z.pair, z.nil]), z.lambda.optional()],
+        input: [z.value, z.listAlike, z.lambda.optional()],
         output: [z.union([z.value, z.booleanFalse])],
         // Same degrade + author-assertion as `member` above (the alist search twin).
         type: dedent`
@@ -719,6 +726,21 @@ export default new EnvCapability("scheme/lists", {
         // value is mutated — the result is the only new thing (`append!`, the destructive
         // sibling, is doored above; this inlines its splice logic over clones instead).
         const is_list = isProperList;
+        // Spine adoption, applied HERE rather than by the bake-time slot adopter: append's contract
+        // is `z.array(z.value)` — a variadic of ANY value, because R7RS §6.4 lets the last argument
+        // be a non-list (the improper-tail form). There is no per-slot schema to mark, so the
+        // reading is chosen where the verb's own semantics state it.
+        //
+        // EVERY argument adopts, including the last. R7RS: `(append list … obj)` produces a PROPER
+        // list exactly when `obj` is itself a list — and a borrowed JS array, read as a spine, is
+        // one. Excluding the last argument (an earlier cut) left it as a nested value instead of
+        // splicing it: `(append arrA arrB)` answered `(1 2 3 . #(1 2 3))` rather than `(1 2 3 4 5 6)`.
+        //
+        // The improper-tail form is protected without a guard, because `adoptSpine` only ever
+        // touches an `AJSArray`: `(append '(1 2) 3)` leaves the `3` exactly as it came, and still
+        // builds `(1 2 . 3)`. The rule states itself — a value that IS a list is spliced as one; a
+        // value that is not is the tail.
+        items = items.map((item) => adoptSpine(item) as SchemeValue);
         const cloned = items.map((item) => (item instanceof APair ? item.clone() : item));
         return cloned.reduce((acc, item, idx) => {
           // R7RS: last argument can be any value (creates improper list). Every
@@ -730,10 +752,10 @@ export default new EnvCapability("scheme/lists", {
           const isLast = idx === cloned.length - 1;
           if (!isLast && !(item instanceof ANil)) {
             if (!(item instanceof APair)) {
-              throw nonListAppendOperandError(item);
+              throw attachOffendingValue(nonListAppendOperandError(item), item);
             }
             if (!is_list(item)) {
-              throw new Error("append: Invalid argument, value is not a list");
+              throw attachOffendingValue(new Error("append: Invalid argument, value is not a list"), item);
             }
           }
           if (acc instanceof ANil) {
@@ -758,7 +780,7 @@ export default new EnvCapability("scheme/lists", {
       // so z.union([z.nil, z.pair]) is the honest input domain, not a representation-blind
       // z.value; a bare array throws (the impl's own final `else` branch).
       {
-        input: [z.union([z.nil, z.pair])],
+        input: [z.listAlike],
         output: [z.value],
         type: dedent`
           {
@@ -774,7 +796,7 @@ export default new EnvCapability("scheme/lists", {
           const arr = listToArray(arg).toReversed();
           return arrayToList(this.runCtx, arr);
         }
-        throw new TypeError(typeErrorMessage("reverse", type(arg), "array or pair"));
+        throw attachOffendingValue(new TypeError(typeErrorMessage("reverse", type(arg), "array or pair")), arg);
       },
     ),
 
@@ -817,7 +839,7 @@ export default new EnvCapability("scheme/lists", {
         } else if (Array.isArray(obj)) {
           return obj[idx];
         } else {
-          throw new TypeError(typeErrorMessage("nth", type(obj), "array or pair", 2));
+          throw attachOffendingValue(new TypeError(typeErrorMessage("nth", type(obj), "array or pair", 2)), obj);
         }
       },
     ),

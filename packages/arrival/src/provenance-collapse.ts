@@ -25,31 +25,49 @@
 // walked — a dict's own point is collected, but stringifying a dict directly is
 // not a wiring path; access a member first.
 
+// ─── WHY THIS MODULE DISPATCHES ON A TERM, NOT ON `instanceof` (P7) ──────────────────────────
+//
+// It used to `import` APair / AVector / AJSArray and `instanceof`-dispatch over them to find each
+// carrier's children. Two things were wrong with that, one fatal:
+//
+//   • ASYMMETRY. The classes ALREADY own this knowledge for the WRITE direction — `withProvenanceDeep`
+//     / `reStampChild` walk exactly these same children to re-stamp them. The READ direction
+//     (collapse) re-derived the same fact from outside, by type-testing. One fact, two mechanisms,
+//     and only one of them was on the class. P7 says the class is the sole authority on its own
+//     representation: `arrival/provenanceChildren` is the read-side twin, and now they cannot drift.
+//
+//   • A MODULE-INIT CYCLE, which is what forced the issue. `AJSArrayList` (the borrowed array's
+//     spine chart) must `extends APair` — pair-ness is nominal in this tree. That makes APair
+//     required AT ITS CLASS-DEFINITION TIME. But APair imports collapseProvenance, and this module
+//     imported AVector/AJSArray, which construct the view... so evaluating APair first ran
+//     APair → provenance-collapse → AVector → AJSArrayList → `extends APair` (undefined). Boom.
+//     Dispatching on a term makes this module a LEAF (AValue + AString only), and the cycle is gone
+//     structurally — not deferred behind a lazy import that would re-arm the same trap later.
+//
+// The completeness requirement is UNCHANGED and now lives where it can be checked: a carrier that
+// reaches AValues must answer `arrival/provenanceChildren`, or its members are invisible here and
+// the wiring silently loses an edge. (AJSObject deliberately answers nothing — a dict's own point
+// is collected, but stringifying a dict is not a wiring path; access a member first.)
+
+import { AString } from "./values/primitives/AString.js";
 import { AValue } from "./values/primitives/AValue.js";
 import { CONSTANT_CTX } from "./values/primitives/RunContext.js";
-import { APair } from "./values/primitives/APair.js";
-import { AVector } from "./values/primitives/AVector.js";
-import { AJSArray } from "./values/primitives/AJSArray.js";
-import { AString } from "./values/primitives/AString.js";
 
 /** Union the provenance point-ids of every AValue reachable in `vals`, deep-walking
- *  the structured carriers (list spines, vectors, arrays). Idempotent: only existing
- *  ids, never fresh ones. */
+ *  the structured carriers (list spines, vectors, arrays) via their own
+ *  `arrival/provenanceChildren` term. Idempotent: only existing ids, never fresh ones. */
 export function collapseProvenance(...vals: unknown[]): Set<number> {
   const acc = new Set<number>();
   const seen = new Set<unknown>();
   const walk = (v: unknown): void => {
     if (v === null || typeof v !== "object" || seen.has(v)) return;
     seen.add(v);
-    if (v instanceof AValue) for (const p of v.provenance) acc.add(p);
-    if (v instanceof APair) {
-      walk(v.car);
-      walk(v.cdr);
-    } else if (v instanceof AVector) {
-      for (const el of v.__vector__) walk(el);
-    } else if (v instanceof AJSArray) {
-      for (const el of v.source) walk(el);
+    if (v instanceof AValue) {
+      for (const p of v.provenance) acc.add(p);
+      for (const child of v["arrival/provenanceChildren"]()) walk(child);
     } else if (Array.isArray(v)) {
+      // A raw JS array is a carrier too (args vectors, ellipsis machinery) and is not an AValue,
+      // so it has no term to answer with — it stays a structural arm.
       for (const el of v) walk(el);
     }
   };

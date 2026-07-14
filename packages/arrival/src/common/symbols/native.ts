@@ -5,6 +5,7 @@
 // TS infers the contract first, then checks the impl against the DECODED types. A
 // wrong-typed impl is a COMPILE error — that inference is the load-bearing proof.
 
+import { buildSlotAdopter } from "../../values/adopt-spine.js";
 import {
   assertCacheClassShape,
   assertProvenanceRoleShape,
@@ -48,6 +49,20 @@ export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
     // Per-lambda-arm callback roles: shape extraction + the declared override, drift-door
     // checked — see extractCallbackRoles in _bake.ts.
     const callbackRoles = extractCallbackRoles(name, provenance, inSchema, outSchema, contract.callbackRoles);
+    // Spine adoption (values/adopt-spine.ts): a slot declared `z.listAlike` takes the SPINE reading
+    // of its argument, so a borrowed JS array is projected onto an `AJSArrayList` view (O(1), same
+    // backing store, same provenance) BEFORE the impl sees it — and an empty array becomes `nil`.
+    //
+    // It has to happen HERE, not inside the impls, because a native's contract is type-only (there
+    // is no runtime validation on this path at all — see the note below) and several impls FIELD-READ
+    // their list argument (`findImpl` does `list.car`). A borrowed array has no `.car`, so those
+    // impls silently read `undefined`: `find` threw on void, `member` answered #f about lists that
+    // contained the element, `list->vector` answered []. Handing the impl a real APair subclass is
+    // the only thing that reaches that class of consumer.
+    //
+    // Computed once at bake and `undefined` when no slot adopts, so a verb with no list arguments
+    // pays exactly nothing.
+    const adoptArgs = buildSlotAdopter(contract.input, contract.inputRest);
     return {
       kind: "native",
       name,
@@ -56,7 +71,11 @@ export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
       out: outSchema,
       // NO runtime validation, NO codec — the impl works on scheme values directly.
       // "zod for types purely": the schemas live on the def for inference + the harvest.
-      impl,
+      impl: (adoptArgs === undefined
+        ? impl
+        : function (this: unknown, ...args: unknown[]) {
+            return (impl as (this: unknown, ...a: unknown[]) => unknown).apply(this, adoptArgs(args));
+          }) as typeof impl,
       type: contract.type,
       preludeOnly: contract.preludeOnly,
       provenance,

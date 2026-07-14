@@ -134,6 +134,44 @@ export function suggestFromVocabulary(unboundName: string, vocabulary: Iterable<
   return nearHits.toSorted(byCodeUnit).slice(0, MAX_SUGGESTIONS);
 }
 
+// ─── Idiom routing (B8 + Tier C, docs/benchmark-defect-register.md) ───────────────
+//
+// A DISJOINT, NAME-EXACT gate from the fuzzy vocabulary matcher above: these are names
+// with no declaration site AND no near-vocabulary match — a model reaching for another
+// dialect's syntax (Racket's `#:kwargs`), or a capability that sounds standard but was
+// never bound here (`require`, `with-input-from-file`, `read-all` — there is no file/port
+// IO in this sandbox; a tool's result IS the data, already in hand). Fuzzy suggestion
+// would never fire on these (edit distance from "require" to any bound name is nowhere
+// near 1), so this table is additive, not a competing heuristic — same family as the
+// `SYNTH_NAMES` seed above (car/cdr), just keyed by exact name/prefix instead of being
+// structurally synthesized. Doctrine: `env/polyglot-racket.ts`'s header — models reach
+// for the dialect they know; give them the name, guard the shape loudly.
+
+/** No-file-IO explanation, shared by every dead-end file/port primitive: the sandbox has
+ *  no filesystem or port layer by design (`catalog.ts`'s own "pure except the bound
+ *  tools" contract) — a tool's own result already IS the data; parse it in-program. */
+const NO_FILE_IO_HINT =
+  "there is no file/port IO in this sandbox; the tool's own result is already the data — parse it with (detect-parse s).";
+
+/** Exact-name idiom routes: a name with no declaration site, routed to its native form. */
+const IDIOM_ROUTES: ReadonlyMap<string, string> = new Map([
+  ["require", "the parsers are already bound here — try (parse-json s) or (detect-parse s), not require."],
+  ["with-input-from-file", NO_FILE_IO_HINT],
+  ["read-all", NO_FILE_IO_HINT],
+]);
+
+/** `#:name` is Racket's keyword-argument syntax; arrival's reader has no `#:` dispatch
+ *  branch (`reader/Lexer.ts`), so the whole token lexes as one ordinary (unbound) symbol
+ *  named literally `#:name` — this checks the PREFIX rather than a table entry, since the
+ *  suffix varies per call. */
+function idiomRoutingHint(name: string): string | undefined {
+  if (name.startsWith("#:")) {
+    const bare = name.slice(2);
+    return `\`#:\` is Racket keyword syntax; arrival spells keyword arguments \`:${bare}\` — drop the \`#\`.`;
+  }
+  return IDIOM_ROUTES.get(name);
+}
+
 /**
  * `unboundVariableError` — builds the thrown Error. `vocabulary` is the throw site's
  * enumeration of every name its resolution walk could have found (`AmbientRuntime
@@ -141,16 +179,19 @@ export function suggestFromVocabulary(unboundName: string, vocabulary: Iterable<
  * omitted/empty ⇒ the plain wall, no hint machinery at all (the evaluator's
  * defensive unreachable-branch throw).
  *
- * The hint (when a near name exists) rides both `.message` (the thrown Error, e.g.
- * surfaced in a stack trace) and `.publicMessage` (the model/agent-facing string an
- * MCP tool surface reads); with no hint both fall back to the plain wording — a pure
- * addition, never a regression.
+ * The hint (when a near name exists, OR the name matches a known dead-end idiom — see
+ * `idiomRoutingHint` above, checked FIRST since it's name-exact and cheaper) rides both
+ * `.message` (the thrown Error, e.g. surfaced in a stack trace) and `.publicMessage` (the
+ * model/agent-facing string an MCP tool surface reads); with no hint both fall back to the
+ * plain wording — a pure addition, never a regression.
  *
  * `enriched` is a THIRD, STRUCTURED signal alongside the two wording fields:
- * unambiguously true iff a did-you-mean suffix was appended. It exists so a consumer
- * that needs "did arrival already enrich this?" asks a typed boolean instead of
- * sniffing the SHAPE of `.message`.
+ * unambiguously true iff a did-you-mean suffix OR an idiom routing hint was appended. It
+ * exists so a consumer that needs "did arrival already enrich this?" asks a typed boolean
+ * instead of sniffing the SHAPE of `.message`.
  */
 export function unboundVariableError(name: string, vocabulary: Iterable<string | symbol> = []): UnboundVariableError {
+  const routingHint = idiomRoutingHint(name);
+  if (routingHint !== undefined) return new UnboundVariableError(name, [], routingHint);
   return new UnboundVariableError(name, suggestFromVocabulary(name, vocabulary));
 }

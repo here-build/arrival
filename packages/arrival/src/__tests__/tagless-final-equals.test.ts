@@ -1,8 +1,17 @@
+// NOTE (2026-07-14): these cycles are tied through `__tieKnot`, the designed door, rather than by
+// raw `p.cdr = p` assignment. `APair`'s car/cdr became prototype GETTERS (so `AJSArrayList`, the
+// lazy spine view over a borrowed JS array, can override them) — and a getter-only property cannot
+// be assigned, so the old raw writes now throw `TypeError: Cannot set property cdr`.
+//
+// That they threw is the useful part: these tests were the ONLY code in the tree still tying knots
+// outside the door. `__tieKnot`'s doc has always said it is "the ONE mutation path through APair's
+// readonly slots" — the tests just quietly weren't using it, and nothing could tell. The getters
+// made the fence real.
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 
 import { AValue } from "../values/primitives/AValue.js";
-import { APair } from "../values/primitives/APair.js";
+import { __tieKnot, APair } from "../values/primitives/APair.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { AString } from "../values/primitives/AString.js";
 import { ABool } from "../values/primitives/ABool.js";
@@ -141,10 +150,10 @@ describe("G2 Pair Setoid", () => {
     // itself), so the locals carry the real slot type rather than the nil-narrowed infer.
     const a: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), nil);
     // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
-    a.cdr = a;
+    __tieKnot(a, "cdr", a);
     const b: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), nil);
     // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
-    b.cdr = b;
+    __tieKnot(b, "cdr", b);
     expect(pairEq(a, b)).toBe(true);
   });
 
@@ -152,15 +161,15 @@ describe("G2 Pair Setoid", () => {
     const a: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), nil);
     const b: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 2), nil);
     // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
-    a.cdr = b;
+    __tieKnot(a, "cdr", b);
     // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
-    b.cdr = a;
+    __tieKnot(b, "cdr", a);
     const c: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), nil);
     const d: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 2), nil);
     // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
-    c.cdr = d;
+    __tieKnot(c, "cdr", d);
     // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
-    d.cdr = c;
+    __tieKnot(d, "cdr", c);
     expect(pairEq(a, c)).toBe(true);
   });
 
@@ -232,10 +241,10 @@ describe("G4 equal? regression — structuralEqual", () => {
   it("cyclic list via structuralEqual terminates", () => {
     const a: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), nil);
     // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
-    a.cdr = a;
+    __tieKnot(a, "cdr", a);
     const b: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), nil);
     // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
-    b.cdr = b;
+    __tieKnot(b, "cdr", b);
     expect(structuralEqual(a, b)).toBe(true);
     // self-equality on a cyclic list must also terminate (the bridge.ts war story)
     expect(structuralEqual(a, a)).toBe(true);

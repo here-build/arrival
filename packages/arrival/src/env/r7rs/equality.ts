@@ -22,6 +22,7 @@
  */
 
 import * as z from "../../common/scheme-zod.js";
+import { AJSArray } from "../../values/primitives/AJSArray.js";
 import dedent from "dedent";
 import { symbol, type CallCtx } from "../../common/symbol.js";
 import { ABool, schemeFalse, schemeTrue } from "../../values/primitives/ABool.js";
@@ -213,7 +214,33 @@ export default new EnvCapability("scheme/equality", {
       // null/undefined no longer reach here — the membrane boxes JS null→nil and
       // undefined→theVoid before any value enters the language — so the legacy
       // global_env's `|| null || undefined` nullish tolerance is dissolved.
-      function (this: CallCtx, obj) { return bool(obj instanceof ANil); },
+      //
+      // ── PLUS one TOLERANCE, scoped to the BORROWED array (V's ruling to confirm) ────────────
+      //
+      // An EMPTY tool-returned JSON array also answers #t.
+      //
+      // Why this is not a hole in R7RS disjointness: `(null? #())` on a genuine scheme vector stays
+      // #f — that constraint is load-bearing and untouched. The tolerance applies ONLY to an
+      // `AJSArray`, the borrowed value whose chart has not been chosen. Every CONTRACTED list verb
+      // already sees `nil` for an empty array (adoption normalizes it at mint — adopt-spine.ts), so
+      // this closes the one remaining path: a BARE `null?` on a raw tool result, where no contract
+      // has spoken.
+      //
+      // Why tolerate rather than stay faithful: at the EMPTY value the two charts CONVERGE. An
+      // empty list and an empty vector both mean "no elements", and a JSON `[]` is honestly both
+      // until a contract picks one. Answering #f there is the membrane insisting on a reading the
+      // caller never asked for — and it is the exact shape of lie this whole rework exists to kill:
+      // a model writing `(if (null? results) "none" (car results))` over an empty tool result took
+      // the ELSE branch, called `(car [])`, got a tolerant nil, and reported confident garbage. A
+      // "nothing here" that will not admit it is nothing.
+      //
+      // FLAGGED FOR V: this is a semantic ruling, not a mechanical fix. It buys seamlessness at the
+      // cost of one value answering #t to both `null?` and `vector?`. Reverting it is a one-line
+      // change (drop the second disjunct) plus the `null? on empty` row in
+      // listalike-divergence.law.test.ts.
+      function (this: CallCtx, obj) {
+        return bool(obj instanceof ANil || (obj instanceof AJSArray && obj.source.length === 0));
+      },
     ),
 
     "boolean?": symbol.native`boolean?: boxed-or-raw boolean test`(
