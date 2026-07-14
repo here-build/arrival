@@ -194,6 +194,15 @@ export interface RunInput {
    *  owner mints one via `LexicalScope.fresh()` and holds it for the world's lifetime). */
   scope: LexicalScope;
   tools: ReadonlyMap<string, BoundTool>;
+  /** Notes the CALLER already knows about this call, seeded into the run's note channel before the
+   *  program runs — so a fact the binder learned OUTSIDE the interpreter (the auto-exec bypass's
+   *  "I rewrote your bare tool call as X") lands in the SAME consolidated footer as every note the
+   *  interpreter itself produces, instead of being stapled on as a bare block ahead of the answer.
+   *
+   *  A caller that prepends its own block is not merely untidy — it is a SECOND, unlabelled channel.
+   *  The model has to learn twice where bookkeeping lives, and the one place it is guaranteed to
+   *  look (the answer) gets a non-answer at the top of it. */
+  seedNotes?: readonly string[];
   /** Per-call override, already clamped to [calibration.responseSizeMinChars,
    *  calibration.responseSizeMaxChars] by the caller. */
   responseSizeMaxChars?: number;
@@ -430,6 +439,7 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
       // interpreter (the kwargs drop, today) can reach the consolidated footer — the only reason
       // that note was invisible before is that it had nowhere to go.
       const noteSink = createNoteSink();
+      for (const line of input.seedNotes ?? []) noteSink.push(line);
 
       for (const [index, form] of forms.entries()) {
         const statementText = displayText[index]!;
