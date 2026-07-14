@@ -32,36 +32,37 @@ const rows = readdirSync(corpusDir)
 if (rows.length === 0) throw new Error(`bug-cell corpus is empty — expected corpus/*.scm at ${corpusDir}`);
 
 /**
- * Rows red for NON-Phase-0 reasons. Phase 0 fixes truthiness only (`lowerIf` /
- * `emitTailForm` / `and` / `or` / `not`); these rows pin cells owned by later
- * mechanisms. Every reason below was verified against the live emitters and
- * the live interpreter, not transcribed from the spec.
+ * Rows red under the GREENFIELD gate subject (constitution §9 subject-routing —
+ * the harness's default since the subject flip). Every reason below was
+ * verified against the live greenfield pipeline and the live interpreter
+ * (Wave-C integration gate, 2026-07-14), not transcribed from the spec.
+ *
+ * Promoted out of this map at the subject flip (each verified end-to-end):
+ * modulo-neg (the `modulo` emit rule), equal-nested-list / member-assoc /
+ * nan-eqv / neg-zero-eqv (stage-0 equality/list walkers via rung-3 shims),
+ * every-last-value / any-witness / every-boolean-pred (value-returning SRFI
+ * every/any in stage-0 + the phase1 table's registry-presence rows), and
+ * eq-vs-equal-string-eq (re-authored as a divergence-by-design sidecar:
+ * boxed-string identity is unobservable post representation-collapse —
+ * interpreter #f / compiled #t, permanently).
  */
 const KNOWN_RED: Readonly<Record<string, string>> = {
   "short-circuit-effect":
-    "prohibited-dynamics Door is Phase 1 (CoreForm): compiled output carries a bare `set(n, 999)` call, and today's interpreter lazily skips the untaken or-branch (returns 0) — no static door on either side yet",
-  // NOT red: short-circuit-control — the harness's COMPILED_PREAMBLE supplies the
-  // error() shim (harness.ts), so the taken-branch (error …) raise classifies
-  // user-error on both sides today; the Phase-1/2 per-symbol residual will merely
-  // replace the shim, not change the verdict.
-  "modulo-neg":
-    "compiled emits the JS remainder `-7 % 3` → -1; the correct-algorithm modulo residual is Phase-1 slice work, not Phase-0 truthiness",
-  "equal-nested-list":
-    "compiled equal? emits `===` (reference compare on two fresh arrays → false); structural equal? residual is Phase 1/2 (operator-identity cell)",
-  "eq-vs-equal-string-eq":
-    "compiled eq? emits `===` on JS string primitives → true; interpreter eq? is boxed-string identity → #f; per-symbol eq? residual is Phase 1/2",
-  "member-assoc":
-    "member/assoc have no emitters — compiled output calls bare unbound identifiers (ReferenceError); per-symbol residuals are Phase 1/2",
-  "nan-eqv":
-    "compiled eqv? emits `===` (NaN === NaN → false); interpreter eqv? is Object.is-shaped (#t); eqv? residual is Phase 1/2",
-  "neg-zero-eqv":
-    "compiled eqv? emits `===` (-0.0 === 0.0 → true); interpreter Object.is → #f; same eqv? cell as nan-eqv",
+    "the sidecar expects a STATIC prohibited-dynamics door on BOTH sides; both sides are lazy by design today. " +
+    "classify DOES door the set! (CoreForm Door), but the walker materializes doors as evaluation-time Throws " +
+    "(walk.ts door-throw contract: a door on an untaken branch must not poison the program) and `(or #t …)` " +
+    "short-circuits before reaching it → compiled returns 0; the interpreter never evaluates the untaken branch " +
+    "either → 0. Both sides AGREE on value 0 — greening this row needs either a compile-FRONT static " +
+    "prohibited-dynamics scan (unowned by any current phase) or a V re-ruling of the sidecar to { value: 0 } " +
+    "(the door's placement is the one §11 spec-level residue: oracle-harness.md OQ8a)",
+  // NOT red: short-circuit-control — the greenfield path resolves `error` through its
+  // harvested define-kind registry row (rung-3 shim) → FRAME → stage-0 `error`
+  // (SchemeUserError), so the taken-branch raise classifies user-error on both sides;
+  // the legacy path's COMPILED_PREAMBLE shim serves only legacy A/B runs.
   "symbol-face":
-    "representation-law gap: mercury lowers 'hello to the interned-name face \"hello\" while rosetta egress is \"'hello\" (ASymbol arrival/toJS) — reconciliation unowned by any current phase",
-  "every-last-value":
-    "SRFI every is value-RETURNING (last predicate result, 2); compiled .every folds to a boolean — the value-shape residual is Phase 1/2 (the predicate-boundary truthiness half is already fixed)",
-  "any-witness":
-    "SRFI any returns the first truthy predicate RESULT; mercury has no `any` emitter — unbound identifier in the artifact; per-symbol residual is Phase 1/2",
+    "representation-law gap (parked V ruling): the greenfield walker lowers 'hello to the interned-name face " +
+    '"hello" (walk.ts datumToR: symbol → Lit(d.name)) while rosetta egress renders the symbol face "\'hello" ' +
+    "(ASymbol arrival/toJS) — reconciliation unowned by any current phase",
 };
 
 function describeOutcome(o: Outcome): string {

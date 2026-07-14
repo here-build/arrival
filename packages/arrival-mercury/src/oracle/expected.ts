@@ -17,13 +17,13 @@ import type { ErrorClass } from "./error-classifier.js";
 import {
   agreementOf,
   evalCompiled,
+  type EvalCompiledOptions,
   evalInterpreter,
   oracleEqual,
   type OracleSession,
   type Outcome,
   show,
 } from "./harness.js";
-import type { Strategy } from "@inhuman.tools/mercury";
 
 export interface ExpectedOutcome {
   readonly value?: unknown; // mutually exclusive with errorClass and divergent
@@ -95,11 +95,11 @@ export async function runCorpusCase(
   session: OracleSession,
   source: string,
   expected: ExpectedOutcome,
-  opts?: { strategy?: Strategy },
+  opts?: EvalCompiledOptions,
 ): Promise<CorpusVerdict> {
   validateExpected(expected);
   const interpreter = await evalInterpreter(session, source);
-  const compiled = await evalCompiled(source, opts);
+  const compiled = await evalCompiled(session, source, opts);
   const failures: string[] = [];
   if (expected.divergent !== undefined) {
     const mi = outcomeMatches(interpreter, expected.divergent.interpreter);

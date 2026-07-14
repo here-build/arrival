@@ -69,17 +69,26 @@ export function classifyInterpreterError(e: unknown): ErrorClass {
  * surfaces through evalCompiled as a classified throw, same path
  * unsupported-form already uses"):
  *
- * 1. COMPILE-time: mercury's own doors are plain `Error`s with teaching
- *    messages ("`case` is not yet desugared — rewrite as `cond`", "run-view:
- *    async `filter` is unsupported", "`apply` of operator `+` is unsupported").
+ * 1. COMPILE-time: doors from either subject. Greenfield doors carry the
+ *    door-throw contract — the message BEGINS with the door code
+ *    ("<category>/<slug>: …") — so slugs classify by prefix; mercury's legacy
+ *    doors are plain `Error`s with teaching messages ("`case` is not yet
+ *    desugared — rewrite as `cond`", "run-view: async `filter` is
+ *    unsupported").
  * 2. RUN-time: whatever the executed artifact throws in-process — native
- *    `ReferenceError`/`TypeError`, or the harness preamble's `error()` shim
- *    (`.name === "OracleUserError"`, see `COMPILED_PREAMBLE` in harness.ts).
+ *    `ReferenceError`/`TypeError`, the stage-0 runtime's `error()`
+ *    (`.name === "SchemeUserError"`, src/runtime/stage0.ts), or the legacy
+ *    preamble's shim (`.name === "OracleUserError"`, `COMPILED_PREAMBLE`).
  */
 export function classifyCompiledError(e: unknown): ErrorClass {
   const name = nameOf(e);
-  if (name === "OracleUserError") return "user-error";
+  if (name === "OracleUserError" || name === "SchemeUserError") return "user-error";
   const message = messageOf(e);
+  // The walker's unresolved-identifier door IS the compiled world's unbound
+  // variable (its slug files under unsupported-form/, but the SEMANTIC class —
+  // what the interpreter throws for the same program — is unbound-variable;
+  // prefix-matched BEFORE the generic /unsupported/ sweep below).
+  if (message.startsWith("unsupported-form/unresolved-identifier")) return "unbound-variable";
   // Gated on V8's actual unbound-identifier shape: a TDZ ReferenceError
   // ("Cannot access 'x' before initialization") or a future emitter bug must
   // land "other" (loud, never agrees), not false-agree as unbound-variable.

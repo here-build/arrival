@@ -7,11 +7,15 @@ export { classifyCompiledError, classifyInterpreterError, type ErrorClass } from
 export {
   agreementOf,
   cleanupOracleScratch,
+  compileGreenfield,
   evalCompiled,
+  type EvalCompiledOptions,
   evalInterpreter,
   openOracleSession,
   oracleEqual,
+  OracleImportHangError,
   type OracleSession,
+  type OracleSubject,
   type OracleVerdict,
   type Outcome,
   runOracle,
@@ -64,6 +68,16 @@ export {
 
 // ── the engine walker (engine-walker.md; constitution §3.5/§4.2/§5.2) ──
 export { runtimeRefsOf, walk, WalkDoorError, type WalkOptions } from "./walker/index.js";
+
+// ── the ASYNC-IFY pass — post-emit {sync, promise} dataflow (Law W §5.2; async-await-plane.md) ──
+export { AsyncIfyDoorError, asyncIfy, type AsyncIfyOptions } from "./async-ify/index.js";
+
+// ── minimal FRAME — the RuntimeRef→import materializer (constitution §3.4/§9 Phase 1) ──
+export { frame, FrameDoorError, type FrameOptions } from "./frame/index.js";
+
+// ── the stage-0 runtime manifest (constitution §4.4 Stage 0; the module itself is
+//    runtime source the emitted project imports — only the symbol→export map is API) ──
+export { STAGE0 } from "./runtime/stage0.js";
 export { render } from "./residual/render.js";
 export type { CompilationUnit } from "./residual/types.js";
 
@@ -75,6 +89,18 @@ export {
   type EmitRegistryRow,
   emitRegistryOf,
 } from "./registry/index.js";
+
+// ── Phase-1 symbol rules + the registry overlay (phase1-symbol-rules.md; §4.3/§7 —
+//    interim compiler-side placement, see rules/overlay.ts) ──
+export {
+  inferAsyncSeeds,
+  type OverlayEmitRegistry,
+  type OverlayRegistryRow,
+  phase1Rules,
+  type SymbolRule,
+  type SymbolRuleTable,
+  withRules,
+} from "./rules/index.js";
 export {
   type And,
   type App,

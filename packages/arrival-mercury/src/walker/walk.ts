@@ -123,9 +123,11 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
   // ── naming: scheme-name resolution frames + open JS-block name sets ─────────────
 
   const schemeFrames: Map<string, Binding>[] = [new Map()];
-  // Module frame pre-seeds "Error": door throws reference the global — a user binding
-  // cleaning to "Error" disambiguates to Error_2 instead of capturing the throws.
-  const jsFrames: Set<string>[] = [new Set(["Error"])];
+  // Module frame pre-seeds the globals the pipeline references by minted binding:
+  // "Error" (door throws), "Math" (the quotient rule), "Promise" (ASYNC-IFY's
+  // Promise.all rewrites). A user binding cleaning to any of these disambiguates to
+  // `_2` instead of shadowing the global reference.
+  const jsFrames: Set<string>[] = [new Set(["Error", "Math", "Promise"])];
   const freshUsed = new Set<string>();
 
   const resolve = (name: string): Binding | undefined => {

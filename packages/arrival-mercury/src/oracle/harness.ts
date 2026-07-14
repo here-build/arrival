@@ -1,9 +1,9 @@
 /**
  * The differential oracle's core (oracle-harness.md §2/§4.1): does `source.scm`
  * evaluate to the same observable value under the arrival interpreter and under
- * `run(compile(source, { target: "run" }))`? Implementation-oblivious and
- * execution-only — it never inspects mercury's internals, and the only view it
- * takes of either world is source-in / JS-face-value-out.
+ * `run(compile(source))`? Implementation-oblivious and execution-only — it never
+ * inspects either compiler's internals, and the only view it takes of either
+ * world is source-in / JS-face-value-out.
  *
  * Interpreter side: ONE `buildArrivalSession` (the expensive capability-DAG
  * assembly) reused across rows; a FRESH `LexicalScope` per program with
@@ -12,18 +12,26 @@
  * loop (`run-program.ts:461-479`): `execState` per parsed top-level form,
  * thenable-await, `schemeToJs` at the exit.
  *
- * Compiled side: `projectToJsRaw(source, { target: "run", strategy })` — raw
- * (format-free `assemble` output) on purpose: each top-level form is one
- * `\n\n`-separated chunk, so the trailing expression is recoverable without
- * fighting prettier's line-splitting. The trailing chunk is rewritten to
- * `export const __oracleResult = <expr>;` (the exporting twin of
- * `compile-project.ts::printEntryResult` — no stdout/JSON round-trip, so
- * `NaN`/`-0` survive), written to a scratch `.mts` INSIDE this package tree
- * (Node bare-specifier resolution walks up for `node_modules`; `os.tmpdir()`
- * never finds the workspace), and executed in-process via tsx's `tsImport`.
+ * Compiled side — SUBJECT-ROUTED (constitution §9 "the dual-path rule"): the
+ * gate subject is `"greenfield"` (default) — the NEW pipeline end to end,
+ * classify → extractFacts → walk(overlay registry) → ASYNC-IFY → FRAME →
+ * render, with `RuntimeRef` shims resolved against the stage-0 runtime module
+ * (a shim is a legitimate residual; Law F says so). `"legacy"` keeps the
+ * mercury string path callable for A/B — a production bridge, never
+ * gate-authoritative. Both subjects export the program's trailing value as
+ * `export const __oracleResult = …` (no stdout/JSON round-trip, so `NaN`/`-0`
+ * survive), write a scratch `.mts` INSIDE this package tree (Node
+ * bare-specifier resolution walks up for `node_modules`; `os.tmpdir()` never
+ * finds the workspace), and execute in-process through ONE shared tsx loader
+ * registration guarded against pipeline hangs (see `importCaseModule`).
+ *
+ * Greenfield registry: `withRules(emitRegistryOf(session.ambient), phase1Rules)`
+ * — harvested ONCE per session ambient and cached (the harvest itself memoizes
+ * per capability instance, but the Law-N witness sweep and row-map build are
+ * per-call; one registry per session is the §4.1 reuse contract applied here).
  */
 import { randomBytes } from "node:crypto";
-import { mkdirSync, rmdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -31,8 +39,21 @@ import { execState, LexicalScope, parseGenerator, schemeToJsUntyped } from "@her
 import type { AssembledAmbient } from "@here.build/arrival/env";
 import { buildArrivalSession, BUILTIN_PREAMBLE, type InferFn } from "@inhuman.tools/arrival-run";
 import { DEFAULT_STRATEGY, projectToJsRaw, type Strategy } from "@inhuman.tools/mercury";
-import { tsImport } from "tsx/esm/api";
+import { register } from "tsx/esm/api";
 
+import { asyncIfy } from "../async-ify/index.js";
+import { classify } from "../coreform/index.js";
+import { desugar } from "../front/desugar.js";
+import { parseSexprs } from "../front/parse.js";
+import { frame } from "../frame/index.js";
+import { emitRegistryOf } from "../registry/index.js";
+import { render } from "../residual/render.js";
+import type { CompilationUnit } from "../residual/types.js";
+import { Binding as mkBinding, Const, Export } from "../residual/types.js";
+import { inferAsyncSeeds, phase1Rules, withRules, type OverlayEmitRegistry } from "../rules/index.js";
+import { narrowsMembersOf } from "../type-emit/index.js";
+import { extractFacts } from "../typefacts/index.js";
+import { walk } from "../walker/index.js";
 import { classifyCompiledError, classifyInterpreterError, type ErrorClass } from "./error-classifier.js";
 
 /** The expensive, reusable half of a differential run — one capability-DAG
@@ -89,10 +110,11 @@ export async function evalInterpreter(session: OracleSession, source: string): P
 }
 
 /**
- * R7RS `(error …)` support for the artifact world: mercury lowers `(error …)`
- * to a bare `error(…)` call with no runtime behind it yet, so the harness
- * supplies the deterministic throwing shim (the "user-error" ErrorClass's
- * compiled half — the immutability-legal short-circuit probe, spec §2/§4.3).
+ * R7RS `(error …)` support for the LEGACY artifact world only: mercury lowers
+ * `(error …)` to a bare `error(…)` call with no runtime behind it, so the
+ * legacy path supplies the deterministic throwing shim (the "user-error"
+ * ErrorClass's compiled half). The greenfield path never sees this preamble —
+ * its `error` is a real stage-0 runtime import (`SchemeUserError`).
  * Function declaration ⇒ hoisted, callable from any emitted position; a corpus
  * program that (pathologically) defines its own `error` collides loudly with a
  * SyntaxError instead of silently shadowing the probe.
@@ -111,10 +133,22 @@ function error(message: unknown, ...irritants: unknown[]): never {
 }
 `;
 
+/** Corpus-authoring misuse (no trailing expression to observe, unparseable wrap)
+ *  escapes `evalCompiled` as a REAL throw, never an Outcome — the same contract
+ *  `exportTrailingResult` has always had, made nominal so the greenfield path's
+ *  compile-door catch can re-throw it. */
+class OracleAuthoringError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "OracleAuthoringError";
+  }
+}
+
 /**
- * Rewrite the compiled module's LAST top-level chunk (raw `assemble` output
- * joins forms with `\n\n`; a single lowered form never contains a blank line)
- * into `export const __oracleResult = <expr>;` — the exporting twin of
+ * LEGACY-path trailing-result surgery: rewrite the compiled module's LAST
+ * top-level chunk (raw `assemble` output joins forms with `\n\n`; a single
+ * lowered form never contains a blank line) into
+ * `export const __oracleResult = <expr>;` — the exporting twin of
  * `compile-project.ts::printEntryResult`. Throws a plain harness error (never
  * an Outcome) when the program has no trailing EXPRESSION to observe: that is
  * corpus-authoring misuse, not a semantics divergence.
@@ -124,10 +158,10 @@ function exportTrailingResult(compiled: string): string {
   const head = cut === -1 ? "" : compiled.slice(0, cut);
   const tail = (cut === -1 ? compiled : compiled.slice(cut + 2)).trim();
   if (tail === "") {
-    throw new Error("oracle evalCompiled: empty compiled output — no trailing expression to observe");
+    throw new OracleAuthoringError("oracle evalCompiled: empty compiled output — no trailing expression to observe");
   }
   if (/^(const|let|var|function|class|import|export|type|interface|enum|declare)\b/.test(tail)) {
-    throw new Error(
+    throw new OracleAuthoringError(
       `oracle evalCompiled: the program's last top-level form must be an expression (the value under test), got a statement: ${tail.slice(0, 80)}`,
     );
   }
@@ -144,8 +178,73 @@ const SCRATCH_ROOT = fileURLToPath(new URL("../../.oracle-tmp/", import.meta.url
  * test-file B's result (observed as a corpus-vs-smoke value flake). The random
  * component makes every URL this instance ever imports globally fresh.
  */
-const SCRATCH_DIR = path.join(SCRATCH_ROOT, `run-${process.pid}-${randomBytes(6).toString("hex")}`);
+const INSTANCE_TAG = `${process.pid}-${randomBytes(6).toString("hex")}`;
+const SCRATCH_DIR = path.join(SCRATCH_ROOT, `run-${INSTANCE_TAG}`);
 let scratchCounter = 0;
+
+/**
+ * ONE namespaced tsx registration, reused for every case import this module
+ * instance performs. `tsImport()` was the previous mechanism and is a trap at
+ * corpus scale: each call registers a FRESH namespaced loader (its own esbuild
+ * transform pipeline) and never unregisters (verified against tsx 4.22.4's
+ * api impl — `register({namespace: Date.now()})` per call, no cleanup), so a
+ * 34-row corpus run piles up dozens of loader pipelines per worker; under
+ * fleet concurrency an import eventually hangs FOREVER on a stalled pipeline —
+ * observed twice on different rows, both unkillable by vitest's timeout (the
+ * hang sits under an await the timer can't preempt). One registration = one
+ * pipeline; the namespace tag (module-instance-unique, like the scratch dir)
+ * keeps it out of vitest's own loader chain and out of sibling instances'.
+ */
+const caseLoader = register({ namespace: `arrival-mercury-oracle-${INSTANCE_TAG}` });
+
+/** How long a single case-module import may take before the harness declares
+ *  the LOADER (not the case) faulty. Real imports of these tiny emitted
+ *  modules complete in well under a second; 60s is pure headroom. */
+const IMPORT_TIMEOUT_MS = 60_000;
+
+/** Oracle INFRASTRUCTURE failure — a stuck loader pipeline, never a semantics
+ *  verdict. Thrown out of `evalCompiled` (the `OracleAuthoringError` path), so
+ *  a hang can never false-classify as a compiled-side crash Outcome. */
+export class OracleImportHangError extends Error {
+  constructor(file: string) {
+    super(
+      `oracle evalCompiled: importing the compiled case module hung twice (> ${IMPORT_TIMEOUT_MS}ms each) — ` +
+        `loader-pipeline fault, not a program verdict. Module kept for inspection at ${file}`,
+    );
+    this.name = "OracleImportHangError";
+  }
+}
+
+/** Import a case module through the shared registration, guarded against the
+ *  hang mode: race a generous timer, retry ONCE at a fresh path (a fresh URL
+ *  cannot hit any wedged in-flight resolution), then fail loudly. */
+async function importCaseModule(file: string): Promise<{ __oracleResult?: unknown }> {
+  const attempt = async (p: string): Promise<{ __oracleResult?: unknown } | typeof HUNG> => {
+    let timer: NodeJS.Timeout | undefined;
+    const hangSignal = new Promise<typeof HUNG>((resolve) => {
+      timer = setTimeout(() => resolve(HUNG), IMPORT_TIMEOUT_MS);
+    });
+    const imported = caseLoader.import(pathToFileURL(p).href, import.meta.url) as Promise<{
+      __oracleResult?: unknown;
+    }>;
+    try {
+      return await Promise.race([imported, hangSignal]);
+    } finally {
+      clearTimeout(timer);
+      // A raced-out import that REJECTS later must not surface as an unhandled
+      // rejection (it would crash the vitest worker long after the row moved on).
+      void imported.catch(() => undefined);
+    }
+  };
+  const first = await attempt(file);
+  if (first !== HUNG) return first;
+  const retryFile = file.replace(/\.mts$/, ".r2.mts");
+  writeFileSync(retryFile, readFileSync(file, "utf8"), "utf8");
+  const second = await attempt(retryFile);
+  if (second !== HUNG) return second;
+  throw new OracleImportHangError(file);
+}
+const HUNG = Symbol("import-hung");
 
 /** Best-effort scratch cleanup — not load-bearing (the directory is gitignored
  *  and outside tsconfig's `src/**` include), but a clean run leaves no litter.
@@ -162,28 +261,175 @@ export function cleanupOracleScratch(): void {
   }
 }
 
+// ─── the greenfield subject (constitution §9 subject-routing) ─────────────────────────
+
+/** The per-session compiled-side registry: harvest + Phase-1 overlay + the Law-N
+ *  witness sweep, once per ambient (§4.1's reuse contract applied to the compiler
+ *  side). Keyed by the AMBIENT (not the session wrapper) so two OracleSession
+ *  handles over one assembly share the work. */
+const registryCache = new WeakMap<
+  AssembledAmbient,
+  { registry: OverlayEmitRegistry; narrowsMembers: ReadonlySet<string> }
+>();
+
+function greenfieldRegistryFor(session: OracleSession): {
+  registry: OverlayEmitRegistry;
+  narrowsMembers: ReadonlySet<string>;
+} {
+  let hit = registryCache.get(session.ambient);
+  if (hit === undefined) {
+    const registry = withRules(emitRegistryOf(session.ambient), phase1Rules);
+    hit = { registry, narrowsMembers: narrowsMembersOf(registry) };
+    registryCache.set(session.ambient, hit);
+  }
+  return hit;
+}
+
+const ORACLE_MAIN = "__oracle-main";
+const RESULT_NAME = "__oracleResult";
+
 /**
- * Compile `source` (run-view, `strategy` defaulting to `DEFAULT_STRATEGY`) and
- * execute the artifact in-process. Mercury's own compile-time doors surface as
- * classified throw-Outcomes — the same path "unsupported-form" uses (spec §2).
+ * Turn the walked unit's trailing statement — by construction the wrap's
+ * `(__oracle-main)` call — into `const __oracleResult = <expr>` + a trailing
+ * named export. `export { x }` renders among the decls (textually before the
+ * const), which ESM's hoisted export linkage makes legal; scratch modules are
+ * executed, never `tsc`'d, so TS2448 aesthetics don't apply.
  */
-export async function evalCompiled(source: string, opts?: { strategy?: Strategy }): Promise<Outcome> {
-  let compiled: string;
+function exportUnitResult(unit: CompilationUnit): CompilationUnit {
+  const body = [...unit.body];
+  const last = body.pop();
+  if (last === undefined) {
+    throw new OracleAuthoringError("oracle evalCompiled: wrapped unit has no trailing call — internal wrap invariant broken");
+  }
+  body.push(Const(mkBinding(RESULT_NAME), last));
+  return { decls: [...unit.decls, Export([RESULT_NAME])], body };
+}
+
+/**
+ * The greenfield pipeline, source → module text:
+ *
+ *   wrap → classify → extractFacts → walk → exportResult → ASYNC-IFY → FRAME → render
+ *
+ * THE WRAP: the whole program compiles as one `(define (__oracle-main) …)` body
+ * plus a trailing `(__oracle-main)` call. The walker's top level discards
+ * non-define statement values (`lowerStmts`) — correct for real programs, but the
+ * oracle must OBSERVE the trailing form's value; a function body's tail position
+ * preserves it (`bodySeq(…, "tail")`), and body-position defines pre-register
+ * exactly like top-level ones (letrec* both), so wrapping is semantics-neutral
+ * for every self-contained corpus program. The interpreter side stays unwrapped —
+ * it evaluates form-by-form and reads the last form's value directly.
+ *
+ * Facts run on the WRAPPED source (spans are wrap-relative on both sides of the
+ * extraction, so the join is unaffected). The registry's narrows rows feed the
+ * NForm grammar via `narrowsMembersOf` — the overlay's `null?`/`pair?` emit bare
+ * and flow into `facts.boolean` exactly as Contract-carried rows would.
+ *
+ * Exported (beyond `evalCompiled`'s own use) for the §8 determinism check and the
+ * §9 enforcement-spine `tsc --strict` output gate — both need the exact bytes the
+ * gate subject produces, not a reconstruction of the pipeline.
+ */
+export function compileGreenfield(session: OracleSession, source: string): string {
+  const { registry, narrowsMembers } = greenfieldRegistryFor(session);
+  const wrapped = `(define (${ORACLE_MAIN})\n${source}\n)\n(${ORACLE_MAIN})\n`;
+  const classified = classify(desugar(parseSexprs(wrapped)));
+  const main = classified.forms[0];
+  if (main?.kind !== "DefineFn") {
+    throw new OracleAuthoringError(
+      "oracle evalCompiled: the greenfield wrap did not classify as a definition — empty or unparseable program",
+    );
+  }
+  const lastForm = main.body.at(-1);
+  if (lastForm === undefined) {
+    throw new OracleAuthoringError("oracle evalCompiled: empty program — no trailing expression to observe");
+  }
+  if (lastForm.kind === "Define" || lastForm.kind === "DefineFn") {
+    throw new OracleAuthoringError(
+      "oracle evalCompiled: the program's last top-level form must be an expression (the value under test), got a definition",
+    );
+  }
+  const extraction = extractFacts({ source: wrapped, classified }, { narrowsMembers });
+  const sync = walk(classified, { registry, facts: extraction.facts, register: "run" });
+  const asyncified = asyncIfy(exportUnitResult(sync), { asyncSeeds: inferAsyncSeeds });
+  const framed = frame(asyncified, { runtimeModule: `./${STAGE0_BASENAME}` });
+  return render(framed);
+}
+
+// ── staging the runtime module next to the scratch cases ──
+// tsx resolves relative `.mts` specifiers natively, and a sibling file keeps the
+// scratch project self-contained (the "copy" half of the spec's copy-or-import-map
+// choice — an absolute import-map would pin scratch output to this checkout's
+// layout). Copied once per module instance; `.ts` source first, `.js` (dist) as
+// the built-package fallback — plain JS is valid `.mts` content.
+const STAGE0_BASENAME = "stage0.mts";
+let stage0Staged = false;
+
+function stageRuntimeModule(): void {
+  if (stage0Staged) return;
+  const candidates = [new URL("../runtime/stage0.ts", import.meta.url), new URL("../runtime/stage0.js", import.meta.url)];
+  let source: string | undefined;
+  for (const url of candidates) {
+    try {
+      source = readFileSync(url, "utf8");
+      break;
+    } catch {
+      /* try the next candidate */
+    }
+  }
+  if (source === undefined) {
+    throw new Error(`oracle evalCompiled: stage-0 runtime module not found beside ${import.meta.url}`);
+  }
+  mkdirSync(SCRATCH_DIR, { recursive: true });
+  writeFileSync(path.join(SCRATCH_DIR, STAGE0_BASENAME), source, "utf8");
+  stage0Staged = true;
+}
+
+/** `"greenfield"` — the new pipeline, gate-authoritative from Phase 1 (§9);
+ *  `"legacy"` — the mercury string path, kept callable for A/B only. */
+export type OracleSubject = "greenfield" | "legacy";
+
+export interface EvalCompiledOptions {
+  /** Default `"greenfield"` — the dual-path rule's gate subject. */
+  readonly subject?: OracleSubject;
+  /** Legacy-path strategy knob; ignored by the greenfield subject. */
+  readonly strategy?: Strategy;
+}
+
+/**
+ * Compile `source` under the routed subject and execute the artifact in-process.
+ * Compile-time doors (walker `WalkDoorError`, `FrameDoorError`, ASYNC-IFY doors,
+ * parse failures, mercury's own doors) surface as classified throw-Outcomes — the
+ * same path "unsupported-form" uses (spec §2). Corpus-authoring misuse
+ * (`OracleAuthoringError`) escapes as a real throw, never an Outcome.
+ */
+export async function evalCompiled(
+  session: OracleSession,
+  source: string,
+  opts?: EvalCompiledOptions,
+): Promise<Outcome> {
+  const subject = opts?.subject ?? "greenfield";
+  let module: string;
   try {
-    compiled = projectToJsRaw(source, { target: "run", strategy: opts?.strategy ?? DEFAULT_STRATEGY });
+    if (subject === "legacy") {
+      const compiled = projectToJsRaw(source, { target: "run", strategy: opts?.strategy ?? DEFAULT_STRATEGY });
+      module = `${COMPILED_PREAMBLE}\n${exportTrailingResult(compiled)}`;
+    } else {
+      stageRuntimeModule();
+      module = compileGreenfield(session, source);
+    }
   } catch (e) {
+    if (e instanceof OracleAuthoringError) throw e;
     return { kind: "throw", errorClass: classifyCompiledError(e), message: messageOf(e), raw: e };
   }
-  const module = `${COMPILED_PREAMBLE}\n${exportTrailingResult(compiled)}`;
   mkdirSync(SCRATCH_DIR, { recursive: true });
   const file = path.join(SCRATCH_DIR, `case-${process.pid}-${scratchCounter++}.mts`);
   writeFileSync(file, module, "utf8");
   try {
-    const ns = (await tsImport(pathToFileURL(file).href, import.meta.url)) as { __oracleResult?: unknown };
+    const ns = await importCaseModule(file);
     let value: unknown = ns.__oracleResult;
     if (isThenable(value)) value = await value; // symmetric with the interpreter side
     return { kind: "value", value };
   } catch (e) {
+    if (e instanceof OracleImportHangError) throw e; // infrastructure, never a verdict
     return { kind: "throw", errorClass: classifyCompiledError(e), message: messageOf(e), raw: e };
   }
 }
@@ -287,13 +533,14 @@ export function agreementOf(interpreter: Outcome, compiled: Outcome): { agree: b
   return { agree: false, detail: `outcome-kind mismatch: interpreter=${interpreter.kind} compiled=${compiled.kind}` };
 }
 
-/** One differential run: interpreter vs compiled, agreement per `agreementOf`. */
+/** One differential run: interpreter vs compiled (subject-routed), agreement per
+ *  `agreementOf`. */
 export async function runOracle(
   session: OracleSession,
   source: string,
-  opts?: { strategy?: Strategy },
+  opts?: EvalCompiledOptions,
 ): Promise<OracleVerdict> {
   const interpreter = await evalInterpreter(session, source);
-  const compiled = await evalCompiled(source, opts);
+  const compiled = await evalCompiled(session, source, opts);
   return { ...agreementOf(interpreter, compiled), interpreter, compiled };
 }
