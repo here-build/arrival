@@ -48,25 +48,25 @@ const DECOY = `(let ((e (dict :v (car (infer "m" "v")) :o "FAKE"))) (number->str
 /** Grounded infer, no fabrication — the value under attribution traces
  *  straight back to a single evidence-class crossing. */
 export const Genuine: Story = {
-  render: () => <CircuitMermaid mermaid={renderCircuit(GENUINE)} />,
+  args: { mermaid: renderCircuit(GENUINE) },
 };
 
 /** A `const` literal ("SAFE") reaches the output on one branch of a choice —
  *  the guard-swap forge; the flag-shaped fabrication mark is unmistakable. */
 export const GuardSwapForge: Story = {
-  render: () => <CircuitMermaid mermaid={renderCircuit(GUARD_SWAP_FORGE)} />,
+  args: { mermaid: renderCircuit(GUARD_SWAP_FORGE) },
 };
 
 /** A boolean choice grounded in evidence — both the "GUILTY" and "INNOCENT"
  *  alts are `const`, but the CHOICE itself is grounded (its guard traces to
  *  a real crossing), so this is a legitimate decision, not a forge. */
 export const Judgment: Story = {
-  render: () => <CircuitMermaid mermaid={renderCircuit(JUDGMENT)} />,
+  args: { mermaid: renderCircuit(JUDGMENT) },
 };
 
 /** Genuine evidence is present in the circuit (the `:v` crossing) but the
  *  OUTPUT reads `:o` instead — a decoy: real evidence exists, just not on
  *  the path that grounds the actual value returned. */
 export const Decoy: Story = {
-  render: () => <CircuitMermaid mermaid={renderCircuit(DECOY)} />,
+  args: { mermaid: renderCircuit(DECOY) },
 };

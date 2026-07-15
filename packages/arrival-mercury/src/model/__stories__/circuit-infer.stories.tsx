@@ -58,9 +58,9 @@ const MOCK_CROSSING_CACHE: ReadonlyMap<number, string> = new Map([
 const mockDataFor = (site: NodeId): string | undefined => MOCK_CROSSING_CACHE.get(site as number);
 
 export const Structure: Story = {
-  render: () => <CircuitMermaid mermaid={renderCircuit(INFER_CHAIN, { view: "infer" })} />,
+  args: { mermaid: renderCircuit(INFER_CHAIN, { view: "infer" }) },
 };
 
 export const WithData: Story = {
-  render: () => <CircuitMermaid mermaid={renderCircuit(INFER_CHAIN, { view: "infer", dataFor: mockDataFor })} />,
+  args: { mermaid: renderCircuit(INFER_CHAIN, { view: "infer", dataFor: mockDataFor }) },
 };

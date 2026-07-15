@@ -58,11 +58,11 @@ const RECURSIVE_INFER = `
 (refine "Label the text." 3)`;
 
 export const MapZStack: Story = {
-  render: () => <CircuitMermaid mermaid={renderCircuit(MAP)} />,
+  args: { mermaid: renderCircuit(MAP) },
 };
 
 export const NestedAxes: Story = {
-  render: () => <CircuitMermaid mermaid={renderCircuit(NESTED)} />,
+  args: { mermaid: renderCircuit(NESTED) },
 };
 
 /** The payoff: a recursive inference loop rendered as a superposition. The
@@ -73,5 +73,5 @@ export const NestedAxes: Story = {
  *  registry doesn't model yet; the recursion lift + z-stack are what this
  *  story demonstrates.) */
 export const RecursiveInferenceLoop: Story = {
-  render: () => <CircuitMermaid mermaid={renderCircuit(RECURSIVE_INFER)} />,
+  args: { mermaid: renderCircuit(RECURSIVE_INFER) },
 };
