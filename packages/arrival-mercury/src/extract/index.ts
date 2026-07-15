@@ -29,14 +29,14 @@ import { extractAtom } from "./arm-atoms.js";
 import { extractControl } from "./arm-control.js";
 import { extractContainer } from "./arm-containers.js";
 
-/** A name bound in scope — the EXPRESSION it was bound to plus the scope that
- *  expression must itself be read in (binding-site scoping, derive.ts hardening
- *  #2: without it, beta-reduction reads a callee's free names in the CALLER's
- *  scope and forges). */
-export interface Bound {
-  readonly expr: CoreForm;
-  readonly scope: Scope;
-}
+/** A name bound in scope — either the EXPRESSION it was bound to plus the
+ *  scope that expression must itself be read in (binding-site scoping,
+ *  derive.ts hardening #2: without it, beta-reduction reads a callee's free
+ *  names in the CALLER's scope and forges), or a SYNTHETIC attribution value
+ *  directly (fan-body element/acc params — `buildFan` binds `element` to
+ *  MuxProv{key:null} over the collection; there is no expr to defer to).
+ *  ARM-A's Ref case returns `prov` directly when present. */
+export type Bound = { readonly expr: CoreForm; readonly scope: Scope } | { readonly prov: StaticProv };
 
 export interface Scope {
   readonly names: ReadonlyMap<string, Bound>;
