@@ -225,3 +225,66 @@ describe("circuitToMermaid — golden: a small realistic circuit, read the full 
     );
   });
 });
+
+// ── the semantic infer view (crossing chain, plumbing contracted) ──────────────
+
+describe("circuitToMermaid — view:'infer' (the semantic crossing chain)", () => {
+  // Distinct sites: the infer view keys nodes BY site, so a chain needs them.
+  const mintAt = (site: number, head: string, closed: readonly StaticProv[] = []): MintProv => ({
+    kind: "mint",
+    site: site as NodeId,
+    head,
+    integrity: "evidence",
+    closed,
+  });
+
+  it("contracts plumbing to a direct infer→infer wire — a prompt built from a prior crossing's output", () => {
+    // rewritten's prompt is a dict whose field wraps labelled's output through
+    // mux/build plumbing; the infer view must show ONE wire labelled -> rewritten,
+    // never the intervening dict/mux nodes.
+    const labelled = mintAt(2, "infer/chat", [konst()]);
+    const rewritten = mintAt(13, "infer/chat", [build("dict", [{ key: "prev", prov: muxOf("label", labelled) }])]);
+    const out = circuitToMermaid(rewritten, { view: "infer" });
+    expect(out).toContain("flowchart LR");
+    expect(out).toContain('x2[["infer/chat"]]');
+    expect(out).toContain('x13[["infer/chat"]]');
+    expect(out).toContain("x2 --> x13"); // the contracted wire (single-arg → no arg label)
+    // NO plumbing nodes leaked:
+    expect(out).not.toContain("dict");
+    expect(out).not.toContain("mux");
+    // rewritten's output is the value → OUTPUT edge:
+    expect(out).toContain('out(["OUTPUT"])');
+    expect(out).toContain("x13 --> out");
+  });
+
+  it("absorbs the recorded data onto nodes and wires when the storage resolver answers", () => {
+    const labelled = mintAt(2, "infer/chat", [konst()]);
+    const rewritten = mintAt(13, "infer/chat", [build("dict", [{ key: "prev", prov: muxOf("label", labelled) }])]);
+    const store: Record<number, string> = { 2: "LABEL: negative", 13: "this app changed my life" };
+    const out = circuitToMermaid(rewritten, { view: "infer", dataFor: (s) => store[s as number] });
+    expect(out).toContain("infer/chat<br/>LABEL: negative");
+    expect(out).toContain("infer/chat<br/>this app changed my life");
+    // the wire carries the UPSTREAM crossing's recorded output:
+    expect(out).toContain('x2 -->|"LABEL: negative"| x13');
+  });
+
+  it("a program-text output (a const final value, no crossing behind it) flags ⚠ fabricated at the sink", () => {
+    const out = circuitToMermaid(konst(), { view: "infer" });
+    expect(out).toContain('out(["OUTPUT"])');
+    expect(out).toContain("outfab");
+    expect(out).toContain("⚠ fabricated");
+    expect(out).toContain("class outfab fab;");
+  });
+
+  it("a plain evidence output (single crossing, no chain) is one node to OUTPUT, no fabrication", () => {
+    const out = circuitToMermaid(mintAt(5, "infer", []), { view: "infer" });
+    expect(out).toContain('x5[["infer"]]');
+    expect(out).toContain("x5 --> out");
+    expect(out).not.toContain("fab");
+  });
+
+  it("defaults to LR but honors an explicit TD", () => {
+    expect(circuitToMermaid(mintAt(5, "infer"), { view: "infer" })).toContain("flowchart LR");
+    expect(circuitToMermaid(mintAt(5, "infer"), { view: "infer", direction: "TD" })).toContain("flowchart TD");
+  });
+});

@@ -95,8 +95,25 @@ import type {
 } from "./static-prov.js";
 
 export interface MermaidOptions {
-  /** Layout direction — see this file's header for the TD default's rationale. */
+  /** Layout direction. `"full"` view defaults TD (the whole circuit reads as a
+   *  dependency tree); `"infer"` view defaults LR (a crossing chain reads
+   *  left-to-right, like the studio's own region render). */
   readonly direction?: "TD" | "LR";
+  /** Which projection:
+   *  - `"full"` (default) — every StaticProv node, the honest circuit.
+   *  - `"infer"` — THE SEMANTIC VIEW. Keep only the membrane crossings (mints);
+   *    contract all the plumbing (mux/build/string/fuse/choice/fan) that wraps
+   *    one crossing's output into the next crossing's prompt down to a single
+   *    WIRE. We never render or re-provenance the wrapping steps — the edge
+   *    plus a point-query to storage IS the mechanism ("the dataflow graph is
+   *    enough, as long as we cache the expensive points"). */
+  readonly view?: "full" | "infer";
+  /** The separate storage's point-query, used only by the `"infer"` view: given
+   *  a crossing's site, return the recorded value that flowed on its output
+   *  wire (the thing RegionView shows as the actual message text). Absent → the
+   *  view shows wire STRUCTURE only (which field grounds where), never invents a
+   *  value. This is the seam onto the content-addressed crossing cache. */
+  readonly dataFor?: (site: NodeId) => string | undefined;
 }
 
 interface Ctx {
@@ -277,8 +294,168 @@ function renderNode(prov: StaticProv, ctx: Ctx): string {
  *  for the shape/edge/direction legend. Deterministic: the same `prov`
  *  always produces the exact same string. */
 export function circuitToMermaid(prov: StaticProv, opts: MermaidOptions = {}): string {
+  if ((opts.view ?? "full") === "infer") return inferView(prov, opts);
   const direction = opts.direction ?? "TD";
   const ctx: Ctx = { lines: [], next: 0 };
   renderNode(prov, ctx);
   return [`flowchart ${direction}`, ...ctx.lines].join("\n");
+}
+
+// ── the semantic infer view (crossing chain, plumbing contracted) ──────────────
+
+/** The mints whose OUTPUT flows to `p`, following the CONTENT channel only — a
+ *  mint is a leaf output, so we STOP at it (never descend into its own `closed`
+ *  prompt) and never follow selection (choice guards). This is the contraction:
+ *  every mux/build/string/fuse/choice-alt/fan between two crossings collapses to
+ *  "these upstream crossings' outputs reach here", i.e. the WIRE. */
+function outputCrossings(p: StaticProv, acc: Map<number, MintProv>): void {
+  switch (p.kind) {
+    case "mint":
+      acc.set(p.site as number, p);
+      return; // STOP — the mint's output is the wire's payload; its closed is a DIFFERENT wire.
+    case "input":
+    case "const":
+    case "opaque":
+      return;
+    case "fused":
+      p.sources.forEach((s) => outputCrossings(s, acc));
+      return;
+    case "mux":
+      outputCrossings(p.source, acc);
+      return;
+    case "build":
+      p.parts.forEach((pt) => outputCrossings(pt.prov, acc));
+      return;
+    case "string":
+      p.runs.forEach((r) => outputCrossings(r, acc));
+      return;
+    case "choice":
+      p.alts.forEach((a) => outputCrossings(a, acc)); // content = alts, never guards
+      return;
+    case "fan":
+      outputCrossings(p.collection, acc);
+      outputCrossings(p.body, acc);
+      return;
+  }
+}
+
+/** Every mint anywhere in the circuit (descends through closed + guards + all
+ *  content) — the node set of the infer view. */
+function allCrossings(p: StaticProv, acc: Map<number, MintProv>): void {
+  switch (p.kind) {
+    case "mint":
+      acc.set(p.site as number, p);
+      p.closed.forEach((c) => allCrossings(c, acc));
+      return;
+    case "input":
+    case "const":
+    case "opaque":
+      return;
+    case "fused":
+      p.sources.forEach((s) => allCrossings(s, acc));
+      return;
+    case "mux":
+      allCrossings(p.source, acc);
+      return;
+    case "build":
+      p.parts.forEach((pt) => allCrossings(pt.prov, acc));
+      return;
+    case "string":
+      p.runs.forEach((r) => allCrossings(r, acc));
+      return;
+    case "choice":
+      p.guards.forEach((g) => allCrossings(g, acc));
+      p.alts.forEach((a) => allCrossings(a, acc));
+      return;
+    case "fan":
+      allCrossings(p.collection, acc);
+      allCrossings(p.body, acc);
+      return;
+  }
+}
+
+/** Does the content of `p` (not its closed/guards) reach a `const` — a
+ *  program-text fabrication on the wire, the thing the seal refuses? Used to
+ *  flag a wire whose payload is (partly) fabricated rather than grounded. */
+function contentHasConst(p: StaticProv): boolean {
+  switch (p.kind) {
+    case "const":
+      return true;
+    case "mint":
+    case "input":
+    case "opaque":
+      return false;
+    case "fused":
+      return p.sources.some(contentHasConst);
+    case "mux":
+      return contentHasConst(p.source);
+    case "build":
+      return p.parts.some((pt) => contentHasConst(pt.prov));
+    case "string":
+      return p.runs.some(contentHasConst);
+    case "choice":
+      return p.alts.some(contentHasConst);
+    case "fan":
+      return contentHasConst(p.collection) || contentHasConst(p.body);
+  }
+}
+
+function inferView(root: StaticProv, opts: MermaidOptions): string {
+  const direction = opts.direction ?? "LR";
+  const nodes = new Map<number, MintProv>();
+  allCrossings(root, nodes);
+
+  const lines: string[] = [];
+  const nid = (site: number): string => `x${site}`;
+
+  // Nodes: one per crossing. The label ABSORBS the crossing's identity (head)
+  // and, when the storage resolver answers, the recorded value on its output —
+  // the crossing's whole prompt struct collapses INTO the node, never drawn as
+  // separate plumbing. (A prompt's template text is the instruction, benign —
+  // not fabrication; only the OUTPUT's grounding is the seal's concern, below.)
+  for (const [site, m] of nodes) {
+    const data = opts.dataFor?.(m.site);
+    const head = m.integrity === "ambient" ? `${m.head} · ambient` : m.head;
+    const label = data !== undefined ? `${head}<br/>${data}` : head;
+    lines.push(m.integrity === "ambient" ? nodeHexagon(nid(site), label) : nodeSubroutine(nid(site), label));
+  }
+
+  // Wires: for each crossing, which UPSTREAM crossings' outputs flow into its
+  // prompt (its `closed` inputs). This is the contracted edge — the wrapping
+  // steps that spliced the upstream value into this prompt are never rendered.
+  // The wire's label is the recorded DATA if storage answers, else the arg slot.
+  for (const [site, m] of nodes) {
+    m.closed.forEach((c, i) => {
+      const up = new Map<number, MintProv>();
+      outputCrossings(c, up);
+      for (const [upSite, upM] of up) {
+        const wireData = opts.dataFor?.(upM.site);
+        const lbl = wireData ?? (m.closed.length > 1 ? `arg${i}` : undefined);
+        lines.push(contentEdge(nid(upSite), nid(site), lbl));
+      }
+    });
+  }
+
+  // OUTPUT: the crossings whose output is the program's final value. The one
+  // place fabrication matters in this view: if the final value carries a `const`
+  // on its content path with NO crossing behind it, the output is program-text —
+  // fabricated, not grounded. That is the seal's verdict, surfaced at the sink.
+  const outs = new Map<number, MintProv>();
+  outputCrossings(root, outs);
+  const outputFabricated = contentHasConst(root);
+  if (outs.size > 0 || outputFabricated) {
+    lines.push(nodeStadium("out", "OUTPUT"));
+    for (const [upSite, upM] of outs) {
+      lines.push(contentEdge(nid(upSite), "out", opts.dataFor?.(upM.site)));
+    }
+    if (outputFabricated) {
+      lines.push(nodeFlag("outfab", "⚠ fabricated"));
+      lines.push(contentEdge("outfab", "out"));
+    }
+  }
+
+  const classes = outputFabricated
+    ? ["classDef fab fill:#e5484d22,stroke:#e5484d,stroke-width:2px,color:#8f1e23;", "class outfab fab;"]
+    : [];
+  return [`flowchart ${direction}`, ...lines, ...classes].join("\n");
 }
