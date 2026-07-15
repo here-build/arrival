@@ -38,8 +38,22 @@ import type { NodeId } from "../coreform/types.js";
  *  `evidence` = a recorded membrane crossing over real inputs (perturbable);
  *  `ambient`  = environment-derived, evidence-free (`(now)`, `(uuid)`) — the
  *               source of the third verdict, "ungrounded-ambient";
- *  `program-text` = written by the (adversarial) author — bottom integrity. */
+ *  `program-text` = written by the (adversarial) author — bottom integrity.
+ *  The full 3-member alphabet: used for `InputProv`/anchor-integrity reads
+ *  (`ChannelAnchor.integrity` in circuit-verdict.ts) where a `program-text`
+ *  reading is a real, reachable classification. `MintProv.integrity` and the
+ *  `HeadClass` mint arm use the NARROWER `MintIntegrity` below — a mint is
+ *  always a real membrane crossing (`MINT_HEADS`'s registry only ever stamps
+ *  `evidence`/`ambient`), so `program-text` there would be a type-level lie a
+ *  registry could never actually produce. */
 export type Integrity = "evidence" | "ambient" | "program-text";
+
+/** The mint-only integrity alphabet (2-member) — see `Integrity`'s doc above
+ *  for why `MintProv`/`HeadClass`'s mint arm are narrowed to this rather than
+ *  the full 3-member `Integrity`: `program-text` is not a real mint class,
+ *  only `MINT_HEADS` registry entries reach here, and that table only ever
+ *  contains `"evidence"`/`"ambient"`. */
+export type MintIntegrity = "evidence" | "ambient";
 
 /** A program INPUT — the evidence handle a run is invoked over (a
  *  `define/overridable` parameter). Evidence-class by construction: inputs are
@@ -60,7 +74,7 @@ export interface MintProv {
   readonly kind: "mint";
   readonly site: NodeId;
   readonly head: string;
-  readonly integrity: Integrity; // "evidence" for recorded crossings, "ambient" for (now)/(uuid)
+  readonly integrity: MintIntegrity; // "evidence" for recorded crossings, "ambient" for (now)/(uuid)
   readonly closed: readonly StaticProv[];
 }
 
@@ -184,7 +198,7 @@ export type HeadClass =
   | { readonly role: "mux"; readonly keyArg: number | "self" } // which arg names the key (`:field` heads are "self")
   | { readonly role: "build"; readonly ctor: BuildProv["ctor"] }
   | { readonly role: "string" } // string-append & friends: fuse with run-order preserved
-  | { readonly role: "mint"; readonly integrity: Integrity }
+  | { readonly role: "mint"; readonly integrity: MintIntegrity }
   | { readonly role: "fan"; readonly fanKind: "map" | "filter" | "fold" }
   | { readonly role: "choice" } // `when`/`unless`-like heads if they survive to App position
   | { readonly role: "opaque"; readonly reason: string };

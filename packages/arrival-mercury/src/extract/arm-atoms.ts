@@ -98,7 +98,7 @@ function extractRef(form: Ref, ctx: ExtractCtx): StaticProv {
   // the render, where-provenance — wants the reference location. Other
   // synthetic kinds (fan elements) keep their binder's site deliberately: the
   // element IS the axis's projection, not a per-use value.
-  if ("prov" in bound) return bound.prov.kind === "input" ? { ...bound.prov, site: form.id } : bound.prov;
+  if (bound.tag === "prov") return bound.prov.kind === "input" ? { ...bound.prov, site: form.id } : bound.prov;
   if (ctx.reducing.has(bound.expr)) return opaque(form.id, "cyclic-binding");
   return extract(bound.expr, { ...ctx, scope: bound.scope, reducing: new Set([...ctx.reducing, bound.expr]) });
 }
@@ -116,14 +116,14 @@ function extendForLet(letKind: LetKind, bindings: readonly Binding[], outer: Sco
   if (letKind === "let*") {
     let acc: Scope = outer;
     for (const b of bindings) {
-      acc = { names: new Map([[b.name, { expr: b.init, scope: acc }]]), parent: acc };
+      acc = { names: new Map([[b.name, { tag: "expr", expr: b.init, scope: acc }]]), parent: acc };
     }
     return acc;
   }
   const names = new Map<string, Bound>();
   const frame: Scope = { names, parent: outer };
   const initScope: Scope = letKind === "let" ? outer : frame; // letrec/letrec* — self-referential
-  for (const b of bindings) names.set(b.name, { expr: b.init, scope: initScope });
+  for (const b of bindings) names.set(b.name, { tag: "expr", expr: b.init, scope: initScope });
   return frame;
 }
 
@@ -147,12 +147,12 @@ function extractBody(body: readonly CoreForm[], ctx: ExtractCtx, siteId: NodeId)
   let last: CoreForm | undefined;
   for (const f of body) {
     if (f.kind === "Define") {
-      names.set(f.name, { expr: f.value, scope: frame });
+      names.set(f.name, { tag: "expr", expr: f.value, scope: frame });
       scope = frame;
       continue;
     }
     if (f.kind === "DefineFn") {
-      names.set(f.name, { expr: f, scope: frame });
+      names.set(f.name, { tag: "expr", expr: f, scope: frame });
       scope = frame;
       continue;
     }

@@ -175,6 +175,7 @@ export type {
   HeadRegistry,
   InputProv,
   Integrity,
+  MintIntegrity,
   MintProv,
   MuxProv,
   OpaqueProv,

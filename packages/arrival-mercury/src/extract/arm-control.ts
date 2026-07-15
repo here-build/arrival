@@ -111,7 +111,7 @@ function extractApp(form: App, ctx: ExtractCtx): StaticProv {
   if (form.fn.kind === "Ref") {
     const bound = lookup(ctx.scope, form.fn.name);
     if (bound !== undefined) {
-      if ("expr" in bound && (bound.expr.kind === "DefineFn" || bound.expr.kind === "Lambda")) {
+      if (bound.tag === "expr" && (bound.expr.kind === "DefineFn" || bound.expr.kind === "Lambda")) {
         return betaReduce(bound.expr, bound.scope, form, ctx);
       }
       // Bound to something that isn't callable (a value, a synthetic fan
@@ -149,7 +149,7 @@ function betaReduce(fn: DefineFn | Lambda, calleeScope: Scope, form: App, ctx: E
   if (ctx.reducing.has(fn)) return opaque(form.id, "cyclic-binding");
 
   const paramNames = new Map<string, Bound>();
-  fn.params.forEach((p, i) => paramNames.set(p.name, { expr: allArgs[i]!, scope: ctx.scope }));
+  fn.params.forEach((p, i) => paramNames.set(p.name, { tag: "expr", expr: allArgs[i]!, scope: ctx.scope }));
   const paramFrame: Scope = { names: paramNames, parent: calleeScope };
   const reducing = new Set(ctx.reducing).add(fn);
   return extractBody(fn.body, { ...ctx, scope: paramFrame, reducing }, form.id);
@@ -175,12 +175,12 @@ function extractBody(body: readonly CoreForm[], ctx: ExtractCtx, site: NodeId): 
   let last: CoreForm | undefined;
   for (const f of body) {
     if (f.kind === "Define") {
-      names.set(f.name, { expr: f.value, scope: frame });
+      names.set(f.name, { tag: "expr", expr: f.value, scope: frame });
       scope = frame;
       continue;
     }
     if (f.kind === "DefineFn") {
-      names.set(f.name, { expr: f, scope: frame });
+      names.set(f.name, { tag: "expr", expr: f, scope: frame });
       scope = frame;
       continue;
     }

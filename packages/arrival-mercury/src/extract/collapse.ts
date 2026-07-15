@@ -39,7 +39,15 @@
  * that structurally ignores acc or element or is a selection mask; everything
  * else stays "lowered".
  */
-import type { CollapseKind, StaticProv } from "../model/static-prov.js";
+import type { StaticProv } from "../model/static-prov.js";
+
+/** `inferCollapse`'s own return alphabet — route|lowered ONLY (see header:
+ *  "combine" is buildFan's call, made against the raw CoreForm before the
+ *  combinator's identity is erased; a body-only view can never legitimately
+ *  answer "combine"). `CollapseKind` (static-prov.ts) stays the 3-member
+ *  FanProv.collapse alphabet; this narrower alias is `inferCollapse`'s own
+ *  contract, checked by tsc at every call site and every return statement. */
+export type InferredCollapse = "route" | "lowered";
 
 /** `element` — the distinguished one-of-collection projection buildFan mints
  *  for every fan body (`{kind:"mux", site:fn.id, key:null, source:collection}`).
@@ -75,7 +83,7 @@ const isAccLeaf = (p: StaticProv): boolean => {
  *  Everything else — any `fused`/`build`/`string` combinator, any `mux` with a
  *  real key, any `choice` with a non-leaf or const/opaque alt, any bare
  *  `const`/`opaque` body — stays "lowered", the sound default. */
-export function inferCollapse(body: StaticProv): CollapseKind {
+export function inferCollapse(body: StaticProv): InferredCollapse {
   if (isElement(body)) return "route";
   if (isAccLeaf(body)) return "route";
   if (body.kind === "choice" && body.alts.length > 0 && body.alts.every((alt) => isElement(alt) || isAccLeaf(alt))) {

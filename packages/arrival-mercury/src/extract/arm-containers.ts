@@ -39,7 +39,7 @@
  * identically — only entry VALUES flow into the circuit, never key spellings.
  */
 import type { CoreForm, DefineFn, Dict, Lambda, NodeId } from "../coreform/types.js";
-import type { BuildProv, ChoiceProv, HeadClass, HeadRegistry, Integrity, StaticProv } from "../model/static-prov.js";
+import type { BuildProv, ChoiceProv, HeadClass, HeadRegistry, MintIntegrity, StaticProv } from "../model/static-prov.js";
 import { inferCollapse } from "./collapse.js";
 import { type Bound, type ExtractCtx, type Scope, extract, lookup, opaque } from "./index.js";
 
@@ -96,12 +96,14 @@ const FUSE_HEADS: Readonly<Record<string, true>> = {
  *  table is fold-collapse-eligibility, not a duplicate of either registry. A
  *  5th member here is a closed-list violation (collapse-kind.test.ts pins the
  *  count) — extend only with a real associativity proof, never by convenience. */
-const AC_HEADS: Readonly<Record<string, true>> = {
-  "+": true,
-  "*": true,
-  "string-append": true,
-  cons: true,
-};
+const AC_HEADS = ["+", "*", "string-append", "cons"] as const;
+type AcHead = (typeof AC_HEADS)[number];
+const AC_HEAD_SET: ReadonlySet<AcHead> = new Set(AC_HEADS);
+/** Membership guard doubling as a type predicate: the closed-4 invariant now
+ *  lives in `AcHead`'s type (a 5th string here is a tsc error at every
+ *  `AC_HEADS` literal, not just a runtime miss), and every call site narrows
+ *  to `AcHead` instead of a bare `string` after the check. */
+const isAcHead = (name: string): name is AcHead => AC_HEAD_SET.has(name as AcHead);
 
 /** Where-provenance projection. `keyArg` names which positional arg supplies the
  *  key; `"self"` marks the heads whose "key" is the operation's own identity —
@@ -146,7 +148,7 @@ const STRING_HEADS: Readonly<Record<string, true>> = {
  *  ambient (I3's third verdict — environment-derived, no recorded input to
  *  ground against); the rest are evidence (a recorded crossing over real
  *  inputs — a prompt, a file path, a required module). */
-const MINT_HEADS: Readonly<Record<string, Integrity>> = {
+const MINT_HEADS: Readonly<Record<string, MintIntegrity>> = {
   infer: "evidence",
   "infer/chat": "evidence",
   "read-file": "evidence",
@@ -213,7 +215,7 @@ function resolveFanFn(fn: CoreForm, ctx: ExtractCtx): { readonly fn: FnForm; rea
   if (isFnForm(fn)) return { fn, scope: ctx.scope };
   if (fn.kind === "Ref") {
     const bound = lookup(ctx.scope, fn.name);
-    if (bound && "expr" in bound && isFnForm(bound.expr)) return { fn: bound.expr, scope: bound.scope };
+    if (bound && bound.tag === "expr" && isFnForm(bound.expr)) return { fn: bound.expr, scope: bound.scope };
   }
   return null;
 }
@@ -226,7 +228,7 @@ const FAN_ARITY: Readonly<Record<"map" | "filter" | "fold", number>> = { map: 1,
  *  the RAW CoreForm — the only place the combinator's identity still exists. */
 function isBareAcCombinatorApp(form: CoreForm, params: readonly { readonly name: string }[]): boolean {
   if (form.kind !== "App") return false;
-  if (form.fn.kind !== "Ref" || !Object.hasOwn(AC_HEADS, form.fn.name)) return false;
+  if (form.fn.kind !== "Ref" || !isAcHead(form.fn.name)) return false;
   if (form.kwargs.length !== 0 || form.positionalArgs.length !== 2) return false;
   const [a0, a1] = form.positionalArgs;
   return a0!.kind === "Ref" && a0!.name === params[0]!.name && a1!.kind === "Ref" && a1!.name === params[1]!.name;
@@ -252,7 +254,7 @@ export function buildFan(
   // `lookup` would find nothing bound to `+` and fail closed to
   // fan/fn-unresolvable. Recognize it BEFORE resolution: the raw Ref's name
   // (not any extracted shape) is the combinator identity itself.
-  if (fanKind === "fold" && fn.kind === "Ref" && Object.hasOwn(AC_HEADS, fn.name)) {
+  if (fanKind === "fold" && fn.kind === "Ref" && isAcHead(fn.name)) {
     const element: StaticProv = { kind: "mux", site: fn.id, key: null, source: collection };
     const acc: StaticProv = init ?? opaque(site, "fan/fold-missing-init");
     const body: StaticProv = { kind: "fused", site: fn.id, sources: [acc, element] };
@@ -277,10 +279,10 @@ export function buildFan(
 
   const names = new Map<string, Bound>();
   if (fanKind === "fold") {
-    names.set(target.params[0]!.name, { prov: init ?? opaque(site, "fan/fold-missing-init") });
-    names.set(target.params[1]!.name, { prov: element });
+    names.set(target.params[0]!.name, { tag: "prov", prov: init ?? opaque(site, "fan/fold-missing-init") });
+    names.set(target.params[1]!.name, { tag: "prov", prov: element });
   } else {
-    names.set(target.params[0]!.name, { prov: element });
+    names.set(target.params[0]!.name, { tag: "prov", prov: element });
   }
   const frame: Scope = { names, parent: resolved.scope };
 
@@ -291,10 +293,10 @@ export function buildFan(
   const inputs = new Set(ctx.inputs);
   for (const f of target.body) {
     if (f.kind === "Define") {
-      names.set(f.name, { expr: f.value, scope: frame });
+      names.set(f.name, { tag: "expr", expr: f.value, scope: frame });
       if (f.overridableType !== undefined) inputs.add(f.name);
     }
-    if (f.kind === "DefineFn") names.set(f.name, { expr: f, scope: frame });
+    if (f.kind === "DefineFn") names.set(f.name, { tag: "expr", expr: f, scope: frame });
   }
 
   const last = target.body.filter((f) => f.kind !== "Define" && f.kind !== "DefineFn").at(-1);

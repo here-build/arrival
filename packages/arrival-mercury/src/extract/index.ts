@@ -36,7 +36,7 @@ import { extractContainer } from "./arm-containers.js";
  *  directly (fan-body element/acc params — `buildFan` binds `element` to
  *  MuxProv{key:null} over the collection; there is no expr to defer to).
  *  ARM-A's Ref case returns `prov` directly when present. */
-export type Bound = { readonly expr: CoreForm; readonly scope: Scope } | { readonly prov: StaticProv };
+export type Bound = { readonly tag: "expr"; readonly expr: CoreForm; readonly scope: Scope } | { readonly tag: "prov"; readonly prov: StaticProv };
 
 export interface Scope {
   readonly names: ReadonlyMap<string, Bound>;
@@ -110,13 +110,13 @@ export function extractProgram(forms: readonly CoreForm[], registry: HeadRegistr
         // (rather than a scope-bypassing inputs check) is load-bearing: an
         // inner `(let ((e "FAB")) e)` shadow must attribute to the shadow's
         // const, never to the input — the shadowed-input forge (corpus row 6).
-        names.set(f.name, { prov: { kind: "input", site: f.id, name: f.name } });
+        names.set(f.name, { tag: "prov", prov: { kind: "input", site: f.id, name: f.name } });
         inputs.add(f.name);
       } else {
-        names.set(f.name, { expr: f.value, scope: top });
+        names.set(f.name, { tag: "expr", expr: f.value, scope: top });
       }
     }
-    if (f.kind === "DefineFn") names.set(f.name, { expr: f, scope: top });
+    if (f.kind === "DefineFn") names.set(f.name, { tag: "expr", expr: f, scope: top });
   }
   const last = forms.filter((f) => f.kind !== "Define" && f.kind !== "DefineFn").at(-1) ?? forms.at(-1);
   if (!last) return { kind: "opaque", site: 0 as NodeId, reason: "empty-program" };
