@@ -1,5 +1,5 @@
 /**
- * ARM-A — atoms / bindings / structure (G1 stub; Sonnet-A fills).
+ * ARM-A — atoms / bindings / structure (IMPLEMENTED; all 8 atom forms).
  *
  * Owns: Lit, Ref, Quote, Define, Let, Begin, Require, Door.
  *

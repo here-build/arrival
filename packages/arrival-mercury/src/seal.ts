@@ -38,6 +38,35 @@
  * answer and the probe cannot upgrade it.
  *
  * Seal = static ∧ probe, fail closed on ANY disagreement or indeterminacy.
+ *
+ * ─── KNOWN MIGRATION STATE (longcat alignment audit, 2026-07-15) ────────────────
+ *
+ * This function consumes `WireVerdict` from `wire/policy` — the OLD static leg,
+ * which is purely STRUCTURAL and has NO integrity concept. The integrity-aware
+ * circuit reading (`verdict/circuit-verdict.ts`, invention I3: the
+ * evidence/ambient/program-text alphabet) is built and tested but NOT YET in this
+ * import graph. Three consequences, all closed together by T6c — do not close
+ * any one alone, the intermediate states are forges:
+ *
+ *   1. AMBIENT BLINDNESS. `wire/policy.dataShaped` signs `(string-append "case-"
+ *      (number->string (now)))` — entirely ambient, evidence-free — because the
+ *      value flows structurally. The design (§2b, I3) requires the STATIC plane to
+ *      refuse ambient-rooted data (verdict `ungrounded-ambient`). Today it is
+ *      refused ONLY by an accident of probe coverage (§3 below), not a designed
+ *      boundary. `circuit-verdict.dataShaped` DOES check
+ *      `anchors.every(a => a.integrity === "evidence")` — T6c must re-point the
+ *      static leg here to THAT.
+ *   2. VOCABULARY CHECK. `wire/policy.judgmentShaped(desc, vocabulary)` checks the
+ *      declared vocabulary; `circuit-verdict.judgmentShaped` does NOT (it defers
+ *      to the conjunction). So the re-point in (1) MUST simultaneously carry the
+ *      vocabulary check into T6c — re-pointing alone would let an undeclared
+ *      constant in a judgment slot seal `selection-attested`. Atomic with (1).
+ *   3. PROBE COVERAGE. `runProbe` perturbs ONLY infer crossings; non-infer
+ *      crossings (incl. ambient `(now)`/`(uuid)`) re-fire and read `ungrounded`,
+ *      which is what accidentally refuses ambient today. Generalizing the probe
+ *      to non-infer crossings BEFORE (1) lands opens the ambient forge. Probe
+ *      generalization MUST lag the (1) re-point. Written down so it is a posture,
+ *      not a surprise.
  */
 import type { LeafVerdictKind } from "./probe/verdict.js";
 import type { LeafRole, WireVerdict } from "./wire/policy.js";

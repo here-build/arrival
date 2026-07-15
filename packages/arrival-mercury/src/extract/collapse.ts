@@ -1,5 +1,5 @@
 /**
- * T3a — collapse-kind inference (contract CORRECTED 2026-07-15; stub SOUND).
+ * T3a — collapse-kind inference (IMPLEMENTED; contract CORRECTED 2026-07-15).
  *
  * A Fan's `collapse` says whether its axis may fold. §2c has two collapsing
  * regimes and a fail-closed default:
