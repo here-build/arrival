@@ -144,11 +144,12 @@ function extractApp(form: App, ctx: ExtractCtx): StaticProv {
   if (form.fn.kind === "Ref") {
     const bound = lookup(ctx.scope, form.fn.name);
     if (bound !== undefined) {
-      if (bound.tag === "expr" && (bound.expr.kind === "DefineFn" || bound.expr.kind === "Lambda")) {
-        return betaReduce(bound.expr, bound.scope, form, ctx);
-      }
-      // Bound to something that isn't callable (a value, a synthetic fan
-      // projection, …) — not one of the ladder's named cases; fail closed.
+      const resolution = resolveCallee(bound, ctx);
+      if (resolution.kind === "fn") return betaReduce(resolution.fn, resolution.scope, form, ctx);
+      if (resolution.kind === "free") return dispatchKnownHead(form, ctx.registry.classifyHead(resolution.name), resolution.name, ctx);
+      // Bound to something that isn't callable (a computed/dynamic value, a
+      // synthetic fan projection, an exhausted ref-cycle, …) — not one of the
+      // ladder's named cases; fail closed.
       return opaque(form.id, "unknown-callee");
     }
     // Free name — resolve as a known/unknown primitive head.
@@ -163,6 +164,58 @@ function extractApp(form: App, ctx: ExtractCtx): StaticProv {
   // (5) anything else — a computed callee (`((pick-fn) x)`), an App/If/Dict/…
   // sitting in head position. Nothing left to resolve.
   return opaque(form.id, "unknown-callee");
+}
+
+/** The terminal outcome of chasing a callee `Ref` through zero or more
+ *  ref-to-ref hops: a resolved user fn ready for beta-reduction (in ITS OWN
+ *  binding scope, unchanged from the direct case), a free name reached at the
+ *  chain's end (dispatch it exactly like today's direct free-Ref path), or
+ *  nothing resolvable — stay opaque. */
+type CalleeResolution =
+  | { readonly kind: "fn"; readonly fn: DefineFn | Lambda; readonly scope: Scope }
+  | { readonly kind: "free"; readonly name: string }
+  | { readonly kind: "opaque" };
+
+/** Chase a callee-position `Ref` through however many ref-to-ref hops it
+ *  takes to bottom out (the higher-order/callable-as-value gap: a param like
+ *  `step` bound to `Ref(generation)`, one level removed from the DefineFn
+ *  `generation` actually is). Sound because refs are immutable in this
+ *  dialect (no `set!` — see the arrival-immutable-no-dynamics law): a name
+ *  resolving to a name resolving to a DefineFn/Lambda IS that DefineFn/Lambda,
+ *  so chasing it is identical to calling it directly.
+ *
+ *  A resolved `"fn"` outcome (the terminal DefineFn/Lambda, direct OR chased)
+ *  returns WITHOUT ever consulting `ctx.reducing` — that set stays exclusively
+ *  `betaReduce`'s own territory (its `ctx.reducing.has(fn)` check, reported as
+ *  `opaque("cyclic-binding")`), unchanged from before this chase existed. A
+ *  direct self-call (`bound.expr` already a DefineFn/Lambda on the first hop,
+ *  no chase needed) must keep hitting THAT check with THAT reason — folding a
+ *  reducing-check in ahead of it here would intercept the exact same cycle
+ *  one step earlier and relabel it `unknown-callee`, a real regression (wrong
+ *  reason strings are the one thing I1 forbids).
+ *
+ *  The cycle guard below exists ONLY for the ref-to-ref hop itself (mirrors
+ *  `extractRef`'s (arm-atoms.ts) own ref-chase guard, same `ctx.reducing` set,
+ *  same shape: check the Ref node against `ctx.reducing` before following it,
+ *  then extend `ctx.reducing` with that same Ref node before recursing). A
+ *  repeat hop (`(define a b)(define b a)` called as a callee) is a
+ *  definitional cycle and fails closed rather than diverging — bounded by the
+ *  number of distinct Ref nodes in the chain, never unbounded.
+ *
+ *  Every other shape stays opaque, NEVER guessed: a synthetic `{tag:"prov"}`
+ *  bound (a fan-body element, an input — not something a static callee chase
+ *  may re-interpret as callable), or a bound expr that is neither `Ref` nor
+ *  `DefineFn`/`Lambda` (a COMPUTED/dynamic callable — `(define f (pick-fn))`
+ *  used through a param — cannot be resolved statically). */
+function resolveCallee(bound: Bound, ctx: ExtractCtx): CalleeResolution {
+  if (bound.tag === "prov") return { kind: "opaque" };
+  const { expr, scope } = bound;
+  if (expr.kind === "DefineFn" || expr.kind === "Lambda") return { kind: "fn", fn: expr, scope };
+  if (expr.kind !== "Ref") return { kind: "opaque" };
+  if (ctx.reducing.has(expr)) return { kind: "opaque" };
+  const next = lookup(scope, expr.name);
+  if (next === undefined) return { kind: "free", name: expr.name };
+  return resolveCallee(next, { ...ctx, reducing: new Set(ctx.reducing).add(expr) });
 }
 
 /** Beta-reduce a call to a known callee (`DefineFn`/`Lambda`, scope-resolved OR

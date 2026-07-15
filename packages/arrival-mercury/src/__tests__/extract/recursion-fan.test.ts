@@ -99,11 +99,17 @@ describe("tail-fold recursion lift — positive rows (recognizeTailFold landed i
   it("gepa-shaped counting loop: root is a FanProv (collapse lowered), NOT opaque", () => {
     const prov = run(`(define (iterate step pool n) (if (= n 0) pool (iterate step (step pool) (- n 1))))\n(iterate f (list a) 3)`);
     expect(prov.kind).not.toBe("opaque");
+    // `f` here is genuinely free (never defined) — `step`'s Ref-to-Ref chase
+    // (arm-control.ts's `resolveCallee`, the higher-order/callable-as-value
+    // fix) now bottoms out on the free name and dispatches it through the
+    // registry exactly like a direct free-Ref callee, landing on the generic
+    // unknown-HEAD reason rather than the pre-fix unknown-CALLEE wall this
+    // row used to hit before the chase existed.
     const pattern: ProvPattern = {
       kind: "fan",
       collapse: "lowered",
       collection: { kind: "build", ctor: "vector", parts: [{ key: 0, prov: input("a") }] },
-      body: { kind: "opaque", reason: "unknown-callee" },
+      body: { kind: "opaque", reason: "unknown-head/f" },
     };
     expect(mismatch(prov, pattern)).toBeNull();
   });

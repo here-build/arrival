@@ -23,26 +23,30 @@
  * this situation ("kept as literal copies … not a module worth coupling two
  * story files to").
  *
- * ── the one finding this sweep could NOT close (verified, not assumed) ─────
+ * ── the one finding this sweep could NOT close, at the time (now CLOSED) ───
  *
  * GEPA's `(iterate generation (list (assess seed)) rounds)` passes the named
  * function `generation` BY VALUE into `iterate`'s `step` parameter, which
  * `iterate`'s body then calls as `(step pool)`. `step`'s scope binding is
  * `{expr: Ref("generation"), scope}` — a Ref bound to ANOTHER Ref, not
- * directly to a Lambda/DefineFn. `arm-control.ts`'s `extractApp` ladder
- * checks only ONE level (`bound.expr.kind === "DefineFn" || "Lambda"`) before
- * falling to `opaque("unknown-callee")` — it does not chase a second hop to
- * find the DefineFn `generation` actually is. This is confirmed to be a
- * GENERAL, pre-existing ARM-B limitation, independent of GEPA and of this
- * registry sweep — an isolated two-function repro with no GEPA machinery at
- * all (`(define (twice f x) (f (f x))) (define (inc y) (+ y 1)) (twice inc 5)`)
- * hits the exact same `opaque("unknown-callee")`. It is the documented
- * "callable-as-value"/tagless-apply gap (stage-3 remainder), not a defect in
- * the classifications this file's registry rows add. Fixing it means
- * extending `extractApp`'s general App-head ladder in `arm-control.ts` —
- * outside this sweep's authorized touch surface (`arm-containers.ts` + this
- * file + the story only). The `it.fails` row below stays red for THAT reason;
- * the plain `it` rows below it are the real, verified, achieved surfacing.
+ * directly to a Lambda/DefineFn. `arm-control.ts`'s `extractApp` ladder used
+ * to check only ONE level (`bound.expr.kind === "DefineFn" || "Lambda"`)
+ * before falling to `opaque("unknown-callee")` — it did not chase a second
+ * hop to find the DefineFn `generation` actually is. This was confirmed to
+ * be a GENERAL, pre-existing ARM-B limitation, independent of GEPA and of
+ * this registry sweep — an isolated two-function repro with no GEPA
+ * machinery at all (`(define (twice f x) (f (f x))) (define (inc y) (+ y 1))
+ * (twice inc 5)`) hit the exact same `opaque("unknown-callee")`. It was the
+ * documented "callable-as-value"/tagless-apply gap (stage-3 remainder), not
+ * a defect in the classifications this file's registry rows add.
+ *
+ * CLOSED in a later session: `arm-control.ts`'s `resolveCallee` now chases a
+ * callee Ref through however many ref-to-ref hops it takes to bottom out on
+ * a DefineFn/Lambda (sound — refs are immutable in this dialect, no `set!`).
+ * The row below is now a plain `it`, and it passes: BOTH infer/chat
+ * crossings surface. See `src/__tests__/extract/higher-order-callee.test.ts`
+ * for the dedicated RED suite (the isolated `twice`/`inc` repro cited above,
+ * plus the adversarial rows — computed callee, ref cycle, hidden const).
  */
 import { describe, expect, it } from "vitest";
 
@@ -184,16 +188,23 @@ describe("GEPA — the real program's circuit surfaces past max-by/append/etc (w
     expect(mints.filter((h) => h === "infer/chat").length).toBeGreaterThanOrEqual(1);
   });
 
-  // See this file's header for the full account: reaching the SECOND
-  // infer/chat crossing (reflect/improve, inside `mutate` inside
-  // `generation`) needs `(step pool)` to resolve `step` through a
+  // See this file's header for the full account of the ORIGINAL gap:
+  // reaching the SECOND infer/chat crossing (reflect/improve, inside `mutate`
+  // inside `generation`) needed `(step pool)` to resolve `step` through a
   // Ref-to-Ref indirection to the DefineFn `generation` — a general ARM-B
-  // App-head-ladder gap (verified via an isolated non-GEPA repro), not
-  // something this registry-only sweep's touch surface can fix. Stays
-  // it.fails for that reason, not because the registry rows above are
-  // incomplete — the two rows above independently verify what this sweep DID
-  // land.
-  it.fails("the full circuit reaches BOTH infer/chat crossings (ask/predict AND reflect/improve) — ≥2 mints", () => {
+  // App-head-ladder gap (verified via an isolated non-GEPA repro), outside
+  // this registry-only sweep's touch surface. It stayed it.fails for that
+  // reason, not because the registry rows above were incomplete.
+  //
+  // CLOSED (separate session, arm-control.ts's `resolveCallee`): `extractApp`
+  // now chases a callee Ref through however many ref-to-ref hops it takes to
+  // bottom out on a DefineFn/Lambda (sound — refs are immutable in this
+  // dialect, no `set!`, so a name resolving to a name resolving to a
+  // DefineFn IS that DefineFn). `step` now resolves to `generation`, so
+  // `(step pool)` beta-reduces instead of going opaque, and the
+  // reflect/improve crossing (buried inside `mutate`, reached through
+  // `generation`'s body) is now reachable. Flipped to a plain `it`.
+  it("the full circuit reaches BOTH infer/chat crossings (ask/predict AND reflect/improve) — ≥2 mints", () => {
     const prov = extractSource(buildGepaSource());
     const mints = collectMintHeads(prov);
     expect(mints.filter((h) => h === "infer/chat").length).toBeGreaterThanOrEqual(2);
