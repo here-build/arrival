@@ -39,37 +39,32 @@
  *
  * Seal = static ∧ probe, fail closed on ANY disagreement or indeterminacy.
  *
- * ─── KNOWN MIGRATION STATE (longcat alignment audit, 2026-07-15) ────────────────
+ * ─── T6c CLOSED (2026-07-16): the re-point ──────────────────────────────────────
  *
- * This function consumes `WireVerdict` from `wire/policy` — the OLD static leg,
- * which is purely STRUCTURAL and has NO integrity concept. The integrity-aware
- * circuit reading (`verdict/circuit-verdict.ts`, invention I3: the
- * evidence/ambient/program-text alphabet) is built and tested but NOT YET in this
- * import graph. Three consequences, all closed together by T6c — do not close
- * any one alone, the intermediate states are forges:
+ * This function used to consume `WireVerdict` from `wire/policy` — the OLD,
+ * purely-structural static leg with no integrity concept — and this block
+ * documented that migration as "KNOWN MIGRATION STATE" while it was in flight.
+ * T6c is closed: `seal()` now takes `CircuitVerdict` (verdict/circuit-verdict.ts)
+ * directly, whose `dataShaped`/`judgmentShaped` check `Integrity`
+ * (evidence/ambient/program-text, invention I3) — an ambient-rooted leaf
+ * (`(now)`/`(uuid)`) is refused by a DESIGNED boundary, not an accident of probe
+ * coverage. The vocabulary check (a judgment leaf's selection against the
+ * DECLARED output schema) is carried by the caller alongside the re-pointed
+ * static leg — see mcp-worker's `attest-provider.ts::judgmentVocabularyOf` for
+ * the live conjunction's own derivation of that vocabulary. The probe-coverage
+ * ordering constraint this block used to warn about (never generalize the probe
+ * to non-infer/ambient crossings BEFORE this re-point lands) is now a PROVED
+ * invariant, not a posture — see `src/__tests__/seal-ambient-ordering.test.ts`.
  *
- *   1. AMBIENT BLINDNESS. `wire/policy.dataShaped` signs `(string-append "case-"
- *      (number->string (now)))` — entirely ambient, evidence-free — because the
- *      value flows structurally. The design (§2b, I3) requires the STATIC plane to
- *      refuse ambient-rooted data (verdict `ungrounded-ambient`). Today it is
- *      refused ONLY by an accident of probe coverage (§3 below), not a designed
- *      boundary. `circuit-verdict.dataShaped` DOES check
- *      `anchors.every(a => a.integrity === "evidence")` — T6c must re-point the
- *      static leg here to THAT.
- *   2. VOCABULARY CHECK. `wire/policy.judgmentShaped(desc, vocabulary)` checks the
- *      declared vocabulary; `circuit-verdict.judgmentShaped` does NOT (it defers
- *      to the conjunction). So the re-point in (1) MUST simultaneously carry the
- *      vocabulary check into T6c — re-pointing alone would let an undeclared
- *      constant in a judgment slot seal `selection-attested`. Atomic with (1).
- *   3. PROBE COVERAGE. `runProbe` perturbs ONLY infer crossings; non-infer
- *      crossings (incl. ambient `(now)`/`(uuid)`) re-fire and read `ungrounded`,
- *      which is what accidentally refuses ambient today. Generalizing the probe
- *      to non-infer crossings BEFORE (1) lands opens the ambient forge. Probe
- *      generalization MUST lag the (1) re-point. Written down so it is a posture,
- *      not a surprise.
+ * `wire/policy.ts`'s `WireVerdict`/`dataShaped`/`judgmentShaped`/`verdictFor`
+ * remain in the tree as the PREDECESSOR plane: `probe-adversarial.test.ts` and
+ * `wire-descriptor.test.ts` still exercise them directly (TESTING.md §2/§3:
+ * "stays green until wire/ dissolves, per losable-legacy") as an independent,
+ * still-passing mechanism check — that dissolution is a separate, explicit step,
+ * not a side effect of this re-point.
  */
 import type { LeafVerdictKind } from "./probe/verdict.js";
-import type { LeafRole, WireVerdict } from "./wire/policy.js";
+import type { CircuitVerdict } from "./verdict/circuit-verdict.js";
 
 /**
  * The sealed outcome for one output leaf. `content-attested` / `selection-
@@ -88,9 +83,27 @@ export type SealVerdict =
 const notAttestable = (reason: string): SealVerdict => ({ kind: "not-attestable", reason });
 
 /**
+ * What a leaf was expected to be, ahead of checking it — the seal's own
+ * declaration, never inferred from the circuit (the design's own "the policy is
+ * specification, not a guess the checker makes from shape alone"). Owned HERE,
+ * not by `verdict/circuit-verdict.ts`'s `CircuitRole` (a bare `"data" |
+ * "judgment"` string with no vocabulary): `CircuitRole` answers "is the circuit
+ * SHAPED like a judgment," a structural question the circuit module can answer
+ * with no schema in hand; this type's `vocabulary` is the DECLARED output
+ * schema the conjunction checks the observed selection against — a downstream
+ * concern `circuit-verdict.ts` explicitly declines to own (see its module
+ * header's `judgmentShaped` doc). `wire/policy.ts` keeps its OWN, independent
+ * copy of this same shape for its (predecessor-plane) `verdictFor` — that is not
+ * a DRY violation: wire/policy is the retiring plane (TESTING.md's
+ * "losable-legacy"), and this copy is the one the LIVE conjunction owns.
+ */
+export type LeafRole = { readonly role: "data" } | { readonly role: "judgment"; readonly vocabulary: ReadonlySet<string> };
+
+/**
  * Compose one leaf's two plane-verdicts into the sealed decision.
  *
- * @param staticVerdict  `verdictFor(descriptor, role)` — the static wire reading.
+ * @param staticVerdict  `circuitVerdict(prov, role.role)` (verdict/circuit-verdict.ts)
+ *                       — the static, integrity-aware circuit reading.
  * @param probeVerdict   the leaf's `LeafVerdict.verdict` — the dynamic reading.
  *                       Pass `"indeterminate"` when no probe ran (fail closed).
  * @param role           the declared role the leaf is being sealed against.
@@ -109,11 +122,11 @@ const notAttestable = (reason: string): SealVerdict => ({ kind: "not-attestable"
  * hand-written per call site). This function trusts the pairing and cannot
  * re-check it: it holds no leaf identity, only two verdicts.
  */
-export function seal(staticVerdict: WireVerdict, probeVerdict: LeafVerdictKind, role: LeafRole): SealVerdict {
+export function seal(staticVerdict: CircuitVerdict, probeVerdict: LeafVerdictKind, role: LeafRole): SealVerdict {
   if (role.role === "data") {
-    // Static gate FIRST: only a clean-content descriptor is a candidate.
-    if (staticVerdict.kind !== "data-shaped") {
-      return notAttestable(`static plane did not certify clean content (${staticVerdict.kind}); the probe cannot upgrade it`);
+    // Static gate FIRST: only a clean-content circuit is a candidate.
+    if (staticVerdict !== "data-shaped") {
+      return notAttestable(`static plane did not certify clean content (${staticVerdict}); the probe cannot upgrade it`);
     }
     // Dynamic gate: the probe must have OBSERVED a mark flow to this leaf.
     if (probeVerdict !== "content") {
@@ -123,8 +136,8 @@ export function seal(staticVerdict: WireVerdict, probeVerdict: LeafVerdictKind, 
   }
 
   // Judgment role.
-  if (staticVerdict.kind !== "judgment-shaped") {
-    return notAttestable(`static plane did not certify a declared judgment (${staticVerdict.kind}); the probe cannot upgrade it`);
+  if (staticVerdict !== "judgment-shaped") {
+    return notAttestable(`static plane did not certify a declared judgment (${staticVerdict}); the probe cannot upgrade it`);
   }
   // The leaf must be OBSERVED to range among the program's own constants —
   // `selection`, not `content` (content here would mean a mark leaked into a

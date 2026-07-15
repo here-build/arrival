@@ -39,18 +39,34 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { classify } from "../coreform/index.js";
 import type { ClassifyResult } from "../coreform/index.js";
+import { defaultRegistry } from "../extract/arm-containers.js";
+import { extractProgram } from "../extract/index.js";
 import { desugar } from "../front/desugar.js";
 import { parseSexprs } from "../front/parse.js";
 import { seal } from "../seal.js";
 import { openProbeSession, probe, recordRun, type CallRef, type ProbeSession, type ProbeTable } from "../probe/session.js";
 import { leafVerdicts, type ProbeAttempt } from "../probe/verdict.js";
 import { witnessesFor, type Witness } from "../probe/witness.js";
+import { circuitVerdict, type CircuitVerdict } from "../verdict/circuit-verdict.js";
 import { dataShaped, judgmentShaped, verdictFor } from "../wire/policy.js";
 import { derive } from "../wire/derive.js";
 import type { Case, Literal, PVertice, WireDescriptor } from "../wire/types.js";
 
 /** The full front pipeline (wire-descriptor.test.ts's own convention). */
 const cf = (src: string): ClassifyResult => classify(desugar(parseSexprs(src)));
+
+/**
+ * The LIVE static leg (T6c) for the `seal()` calls below — extract a REAL
+ * `StaticProv` from the EXECUTABLE source (the exact text the probe runs) and
+ * read `circuitVerdict` off it. Deliberately over `execSrc`, never the
+ * predecessor wire/policy plane's free-`e` "mission text" (`staticSrc` above):
+ * the new mechanism grounds anchors through real `mint`/`input` crossings, not
+ * a free-floating vertex, and this is exactly what mcp-worker's
+ * `attest-provider.ts::sealLeaf` extracts from in production (same recipe:
+ * `parseSexprs → desugar → classify → extractProgram(forms, defaultRegistry)`).
+ */
+const circuitStatic = (execSrc: string, role: "data" | "judgment"): CircuitVerdict =>
+  circuitVerdict(extractProgram(cf(execSrc).forms, defaultRegistry), role);
 
 /** Render a WireDescriptor the way the design doc itself renders one (§3):
  *  `PVertice(name) > step > step > result`, recursing into Case/otherArgs so
@@ -518,8 +534,13 @@ describe("provenance by perturbation — THE ADVERSARIAL CORPUS (security review
       console.log("row 8 probe-ALONE verdict (the forge):", verdicts[0]);
       expect(probeVerdict).toBe("content"); // ← THE FORGE: the probe by itself is deceived
 
-      // ── THE SEAL (static ∧ probe) catches it: the static plane vetoes. ──
-      const sealed = seal(staticVerdict, probeVerdict, { role: "data" });
+      // ── THE SEAL (static ∧ probe), over the LIVE integrity-aware circuit leg
+      //    (T6c) — extracted from the SAME execSrc the probe just ran, never the
+      //    predecessor wire/policy plane's free-`e` mission text (staticVerdict
+      //    above is retained only as the predecessor-plane's own check). ──
+      const circuitStaticVerdict = circuitStatic(execSrc, "data");
+      expect(circuitStaticVerdict).toBe("not-attestable"); // the circuit leg vetoes too
+      const sealed = seal(circuitStaticVerdict, probeVerdict, { role: "data" });
       // eslint-disable-next-line no-console
       console.log("row 8 SEALED verdict:", sealed);
       expect(sealed.kind).toBe("not-attestable"); // fabricated "SAFE" is NEVER signed
@@ -558,8 +579,13 @@ describe("provenance by perturbation — THE ADVERSARIAL CORPUS (security review
       console.log("row 9 probe-ALONE verdict:", probeVerdict);
       expect(probeVerdict).toBe("content"); // ← the forge: the probe by itself is deceived across the hidden branch
 
-      // THE SEAL (static ∧ probe): the static plane now vetoes.
-      const sealed = seal(staticVerdict, probeVerdict, { role: "data" });
+      // THE SEAL (static ∧ probe), over the LIVE circuit leg (T6c) — extract's
+      // own beta-reduction resolves the named helper `f` exactly as the
+      // predecessor wire/derive.ts plane did (both must refuse the hidden
+      // guard-swap; staticVerdict above is retained as that predecessor check).
+      const circuitStaticVerdict = circuitStatic(execSrc, "data");
+      expect(circuitStaticVerdict).toBe("not-attestable");
+      const sealed = seal(circuitStaticVerdict, probeVerdict, { role: "data" });
       // eslint-disable-next-line no-console
       console.log("row 9 SEALED verdict:", sealed);
       expect(sealed.kind).toBe("not-attestable");
@@ -574,14 +600,26 @@ describe("provenance by perturbation — THE ADVERSARIAL CORPUS (security review
     const staticSrc = `(string-append (:id e) (:name e))`;
     const { descriptor } = derive(cf(staticSrc))[0]!;
     expect(dataShaped(descriptor)).toBe(true);
-    const staticVerdict = verdictFor(descriptor, { role: "data" });
-    expect(staticVerdict.kind).toBe("data-shaped");
+    expect(verdictFor(descriptor, { role: "data" }).kind).toBe("data-shaped"); // predecessor plane (wire/policy) — unchanged
 
     const table: ProbeTable = [
       { call: { model: "m", prompt: "id", schema: null, cacheKey: null }, result: "ID-alpha" },
       { call: { model: "m", prompt: "name", schema: null, cacheKey: null }, result: "NAME-beta" },
     ];
-    const execSrc = `(let ((e (list (cons 'id (car (infer "m" "id"))) (cons 'name (car (infer "m" "name")))))) (string-append (:id e) (:name e)))`;
+    // dict-native evidence (evidence-idiom law, synthesis §2c) — NOT the
+    // `(list (cons 'k v))` alist idiom the OTHER rows in this file use. That
+    // idiom is a primitives-materialization the circuit leg's mux narrowing
+    // cannot see through (a `list`'s BuildProv is keyed POSITIONALLY, so a
+    // symbolic `:id`/`:name` mux key never finds a match and the leaf opaques
+    // — sound-but-conservative, never a forge, but it CANNOT positively
+    // attest). A `dict`'s BuildProv is keyed by its own literal keys, so
+    // `(:id e)`/`(:name e)` narrow to the exact part (BKT where-provenance).
+    // This mirrors mcp-worker's attest-conjunction.test.ts's own "GENUINE"
+    // rows verbatim (its own comment: "The alist idiom (list (cons 'v …)) is
+    // a primitives-materialization that seals not-attestable... covered in
+    // circuit-verdict's own mux-narrowing suite") — this row NEEDS the
+    // circuit leg to positively attest, so it uses the idiom that can.
+    const execSrc = `(let ((e (dict :id (car (infer "m" "id")) :name (car (infer "m" "name"))))) (string-append (:id e) (:name e)))`;
     const baseline = await recordRun(session, execSrc, table);
     expect(baseline.value).toBe("ID-alphaNAME-beta");
 
@@ -592,7 +630,10 @@ describe("provenance by perturbation — THE ADVERSARIAL CORPUS (security review
     const verdicts = leafVerdicts(baseline.value, attempts);
     expect(verdicts[0]!.verdict).toBe("content");
 
-    const sealed = seal(staticVerdict, verdicts[0]!.verdict, { role: "data" });
+    // THE SEAL, over the LIVE circuit leg (T6c) — same execSrc, both crossings evidence-grounded.
+    const circuitStaticVerdict = circuitStatic(execSrc, "data");
+    expect(circuitStaticVerdict).toBe("data-shaped");
+    const sealed = seal(circuitStaticVerdict, verdicts[0]!.verdict, { role: "data" });
     // eslint-disable-next-line no-console
     console.log("row 8b SEALED verdict (genuine content):", sealed);
     expect(sealed.kind).toBe("content-attested"); // real evidence IS signed

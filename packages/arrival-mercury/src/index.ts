@@ -199,8 +199,7 @@ export type {
 // `circuitOf` doc for why). Exporting these is pure plumbing: no logic here
 // changes, every symbol is re-exported verbatim from its owning module. ──
 export { channels, circuitVerdict, type Channels, type ChannelAnchor, type ChannelTerminals, type CircuitRole, type CircuitVerdict } from "./verdict/circuit-verdict.js";
-export { seal, type SealVerdict } from "./seal.js";
-export type { LeafRole, WireVerdict } from "./wire/policy.js";
+export { seal, type LeafRole, type SealVerdict } from "./seal.js";
 export { leafVerdicts, type LeafVerdict, type LeafVerdictKind, type ProbeAttempt, type ProbeOutcome } from "./probe/verdict.js";
 export type { LeafPath as DynamicLeafPath } from "./probe/verdict.js";
 export { witnessesFor, type Witness, type WitnessAxis, type WitnessOptions } from "./probe/witness.js";
