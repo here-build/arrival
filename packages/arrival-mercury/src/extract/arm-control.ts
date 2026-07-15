@@ -471,6 +471,17 @@ function dispatchKnownHead(form: App, head: HeadClass, name: string, ctx: Extrac
       return hasKwargs ? opaque(form.id, "kwargs-unsupported-head") : dispatchMux(form, head, name, ctx);
     case "build": {
       if (hasKwargs) return opaque(form.id, "kwargs-unsupported-head");
+      // NUMERIC positional keys, always — regardless of `ctor` (pair/vector/
+      // both alias here; `dict` reaches ARM-C's own `extractContainer`
+      // instead, never this arm — arm-containers.ts's BUILD_HEADS comment).
+      // A `cons`'s two parts are keyed 0/1, NOT "car"/"cdr" — those are the
+      // ACCESSOR's own self-key, a DIFFERENT alphabet (`dispatchMux`'s "self"
+      // arm below). `(car (cons a b))` therefore mux-projects a STRING key
+      // against these NUMERIC part keys — zero matches, always — which
+      // circuit-verdict.ts's mux case reads as sound-but-conservative
+      // (opaque/not-attestable), never a forge. See
+      // src/__tests__/verdict/circuit-verdict.test.ts's "car/cdr accessors
+      // vs container builds" describe block for the worked example.
       const parts = form.positionalArgs.map((a, i) => ({ key: i, prov: extract(a, ctx) }));
       return { kind: "build", site: form.id, ctor: head.ctor, parts };
     }
@@ -493,6 +504,14 @@ function dispatchKnownHead(form: App, head: HeadClass, name: string, ctx: Extrac
 function dispatchMux(form: App, head: Extract<HeadClass, { role: "mux" }>, name: string, ctx: ExtractCtx): StaticProv {
   const args = form.positionalArgs;
   if (head.keyArg === "self") {
+    // STRING self-key (the head's own name — "car"/"cdr"/"first"/"rest"), a
+    // DIFFERENT alphabet than the generic "build" case's NUMERIC positional
+    // keys above: a `cons`'s parts are keyed 0/1, so `(car (cons a b))`
+    // filters "car" against {0,1} — zero matches, always. Sound-but-
+    // conservative (never a forge — see the "build" case's comment above and
+    // circuit-verdict.ts's mux case, the 0-hits fail-closed-to-opaque
+    // fallback), not a bug to "fix" by changing either alphabet: it is the
+    // documented intended behavior for this primitives-materialization idiom.
     return args.length === 1
       ? { kind: "mux", site: form.id, key: name, source: extract(args[0]!, ctx) }
       : opaque(form.id, "mux-arity");

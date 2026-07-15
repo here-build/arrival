@@ -46,12 +46,14 @@
  * documented that migration as "KNOWN MIGRATION STATE" while it was in flight.
  * T6c is closed: `seal()` now takes `CircuitVerdict` (verdict/circuit-verdict.ts)
  * directly, whose `dataShaped`/`judgmentShaped` check `Integrity`
- * (evidence/ambient/program-text, invention I3) — an ambient-rooted leaf
- * (`(now)`/`(uuid)`) is refused by a DESIGNED boundary, not an accident of probe
- * coverage. The vocabulary check (a judgment leaf's selection against the
- * DECLARED output schema) is carried by the caller alongside the re-pointed
- * static leg — see mcp-worker's `attest-provider.ts::judgmentVocabularyOf` for
- * the live conjunction's own derivation of that vocabulary. The probe-coverage
+ * (evidence/ambient, invention I3 — 2-member; see static-prov.ts's `Integrity`
+ * doc for why the original 3-tier draft's `program-text` member was removed)
+ * — an ambient-rooted leaf (`(now)`/`(uuid)`) is refused by a DESIGNED
+ * boundary, not an accident of probe coverage. The vocabulary check (a
+ * judgment leaf's selection against the DECLARED output schema) is carried by
+ * the caller alongside the re-pointed static leg — see mcp-worker's
+ * `attest-provider.ts::judgmentVocabularyOf` for the live conjunction's own
+ * derivation of that vocabulary. The probe-coverage
  * ordering constraint this block used to warn about (never generalize the probe
  * to non-infer/ambient crossings BEFORE this re-point lands) is now a PROVED
  * invariant, not a posture — see `src/__tests__/seal-ambient-ordering.test.ts`.

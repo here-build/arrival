@@ -37,22 +37,42 @@ import type { NodeId } from "../coreform/types.js";
 /** The integrity class of an annotation (invention I3 — the typed alphabet).
  *  `evidence` = a recorded membrane crossing over real inputs (perturbable);
  *  `ambient`  = environment-derived, evidence-free (`(now)`, `(uuid)`) — the
- *               source of the third verdict, "ungrounded-ambient";
- *  `program-text` = written by the (adversarial) author — bottom integrity.
- *  The full 3-member alphabet: used for `InputProv`/anchor-integrity reads
- *  (`ChannelAnchor.integrity` in circuit-verdict.ts) where a `program-text`
- *  reading is a real, reachable classification. `MintProv.integrity` and the
- *  `HeadClass` mint arm use the NARROWER `MintIntegrity` below — a mint is
- *  always a real membrane crossing (`MINT_HEADS`'s registry only ever stamps
- *  `evidence`/`ambient`), so `program-text` there would be a type-level lie a
- *  registry could never actually produce. */
-export type Integrity = "evidence" | "ambient" | "program-text";
+ *               source of the third verdict, "ungrounded-ambient".
+ *
+ *  Used for `InputProv`/anchor-integrity reads (`ChannelAnchor.integrity` in
+ *  circuit-verdict.ts): an `input` anchor is unconditionally `"evidence"`
+ *  (there is no `integrity` field on `InputProv` itself to read — only one
+ *  answer is possible, circuit-verdict.ts's `channels()` `"input"` arm stamps
+ *  it directly); a `mint` anchor carries whatever `MintProv.integrity`
+ *  recorded.
+ *
+ *  REMOVED 2026-07-16 (Finding E): a third member, `"program-text"` (written
+ *  by the (adversarial) author — bottom integrity), was carried here from the
+ *  original 3-tier design draft. After `MintIntegrity`'s introduction (commit
+ *  d4d0de8a3a, "MintIntegrity hardening") narrowed every REAL producer to 2
+ *  members, no code path ever minted a `"program-text"` `ChannelAnchor`:
+ *  `InputProv` has no `integrity` field to carry it, and `MintProv.integrity`
+ *  / `HeadClass`'s mint arm were already typed to the narrower
+ *  `MintIntegrity` below, never this wider `Integrity`. The member survived
+ *  only in the type and in prose — a dead alphabet slot, not a security gap
+ *  (fail-closed logic never depended on it being reachable). The fabrication
+ *  case it was meant to name is handled by a COMPLETELY different mechanism —
+ *  `ConstProv` below is its own `StaticProv` KIND with its own
+ *  empty-where-provenance semantics, not an anchor-integrity tag — so
+ *  removing the member drops no real coverage. `Integrity` and
+ *  `MintIntegrity` now happen to share the same 2 members; they stay
+ *  separately named because they document different ROLES (the general
+ *  anchor-reporting alphabet vs. specifically what a mint's registry may
+ *  stamp), not because their membership still differs. */
+export type Integrity = "evidence" | "ambient";
 
-/** The mint-only integrity alphabet (2-member) — see `Integrity`'s doc above
- *  for why `MintProv`/`HeadClass`'s mint arm are narrowed to this rather than
- *  the full 3-member `Integrity`: `program-text` is not a real mint class,
- *  only `MINT_HEADS` registry entries reach here, and that table only ever
- *  contains `"evidence"`/`"ambient"`. */
+/** The mint-only integrity alphabet — `MintProv.integrity` and the
+ *  `HeadClass` mint arm are typed to this rather than bare `Integrity` to
+ *  keep the ROLE distinction legible (a mint is always a real membrane
+ *  crossing; `MINT_HEADS`'s registry only ever stamps `evidence`/`ambient`)
+ *  even though the two types' membership currently coincides — see
+ *  `Integrity`'s doc above for why the alphabet is 2-member, not the
+ *  original 3-tier design. */
 export type MintIntegrity = "evidence" | "ambient";
 
 /** A program INPUT — the evidence handle a run is invoked over (a

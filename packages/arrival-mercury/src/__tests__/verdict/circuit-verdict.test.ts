@@ -10,10 +10,26 @@
  * `site` is irrelevant to every check here (channels report it but never
  * compare on it — see circuit-verdict.ts's `ChannelAnchor` doc), so every
  * hand-built node shares one dummy `NodeId`.
+ *
+ * UPDATE 2026-07-16 (Findings B and C, grok #2/#4 audit): `extract` now
+ * exists — a handful of cases below (the "car/cdr accessors vs container
+ * builds" describe block, the new vector-ref case in the mux-narrowing block,
+ * and the guardless-choice case in the `judgmentShaped` block) call it FOR
+ * REAL via the `run` helper, rather than hand-building, specifically where
+ * fidelity to extract's own key-minting alphabet is the entire point of the
+ * case and a hand-built fixture would risk re-encoding the same wrong
+ * assumption the case exists to catch. The rest of the file stays hand-built,
+ * unchanged in spirit — FIXTURE-FIRST is still the right default where the
+ * shape is simple and stable.
  */
 import { describe, expect, it } from "vitest";
 
+import { classify } from "../../coreform/index.js";
 import type { NodeId } from "../../coreform/types.js";
+import { defaultRegistry } from "../../extract/arm-containers.js";
+import { extractProgram } from "../../extract/index.js";
+import { desugar } from "../../front/desugar.js";
+import { parseSexprs } from "../../front/parse.js";
 import type {
   BuildProv,
   ChoiceProv,
@@ -53,6 +69,18 @@ const fan = (collection: StaticProv, body: StaticProv, collapse: CollapseKind): 
   body,
   collapse,
 });
+
+/** REAL `extract`, for the handful of cases where fidelity to extract's own
+ *  key-minting alphabet (not a hand-built approximation of it) is the point
+ *  — same pipeline and registry as extract-corpus.test.ts's J1 gate
+ *  (`classify(desugar(parseSexprs(src))).forms` through `extractProgram`
+ *  with the REAL `defaultRegistry`, not a test-local stand-in), so a future
+ *  change to extract's key alphabets is caught here automatically instead of
+ *  silently re-diverging from a frozen hand-built fixture. */
+const run = (src: string): StaticProv => {
+  const { forms } = classify(desugar(parseSexprs(src)));
+  return extractProgram(forms, defaultRegistry);
+};
 
 // ── the fixture-corpus mirrors (fixture-corpus.ts's five rows, as concrete circuits) ──
 
@@ -180,13 +208,23 @@ describe("adversarial choice — one grounded alt, one const alt", () => {
 
 describe("build and string nodes are transparent to content", () => {
   it("(cons (:name e) \"FABRICATED\") — the cdr's bare const poisons content", () => {
+    // Parts keyed 0/1, NOT "car"/"cdr" — a real `cons` keys its build parts
+    // NUMERICALLY by argument position regardless of ctor (arm-control.ts's
+    // dispatchKnownHead "build" case); "car"/"cdr" are the ACCESSOR's own
+    // self-key, a DIFFERENT alphabet entirely (see the "car/cdr accessors vs
+    // container builds" describe block below — Finding B, a prior version of
+    // this fixture used the accessor's string keys here, a key space extract
+    // never actually emits for a build). This test is unaffected by which
+    // alphabet is used, since the "build" case folds every part into content
+    // unconditionally without reading `key` at all (circuit-verdict.ts) — the
+    // fix is fidelity to what extract emits, not a behavior change.
     const buildNode: BuildProv = {
       kind: "build",
       site: S,
       ctor: "pair",
       parts: [
-        { key: "car", prov: input("a") },
-        { key: "cdr", prov: konst() },
+        { key: 0, prov: input("a") },
+        { key: 1, prov: konst() },
       ],
     };
     expect(dataShaped(buildNode)).toBe(false);
@@ -201,6 +239,18 @@ describe("build and string nodes are transparent to content", () => {
 // ── mux where-provenance narrowing (BKT 2001; the T6c STOP finding) ─────────────
 
 describe("mux narrows into the keyed part, not the whole container (BKT where-provenance)", () => {
+  // Both key alphabets below are verified against extract's own minting, not
+  // assumed (Finding B follow-through): `dictOf`'s STRING keys mirror
+  // arm-containers.ts's `extractContainer` (`(dict :v x)` keys each part by
+  // its literal `:field` name, a string, ARM-C's own special-form path — the
+  // generic numeric "build" case in arm-control.ts never runs for `dict`);
+  // the `vector`-ctor builds below mirror the generic "build" case's NUMERIC
+  // positional keys, the SAME path `cons`/`list`/`make-vector` all share. So
+  // `dict-ref`/`vector-ref`'s accessor keys (a literal argument, string or
+  // number respectively — arm-control.ts's `dispatchMux`, `keyArg` a
+  // positional index) line up with their container's own alphabet — REAL
+  // narrowing, unlike `car`/`cdr`'s STRING self-key over a NUMERIC-keyed pair
+  // build (see the "car/cdr accessors vs container builds" block below).
   const dictOf = (...entries: readonly [string, StaticProv][]): BuildProv => ({
     kind: "build",
     site: S,
@@ -246,11 +296,82 @@ describe("mux narrows into the keyed part, not the whole container (BKT where-pr
   it("mux over a non-build source (an input) stays transparent — the free-e field idiom", () => {
     expect(dataShaped(muxOf("v", input("e")))).toBe(true);
   });
+
+  it("(vector-ref (vector (:v e) \"FAKE\") 0) IS data-shaped — a REAL numeric accessor key over a REAL numeric build key, run through actual extract, not hand-built", () => {
+    // Contrast with the "car/cdr accessors vs container builds" block below:
+    // same shape (accessor-over-a-freshly-built-container), but here BOTH
+    // sides of the projection are numeric (vector-ref's literal index arg vs
+    // the generic "build" case's positional part keys), so the alphabets
+    // MATCH and where-provenance narrowing genuinely excludes the decoy at
+    // index 1 — this is the positive case FIX B(a) asks to keep alongside
+    // the negative car/cdr one, run via `extractProgram` for the same reason.
+    const prov = run(`(vector-ref (vector (:v e) "FAKE") 0)`);
+    expect(prov).toMatchObject({ kind: "mux", key: 0, source: { kind: "build", ctor: "vector" } });
+    expect(dataShaped(prov)).toBe(true);
+    expect(circuitVerdict(prov, "data")).toBe("data-shaped");
+  });
+});
+
+// ── car/cdr accessors vs container builds — the two key alphabets (Finding B, grok #2) ──
+
+describe("car/cdr accessors vs container builds — the two key alphabets", () => {
+  // extract mints TWO DIFFERENT key alphabets for containers vs. their fixed
+  // unary accessors: a generic container build (`cons`/`list`/`vector` — the
+  // "build" case in arm-control.ts's dispatchKnownHead) keys its parts
+  // NUMERICALLY by argument position (`key: i`); a self-keyed accessor
+  // (`car`/`cdr`/`first`/`rest` — dispatchMux's "self" arm) keys ITSELF by
+  // its own name (`key: "car"`). A `(car (cons a b))` mux therefore filters a
+  // STRING key against the pair build's NUMERIC part keys {0, 1} — zero
+  // matches, unconditionally — so circuit-verdict.ts's mux case falls to its
+  // 0-hits fallback (an explicit opaque, "provably absent from this literal
+  // container"). This is SOUND-BUT-CONSERVATIVE, never a forge: nothing is
+  // mislabeled as attestable that shouldn't be, and the evidence-idiom law
+  // (cons/car is a primitives-materialization idiom) predicts exactly this
+  // — a lost precision, not a hole. It is the documented intended behavior;
+  // extract's key minting is NOT to be changed to "fix" it.
+  it('(car (cons (:v e) (:w e))) is NOT data-shaped — both slots are clean evidence, yet the string/numeric key mismatch blinds the projection', () => {
+    const prov = run(`(car (cons (:v e) (:w e)))`);
+    expect(prov).toMatchObject({
+      kind: "mux",
+      key: "car",
+      source: { kind: "build", ctor: "pair", parts: [{ key: 0 }, { key: 1 }] },
+    });
+    expect(dataShaped(prov)).toBe(false);
+    expect(circuitVerdict(prov, "data")).toBe("not-attestable");
+  });
+
+  it('(cdr (cons (:v e) (:w e))) is likewise NOT data-shaped — the SAME conservatism from the other accessor', () => {
+    const prov = run(`(cdr (cons (:v e) (:w e)))`);
+    expect(prov).toMatchObject({ kind: "mux", key: "cdr", source: { kind: "build", ctor: "pair" } });
+    expect(dataShaped(prov)).toBe(false);
+    expect(circuitVerdict(prov, "data")).toBe("not-attestable");
+  });
+
+  it("channels() reports the opaque explicitly (fail-closed), not an empty/vacuous content — the projection is refused, never silently blessed", () => {
+    const prov = run(`(car (cons (:v e) (:w e)))`);
+    const c = channels(prov).content;
+    expect(c.opaques).toBe(1);
+    expect(c.anchors).toHaveLength(0);
+  });
 });
 
 // ── judgmentShaped: the per-guard existential, independent of the alts check ────
 
 describe("judgmentShaped — guards must each independently ground in evidence", () => {
+  it("FALSE when there are NO guards at all — a guardless choice is not a judgment, even with all-bare-const alts (Finding C, grok #4: the vacuous-every fix)", () => {
+    // (and "YES") — extractAndOr's `guards: provs.slice(0, -1)` (arm-control.ts)
+    // is EMPTY for a single-argument and/or. Array.prototype.every vacuously
+    // returns true on an empty array, so `guards.every(guardGroundsInEvidence)`
+    // alone could not distinguish "every guard grounds in evidence" from
+    // "there is no guard to check" — before the fix, this real, reachable
+    // shape read as judgment-shaped: a bare author literal with nothing
+    // grounding why it was "selected" (there was no selection to make).
+    const prov = run(`(and "YES")`);
+    expect(prov).toMatchObject({ kind: "choice", guards: [], alts: [{ kind: "const" }] });
+    expect(judgmentShaped(prov)).toBe(false);
+    expect(circuitVerdict(prov, "judgment")).toBe("not-attestable");
+  });
+
   it("FALSE when the only guard is fully ambient, even though both alts are bare consts", () => {
     const ambientGuardJudgment = choice([mint("now", "ambient")], [konst(), konst()]);
     expect(judgmentShaped(ambientGuardJudgment)).toBe(false);

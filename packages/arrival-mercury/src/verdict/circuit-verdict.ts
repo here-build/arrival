@@ -444,14 +444,33 @@ function flattenChoiceTower(prov: ChoiceProv): ChoiceTower {
 /**
  * TRUE iff the root — or the root's choice TOWER (`flattenChoiceTower`) — is
  * a choice whose every leaf alt is a bare const (an enumerated vocabulary,
- * structurally: no externally DECLARED set is checked here, see header) and
- * whose every guard, at every level of the tower, grounds in evidence
- * (`guardGroundsInEvidence`). A non-`choice` root is never judgment-shaped.
+ * structurally: no externally DECLARED set is checked here, see header),
+ * whose tower has AT LEAST ONE guard, and whose every guard, at every level
+ * of the tower, grounds in evidence (`guardGroundsInEvidence`). A non-`choice`
+ * root is never judgment-shaped.
+ *
+ * THE `guards.length > 0` CONJUNCT (2026-07-16, Finding C): without it,
+ * `guards.every(guardGroundsInEvidence)` is VACUOUSLY true on an empty guard
+ * list — `Array.prototype.every` returns `true` for "every element of the
+ * empty set satisfies P" regardless of P, which cannot distinguish "every
+ * guard grounds in evidence" from "there is no guard to check at all". A
+ * guardless choice IS a reachable shape, not a hypothetical: `extractAndOr`
+ * (arm-control.ts) gives `and`/`or` `guards: provs.slice(0, -1)`, which is
+ * EMPTY for a single-argument call — `(and "YES")` extracts to
+ * `ChoiceProv{guards:[], alts:[const]}`. Before this fix, that shape read as
+ * `judgment-shaped`: a bare author-written literal with nothing grounding
+ * WHY it was selected (there is no selection — there is only one option)
+ * passed the same check as a genuine evidence-guarded judgment. This never
+ * reached the live seal as an over-grant (`seal.ts`'s probe conjunct still
+ * requires an observed `"selection"` crossing, which a guardless choice never
+ * produces), but the STATIC certificate alone was wrong, which is what this
+ * module exists to get right. A judgment with nothing grounding its
+ * selection is not a judgment.
  */
 export function judgmentShaped(prov: StaticProv): boolean {
   if (prov.kind !== "choice") return false;
   const { guards, leafAlts } = flattenChoiceTower(prov);
-  return leafAlts.length > 0 && leafAlts.every(isBareConst) && guards.every(guardGroundsInEvidence);
+  return guards.length > 0 && leafAlts.length > 0 && leafAlts.every(isBareConst) && guards.every(guardGroundsInEvidence);
 }
 
 // ── circuitVerdict ───────────────────────────────────────────────────────────
