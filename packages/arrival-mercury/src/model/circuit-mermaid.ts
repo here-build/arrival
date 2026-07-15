@@ -38,15 +38,34 @@
  * scrolling past: it is the fabrication mark a reviewer hunts for, per
  * static-prov.ts's own header ("THE fabrication mark").
  *
- * ── edges carry the CHANNEL, not just the shape ─────────────────────────────
+ * ── edges carry the CHANNEL, not just the shape — plus one deliberate borrow ─
  *
  * Solid (`-->`) = the CONTENT channel (what value flowed: `fused` sources,
- * `mux`/`build`/`string`/`fan` children, `choice` alts). Dotted (`-.->`) = the
- * SELECTION channel (why this world, never what flowed: `choice` guards, and
- * `mint`'s `closed` — static-prov.ts is explicit that a mint's own inputs
- * "ground the SELECTION story, never the content"). A reviewer sees the two
- * provenance channels (Green-Karvounarakis-Tannen content vs
- * Imieliński-Lipski selection) at a glance, without reading a legend.
+ * `mux`/`build`/`string`/`fan` children). Dotted (`-.->`) = the SELECTION
+ * channel (why this world, never what flowed: `choice` guards, and `mint`'s
+ * `closed` — static-prov.ts is explicit that a mint's own inputs "ground the
+ * SELECTION story, never the content"). A reviewer sees the two provenance
+ * channels (Green-Karvounarakis-Tannen content vs Imieliński-Lipski
+ * selection) at a glance, without reading a legend.
+ *
+ * `choice` ALTS are dashed too (2026-07-16, the cross-projection parity fix)
+ * — a deliberate borrow of the selection styling, not a `channels()`
+ * reclassification: an alt's own content still folds into the CONTENT
+ * channel (circuit-verdict.ts's `channels()`), never selection. What earns it
+ * the dashed treatment is a DIFFERENT, related fact: unlike a `fused`/
+ * `build`/`string`/`fan` child (every one of which unconditionally
+ * contributes), only ONE of a `choice`'s kept alts is realized per run — the
+ * rest sit in the circuit unexercised (static-prov.ts: "All alternatives stay
+ * in the circuit (gray wires)"). Dashing the edge flags exactly that
+ * "kept, not-necessarily-realized" shape, the same thing `circuit-sexpr.ts`'s
+ * `(gray …)` wrap flags at the sexpr layer and `to-wireframe.ts`'s
+ * `choiceWireRole` side map flags at the data layer — a cross-model audit
+ * found the three projections disagreeing about whether this structure was
+ * visible at all; this keeps them in agreement. A true selection-channel edge
+ * (`guard`, `closed`) and a borrowed one (`alt`) share the SAME dash pattern
+ * on purpose (both mean "not a guaranteed pass-through, read the label to
+ * know which"); the edge LABEL is what still tells them apart, exactly as
+ * `guard` and `closed` already differ only by label today.
  *
  * ── gray, never taken/gray (same as circuit-sexpr.ts) ───────────────────────
  *
@@ -245,9 +264,11 @@ const renderString = (p: StringProv, ctx: Ctx): string => {
 };
 
 /** Every alt renders identically (no valuation at this pure, trace-free
- *  layer — see this file's header). Guards are the SELECTION channel
- *  (dotted, "why this world"); alts are the CONTENT channel (solid, "what
- *  flowed"). */
+ *  layer — see this file's header). Guards are the true SELECTION channel
+ *  (dotted, "why this world"); alts are dashed too — a deliberate borrow of
+ *  the same styling, not a channel reclassification (an alt's content is
+ *  still CONTENT-channel data; see this file's header for the full
+ *  rationale). The `"guard"` vs `"alt"` label is what tells the two apart. */
 const renderChoice = (p: ChoiceProv, ctx: Ctx): string => {
   const id = freshId(ctx);
   ctx.lines.push(nodeRhombus(id, withSite("choice", p.site)));
@@ -257,7 +278,7 @@ const renderChoice = (p: ChoiceProv, ctx: Ctx): string => {
   }
   for (const a of p.alts) {
     const childId = renderNode(a, ctx);
-    ctx.lines.push(contentEdge(id, childId, "alt"));
+    ctx.lines.push(selectionEdge(id, childId, "alt"));
   }
   return id;
 };

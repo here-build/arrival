@@ -22,7 +22,7 @@
  *                    │                    │                          |   own money table row)
  *   build           │ transparent        │ buildShape (ctor + keys) | op = "build"
  *   string          │ transparent        │ —                        | op = "string"
- *   choice          │ mux                │ —                        | arms = alts.length, all gray
+ *   choice          │ mux                │ choiceWireRole           | arms = alts.length, all gray
  *   fan             │ fan                │ collapse, fanTemplates   | template = nested projection
  *   opaque          │ opaque             │ —                        | exact, reason surfaces as `op`
  *
@@ -93,6 +93,35 @@
  * references a node index local to one `nodes` array, so there is no
  * cross-level slot to point a shared reference at without a bigger change to
  * `WireframeGraph` itself. Dedup WITHIN one level is unconditional and exact.
+ *
+ * ── choiceWireRole: closing the cross-projection parity gap (2026-07-16) ───
+ *
+ * A `choice`'s own wires are the one place a `WireframeNode`'s incoming wires
+ * are NOT uniformly one channel: `guards` → SELECTION, `alts` → CONTENT
+ * (static-prov.ts's `ChoiceProv` doc — "guards attribute the SELECTION...
+ * alts attribute the CONTENT"). Every other kind's wires are unambiguous from
+ * `provKind` alone (a `mint`'s `closed*` wires are always selection; a
+ * `fused`/`build`/`string`/`mux`/`fan`'s argument wires are always content),
+ * so only `choice` needs a per-wire map. Before this field, the only signal
+ * was the `selector*`/`arm*` slot-name CONVENTION already documented on
+ * `WireSlot` (arrival's `wireframe/types.ts`) — a string prefix a consumer
+ * had to parse, never a first-class fact. `choiceWireRole` makes it one,
+ * keyed by the exact same `(node, slot)` pair a `Wire.consumer` already
+ * carries (`wireKey`, below) — no new identity invented, just a typed lookup
+ * over data that was always there.
+ *
+ * This is the WIREFRAME leg of a three-projection parity fix: a cross-model
+ * audit found `circuit-sexpr.ts` renders a `choice`'s kept, non-taken
+ * alternatives distinctly (the `(gray …)` wrap) while `circuit-mermaid.ts`
+ * rendered them as plain solid edges (indistinguishable from data flow) and
+ * this projection exposed no distinct channel for them at all — three
+ * projections of the same circuit disagreeing about what is visible, drift
+ * risk on a security review surface. `circuit-mermaid.ts` now dashes a
+ * `choice`'s alt edges too (its own header explains why that is a deliberate
+ * borrow, not a `channels()` reclassification); `choiceWireRole` is this
+ * file's side of the same fix — a reviewer (or a test) can now ask "does
+ * this projection make the choice's alternative structure visible" and get
+ * the SAME answer from all three.
  */
 import type { Wire, WireConsumer, WireframeGraph, WireframeNode } from "@here.build/arrival/provenance";
 
@@ -143,6 +172,17 @@ export interface WireframeSideMaps {
    *  `template` graph's own side maps — the body is a private interior with
    *  its own index space, so its domain data cannot share this map. */
   readonly fanTemplates: ReadonlyMap<number, WireframeSideMaps>;
+  /** `"guard"` (selection channel) vs `"alt"` (content channel) for a
+   *  `choice`-projected node's own wires ONLY — the one `WireframeNode` kind
+   *  whose incoming wires split across both `channels()` channels (see this
+   *  file's header, "choiceWireRole"). Keyed by `wireKey(node, slot)`, the
+   *  same `(node, slot)` pair every `Wire.consumer` already carries — never a
+   *  new identity. Optional/additive: absent on a `WireframeSideMaps` built
+   *  before this field existed (or hand-constructed by an older test/fixture),
+   *  so every existing object literal still type-checks unchanged; a reader
+   *  should treat a missing entry (or a missing map) the same as "no
+   *  selection structure to show here," never throw on its absence. */
+  readonly choiceWireRole?: ReadonlyMap<string, "guard" | "alt">;
 }
 
 export interface WireframeProjection {
@@ -162,6 +202,13 @@ function passthroughWire(fromNode: number, consumer: WireConsumer, span: string)
   };
 }
 
+/** The `choiceWireRole` map key — the exact `(node, slot)` pair a
+ *  `Wire.consumer` already carries, turned into a lookup key. Not a new
+ *  identity: a caller holding a `Wire` can reconstruct the SAME key from
+ *  `wire.consumer.node`/`wire.consumer.slot` with no string-prefix parsing of
+ *  the slot name itself required. */
+const wireKey = (node: number, slot: string): string => `${node}:${slot}`;
+
 interface Builder {
   readonly nodes: WireframeNode[];
   readonly wires: Wire[];
@@ -171,6 +218,8 @@ interface Builder {
   readonly buildShape: Map<number, { readonly ctor: BuildProv["ctor"]; readonly keys: readonly (string | number)[] }>;
   readonly fabrication: Set<number>;
   readonly fanTemplates: Map<number, WireframeSideMaps>;
+  /** `choice` wires only — see `WireframeSideMaps.choiceWireRole`'s doc. */
+  readonly choiceWireRole: Map<string, "guard" | "alt">;
   /** Shared-DAG dedup (G2, 2026-07-16), scoped to THIS builder/graph level —
    *  see `project`'s doc for why a fan's nested `template` graph (its own
    *  Builder, its own index space — the "private interior" discipline this
@@ -189,6 +238,7 @@ function newBuilder(): Builder {
     buildShape: new Map(),
     fabrication: new Set(),
     fanTemplates: new Map(),
+    choiceWireRole: new Map(),
     seen: new Map(),
   };
 }
@@ -200,10 +250,26 @@ function pushNode(b: Builder, node: WireframeNode, kind: StaticProv["kind"]): nu
   return idx;
 }
 
-function wireChildren(b: Builder, parent: number, span: string, slotPrefix: string, children: readonly StaticProv[]): void {
+/** Wires a parent's children in as `${slotPrefix}${i}`-slotted passthroughs.
+ *  `choiceRole`, when supplied, ALSO records each wire's `(node, slot)` key
+ *  into `b.choiceWireRole` — used only by `projectChoice`'s two calls
+ *  (`"guard"` for guards, `"alt"` for alts); every other caller (fused
+ *  sources, build parts, string runs) omits it and gets the plain wiring
+ *  unchanged, since those kinds' wires are already unambiguous from
+ *  `provKind` alone (see `WireframeSideMaps.choiceWireRole`'s doc). */
+function wireChildren(
+  b: Builder,
+  parent: number,
+  span: string,
+  slotPrefix: string,
+  children: readonly StaticProv[],
+  choiceRole?: "guard" | "alt",
+): void {
   children.forEach((child, i) => {
     const childIdx = project(b, child);
-    b.wires.push(passthroughWire(childIdx, { node: parent, slot: `${slotPrefix}${i}` }, span));
+    const slot = `${slotPrefix}${i}`;
+    b.wires.push(passthroughWire(childIdx, { node: parent, slot }, span));
+    if (choiceRole !== undefined) b.choiceWireRole.set(wireKey(parent, slot), choiceRole);
   });
 }
 
@@ -264,8 +330,8 @@ function projectString(b: Builder, prov: StringProv): number {
 function projectChoice(b: Builder, prov: ChoiceProv): number {
   const span = String(prov.site);
   const idx = pushNode(b, { kind: "mux", op: "choice", span, arms: prov.alts.length }, "choice");
-  wireChildren(b, idx, span, "selector", prov.guards);
-  wireChildren(b, idx, span, "arm", prov.alts);
+  wireChildren(b, idx, span, "selector", prov.guards, "guard");
+  wireChildren(b, idx, span, "arm", prov.alts, "alt");
   return idx;
 }
 
@@ -379,6 +445,7 @@ export function toWireframe(prov: StaticProv): WireframeProjection {
       buildShape: b.buildShape,
       fabrication: b.fabrication,
       fanTemplates: b.fanTemplates,
+      choiceWireRole: b.choiceWireRole,
     },
   };
 }

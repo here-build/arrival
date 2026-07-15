@@ -127,7 +127,7 @@ describe("circuitToMermaid — every StaticProv kind renders a node", () => {
     );
   });
 
-  it("choice → rhombus decision; guards dotted (selection), alts solid (content)", () => {
+  it("choice → rhombus decision; guards dotted (selection), alts dashed too (borrowed selection styling), told apart by label", () => {
     const c = choice([input("guard")], [konst(), input("e")]);
     const out = circuitToMermaid(c);
     expect(out).toBe(
@@ -136,14 +136,17 @@ describe("circuitToMermaid — every StaticProv kind renders a node", () => {
         'n1(["evidence: guard (site 0)"])\n' +
         'n0 -.->|"guard"| n1\n' +
         'n2>"⚠ const (site 0)"]\n' +
-        'n0 -->|"alt"| n2\n' +
+        'n0 -.->|"alt"| n2\n' +
         'n3(["evidence: e (site 0)"])\n' +
-        'n0 -->|"alt"| n3',
+        'n0 -.->|"alt"| n3',
     );
-    // the two channels use visually distinct arrow syntax — a reviewer
-    // doesn't need a legend to tell selection from content.
-    expect(out).toContain("-.->|");
-    expect(out).toContain("-->|");
+    // both of a choice's own edges are dashed now (a deliberate borrow — see
+    // circuit-mermaid.ts's header); the LABEL, not the dash pattern, is what
+    // still tells a guard apart from an alt. A leaf-only choice like this one
+    // (guard/alts are all terminal nodes) has NO solid edge anywhere.
+    expect(out).toContain('-.->|"guard"|');
+    expect(out).toContain('-.->|"alt"|');
+    expect(out).not.toContain("-->|");
   });
 
   it("fan → a z-STACK subgraph: the body template inside the axis, the collection unwound in", () => {
@@ -202,7 +205,11 @@ describe("circuitToMermaid — golden: a small realistic circuit, read the full 
     // program-text constant (the thing a reviewer is hunting for); the other
     // alt = a plain evidence fallback. No valuation exists at this static
     // layer, so BOTH alts render — gray/taken is a runtime overlay this
-    // function never sees (see the module header).
+    // function never sees (see the module header). The choice's OWN edges to
+    // both alts are dashed (the borrowed selection styling); the fused node's
+    // OWN edges to its sources (`n2 --> n3`/`n2 --> n4`) stay solid — those
+    // are genuine, unconditional content edges one level further in, a
+    // different edge than the choice's structural one.
     const circuit = choice(
       [input("cond")],
       [fused(mint("infer", "evidence"), konst()), input("fallback")],
@@ -219,9 +226,9 @@ describe("circuitToMermaid — golden: a small realistic circuit, read the full 
         "n2 --> n3",
         'n4>"⚠ const (site 0)"]',
         "n2 --> n4",
-        'n0 -->|"alt"| n2',
+        'n0 -.->|"alt"| n2',
         'n5(["evidence: fallback (site 0)"])',
-        'n0 -->|"alt"| n5',
+        'n0 -.->|"alt"| n5',
       ].join("\n"),
     );
   });
