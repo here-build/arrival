@@ -58,7 +58,7 @@
 import type { CoreForm, DefineFn, Dict, Lambda, NodeId } from "../coreform/types.js";
 import type { BuildProv, ChoiceProv, HeadClass, HeadRegistry, MintIntegrity, StaticProv } from "../model/static-prov.js";
 import { inferCollapse } from "./collapse.js";
-import { type Bound, type ExtractCtx, type Scope, extract, lookup, opaque } from "./index.js";
+import { type Bound, type ExtractCtx, type Scope, extract, lookup, markRisk, opaque } from "./index.js";
 
 export function extractContainer(form: Dict, ctx: ExtractCtx): StaticProv {
   return {
@@ -335,6 +335,7 @@ export function buildFan(
   if (target.params.length !== FAN_ARITY[fanKind] || target.params.some((p) => p.rest)) {
     return opaque(site, "fan/arity");
   }
+  markRisk(ctx); // consulting `reducing`'s content next — see ExtractCtx.riskProbes
   if (ctx.reducing.has(target)) return opaque(site, "cyclic-binding");
 
   // The distinguished one-of-collection projection — every fan-body param that
@@ -371,6 +372,8 @@ export function buildFan(
     registry: ctx.registry,
     reducing: new Set([...ctx.reducing, target]),
     inputs,
+    memo: ctx.memo,
+    riskProbes: ctx.riskProbes,
   };
   const body = extract(last, bodyCtx);
 

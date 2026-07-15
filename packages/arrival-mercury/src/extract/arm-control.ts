@@ -98,7 +98,7 @@ import type { HeadClass, StaticProv } from "../model/static-prov.js";
 // (a keyword accessor's operand, a fuse head's args, a callee's body — any of
 // which can be a Lit/Ref/Dict/etc.). Sound because every cross-cycle reference
 // happens from inside a function body, never at module-eval time.
-import { type Bound, type ExtractCtx, type Scope, extract, lookup, opaque } from "./index.js";
+import { type Bound, type ExtractCtx, type Scope, extract, lookup, markRisk, opaque } from "./index.js";
 import { buildFan } from "./arm-containers.js";
 
 type ControlForm = App | DefineFn | Lambda | NamedLet | If | And | Or;
@@ -212,6 +212,7 @@ function resolveCallee(bound: Bound, ctx: ExtractCtx): CalleeResolution {
   const { expr, scope } = bound;
   if (expr.kind === "DefineFn" || expr.kind === "Lambda") return { kind: "fn", fn: expr, scope };
   if (expr.kind !== "Ref") return { kind: "opaque" };
+  markRisk(ctx); // consulting `reducing`'s content next — see ExtractCtx.riskProbes
   if (ctx.reducing.has(expr)) return { kind: "opaque" };
   const next = lookup(scope, expr.name);
   if (next === undefined) return { kind: "free", name: expr.name };
@@ -232,6 +233,7 @@ function betaReduce(fn: DefineFn | Lambda, calleeScope: Scope, form: App, ctx: E
   if (fn.params.some((p) => p.rest)) return opaque(form.id, "callee-arity");
   const allArgs: readonly CoreForm[] = [...form.positionalArgs, ...form.kwargs.map((kw) => kw.value)];
   if (fn.params.length !== allArgs.length) return opaque(form.id, "callee-arity");
+  markRisk(ctx); // consulting `reducing`'s content next — see ExtractCtx.riskProbes
   if (ctx.reducing.has(fn)) return opaque(form.id, "cyclic-binding");
 
   // The tail-fold lift (see the App bullet's header note): only reachable on

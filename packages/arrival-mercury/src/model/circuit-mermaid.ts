@@ -62,13 +62,26 @@
  * one against; see circuit-sexpr.ts's header for the full argument, which
  * applies here unchanged).
  *
- * ── determinism ──────────────────────────────────────────────────────────────
+ * ── determinism, and the shared-DAG dedup (G2, 2026-07-16) ─────────────────
  *
  * Node ids (`n0`, `n1`, …) are assigned in a stable PRE-ORDER walk (own id
- * first, then children left-to-right in field-declaration order) with no
- * structural-sharing dedup — same input StaticProv always produces the exact
- * same string, so a test can assert against a golden string, and two runs of
- * this function diff cleanly.
+ * first, then children left-to-right in field-declaration order), WITH
+ * structural-sharing dedup keyed on `StaticProv` OBJECT IDENTITY (`renderNode`
+ * below): a `prov` reference already visited earlier in the SAME render
+ * reuses its existing id instead of minting a new one and re-walking its
+ * subtree — the representation-sharing half of "a provenance circuit IS a
+ * shared DAG" (Deutch-Milo-Roy-Tannen, ICDT 2014; the extract-side half is
+ * `ExtractCtx.memo`, src/extract/index.ts, which is what makes two Refs to one
+ * binding share the identical object in the first place). This is a pure
+ * REPRESENTATION change — never semantics: a shared node renders as one box
+ * with multiple in-edges rather than a duplicated subtree, but the same
+ * input StaticProv still always produces the exact same string (object
+ * identity is fixed once `prov` is constructed, so the walk order — and
+ * therefore every id and every line — is exactly as deterministic as before),
+ * so a test can still assert against a golden string, and two runs of this
+ * function still diff cleanly. A hand-built fixture with no aliasing anywhere
+ * renders byte-identically to the pre-dedup output, since dedup only ever
+ * changes anything when the SAME reference is seen twice.
  *
  * ── escaping ─────────────────────────────────────────────────────────────────
  *
@@ -119,6 +132,14 @@ export interface MermaidOptions {
 interface Ctx {
   readonly lines: string[];
   next: number;
+  /** Shared-DAG dedup (object identity — the extract-side memo, src/extract/
+   *  index.ts's `ExtractCtx.memo`, is what makes two Refs to one binding
+   *  return the SAME StaticProv object; this map is what a RENDERER does with
+   *  that identity). A revisited node emits ONLY the edge to its existing id
+   *  — no second node line — which is exactly what makes the flowchart read
+   *  as a DAG (one box, two in-edges) instead of a duplicated subtree.
+   *  Mermaid draws a multi-parent node natively; no special syntax needed. */
+  readonly seen: Map<StaticProv, string>;
 }
 
 const freshId = (ctx: Ctx): string => `n${ctx.next++}`;
@@ -265,11 +286,12 @@ const renderOpaque = (p: OpaqueProv, ctx: Ctx): string => {
   return id;
 };
 
-/** `StaticProv` → mermaid node(s)/edge(s), returning the id assigned to
- *  `prov` itself. Exhaustive by tsc (no default arm) — adding an 11th
+/** `StaticProv` → mermaid node(s)/edge(s) for a NOT-YET-SEEN `prov`, returning
+ *  the freshly-minted id. Exhaustive by tsc (no default arm) — adding an 11th
  *  `StaticProv` kind breaks this file at compile time, mirroring
- *  `circuit-sexpr.ts`'s and `extract`'s own totality proof (I1). */
-function renderNode(prov: StaticProv, ctx: Ctx): string {
+ *  `circuit-sexpr.ts`'s and `extract`'s own totality proof (I1). Called only
+ *  from `renderNode`, below, on a `ctx.seen` miss. */
+function renderNodeFresh(prov: StaticProv, ctx: Ctx): string {
   switch (prov.kind) {
     case "input":
       return renderInput(prov, ctx);
@@ -294,13 +316,35 @@ function renderNode(prov: StaticProv, ctx: Ctx): string {
   }
 }
 
+/** `StaticProv` → mermaid node(s)/edge(s), returning the id assigned to
+ *  `prov` itself — SHARED-DAG AWARE: a `prov` object already rendered earlier
+ *  in this SAME `circuitToMermaid` call returns its EXISTING id with no new
+ *  node line emitted (the caller still emits its own edge TO that id — see
+ *  e.g. `renderFused`'s loop — so a shared node ends up with multiple
+ *  in-edges, drawn natively by mermaid). Dedup is by OBJECT IDENTITY, keyed
+ *  on the exact same `StaticProv` reference the extract-side memo produces
+ *  (src/extract/index.ts's `ExtractCtx.memo`) — two STRUCTURALLY equal but
+ *  distinct object instances (e.g. two independent call sites' attributions
+ *  that happen to look the same) are NOT merged, only genuine representation
+ *  sharing is. Safe across a `fan`'s body boundary too: `renderFan` recurses
+ *  through this same function with the SAME `ctx`, so a node shared between a
+ *  fan's body and the surrounding circuit dedups exactly like any other. */
+function renderNode(prov: StaticProv, ctx: Ctx): string {
+  const existing = ctx.seen.get(prov);
+  if (existing !== undefined) return existing;
+  const id = renderNodeFresh(prov, ctx);
+  ctx.seen.set(prov, id);
+  return id;
+}
+
 /** `StaticProv` → a mermaid `flowchart` definition — see this file's header
  *  for the shape/edge/direction legend. Deterministic: the same `prov`
- *  always produces the exact same string. */
+ *  always produces the exact same string (dedup walks in the same stable
+ *  pre-order, so object-identity iteration order never varies run to run). */
 export function circuitToMermaid(prov: StaticProv, opts: MermaidOptions = {}): string {
   if ((opts.view ?? "full") === "infer") return inferView(prov, opts);
   const direction = opts.direction ?? "TD";
-  const ctx: Ctx = { lines: [], next: 0 };
+  const ctx: Ctx = { lines: [], next: 0, seen: new Map() };
   renderNode(prov, ctx);
   return [`flowchart ${direction}`, ...ctx.lines].join("\n");
 }

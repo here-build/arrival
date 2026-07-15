@@ -34,6 +34,20 @@
  * sees the static circuit, so every alt renders gray, uniformly — there is no
  * "taken" to distinguish without a trace to overlay, and inventing one would
  * misrepresent an unexercised branch as chosen.
+ *
+ * ── shared-DAG dedup (G2, 2026-07-16) ───────────────────────────────────────
+ *
+ * A circuit IS a shared DAG (Deutch-Milo-Roy-Tannen, ICDT 2014), and since the
+ * extract-side memo (`ExtractCtx.memo`, src/extract/index.ts) makes two Refs
+ * to one binding return the IDENTICAL `StaticProv` object, this renderer
+ * recognizes that identity instead of re-rendering the shared subtree once
+ * per reference: a node reachable ≥2 times by object identity renders its
+ * FIRST occurrence tagged `:id N` and every later occurrence as the compact
+ * `(ref N)` — see `renderNode`'s doc for the two-pass mechanism. This is a
+ * pure REPRESENTATION change, never semantics — the referenced subtree's own
+ * rendering is byte-identical to what `(ref N)` stands in for, and a circuit
+ * with no aliasing anywhere (object identity never repeats) renders exactly
+ * as it did before this dedup existed, with no `:id`/`:ref` anywhere.
  */
 import type {
   BuildProv,
@@ -52,63 +66,170 @@ import type {
 const s = (x: string): string => JSON.stringify(x);
 const key = (k: string | number): string => (typeof k === "number" ? String(k) : s(k));
 
+/** Shared-DAG dedup (G2, 2026-07-16), two-pass so an UNSHARED circuit renders
+ *  byte-identical to before this existed (the golden tests' own invariant —
+ *  none of their hand-built fixtures alias, so none of them ever see an
+ *  `:id`). Pass 1 (`countOccurrences`, below) counts each `StaticProv`
+ *  object's reachable occurrences BY IDENTITY — the same identity the
+ *  extract-side memo produces (`ExtractCtx.memo`, src/extract/index.ts) for
+ *  two Refs to one binding. Pass 2 (`renderNode`) tags the first rendering of
+ *  a ≥2-occurrence node with `:id N` and renders every LATER visit to that
+ *  SAME reference as the compact `(ref N)` — the homoiconic-sexpr sibling of
+ *  circuit-mermaid.ts's "one box, two in-edges." A node with exactly one
+ *  occurrence never gets an `:id`, so a circuit with no aliasing anywhere is
+ *  untouched by any of this. */
+interface Ctx {
+  readonly counts: ReadonlyMap<StaticProv, number>;
+  readonly rendered: Map<StaticProv, number>;
+  nextId: number;
+}
+
+/** Pass 1: count `prov`'s reachable object-identity occurrences. Stops
+ *  descending on a REPEAT visit — a shared node's children were already
+ *  counted the first time THAT reference was reached, so this is linear in
+ *  the DAG's distinct-node count, never exponential under deep sharing
+ *  (mirrors circuit-verdict.ts's own "no fuel needed" discipline, applied to
+ *  a census instead of a fold). Exhaustive over StaticProv's ten members
+ *  WITHOUT a default arm — tsc's return-type check is the totality proof. */
+function countOccurrences(prov: StaticProv, counts: Map<StaticProv, number>): void {
+  const before = counts.get(prov) ?? 0;
+  counts.set(prov, before + 1);
+  if (before > 0) return;
+  switch (prov.kind) {
+    case "input":
+    case "const":
+    case "opaque":
+      return;
+    case "mint":
+      prov.closed.forEach((c) => countOccurrences(c, counts));
+      return;
+    case "fused":
+      prov.sources.forEach((c) => countOccurrences(c, counts));
+      return;
+    case "mux":
+      countOccurrences(prov.source, counts);
+      return;
+    case "build":
+      prov.parts.forEach((p) => countOccurrences(p.prov, counts));
+      return;
+    case "string":
+      prov.runs.forEach((c) => countOccurrences(c, counts));
+      return;
+    case "choice":
+      prov.guards.forEach((g) => countOccurrences(g, counts));
+      prov.alts.forEach((a) => countOccurrences(a, counts));
+      return;
+    case "fan":
+      countOccurrences(prov.collection, counts);
+      countOccurrences(prov.body, counts);
+      return;
+  }
+}
+
 const renderInput = (p: InputProv): string => `(input :site ${p.site} :name ${s(p.name)})`;
 
-const renderMint = (p: MintProv): string =>
+const renderMint = (p: MintProv, ctx: Ctx): string =>
   `(mint :site ${p.site} :head ${s(p.head)} :integrity ${p.integrity}` +
-  (p.closed.length > 0 ? ` :closed (${p.closed.map(circuitToSexpr).join(" ")})` : "") +
+  (p.closed.length > 0 ? ` :closed (${p.closed.map((c) => renderNode(c, ctx)).join(" ")})` : "") +
   `)`;
 
 const renderConst = (p: ConstProv): string => `(const :site ${p.site})`;
 
-const renderFused = (p: FusedProv): string => `(fused :site ${p.site} :sources (${p.sources.map(circuitToSexpr).join(" ")}))`;
+const renderFused = (p: FusedProv, ctx: Ctx): string =>
+  `(fused :site ${p.site} :sources (${p.sources.map((c) => renderNode(c, ctx)).join(" ")}))`;
 
-const renderMux = (p: MuxProv): string =>
-  `(mux :site ${p.site} :key ${p.key === null ? "nil" : key(p.key)} :source ${circuitToSexpr(p.source)})`;
+const renderMux = (p: MuxProv, ctx: Ctx): string =>
+  `(mux :site ${p.site} :key ${p.key === null ? "nil" : key(p.key)} :source ${renderNode(p.source, ctx)})`;
 
-const renderBuild = (p: BuildProv): string =>
+const renderBuild = (p: BuildProv, ctx: Ctx): string =>
   `(build :site ${p.site} :ctor ${p.ctor} :parts (${p.parts
-    .map((part) => `(:key ${key(part.key)} :prov ${circuitToSexpr(part.prov)})`)
+    .map((part) => `(:key ${key(part.key)} :prov ${renderNode(part.prov, ctx)})`)
     .join(" ")}))`;
 
-const renderString = (p: StringProv): string => `(string :site ${p.site} :runs (${p.runs.map(circuitToSexpr).join(" ")}))`;
+const renderString = (p: StringProv, ctx: Ctx): string =>
+  `(string :site ${p.site} :runs (${p.runs.map((c) => renderNode(c, ctx)).join(" ")}))`;
 
 /** Every alt renders GRAY — no valuation is available at this pure, trace-free
  *  layer (see this file's header). */
-const renderChoice = (p: ChoiceProv): string =>
-  `(choice :site ${p.site} :guards (${p.guards.map(circuitToSexpr).join(" ")}) :alts (${p.alts
-    .map((alt) => `(gray ${circuitToSexpr(alt)})`)
+const renderChoice = (p: ChoiceProv, ctx: Ctx): string =>
+  `(choice :site ${p.site} :guards (${p.guards.map((c) => renderNode(c, ctx)).join(" ")}) :alts (${p.alts
+    .map((alt) => `(gray ${renderNode(alt, ctx)})`)
     .join(" ")}))`;
 
-const renderFan = (p: FanProv): string =>
-  `(fan :site ${p.site} :collapse ${p.collapse} :collection ${circuitToSexpr(p.collection)} :body ${circuitToSexpr(p.body)})`;
+const renderFan = (p: FanProv, ctx: Ctx): string =>
+  `(fan :site ${p.site} :collapse ${p.collapse} :collection ${renderNode(p.collection, ctx)} :body ${renderNode(p.body, ctx)})`;
 
 const renderOpaque = (p: OpaqueProv): string => `(opaque :site ${p.site} :reason ${s(p.reason)})`;
 
-/** `StaticProv` → homoiconic sexpr. Exhaustive by tsc (no default arm) — adding
- *  an 11th `StaticProv` kind breaks this file at compile time, mirroring
- *  `extract`'s own totality proof (I1). */
-export function circuitToSexpr(prov: StaticProv): string {
+/** `StaticProv` → sexpr for a NOT-YET-tagged `prov` — the exhaustive per-kind
+ *  switch. Exhaustive by tsc (no default arm) — adding an 11th `StaticProv`
+ *  kind breaks this file at compile time, mirroring `extract`'s own totality
+ *  proof (I1). Called only from `renderNode`, below. */
+function renderNodeFresh(prov: StaticProv, ctx: Ctx): string {
   switch (prov.kind) {
     case "input":
       return renderInput(prov);
     case "mint":
-      return renderMint(prov);
+      return renderMint(prov, ctx);
     case "const":
       return renderConst(prov);
     case "fused":
-      return renderFused(prov);
+      return renderFused(prov, ctx);
     case "mux":
-      return renderMux(prov);
+      return renderMux(prov, ctx);
     case "build":
-      return renderBuild(prov);
+      return renderBuild(prov, ctx);
     case "string":
-      return renderString(prov);
+      return renderString(prov, ctx);
     case "choice":
-      return renderChoice(prov);
+      return renderChoice(prov, ctx);
     case "fan":
-      return renderFan(prov);
+      return renderFan(prov, ctx);
     case "opaque":
       return renderOpaque(prov);
   }
+}
+
+/** Splice `:id N` in right after the kind symbol of an already-rendered form
+ *  — `(fused :site 0 ...)` → `(fused :id 3 :site 0 ...)`. Every current
+ *  kind's render is `(kindname :field ...)`, so the first space in the
+ *  string is always exactly the boundary after the (space-free) kind symbol,
+ *  regardless of what field content follows (even a quoted string value that
+ *  itself contains a space, e.g. a mint `:head` — `.indexOf` finds the
+ *  FIRST occurrence only). Only ever called for a node `ctx.counts` says is
+ *  shared; an unshared node's rendering never reaches here. */
+function withId(rendered: string, id: number): string {
+  const spaceIdx = rendered.indexOf(" ");
+  if (spaceIdx === -1) return rendered; // defensive; no current kind renders with zero fields
+  return `${rendered.slice(0, spaceIdx)} :id ${id}${rendered.slice(spaceIdx)}`;
+}
+
+/** `StaticProv` → sexpr, returning the string for `prov` itself —
+ *  SHARED-DAG AWARE (G2, 2026-07-16): a `prov` object identity already
+ *  rendered earlier in this SAME `circuitToSexpr` call emits the compact
+ *  `(ref N)` form instead of re-rendering the whole subtree; a node reachable
+ *  only once never gets tagged at all (see `withId`'s doc and this file's
+ *  header for the byte-identical-when-unshared guarantee). Dedup is by
+ *  OBJECT IDENTITY — two structurally-equal but distinct object instances
+ *  (e.g. two independent call sites' attributions that happen to look the
+ *  same) are never merged, only genuine representation sharing is. */
+function renderNode(prov: StaticProv, ctx: Ctx): string {
+  const already = ctx.rendered.get(prov);
+  if (already !== undefined) return `(ref ${already})`;
+  const fresh = renderNodeFresh(prov, ctx);
+  if ((ctx.counts.get(prov) ?? 1) < 2) return fresh;
+  const id = ctx.nextId++;
+  ctx.rendered.set(prov, id);
+  return withId(fresh, id);
+}
+
+/** `StaticProv` → homoiconic sexpr. Exhaustive over StaticProv's ten members
+ *  (see `renderNodeFresh`'s own totality proof). Deterministic: the same
+ *  `prov` always produces the exact same string (object identity is fixed
+ *  once `prov` is constructed, so the count pre-pass and the render walk
+ *  both proceed in the same stable order every call). */
+export function circuitToSexpr(prov: StaticProv): string {
+  const counts = new Map<StaticProv, number>();
+  countOccurrences(prov, counts);
+  return renderNode(prov, { counts, rendered: new Map(), nextId: 0 });
 }

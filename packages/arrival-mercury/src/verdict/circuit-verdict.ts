@@ -68,14 +68,34 @@
  * `extract`'s cycle guard (beta-reduction with a revisit-set — perturbation.md
  * §3's named-helper fix) lifts every recursive/cyclic construct to `opaque`
  * AT THE PRODUCER: a `StaticProv` this module ever receives is already a
- * finite TREE. Shared sub-objects may repeat under multiple parents (the type
- * is a "provenance CIRCUIT," Deutch-Milo-Roy-Tannen ICDT 2014 — DAG-shared by
- * name), but repetition under distinct parents is not a cycle; a plain walk
- * revisits a shared node once per incoming edge and terminates on the edge
- * count, same as it would over a tree with no sharing at all — and revisiting
- * is the CORRECT over-approximation here, not a bug (`(- (:v e) (:v e))`
- * must count `e` twice; deduplicating shared structure is the probe's job,
- * never the static plane's, seal.ts's own worked example).
+ * finite, acyclic graph. Shared sub-objects may repeat under multiple parents
+ * (the type is a "provenance CIRCUIT," Deutch-Milo-Roy-Tannen ICDT 2014 —
+ * DAG-shared BY OBJECT IDENTITY since `extract`'s own memo, `ExtractCtx.memo`
+ * in src/extract/index.ts, G2), but repetition under distinct parents is not
+ * a cycle, and a bottom-up fold terminates on the DISTINCT-node count either
+ * way (memoized here by identity, `channelsMemo` below, purely so a node with
+ * high in-degree folds once instead of once per incoming edge — never a
+ * fixpoint concern, see below).
+ *
+ * This memoization does NOT weaken `(- (:v e) (:v e))`'s own guard: those two
+ * `(:v e)` reads are two SEPARATE `App` nodes over an unbound name — `e`
+ * resolves through extractRef's free-name path (never a Bound, never
+ * `ExtractCtx.memo`'d), so they produce two DISTINCT `MuxProv`/`InputProv`
+ * OBJECTS, and `channelsMemo` folds each independently and counts `e` twice,
+ * exactly as seal.ts's worked example requires — the counting the probe
+ * relies on is about REPEATED EVIDENCE READS at runtime, and it survives
+ * completely intact because it was never about object identity to begin
+ * with. What DOES now fold once is the case that IS the same object — two
+ * Refs to one `define`/`let` binding (`(define xs (:v e)) (- xs xs)`) — and
+ * this is sound for every check this module performs: `dataShaped` and
+ * `guardGroundsInEvidence` only ever test PRESENCE (`anchors.length > 0`,
+ * `.some(...)`, `.every(...)`) or EXACT-ZERO (`consts === 0`, `opaques ===
+ * 0`) — never a multiplicity threshold — and both kinds of test are
+ * reachability properties, invariant under how many incoming edges a shared
+ * node has. Folding `xs` once instead of twice changes `anchors.length` from
+ * 2 to 1 but never changes whether zero is reachable or whether an anchor
+ * exists; no verdict this module returns can depend on a count a future
+ * change might introduce without re-examining this note.
  *
  * The Knaster-Tarski least-fixpoint machinery the design docs invoke
  * (scheme-semantic-model-synthesis.md §2c) governs `extract`'s OWN dialect
@@ -139,14 +159,54 @@ function unionTerminals(parts: readonly ChannelTerminals[]): ChannelTerminals {
 // ── The walk ─────────────────────────────────────────────────────────────────
 
 /**
- * Fold a circuit into its two attribution channels, bottom-up, in ONE pass.
- * Safe to call again on any sub-circuit (a guard, a collection) exactly as on
- * the whole circuit — `judgmentShaped` does this per guard; see the header
- * for why no fuel is needed either way. Exhaustive over `StaticProv`'s ten
- * members WITHOUT a `default` arm: tsc's return-type check is the totality
- * proof, mirroring `extract`'s own dispatcher (src/extract/index.ts).
+ * Fold a circuit into its two attribution channels, bottom-up, in ONE pass —
+ * MEMOIZED by `StaticProv` object identity within this one top-level call
+ * (G2, 2026-07-16: the shared-DAG follow-through — `extract`'s own memo,
+ * `ExtractCtx.memo` in src/extract/index.ts, is what makes two Refs to one
+ * binding share the identical object; this is what a CONSUMER of that
+ * sharing does with it). Safe to call again on any sub-circuit (a guard, a
+ * collection) exactly as on the whole circuit — `judgmentShaped` does this
+ * per guard, each such call getting its OWN fresh memo (`channels` creates
+ * one per invocation, below) — see the header for why no fuel is needed
+ * either way. PURE: this is strictly a performance change over an
+ * already-acyclic DAG (`extract`'s cycle guard is what guarantees that), not
+ * a semantics change — unlike the extract-side memo, there is no ambient
+ * context here for a cached value to accidentally depend on (`channelsFresh`
+ * is a plain bottom-up fold: a node's `Channels` is a pure function of its
+ * children's already-computed `Channels`, nothing else), so memoizing by
+ * identity is unconditionally sound — no analog of `ExtractCtx.riskProbes`
+ * is needed here. Without this, a shared node under many parents (the
+ * pathological case this fix exists for) would be RE-WALKED once per
+ * incoming edge — the exact "per-use re-derivation" the fused-provenance
+ * thesis rules out; with it, each distinct node folds exactly once,
+ * regardless of its in-degree.
  */
 export function channels(prov: StaticProv): Channels {
+  return channelsMemo(prov, new Map());
+}
+
+/** Memoizing dispatcher: a cache hit returns the SAME `Channels` object
+ *  computed the first time this exact `prov` reference was folded within the
+ *  CURRENT top-level `channels()` call; a miss computes it via
+ *  `channelsFresh`, caches, and returns. */
+function channelsMemo(prov: StaticProv, memo: Map<StaticProv, Channels>): Channels {
+  const cached = memo.get(prov);
+  if (cached !== undefined) return cached;
+  const result = channelsFresh(prov, memo);
+  memo.set(prov, result);
+  return result;
+}
+
+/**
+ * The exhaustive per-kind fold for a NOT-YET-memoized `prov`. Exhaustive over
+ * `StaticProv`'s ten members WITHOUT a `default` arm: tsc's return-type check
+ * is the totality proof, mirroring `extract`'s own dispatcher
+ * (src/extract/index.ts). Called only from `channelsMemo`, above; every
+ * recursive reference to a child goes back through `channelsMemo` (never a
+ * bare recursive call to this function, and never to the public `channels`,
+ * which would start a FRESH memo per child and defeat the point).
+ */
+function channelsFresh(prov: StaticProv, memo: Map<StaticProv, Channels>): Channels {
   switch (prov.kind) {
     case "input":
       // Evidence-class by construction (static-prov.ts's `InputProv` doc) —
@@ -162,7 +222,7 @@ export function channels(prov: StaticProv): Channels {
       // crossing's own inputs — grounds SELECTION only, recursively (both
       // halves of each closed input's own channels: a closed input can
       // itself carry further selection structure, e.g. a nested mint).
-      const closed = prov.closed.map(channels);
+      const closed = prov.closed.map((c) => channelsMemo(c, memo));
       return {
         content: { anchors: [{ kind: "mint", integrity: prov.integrity, site: prov.site }], consts: 0, opaques: 0 },
         selection: unionTerminals(closed.flatMap((c) => [c.content, c.selection])),
@@ -176,7 +236,7 @@ export function channels(prov: StaticProv): Channels {
       return { content: { anchors: [], consts: 0, opaques: 1 }, selection: EMPTY };
 
     case "fused": {
-      const parts = prov.sources.map(channels);
+      const parts = prov.sources.map((c) => channelsMemo(c, memo));
       return {
         content: unionTerminals(parts.map((p) => p.content)),
         selection: unionTerminals(parts.map((p) => p.selection)),
@@ -217,8 +277,8 @@ export function channels(prov: StaticProv): Channels {
           // one of them) and still excludes irrelevant siblings. Never widens
           // to the whole container.
           return {
-            content: unionTerminals(hits.map((p) => channels(p.prov).content)),
-            selection: unionTerminals(hits.map((p) => channels(p.prov).selection)),
+            content: unionTerminals(hits.map((p) => channelsMemo(p.prov, memo).content)),
+            selection: unionTerminals(hits.map((p) => channelsMemo(p.prov, memo).selection)),
           };
         }
         // 0 parts → the field is PROVABLY ABSENT from this literal container;
@@ -232,11 +292,11 @@ export function channels(prov: StaticProv): Channels {
       // Null key (dynamic index — could be ANY part) or a non-build source
       // (projection of an input/fused/mint): the whole source is the sound
       // over-approximation.
-      return channels(src);
+      return channelsMemo(src, memo);
     }
 
     case "build": {
-      const parts = prov.parts.map((p) => channels(p.prov));
+      const parts = prov.parts.map((p) => channelsMemo(p.prov, memo));
       return {
         content: unionTerminals(parts.map((p) => p.content)),
         selection: unionTerminals(parts.map((p) => p.selection)),
@@ -244,7 +304,7 @@ export function channels(prov: StaticProv): Channels {
     }
 
     case "string": {
-      const parts = prov.runs.map(channels);
+      const parts = prov.runs.map((c) => channelsMemo(c, memo));
       return {
         content: unionTerminals(parts.map((p) => p.content)),
         selection: unionTerminals(parts.map((p) => p.selection)),
@@ -258,8 +318,8 @@ export function channels(prov: StaticProv): Channels {
       // contain a further choice or mint). An alt's own nested selection
       // (a further choice inside it) also bubbles into the parent's
       // selection, so a tower of nested guards all ground one outer verdict.
-      const alts = prov.alts.map(channels);
-      const guards = prov.guards.map(channels);
+      const alts = prov.alts.map((a) => channelsMemo(a, memo));
+      const guards = prov.guards.map((g) => channelsMemo(g, memo));
       return {
         content: unionTerminals(alts.map((a) => a.content)),
         selection: unionTerminals([...alts.map((a) => a.selection), ...guards.map((g) => g.content), ...guards.map((g) => g.selection)]),
@@ -271,8 +331,8 @@ export function channels(prov: StaticProv): Channels {
       // per-element references reach the collection through the element mux,
       // but this module never assumes that embedding; it unions the
       // collection in explicitly regardless of how extract wires the body.
-      const body = channels(prov.body);
-      const collection = channels(prov.collection);
+      const body = channelsMemo(prov.body, memo);
+      const collection = channelsMemo(prov.collection, memo);
       const selectionParts = [body.selection, collection.selection];
       // `route` (min/max/last/filter-survivor): the fan IS a choice over the
       // collection's own elements — the collection's CONTENT grounds WHICH

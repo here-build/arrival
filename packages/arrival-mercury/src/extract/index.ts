@@ -63,6 +63,84 @@ export interface ExtractCtx {
   /** Program-input names (`define/overridable` params) — these Refs are
    *  evidence-class InputProv, everything else resolves through scope. */
   readonly inputs: ReadonlySet<string>;
+  /** The shared-DAG memo (G2, 2026-07-16): a Bound's `{tag:"expr"}` extraction,
+   *  cached ON THE BOUND OBJECT — every Ref that `lookup()`s to the SAME Bound
+   *  (a top-level `define`, a `let`-binding) shares the identical StaticProv
+   *  object reference on every use, turning the attribution TREE into the
+   *  shared DAG a provenance circuit actually is (Deutch-Milo-Roy-Tannen, ICDT
+   *  2014). Beta-reduction creates FRESH Bound objects per call site
+   *  (betaReduce's `paramNames.set(..., {tag:"expr", expr: allArgs[i], ...})`),
+   *  so this WeakMap never conflates two different calls' argument
+   *  attributions — object identity IS the sharing key, by construction.
+   *  Created fresh per `extractProgram` run (never module-global — extract
+   *  stays reentrant/pure across independent runs). See `extractRef`
+   *  (arm-atoms.ts) for the cache's read/write discipline and the soundness
+   *  argument for WHEN a result may be cached (`riskProbes`, below, is the
+   *  other half of that argument). */
+  readonly memo: WeakMap<Bound, StaticProv>;
+  /** The memo's safety gate (paired with `memo`, above). A Bound's extraction
+   *  is sound to cache-and-reuse-anywhere ONLY if it never consults
+   *  `ctx.reducing`'s CONTENT anywhere in its recursive extraction — not
+   *  merely "never hits a cycle." (A weaker rule — cache unless the result
+   *  contains an `opaque("cyclic-binding")` anywhere — is UNSOUND: a Bound can
+   *  extract cleanly through a non-recursive helper `h` on one path, yet the
+   *  SAME Bound referenced from a DIFFERENT point already mid-reducing `h` via
+   *  an unrelated call site hits `ctx.reducing.has(h)` and opaques instead —
+   *  same Bound, same cached-candidate value, two genuinely different correct
+   *  answers depending on the ambient `reducing` set at the reference point.
+   *  Concretely: `(define (idf x) x) (define shared (idf 42)) (define (f n)
+   *  (if (= n 0) (idf shared) (f (- n 1))))` — resolving `shared` directly
+   *  extracts cleanly (a ConstProv, zero opaques anywhere), but resolving it
+   *  from inside `f`'s body — where `idf` is ALREADY mid-reduction for the
+   *  OUTER `(idf shared)` call — must opaque on the INNER `(idf 42)` betaReduce
+   *  (`ctx.reducing.has(idf)` now true); caching the first, opaque-free result
+   *  and serving it to the second site would silently swap in the wrong
+   *  answer.) `riskProbes` makes "never consults `reducing`'s content" a
+   *  directly observable property instead of an unreliable output-shape
+   *  proxy: every one of the four `ctx.reducing.has(...)` call sites in this
+   *  package (extractRef here; `resolveCallee`/`betaReduce` in
+   *  arm-control.ts; `buildFan` in arm-containers.ts — see `markRisk`'s own
+   *  doc) marks every CURRENTLY ACTIVE probe as touched, REGARDLESS of
+   *  whether that check hits or misses. `extractRef` pushes a fresh probe
+   *  before attempting a new (uncached) resolution and only writes to `memo`
+   *  if that probe is still untouched when the recursive extraction returns —
+   *  i.e., iff NOTHING anywhere in that resolution ever looked at `reducing`'s
+   *  content, which is exactly the condition under which the result cannot
+   *  depend on it. (Nested resolutions push their OWN probe but still mark
+   *  every ENCLOSING one: touching `reducing` at any depth invalidates every
+   *  in-flight ancestor attempt, not just the innermost.) A probe list, not a
+   *  single flag, because attempts nest (a cached-or-not Bound can defer to
+   *  ANOTHER Bound partway through its own extraction). This is why the
+   *  Bound's OWN registry-checked-once invariants (`registry` is one constant
+   *  instance for a whole `extractProgram` run; `inputs` is currently read
+   *  nowhere in this package, grepped) don't need their own probes — only
+   *  `reducing`'s content varies by call site, and it is the only one of the
+   *  four ctx fields any code path ever branches on. */
+  readonly riskProbes: readonly RiskProbe[];
+}
+
+/** A mutable cell threaded through `ExtractCtx.riskProbes` — see `ExtractCtx.
+ *  riskProbes`'s own doc for the full argument. Deliberately the one
+ *  internally-mutable value in an otherwise immutable module: it never
+ *  escapes `extract()`'s call tree and never appears in any returned
+ *  StaticProv, so `extract` stays referentially transparent from every
+ *  caller's perspective — this is bookkeeping for the cache's OWN soundness,
+ *  not a language-level dynamics the arrival-immutable-no-dynamics law (which
+ *  governs the SCHEME programs being analyzed, not this analyzer's internals)
+ *  has any bearing on. */
+export interface RiskProbe {
+  touched: boolean;
+}
+
+/** Mark every currently-active risk probe as touched — call this immediately
+ *  before (not after) each of the four `ctx.reducing.has(...)` consultations
+ *  in this package, unconditionally (regardless of whether the check hits or
+ *  misses): a MISS is still a consultation of `reducing`'s content, and it is
+ *  exactly the thing that can differ between two ambient contexts (see
+ *  `ExtractCtx.riskProbes`'s doc for the worked counterexample). A no-op when
+ *  no memo attempt is in flight (`riskProbes` empty). */
+export function markRisk(ctx: ExtractCtx): void {
+  for (const p of ctx.riskProbes) p.touched = true;
 }
 
 export const opaque = (site: NodeId, reason: string): StaticProv => ({ kind: "opaque", site, reason });
@@ -120,5 +198,5 @@ export function extractProgram(forms: readonly CoreForm[], registry: HeadRegistr
   }
   const last = forms.filter((f) => f.kind !== "Define" && f.kind !== "DefineFn").at(-1) ?? forms.at(-1);
   if (!last) return { kind: "opaque", site: 0 as NodeId, reason: "empty-program" };
-  return extract(last, { scope: top, registry, reducing: new Set(), inputs });
+  return extract(last, { scope: top, registry, reducing: new Set(), inputs, memo: new WeakMap(), riskProbes: [] });
 }

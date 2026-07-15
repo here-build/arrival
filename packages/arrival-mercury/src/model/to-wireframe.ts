@@ -76,6 +76,23 @@
  * narrows to a subset); `sideMaps.collapse` carries the real, load-bearing
  * signal. Report this as a second gap: a true `lengthPreserving` bit needs a
  * field `extract` does not populate on `FanProv` today.
+ *
+ * ── shared-DAG dedup, scoped per graph level (G2, 2026-07-16) ──────────────
+ *
+ * `project` (below) recognizes a `StaticProv` object identity already
+ * projected earlier and reuses its node index instead of re-projecting the
+ * whole subtree — the representation-sharing half of "a provenance circuit
+ * IS a shared DAG" (the extract-side memo, `ExtractCtx.memo` in
+ * src/extract/index.ts, is the other half: it is what makes two Refs to one
+ * binding return the identical object in the first place). Third documented
+ * gap: this dedup is scoped to one `Builder` — one graph LEVEL — because a
+ * `fan`'s body already projects through a RECURSIVE `toWireframe` call into
+ * its OWN private index space (`fanTemplates`' own doc, above). A node shared
+ * ACROSS a fan boundary (between the outer graph and a template, or between
+ * two templates) still projects once per level it appears in — `Wire`
+ * references a node index local to one `nodes` array, so there is no
+ * cross-level slot to point a shared reference at without a bigger change to
+ * `WireframeGraph` itself. Dedup WITHIN one level is unconditional and exact.
  */
 import type { Wire, WireConsumer, WireframeGraph, WireframeNode } from "@here.build/arrival/provenance";
 
@@ -154,6 +171,12 @@ interface Builder {
   readonly buildShape: Map<number, { readonly ctor: BuildProv["ctor"]; readonly keys: readonly (string | number)[] }>;
   readonly fabrication: Set<number>;
   readonly fanTemplates: Map<number, WireframeSideMaps>;
+  /** Shared-DAG dedup (G2, 2026-07-16), scoped to THIS builder/graph level —
+   *  see `project`'s doc for why a fan's nested `template` graph (its own
+   *  Builder, its own index space — the "private interior" discipline this
+   *  file's header already documents) is a SEPARATE dedup scope, not a gap in
+   *  this one. */
+  readonly seen: Map<StaticProv, number>;
 }
 
 function newBuilder(): Builder {
@@ -166,6 +189,7 @@ function newBuilder(): Builder {
     buildShape: new Map(),
     fabrication: new Set(),
     fanTemplates: new Map(),
+    seen: new Map(),
   };
 }
 
@@ -273,8 +297,9 @@ function projectOpaque(b: Builder, prov: OpaqueProv): number {
 
 /** Exhaustive by tsc (no default arm) — adding an 11th `StaticProv` kind
  *  breaks this file at compile time, the same totality discipline
- *  `circuitToSexpr` and `extract` itself hold (I1). */
-function project(b: Builder, prov: StaticProv): number {
+ *  `circuitToSexpr` and `extract` itself hold (I1). Called only from
+ *  `project`, below, on a `b.seen` miss within THIS builder's scope. */
+function projectFresh(b: Builder, prov: StaticProv): number {
   switch (prov.kind) {
     case "input":
       return projectInput(b, prov);
@@ -297,6 +322,39 @@ function project(b: Builder, prov: StaticProv): number {
     case "opaque":
       return projectOpaque(b, prov);
   }
+}
+
+/** `StaticProv` → node index within `b`, returning the SAME index for a
+ *  `prov` object identity already projected earlier within THIS builder —
+ *  the shared-DAG dedup (G2, 2026-07-16; the extract-side memo,
+ *  `ExtractCtx.memo` in src/extract/index.ts, is what makes two Refs to one
+ *  binding return the identical `StaticProv` object in the first place). The
+ *  CALLER still pushes its own `Wire` unconditionally (see `wireChildren`,
+ *  `projectMux`, `projectFan`'s collection wiring), so a shared node ends up
+ *  fed by multiple wires into the SAME node index — `WireframeGraph`/`Wire`
+ *  impose no one-producer-per-node constraint, so this needs no schema
+ *  change, and ELK (`WireframeElk.tsx`) lays out a multi-parent node exactly
+ *  as it lays out any other.
+ *
+ *  SCOPE (documented, not a bug — mirrors this file's other "THE GAP"
+ *  callouts): dedup is per-`Builder`, i.e. per graph LEVEL. A `fan` node's
+ *  body projects through a RECURSIVE `toWireframe(prov.body)` call
+ *  (`projectFan`, below), which allocates a BRAND NEW `Builder` — the "private
+ *  interior" discipline this file's header already documents for
+ *  `WireframeSideMaps.fanTemplates` (each template has its own index space
+ *  from 0). A `StaticProv` object shared BETWEEN the outer graph and a fan's
+ *  template (or between two different fans' templates) therefore still
+ *  projects once per level — `WireframeGraph`'s wires reference node indices
+ *  local to one `nodes` array, so a cross-level reference has nowhere to
+ *  point without a bigger structural change to that type (out of scope
+ *  here). Dedup WITHIN one level — the top graph, or one fan's own template —
+ *  is unconditional and exact. */
+function project(b: Builder, prov: StaticProv): number {
+  const existing = b.seen.get(prov);
+  if (existing !== undefined) return existing;
+  const idx = projectFresh(b, prov);
+  b.seen.set(prov, idx);
+  return idx;
 }
 
 /** `StaticProv` → `WireframeGraph`, the render-compat projection. Pure and
