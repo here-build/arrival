@@ -246,9 +246,12 @@ export const GepaOneRound: Story = {
  *  a fan body: a green `source`/`infer/chat` node (evidence-integrity),
  *  feeding `:label`/`car` muxes, a `string-append` build for the prompt (the
  *  `infer/chat/user` BUILD part keeping its content visible), and the
- *  `s/object` schema arg staying honestly opaque (metadata, never claimed as
- *  evidence). Same evidence path the full `Gepa` story has at scale, just not
- *  hidden behind a collapsed fan node. */
+ *  `s/object` schema arg drawing as a fused-const node — RECLASSIFIED
+ *  2026-07-16 (V's ruling: the whole `s/` namespace is arrival's type syntax,
+ *  a descriptor call is ordinary data, honestly `fuse`; arm-containers.ts's
+ *  `s/`-namespace rule), where this story used to show it as an opaque
+ *  unknown-head. Same evidence path the full `Gepa` story has at scale, just
+ *  not hidden behind a collapsed fan node. */
 export const GepaAskCrossing: Story = {
   args: {
     projection: renderProjection(`

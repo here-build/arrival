@@ -9,8 +9,19 @@
  * `infer/chat` crossing, the whole `iterate`/`generation` fan, all of it.
  * `append`, `cadr`, and three predicates (`zero?`/`null?`/`string-ci=?`) were
  * unknown too. The registry additions in `arm-containers.ts` (this sweep) fix
- * the data-carrying heads; `s/object`/`s/field/string`/`apply`/`every`/`some`
- * stay opaque deliberately (metadata/higher-order — see that file's header).
+ * the data-carrying heads. `apply`/`every`/`some` stay opaque deliberately
+ * (higher-order combinators never on a path this sweep needs to open — see
+ * that file's header). `s/object`/`s/field/string` ALSO stayed opaque at the
+ * time of this sweep (the theory that an `infer/chat` output-schema arg never
+ * carries evidence) — RECLASSIFIED 2026-07-16 (V's ruling: the whole `s/`
+ * namespace is arrival's type syntax, not a value operator; a descriptor call
+ * is ordinary data, honestly `fuse` — see arm-containers.ts's `s/`-namespace
+ * rule for the full account). The opaque was not cosmetic: it rode
+ * `infer/chat`'s `closed` into the mint's SELECTION channel and poisoned
+ * `guardGroundsInEvidence` even where the guard's OWN evidence anchor was
+ * completely real — see circuit-verdict.test.ts's "s/* reclassified to fuse"
+ * describe block for the worked repro (a GEPA-shaped judgment flipping from
+ * not-attestable to judgment-shaped).
  *
  * `buildGepaSource` reconstructs the exact algorithm from the real fixture
  * (`inhuman/saas/studio/src/workbench/trace/__fixtures__/gepa-source.ts`'s

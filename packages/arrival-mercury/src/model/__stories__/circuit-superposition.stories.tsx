@@ -69,9 +69,10 @@ export const NestedAxes: Story = {
  *  `iterate`/`refine` recursion lifts to a `Fan{collapse:"lowered"}`, so the
  *  loop draws as a z-stack with the `infer/chat` crossing visible inside — the
  *  same shape the studio shows GEPA's evolutionary loop, from the static
- *  circuit. (`infer/chat/user`/`s/object` render as `opaque` — heads the
- *  registry doesn't model yet; the recursion lift + z-stack are what this
- *  story demonstrates.) */
+ *  circuit. (`infer/chat/user` draws as a BUILD node and `s/object` as a
+ *  fused-const node — both modeled by the registry (the latter reclassified
+ *  2026-07-16, V's ruling — arm-containers.ts's `s/`-namespace rule), never
+ *  opaque; the recursion lift + z-stack are what this story demonstrates.) */
 export const RecursiveInferenceLoop: Story = {
   args: { mermaid: renderCircuit(RECURSIVE_INFER) },
 };

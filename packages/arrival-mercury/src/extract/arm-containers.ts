@@ -45,15 +45,23 @@
  * `max-by` wraps the ENTIRE program's return value, so its opaque discarded
  * the whole circuit. The classifications added below (see each table's own
  * comments for the per-head seal claim) surface the chain; `max-by`'s mux
- * entry is the load-bearing one. Left DELIBERATELY unclassified (still
- * opaque via the unknown-head fallback) because they never carry evidence:
- * `s/object`/`s/field/string` are `infer/chat`'s output-schema arg (selection
- * metadata, and a mint's `closed` inputs are lineage-cut regardless — see
- * static-prov.ts's `MintProv` doc); `every`/`some` are the higher-order
- * predicate combinators inside `dominates?`, never on a path this sweep needs
- * to open; `apply` is `max-by`'s KEY function (arg0) — `dispatchMux` only
- * ever walks the SOURCE arg (arg1), so `apply` is never even passed to
- * `extract` and its classification is moot either way.
+ * entry is the load-bearing one. `s/object`/`s/field/string` were left
+ * unclassified BY THIS SWEEP (still opaque via the unknown-head fallback) on
+ * the theory that `infer/chat`'s output-schema arg never carries evidence —
+ * RECLASSIFIED 2026-07-16 (V's ruling, `classifyHead`'s own `s/`-namespace
+ * rule below has the full account): that theory undercounted the cost. The
+ * schema arg's opaque still flows into the mint's `closed` (a crossing's own
+ * inputs — static-prov.ts's `MintProv` doc), which grounds the SELECTION
+ * channel, and an opaque anywhere in a guard's selection fails
+ * `guardGroundsInEvidence` (circuit-verdict.ts) even when the guard's own
+ * evidence anchor is real — an evidence-grounded judgment was reading as
+ * not-attestable purely because its schema arg was miscategorized. `every`/
+ * `some` stay unclassified (still opaque via the unknown-head fallback)
+ * because they never carry evidence: they are the higher-order predicate
+ * combinators inside `dominates?`, never on a path this sweep needs to open;
+ * `apply` is `max-by`'s KEY function (arg0) — `dispatchMux` only ever walks
+ * the SOURCE arg (arg1), so `apply` is never even passed to `extract` and its
+ * classification is moot either way.
  */
 import type { CoreForm, DefineFn, Dict, Lambda, NodeId } from "../coreform/types.js";
 import type { BuildProv, ChoiceProv, HeadClass, HeadRegistry, MintIntegrity, StaticProv } from "../model/static-prov.js";
@@ -259,6 +267,41 @@ export const defaultRegistry: HeadRegistry = {
     if (Object.hasOwn(STRING_HEADS, name)) return { role: "string" };
     if (Object.hasOwn(MINT_HEADS, name)) return { role: "mint", integrity: MINT_HEADS[name]! };
     if (Object.hasOwn(FAN_HEADS, name)) return { role: "fan", fanKind: FAN_HEADS[name]! };
+    // `s/` — the reserved TYPE-SYNTAX namespace (V's ruling, 2026-07-16): every
+    // head under this prefix (`s/object`, `s/field/string`, `s/enum`, …) is
+    // arrival's type vocabulary, not a value operator (type-emit/emit.ts's own
+    // comment: "s/* — s/enum, s/object, … — is the only type vocabulary,
+    // prelude-loaded the same way BUILTIN_PREAMBLE is"). A FAMILY rule (a
+    // namespace test), not an enumeration — `s/` is reserved wholesale, so
+    // membership is closed by the prefix itself and needs no per-member table.
+    //
+    // (a) A descriptor CALL (`(s/object (s/field/string "label"))`) is
+    //     ordinary DATA constructed from its args — usually author consts,
+    //     possibly a dynamic field name/description built from evidence — so
+    //     the honest classification is `fuse` (⊗ over the args' own
+    //     where-provenance): an author-const schema stays a visible const, a
+    //     schema built from evidence stays VISIBLE, nothing goes opaque.
+    //     Const-classification was considered and REJECTED: it would erase
+    //     real flow the moment a schema is built from evidence — unsound.
+    //     Separately, the type-level NARROWING `s/*` performs at a crossing
+    //     is identity-or-crash on execution (never a value transform) — it
+    //     contributes NOTHING to attribution and rides the consuming mint's
+    //     `closed` (selection, lineage-cut — static-prov.ts's `MintProv`
+    //     doc). `fuse` for the descriptor plus that placement in `closed` is
+    //     the FULL honest story; no separate "type-narrowing" role is needed.
+    // (b) SEAM, not built: a FUTURE explicit value-narrowing form — applying
+    //     `s/*` to a value actually flowing through the circuit, rather than
+    //     constructing a schema descriptor from author/evidence args — would
+    //     want an EXACT pass-through class (identity, never fuse) at that
+    //     application site. No such form exists yet; every current `s/*`
+    //     call is descriptor construction. Flagged for whoever adds it, not
+    //     built ahead of the form that would need it.
+    // (c) Safe under user shadowing: a scope-bound callee beta-reduces
+    //     (`resolveCallee`/`betaReduce`, arm-control.ts) BEFORE the registry
+    //     is ever consulted — `dispatchKnownHead` only runs for a FREE name
+    //     (`extractApp`'s free-Ref branch). A user `(define (s/object x) …)`
+    //     would shadow this rule entirely; it can never collide with it.
+    if (name.startsWith("s/")) return { role: "fuse" };
     return { role: "opaque", reason: `unknown-head/${name}` };
   },
 };

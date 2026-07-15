@@ -421,3 +421,69 @@ describe("fan collapse kind and the collection's selection role", () => {
     expect(channels(combineFan).selection.anchors).toHaveLength(0);
   });
 });
+
+// ── s/* reclassified to fuse — the extract-registry consequence (V's ruling, 2026-07-16) ──
+
+/**
+ * `s/object`/`s/field/string`/… were left as unknown-head opaque by the
+ * 2026-07-15 GEPA sweep (arm-containers.ts's header, at the time) on the
+ * theory that an `infer/chat` output-schema arg never carries evidence. V's
+ * ruling overturned that theory: the whole `s/` namespace is arrival's TYPE
+ * SYNTAX — the narrowing it performs at a crossing is identity-or-crash on
+ * execution, contributing nothing to attribution — so a descriptor CALL like
+ * `(s/object (s/field/string "label"))` is just ordinary data built from its
+ * args, and the honest classification is `fuse` (arm-containers.ts's `s/`
+ * namespace rule), never opaque.
+ *
+ * The opaque was not cosmetic. It rode straight into `infer/chat`'s `closed`
+ * (a mint's own crossing inputs — static-prov.ts's `MintProv` doc), which
+ * grounds the SELECTION channel, never content. `guardGroundsInEvidence`
+ * fails closed on ANY opaque reachable from a guard, through EITHER channel —
+ * so a guard built from a genuinely evidence-grounded `infer/chat` crossing
+ * still read as ungrounded, purely because its schema arg happened to be an
+ * unclassified head. The five cases below pin the fix (case 1: honest fused
+ * shape) and its consequence (case 2: THE FLIP — a GEPA-shaped judgment moves
+ * from not-attestable to judgment-shaped), then pin the two soundness rails
+ * that must survive the reclassification unchanged (case 3: a fabricated
+ * schema string leaked into content still poisons; case 4: a guard with zero
+ * real evidence anywhere still does not ground, fused consts or not), plus
+ * one more positive (case 5: a schema built from a live evidence read stays
+ * VISIBLE instead of vanishing into opaque).
+ */
+describe("s/* reclassified to fuse — the extract-registry consequence of V's ruling", () => {
+  it('(s/object (s/field/string "label")) extracts with no opaque anywhere — fused consts, honest descriptor construction', () => {
+    const prov = run(`(s/object (s/field/string "label"))`);
+    expect(prov).toMatchObject({
+      kind: "fused",
+      sources: [{ kind: "fused", sources: [{ kind: "const" }] }],
+    });
+  });
+
+  it("THE FLIP — a GEPA-shaped judgment is now judgmentShaped (was not-attestable purely because the schema arg opaqued the guard's selection channel)", () => {
+    const prov = run(
+      `(if (string-ci=? (:label (car (infer/chat "m" (list (infer/chat/user "p")) (s/object (s/field/string "label")) "k"))) (:expected e)) 1 0)`,
+    );
+    expect(prov.kind).toBe("choice");
+    expect(judgmentShaped(prov)).toBe(true);
+    expect(circuitVerdict(prov, "judgment")).toBe("judgment-shaped");
+  });
+
+  it('soundness guard 1 — a schema value leaked into CONTENT still poisons: (number->string (s/object (s/field/string "FORGED"))) stays not-attestable for role data (consts in content = fabrication marks survive fuse)', () => {
+    const prov = run(`(number->string (s/object (s/field/string "FORGED")))`);
+    expect(dataShaped(prov)).toBe(false);
+    expect(circuitVerdict(prov, "data")).toBe("not-attestable");
+  });
+
+  it('soundness guard 2 — a pure-const guard (no evidence anchor anywhere) still does not ground: (if (s/field/string "x") "A" "B") is NOT judgment-shaped (the reclassification must not open an all-authored-judgment hole)', () => {
+    const prov = run(`(if (s/field/string "x") "A" "B")`);
+    expect(judgmentShaped(prov)).toBe(false);
+    expect(circuitVerdict(prov, "judgment")).toBe("not-attestable");
+  });
+
+  it("dynamic schema visibility — (s/field/string (:v e)) reaches the input anchor; fuse preserves evidence flow instead of swallowing it into opaque", () => {
+    const prov = run(`(s/field/string (:v e))`);
+    const anchors = channels(prov).content.anchors;
+    expect(anchors).toHaveLength(1);
+    expect(anchors[0]).toMatchObject({ kind: "input", integrity: "evidence" });
+  });
+});

@@ -119,6 +119,32 @@ describe("defaultRegistry.classifyHead — every enumerated head, one row per li
   );
 });
 
+// ── the s/ namespace family rule (V's ruling, 2026-07-16) ───────────────────────
+
+describe("defaultRegistry.classifyHead — the s/ namespace is a FAMILY rule, not an enumeration", () => {
+  // Any head under the reserved `s/` type-syntax prefix fuses — never opaque,
+  // regardless of whether this specific member is ever added to a table (see
+  // this file's own namespace-rule comment, above `classifyHead`'s `s/`
+  // check, for the full account of why fuse is the honest classification).
+  it.each(["s/object", "s/field/string", "s/field/number", "s/enum", "s/array", "s/anything-not-yet-invented"])(
+    "%s → fuse (unenumerated s/-prefixed heads still fuse — the family rule, not a table miss)",
+    (name) => {
+      expect(defaultRegistry.classifyHead(name)).toEqual({ role: "fuse" });
+    },
+  );
+
+  // Precision check: the rule is an exact "s/" PREFIX test, case-sensitive —
+  // it must not over-match a name that merely contains "s/" elsewhere, drops
+  // the slash, or differs only in case. Each of these still falls through to
+  // the unchanged unknown-head opaque default.
+  it.each(["s", "s-thing", "sobject", "S/object", "this-has-s/-in-the-middle"])(
+    "%j does NOT match the s/ namespace rule → unchanged unknown-head opaque",
+    (name) => {
+      expect(defaultRegistry.classifyHead(name)).toEqual({ role: "opaque", reason: `unknown-head/${name}` });
+    },
+  );
+});
+
 // ── extractContainer — Dict → BuildProv ──────────────────────────────────────────
 
 describe("extractContainer — Dict → BuildProv", () => {
