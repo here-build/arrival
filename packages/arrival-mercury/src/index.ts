@@ -155,3 +155,15 @@ export {
   type ScalarLit,
   type Span,
 } from "./coreform/index.js";
+
+// ── the ATTRIBUTION CIRCUIT — extract (CoreForm → StaticProv, I1's totality proof) +
+//    circuitToSexpr (its homoiconic render), plus the registry `extractProgram` needs
+//    (static-prov.ts's G1 freeze; circuit-sexpr.ts's T6b). The ONE surface a host OUTSIDE
+//    the arrival-mercury → arrival-run → arrival-reflect cycle (e.g. inhuman-mcp-worker) needs
+//    to inject a live `circuit` capability into an arrival-reflect `ResultHandle` — see
+//    arrival-reflect's `handle-provenance.ts` (`circuitOf`) for why arrival-reflect itself can
+//    never import this package directly. ──
+export { extractProgram, type ExtractCtx } from "./extract/index.js";
+export { defaultRegistry } from "./extract/arm-containers.js";
+export { circuitToSexpr } from "./model/circuit-sexpr.js";
+export type { HeadRegistry, StaticProv } from "./model/static-prov.js";
