@@ -166,6 +166,12 @@ export {
 export { extractProgram, type ExtractCtx } from "./extract/index.js";
 export { defaultRegistry } from "./extract/arm-containers.js";
 export { circuitToSexpr } from "./model/circuit-sexpr.js";
+// The two other circuit projections (§2f's consumers): circuitToMermaid — the
+// eyeball-able flowchart for reviews + the MCP `(circuit h :as mermaid)` option;
+// toWireframe — the StaticProv→WireframeGraph projection the studio ELK pane
+// consumes. Both pure, same host-facing surface as circuitToSexpr.
+export { circuitToMermaid, type MermaidOptions } from "./model/circuit-mermaid.js";
+export { toWireframe, type WireframeProjection, type WireframeSideMaps } from "./model/to-wireframe.js";
 export type {
   BuildProv,
   ChoiceProv,
