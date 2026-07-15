@@ -74,7 +74,7 @@ predecessor wire/policy plane — stays green until wire/ dissolves, per losable
 | F18 | tamper-on-load | flipped byte in a stored crossing payload | `key-spec.ts::verifiedPayload` (green now); T5b cache suite (every-load verify) | guarded → T5b |
 | F19 | fake-positive leakage | any surface emits `content-attested`/`selection-attested` before its leg is live | emitter census gate (§4.2) + T6a door-text row | red (T6a in flight) |
 | F20 | budget/overflow partiality | budget trip emits a truncated circuit (under-approximates the const-set) | I1: overflow ⇒ `opaque`; totality fuzz (§4.1) + an explicit deep-tower row in the J1 growth set | gap |
-| F21 | mispairing upgrade | static verdict of leaf A paired with probe verdict of leaf B | `seal.ts` header's documented trusted-base hole; **J2 row: per-leaf pairing is mechanical through the MCP path** (row-3 two-leaf program) | gap (J2) |
+| F21 | mispairing upgrade | static verdict of leaf A paired with probe verdict of leaf B | `seal.ts` header's documented trusted-base hole; **J2 row: per-leaf pairing is mechanical through the MCP path** (row-3 two-leaf program) | guarded → J2 |
 | F22 | route-as-combine collapse | `(fold max …)` or a non-AC body collapsed to one `fused` | T3a suite: combine ONLY for the enumerated void-free AC list | red (T3a) |
 | F23 | free-builtin-as-evidence | free `Ref` to an env builtin in value position becomes `InputProv` | §2c mandatory rule: builtin ref ⇒ `opaque`, never input/vertex — **arm-A stub header omits it**; corpus growth row | gap (sharp) |
 | F24 | mark-destroying transform (known refusal, availability not security) | `(string-upcase (:id e))` — mark uppercased, containment misses | documented-refusal row in T5c suite: seals `not-attestable`, and that is CORRECT (fail-closed); do not "fix" by weakening containment | to document |
@@ -242,9 +242,15 @@ direct `seal()` call), and assert the SEALED verdict:
 - door-degradation: with the probe leg artificially absent, `(attest h)` returns the
   advisory door, never a verdict (staging law holds even post-J2 for missing legs).
 
-Red pre-J2: the whole file is `it.fails` capability rows against the T6a-frozen verb
-signatures (the doors make every row's assertion fail exactly as intended until T6c).
-Flip owner: the J2/T6c owner. Impl agents may not edit this file (§6).
+Green post-J2 (T6c; commit 33c93a1972 re-pointed `seal()` to consume `CircuitVerdict`
+directly, retiring the last adapter): the flip owner removed every `.fails`, and the suite
+now runs as plain `it` rows dispatched through the live conjunction. One fixture row is
+currently KNOWN-STALE and red: the "declared judgment" row builds its evidence with the
+alist idiom (`(list (cons 'guilty …))`), which the evidence-idiom law (§2c) seals
+`not-attestable` by design (sound-but-conservative) — the row needs re-authoring to the
+dict idiom (`(dict :guilty …)`) to assert `selection-attested` again. That fix is not a
+unilateral impl-agent edit; it awaits the J2/T6c owner's explicit authorization. Impl
+agents may not edit this file (§6).
 
 ---
 
