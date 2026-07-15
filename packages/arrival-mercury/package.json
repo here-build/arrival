@@ -16,6 +16,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./circuit": {
+      "types": "./dist/circuit.d.ts",
+      "default": "./dist/circuit.js"
     }
   },
   "main": "./dist/index.js",
