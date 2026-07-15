@@ -1,47 +1,272 @@
 /**
- * ARM-B — application / control (G1 stub; Sonnet-B fills).
+ * ARM-B — application / control.
  *
  * Owns: App, DefineFn, Lambda, NamedLet, If, And, Or.
  *
- * Contracts (I1 throughout):
- *  - If   → ChoiceProv { guards:[extract(cond)], alts:[extract(then), extract(else)] }.
- *           BOTH alts extracted — gray wires are the design's core claim. A
- *           literal alt stays a visible ConstProv (the guard-swap forge's
- *           signature; the verdict channel reads it, extract never hides it).
- *  - And/Or → ChoiceProv; args are both guards AND alts (each arg can be the
- *           result and gates the rest). guards = args[0..n-1], alts = args.
- *  - App  → resolve the callee:
- *           · user fn (scope/DefineFn/Lambda) ⇒ BETA-REDUCE (derive.ts
- *             hardenings: cycle guard ⇒ opaque("cyclic-binding"); arity
- *             mismatch/variadic ⇒ opaque("callee-arity"); params bound to ARG
- *             ATTRIBUTIONS in the callee's own scope).
- *           · keyword head (`:field`) ⇒ MuxProv over the argument.
- *           · known primitive ⇒ ctx.registry.classifyHead(name) — fuse/mux/
- *             build/string/mint/fan/choice/opaque per HeadClass (fan kinds
- *             desugar to FanProv via ARM-C's fan builder; T3b wires collapse
- *             inference, until then collapse = "lowered" ALWAYS — sound).
- *           · kwargs FOLD into the argument set (hardening #4 — never a silent
- *             forge channel); kwargs-only call to an unknown head ⇒ opaque.
- *           · anything else ⇒ opaque("unknown-callee").
- *  - DefineFn/Lambda in VALUE position (not being applied) → the fn as a value
- *           is program text: ConstProv? NO — it closes over scope; a later App
- *           beta-reduces it. As a leaf value it is opaque("fn-as-value") until
- *           the callable-as-value design (tagless apply) lands. Fail closed.
- *  - NamedLet → the loop form: recursion knot. Bindings seed the frame; the
- *           body extracts with the loop name bound; a recursive call hits the
- *           cycle guard and the whole loop lifts to FanProv over the SEED
- *           attributions with collapse "lowered" (a loop is a fold in a coat) —
- *           or opaque("named-let/unliftable") where the shape resists. Never
- *           collapse.
+ * Contracts (I1 throughout — lift or opaque, never mislabel):
+ *  - If     → ChoiceProv { guards:[extract(cond)], alts:[extract(then), extract(else)] }.
+ *             BOTH alts extracted — gray wires are the design's core claim. A
+ *             literal alt stays a visible ConstProv (the guard-swap forge's
+ *             signature; the verdict channel reads it, extract never hides it).
+ *  - And/Or → ChoiceProv; every arg is BOTH a guard AND an alt (each arg can be
+ *             the result and gates the rest). guards = args[0..n-1], alts = args
+ *             (computed once, sliced twice — extract is pure, but there is no
+ *             reason to walk each arg's subtree twice).
+ *  - App    → resolve the callee, in order:
+ *             (1) keyword head (`:field`) ⇒ MuxProv over the operand. Arity is
+ *                 exactly one positional operand and zero kwargs; anything else
+ *                 is opaque("keyword-arity") — there is no operand to project.
+ *             (2)/(4) a user fn (scope-resolved DefineFn/Lambda, OR an IIFE
+ *                 Lambda literal written directly in head position) ⇒
+ *                 BETA-REDUCE (derive.ts's hardenings): no rest param and folded
+ *                 arity must match param count ⇒ else opaque("callee-arity");
+ *                 a callee already on the reduction stack ⇒
+ *                 opaque("cyclic-binding"); each param binds to its ARGUMENT's
+ *                 OWN attribution evaluated in the CALLER's scope — binding-site
+ *                 scoping, the mechanism that keeps a helper's hidden guard
+ *                 visible (the reopened named-helper forge). The body pools its
+ *                 own internal Define/DefineFn into one frame and attributes the
+ *                 last non-define form (mirrors extractProgram's and ARM-A's
+ *                 Begin/Let bodies — the same R7RS "defines then expressions"
+ *                 idiom, so all three treat a body identically).
+ *             (3) a free (not-in-scope) Ref ⇒ ctx.registry.classifyHead(name) —
+ *                 fuse/mux/build/string/mint/fan/choice/opaque per HeadClass.
+ *                 kwargs FOLD into the flat arg list (positional order, then
+ *                 kwargs in source order) for fuse/mint/string/choice — never a
+ *                 silent forge channel (hardening #4). mux/build/fan have a
+ *                 rigid positional shape and reject ANY kwargs outright
+ *                 (opaque("kwargs-unsupported-head")); an unknown head called
+ *                 with kwargs and no positional args gets the more specific
+ *                 opaque("kwargs-only-call") instead of the generic
+ *                 unknown-head reason. fan kinds desugar to FanProv via ARM-C's
+ *                 `buildFan` (treated as an opaque black box here — its body is
+ *                 ARM-C's; collapse is always "lowered" until T3a).
+ *             (5) anything else (a computed callee, a name bound to a
+ *                 non-callable value, …) ⇒ opaque("unknown-callee").
+ *  - DefineFn/Lambda in VALUE position (reached directly by the dispatcher, NOT
+ *           through App's head — that path is fully handled inline above and
+ *           never falls through to the generic `extract` on the callee) → the
+ *           fn as a value closes over scope; a later App beta-reduces it. As a
+ *           leaf value it is opaque("fn-as-value") until the callable-as-value
+ *           design (tagless apply) lands. Fail closed.
+ *  - NamedLet → the loop form: a recursion knot. G1 ships the SOUND default,
+ *           unconditionally: opaque("named-let/unliftable"). Lifting the simple
+ *           seeded-accumulator shape to FanProv{collapse:"lowered"} is a
+ *           legitimate future refinement (the spec explicitly permits it), but
+ *           opaque is ALWAYS a correct answer here, and guessing at a partial
+ *           lift is exactly the kind of shape-matching that must not be
+ *           attempted halfway — mislabeling is the only sin.
  */
-import type { And, App, CoreForm, DefineFn, If, Lambda, NamedLet, Or } from "../coreform/types.js";
-import type { StaticProv } from "../model/static-prov.js";
-import { type ExtractCtx, opaque } from "./index.js";
+import type { And, App, CoreForm, DefineFn, If, Lambda, NamedLet, NodeId, Or } from "../coreform/types.js";
+import type { HeadClass, StaticProv } from "../model/static-prov.js";
+// Circular with ./index.js by construction (same shape as ARM-A/ARM-C's own
+// note): index.ts imports extractControl to dispatch INTO this module; this
+// module imports extract to recurse back OUT to sibling-owned CoreForm kinds
+// (a keyword accessor's operand, a fuse head's args, a callee's body — any of
+// which can be a Lit/Ref/Dict/etc.). Sound because every cross-cycle reference
+// happens from inside a function body, never at module-eval time.
+import { type Bound, type ExtractCtx, type Scope, extract, lookup, opaque } from "./index.js";
+import { buildFan } from "./arm-containers.js";
 
 type ControlForm = App | DefineFn | Lambda | NamedLet | If | And | Or;
 
 export function extractControl(form: ControlForm, ctx: ExtractCtx): StaticProv {
-  void ctx; // stub — arm agent replaces
-  void (0 as unknown as CoreForm);
-  return opaque(form.id, `unimplemented/arm-b/${form.kind}`);
+  switch (form.kind) {
+    case "If":
+      return extractIf(form, ctx);
+    case "And":
+    case "Or":
+      return extractAndOr(form, ctx);
+    case "App":
+      return extractApp(form, ctx);
+    case "DefineFn":
+    case "Lambda":
+      return opaque(form.id, "fn-as-value");
+    case "NamedLet":
+      return opaque(form.id, "named-let/unliftable");
+  }
+}
+
+// ── If / And / Or ───────────────────────────────────────────────────────────────
+
+function extractIf(form: If, ctx: ExtractCtx): StaticProv {
+  const guard = extract(form.cond, ctx);
+  return { kind: "choice", site: form.id, guards: [guard], alts: [extract(form.then, ctx), extract(form.else, ctx)] };
+}
+
+function extractAndOr(form: And | Or, ctx: ExtractCtx): StaticProv {
+  const provs = form.args.map((a) => extract(a, ctx));
+  return { kind: "choice", site: form.id, guards: provs.slice(0, -1), alts: provs };
+}
+
+// ── App ──────────────────────────────────────────────────────────────────────────
+
+function extractApp(form: App, ctx: ExtractCtx): StaticProv {
+  // (1) keyword accessor — `(:field obj)`.
+  if (form.fn.kind === "Lit" && form.fn.value.kind === "keyword") {
+    if (form.positionalArgs.length !== 1 || form.kwargs.length !== 0) return opaque(form.id, "keyword-arity");
+    return { kind: "mux", site: form.id, key: form.fn.value.name, source: extract(form.positionalArgs[0]!, ctx) };
+  }
+
+  if (form.fn.kind === "Ref") {
+    const bound = lookup(ctx.scope, form.fn.name);
+    if (bound !== undefined) {
+      if ("expr" in bound && (bound.expr.kind === "DefineFn" || bound.expr.kind === "Lambda")) {
+        return betaReduce(bound.expr, bound.scope, form, ctx);
+      }
+      // Bound to something that isn't callable (a value, a synthetic fan
+      // projection, …) — not one of the ladder's named cases; fail closed.
+      return opaque(form.id, "unknown-callee");
+    }
+    // Free name — resolve as a known/unknown primitive head.
+    return dispatchKnownHead(form, ctx.registry.classifyHead(form.fn.name), form.fn.name, ctx);
+  }
+
+  // (4) IIFE — an immediately-applied Lambda literal beta-reduces exactly like a
+  // resolved user function; it is lexically written right here, so its closure
+  // scope is simply the current scope.
+  if (form.fn.kind === "Lambda") return betaReduce(form.fn, ctx.scope, form, ctx);
+
+  // (5) anything else — a computed callee (`((pick-fn) x)`), an App/If/Dict/…
+  // sitting in head position. Nothing left to resolve.
+  return opaque(form.id, "unknown-callee");
+}
+
+/** Beta-reduce a call to a known callee (`DefineFn`/`Lambda`, scope-resolved OR
+ *  an IIFE literal). Order matters (matches the spec's own ordering): shape
+ *  first (rest param, folded arity) — these are facts about THIS call site, so
+ *  they get the more specific reason when a mismatched call also happens to be
+ *  recursive — THEN the cycle guard. Kwargs fold into the SAME flat, positional
+ *  arg list used elsewhere (never a silent forge channel); each param binds
+ *  positionally over that fold. Binding-site scoping: every arg's attribution
+ *  is deferred in the CALLER's scope (`ctx.scope`), never the callee's — this is
+ *  what keeps a helper's hidden guard visible instead of reading as opaque
+ *  forwarding (derive.ts's reopened guard-swap forge). */
+function betaReduce(fn: DefineFn | Lambda, calleeScope: Scope, form: App, ctx: ExtractCtx): StaticProv {
+  if (fn.params.some((p) => p.rest)) return opaque(form.id, "callee-arity");
+  const allArgs: readonly CoreForm[] = [...form.positionalArgs, ...form.kwargs.map((kw) => kw.value)];
+  if (fn.params.length !== allArgs.length) return opaque(form.id, "callee-arity");
+  if (ctx.reducing.has(fn)) return opaque(form.id, "cyclic-binding");
+
+  const paramNames = new Map<string, Bound>();
+  fn.params.forEach((p, i) => paramNames.set(p.name, { expr: allArgs[i]!, scope: ctx.scope }));
+  const paramFrame: Scope = { names: paramNames, parent: calleeScope };
+  const reducing = new Set(ctx.reducing).add(fn);
+  return extractBody(fn.body, { ...ctx, scope: paramFrame, reducing }, form.id);
+}
+
+/** Begin-semantics body walk for a beta-reduced callee — deliberately the SAME
+ *  algorithm as ARM-A's Begin/Let-body helper and `extractProgram`'s top-level
+ *  pass (the R7RS "defines then expressions" idiom is one shape no matter which
+ *  construct hosts it): every internal Define/DefineFn pools into ONE
+ *  body-local frame regardless of its position relative to the selected value
+ *  form (self-referential — mutual visibility among internal helpers, letrec*-
+ *  style), and the LAST NON-DEFINE form is the body's value — a trailing
+ *  define after it is scope-only, never re-selected as the value. All-defines
+ *  body: fall back to the array's own last element (whose Define/DefineFn
+ *  dispatch already attributes sensibly). Empty body: opaque, fail-closed —
+ *  `Lambda`'s CoreForm shape does not itself guarantee non-emptiness the way
+ *  `DefineFn`'s does (classify()'s `(lambda (x))` gap), so this must not index
+ *  off the end of an empty array. */
+function extractBody(body: readonly CoreForm[], ctx: ExtractCtx, site: NodeId): StaticProv {
+  const names = new Map<string, Bound>();
+  const frame: Scope = { names, parent: ctx.scope };
+  let scope: Scope = ctx.scope;
+  let last: CoreForm | undefined;
+  for (const f of body) {
+    if (f.kind === "Define") {
+      names.set(f.name, { expr: f.value, scope: frame });
+      scope = frame;
+      continue;
+    }
+    if (f.kind === "DefineFn") {
+      names.set(f.name, { expr: f, scope: frame });
+      scope = frame;
+      continue;
+    }
+    last = f;
+  }
+  const target = last ?? body.at(-1);
+  if (target === undefined) return opaque(site, "empty-body");
+  return extract(target, { ...ctx, scope });
+}
+
+// ── known-head dispatch (path 3 — a free Ref, resolved via the registry) ────────
+
+function dispatchKnownHead(form: App, head: HeadClass, name: string, ctx: ExtractCtx): StaticProv {
+  const hasKwargs = form.kwargs.length > 0;
+  const folded = (): readonly CoreForm[] => [...form.positionalArgs, ...form.kwargs.map((kw) => kw.value)];
+
+  switch (head.role) {
+    case "fuse":
+      return { kind: "fused", site: form.id, sources: folded().map((a) => extract(a, ctx)) };
+    case "string":
+      return { kind: "string", site: form.id, runs: folded().map((a) => extract(a, ctx)) };
+    case "choice": {
+      const provs = folded().map((a) => extract(a, ctx));
+      return { kind: "choice", site: form.id, guards: provs.slice(0, -1), alts: provs };
+    }
+    case "mint":
+      return {
+        kind: "mint",
+        site: form.id,
+        head: name,
+        integrity: head.integrity,
+        closed: folded().map((a) => extract(a, ctx)),
+      };
+    case "mux":
+      return hasKwargs ? opaque(form.id, "kwargs-unsupported-head") : dispatchMux(form, head, name, ctx);
+    case "build": {
+      if (hasKwargs) return opaque(form.id, "kwargs-unsupported-head");
+      const parts = form.positionalArgs.map((a, i) => ({ key: i, prov: extract(a, ctx) }));
+      return { kind: "build", site: form.id, ctor: head.ctor, parts };
+    }
+    case "fan":
+      return hasKwargs ? opaque(form.id, "kwargs-unsupported-head") : dispatchFan(form, head.fanKind, ctx);
+    case "opaque":
+      return hasKwargs && form.positionalArgs.length === 0
+        ? opaque(form.id, "kwargs-only-call")
+        : opaque(form.id, head.reason);
+  }
+}
+
+/** `keyArg: "self"` — a fixed unary projection (`car`/`cdr`/`first`/`rest`): the
+ *  key IS the head's own name, the source is the one operand. Otherwise
+ *  `keyArg` names which positional slot supplies the key; the OTHER slot (the
+ *  container) is the source. Static key iff that slot is itself a Lit
+ *  string/number — else null, "still a projection, coarser" (static-prov.ts's
+ *  own words for MuxProv.key). Out-of-range indices (a malformed/short call to
+ *  a mux head) fail closed rather than index off the array. */
+function dispatchMux(form: App, head: Extract<HeadClass, { role: "mux" }>, name: string, ctx: ExtractCtx): StaticProv {
+  const args = form.positionalArgs;
+  if (head.keyArg === "self") {
+    return args.length === 1
+      ? { kind: "mux", site: form.id, key: name, source: extract(args[0]!, ctx) }
+      : opaque(form.id, "mux-arity");
+  }
+  const keyIdx = head.keyArg;
+  const sourceIdx = keyIdx === 0 ? 1 : 0;
+  if (keyIdx < 0 || keyIdx >= args.length || sourceIdx >= args.length) return opaque(form.id, "mux-arity");
+  return { kind: "mux", site: form.id, key: staticKeyOf(args[keyIdx]!), source: extract(args[sourceIdx]!, ctx) };
+}
+
+function staticKeyOf(f: CoreForm): string | number | null {
+  if (f.kind !== "Lit") return null;
+  if (f.value.kind === "string") return f.value.value;
+  if (f.value.kind === "number") return Number(f.value.text);
+  return null;
+}
+
+/** `(map f coll)`/`(filter p coll)`: fnArg=arg0, coll=arg1, init=null.
+ *  `(fold op init coll)`: fnArg=arg0, init=extract(arg1), coll=arg2. `buildFan`
+ *  (ARM-C, treated as an opaque black box here) resolves/beta-reduces `fnArg`
+ *  itself — it wants the raw CoreForm, not a pre-extracted attribution. */
+function dispatchFan(form: App, fanKind: "map" | "filter" | "fold", ctx: ExtractCtx): StaticProv {
+  const args = form.positionalArgs;
+  if (fanKind === "fold") {
+    if (args.length !== 3) return opaque(form.id, "fan-arity");
+    return buildFan("fold", form.id, args[0]!, extract(args[2]!, ctx), extract(args[1]!, ctx), ctx);
+  }
+  if (args.length !== 2) return opaque(form.id, "fan-arity");
+  return buildFan(fanKind, form.id, args[0]!, extract(args[1]!, ctx), null, ctx);
 }
