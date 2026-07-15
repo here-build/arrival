@@ -66,6 +66,14 @@ const FUSE_HEADS: Readonly<Record<string, true>> = {
   not: true,
   "string-length": true,
   hash: true,
+  // Pure single-source conversions: a `->` cast is a transformation of its one
+  // argument, transformation-blind ⇒ fuse (one source, all contributes) — the
+  // content story of `(number->string (:v e))`. Tight, unambiguous core; a
+  // wider registry-completeness sweep is a separate audited pass, not a guess.
+  "number->string": true,
+  "string->number": true,
+  "symbol->string": true,
+  "string->symbol": true,
 };
 
 /** Where-provenance projection. `keyArg` names which positional arg supplies the
