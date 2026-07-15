@@ -122,31 +122,96 @@ ${GEPA_EXAMPLES.map((e) => `    (dict :input ${JSON.stringify(e.input)} :expecte
 
 const GEPA_SOURCE = buildGepaSource();
 
-/** The full GEPA circuit's OUTER shape: before this sweep, the whole program
- *  was one `opaque(unknown-head/max-by)` node — nothing rendered at all.
- *  Now `max-by`'s mux passes the `iterate`/`generation` fan through instead
- *  of discarding it: the layout shows the recursion-lifted `iterate` FAN,
- *  its `collection` (the seed's `assess` — a BUILD nesting the ten literal
- *  `examples`, each a const dict) laid out node-by-node, and a SECOND nested
- *  fan (`evaluate`'s `map` over `examples`) as one collapsed node.
- *
- *  That second fan is exactly where this component's own documented limit
- *  bites (see this file's `WireframeElk` import / its header's "Nested `fan`
- *  template graphs are NOT spliced in" — the I5 exterior-collapse
- *  discipline): the `ask` crossing (the FIRST `infer/chat`, now reachable at
- *  the `extract()`/`StaticProv` level per `gepa-heads.test.ts`) lives INSIDE
- *  that fan's body, which this gallery renders as one opaque-ish box, not
- *  spliced open. `GepaAskCrossing` below is the same evidence path pulled out
- *  flat, specifically so the crossing itself is visible. The `generation`
- *  branch (mutate/reflect, the SECOND `infer/chat`) doesn't reach even that
- *  far — it's cut earlier, at `(step pool)`, by a pre-existing ARM-B
- *  alias-resolution gap this registry-only sweep does not touch (verified via
- *  an isolated non-GEPA repro; see `gepa-heads.test.ts`'s header). Render
- *  whatever `toWireframe` produces honestly, same rule `circuit-elk.stories
- *  .tsx`'s other stories hold — no suppressing the collapsed fan to "look
- *  more finished". */
+/** The full GEPA circuit, now rendered with `WireframeElk`'s DESCENDED fan
+ *  compound nodes (this component no longer holds I5 exterior-collapse —
+ *  see its header): the recursion-lifted `iterate` fan, `generation`'s `map`
+ *  over the Pareto pool, and `evaluate`'s `map` over the ten literal
+ *  `examples` all render as NESTED dashed-border boxes, `⟳ fan · <collapse>`
+ *  labeled, one inside the next — 23 fan boxes, depth 5, 25 `infer/chat`
+ *  crossings among them (both `ask`'s and `reflect`'s), by an independent
+ *  recursive count over this exact projection. Where the earlier
+ *  one-collapsed-leaf-per-fan render showed a couple of hollow boxes, this
+ *  shows GEPA's actual evolutionary loop: the per-round Pareto-frontier
+ *  fan opening onto the per-example evaluation fan opening onto the
+ *  `ask`/`reflect` `infer/chat` crossings themselves, red `fabrication`
+ *  markers on the ten-example-literal `const` leaves throughout. The graph is
+ *  large (3000+ nodes) — `GepaOneRound` below is the same program at a scale
+ *  that fits a screen. Render whatever `toWireframe` produces honestly, same
+ *  rule `circuit-elk.stories.tsx`'s other stories hold — no truncating the
+ *  real structure to "look more finished". */
 export const Gepa: Story = {
   render: () => <WireframeElk projection={renderProjection(GEPA_SOURCE)} />,
+};
+
+/** The exact same GEPA algorithm, two examples — checked empirically
+ *  (an independent recursive count over `toWireframe`'s output, both here
+ *  and for the full `Gepa` story above): the fan/source STRUCTURE (23 fans,
+ *  25 `infer/chat` crossings, depth 5) is fixed by the program's recursive
+ *  SHAPE, not by `rounds` or example count — `iterate`'s recursion becomes
+ *  ONE fan template regardless of how many rounds it is called with
+ *  (rounds is a runtime int threaded as an ordinary argument, not something
+ *  the static extractor unrolls per call), so shrinking `rounds` changes
+ *  nothing render-side. Only the LITERAL `examples` list's length changes
+ *  total node count (each entry is its own `const`/`build` leaf pair,
+ *  linearly ~230 nodes/example) — two examples instead of ten brings the
+ *  graph from ~3000 nodes down to ~1250, small enough to actually scroll
+ *  through, while the descent depth/shape stays byte-identical to the full
+ *  program's. Same `buildGepaSource` shape, fewer literal examples — not a
+ *  different program. */
+function buildGepaSourceSmall(): string {
+  const examples = GEPA_EXAMPLES.slice(0, 2);
+  const examplesScheme = `(list
+${examples.map((e) => `    (dict :input ${JSON.stringify(e.input)} :expected ${JSON.stringify(e.expected)})`).join("\n")})`;
+  return `
+(define examples ${examplesScheme})
+
+(define (metric prediction expected) (if (string-ci=? prediction expected) 1 0))
+
+(define (ask instruction input)
+  (:label (car (infer/chat "qwen3.5-9b"
+                 (list (infer/chat/user (string-append instruction "\\n\\n" input)))
+                 (s/object (s/field/string "label"))
+                 (string-append "predict/" instruction "/" input)))))
+
+(define (reflect instruction failures)
+  (:instruction (car (infer/chat "qwen3.5-9b"
+                       (list (infer/chat/user (string-append
+                         "Rewrite it to fix the failures"
+                         (if (null? failures) "" (string-append " like: " (:input (car failures))))
+                         ". Current instruction: " instruction)))
+                       (s/object (s/field/string "instruction"))
+                       (string-append "improve/" instruction)))))
+
+(define (evaluate instruction)
+  (map (lambda (ex) (metric (ask instruction (:input ex)) (:expected ex))) examples))
+
+(define (assess instruction) (dict :instruction instruction :scores (evaluate instruction)))
+
+(define (failing candidate) (map car (filter (lambda (pair) (zero? (cadr pair))) (map list examples (:scores candidate)))))
+
+(define (mutate candidate) (assess (reflect (:instruction candidate) (failing candidate))))
+
+(define (dominates? a b)
+  (and (every >= (:scores a) (:scores b))
+       (some  >  (:scores a) (:scores b))))
+
+(define (frontier pool)
+  (filter (lambda (c) (not (some (lambda (other) (dominates? other c)) pool))) pool))
+
+(define (iterate step pool n) (if (zero? n) pool (iterate step (step pool) (- n 1))))
+
+(define (generation pool) (frontier (append pool (map mutate pool))))
+
+(define (gepa seed rounds)
+  (max-by (lambda (c) (apply + (:scores c)))
+          (iterate generation (list (assess seed)) rounds)))
+
+(gepa "Label the text." 1)
+`;
+}
+
+export const GepaOneRound: Story = {
+  render: () => <WireframeElk projection={renderProjection(buildGepaSourceSmall())} />,
 };
 
 /** The `ask` crossing pulled OUT of its fan (one instruction/example round,

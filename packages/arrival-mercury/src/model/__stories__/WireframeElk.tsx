@@ -19,9 +19,32 @@
  *     named input slot; edges reference node ids directly (ELK attaches an
  *     id-referenced edge to the node's bounding-box perimeter with no port
  *     declared).
- * Nested `fan` template graphs are NOT spliced in (same I5 exterior-collapse
- * discipline the studio adapter holds) — a `fan` renders as one collapsed
- * node here, its `sideMaps.fanTemplates` interior unvisited.
+ *
+ * ── fan DESCENDS — this adapter is the one place I5 exterior-collapse is
+ * deliberately NOT held ──────────────────────────────────────────────────────
+ *
+ * The studio adapter (and this file, before this change) render a `fan` as
+ * one opaque leaf — "from the enclosing graph this is ONE node." That's the
+ * right discipline for a trace-driven workbench pane (the interior is
+ * demand-replayed against records that may not exist yet). This gallery has
+ * no such constraint: `toWireframe` already computed the fan's `template`
+ * (a full nested `WireframeGraph`, `to-wireframe.ts`'s `projectFan`) and a
+ * matching nested `WireframeSideMaps` (`sideMaps.fanTemplates.get(index)`)
+ * eagerly, for every fan, at projection time — the data is sitting right
+ * there. Collapsing it here was purely this gallery's own prior choice, not
+ * a limit `toWireframe` imposes. So: a `fan` node becomes an ELK COMPOUND
+ * node — `children`/`edges` built recursively from `node.template`, laid out
+ * as its own nested sub-problem (elkjs sizes the parent box to its interior
+ * automatically, standard hierarchical-graph behavior, no special
+ * `hierarchyHandling` needed since no edge ever crosses a fan boundary — the
+ * `source`/`collection` wire always terminates AT the fan node from outside,
+ * never reaches into its interior). A fan inside a fan's template recurses
+ * the same way, so GEPA's 4-deep `iterate → generation-map → evaluate-map →
+ * ask/reflect` nesting draws as 4 levels of nested boxes, not one hollow
+ * leaf. A fan whose `template` is absent or empty (I5's genuine "nothing to
+ * descend into" case — a bare-symbol callback, `fnOp` only) still falls back
+ * to today's collapsed-leaf rendering; this is additive; it never renders
+ * less than before.
  *
  * ── layout engine: elkjs's fake-worker, wired by hand ──────────────────────
  *
@@ -50,6 +73,17 @@
  *       === "evidence"                    → green  (grounded crossing)
  *       === "ambient"                     → amber  (ungrounded crossing)
  *   - otherwise                           → neutral steel
+ *
+ * This holds AT EVERY NESTING DEPTH: a node index is only meaningful paired
+ * with the `WireframeSideMaps` object it was assigned from — a fan's
+ * template graph gets its own private index space starting back at 0
+ * (`to-wireframe.ts`'s "the same 'private interior' discipline `binder
+ * .interior` already holds"), so index 0 inside a nested fan and index 0 at
+ * the top level are unrelated nodes under unrelated side-map objects. The
+ * ELK-id → (sideMaps, index) registry built below carries the CORRECT paired
+ * side-map object down through every recursion level, so a fabrication or
+ * evidence-class node four fans deep still resolves to the right color —
+ * never the enclosing graph's side maps by mistake.
  */
 import { useEffect, useState } from "react";
 // elkjs's PACKAGE MAIN (`elkjs` / `elkjs/lib/main.js`) is NOT usable under a
@@ -92,7 +126,7 @@ import type { ElkExtendedEdge, ElkNode } from "elkjs";
 import * as ElkFakeWorkerModule from "elkjs/lib/elk-worker.min.js";
 
 import type { Wire, WireframeGraph, WireframeNode } from "@here.build/arrival/provenance";
-import type { WireframeProjection } from "../to-wireframe.js";
+import type { WireframeProjection, WireframeSideMaps } from "../to-wireframe.js";
 
 interface FakeElkWorker {
   postMessage(data: unknown): void;
@@ -141,27 +175,86 @@ function nodeLabel(node: WireframeNode): string {
 const isNodeRef = (ref: Wire["paramRefs"][number]): ref is Extract<Wire["paramRefs"][number], { kind: "node" }> =>
   ref.kind === "node";
 
-interface ElkBuild {
-  readonly root: ElkNode;
-  /** elk node id (`n${index}`) → the node's index, for side-map lookups. */
-  readonly indexOf: ReadonlyMap<string, number>;
+/** Compound-node padding for a `fan`'s box — top is wider than the other
+ *  three sides to reserve room for the "⟳ fan · <collapse>" label this
+ *  component draws itself (ELK does not know about our manual SVG label
+ *  render, so its auto-sizing of the parent box around laid-out children
+ *  needs the padding spelled out explicitly, or the label would overlap the
+ *  first interior row). */
+const FAN_LAYOUT_OPTIONS: Record<string, string> = {
+  ...LAYOUT_OPTIONS,
+  "elk.padding": "[top=28.0,left=14.0,bottom=14.0,right=14.0]",
+};
+
+/** Paired (side-map object, index-within-that-object) for one ELK node id —
+ *  see this file's header on why the index alone is not enough once fan
+ *  templates nest (each template has its OWN index space from 0). */
+interface SideMapRef {
+  readonly sideMaps: WireframeSideMaps;
+  readonly index: number;
 }
 
-function buildElkGraph(graph: WireframeGraph): ElkBuild {
-  const indexOf = new Map<string, number>();
+interface ElkBuild {
+  readonly root: ElkNode;
+  /** elk node id (any nesting depth, `n0`, `n3.n1`, `n3.n1.n0`, …) → the
+   *  paired side-map object + local index, for `toneOf` lookups at every
+   *  depth. */
+  readonly registry: ReadonlyMap<string, SideMapRef>;
+}
+
+/** Builds one level's `children`/`edges` — called once for the top graph and
+ *  once more per descended `fan` template, recursively. `idPrefix` keeps
+ *  every id globally unique across the whole nested tree (elkjs resolves
+ *  edge `sources`/`targets` by id across the full graph, not per-level). */
+function buildLevel(
+  graph: WireframeGraph,
+  sideMaps: WireframeSideMaps,
+  idPrefix: string,
+  registry: Map<string, SideMapRef>,
+): { children: ElkNode[]; edges: ElkExtendedEdge[] } {
   const children: ElkNode[] = graph.nodes.map((node, index) => {
-    const id = `n${index}`;
-    indexOf.set(id, index);
+    const id = `${idPrefix}n${index}`;
+    registry.set(id, { sideMaps, index });
+
+    if (node.kind === "fan" && node.template && node.template.nodes.length > 0) {
+      const templateSideMaps = sideMaps.fanTemplates.get(index);
+      if (templateSideMaps) {
+        const interior = buildLevel(node.template, templateSideMaps, `${id}.`, registry);
+        const collapse = sideMaps.collapse.get(index);
+        return {
+          id,
+          layoutOptions: FAN_LAYOUT_OPTIONS,
+          children: interior.children,
+          edges: interior.edges,
+          labels: [{ text: `⟳ fan · ${collapse ?? node.op}` }],
+        };
+      }
+    }
+    // Leaf — either not a fan, or a fan with no descendable template
+    // (I5's genuine case: a bare-symbol callback, `fnOp` only, nothing to
+    // splice in). Same rendering every node kind had before this change.
     return { id, width: NODE_W, height: NODE_H, labels: [{ text: `${node.kind}: ${nodeLabel(node)}` }] };
   });
 
   const edges: ElkExtendedEdge[] = graph.wires.flatMap((wire) => {
-    const sources = wire.paramRefs.filter(isNodeRef).map((ref) => `n${ref.node}`);
+    const sources = wire.paramRefs.filter(isNodeRef).map((ref) => `${idPrefix}n${ref.node}`);
     if (sources.length === 0) return []; // slot-only ingress — no in-graph producer to draw from
-    return [{ id: `w:${wire.consumer.node}:${wire.consumer.slot}`, sources, targets: [`n${wire.consumer.node}`] }];
+    return [
+      {
+        id: `${idPrefix}w:${wire.consumer.node}:${wire.consumer.slot}`,
+        sources,
+        targets: [`${idPrefix}n${wire.consumer.node}`],
+      },
+    ];
   });
 
-  return { root: { id: "root", layoutOptions: LAYOUT_OPTIONS, children, edges }, indexOf };
+  return { children, edges };
+}
+
+function buildElkGraph(projection: WireframeProjection): ElkBuild {
+  const registry = new Map<string, SideMapRef>();
+  const { children, edges } = buildLevel(projection.graph, projection.sideMaps, "", registry);
+  return { root: { id: "root", layoutOptions: LAYOUT_OPTIONS, children, edges }, registry };
 }
 
 type NodeTone = "fabrication" | "evidence" | "ambient" | "neutral";
@@ -185,6 +278,88 @@ const TONE_COLOR: Record<NodeTone, { fill: string; stroke: string; text: string 
   neutral: { fill: "#1c2029", stroke: "#4a5468", text: "#c9d1d9" },
 };
 
+/** One ELK edge → its laid-out path(s) — shared by the top level and every
+ *  nested fan level (an edge only ever connects nodes at its OWN level, so it
+ *  is always rendered in the same coordinate frame as its siblings' `<g
+ *  transform>`, never needing depth-tracked offsets). */
+function renderEdges(edges: readonly ElkExtendedEdge[] | undefined) {
+  return (edges ?? []).flatMap((edge) => {
+    const sections = edge.sections ?? [];
+    return sections.map((section, i) => {
+      const points = [section.startPoint, ...(section.bendPoints ?? []), section.endPoint];
+      const d = points.map((p, pi) => `${pi === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+      return (
+        <path
+          key={`${edge.id}-${i}`}
+          d={d}
+          fill="none"
+          stroke="#4a5468"
+          strokeWidth={1.5}
+          markerEnd="url(#wireframe-elk-arrow)"
+        />
+      );
+    });
+  });
+}
+
+/** Renders one laid-out ELK node — recursively, for a `fan` compound node's
+ *  `children`. ELK gives every node's `x`/`y` relative to its OWN parent's
+ *  origin (standard nested-graph coordinate convention), so a `<g
+ *  transform="translate(x,y)">` per node composes the right absolute
+ *  position through arbitrary nesting depth with no manual offset
+ *  arithmetic — the same reason `renderEdges` needs no depth parameter. */
+function renderNode(n: ElkNode, registry: ReadonlyMap<string, SideMapRef>): JSX.Element {
+  // Map back by ELK node id (not array position) — `elk.layout()` is not
+  // contractually obligated to preserve `children` array order, only to fill
+  // in x/y/width/height per node; `registry` was built from the SAME ids at
+  // graph-construction time, so this lookup is correct regardless of what
+  // order the engine returns nodes in, at every nesting depth.
+  const ref = registry.get(n.id);
+  const tone = ref ? toneOf(ref.sideMaps, ref.index) : "neutral";
+  const color = TONE_COLOR[tone];
+  const x = n.x ?? 0;
+  const y = n.y ?? 0;
+  const w = n.width ?? NODE_W;
+  const h = n.height ?? NODE_H;
+  const label = n.labels?.[0]?.text ?? "";
+  const children = n.children ?? [];
+  const isCompound = children.length > 0;
+
+  return (
+    <g key={n.id} transform={`translate(${x},${y})`}>
+      <rect
+        x={0}
+        y={0}
+        width={w}
+        height={h}
+        rx={6}
+        fill={isCompound ? "rgba(122,148,214,0.07)" : color.fill}
+        stroke={color.stroke}
+        strokeWidth={2}
+        strokeDasharray={isCompound ? "5 3" : undefined}
+      />
+      <text
+        x={isCompound ? 10 : w / 2}
+        y={isCompound ? 16 : h / 2 - (tone === "fabrication" ? 6 : 0)}
+        fill={isCompound ? "#a9bdec" : color.text}
+        fontSize={11}
+        fontWeight={isCompound ? "bold" : undefined}
+        textAnchor={isCompound ? "start" : "middle"}
+        dominantBaseline={isCompound ? "hanging" : "middle"}
+      >
+        {label}
+      </text>
+      {!isCompound && tone === "fabrication" && (
+        <text x={w / 2} y={h / 2 + 12} fill={color.stroke} fontSize={11} fontWeight="bold" textAnchor="middle" dominantBaseline="middle">
+          ⚠ fabrication
+        </text>
+      )}
+      {renderEdges(n.edges)}
+      {children.map((c) => renderNode(c, registry))}
+    </g>
+  );
+}
+
 export interface WireframeElkProps {
   readonly projection: WireframeProjection;
 }
@@ -192,21 +367,21 @@ export interface WireframeElkProps {
 export function WireframeElk({ projection }: WireframeElkProps) {
   const { graph, sideMaps } = projection;
   const [laidOut, setLaidOut] = useState<ElkNode | null>(null);
-  const [indexOf, setIndexOf] = useState<ReadonlyMap<string, number> | null>(null);
+  const [registry, setRegistry] = useState<ReadonlyMap<string, SideMapRef> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setError(null);
     setLaidOut(null);
-    const { root, indexOf: builtIndexOf } = buildElkGraph(graph);
+    const { root, registry: builtRegistry } = buildElkGraph(projection);
     const elk = new ElkCtor({ workerFactory: () => new FakeElkWorkerCtor() });
     elk
       .layout(root)
       .then((laid) => {
         if (!cancelled) {
           setLaidOut(laid as ElkNode);
-          setIndexOf(builtIndexOf);
+          setRegistry(builtRegistry);
         }
       })
       .catch((err: unknown) => {
@@ -215,12 +390,16 @@ export function WireframeElk({ projection }: WireframeElkProps) {
     return () => {
       cancelled = true;
     };
-  }, [graph]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the
+    // graph+sideMaps identity that actually determines the built ELK input;
+    // `projection` itself is a fresh object per story render but its
+    // constituent graph/sideMaps are what this effect depends on.
+  }, [graph, sideMaps]);
 
   if (error !== null) {
     return <pre style={{ color: "#e5484d", whiteSpace: "pre-wrap" }}>ELK layout error: {error}</pre>;
   }
-  if (laidOut === null || indexOf === null) {
+  if (laidOut === null || registry === null) {
     return <div style={{ color: "#8b93a7", fontFamily: "system-ui, sans-serif" }}>laying out…</div>;
   }
 
@@ -237,51 +416,8 @@ export function WireframeElk({ projection }: WireframeElkProps) {
             <path d="M0,0 L8,4 L0,8 Z" fill="#4a5468" />
           </marker>
         </defs>
-        {edges.map((edge) => {
-          const sections = edge.sections ?? [];
-          return sections.map((section, i) => {
-            const points = [section.startPoint, ...(section.bendPoints ?? []), section.endPoint];
-            const d = points.map((p, pi) => `${pi === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
-            return (
-              <path
-                key={`${edge.id}-${i}`}
-                d={d}
-                fill="none"
-                stroke="#4a5468"
-                strokeWidth={1.5}
-                markerEnd="url(#wireframe-elk-arrow)"
-              />
-            );
-          });
-        })}
-        {nodes.map((n) => {
-          // Map back by ELK node id (not array position) — `elk.layout()` is
-          // not contractually obligated to preserve `children` array order,
-          // only to fill in x/y/width/height per node; `indexOf` was built
-          // from the SAME ids at graph-construction time, so this lookup is
-          // correct regardless of what order the engine returns nodes in.
-          const index = indexOf.get(n.id);
-          const tone = index !== undefined ? toneOf(sideMaps, index) : "neutral";
-          const color = TONE_COLOR[tone];
-          const x = n.x ?? 0;
-          const y = n.y ?? 0;
-          const w = n.width ?? NODE_W;
-          const h = n.height ?? NODE_H;
-          const label = n.labels?.[0]?.text ?? "";
-          return (
-            <g key={n.id}>
-              <rect x={x} y={y} width={w} height={h} rx={6} fill={color.fill} stroke={color.stroke} strokeWidth={2} />
-              <text x={x + w / 2} y={y + h / 2 - (tone === "fabrication" ? 6 : 0)} fill={color.text} fontSize={11} textAnchor="middle" dominantBaseline="middle">
-                {label}
-              </text>
-              {tone === "fabrication" && (
-                <text x={x + w / 2} y={y + h / 2 + 12} fill={color.stroke} fontSize={11} fontWeight="bold" textAnchor="middle" dominantBaseline="middle">
-                  ⚠ fabrication
-                </text>
-              )}
-            </g>
-          );
-        })}
+        {renderEdges(edges)}
+        {nodes.map((n) => renderNode(n, registry))}
       </svg>
     </div>
   );
