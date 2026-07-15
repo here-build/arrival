@@ -33,13 +33,16 @@
     "!**/__benchmarks__",
     "!**/__custdev__",
     "!**/__visual__",
+    "!**/__stories__",
     "!**/*.test.*",
     "!**/*.stories.*"
   ],
   "scripts": {
     "build": "tsc --build --force",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "storybook": "storybook dev -p 6007",
+    "build-storybook": "storybook build"
   },
   "dependencies": {
     "@here.build/arrival": "workspace:^",
@@ -54,9 +57,18 @@
   },
   "devDependencies": {
     "@here.build/tsconfig": "workspace:^",
+    "@storybook/react-vite": "^10.0.0",
     "@types/node": "24.0.0",
     "@types/pluralize": "0.0.33",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "5.2.0",
     "fast-check": "4.8.0",
+    "mermaid": "11.16.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "storybook": "^10.0.0",
+    "vite": "7.2.7",
     "vitest": "4.1.0"
   }
 }
