@@ -198,6 +198,56 @@ describe("build and string nodes are transparent to content", () => {
   });
 });
 
+// ── mux where-provenance narrowing (BKT 2001; the T6c STOP finding) ─────────────
+
+describe("mux narrows into the keyed part, not the whole container (BKT where-provenance)", () => {
+  const dictOf = (...entries: readonly [string, StaticProv][]): BuildProv => ({
+    kind: "build",
+    site: S,
+    ctor: "dict",
+    parts: entries.map(([key, prov]) => ({ key, prov })),
+  });
+
+  it("(:v e) on (dict :v <evidence> :o \"FAKE\") is data-shaped — the sibling decoy does NOT flow to the v-projection", () => {
+    const e = dictOf(["v", mint("infer", "evidence")], ["o", konst()]);
+    expect(dataShaped(muxOf("v", e))).toBe(true);
+  });
+
+  it("(:o e) on the same container is NOT data-shaped — projecting the decoy key yields the const", () => {
+    const e = dictOf(["v", mint("infer", "evidence")], ["o", konst()]);
+    expect(dataShaped(muxOf("o", e))).toBe(false);
+  });
+
+  it("(:z e) — a key PROVABLY ABSENT from a literal container fails closed (opaque), never a spurious attest of nil", () => {
+    const e = dictOf(["v", mint("infer", "evidence")]);
+    expect(dataShaped(muxOf("z", e))).toBe(false);
+  });
+
+  it("a duplicate-keyed container unions the CANDIDATES — a fabricated second binding poisons, siblings still excluded", () => {
+    const e = dictOf(["v", mint("infer", "evidence")], ["v", konst()], ["o", mint("infer", "evidence")]);
+    expect(dataShaped(muxOf("v", e))).toBe(false); // the const among the v-candidates poisons
+  });
+
+  it("a null key (dynamic index) over a build stays conservative — the whole container", () => {
+    const cleanVec: BuildProv = { kind: "build", site: S, ctor: "vector", parts: [{ key: 0, prov: input("e") }] };
+    const poisonedVec: BuildProv = {
+      kind: "build",
+      site: S,
+      ctor: "vector",
+      parts: [
+        { key: 0, prov: input("e") },
+        { key: 1, prov: konst() },
+      ],
+    };
+    expect(dataShaped(muxOf(null, cleanVec))).toBe(true);
+    expect(dataShaped(muxOf(null, poisonedVec))).toBe(false);
+  });
+
+  it("mux over a non-build source (an input) stays transparent — the free-e field idiom", () => {
+    expect(dataShaped(muxOf("v", input("e")))).toBe(true);
+  });
+});
+
 // ── judgmentShaped: the per-guard existential, independent of the alts check ────
 
 describe("judgmentShaped — guards must each independently ground in evidence", () => {

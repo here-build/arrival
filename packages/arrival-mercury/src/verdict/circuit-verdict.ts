@@ -183,11 +183,57 @@ export function channels(prov: StaticProv): Channels {
       };
     }
 
-    case "mux":
-      // Where-provenance projection: transparent to both channels — the
-      // value IS (part of) the source, so its content/selection ARE the
-      // source's.
-      return channels(prov.source);
+    case "mux": {
+      // Where-provenance projection (Buneman-Khanna-Tan, ICDT 2001 — §2d
+      // borrow table): the projected value's provenance is the provenance of
+      // the PART it was copied FROM, not the whole container. When the source
+      // is a statically-keyed build and the projection key names specific
+      // part(s), NARROW to those parts — a sibling part's const (a `(dict :v
+      // (infer …) :other "FAKE")` decoy, or an alist pair's own quoted key)
+      // genuinely never flows to `(:v e)` at runtime, so inheriting the whole
+      // container's channels over-refuses (it is sound-but-blind: it blocks
+      // the entire field-access evidence idiom).
+      //
+      // SOUNDNESS of narrowing (why removing siblings cannot hide a forge):
+      // `(:v e)` returns ONLY the v-part; the decoy in `:other` never appears
+      // in the output, so attributing the output to v alone is exactly correct.
+      // Fail-closed fallbacks keep it sound where the key is not statically
+      // resolvable: a null key (dynamic index), a key matching NO part
+      // (out-of-range / unknown field), or MULTIPLE matching parts (a
+      // duplicate-keyed alist, where runtime picks one but statically we cannot
+      // say which) all fall back to the whole-source channels — the
+      // conservative over-approximation, never a narrowing that could drop a
+      // reachable const.
+      const src = prov.source;
+      if (prov.key !== null && src.kind === "build") {
+        // A BuildProv's parts are the COMPLETE static part set (a literal
+        // container; a dynamically-extended one extracts as mux/fused/opaque
+        // over a base, not a build). So a statically-resolvable key partitions
+        // three ways:
+        const hits = src.parts.filter((p) => p.key === prov.key);
+        if (hits.length >= 1) {
+          // 1 part → exact where-provenance. >1 (a duplicate-keyed container,
+          // runtime picks one) → union of the CANDIDATES: sound (the value is
+          // one of them) and still excludes irrelevant siblings. Never widens
+          // to the whole container.
+          return {
+            content: unionTerminals(hits.map((p) => channels(p.prov).content)),
+            selection: unionTerminals(hits.map((p) => channels(p.prov).selection)),
+          };
+        }
+        // 0 parts → the field is PROVABLY ABSENT from this literal container;
+        // the projection is nil/absent at runtime, grounded in nothing. Empty
+        // content would vacuously satisfy dataShaped (every-anchor-evidence over
+        // ∅ is true), so fail closed EXPLICITLY with an opaque — "this
+        // projection lands on no known part," a not-attestable, never a spurious
+        // attestation of an absent value.
+        return { content: { anchors: [], consts: 0, opaques: 1 }, selection: EMPTY };
+      }
+      // Null key (dynamic index — could be ANY part) or a non-build source
+      // (projection of an input/fused/mint): the whole source is the sound
+      // over-approximation.
+      return channels(src);
+    }
 
     case "build": {
       const parts = prov.parts.map((p) => channels(p.prov));
