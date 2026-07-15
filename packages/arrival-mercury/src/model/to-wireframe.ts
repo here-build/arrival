@@ -1,0 +1,326 @@
+/**
+ * toWireframe — StaticProv → WireframeGraph, the render-compat projection
+ * (T7a, docs/working-proposals/scheme-semantic-model-synthesis.md §2f, "the
+ * money table" + "Design: one static object, two projections (bifunctor
+ * discipline)"). `extract` (P4) produces StaticProv; this proves it renders
+ * through the EXISTING workbench pane (`WireframeGraph`, the studio's ELK
+ * pane target) UNCHANGED — no studio edit, no new node kind added to the
+ * workbench's union. Semantics ride SIDE MAPS, never baked onto a
+ * `WireframeNode`'s own fields — the invariant both existing ELK adapters
+ * (`buildWireframe`'s source builder and this one) hold.
+ *
+ * ── the money table, as implemented ─────────────────────────────────────────
+ *
+ *   StaticProv kind │ WireframeNode kind │ side map                | delta
+ *   ────────────────┼────────────────────┼──────────────────────────┼──────
+ *   input           │ source             │ —                        | exact (op = param name)
+ *   mint            │ source             │ integrity                | op = effect head
+ *   const           │ opaque             │ fabrication (laundering  | THE GAP — see below
+ *                    │                    │   guard)                 |
+ *   fused           │ transparent        │ —                        | op = "fuse"
+ *   mux             │ transparent        │ —                        | op = "mux" (exact per doc's
+ *                    │                    │                          |   own money table row)
+ *   build           │ transparent        │ buildShape (ctor + keys) | op = "build"
+ *   string          │ transparent        │ —                        | op = "string"
+ *   choice          │ mux                │ —                        | arms = alts.length, all gray
+ *   fan             │ fan                │ collapse, fanTemplates   | template = nested projection
+ *   opaque          │ opaque             │ —                        | exact, reason surfaces as `op`
+ *
+ * ── THE GAP (report this, per the task brief) ───────────────────────────────
+ *
+ * `WireframeNode` has no `const` arm — the money table (§2f) names it as
+ * "the one node kind to add," but adding a union member is a studio-workbench
+ * change (`foundations/arrival/arrival/src/provenance/wireframe/types.ts`),
+ * out of bounds for this pure projection. The closest HONEST existing kind is
+ * `opaque` (a black box, "don't trust this") — never `source` (would claim
+ * evidence-class ancestry a program-text literal does not have) and never
+ * `transparent` (would claim pass-through fidelity a literal does not
+ * preserve — there is nothing upstream to be transparent TO). A `const` node
+ * is therefore rendered as `{kind:"opaque", op:"const", ...}`, and
+ * `sideMaps.fabrication` carries the ONE authoritative bit: "is this node
+ * REALLY a const" must always be answered from `fabrication`, never from the
+ * node's own `kind`/`op` — reading `kind === "opaque"` alone conflates a
+ * proven fabrication with a merely-unresolvable circuit (a real `OpaqueProv`),
+ * which is exactly the laundering this side map exists to prevent. A future
+ * workbench change adding a real `const` arm should replace this mapping, not
+ * layer on top of it.
+ *
+ * ── span is a bare stringified NodeId, not `head@line:col` ─────────────────
+ *
+ * Same limit `circuit-sexpr.ts` documents: a `StaticProv` carries only a
+ * `site: NodeId` with no accompanying span or source text to resolve one
+ * against. Fabricating a `head@line:col`-shaped string would invent
+ * structure I1 forbids; `span = String(site)` is the honest choice.
+ *
+ * ── wires carry no real dataflow — they are honest passthroughs ────────────
+ *
+ * `StaticProv` is transformation-blind (it never computes an op's result —
+ * `static-prov.ts`'s header) and carries no source text to re-emit as a
+ * `Wire`'s closed lambda body. Rather than fabricate a body that pretends to
+ * DO something, every wire here is a literal identity passthrough of its
+ * referenced upstream node — `(lambda (p0) p0)`, `paramRefs: [{kind:"node",
+ * name:"p0", node: <upstream>}]` — which is exactly what a wire IS in this
+ * graph model when it does no extra plumbing (the struct-fact case aside).
+ * This is not a placeholder claim; "this slot receives that node's value,
+ * unchanged" is true by construction of the projection.
+ *
+ * ── fan.lengthPreserving is a documented proxy, not a derivation ───────────
+ *
+ * `CollapseKind` (combine/route/lowered) is a DIFFERENT axis than
+ * length-preservation — `StaticProv` deliberately does not carry a
+ * map/filter/fold tag (the fan zoo vanishes into unwind/wind, §2c). There is
+ * no honest derivation of `lengthPreserving` from `collapse` alone.
+ * `lengthPreserving: collapse === "lowered"` is used as a conservative
+ * proxy (never overclaims for the two collapse-kinds that are provably
+ * NOT length-preserving — `combine` aggregates to one value, `route`
+ * narrows to a subset); `sideMaps.collapse` carries the real, load-bearing
+ * signal. Report this as a second gap: a true `lengthPreserving` bit needs a
+ * field `extract` does not populate on `FanProv` today.
+ */
+import type { Wire, WireConsumer, WireframeGraph, WireframeNode } from "@here.build/arrival/provenance";
+
+import type {
+  BuildProv,
+  ChoiceProv,
+  CollapseKind,
+  ConstProv,
+  FanProv,
+  FusedProv,
+  InputProv,
+  Integrity,
+  MintProv,
+  MuxProv,
+  OpaqueProv,
+  StaticProv,
+  StringProv,
+} from "./static-prov.js";
+
+/** Domain data that never rides on a `WireframeNode`'s own fields — keyed by
+ *  index into the SAME graph's `nodes` array. `fanTemplates` nests one level
+ *  per `fan` node (its `template` graph gets its OWN index space and its OWN
+ *  side maps — the same "private interior" discipline `binder.interior`
+ *  already holds in the workbench). */
+export interface WireframeSideMaps {
+  /** The ground-truth `StaticProv` kind for every node — always present,
+   *  regardless of which (necessarily coarser) `WireframeNode` kind it
+   *  projected onto. */
+  readonly provKind: ReadonlyMap<number, StaticProv["kind"]>;
+  /** `mint`/`input` integrity class (money table: "needs integrity class
+   *  (side-table)"). Present only for nodes whose `provKind` is `mint`. */
+  readonly integrity: ReadonlyMap<number, Integrity>;
+  /** `fan` collapse-kind (money table: "needs collapse-kind (void-free AC
+   *  vs lowered)"). Present only for nodes whose `provKind` is `fan`. */
+  readonly collapse: ReadonlyMap<number, CollapseKind>;
+  /** `build`'s ctor + ordered part keys (the "container shape" delta).
+   *  Present only for nodes whose `provKind` is `build`. */
+  readonly buildShape: ReadonlyMap<number, { readonly ctor: BuildProv["ctor"]; readonly keys: readonly (string | number)[] }>;
+  /** THE render-laundering guard. A node index is in this set iff it is a
+   *  `const` (program-text fabrication mark) projected onto the closest
+   *  honest existing kind (`opaque`). A renderer/seal consumer MUST consult
+   *  this before treating an `opaque` node as "merely unresolvable" — a
+   *  `const` is a PROVEN fabrication, strictly worse than a gap. Never
+   *  derive this from `kind`/`op`; that is exactly the laundering this map
+   *  exists to prevent. */
+  readonly fabrication: ReadonlySet<number>;
+  /** Per-`fan`-node (keyed by the OUTER graph's node index) the INNER
+   *  `template` graph's own side maps — the body is a private interior with
+   *  its own index space, so its domain data cannot share this map. */
+  readonly fanTemplates: ReadonlyMap<number, WireframeSideMaps>;
+}
+
+export interface WireframeProjection {
+  readonly graph: WireframeGraph;
+  readonly sideMaps: WireframeSideMaps;
+}
+
+/** A wire whose body is the literal identity of the node it references —
+ *  true by construction (see this file's header). */
+function passthroughWire(fromNode: number, consumer: WireConsumer, span: string): Wire {
+  return {
+    source: "(lambda (p0) p0)",
+    params: ["p0"],
+    paramRefs: [{ kind: "node", name: "p0", node: fromNode }],
+    span,
+    consumer,
+  };
+}
+
+interface Builder {
+  readonly nodes: WireframeNode[];
+  readonly wires: Wire[];
+  readonly provKind: Map<number, StaticProv["kind"]>;
+  readonly integrity: Map<number, Integrity>;
+  readonly collapse: Map<number, CollapseKind>;
+  readonly buildShape: Map<number, { readonly ctor: BuildProv["ctor"]; readonly keys: readonly (string | number)[] }>;
+  readonly fabrication: Set<number>;
+  readonly fanTemplates: Map<number, WireframeSideMaps>;
+}
+
+function newBuilder(): Builder {
+  return {
+    nodes: [],
+    wires: [],
+    provKind: new Map(),
+    integrity: new Map(),
+    collapse: new Map(),
+    buildShape: new Map(),
+    fabrication: new Set(),
+    fanTemplates: new Map(),
+  };
+}
+
+function pushNode(b: Builder, node: WireframeNode, kind: StaticProv["kind"]): number {
+  const idx = b.nodes.length;
+  b.nodes.push(node);
+  b.provKind.set(idx, kind);
+  return idx;
+}
+
+function wireChildren(b: Builder, parent: number, span: string, slotPrefix: string, children: readonly StaticProv[]): void {
+  children.forEach((child, i) => {
+    const childIdx = project(b, child);
+    b.wires.push(passthroughWire(childIdx, { node: parent, slot: `${slotPrefix}${i}` }, span));
+  });
+}
+
+function projectInput(b: Builder, prov: InputProv): number {
+  return pushNode(b, { kind: "source", op: prov.name, span: String(prov.site) }, "input");
+}
+
+function projectMint(b: Builder, prov: MintProv): number {
+  const span = String(prov.site);
+  const idx = pushNode(b, { kind: "source", op: prov.head, span }, "mint");
+  b.integrity.set(idx, prov.integrity);
+  wireChildren(b, idx, span, "closed", prov.closed);
+  return idx;
+}
+
+function projectConst(b: Builder, prov: ConstProv): number {
+  const idx = pushNode(b, { kind: "opaque", op: "const", span: String(prov.site) }, "const");
+  b.fabrication.add(idx);
+  return idx;
+}
+
+function projectFused(b: Builder, prov: FusedProv): number {
+  const span = String(prov.site);
+  const idx = pushNode(b, { kind: "transparent", op: "fuse", span }, "fused");
+  wireChildren(b, idx, span, "arg", prov.sources);
+  return idx;
+}
+
+function projectMux(b: Builder, prov: MuxProv): number {
+  const span = String(prov.site);
+  const idx = pushNode(b, { kind: "transparent", op: "mux", span }, "mux");
+  const sourceIdx = project(b, prov.source);
+  b.wires.push(passthroughWire(sourceIdx, { node: idx, slot: "source" }, span));
+  return idx;
+}
+
+function projectBuild(b: Builder, prov: BuildProv): number {
+  const span = String(prov.site);
+  const idx = pushNode(b, { kind: "transparent", op: "build", span }, "build");
+  b.buildShape.set(idx, { ctor: prov.ctor, keys: prov.parts.map((p) => p.key) });
+  wireChildren(
+    b,
+    idx,
+    span,
+    "arg",
+    prov.parts.map((p) => p.prov),
+  );
+  return idx;
+}
+
+function projectString(b: Builder, prov: StringProv): number {
+  const span = String(prov.site);
+  const idx = pushNode(b, { kind: "transparent", op: "string", span }, "string");
+  wireChildren(b, idx, span, "arg", prov.runs);
+  return idx;
+}
+
+function projectChoice(b: Builder, prov: ChoiceProv): number {
+  const span = String(prov.site);
+  const idx = pushNode(b, { kind: "mux", op: "choice", span, arms: prov.alts.length }, "choice");
+  wireChildren(b, idx, span, "selector", prov.guards);
+  wireChildren(b, idx, span, "arm", prov.alts);
+  return idx;
+}
+
+function projectFan(b: Builder, prov: FanProv): number {
+  const span = String(prov.site);
+  const bodyProjection = toWireframe(prov.body);
+  const idx = pushNode(
+    b,
+    {
+      kind: "fan",
+      op: "fan",
+      span,
+      // Documented proxy, not a derivation — see this file's header.
+      lengthPreserving: prov.collapse === "lowered",
+      template: bodyProjection.graph,
+    },
+    "fan",
+  );
+  b.collapse.set(idx, prov.collapse);
+  b.fanTemplates.set(idx, bodyProjection.sideMaps);
+  const collectionIdx = project(b, prov.collection);
+  b.wires.push(passthroughWire(collectionIdx, { node: idx, slot: "source" }, span));
+  return idx;
+}
+
+function projectOpaque(b: Builder, prov: OpaqueProv): number {
+  return pushNode(b, { kind: "opaque", op: prov.reason, span: String(prov.site) }, "opaque");
+}
+
+/** Exhaustive by tsc (no default arm) — adding an 11th `StaticProv` kind
+ *  breaks this file at compile time, the same totality discipline
+ *  `circuitToSexpr` and `extract` itself hold (I1). */
+function project(b: Builder, prov: StaticProv): number {
+  switch (prov.kind) {
+    case "input":
+      return projectInput(b, prov);
+    case "mint":
+      return projectMint(b, prov);
+    case "const":
+      return projectConst(b, prov);
+    case "fused":
+      return projectFused(b, prov);
+    case "mux":
+      return projectMux(b, prov);
+    case "build":
+      return projectBuild(b, prov);
+    case "string":
+      return projectString(b, prov);
+    case "choice":
+      return projectChoice(b, prov);
+    case "fan":
+      return projectFan(b, prov);
+    case "opaque":
+      return projectOpaque(b, prov);
+  }
+}
+
+/** `StaticProv` → `WireframeGraph`, the render-compat projection. Pure and
+ *  total (see `project`'s exhaustive switch). The value's own attribution
+ *  circuit becomes every node but one; the last is the graph's own `port`
+ *  egress (`WireframeGraph.egress`), wired from the circuit's root — a
+ *  `StaticProv` IS a value's attribution, so unlike a whole-program
+ *  `WireframeGraph` it always HAS an egress. */
+export function toWireframe(prov: StaticProv): WireframeProjection {
+  const b = newBuilder();
+  const rootIdx = project(b, prov);
+  const span = String(prov.site);
+  const portIdx = b.nodes.length;
+  b.nodes.push({ kind: "port", direction: "out", span });
+  b.wires.push(passthroughWire(rootIdx, { node: portIdx, slot: "out" }, span));
+  return {
+    graph: { nodes: b.nodes, wires: b.wires, egress: portIdx },
+    sideMaps: {
+      provKind: b.provKind,
+      integrity: b.integrity,
+      collapse: b.collapse,
+      buildShape: b.buildShape,
+      fabrication: b.fabrication,
+      fanTemplates: b.fanTemplates,
+    },
+  };
+}
