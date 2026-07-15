@@ -282,7 +282,7 @@ describe("buildFan — arity and fn-resolution errors (short-circuit before touc
 // ── buildFan — map/filter/fold desugar shapes ────────────────────────────────────
 
 describe("buildFan — map/filter/fold desugar shapes (bodies stay within ARM-A + ARM-C, avoiding the ARM-B App/If gap)", () => {
-  it("map: an identity lambda's body is exactly the element projection", () => {
+  it("map: an identity lambda's body is exactly the element projection — collapse ROUTE (route-last, ignores acc)", () => {
     const fn = parseLambda("(lambda (x) x)");
     const result = buildFan("map", 7 as NodeId, fn, collection, null, baseCtx());
     expect(result).toEqual({
@@ -290,11 +290,11 @@ describe("buildFan — map/filter/fold desugar shapes (bodies stay within ARM-A 
       site: 7,
       collection,
       body: { kind: "mux", site: fn.id, key: null, source: collection },
-      collapse: "lowered",
+      collapse: "route",
     });
   });
 
-  it("filter: body wraps the predicate in a choice whose alt is the kept element", () => {
+  it("filter: body wraps the predicate in a choice whose alt is the kept element — collapse ROUTE (selection mask)", () => {
     const fn = parseLambda("(lambda (x) x)");
     const result = buildFan("filter", 7 as NodeId, fn, collection, null, baseCtx());
     const element: StaticProv = { kind: "mux", site: fn.id, key: null, source: collection };
@@ -303,7 +303,7 @@ describe("buildFan — map/filter/fold desugar shapes (bodies stay within ARM-A 
       site: 7,
       collection,
       body: { kind: "choice", site: fn.id, guards: [element], alts: [element] },
-      collapse: "lowered",
+      collapse: "route",
     });
   });
 
@@ -314,7 +314,7 @@ describe("buildFan — map/filter/fold desugar shapes (bodies stay within ARM-A 
     expect(result).toEqual({ kind: "fan", site: 7, collection, body: init, collapse: "lowered" });
   });
 
-  it("fold: param1 binds to the element, independent of acc/init", () => {
+  it("fold: param1 binds to the element, independent of acc/init — collapse ROUTE (route-last, ignores acc)", () => {
     const fn = parseLambda("(lambda (acc x) x)");
     const result = buildFan("fold", 7 as NodeId, fn, collection, null, baseCtx());
     expect(result).toEqual({
@@ -322,7 +322,7 @@ describe("buildFan — map/filter/fold desugar shapes (bodies stay within ARM-A 
       site: 7,
       collection,
       body: { kind: "mux", site: fn.id, key: null, source: collection },
-      collapse: "lowered",
+      collapse: "route",
     });
   });
 
@@ -353,13 +353,14 @@ describe("buildFan — map/filter/fold desugar shapes (bodies stay within ARM-A 
     });
   });
 
-  it("collapse is unconditionally 'lowered' regardless of body shape — never inferred as combine/route", () => {
-    for (const src of ["(lambda (x) x)", "(lambda (x) (dict :v x))"]) {
-      const fn = parseLambda(src);
-      const result = buildFan("map", 7 as NodeId, fn, collection, null, baseCtx());
-      expect(result.kind).toBe("fan");
-      if (result.kind === "fan") expect(result.collapse).toBe("lowered");
-    }
+  it("collapse is INFERRED per body shape (T3a contract correction 2026-07-15): route for a selection body, lowered for a combinator body", () => {
+    // Superseded the pre-T3a "unconditionally lowered" premise. buildFan owns
+    // combine (needs the raw head — none of these bodies is a bare AC head);
+    // inferCollapse owns route-vs-lowered over the extracted body.
+    const identity = buildFan("map", 7 as NodeId, parseLambda("(lambda (x) x)"), collection, null, baseCtx());
+    expect(identity.kind === "fan" && identity.collapse).toBe("route"); // body IS the element — route-last
+    const builder = buildFan("map", 7 as NodeId, parseLambda("(lambda (x) (dict :v x))"), collection, null, baseCtx());
+    expect(builder.kind === "fan" && builder.collapse).toBe("lowered"); // body is a build combinator — stays lowered
   });
 });
 

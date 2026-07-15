@@ -21,12 +21,18 @@
  *      through the shared `extract()` dispatcher in a frame closed over the
  *      lambda's OWN defining scope (never the call site's — the same
  *      binding-site-scoping rule `wire/derive.ts`'s `resolveCallee` uses for
- *      ordinary beta-reduction). Collapse is ALWAYS `"lowered"`: T3a wires
- *      abstract-interpretation-derived collapse later, but until then "lowered"
- *      is the only sound default. Defaulting to `"combine"` instead would BE the
- *      fold-collapse forge this design guards against — a `const` hidden behind
- *      an `if` inside a fold body must stay a visible `choice` node, never
- *      vanish into one fused value.
+ *      ordinary beta-reduction). Collapse (T3a, contract-corrected 2026-07-15,
+ *      see `collapse.ts`'s header for the full split): `buildFan` ALONE decides
+ *      "combine" — a RAW-COREFORM check against the closed AC list (`AC_HEADS`,
+ *      below) against the raw `fn` this arm still holds, BEFORE that identity
+ *      is erased by extraction (`+`/`-`/`*` all extract to a bit-identical
+ *      `FusedProv` — a body-only view can never tell them apart). Only a bare
+ *      AC-head `Ref` (`(fold + 0 v)`) or a lambda whose entire raw body is
+ *      exactly `(ac-head acc element)` qualifies — anything else defers to
+ *      `inferCollapse(body)` for route-vs-lowered. Defaulting "combine" for
+ *      anything less exact would BE the fold-collapse forge this design guards
+ *      against — a `const` hidden behind an `if` inside a fold body must stay a
+ *      visible `choice` node, never vanish into one fused value.
  *
  * Dict → BuildProv{ctor:"dict"}, one part per entry, `prov` the entry VALUE's
  * attribution. A key is program text, not data: `{:a 1}` and `{:b 1}` attribute
@@ -34,6 +40,7 @@
  */
 import type { CoreForm, DefineFn, Dict, Lambda, NodeId } from "../coreform/types.js";
 import type { BuildProv, ChoiceProv, HeadClass, HeadRegistry, Integrity, StaticProv } from "../model/static-prov.js";
+import { inferCollapse } from "./collapse.js";
 import { type Bound, type ExtractCtx, type Scope, extract, lookup, opaque } from "./index.js";
 
 export function extractContainer(form: Dict, ctx: ExtractCtx): StaticProv {
@@ -74,6 +81,26 @@ const FUSE_HEADS: Readonly<Record<string, true>> = {
   "string->number": true,
   "symbol->string": true,
   "string->symbol": true,
+};
+
+/** The CLOSED fold-combinator AC list (§2c) — exactly 4 members: associative,
+ *  void-free, arity-liftable. This is `buildFan`'s "combine" check, against the
+ *  RAW `fn` CoreForm (a bare `Ref` or a lambda's literal one-line body) — never
+ *  against an extracted `FusedProv`, which has already forgotten which head
+ *  produced it (`+`/`-`/`*` all extract identically). This is a DIFFERENT axis
+ *  than `FUSE_HEADS`'s attribution role — `FUSE_HEADS` also contains non-AC
+ *  heads (`-`, `/`, the comparisons, `abs`, `min`, `max`, `not`, `hash`,
+ *  `string-length`, the `->` casts) that must never combine — so `AC_HEADS`
+ *  stays its own table rather than deriving from `FUSE_HEADS`'s membership.
+ *  `string-append` (STRING_HEADS) and `cons` (BUILD_HEADS) are AC too; this
+ *  table is fold-collapse-eligibility, not a duplicate of either registry. A
+ *  5th member here is a closed-list violation (collapse-kind.test.ts pins the
+ *  count) — extend only with a real associativity proof, never by convenience. */
+const AC_HEADS: Readonly<Record<string, true>> = {
+  "+": true,
+  "*": true,
+  "string-append": true,
+  cons: true,
 };
 
 /** Where-provenance projection. `keyArg` names which positional arg supplies the
@@ -193,6 +220,25 @@ function resolveFanFn(fn: CoreForm, ctx: ExtractCtx): { readonly fn: FnForm; rea
 
 const FAN_ARITY: Readonly<Record<"map" | "filter" | "fold", number>> = { map: 1, filter: 1, fold: 2 };
 
+/** Is `form` exactly `(ac-head p0 p1)` — a bare closed-list AC head applied to
+ *  precisely the two named params, in order, with nothing else (no kwargs, no
+ *  extra/missing positional args)? This is the "combine" shape check against
+ *  the RAW CoreForm — the only place the combinator's identity still exists. */
+function isBareAcCombinatorApp(form: CoreForm, params: readonly { readonly name: string }[]): boolean {
+  if (form.kind !== "App") return false;
+  if (form.fn.kind !== "Ref" || !Object.hasOwn(AC_HEADS, form.fn.name)) return false;
+  if (form.kwargs.length !== 0 || form.positionalArgs.length !== 2) return false;
+  const [a0, a1] = form.positionalArgs;
+  return a0!.kind === "Ref" && a0!.name === params[0]!.name && a1!.kind === "Ref" && a1!.name === params[1]!.name;
+}
+
+/** A resolved fold lambda combine-qualifies iff its ENTIRE raw body is exactly
+ *  one `(ac-head acc element)` form — "nothing else" means no internal defines
+ *  either, not just no extra trailing expressions. */
+function isBareAcLambdaBody(target: FnForm): boolean {
+  return target.body.length === 1 && isBareAcCombinatorApp(target.body[0]!, target.params);
+}
+
 export function buildFan(
   fanKind: "map" | "filter" | "fold",
   site: NodeId,
@@ -201,6 +247,18 @@ export function buildFan(
   init: StaticProv | null,
   ctx: ExtractCtx,
 ): StaticProv {
+  // A bare AC-head Ref as a fold combinator (`(fold + 0 v)`) IS a valid
+  // combinator with no user binding to resolve through — `resolveFanFn`'s
+  // `lookup` would find nothing bound to `+` and fail closed to
+  // fan/fn-unresolvable. Recognize it BEFORE resolution: the raw Ref's name
+  // (not any extracted shape) is the combinator identity itself.
+  if (fanKind === "fold" && fn.kind === "Ref" && Object.hasOwn(AC_HEADS, fn.name)) {
+    const element: StaticProv = { kind: "mux", site: fn.id, key: null, source: collection };
+    const acc: StaticProv = init ?? opaque(site, "fan/fold-missing-init");
+    const body: StaticProv = { kind: "fused", site: fn.id, sources: [acc, element] };
+    return { kind: "fan", site, collection, body, collapse: "combine" };
+  }
+
   const resolved = resolveFanFn(fn, ctx);
   if (!resolved) return opaque(fn.id, "fan/fn-unresolvable");
   const { fn: target } = resolved;
@@ -250,9 +308,17 @@ export function buildFan(
   };
   const body = extract(last, bodyCtx);
 
+  // Lambda-form combine: `(fold (lambda (acc x) (+ acc x)) …)` — the raw body
+  // is exactly `(ac-head acc element)` over the two params, nothing else. Only
+  // fold has both an acc and an element to combine; map/filter never qualify
+  // (FAN_ARITY holds them to 1 param, so this check is vacuous for them).
+  if (fanKind === "fold" && isBareAcLambdaBody(target)) {
+    return { kind: "fan", site, collection, body, collapse: "combine" };
+  }
+
   if (fanKind === "filter") {
     const choice: ChoiceProv = { kind: "choice", site: fn.id, guards: [body], alts: [element] };
-    return { kind: "fan", site, collection, body: choice, collapse: "lowered" };
+    return { kind: "fan", site, collection, body: choice, collapse: inferCollapse(choice) };
   }
-  return { kind: "fan", site, collection, body, collapse: "lowered" };
+  return { kind: "fan", site, collection, body, collapse: inferCollapse(body) };
 }

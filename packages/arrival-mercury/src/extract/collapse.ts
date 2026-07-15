@@ -41,9 +41,45 @@
  */
 import type { CollapseKind, StaticProv } from "../model/static-prov.js";
 
+/** `element` — the distinguished one-of-collection projection buildFan mints
+ *  for every fan body (`{kind:"mux", site:fn.id, key:null, source:collection}`).
+ *  Recognized structurally by shape (`mux` + `key === null`), never by identity
+ *  — inferCollapse never sees the `collection` it was minted from to compare
+ *  against, only the body. */
+const isElement = (p: StaticProv): boolean => p.kind === "mux" && p.key === null;
+
+/** `acc` — "the other leaf" (header's own words): a bare, unstructured leaf
+ *  that is NOT the element projection. Deliberately excludes `const`/`opaque`
+ *  (and any combinator: `fused`/`build`/`string`/`choice`/`fan`, and a `mux`
+ *  with a real key) — a hidden constant or an unresolved crossing standing in
+ *  for "the whole body" is a fabrication-or-failure mark, never a legitimate
+ *  acc-selection, and MUST stay lowered (never routed away). Only `input` and
+ *  `mint` are plain evidence leaves eligible to read as "the accumulator". */
+const isAccLeaf = (p: StaticProv): boolean => {
+  if (isElement(p)) return false;
+  return p.kind === "input" || p.kind === "mint";
+};
+
 /** route | lowered ONLY — see the header split. "combine" is buildFan's call
- *  (it needs the combinator identity this body-only view has lost). */
+ *  (it needs the combinator identity this body-only view has lost).
+ *
+ *  "route" iff the body structurally SELECTS rather than combines:
+ *    - the body IS the element leaf (ignores acc entirely — route-last), or
+ *    - the body IS a bare acc-shaped leaf (ignores element entirely — route-init), or
+ *    - the body is a `choice` whose EVERY alt is an element/acc leaf (a pure
+ *      selection mask — min/max/last, filter survivors: §2c's "min/max/filter
+ *      shape"). A single const or opaque anywhere among the alts disqualifies
+ *      the whole choice back to "lowered" — a mask that could be smuggling a
+ *      fabricated alternative is not statically all-gray, it is a forge.
+ *
+ *  Everything else — any `fused`/`build`/`string` combinator, any `mux` with a
+ *  real key, any `choice` with a non-leaf or const/opaque alt, any bare
+ *  `const`/`opaque` body — stays "lowered", the sound default. */
 export function inferCollapse(body: StaticProv): CollapseKind {
-  void body; // stub — T3a impl replaces (returns "route" | "lowered", never "combine")
+  if (isElement(body)) return "route";
+  if (isAccLeaf(body)) return "route";
+  if (body.kind === "choice" && body.alts.length > 0 && body.alts.every((alt) => isElement(alt) || isAccLeaf(alt))) {
+    return "route";
+  }
   return "lowered";
 }

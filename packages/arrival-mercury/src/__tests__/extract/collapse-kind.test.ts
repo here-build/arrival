@@ -88,19 +88,19 @@ const collapseOf = (prov: StaticProv): CollapseKind | null => (prov.kind === "fa
 // violation, never progress.
 
 describe('§2c "combine" — buildFan over real source, the closed AC list (it.fails until T3a-impl)', () => {
-  it.fails("(fold + 0 v): bare AC head, seed-const — the paradigm combine case", () => {
+  it("(fold + 0 v): bare AC head, seed-const — the paradigm combine case", () => {
     expect(collapseOf(run(`(fold + 0 v)`))).toBe("combine");
   });
 
-  it.fails("(fold * 1 v): bare AC head", () => {
+  it("(fold * 1 v): bare AC head", () => {
     expect(collapseOf(run(`(fold * 1 v)`))).toBe("combine");
   });
 
-  it.fails('(fold string-append "" v): bare AC head (string monoid)', () => {
+  it('(fold string-append "" v): bare AC head (string monoid)', () => {
     expect(collapseOf(run(`(fold string-append "" v)`))).toBe("combine");
   });
 
-  it.fails("(fold cons '() v): bare AC head (list monoid)", () => {
+  it("(fold cons '() v): bare AC head (list monoid)", () => {
     expect(collapseOf(run(`(fold cons '() v)`))).toBe("combine");
   });
 
@@ -165,25 +165,25 @@ const fused = (...sources: readonly StaticProv[]): FusedProv => ({ kind: "fused"
 // "lowered"); these flip to real "route" then.
 
 describe('§2c "route" — inferCollapse over dnf@Fan bodies (it.fails until T3a-impl)', () => {
-  it.fails("(fold max s v) body: choice{guards:[compare(acc,element)], alts:[acc,element]} — both candidates stay gray", () => {
+  it("(fold max s v) body: choice{guards:[compare(acc,element)], alts:[acc,element]} — both candidates stay gray", () => {
     const body: ChoiceProv = { kind: "choice", site: SITE, guards: [fused(ACC, element)], alts: [ACC, element] };
     expect(inferCollapse(body)).toBe("route");
   });
 
-  it.fails("(fold min s v) body: same dnf@Fan shape — route is direction-blind (min/max share the regime, not a type)", () => {
+  it("(fold min s v) body: same dnf@Fan shape — route is direction-blind (min/max share the regime, not a type)", () => {
     const body: ChoiceProv = { kind: "choice", site: SITE, guards: [fused(ACC, element)], alts: [ACC, element] };
     expect(inferCollapse(body)).toBe("route");
   });
 
-  it.fails("(λ (acc x) x): body IS element, acc wholly unreferenced ⇒ route-last", () => {
+  it("(λ (acc x) x): body IS element, acc wholly unreferenced ⇒ route-last", () => {
     expect(inferCollapse(element)).toBe("route");
   });
 
-  it.fails("(λ (acc x) acc): body IS acc, element wholly unreferenced ⇒ route-init", () => {
+  it("(λ (acc x) acc): body IS acc, element wholly unreferenced ⇒ route-init", () => {
     expect(inferCollapse(ACC)).toBe("route");
   });
 
-  it.fails("filter-survivor mask: choice{guards:[pred-over-element], alts:[element]} — single alt, no swappable else", () => {
+  it("filter-survivor mask: choice{guards:[pred-over-element], alts:[element]} — single alt, no swappable else", () => {
     const body: ChoiceProv = { kind: "choice", site: SITE, guards: [fused(element)], alts: [element] };
     expect(inferCollapse(body)).toBe("route");
   });
