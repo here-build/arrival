@@ -16,7 +16,9 @@
  *                   bound by the run harness, not the source. Sound under
  *                   adversarial authorship because the seal is static ∧ probe:
  *                   a name unbound at RUN time crashes the run, and no run ⇒ no
- *                   probe leg ⇒ nothing attests.
+ *                   probe leg ⇒ nothing attests. ctx.inputs is checked BEFORE
+ *                   scope, unconditionally — an input name stays evidence-class
+ *                   even if some inner binding happens to reuse the same name.
  *  - Define       → attribution of its value (top-level registration is
  *                   extractProgram's job; nested defines extend scope).
  *  - Let (4 kinds)→ letKind-honoring scope extension (let: all inits in OUTER;
@@ -25,20 +27,121 @@
  *                   body: attribution of LAST body form (Begin semantics).
  *  - Begin        → attribution of the LAST form (earlier forms are effect
  *                   positions; their mints still exist as crossing sites but do
- *                   not flow into the value).
+ *                   not flow into the value). A Define/DefineFn pools into ONE
+ *                   body-local frame regardless of its position relative to the
+ *                   selected last form (mirrors extractProgram's own top-level
+ *                   treatment — bodies are the R7RS idiom of defines-then-
+ *                   expressions; a define textually AFTER the selected last form
+ *                   is not distinguished from one before it).
  *  - Require      → MintProv (a crossing: module loading penetrates the
  *                   membrane), integrity "evidence", head "require".
  *  - Door         → opaque(door.code) — the classifier already refused; extract
  *                   NEVER upgrades a Door.
  */
-import type { Begin, CoreForm, Define, Door, Let, Lit, Quote, Ref, Require } from "../coreform/types.js";
+import type { Begin, Binding, CoreForm, Define, Door, Let, LetKind, Lit, NodeId, Quote, Ref, Require } from "../coreform/types.js";
 import type { StaticProv } from "../model/static-prov.js";
-import { type ExtractCtx, opaque } from "./index.js";
+// Circular with ./index.js by construction: index.ts imports extractAtom to dispatch INTO
+// this module; this module imports extract to recurse back OUT for sub-forms. Sound because
+// both sides only reach across the cycle from inside function bodies, never at module-eval
+// time (the arm-group cut's own note — calls happen at runtime).
+import { type Bound, type ExtractCtx, type Scope, extract, lookup, opaque } from "./index.js";
 
 type AtomForm = Lit | Ref | Quote | Define | Let | Begin | Require | Door;
 
 export function extractAtom(form: AtomForm, ctx: ExtractCtx): StaticProv {
-  void ctx; // stub — arm agent replaces
-  void (0 as unknown as CoreForm);
-  return opaque(form.id, `unimplemented/arm-a/${form.kind}`);
+  switch (form.kind) {
+    case "Lit":
+      return { kind: "const", site: form.id };
+    case "Quote":
+      return { kind: "const", site: form.id };
+    case "Ref":
+      return extractRef(form, ctx);
+    case "Define":
+      return extract(form.value, ctx);
+    case "Let": {
+      const scope = extendForLet(form.letKind, form.bindings, ctx.scope);
+      return extractBody(form.body, { ...ctx, scope }, form.id);
+    }
+    case "Begin":
+      return extractBody(form.body, ctx, form.id);
+    case "Require":
+      return { kind: "mint", site: form.id, head: "require", integrity: "evidence", closed: [] };
+    case "Door":
+      return opaque(form.id, form.code);
+  }
+}
+
+/** Ref's three-way contract (header above): ctx.inputs member first (checked
+ *  unconditionally, ahead of scope); else a scope hit, which is either a direct
+ *  `prov` (a synthetic binding — e.g. a fan-body element with no expr to defer
+ *  to) or a deferred `{expr, scope}` pair extracted IN ITS OWN BINDING SCOPE
+ *  (never the reference site — derive.ts hardening #2) behind the cycle guard;
+ *  else unbound, which is ALSO InputProv (the evidence-handle convention). */
+function extractRef(form: Ref, ctx: ExtractCtx): StaticProv {
+  if (ctx.inputs.has(form.name)) return { kind: "input", site: form.id, name: form.name };
+  const bound = lookup(ctx.scope, form.name);
+  if (bound === undefined) return { kind: "input", site: form.id, name: form.name };
+  if ("prov" in bound) return bound.prov;
+  if (ctx.reducing.has(bound.expr)) return opaque(form.id, "cyclic-binding");
+  return extract(bound.expr, { ...ctx, scope: bound.scope, reducing: new Set([...ctx.reducing, bound.expr]) });
+}
+
+/** Build the scope a Let's BODY sees, honoring letKind (derive.ts's
+ *  `extendForLet`, ported onto index.ts's Scope/Bound shapes — same three-way
+ *  split, same reasoning): `let*` chains one frame per binding (init i sees
+ *  bindings 0..i-1 only, never itself or later ones — each new frame carries
+ *  just that one name, parented to the accumulator-so-far); `let` and
+ *  `letrec`/`letrec*` build ONE frame, differing only in which scope the
+ *  inits themselves resolve against (outer vs the frame itself,
+ *  self-referential — a letrec cycle is caught later, by Ref's cycle guard,
+ *  not here). */
+function extendForLet(letKind: LetKind, bindings: readonly Binding[], outer: Scope): Scope {
+  if (letKind === "let*") {
+    let acc: Scope = outer;
+    for (const b of bindings) {
+      acc = { names: new Map([[b.name, { expr: b.init, scope: acc }]]), parent: acc };
+    }
+    return acc;
+  }
+  const names = new Map<string, Bound>();
+  const frame: Scope = { names, parent: outer };
+  const initScope: Scope = letKind === "let" ? outer : frame; // letrec/letrec* — self-referential
+  for (const b of bindings) names.set(b.name, { expr: b.init, scope: initScope });
+  return frame;
+}
+
+/** Shared Begin/Let-body walk: a Define/DefineFn extends one body-local frame
+ *  (visible to the rest of the body — the R7RS internal-define idiom; for a
+ *  DefineFn the bound expr is the DefineFn form itself, matching
+ *  extractProgram's top-level treatment); every other form is a candidate
+ *  value, and the LAST one seen is the one actually extracted — earlier
+ *  candidates are effect positions and are never walked (I1 needs their
+ *  crossing sites to exist in the SOURCE, not in this return value — walking
+ *  them here would be pure waste, and extractProgram's own top-level pass
+ *  already sets this precedent). All-defines body: fall back to the body's
+ *  own last element (a bare Define there attributes its value via the Define
+ *  case above). Empty body: opaque, fail-closed — CoreForm's grammar does not
+ *  guarantee non-emptiness for Let/Begin bodies the way it does for
+ *  DefineFn/Lambda. */
+function extractBody(body: readonly CoreForm[], ctx: ExtractCtx, siteId: NodeId): StaticProv {
+  const names = new Map<string, Bound>();
+  const frame: Scope = { names, parent: ctx.scope };
+  let scope: Scope = ctx.scope;
+  let last: CoreForm | undefined;
+  for (const f of body) {
+    if (f.kind === "Define") {
+      names.set(f.name, { expr: f.value, scope: frame });
+      scope = frame;
+      continue;
+    }
+    if (f.kind === "DefineFn") {
+      names.set(f.name, { expr: f, scope: frame });
+      scope = frame;
+      continue;
+    }
+    last = f;
+  }
+  const target = last ?? body.at(-1);
+  if (target === undefined) return opaque(siteId, "empty-body");
+  return extract(target, { ...ctx, scope });
 }
