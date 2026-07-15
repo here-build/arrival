@@ -42,19 +42,15 @@ import { DEFAULT_STRATEGY, projectToJsRaw, type Strategy } from "@inhuman.tools/
 import { register } from "tsx/esm/api";
 
 import { asyncIfy } from "../async-ify/index.js";
-import { classify } from "../coreform/index.js";
-import { desugar } from "../front/desugar.js";
-import { parseSexprs } from "../front/parse.js";
 import { frame } from "../frame/index.js";
 import { legibility } from "../legibility/index.js";
+import { SchemeSemanticModel } from "../model/model.js";
 import { peephole } from "../peepholes/index.js";
 import { emitRegistryOf } from "../registry/index.js";
 import { render } from "../residual/render.js";
 import type { CompilationUnit } from "../residual/types.js";
 import { Binding as mkBinding, Const, Export } from "../residual/types.js";
 import { inferAsyncSeeds, phase1Rules, withRules, type OverlayEmitRegistry } from "../rules/index.js";
-import { narrowsMembersOf } from "../type-emit/index.js";
-import { extractFacts } from "../typefacts/index.js";
 import { walk } from "../walker/index.js";
 import { classifyCompiledError, classifyInterpreterError, type ErrorClass } from "./error-classifier.js";
 
@@ -268,20 +264,17 @@ export function cleanupOracleScratch(): void {
 /** The per-session compiled-side registry: harvest + Phase-1 overlay + the Law-N
  *  witness sweep, once per ambient (§4.1's reuse contract applied to the compiler
  *  side). Keyed by the AMBIENT (not the session wrapper) so two OracleSession
- *  handles over one assembly share the work. */
-const registryCache = new WeakMap<
-  AssembledAmbient,
-  { registry: OverlayEmitRegistry; narrowsMembers: ReadonlySet<string> }
->();
+ *  handles over one assembly share the work. (`narrowsMembers` used to be cached
+ *  alongside the registry here; E0's rewiring moved that derivation onto
+ *  `SchemeSemanticModel.narrowsMembers` — a cheap, per-model O(names) pass over
+ *  the SAME registry, so caching it a second time here would only be a
+ *  redundant memo of the same cheap computation, model.ts's own header.) */
+const registryCache = new WeakMap<AssembledAmbient, OverlayEmitRegistry>();
 
-function greenfieldRegistryFor(session: OracleSession): {
-  registry: OverlayEmitRegistry;
-  narrowsMembers: ReadonlySet<string>;
-} {
+function greenfieldRegistryFor(session: OracleSession): OverlayEmitRegistry {
   let hit = registryCache.get(session.ambient);
   if (hit === undefined) {
-    const registry = withRules(emitRegistryOf(session.ambient), phase1Rules);
-    hit = { registry, narrowsMembers: narrowsMembersOf(registry) };
+    hit = withRules(emitRegistryOf(session.ambient), phase1Rules);
     registryCache.set(session.ambient, hit);
   }
   return hit;
@@ -358,11 +351,25 @@ function exportUnitResult(unit: CompilationUnit): CompilationUnit {
  * Exported (beyond `evalCompiled`'s own use) for the §8 determinism check and the
  * §9 enforcement-spine `tsc --strict` output gate — both need the exact bytes the
  * gate subject produces, not a reconstruction of the pipeline.
+ *
+ * E0 rewiring (engine plan §2 E0): classify, facts, and the registry now flow
+ * through a `SchemeSemanticModel` instead of being assembled inline —
+ * `sm.coreform` / `sm.factsMap()` / `sm.registry` replace the bare
+ * `classify(desugar(parseSexprs(...)))` / `extractFacts(...)` calls this
+ * function used to make directly. The passes downstream of classification
+ * (`peephole`, `walk`, `legibility`, `asyncIfy`, `frame`, `render`) are
+ * UNCHANGED — they still read a plain `ClassifyResult`/registry/facts-map,
+ * exactly as before; only WHERE those values come from moved. No fixture
+ * bytes should move by construction (the model computes the identical values
+ * the inline calls did) — see `model-imports-agree.test.ts` for the
+ * behavioral proof on the one new view (`importsOf`) this rewiring doesn't
+ * yet consume for emission (E1b's job).
  */
 export function compileGreenfield(session: OracleSession, source: string): string {
-  const { registry, narrowsMembers } = greenfieldRegistryFor(session);
+  const registry = greenfieldRegistryFor(session);
   const wrapped = `(define (${ORACLE_MAIN})\n${source}\n)\n(${ORACLE_MAIN})\n`;
-  const classified = classify(desugar(parseSexprs(wrapped)));
+  const sm = new SchemeSemanticModel(wrapped, registry);
+  const classified = sm.coreform;
   const main = classified.forms[0];
   if (main?.kind !== "DefineFn") {
     throw new OracleAuthoringError(
@@ -378,10 +385,9 @@ export function compileGreenfield(session: OracleSession, source: string): strin
       "oracle evalCompiled: the program's last top-level form must be an expression (the value under test), got a definition",
     );
   }
-  const extraction = extractFacts({ source: wrapped, classified }, { narrowsMembers });
   const peepholed = peephole(classified);
-  const sync = walk(peepholed, { registry, facts: extraction.facts, register: "run" });
-  const legible = legibility(exportUnitResult(sync), { registry });
+  const sync = walk(peepholed, { registry: sm.registry, facts: sm.factsMap(), register: "run" });
+  const legible = legibility(exportUnitResult(sync), { registry: sm.registry });
   const asyncified = asyncIfy(legible, { asyncSeeds: inferAsyncSeeds });
   const framed = frame(asyncified, { runtimeModule: `./${STAGE0_BASENAME}` });
   return render(framed);
