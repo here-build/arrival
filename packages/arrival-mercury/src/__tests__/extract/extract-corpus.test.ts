@@ -1,12 +1,12 @@
 /**
  * The J1 gate — extract vs the dual-use fixture corpus (G1, 2026-07-15).
  *
- * Every row runs `it.fails` while the arms are G1 stubs (everything lifts to
- * `opaque("unimplemented/…")`, which is I1-sound and corpus-red). At J1 (the
- * three arms merged), the merge owner flips `.fails` off row by row — a row
- * that STAYS red at J1 is a real extract defect, and a row that goes green
- * EARLY means a stub stopped being a stub without the merge owner knowing.
- * Do not flip these in arm branches; the flip is the J1 act itself.
+ * A row runs `it.fails` until its `landed` flag flips (the arms' machinery for
+ * it merged and verified), then plain `it` — FOREVER. The flip is DATA in
+ * fixture-corpus.ts, and flipping is the merge owner's act, never an arm
+ * agent's: a row that STAYS red at its flip is a real extract defect, and a
+ * row that goes green EARLY means a stub stopped being a stub without the
+ * merge owner knowing (stop and ping the flip owner — do not self-flip).
  */
 import { describe, expect, it } from "vitest";
 
@@ -17,9 +17,10 @@ import { extractProgram } from "../../extract/index.js";
 import { defaultRegistry } from "../../extract/arm-containers.js";
 import { FIXTURE_CORPUS, mismatch } from "./fixture-corpus.js";
 
-describe("extract() vs the fixture corpus (J1 gate — it.fails until the arms land)", () => {
+describe("extract() vs the fixture corpus (J1 gate — it.fails until each row lands)", () => {
   for (const row of FIXTURE_CORPUS) {
-    it.fails(`${row.name}: ${row.why.slice(0, 80)}…`, () => {
+    const runner = row.landed ? it : it.fails;
+    runner(`${row.name}: ${row.why.slice(0, 80)}…`, () => {
       const { forms } = classify(desugar(parseSexprs(row.source)));
       const prov = extractProgram(forms, defaultRegistry);
       expect(mismatch(prov, row.expected)).toBeNull();

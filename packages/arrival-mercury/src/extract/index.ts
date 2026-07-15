@@ -102,8 +102,19 @@ export function extractProgram(forms: readonly CoreForm[], registry: HeadRegistr
   const inputs = new Set<string>();
   for (const f of forms) {
     if (f.kind === "Define") {
-      names.set(f.name, { expr: f.value, scope: top });
-      if (f.overridableType !== undefined) inputs.add(f.name);
+      if (f.overridableType !== undefined) {
+        // A define/overridable is a program INPUT: bind it in scope as the
+        // synthetic InputProv (evidence-class), NOT as its fallback expr — the
+        // override is always supplied by the harness, and the fallback must
+        // never become the attribution. Binding through the ORDINARY scope
+        // (rather than a scope-bypassing inputs check) is load-bearing: an
+        // inner `(let ((e "FAB")) e)` shadow must attribute to the shadow's
+        // const, never to the input — the shadowed-input forge (corpus row 6).
+        names.set(f.name, { prov: { kind: "input", site: f.id, name: f.name } });
+        inputs.add(f.name);
+      } else {
+        names.set(f.name, { expr: f.value, scope: top });
+      }
     }
     if (f.kind === "DefineFn") names.set(f.name, { expr: f, scope: top });
   }

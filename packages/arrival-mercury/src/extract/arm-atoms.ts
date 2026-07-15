@@ -8,17 +8,18 @@
  *                   A keyword Lit in App-head position never reaches here (ARM-B).
  *  - Quote        → ConstProv. Quoted data is inert program text — a quoted list
  *                   is ONE const, not a build (it cannot carry evidence).
- *  - Ref          → ctx.inputs member ⇒ InputProv (evidence-class);
- *                   in-scope ⇒ extract the bound expr IN ITS BINDING SCOPE
+ *  - Ref          → SCOPE FIRST (lexical shadowing is real — the
+ *                   shadowed-input forge fix): in-scope ⇒ a synthetic `prov`
+ *                   directly, or extract the bound expr IN ITS BINDING SCOPE
  *                   (Bound.scope, hardening #2) with the cycle guard;
  *                   UNBOUND ⇒ InputProv — the wire-model convention (derive.ts's
  *                   PVertice): the evidence handle arrives as a free name (`e`),
  *                   bound by the run harness, not the source. Sound under
  *                   adversarial authorship because the seal is static ∧ probe:
  *                   a name unbound at RUN time crashes the run, and no run ⇒ no
- *                   probe leg ⇒ nothing attests. ctx.inputs is checked BEFORE
- *                   scope, unconditionally — an input name stays evidence-class
- *                   even if some inner binding happens to reuse the same name.
+ *                   probe leg ⇒ nothing attests. define/overridable inputs are
+ *                   bound by extractProgram as Bound{prov: InputProv} in the
+ *                   ORDINARY top scope, so an inner shadow wins lexically.
  *  - Define       → attribution of its value (top-level registration is
  *                   extractProgram's job; nested defines extend scope).
  *  - Let (4 kinds)→ letKind-honoring scope extension (let: all inits in OUTER;
@@ -71,17 +72,33 @@ export function extractAtom(form: AtomForm, ctx: ExtractCtx): StaticProv {
   }
 }
 
-/** Ref's three-way contract (header above): ctx.inputs member first (checked
- *  unconditionally, ahead of scope); else a scope hit, which is either a direct
- *  `prov` (a synthetic binding — e.g. a fan-body element with no expr to defer
- *  to) or a deferred `{expr, scope}` pair extracted IN ITS OWN BINDING SCOPE
- *  (never the reference site — derive.ts hardening #2) behind the cycle guard;
- *  else unbound, which is ALSO InputProv (the evidence-handle convention). */
+/** Ref's contract (SCOPE FIRST — the shadowed-input forge fix, corpus row 6):
+ *  a scope hit wins unconditionally, honoring lexical shadowing — it is either
+ *  a direct `prov` (a synthetic binding: a fan-body element, or a
+ *  define/overridable input bound as InputProv by extractProgram) or a deferred
+ *  `{expr, scope}` pair extracted IN ITS OWN BINDING SCOPE (never the
+ *  reference site — derive.ts hardening #2) behind the cycle guard. Only a
+ *  scope MISS is the evidence-handle convention: a free name is the input the
+ *  harness binds (InputProv). ctx.inputs never bypasses scope — an
+ *  inputs-first check let `(let ((e "FAB")) e)` attribute the shadow's const
+ *  as evidence, which the static leg must never do. */
 function extractRef(form: Ref, ctx: ExtractCtx): StaticProv {
-  if (ctx.inputs.has(form.name)) return { kind: "input", site: form.id, name: form.name };
   const bound = lookup(ctx.scope, form.name);
-  if (bound === undefined) return { kind: "input", site: form.id, name: form.name };
-  if ("prov" in bound) return bound.prov;
+  if (bound === undefined) {
+    // F23 (architecture review, 2026-07-15): a free name that the registry
+    // KNOWS is a builtin head is a fn-as-value, not evidence — `(car (list +))`
+    // must not launder `+` into an evidence-class input. Only registry-unknown
+    // free names are the evidence-handle convention.
+    if (ctx.registry.classifyHead(form.name).role !== "opaque") return opaque(form.id, "builtin-as-value");
+    return { kind: "input", site: form.id, name: form.name };
+  }
+  // A synthetic InputProv re-stamps to the USE site: the binding is a
+  // declaration-synthetic (extractProgram binds define/overridable once, at the
+  // define's id), but every consumer of the attribution — scope-id addressing,
+  // the render, where-provenance — wants the reference location. Other
+  // synthetic kinds (fan elements) keep their binder's site deliberately: the
+  // element IS the axis's projection, not a per-use value.
+  if ("prov" in bound) return bound.prov.kind === "input" ? { ...bound.prov, site: form.id } : bound.prov;
   if (ctx.reducing.has(bound.expr)) return opaque(form.id, "cyclic-binding");
   return extract(bound.expr, { ...ctx, scope: bound.scope, reducing: new Set([...ctx.reducing, bound.expr]) });
 }

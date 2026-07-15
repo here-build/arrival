@@ -46,11 +46,16 @@ describe("extractAtom — Ref", () => {
     expect(run("totally-free-name")).toMatchObject({ kind: "input", name: "totally-free-name" });
   });
 
-  it("a define/overridable input wins over scope even though the SAME name is also bound there", () => {
-    // "e" is both an input (overridableType set) and scope-bound to Lit(0) — ctx.inputs
-    // must be checked first and unconditionally, per the contract's ordering.
+  it("a define/overridable input reads as InputProv through ORDINARY scope (bound as a synthetic prov, fallback never the attribution)", () => {
     const prov = run(`(define/overridable e any 0)\ne`);
     expect(prov).toMatchObject({ kind: "input", name: "e" });
+  });
+
+  it("SHADOWED-INPUT FORGE: an inner binding shadowing a declared input attributes to the shadow's const, never to the input", () => {
+    // The corpus row 6 forge (2026-07-15): inputs-before-scope let the static
+    // leg bless `(let ((e "FAB")) e)` as evidence. Scope always wins.
+    const prov = run(`(define/overridable e any 0)\n(let ((e "FAB")) e)`);
+    expect(prov.kind).toBe("const");
   });
 });
 

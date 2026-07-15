@@ -150,6 +150,10 @@ export interface FixtureRow {
   readonly expected: ProvPattern;
   /** What the row guards — cite the forge or the property. */
   readonly why: string;
+  /** The J1 flip, as DATA: false/absent ⇒ the runner uses it.fails (the arms
+   *  haven't landed this row's machinery); true ⇒ plain it (the row must pass,
+   *  and STAY passing, forever). Flipping is the merge owner's act. */
+  readonly landed?: boolean;
 }
 
 const input = (name: string): ProvPattern => ({ kind: "input", name });
@@ -202,5 +206,19 @@ export const FIXTURE_CORPUS: readonly FixtureRow[] = [
     source: `(+ (:a e) (:b e))`,
     expected: { kind: "fused", sources: [muxOf("a", "e"), muxOf("b", "e")] },
     why: "⊗ baseline: both evidence projections contribute; arity and order preserved.",
+  },
+  {
+    name: "shadowed-input forge",
+    source: `(define/overridable e "evidence" (dict))\n(let ((e "FAB")) e)`,
+    expected: { kind: "const" },
+    why: "An inner binding shadowing a declared input must attribute to the SHADOW's const, never to the input — an inputs-before-scope check let the static leg bless a fabrication as evidence (found in ARM-A verification, 2026-07-15). Lexical shadowing is real; scope always wins.",
+    landed: true,
+  },
+  {
+    name: "builtin-as-value laundering (F23)",
+    source: `(let ((f +)) f)`,
+    expected: { kind: "opaque", reason: "builtin-as-value" },
+    why: "A free name the registry KNOWS is a builtin head must lift to opaque, never to an evidence-class input — the unbound-Ref convention is for the harness-bound evidence handle only (architecture review F23, 2026-07-15).",
+    landed: true,
   },
 ];
