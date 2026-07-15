@@ -28,7 +28,7 @@
  *    extract; keys are program text and do NOT contribute a const — a key is
  *    structure, not content).
  */
-import type { CoreForm, Dict } from "../coreform/types.js";
+import type { CoreForm, Dict, NodeId } from "../coreform/types.js";
 import type { HeadClass, HeadRegistry, StaticProv } from "../model/static-prov.js";
 import { type ExtractCtx, opaque } from "./index.js";
 
@@ -45,3 +45,29 @@ export const defaultRegistry: HeadRegistry = {
     return { role: "opaque", reason: `unknown-head/${name}` };
   },
 };
+
+/** The Fan constructor — ARM-B delegates here for fan-role heads (`map`,
+ *  `filter`, `fold`, …). Signature FROZEN at G1 so the arms build in parallel;
+ *  ARM-C fills the body per §2c's desugar rules:
+ *    map    → Fan(collection, body = extract of `(fn element)`)
+ *    filter → Fan(collection, body = choice over the predicate)
+ *    fold   → Fan(collection, body = extract of `(fn acc element)` with acc
+ *             bound to init's attribution, element to the collection element)
+ *  `element` inside the body = MuxProv{key: null, source: collection} — the
+ *  distinguished element-of-collection projection. Collapse is ALWAYS
+ *  "lowered" until T3a's inference wires in (sound: every internal choice and
+ *  const stays visible; the fold-collapse forge cannot arise). */
+export function buildFan(
+  fanKind: "map" | "filter" | "fold",
+  site: NodeId,
+  fn: CoreForm,
+  collection: StaticProv,
+  init: StaticProv | null,
+  ctx: ExtractCtx,
+): StaticProv {
+  void fn;
+  void collection;
+  void init;
+  void ctx; // stub — arm agent replaces
+  return opaque(site, `unimplemented/arm-c/fan-${fanKind}`);
+}
