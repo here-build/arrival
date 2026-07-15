@@ -166,4 +166,34 @@ export {
 export { extractProgram, type ExtractCtx } from "./extract/index.js";
 export { defaultRegistry } from "./extract/arm-containers.js";
 export { circuitToSexpr } from "./model/circuit-sexpr.js";
-export type { HeadRegistry, StaticProv } from "./model/static-prov.js";
+export type {
+  BuildProv,
+  ChoiceProv,
+  ConstProv,
+  FanProv,
+  FusedProv,
+  HeadRegistry,
+  InputProv,
+  Integrity,
+  MintProv,
+  MuxProv,
+  OpaqueProv,
+  StaticProv,
+  StringProv,
+} from "./model/static-prov.js";
+
+// ── T6c — the live conjunction's remaining ingredients: the static verdict
+// channel (T4), the seal (I2), the dynamic leaf-verdict classifier + witness
+// generator (T5c's siblings). None of these were previously reachable outside
+// this package (only extract/circuitToSexpr were, for T6b's `circuit`
+// capability) — T6c's whole job is wiring the two rails together, and the
+// wiring lives OUTSIDE this package (mcp-worker, which sits outside the
+// arrival-mercury → arrival-run → arrival-reflect cycle — see arrival-reflect's
+// `circuitOf` doc for why). Exporting these is pure plumbing: no logic here
+// changes, every symbol is re-exported verbatim from its owning module. ──
+export { channels, circuitVerdict, type Channels, type ChannelAnchor, type ChannelTerminals, type CircuitRole, type CircuitVerdict } from "./verdict/circuit-verdict.js";
+export { seal, type SealVerdict } from "./seal.js";
+export type { LeafRole, WireVerdict } from "./wire/policy.js";
+export { leafVerdicts, type LeafVerdict, type LeafVerdictKind, type ProbeAttempt, type ProbeOutcome } from "./probe/verdict.js";
+export type { LeafPath as DynamicLeafPath } from "./probe/verdict.js";
+export { witnessesFor, type Witness, type WitnessAxis, type WitnessOptions } from "./probe/witness.js";
