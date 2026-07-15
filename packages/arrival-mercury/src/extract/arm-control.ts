@@ -21,14 +21,44 @@
  *                 BETA-REDUCE (derive.ts's hardenings): no rest param and folded
  *                 arity must match param count ⇒ else opaque("callee-arity");
  *                 a callee already on the reduction stack ⇒
- *                 opaque("cyclic-binding"); each param binds to its ARGUMENT's
- *                 OWN attribution evaluated in the CALLER's scope — binding-site
- *                 scoping, the mechanism that keeps a helper's hidden guard
- *                 visible (the reopened named-helper forge). The body pools its
- *                 own internal Define/DefineFn into one frame and attributes the
- *                 last non-define form (mirrors extractProgram's and ARM-A's
- *                 Begin/Let bodies — the same R7RS "defines then expressions"
- *                 idiom, so all three treat a body identically).
+ *                 opaque("cyclic-binding") — UNLESS `recognizeTailFold` (below)
+ *                 recognizes the narrow self-recursive fold/loop shape FIRST,
+ *                 in which case the whole call lifts to a `FanProv` instead
+ *                 (the NamedLet comment's "planned extension", landed for
+ *                 DefineFn self-recursion): `(define (f p…) (if <base-guard>
+ *                 <bare-param-base> (f <stepped-args>)))` — one `If`, one
+ *                 branch a direct tail self-call, the other a bare Ref to
+ *                 exactly one of `f`'s own params (the accumulator), no
+ *                 self-reference anywhere else in the shape. `collection` =
+ *                 the accumulator's SEED argument's attribution (the value
+ *                 flowing in at the ORIGINAL call site); `element` = the usual
+ *                 `MuxProv{key:null, source:collection}` (buildFan's own
+ *                 mechanism); `body` = the attribution of the accumulator's
+ *                 UPDATE expression (the recursive call's corresponding arg,
+ *                 e.g. `(step pool)`) extracted with the accumulator param
+ *                 bound to `element` — this is exactly fold's combinator body,
+ *                 just hand-written as recursion instead of passed as a
+ *                 lambda. `collapse` is ALWAYS "lowered": the update
+ *                 expression's own dialect program (every internal `if`,
+ *                 every literal) is extracted NORMALLY, so a const hidden
+ *                 behind an `if` in the loop body stays a visible `choice`
+ *                 alt — the same guard that keeps buildFan's fold-collapse
+ *                 forge dead, reused here rather than re-invented. Anything
+ *                 that doesn't match this exact shape (non-tail recursion,
+ *                 mutual recursion, a base case that isn't a bare
+ *                 param-Ref, two recursive branches, a stray self-reference
+ *                 in the guard or elsewhere) falls straight through to the
+ *                 unchanged cyclic-binding opaque below — recognition NEVER
+ *                 guesses, it only fires on an unambiguous match. In the
+ *                 ordinary (non-lifted) case, each param binds to its
+ *                 ARGUMENT's OWN attribution evaluated in the CALLER's scope
+ *                 — binding-site scoping, the mechanism that keeps a helper's
+ *                 hidden guard visible (the reopened named-helper forge). The
+ *                 body pools its own internal Define/DefineFn into one frame
+ *                 and attributes the last non-define form (mirrors
+ *                 extractProgram's and ARM-A's Begin/Let bodies — the same
+ *                 R7RS "defines then expressions" idiom, so all three treat a
+ *                 body identically).
  *             (3) a free (not-in-scope) Ref ⇒ ctx.registry.classifyHead(name) —
  *                 fuse/mux/build/string/mint/fan/choice/opaque per HeadClass.
  *                 kwargs FOLD into the flat arg list (positional order, then
@@ -50,12 +80,15 @@
  *           leaf value it is opaque("fn-as-value") until the callable-as-value
  *           design (tagless apply) lands. Fail closed.
  *  - NamedLet → the loop form: a recursion knot. G1 ships the SOUND default,
- *           unconditionally: opaque("named-let/unliftable"). Lifting the simple
- *           seeded-accumulator shape to FanProv{collapse:"lowered"} is a
- *           legitimate future refinement (the spec explicitly permits it), but
- *           opaque is ALWAYS a correct answer here, and guessing at a partial
- *           lift is exactly the kind of shape-matching that must not be
- *           attempted halfway — mislabeling is the only sin.
+ *           unconditionally: opaque("named-let/unliftable"), UNCHANGED here —
+ *           this bullet's own "planned extension" landed for self-recursive
+ *           DefineFn (App's bullet, `recognizeTailFold`/`buildRecursionFan`
+ *           below) but a NamedLet is a distinct CoreForm kind with no App/
+ *           betaReduce path through it, so recognizing the same shape written
+ *           as `(let loop (…) …)` is a separate, still-unattempted lift.
+ *           Guessing at a partial lift here is exactly the kind of
+ *           shape-matching that must not be attempted halfway — mislabeling
+ *           is the only sin; opaque stays ALWAYS a correct answer.
  */
 import type { And, App, CoreForm, DefineFn, If, Lambda, NamedLet, NodeId, Or } from "../coreform/types.js";
 import type { HeadClass, StaticProv } from "../model/static-prov.js";
@@ -148,11 +181,176 @@ function betaReduce(fn: DefineFn | Lambda, calleeScope: Scope, form: App, ctx: E
   if (fn.params.length !== allArgs.length) return opaque(form.id, "callee-arity");
   if (ctx.reducing.has(fn)) return opaque(form.id, "cyclic-binding");
 
+  // The tail-fold lift (see the App bullet's header note): only reachable on
+  // the FIRST reduction of `fn` (the check above already ruled out a revisit),
+  // and only for a named DefineFn — a bare Lambda has no name to self-call
+  // through, so it can never match `recognizeTailFold`'s shape. Recognition
+  // is a pure function of `fn`'s own body text; a non-match falls straight
+  // through to the unchanged normal beta-reduction below.
+  if (fn.kind === "DefineFn") {
+    const fold = recognizeTailFold(fn);
+    if (fold) return buildRecursionFan(fold, fn, calleeScope, allArgs, ctx);
+  }
+
   const paramNames = new Map<string, Bound>();
   fn.params.forEach((p, i) => paramNames.set(p.name, { tag: "expr", expr: allArgs[i]!, scope: ctx.scope }));
   const paramFrame: Scope = { names: paramNames, parent: calleeScope };
   const reducing = new Set(ctx.reducing).add(fn);
   return extractBody(fn.body, { ...ctx, scope: paramFrame, reducing }, form.id);
+}
+
+// ── the tail-fold lift (self-recursive DefineFn ⇒ FanProv) ──────────────────────
+
+/** The recognized shape: which param is the accumulator (returned bare in the
+ *  base branch) and which raw CoreForm computes its NEXT value (the
+ *  recursive call's corresponding argument — fold's combinator body, hand-
+ *  written as recursion instead of passed as a lambda). */
+interface TailFold {
+  readonly accParamIndex: number;
+  readonly updateExpr: CoreForm;
+}
+
+/** Is `form` exactly a direct tail call back to `fn` itself — `fn.fn` a Ref
+ *  spelled `fn.name`? (Mutual recursion, or a call to anything else, never
+ *  matches — this is the ONLY test that lets a DIFFERENT function's call
+ *  through unrecognized, which is what keeps mutual recursion opaque.) */
+function isDirectSelfCall(form: CoreForm, fn: DefineFn): form is App {
+  return form.kind === "App" && form.fn.kind === "Ref" && form.fn.name === fn.name;
+}
+
+/** Generic free-reference scan — does `form`'s subtree contain a `Ref` spelled
+ *  `name` ANYWHERE? Used only by `recognizeTailFold`'s guard checks (never by
+ *  extraction itself): a self-reference outside the one recognized tail-call
+ *  position — in the guard, in the base branch, or nested inside one of the
+ *  recursive call's own arguments — means this is a MORE COMPLEX recursion
+ *  shape (non-tail, a second recursive branch, …) that this narrow lift does
+ *  not attempt; the caller bails to the unchanged opaque("cyclic-binding")
+ *  default rather than guess. Exhaustive over CoreForm by tsc (no default
+ *  arm) — the same totality discipline as `extract`'s own dispatcher. Quoted
+ *  data (`Quote`) is inert program text, never re-classified, so it can never
+ *  hide a live Ref — correctly excluded here the same way ARM-A excludes it
+ *  from attribution. */
+function containsRef(form: CoreForm, name: string): boolean {
+  switch (form.kind) {
+    case "Ref":
+      return form.name === name;
+    case "Lit":
+    case "Quote":
+    case "Require":
+    case "Door":
+      return false;
+    case "Define":
+      return containsRef(form.value, name) || (form.overridableType !== undefined && containsRef(form.overridableType, name));
+    case "DefineFn":
+      return (
+        form.body.some((f) => containsRef(f, name)) || (form.overridableType !== undefined && containsRef(form.overridableType, name))
+      );
+    case "Lambda":
+      return form.body.some((f) => containsRef(f, name));
+    case "If":
+      return containsRef(form.cond, name) || containsRef(form.then, name) || containsRef(form.else, name);
+    case "And":
+    case "Or":
+      return form.args.some((a) => containsRef(a, name));
+    case "Let":
+    case "NamedLet":
+      return form.bindings.some((b) => containsRef(b.init, name)) || form.body.some((f) => containsRef(f, name));
+    case "Begin":
+      return form.body.some((f) => containsRef(f, name));
+    case "App":
+      return containsRef(form.fn, name) || form.positionalArgs.some((a) => containsRef(a, name)) || form.kwargs.some((kw) => containsRef(kw.value, name));
+    case "Dict":
+      return form.entries.some((e) => containsRef(e.value, name));
+  }
+}
+
+/** Does `fn`'s own raw body match the narrow self-recursive fold/loop shape?
+ *  A pure syntactic check against the UN-EXTRACTED CoreForm — the same
+ *  discipline `isBareAcLambdaBody` (arm-containers.ts) uses to read a
+ *  combinator's identity before extraction erases it. Requires, in order
+ *  (any failure ⇒ null, the caller's unchanged opaque("cyclic-binding") path):
+ *   1. the body's value form (defines-then-expressions, same walk as
+ *      `extractBody`) is a single `If` — no cond/nested-If nesting attempted.
+ *   2. exactly ONE of `then`/`else` is a direct tail self-call (both, or
+ *      neither, bails — over-lifting guard).
+ *   3. no OTHER reference to `fn.name` anywhere in the guard, the base
+ *      branch, or the recursive call's own arguments (mutual/nested
+ *      recursion, a second recursive site — none of this narrow lift's
+ *      business).
+ *   4. the recursive call's shape matches an ordinary beta-reduction call:
+ *      no kwargs, positional arity === fn.params.length (fn's rest-param
+ *      check already ran in `betaReduce` before this is called).
+ *   5. the base branch is a BARE `Ref` to one of `fn`'s OWN params — the
+ *      accumulator returned unchanged at the end of the loop. A computed
+ *      base value (anything else) is a shape this lift does not attempt. */
+function recognizeTailFold(fn: DefineFn): TailFold | null {
+  let last: CoreForm | undefined;
+  for (const f of fn.body) {
+    if (f.kind === "Define" || f.kind === "DefineFn") continue;
+    last = f;
+  }
+  const target = last ?? fn.body.at(-1);
+  if (target === undefined || target.kind !== "If") return null;
+
+  const branches: readonly [CoreForm, CoreForm] = [target.then, target.else];
+  const selfIdx = branches.findIndex((b) => isDirectSelfCall(b, fn));
+  if (selfIdx === -1) return null;
+  const otherIdx = selfIdx === 0 ? 1 : 0;
+  if (isDirectSelfCall(branches[otherIdx]!, fn)) return null; // both branches recurse — not this shape
+
+  const recursiveApp = branches[selfIdx] as App;
+  const baseBranch = branches[otherIdx]!;
+
+  if (containsRef(target.cond, fn.name)) return null;
+  if (containsRef(baseBranch, fn.name)) return null;
+  if (recursiveApp.kwargs.length !== 0) return null;
+  if (recursiveApp.positionalArgs.length !== fn.params.length) return null;
+  if (recursiveApp.positionalArgs.some((a) => containsRef(a, fn.name))) return null;
+
+  if (baseBranch.kind !== "Ref") return null;
+  const accParamIndex = fn.params.findIndex((p) => p.name === baseBranch.name);
+  if (accParamIndex === -1) return null;
+
+  return { accParamIndex, updateExpr: recursiveApp.positionalArgs[accParamIndex]! };
+}
+
+/** Build the lifted `FanProv` — the fold/loop's `collection` is the
+ *  accumulator's SEED (its argument at THIS call site, extracted in the
+ *  CALLER's scope — binding-site scoping, unchanged from ordinary
+ *  beta-reduction); `element` is the usual one-round projection (buildFan's
+ *  own mechanism, reused rather than re-invented); `body` is the accumulator's
+ *  UPDATE expression (the recursive call's own argument in that slot,
+ *  fold's combinator body in every way but syntax) extracted with the
+ *  accumulator param rebound to `element` and every OTHER param rebound to
+ *  ITS OWN seed argument (an approximation for a param that itself changes
+ *  round to round, e.g. a counter — sound because it never hides a source,
+ *  it only stands in one concrete round for "some round"; the design's
+ *  concern is fabrication, not precision). `collapse` is always "lowered" —
+ *  never inferred, never combine/route — because the update expression's
+ *  full dialect program (every internal `if`, every literal) is extracted
+ *  through the ordinary `extract` dispatcher below, so a const hidden behind
+ *  an `if` in the loop body surfaces as a visible `choice` alt exactly the
+ *  way buildFan's own fold-collapse guard keeps it visible. */
+function buildRecursionFan(
+  fold: TailFold,
+  fn: DefineFn,
+  calleeScope: Scope,
+  allArgs: readonly CoreForm[],
+  ctx: ExtractCtx,
+): StaticProv {
+  const seedArg = allArgs[fold.accParamIndex]!;
+  const collection = extract(seedArg, ctx);
+  const element: StaticProv = { kind: "mux", site: fn.id, key: null, source: collection };
+
+  const names = new Map<string, Bound>();
+  fn.params.forEach((p, i) => {
+    names.set(p.name, i === fold.accParamIndex ? { tag: "prov", prov: element } : { tag: "expr", expr: allArgs[i]!, scope: ctx.scope });
+  });
+  const frame: Scope = { names, parent: calleeScope };
+  const reducing = new Set(ctx.reducing).add(fn);
+  const body = extract(fold.updateExpr, { ...ctx, scope: frame, reducing });
+
+  return { kind: "fan", site: fn.id, collection, body, collapse: "lowered" };
 }
 
 /** Begin-semantics body walk for a beta-reduced callee — deliberately the SAME

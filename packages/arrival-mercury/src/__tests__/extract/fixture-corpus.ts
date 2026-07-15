@@ -226,4 +226,23 @@ export const FIXTURE_CORPUS: readonly FixtureRow[] = [
     why: "A free name the registry KNOWS is a builtin head must lift to opaque, never to an evidence-class input — the unbound-Ref convention is for the harness-bound evidence handle only (architecture review F23, 2026-07-15).",
     landed: true,
   },
+  {
+    name: "tail-fold recursion lift",
+    source: `(define (loop acc n) (if (= n 0) acc (loop (cons (:v e) acc) (- n 1))))\n(loop (list) 3)`,
+    expected: {
+      kind: "fan",
+      collapse: "lowered",
+      collection: { kind: "build", ctor: "vector", parts: [] },
+      body: {
+        kind: "build",
+        ctor: "pair",
+        parts: [
+          { key: 0, prov: muxOf("v", "e") },
+          { key: 1, prov: { kind: "mux", key: null, source: { kind: "build", ctor: "vector", parts: [] } } },
+        ],
+      },
+    },
+    why: "A self-recursive tail DefineFn desugars to a Fan exactly like fold (arm-control.ts's NamedLet-comment 'planned extension', landed for DefineFn): `(loop (cons (:v e) acc) (- n 1))`'s first arg IS acc's update expression, extracted with acc bound to the axis element. Collapse stays 'lowered' so a fold-collapse-style forge hiding in the update expression can never hide behind the lift.",
+    landed: true,
+  },
 ];
