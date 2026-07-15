@@ -40,6 +40,15 @@ function renderProjection(source: string): WireframeProjection {
 const meta = {
   title: "Circuit/ELK",
   component: WireframeElk,
+  // GEPA is a causality / teleology view — fabrication (program-text `const`)
+  // nodes carry no lineage, so they are hidden by default here; toggle the
+  // `hideFabricated` control off to see them painted red (the security reading
+  // the `circuit-elk` canonical stories default to).
+  args: { hideFabricated: true },
+  argTypes: {
+    projection: { table: { disable: true } },
+    hideFabricated: { control: "boolean" },
+  },
 } satisfies Meta<typeof WireframeElk>;
 
 export default meta;
@@ -122,41 +131,58 @@ ${GEPA_EXAMPLES.map((e) => `    (dict :input ${JSON.stringify(e.input)} :expecte
 
 const GEPA_SOURCE = buildGepaSource();
 
-/** The full GEPA circuit, now rendered with `WireframeElk`'s DESCENDED fan
+/** The full GEPA circuit, rendered with `WireframeElk`'s DESCENDED fan
  *  compound nodes (this component no longer holds I5 exterior-collapse —
  *  see its header): the recursion-lifted `iterate` fan, `generation`'s `map`
  *  over the Pareto pool, and `evaluate`'s `map` over the ten literal
  *  `examples` all render as NESTED dashed-border boxes, `⟳ fan · <collapse>`
- *  labeled, one inside the next — 23 fan boxes, depth 5, 25 `infer/chat`
- *  crossings among them (both `ask`'s and `reflect`'s), by an independent
- *  recursive count over this exact projection. Where the earlier
- *  one-collapsed-leaf-per-fan render showed a couple of hollow boxes, this
- *  shows GEPA's actual evolutionary loop: the per-round Pareto-frontier
- *  fan opening onto the per-example evaluation fan opening onto the
- *  `ask`/`reflect` `infer/chat` crossings themselves, red `fabrication`
- *  markers on the ten-example-literal `const` leaves throughout. The graph is
- *  large (3000+ nodes) — `GepaOneRound` below is the same program at a scale
- *  that fits a screen. Render whatever `toWireframe` produces honestly, same
+ *  labeled, one inside the next, 6 levels deep — GEPA's actual evolutionary
+ *  loop: the per-round Pareto-frontier fan opening onto the per-example
+ *  evaluation fan opening onto the `ask`/`reflect` `infer/chat` crossings
+ *  themselves, red `fabrication` markers on the ten-example-literal `const`
+ *  leaves throughout.
+ *
+ *  SHARED-DAG DEDUP (G2, 2026-07-16): before the fix that added this note,
+ *  `extract` re-derived a binding's attribution at EVERY `Ref` use (never
+ *  memoized), so `examples` — referenced from every inlined call site that
+ *  reaches it through the `evaluate`/`failing` chain — was independently
+ *  re-walked dozens of times, and this story rendered 23 fan boxes, 25
+ *  `infer/chat` crossings, ~3081 total rects (an independent recursive count
+ *  over this exact projection, both before and after, is the source of every
+ *  number in this comment). `ExtractCtx.memo` (src/extract/index.ts) now
+ *  caches a `{tag:"expr"}` Bound's extraction ON THE BOUND OBJECT, so two
+ *  Refs to one binding share the identical `StaticProv` object, and
+ *  `to-wireframe.ts`'s `project` recognizes that identity instead of
+ *  re-projecting the shared subtree once per reference (scoped per graph
+ *  level — see that file's own header for the documented cross-fan-boundary
+ *  limit). Same program, same real structure, same verdicts (verified by a
+ *  dedicated pre/post seal-gate test, `__tests__/extract/circuit-sharing
+ *  .test.ts`) — now 13 fan boxes, 15 `infer/chat` crossings, ~811 total
+ *  rects: representation collapsed, nothing reachable lost. `GepaOneRound`
+ *  below is the same program at 2 examples/1 round instead of 10/4 — same
+ *  fan/crossing shape, ~475 rects instead of ~1257, small enough to actually
+ *  scroll through. Render whatever `toWireframe` produces honestly, same
  *  rule `circuit-elk.stories.tsx`'s other stories hold — no truncating the
  *  real structure to "look more finished". */
 export const Gepa: Story = {
-  render: () => <WireframeElk projection={renderProjection(GEPA_SOURCE)} />,
+  args: { projection: renderProjection(GEPA_SOURCE) },
 };
 
 /** The exact same GEPA algorithm, two examples — checked empirically
  *  (an independent recursive count over `toWireframe`'s output, both here
- *  and for the full `Gepa` story above): the fan/source STRUCTURE (23 fans,
- *  25 `infer/chat` crossings, depth 5) is fixed by the program's recursive
- *  SHAPE, not by `rounds` or example count — `iterate`'s recursion becomes
- *  ONE fan template regardless of how many rounds it is called with
- *  (rounds is a runtime int threaded as an ordinary argument, not something
- *  the static extractor unrolls per call), so shrinking `rounds` changes
- *  nothing render-side. Only the LITERAL `examples` list's length changes
- *  total node count (each entry is its own `const`/`build` leaf pair,
- *  linearly ~230 nodes/example) — two examples instead of ten brings the
- *  graph from ~3000 nodes down to ~1250, small enough to actually scroll
- *  through, while the descent depth/shape stays byte-identical to the full
- *  program's. Same `buildGepaSource` shape, fewer literal examples — not a
+ *  and for the full `Gepa` story above, post the G2 shared-DAG dedup — see
+ *  `Gepa`'s own doc): the fan/source STRUCTURE (13 fans, 15 `infer/chat`
+ *  crossings, depth 6) is fixed by the program's recursive SHAPE, not by
+ *  `rounds` or example count — `iterate`'s recursion becomes ONE fan
+ *  template regardless of how many rounds it is called with (rounds is a
+ *  runtime int threaded as an ordinary argument, not something the static
+ *  extractor unrolls per call), so shrinking `rounds` changes nothing
+ *  render-side. Only the LITERAL `examples` list's length changes total node
+ *  count (each entry is its own `const`/`build` leaf pair) — two examples
+ *  instead of ten brings the graph from ~811 nodes down to ~475, small
+ *  enough to actually scroll through, while the descent depth/shape stays
+ *  byte-identical to the full program's. Same `buildGepaSource` shape, fewer
+ *  literal examples — not a
  *  different program. */
 function buildGepaSourceSmall(): string {
   const examples = GEPA_EXAMPLES.slice(0, 2);
@@ -211,7 +237,7 @@ ${examples.map((e) => `    (dict :input ${JSON.stringify(e.input)} :expected ${J
 }
 
 export const GepaOneRound: Story = {
-  render: () => <WireframeElk projection={renderProjection(buildGepaSourceSmall())} />,
+  args: { projection: renderProjection(buildGepaSourceSmall()) },
 };
 
 /** The `ask` crossing pulled OUT of its fan (one instruction/example round,
@@ -224,9 +250,8 @@ export const GepaOneRound: Story = {
  *  evidence). Same evidence path the full `Gepa` story has at scale, just not
  *  hidden behind a collapsed fan node. */
 export const GepaAskCrossing: Story = {
-  render: () => (
-    <WireframeElk
-      projection={renderProjection(`
+  args: {
+    projection: renderProjection(`
 (define (metric prediction expected) (if (string-ci=? prediction expected) 1 0))
 (define (ask instruction input)
   (:label (car (infer/chat "qwen3.5-9b"
@@ -234,7 +259,6 @@ export const GepaAskCrossing: Story = {
                  (s/object (s/field/string "label"))
                  (string-append "predict/" instruction "/" input)))))
 (metric (ask "Label the text." "this app changed my life") "positive")
-`)}
-    />
-  ),
+`),
+  },
 };

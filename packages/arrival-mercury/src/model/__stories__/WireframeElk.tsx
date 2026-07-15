@@ -74,6 +74,16 @@
  *       === "ambient"                     → amber  (ungrounded crossing)
  *   - otherwise                           → neutral steel
  *
+ * ── hideFabricated: the causal / teleological view drops the red entirely ──
+ *
+ * The `fabrication` tone above is the SECURITY reading. Causality and teleology
+ * views instead pass `hideFabricated` (prop below): a `const` node carries no
+ * lineage (empty where-provenance), so those views omit it and its out-edges
+ * wholesale (`buildLevel`), leaving only the crossings and transforms that
+ * actually carry evidence. Same projection, two complementary readings — one
+ * paints fabrication red, the other elides it — and both still resolve
+ * fabrication from the side map, never a node's own `kind`/`op`.
+ *
  * This holds AT EVERY NESTING DEPTH: a node index is only meaningful paired
  * with the `WireframeSideMaps` object it was assigned from — a fan's
  * template graph gets its own private index space starting back at 0
@@ -85,7 +95,7 @@
  * evidence-class node four fans deep still resolves to the right color —
  * never the enclosing graph's side maps by mistake.
  */
-import { useEffect, useState } from "react";
+import { type ReactElement, useEffect, useState } from "react";
 // elkjs's PACKAGE MAIN (`elkjs` / `elkjs/lib/main.js`) is NOT usable under a
 // Vite-bundled static build: its no-worker fallback path does
 // `try { require.resolve('web-worker') } catch {}` to probe an OPTIONAL peer
@@ -211,34 +221,52 @@ function buildLevel(
   sideMaps: WireframeSideMaps,
   idPrefix: string,
   registry: Map<string, SideMapRef>,
+  hideFabricated: boolean,
 ): { children: ElkNode[]; edges: ElkExtendedEdge[] } {
-  const children: ElkNode[] = graph.nodes.map((node, index) => {
+  // A `const` (fabrication) node is a where-provenance LEAF — empty ancestry,
+  // program-text only — so it is never part of an evidence-flow story. When
+  // hidden, it is omitted from the layout and every edge touching it is pruned
+  // (a `const` only ever PRODUCES into a consumer; the consumer keeps its other
+  // inputs). No index remapping is needed: ELK ids are `n${index}` strings, so
+  // omitting a node and its edges leaves the rest a valid subgraph under the
+  // SAME ids. Read from `sideMaps.fabrication` (the per-level set), never a
+  // node's own `kind`/`op` — the same laundering guard `toneOf` holds.
+  const hidden = (index: number): boolean => hideFabricated && sideMaps.fabrication.has(index);
+
+  const children: ElkNode[] = graph.nodes.flatMap((node, index): ElkNode[] => {
+    if (hidden(index)) return [];
     const id = `${idPrefix}n${index}`;
     registry.set(id, { sideMaps, index });
 
     if (node.kind === "fan" && node.template && node.template.nodes.length > 0) {
       const templateSideMaps = sideMaps.fanTemplates.get(index);
       if (templateSideMaps) {
-        const interior = buildLevel(node.template, templateSideMaps, `${id}.`, registry);
+        const interior = buildLevel(node.template, templateSideMaps, `${id}.`, registry, hideFabricated);
         const collapse = sideMaps.collapse.get(index);
-        return {
-          id,
-          layoutOptions: FAN_LAYOUT_OPTIONS,
-          children: interior.children,
-          edges: interior.edges,
-          labels: [{ text: `⟳ fan · ${collapse ?? node.op}` }],
-        };
+        return [
+          {
+            id,
+            layoutOptions: FAN_LAYOUT_OPTIONS,
+            children: interior.children,
+            edges: interior.edges,
+            labels: [{ text: `⟳ fan · ${collapse ?? node.op}` }],
+          },
+        ];
       }
     }
     // Leaf — either not a fan, or a fan with no descendable template
     // (I5's genuine case: a bare-symbol callback, `fnOp` only, nothing to
     // splice in). Same rendering every node kind had before this change.
-    return { id, width: NODE_W, height: NODE_H, labels: [{ text: `${node.kind}: ${nodeLabel(node)}` }] };
+    return [{ id, width: NODE_W, height: NODE_H, labels: [{ text: `${node.kind}: ${nodeLabel(node)}` }] }];
   });
 
   const edges: ElkExtendedEdge[] = graph.wires.flatMap((wire) => {
-    const sources = wire.paramRefs.filter(isNodeRef).map((ref) => `${idPrefix}n${ref.node}`);
-    if (sources.length === 0) return []; // slot-only ingress — no in-graph producer to draw from
+    if (hidden(wire.consumer.node)) return []; // consumer itself hidden — drop the whole edge
+    const sources = wire.paramRefs
+      .filter(isNodeRef)
+      .filter((ref) => !hidden(ref.node)) // a fabricated producer contributes no wire in this view
+      .map((ref) => `${idPrefix}n${ref.node}`);
+    if (sources.length === 0) return []; // slot-only ingress, or every producer hidden — no arrow to draw
     return [
       {
         id: `${idPrefix}w:${wire.consumer.node}:${wire.consumer.slot}`,
@@ -251,9 +279,9 @@ function buildLevel(
   return { children, edges };
 }
 
-function buildElkGraph(projection: WireframeProjection): ElkBuild {
+export function buildElkGraph(projection: WireframeProjection, hideFabricated: boolean): ElkBuild {
   const registry = new Map<string, SideMapRef>();
-  const { children, edges } = buildLevel(projection.graph, projection.sideMaps, "", registry);
+  const { children, edges } = buildLevel(projection.graph, projection.sideMaps, "", registry, hideFabricated);
   return { root: { id: "root", layoutOptions: LAYOUT_OPTIONS, children, edges }, registry };
 }
 
@@ -308,7 +336,7 @@ function renderEdges(edges: readonly ElkExtendedEdge[] | undefined) {
  *  transform="translate(x,y)">` per node composes the right absolute
  *  position through arbitrary nesting depth with no manual offset
  *  arithmetic — the same reason `renderEdges` needs no depth parameter. */
-function renderNode(n: ElkNode, registry: ReadonlyMap<string, SideMapRef>): JSX.Element {
+function renderNode(n: ElkNode, registry: ReadonlyMap<string, SideMapRef>): ReactElement {
   // Map back by ELK node id (not array position) — `elk.layout()` is not
   // contractually obligated to preserve `children` array order, only to fill
   // in x/y/width/height per node; `registry` was built from the SAME ids at
@@ -362,9 +390,17 @@ function renderNode(n: ElkNode, registry: ReadonlyMap<string, SideMapRef>): JSX.
 
 export interface WireframeElkProps {
   readonly projection: WireframeProjection;
+  /** Omit `const` (fabrication) nodes and their out-edges from the layout.
+   *  Causality and teleology dataflow views don't need program-text literals —
+   *  a `const` is a where-provenance leaf, never part of evidence flow — so
+   *  hiding them declutters the graph down to the crossings and transforms that
+   *  actually carry lineage. The seal/attest path is unaffected (it reads
+   *  `StaticProv` directly, not this render); the security-demo stories keep
+   *  this OFF so the red fabrication markers stay visible. Default false. */
+  readonly hideFabricated?: boolean;
 }
 
-export function WireframeElk({ projection }: WireframeElkProps) {
+export function WireframeElk({ projection, hideFabricated = false }: WireframeElkProps) {
   const { graph, sideMaps } = projection;
   const [laidOut, setLaidOut] = useState<ElkNode | null>(null);
   const [registry, setRegistry] = useState<ReadonlyMap<string, SideMapRef> | null>(null);
@@ -374,7 +410,7 @@ export function WireframeElk({ projection }: WireframeElkProps) {
     let cancelled = false;
     setError(null);
     setLaidOut(null);
-    const { root, registry: builtRegistry } = buildElkGraph(projection);
+    const { root, registry: builtRegistry } = buildElkGraph(projection, hideFabricated);
     const elk = new ElkCtor({ workerFactory: () => new FakeElkWorkerCtor() });
     elk
       .layout(root)
@@ -391,10 +427,11 @@ export function WireframeElk({ projection }: WireframeElkProps) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the
-    // graph+sideMaps identity that actually determines the built ELK input;
+    // graph+sideMaps identity that actually determines the built ELK input
+    // (plus hideFabricated, which changes which nodes/edges are emitted);
     // `projection` itself is a fresh object per story render but its
     // constituent graph/sideMaps are what this effect depends on.
-  }, [graph, sideMaps]);
+  }, [graph, sideMaps, hideFabricated]);
 
   if (error !== null) {
     return <pre style={{ color: "#e5484d", whiteSpace: "pre-wrap" }}>ELK layout error: {error}</pre>;

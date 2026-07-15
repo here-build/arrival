@@ -32,6 +32,15 @@ function renderProjection(source: string): WireframeProjection {
 const meta = {
   title: "Circuit/ELK",
   component: WireframeElk,
+  // These four are the SECURITY reading — their whole point is the red
+  // fabrication markers — so `hideFabricated` defaults OFF here (unlike the
+  // GEPA causality/teleology stories, which default it on). Toggle the control
+  // to see the same circuit with program-text `const` nodes elided.
+  args: { hideFabricated: false },
+  argTypes: {
+    projection: { table: { disable: true } },
+    hideFabricated: { control: "boolean" },
+  },
 } satisfies Meta<typeof WireframeElk>;
 
 export default meta;
@@ -58,7 +67,7 @@ const DECOY = `(let ((e (dict :v (car (infer "m" "v")) :o "FAKE"))) (number->str
  *  path — verify that by tracing solid-looking edges from the egress, not by
  *  expecting zero red nodes anywhere in frame. */
 export const Genuine: Story = {
-  render: () => <WireframeElk projection={renderProjection(GENUINE)} />,
+  args: { projection: renderProjection(GENUINE) },
 };
 
 /** A `const` literal ("SAFE") reaches the output on one branch of a choice —
@@ -67,7 +76,7 @@ export const Genuine: Story = {
  *  ALSO a `const` and also flags red (same channel-blind rule as Genuine's
  *  infer arguments) — two red nodes total, one of them the actual forge. */
 export const GuardSwapForge: Story = {
-  render: () => <WireframeElk projection={renderProjection(GUARD_SWAP_FORGE)} />,
+  args: { projection: renderProjection(GUARD_SWAP_FORGE) },
 };
 
 /** A boolean choice grounded in evidence — the "GUILTY"/"INNOCENT" alts are
@@ -77,7 +86,7 @@ export const GuardSwapForge: Story = {
  *  Genuine) — four red nodes total. Render whatever `toWireframe` produces
  *  honestly; don't suppress any of them to make this "look clean". */
 export const Judgment: Story = {
-  render: () => <WireframeElk projection={renderProjection(JUDGMENT)} />,
+  args: { projection: renderProjection(JUDGMENT) },
 };
 
 /** Genuine evidence is present (the `:v` crossing) but the OUTPUT reads `:o`
@@ -86,5 +95,5 @@ export const Judgment: Story = {
  *  selection-channel rule as Genuine) — three red nodes total, one of them
  *  (`"FAKE"`) the actual decoy. */
 export const Decoy: Story = {
-  render: () => <WireframeElk projection={renderProjection(DECOY)} />,
+  args: { projection: renderProjection(DECOY) },
 };
