@@ -146,15 +146,16 @@ describe("circuitToMermaid — every StaticProv kind renders a node", () => {
     expect(out).toContain("-->|");
   });
 
-  it("fan → subroutine labeled with its collapse kind; collection and body both content", () => {
+  it("fan → a z-STACK subgraph: the body template inside the axis, the collection unwound in", () => {
     const f = fan(input("xs"), input("x"), "combine");
     expect(circuitToMermaid(f)).toBe(
       'flowchart TD\n' +
-        'n0[["fan: combine (site 0)"]]\n' +
-        'n1(["evidence: xs (site 0)"])\n' +
-        'n0 -->|"collection"| n1\n' +
-        'n2(["evidence: x (site 0)"])\n' +
-        'n0 -->|"body"| n2',
+        'subgraph f0["⟳ fan · combine · z-stack (site 0)"]\n' +
+        'direction TB\n' +
+        'n1(["evidence: x (site 0)"])\n' + // the per-element body template, INSIDE the axis
+        'end\n' +
+        'n2(["evidence: xs (site 0)"])\n' +
+        'n2 -->|"unwind"| n1', // the collection unwinds into the body
     );
   });
 
@@ -190,7 +191,7 @@ describe("circuitToMermaid — cross-cutting properties", () => {
       "lowered",
     );
     const out = circuitToMermaid(nested);
-    expect(out).toContain('n0[["fan: lowered (site 0)"]]');
+    expect(out).toContain('subgraph f0["⟳ fan · lowered · z-stack (site 0)"]');
     expect(out).toContain('"⚠ const (site 0)"');
   });
 });

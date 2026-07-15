@@ -241,17 +241,21 @@ const renderChoice = (p: ChoiceProv, ctx: Ctx): string => {
   return id;
 };
 
-/** Both `collection` and `body` are content: the collection is the data
- *  under iteration, `body` is the per-element attribution template. The
- *  node's own label carries `collapse` — the only fan-specific metadata a
- *  static (unexecuted) circuit has to show. */
+/** A Fan is a SUPERPOSITION — the collection lifted to all element-states at
+ *  once (invention I4, the z-axis). It renders as a z-STACK: a subgraph holding
+ *  the per-element `body` template (one drawn iteration standing for all N),
+ *  with the `collection` unwound INTO it and the wound result flowing OUT. A
+ *  `body` that is itself a Fan nests — nested subgraphs = nested z-axes
+ *  (`(map (λ row (filter p row)) matrix)`). Matches the studio region render's
+ *  own `iterate ◇/map ◇` stacked boxes. `collapse` labels the axis. */
 const renderFan = (p: FanProv, ctx: Ctx): string => {
-  const id = freshId(ctx);
-  ctx.lines.push(nodeSubroutine(id, withSite(`fan: ${p.collapse}`, p.site)));
+  const id = `f${ctx.next++}`;
+  ctx.lines.push(`subgraph ${id}[${escapeLabel(withSite(`⟳ fan · ${p.collapse} · z-stack`, p.site))}]`);
+  ctx.lines.push("direction TB");
+  const bodyId = renderNode(p.body, ctx); // the per-element template, INSIDE the axis
+  ctx.lines.push("end");
   const collectionId = renderNode(p.collection, ctx);
-  ctx.lines.push(contentEdge(id, collectionId, "collection"));
-  const bodyId = renderNode(p.body, ctx);
-  ctx.lines.push(contentEdge(id, bodyId, "body"));
+  ctx.lines.push(contentEdge(collectionId, bodyId, "unwind"));
   return id;
 };
 
