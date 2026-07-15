@@ -42,7 +42,7 @@ export function CircuitMermaid({ mermaid: source }: CircuitMermaidProps) {
   }, [source, reactId]);
 
   return (
-    <div style={{ fontFamily: "system-ui, sans-serif", color: "#c9d1d9" }}>
+    <div style={{ fontFamily: "system-ui, sans-serif", color: "#c9d1d9", background: "#12161f", padding: 16 }}>
       <div ref={containerRef} />
       {error !== null && (
         <pre style={{ color: "#e5484d", whiteSpace: "pre-wrap" }}>Mermaid render error: {error}</pre>
