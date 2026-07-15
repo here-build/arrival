@@ -376,7 +376,7 @@ describe("hidden-const fold shape (longcat's ≥2-agree forge, fixture-corpus ro
   // extract-corpus.test.ts's own J1 convention — a row that stays red at J1 is a
   // real defect, one that goes green early means a stub stopped being a stub
   // without the merge owner knowing).
-  it.fails("fold+if: collapse stays lowered, the const alt stays a visible const — never collapses to combine", () => {
+  it("fold+if: collapse stays lowered, the const alt stays a visible const — never collapses to combine", () => {
     const fn = parseLambda(`(lambda (acc x) (if (= x "s") "FABRICATED" x))`);
     const init: StaticProv = { kind: "const", site: 1 as NodeId };
     const result = buildFan("fold", 7 as NodeId, fn, collection, init, baseCtx());

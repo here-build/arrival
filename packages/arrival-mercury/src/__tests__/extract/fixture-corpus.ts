@@ -169,6 +169,7 @@ export const FIXTURE_CORPUS: readonly FixtureRow[] = [
       alts: [{ kind: "const" }, { kind: "fused", sources: [muxOf("v", "e")] }],
     },
     why: "The FATAL v2 forge: probe alone certifies the flipped branch; the literal alt must stay a visible const so the static leg refuses content.",
+    landed: true,
   },
   {
     name: "named-helper forge",
@@ -179,6 +180,7 @@ export const FIXTURE_CORPUS: readonly FixtureRow[] = [
       alts: [{ kind: "const" }, muxOf("score", "e")],
     },
     why: "The Fable-audit reopening: without beta-reduction the helper call reads as opaque forwarding and the guard's literal hides. Beta must inline f's body with x bound to the argument's attribution.",
+    landed: true,
   },
   {
     name: "hidden-const fold (longcat)",
@@ -194,18 +196,21 @@ export const FIXTURE_CORPUS: readonly FixtureRow[] = [
       },
     },
     why: "The ≥2-agree fold-collapse forge: a const behind an if inside a fold body. Collapse must stay 'lowered' (never combine) and the body's const must stay visible.",
+    landed: true,
   },
   {
     name: "genuine content",
     source: `(number->string (:v e))`,
     expected: { kind: "fused", sources: [muxOf("v", "e")] },
     why: "The innocent twin of row 1's else-branch: pure transformation of evidence is content — fused over the projection, no const anywhere.",
+    landed: true,
   },
   {
     name: "plain fuse",
     source: `(+ (:a e) (:b e))`,
     expected: { kind: "fused", sources: [muxOf("a", "e"), muxOf("b", "e")] },
     why: "⊗ baseline: both evidence projections contribute; arity and order preserved.",
+    landed: true,
   },
   {
     name: "shadowed-input forge",
