@@ -43,12 +43,24 @@
  * recognizes that identity instead of re-rendering the shared subtree once
  * per reference: a node reachable ≥2 times by object identity renders its
  * FIRST occurrence tagged `:id N` and every later occurrence as the compact
- * `(ref N)` — see `renderNode`'s doc for the two-pass mechanism. This is a
+ * `(ref N)` — see `renderNode`'s doc for the mechanism. This is a
  * pure REPRESENTATION change, never semantics — the referenced subtree's own
  * rendering is byte-identical to what `(ref N)` stands in for, and a circuit
  * with no aliasing anywhere (object identity never repeats) renders exactly
  * as it did before this dedup existed, with no `:id`/`:ref` anywhere.
+ *
+ * SHARED CENSUS (C2, provenance-beautiful-child consolidation, 2026-07-16):
+ * the occurrence-count + id-assignment walk that used to live privately here
+ * (`countOccurrences` + the render-time `nextId` mint) is extracted to
+ * `census.ts` so the compose projection's where-clause `♯k` labels and this
+ * file's `:id k` tags come from ONE pass and can never drift — a human
+ * cross-reads `♯1` in a formula straight to `(build :id 1 …)`/`(ref 1)` in
+ * the sexpr dump of the same circuit. `census.assignIds` reproduces the old
+ * render-time mint order exactly (post-order along the identical per-kind
+ * child walk — census.ts's header carries the argument), so this file's
+ * output is BYTE-IDENTICAL to the pre-extraction rendering; its tests pin it.
  */
+import { census } from "./census.js";
 import type {
   BuildProv,
   ChoiceProv,
@@ -66,64 +78,19 @@ import type {
 const s = (x: string): string => JSON.stringify(x);
 const key = (k: string | number): string => (typeof k === "number" ? String(k) : s(k));
 
-/** Shared-DAG dedup (G2, 2026-07-16), two-pass so an UNSHARED circuit renders
- *  byte-identical to before this existed (the golden tests' own invariant —
- *  none of their hand-built fixtures alias, so none of them ever see an
- *  `:id`). Pass 1 (`countOccurrences`, below) counts each `StaticProv`
- *  object's reachable occurrences BY IDENTITY — the same identity the
- *  extract-side memo produces (`ExtractCtx.memo`, src/extract/index.ts) for
- *  two Refs to one binding. Pass 2 (`renderNode`) tags the first rendering of
- *  a ≥2-occurrence node with `:id N` and renders every LATER visit to that
- *  SAME reference as the compact `(ref N)` — the homoiconic-sexpr sibling of
- *  circuit-mermaid.ts's "one box, two in-edges." A node with exactly one
- *  occurrence never gets an `:id`, so a circuit with no aliasing anywhere is
- *  untouched by any of this. */
+/** Shared-DAG dedup (G2, 2026-07-16; census extracted per C2 — see this
+ *  file's header and census.ts). `idOf` is the shared census's numbering: a
+ *  node reachable ≥2 times by object identity has an id, everything else is
+ *  absent — so an UNSHARED circuit renders byte-identical to before dedup
+ *  existed (the golden tests' own invariant — none of their hand-built
+ *  fixtures alias, so none of them ever see an `:id`). `rendered` tracks
+ *  which shared nodes THIS render already emitted in full: the first
+ *  rendering of a shared node is tagged `:id N`, every LATER visit to that
+ *  SAME reference emits the compact `(ref N)` — the homoiconic-sexpr sibling
+ *  of circuit-mermaid.ts's "one box, two in-edges." */
 interface Ctx {
-  readonly counts: ReadonlyMap<StaticProv, number>;
+  readonly idOf: ReadonlyMap<StaticProv, number>;
   readonly rendered: Map<StaticProv, number>;
-  nextId: number;
-}
-
-/** Pass 1: count `prov`'s reachable object-identity occurrences. Stops
- *  descending on a REPEAT visit — a shared node's children were already
- *  counted the first time THAT reference was reached, so this is linear in
- *  the DAG's distinct-node count, never exponential under deep sharing
- *  (mirrors circuit-verdict.ts's own "no fuel needed" discipline, applied to
- *  a census instead of a fold). Exhaustive over StaticProv's ten members
- *  WITHOUT a default arm — tsc's return-type check is the totality proof. */
-function countOccurrences(prov: StaticProv, counts: Map<StaticProv, number>): void {
-  const before = counts.get(prov) ?? 0;
-  counts.set(prov, before + 1);
-  if (before > 0) return;
-  switch (prov.kind) {
-    case "input":
-    case "const":
-    case "opaque":
-      return;
-    case "mint":
-      prov.closed.forEach((c) => countOccurrences(c, counts));
-      return;
-    case "fused":
-      prov.sources.forEach((c) => countOccurrences(c, counts));
-      return;
-    case "mux":
-      countOccurrences(prov.source, counts);
-      return;
-    case "build":
-      prov.parts.forEach((p) => countOccurrences(p.prov, counts));
-      return;
-    case "string":
-      prov.runs.forEach((c) => countOccurrences(c, counts));
-      return;
-    case "choice":
-      prov.guards.forEach((g) => countOccurrences(g, counts));
-      prov.alts.forEach((a) => countOccurrences(a, counts));
-      return;
-    case "fan":
-      countOccurrences(prov.collection, counts);
-      countOccurrences(prov.body, counts);
-      return;
-  }
 }
 
 const renderInput = (p: InputProv): string => `(input :site ${p.site} :name ${s(p.name)})`;
@@ -196,7 +163,7 @@ function renderNodeFresh(prov: StaticProv, ctx: Ctx): string {
  *  string is always exactly the boundary after the (space-free) kind symbol,
  *  regardless of what field content follows (even a quoted string value that
  *  itself contains a space, e.g. a mint `:head` — `.indexOf` finds the
- *  FIRST occurrence only). Only ever called for a node `ctx.counts` says is
+ *  FIRST occurrence only). Only ever called for a node `ctx.idOf` says is
  *  shared; an unshared node's rendering never reaches here. */
 function withId(rendered: string, id: number): string {
   const spaceIdx = rendered.indexOf(" ");
@@ -217,8 +184,8 @@ function renderNode(prov: StaticProv, ctx: Ctx): string {
   const already = ctx.rendered.get(prov);
   if (already !== undefined) return `(ref ${already})`;
   const fresh = renderNodeFresh(prov, ctx);
-  if ((ctx.counts.get(prov) ?? 1) < 2) return fresh;
-  const id = ctx.nextId++;
+  const id = ctx.idOf.get(prov);
+  if (id === undefined) return fresh;
   ctx.rendered.set(prov, id);
   return withId(fresh, id);
 }
@@ -226,10 +193,11 @@ function renderNode(prov: StaticProv, ctx: Ctx): string {
 /** `StaticProv` → homoiconic sexpr. Exhaustive over StaticProv's ten members
  *  (see `renderNodeFresh`'s own totality proof). Deterministic: the same
  *  `prov` always produces the exact same string (object identity is fixed
- *  once `prov` is constructed, so the count pre-pass and the render walk
- *  both proceed in the same stable order every call). */
+ *  once `prov` is constructed, so the census pre-pass and the render walk
+ *  both proceed in the same stable order every call). The census's id
+ *  assignment reproduces this file's original render-time mint order exactly
+ *  (census.ts's header carries the argument), so output is byte-identical
+ *  to the pre-C2 private implementation. */
 export function circuitToSexpr(prov: StaticProv): string {
-  const counts = new Map<StaticProv, number>();
-  countOccurrences(prov, counts);
-  return renderNode(prov, { counts, rendered: new Map(), nextId: 0 });
+  return renderNode(prov, { idOf: census(prov).idOf, rendered: new Map() });
 }

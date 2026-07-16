@@ -111,7 +111,7 @@
  * exactly the forgeable partial attribution I1 forbids).
  */
 import type { NodeId } from "../coreform/types.js";
-import type { ChoiceProv, Integrity, StaticProv } from "../model/static-prov.js";
+import type { ChoiceProv, Integrity, MuxProv, StaticProv } from "../model/static-prov.js";
 
 // ── The channel shape ────────────────────────────────────────────────────────
 
@@ -154,6 +154,71 @@ function unionTerminals(parts: readonly ChannelTerminals[]): ChannelTerminals {
     opaques += part.opaques;
   }
   return { anchors, consts, opaques };
+}
+
+// ── mux narrowing (the shared where-provenance rule) ─────────────────────────
+
+/** The three-way partition a statically-keyed projection makes over its
+ *  source. `parts` = the candidate part attributions the key selects
+ *  (exactly one for a unique key; the CANDIDATE union for a duplicate-keyed
+ *  container); `dead` = the 0-hit fail-closed sub-case (the key is provably
+ *  absent from a literal container); `whole` = no narrowing applies (null/
+ *  dynamic key, or a non-build source) and the whole source is the sound
+ *  over-approximation. */
+export type MuxNarrowing =
+  | { readonly kind: "parts"; readonly parts: readonly StaticProv[] }
+  | { readonly kind: "dead" }
+  | { readonly kind: "whole" };
+
+/**
+ * Where-provenance narrowing (Buneman-Khanna-Tan, ICDT 2001 — §2d borrow
+ * table): the projected value's provenance is the provenance of the PART it
+ * was copied FROM, not the whole container. When the source is a
+ * statically-keyed build and the projection key names specific part(s),
+ * NARROW to those parts — a sibling part's const (a `(dict :v (infer …) :other
+ * "FAKE")` decoy, or an alist pair's own quoted key) genuinely never flows to
+ * `(:v e)` at runtime, so inheriting the whole container's channels
+ * over-refuses (it is sound-but-blind: it blocks the entire field-access
+ * evidence idiom).
+ *
+ * SOUNDNESS of narrowing (why removing siblings cannot hide a forge):
+ * `(:v e)` returns ONLY the v-part; the decoy in `:other` never appears
+ * in the output, so attributing the output to v alone is exactly correct.
+ * Fail-closed fallbacks keep it sound where the key is not statically
+ * resolvable: a null key (dynamic index), a key matching NO part
+ * (out-of-range / unknown field), or MULTIPLE matching parts (a
+ * duplicate-keyed alist, where runtime picks one but statically we cannot
+ * say which) all fall back to the whole-source channels — the
+ * conservative over-approximation, never a narrowing that could drop a
+ * reachable const.
+ *
+ * A BuildProv's parts are the COMPLETE static part set (a literal
+ * container; a dynamically-extended one extracts as mux/fused/opaque
+ * over a base, not a build). So a statically-resolvable key partitions
+ * three ways — see `MuxNarrowing`.
+ *
+ * THE ONE SHARED HELPER (R3 of the beautiful-child consolidation): this rule
+ * has two callers — `channels()`'s mux arm (the verdict fold) and the compose
+ * projection's `access.dead` mark (`compose-template.ts`) — and any future
+ * `fieldProv` descent. One function, N callers, so the narrowing rule can
+ * never drift between the verdict and a render.
+ */
+export function narrowMux(prov: MuxProv): MuxNarrowing {
+  const src = prov.source;
+  if (prov.key !== null && src.kind === "build") {
+    const hits = src.parts.filter((p) => p.key === prov.key);
+    // 1 part → exact where-provenance. >1 (a duplicate-keyed container,
+    // runtime picks one) → the CANDIDATES: sound (the value is one of them)
+    // and still excludes irrelevant siblings. Never widens to the whole
+    // container.
+    if (hits.length >= 1) return { kind: "parts", parts: hits.map((p) => p.prov) };
+    // 0 parts → the field is PROVABLY ABSENT from this literal container;
+    // the projection is nil/absent at runtime, grounded in nothing.
+    return { kind: "dead" };
+  }
+  // Null key (dynamic index — could be ANY part) or a non-build source
+  // (projection of an input/fused/mint): no narrowing applies.
+  return { kind: "whole" };
 }
 
 // ── The walk ─────────────────────────────────────────────────────────────────
@@ -244,55 +309,26 @@ function channelsFresh(prov: StaticProv, memo: Map<StaticProv, Channels>): Chann
     }
 
     case "mux": {
-      // Where-provenance projection (Buneman-Khanna-Tan, ICDT 2001 — §2d
-      // borrow table): the projected value's provenance is the provenance of
-      // the PART it was copied FROM, not the whole container. When the source
-      // is a statically-keyed build and the projection key names specific
-      // part(s), NARROW to those parts — a sibling part's const (a `(dict :v
-      // (infer …) :other "FAKE")` decoy, or an alist pair's own quoted key)
-      // genuinely never flows to `(:v e)` at runtime, so inheriting the whole
-      // container's channels over-refuses (it is sound-but-blind: it blocks
-      // the entire field-access evidence idiom).
-      //
-      // SOUNDNESS of narrowing (why removing siblings cannot hide a forge):
-      // `(:v e)` returns ONLY the v-part; the decoy in `:other` never appears
-      // in the output, so attributing the output to v alone is exactly correct.
-      // Fail-closed fallbacks keep it sound where the key is not statically
-      // resolvable: a null key (dynamic index), a key matching NO part
-      // (out-of-range / unknown field), or MULTIPLE matching parts (a
-      // duplicate-keyed alist, where runtime picks one but statically we cannot
-      // say which) all fall back to the whole-source channels — the
-      // conservative over-approximation, never a narrowing that could drop a
-      // reachable const.
-      const src = prov.source;
-      if (prov.key !== null && src.kind === "build") {
-        // A BuildProv's parts are the COMPLETE static part set (a literal
-        // container; a dynamically-extended one extracts as mux/fused/opaque
-        // over a base, not a build). So a statically-resolvable key partitions
-        // three ways:
-        const hits = src.parts.filter((p) => p.key === prov.key);
-        if (hits.length >= 1) {
-          // 1 part → exact where-provenance. >1 (a duplicate-keyed container,
-          // runtime picks one) → union of the CANDIDATES: sound (the value is
-          // one of them) and still excludes irrelevant siblings. Never widens
-          // to the whole container.
-          return {
-            content: unionTerminals(hits.map((p) => channelsMemo(p.prov, memo).content)),
-            selection: unionTerminals(hits.map((p) => channelsMemo(p.prov, memo).selection)),
-          };
-        }
-        // 0 parts → the field is PROVABLY ABSENT from this literal container;
-        // the projection is nil/absent at runtime, grounded in nothing. Empty
-        // content would vacuously satisfy dataShaped (every-anchor-evidence over
-        // ∅ is true), so fail closed EXPLICITLY with an opaque — "this
-        // projection lands on no known part," a not-attestable, never a spurious
-        // attestation of an absent value.
+      // Where-provenance narrowing — the rule itself lives in `narrowMux`
+      // (above), SHARED with the compose projection's dead-mark so the two
+      // can never drift; this arm only folds the partition it returns.
+      const narrowed = narrowMux(prov);
+      if (narrowed.kind === "parts") {
+        return {
+          content: unionTerminals(narrowed.parts.map((p) => channelsMemo(p, memo).content)),
+          selection: unionTerminals(narrowed.parts.map((p) => channelsMemo(p, memo).selection)),
+        };
+      }
+      if (narrowed.kind === "dead") {
+        // 0 parts → provably absent. Empty content would vacuously satisfy
+        // dataShaped (every-anchor-evidence over ∅ is true), so fail closed
+        // EXPLICITLY with an opaque — "this projection lands on no known
+        // part," a not-attestable, never a spurious attestation of an absent
+        // value.
         return { content: { anchors: [], consts: 0, opaques: 1 }, selection: EMPTY };
       }
-      // Null key (dynamic index — could be ANY part) or a non-build source
-      // (projection of an input/fused/mint): the whole source is the sound
-      // over-approximation.
-      return channelsMemo(src, memo);
+      // No narrowing applies: the whole source is the sound over-approximation.
+      return channelsMemo(prov.source, memo);
     }
 
     case "build": {
@@ -491,4 +527,64 @@ export type CircuitVerdict = "data-shaped" | "judgment-shaped" | "not-attestable
 export function circuitVerdict(prov: StaticProv, role: CircuitRole): CircuitVerdict {
   if (role === "data") return dataShaped(prov) ? "data-shaped" : "not-attestable";
   return judgmentShaped(prov) ? "judgment-shaped" : "not-attestable";
+}
+
+// ── planeOf ──────────────────────────────────────────────────────────────────
+
+/** The channel-plane of one node — see `planeOf`. */
+export type Plane = "transparent" | "active" | "const";
+
+/**
+ * C1 — the one boundary every projection derives from
+ * (docs/working-proposals/provenance-beautiful-child/README.md §1): all three
+ * design lenses (control-plane collapse, compose formulas, field-granular
+ * access) independently discovered the SAME cut in `channelsFresh`'s
+ * per-kind fold, so it is exported ONCE, from this module — it IS a reading
+ * of the verdict's channel algebra, and living beside `channelsFresh` is
+ * what makes drift structurally impossible (a new `StaticProv` kind breaks
+ * both switches at compile time, in the same file).
+ *
+ *  - `"transparent"` — the fold is the pointwise absorptive union; the node
+ *    contributes nothing of its own (`fused`/`mux`/`build`/`string`, read
+ *    off the arms above). A render INLINES these into a formula; a collapse
+ *    view contracts them into a lens edge; an access path consumes them as
+ *    a segment.
+ *  - `"active"` — the fold crosses, cuts, promotes, or opens an axis
+ *    (`input`/`mint` introduce anchors; `choice` crosses channels; `fan`
+ *    opens the aggregation axis; `opaque` is the fail-closed wall). A render
+ *    keeps these as holes/states/frontiers — never inlined.
+ *  - `"const"` — the absorptive terminal, THE fabrication mark: no interior
+ *    to inline or to hold open; it rides as a marked token.
+ *
+ * THE ONE EXCEPTION (lens-1 table, consolidation §1): a `fan` with
+ * `collapse:"combine"` is DATA-plane — the enumerated, void-free AC
+ * combinator (`+ * string-append cons`, `inferCollapse`/`buildFan`'s own
+ * closed list) folds every element unconditionally, exactly like a `fused`
+ * over N sources; nothing routes, nothing is selected, so a machine view
+ * contracts it into the data plane. `route`/`lowered` fans stay active
+ * (route IS a choice over the collection's elements — `channelsFresh`'s own
+ * selection-promotion arm; lowered keeps a full dialect program open).
+ * NOTE for formula consumers: the compose projection still renders EVERY fan
+ * as a hole (spec §3's per-kind table — R1's hole-by-kind rule is about
+ * formula interiors, where a variable-arity axis can never inline); this
+ * exception is the machine/collapse view's contraction rule, exported here
+ * so that view derives it from the verdict rather than re-deciding it.
+ */
+export function planeOf(prov: StaticProv): Plane {
+  switch (prov.kind) {
+    case "fused":
+    case "mux":
+    case "build":
+    case "string":
+      return "transparent";
+    case "fan":
+      return prov.collapse === "combine" ? "transparent" : "active";
+    case "input":
+    case "mint":
+    case "choice":
+    case "opaque":
+      return "active";
+    case "const":
+      return "const";
+  }
 }

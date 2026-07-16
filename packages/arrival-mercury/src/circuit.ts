@@ -29,14 +29,27 @@ export type { ClassifyResult, CoreForm, NodeId } from "./coreform/types.js";
 export { extractProgram, type ExtractCtx } from "./extract/index.js";
 export { defaultRegistry } from "./extract/arm-containers.js";
 
-// ── the three circuit projections (§2f's render consumers) ──────────────────────
+// ── the four circuit projections (§2f's render consumers + T-compose) ────────────
 export { circuitToSexpr } from "./model/circuit-sexpr.js";
 export { circuitToMermaid, type MermaidOptions } from "./model/circuit-mermaid.js";
 export { toWireframe, type WireframeProjection, type WireframeSideMaps } from "./model/to-wireframe.js";
+// The compose projection (provenance-beautiful-child compose-phase.md §4) + the
+// C2 census both consumers share (formula `♯k` ≡ sexpr `:id k` by construction).
+export { census, type Census } from "./model/census.js";
+export {
+  type ComposeExpr,
+  type ComposeHole,
+  type ComposeTemplate,
+  type HoleId,
+  type HoleReason,
+  renderComposeText,
+  type SourceLens,
+  toComposeTemplate,
+} from "./model/compose-template.js";
 
 // ── the verdict channel (pure — for a consumer that wants the static reading) ────
-export { channels, circuitVerdict, dataShaped, judgmentShaped } from "./verdict/circuit-verdict.js";
-export type { CircuitRole, CircuitVerdict } from "./verdict/circuit-verdict.js";
+export { channels, circuitVerdict, dataShaped, judgmentShaped, planeOf } from "./verdict/circuit-verdict.js";
+export type { CircuitRole, CircuitVerdict, Plane } from "./verdict/circuit-verdict.js";
 
 // ── the StaticProv circuit types ────────────────────────────────────────────────
 export type {

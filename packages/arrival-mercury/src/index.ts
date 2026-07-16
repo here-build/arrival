@@ -172,6 +172,22 @@ export { circuitToSexpr } from "./model/circuit-sexpr.js";
 // consumes. Both pure, same host-facing surface as circuitToSexpr.
 export { circuitToMermaid, type MermaidOptions } from "./model/circuit-mermaid.js";
 export { toWireframe, type WireframeProjection, type WireframeSideMaps } from "./model/to-wireframe.js";
+// The FOURTH projection (provenance-beautiful-child, Wave 1): the compose
+// formula lens + the C2 census it shares with circuit-sexpr's `:id` numbering.
+// `HoleReason` is aliased here ONLY because the root barrel already exports
+// typefacts' unrelated `HoleReason`; the browser-safe `/circuit` subpath
+// exports it under its own name.
+export { census, type Census } from "./model/census.js";
+export {
+  type ComposeExpr,
+  type ComposeHole,
+  type ComposeTemplate,
+  type HoleId,
+  type HoleReason as ComposeHoleReason,
+  renderComposeText,
+  type SourceLens,
+  toComposeTemplate,
+} from "./model/compose-template.js";
 export type {
   BuildProv,
   ChoiceProv,
@@ -198,7 +214,7 @@ export type {
 // arrival-mercury → arrival-run → arrival-reflect cycle — see arrival-reflect's
 // `circuitOf` doc for why). Exporting these is pure plumbing: no logic here
 // changes, every symbol is re-exported verbatim from its owning module. ──
-export { channels, circuitVerdict, type Channels, type ChannelAnchor, type ChannelTerminals, type CircuitRole, type CircuitVerdict } from "./verdict/circuit-verdict.js";
+export { channels, circuitVerdict, planeOf, type Channels, type ChannelAnchor, type ChannelTerminals, type CircuitRole, type CircuitVerdict, type Plane } from "./verdict/circuit-verdict.js";
 export { seal, type LeafRole, type SealVerdict } from "./seal.js";
 export { leafVerdicts, type LeafVerdict, type LeafVerdictKind, type ProbeAttempt, type ProbeOutcome } from "./probe/verdict.js";
 export type { LeafPath as DynamicLeafPath } from "./probe/verdict.js";
