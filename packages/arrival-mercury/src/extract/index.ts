@@ -63,60 +63,125 @@ export interface ExtractCtx {
   /** Program-input names (`define/overridable` params) — these Refs are
    *  evidence-class InputProv, everything else resolves through scope. */
   readonly inputs: ReadonlySet<string>;
-  /** The shared-DAG memo (G2, 2026-07-16): a Bound's `{tag:"expr"}` extraction,
-   *  cached ON THE BOUND OBJECT — every Ref that `lookup()`s to the SAME Bound
-   *  (a top-level `define`, a `let`-binding) shares the identical StaticProv
-   *  object reference on every use, turning the attribution TREE into the
-   *  shared DAG a provenance circuit actually is (Deutch-Milo-Roy-Tannen, ICDT
-   *  2014). Beta-reduction creates FRESH Bound objects per call site
-   *  (betaReduce's `paramNames.set(..., {tag:"expr", expr: allArgs[i], ...})`),
-   *  so this WeakMap never conflates two different calls' argument
-   *  attributions — object identity IS the sharing key, by construction.
-   *  Created fresh per `extractProgram` run (never module-global — extract
-   *  stays reentrant/pure across independent runs). See `extractRef`
-   *  (arm-atoms.ts) for the cache's read/write discipline and the soundness
-   *  argument for WHEN a result may be cached (`riskProbes`, below, is the
-   *  other half of that argument). */
-  readonly memo: WeakMap<Bound, StaticProv>;
-  /** The memo's safety gate (paired with `memo`, above). A Bound's extraction
-   *  is sound to cache-and-reuse-anywhere ONLY if it never consults
-   *  `ctx.reducing`'s CONTENT anywhere in its recursive extraction — not
-   *  merely "never hits a cycle." (A weaker rule — cache unless the result
-   *  contains an `opaque("cyclic-binding")` anywhere — is UNSOUND: a Bound can
-   *  extract cleanly through a non-recursive helper `h` on one path, yet the
-   *  SAME Bound referenced from a DIFFERENT point already mid-reducing `h` via
-   *  an unrelated call site hits `ctx.reducing.has(h)` and opaques instead —
-   *  same Bound, same cached-candidate value, two genuinely different correct
-   *  answers depending on the ambient `reducing` set at the reference point.
+  /** The shared-DAG memo (G2, 2026-07-16; upgraded to READ-SET memoization,
+   *  #74, 2026-07-17): a Bound's `{tag:"expr"}` extraction, cached ON THE
+   *  BOUND OBJECT — every Ref that `lookup()`s to the SAME Bound (a top-level
+   *  `define`, a `let`-binding) shares the identical StaticProv object
+   *  reference on every use WHOSE `reducing` set agrees with the entry's own
+   *  recorded reads (`readSetMatches`, below — the soundness gate), turning
+   *  the attribution TREE into the shared DAG a provenance circuit actually
+   *  is (Deutch-Milo-Roy-Tannen, ICDT 2014). Beta-reduction creates FRESH
+   *  Bound objects per call site (betaReduce's `paramNames.set(...,
+   *  {tag:"expr", expr: allArgs[i], ...})`), so this WeakMap never conflates
+   *  two different calls' argument attributions — object identity IS the
+   *  sharing key, by construction. Created fresh per `extractProgram` run
+   *  (never module-global — extract stays reentrant/pure across independent
+   *  runs). See `extractRef` (arm-atoms.ts) for the cache's read/write
+   *  discipline and `riskProbes`, below, for the read-set's own soundness
+   *  argument. */
+  readonly memo: WeakMap<Bound, MemoEntry>;
+  /** The memo's safety mechanism (paired with `memo`, above) — a READ-SET,
+   *  not a 1-bit flag. A Bound's extraction is sound to cache-and-reuse ONLY
+   *  where `ctx.reducing`'s CONTENT agrees with what the ORIGINAL extraction
+   *  observed — not merely "never hits a cycle," and not merely "never
+   *  consulted `reducing` at all" (that first upgrade, #46, was already a
+   *  refinement of a hypothetical all-or-nothing rule; this is the second:
+   *  cache the CONDITION, not just its absence). A weaker rule — cache
+   *  unless the result contains an `opaque("cyclic-binding")` anywhere — is
+   *  UNSOUND: a Bound can extract cleanly through a non-recursive helper `h`
+   *  on one path, yet the SAME Bound referenced from a DIFFERENT point
+   *  already mid-reducing `h` via an unrelated call site hits
+   *  `ctx.reducing.has(h)` and opaques instead — same Bound, same cached-
+   *  candidate value, two genuinely different correct answers depending on
+   *  the ambient `reducing` set at the reference point.
+   *
    *  Concretely: `(define (idf x) x) (define shared (idf 42)) (define (f n)
    *  (if (= n 0) (idf shared) (f (- n 1))))` — resolving `shared` directly
    *  extracts cleanly (a ConstProv, zero opaques anywhere), but resolving it
    *  from inside `f`'s body — where `idf` is ALREADY mid-reduction for the
-   *  OUTER `(idf shared)` call — must opaque on the INNER `(idf 42)` betaReduce
-   *  (`ctx.reducing.has(idf)` now true); caching the first, opaque-free result
-   *  and serving it to the second site would silently swap in the wrong
-   *  answer.) `riskProbes` makes "never consults `reducing`'s content" a
-   *  directly observable property instead of an unreliable output-shape
-   *  proxy: every one of the four `ctx.reducing.has(...)` call sites in this
-   *  package (extractRef here; `resolveCallee`/`betaReduce` in
-   *  arm-control.ts; `buildFan` in arm-containers.ts — see `markRisk`'s own
-   *  doc) marks every CURRENTLY ACTIVE probe as touched, REGARDLESS of
-   *  whether that check hits or misses. `extractRef` pushes a fresh probe
-   *  before attempting a new (uncached) resolution and only writes to `memo`
-   *  if that probe is still untouched when the recursive extraction returns —
-   *  i.e., iff NOTHING anywhere in that resolution ever looked at `reducing`'s
-   *  content, which is exactly the condition under which the result cannot
-   *  depend on it. (Nested resolutions push their OWN probe but still mark
-   *  every ENCLOSING one: touching `reducing` at any depth invalidates every
-   *  in-flight ancestor attempt, not just the innermost.) A probe list, not a
-   *  single flag, because attempts nest (a cached-or-not Bound can defer to
+   *  OUTER `(idf shared)` call — must opaque on the INNER `(idf 42)`
+   *  betaReduce (`ctx.reducing.has(idf)` now true). The direct reference's
+   *  own extraction records exactly one consultation, `(idf, false)`; that
+   *  is `shared`'s memo entry's read-set. The from-inside-`f` reference,
+   *  before ever touching the memo, re-derives `shared`'s Bound and asks
+   *  `readSetMatches`: does `ctx.reducing.has(idf)` STILL read `false` here?
+   *  No — `idf` is already reducing — so the entry is (correctly) treated as
+   *  inapplicable and `shared` is RE-EXTRACTED fresh at this reference
+   *  point, reaching the same `ctx.reducing.has(idf)` check the direct path
+   *  did, this time observing `true` and opaquing. Neither reference point
+   *  ever sees the other's answer; caching the first, opaque-free result and
+   *  serving it to the second site — what a 1-bit "was `reducing` ever
+   *  consulted" rule is FORCED to refuse altogether, since both paths
+   *  consult it — would silently swap in the wrong answer, and that is
+   *  exactly the failure mode a per-binding read-set is precise enough to
+   *  avoid while a boolean is not: the two paths' reads DISAGREE (`false` vs
+   *  `true` on the same binding), so `readSetMatches` tells them apart
+   *  instead of refusing to cache either.
+   *
+   *  `riskProbes` makes "which `reducing` memberships this extraction's
+   *  answer depends on" a directly observable property instead of an
+   *  unreliable output-shape proxy: every one of the four
+   *  `ctx.reducing.has(...)` call sites in this package (extractRef here;
+   *  `resolveCallee`/`betaReduce` in arm-control.ts; `buildFan` in
+   *  arm-containers.ts — see `markRead`'s own doc) records the binding it
+   *  checked and what it observed into every CURRENTLY ACTIVE probe,
+   *  REGARDLESS of whether that check hits or misses — a miss recorded is a
+   *  miss required at reuse time. `extractRef` pushes a fresh probe before
+   *  attempting a new (uncached, or cache-inapplicable) resolution and
+   *  ALWAYS writes the result to `memo` alongside whatever read-set that
+   *  probe accumulated (an empty read-set — nothing anywhere in the
+   *  resolution ever consulted `reducing` — trivially matches every future
+   *  context, which is the #46 behavior as the read-set's own vacuous case).
+   *  (Nested resolutions push their OWN probe but still mark every
+   *  ENCLOSING one: touching `reducing` at any depth is a real dependency of
+   *  every in-flight ancestor attempt, not just the innermost — read-
+   *  propagation, not just touch-propagation.) A probe list, not a single
+   *  probe, because attempts nest (a cached-or-not Bound can defer to
    *  ANOTHER Bound partway through its own extraction). This is why the
    *  Bound's OWN registry-checked-once invariants (`registry` is one constant
    *  instance for a whole `extractProgram` run; `inputs` is currently read
    *  nowhere in this package, grepped) don't need their own probes — only
    *  `reducing`'s content varies by call site, and it is the only one of the
-   *  four ctx fields any code path ever branches on. */
+   *  four ctx fields any code path ever branches on.
+   *
+   *  Immutability (the arrival-immutable-no-dynamics law) is what makes a
+   *  MATCHED read permanent: the same binding, re-checked against the same
+   *  observed membership, can never later disagree with itself mid-run —
+   *  there is no `set!` to invalidate a read after the fact, so once
+   *  `readSetMatches` confirms agreement the cached `result` is not a
+   *  snapshot that might go stale, it simply IS the value this reference
+   *  point would compute. */
   readonly riskProbes: readonly RiskProbe[];
+}
+
+/** One cached extraction outcome, paired with the READ-SET that makes it
+ *  safe to reuse — see `ExtractCtx.memo`/`riskProbes`'s doc for the full
+ *  soundness argument. `result` alone (the pre-#74 shape) is not enough: a
+ *  Bound's extraction can be context-dependent on `reducing`'s content, so
+ *  the entry must carry exactly WHICH consultations produced it, so a future
+ *  reference point can check whether it would have observed the same
+ *  answers. */
+export interface MemoEntry {
+  readonly reads: ReadonlyMap<CoreForm, boolean>;
+  readonly result: StaticProv;
+}
+
+/** Does a memo entry's recorded read-set agree with the CURRENT `reducing`
+ *  set at a new reference point — i.e., would every `ctx.reducing.has(
+ *  binding)` consultation the original extraction performed return the SAME
+ *  answer here? Iff so, the cached `result` is provably the exact value
+ *  this reference point would itself compute (`ExtractCtx.riskProbes`'s doc
+ *  has the full argument and the idf/shared/f worked counterexample). A
+ *  binding never checked by the original extraction places no constraint at
+ *  all — absence from `reads` is not a "false" reading, it is no reading,
+ *  so an empty read-set (nothing ever consulted `reducing`) matches every
+ *  context vacuously — the #46 all-clear case, subsumed here rather than
+ *  special-cased. */
+export function readSetMatches(reads: ReadonlyMap<CoreForm, boolean>, reducing: ReadonlySet<CoreForm>): boolean {
+  for (const [binding, observed] of reads) {
+    if (reducing.has(binding) !== observed) return false;
+  }
+  return true;
 }
 
 /** A mutable cell threaded through `ExtractCtx.riskProbes` — see `ExtractCtx.
@@ -129,18 +194,44 @@ export interface ExtractCtx {
  *  governs the SCHEME programs being analyzed, not this analyzer's internals)
  *  has any bearing on. */
 export interface RiskProbe {
-  touched: boolean;
+  /** Every `ctx.reducing.has(binding)` consultation observed during this
+   *  attempt's own (possibly nested) recursive extraction, keyed by
+   *  `binding` (last write wins — see `markRead`'s doc for why the same
+   *  probe can never legitimately observe two different answers for the
+   *  same binding, so overwriting is never lossy in practice). */
+  readonly reads: Map<CoreForm, boolean>;
 }
 
-/** Mark every currently-active risk probe as touched — call this immediately
- *  before (not after) each of the four `ctx.reducing.has(...)` consultations
- *  in this package, unconditionally (regardless of whether the check hits or
- *  misses): a MISS is still a consultation of `reducing`'s content, and it is
- *  exactly the thing that can differ between two ambient contexts (see
- *  `ExtractCtx.riskProbes`'s doc for the worked counterexample). A no-op when
- *  no memo attempt is in flight (`riskProbes` empty). */
-export function markRisk(ctx: ExtractCtx): void {
-  for (const p of ctx.riskProbes) p.touched = true;
+/** Record one `ctx.reducing.has(binding)` consultation's OUTCOME into every
+ *  currently-active risk probe — call this immediately after computing
+ *  `observed` and before branching on it, at each of the four
+ *  `ctx.reducing.has(...)` sites in this package, unconditionally (regardless
+ *  of whether the check hits or misses: a MISS is still a consultation of
+ *  `reducing`'s content, and it is exactly the thing that can differ between
+ *  two ambient contexts — see `ExtractCtx.riskProbes`'s doc for the worked
+ *  counterexample). A no-op when no memo attempt is in flight (`riskProbes`
+ *  empty).
+ *
+ *  Every ENCLOSING probe is marked, not just the innermost (nested attempts
+ *  propagate reads to ancestors, mirroring #46's touch-propagation): a
+ *  cached-or-not Bound can defer to ANOTHER Bound partway through its own
+ *  extraction, and that inner Bound's read is just as load-bearing for the
+ *  OUTER Bound's own cacheability as it is for the inner one's — the outer
+ *  result recursively depends on whatever the inner extraction observed.
+ *
+ *  Can the SAME probe ever observe two DIFFERENT answers for the SAME
+ *  `binding`? No, by construction of the four call sites: each checks
+ *  `ctx.reducing.has(binding)` and returns IMMEDIATELY (opaque) when it
+ *  reads `true`, so a probe's subtree never continues past a `true` reading
+ *  to re-check the identical binding later; and `reducing` only ever GROWS
+ *  going down through a single call chain (fresh `Set`s built by adding to a
+ *  copy, never by removing), so two consultations of the same binding within
+ *  one still-open probe's subtree cannot see a `true`-then-`false`
+ *  transition either. `.set()`'s overwrite semantics are therefore never
+ *  actually exercised on a genuine disagreement — they are here only because
+ *  a `Map` is the natural accumulator, not because a conflict is expected. */
+export function markRead(ctx: ExtractCtx, binding: CoreForm, observed: boolean): void {
+  for (const p of ctx.riskProbes) p.reads.set(binding, observed);
 }
 
 export const opaque = (site: NodeId, reason: string): StaticProv => ({ kind: "opaque", site, reason });

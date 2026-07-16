@@ -45,7 +45,7 @@ import type { StaticProv } from "../model/static-prov.js";
 // this module; this module imports extract to recurse back OUT for sub-forms. Sound because
 // both sides only reach across the cycle from inside function bodies, never at module-eval
 // time (the arm-group cut's own note — calls happen at runtime).
-import { type Bound, type ExtractCtx, type RiskProbe, type Scope, extract, lookup, markRisk, opaque } from "./index.js";
+import { type Bound, type ExtractCtx, type RiskProbe, type Scope, extract, lookup, markRead, opaque, readSetMatches } from "./index.js";
 
 type AtomForm = Lit | Ref | Quote | Define | Let | Begin | Require | Door;
 
@@ -78,16 +78,20 @@ export function extractAtom(form: AtomForm, ctx: ExtractCtx): StaticProv {
  *  define/overridable input bound as InputProv by extractProgram) or a deferred
  *  `{expr, scope}` pair extracted IN ITS OWN BINDING SCOPE (never the
  *  reference site — derive.ts hardening #2) behind the cycle guard, MEMOIZED
- *  on the Bound object (the shared-DAG fix, G2 — see `ExtractCtx.memo`/
- *  `riskProbes`'s doc in index.ts for the cache's full soundness argument: it
- *  is keyed by Bound IDENTITY, so betaReduce's per-call-site fresh param
- *  Bounds never collide, and it is only WRITTEN when nothing during the
- *  deferred extraction ever consulted `ctx.reducing`'s content — the
- *  observable property that makes the result reference-context-independent).
- *  Only a scope MISS is the evidence-handle convention: a free name is the
- *  input the harness binds (InputProv). ctx.inputs never bypasses scope — an
- *  inputs-first check let `(let ((e "FAB")) e)` attribute the shadow's const
- *  as evidence, which the static leg must never do. */
+ *  on the Bound object (the shared-DAG fix, G2, upgraded to read-set
+ *  memoization #74 — see `ExtractCtx.memo`/`riskProbes`'s doc in index.ts for
+ *  the cache's full soundness argument: it is keyed by Bound IDENTITY, so
+ *  betaReduce's per-call-site fresh param Bounds never collide, and every
+ *  completed extraction is written to `memo` alongside the read-set its own
+ *  probe accumulated — a cached entry is only ever SERVED, though, when
+ *  `readSetMatches` confirms this reference point's `ctx.reducing` agrees
+ *  with that read-set; a mismatch falls through to a fresh, uncached-here
+ *  extraction rather than laundering a context-dependent answer across
+ *  reference points it was never computed for). Only a scope MISS is the
+ *  evidence-handle convention: a free name is the input the harness binds
+ *  (InputProv). ctx.inputs never bypasses scope — an inputs-first check let
+ *  `(let ((e "FAB")) e)` attribute the shadow's const as evidence, which the
+ *  static leg must never do. */
 function extractRef(form: Ref, ctx: ExtractCtx): StaticProv {
   const bound = lookup(ctx.scope, form.name);
   if (bound === undefined) {
@@ -105,18 +109,19 @@ function extractRef(form: Ref, ctx: ExtractCtx): StaticProv {
   // synthetic kinds (fan elements) keep their binder's site deliberately: the
   // element IS the axis's projection, not a per-use value.
   if (bound.tag === "prov") return bound.prov.kind === "input" ? { ...bound.prov, site: form.id } : bound.prov;
-  markRisk(ctx); // consulting `reducing`'s content next — see ExtractCtx.riskProbes
-  if (ctx.reducing.has(bound.expr)) return opaque(form.id, "cyclic-binding");
+  const reducingHit = ctx.reducing.has(bound.expr);
+  markRead(ctx, bound.expr, reducingHit); // consulting `reducing`'s content — see ExtractCtx.riskProbes
+  if (reducingHit) return opaque(form.id, "cyclic-binding");
   const cached = ctx.memo.get(bound);
-  if (cached !== undefined) return cached;
-  const probe: RiskProbe = { touched: false };
+  if (cached !== undefined && readSetMatches(cached.reads, ctx.reducing)) return cached.result;
+  const probe: RiskProbe = { reads: new Map() };
   const result = extract(bound.expr, {
     ...ctx,
     scope: bound.scope,
     reducing: new Set([...ctx.reducing, bound.expr]),
     riskProbes: [...ctx.riskProbes, probe],
   });
-  if (!probe.touched) ctx.memo.set(bound, result);
+  ctx.memo.set(bound, { reads: probe.reads, result });
   return result;
 }
 
