@@ -79,10 +79,18 @@ function scanScmDeps(relPath: string, source: string, files: Readonly<Record<str
 
 /** Kahn-style DFS post-order topological sort — leaves first (a file's own
  *  deps are compiled, and their `shape`s known, before it is). A require cycle
- *  doors: the cycle-closing edge is dropped with a warning, per design doc §3's
- *  sequencing note ("the project tree is a DAG; cycles door"); the culprit
- *  file(s) are excluded from `order` (and therefore never compiled — any
- *  OTHER file requiring one reports "not compiled" via `resolveRequire`). */
+ *  doors (design doc §3's sequencing note: "the project tree is a DAG; cycles
+ *  door") — but NOT by exclusion: every node in `infos` still reaches its own
+ *  `inStack.delete`/`order.push` once its (partial) DFS subtree returns, so a
+ *  2-file mutual cycle still compiles BOTH files. What actually breaks the
+ *  cycle is `resolveRequire` (below): the SECOND file visited, at the moment
+ *  it re-enters the first, finds no recorded `shape` yet and reports its own
+ *  `(require …)` as unresolved. This warning names the cycle honestly (no
+ *  span: the detecting frame is the REVISITED node, not the ancestor whose
+ *  SOURCE actually contains the closing `(require …)` — attaching this file's
+ *  own byte offsets to a warning about a different file's statement would
+ *  misattribute a position, which is worse than printing none, per this
+ *  lane's report). */
 function topoSort(infos: ReadonlyMap<string, FileInfo>, warnings: BuildWarning[]): string[] {
   const visited = new Set<string>();
   const inStack = new Set<string>();
@@ -92,7 +100,8 @@ function topoSort(infos: ReadonlyMap<string, FileInfo>, warnings: BuildWarning[]
     if (inStack.has(relPath)) {
       warnings.push({
         path: relPath,
-        message: `require cycle: ${[...chain, relPath].join(" → ")} — this file is excluded from the build (design doc §3: cycles door)`,
+        code: "build/require-cycle",
+        message: `require cycle: ${[...chain, relPath].join(" → ")} — the cycle-closing require will report as unresolved from whichever side of the loop compiles second (design doc §3: cycles door)`,
       });
       return;
     }
@@ -143,6 +152,14 @@ export async function buildProject(files: Readonly<Record<string, string>>, opts
   const stage0Basename = opts?.stage0Basename ?? "stage0";
   const warnings: BuildWarning[] = [];
   const outFiles: BuildFile[] = [];
+  // Project-relative INPUT paths that end up with NO compiled output at all —
+  // the CLI's "skipped" count (DX memo item 1), kept as a direct structural
+  // fact (every `continue` below that never reaches an `outFiles.push`) rather
+  // than inferred after the fact from warning codes, which would have to
+  // special-case "a warning on a file that also never compiled" vs. "a warning
+  // on a require site whose OWN file still compiled fine" (see `resolveRequire`
+  // below for exactly that second case).
+  const skippedFiles: string[] = [];
 
   const infos = new Map<string, FileInfo>();
   for (const [relPath, content] of Object.entries(files)) {
@@ -154,8 +171,10 @@ export async function buildProject(files: Readonly<Record<string, string>>, opts
     } else {
       warnings.push({
         path: relPath,
+        code: "build/unrecognized-ext",
         message: `unrecognized file type "${ext || "(none)"}" — v0 handles .scm/.prompt/.json/.yaml/.yml/.txt; skipped`,
       });
+      skippedFiles.push(relPath);
     }
   }
 
@@ -185,12 +204,18 @@ export async function buildProject(files: Readonly<Record<string, string>>, opts
         // (dotprompt → scheme) compiler is not a reusable pure-string-in
         // library today — see the CLI report's precise account. No shape is
         // recorded; any require of this file reports "unresolved" below,
-        // which is a real (visible) build warning, never a silent gap.
+        // which is a real (visible) build warning, never a silent gap. No
+        // span: a `.prompt` file is never parsed as CoreForm at all (that IS
+        // the gap), so there is no node to point at — `build/prompt-phase1-gap`
+        // (on the REQUIRING file's own require site, below) carries the real,
+        // CoreForm-anchored position instead.
         warnings.push({
           path: relPath,
+          code: "build/prompt-unsupported",
           message:
             ".prompt compilation is not implemented in this build (v0 STOP item — the phase-1 dotprompt→scheme step is embedded in a live EnvCapability's ContentResolver, not a pure function; see the lane report). Requiring this file will door at build/run time.",
         });
+        skippedFiles.push(relPath);
         continue;
       }
 
@@ -199,9 +224,14 @@ export async function buildProject(files: Readonly<Record<string, string>>, opts
           const compiled = compileDataFile(info.ext, source, relPath);
           shapes.set(relPath, compiled.shape);
           outFiles.push({ path: outPathFor(relPath), content: compiled.content });
-          for (const m of compiled.warnings) warnings.push({ path: relPath, message: m });
+          for (const w of compiled.warnings) warnings.push({ path: relPath, ...w });
         } catch (e) {
-          warnings.push({ path: relPath, message: e instanceof Error ? e.message : String(e) });
+          warnings.push({
+            path: relPath,
+            code: "build/data-parse-error",
+            message: e instanceof Error ? e.message : String(e),
+          });
+          skippedFiles.push(relPath);
         }
         continue;
       }
@@ -211,11 +241,17 @@ export async function buildProject(files: Readonly<Record<string, string>>, opts
       const resolveRequire = (specifier: string): RequireResolution => {
         const target = resolveSpecifier(relPath, specifier);
         if (!Object.hasOwn(files, target)) {
-          return { kind: "unresolved", reason: `— "${target}" is not a file in this project` };
+          return { kind: "unresolved", code: "build/unresolved-require", reason: `— "${target}" is not a file in this project` };
         }
         const shape = shapes.get(target);
         if (shape === undefined) {
-          return { kind: "unresolved", reason: `— "${target}" was not compiled (a require cycle or an upstream .prompt/.json gap; see its own warning)` };
+          // The target IS a project file, just never got a recorded shape —
+          // either it's a known, named gap (`.prompt`, v0's STOP item — give
+          // it its OWN code so a caller can filter on "the prompt gap"
+          // specifically) or some other upstream failure (cycle/data-parse).
+          const code = extOf(target) === PROMPT_EXT ? "build/prompt-phase1-gap" : "build/unresolved-require";
+          const why = extOf(target) === PROMPT_EXT ? "the .prompt phase-1 gap" : "a require cycle or an upstream data-parse-error";
+          return { kind: "unresolved", code, reason: `— "${target}" was not compiled (${why}; see its own warning)` };
         }
         return { kind: "resolved", importPath: importSpecifierBetween(relPath, target), shape };
       };
@@ -223,7 +259,7 @@ export async function buildProject(files: Readonly<Record<string, string>>, opts
       const compiled = compileScmModule(source, { baseRegistry }, { path: relPath, resolveRequire, runtimeImportPath, isPipeline });
       shapes.set(relPath, compiled.shape);
       outFiles.push({ path: outPathFor(relPath), content: compiled.content });
-      for (const m of compiled.warnings) warnings.push({ path: relPath, message: m });
+      for (const w of compiled.warnings) warnings.push({ path: relPath, ...w });
     }
   } finally {
     await session.dispose();
@@ -231,5 +267,5 @@ export async function buildProject(files: Readonly<Record<string, string>>, opts
 
   outFiles.push({ path: `${stage0Basename}.ts`, content: loadStage0Source() });
 
-  return { files: outFiles, warnings };
+  return { files: outFiles, warnings, skippedFiles };
 }

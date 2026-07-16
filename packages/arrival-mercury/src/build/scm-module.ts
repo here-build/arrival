@@ -25,7 +25,7 @@
  *     of zero-arg, and never immediately called (the whole point is deferral:
  *     nothing may run at import time).
  */
-import type { CoreForm, Define, DefineFn, Require } from "../coreform/types.js";
+import type { CoreForm, Define, DefineFn, Require, Span } from "../coreform/types.js";
 import { classify } from "../coreform/classify.js";
 import { desugar } from "../front/desugar.js";
 import { parseSexprs } from "../front/parse.js";
@@ -52,7 +52,7 @@ import { cleanName } from "../walker/names.js";
 import { walk } from "../walker/walk.js";
 import { idMinter, liftOverridable, OVERRIDABLE_SYMBOL, overridableSymbolRule, PIPELINE_PARAMS_SCHEME_NAME } from "./overridable.js";
 import { flattenTopBegins, hasProgramFace, scanRequires, topLevelDefineNames, type RequireOccurrence } from "./require-scan.js";
-import type { CompileFileOptions, CompileFileResult } from "./types.js";
+import type { CompileFileOptions, CompileFileResult, PendingWarning } from "./types.js";
 
 export interface ScmCompileDeps {
   /** The shared base registry — `greenfieldRegistryFor(session)` from
@@ -96,7 +96,7 @@ interface RequireMachinery {
    *  same JS name (`const examples = examples;` — a TDZ self-reference; this was
    *  a real bug caught by the GEPA smoke test, not a hypothetical). */
   readonly resolvedBoundNames: ReadonlySet<string>;
-  readonly warnings: string[];
+  readonly warnings: PendingWarning[];
 }
 
 /**
@@ -122,7 +122,7 @@ function buildRequireMachinery(uses: readonly RequireOccurrence[], opts: Compile
   // read-only `SymbolRuleTable` view — structurally the same object, only the
   // TYPE narrows once construction is done).
   const overlayTable: Record<string, SymbolRule> = {};
-  const warnings: string[] = [];
+  const warnings: PendingWarning[] = [];
   const uniqueAlias = makeUniqueAlias();
   /** ONE default-import binding per distinct required PATH that's ever bound/
    *  inline-used — several occurrences of the same require share it. */
@@ -131,9 +131,16 @@ function buildRequireMachinery(uses: readonly RequireOccurrence[], opts: Compile
   const unresolvedPaths = new Set<string>();
   const resolvedBoundNames = new Set<string>();
 
-  const addOverlayRow = (exported: string, binding: Binding, context: string): void => {
+  // `span` is always the CURRENT `RequireOccurrence.node.span` — the specific
+  // require/define statement whose name is spilling/binding `exported` — never
+  // a fabricated position (DX memo item 2).
+  const addOverlayRow = (exported: string, binding: Binding, context: string, span: Span): void => {
     if (Object.hasOwn(overlayTable, exported)) {
-      warnings.push(`${context} spills/binds "${exported}", which an earlier require in this file already bound — the earlier binding wins`);
+      warnings.push({
+        code: "build/require-name-collision",
+        span,
+        message: `${context} spills/binds "${exported}", which an earlier require in this file already bound — the earlier binding wins`,
+      });
       return;
     }
     overlayTable[exported] = { emit: { call: (args) => Call(Ref(binding), args), ref: () => Ref(binding) } };
@@ -141,21 +148,26 @@ function buildRequireMachinery(uses: readonly RequireOccurrence[], opts: Compile
 
   for (const use of uses) {
     const path = use.node.path;
+    const span = use.node.span;
     const res = opts.resolveRequire(path);
     if (res.kind === "unresolved") {
       unresolvedPaths.add(path);
-      warnings.push(`(require "${path}") ${res.reason}`);
+      warnings.push({ code: res.code, span, message: `(require "${path}") ${res.reason}` });
       continue;
     }
     if (use.kind === "spill") {
       if (spilledPaths.has(path)) continue; // already imported this sibling's names once
       spilledPaths.add(path);
       if (res.shape.named.length === 0) {
-        warnings.push(`(require "${path}") spills no names — "${path}" declares no top-level defines`);
+        warnings.push({
+          code: "build/require-no-exports",
+          span,
+          message: `(require "${path}") spills no names — "${path}" declares no top-level defines`,
+        });
         continue;
       }
       const names = res.shape.named.map((exported) => ({ exported, local: uniqueAlias(exported) }));
-      for (const { exported, local } of names) addOverlayRow(exported, mkBinding(local), `(require "${path}")`);
+      for (const { exported, local } of names) addOverlayRow(exported, mkBinding(local), `(require "${path}")`, span);
       importDecls.push(
         Import(names.map(({ exported, local }) => ({ imported: exported, local: local === exported ? undefined : local })), res.importPath),
       );
@@ -167,14 +179,18 @@ function buildRequireMachinery(uses: readonly RequireOccurrence[], opts: Compile
       // twice) — a "bound" occurrence still needs its OWN overlay row even on
       // a repeat path, since each `boundName` is a distinct JS identifier.
       if (use.kind === "bound") {
-        addOverlayRow(use.boundName, defaultImportOf.get(path)!, `(define ${use.boundName} (require "${path}"))`);
+        addOverlayRow(use.boundName, defaultImportOf.get(path)!, `(define ${use.boundName} (require "${path}"))`, span);
         resolvedBoundNames.add(use.boundName);
       }
       continue;
     }
     if (!res.shape.hasDefault) {
       unresolvedPaths.add(path);
-      warnings.push(`(require "${path}") has no program-face value — "${path}" ends in defines only, nothing to import as a value`);
+      warnings.push({
+        code: "build/require-no-default",
+        span,
+        message: `(require "${path}") has no program-face value — "${path}" ends in defines only, nothing to import as a value`,
+      });
       continue;
     }
     const aliasBase = use.kind === "bound" ? cleanName(use.boundName) : aliasFromPath(path);
@@ -187,7 +203,7 @@ function buildRequireMachinery(uses: readonly RequireOccurrence[], opts: Compile
     // file's header note in the project report: never modified, only composed).
     importDecls.push(Import([{ imported: "default", local }], res.importPath));
     if (use.kind === "bound") {
-      addOverlayRow(use.boundName, binding, `(define ${use.boundName} (require "${path}"))`);
+      addOverlayRow(use.boundName, binding, `(define ${use.boundName} (require "${path}"))`, span);
       resolvedBoundNames.add(use.boundName);
     }
   }
@@ -258,14 +274,22 @@ export function compileScmModule(source: string, deps: ScmCompileDeps, opts: Com
   const uses = scanRequires(scanForms);
   const { importDecls, overlayTable, requireOf, resolvedBoundNames, warnings } = buildRequireMachinery(uses, opts);
 
-  const fnLiftWarnings: string[] = [];
+  const fnLiftWarnings: PendingWarning[] = [];
   let overlay = overlayTable;
   if (opts.isPipeline) {
-    const anyOverridableFnShorthand = scanForms.some((f) => f.kind === "DefineFn" && (f as DefineFn).overridableType !== undefined);
-    if (anyOverridableFnShorthand) {
-      fnLiftWarnings.push(
-        "one or more `define/overridable`'s fn-shorthand forms found — v0 does not lift a function-bodied overridable into the params cone; it compiles as an ordinary (un-lifted) function",
-      );
+    // `.find`, not `.some` — the FIRST offending node's own span is a real,
+    // exact position (DX memo item 2); a boolean check would leave this
+    // warning span-less for no reason (only the first occurrence is named
+    // when several exist, a deliberate v0 simplification — see require-scan's
+    // own "first-encounter order" convention for the same call).
+    const overridableFnShorthand = scanForms.find((f): f is DefineFn => f.kind === "DefineFn" && f.overridableType !== undefined);
+    if (overridableFnShorthand !== undefined) {
+      fnLiftWarnings.push({
+        code: "build/overridable-fn-shorthand-unlifted",
+        span: overridableFnShorthand.span,
+        message:
+          "one or more `define/overridable`'s fn-shorthand forms found — v0 does not lift a function-bodied overridable into the params cone; it compiles as an ordinary (un-lifted) function",
+      });
     }
     if (scanForms.some(isLiftableOverridable)) overlay = { ...overlayTable, [OVERRIDABLE_SYMBOL]: overridableSymbolRule };
   }

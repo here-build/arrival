@@ -279,7 +279,17 @@ export { witnessesFor, type Witness, type WitnessAxis, type WitnessOptions } fro
 //    ONE new public surface this lane adds — everything else above is
 //    untouched. ──
 export { buildProject, type BuildProjectOptions } from "./build/project.js";
-export type { BuildFile, BuildResult, BuildWarning, CompileFileOptions, CompileFileResult, ExportShape, RequireResolution } from "./build/types.js";
+export type {
+  BuildFile,
+  BuildResult,
+  BuildWarning,
+  BuildWarningCode,
+  CompileFileOptions,
+  CompileFileResult,
+  ExportShape,
+  PendingWarning,
+  RequireResolution,
+} from "./build/types.js";
 export { compileDataFile, DATA_EXTENSIONS } from "./build/data-module.js";
 export { compileScmModule, type ScmCompileDeps } from "./build/scm-module.js";
 export { flattenTopBegins, hasProgramFace, scanRequires, topLevelDefineNames, type RequireOccurrence } from "./build/require-scan.js";
