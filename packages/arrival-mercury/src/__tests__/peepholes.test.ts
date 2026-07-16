@@ -207,9 +207,10 @@ describe("compileGreenfield wiring — PEEPHOLES runs end to end through the REA
 
   it('(car (infer "gpt-4" "hello")) compiles through the REAL compileGreenfield to the folded call surface', () => {
     const compiled = compileGreenfield(session, `(car (infer "gpt-4" "hello"))`);
-    // FRAME resolved the folded name against the stage-0 manifest (no FrameDoorError —
-    // proves the runtime/stage0.ts `infer/scalar`→`inferScalar` row this wave added is
-    // what makes the wiring actually EXECUTABLE, not merely shape-correct).
+    // materializeImports resolved the folded name against the stage-0 manifest (no
+    // MaterializeImportsDoorError — proves the runtime/stage0.ts
+    // `infer/scalar`→`inferScalar` row this wave added is what makes the wiring
+    // actually EXECUTABLE, not merely shape-correct).
     expect(compiled).toContain("inferScalar");
     // No car-of-list residue survives — the fold REPLACED the shape, never wrapped it.
     expect(compiled).not.toContain("[0]");

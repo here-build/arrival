@@ -80,22 +80,26 @@ export { elementNameOf, legibility, type LegibilityOptions, pureRegionCse } from
 
 // ── NAMING — E1a's census + allocation phase (engine plan §2 E1a): the binding
 //    census view, the lexical-namer allocation adapter, and the materialize step
-//    walker/walk.ts drives internally before it ever returns a CompilationUnit. ──
+//    walker/walk.ts drives internally before it ever returns a CompilationUnit.
+//    Plus E1b's import materialization (engine plan §2 E1b) — the RuntimeRef→
+//    Ref commit that replaced the dissolved `frame/` pass (constitution §3.4/§9
+//    Phase 1's minimal FRAME no longer exists; see naming/imports.ts's header
+//    for where its knowledge went). ──
 export {
   allocateNames,
   bindingCensusOf,
+  materializeImports,
   materializeNames,
+  MaterializeImportsDoorError,
   type BindingCensus,
   type BindingOrigin,
   type BindingSite,
   type DestructureShape,
   type EntityKind,
+  type MaterializeImportsOptions,
   type NameAllocation,
   type ScopeCensus,
 } from "./naming/index.js";
-
-// ── minimal FRAME — the RuntimeRef→import materializer (constitution §3.4/§9 Phase 1) ──
-export { frame, FrameDoorError, type FrameOptions } from "./frame/index.js";
 
 // ── the stage-0 runtime manifest (constitution §4.4 Stage 0; the module itself is
 //    runtime source the emitted project imports — only the symbol→export map is API) ──

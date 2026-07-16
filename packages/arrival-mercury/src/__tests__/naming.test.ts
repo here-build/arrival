@@ -267,8 +267,9 @@ describe("walk() — the naming phase end to end", () => {
   it("a program that DOES reference a stage-0 symbol in value position still reserves its manifest name", () => {
     // `pick`'s value-position reference to the bare `car` registry symbol
     // (refPolicy "shim" — this test registry declares no `.ref`) compiles to an
-    // actual surviving RuntimeRef the frame pass will later import as `car`; a
-    // same-named LOCAL binding elsewhere in the SAME unit must still suffix.
+    // actual surviving RuntimeRef `naming/imports.ts`'s materializeImports will
+    // later import as `car`; a same-named LOCAL binding elsewhere in the SAME
+    // unit must still suffix.
     const out = render(compile(`(define pick car) (define (f xs) (let ((car (lambda (p) 99))) (car xs)))`, testRegistry));
     expect(out).toContain("const car_2 = p => 99;");
     expect(out).toContain("return car_2(xs);");

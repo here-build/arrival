@@ -15,9 +15,13 @@
  * Compiled side — SUBJECT-ROUTED (constitution §9 "the dual-path rule"): the
  * gate subject is `"greenfield"` (default) — the NEW pipeline end to end,
  * classify → extractFacts → PEEPHOLES → walk(overlay registry) → LEGIBILITY →
- * ASYNC-IFY → FRAME → render, with `RuntimeRef` shims resolved against the stage-0 runtime module
- * (a shim is a legitimate residual; Law F says so). `"legacy"` keeps the
- * mercury string path callable for A/B — a production bridge, never
+ * ASYNC-IFY → materializeImports(sm.importsOf) → render, with `RuntimeRef`
+ * shims resolved against the stage-0 runtime module (a shim is a legitimate
+ * residual; Law F says so). `frame` (a post-render tree scan) DISSOLVED at
+ * E1b (engine plan §2 E1b): the import symbol set is now a MODEL VIEW
+ * (`sm.importsOf`, unioned over the program's top-level forms) rather than a
+ * fresh census over the finished tree — see `../naming/imports.ts`'s header.
+ * `"legacy"` keeps the mercury string path callable for A/B — a production bridge, never
  * gate-authoritative. Both subjects export the program's trailing value as
  * `export const __oracleResult = …` (no stdout/JSON round-trip, so `NaN`/`-0`
  * survive), write a scratch `.mts` INSIDE this package tree (Node
@@ -42,9 +46,9 @@ import { DEFAULT_STRATEGY, projectToJsRaw, type Strategy } from "@inhuman.tools/
 import { register } from "tsx/esm/api";
 
 import { asyncIfy } from "../async-ify/index.js";
-import { frame } from "../frame/index.js";
 import { legibility } from "../legibility/index.js";
 import { SchemeSemanticModel } from "../model/model.js";
+import { materializeImports } from "../naming/index.js";
 import { peephole } from "../peepholes/index.js";
 import { emitRegistryOf } from "../registry/index.js";
 import { render } from "../residual/render.js";
@@ -304,7 +308,7 @@ function exportUnitResult(unit: CompilationUnit): CompilationUnit {
  * The greenfield pipeline, source → module text:
  *
  *   wrap → classify → extractFacts → PEEPHOLES → walk → exportResult → LEGIBILITY
- *     → ASYNC-IFY → FRAME → render
+ *     → ASYNC-IFY → materializeImports(sm.importsOf) → render
  *
  * PEEPHOLES (constitution §3.1/§3.5, Law C) runs AFTER the type pass/TypeFacts
  * extraction and BEFORE the emit pass — the constitution's own ordering (§3.1's
@@ -357,13 +361,21 @@ function exportUnitResult(unit: CompilationUnit): CompilationUnit {
  * `sm.coreform` / `sm.factsMap()` / `sm.registry` replace the bare
  * `classify(desugar(parseSexprs(...)))` / `extractFacts(...)` calls this
  * function used to make directly. The passes downstream of classification
- * (`peephole`, `walk`, `legibility`, `asyncIfy`, `frame`, `render`) are
- * UNCHANGED — they still read a plain `ClassifyResult`/registry/facts-map,
- * exactly as before; only WHERE those values come from moved. No fixture
- * bytes should move by construction (the model computes the identical values
- * the inline calls did) — see `model-imports-agree.test.ts` for the
- * behavioral proof on the one new view (`importsOf`) this rewiring doesn't
- * yet consume for emission (E1b's job).
+ * (`peephole`, `walk`, `legibility`, `asyncIfy`, `render`) are UNCHANGED —
+ * they still read a plain `ClassifyResult`/registry/facts-map, exactly as
+ * before; only WHERE those values come from moved.
+ *
+ * E1b cut-over (engine plan §2 E1b): `frame` (a post-render `RuntimeRef`
+ * census + ad hoc collision-avoidance ladder) DISSOLVED. The import symbol
+ * set below is `sm.importsOf`, unioned over the PEEPHOLED top-level forms
+ * (the program `walk` actually lowers — see the inline comment at the union
+ * for why pre-peephole forms would under-count) — a MODEL VIEW, not a fresh
+ * tree scan — and `../naming/imports.ts`'s `materializeImports` commits it
+ * (prepend the `Import` decl, rewrite every `RuntimeRef` to a `Ref`) at the
+ * same pipeline POSITION `frame` occupied (still after ASYNC-IFY — see that
+ * module's header for why). No fixture bytes should move by construction —
+ * `model-imports-agree.test.ts` pins `sm.importsOf`'s answer against the
+ * actual emitted imports, including through the peephole fold.
  */
 export function compileGreenfield(session: OracleSession, source: string): string {
   const registry = greenfieldRegistryFor(session);
@@ -389,8 +401,20 @@ export function compileGreenfield(session: OracleSession, source: string): strin
   const sync = walk(peepholed, { registry: sm.registry, facts: sm.factsMap(), register: "run" });
   const legible = legibility(exportUnitResult(sync), { registry: sm.registry });
   const asyncified = asyncIfy(legible, { asyncSeeds: inferAsyncSeeds });
-  const framed = frame(asyncified, { runtimeModule: `./${STAGE0_BASENAME}` });
-  return render(framed);
+  // THE MODEL VIEW, not a post-render scan (engine plan §2 E1b) — every
+  // top-level form's own recursive `sm.importsOf`, unioned into the
+  // whole-program symbol set `materializeImports` needs. Queried over the
+  // PEEPHOLED forms — the program `walk` actually lowered — because peephole
+  // is the one eager pre-walk rewrite and it MOVES the symbol census:
+  // `(car (infer …))` folds to `infer/scalar`, so asking about the
+  // pre-peephole forms would answer `infer` for a tree that references
+  // `infer/scalar` (importsOf's documented limit 2, model.ts — resolved at
+  // this call site until E2's `sm.idiomAt` pulls the peephole itself into
+  // the model).
+  const importSymbols = new Set<string>();
+  for (const form of peepholed.forms) for (const s of sm.importsOf(form)) importSymbols.add(s);
+  const materialized = materializeImports(asyncified, { symbols: importSymbols, runtimeModule: `./${STAGE0_BASENAME}` });
+  return render(materialized);
 }
 
 // ── staging the runtime module next to the scratch cases ──
@@ -435,7 +459,7 @@ export interface EvalCompiledOptions {
 
 /**
  * Compile `source` under the routed subject and execute the artifact in-process.
- * Compile-time doors (walker `WalkDoorError`, `FrameDoorError`, ASYNC-IFY doors,
+ * Compile-time doors (walker `WalkDoorError`, `MaterializeImportsDoorError`, ASYNC-IFY doors,
  * parse failures, mercury's own doors) surface as classified throw-Outcomes — the
  * same path "unsupported-form" uses (spec §2). Corpus-authoring misuse
  * (`OracleAuthoringError`) escapes as a real throw, never an Outcome.

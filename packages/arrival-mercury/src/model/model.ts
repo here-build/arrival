@@ -131,12 +131,13 @@ export class SchemeSemanticModel {
    * THE FIRST RECURSIVE DECISION-VIEW (engine plan §2 E0): the runtime-module
    * import symbols `node`'s own subtree requires. LSP consumer:
    * organize-imports (once emission splits per-artifact, E4). Compiler
-   * consumer: the eventual E1b materializer (imports emitted BEFORE the
-   * body — the `frame` post-pass dies once this view is the one true
-   * source). Today `frame` still recomputes the same knowledge from the
-   * WALKED tree post-render; `src/__tests__/model-imports-agree.test.ts`
-   * pins the two as agreeing so E1b's cut-over is mechanical, never a
-   * behavior change.
+   * consumer: the E1b import materializer (`naming/imports.ts`'s
+   * `materializeImports`, driven by `oracle/harness.ts`'s
+   * `compileGreenfield`) — imports are emitted FROM this view; the `frame`
+   * post-pass that used to recompute the same knowledge from the walked tree
+   * post-render is DELETED (E1b, engine plan §2).
+   * `src/__tests__/model-imports-agree.test.ts` pins this view's answer
+   * against the actual emitted import list as the standing regression guard.
    *
    * Implementation deliberately delegates to the SAME `walk()`/
    * `runtimeRefsOf()` machinery `frame`'s census is built from, scoped to
@@ -155,10 +156,14 @@ export class SchemeSemanticModel {
    *     free symbol either finds a registry row or doors, it never invents a
    *     WRONG `RuntimeRef`, so this is an over-approximation risk, never a
    *     silent-wrong one.
-   *  2. reads `sm.coreform` — PRE-peephole. A peephole-folded symbol
-   *     (`infer` → `infer/scalar`) is E2's `sm.idiomAt` integration ("CSE and
-   *     the peephole pair become sharing/idiom decision views… decided
-   *     pre-census" — engine plan §2 E2), not E0's.
+   *  2. answers for exactly the node it is HANDED — so a caller that queries
+   *     the model's own `sm.coreform` forms sees the PRE-peephole census: a
+   *     peephole-folded symbol (`infer` → `infer/scalar`) is E2's `sm.idiomAt`
+   *     integration ("CSE and the peephole pair become sharing/idiom decision
+   *     views… decided pre-census" — engine plan §2 E2), not E0's. Until E2,
+   *     the E1b consumer (`oracle/harness.ts`'s `compileGreenfield`) resolves
+   *     this at the call site by querying the view over the PEEPHOLED forms —
+   *     the program the walk actually lowers.
    */
   readonly importsOf: (node: CoreForm) => ReadonlySet<string>;
 

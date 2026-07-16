@@ -2,10 +2,19 @@
  * E0's compiler-view stratum (engine plan §2 E0; model.ts's own header): unit
  * coverage for `sm.narrowsMembers` / `sm.registryRow` / `sm.factsAt` /
  * `sm.factsMap`, plus the PINNING AGREEMENT between `sm.importsOf` (the
- * recursive, pre-render decision-view) and `frame`'s actual post-render
- * census (`runtimeRefsOf(walk(...))`) — the proof that E1b's cut-over
- * (imports emitted FROM the model, killing the `frame` post-pass) is a
- * mechanical no-op over today's corpus, never a behavior change.
+ * recursive, pre-render decision-view) and the ACTUAL EMITTED IMPORTS — the
+ * proof that E1b's cut-over (imports emitted FROM the model, via
+ * `naming/imports.ts`'s `materializeImports`, killing the `frame` post-pass
+ * entirely) was a mechanical no-op over today's corpus, never a behavior
+ * change.
+ *
+ * Pre-E1b this described "frame's actual post-render census
+ * (`runtimeRefsOf(walk(...))`)"; `frame/` is now deleted. The ground truth
+ * this suite pins against is `runtimeRefsOf` run directly over an
+ * INDEPENDENT whole-program walk (never fed by `sm.importsOf` — that would
+ * make the check circular), then materialized for real through
+ * `materializeImports` — so the comparison exercises the actual E1b emission
+ * code path, not just the symbol-discovery step it replaced.
  *
  * Also carries S5's dependency-rule lint in its minimal, "start small, grow
  * per phase" form (engine plan §1 S5): a static check that `model.ts` never
@@ -16,10 +25,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { ClassifyResult } from "../coreform/types.js";
 import { SchemeSemanticModel } from "../model/model.js";
 import { MULTI_SLOT, TWO_CROSSINGS } from "../model/__fixtures__.js";
+import { materializeImports } from "../naming/index.js";
 import { openOracleSession, type OracleSession } from "../oracle/harness.js";
+import { peephole } from "../peepholes/index.js";
 import type { EmitRegistry } from "../registry/harvest.js";
 import { emitRegistryOf } from "../registry/index.js";
 import { phase1Rules, withRules } from "../rules/index.js";
+import { STAGE0 } from "../runtime/stage0.js";
 import { runtimeRefsOf, walk } from "../walker/index.js";
 
 let session: OracleSession;
@@ -77,36 +89,81 @@ describe("SchemeSemanticModel — E0 compiler views", () => {
     expect(sm.importsOf(sm.coreform.forms[0]!)).toEqual(new Set());
   });
 
-  describe("importsOf agrees with frame's post-render census (the E1b pinning proof)", () => {
+  describe("importsOf agrees with the EMITTED imports (the E1b pinning proof — frame is dissolved)", () => {
     const FIXTURES = { TWO_CROSSINGS, MULTI_SLOT };
+    const RUNTIME_MODULE = "./stage0.mts"; // matches oracle/harness.ts's own staged specifier
+
+    /**
+     * The new ground truth: an INDEPENDENT whole-program walk (never fed by
+     * `sm.importsOf` — that would make the comparison circular), censused by
+     * the SAME `runtimeRefsOf` the dissolved `frame` used to read, then
+     * materialized for real through `materializeImports` — the actual E1b
+     * emission code path. Returns the manifest EXPORTED names (`ImportName
+     * .imported`), so the caller must map `sm.importsOf`'s scheme-symbol
+     * answer through the SAME manifest before comparing (see the two `it`s
+     * below) — the two sides are scheme-symbol-named vs. JS-export-named by
+     * construction, not an oversight.
+     */
+    const emittedImportsOf = (source: string): string[] => {
+      const sm = new SchemeSemanticModel(source, registry);
+      const walked = walk(sm.coreform, { registry, facts: sm.factsMap(), register: "run" });
+      const wholeProgramCensus = runtimeRefsOf(walked);
+      const materialized = materializeImports(walked, { symbols: wholeProgramCensus, runtimeModule: RUNTIME_MODULE });
+      const importDecl = materialized.decls[0];
+      if (importDecl?.t !== "Import") {
+        throw new Error("expected materializeImports to prepend an Import decl as decls[0]");
+      }
+      return importDecl.names.map((n) => n.imported);
+    };
 
     for (const [name, source] of Object.entries(FIXTURES)) {
-      it(`${name}: union of per-form sm.importsOf === runtimeRefsOf(walk(whole program))`, () => {
+      it(`${name}: manifest-mapped sm.importsOf === materializeImports's actual emitted import names`, () => {
         const sm = new SchemeSemanticModel(source, registry);
 
         // The model's answer: the recursive view, per top-level form, unioned
         // (exactly how a materializer would ask "what does this program need"
-        // once files split per-artifact, E4).
+        // once files split per-artifact, E4) — scheme-symbol-named.
         const viaModel = new Set<string>();
         for (const form of sm.coreform.forms) for (const s of sm.importsOf(form)) viaModel.add(s);
+        const viaModelExported = [...viaModel].map((s) => STAGE0[s]).filter((v): v is string => v !== undefined);
 
-        // Ground truth: `frame`'s OWN census mechanism (frame/frame.ts's
-        // `runtimeRefsOf`), run directly over the real whole-program walk with
-        // the SAME registry/facts. Peephole/legibility/asyncIfy never add or
-        // remove a RuntimeRef symbol (importsOf's doc, limit 2) — a fixed
-        // point today's corpus does not exercise (no fixture nests `(car
-        // (infer …))` directly; see __fixtures__.ts).
-        const viaWholeProgramWalk = runtimeRefsOf(walk(sm.coreform, { registry, facts: sm.factsMap(), register: "run" }));
-
-        expect([...viaModel].sort()).toEqual([...viaWholeProgramWalk].sort());
+        expect(viaModelExported.sort()).toEqual([...emittedImportsOf(source)].sort());
       });
     }
 
-    it("TWO_CROSSINGS: the census is exactly {infer, string-append} (car needs no shim)", () => {
+    it("TWO_CROSSINGS: the emitted imports are exactly {infer, stringAppend} (car needs no shim)", () => {
       const sm = new SchemeSemanticModel(TWO_CROSSINGS, registry);
       const viaModel = new Set<string>();
       for (const form of sm.coreform.forms) for (const s of sm.importsOf(form)) viaModel.add(s);
       expect([...viaModel].sort()).toEqual(["infer", "string-append"]);
+      expect(emittedImportsOf(TWO_CROSSINGS).sort()).toEqual(["infer", "stringAppend"]);
+    });
+
+    it("the PEEPHOLE fold: importsOf must be queried over the PEEPHOLED forms (the E1b call-site rule)", () => {
+      // Regression pin for the bug the E1b cut-over surfaced live: peephole is
+      // the one eager pre-walk rewrite that MOVES the symbol census —
+      // `(car (infer …))` folds to `infer/scalar` — so a consumer querying
+      // `sm.importsOf` over the PRE-peephole forms answers `infer` for a tree
+      // that references `RuntimeRef("infer/scalar")` (importsOf's documented
+      // limit 2, model.ts; `materializeImports` fail-closes on the mismatch).
+      // `compileGreenfield` queries over the peepholed forms; this row pins
+      // that discipline at the unit level, per-form union vs whole-walk.
+      const source = `(define (f m p) (car (infer m p)))\n(f "gpt" "q")`;
+      const sm = new SchemeSemanticModel(source, registry);
+      const peepholed = peephole(sm.coreform);
+
+      const viaModel = new Set<string>();
+      for (const form of peepholed.forms) for (const s of sm.importsOf(form)) viaModel.add(s);
+      expect([...viaModel]).toContain("infer/scalar"); // the folded symbol, not bare `infer`
+      expect([...viaModel]).not.toContain("infer");
+
+      const walked = walk(peepholed, { registry, facts: sm.factsMap(), register: "run" });
+      expect([...viaModel].sort()).toEqual([...runtimeRefsOf(walked)].sort());
+
+      const materialized = materializeImports(walked, { symbols: viaModel, runtimeModule: RUNTIME_MODULE });
+      const importDecl = materialized.decls[0];
+      if (importDecl?.t !== "Import") throw new Error("expected an Import decl at decls[0]");
+      expect(importDecl.names.map((n) => n.imported)).toContain("inferScalar");
     });
   });
 });

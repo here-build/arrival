@@ -32,12 +32,13 @@
  * is deliberately NOT the literal subject here: it is a registered arrival
  * native (`foundations/arrival/arrival/src/env/r7rs/lists.ts`) with no
  * `phase1Rules` emit rule and no `STAGE0` manifest row (verified against
- * `src/runtime/stage0.ts`) — a compiled call would DOOR at FRAME
- * (`FrameDoorError`, "not supported by the runtime module yet"), not compile
- * clean. The out-of-range CASE Law U describes is reached instead compositionally
- * through car/cdr — `(car (cdr '(1)))` lands at the same `[][0]` cell a
- * `list-ref` overrun would, while staying inside the representation-collapsed
- * rules that actually compile clean today.
+ * `src/runtime/stage0.ts`) — a compiled call would DOOR at the import
+ * materialization step (`MaterializeImportsDoorError`, "not supported by the
+ * runtime module yet"), not compile clean. The out-of-range CASE Law U
+ * describes is reached instead compositionally through car/cdr —
+ * `(car (cdr '(1)))` lands at the same `[][0]` cell a `list-ref` overrun
+ * would, while staying inside the representation-collapsed rules that
+ * actually compile clean today.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
