@@ -10,17 +10,39 @@
  * manifest-named `Binding`.
  *
  * ── Why this can't run inside walk()'s own census→allocate→materialize call ──
- * LEGIBILITY's CSE eligibility check and ASYNC-IFY's seed detection both key
- * off `n.callee.t === "RuntimeRef"` (legibility/cse.ts, async-ify/async-ify.ts)
- * — the marker must survive both passes undisturbed. Resolving RuntimeRef→Ref
- * any earlier (inside walk()'s own materialize step, alongside the rest of
- * E1a's naming commit) would blind both to registry calls. So this step keeps
- * the pipeline POSITION `frame` used to occupy — after ASYNC-IFY, before
- * render — a genuine tree-shape constraint, not a reluctance to relocate the
+ * LEGIBILITY's CSE eligibility check (legibility/cse.ts) keys off
+ * `n.callee.t === "RuntimeRef"` to recognize a hoistable call — the marker
+ * must survive CSE undisturbed. Resolving RuntimeRef→Ref any earlier (inside
+ * walk()'s own materialize step, alongside the rest of E1a's naming commit)
+ * would blind CSE to registry calls entirely. So this step keeps the
+ * pipeline POSITION `frame` used to occupy — after the asyncness
+ * materializer (naming/asyncness.ts's `materializeAsyncness`), before render
+ * — a genuine tree-shape constraint, not a reluctance to relocate the
  * DECISION backward (that decision — which manifest name each symbol gets —
  * already lives one phase back, in ../walker/walk.ts's naming phase; see the
  * next section). Per the engine plan's own fallback clause: this is "the
  * materializer step", not a re-decided post-pass.
+ *
+ * ── E1c update, honestly: this ordering constraint did NOT dissolve ─────────
+ * E1c (engine plan §2 E1c) killed the standalone `async-ify/` PASS —
+ * asyncness is now `SchemeSemanticModel.asyncnessOf` (a view,
+ * naming/asyncness.ts) plus `materializeAsyncness` (the mechanical rewrite,
+ * same module) — but the STRUCTURAL reason this file still has to run AFTER
+ * that materializer is IDENTICAL to the reason it used to run after the
+ * dissolved `asyncIfy`: `materializeAsyncness`'s own seed detection
+ * (`AsyncnessFacts.callType`'s `RuntimeRef` branch) identifies a
+ * promise-seeded call by its `RuntimeRef` SYMBOL NAME — which only resolves
+ * correctly while the node is STILL a `RuntimeRef`, not yet rewritten to a
+ * plain `Ref` against its manifest-named binding. Swap this file's position
+ * to run BEFORE the asyncness materializer and every `RuntimeRef` it needs
+ * to seed from has already become an opaque `Ref`: the whole-program "did
+ * any seed fire" census silently answers "no" and every promise-typed call
+ * renders un-awaited — a correctness regression, not a style miss. So: two
+ * independent passes (LEGIBILITY's CSE, the asyncness materializer's seed
+ * detection) key off the SAME `RuntimeRef` marker, each for its own
+ * independent reason, and this file must run after BOTH. The dissolved
+ * pass's NAME is gone from this sentence; its constraint is not — it moved
+ * with the mechanism, to `naming/asyncness.ts`.
  *
  * ── No collision ladder — the aliasing knowledge that actually moved ────────
  * `frame`'s dissolved implementation re-scanned the WHOLE finished tree for
@@ -38,11 +60,12 @@
  * guess re-deciding what allocation already decided.
  *
  * This relies on the `RuntimeRef` symbol set being STABLE from walk() through
- * LEGIBILITY/ASYNC-IFY — neither mints a new registry call nor folds one away
- * this wave (verified: legibility's CSE and ASYNC-IFY's seeding both only
- * READ `RuntimeRef` call targets, never construct one; peephole's folds are
- * PRE-walk, `model.ts`'s own documented limit). `../__tests__/
- * model-imports-agree.test.ts` is the regression guard for this invariant.
+ * LEGIBILITY/the asyncness materializer — neither mints a new registry call
+ * nor folds one away this wave (verified: legibility's CSE and
+ * `materializeAsyncness`'s seed detection both only READ `RuntimeRef` call
+ * targets, never construct one; peephole's folds are PRE-walk, `model.ts`'s
+ * own documented limit). `../__tests__/model-imports-agree.test.ts` is the
+ * regression guard for this invariant.
  *
  * Two throws remain, both Law F ("never wrong, always visible"):
  *  - a required symbol with no manifest row — the door. Message text

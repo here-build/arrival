@@ -15,12 +15,17 @@
  * Compiled side — SUBJECT-ROUTED (constitution §9 "the dual-path rule"): the
  * gate subject is `"greenfield"` (default) — the NEW pipeline end to end,
  * classify → extractFacts → PEEPHOLES → walk(overlay registry) → LEGIBILITY →
- * ASYNC-IFY → materializeImports(sm.importsOf) → render, with `RuntimeRef`
- * shims resolved against the stage-0 runtime module (a shim is a legitimate
- * residual; Law F says so). `frame` (a post-render tree scan) DISSOLVED at
- * E1b (engine plan §2 E1b): the import symbol set is now a MODEL VIEW
- * (`sm.importsOf`, unioned over the program's top-level forms) rather than a
- * fresh census over the finished tree — see `../naming/imports.ts`'s header.
+ * materializeAsyncness(sm.asyncnessOf) → materializeImports(sm.importsOf) →
+ * render, with `RuntimeRef` shims resolved against the stage-0 runtime
+ * module (a shim is a legitimate residual; Law F says so). `frame` (a
+ * post-render tree scan) DISSOLVED at E1b (engine plan §2 E1b): the import
+ * symbol set is now a MODEL VIEW (`sm.importsOf`, unioned over the
+ * program's top-level forms) rather than a fresh census over the finished
+ * tree — see `../naming/imports.ts`'s header. `async-ify/` (the post-emit
+ * `{sync, promise}` rewriting pass) DISSOLVED at E1c (engine plan §2 E1c):
+ * asyncness is now ALSO a MODEL VIEW (`sm.asyncnessOf`) plus its mechanical
+ * materializer (`materializeAsyncness`, ../naming/asyncness.ts) — see that
+ * module's header.
  * `"legacy"` keeps the mercury string path callable for A/B — a production bridge, never
  * gate-authoritative. Both subjects export the program's trailing value as
  * `export const __oracleResult = …` (no stdout/JSON round-trip, so `NaN`/`-0`
@@ -45,10 +50,9 @@ import { buildArrivalSession, BUILTIN_PREAMBLE, type InferFn } from "@inhuman.to
 import { DEFAULT_STRATEGY, projectToJsRaw, type Strategy } from "@inhuman.tools/mercury";
 import { register } from "tsx/esm/api";
 
-import { asyncIfy } from "../async-ify/index.js";
 import { legibility } from "../legibility/index.js";
 import { SchemeSemanticModel } from "../model/model.js";
-import { materializeImports } from "../naming/index.js";
+import { materializeAsyncness, materializeImports } from "../naming/index.js";
 import { peephole } from "../peepholes/index.js";
 import { emitRegistryOf } from "../registry/index.js";
 import { render } from "../residual/render.js";
@@ -308,7 +312,7 @@ function exportUnitResult(unit: CompilationUnit): CompilationUnit {
  * The greenfield pipeline, source → module text:
  *
  *   wrap → classify → extractFacts → PEEPHOLES → walk → exportResult → LEGIBILITY
- *     → ASYNC-IFY → materializeImports(sm.importsOf) → render
+ *     → materializeAsyncness(sm.asyncnessOf) → materializeImports(sm.importsOf) → render
  *
  * PEEPHOLES (constitution §3.1/§3.5, Law C) runs AFTER the type pass/TypeFacts
  * extraction and BEFORE the emit pass — the constitution's own ordering (§3.1's
@@ -327,16 +331,20 @@ function exportUnitResult(unit: CompilationUnit): CompilationUnit {
  *
  * LEGIBILITY (constitution §3.5's third invention — implicit destruction +
  * element-name singularization + pure-region CSE) runs on the finished Residual
- * tree, BEFORE ASYNC-IFY — a documented DEVIATION from the constitution's §3.1
- * diagram and §3.5 table, which both draw it after. See
+ * tree, BEFORE the asyncness materializer — a documented DEVIATION from the
+ * constitution's §3.1 diagram and §3.5 table, which both draw it after. See
  * `../legibility/legibility.ts`'s header for the full reasoning; the short
  * version: CSE hoists duplicate `Call`s into an ordinary sync-shaped `Const`
- * BEFORE asyncness exists, so ASYNC-IFY's ordinary Const-handling (await the
- * init iff seeded; every `Ref` read is unconditionally sync) awaits the ONE
- * hoisted call correctly with zero changes to either pass. Running LEGIBILITY
- * after ASYNC-IFY would force CSE to see through `Await` nodes — a Promise-aware
- * code path Law W (rules/walker output is async-BLIND) has no other reason to
- * introduce.
+ * BEFORE asyncness exists, so `materializeAsyncness`'s ordinary Const-handling
+ * (await the init iff seeded; every `Ref` read is unconditionally sync) awaits
+ * the ONE hoisted call correctly with zero changes to either pass. Running
+ * LEGIBILITY after asyncness materialization would force CSE to see through
+ * `Await` nodes — a Promise-aware code path Law W (rules/walker output is
+ * async-BLIND) has no other reason to introduce. (E1c, engine plan §2 E1c,
+ * carried this constraint forward unchanged from the dissolved `async-ify/`
+ * pass onto its replacement — see ../naming/asyncness.ts's header and
+ * ../naming/imports.ts's header for the full account of what survived and
+ * what didn't.)
  *
  * THE WRAP: the whole program compiles as one `(define (__oracle-main) …)` body
  * plus a trailing `(__oracle-main)` call. The walker's top level discards
@@ -361,9 +369,10 @@ function exportUnitResult(unit: CompilationUnit): CompilationUnit {
  * `sm.coreform` / `sm.factsMap()` / `sm.registry` replace the bare
  * `classify(desugar(parseSexprs(...)))` / `extractFacts(...)` calls this
  * function used to make directly. The passes downstream of classification
- * (`peephole`, `walk`, `legibility`, `asyncIfy`, `render`) are UNCHANGED —
- * they still read a plain `ClassifyResult`/registry/facts-map, exactly as
- * before; only WHERE those values come from moved.
+ * (`peephole`, `walk`, `legibility`, `render`) are UNCHANGED — they still
+ * read a plain `ClassifyResult`/registry/facts-map, exactly as before; only
+ * WHERE those values come from moved. (`asyncIfy` was on this same
+ * unchanged-list at E0's writing; E1c below is what changed it.)
  *
  * E1b cut-over (engine plan §2 E1b): `frame` (a post-render `RuntimeRef`
  * census + ad hoc collision-avoidance ladder) DISSOLVED. The import symbol
@@ -372,10 +381,26 @@ function exportUnitResult(unit: CompilationUnit): CompilationUnit {
  * for why pre-peephole forms would under-count) — a MODEL VIEW, not a fresh
  * tree scan — and `../naming/imports.ts`'s `materializeImports` commits it
  * (prepend the `Import` decl, rewrite every `RuntimeRef` to a `Ref`) at the
- * same pipeline POSITION `frame` occupied (still after ASYNC-IFY — see that
- * module's header for why). No fixture bytes should move by construction —
- * `model-imports-agree.test.ts` pins `sm.importsOf`'s answer against the
- * actual emitted imports, including through the peephole fold.
+ * same pipeline POSITION `frame` occupied (still after the asyncness
+ * materializer — see that module's header for why, and E1c's own note
+ * below for how that survived asyncIfy's dissolution). No fixture bytes
+ * should move by construction — `model-imports-agree.test.ts` pins
+ * `sm.importsOf`'s answer against the actual emitted imports, including
+ * through the peephole fold.
+ *
+ * E1c cut-over (engine plan §2 E1c): `async-ify/` (a post-emit `{sync,
+ * promise}` rewriting pass over the finished Residual tree) DISSOLVED.
+ * Asyncness is now `sm.asyncnessOf` (the call-graph fixpoint, confined
+ * inside one model view — ../naming/asyncness.ts's `asyncnessOf`, which
+ * `SchemeSemanticModel` wraps verbatim) plus `materializeAsyncness` (the
+ * mechanical Await-minting/`.async`-setting rewrite, same module) at the
+ * exact pipeline POSITION `asyncIfy` occupied — after LEGIBILITY, before
+ * `materializeImports` (see that module's header: the position survives
+ * because `materializeAsyncness`'s own seed detection keys off `RuntimeRef`
+ * symbol names exactly like the dissolved pass did). Seeded from the SAME
+ * `inferAsyncSeeds` (rules/phase1.ts) the dissolved pass read — porting the
+ * seeding, not re-deriving it. No fixture bytes should move: same fixpoint,
+ * same rewrite table, different home.
  */
 export function compileGreenfield(session: OracleSession, source: string): string {
   const registry = greenfieldRegistryFor(session);
@@ -400,7 +425,11 @@ export function compileGreenfield(session: OracleSession, source: string): strin
   const peepholed = peephole(classified);
   const sync = walk(peepholed, { registry: sm.registry, facts: sm.factsMap(), register: "run" });
   const legible = legibility(exportUnitResult(sync), { registry: sm.registry });
-  const asyncified = asyncIfy(legible, { asyncSeeds: inferAsyncSeeds });
+  // THE MODEL VIEW, not a post-emit rewriting pass (engine plan §2 E1c) —
+  // the SAME call-graph fixpoint the dissolved `async-ify/` pass ran,
+  // confined inside `sm.asyncnessOf`; `materializeAsyncness` is the pure,
+  // mechanical reader that mints Await/sets `.async` from those facts.
+  const asyncified = materializeAsyncness(sm.asyncnessOf(legible, inferAsyncSeeds));
   // THE MODEL VIEW, not a post-render scan (engine plan §2 E1b) — every
   // top-level form's own recursive `sm.importsOf`, unioned into the
   // whole-program symbol set `materializeImports` needs. Queried over the

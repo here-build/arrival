@@ -1,25 +1,31 @@
 /**
- * ASYNC-IFY gate tests (constitution §5.2 Law W; async-await-plane.md). Everything runs
- * through the REAL pipeline — parse → desugar → classify → walk → asyncIfy → render —
- * against inline goldens (pinned typescript@6.0.2 printer bytes, matching walker.test.ts).
+ * ASYNCNESS gate tests (constitution §5.2 Law W; async-await-plane.md; engine
+ * plan §2 E1c). Ported verbatim from the dissolved `async-ify.test.ts` — same
+ * goldens, same coverage, new call shape: `asyncnessOf` (the view) feeds
+ * `materializeAsyncness` (the mechanical rewrite) instead of one combined
+ * `asyncIfy` call. Everything runs through the REAL pipeline — parse →
+ * desugar → classify → walk → asyncnessOf → materializeAsyncness → render —
+ * against inline goldens (pinned typescript@6.0.2 printer bytes, matching
+ * walker.test.ts).
  *
- * The strict-compile check at the bottom is the "emitted text typechecks" gate the
- * mission asks for: a programmatic `ts.createProgram` over an in-memory file (no temp
- * file, no shell-out) with a `declare`d runtime preamble standing in for FRAME. It runs
- * with `noImplicitAny: false` (walker output has unannotated params) — the promise-flow
- * assertions survive that: return types still infer, so a missing `await` still turns
- * `string` into `Promise<string>` at a `string`-typed use and fails the check. The
- * negative control (the sync-shaped tree fails the same check) proves the teeth.
+ * The strict-compile check at the bottom is the "emitted text typechecks" gate
+ * the mission asks for: a programmatic `ts.createProgram` over an in-memory
+ * file (no temp file, no shell-out) with a `declare`d runtime preamble
+ * standing in for FRAME. It runs with `noImplicitAny: false` (walker output
+ * has unannotated params) — the promise-flow assertions survive that: return
+ * types still infer, so a missing `await` still turns `string` into
+ * `Promise<string>` at a `string`-typed use and fails the check. The negative
+ * control (the sync-shaped tree fails the same check) proves the teeth.
  */
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 import type { EmitRule } from "@here.build/arrival/emit";
 
-import { asyncIfy, AsyncIfyDoorError } from "../async-ify/index.js";
 import { classify } from "../coreform/index.js";
 import { desugar } from "../front/desugar.js";
 import { parseSexprs } from "../front/parse.js";
+import { AsyncnessDoorError, asyncnessOf, materializeAsyncness } from "../naming/index.js";
 import type { EmitRegistry, EmitRegistryRow } from "../registry/index.js";
 import { render } from "../residual/render.js";
 import type { CompilationUnit, R } from "../residual/types.js";
@@ -74,7 +80,7 @@ const SEEDS: ReadonlySet<string> = new Set(["infer"]);
 
 const compile = (src: string): CompilationUnit =>
   walk(classify(desugar(parseSexprs(src))), { registry: testRegistry, register: "run" });
-const asyncified = (src: string): CompilationUnit => asyncIfy(compile(src), { asyncSeeds: SEEDS });
+const asyncified = (src: string): CompilationUnit => materializeAsyncness(asyncnessOf(compile(src), SEEDS));
 const emit = (src: string): string => render(asyncified(src));
 
 // ── plain insertion ────────────────────────────────────────────────────────────────────
@@ -141,7 +147,7 @@ describe("rewrite table", () => {
   });
 
   it("filter with a promise-typed predicate is a door, not silently-wrong output", () => {
-    expect(() => asyncified(`(define (f xs) (filter (lambda (x) (infer x)) xs))`)).toThrow(AsyncIfyDoorError);
+    expect(() => asyncified(`(define (f xs) (filter (lambda (x) (infer x)) xs))`)).toThrow(AsyncnessDoorError);
     expect(() => asyncified(`(define (f xs) (filter (lambda (x) (infer x)) xs))`)).toThrow(
       /filter-async-predicate/,
     );
@@ -172,7 +178,7 @@ describe("promiseWrap on flipped definitions", () => {
       ],
       body: [],
     };
-    expect(render(asyncIfy(unit, { asyncSeeds: SEEDS }))).toBe(
+    expect(render(materializeAsyncness(asyncnessOf(unit, SEEDS)))).toBe(
       `async function f(x): Promise<string[]> {\n    return await infer(x);\n}\n`,
     );
   });
@@ -183,7 +189,7 @@ describe("promiseWrap on flipped definitions", () => {
 describe("purity and the identity fast-path", () => {
   it("no seed fires → the SAME unit reference comes back, and the render carries no asyncness", () => {
     const unit = compile(`(define (f xs) (reverse xs)) (define (g xs) (f xs))`);
-    const out = asyncIfy(unit, { asyncSeeds: SEEDS });
+    const out = materializeAsyncness(asyncnessOf(unit, SEEDS));
     expect(out).toBe(unit);
     const text = render(out);
     expect(text).not.toContain("async");
@@ -192,20 +198,20 @@ describe("purity and the identity fast-path", () => {
 
   it("empty seed set → identity, even when the program calls runtime shims", () => {
     const unit = compile(`(define (f x) (infer x))`);
-    expect(asyncIfy(unit, { asyncSeeds: new Set<string>() })).toBe(unit);
+    expect(materializeAsyncness(asyncnessOf(unit, new Set<string>()))).toBe(unit);
   });
 
   it("the input unit is never mutated (pure function: unit → unit)", () => {
     const unit = compile(`(define (f x) (infer x)) (define (g y) (f y))`);
     const before = structuredClone(unit);
-    asyncIfy(unit, { asyncSeeds: SEEDS });
+    materializeAsyncness(asyncnessOf(unit, SEEDS));
     expect(unit).toEqual(before);
   });
 
   it("Law W input contract: a pre-existing Await is refused loudly", () => {
     const unit = compile(`(define (f x) (infer x))`);
-    const once = asyncIfy(unit, { asyncSeeds: SEEDS });
-    expect(() => asyncIfy(once, { asyncSeeds: SEEDS })).toThrow(/law-w\/input-not-sync-shaped/);
+    const once = materializeAsyncness(asyncnessOf(unit, SEEDS));
+    expect(() => asyncnessOf(once, SEEDS)).toThrow(/law-w\/input-not-sync-shaped/);
   });
 });
 
@@ -214,7 +220,7 @@ describe("purity and the identity fast-path", () => {
 /** Typecheck one in-memory source against the real es2022 lib (constitutionally pinned
  *  typescript@6.0.2 from this package's own deps). `noImplicitAny` off — see header. */
 function strictDiagnostics(source: string): readonly string[] {
-  const fileName = "/async-ify-check.ts";
+  const fileName = "/asyncness-check.ts";
   const options: ts.CompilerOptions = {
     strict: true,
     noImplicitAny: false,

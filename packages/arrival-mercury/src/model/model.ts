@@ -48,6 +48,8 @@ import type { ClassifyResult, CoreForm, NodeId } from "../coreform/types.js";
 import { classify } from "../coreform/classify.js";
 import { desugar } from "../front/desugar.js";
 import { parseSexprs } from "../front/parse.js";
+import { asyncnessOf } from "../naming/asyncness.js";
+import type { AsyncnessFacts } from "../naming/asyncness.js";
 import { bindingCensusOf } from "../naming/census.js";
 import type { BindingCensus } from "../naming/types.js";
 import type { EmitRegistry, EmitRegistryRow } from "../registry/harvest.js";
@@ -184,6 +186,32 @@ export class SchemeSemanticModel {
    */
   readonly bindingCensus: (unit: CompilationUnit) => BindingCensus;
 
+  /**
+   * E1c's asyncness view (engine plan §2 E1c): the call-graph fixpoint
+   * (declared-bottom iteration, monotone, terminates) confined inside
+   * `naming/asyncness.ts`'s `asyncnessOf` — a THIN wrap, same "delegate to
+   * the same machinery" discipline as `importsOf`/`bindingCensus` above.
+   * Seeded EXTERNALLY (`seeds`, e.g. `inferAsyncSeeds` from rules/phase1.ts)
+   * rather than baked into the constructor: asyncness seeding is a
+   * runtime-shim-registration fact orthogonal to `(source, registry)`, and
+   * every other externally-supplied context this class needs (the registry
+   * a caller wants `bindingCensus`'s `unit` walked against, the node
+   * `importsOf` is asked about) already arrives as a call-site argument, not
+   * a constructor field — matching that same precedent here.
+   *
+   * No LSP consumer of its own YET (inlay hints — "this call awaits" — are
+   * the natural one, once the LSP wires in); compiler consumer:
+   * `oracle/harness.ts`'s `compileGreenfield`, which feeds this view's
+   * answer straight into `materializeAsyncness` (naming/asyncness.ts) —
+   * the mechanical Await-minting/`.async`-setting rewrite that replaced the
+   * dissolved `async-ify/` pass. Unlike `importsOf` (per-CoreForm-node,
+   * memoized), this is per-`CompilationUnit` and uncached — matching
+   * `bindingCensus`'s own precedent: the real pipeline calls it once per
+   * compile, over the whole walked-and-CSE'd unit, so a cache would only
+   * ever see one hit.
+   */
+  readonly asyncnessOf: (unit: CompilationUnit, seeds: ReadonlySet<string>) => AsyncnessFacts;
+
   // Internal-only caches, TS-`private` (compile-time) rather than `#`-native-
   // private: native `#` fields need `tslib`'s brand-check helpers under this
   // package's `importHelpers: true` (confirmed by isolated repro — the helper
@@ -205,6 +233,7 @@ export class SchemeSemanticModel {
     this.factsMap = () => this.facts().facts;
     this.registryRow = (name) => this.registry.lookup(name);
     this.bindingCensus = (unit) => bindingCensusOf(unit);
+    this.asyncnessOf = (unit, seeds) => asyncnessOf(unit, seeds);
     this.importsOf = (node) => {
       const hit = this.importsCache.get(node);
       if (hit !== undefined) return hit;

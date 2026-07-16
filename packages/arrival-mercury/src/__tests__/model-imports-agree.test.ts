@@ -168,7 +168,7 @@ describe("SchemeSemanticModel — E0 compiler views", () => {
   });
 });
 
-describe("S5 — the dependency-rule lint (minimal; engine plan §1 S5, \"start minimal — the lint grows per phase\")", () => {
+describe("S5 — the dependency-rule lint (engine plan §1 S5; extended at E1's exit gate, §2)", () => {
   it("model.ts's own import specifiers never point at emitted output (the renderer)", async () => {
     const fs = await import("node:fs/promises");
     const src = await fs.readFile(new URL("../model/model.ts", import.meta.url), "utf8");
@@ -177,5 +177,74 @@ describe("S5 — the dependency-rule lint (minimal; engine plan §1 S5, \"start 
     const EMITTED_OUTPUT = /residual\/render(\.js)?$/;
     const offenders = specifiers.filter((s) => EMITTED_OUTPUT.test(s));
     expect(offenders, "a view may not read emitted output (the renderer) — S5's stratification law").toEqual([]);
+  });
+
+  /**
+   * E1 exit gate (engine plan §2, "E1 exit gate"): "the emitted-output path
+   * contains zero post-passes — pipeline is `model views → materialize
+   * (census → allocate → emit) → format`. The paradigm's causality property
+   * holds mechanically (S5's lint extended: no pass may take emitted output
+   * as input)." Grown from the model-only check above to every module that
+   * feeds the greenfield pipeline (views AND the passes that materialize
+   * them) — none may import the renderer, because none may take rendered
+   * TEXT as an input to a further decision.
+   */
+  it("no view or pass module (model + naming + walker + legibility + peepholes) reads emitted output", async () => {
+    const fs = await import("node:fs/promises");
+    const MODULES = [
+      "../model/model.ts",
+      "../naming/asyncness.ts",
+      "../naming/census.ts",
+      "../naming/allocate.ts",
+      "../naming/materialize.ts",
+      "../naming/imports.ts",
+      "../naming/origin.ts",
+      "../walker/walk.ts",
+      "../legibility/legibility.ts",
+      "../legibility/cse.ts",
+      "../legibility/tree.ts",
+      "../peepholes/index.ts",
+    ] as const;
+    const EMITTED_OUTPUT = /residual\/render(\.js)?$/;
+    let filesChecked = 0;
+    for (const rel of MODULES) {
+      const src = await fs.readFile(new URL(rel, import.meta.url), "utf8");
+      filesChecked++;
+      const specifiers = [...src.matchAll(/^\s*(?:import|export)[^;]*?from\s+["']([^"']+)["']/gm)].map((m) => m[1]!);
+      const offenders = specifiers.filter((s) => EMITTED_OUTPUT.test(s));
+      expect(offenders, `${rel}: no pass may take emitted output (the renderer) as input — E1 exit gate`).toEqual([]);
+    }
+    expect(filesChecked, "sanity: the module list above must not have silently shrunk to nothing").toBe(MODULES.length);
+  });
+
+  /**
+   * The other half of the exit gate — a source-level structural check over
+   * `oracle/harness.ts`'s own pipeline chain (the plan's own concession:
+   * "a source-level test over harness.ts's chain is acceptable and
+   * honest"). Proves `render(...)` is the LAST transformation
+   * `compileGreenfield` performs: nothing — no further pass, no
+   * re-materialization — follows its `return render(...)` statement.
+   */
+  it("compileGreenfield's pipeline chain ends at render() — zero post-passes after materialize/format", async () => {
+    const fs = await import("node:fs/promises");
+    const src = await fs.readFile(new URL("../oracle/harness.ts", import.meta.url), "utf8");
+    const fnStart = src.indexOf("export function compileGreenfield(");
+    expect(fnStart, "sanity: compileGreenfield must exist in harness.ts").toBeGreaterThan(-1);
+    const rest = src.slice(fnStart);
+    // The function's OWN closing brace: a bare `}` at column 0 (every nested
+    // block inside compileGreenfield is indented at least 2 spaces).
+    const fnEnd = rest.indexOf("\n}\n");
+    expect(fnEnd, "sanity: could not find compileGreenfield's own closing brace").toBeGreaterThan(-1);
+    const body = rest.slice(0, fnEnd);
+    const returnIdx = body.indexOf("return render(");
+    expect(returnIdx, "compileGreenfield must end by returning render(...) — the pipeline's format step").toBeGreaterThan(-1);
+    const afterReturnKeyword = body.slice(returnIdx);
+    const semicolonIdx = afterReturnKeyword.indexOf(";");
+    expect(semicolonIdx, "sanity: the return render(...) statement must be semicolon-terminated").toBeGreaterThan(-1);
+    const trailing = afterReturnKeyword.slice(semicolonIdx + 1).trim();
+    expect(
+      trailing,
+      "nothing may follow the render(...) return — it must be the pipeline's LAST statement (no post-pass)",
+    ).toBe("");
   });
 });

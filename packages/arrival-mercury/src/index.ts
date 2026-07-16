@@ -69,13 +69,11 @@ export {
 // ── the engine walker (engine-walker.md; constitution §3.5/§4.2/§5.2) ──
 export { runtimeRefsOf, walk, WalkDoorError, type WalkOptions } from "./walker/index.js";
 
-// ── the ASYNC-IFY pass — post-emit {sync, promise} dataflow (Law W §5.2; async-await-plane.md) ──
-export { AsyncIfyDoorError, asyncIfy, type AsyncIfyOptions } from "./async-ify/index.js";
-
 // ── LEGIBILITY — constitution §3.5's third-invention pass. As of E1a, pure-region
 //    CSE only; destructure/singularize dissolved into ./naming/ (see
-//    legibility/legibility.ts's header). Runs PRE-ASYNC-IFY (a documented deviation
-//    from the constitution's pipeline diagram — see legibility.ts's header). ──
+//    legibility/legibility.ts's header). Runs PRE-asyncness-materialization (a
+//    documented deviation from the constitution's pipeline diagram — see
+//    legibility.ts's header). ──
 export { elementNameOf, legibility, type LegibilityOptions, pureRegionCse } from "./legibility/index.js";
 
 // ── NAMING — E1a's census + allocation phase (engine plan §2 E1a): the binding
@@ -84,18 +82,28 @@ export { elementNameOf, legibility, type LegibilityOptions, pureRegionCse } from
 //    Plus E1b's import materialization (engine plan §2 E1b) — the RuntimeRef→
 //    Ref commit that replaced the dissolved `frame/` pass (constitution §3.4/§9
 //    Phase 1's minimal FRAME no longer exists; see naming/imports.ts's header
-//    for where its knowledge went). ──
+//    for where its knowledge went) — and E1c's asyncness materialization
+//    (engine plan §2 E1c): `asyncnessOf` (the call-graph fixpoint, confined
+//    inside a model view — SchemeSemanticModel wraps it as `sm.asyncnessOf`)
+//    + `materializeAsyncness` (the mechanical Await/`.async` rewrite), the
+//    dissolved `async-ify/` post-pass's replacement. ──
 export {
   allocateNames,
+  AsyncnessDoorError,
+  asyncnessOf,
   bindingCensusOf,
+  materializeAsyncness,
   materializeImports,
   materializeNames,
   MaterializeImportsDoorError,
+  type AsyncnessFacts,
+  type AsyncType,
   type BindingCensus,
   type BindingOrigin,
   type BindingSite,
   type DestructureShape,
   type EntityKind,
+  type FnDef,
   type MaterializeImportsOptions,
   type NameAllocation,
   type ScopeCensus,
