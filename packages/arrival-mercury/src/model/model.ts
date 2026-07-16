@@ -64,11 +64,12 @@ import type { CompilationUnit } from "../residual/types.js";
 import { shakeTopLevel } from "../shake/index.js";
 import type { ShakeDecision } from "../shake/index.js";
 import { narrowsMembersOf } from "../type-emit/narrows.js";
-import type { FactsExtraction } from "../typefacts/facts.js";
+import type { FactsExtraction, HoleReason } from "../typefacts/facts.js";
 import { queryFacts } from "../typefacts/extract.js";
 import { createFactsProgram, type FactsProgram } from "../typefacts/lens-program.js";
 import { emitTypes, type EmitTypesResult } from "../type-emit/index.js";
 import { runtimeRefsOf, walk } from "../walker/walk.js";
+import { reconcileForms } from "./reconcile.js";
 import type {
   Anchor,
   AnchorPort,
@@ -92,6 +93,74 @@ export class Unimplemented extends Error {
     super(`SchemeSemanticModel.${view}: unimplemented (E0 red state — see model-spine.test.ts)`);
     this.name = "Unimplemented";
   }
+}
+
+/** One memoized view's query tally — see `ViewStats`. */
+export interface ViewCount {
+  readonly hits: number;
+  readonly misses: number;
+}
+
+/**
+ * E4b's measurement instrument (engine plan §E4: "measured, not claimed… a
+ * benchmark fixture… assert sub-linear recompute via view-hit counters") —
+ * `sm.viewStats()` returns a snapshot of every memoized decision-view's
+ * hit/miss tally, incremented on every query (`idiomAt`/`prevalueOf`/
+ * `propagationOf`/`sameBranchOf`/`factsAt`, the five caches `reconcile` seeds).
+ *
+ * A HIT means the answer was already known BEFORE this call — for the four
+ * decision views, prev's WeakMap already had this exact node object (either
+ * queried earlier on THIS model, or inherited by `reconcile` because the node
+ * is a form `reconcileForms` judged unchanged); for `factsAt`, the id was
+ * TRANSPLANTED from a prior model's completed extraction (`reconcile`'s
+ * `seededFacts`/`seededHoles`), never touched by THIS model's own `queryFacts`
+ * call. A fresh (non-reconciled) model's rows are never pre-seeded, so its
+ * `factsAt` row is all-misses and its four decision rows warm up the ordinary
+ * way (first query of a given node misses, a repeat of the SAME node hits).
+ */
+export interface ViewStats {
+  readonly idiomAt: ViewCount;
+  readonly prevalueOf: ViewCount;
+  readonly propagationOf: ViewCount;
+  readonly sameBranchOf: ViewCount;
+  readonly factsAt: ViewCount;
+}
+
+type ViewName = keyof ViewStats;
+
+/**
+ * `reconcile`'s internal construction seed (E4b) — never built outside
+ * `reconcile` itself, never exported. Carries exactly what a reconciled
+ * instance needs beyond `(source, registry)`:
+ *
+ *  - `forms`/`changedForms`: `reconcileForms`' splice — `changedForms` scopes
+ *    the ONE `queryFacts` call a reconciled model's `facts()` performs (see
+ *    that method) so shared nodes' facts are never re-derived from tsc.
+ *  - `seededFacts`/`seededHoles`: the prev model's OWN completed extraction —
+ *    transplanted wholesale (see `reconcile`'s own doc for why filtering to
+ *    just the shared forms' ids isn't needed: every remapped CHANGED id is,
+ *    by construction, strictly above every id these maps could contain).
+ *  - `idiomCache`/`prevalueCache`/`propagationCache`/`sameBranchCache`: the
+ *    prev instance's OWN WeakMaps, ALIASED (not copied) — object identity is
+ *    the entire transplant mechanism: a shared form's nodes ARE the prev
+ *    instance's node objects, so `cache.has(sharedNode)` is correct with zero
+ *    extra bookkeeping. `idiomCache` is the one exception: it is `undefined`
+ *    (start empty) when the whole-program shadow verdict (`isIdiomShadowed`)
+ *    DISAGREES between prev and the new program — reusing decisions made
+ *    under the wrong shadow verdict would be unsound (idiom folding is
+ *    disabled program-wide the instant any name shadows, per `idiomDecisionAt`'s
+ *    own doc), so `reconcile` computes both verdicts and only aliases the
+ *    cache when they match.
+ */
+interface ReconcileSeed {
+  readonly forms: readonly CoreForm[];
+  readonly changedForms: readonly CoreForm[];
+  readonly seededFacts: ReadonlyMap<NodeId, TypeFacts>;
+  readonly seededHoles: ReadonlyMap<NodeId, HoleReason>;
+  readonly idiomCache: WeakMap<App, App | undefined> | undefined;
+  readonly prevalueCache: WeakMap<If | And | Or, CoreForm | undefined>;
+  readonly propagationCache: WeakMap<Let, Let | undefined>;
+  readonly sameBranchCache: WeakMap<If, CoreForm | undefined>;
 }
 
 export class SchemeSemanticModel {
@@ -444,6 +513,45 @@ export class SchemeSemanticModel {
    */
   readonly shakeOf: (forms: readonly CoreForm[]) => ShakeDecision;
 
+  // ── E4b: incrementality — structural sharing + its measurement instrument ──
+
+  /** `ViewStats`' live snapshot — see that type's own doc for what a hit/miss
+   *  means per view. Returns a fresh copy each call (never the internal
+   *  mutable counters themselves) so a caller can't perturb the tally. */
+  readonly viewStats: () => ViewStats;
+
+  /**
+   * THE INCREMENTALITY ENGINE (engine plan §E4: "edit → new root with
+   * structural sharing → surviving nodes keep cached facts → recompile
+   * touches only the changed artifact"). Given an edited source string,
+   * builds a NEW model whose forms are `../model/reconcile.js`'s
+   * `reconcileForms` splice: every top-level form `reconcileForms` judges
+   * structurally unchanged is the SAME object this model uses (so its
+   * NodeIds are unchanged too), and everything else is freshly classified
+   * with remapped, non-colliding ids (see `reconcileForms`'s own header for
+   * the collision analysis).
+   *
+   * The new model's caches are SEEDED, not recomputed: the four per-node
+   * decision WeakMaps (`idiomAt`/`prevalueOf`/`propagationOf`/`sameBranchOf`)
+   * are ALIASED from `this` — object identity alone makes a shared form's
+   * nodes cache-hit for free — and `factsAt`'s whole-program table is
+   * seeded from `this.facts()` (forcing it first if this model never queried
+   * its own facts) so every shared node's fact is a transplant, never a
+   * fresh `queryFacts` call. Only the CHANGED forms are actually queried —
+   * `factsQueryForms` below scopes that one call. Facts extraction is still
+   * whole-program TS underneath (`virtualTs`/`program` rebuild fully over
+   * `newSource`, lazily, on first `factsAt`/`factsMap` call) — this phase's
+   * claim is that the VIEW layer recomputes only for changed forms, not that
+   * the tsc build itself is incremental (engine plan §E4's own "v1" framing;
+   * a later phase makes `program` itself persist+version-bump instead of
+   * rebuilding). Measured by `src/__benchmarks__/incrementality.test.ts`.
+   *
+   * `registry` carries over unchanged — reconciling models an EDIT to the
+   * scheme source, never a registry/capability change (those are a fresh
+   * `new SchemeSemanticModel(source, newRegistry)`, same as today).
+   */
+  readonly reconcile: (newSource: string) => SchemeSemanticModel;
+
   // Internal-only caches, TS-`private` (compile-time) rather than `#`-native-
   // private: native `#` fields need `tslib`'s brand-check helpers under this
   // package's `importHelpers: true` (confirmed by isolated repro — the helper
@@ -462,16 +570,25 @@ export class SchemeSemanticModel {
   private readonly importsCache = new WeakMap<CoreForm, ReadonlySet<string>>();
   /** `idiomAt`'s own memo — keyed by `App` identity, `WeakMap`-valued so a
    *  cached "no idiom applies" (`undefined`) is distinguishable from "never
-   *  queried" via `.has()` (see `idiomAt`'s field, below). */
-  private readonly idiomCache = new WeakMap<App, App | undefined>();
+   *  queried" via `.has()` (see `idiomAt`'s field, below). Assigned in the
+   *  constructor (E4b) rather than initialized here: `reconcile` ALIASES the
+   *  prev instance's own WeakMap (when the shadow-guard agrees — see
+   *  `ReconcileSeed`'s doc) instead of starting empty, and a field
+   *  initializer cannot see the constructor's `seed` parameter. */
+  private readonly idiomCache: WeakMap<App, App | undefined>;
   /** `prevalueOf`'s own memo — keyed by node identity, `WeakMap`-valued so a
    *  cached "no fold applies" (`undefined`) is distinguishable from "never
-   *  queried" via `.has()` (mirrors `idiomCache`'s own discipline, above). */
-  private readonly prevalueCache = new WeakMap<If | And | Or, CoreForm | undefined>();
-  /** `propagationOf`'s own memo — same discipline as `prevalueCache`. */
-  private readonly propagationCache = new WeakMap<Let, Let | undefined>();
+   *  queried" via `.has()` (mirrors `idiomCache`'s own discipline, above).
+   *  Constructor-assigned for the same E4b reason as `idiomCache` — always
+   *  aliased from `reconcile`'s seed when present (unconditionally sound:
+   *  `prevalueDecisionAt` is a pure function of a node's own subtree, no
+   *  shadow guard needed — see that function's own header). */
+  private readonly prevalueCache: WeakMap<If | And | Or, CoreForm | undefined>;
+  /** `propagationOf`'s own memo — same discipline as `prevalueCache` (pure
+   *  per-node, unconditionally safe to alias from a `reconcile` seed). */
+  private readonly propagationCache: WeakMap<Let, Let | undefined>;
   /** `sameBranchOf`'s own memo — same discipline as `prevalueCache`. */
-  private readonly sameBranchCache = new WeakMap<If, CoreForm | undefined>();
+  private readonly sameBranchCache: WeakMap<If, CoreForm | undefined>;
   /** The whole-program shadow verdict `idiomDecisionAt` needs (its `shadowed`
    *  dependency) — computed ONCE, lazily, on first `idiomAt` query, not per
    *  query (mirrors `facts()`'s own lazy-cache discipline just below). */
@@ -482,11 +599,68 @@ export class SchemeSemanticModel {
    *  the same field-only discipline this class's header requires). */
   private nextIdiomId: number | undefined;
 
-  constructor(source: string, registry: EmitRegistry) {
+  // ── E4b fields (reconcile's own seeded state — see `reconcile`/`ReconcileSeed`) ──
+
+  /** `true` iff this instance came from `reconcile` (a `seed` was supplied).
+   *  Gates `facts()`'s two code paths: the ordinary path below is untouched,
+   *  byte-identical to E4a — this flag exists so E4a's behavior is provably
+   *  unperturbed for every model NOT built via `reconcile`. */
+  private readonly isReconciled: boolean;
+  /** The forms `facts()` actually calls `queryFacts` over: EVERY form for an
+   *  ordinary model (unchanged E4a behavior), or ONLY `reconcile`'s changed
+   *  forms for a reconciled one (`seededFacts`/`seededHoles` below cover the
+   *  rest — see `facts()`'s own doc). */
+  private readonly factsQueryForms: readonly CoreForm[];
+  /** Prev model's completed fact table, transplanted wholesale by `reconcile`
+   *  (empty for an ordinary model) — see `ReconcileSeed`'s doc for why no
+   *  filtering-to-shared-ids step is needed. */
+  private readonly seededFacts: ReadonlyMap<NodeId, TypeFacts>;
+  private readonly seededHoles: ReadonlyMap<NodeId, HoleReason>;
+  /** `seededFacts` ∪ `seededHoles`' keys, precomputed once — `factsAt`'s
+   *  hit/miss classification (a `factsAt` HIT means "this id's verdict was
+   *  already known before this model ran its own `queryFacts`", regardless of
+   *  whether that verdict is a fact or a documented hole). */
+  private readonly seededIds: ReadonlySet<NodeId>;
+  /** `ViewStats`' live, mutable counters — `bumpView` is the only writer. */
+  private readonly viewStatsData: {
+    idiomAt: { hits: number; misses: number };
+    prevalueOf: { hits: number; misses: number };
+    propagationOf: { hits: number; misses: number };
+    sameBranchOf: { hits: number; misses: number };
+    factsAt: { hits: number; misses: number };
+  };
+
+  constructor(source: string, registry: EmitRegistry, seed?: ReconcileSeed) {
     this.source = source;
     this.registry = registry;
-    this.coreform = classify(desugar(parseSexprs(source)));
+    this.coreform = seed
+      ? // E4b: the splice `reconcileForms` already computed — empty side tables,
+        // matching `computeImportsOf`'s own precedent just below (`originAtom`/
+        // `parentOf`/`doors` are read by NOTHING on this path: `walk()`/
+        // `queryFacts` only ever read `.forms` off a `ClassifyResult` — grepped
+        // codebase-wide before relying on this; the two real call sites that DO
+        // thread `sm.coreform.originAtom`/`parentOf`/`doors` through, in
+        // `build/scm-module.ts`, pass them to `walk()`, which itself never reads
+        // them either).
+        { forms: seed.forms, originAtom: new Map(), parentOf: new Map(), doors: [] }
+      : classify(desugar(parseSexprs(source)));
     this.narrowsMembers = narrowsMembersOf(registry);
+    this.isReconciled = seed !== undefined;
+    this.factsQueryForms = seed ? seed.changedForms : this.coreform.forms;
+    this.seededFacts = seed?.seededFacts ?? new Map();
+    this.seededHoles = seed?.seededHoles ?? new Map();
+    this.seededIds = new Set([...this.seededFacts.keys(), ...this.seededHoles.keys()]);
+    this.viewStatsData = {
+      idiomAt: { hits: 0, misses: 0 },
+      prevalueOf: { hits: 0, misses: 0 },
+      propagationOf: { hits: 0, misses: 0 },
+      sameBranchOf: { hits: 0, misses: 0 },
+      factsAt: { hits: 0, misses: 0 },
+    };
+    this.idiomCache = seed?.idiomCache ?? new WeakMap();
+    this.prevalueCache = seed?.prevalueCache ?? new WeakMap();
+    this.propagationCache = seed?.propagationCache ?? new WeakMap();
+    this.sameBranchCache = seed?.sameBranchCache ?? new WeakMap();
     this.virtualTs = () => {
       if (this.virtualTsCache === undefined) {
         this.virtualTsCache = emitTypes(this.source, { narrowsMembers: this.narrowsMembers });
@@ -499,7 +673,14 @@ export class SchemeSemanticModel {
       }
       return this.programCache;
     };
-    this.factsAt = (node) => this.facts().facts.get(node.id);
+    this.factsAt = (node) => {
+      // A HIT here means "transplanted by `reconcile`, never touched THIS
+      // model's own `queryFacts` call" — see `ViewStats`'/`seededIds`' own
+      // doc. Checked BEFORE `facts()` forces computation so the classification
+      // reflects what was known going in, not what's true after the call.
+      this.bumpView("factsAt", this.seededIds.has(node.id));
+      return this.facts().facts.get(node.id);
+    };
     this.factsMap = () => this.facts().facts;
     this.registryRow = (name) => this.registry.lookup(name);
     this.bindingCensus = (unit) => bindingCensusOf(unit);
@@ -515,7 +696,9 @@ export class SchemeSemanticModel {
       return symbols;
     };
     this.idiomAt = (node) => {
-      if (this.idiomCache.has(node)) return this.idiomCache.get(node);
+      const hit = this.idiomCache.has(node);
+      this.bumpView("idiomAt", hit);
+      if (hit) return this.idiomCache.get(node);
       const decision = idiomDecisionAt(node, {
         shadowed: this.isIdiomShadowed(),
         mintId: () => this.mintIdiomId(),
@@ -525,25 +708,88 @@ export class SchemeSemanticModel {
       return decision;
     };
     this.prevalueOf = (node) => {
-      if (this.prevalueCache.has(node)) return this.prevalueCache.get(node);
+      const hit = this.prevalueCache.has(node);
+      this.bumpView("prevalueOf", hit);
+      if (hit) return this.prevalueCache.get(node);
       const decision = prevalueDecisionAt(node);
       this.prevalueCache.set(node, decision);
       return decision;
     };
     this.propagationOf = (node) => {
-      if (this.propagationCache.has(node)) return this.propagationCache.get(node);
+      const hit = this.propagationCache.has(node);
+      this.bumpView("propagationOf", hit);
+      if (hit) return this.propagationCache.get(node);
       const decision = propagationDecisionAt(node);
       this.propagationCache.set(node, decision);
       return decision;
     };
     this.sameBranchOf = (node) => {
-      if (this.sameBranchCache.has(node)) return this.sameBranchCache.get(node);
+      const hit = this.sameBranchCache.has(node);
+      this.bumpView("sameBranchOf", hit);
+      if (hit) return this.sameBranchCache.get(node);
       const decision = sameBranchDecisionAt(node);
       this.sameBranchCache.set(node, decision);
       return decision;
     };
     this.sharedBindingsOf = (unit) => sharedBindingsOf(unit, this.registry);
+    this.viewStats = () => ({
+      idiomAt: { ...this.viewStatsData.idiomAt },
+      prevalueOf: { ...this.viewStatsData.prevalueOf },
+      propagationOf: { ...this.viewStatsData.propagationOf },
+      sameBranchOf: { ...this.viewStatsData.sameBranchOf },
+      factsAt: { ...this.viewStatsData.factsAt },
+    });
+    this.reconcile = (newSource) => this.buildReconciled(newSource);
   }
+
+  /** `viewStats`'s only writer — see `ViewStats`'s own doc for what hit/miss
+   *  means per view. Arrow-valued (not a method — same R11 prototype reason
+   *  as every other internal helper here). */
+  private readonly bumpView = (view: ViewName, hit: boolean): void => {
+    const counter = this.viewStatsData[view];
+    if (hit) counter.hits += 1;
+    else counter.misses += 1;
+  };
+
+  /** `reconcile`'s cache-miss path (E4b) — splices the new program via
+   *  `reconcileForms`, then constructs the reconciled instance through the
+   *  SAME constructor every model goes through (a `ReconcileSeed`, never a
+   *  bespoke object-building path — see `ReconcileSeed`'s own doc for what
+   *  each field carries and why).
+   *
+   *  `this.facts()` is called here to FORCE prev's own lazy extraction before
+   *  transplanting it — a `reconcile` called before this model ever queried a
+   *  single fact would otherwise seed the new model from an empty table
+   *  (correct but wasteful: it would just re-derive everything, including the
+   *  unchanged forms', on first query — the incrementality win requires prev
+   *  to have already paid for its own facts, exactly like the benchmark's own
+   *  "force all facts+views" step does before it ever reconciles).
+   *
+   *  The idiom-cache shadow-guard: `idiomDecisionAt`'s `shadowed` verdict is
+   *  program-wide (per its own header, "a shadow ANYWHERE in the program…
+   *  disables BOTH idioms for the WHOLE compile") — aliasing `this.idiomCache`
+   *  into a program where that verdict has FLIPPED would let a decision made
+   *  under the old verdict answer for the new program, unsound. Both verdicts
+   *  are cheap (a flat name census, no tsc) — compute both, alias only when
+   *  they agree; `ReconcileSeed.idiomCache` being `undefined` tells the
+   *  constructor to start that ONE cache fresh instead. */
+  private readonly buildReconciled = (newSource: string): SchemeSemanticModel => {
+    const { forms, changed } = reconcileForms(this.coreform.forms, newSource);
+    const prevFacts = this.facts();
+    const prevShadowed = this.isIdiomShadowed();
+    const newShadowed = programShadowsPeepholeNames(forms);
+    const seed: ReconcileSeed = {
+      forms,
+      changedForms: [...changed],
+      seededFacts: prevFacts.facts,
+      seededHoles: prevFacts.holes,
+      idiomCache: newShadowed === prevShadowed ? this.idiomCache : undefined,
+      prevalueCache: this.prevalueCache,
+      propagationCache: this.propagationCache,
+      sameBranchCache: this.sameBranchCache,
+    };
+    return new SchemeSemanticModel(newSource, this.registry, seed);
+  };
 
   /** The lazy, once-per-model whole-program extraction `factsAt`/`factsMap`
    *  share — "behind the LS epoch": nothing pays for a TS Program build until
@@ -558,14 +804,29 @@ export class SchemeSemanticModel {
       // fact DAG made explicit. Behaviorally identical to the old all-in-one
       // (queryFacts over emitTypes+createFactsProgram IS what extractFacts did).
       const emitted = this.virtualTs();
-      const { facts, holes } = queryFacts(this.coreform, emitted, this.program());
-      this.factsExtractionCache = {
-        facts,
-        holes,
-        parseFailure: false,
-        classified: this.coreform,
-        virtualTs: emitted.ts,
-      };
+      if (!this.isReconciled) {
+        // Ordinary model — untouched from E4a: query EVERY form, nothing to
+        // transplant. This branch is what makes E4a's "facts byte-identical"
+        // invariant provably still hold for every non-reconciled model.
+        const { facts, holes } = queryFacts(this.coreform, emitted, this.program());
+        this.factsExtractionCache = { facts, holes, parseFailure: false, classified: this.coreform, virtualTs: emitted.ts };
+      } else {
+        // Reconciled model (E4b) — query ONLY the changed forms (never a
+        // shared node's fact — that's the whole point) and merge over the
+        // seed. `queryFacts`/its `walkProgram` read nothing off a
+        // `ClassifyResult` but `.forms` (confirmed codebase-wide before
+        // relying on it — see the constructor's own comment), so the empty
+        // side tables here are exactly as inert as `computeImportsOf`'s.
+        const toQuery: ClassifyResult = { forms: this.factsQueryForms, originAtom: new Map(), parentOf: new Map(), doors: [] };
+        const { facts: freshFacts, holes: freshHoles } = queryFacts(toQuery, emitted, this.program());
+        this.factsExtractionCache = {
+          facts: new Map([...this.seededFacts, ...freshFacts]),
+          holes: new Map([...this.seededHoles, ...freshHoles]),
+          parseFailure: false,
+          classified: this.coreform,
+          virtualTs: emitted.ts,
+        };
+      }
     }
     return this.factsExtractionCache;
   };

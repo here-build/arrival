@@ -40,6 +40,7 @@
   "scripts": {
     "build": "tsc --build --force",
     "test": "vitest run",
+    "benchmarks": "vitest run --config vitest.benchmarks.config.ts",
     "typecheck": "tsc --noEmit && pnpm run check:stories",
     "check:stories": "tsc -p tsconfig.stories.json --noEmit",
     "storybook": "storybook dev -p 6007",
