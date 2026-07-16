@@ -6,7 +6,7 @@
  * the derivation rules, and the instantiated-signature probe.
  */
 export { deriveFacts, litFacts, quoteFacts, type DeriveContext } from "./derive.js";
-export { extractFacts } from "./extract.js";
+export { extractFacts, queryFacts } from "./extract.js";
 export {
   type ClassifiedSource,
   type ExtractFactsOptions,

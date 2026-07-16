@@ -65,7 +65,9 @@ import { shakeTopLevel } from "../shake/index.js";
 import type { ShakeDecision } from "../shake/index.js";
 import { narrowsMembersOf } from "../type-emit/narrows.js";
 import type { FactsExtraction } from "../typefacts/facts.js";
-import { extractFacts } from "../typefacts/extract.js";
+import { queryFacts } from "../typefacts/extract.js";
+import { createFactsProgram, type FactsProgram } from "../typefacts/lens-program.js";
+import { emitTypes, type EmitTypesResult } from "../type-emit/index.js";
 import { runtimeRefsOf, walk } from "../walker/walk.js";
 import type {
   Anchor,
@@ -109,11 +111,34 @@ export class SchemeSemanticModel {
   readonly narrowsMembers: ReadonlySet<string>;
 
   /**
-   * Per-node type facts (typefacts-extraction.md), read behind the LS epoch —
-   * one whole-program TS Program/LanguageService build, lazily materialized
-   * on first query and cached for the model's lifetime (the private `facts`
-   * field below). LSP consumer: hover (S4: "hover (factsAt + the registry
-   * row's contract)").
+   * The fact DAG's BOTTOM layer (E4): the virtual-TS lens — raw scheme lowered
+   * to the `__arr`-membered TS glass `emitTypes` produces, fact-FREE by Law V
+   * (reads source + the registry's `narrowsMembers` only, never a type fact).
+   * Lazily materialized, cached for the model's lifetime. LSP consumer: the
+   * "go to the type behind this expression" surface; compiler consumer: the
+   * `program`/`factsAt` layers staged on top of it. This is the first of the
+   * "two registers, staged by the fact DAG": nothing here has consulted tsc.
+   */
+  readonly virtualTs: () => EmitTypesResult;
+
+  /**
+   * The fact DAG's MIDDLE layer (E4): the TS `LanguageService`/checker built
+   * over `virtualTs`'s emission — the tsc epoch made an explicit view. One
+   * whole-program build, lazy, cached for the model's lifetime (incrementality
+   * will later persist + version-bump THIS layer; today it is once-per-model,
+   * the spec's sanctioned v1 cost). LSP consumer: every hover/quickinfo query;
+   * compiler consumer: `factsAt`, which queries this checker per node.
+   */
+  readonly program: () => FactsProgram;
+
+  /**
+   * The fact DAG's TOP layer (E4): per-node type facts
+   * (typefacts-extraction.md), RE-DERIVED on top of `virtualTs` → `program`
+   * (this staging is E4's "one model, two registers, staged by the fact DAG"
+   * made literal — the two lower layers are their own cached views, and this
+   * is `queryFacts` over them, not a monolithic extraction). Lazily
+   * materialized on first query, cached for the model's lifetime. LSP
+   * consumer: hover (S4: "hover (factsAt + the registry row's contract)").
    * Compiler consumer: the walker's Law T `truthTest` / Law A arg-gating /
    * registry rules' fact-directed branches (`null?`/`pair?`'s clean form).
    */
@@ -429,6 +454,11 @@ export class SchemeSemanticModel {
   // views above — they never reach the prototype and R11's allow-list never
   // sees them, `#`-brand or not.
   private factsExtractionCache: FactsExtraction | undefined;
+  /** The fact DAG's three cached layers (E4) — each materialized on first
+   *  demand, independently, so `virtualTs` can be read without paying for the
+   *  tsc build and `program` without paying for the per-node query walk. */
+  private virtualTsCache: EmitTypesResult | undefined;
+  private programCache: FactsProgram | undefined;
   private readonly importsCache = new WeakMap<CoreForm, ReadonlySet<string>>();
   /** `idiomAt`'s own memo — keyed by `App` identity, `WeakMap`-valued so a
    *  cached "no idiom applies" (`undefined`) is distinguishable from "never
@@ -457,6 +487,18 @@ export class SchemeSemanticModel {
     this.registry = registry;
     this.coreform = classify(desugar(parseSexprs(source)));
     this.narrowsMembers = narrowsMembersOf(registry);
+    this.virtualTs = () => {
+      if (this.virtualTsCache === undefined) {
+        this.virtualTsCache = emitTypes(this.source, { narrowsMembers: this.narrowsMembers });
+      }
+      return this.virtualTsCache;
+    };
+    this.program = () => {
+      if (this.programCache === undefined) {
+        this.programCache = createFactsProgram(this.virtualTs().ts);
+      }
+      return this.programCache;
+    };
     this.factsAt = (node) => this.facts().facts.get(node.id);
     this.factsMap = () => this.facts().facts;
     this.registryRow = (name) => this.registry.lookup(name);
@@ -510,10 +552,20 @@ export class SchemeSemanticModel {
    *  land on the prototype and trip R11's allow-list. */
   private readonly facts = (): FactsExtraction => {
     if (this.factsExtractionCache === undefined) {
-      this.factsExtractionCache = extractFacts(
-        { source: this.source, classified: this.coreform },
-        { narrowsMembers: this.narrowsMembers },
-      );
+      // E4: staged through the two lower cached views (`virtualTs` → `program`)
+      // rather than the monolithic `extractFacts`, so `factsAt` is literally
+      // `queryFacts` re-derived on top of the register's lower layers — the
+      // fact DAG made explicit. Behaviorally identical to the old all-in-one
+      // (queryFacts over emitTypes+createFactsProgram IS what extractFacts did).
+      const emitted = this.virtualTs();
+      const { facts, holes } = queryFacts(this.coreform, emitted, this.program());
+      this.factsExtractionCache = {
+        facts,
+        holes,
+        parseFailure: false,
+        classified: this.coreform,
+        virtualTs: emitted.ts,
+      };
     }
     return this.factsExtractionCache;
   };

@@ -44,7 +44,7 @@ import { classify } from "../coreform/index.js";
 import type { ClassifyResult, CoreForm, NodeId, Span } from "../coreform/index.js";
 import { desugar } from "../front/desugar.js";
 import { parseSexprs } from "../front/parse.js";
-import { emitTypes, type Mapping } from "../type-emit/index.js";
+import { emitTypes, type EmitTypesResult, type Mapping } from "../type-emit/index.js";
 import { callableClaim, deriveFacts, litFacts, quoteFacts, type DeriveContext } from "./derive.js";
 import {
   type ClassifiedSource,
@@ -54,7 +54,7 @@ import {
   type HoleReason,
   type TypeFacts,
 } from "./facts.js";
-import { createFactsProgram, PRELUDE_FILE, tightestCovering } from "./lens-program.js";
+import { createFactsProgram, type FactsProgram, PRELUDE_FILE, tightestCovering } from "./lens-program.js";
 
 const ANY_OR_UNKNOWN = ts.TypeFlags.Any | ts.TypeFlags.Unknown;
 
@@ -243,7 +243,28 @@ export function extractFacts(input: string | ClassifiedSource, opts?: ExtractFac
   // cannot fail here, and the classified path degrades to the empty module —
   // every queried node then holes as "unmapped-span" (Law F, not a throw).
   const emitted = emitTypes(source, { narrowsMembers: opts?.narrowsMembers, hostMembers: opts?.hostMembers });
-  const { checker, sourceFile } = createFactsProgram(emitted.ts);
+  const program = createFactsProgram(emitted.ts);
+  const { facts, holes } = queryFacts(classified, emitted, program);
+  return { facts, holes, parseFailure: false, classified, virtualTs: emitted.ts };
+}
+
+/**
+ * The fact DAG's TOP layer, made re-derivable (E4): given an already-emitted
+ * virtual-TS lens (`emitTypes` — the Law-V glass, no facts in it) and its built
+ * `FactsProgram` (the tsc epoch), query every node's type facts. Split out of
+ * `extractFacts` so `SchemeSemanticModel` can stage the three layers
+ * independently — `sm.virtualTs` (emit) → `sm.program` (the LS) → `sm.factsAt`
+ * (this) — and cache each on its own, the "one model, two registers, staged by
+ * the fact DAG" shape the engine plan's §E4 names. `extractFacts` above is now
+ * the all-in-one composition of the same three steps; its result is
+ * byte-identical to calling them in sequence.
+ */
+export function queryFacts(
+  classified: ClassifyResult,
+  emitted: EmitTypesResult,
+  program: FactsProgram,
+): { readonly facts: Map<NodeId, TypeFacts>; readonly holes: Map<NodeId, HoleReason> } {
+  const { checker, sourceFile } = program;
   const { entries, spanOwner } = walkProgram(classified);
   const bySpan = indexMappings(emitted.mappings);
   const droppedTop = new Set(emitted.droppedForms);
@@ -326,5 +347,5 @@ export function extractFacts(input: string | ClassifiedSource, opts?: ExtractFac
     // Proven type, silent vocabulary → neither fact nor hole.
   }
 
-  return { facts, holes, parseFailure: false, classified, virtualTs: emitted.ts };
+  return { facts, holes };
 }
