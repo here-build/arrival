@@ -221,6 +221,73 @@ const cdrRule: EmitRule<R> = {
   call: (args, ctx) => Method(exactly(ctx, "cdr", args, 1)[0]!, "slice", [Lit(1)]),
 };
 
+// ─── §2.1 representation collapse, compound family: cadr / caddr / cddr / … ───────────
+// The SAME law as car/cdr above, extended to R7RS's full generative cxr family: a
+// compound name is nothing but car/cdr applied in sequence, innermost (rightmost)
+// letter first — arrival's own kernel derives the identical steps for the
+// INTERPRETER (foundations/arrival/arrival/src/eval/Resolver.ts's `cxrUnfold`:
+// `[...name.slice(1, -1)].reverse()`, "innermost (rightmost) letter applied
+// first"). `cxrCall` below is that same derivation, read off the NAME, targeting
+// the array representation instead of a runtime letter-walk — no guard, no shim,
+// no register branch, exactly car/cdr's own "no mode" (§4.3).
+//
+// Folded, not nested: a run of pending cdrs collapses into one pending "drop
+// count" that the NEXT car folds directly into an index — `.slice(k)[0]` is
+// always `[k]` for an array, so the drop never renders its own `.slice()` unless
+// the name ends on a cdr with no following car. `cadr` → `xs[1]` (not
+// `xs.slice(1)[0]`), `caddr` → `xs[2]`, `cddr` → `xs.slice(2)`, and a genuine
+// composition like `cadar` → `xs[0][1]` (car, then a pending single drop folds
+// into the next car's index) — derived, never hand-typed per name.
+//
+// Bounded at depth 4 — R7RS's own generative ceiling (there is no `cadddr`-of-a-
+// cdddr-style depth-5 name), the same bound gate1/measure.ts's local `CXR_RE =
+// /^c[ad]{1,4}r$/` polices independently. car/cdr (depth 1) keep their own
+// hand-written rules above — they predate this table and carry car's eta `.ref`
+// (R5c); this table covers depths 2-4 only, enumerated from the {a,d} alphabet
+// rather than hand-typed, so one compound name can never be present while its
+// same-depth sibling is missing. No `.ref`/eta here (unlike car): nothing in the
+// current oracle corpus uses a compound accessor as a bare HOF value — a future
+// value-position use degrades to the ordinary rung-3 shim ladder like any other
+// registry symbol without a `.ref`, and doors honestly (frame door) if no
+// stage-0 export answers it, exactly like every other un-shimmed symbol.
+function cxrCall(name: string, args: readonly R[], ctx: EmitCtx<R>): R {
+  let cur = exactly(ctx, name, args, 1)[0]!;
+  let pendingDrops = 0;
+  for (const letter of [...name.slice(1, -1)].reverse()) {
+    if (letter === "d") {
+      pendingDrops += 1;
+    } else {
+      cur = Index(cur, Lit(pendingDrops));
+      pendingDrops = 0;
+    }
+  }
+  // A trailing run of cdrs with no following car (cddr, cdddr, …) has no index
+  // to fold into — it renders as the plain slice.
+  if (pendingDrops > 0) cur = Method(cur, "slice", [Lit(pendingDrops)]);
+  return cur;
+}
+
+const cxrEmitRule = (name: string): EmitRule<R> => ({
+  call: (args, ctx) => cxrCall(name, args, ctx),
+});
+
+/** Every depth-2..4 name over the {a,d} alphabet — R7RS's full compound cxr family
+ *  (4 + 8 + 16 = 28 names), generated from the alphabet rather than hand-typed so
+ *  the row set can never miss a sibling. */
+function compoundCxrNames(): readonly string[] {
+  const names: string[] = [];
+  for (let depth = 2; depth <= 4; depth++) {
+    for (let bits = 0; bits < 2 ** depth; bits++) {
+      let middle = "";
+      for (let bit = depth - 1; bit >= 0; bit--) middle += (bits >> bit) & 1 ? "d" : "a";
+      names.push(`c${middle}r`);
+    }
+  }
+  return names;
+}
+
+const compoundCxrRules: SymbolRuleTable = Object.fromEntries(compoundCxrNames().map((name) => [name, { emit: cxrEmitRule(name) }]));
+
 // ─── cons / not / null? / pair? / + / - / * / / — RELOCATED (see the module header's
 // relocation note, Wave 2). `cons`'s ArrayLit/Spread constructor, `not`'s Law-T guard,
 // `null?`/`pair?`'s fact-gated `.length` reads (narrows + refPolicy moved WITH them),
@@ -289,6 +356,10 @@ const inferRule = (verb: string): EmitRule<R> => ({
 export const phase1Rules: SymbolRuleTable = {
   car: { emit: carRule, refPolicy: "eta" },
   cdr: { emit: cdrRule, refPolicy: "eta" },
+  // The compound cxr family (cadr, caddr, cddr, … depth 2-4) — see the
+  // `compoundCxrRules` section above for the derivation; spread here rather than
+  // hand-listed so the table can never drift from the generated name set.
+  ...compoundCxrRules,
   // cons / not / null? / pair? / - / / / = / quotient / modulo / map / apply / filter
   // — RELOCATED onto their own Contracts (module header's relocation note); no table
   // row remains for any of them. The bare "+"/"*" presence rows this comment used to
@@ -310,6 +381,36 @@ export const phase1Rules: SymbolRuleTable = {
   // them is a separate, ungated cleanup, not this gap's fix.
   every: {},
   any: {},
+  // some — UNLIKE every/any above, this row is NOT functionally redundant: grepped,
+  // the interpreter defines `some` as `symbol.alias\`any?\`` (srfi-1.ts) — a byte-
+  // identical rebinding, never its own baked entity — and the harvest's
+  // `isBakedEntityLike` (registry/harvest.ts) explicitly SKIPS `kind === "alias"`
+  // defs ("alias never binds directly … none of them can carry `.emit`"), so `some`
+  // never gets a row from the ambient harvest at all. This presence row is the
+  // ONLY thing that makes it resolvable — same tier as every/any (no `.emit`, falls
+  // to the rung-3 named-import shim, `some` in runtime/stage0.ts).
+  //
+  // Behavior note (verified against srfi-1.ts, not assumed from the name): bare
+  // `some` is NOT SRFI-1's value-returning `any` — it aliases `any?`, the HONEST
+  // boolean quantifier (#t iff SOME element-tuple's predicate result is
+  // scheme-truthy; plain #t/#f, never the witness). `every`'s bare form stays
+  // genuinely value-returning (LAST result) — the two are asymmetric by the
+  // interpreter's own 2026-07-13 any/every split ruling, not one shape copied onto
+  // both names. stage0.ts's `some` mirrors the boolean shape; `any` (already
+  // exported there) stays the value-returning witness-finder untouched.
+  some: {},
+  // max-by — NOT Contract-backed at all (unlike every/any/some, which are at least
+  // DECLARED in srfi-1.ts): grepped, confirmed absent from every
+  // foundations/arrival/arrival/src/env/**/*.ts. The interpreter binds it by
+  // injecting a scheme-level `(define (max-by f xs) …)` STRING into every session's
+  // prelude (arrival-run/src/run-program.ts's `BUILTIN_PREAMBLE`, flagged there as a
+  // standing TODO to migrate into a real core pack) — no Contract, so no ambient row
+  // is possible until that migration lands. This presence row is therefore the
+  // entire fix: falls to the rung-3 shim (`maxBy` in runtime/stage0.ts), same tier
+  // as `max` itself (`max_`). Ties: the interpreter's own body (`reduce` seeded on
+  // `(car xs)`, strict `>`) lets the FIRST (leftmost) element attaining the max
+  // stand — `maxBy`'s shim mirrors that fold exactly, not `>=`.
+  "max-by": {},
   // infer / infer/chat / infer/chat/system / infer/chat/user / infer/chat/assistant —
   // RELOCATED (R2, module header's relocation note); no table row remains for any of
   // them — `withRules`' fallthrough to the harvested Contract row

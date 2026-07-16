@@ -55,8 +55,10 @@ export interface EmitRegistryRow {
 
 export interface EmitRegistry {
   /** Direct hit; `undefined` ⇒ the caller's fallback ladder proceeds to shim/door.
-   *  (The generative `c[ad]+r` composition rung lands with the kernel-seed rows in the
-   *  symbol-rules wave — it needs Residual constructors this package doesn't have yet.) */
+   *  (The generative `c[ad]+r` composition rung — depths 2-4, `cadr`/`caddr`/`cddr`/…
+   *  — landed in the symbol-rules wave: `rules/phase1.ts`'s `compoundCxrRules`. This
+   *  harvest itself carries no cxr-specific knowledge; the overlay resolves each
+   *  compound name as an ordinary presence row, same as any other table entry.) */
   lookup(name: string): EmitRegistryRow | undefined;
   /** Every DECLARED name. */
   readonly names: ReadonlySet<string>;

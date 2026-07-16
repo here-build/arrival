@@ -164,6 +164,23 @@ export function any(pred: (...xs: unknown[]) => unknown, ...lists: readonly (rea
   return false;
 }
 
+/**
+ * `some` — NOT `any`'s value-returning twin, despite the shared shape. Verified
+ * against the interpreter (srfi-1.ts): `some` aliases `any?`, the HONEST boolean
+ * quantifier — plain `#t` iff `pred` holds (Law T: result `!== false`) for SOME
+ * element-tuple across the parallel lists, short-circuiting on the first hit;
+ * never the witness. N-ary, min-length-driven, same parallel-list convention as
+ * `every`/`any` above.
+ */
+export function some(pred: (...xs: unknown[]) => unknown, ...lists: readonly (readonly unknown[])[]): boolean {
+  if (lists.length === 0) return false;
+  const n = Math.min(...lists.map((l) => l.length));
+  for (let i = 0; i < n; i++) {
+    if (pred(...lists.map((l) => l[i])) !== false) return true;
+  }
+  return false;
+}
+
 // ─── infer — placeholder ONLY (the framework axis is a later phase) ──────────────────
 /**
  * `infer` — the call-position emit rule (`phase1.ts`'s `inferRule`) always emits
@@ -291,6 +308,31 @@ export const listRef = (xs: readonly unknown[], k: number): unknown => xs[k];
 export const max_ = (...ns: number[]): number => Math.max(...ns);
 export const append_ = (...xss: readonly unknown[][]): unknown[] => xss.flat(1) as unknown[];
 
+/**
+ * `max-by` — argmax by key function (`(max-by total pool)`): the element of `xs`
+ * maximizing `f`, ties going to the FIRST (leftmost) element attaining the max.
+ * Mirrors the interpreter's own scheme-bodied definition verbatim
+ * (`@inhuman.tools/arrival-run`'s `run-program.ts`, `BUILTIN_PREAMBLE`:
+ * `(reduce (lambda (x best) (if (> (f x) (f best)) x best)) (car xs) (cdr xs))`
+ * — max-by is not a Contract anywhere, just scheme prelude text): a strict `>`
+ * fold seeded on the first element never lets a later TIE displace an earlier
+ * max. `xs` empty is outside the contract — the interpreter's own `(car xs)`
+ * seed is equally undefined on `'()` (§2.1 UB parity; no guard added here that
+ * the reference doesn't have either).
+ */
+export function maxBy(f: (x: unknown) => number, xs: readonly unknown[]): unknown {
+  let best = xs[0];
+  let bestKey = f(best);
+  for (let i = 1; i < xs.length; i++) {
+    const key = f(xs[i]);
+    if (key > bestKey) {
+      best = xs[i];
+      bestKey = key;
+    }
+  }
+  return best;
+}
+
 export const STAGE0: Readonly<Record<string, string>> = {
   "<": "lt",
   "<=": "le",
@@ -313,6 +355,8 @@ export const STAGE0: Readonly<Record<string, string>> = {
   "string-append": "stringAppend",
   every: "every",
   any: "any",
+  some: "some",
+  "max-by": "maxBy",
   "odd?": "odd",
   ">": "gt",
   "+": "plus",

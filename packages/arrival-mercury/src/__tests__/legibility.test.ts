@@ -113,12 +113,13 @@ const emit = (src: string, pass: (u: CompilationUnit) => CompilationUnit): strin
 
 describe("implicit destruction — now decided inside walk() (engine plan §2 E1a)", () => {
   it("THE constitution example: a param used only through car/cdr-composed positional access destructures to [first, second]", () => {
-    // The constitution spells the second access `(cadr pair)`; `cadr` is not yet a
-    // registered symbol in this slice (registry/harvest.ts's own comment — the
-    // generative cxr composition rung is future work), so this exercises the
-    // semantically-identical `(car (cdr pair))` spelling that THIS slice's
-    // registered rules actually produce — naming/census.ts's `cdrOffsetOf` resolves
-        // either spelling to the same tuple position (see its own header).
+    // The constitution spells the second access `(cadr pair)`; this test keeps the
+    // semantically-identical `(car (cdr pair))` spelling it always used (`cadr` is
+    // now ALSO a registered symbol — rules/phase1.ts's `compoundCxrRules` — but this
+    // file builds its own minimal `testRegistry`, not the real phase1Rules table, so
+    // it never resolves compound cxr names regardless) — naming/census.ts's
+    // `cdrOffsetOf` resolves either spelling to the same tuple position (see its own
+    // header).
     expect(render(compile(`(define (f pair) (+ (car pair) (car (cdr pair))))`))).toBe(
       `function f([first, second]) {\n    return first + second;\n}\n`,
     );

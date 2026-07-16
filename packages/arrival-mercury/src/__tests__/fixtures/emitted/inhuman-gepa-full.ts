@@ -1,4 +1,4 @@
-import { lt, le, gt, ge, equalP, evenP, every, length_, list, listRef, map, max_, nullP, zeroP } from "./stage0.mts";
+import { lt, le, gt, ge, equalP, evenP, every, length_, list, listRef, map, max_, maxBy, nullP, some, zeroP } from "./stage0.mts";
 function OracleMain() {
     throw new Error("unsupported-form/require: `(require \"metric.scm\")` \u2014 module loading is not compiled in this slice (the loader/FRAME wave owns import planning).");
     const examples = (() => {
@@ -31,12 +31,8 @@ function OracleMain() {
     const assess = (analyze, decide, via) => candidate(analyze, decide, via, evaluate(analyze, decide, paretoset));
     const scores = ({ recs }) => scoresOf(recs);
     const total = c => scores(c).reduce((__acc, score) => __acc + score, 0);
-    const dominates = (a, b) => every(ge, scores(a), scores(b)) && (() => {
-        throw new Error("unsupported-form/unresolved-identifier: `some` is not lexically bound and is not a registry symbol.");
-    })();
-    const frontier = pool => pool.filter(__x => (c => !(() => {
-        throw new Error("unsupported-form/unresolved-identifier: `some` is not lexically bound and is not a registry symbol.");
-    })())(__x) !== false);
+    const dominates = (a, b) => every(ge, scores(a), scores(b)) && some(gt, scores(a), scores(b));
+    const frontier = pool => pool.filter(__x => (c => !some(it => dominates(it, c), pool))(__x) !== false);
     const stageFor = iter => evenP(iter) ? "analyze" : "decide";
     const propose = (c, batch, iter) => {
         const stage = stageFor(iter);
@@ -95,9 +91,7 @@ function OracleMain() {
         const target = rngInt(state, weights.reduce((__acc, weight) => __acc + weight, 0));
         return list(listRef(pool, weightedIndex(weights, target)), rngNext(state));
     };
-    const isPicked = (ex, batch) => {
-        throw new Error("unsupported-form/unresolved-identifier: `some` is not lexically bound and is not a registry symbol.");
-    };
+    const isPicked = ({ id }, batch) => some(({ id: id_2 }) => equalP(id_2, id), batch);
     const sampleBatch = (set, k, state) => {
         let picked = [];
         let tries = 3 * k;
@@ -125,28 +119,18 @@ function OracleMain() {
             const __and = zeroP((iter % MERGEEVERY + MERGEEVERY) % MERGEEVERY);
             return __and === false ? __and : findMerge(frontier(pool));
         })();
-        return pair !== false ? evolve(frontier([merge(pair[0], (() => {
-                throw new Error("unsupported-form/unresolved-identifier: `cadr` is not lexically bound and is not a registry symbol.");
-            })()), ...pool]), budget - length_(paretoset), rngNext(rng), iter + 1) : (() => {
+        return pair !== false ? evolve(frontier([merge(pair[0], pair[1]), ...pool]), budget - length_(paretoset), rngNext(rng), iter + 1) : (() => {
             const sel = select(pool, rng);
             const parent = sel[0];
-            const rng1 = (() => {
-                throw new Error("unsupported-form/unresolved-identifier: `cadr` is not lexically bound and is not a registry symbol.");
-            })();
+            const rng1 = sel[1];
             const smp = sampleBatch(parent["recs"], BATCH, rng1);
             const batch = smp[0];
-            const rng2 = (() => {
-                throw new Error("unsupported-form/unresolved-identifier: `cadr` is not lexically bound and is not a registry symbol.");
-            })();
+            const rng2 = smp[1];
             const prop = propose(parent, batch, iter);
             return prop === false ? evolve(pool, budget - BATCH, rng2, iter + 1) : (() => {
                 const pAnalyze = prop[0];
-                const pDecide = (() => {
-                    throw new Error("unsupported-form/unresolved-identifier: `cadr` is not lexically bound and is not a registry symbol.");
-                })();
-                const pVia = (() => {
-                    throw new Error("unsupported-form/unresolved-identifier: `caddr` is not lexically bound and is not a registry symbol.");
-                })();
+                const pDecide = prop[1];
+                const pVia = prop[2];
                 const propScore = proposalBatchScore(pAnalyze, pDecide, batch);
                 const parentScore = parentBatchScore(batch);
                 return gt(propScore, parentScore) ? evolve(frontier([assess(pAnalyze, pDecide, pVia), ...pool]), budget - BATCH - length_(paretoset), rng2, iter + 1) : evolve(pool, budget - BATCH, rng2, iter + 1);
@@ -162,7 +146,7 @@ function OracleMain() {
             throw new Error("unsupported-form/require: `(require \"decide-seed.txt\")` \u2014 module loading is not compiled in this slice (the loader/FRAME wave owns import planning).");
         })(), "seed");
         const final = evolve([seed], BUDGET - length_(paretoset), SEEDRNG, 0);
-        throw new Error("unsupported-form/unresolved-identifier: `max-by` is not lexically bound and is not a registry symbol.");
+        return maxBy(total, frontier(final));
     };
     return gepa();
 }
