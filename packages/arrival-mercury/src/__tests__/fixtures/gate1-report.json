@@ -93,22 +93,119 @@
         "sites": 1,
         "clean": 0
       }
+    },
+    {
+      "name": "inhuman-custdev-best-tagline",
+      "sourcePath": "src/__tests__/fixtures/gate1-corpus/inhuman-custdev-best-tagline.scm",
+      "doors": 0,
+      "carFamily": {
+        "sites": 16,
+        "clean": 14,
+        "bySymbol": {
+          "car": {
+            "sites": 9,
+            "clean": 9
+          },
+          "cadr": {
+            "sites": 2,
+            "clean": 0
+          },
+          "cdr": {
+            "sites": 5,
+            "clean": 5
+          }
+        }
+      },
+      "if": {
+        "sites": 23,
+        "clean": 17
+      },
+      "map": {
+        "sites": 16,
+        "clean": 16
+      },
+      "filter": {
+        "sites": 3,
+        "clean": 0
+      }
+    },
+    {
+      "name": "inhuman-geo",
+      "sourcePath": "src/__tests__/fixtures/gate1-corpus/inhuman-geo.scm",
+      "doors": 0,
+      "carFamily": {
+        "sites": 5,
+        "clean": 5,
+        "bySymbol": {
+          "cdr": {
+            "sites": 3,
+            "clean": 3
+          },
+          "car": {
+            "sites": 2,
+            "clean": 2
+          }
+        }
+      },
+      "if": {
+        "sites": 7,
+        "clean": 7
+      },
+      "map": {
+        "sites": 3,
+        "clean": 3
+      },
+      "filter": {
+        "sites": 0,
+        "clean": 0
+      }
+    },
+    {
+      "name": "inhuman-reference-interview",
+      "sourcePath": "src/__tests__/fixtures/gate1-corpus/inhuman-reference-interview.scm",
+      "doors": 0,
+      "carFamily": {
+        "sites": 4,
+        "clean": 4,
+        "bySymbol": {
+          "car": {
+            "sites": 3,
+            "clean": 3
+          },
+          "cdr": {
+            "sites": 1,
+            "clean": 1
+          }
+        }
+      },
+      "if": {
+        "sites": 6,
+        "clean": 6
+      },
+      "map": {
+        "sites": 13,
+        "clean": 13
+      },
+      "filter": {
+        "sites": 3,
+        "clean": 0
+      }
     }
   ],
   "totals": {
-    "carSites": 21,
-    "carClean": 15,
-    "ifSites": 17,
-    "ifClean": 16,
-    "cleanPct": 81.57894736842105,
-    "mapSites": 11,
-    "mapClean": 11,
-    "filterSites": 5,
+    "carSites": 46,
+    "carClean": 38,
+    "ifSites": 53,
+    "ifClean": 46,
+    "cleanPct": 84.84848484848484,
+    "mapSites": 43,
+    "mapClean": 43,
+    "filterSites": 11,
     "filterClean": 0
   },
   "sampleSizeGuard": {
     "threshold": 20,
-    "measured": 38,
+    "measured": 99,
     "passed": true
   },
   "lensWarnedUBExcluded": 0

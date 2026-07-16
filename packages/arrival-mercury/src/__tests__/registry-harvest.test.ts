@@ -31,7 +31,7 @@ describe("emitRegistryOf over the real oracle ambient", () => {
     // proof that neither resources nor impls were touched (test-plan row 2).
     const registry = emitRegistryOf(session.ambient);
     expect(registry.names.size).toBeGreaterThan(50);
-    for (const name of ["infer", "infer/chat", "pair?"]) {
+    for (const name of ["infer", "infer/chat", "infer/chat/system", "infer/chat/user", "infer/chat/assistant", "pair?"]) {
       expect(registry.lookup(name), name).toBeDefined();
     }
     const infer = registry.lookup("infer");
@@ -44,7 +44,18 @@ describe("emitRegistryOf over the real oracle ambient", () => {
       refPolicy: "shim", // no authored policy anywhere yet — the resolved default
     });
     expect(infer?.type).toContain("prompt");
-    expect(infer?.emit).toBeUndefined(); // Wave C lands stdlib/capability rules
+    // R2 relocation (arrival-mercury constitution §9): `infer`'s Contract now carries
+    // its own `emit` rule (llm-plane-arrival-env/src/infer.ts's `inferEmitRule`,
+    // moved off this package's phase1 table) — this is the ambient PROOF that
+    // `arrival/infer` resolves through the real harvest at all (unlike scheme/srfi-1,
+    // never a held row here). `infer/chat/system` is `kind: "define"` (a
+    // `symbol.define` procedure, not `rosetta`) — its `emit` is carried by the
+    // declaration-site SPREAD idiom (`symbol.define`'s factory does not thread a
+    // Contract's `emit` through on its own; see infer.ts's own note), proven equally
+    // reachable here.
+    expect(infer?.emit).toBeDefined();
+    expect(registry.lookup("infer/chat/system")).toMatchObject({ kind: "define" });
+    expect(registry.lookup("infer/chat/system")?.emit).toBeDefined();
   });
 
   it("ambient harvest resolves activation-dependent builders; the same roster BARE doors loudly", () => {

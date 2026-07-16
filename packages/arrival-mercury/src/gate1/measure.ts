@@ -317,16 +317,43 @@ export interface Gate1ManifestEntry {
 
 /**
  * The committed gate1-corpus manifest (constitution §9: "a committed
- * `gate1-corpus` manifest — three named real programs selected by site-density
- * criteria"). Scouted from: mercury's `fixtures/sources/*.scm`, the gepa example
- * sources it's drawn from, and `ai-winter-thawed/scm/*.scm` (see the scout
- * report for the rejected candidates and density counts). Files live
- * copy-as-chunk under `src/__tests__/fixtures/gate1-corpus/`.
+ * `gate1-corpus` manifest — real programs selected by site-density criteria").
+ * Originally three named programs, scouted from: mercury's `fixtures/sources/
+ * *.scm`, the gepa example sources it's drawn from, and `ai-winter-thawed/scm/
+ * *.scm` (see the scout report for the rejected candidates and density counts).
+ *
+ * R5a WIDENING (known caveat closed): the original three-program manifest was
+ * 92% concentrated in `inhuman-gepa-full.scm` alone (35 of 38 total car/if
+ * sites) — a healthy denominator riding almost entirely on one file's shape.
+ * Three more real programs join it, scouted this wave from `inhuman/examples/`
+ * (the broader example-project pool beyond the gepa variants already present)
+ * and picked purely by MEASURED site density (`measureProgram`, never
+ * eyeballed) — never by which direction they'd push the clean%, per the
+ * "if the number drops, that is information, not failure" ruling:
+ *   - `inhuman-custdev-best-tagline.scm` — 39 car/if sites (16 car, 23 if), the
+ *     single densest real program found across every scouted directory this
+ *     wave (more than doubling the ORIGINAL manifest's total denominator on its
+ *     own): a recursive hill-climb with a hierarchical audience-split.
+ *   - `inhuman-geo.scm` — 12 sites (5 car, 7 if), a bounded-recursion
+ *     convergence loop with a second constraining judge.
+ *   - `inhuman-reference-interview.scm` — 10 sites (4 car, 6 if), a stateless
+ *     interview → consolidate → audit pipeline.
+ *
+ * The metric definition itself (site/clean/denominator rules, `measureProgram`,
+ * `SAMPLE_SIZE_THRESHOLD`) is UNCHANGED — only the sample widens. New
+ * concentration: `inhuman-gepa-full.scm` is now 35 of 99 total sites (35.4%),
+ * spread across six real, differently-shaped programs instead of three.
+ *
+ * Files live copy-as-chunk under `src/__tests__/fixtures/gate1-corpus/` — each
+ * carries its own "Selection rationale" header recording why IT was chosen.
  */
 export const GATE1_MANIFEST: readonly Gate1ManifestEntry[] = [
   { name: "inhuman-gepa-full", fileName: "inhuman-gepa-full.scm" },
   { name: "mercury-fixture-gepa", fileName: "mercury-fixture-gepa.scm" },
   { name: "ai-winter-ebl-investigation", fileName: "ai-winter-ebl-investigation.scm" },
+  { name: "inhuman-custdev-best-tagline", fileName: "inhuman-custdev-best-tagline.scm" },
+  { name: "inhuman-geo", fileName: "inhuman-geo.scm" },
+  { name: "inhuman-reference-interview", fileName: "inhuman-reference-interview.scm" },
 ];
 
 export const GATE1_CORPUS_DIR = fileURLToPath(new URL("../__tests__/fixtures/gate1-corpus/", import.meta.url));

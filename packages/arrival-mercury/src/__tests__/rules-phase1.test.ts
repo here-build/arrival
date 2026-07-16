@@ -36,7 +36,6 @@ import {
   parseSexprs,
   phase1Rules,
   render,
-  runtimeRefsOf,
   walk,
   WalkDoorError,
   type WalkOptions,
@@ -156,31 +155,28 @@ describe("filter — the Law-T predicate guard", () => {
   });
 });
 
-// ── infer family — sync-shaped call surface (Law W) ───────────────────────────────────
-
-describe("infer family — Call(RuntimeRef(verb), args), framework axis on the shim", () => {
-  it("infer → infer(m, prompt) — sync-shaped, no await anywhere (Law W)", () => {
-    const unit = compile(`(define (g m) (infer m "hi"))`);
-    const ts = render(unit);
-    expect(ts).toBe(`function g(m) {\n    return infer(m, "hi");\n}\n`);
-    expect(ts).not.toContain("await");
-    expect(runtimeRefsOf(unit)).toEqual(new Set(["infer"]));
-  });
-
-  it("kwargs ride as the ONE trailing options ObjectLit (walker collapse; the rule adds nothing)", () => {
-    expect(emit(`(define (g m) (infer m "hi" :max-tokens 100))`)).toBe(
-      `function g(m) {\n    return infer(m, "hi", { maxTokens: 100 });\n}\n`,
-    );
-  });
-
-  it("family members ride the same rule; the raw RuntimeRef symbol awaits FRAME aliasing", () => {
-    const unit = compile(`(define (g m ms) (infer/chat m ms))`);
-    // `infer/chat` is NOT a legal JS identifier — the census is the seam FRAME will
-    // alias through; the render pins today's (pre-FRAME) raw-symbol behavior.
-    expect(runtimeRefsOf(unit)).toEqual(new Set(["infer/chat"]));
-    expect(render(unit)).toBe(`function g(m, ms) {\n    return infer/chat(m, ms);\n}\n`);
-  });
-});
+// ── infer family — RELOCATED (R2, arrival-mercury constitution §9) ───────────────────
+// The infer family's five real Contract-backed symbols (infer, infer/chat,
+// infer/chat/system, infer/chat/user, infer/chat/assistant) no longer carry a RULE in
+// `phase1Rules` — each is now the `emit` field of its own Contract in
+// `@inhuman.tools/llm-plane-arrival-env`'s `src/infer.ts` (`arrivalInferCapability`),
+// so this file's EMPTY-based registry (`withRules(EMPTY, phase1Rules)`, above) can no
+// longer resolve their APPLICATION-position residuals (there is neither a table rule
+// nor a base row to fall through to — `compile(...)`'s registry has no base at all,
+// unlike the real harvest). Their coverage now lives in two places: the Contract-level
+// rule-shape proof (llm-plane-arrival-env/src/__tests__/infer-emit.test.ts, calling
+// `emit.call` directly against a synthetic ctx — the "sync-shaped, no Await" and
+// "Call(RuntimeRef(verb), args)" goldens this describe block used to hold moved
+// there verbatim) and the full-pipeline proof through the REAL harvest —
+// legibility.test.ts's async-pipeline CSE test and model-spine.test.ts both compile
+// `(infer …)` through `withRules(emitRegistryOf(session.ambient), phase1Rules)` —
+// the harvested Contract row, not this file's stand-in table — unchanged by the
+// relocation. (The infer family has no dedicated bug-cell row of its own but is
+// exercised pervasively across the existing corpus, also unchanged.)
+//
+// `infer/scalar`/`infer/chat/scalar` — the infer-scalar-fold peephole's synthetic
+// dispatch heads — are NOT part of this relocation (see phase1.ts's own relocation
+// note): they back no Contract at all, so `phase1Rules` keeps their table rows.
 
 // ── withRules — the overlay contract ──────────────────────────────────────────────────
 

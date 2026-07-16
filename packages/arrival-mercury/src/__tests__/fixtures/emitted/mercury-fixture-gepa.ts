@@ -1,4 +1,4 @@
-import { ge, append_, car, every, list, zeroP } from "./stage0.mts";
+import { ge, append_, every, list, zeroP } from "./stage0.mts";
 function OracleMain() {
     throw new Error("unsupported-form/require: `(require \"metric.scm\")` \u2014 module loading is not compiled in this slice (the loader/FRAME wave owns import planning).");
     const examples = (() => {
@@ -16,16 +16,16 @@ function OracleMain() {
         throw new Error("unsupported-form/unresolved-identifier: `metric` is not lexically bound and is not a registry symbol.");
     });
     const assess = instruction => ({ instruction: instruction, scores: evaluate(instruction) });
-    const failing = candidate => examples.map((example, __i) => list(example, candidate["scores"][__i])).filter(__x => (pair => zeroP((() => {
+    const failing = candidate => examples.map((example, __i) => list(example, candidate["scores"][__i])).filter(__x2 => (pair => zeroP((() => {
         throw new Error("unsupported-form/unresolved-identifier: `cadr` is not lexically bound and is not a registry symbol.");
-    })()))(__x) !== false).map(car);
+    })()))(__x2) !== false).map(([head]) => head);
     const mutate = candidate => assess(reflect(candidate["instruction"], failing(candidate)));
     const dominates = (a, b) => every(ge, a["scores"], b["scores"]) && (() => {
         throw new Error("unsupported-form/unresolved-identifier: `some` is not lexically bound and is not a registry symbol.");
     })();
-    const frontier = pool => pool.filter(__x2 => (c => !(() => {
+    const frontier = pool => pool.filter(__x3 => (c => !(() => {
         throw new Error("unsupported-form/unresolved-identifier: `some` is not lexically bound and is not a registry symbol.");
-    })())(__x2) !== false);
+    })())(__x3) !== false);
     const iterate = (step, pool, n) => zeroP(n) ? pool : iterate(step, step(pool), n - 1);
     const generation = pool => frontier(append_(pool, pool.map(mutate)));
     const gepa = (seed, rounds) => {

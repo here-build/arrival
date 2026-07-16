@@ -38,7 +38,7 @@ const CASES = [
   { name: "apply patterns: apply-plus reduce", fixture: applyPlus },
   { name: "apply patterns: apply-map-transpose", fixture: applyMapTranspose },
   { name: "short-circuit or-chain (guarded cascade, nested)", fixture: shortCircuitOr },
-  { name: "first-class car in HOF position (eta degrades to shim, today)", fixture: firstClassCarHof },
+  { name: "first-class car in HOF position (eta expands, goldenEpoch 2)", fixture: firstClassCarHof },
   { name: "LEGIBILITY: implicit destruction (constitution §3.5's worked example)", fixture: legibilityDestructure },
 ] as const;
 
@@ -63,7 +63,13 @@ describe("Gate 3 — full-pipeline emitted TEXT goldens", () => {
     expect(applyPlus.golden).toContain(".reduce(");
     expect(applyMapTranspose.golden).toContain("...list(");
     expect(shortCircuitOr.golden).toContain("!== false ?");
-    expect(firstClassCarHof.golden).toContain(".map(car)");
+    // goldenEpoch 2 (R5c): eta now expands `car` inline — the pattern under test
+    // flipped from "eta degrades to shim" to "eta actually fires", so the honest
+    // non-degradation check is the opposite shape: no bare `car` shim survives
+    // (neither as an import nor as a value-position reference), AND the eta-built
+    // arrow is really there.
+    expect(firstClassCarHof.golden).not.toContain("car");
+    expect(firstClassCarHof.golden).toContain(".map(([head]) => head)");
     expect(legibilityDestructure.golden).toContain("([first, second]) => first + second");
   });
 });

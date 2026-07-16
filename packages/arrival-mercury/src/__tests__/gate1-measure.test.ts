@@ -31,11 +31,14 @@ describe("Gate 1 — type-availability measurement over the committed corpus", (
     await session.dispose();
   });
 
-  it("the manifest names exactly the three committed corpus programs", () => {
+  it("the manifest names exactly the six committed corpus programs (R5a widening)", () => {
     expect(GATE1_MANIFEST.map((m) => m.name)).toEqual([
       "inhuman-gepa-full",
       "mercury-fixture-gepa",
       "ai-winter-ebl-investigation",
+      "inhuman-custdev-best-tagline",
+      "inhuman-geo",
+      "inhuman-reference-interview",
     ]);
   });
 

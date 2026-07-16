@@ -40,13 +40,45 @@
  * check, deliberately: a fixed-arity builtin called wrong is a static defect, exactly
  * the class a compiler front gate exists to catch.
  *
- * Known deferred hazards (documented, not landed — report-tracked for later waves):
- *  - `null?`/`pair?`'s FACT-GATED clean form (now on their own Contracts —
+ * Known deferred hazards (documented, INVESTIGATED this wave — R5b, the TS2367
+ * widen sweep — but NOT landed; both would change committed emitted text, which
+ * conflicts with the zero-golden-churn gate, so both are report-tracked for a
+ * churn-accepting follow-up rather than fixed unilaterally here):
+ *  - `null?`'s FACT-GATED clean form (now on its own Contract —
  *    foundations/arrival/arrival/src/env/r7rs/equality.ts) can still hit TS2367 under
  *    a TUPLE-typed proven argument (`.length` narrows to a numeric literal; `=== 0` is
  *    a no-overlap comparison); phase1-symbol-rules.md §2 prescribes a `Un("+", …)`
- *    widen. Rarer now (the clean form needs a proven list fact at all), lands with the
- *    widen sweep wherever the rule lives.
+ *    widen. **Tried and REVERTED this wave**: `provesArray` (equality.ts) gates the
+ *    clean branch on ANY proven list/pair/nonEmptyList fact, not specifically a
+ *    tuple-narrowed one — the two aren't distinguished at the facts layer yet, so the
+ *    branch is NOT dormant (a prior draft of this note claimed it was; disproven
+ *    empirically) — `inhuman-gepa-full`'s two `null?` call sites already prove plain
+ *    (non-tuple) list facts and hit this branch TODAY. Applying the widen unconditionally
+ *    therefore changed ALREADY-CORRECT emitted text (`fails.length === 0` →
+ *    `+fails.length === 0`, etc.), breaking `emitted-fixtures.test.ts`'s committed
+ *    `inhuman-gepa-full.ts` golden — reverted rather than accepted. A safe fix needs
+ *    the facts layer to distinguish "tuple-narrowed length" from "plain list length"
+ *    FIRST (typefacts-extraction.md §4 item 2's tuple-typed list-constructor leaves,
+ *    not yet delivered) so the widen can be scoped to only the case that needs it.
+ *    `pair?`'s sibling rule needs no such fix regardless: its `>` is RELATIONAL, not
+ *    `===`/`!==` — TS2367 only fires on the equality family (empirically confirmed:
+ *    `xs.length > 0` never errors on a tuple-typed `xs`).
+ *  - `and`/`or`/`not`'s Law-T truthiness guard (`X === false` / `X !== false`) hits
+ *    TS2367 whenever `X`'s tsc-inferred type is a literal disjoint from `false` —
+ *    empirically the CURRENT cause of `emitted-strict-gate.test.ts`'s documented
+ *    "TS2367 (9 rows)": `and-three`, `and-zero-then-one`, `not-zero`,
+ *    `or-first-truthy-wins`, `short-circuit-effect`, `short-circuit-or`,
+ *    `truthy-empty-list`, `truthy-empty-string`, `truthy-zero-then` (verified via
+ *    `strictDiagnostics` over every corpus row — 10 diagnostics across these 9 files,
+ *    matching the header's count exactly). Unlike `null?`'s attempted fix, this class
+ *    has no type-only widen available even in principle: the disjointness is
+ *    inherent (a `number`/`string`/`unknown[]` literal is genuinely never `false`), so
+ *    any fix changes the rendered comparison/declaration text for `and`/`or`/`if`
+ *    (walker.ts's shared `truthTest`/`lowerAndOr`) and `not`'s guard — a foundational,
+ *    pervasively-exercised path whose committed goldens (gate3's short-circuit-or,
+ *    cross-pass-fixtures, several `fixtures/emitted/*.ts` rows) would all need
+ *    re-basing. Not attempted, for the same golden-churn reason `null?`'s attempt was
+ *    reverted for.
  *
  * RELOCATED (Phase-2 relocation drill, constitution §9), one package deal at a time:
  *  - Wave 1: `=`/`quotient`/`modulo` moved onto their own Contract's `emit` field —
@@ -96,14 +128,37 @@
  *    as of this wave) — flagged for a follow-up wave, not fixed here. Once it lands,
  *    deleting this table row is the same one-line move every other Wave-3 symbol
  *    already made.
- *  All thirteen fully-relocated symbols (map/apply this wave; eleven from Waves 1-2)
- *  are byte-identical to the rules this file used to hold (verified: the oracle's
- *  bug-cell rows quotient-neg/modulo-neg/exact-vs-inexact-eq and the cross-pass/gate3
- *  goldens are unchanged; the rest have no dedicated bug-cell row of their own but are
- *  exercised pervasively across the existing corpus, also unchanged). `filter`'s
- *  table-resident rule (below) is likewise byte-identical to its new Contract twin —
- *  the two are proven equal by construction (one function, copied once, never
- *  re-derived) rather than merely "consistent."
+ *  - R2: the infer family's FIVE real Contract-backed symbols (`infer`, `infer/chat`,
+ *    `infer/chat/system`, `infer/chat/user`, `infer/chat/assistant`) move onto their
+ *    own Contracts in `@inhuman.tools/llm-plane-arrival-env`'s `src/infer.ts`
+ *    (`arrivalInferCapability`) — the SAME `inferRule(verb)` factory this file used
+ *    to hold, now named `inferEmitRule` there, byte-identical (`Call(ctx.runtime
+ *    (verb), args)`). **Discovered, not assumed, and the OPPOSITE of filter's case:**
+ *    `registry-harvest.test.ts`'s own pre-existing assertion (`capability:
+ *    "arrival/infer"` on the harvested `infer` row) already proved `arrival/infer`
+ *    IS part of the oracle's harvested ambient — `arrivalAgenticCapability` (rooted
+ *    in `arrivalCapabilities()`, `@inhuman.tools/arrival-run/src/packs/index.ts`)
+ *    deps on it, so `infer`/`infer/chat`/the three chat-message constructors resolve
+ *    through the REAL harvest exactly like map/apply/cons do — no ambient gap, no
+ *    held row. All five table rows are deleted (not just presence-only) —
+ *    `withRules`' fallthrough to the harvested Contract row is what resolves them
+ *    now.
+ *  - `infer/scalar`/`infer/chat/scalar` STAY table-resident — but for a DIFFERENT
+ *    reason than filter's ambient gap: they are not real capability vocabulary at
+ *    all. They are the infer-scalar-fold peephole's synthetic dispatch heads (the
+ *    distinguished call-head `(car (infer …))`/`(car (infer/chat …))` fuses onto —
+ *    ../peepholes/infer.ts), so no `arrival/infer` symbol is named "infer/scalar";
+ *    there is no Contract for either to move to, ever. Law C holds: the peepholes
+ *    themselves (cross-node idioms) stay engine-side, unmoved by this relocation.
+ *  All eighteen fully-relocated symbols (the infer family this wave; thirteen from
+ *  Waves 1-3) are byte-identical to the rules this file used to hold (verified: the
+ *  oracle's bug-cell rows quotient-neg/modulo-neg/exact-vs-inexact-eq and the
+ *  cross-pass/gate3 goldens are unchanged; the infer family and the rest have no
+ *  dedicated bug-cell row of their own but are exercised pervasively across the
+ *  existing corpus and model-spine/legibility's async-pipeline suites, also
+ *  unchanged). `filter`'s table-resident rule (below) is likewise byte-identical to
+ *  its new Contract twin — the two are proven equal by construction (one function,
+ *  copied once, never re-derived) rather than merely "consistent."
  */
 import type { EmitCtx, EmitRule } from "@here.build/arrival/emit";
 
@@ -133,6 +188,39 @@ function exactly(ctx: EmitCtx<R>, sym: string, args: readonly R[], n: number): r
 
 const carRule: EmitRule<R> = {
   call: (args, ctx) => Index(exactly(ctx, "car", args, 1)[0]!, Lit(0)),
+  // ── R5c: eta-`ref`, value position (`(map car xss)`) — constitution §4.2/§4.5's
+  // refPolicy design, phase1-symbol-rules.md §1, arrival-ts-transpiler-design.md §4.2's
+  // named Gate-3 golden (fixtures/gate3/first-class-car-hof.golden.ts's own "⚠ UPGRADE
+  // MARKER"). `car`'s table row already declares `refPolicy: "eta"`; only this `.ref`
+  // method was missing, so the walker's ladder (`registryValueRef`) fell through to
+  // the rung-3 shim every time — TODAY it takes this branch first.
+  //
+  // Eta-expands `call` against the INSTANTIATED use-site signature
+  // (`ctx.selfFacts?.callable` — `TypeFacts.callable`, "the instantiated signature at
+  // THIS use site": tsc has already instantiated `car<T>` against the consuming HOF's
+  // element type). The extraction side needed NO new work — typefacts/extract.ts's
+  // `probeCallable` already fires for exactly this shape ("Value-position probe —
+  // single-occurrence Refs in argument position"), the once-unverified assumption
+  // this design confessed ("whether the lens delivers instantiated signatures in
+  // argument position") now proven live (the Wave-B readout).
+  //
+  // No proven signature, or a proven arity other than 1 (car is fixed-arity — an
+  // unbounded/mismatched arity has no honest 1-param arrow to build) ⇒ the exact same
+  // shim the walker's own fallback rung would have produced (Law F's value-position
+  // analog: absence of proof ⇒ conservative, never a guess). `carRule.call` itself
+  // never branches on `argFacts` (car's residual is unconditional — §2.1), so
+  // threading `paramFacts` through changes nothing FOR CAR TODAY; it's still the
+  // honest general shape (a future fact-driven `.ref` reuses the same plumbing).
+  //
+  // `cdr` is the natural, structurally identical follow-up — deliberately NOT done
+  // here (no golden names it yet; this wave lands exactly the case that's pinned).
+  ref: (ctx) => {
+    const callable = ctx.selfFacts?.callable;
+    if (callable?.arity !== 1) return ctx.runtime("car"); // Law F: no proof ⇒ shim
+    const x = freshBinding(ctx, "x");
+    const innerCtx: EmitCtx<R> = { ...ctx, argFacts: [callable.paramFacts?.[0] ?? {}] };
+    return Arrow([x], carRule.call([Ref(x)], innerCtx));
+  },
 };
 
 const cdrRule: EmitRule<R> = {
@@ -187,18 +275,28 @@ const filterRule: EmitRule<R> = {
   },
 };
 
-// ─── infer family — ONE sync-shaped call surface, framework axis deferred ────────────
-// Sync-shaped `Call(RuntimeRef(verb), args)` — Law W: no Await minted; ASYNC-IFY reads
+// ─── infer/scalar / infer/chat/scalar — RELOCATED (R2), except these two ─────────────
+// The infer family's FIVE real Contract-backed symbols (`infer`, `infer/chat`,
+// `infer/chat/system`, `infer/chat/user`, `infer/chat/assistant`) moved onto their own
+// Contract's `emit` field — `@inhuman.tools/llm-plane-arrival-env`'s `src/infer.ts`
+// (`arrivalInferCapability`), carrying `inferEmitRule("infer")` etc., byte-identical to
+// this file's own (now-deleted) `inferRule` factory. See the module header's relocation
+// note for the full account, including WHY that move was safe outright (no ambient gap
+// — `arrival/infer` IS part of the oracle's harvested ambient, discovered via
+// registry-harvest.test.ts's own pre-existing assertion, unlike filter's srfi-1 case).
+//
+// `infer/scalar`/`infer/chat/scalar` are NOT part of that move (Law C — cross-node
+// idioms are never symbol rules; the infer-scalar-fold + cache-key-elide PEEPHOLES that
+// mint/consume these two heads stay engine-side, ../peepholes/infer.ts, untouched by
+// this relocation). They are the scalar-fold peephole's own synthetic dispatch heads —
+// the distinguished call-head `(car (infer …))`/`(car (infer/chat …))` fuses onto — not
+// real capability vocabulary: no `arrival/infer` symbol is named "infer/scalar", so
+// there is no Contract for either to ever move to. `inferRule` stays here, retained
+// SOLELY for these two rows (the SAME sync-shaped shape as its five relocated former
+// table-mates: `Call(RuntimeRef(verb), args)` — Law W: no Await minted; ASYNC-IFY reads
 // the runtime shim's real declared type and awaits the promise-typed edge. The walker
 // has ALREADY collapsed kwargs into one trailing options ObjectLit before any rule
-// runs, so `args` carries the options object as-is — the rule adds nothing.
-//
-// TODO(config.framework): the per-framework residuals (vercel `generateText`/
-// langchain `models.*.invoke`, phase1-symbol-rules.md §8's config-branched builders)
-// do NOT land in this wave — the stage-0 runtime shim owns the framework axis: one
-// `infer` export whose body dispatches, so the emitted call surface is framework-
-// stable. When the §8 builders land, this rule grows the `ctx.config.framework`
-// branch and the shim dissolves; the call-shape goldens pin today's surface.
+// runs, so `args` carries the options object as-is — the rule adds nothing).
 
 const inferRule = (verb: string): EmitRule<R> => ({
   call: (args, ctx) => Call(ctx.runtime(verb), args),
@@ -236,16 +334,18 @@ export const phase1Rules: SymbolRuleTable = {
   // already landed this wave; only the ambient-visibility gap blocks the same move.
   every: {},
   any: {},
-  infer: { emit: inferRule("infer") },
-  "infer/chat": { emit: inferRule("infer/chat") },
-  "infer/chat/system": { emit: inferRule("infer/chat/system") },
-  "infer/chat/user": { emit: inferRule("infer/chat/user") },
-  "infer/chat/assistant": { emit: inferRule("infer/chat/assistant") },
-  // The infer-scalar-fold peephole's targets (../peepholes/infer.ts): the SAME
-  // sync-shaped `inferRule` factory, under the distinguished head the peephole
-  // rewrites `(car (infer …))` / `(car (infer/chat …))` onto. No new Residual
-  // shape, no walker change — the peephole's whole integration cost is this row
-  // plus the matching `inferAsyncSeeds` entry below.
+  // infer / infer/chat / infer/chat/system / infer/chat/user / infer/chat/assistant —
+  // RELOCATED (R2, module header's relocation note); no table row remains for any of
+  // them — `withRules`' fallthrough to the harvested Contract row
+  // (`@inhuman.tools/llm-plane-arrival-env`'s `arrivalInferCapability`) resolves them
+  // now.
+  //
+  // The infer-scalar-fold peephole's targets (../peepholes/infer.ts) — NOT relocated,
+  // and never will be (see the section comment above `inferRule`, just above): the SAME
+  // sync-shaped `inferRule` factory, under the distinguished head the peephole rewrites
+  // `(car (infer …))` / `(car (infer/chat …))` onto. No new Residual shape, no walker
+  // change — the peephole's whole integration cost is this row plus the matching
+  // `inferAsyncSeeds` entry below.
   "infer/scalar": { emit: inferRule("infer/scalar") },
   "infer/chat/scalar": { emit: inferRule("infer/chat/scalar") },
 };

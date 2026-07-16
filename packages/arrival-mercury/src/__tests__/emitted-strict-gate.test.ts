@@ -24,10 +24,21 @@
  * are documented, not hidden (Law F's "never wrong, always visible" applied to
  * the gate itself):
  *
- *  - TS2367 (9 rows): Law T's run-side guard `c !== false` where tsc KNOWS `c`
- *    is never boolean (literals, `unknown[]`, strings) — semantically correct
- *    Scheme truthiness that TS flags as a suspicious comparison; the widen is
- *    the same hazard class phase1.ts's header defers to a later wave.
+ *  - TS2367 (9 rows: and-three, and-zero-then-one, not-zero, or-first-truthy-wins,
+ *    short-circuit-effect, short-circuit-or, truthy-empty-list, truthy-empty-string,
+ *    truthy-zero-then): Law T's run-side guard `c !== false` / `c === false` where
+ *    tsc KNOWS `c` is never boolean (literals, `unknown[]`, strings) — semantically
+ *    correct Scheme truthiness that TS flags as a suspicious comparison. Same
+ *    DIAGNOSTIC CODE as the `null?` tuple-length hazard phase1.ts's header defers
+ *    (R5b investigated both this wave; NEITHER has a churn-free fix — `null?`'s
+ *    candidate widen was tried and reverted after it broke a committed golden, see
+ *    phase1.ts's header for the full account). This class is inherent regardless: a
+ *    `number`/`string`/`unknown[]` literal is genuinely disjoint from `false`, so
+ *    closing it changes the EMITTED comparison/declaration text for `and`/`or`/`if`
+ *    (walker.ts's shared `truthTest`/`lowerAndOr`) and `not`'s guard, which would
+ *    re-base several committed goldens (gate3's short-circuit-or, cross-pass-
+ *    fixtures, several `fixtures/emitted/*.ts` rows) — a churn-accepting call for
+ *    V, deliberately not made unilaterally here.
  *  - TS2345/TS18046 (4 rows: any-witness, apply-plus, every-boolean-pred,
  *    multi-list-map): `unknown`-element shim results (`list` → `unknown[]`)
  *    meeting number-typed shim params (`plus`, `gt`, `odd?`) or arithmetic —

@@ -41,7 +41,16 @@ const cf = (src: string): ClassifyResult => classify(desugar(parseSexprs(src)));
 // exactly where harness.ts's `compileGreenfield` now calls it — no FRAME/ASYNC-IFY
 // noise, so goldens stay the same bare byte-level shape that file already pins.)
 const EMPTY: EmitRegistry = { lookup: () => undefined, names: new Set<string>() };
-const registry = withRules(EMPTY, phase1Rules);
+// A bare "infer" presence row: `infer`'s own emit rule relocated onto its Contract
+// (R2, arrival-mercury constitution §9 — llm-plane-arrival-env/src/infer.ts) and left
+// no row in `phase1Rules`, so this file's EMPTY-based stand-in registry (unlike the
+// real harvest) can no longer resolve a BARE `(infer …)` call site on its own.
+// Byte-identical output either way: with no `emit` at all, "infer" falls to the
+// walker's rung-3 RuntimeRef shim (`Call(RuntimeRef("infer"), args)`) — the exact
+// same residual the relocated Contract rule builds (same convention
+// async-ify.test.ts's own `row("infer")` already relies on) — so this row exists
+// SOLELY to make the symbol resolvable, not to stand in for its compiled shape.
+const registry = withRules(EMPTY, { ...phase1Rules, infer: {} });
 const emit = (src: string): string => render(walk(peephole(cf(src)), { registry, register: "run" }));
 
 function assertKind<K extends CoreForm["kind"]>(f: CoreForm, kind: K): Extract<CoreForm, { kind: K }> {
