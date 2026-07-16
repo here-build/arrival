@@ -70,6 +70,33 @@
  *    dividend): pure subexpressions inline directly across suspension
  *    points — this pass only ever wraps existing edges, never restructures
  *    around them.
+ *
+ * R-G3 addition (gate3-human-grade-rulings.md — Gate-3 human-grade review,
+ * V) — two elisions that read as noise otherwise, landed as ONE rule
+ * (`consumeTail`, below) applied at the two positions a "return" can be: an
+ * explicit `Return.value`, and an Arrow's own expression body (an implicit
+ * return). `return await X` is pointless outside a try/catch — arrival has
+ * no `Try` node yet (residual/types.ts's own "No `Try` — guard doors in
+ * v1"), so the elision is UNCONDITIONAL today; the day `Try` lands, THIS is
+ * the one place to gate it on "not inside a try". An inner arrow whose
+ * ENTIRE body reduces to that shape (`async (x) => await infer(x)`) needs
+ * neither `async` nor `await` — the promise is returned either way.
+ *
+ * This SPLITS what used to be one question into two. `AsyncnessFacts.
+ * arrowAsync` keeps meaning exactly what it always has — "does CALLING this
+ * def yield a promise" (feeds `callType`/`promiseWrap`, both semantic,
+ * both UNCHANGED by this addition). `materializeAsyncness` separately
+ * derives an un-exported "does this def's OWN declaration need the `async`
+ * keyword" verdict from whatever survives ITS OWN tail-elision rewrite. The
+ * two questions coincided before this ruling (an await was minted at every
+ * promise-typed consuming position, tail returns included, so "reachable
+ * Await" was the same test either way) and no longer do: a pass-through
+ * wrapper (`function f(x) { return infer(x); }`, itself this addition's own
+ * effect) still returns a promise to ITS OWN callers with zero `async`
+ * keywords anywhere in sight. Getting this backwards — reading `arrowAsync`
+ * as "is this printed `async`" and having `callType` key off THAT instead —
+ * would silently under-await every caller of a fully-elided pass-through
+ * def, exactly the bug class this whole pass exists to prevent.
  */
 import type { Binding, ChunkExpr, ChunkStmt, CompilationUnit, Decl, NodeId, R, TsType } from "../residual/types.js";
 import { Binding as mkBinding, Call, Member, Ref } from "../residual/types.js";
@@ -119,7 +146,19 @@ export interface AsyncnessFacts {
    *  IDENTITY from this exact `unit`, and would silently under-answer
    *  ("unknown"/not-async) against any other tree. */
   readonly unit: CompilationUnit;
-  /** Is this Arrow/FnDecl definition async — the fixpoint's final answer. */
+  /** Does CALLING this Arrow/FnDecl definition yield a promise — the
+   *  fixpoint's final answer (async-await-plane.md Mechanics 1-2's own
+   *  question; UNCHANGED by R-G3's tail-await elision, module header). NOT
+   *  "does this def's own declaration print the `async` keyword" — R-G3
+   *  makes those two diverge on purpose: a def whose only promise-touching
+   *  code is a bare tail return (`return infer(x);`, no `await` needed at
+   *  all) still yields a promise to ITS OWN callers when called, even
+   *  though its own declaration needs no `async` keyword.
+   *  `materializeAsyncness` derives THAT separate, un-exported decision
+   *  from what survives its own tail-elision rewrite; this fact continues
+   *  to be exactly what `callType` (below) reads for a `Ref`/`RuntimeRef`
+   *  callee and what `promiseWrap` (Mechanics 8) gates on — both semantic,
+   *  both blind to how a def's own body ends up PRINTED. */
   readonly arrowAsync: (def: FnDef) => boolean;
   /** What does EVALUATING this node yield, right now? A `Ref` is always
    *  `"sync"` — see `makeRewriter`'s boxed note below. */
@@ -254,8 +293,16 @@ function lawWViolation(what: string, origin?: NodeId): never {
  * `typeOf`, is the only place `arrowAsync` is consulted, and only in
  * `Call`/`Method` callee position.
  */
-function makeRewriter(oracle: Pick<AsyncnessFacts, "typeOf" | "callType" | "arrowAsync">) {
+function makeRewriter(
+  oracle: Pick<AsyncnessFacts, "typeOf" | "callType" | "arrowAsync">,
+  opts?: { readonly elideTailAwait?: boolean },
+) {
   const { typeOf, callType, arrowAsync } = oracle;
+  // R-G3 (module header): ONLY materializeAsyncness's own Phase-2 instance sets this.
+  // asyncnessOf's Phase-1 instance never does — consumeTail's own header explains why
+  // the two phases must disagree here on purpose (this is the one place they diverge;
+  // every other rule below is shared, unconditionally, by both phases).
+  const elideTailAwait = opts?.elideTailAwait === true;
   const mintAwait = (value: R): R => ({ t: "Await", value, origin: value.origin });
 
   /** A value-consuming position: the parent reads THROUGH the child's
@@ -264,6 +311,44 @@ function makeRewriter(oracle: Pick<AsyncnessFacts, "typeOf" | "callType" | "arro
   const consume = (n: R): R => {
     const r = rewriteExpr(n);
     return typeOf(n) === "sync" ? r : mintAwait(r);
+  };
+
+  /**
+   * R-G3's two elisions (module header), landed as ONE rule at the two "return"
+   * positions: an explicit `Return.value`, and an Arrow's own expression body (an
+   * implicit return, `rewriteExpr`'s Arrow case, below). Never MINTS an Await at this
+   * position at all — cheaper than mint-then-strip, and identical in effect, since
+   * `mintAwait(r).value === r` — EXCEPT a rewrite-table rule (the async-map
+   * `Promise.all` collapse; the ArrayLit by-right parallelization, both in
+   * `rewriteExpr` below) mints its OWN `Await` unconditionally, regardless of what
+   * position it ends up in; when that happens to be here, that one layer is stripped
+   * back off: "the promise is returned either way" (R-G3's own words, quoted in the
+   * ruling doc).
+   *
+   * Shape-restricted on purpose: only a BARE `Await` at the very TOP of the rewritten
+   * result is ever touched. `Member(Await(Call(...)), "text")`, `Bin("+", Lit(1),
+   * Await(...))`, an `Await` buried inside a `Call`'s own argument list — every shape
+   * where something ELSE reads through the resolved value at THIS position — passes
+   * through unchanged, because `rewriteExpr` never hands this function anything but
+   * the outermost node of whatever it's asked to rewrite, and none of those shapes
+   * produce a bare `Await` there (`consume`, not this function, still owns every one
+   * of them — the KEEP cases, asyncness.test.ts's own "unaffected" rows).
+   *
+   * Only active when `elideTailAwait` — degenerates to plain `consume` otherwise, so
+   * `asyncnessOf`'s Phase-1 fixpoint (which shares this exact rule set) sees the
+   * un-elided tree it always has. That fixpoint decides `arrowAsync`/`callType` —
+   * "does calling this def yield a promise" — which must stay accurate regardless of
+   * whether the def's OWN body ends up PRINTED with `await`/`async`: a fully-elided
+   * pass-through wrapper (`function f(x) { return infer(x); }`) still returns a
+   * promise to ITS OWN callers. Letting Phase 1 see the elided tree would make THAT
+   * fixpoint under-count — the exact "does calling this yield a promise" question this
+   * whole pass exists to answer correctly — silently reintroducing an under-await bug
+   * one level up the call graph.
+   */
+  const consumeTail = (n: R): R => {
+    if (!elideTailAwait) return consume(n);
+    const r = rewriteExpr(n);
+    return r.t === "Await" ? r.value : r;
   };
 
   const rewriteBlock = (b: BlockR): BlockR => ({ ...b, stmts: b.stmts.map(rewriteStmt) });
@@ -296,7 +381,9 @@ function makeRewriter(oracle: Pick<AsyncnessFacts, "typeOf" | "callType" | "arro
       case "Assign":
         return { ...n, value: consume(n.value) };
       case "Return":
-        return n.value === undefined ? n : { ...n, value: consume(n.value) };
+        // R-G3: a return position — consumeTail (above), not consume — the
+        // "outer return-await elision".
+        return n.value === undefined ? n : { ...n, value: consumeTail(n.value) };
       case "While":
         return { ...n, test: consume(n.test), body: rewriteBlock(n.body) };
       case "ForOf":
@@ -395,10 +482,18 @@ function makeRewriter(oracle: Pick<AsyncnessFacts, "typeOf" | "callType" | "arro
         // union case, free).
         return { ...n, test: consume(n.test), then: rewriteExpr(n.then), else: rewriteExpr(n.else) };
       case "Arrow": {
-        const isAsync = arrowAsync(n);
-        // An expression body IS the return value — a consuming position,
-        // same as `Return`.
-        const body = n.body.t === "Block" ? rewriteBlock(n.body) : consume(n.body);
+        // An expression body IS the return value — a consuming (tail)
+        // position, same as `Return` — consumeTail (above), R-G3's
+        // "inner-arrow elision".
+        const body = n.body.t === "Block" ? rewriteBlock(n.body) : consumeTail(n.body);
+        // Printing decision: when eliding, re-derived from what's actually
+        // LEFT in the rewritten body — NOT read off `arrowAsync`, which
+        // answers "does calling this yield a promise" (module header) and
+        // can stay true for an arrow that no longer needs the `async`
+        // keyword at all (R-G3's own worked example: `async (x) => await
+        // infer(x)` → `(x) => infer(x)`). Phase 1 (not eliding) is
+        // unchanged: still reads `arrowAsync(n)` directly.
+        const isAsync = elideTailAwait ? containsAwaitShallow(body) : arrowAsync(n);
         return { ...n, body, async: isAsync ? true : n.async };
       }
       case "ArrayLit": {
@@ -628,21 +723,41 @@ export function asyncnessOf(unit: CompilationUnit, seeds: ReadonlySet<string>): 
  * `facts` — never re-derives `arrowAsync`/`typeOf`/`callType`. Identity
  * fast-path: `!facts.hasAsync` returns `facts.unit` UNCHANGED (same
  * reference).
+ *
+ * R-G3 (module header): the ONLY call site that opts into `elideTailAwait` —
+ * this is where the two elisions actually land in the emitted tree. A
+ * FnDecl's OWN `.async` flag is therefore re-derived from what's left in its
+ * REWRITTEN body (`containsAwaitShallow`, below) rather than read straight
+ * off `facts.arrowAsync` (which still answers the unchanged, separate
+ * question — "does calling this def yield a promise" — used here only for
+ * the `returnType`/`promiseWrap` Law-V join point, module header's own
+ * worked distinction).
  */
 export function materializeAsyncness(facts: AsyncnessFacts): CompilationUnit {
   if (!facts.hasAsync) return facts.unit;
 
-  const { rewriteBlock, rewriteStmt, consume } = makeRewriter(facts);
+  const { rewriteBlock, rewriteStmt, consume, containsAwaitShallow } = makeRewriter(facts, {
+    elideTailAwait: true,
+  });
 
   const rewriteDecl = (d: Decl): Decl => {
     switch (d.t) {
       case "FnDecl": {
-        const isAsync = facts.arrowAsync(d);
+        const body = rewriteBlock(d.body);
+        // Printing decision (R-G3) — mirrors rewriteExpr's Arrow case:
+        // derived from the REWRITTEN body, never from facts.arrowAsync
+        // (which stays true for a fully-elided pass-through wrapper).
+        const isAsync = containsAwaitShallow(body);
+        // Law V join point (Mechanics 8, async-await-plane.md) — unaffected
+        // by R-G3: the Scheme-semantics return type still wraps in
+        // Promise<…> whenever CALLING this def yields one, even once its
+        // own declaration no longer carries the `async` keyword.
+        const returnsPromise = facts.arrowAsync(d);
         return {
           ...d,
-          body: rewriteBlock(d.body),
+          body,
           async: isAsync ? true : d.async,
-          returnType: isAsync && d.returnType !== undefined ? promiseWrap(d.returnType) : d.returnType,
+          returnType: returnsPromise && d.returnType !== undefined ? promiseWrap(d.returnType) : d.returnType,
         };
       }
       case "ConstDecl":

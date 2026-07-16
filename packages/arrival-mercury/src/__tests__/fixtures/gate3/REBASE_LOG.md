@@ -1,5 +1,189 @@
 # Gate-3 goldens — rebase log
 
+## goldenEpoch 5 — R-G6: static prevaluation lands (2026-07-17)
+
+**One golden changed — the exact punch-list item this landing targets**
+(`docs/working-proposals/arrival-mercury/gate3-human-grade-rulings.md` R-G6,
+"not a sidecar re-ruling — the major one"). A new decision-view module,
+`../../prevalue/index.ts` (`prevalue`, the three-valued Scheme-truthiness
+evaluator; `prevalueDecisionAt`, the fold), wrapped by `SchemeSemanticModel.
+prevalueOf` (`../../model/model.ts`) exactly the way `idiomAt` wraps
+`idiomDecisionAt` — memoized per node identity, no shadow guard needed
+(unlike `idiomAt`'s `car`/`infer`, `if`/`and`/`or` are special forms
+`classify()` recognizes structurally; a program cannot shadow them). The
+walker (`../../walker/walk.ts`'s `lowerExpr` and `tailLoopForm`'s own `If`
+arm) consults it inline, at the top of every `If`/`And`/`Or` it lowers, and
+`oracle/harness.ts`'s `compileGreenfield` wires `sm.prevalueOf` into the
+real `walk()` call the same way it already wires `sm.idiomAt`.
+
+**`short-circuit-or.golden.ts`** — the named target, "its whole point becomes
+demonstrating the fold" (R-G6's own words):
+```diff
+- import { error } from "./stage0.mts";
+  function OracleMain() {
+-     const __or = false;
+-     return __or !== false ? __or : (() => {
+-         const __or2 = "a";
+-         return __or2 !== false ? __or2 : error("must-not-run");
+-     })();
++     return "a";
+  }
+```
+`#f` (the first operand) is provably inert for `or` and drops from the
+chain; `"a"` (the second) is provably true (Scheme truthiness — a non-empty
+string is never `#f`) and short-circuits the whole expression; `(error
+"must-not-run")` sits strictly after the short-circuit point and is dropped
+WHOLE, never lowered. `gate3-goldens.test.ts`'s own "actually exercises the
+pattern" sanity check flips with it: `!== false ?` (the guard shape) no
+longer exists to assert on, so the honest non-degradation proof becomes
+"`error` is genuinely gone, not merely unreached at runtime" plus "the
+surviving value is exactly the provably-true operand."
+
+**OQ8a (`oracle-harness.md`'s own open question) resolved by ELIMINATION,
+not by re-ruling** — the bug-cell corpus's `short-circuit-effect` row
+(`(let ((n 0)) (or #t (begin (set! n 999) 'x)) n)`) was `it.fails`-tracked
+because the sidecar expected a static `prohibited-dynamics` door on both
+sides while both sides were lazy by design. Static prevaluation dissolves
+the question instead of re-answering it: `or`'s first operand is the
+literal `#t`, so the WHOLE `or` folds to that value and the `(begin (set! n
+999) 'x)` branch — `Door("prohibited-dynamics/set!")` included — is dropped
+whole, never lowered, never doored. `src/__tests__/bug-cell-corpus.test.ts`'s
+`KNOWN_RED` entry for this row is deleted (it now runs as a plain, passing
+`it`); `corpus/short-circuit-effect.expect.ts`'s `expected` changed from
+`{ errorClass: "prohibited-dynamics" }` to `{ value: 0 }`, with its header
+rewritten to record the elimination (not a "designed truth, not current
+truth" placeholder anymore — this is now the ACTUAL, honest compiled
+behavior).
+
+**Two hard soundness invariants, each proven by a dedicated red-first test**
+(`src/__tests__/prevalue.test.ts`): (1) value preservation — folding never
+changes an oracle value, checked directly against the interpreter/compiled
+pair for every fold shape (constant `if`, `and`/`or` drop, `and`/`or`
+truncate, nested folds); (2) reachable doors still fire — `(if
+runtime-cond (set! x) 0)` (an unprovable guard) folds NOTHING, the `set!`
+door still throws exactly as before; `(or #f (set! x))` (the `#f` operand
+drops, but `set!` is now the ONE remaining, unconditionally-reached
+operand) still doors, unconditionally — proving the fold only ever
+eliminates a branch PROVEN dead, never merely "probably fine."
+
+**Fixture churn beyond this directory, reviewed the same way (dead-branch-
+elimination class only, confirmed by diff, not assumed):** eleven more
+`fixtures/emitted/*.ts` rows regenerated via `emitted-fixtures.test.ts`'s own
+`-u` workflow (that suite's header already frames this as lockfile-style
+churn, no REBASE_LOG entry of its own): `and-false-short-circuits`,
+`and-three`, `and-zero-then-one`, `if-missing-else`, `or-first-truthy-wins`,
+`or-three`, `short-circuit-control`, `short-circuit-effect`, `short-circuit-or`
+(the bug-cell corpus's OWN copy of this shape — a different, 2-operand
+source than the gate3 golden's 3-operand one, same fold), `truthy-empty-string`,
+`truthy-false`, `truthy-zero-then`. Every one collapses a provably-constant
+`if`/`and`/`or` to its bare value or a strictly shorter chain; `short-circuit-
+control` (`(or #f (error "does-run"))`, the POSITIVE control proving the probe
+still fires when the branch IS taken) now emits the `error(...)` call
+UNCONDITIONALLY — correct, since `#f` being the sole earlier operand means the
+call is no longer merely reachable but deterministic. `truthy-empty-list`
+(`(if (list) "a" "b")`) and `or-await-literal`/`or-in-define` (Ref-headed
+operands) are UNCHANGED — confirmed, not assumed: `(list)` is a runtime call
+(an `App`, not a literal), and a `Ref` operand's truthiness is genuinely
+unknown at compile time, so `prevalue` correctly declines both. `not-zero`
+(`(not 0)`) is also unchanged — `not` is an ordinary registry-symbol `App`,
+not a special form, deliberately out of this wave's scope (see `../../
+prevalue/index.ts`'s own header).
+
+**Verified the blast radius stops exactly here**: `gate1-measure.test.ts`'s
+committed report (`fixtures/gate1-report.json`) is BYTE-IDENTICAL — confirmed
+via `git status`, not assumed — because `gate1/measure.ts` measures directly
+off `classify()`'s raw tree and never calls `walk()`/`prevalueOf` at all (its
+own module header's "instrument choice" already explains why the walker's
+decisions are irrelevant to that metric); none of the six `gate1-corpus`
+manifest programs contains a literal-headed `if`/`and`/`or` in the first
+place (confirmed by grep). `model-spine.test.ts`'s R11 prototype allow-list
+is unaffected — `prevalueOf` is a plain instance field (an arrow function
+assigned in the constructor), exactly like `idiomAt`, never a `Object.
+getOwnPropertyNames(prototype)`-visible method. Every existing direct
+`walk()` caller in the test suite (`walker.test.ts`, `chunk.test.ts`,
+`rules-phase1.test.ts`, `naming.test.ts`, `asyncness.test.ts`,
+`pipeline-smoke.test.ts`, `cross-pass-fixtures.test.ts`) never supplies
+`prevalueOf`, so it defaults to `undefined` and no fold ever fires there —
+byte-identical, unaffected, confirmed by running the suites, not inferred
+from "the field is optional." Full `arrival-mercury` suite green post-change
+(see this landing's own final gate report); `tsc --noEmit` and
+`check:stories` both clean.
+
+## goldenEpoch 4 — R-G3: async/await tail-await elision lands (2026-07-17)
+
+**One golden changed — the exact punch-list item this landing targets**
+(`docs/working-proposals/arrival-mercury/gate3-human-grade-rulings.md`
+R-G3, conditional on Gate-3's `SIGN-OFF.md` sign-off). `asyncnessOf`/
+`materializeAsyncness` (`../../naming/asyncness.ts`) implement the ruling's
+two elisions as ONE rule (`consumeTail`, the module's own new helper),
+applied at the two positions a "return" can occupy — an explicit
+`Return.value`, and an Arrow's own expression body (an implicit return):
+`return await X` is pointless outside a try/catch (arrival has no `Try`
+node yet — `residual/types.ts`'s own "No `Try` — guard doors in v1" — so
+the elision is UNCONDITIONAL today; gates for real the moment `Try` lands),
+and an inner arrow whose ENTIRE body reduces to that shape needs neither
+`async` nor `await` at all.
+
+**`async-map-promise-all.golden.ts`** — the named target, R-G3's own worked
+example:
+```diff
+- async function OracleMain() {
+-     return await Promise.all(["a", "b"].map(async (x) => await infer("fast", x)));
+- }
++ function OracleMain() {
++     return Promise.all(["a", "b"].map(x => infer("fast", x)));
++ }
+```
+Three eliminations, all the same mechanism applied at three different tail
+positions: the callback's own `await infer(...)` (an implicit-return Arrow
+body), the callback's own `async` keyword (nothing else inside it needed
+`await`), and `OracleMain`'s outer `await Promise.all(...)` plus ITS OWN
+`async` keyword (its whole body is now that one bare tail return). The
+`Promise.all` rewrite-table collapse itself (Mechanics 3) is UNTOUCHED —
+same trigger condition, same shape — only WHO ends up printing `await`/
+`async` around it changed.
+
+**The design point this landing had to get right, not just the byte diff**:
+`AsyncnessFacts.arrowAsync` ("does calling this def yield a promise", feeds
+`callType`/`promiseWrap`) and "does this def's own declaration need the
+`async` keyword" (a NEW, un-exported decision `materializeAsyncness` derives
+from what survives its own tail-elision rewrite) used to be the same
+question and no longer are — `OracleMain` still "returns a promise" to the
+harness's `const __oracleResult = await OracleMain();` (unaffected, a
+genuine Const-init consuming position) even though its own declaration no
+longer spells `async`. Getting this backwards (reading `arrowAsync` as "is
+this printed `async`") would silently under-await every caller of a
+fully-elided pass-through def — the exact bug class Law W's whole "over-
+await is safe, under-await is not" discipline exists to prevent. `asyncness.
+test.ts` gained three dedicated regression rows for the split (a Block-body
+`{ return await E }` Arrow ELIDE case; a `const y = await f(); return y + 1;`
+FnDecl KEEP case; an arithmetic-consuming Arrow KEEP case) alongside updating
+every existing row the elision touches — none of the existing KEEP-shaped
+rows (argument position, guarded and-chain, the non-batched ArrayLit
+sibling, the `filter`/`every`/`some` door) changed a single byte.
+
+**Verified the blast radius stops at exactly this one gate3 golden**: the
+other six (`multi-list-map`, `apply-plus`, `apply-map-transpose`,
+`first-class-car-hof`, `legibility-destructure`, `short-circuit-or`) contain
+no `infer` call anywhere in their source (confirmed by grep, not assumed)
+and are byte-identical before/after. Two OTHER, non-gate3 fixtures were
+ALSO affected by the same mechanism and are logged at their own call sites,
+not here (this log is gate3's own, per its header note below): `legibility.
+test.ts`'s "an infer pair dedupes THROUGH the real ASYNC-IFY plane" row
+(`OracleMain` itself drops to non-async — its own body is a bare
+`f("hi")` tail return once CSE has already hoisted the genuine await into
+`f`'s own `const __infer = await infer(...)`, which correctly stays). Full
+`arrival-mercury` suite (51 files) re-run before/after: two failures, both
+this ruling's own expected churn, both fixed; `tsc --noEmit` and
+`check:stories` clean; `gate1-measure.test.ts`'s committed report
+byte-identical (asyncness is an orthogonal axis to gate 1's `car`/`cdr`/`if`
+type-availability measurement).
+
+Per-file `goldenEpoch:` comment bumped 3 → 4 for `async-map-promise-all.
+golden.ts` only (the R5c precedent: bump the one file that changed, not
+every file in the directory — `short-circuit-or.golden.ts` is still
+correctly at epoch 1, having never changed since the initial baseline).
+
 ## goldenEpoch 3 — E2 lands: the hybrid tree's hard side, `list(...)` shim dies for slot-safe data (2026-07-16)
 
 **Six of seven goldens changed — the folding-churn class the engine plan's

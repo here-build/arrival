@@ -256,15 +256,24 @@ describe("legibility wired into compileGreenfield — the real pipeline, oracle 
     // that ONE Const's init exactly like any other seeded call, and both reads
     // are plain (unconditionally-sync) Refs. If this ever regresses to two
     // separate `await infer(...)` calls, the ordering decision broke.
+    //
+    // R-G3 (gate3-human-grade-rulings.md) churn, unrelated to the CSE claim
+    // this golden pins: `f` itself keeps `async` (the genuine, non-tail
+    // `__infer` Const-init await inside it), but `OracleMain`'s OWN body is
+    // now a bare tail return of `f("hi")`'s promise — neither `async` nor
+    // `await` survives there, since nothing else in OracleMain observes the
+    // resolved value. `f` still returns a promise to OracleMain regardless
+    // (facts.arrowAsync unaffected), so `await f("hi")` → `f("hi")` changes
+    // no value, just drops the now-pointless keyword.
     const out = compileGreenfield(session, `(define (f x) (+ (infer "sys" x) (infer "sys" x))) (f "hi")`);
     expect(out).toBe(
       `import { infer } from "./stage0.mts";\n` +
-        `async function OracleMain() {\n` +
+        `function OracleMain() {\n` +
         `    const f = async (x) => {\n` +
         `        const __infer = await infer("sys", x);\n` +
         `        return __infer + __infer;\n` +
         `    };\n` +
-        `    return await f("hi");\n` +
+        `    return f("hi");\n` +
         `}\n` +
         `export { __oracleResult };\n` +
         `const __oracleResult = await OracleMain();\n`,

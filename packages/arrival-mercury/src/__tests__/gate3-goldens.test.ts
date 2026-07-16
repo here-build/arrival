@@ -59,14 +59,25 @@ describe("Gate 3 — full-pipeline emitted TEXT goldens", () => {
 
   it("every case actually exercises the pattern it claims to (a golden that silently degrades to a door is not a golden)", () => {
     expect(multiListMap.golden).toContain(".map((__item, __i) =>");
-    expect(asyncMapPromiseAll.golden).toContain("await Promise.all(");
+    // goldenEpoch 4 (R-G3): the tail-await elision drops the outer `await`
+    // (nothing downstream of OracleMain's own return observes the resolved
+    // value) — `Promise.all(` alone still proves the .map collapse fired
+    // rather than silently degrading to a plain, unbatched `.map`.
+    expect(asyncMapPromiseAll.golden).toContain("Promise.all(");
     expect(applyPlus.golden).toContain(".reduce(");
     // E2 ingestion fold (engine plan §2 E2): the transposed list-of-lists
     // is now a literal array chunk, not a `list(...)` call — the spread
     // still spreads a genuine array, `apply`'s own pattern under test
     // (never degrading to a door) is unaffected.
     expect(applyMapTranspose.golden).toContain("...[");
-    expect(shortCircuitOr.golden).toContain("!== false ?");
+    // goldenEpoch 5 (R-G6): static prevaluation folds the whole three-operand
+    // `or` to its one live value — there is no runtime guard left to assert
+    // on. The honest non-degradation check flips from "the guard shape is
+    // there" to "the dead branch is truly GONE, not merely unreached at
+    // runtime": no `error` survives anywhere in the output (import or call),
+    // and the surviving literal is exactly the provably-true second operand.
+    expect(shortCircuitOr.golden).not.toContain("error");
+    expect(shortCircuitOr.golden).toContain('return "a"');
     // goldenEpoch 2 (R5c): eta now expands `car` inline — the pattern under test
     // flipped from "eta degrades to shim" to "eta actually fires", so the honest
     // non-degradation check is the opposite shape: no bare `car` shim survives
