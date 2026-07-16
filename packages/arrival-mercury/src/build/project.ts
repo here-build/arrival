@@ -11,14 +11,17 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import type { Span } from "../coreform/types.js";
 import { classify } from "../coreform/classify.js";
 import { desugar } from "../front/desugar.js";
 import { parseSexprs } from "../front/parse.js";
 import { greenfieldRegistryFor, openOracleSession } from "../oracle/harness.js";
+import { defaultClassifier, type ClassifyFile } from "./classify.js";
 import { compileDataFile, DATA_EXTENSIONS } from "./data-module.js";
+import { foldOverridableExports, type FlowedUpOverridable, type OverridableExport } from "./overridable.js";
 import { flattenTopBegins, hasProgramFace, scanRequires } from "./require-scan.js";
-import { compileScmModule } from "./scm-module.js";
-import type { BuildFile, BuildResult, BuildWarning, ExportShape, RequireResolution } from "./types.js";
+import { aliasFromPath, compileScmModule } from "./scm-module.js";
+import type { BuildFile, BuildResult, BuildWarning, ExportShape, PendingWarning, RequireResolution } from "./types.js";
 
 const SCM_EXT = ".scm";
 const PROMPT_EXT = ".prompt";
@@ -55,60 +58,121 @@ function importSpecifierBetween(fromRelPath: string, toRelPath: string): string 
   return rel.replace(/\.ts$/, ".js");
 }
 
+/** One resolved `(require …)` edge: `target` is the dependency's relPath,
+ *  `span` is the SOURCE POSITION (in the REQUIRING file, `relPath`, not
+ *  `target`) of the FIRST require statement that names it — first-encounter
+ *  order, mirroring require-scan.ts's own convention (§4.2's "first
+ *  occurrence is the one that's named"). Kept alongside `target` (not
+ *  discarded, v0's original shape) so `topoSort` can attribute a require
+ *  cycle to the ANCESTOR's own closing statement (TASK #84) instead of the
+ *  revisited node. */
+interface RequireEdge {
+  readonly target: string;
+  readonly span: Span;
+}
+
 interface FileInfo {
   readonly relPath: string;
   readonly ext: string;
-  /** Resolved relPaths this `.scm` file requires — ONLY targets that exist
-   *  among the project's own files (a dangling require is a per-file
+  /** Resolved dependency edges this `.scm` file requires — ONLY targets that
+   *  exist among the project's own files (a dangling require is a per-file
    *  `resolveRequire` warning at compile time, not a graph edge). Empty for
    *  every non-`.scm` file (data/`.prompt` files have no requires of their
    *  own). */
-  readonly deps: readonly string[];
+  readonly deps: readonly RequireEdge[];
+  /** Only meaningful for `.scm` — does this file's own flattened top-level
+   *  forms end in a genuine program-face expression (require-scan.ts's
+   *  `hasProgramFace`)? Computed here, from the SAME parse `deps` already
+   *  needed, so `classify.ts`'s default classifier never re-parses a file it
+   *  has already been parsed once for (TASK #87). `false` for every
+   *  non-`.scm` file. */
+  readonly hasProgramFace: boolean;
+  /** This file's OWN top-level `define/overridable` names (cleaned, bare —
+   *  pre-collision), from the SAME parse — seeds a pipeline's flow-up
+   *  collision check (TASK #87 Q2) with names that must NEVER be
+   *  namespaced away, since they're the pipeline's own pre-existing,
+   *  already-shipped signature. Empty for every non-`.scm` file. */
+  readonly localOverridableNames: readonly string[];
 }
 
-function scanScmDeps(relPath: string, source: string, files: Readonly<Record<string, string>>): string[] {
+/** Parse `source` exactly ONCE and extract every project-graph fact
+ *  `project.ts` needs about it: its resolved require edges (with span, for
+ *  TASK #84's honest cycle attribution), whether it has a program face, and
+ *  its own local overridable names (for TASK #87 Q2's collision seeding) —
+ *  replacing three separate re-parses of the same file (`scanScmDeps`'s own
+ *  parse, the old inline `isPipeline` re-parse, and a hypothetical fourth
+ *  for overridable names) with one. */
+function analyzeScmFile(relPath: string, source: string, files: Readonly<Record<string, string>>): Omit<FileInfo, "relPath" | "ext"> {
   const forms = flattenTopBegins(classify(desugar(parseSexprs(source))).forms);
   const uses = scanRequires(forms);
-  const targets = new Set<string>();
+  const depsByTarget = new Map<string, Span>();
   for (const use of uses) {
     const target = resolveSpecifier(relPath, use.node.path);
-    if (Object.hasOwn(files, target)) targets.add(target);
+    if (Object.hasOwn(files, target) && !depsByTarget.has(target)) depsByTarget.set(target, use.node.span);
   }
-  return [...targets];
+  const deps: RequireEdge[] = [...depsByTarget].map(([target, span]) => ({ target, span }));
+  return {
+    deps,
+    hasProgramFace: hasProgramFace(forms),
+    localOverridableNames: foldOverridableExports(forms).map((o) => o.name),
+  };
 }
 
-/** Kahn-style DFS post-order topological sort — leaves first (a file's own
- *  deps are compiled, and their `shape`s known, before it is). A require cycle
- *  doors (design doc §3's sequencing note: "the project tree is a DAG; cycles
- *  door") — but NOT by exclusion: every node in `infos` still reaches its own
- *  `inStack.delete`/`order.push` once its (partial) DFS subtree returns, so a
- *  2-file mutual cycle still compiles BOTH files. What actually breaks the
- *  cycle is `resolveRequire` (below): the SECOND file visited, at the moment
- *  it re-enters the first, finds no recorded `shape` yet and reports its own
- *  `(require …)` as unresolved. This warning names the cycle honestly (no
- *  span: the detecting frame is the REVISITED node, not the ancestor whose
- *  SOURCE actually contains the closing `(require …)` — attaching this file's
- *  own byte offsets to a warning about a different file's statement would
- *  misattribute a position, which is worse than printing none, per this
- *  lane's report). */
+/**
+ * DFS post-order topological sort — leaves first (a file's own deps are
+ * compiled, and their `shape`s known, before it is). TASK #84's ruling on the
+ * v0.1 finding: a require cycle is honestly a LOADER question, not a graph
+ * one — a lazy-reference cycle (this cycle's closing require is never
+ * evaluated at module-eval time, only referenced) is legal in ESM the same
+ * way it's legal here; a true VALUE cycle (the closing require's result is
+ * actually NEEDED before either side finishes initializing) is a real error.
+ * Scheme `require` is run-once-spill (module-cache semantics — design doc
+ * §3), so this compiler cannot, in general, tell which case a given cycle is
+ * WITHOUT running it; v0's chosen semantics (kept, unchanged by this lane):
+ * **compile both files, let the SECOND-to-resolve side's specific closing
+ * require report unresolved** (`resolveRequire`, in `buildProject`'s main
+ * loop, below — a real, per-file, span-accurate `build/unresolved-require`
+ * on whichever side actually needed the not-yet-compiled sibling) — never a
+ * hard failure, since a cycle whose closing reference is never actually
+ * evaluated (e.g. spilled but unused, or only referenced inside a function
+ * body called later) would otherwise door a program that runs FINE. This
+ * function's OWN job is narrower: name the cycle SHAPE itself, honestly.
+ *
+ * Every node in `infos` still reaches its own `inStack.delete`/`order.push`
+ * once its (partial) DFS subtree returns — a 2-file mutual cycle still
+ * compiles BOTH files; nothing is excluded here.
+ *
+ * TASK #84's span fix: the cycle check moved from "top of visit()" (which
+ *  only ever sees the REVISITED node — no CoreForm site of its own to point
+ *  at) to the LOOP that's ABOUT TO RECURSE — at that point `relPath` is the
+ *  ANCESTOR file whose OWN `(require …)` statement closes the loop, and
+ *  `dep.span` is that statement's REAL, exact position (threaded through
+ *  from `analyzeScmFile`'s parse) — never a fabricated or misattributed one.
+ */
 function topoSort(infos: ReadonlyMap<string, FileInfo>, warnings: BuildWarning[]): string[] {
   const visited = new Set<string>();
   const inStack = new Set<string>();
   const order: string[] = [];
   const visit = (relPath: string, chain: readonly string[]): void => {
     if (visited.has(relPath)) return;
-    if (inStack.has(relPath)) {
-      warnings.push({
-        path: relPath,
-        code: "build/require-cycle",
-        message: `require cycle: ${[...chain, relPath].join(" → ")} — the cycle-closing require will report as unresolved from whichever side of the loop compiles second (design doc §3: cycles door)`,
-      });
-      return;
-    }
     const info = infos.get(relPath);
     if (info === undefined) return;
     inStack.add(relPath);
-    for (const dep of info.deps) visit(dep, [...chain, relPath]);
+    for (const dep of info.deps) {
+      if (inStack.has(dep.target)) {
+        // `relPath` (the CURRENT frame — an ANCESTOR of `dep.target` in this
+        // DFS) has a require statement, at `dep.span`, that closes a loop
+        // back to `dep.target`, which is still mid-compile on the stack.
+        warnings.push({
+          path: relPath,
+          span: dep.span,
+          code: "build/require-cycle",
+          message: `require cycle: ${[...chain, relPath, dep.target].join(" → ")} — this (require "${dep.target}") closes the loop; both files still compile, but whichever side resolves second will report ITS OWN closing require as unresolved (see that file's own build/unresolved-require)`,
+        });
+        continue; // don't recurse back into the cycle — already on the stack
+      }
+      visit(dep.target, [...chain, relPath]);
+    }
     inStack.delete(relPath);
     visited.add(relPath);
     order.push(relPath);
@@ -139,6 +203,87 @@ export interface BuildProjectOptions {
   /** Output basename for the copied stage-0 runtime module (no extension).
    *  Default `"stage0"`. */
   readonly stage0Basename?: string;
+  /** TASK #87 — the pluggable file-classification seam (`classify.ts`).
+   *  Omitted ⇒ `defaultClassifier`, built from this project's own require-DAG
+   *  facts (v0's exact "DAG-root + program-face" derivation, unchanged). A
+   *  project supplies its own to opt out of that derivation entirely (e.g.
+   *  `pipelinesDirClassifier` — the CLI resolves `inhuman.config.json`'s
+   *  `build.classifier` to a value of this type before calling in). */
+  readonly classifyFile?: ClassifyFile;
+}
+
+/** The project-root-anchored form of `relPath` — `classify.ts`'s `absPath`
+ *  argument, reusing `resolveSpecifier`'s OWN "a leading `/` means root-
+ *  relative" vocabulary rather than inventing a second notion of "absolute"
+ *  (never a real OS path — this stays pure). */
+function rootAnchored(relPath: string): string {
+  return `/${relPath}`;
+}
+
+/** BFS over `infos`' require-DAG from `startRelPath` (EXCLUDING itself),
+ *  collecting every reachable dependency's OWN published overridables
+ *  (`ExportShape.overridables`) — TASK #87 Q2's "transitive knob cone". A
+ *  dependency that never got a recorded `shape` (an upstream cycle/data-
+ *  parse-error/`.prompt` gap) contributes nothing — an already-warned gap
+ *  elsewhere, not a new failure here. `visited` guards a diamond dependency
+ *  from being counted twice and a require CYCLE from looping forever
+ *  (mirrors `topoSort`'s own revisit guard; breadth-first since only
+ *  REACHABILITY — not compile order — matters here). */
+function collectOverridableCone(
+  startRelPath: string,
+  infos: ReadonlyMap<string, FileInfo>,
+  shapes: ReadonlyMap<string, ExportShape>,
+): { readonly sourceRelPath: string; readonly entry: OverridableExport }[] {
+  const visited = new Set<string>([startRelPath]);
+  const queue: string[] = (infos.get(startRelPath)?.deps ?? []).map((d) => d.target);
+  const out: { sourceRelPath: string; entry: OverridableExport }[] = [];
+  while (queue.length > 0) {
+    const relPath = queue.shift()!;
+    if (visited.has(relPath)) continue;
+    visited.add(relPath);
+    const shape = shapes.get(relPath);
+    if (shape !== undefined) for (const entry of shape.overridables) out.push({ sourceRelPath: relPath, entry });
+    for (const dep of infos.get(relPath)?.deps ?? []) queue.push(dep.target);
+  }
+  return out;
+}
+
+/** Resolve each cone entry's EXPOSED key (design doc Q2: "metric.threshold
+ *  style" — namespaced ONLY on collision, bare otherwise). `localNames` seeds
+ *  the taken-set with the PIPELINE's OWN local overridable names (unchanged,
+ *  always bare — see overridable.ts) so a same-named MODULE knob is the one
+ *  that gets namespaced, never the reverse. First-encounter order (the
+ *  cone's own BFS order, from `collectOverridableCone`) decides which of
+ *  several SAME-named module knobs stays bare when more than one collides —
+ *  mirrors require-scan's own "first encounter wins" convention. Returns the
+ *  resolved list PLUS any `build/overridable-flow-up-*` notes (the caller
+ *  stamps `path`, matching every other per-file warning list in this file). */
+function resolveFlowUp(
+  cone: readonly { readonly sourceRelPath: string; readonly entry: OverridableExport }[],
+  localNames: ReadonlySet<string>,
+): { readonly overridables: FlowedUpOverridable[]; readonly warnings: PendingWarning[] } {
+  const taken = new Set(localNames);
+  const overridables: FlowedUpOverridable[] = [];
+  const warnings: PendingWarning[] = [];
+  for (const { sourceRelPath, entry } of cone) {
+    let exposedKey = entry.name;
+    if (taken.has(exposedKey)) {
+      exposedKey = `${aliasFromPath(sourceRelPath)}.${entry.name}`;
+      warnings.push({
+        code: "build/overridable-flow-up-namespaced",
+        message: `"${entry.name}" (from "${sourceRelPath}") collided with an existing knob name in this pipeline's cone — exposed as "${exposedKey}" instead`,
+      });
+    }
+    taken.add(exposedKey);
+    if (entry.defaultLit === undefined) {
+      warnings.push({
+        code: "build/overridable-flow-up-nonliteral-default",
+        message: `"${exposedKey}" (from "${sourceRelPath}") declares a non-literal default — the flowed-up param falls back to undefined rather than re-deriving the computed value across the require boundary`,
+      });
+    }
+    overridables.push({ exposedKey, envKey: entry.envKey, tag: entry.tag, defaultLit: entry.defaultLit });
+  }
+  return { overridables, warnings };
 }
 
 /**
@@ -165,9 +310,9 @@ export async function buildProject(files: Readonly<Record<string, string>>, opts
   for (const [relPath, content] of Object.entries(files)) {
     const ext = extOf(relPath);
     if (ext === SCM_EXT) {
-      infos.set(relPath, { relPath, ext, deps: scanScmDeps(relPath, content, files) });
+      infos.set(relPath, { relPath, ext, ...analyzeScmFile(relPath, content, files) });
     } else if (DATA_EXTENSIONS.has(ext) || ext === PROMPT_EXT) {
-      infos.set(relPath, { relPath, ext, deps: [] });
+      infos.set(relPath, { relPath, ext, deps: [], hasProgramFace: false, localOverridableNames: [] });
     } else {
       warnings.push({
         path: relPath,
@@ -180,15 +325,18 @@ export async function buildProject(files: Readonly<Record<string, string>>, opts
 
   const order = topoSort(infos, warnings);
 
-  // The v0 pipeline heuristic (design doc §3's `@/pipelines/*` rule, resolved
-  // for THIS project layout — see the CLI report): a `.scm` file gets the
-  // thunked, parameterized `export default function` treatment iff (a) it has
-  // a genuine trailing program-face expression, AND (b) no OTHER file in the
-  // project requires it (a DAG root — nothing to spill/import FROM it, so
-  // there is no "module face" consumer to preserve; it is, structurally, an
-  // entry point). A file matching neither stays ordinary module face.
+  // TASK #87: the file-classification seam (`classify.ts`). `requiredBy`/
+  // `hasProgramFaceOf` are whole-project facts ONLY `defaultClassifier` needs
+  // (a per-file policy structurally cannot see them) — computed once here,
+  // regardless of whether they end up used, since a project's OWN classifier
+  // (`opts.classifyFile`) may ignore them entirely (that's the point: a
+  // pipeline's classification no longer HAS to depend on whether something
+  // else requires it).
   const requiredBy = new Set<string>();
-  for (const info of infos.values()) for (const dep of info.deps) requiredBy.add(dep);
+  for (const info of infos.values()) for (const dep of info.deps) requiredBy.add(dep.target);
+  const hasProgramFaceOf = new Map<string, boolean>();
+  for (const info of infos.values()) hasProgramFaceOf.set(info.relPath, info.hasProgramFace);
+  const classifyFile: ClassifyFile = opts?.classifyFile ?? defaultClassifier(requiredBy, hasProgramFaceOf);
 
   const shapes = new Map<string, ExportShape>();
   const session = await openOracleSession();
@@ -236,8 +384,24 @@ export async function buildProject(files: Readonly<Record<string, string>>, opts
         continue;
       }
 
-      // .scm
-      const isPipeline = !requiredBy.has(relPath) && hasProgramFace(flattenTopBegins(classify(desugar(parseSexprs(source))).forms));
+      // .scm — TASK #87: the classifier seam decides pipeline vs module (the
+      // ambiguity v0's own DAG-root+program-face detector got fuzzy — data
+      // files stay extension-routed above, unambiguous either way, so the
+      // seam's ONLY job here is the split that actually needed one).
+      const isPipeline = classifyFile(relPath, rootAnchored(relPath)) === "pipeline";
+
+      // TASK #87 Q2: a pipeline's params cone is the TRANSITIVE knob set —
+      // every overridable reachable through its own require-DAG, collision-
+      // resolved against its OWN local overridable names (unchanged, always
+      // bare). A module face never computes this (empty, the default).
+      let flowedUpOverridables: readonly FlowedUpOverridable[] = [];
+      if (isPipeline) {
+        const cone = collectOverridableCone(relPath, infos, shapes);
+        const resolved = resolveFlowUp(cone, new Set(info.localOverridableNames));
+        flowedUpOverridables = resolved.overridables;
+        for (const w of resolved.warnings) warnings.push({ path: relPath, ...w });
+      }
+
       const resolveRequire = (specifier: string): RequireResolution => {
         const target = resolveSpecifier(relPath, specifier);
         if (!Object.hasOwn(files, target)) {
@@ -256,7 +420,7 @@ export async function buildProject(files: Readonly<Record<string, string>>, opts
         return { kind: "resolved", importPath: importSpecifierBetween(relPath, target), shape };
       };
       const runtimeImportPath = importSpecifierBetween(relPath, `${stage0Basename}.ts`);
-      const compiled = compileScmModule(source, { baseRegistry }, { path: relPath, resolveRequire, runtimeImportPath, isPipeline });
+      const compiled = compileScmModule(source, { baseRegistry }, { path: relPath, resolveRequire, runtimeImportPath, isPipeline, flowedUpOverridables });
       shapes.set(relPath, compiled.shape);
       outFiles.push({ path: outPathFor(relPath), content: compiled.content });
       for (const w of compiled.warnings) warnings.push({ path: relPath, ...w });

@@ -14,9 +14,13 @@
  *  2. **The export contract** (design doc §3): module face (every top-level
  *     define → named export, ALWAYS) and program face (a trailing non-define
  *     expression → `export default`) — either a plain, eager value, or, for a
- *     v0-classified PIPELINE file, a thunked, parameterized function with every
- *     `define/overridable` lifted into its env-chained params cone
- *     (`overridable.ts`).
+ *     PIPELINE-classified file (`classify.ts`, TASK #87), a thunked,
+ *     parameterized function with every `define/overridable` lifted into its
+ *     env-chained params cone (`overridable.ts`) — INCLUDING every overridable
+ *     transitively reachable through its own require-DAG (TASK #87 Q2's
+ *     flow-up; `project.ts`'s cone walk). A MODULE-classified file's own
+ *     local overridables still resolve a real (params-less) env chain, just
+ *     with no explicit-argument tier of their own.
  *  3. **v0's pipeline wrap**: reusing the SAME "whole program as one synthetic
  *     function body" technique `oracle/harness.ts`'s `compileGreenfield` uses
  *     for its own (unrelated) reason — proven semantics-neutral there (a
@@ -25,7 +29,7 @@
  *     of zero-arg, and never immediately called (the whole point is deferral:
  *     nothing may run at import time).
  */
-import type { CoreForm, Define, DefineFn, Require, Span } from "../coreform/types.js";
+import type { CoreForm, DefineFn, Require, Span } from "../coreform/types.js";
 import { classify } from "../coreform/classify.js";
 import { desugar } from "../front/desugar.js";
 import { parseSexprs } from "../front/parse.js";
@@ -50,7 +54,20 @@ import {
 } from "../residual/types.js";
 import { cleanName } from "../walker/names.js";
 import { walk } from "../walker/walk.js";
-import { idMinter, liftOverridable, OVERRIDABLE_SYMBOL, overridableSymbolRule, PIPELINE_PARAMS_SCHEME_NAME } from "./overridable.js";
+import {
+  foldOverridableExports,
+  idMinter,
+  isLiftableOverridable,
+  liftFlowedUpOverridable,
+  liftLocalOverridable,
+  liftOverridable,
+  MODULE_OVERRIDABLE_SYMBOL,
+  moduleOverridableSymbolRule,
+  OVERRIDABLE_SYMBOL,
+  overridableSymbolRule,
+  PIPELINE_PARAMS_SCHEME_NAME,
+  type FlowedUpOverridable,
+} from "./overridable.js";
 import { flattenTopBegins, hasProgramFace, scanRequires, topLevelDefineNames, type RequireOccurrence } from "./require-scan.js";
 import type { CompileFileOptions, CompileFileResult, PendingWarning } from "./types.js";
 
@@ -79,8 +96,12 @@ function makeUniqueAlias(): (base: string) => string {
 
 /** A require path's basename, cleaned to a JS identifier — the alias an
  *  `"inline"` require falls back to when there's no user-chosen `define` name
- *  to borrow (design doc §3's bound-require aliasing; see this file's header). */
-function aliasFromPath(specifier: string): string {
+ *  to borrow (design doc §3's bound-require aliasing; see this file's header).
+ *  Exported: `project.ts`'s cone walk (TASK #87 Q2) reuses this EXACT alias
+ *  convention to namespace a flowed-up overridable on collision
+ *  (`<moduleAlias>.<name>`), so a module's own default-import alias and its
+ *  knob namespace always agree. */
+export function aliasFromPath(specifier: string): string {
   const base = (specifier.split("/").pop() ?? specifier).replace(/\.[^.]+$/, "");
   return cleanName(base);
 }
@@ -236,12 +257,6 @@ function popTrailingAsConst(unit: CompilationUnit, binding: Binding): Compilatio
   return { decls: [...unit.decls, ConstDecl(binding, last)], body };
 }
 
-/** Every top-level `Define` whose `overridableType` marks it `define/overridable`
- *  AND is a plain value (never `DefineFn` — see `overridable.ts`'s header). */
-function isLiftableOverridable(f: CoreForm): f is Define {
-  return f.kind === "Define" && f.overridableType !== undefined;
-}
-
 /** Drop every `(define x (require "…"))` whose `x` resolved (per
  *  `resolvedBoundNames`) from a form list before it reaches `walk()` — `x` is
  *  a registry row now (`buildRequireMachinery`'s `addOverlayRow`), never a
@@ -274,24 +289,37 @@ export function compileScmModule(source: string, deps: ScmCompileDeps, opts: Com
   const uses = scanRequires(scanForms);
   const { importDecls, overlayTable, requireOf, resolvedBoundNames, warnings } = buildRequireMachinery(uses, opts);
 
+  const flowedUpOverridables = opts.flowedUpOverridables ?? [];
   const fnLiftWarnings: PendingWarning[] = [];
+  // `.find`, not `.some` — the FIRST offending node's own span is a real,
+  // exact position (DX memo item 2); a boolean check would leave this
+  // warning span-less for no reason (only the first occurrence is named
+  // when several exist, a deliberate v0 simplification — see require-scan's
+  // own "first-encounter order" convention for the same call). Checked for
+  // BOTH faces (TASK #87): a module-face fn-shorthand overridable is just as
+  // silently un-lifted as a pipeline-face one now that `compileModuleFace`
+  // ALSO lifts its plain-value overridables (below).
+  const overridableFnShorthand = scanForms.find((f): f is DefineFn => f.kind === "DefineFn" && f.overridableType !== undefined);
+  if (overridableFnShorthand !== undefined) {
+    fnLiftWarnings.push({
+      code: "build/overridable-fn-shorthand-unlifted",
+      span: overridableFnShorthand.span,
+      message:
+        "one or more `define/overridable`'s fn-shorthand forms found — v0 does not lift a function-bodied overridable into the params cone; it compiles as an ordinary (un-lifted) function",
+    });
+  }
+  // Which registry row (if either) this file needs: a pipeline overlays the
+  // params-aware symbol when it has local overridables OR a transitive
+  // flow-up cone (TASK #87 Q2); a module overlays the params-less symbol
+  // when it has local overridables of its own (TASK #87 Q2's prerequisite —
+  // see overridable.ts's module-face section). A file with neither needs no
+  // overlay row at all, matching v0's original "only overlay when used".
+  const hasLocalOverridables = scanForms.some(isLiftableOverridable);
   let overlay = overlayTable;
   if (opts.isPipeline) {
-    // `.find`, not `.some` — the FIRST offending node's own span is a real,
-    // exact position (DX memo item 2); a boolean check would leave this
-    // warning span-less for no reason (only the first occurrence is named
-    // when several exist, a deliberate v0 simplification — see require-scan's
-    // own "first-encounter order" convention for the same call).
-    const overridableFnShorthand = scanForms.find((f): f is DefineFn => f.kind === "DefineFn" && f.overridableType !== undefined);
-    if (overridableFnShorthand !== undefined) {
-      fnLiftWarnings.push({
-        code: "build/overridable-fn-shorthand-unlifted",
-        span: overridableFnShorthand.span,
-        message:
-          "one or more `define/overridable`'s fn-shorthand forms found — v0 does not lift a function-bodied overridable into the params cone; it compiles as an ordinary (un-lifted) function",
-      });
-    }
-    if (scanForms.some(isLiftableOverridable)) overlay = { ...overlayTable, [OVERRIDABLE_SYMBOL]: overridableSymbolRule };
+    if (hasLocalOverridables || flowedUpOverridables.length > 0) overlay = { ...overlayTable, [OVERRIDABLE_SYMBOL]: overridableSymbolRule };
+  } else if (hasLocalOverridables) {
+    overlay = { ...overlayTable, [MODULE_OVERRIDABLE_SYMBOL]: moduleOverridableSymbolRule };
   }
 
   const registry = withRules(deps.baseRegistry, overlay);
@@ -299,14 +327,14 @@ export function compileScmModule(source: string, deps: ScmCompileDeps, opts: Com
   const flatForms = flattenTopBegins(sm.coreform.forms);
 
   const result = opts.isPipeline
-    ? compilePipelineFace(sm, flatForms, requireOf, resolvedBoundNames, opts.runtimeImportPath)
+    ? compilePipelineFace(sm, flatForms, requireOf, resolvedBoundNames, opts.runtimeImportPath, flowedUpOverridables)
     : compileModuleFace(sm, flatForms, requireOf, resolvedBoundNames, opts.runtimeImportPath);
 
   const finalDecls: Decl[] = [...importDecls, ...result.decls];
   const code = `${render({ decls: finalDecls, body: result.body })}${result.defaultSuffix ?? ""}`;
   return {
     content: code,
-    shape: { named: result.named, hasDefault: result.defaultSuffix !== undefined },
+    shape: { named: result.named, hasDefault: result.defaultSuffix !== undefined, overridables: foldOverridableExports(scanForms) },
     warnings: [...warnings, ...fnLiftWarnings],
   };
 }
@@ -339,7 +367,13 @@ function compileModuleFace(
 ): FaceResult {
   const named = topLevelDefineNames(flatForms);
   const wantsDefault = hasProgramFace(flatForms);
-  const formsToWalk = dropResolvedBoundRequires(flatForms, resolvedBoundNames);
+  const id = idMinter(maxNodeId(sm.coreform.forms) + 1);
+  const droppedRequires = dropResolvedBoundRequires(flatForms, resolvedBoundNames);
+  // TASK #87 Q2's prerequisite: a LOCAL `define/overridable` still gets a
+  // real (params-less) env chain even though a module face has no params
+  // cone of its own to consult an explicit argument from — see
+  // overridable.ts's `liftLocalOverridable`/`MODULE_OVERRIDABLE_SYMBOL`.
+  const formsToWalk = droppedRequires.map((f) => (isLiftableOverridable(f) ? liftLocalOverridable(f, id) : f));
 
   const sync = walk(
     { forms: formsToWalk, originAtom: sm.coreform.originAtom, parentOf: sm.coreform.parentOf, doors: sm.coreform.doors },
@@ -375,25 +409,35 @@ function compileModuleFace(
 
 /** v0's pipeline face (design doc §3): the WHOLE file becomes one synthetic
  *  `DefineFn` ("the wrap" — see the module header), its own top-level
- *  `define/overridable`s lifted into the params cone (`overridable.ts`), then
- *  exported as a plain `export default` of that function — thunked BY
- *  CONSTRUCTION (a function body never runs at import; v0 treats every
- *  pipeline as unconditionally deferred, per this lane's directive — "simplest
- *  sound choice; the effect-derived refinement is the documented end-state,
- *  not yours"). No named exports: v0 does not attempt the "overridable cone"
- *  analysis that would let some defines escape the closure (design doc §3's
- *  stated end-state, explicitly deferred). */
+ *  `define/overridable`s PLUS the entire transitive flow-up cone
+ *  (`flowedUpOverridables` — TASK #87 Q2) lifted into the params cone
+ *  (`overridable.ts`), then exported as a plain `export default` of that
+ *  function — thunked BY CONSTRUCTION (a function body never runs at import;
+ *  v0 treats every pipeline as unconditionally deferred, per this lane's
+ *  directive — "simplest sound choice; the effect-derived refinement is the
+ *  documented end-state, not yours"). No named exports: this is a DIFFERENT
+ *  cone than design doc §3's stated end-state (still deferred) — that one
+ *  is INTRA-file (which of THIS file's own defines close over params vs.
+ *  escape as named exports); TASK #87 Q2's cone is INTER-file (which
+ *  OTHER files' overridables flow up into THIS file's signature). */
 function compilePipelineFace(
   sm: SchemeSemanticModel,
   flatForms: readonly CoreForm[],
   requireOf: (n: Require) => R | undefined,
   resolvedBoundNames: ReadonlySet<string>,
   runtimeImportPath: string,
+  flowedUpOverridables: readonly FlowedUpOverridable[],
 ): FaceResult {
   const id = idMinter(maxNodeId(sm.coreform.forms) + 1);
   const wrapperSpan = flatForms[0]?.span ?? ([0, 0] as const);
   const formsForBody = dropResolvedBoundRequires(flatForms, resolvedBoundNames);
   const liftedBody = formsForBody.map((f) => (isLiftableOverridable(f) ? liftOverridable(f, id) : f));
+  // TASK #87 Q2: every overridable transitively reached through this
+  // pipeline's require-DAG (project.ts's cone walk — already collision-
+  // resolved) lifts ALONGSIDE this file's own local ones, prepended so the
+  // params cone reads as one coherent block of declared knobs ahead of the
+  // pipeline's own logic.
+  const flowedUpDefines = flowedUpOverridables.map((entry, index) => liftFlowedUpOverridable(entry, index, id, wrapperSpan));
   const wrapperName = "run";
   const wrapper: DefineFn = {
     kind: "DefineFn",
@@ -401,7 +445,7 @@ function compilePipelineFace(
     span: wrapperSpan,
     name: wrapperName,
     params: [{ recordKind: "param", id: id(), span: wrapperSpan, name: PIPELINE_PARAMS_SCHEME_NAME, rest: false }],
-    body: liftedBody,
+    body: [...flowedUpDefines, ...liftedBody],
   };
 
   const sync = walk(

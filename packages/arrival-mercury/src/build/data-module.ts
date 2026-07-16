@@ -46,7 +46,10 @@ export function compileDataFile(ext: string, content: string, path: string): Com
   const printed = JSON.stringify(value, null, 2) ?? "null";
   return {
     content: `// Generated from ${path} by @inhuman.tools/arrival-mercury — do not edit.\nexport default ${printed} as const;\n`,
-    shape: { named: [], hasDefault: true },
+    // A data file declares no `define/overridable`s of its own — TASK #87
+    // Q2's cone walk (project.ts) still reads this field unconditionally, so
+    // it must be present, not omitted.
+    shape: { named: [], hasDefault: true, overridables: [] },
     warnings: [],
   };
 }

@@ -4,6 +4,7 @@
  * inhuman-build-cli-dx.md`). Pure types; no logic.
  */
 import type { Span } from "../coreform/types.js";
+import type { FlowedUpOverridable, OverridableExport } from "./overridable.js";
 
 /** What a compiled sibling actually offers a `(require …)` site: the module face
  *  (named exports, always populated for a `.scm` file's top-level defines) and
@@ -13,6 +14,13 @@ import type { Span } from "../coreform/types.js";
 export interface ExportShape {
   readonly named: readonly string[];
   readonly hasDefault: boolean;
+  /** This file's OWN top-level `define/overridable`s, folded to a portable
+   *  triple (TASK #87 Q2) — `project.ts`'s cone walk unions these across the
+   *  WHOLE transitive require-graph reachable from an entry pipeline, so its
+   *  signature is the transitive knob set, not just its own file's. Always
+   *  populated (module or pipeline face alike), even when nothing ever
+   *  requires this file. */
+  readonly overridables: readonly OverridableExport[];
 }
 
 /** One compiled output file, ready to write to disk. `path` is OUTPUT-relative
@@ -44,10 +52,11 @@ export type BuildWarningCode =
    *  reason — dangling (no such file in the project), or the target itself
    *  never got a shape recorded (an upstream cycle/data-parse-error). */
   | "build/unresolved-require"
-  /** A cycle in the require graph (`project.ts`'s `topoSort`). No span: the
-   *  detecting frame sees the REVISITED node, not the specific requiring
-   *  statement in some ancestor's source — see this lane's report for why a
-   *  span here would misattribute a byte offset to the wrong file's text. */
+  /** A cycle in the require graph (`project.ts`'s `topoSort`). TASK #84: `path`
+   *  + `span` name the ANCESTOR file's own closing `(require …)` statement —
+   *  the one whose target is still mid-compile on the DFS stack — never the
+   *  REVISITED node (which has no CoreForm site of its own for this warning
+   *  to point at; see `topoSort`'s own doc for the full reasoning). */
   | "build/require-cycle"
   /** A bare, spilling `(require "x.scm")` whose target declares no top-level
    *  defines — nothing to import. */
@@ -59,12 +68,25 @@ export type BuildWarningCode =
    *  the earlier one wins, the later is dropped. */
   | "build/require-name-collision"
   /** A `define/overridable`'s fn-shorthand form — v0 does not lift a
-   *  function-bodied overridable into the pipeline's params cone; it compiles
-   *  un-lifted, un-parameterized. */
+   *  function-bodied overridable into the params cone (pipeline OR module
+   *  face); it compiles un-lifted, un-parameterized. */
   | "build/overridable-fn-shorthand-unlifted"
   /** A `.json`/`.yaml`/`.txt` file that failed to parse. No span: a data-file
    *  parse error has no CoreForm position (see this lane's report). */
-  | "build/data-parse-error";
+  | "build/data-parse-error"
+  /** TASK #87 Q2: a flowed-up overridable's bare name collided (with the
+   *  entry pipeline's own local overridable names, or with another cone
+   *  entry's) and was namespaced `<moduleAlias>.<name>` instead. No span: the
+   *  collision is a whole-project fact (`project.ts`'s cone walk), not one
+   *  CoreForm site's — attached to the entry pipeline's own path. */
+  | "build/overridable-flow-up-namespaced"
+  /** TASK #87 Q2: a flowed-up overridable's declared default (in the
+   *  REQUIRING file, not the one that declared it) wasn't a plain literal —
+   *  it still gets a full explicit-arg/env chain, only the innermost
+   *  fallback becomes `undefined` rather than silently re-deriving a value
+   *  this lane has no re-lowering machinery for. No span, same reason as
+   *  `build/overridable-flow-up-namespaced`. */
+  | "build/overridable-flow-up-nonliteral-default";
 
 /** A non-fatal build-time note — a file this build couldn't fully handle (the
  *  `.prompt` gap), a require that didn't resolve, a dependency cycle. Surfaced to
@@ -128,12 +150,24 @@ export interface CompileFileOptions {
   /** Relative import specifier this file should use to reach the copied stage-0
    *  runtime module (e.g. `"./stage0.js"`, or `"../stage0.js"` when nested). */
   readonly runtimeImportPath: string;
-  /** v0's pipeline classification (design doc §3): true ⇒ the WHOLE file becomes
-   *  `export default async function run(params = {}) { … }` (thunked, every
-   *  `define/overridable` lifted to the env-chained params cone); false ⇒ ordinary
-   *  module face (named exports) plus, if the file ends in a trailing expression,
-   *  a PLAIN (eager) `export default`. */
+  /** Which classifier verdict this file got (TASK #87): `"pipeline"` ⇒ the
+   *  WHOLE file becomes `export default function run(params) { … }` (thunked,
+   *  every `define/overridable` lifted to the env-chained params cone, PLUS
+   *  the transitive flow-up cone below — NOTE: `params` carries no declared
+   *  default of its own today, a pre-existing v0 gap this lane's report names
+   *  but doesn't fix — calling the emitted function with zero arguments is a
+   *  real arity error, out of TASK #87/#84's boundary); `"module"` ⇒ ordinary
+   *  module face (named exports) plus, if the file ends in a trailing
+   *  expression, a PLAIN (eager) `export default` — its OWN local
+   *  overridables still get a real (params-less) env-chain. */
   readonly isPipeline: boolean;
+  /** TASK #87 Q2 — the pipeline's TRANSITIVE overridable cone: every
+   *  overridable reachable via the require-graph from this file, already
+   *  collision-resolved (`project.ts`'s cone walk — see `FlowedUpOverridable`'s
+   *  own doc for the namespacing rule). Empty when `isPipeline` is false;
+   *  `project.ts` never computes this for a module face. Optional (defaults
+   *  to empty) so a direct `compileScmModule` caller need not pass it. */
+  readonly flowedUpOverridables?: readonly FlowedUpOverridable[];
 }
 
 export interface CompileFileResult {
