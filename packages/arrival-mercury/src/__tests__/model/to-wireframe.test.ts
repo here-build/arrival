@@ -238,3 +238,35 @@ describe("toWireframe — semantics-in-side-maps, structurally", () => {
     }
   });
 });
+
+describe("toWireframe — nodeIndex side map (C3, field-granular-access.md §6.2)", () => {
+  it("a shared node (same StaticProv object reached twice) gets ONE index, and nodeIndex.get(that object) resolves it — the bridge from a cone's object identity to render highlighting", () => {
+    const shared = konst();
+    const f = fused(shared, shared);
+    const { graph, sideMaps } = toWireframe(f);
+    expect(sideMaps.nodeIndex).toBeDefined();
+    const sharedIdx = sideMaps.nodeIndex!.get(shared);
+    expect(sharedIdx).toBeDefined();
+    // Only ONE node was ever projected for the shared object (the existing G2 dedup) —
+    // nodeIndex just exposes the SAME lookup `project` already builds and used to discard.
+    expect(graph.nodes[sharedIdx!]!.kind).toBe("opaque"); // const projects onto opaque
+    expect(sideMaps.provKind.get(sharedIdx!)).toBe("const");
+    // A structurally-identical but DISTINCT object never collides — identity, not shape, is the key.
+    const other = konst();
+    expect(sideMaps.nodeIndex!.get(other)).toBeUndefined();
+  });
+
+  it("is scoped PER LEVEL — a fan's template gets its OWN nodeIndex, never the outer graph's", () => {
+    const bodyNode = input("x");
+    const f = fan(input("xs"), bodyNode, "lowered");
+    const { sideMaps } = toWireframe(f);
+    const fanIdx = [...sideMaps.provKind.entries()].find(([, kind]) => kind === "fan")?.[0];
+    expect(fanIdx).toBeDefined();
+    const templateSideMaps = sideMaps.fanTemplates.get(fanIdx!) as WireframeSideMaps;
+    // The body's node lives in the TEMPLATE's own private index space (its own recursive
+    // toWireframe/Builder — this file's "shared-DAG dedup, scoped per graph level" header note) —
+    // its nodeIndex resolves it, the OUTER graph's nodeIndex never saw it at all.
+    expect(templateSideMaps.nodeIndex?.get(bodyNode)).toBeDefined();
+    expect(sideMaps.nodeIndex?.get(bodyNode)).toBeUndefined();
+  });
+});

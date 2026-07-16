@@ -183,6 +183,19 @@ export interface WireframeSideMaps {
    *  should treat a missing entry (or a missing map) the same as "no
    *  selection structure to show here," never throw on its absence. */
   readonly choiceWireRole?: ReadonlyMap<string, "guard" | "alt">;
+  /** `StaticProv` object identity → its node index in THIS SAME level's `nodes` array — the
+   *  bridge from a cone (a `fieldProv` answer, object-identity-valued) to render highlighting
+   *  (node indexes), field-granular-access.md §6.2 / README.md C3. Literally `Builder.seen`,
+   *  exposed instead of discarded — `project` (below) already builds this exact map for its own
+   *  shared-DAG dedup; this field just hands the caller the same lookup. Optional/additive, same
+   *  pattern as `choiceWireRole`: absent on a `WireframeSideMaps` built before this field existed
+   *  (or hand-constructed by an older test/fixture), so every existing object literal still
+   *  type-checks unchanged; a reader should treat a missing map as "no highlight lookup
+   *  available," never throw on its absence. SCOPED PER GRAPH LEVEL, same as `fabrication`/
+   *  `choiceWireRole`/`seen` itself — a fan's nested `template` graph has its OWN `nodeIndex`
+   *  inside its own `fanTemplates` entry, not this one (see `project`'s doc for why dedup, and
+   *  therefore this map, cannot cross a fan boundary). */
+  readonly nodeIndex?: ReadonlyMap<StaticProv, number>;
 }
 
 export interface WireframeProjection {
@@ -446,6 +459,7 @@ export function toWireframe(prov: StaticProv): WireframeProjection {
       fabrication: b.fabrication,
       fanTemplates: b.fanTemplates,
       choiceWireRole: b.choiceWireRole,
+      nodeIndex: b.seen,
     },
   };
 }
