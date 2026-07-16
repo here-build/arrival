@@ -65,6 +65,7 @@ import { buildArrivalSession, BUILTIN_PREAMBLE, type InferFn } from "@inhuman.to
 import { DEFAULT_STRATEGY, projectToJsRaw, type Strategy } from "@inhuman.tools/mercury";
 import { register } from "tsx/esm/api";
 
+import type { ClassifyResult } from "../coreform/types.js";
 import { SchemeSemanticModel } from "../model/model.js";
 import { materializeAsyncness, materializeImports, materializeSharedBindings } from "../naming/index.js";
 import { emitRegistryOf, type EmitRegistry } from "../registry/index.js";
@@ -507,6 +508,23 @@ function exportUnitResult(unit: CompilationUnit): CompilationUnit {
  * rule `model-imports-agree.test.ts` used to pin is gone WITH the pass (see
  * that test's own updated row, and model.ts's `importsOf` doc). No fixture
  * bytes should move: same decisions (idiom fold, CSE hoist), new home.
+ *
+ * E3 cut-over (engine plan §2 E3): TWO more decisions relocate off the
+ * walker's own inline branching, onto `../lowering/index.ts`
+ * (`sm.loweringDecisionAt`/`sm.guardFormOf`, `WalkOptions.loweringDecisionAt`/
+ * `guardFormOf` below) — the §4.2 rule/shim/door ladder and Law T's guard
+ * form no longer read `registry.lookup`/`facts.get` inline inside `walk()`
+ * itself (the S5-extended lint's own mechanical check,
+ * model-imports-agree.test.ts). No fixture bytes should move: same
+ * decisions, same registry/facts inputs, relocated. THE SHAKE
+ * (`../shake/index.ts`'s `shakeTopLevel`, `sm.shakeOf`) is new behavior, not
+ * a relocation: dead-and-pure top-level defines are pruned from the oracle
+ * wrapper's OWN body (`main.body`, below — where a corpus program's real
+ * top-level defines live once wrapped) before `walk()` ever sees them;
+ * effectful crossings (an unreferenced top-level `infer`, say) survive on
+ * effect grounds. Fixture bytes MAY move here — a dropped dead-define's
+ * lines are the wanted shake class (engine plan §2 E3; REBASE_LOG-recorded
+ * per program).
  */
 export function compileGreenfield(session: OracleSession, source: string): string {
   const registry = greenfieldRegistryFor(session);
@@ -528,12 +546,26 @@ export function compileGreenfield(session: OracleSession, source: string): strin
       "oracle evalCompiled: the program's last top-level form must be an expression (the value under test), got a definition",
     );
   }
+  // E3's shake (engine plan §2 E3; ../shake/index.ts's `shakeTopLevel`,
+  // `sm.shakeOf`) — dead-and-pure top-level defines pruned BEFORE `walk()`
+  // ever sees them (effectful crossings survive; requires untouched — see
+  // that module's own header). Applied to `main.body`, NOT `classified.forms`
+  // directly: the oracle wrap puts a corpus program's own top-level defines
+  // one level INSIDE `(define (__oracle-main) …)`, so that is where sibling
+  // liveness must be computed (classified.forms itself is just [the wrapper,
+  // its trailing call] — no dead siblings ever live at THAT level). The
+  // trailing form under test is NEVER a candidate (it is always a "root" —
+  // never itself a named define — so `lastForm`, validated above, survives
+  // identically whether the shake fires or not).
+  const shaken = sm.shakeOf(main.body);
+  const shakenMain = { ...main, body: shaken.forms };
+  const shakenClassified: ClassifyResult = { ...classified, forms: [shakenMain, ...classified.forms.slice(1)] };
   // idiomAt: this.idiomAt — the E2 decision-view, consulted INLINE by
   // lowerApp; no separate peephole() pre-pass exists anymore.
   // prevalueOf: this.prevalueOf — R-G6's static-prevaluation decision-view
   // (gate3-human-grade-rulings.md), consulted INLINE by every If/And/Or this
   // walker lowers; no separate fold pre-pass, same discipline as idiomAt.
-  const sync = walk(classified, {
+  const sync = walk(shakenClassified, {
     registry: sm.registry,
     facts: sm.factsMap(),
     idiomAt: sm.idiomAt,
@@ -549,6 +581,16 @@ export function compileGreenfield(session: OracleSession, source: string): strin
     // prevalueOf declines, at the same two call sites.
     propagationOf: sm.propagationOf,
     sameBranchOf: sm.sameBranchOf,
+    // loweringDecisionAt / guardFormOf: E3's remaining two decision-views
+    // (engine plan §2 E3; ../lowering/index.ts) — the §4.2 ladder and Law-T's
+    // guard form, both consulted INLINE by the walker instead of a direct
+    // `registry.lookup`/`facts.get` read (the S5-extended lint's own check,
+    // model-imports-agree.test.ts). Wired here at walk()'s TOP level too
+    // (harmless no-op for the oracle wrap's own [wrapper, trailing-call]
+    // pair) for the day a real, unwrapped top level exists (E4).
+    loweringDecisionAt: sm.loweringDecisionAt,
+    guardFormOf: sm.guardFormOf,
+    shakeOf: sm.shakeOf,
     register: "run",
   });
   // THE MODEL VIEW, not a post-walk rewriting pass (engine plan §2 E2) —
@@ -564,13 +606,15 @@ export function compileGreenfield(session: OracleSession, source: string): strin
   const asyncified = materializeAsyncness(sm.asyncnessOf(shared, inferAsyncSeeds));
   // THE MODEL VIEW, not a post-render scan (engine plan §2 E1b) — every
   // top-level form's own recursive `sm.importsOf`, unioned into the
-  // whole-program symbol set `materializeImports` needs. Queried over
-  // `sm.coreform`'s ORIGINAL forms — `sm.idiomAt` folding happens INSIDE
-  // `walk()` (and inside `importsOf`'s own synthetic walk, model.ts's
+  // whole-program symbol set `materializeImports` needs. Queried over the
+  // SHAKEN forms (not `classified.forms` directly) — a pruned-away dead
+  // define's own import needs must not superfluously survive into the
+  // materialized import list. `sm.idiomAt` folding happens INSIDE `walk()`
+  // (and inside `importsOf`'s own synthetic walk, model.ts's
   // `computeImportsOf`), so the two can never disagree about which symbols a
   // folded call needs (see importsOf's own doc, model.ts).
   const importSymbols = new Set<string>();
-  for (const form of classified.forms) for (const s of sm.importsOf(form)) importSymbols.add(s);
+  for (const form of shakenClassified.forms) for (const s of sm.importsOf(form)) importSymbols.add(s);
   const materialized = materializeImports(asyncified, { symbols: importSymbols, runtimeModule: `./${STAGE0_BASENAME}` });
   return render(materialized);
 }

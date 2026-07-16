@@ -54,11 +54,15 @@ import { bindingCensusOf } from "../naming/census.js";
 import { sharedBindingsOf } from "../naming/shared-bindings.js";
 import type { BindingCensus } from "../naming/types.js";
 import type { SharedBindingsView } from "../naming/shared-bindings.js";
+import { guardFormOf, loweringDecisionAt } from "../lowering/index.js";
+import type { GuardForm, LoweringDecision } from "../lowering/index.js";
 import { idiomDecisionAt, maxNodeId, programShadowsPeepholeNames } from "../peepholes/index.js";
 import { prevalueDecisionAt } from "../prevalue/index.js";
 import { propagationDecisionAt, sameBranchDecisionAt } from "../propagate/index.js";
 import type { EmitRegistry, EmitRegistryRow } from "../registry/harvest.js";
 import type { CompilationUnit } from "../residual/types.js";
+import { shakeTopLevel } from "../shake/index.js";
+import type { ShakeDecision } from "../shake/index.js";
 import { narrowsMembersOf } from "../type-emit/narrows.js";
 import type { FactsExtraction } from "../typefacts/facts.js";
 import { extractFacts } from "../typefacts/extract.js";
@@ -361,6 +365,60 @@ export class SchemeSemanticModel {
    */
   readonly asyncnessOf: (unit: CompilationUnit, seeds: ReadonlySet<string>) => AsyncnessFacts;
 
+  // ── E3: decisions, not analyses (engine plan §2 E3) ─────────────────────
+  // The remaining semantic branches `../walker/walk.ts` used to decide INLINE
+  // become view answers here — "the walker consults the view; it does not
+  // decide", same discipline as `idiomAt`/`prevalueOf` above. Both are pure
+  // functions of explicit arguments (`../lowering/index.ts`'s own header) —
+  // registry.lookup is an O(1) Map hit and guardFormOf is one comparison, so
+  // neither earns a cache the way `factsAt`'s whole-program TS build does
+  // (matching `registryRow`'s own "a second cache layer here would earn
+  // nothing" precedent, just above).
+
+  /**
+   * THE §4.2 ladder verdict (`../lowering/index.ts`'s `loweringDecisionAt`) —
+   * rule / shim / door, for a symbol reference already proven free (lexical
+   * scope resolution stays `../walker/walk.ts`'s own `resolve()`, structural,
+   * never modeled — this view is asked ONLY once a name is proven NOT
+   * locally bound, exactly where the walker's pre-E3 `lowerApp`/
+   * `registryValueRef` reached the registry). No LSP consumer of its own yet
+   * (hover showing "this compiles via the RuntimeRef shim" is the natural
+   * one); compiler consumer: `../walker/walk.ts`'s `lowerApp` (`"call"`
+   * position) and `registryValueRef` (`"value"` position) — both now switch
+   * on the returned verdict instead of calling `this.registry.lookup`
+   * themselves.
+   */
+  readonly loweringDecisionAt: (name: string, position: "call" | "value") => LoweringDecision;
+
+  /**
+   * Law-T's guard form (`../lowering/index.ts`'s `guardFormOf`) — "bare" or
+   * "strict", for a condition-position node. A thin wrap over `this.factsAt`
+   * + the pure decision function; `register` is a per-compile config, not a
+   * per-model property (the SAME model may be walked in either register), so
+   * it is a call-site argument here exactly like `bindingCensus`'s `unit` or
+   * `importsOf`'s `node`. No LSP consumer of its own yet (an inlay hint
+   * showing "this condition needs the exact-Scheme guard" is the natural
+   * one); compiler consumer: `../walker/walk.ts`'s `truthTest`/`lowerAndOr`.
+   */
+  readonly guardFormOf: (node: CoreForm, register: "run" | "read") => GuardForm;
+
+  /**
+   * Arrival's shake (`../shake/index.ts`'s `shakeTopLevel`) — dead top-level
+   * `Define`/`DefineFn` pruned while preserving effects (a sink/source/opaque
+   * crossing survives even when unreferenced; requires are untouched this
+   * wave — see that module's own header). A THIN wrap over `shakeTopLevel`,
+   * same "delegate to the same machinery" discipline as `sharedBindingsOf`
+   * just above — registry-dependent, per-call, uncached (the real pipeline
+   * calls it once per compile, matching `bindingCensus`/`asyncnessOf`'s own
+   * "a cache would only ever see one hit" precedent). No LSP consumer of its
+   * own yet (a "this definition is unreferenced" diagnostic/inlay hint is
+   * the natural one); compiler consumer: `oracle/harness.ts`'s
+   * `compileGreenfield`, which shakes the oracle wrapper's own body (where a
+   * corpus program's top-level defines actually live once wrapped — see that
+   * module's own comment) before handing the tree to `walk()`.
+   */
+  readonly shakeOf: (forms: readonly CoreForm[]) => ShakeDecision;
+
   // Internal-only caches, TS-`private` (compile-time) rather than `#`-native-
   // private: native `#` fields need `tslib`'s brand-check helpers under this
   // package's `importHelpers: true` (confirmed by isolated repro — the helper
@@ -404,6 +462,9 @@ export class SchemeSemanticModel {
     this.registryRow = (name) => this.registry.lookup(name);
     this.bindingCensus = (unit) => bindingCensusOf(unit);
     this.asyncnessOf = (unit, seeds) => asyncnessOf(unit, seeds);
+    this.loweringDecisionAt = (name, position) => loweringDecisionAt(name, this.registry, position);
+    this.guardFormOf = (node, register) => guardFormOf(this.factsAt(node), register);
+    this.shakeOf = (forms) => shakeTopLevel(forms, this.registry);
     this.importsOf = (node) => {
       const hit = this.importsCache.get(node);
       if (hit !== undefined) return hit;

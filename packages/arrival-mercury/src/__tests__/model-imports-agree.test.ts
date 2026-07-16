@@ -192,7 +192,7 @@ describe("S5 — the dependency-rule lint (engine plan §1 S5; extended at E1's 
    * them) — none may import the renderer, because none may take rendered
    * TEXT as an input to a further decision.
    */
-  it("no view or pass module (model + naming + walker + legibility + peepholes) reads emitted output", async () => {
+  it("no view or pass module (model + naming + walker + legibility + peepholes + lowering + shake) reads emitted output", async () => {
     const fs = await import("node:fs/promises");
     const MODULES = [
       "../model/model.ts",
@@ -207,6 +207,8 @@ describe("S5 — the dependency-rule lint (engine plan §1 S5; extended at E1's 
       "../legibility/tree.ts",
       "../peepholes/index.ts",
       "../peepholes/infer.ts",
+      "../lowering/index.ts",
+      "../shake/index.ts",
     ] as const;
     const EMITTED_OUTPUT = /residual\/render(\.js)?$/;
     let filesChecked = 0;
@@ -249,5 +251,46 @@ describe("S5 — the dependency-rule lint (engine plan §1 S5; extended at E1's 
       trailing,
       "nothing may follow the render(...) return — it must be the pipeline's LAST statement (no post-pass)",
     ).toBe("");
+  });
+
+  // ── E3's extension: no EMITTER branches on semantics (engine plan §2 E3) ──
+  //
+  // "The walker/materializer becomes a pure reader; if an emitter branches on
+  // semantics anywhere, S5's lint fails it." Operationalized as strictly as is
+  // honest (the plan's own concession): a SOURCE-SCAN test over walk.ts's own
+  // text, comments stripped first (feedback-comments-are-the-drift-origin.md
+  // — a doc comment mentioning "registry.lookup" in prose must never count as
+  // an offense). Two mechanical, achievable checks; anything this coarse a
+  // scan cannot honestly assert (e.g. "no rule/naming module calls
+  // registry.lookup either") stays a convention, not a lint, per the plan's
+  // own "pin the achievable subset" clause.
+
+  /** Strip `/* … *\/` and `// …` comments — good enough for this package's own
+   *  code style (no string literal in this file contains a bare `//`); never
+   *  claimed as a general-purpose TS/JS comment stripper. */
+  function stripComments(src: string): string {
+    return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  }
+
+  it("walk.ts's own CODE (comments stripped) never calls registry.lookup(...) directly — the §4.2 ladder is loweringDecisionAt's decision", async () => {
+    const fs = await import("node:fs/promises");
+    const src = stripComments(await fs.readFile(new URL("../walker/walk.ts", import.meta.url), "utf8"));
+    const offenders = [...src.matchAll(/\b\w+\.lookup\s*\(/g)].map((m) => m[0]);
+    expect(offenders, "walk.ts must not read the registry directly — the ladder relocated to ../lowering/index.ts").toEqual([]);
+  });
+
+  it("walk.ts's own CODE (comments stripped) reads TypeFacts through exactly ONE named accessor, never a second facts.get(...) call site", async () => {
+    const fs = await import("node:fs/promises");
+    const src = stripComments(await fs.readFile(new URL("../walker/walk.ts", import.meta.url), "utf8"));
+    const hits = [...src.matchAll(/\bfacts\.get\s*\(/g)];
+    expect(hits.length, "exactly one facts.get(...) call site is allowed: the factsAt(id) wrapper's own definition").toBe(1);
+  });
+
+  it("walk.ts actually IMPORTS the relocated decision views (a positive check — renaming the calls away would satisfy the two greps above without ever consulting the view)", async () => {
+    const fs = await import("node:fs/promises");
+    const src = await fs.readFile(new URL("../walker/walk.ts", import.meta.url), "utf8");
+    expect(src).toMatch(/from\s+["']\.\.\/lowering\/index\.js["']/);
+    expect(src).toContain("loweringDecisionAt");
+    expect(src).toContain("guardFormOf");
   });
 });

@@ -12,9 +12,14 @@
  *  - Law F (fail-safe facts): the facts side-table defaults to empty — absence of a fact
  *    lands on the conservative residual, never the clean one.
  *  - Law A (arg-gating): registry rules receive per-argument facts, never result types.
- *  - §4.2 fallback ladder per free symbol: emit rule → (eta: SKIPPED this wave, degrades
- *    to shim — the instantiated-signature facts it needs haven't landed) → RuntimeRef
- *    shim → door. Silence is impossible by construction.
+ *  - §4.2 fallback ladder per free symbol: emit rule → eta (`rule.ref`, opt-in per
+ *    symbol — R5c landed `car`'s instantiated-signature eta-expansion live; every OTHER
+ *    `refPolicy: "eta"` symbol still has no `.ref` and degrades to the shim rung, Law
+ *    F's value-position analog: absence of proof ⇒ conservative, never a guess) →
+ *    RuntimeRef shim → door. Silence is impossible by construction. STALE-COMMENT NOTE
+ *    (E3, "verify before you cite"): this bullet used to read "eta: SKIPPED this wave" —
+ *    that predates R5c and was already inaccurate for `car` specifically before this
+ *    wave touched the file; corrected here, not introduced by E3.
  *
  * Door materialization (the door-throw contract, wave-plan gate finding): a `Door` that
  * reaches the emitted artifact is a `Throw` residual whose message BEGINS with the
@@ -23,6 +28,28 @@
  * so a door on an untaken branch does not poison the program (interpreter parity).
  * The one compile-TIME refusal is `EmitCtx.door` (a rule declining a call site): that
  * throws `WalkDoorError` out of `walk()` itself.
+ *
+ * E3 — decisions, not analyses (engine plan §2 E3): the §4.2 ladder (rule / shim /
+ * door) and Law T's guard form used to be decided INLINE here — `registry.lookup`
+ * and `facts.get` calls scattered through `lowerApp`/`registryValueRef`/`truthTest`/
+ * `lowerAndOr`. Both DECISIONS relocated to `../lowering/index.ts`
+ * (`loweringDecisionAt`/`guardFormOf`, pure functions of explicit arguments) —
+ * `../model/model.ts` wraps them as `sm.loweringDecisionAt`/`sm.guardFormOf`. This
+ * walker now READS the two local closures `decisionFor`/`guardFor` (below), each
+ * defaulting to the SAME relocated function called directly against `opts.registry`/
+ * `opts.facts` when the model does not supply its own view — so every existing
+ * hand-rolled-registry test in this package (never wiring `opts.loweringDecisionAt`/
+ * `opts.guardFormOf`) is BYTE-IDENTICAL to before, exactly like `idiomAt`/
+ * `prevalueOf`'s own "declining is always safe" default. `opts.registry` and
+ * `opts.facts` therefore stay mandatory/present-by-default fields on `WalkOptions` —
+ * only the WALKER's OWN body stops branching on them directly; see the S5-extended
+ * lint (`model-imports-agree.test.ts`) for the mechanical check.
+ *
+ * E3 — the shake (engine plan §2 E3): `opts.shakeOf`, an OPTIONAL hook mirroring
+ * `propagationOf`'s own gating discipline, prunes dead-and-pure top-level
+ * `Define`/`DefineFn` forms (effectful crossings survive — `../shake/index.ts`'s own
+ * header) at the SAME point `propagateTopLevelDefines` already runs. Default
+ * `undefined` ⇒ no shake ever fires.
  *
  * Scope/naming (engine plan §2 E1a — the lookahead namer): this walk mints a Binding
  * (via `declareJs`/`fresh`) at every scheme binding site or engine-glue need, but
@@ -39,7 +66,7 @@
  * unconditionally redeclare-safe, but that guarantee is now the allocation phase's
  * (scope-tree reservations propagate down, exactly as they did here before).
  */
-import type { EmitConfig, EmitCtx, EmitRule, TypeFacts } from "@here.build/arrival/emit";
+import type { EmitConfig, EmitCtx, TypeFacts } from "@here.build/arrival/emit";
 
 import type {
   And,
@@ -58,12 +85,15 @@ import type {
   QuoteDatum,
   Require as CfRequire,
 } from "../coreform/types.js";
+import { guardFormOf, loweringDecisionAt } from "../lowering/index.js";
+import type { GuardForm, LoweringDecision } from "../lowering/index.js";
 import { allocateNames, bindingCensusOf, materializeNames, recordOrigin } from "../naming/index.js";
 import { propagateTopLevelDefines } from "../propagate/index.js";
-import type { EmitRegistry, EmitRegistryRow } from "../registry/harvest.js";
+import type { EmitRegistry } from "../registry/harvest.js";
 import { arrayChunkAst, type ChunkElement } from "../residual/chunk.js";
 import type { Binding, CompilationUnit, Decl, Pattern, R } from "../residual/types.js";
 import { STAGE0 } from "../runtime/stage0.js";
+import type { ShakeDecision } from "../shake/index.js";
 import {
   ArrayLit,
   ArrayPattern,
@@ -84,6 +114,7 @@ import {
   Let as LetStmt,
   Lit,
   Bin,
+  Method,
   New,
   ObjectLit,
   Ref,
@@ -182,6 +213,40 @@ export interface WalkOptions {
    * ITSELF lowers to, in whichever position it was written.
    */
   readonly requireOf?: (node: CfRequire) => R | undefined;
+  /**
+   * E3's §4.2 ladder decision-view (`../lowering/index.ts`'s
+   * `loweringDecisionAt`, `../model/model.ts`'s `sm.loweringDecisionAt`):
+   * consulted by `lowerApp`'s free-`Ref` branch (`"call"` position) and
+   * `registryValueRef` (`"value"` position) in place of a direct
+   * `registry.lookup` + `row.kind`/`row.emit` branch. Default `undefined` ⇒
+   * the SAME decision computed directly against `opts.registry` (see
+   * `decisionFor`, above) — byte-identical to the pre-E3 inline ladder for
+   * every existing hand-rolled-registry test in this package, exactly like
+   * `idiomAt`/`prevalueOf`'s own default (the one difference: this decision
+   * is not itself optional-to-fire, so the default RECOMPUTES it rather than
+   * declining).
+   */
+  readonly loweringDecisionAt?: (name: string, position: "call" | "value") => LoweringDecision;
+  /**
+   * Law-T's guard-form decision-view (`../lowering/index.ts`'s
+   * `guardFormOf`, `sm.guardFormOf`): consulted by `truthTest`/`allBoolean`
+   * in place of a direct `facts.get(id)?.boolean === true` read. Default
+   * `undefined` ⇒ the SAME decision computed directly against `opts.facts`
+   * (see `guardFor`, above) — byte-identical to the pre-E3 inline check.
+   */
+  readonly guardFormOf?: (node: CoreForm, register: "run" | "read") => GuardForm;
+  /**
+   * Arrival's shake (`../shake/index.ts`'s `shakeTopLevel`, `sm.shakeOf`):
+   * consulted ONCE, at the same point `propagateTopLevelDefines` already
+   * runs (below) — prunes dead-and-pure top-level `Define`/`DefineFn` forms
+   * from `forms` before `preRegisterDefines` ever sees them (effectful
+   * crossings survive; requires are untouched — see that module's own
+   * header). Default `undefined` ⇒ no shake ever fires, exactly like
+   * `idiomAt`/`prevalueOf`'s own "decline is always safe" default — every
+   * existing hand-rolled-registry test in this package that never supplies
+   * `shakeOf` is unaffected.
+   */
+  readonly shakeOf?: (forms: readonly CoreForm[]) => ShakeDecision;
 }
 
 /** Statement-sequence mode: `tail` returns the last form's value; `stmt` discards it;
@@ -204,6 +269,30 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
   const facts = opts.facts ?? new Map<NodeId, TypeFacts>();
   const config: EmitConfig = { register: opts.register };
   const { registry } = opts;
+
+  // ── E3: decisions, not analyses (module header) ───────────────────────────────────
+  //
+  // THE one named accessor onto the facts side-table — every fact read anywhere below
+  // goes through this closure, never a second `facts.get(...)` call site (the
+  // S5-extended lint's mechanical check, model-imports-agree.test.ts). Keyed by NodeId
+  // directly (not a CoreForm node) — `registryValueRef`'s value-position call site only
+  // ever has the bare id on hand, never a full node.
+  const factsAt = (id: NodeId): TypeFacts | undefined => facts.get(id);
+
+  // THE §4.2 ladder verdict, per free symbol reference: `opts.loweringDecisionAt` when
+  // the model supplies its own view (the real pipeline, oracle/harness.ts's
+  // `compileGreenfield`), else the SAME relocated decision (../lowering/index.ts)
+  // computed directly against `registry` — byte-identical either way (idiomAt/
+  // prevalueOf's own "declining is always safe" default, applied to a decision that
+  // isn't itself optional: absent a supplied view, the walker still needs an answer,
+  // so the default calls the very function the view would have called). The walker's
+  // own body never calls `registry.lookup` again past this point.
+  const decisionFor =
+    opts.loweringDecisionAt ?? ((name: string, position: "call" | "value") => loweringDecisionAt(name, registry, position));
+
+  // Law-T's guard form, per condition node: same supplied-view-or-relocated-default
+  // split as `decisionFor`.
+  const guardFor = opts.guardFormOf ?? ((n: CoreForm, register: "run" | "read") => guardFormOf(factsAt(n.id), register));
 
   // ── naming: scheme-name resolution frames + provisional minting ─────────────────
   //
@@ -259,16 +348,13 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
     );
 
   // ── registry dispatch (§4.2 ladder) ───────────────────────────────────────────────
-
-  /**
-   * THE one explicit narrowing seam (wave-plan gate finding). `EmitRegistryRow.emit` is
-   * stored opaque (`EmitRule` = `EmitRule<unknown>`) because arrival core cannot name
-   * this package's `R` (§4.5 layering). Bivariant method-parameter checking makes a
-   * rule authored against the real `R` assignable INTO the opaque slot, but the opaque
-   * slot does not implicitly assign back out — the engine re-instantiates it here,
-   * once, and nowhere else.
-   */
-  const ruleOf = (row: EmitRegistryRow): EmitRule<R> | undefined => row.emit as EmitRule<R> | undefined;
+  //
+  // The ladder itself — rule vs shim vs door — is `decisionFor`'s decision (E3, above);
+  // this walker only builds the residual the verdict calls for. The one narrowing seam
+  // for the registry's opaquely-stored `EmitRule` (the former `ruleOf` comment: "the
+  // engine re-instantiates it here, once, and nowhere else") relocated WITH the ladder
+  // to `../lowering/index.ts` — `decision.rule`, below, already carries the narrowed
+  // value.
 
   const ctxFor = (argFacts: TypeFacts[], selfFacts: TypeFacts | undefined, origin: NodeId): EmitCtx<R> => ({
     argFacts,
@@ -282,47 +368,39 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
     },
   });
 
-  const unresolvedDoor = (name: string): R =>
-    doorExpr(
-      "unsupported-form/unresolved-identifier",
-      `\`${name}\` is not lexically bound and is not a registry symbol.`,
-    );
-  const doorRowExpr = (row: EmitRegistryRow): R =>
-    doorExpr(`unsupported-form/${row.symbol}`, row.doorReason ?? `\`${row.symbol}\` is not supported in compiled output.`);
+  /** Structural switch over a `LoweringDecision` — never a semantic re-decision: reads
+   *  the verdict's OWN fields, decides nothing about the registry itself. Shared by
+   *  `registryValueRef` (below) and `lowerApp`'s free-`Ref` branch. */
+  const lowerDoor = (decision: Extract<LoweringDecision, { rung: "door" }>): R => doorExpr(decision.code, decision.message);
 
-  /** Value position of a FREE name (`(map car xss)`'s `car`, a define's RHS): the same
-   *  ladder as call position, minus the call — rule `ref` → refPolicy. `"eta"` degrades
-   *  to shim this wave (needs `facts.callable`, the instantiated use-site signature —
-   *  not extracted yet; Law F's value-position analog says shim is always sound). */
+  /** Value position of a FREE name (`(map car xss)`'s `car`, a define's RHS): the
+   *  `"value"` ladder — `decisionFor`'s rule/shim/door verdict, built into a residual. */
   const registryValueRef = (name: string, id: NodeId): R => {
-    const row = registry.lookup(name);
-    if (row === undefined) return unresolvedDoor(name);
-    if (row.kind === "door") return doorRowExpr(row);
-    const rule = ruleOf(row);
-    if (rule?.ref !== undefined) return rule.ref(ctxFor([], facts.get(id), id));
-    if (row.refPolicy === "door") {
-      return doorExpr(
-        `unsupported-form/${name}`,
-        `\`${name}\` cannot be used as a first-class value in compiled output (refPolicy "door").`,
-      );
+    const decision = decisionFor(name, "value");
+    switch (decision.rung) {
+      case "door":
+        return lowerDoor(decision);
+      case "rule":
+        return decision.rule.ref!(ctxFor([], factsAt(id), id));
+      case "shim":
+        return RuntimeRef(decision.row.symbol);
     }
-    return RuntimeRef(row.symbol); // "shim" (default) and this wave's "eta"
   };
 
   // ── Law T (truthiness) ─────────────────────────────────────────────────────────────
 
-  /** Run-side Law T: bare iff proven boolean; otherwise exact-Scheme `c !== false`
-   *  (only `#f` is false — `0`/`""` are truthy). Read register always bare (§1). */
+  /** Run-side Law T: bare iff `guardFor` proves it; otherwise exact-Scheme `c !== false`
+   *  (only `#f` is false — `0`/`""` are truthy). Read register always bare (§1) — decided
+   *  BY `guardFor` (`../lowering/index.ts`'s `guardFormOf`), not re-checked here. */
   const truthTest = (cond: CoreForm): R => {
     const c = lowerExpr(cond);
-    if (config.register === "read" || facts.get(cond.id)?.boolean === true) return c;
-    return Bin("!==", c, Lit(false));
+    return guardFor(cond, config.register) === "bare" ? c : Bin("!==", c, Lit(false));
   };
 
   // ── And/Or ─────────────────────────────────────────────────────────────────────────
 
   const allBoolean = (args: readonly CoreForm[]): boolean =>
-    args.every((a) => facts.get(a.id)?.boolean === true);
+    args.every((a) => guardFor(a, "run") === "bare");
 
   /**
    * The value-returning guarded cascade (Law T run-side; engine-walker.md §1): one
@@ -945,6 +1023,36 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
     // Rung 0 (structural, pre-registry): keyword accessor `(:field obj)`. Index+Lit,
     // never Member — Dict writes raw keys, and the read MUST share that one key-fold
     // (engine-walker.md §5: `(let ((d (dict :max-words 5))) (:max-words d))`).
+    //
+    // ALIST BRANCH (V's 2026-07-17 ruling): `obj` PROVEN array-backed (`list`/`pair`/
+    // `nonEmptyList` — the closed TypeFacts vocabulary's only "this is array-shaped"
+    // signals; a Dict carries NONE of them — typefacts/facts.ts's own doc calls out
+    // "a plain dict object" as a type the vocabulary has nothing to say about) AND
+    // whose ELEMENTS are themselves proven array-backed (`elementFacts`) is an ALIST
+    // — a list of `[k, v]` entries, never a dict: `obj["field"]` silently reads
+    // `undefined` (an array carries no string-keyed "field" own property). Lower
+    // Object.entries-shaped instead: find the entry whose key matches, project its
+    // value — mirroring the interpreter's own accessor exactly (`AKeywordSymbol.apply`
+    // → `APair#get`, foundations/arrival/arrival/src/values/primitives/APair.ts: walk
+    // the list, return the FIRST match's `cdr`, else `nil`). `?.[1]` alone yields
+    // `undefined` on a miss where the interpreter yields `nil` (membrane JS face
+    // `[]`) — the `??` gates on the FOUND PAIR, never the projected value, so a hit
+    // whose stored value happens to itself be `undefined` is never mistaken for a miss.
+    //
+    // The ELEMENT check matters on its own: a proven list of plain SCALARS (`(list 1 2
+    // 3)` — `list`/`nonEmptyList` true, but elements are numbers, not pairs) has no
+    // `[k, ...]`-destructurable entries — `.find(([k]) => …)` would THROW on the first
+    // non-iterable element ("1 is not iterable") where the pre-existing `Index` form
+    // only ever read `undefined`. Requiring the SAME array-shape proof one level down
+    // (`elementFacts`) keeps that degenerate case on its original, non-crashing
+    // (if equally unproven-correct) path — this branch may only ever improve outcomes
+    // over `Index`, never introduce a new crash Law F didn't already accept.
+    //
+    // UNKNOWN shape (no fact proven at either level — a Dict, a non-alist list, or a
+    // genuinely unproven receiver) keeps today's `Index` form unchanged: the dict
+    // case's own recommended narrowing (engine-walker.md §5) doubles as the safe Law-F
+    // default when the alist shape isn't provable — no universal dict-or-alist runtime
+    // dispatch exists yet (a follow-up's concern, not this branch's).
     if (n.fn.kind === "Lit" && n.fn.value.kind === "keyword") {
       const field = n.fn.value.name;
       if (n.positionalArgs.length !== 1 || n.kwargs.length > 0) {
@@ -953,14 +1061,24 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
           `the accessor \`(:${field} obj)\` takes exactly one operand.`,
         );
       }
-      return Index(lowerExpr(n.positionalArgs[0]!), Lit(field));
+      const recv = lowerExpr(n.positionalArgs[0]!);
+      const recvFacts: TypeFacts = factsAt(n.positionalArgs[0]!.id) ?? {};
+      const provesArray = (f: TypeFacts | undefined): boolean =>
+        f?.list === true || f?.pair === true || f?.nonEmptyList === true;
+      const provenAlist = provesArray(recvFacts) && provesArray(recvFacts.elementFacts);
+      if (provenAlist) {
+        const k = fresh("k");
+        const found = Method(recv, "find", [Arrow([ArrayPattern([k])], Bin("===", Ref(k), Lit(field)))]);
+        return Index(Bin("??", found, ArrayLit([Lit(undefined), ArrayLit([])])), Lit(1));
+      }
+      return Index(recv, Lit(field));
     }
 
     // Kwarg-collapse once, up front (§4): kwargs → ONE trailing options object with
     // cleanName'd keys — the App key space (deliberately different from Dict's raw
     // keys; engine-walker.md §4/§5, matching today's lowerCall convention).
     const argsR: R[] = n.positionalArgs.map(lowerExpr);
-    const argFacts: TypeFacts[] = n.positionalArgs.map((a) => facts.get(a.id) ?? {});
+    const argFacts: TypeFacts[] = n.positionalArgs.map((a) => factsAt(a.id) ?? {});
     if (n.kwargs.length > 0) {
       argsR.push(
         ObjectLit(n.kwargs.map((e) => ({ kind: "prop" as const, key: cleanName(e.key), value: lowerExpr(e.value) }))),
@@ -971,28 +1089,37 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
     if (n.fn.kind === "Ref") {
       const local = resolve(n.fn.name);
       // Resolved ⇒ ordinary lexical call — the registry is NEVER consulted (a locally
-      // shadowed builtin compiles to the local: `(let ((car …)) (car xs))`).
+      // shadowed builtin compiles to the local: `(let ((car …)) (car xs))`). Lexical
+      // scope resolution is STRUCTURAL (the walker's own schemeFrames bookkeeping),
+      // never a registry/semantic decision — `decisionFor`, below, is asked ONLY once
+      // a name is proven free, exactly where the pre-E3 walker first reached the
+      // registry.
       if (local !== undefined) return Call(Ref(local), argsR);
-      const row = registry.lookup(n.fn.name);
-      if (row === undefined) return unresolvedDoor(n.fn.name);
-      if (row.kind === "door") return doorRowExpr(row);
-      const rule = ruleOf(row); // the narrowing seam — see ruleOf
-      if (rule !== undefined) return rule.call(argsR, ctxFor(argFacts, facts.get(n.id), n.id));
-      // rung 3: the named-import shim — E2's ingestion fold (S2) intercepts
-      // here for `list`: a data-only argument list folds directly to a
-      // chunk-expression (a genuine TS array literal), killing the stage-0
-      // `list(...)` shim call for exactly the class the mission names ("the
-      // list(1, 2) stage0 shim dies for literal data"). `tryFoldListCall`
-      // aborts (returns `undefined`) whenever any argument's lowered form
-      // isn't call-free (`isCallFree` — a fold-SCOPE policy, not a
-      // walker-safety gate: every walker sees through slots per
-      // mercury-ir.md's mutual-recursion rule), keeping this wave's churn to
-      // the literal-data class the plan names.
-      if (row.symbol === "list" && n.kwargs.length === 0) {
-        const folded = tryFoldListCall(argsR);
-        if (folded !== undefined) return folded;
+      const decision = decisionFor(n.fn.name, "call");
+      switch (decision.rung) {
+        case "door":
+          return lowerDoor(decision);
+        case "rule":
+          return decision.rule.call(argsR, ctxFor(argFacts, factsAt(n.id), n.id));
+        case "shim": {
+          // rung 3: the named-import shim — E2's ingestion fold (S2) intercepts
+          // here for `list`: a data-only argument list folds directly to a
+          // chunk-expression (a genuine TS array literal), killing the stage-0
+          // `list(...)` shim call for exactly the class the mission names ("the
+          // list(1, 2) stage0 shim dies for literal data"). `tryFoldListCall`
+          // aborts (returns `undefined`) whenever any argument's lowered form
+          // isn't call-free (`isCallFree` — a fold-SCOPE policy, not a
+          // walker-safety gate: every walker sees through slots per
+          // mercury-ir.md's mutual-recursion rule), keeping this wave's churn to
+          // the literal-data class the plan names. This is a STRUCTURAL check on
+          // the verdict's own `row.symbol` field, never a second registry read.
+          if (decision.row.symbol === "list" && n.kwargs.length === 0) {
+            const folded = tryFoldListCall(argsR);
+            if (folded !== undefined) return folded;
+          }
+          return Call(RuntimeRef(decision.row.symbol), argsR); // rung 3: the named-import shim
+        }
       }
-      return Call(RuntimeRef(row.symbol), argsR); // rung 3: the named-import shim
     }
     // Any other callee shape (Lambda IIFE, computed fn, …): an ordinary call — the
     // renderer parenthesizes an immediate-lambda callee structurally.
@@ -1084,7 +1211,14 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
   // undefined ⇒ no fold ever fires" discipline) rather than this whole-
   // program pass firing unconditionally for every existing walk() caller.
   const flatForms = flattenTopBegins(classified.forms);
-  const forms = opts.propagationOf !== undefined ? propagateTopLevelDefines(flatForms) : flatForms;
+  const propagatedForms = opts.propagationOf !== undefined ? propagateTopLevelDefines(flatForms) : flatForms;
+  // E3's shake (../shake/index.ts's `shakeTopLevel`, `sm.shakeOf`) — runs AFTER
+  // propagation so a define propagation makes unreferenced is shake-eligible too
+  // (module header's own composition note), BEFORE `preRegisterDefines`/the main
+  // loop so a pruned define never even reaches lowering. Gated on `opts.shakeOf`
+  // being supplied — the SAME opt-in discipline `propagateTopLevelDefines`, just
+  // above, already uses for the identical reason.
+  const forms = opts.shakeOf !== undefined ? opts.shakeOf(propagatedForms).forms : propagatedForms;
   const decls: Decl[] = [];
   const body: R[] = [];
   preRegisterDefines(forms); // top level is letrec*-flavored — mutual recursion resolves
