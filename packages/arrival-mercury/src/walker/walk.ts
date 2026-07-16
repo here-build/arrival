@@ -42,15 +42,18 @@
 import type { EmitConfig, EmitCtx, EmitRule, TypeFacts } from "@here.build/arrival/emit";
 
 import type {
+  And,
   App,
   ClassifyResult,
   CoreForm,
   Define,
   DefineFn,
+  If as CfIf,
   Let as CfLet,
   Lit as CfLit,
   NamedLet,
   NodeId,
+  Or,
   Param as CfParam,
   QuoteDatum,
   Require as CfRequire,
@@ -119,6 +122,18 @@ export interface WalkOptions {
    * package that never supplies `idiomAt` is unaffected).
    */
   readonly idiomAt?: (node: App) => App | undefined;
+  /**
+   * R-G6's static-prevaluation decision-view (`../prevalue/index.ts`,
+   * `../model/model.ts`'s `sm.prevalueOf`): consulted at the top of every
+   * `If`/`And`/`Or` this walker lowers (`lowerExpr`, below, and
+   * `tailLoopForm`'s own `If` arm — the one site that builds an `if`
+   * statement directly instead of routing through `lowerExpr`) — mirrors
+   * how `idiomAt`, above, is consulted at the top of `lowerApp`. Default
+   * `undefined` ⇒ no fold ever fires — every existing hand-rolled-registry
+   * test in this package that never supplies `prevalueOf` is unaffected,
+   * exactly like `idiomAt`'s own default.
+   */
+  readonly prevalueOf?: (node: CfIf | And | Or) => CoreForm | undefined;
   /** `"run"` = executable artifact (Law T strict); `"read"` = glass (clean forms). */
   readonly register: "run" | "read";
 }
@@ -749,6 +764,12 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
         break;
       }
       case "If": {
+        // Same R-G6 consultation as `lowerExpr`'s "If" arm — this site builds
+        // its own `IfStmt` directly (the TCO tail rewrite) rather than
+        // routing through `lowerExpr`, so it needs its own check to avoid
+        // visiting/emitting a statically-dead arm (and any door inside it).
+        const folded = opts.prevalueOf?.(n);
+        if (folded !== undefined) return tailLoopForm(folded, mode);
         const thenB = Block(tailLoopForm(n.then, mode));
         const elseB = Block(tailLoopForm(n.else, mode));
         return [IfStmt(truthTest(n.cond), thenB, elseB)];
@@ -920,12 +941,21 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
         return ObjectLit(n.entries.map((e) => ({ kind: "prop" as const, key: e.key, value: lowerExpr(e.value) })));
       case "App":
         return lowerApp(n);
-      case "If":
+      case "If": {
+        // R-G6 static prevaluation, consulted FIRST (mirrors `lowerApp`'s own
+        // `idiomAt` consultation): a provably-constant guard folds to
+        // WHICHEVER branch is live, dropping the other whole — including any
+        // prohibited-dynamics door inside it (never lowered, never visited).
+        const folded = opts.prevalueOf?.(n);
+        if (folded !== undefined) return lowerExpr(folded);
         return Cond(truthTest(n.cond), lowerExpr(n.then), lowerExpr(n.else));
+      }
       case "And":
-        return lowerAndOr(n.args, "and");
-      case "Or":
-        return lowerAndOr(n.args, "or");
+      case "Or": {
+        const folded = opts.prevalueOf?.(n);
+        if (folded !== undefined) return lowerExpr(folded);
+        return lowerAndOr(n.args, n.kind === "And" ? "and" : "or");
+      }
       case "Lambda": {
         const fn = lowerLambdaLike(n.params, n.body);
         return Arrow(fn.params, collapseBody(fn.stmts));

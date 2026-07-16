@@ -1,5 +1,5 @@
 function OracleMain() {
-    return false ? "a" : "b";
+    return "b";
 }
 export { __oracleResult };
 const __oracleResult = OracleMain();

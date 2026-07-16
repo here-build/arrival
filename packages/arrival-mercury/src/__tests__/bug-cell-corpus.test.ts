@@ -45,16 +45,20 @@ if (rows.length === 0) throw new Error(`bug-cell corpus is empty — expected co
  * eq-vs-equal-string-eq (re-authored as a divergence-by-design sidecar:
  * boxed-string identity is unobservable post representation-collapse —
  * interpreter #f / compiled #t, permanently).
+ *
+ * OQ8a resolved by ELIMINATION, not re-ruling (gate3-human-grade-rulings.md
+ * R-G6): `short-circuit-effect` promoted OUT of this map when static
+ * prevaluation (`../prevalue/index.ts`, consulted by `../walker/walk.ts`)
+ * landed — `(or #t (begin (set! n 999) 'x))`'s FIRST operand is a provable
+ * `#t`, so the whole `or` folds to the value, and the `(begin (set! n 999)
+ * 'x)` branch — Door and all — is dropped whole, never lowered. The
+ * compiled artifact now contains no `set!` and no door to place; the
+ * interpreter already never evaluated the untaken branch either. Both sides
+ * agree on value 0 because the dead branch never contributed to the value
+ * on EITHER side — not because the door's placement was re-argued away.
+ * See `corpus/short-circuit-effect.expect.ts`'s own updated header.
  */
 const KNOWN_RED: Readonly<Record<string, string>> = {
-  "short-circuit-effect":
-    "the sidecar expects a STATIC prohibited-dynamics door on BOTH sides; both sides are lazy by design today. " +
-    "classify DOES door the set! (CoreForm Door), but the walker materializes doors as evaluation-time Throws " +
-    "(walk.ts door-throw contract: a door on an untaken branch must not poison the program) and `(or #t …)` " +
-    "short-circuits before reaching it → compiled returns 0; the interpreter never evaluates the untaken branch " +
-    "either → 0. Both sides AGREE on value 0 — greening this row needs either a compile-FRONT static " +
-    "prohibited-dynamics scan (unowned by any current phase) or a V re-ruling of the sidecar to { value: 0 } " +
-    "(the door's placement is the one §11 spec-level residue: oracle-harness.md OQ8a)",
   // NOT red: short-circuit-control — the greenfield path resolves `error` through its
   // harvested define-kind registry row (rung-3 shim) → FRAME → stage-0 `error`
   // (SchemeUserError), so the taken-branch raise classifies user-error on both sides;

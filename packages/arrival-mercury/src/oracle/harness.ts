@@ -14,7 +14,7 @@
  *
  * Compiled side — SUBJECT-ROUTED (constitution §9 "the dual-path rule"): the
  * gate subject is `"greenfield"` (default) — the NEW pipeline end to end,
- * classify → extractFacts → walk(overlay registry, sm.idiomAt) →
+ * classify → extractFacts → walk(overlay registry, sm.idiomAt, sm.prevalueOf) →
  * materializeSharedBindings(sm.sharedBindingsOf) →
  * materializeAsyncness(sm.asyncnessOf) → materializeImports(sm.importsOf) →
  * render, with `RuntimeRef` shims resolved against the stage-0 runtime
@@ -387,7 +387,7 @@ function exportUnitResult(unit: CompilationUnit): CompilationUnit {
 /**
  * The greenfield pipeline, source → module text:
  *
- *   wrap → classify → extractFacts → walk(sm.idiomAt) → exportResult
+ *   wrap → classify → extractFacts → walk(sm.idiomAt, sm.prevalueOf) → exportResult
  *     → materializeSharedBindings(sm.sharedBindingsOf)
  *     → materializeAsyncness(sm.asyncnessOf) → materializeImports(sm.importsOf) → render
  *
@@ -409,6 +409,15 @@ function exportUnitResult(unit: CompilationUnit): CompilationUnit {
  *     residual" already covers this; no rule in `phase1Rules` reads facts on
  *     an infer-family node, so today this is a non-issue in practice, not
  *     just in theory.
+ *
+ * STATIC PREVALUATION (gate3-human-grade-rulings.md's R-G6; `sm.prevalueOf`,
+ * `../prevalue/index.ts`) is consulted the SAME way, at the same layer: the
+ * top of every `If`/`And`/`Or` `walk()` lowers. A provably-constant
+ * guard/operand (Scheme truthiness) folds to whichever branch is live,
+ * dropping the other whole — including any `prohibited-dynamics` door
+ * inside it, which is simply never visited. No separate fold pre-pass
+ * exists; `extractFacts` sees the ORIGINAL, un-folded `If`/`And`/`Or` nodes
+ * for the same reason idioms don't feed it either.
  *
  * SHARED BINDINGS (constitution §3.5's third invention, leg 3 — pure-region
  * CSE; `sm.sharedBindingsOf` + `materializeSharedBindings`, engine plan §2
@@ -521,7 +530,16 @@ export function compileGreenfield(session: OracleSession, source: string): strin
   }
   // idiomAt: this.idiomAt — the E2 decision-view, consulted INLINE by
   // lowerApp; no separate peephole() pre-pass exists anymore.
-  const sync = walk(classified, { registry: sm.registry, facts: sm.factsMap(), idiomAt: sm.idiomAt, register: "run" });
+  // prevalueOf: this.prevalueOf — R-G6's static-prevaluation decision-view
+  // (gate3-human-grade-rulings.md), consulted INLINE by every If/And/Or this
+  // walker lowers; no separate fold pre-pass, same discipline as idiomAt.
+  const sync = walk(classified, {
+    registry: sm.registry,
+    facts: sm.factsMap(),
+    idiomAt: sm.idiomAt,
+    prevalueOf: sm.prevalueOf,
+    register: "run",
+  });
   // THE MODEL VIEW, not a post-walk rewriting pass (engine plan §2 E2) —
   // the SAME eligibility/structural-equality decision the dissolved
   // `legibility/cse.ts` computed, confined inside `sm.sharedBindingsOf`;

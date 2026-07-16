@@ -44,7 +44,7 @@
  *    to) is call-site-invisible. `./types.js`'s own header makes the same
  *    call for the spine's v1 ("no mobx… wraps this in the editor phase").
  */
-import type { App, ClassifyResult, CoreForm, NodeId } from "../coreform/types.js";
+import type { And, App, ClassifyResult, CoreForm, If, NodeId, Or } from "../coreform/types.js";
 import { classify } from "../coreform/classify.js";
 import { desugar } from "../front/desugar.js";
 import { parseSexprs } from "../front/parse.js";
@@ -55,6 +55,7 @@ import { sharedBindingsOf } from "../naming/shared-bindings.js";
 import type { BindingCensus } from "../naming/types.js";
 import type { SharedBindingsView } from "../naming/shared-bindings.js";
 import { idiomDecisionAt, maxNodeId, programShadowsPeepholeNames } from "../peepholes/index.js";
+import { prevalueDecisionAt } from "../prevalue/index.js";
 import type { EmitRegistry, EmitRegistryRow } from "../registry/harvest.js";
 import type { CompilationUnit } from "../residual/types.js";
 import { narrowsMembersOf } from "../type-emit/narrows.js";
@@ -173,7 +174,10 @@ export class SchemeSemanticModel {
    * exactly like the real pipeline's walk does, so `importsOf`'s answer over
    * `sm.coreform`'s ORIGINAL forms already agrees with the emitted imports —
    * the view and the tree agree BY CONSTRUCTION, not by a call-site
-   * discipline a future caller could forget.
+   * discipline a future caller could forget. `prevalueOf` (below) joins the
+   * same synthetic walk for the identical reason: a runtime symbol living
+   * only inside a branch prevaluation proves statically dead must not be
+   * over-counted as needed.
    */
   readonly importsOf: (node: CoreForm) => ReadonlySet<string>;
 
@@ -206,6 +210,40 @@ export class SchemeSemanticModel {
    * this view's own `computeImportsOf`.
    */
   readonly idiomAt: (node: App) => App | undefined;
+
+  /**
+   * R-G6's static-prevaluation decision-view (gate3-human-grade-rulings.md;
+   * docs/working-proposals/arrival-mercury/dnf-prevaluation-evidence.md —
+   * the here.build DNF-fold peek): given an `If`/`And`/`Or` node whose
+   * guard/operands are PROVABLY constant (Scheme truthiness —
+   * `../prevalue/index.ts`'s `prevalue`), answers the REPLACEMENT node
+   * that carries the same value — dropping every unreachable branch
+   * whole, including any `prohibited-dynamics` door inside it (a door on
+   * a statically-dead branch is exactly the walker's own "an untaken
+   * branch must not poison the program" contract taken to its
+   * conclusion — `../walker/walk.ts`'s module header). The WALKER
+   * consumes it inline (`../walker/walk.ts`'s `lowerExpr`, and
+   * `tailLoopForm`'s own `If` arm), exactly where `idiomAt`, above, is
+   * consumed at the top of `lowerApp` — same shape, same "decline is
+   * always safe" fallback.
+   *
+   * Unlike `idiomAt`, no shadow guard or id-mint floor is needed:
+   * `if`/`and`/`or` are special forms `classify()` itself recognizes
+   * structurally, never a locally-shadowable registry symbol
+   * (`../prevalue/index.ts`'s own header spells out why), so
+   * `prevalueDecisionAt` is a pure function of its own subtree —
+   * `IdiomDeps`-shaped external state would have nothing to carry.
+   *
+   * Memoized per node identity (a `WeakMap`, matching `idiomAt`'s own
+   * discipline). No LSP consumer of its own yet (a "this branch is
+   * statically dead" inlay hint is the natural one); compiler consumer:
+   * `../walker/walk.ts`'s conditional lowering, and this view's own
+   * `computeImportsOf` (below) — so the import census can never
+   * over-count a runtime symbol a folded-away branch used to reference,
+   * the identical class of gap `idiomAt` closes for its own fold (see
+   * `importsOf`'s doc, above).
+   */
+  readonly prevalueOf: (node: If | And | Or) => CoreForm | undefined;
 
   /**
    * E2's sharing decision-view (engine plan §2 E2, second half): "CSE…
@@ -284,6 +322,10 @@ export class SchemeSemanticModel {
    *  cached "no idiom applies" (`undefined`) is distinguishable from "never
    *  queried" via `.has()` (see `idiomAt`'s field, below). */
   private readonly idiomCache = new WeakMap<App, App | undefined>();
+  /** `prevalueOf`'s own memo — keyed by node identity, `WeakMap`-valued so a
+   *  cached "no fold applies" (`undefined`) is distinguishable from "never
+   *  queried" via `.has()` (mirrors `idiomCache`'s own discipline, above). */
+  private readonly prevalueCache = new WeakMap<If | And | Or, CoreForm | undefined>();
   /** The whole-program shadow verdict `idiomDecisionAt` needs (its `shadowed`
    *  dependency) — computed ONCE, lazily, on first `idiomAt` query, not per
    *  query (mirrors `facts()`'s own lazy-cache discipline just below). */
@@ -321,6 +363,12 @@ export class SchemeSemanticModel {
       this.idiomCache.set(node, decision);
       return decision;
     };
+    this.prevalueOf = (node) => {
+      if (this.prevalueCache.has(node)) return this.prevalueCache.get(node);
+      const decision = prevalueDecisionAt(node);
+      this.prevalueCache.set(node, decision);
+      return decision;
+    };
     this.sharedBindingsOf = (unit) => sharedBindingsOf(unit, this.registry);
   }
 
@@ -355,6 +403,7 @@ export class SchemeSemanticModel {
       registry: this.registry,
       facts: this.facts().facts,
       idiomAt: this.idiomAt,
+      prevalueOf: this.prevalueOf,
       register: "run",
     });
     return runtimeRefsOf(unit);
