@@ -538,6 +538,17 @@ export function compileGreenfield(session: OracleSession, source: string): strin
     facts: sm.factsMap(),
     idiomAt: sm.idiomAt,
     prevalueOf: sm.prevalueOf,
+    // propagationOf: this.propagationOf — the structural-optimization
+    // lane's constant/copy propagation (gate3-human-grade-rulings.md's
+    // governing principle; `../propagate/index.ts`), consulted INLINE by
+    // `letStmts` BEFORE prevaluation examines a nested If/And/Or — no
+    // separate propagation pre-pass, same discipline as idiomAt/prevalueOf.
+    // sameBranchOf: this.sameBranchOf — the same lane's other free fold
+    // (`(if c A A)` when `cond` isn't provably constant but both arms are
+    // the same trivially-pure value anyway), consulted right after
+    // prevalueOf declines, at the same two call sites.
+    propagationOf: sm.propagationOf,
+    sameBranchOf: sm.sameBranchOf,
     register: "run",
   });
   // THE MODEL VIEW, not a post-walk rewriting pass (engine plan §2 E2) —

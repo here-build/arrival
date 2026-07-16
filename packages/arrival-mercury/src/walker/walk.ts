@@ -59,6 +59,7 @@ import type {
   Require as CfRequire,
 } from "../coreform/types.js";
 import { allocateNames, bindingCensusOf, materializeNames, recordOrigin } from "../naming/index.js";
+import { propagateTopLevelDefines } from "../propagate/index.js";
 import type { EmitRegistry, EmitRegistryRow } from "../registry/harvest.js";
 import { arrayChunkAst, type ChunkElement } from "../residual/chunk.js";
 import type { Binding, CompilationUnit, Decl, Pattern, R } from "../residual/types.js";
@@ -134,6 +135,27 @@ export interface WalkOptions {
    * exactly like `idiomAt`'s own default.
    */
   readonly prevalueOf?: (node: CfIf | And | Or) => CoreForm | undefined;
+  /**
+   * The structural-optimization lane's propagation decision-view
+   * (`../propagate/index.ts`'s `propagationDecisionAt`, `../model/model.ts`'s
+   * `sm.propagationOf`): consulted at the top of `letStmts` (below) — the
+   * single function every `Let`-lowering site routes through — BEFORE the
+   * body it returns is lowered, so a propagated literal is already in place
+   * the moment `prevalueOf`, above, examines a nested `If`/`And`/`Or`
+   * (`(let ((flag #t)) (if flag A B))` → propagate → `(if #t A B)` →
+   * prevalue folds → `A`). Default `undefined` ⇒ no propagation ever fires,
+   * exactly like `idiomAt`/`prevalueOf`'s own default.
+   */
+  readonly propagationOf?: (node: CfLet) => CfLet | undefined;
+  /**
+   * The structural-optimization lane's other free fold
+   * (`../propagate/index.ts`'s `sameBranchDecisionAt`, `sm.sameBranchOf`):
+   * consulted immediately after `prevalueOf` declines, at the same two call
+   * sites (`lowerExpr`'s "If" arm, `tailLoopForm`'s own "If" arm) — folds
+   * `(if c A A)` (both arms the SAME trivially-pure value) even when `c`
+   * itself is not provably constant. Default `undefined` ⇒ never fires.
+   */
+  readonly sameBranchOf?: (node: CfIf) => CoreForm | undefined;
   /** `"run"` = executable artifact (Law T strict); `"read"` = glass (clean forms). */
   readonly register: "run" | "read";
 }
@@ -615,33 +637,41 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
    * see every sibling (JS TDZ enforces use-before-init at runtime, which IS letrec*'s
    * own restriction). Caller owns the JS frame (block vs splice).
    */
-  const letStmts = (n: CfLet, mode: SeqMode): R[] =>
-    inSchemeFrame(() => {
+  const letStmts = (n: CfLet, mode: SeqMode): R[] => {
+    // The structural-optimization lane's propagation decision, consulted
+    // FIRST — mirrors `lowerApp`'s own `idiomAt` consultation. Runs BEFORE
+    // this function's own lowering (and therefore before `prevalueOf`/
+    // `sameBranchOf` ever see a nested If/And/Or in `effective.body`), so a
+    // propagated literal is already substituted in place by the time either
+    // of those views examines it (see `WalkOptions.propagationOf`'s own doc).
+    const effective = opts.propagationOf?.(n) ?? n;
+    return inSchemeFrame(() => {
       const consts: R[] = [];
-      if (n.letKind === "let") {
-        const inits = n.bindings.map((b) => lowerExpr(b.init)); // outer scope — frame is pushed but empty
-        n.bindings.forEach((b, i) => {
+      if (effective.letKind === "let") {
+        const inits = effective.bindings.map((b) => lowerExpr(b.init)); // outer scope — frame is pushed but empty
+        effective.bindings.forEach((b, i) => {
           const jb = declareJs(b.name);
           bind(b.name, jb);
           consts.push(Const(jb, inits[i]!));
         });
-      } else if (n.letKind === "let*") {
-        for (const b of n.bindings) {
+      } else if (effective.letKind === "let*") {
+        for (const b of effective.bindings) {
           const init = lowerExpr(b.init); // sees previous bindings only
           const jb = declareJs(b.name);
           bind(b.name, jb);
           consts.push(Const(jb, init));
         }
       } else {
-        const jbs = n.bindings.map((b) => {
+        const jbs = effective.bindings.map((b) => {
           const jb = declareJs(b.name);
           bind(b.name, jb);
           return jb;
         });
-        n.bindings.forEach((b, i) => consts.push(Const(jbs[i]!, lowerExpr(b.init))));
+        effective.bindings.forEach((b, i) => consts.push(Const(jbs[i]!, lowerExpr(b.init))));
       }
-      return [...consts, ...bodySeq(n.body, mode)];
+      return [...consts, ...bodySeq(effective.body, mode)];
     });
+  };
 
   // ── NamedLet: TCO while-loop or declared arrow ─────────────────────────────────────
 
@@ -770,6 +800,11 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
         // visiting/emitting a statically-dead arm (and any door inside it).
         const folded = opts.prevalueOf?.(n);
         if (folded !== undefined) return tailLoopForm(folded, mode);
+        // The same-branch identity, consulted second (mirrors `lowerExpr`'s
+        // own ordering) — `prevalueOf` couldn't prove `n.cond`, but `then`/
+        // `else` may still be the identical trivially-pure value regardless.
+        const sameBranch = opts.sameBranchOf?.(n);
+        if (sameBranch !== undefined) return tailLoopForm(sameBranch, mode);
         const thenB = Block(tailLoopForm(n.then, mode));
         const elseB = Block(tailLoopForm(n.else, mode));
         return [IfStmt(truthTest(n.cond), thenB, elseB)];
@@ -948,6 +983,12 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
         // prohibited-dynamics door inside it (never lowered, never visited).
         const folded = opts.prevalueOf?.(n);
         if (folded !== undefined) return lowerExpr(folded);
+        // The same-branch identity, consulted second (see
+        // `WalkOptions.sameBranchOf`'s own doc) — `prevalueOf` couldn't
+        // prove `n.cond`, but `then`/`else` may still be the identical
+        // trivially-pure value regardless of which way `cond` goes.
+        const sameBranch = opts.sameBranchOf?.(n);
+        if (sameBranch !== undefined) return lowerExpr(sameBranch);
         return Cond(truthTest(n.cond), lowerExpr(n.then), lowerExpr(n.else));
       }
       case "And":
@@ -984,7 +1025,22 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
   const flattenTopBegins = (forms: readonly CoreForm[]): CoreForm[] =>
     forms.flatMap((f) => (f.kind === "Begin" ? flattenTopBegins(f.body) : [f]));
 
-  const forms = flattenTopBegins(classified.forms);
+  // Top-level `define` VALUE-binding propagation (`../propagate/index.ts`'s
+  // `propagateTopLevelDefines` — literal-only, order-independent; see that
+  // function's own header for why copy-propagation is NOT attempted at this
+  // scope). A pure, stateless whole-program pass — called directly, no
+  // `SchemeSemanticModel` view mediates it, mirroring `flattenTopBegins`
+  // just above. Runs BEFORE `preRegisterDefines`/the main loop so a
+  // propagated top-level literal is already in place everywhere `walk()`
+  // lowers, the same "propagation before prevaluation" ordering `letStmts`
+  // gives its own bindings. Gated on `opts.propagationOf` being supplied —
+  // the SAME opt-in signal `letStmts` uses for its own (per-`Let`)
+  // propagation, so a caller that never wires the feature in gets
+  // byte-identical output (matching `idiomAt`/`prevalueOf`'s own "default
+  // undefined ⇒ no fold ever fires" discipline) rather than this whole-
+  // program pass firing unconditionally for every existing walk() caller.
+  const flatForms = flattenTopBegins(classified.forms);
+  const forms = opts.propagationOf !== undefined ? propagateTopLevelDefines(flatForms) : flatForms;
   const decls: Decl[] = [];
   const body: R[] = [];
   preRegisterDefines(forms); // top level is letrec*-flavored — mutual recursion resolves

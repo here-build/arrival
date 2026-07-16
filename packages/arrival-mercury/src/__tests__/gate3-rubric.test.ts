@@ -21,11 +21,18 @@ const compile = async (src: string): Promise<string> => compileGreenfield(sessio
 
 describe("Gate-3 rubric — machine-checked items (constitution §9)", () => {
   it("no IIFE where a block suffices: a statement-position let body renders as a plain function body, not an arrow IIFE", async () => {
-    const out = await compile(`(define (f x) (let ((y 1)) (+ x y)))\n(f 1)`);
+    // `y`'s init is `(car (list 1 2))` — an `App`, not trivially pure — so the
+    // structural-optimization lane's constant/copy propagation
+    // (`../propagate/index.ts`) does not touch this binding and it survives
+    // as a real `const`, keeping this row's original point (a SURVIVING
+    // statement-position let renders as const-in-function-body, never an
+    // IIFE) distinct from propagation's own, separately-tested behavior
+    // (`propagate.test.ts`) of eliminating a trivially-pure binding entirely.
+    const out = await compile(`(define (f x) (let ((y (car (list 1 2)))) (+ x y)))\n(f 1)`);
     // The let lands as const-in-function-body — an IIFE here would be the exact
     // "expression machinery in statement position" smell the rubric names.
     expect(out).not.toMatch(/\(\(\) =>/);
-    expect(out).toContain("const y = 1");
+    expect(out).toContain("const y = ");
   });
 
   it("import order is deterministic and sorted (FRAME's one-scan census)", async () => {

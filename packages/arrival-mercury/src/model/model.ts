@@ -44,7 +44,7 @@
  *    to) is call-site-invisible. `./types.js`'s own header makes the same
  *    call for the spine's v1 ("no mobx… wraps this in the editor phase").
  */
-import type { And, App, ClassifyResult, CoreForm, If, NodeId, Or } from "../coreform/types.js";
+import type { And, App, ClassifyResult, CoreForm, If, Let, NodeId, Or } from "../coreform/types.js";
 import { classify } from "../coreform/classify.js";
 import { desugar } from "../front/desugar.js";
 import { parseSexprs } from "../front/parse.js";
@@ -56,6 +56,7 @@ import type { BindingCensus } from "../naming/types.js";
 import type { SharedBindingsView } from "../naming/shared-bindings.js";
 import { idiomDecisionAt, maxNodeId, programShadowsPeepholeNames } from "../peepholes/index.js";
 import { prevalueDecisionAt } from "../prevalue/index.js";
+import { propagationDecisionAt, sameBranchDecisionAt } from "../propagate/index.js";
 import type { EmitRegistry, EmitRegistryRow } from "../registry/harvest.js";
 import type { CompilationUnit } from "../residual/types.js";
 import { narrowsMembersOf } from "../type-emit/narrows.js";
@@ -246,6 +247,59 @@ export class SchemeSemanticModel {
   readonly prevalueOf: (node: If | And | Or) => CoreForm | undefined;
 
   /**
+   * The structural-optimization lane's propagation decision-view
+   * (`../propagate/index.ts`'s `propagationDecisionAt` — constant/copy
+   * propagation over immutable bindings, composing WITH `prevalueOf` above:
+   * this view is consulted FIRST, in `../walker/walk.ts`'s `letStmts`, so a
+   * propagated literal becomes a literal guard `prevalueOf` can then fold —
+   * `(let ((flag #t)) (if flag A B))` → propagate `flag` → `(if #t A B)` →
+   * prevalue folds → `A`). Given a `let`/`let*` node whose bindings are
+   * PROVABLY literal/quoted-data or a bare-`Ref` copy (the trivially-pure
+   * floor — `isTriviallyPure`), answers the REPLACEMENT `Let` (fewer
+   * bindings, every use substituted) — or `undefined` to decline (`letrec`/
+   * `letrec*`, or no binding in scope). Same "decline is always safe, a
+   * fold may recurse through the same entry point" discipline as
+   * `idiomAt`/`prevalueOf`, above.
+   *
+   * No shadow guard or id-mint floor needed, for a DIFFERENT reason than
+   * `prevalueOf`'s (which leans on `if`/`and`/`or` being unshadowable
+   * special forms): propagation never keys on a symbol NAME — it reads a
+   * `Let` node's own `bindings` (real structural fact, not shadowable) and
+   * substitutes only within that node's own body, stopping at any nested
+   * rebinding (`../propagate/index.ts`'s own header). Memoized per node
+   * identity (a `WeakMap`, matching `idiomAt`/`prevalueOf`'s own
+   * discipline). Compiler consumer: `../walker/walk.ts`'s `letStmts`, and
+   * this view's own `computeImportsOf` (below) — so the import census can
+   * never over-count a runtime symbol only a propagated-away binding's
+   * (now-unreachable) init referenced, the identical class of gap
+   * `idiomAt`/`prevalueOf` each close for their own fold.
+   *
+   * Top-level `define` VALUE-binding propagation
+   * (`../propagate/index.ts`'s `propagateTopLevelDefines`) is a SEPARATE,
+   * whole-program pure pass with no per-model state to memoize — `walk.ts`
+   * calls it directly (mirroring how it already calls its own
+   * `flattenTopBegins` directly), so it has no `sm.*` view of its own.
+   */
+  readonly propagationOf: (node: Let) => Let | undefined;
+
+  /**
+   * The structural-optimization lane's OTHER free fold
+   * (`../propagate/index.ts`'s `sameBranchDecisionAt`): given an `If` whose
+   * `cond` is NOT provably constant (`prevalueOf` already declined) but
+   * whose `then`/`else` are the SAME trivially-pure value regardless,
+   * answers the replacement — `node.then` alone when `cond` is itself
+   * effect-free, or a `Begin` sequencing `cond` (for its effect) then
+   * `then` when it isn't. Deliberately narrower than general structural
+   * equality (see that function's own header for why an `App`-shaped
+   * branch is NOT included — collapsing two textually-identical `(infer …)`
+   * calls needs the same cacheClass/provenance purity gate CSE reads off
+   * the registry, deferred). Memoized per node identity, same discipline as
+   * `prevalueOf`. Compiler consumer: `../walker/walk.ts`'s `lowerExpr`/
+   * `tailLoopForm`, consulted immediately after `prevalueOf` declines.
+   */
+  readonly sameBranchOf: (node: If) => CoreForm | undefined;
+
+  /**
    * E2's sharing decision-view (engine plan §2 E2, second half): "CSE…
    * become… sharing… decision views (`sm.sharedBindingsOf(unit)`) — decided
    * pre-census so shared bindings get named like everything else". Given a
@@ -326,6 +380,10 @@ export class SchemeSemanticModel {
    *  cached "no fold applies" (`undefined`) is distinguishable from "never
    *  queried" via `.has()` (mirrors `idiomCache`'s own discipline, above). */
   private readonly prevalueCache = new WeakMap<If | And | Or, CoreForm | undefined>();
+  /** `propagationOf`'s own memo — same discipline as `prevalueCache`. */
+  private readonly propagationCache = new WeakMap<Let, Let | undefined>();
+  /** `sameBranchOf`'s own memo — same discipline as `prevalueCache`. */
+  private readonly sameBranchCache = new WeakMap<If, CoreForm | undefined>();
   /** The whole-program shadow verdict `idiomDecisionAt` needs (its `shadowed`
    *  dependency) — computed ONCE, lazily, on first `idiomAt` query, not per
    *  query (mirrors `facts()`'s own lazy-cache discipline just below). */
@@ -369,6 +427,18 @@ export class SchemeSemanticModel {
       this.prevalueCache.set(node, decision);
       return decision;
     };
+    this.propagationOf = (node) => {
+      if (this.propagationCache.has(node)) return this.propagationCache.get(node);
+      const decision = propagationDecisionAt(node);
+      this.propagationCache.set(node, decision);
+      return decision;
+    };
+    this.sameBranchOf = (node) => {
+      if (this.sameBranchCache.has(node)) return this.sameBranchCache.get(node);
+      const decision = sameBranchDecisionAt(node);
+      this.sameBranchCache.set(node, decision);
+      return decision;
+    };
     this.sharedBindingsOf = (unit) => sharedBindingsOf(unit, this.registry);
   }
 
@@ -404,6 +474,8 @@ export class SchemeSemanticModel {
       facts: this.facts().facts,
       idiomAt: this.idiomAt,
       prevalueOf: this.prevalueOf,
+      propagationOf: this.propagationOf,
+      sameBranchOf: this.sameBranchOf,
       register: "run",
     });
     return runtimeRefsOf(unit);
