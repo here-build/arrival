@@ -5,12 +5,20 @@
  * `+` in value position is `RuntimeRef("+")` before this rule ever runs (Law A:
  * the rule reads the lowered value in hand, never the source syntax).
  *
- * goldenEpoch: 3 — see ../gate3/REBASE_LOG.md before touching `golden` below.
+ * The accumulator now reads `total` (naming lane item 4 — the fold-role gate,
+ * `naming/census.ts`'s `foldRoleNames`, keyed off the `+` operator this
+ * SAME already-lowered `Bin` shape carries): no coupling to `applyRule`
+ * itself, a pure structural read of the residual it already produces. `xs`'s
+ * literal-array receiver (`[1, 2, 3]`) has no derivable collection name, so
+ * the item stays the honest generic `__item` — the same "no proof ⇒ no
+ * guess" discipline `car`'s own `.ref` eta-expansion follows.
+ *
+ * goldenEpoch: 6 — see ../gate3/REBASE_LOG.md before touching `golden` below.
  */
 export const source = `(apply + (list 1 2 3))`;
 
 export const golden = `function OracleMain() {
-    return [1, 2, 3].reduce((__acc, __item) => __acc + __item, 0);
+    return [1, 2, 3].reduce((total, __item) => total + __item, 0);
 }
 export { __oracleResult };
 const __oracleResult = OracleMain();

@@ -197,7 +197,8 @@ export function collectBoundNames(unit: CompilationUnit): Set<string> {
   const pat = (p: Pattern): void => {
     if (p.t === "Binding") out.add(p.text);
     else if (p.t === "RestBinding") out.add(p.binding.text);
-    else p.elements.forEach(pat);
+    else if (p.t === "ObjectPattern") p.properties.forEach((prop) => out.add(prop.binding.text));
+    else p.elements.forEach(pat); // ArrayPattern
   };
   const visit = (n: R): void => {
     switch (n.t) {

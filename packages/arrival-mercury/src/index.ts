@@ -110,6 +110,7 @@ export {
   type BindingSite,
   type DestructureShape,
   type EntityKind,
+  type FieldDestructureShape,
   type FnDef,
   type MaterializeImportsOptions,
   type NameAllocation,

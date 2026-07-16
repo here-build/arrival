@@ -33,6 +33,7 @@ export type {
   BindingSite,
   DestructureShape,
   EntityKind,
+  FieldDestructureShape,
   NameAllocation,
   ScopeCensus,
 } from "./types.js";

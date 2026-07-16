@@ -47,19 +47,46 @@ export interface DestructureShape {
   readonly maxIndex: number;
 }
 
+/**
+ * A literal-key field-access destructure candidate — the dict-field twin of
+ * `DestructureShape` (naming lane item 2): every occurrence of this binding
+ * is `Index(Ref(binding), Lit({k:"string", value: key}))` (arrival's
+ * keyword-accessor lowering, `(:key obj)` → `obj["key"]`), never a bare use
+ * or a positional one. One hop only — a further `x["a"]["b"]` reads `x["a"]`'s
+ * RESULT, not `x` itself, so it never registers here. Mutually exclusive with
+ * both `DestructureShape` and `singularName` (positional destructure is
+ * checked first — census.ts's `registerParams` — a bare/mixed-use param gets
+ * neither and falls to an ordinary binding).
+ */
+export interface FieldDestructureShape {
+  /** Qualifying occurrence node (by identity) → the literal dict key it reads. */
+  readonly accesses: ReadonlyMap<R, string>;
+  /** Distinct field names, first-encountered order (stable binding/property order). */
+  readonly fields: readonly string[];
+}
+
 export interface BindingSite {
   readonly binding: Binding;
   readonly origin: BindingOrigin;
   readonly kind: EntityKind;
   /** Present iff every occurrence of this "param"-kind binding is a car/cdr-
    *  composed positional access — the naming policy's destructure candidate.
-   *  Mutually exclusive with `singularName` (destructure takes precedence,
-   *  matching the dissolved legs' own ordering: a destructured param has no
-   *  single remaining Binding to singularize). */
+   *  Mutually exclusive with `fieldDestructure`/`singularName` (destructure
+   *  takes precedence, matching the dissolved legs' own ordering: a
+   *  destructured param has no single remaining Binding to singularize). */
   readonly destructure?: DestructureShape;
-  /** Present iff this "element"-kind (fresh-minted HOF callback) binding's
-   *  receiver has a derivable singular collection name — the naming policy's
-   *  singularize candidate. */
+  /** Present iff every occurrence of this "param"-kind binding is a literal-
+   *  key field access AND `destructure` did not already fire (positional
+   *  takes precedence — a binding can't be BOTH shapes at once). The
+   *  allocate.ts Shape dissolution offers this as an object-destructure
+   *  shape alongside the same T80 bare fallback positional destructure gets. */
+  readonly fieldDestructure?: FieldDestructureShape;
+  /** Present iff this "element"/"accumulator"-kind (fresh-minted HOF/fold
+   *  callback) binding has a derivable readable-name candidate: an iterator
+   *  element's singularized collection name, or a fold accumulator's
+   *  operator-derived role name ("total"/"product" — naming lane item 4).
+   *  Suppressed whenever `destructure`/`fieldDestructure` fires (same
+   *  precedence rule, extended). */
   readonly singularName?: string;
 }
 
@@ -85,14 +112,28 @@ export interface BindingCensus {
 /**
  * The allocation phase's output (engine plan §2 E1a item 2): binding site →
  * final name, for every NON-destructured site; a destructured param resolves
- * through `destructureOf` instead (its Param.pattern changes shape — a single
- * name doesn't apply). `positions` is carried through unchanged from the
- * census's `DestructureShape` so materialize.ts never needs the census itself.
+ * through `destructureOf`/`fieldDestructureOf` instead (its Param.pattern
+ * changes shape — a single name doesn't apply). Both are the RESOLVED
+ * outcome of `allocate.ts`'s Shape-API dissolution — a destructure-eligible
+ * site's [T100 destructure, T80 bare] shape ladder may still resolve to the
+ * bare shape (a genuine collision the namer's all-or-nothing selection
+ * declined), in which case the site is absent from BOTH maps and resolves
+ * through `nameOf` like any ordinary binding. `positions`/`accesses` are
+ * carried through unchanged from the census's `DestructureShape`/
+ * `FieldDestructureShape` so materialize.ts never needs the census itself.
  */
 export interface NameAllocation {
   readonly nameOf: ReadonlyMap<Binding, string>;
   readonly destructureOf: ReadonlyMap<
     Binding,
     { readonly slots: readonly Binding[]; readonly positions: ReadonlyMap<R, number> }
+  >;
+  /** `properties` — ordered `{ key, binding }` pairs, ready for `ObjectPattern`.
+   *  `accesses` — every qualifying occurrence node → the Binding that replaces it
+   *  (the field-destructure twin of `destructureOf`'s `positions`, pre-resolved
+   *  to a Binding directly since there's no positional-index indirection to keep). */
+  readonly fieldDestructureOf: ReadonlyMap<
+    Binding,
+    { readonly properties: readonly { readonly key: string; readonly binding: Binding }[]; readonly accesses: ReadonlyMap<R, Binding> }
   >;
 }

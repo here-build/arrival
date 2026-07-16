@@ -500,6 +500,16 @@ function renderBindingPattern(pattern: Pattern, origin: NodeId | undefined): ts.
       return f.createIdentifier(pattern.text);
     case "ArrayPattern":
       return f.createArrayBindingPattern(pattern.elements.map((el, i) => bindingElement(el, i === pattern.elements.length - 1, origin)));
+    case "ObjectPattern":
+      // Shorthand (`{ recs }`) iff the field key and the allocated local name are
+      // byte-identical; otherwise the explicit alias form (`{ "my-field": local }`,
+      // kebab-routed through `propName` exactly like a property key elsewhere) —
+      // `ObjectPatternProperty`'s own doc states the rule this mirrors.
+      return f.createObjectBindingPattern(
+        pattern.properties.map((p) =>
+          f.createBindingElement(undefined, p.key === p.binding.text ? undefined : propName(p.key), f.createIdentifier(p.binding.text)),
+        ),
+      );
     case "RestBinding":
       throw new ResidualRenderError(
         "RestBinding is legal only as the last element of an ArrayPattern or the last Param's pattern",
@@ -523,13 +533,17 @@ function bindingElement(pattern: Pattern, isLast: boolean, origin: NodeId | unde
 /** Target position (Assign.pattern — the TCO simultaneous-reassignment case): an
  *  ArrayPattern renders as a plain ARRAY LITERAL used as an assignment target
  *  (`[a, b] = [x, y]`). No RestBinding in target position — the TCO rewrite is always a
- *  same-arity swap. */
+ *  same-arity swap. No ObjectPattern either — dict-field destructure is a naming-phase
+ *  choice over a PARAM's binding shape (naming/materialize.ts), never over a TCO
+ *  loop-variable's reassignment target. */
 function renderTargetPattern(pattern: Pattern, origin: NodeId | undefined): ts.Expression {
   switch (pattern.t) {
     case "Binding":
       return f.createIdentifier(pattern.text);
     case "ArrayPattern":
       return f.createArrayLiteralExpression(pattern.elements.map((el) => renderTargetPattern(el, origin)));
+    case "ObjectPattern":
+      throw new ResidualRenderError("ObjectPattern has no target-position rendering (TCO reassignment never destructures fields)", origin);
     case "RestBinding":
       throw new ResidualRenderError("RestBinding has no target-position rendering", origin);
     default:

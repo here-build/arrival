@@ -4,8 +4,8 @@ async function OracleMain() {
     const devices = (() => {
         throw new Error("unsupported-form/unresolved-identifier: `json/parse` is not lexically bound and is not a registry symbol.");
     })();
-    const privileged = devices.filter(__x => (d => lt(d["port"], 1024) && !equalP(d["owner"], "root"))(__x) !== false);
-    const offenders = privileged.map(d => d["name"]);
+    const privileged = devices.filter(__x => (({ port, owner }) => lt(port, 1024) && !equalP(owner, "root"))(__x) !== false);
+    const offenders = privileged.map(({ name }) => name);
     return offenders;
 }
 export { __oracleResult };

@@ -16,11 +16,11 @@ function OracleMain() {
         throw new Error("unsupported-form/unresolved-identifier: `metric` is not lexically bound and is not a registry symbol.");
     });
     const assess = instruction => ({ instruction: instruction, scores: evaluate(instruction) });
-    const failing = candidate => examples.map((example, __i) => list(example, candidate["scores"][__i])).filter(__x => (pair => zeroP((() => {
+    const failing = ({ scores }) => examples.map((example, __i) => list(example, scores[__i])).filter(__x => (pair => zeroP((() => {
         throw new Error("unsupported-form/unresolved-identifier: `cadr` is not lexically bound and is not a registry symbol.");
     })()))(__x) !== false).map(([head]) => head);
     const mutate = candidate => assess(reflect(candidate["instruction"], failing(candidate)));
-    const dominates = (a, b) => every(ge, a["scores"], b["scores"]) && (() => {
+    const dominates = ({ scores }, { scores: scores_2 }) => every(ge, scores, scores_2) && (() => {
         throw new Error("unsupported-form/unresolved-identifier: `some` is not lexically bound and is not a registry symbol.");
     })();
     const frontier = pool => pool.filter(__x => (c => !(() => {

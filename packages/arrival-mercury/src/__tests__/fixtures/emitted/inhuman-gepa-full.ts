@@ -14,11 +14,11 @@ function OracleMain() {
         throw new Error("unsupported-form/require: `(require \"reflect.prompt\")` \u2014 module loading is not compiled in this slice (the loader/FRAME wave owns import planning).");
     })();
     const paretoset = examples;
-    const trace = (analyze, decide, ex) => {
-        const message = ex["input"];
+    const trace = (analyze, decide, { input, id, expected }) => {
+        const message = input;
         const analysis = runAnalyze([analyze, message], { instruction: analyze, message: message });
         const label = runDecide([decide, message, analysis], { instruction: decide, message: message, analysis: analysis });
-        return { id: ex["id"], input: message, analysis: analysis, prediction: label, expected: ex["expected"] };
+        return { id: id, input: message, analysis: analysis, prediction: label, expected: expected };
     };
     const evaluate = (analyze, decide, set) => set.map(it => trace(analyze, decide, it));
     const recScore = rec => {
@@ -27,10 +27,10 @@ function OracleMain() {
     const scoresOf = recs => recs.map(recScore);
     const failuresOf = recs => recs.filter(__x => (rec => zeroP(recScore(rec)))(__x) !== false);
     const candidate = (analyze, decide, via, recs) => ({ analyze: analyze, decide: decide, via: via, recs: recs });
-    const instrOf = (c, stage) => equalP(stage, "analyze") ? c["analyze"] : c["decide"];
+    const instrOf = ({ analyze, decide }, stage) => equalP(stage, "analyze") ? analyze : decide;
     const assess = (analyze, decide, via) => candidate(analyze, decide, via, evaluate(analyze, decide, paretoset));
-    const scores = c => scoresOf(c["recs"]);
-    const total = c => scores(c).reduce((__acc, __item) => __acc + __item, 0);
+    const scores = ({ recs }) => scoresOf(recs);
+    const total = c => scores(c).reduce((__acc, score) => __acc + score, 0);
     const dominates = (a, b) => every(ge, scores(a), scores(b)) && (() => {
         throw new Error("unsupported-form/unresolved-identifier: `some` is not lexically bound and is not a registry symbol.");
     })();
@@ -47,8 +47,8 @@ function OracleMain() {
             return equalP(stage, "analyze") ? [improved, c["decide"], "analyze"] : [c["analyze"], improved, "decide"];
         })();
     };
-    const complementary = (a, b) => equalP(a["via"], "analyze") && equalP(b["via"], "decide") || equalP(a["via"], "decide") && equalP(b["via"], "analyze");
-    const merge = (a, b) => equalP(a["via"], "analyze") ? assess(a["analyze"], b["decide"], "merge") : assess(b["analyze"], a["decide"], "merge");
+    const complementary = ({ via }, { via: via_2 }) => equalP(via, "analyze") && equalP(via_2, "decide") || equalP(via, "decide") && equalP(via_2, "analyze");
+    const merge = ({ via, analyze, decide }, { decide: decide_2, analyze: analyze_2 }) => equalP(via, "analyze") ? assess(analyze, decide_2, "merge") : assess(analyze_2, decide, "merge");
     const findMerge = pool => {
         const outer = as => nullP(as) ? false : (() => {
             let bs = pool;
@@ -92,7 +92,7 @@ function OracleMain() {
     const select = (pool, state) => {
         const maxima = columnMaxima(pool);
         const weights = pool.map(it => paretoWeight(it, maxima));
-        const target = rngInt(state, weights.reduce((__acc, __item) => __acc + __item, 0));
+        const target = rngInt(state, weights.reduce((__acc, weight) => __acc + weight, 0));
         return list(listRef(pool, weightedIndex(weights, target)), rngNext(state));
     };
     const isPicked = (ex, batch) => {

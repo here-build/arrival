@@ -134,15 +134,42 @@ export type TsType =
   | { readonly k: "ref"; readonly name: string; readonly args?: readonly TsType[] }
   | { readonly k: "union"; readonly members: readonly TsType[] }; // pre-sorted upstream — renderer never re-sorts
 
-export type Pattern = Binding | ArrayPattern | RestBinding;
+export type Pattern = Binding | ArrayPattern | ObjectPattern | RestBinding;
 
 export interface ArrayPattern {
   readonly t: "ArrayPattern";
   readonly elements: readonly Pattern[];
 }
 
-/** Legal ONLY as the last element of an ArrayPattern, or as the last Param's pattern.
- *  No ObjectPattern — arrival has no destructuring-at-declaration-site source form. */
+/**
+ * One `{ key: binding }` slot of an `ObjectPattern` — `key` is the LITERAL
+ * object field name (never renamed: it must match the real runtime value's
+ * own key) and `binding` is the local, namer-allocated identifier. Rendered
+ * as shorthand (`{ key }`) iff `key === binding.text` exactly; otherwise the
+ * explicit alias form (`{ key: binding }`) — `residual/render.ts`'s own
+ * shorthand-suppression rule (`namesOnlyDiff`'s documented byte-exact
+ * shorthand case applies the same distinction the other direction).
+ */
+export interface ObjectPatternProperty {
+  readonly key: string;
+  readonly binding: Binding;
+}
+
+/**
+ * Dict-field destructure (naming/census.ts's `FieldDestructureShape` /
+ * naming/allocate.ts's Shape-API dissolution — never a user source form:
+ * arrival has no destructuring-at-declaration-site syntax, so the ONLY
+ * mint site is the naming phase choosing this shape over a bare binding for
+ * a param used solely via literal-key field access, `x["scores"]`). One
+ * level flat — no nested `ObjectPattern`/`ArrayPattern` properties, matching
+ * the analysis that mints it (a single hop of `Index(Ref(param), Lit(string))`).
+ */
+export interface ObjectPattern {
+  readonly t: "ObjectPattern";
+  readonly properties: readonly ObjectPatternProperty[];
+}
+
+/** Legal ONLY as the last element of an ArrayPattern, or as the last Param's pattern. */
 export interface RestBinding {
   readonly t: "RestBinding";
   readonly binding: Binding;
@@ -247,6 +274,10 @@ export function Binding(text: string): Binding {
 
 export function ArrayPattern(elements: readonly Pattern[]): ArrayPattern {
   return { t: "ArrayPattern", elements };
+}
+
+export function ObjectPattern(properties: readonly ObjectPatternProperty[]): ObjectPattern {
+  return { t: "ObjectPattern", properties };
 }
 
 export function RestBinding(binding: Binding): RestBinding {

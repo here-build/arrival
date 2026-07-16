@@ -1,5 +1,181 @@
 # Gate-3 goldens — rebase log
 
+## goldenEpoch 6 — naming-leverage lane: destructure dissolves into `@here.build/lexical-namer`'s Shape API (2026-07-17)
+
+**One gate-3 golden changed — `apply-plus.golden.ts`**, the exact punch-list
+target this landing's item 4 names:
+```diff
+  function OracleMain() {
+-     return [1, 2, 3].reduce((__acc, __item) => __acc + __item, 0);
++     return [1, 2, 3].reduce((total, __item) => total + __item, 0);
+  }
+```
+The accumulator now reads `total` — `naming/census.ts`'s new `foldRoleNames`
+structurally recognizes the `(apply + xs)` fold shape `applyEmitRule`
+(arrival-core, `foundations/arrival/arrival/src/env/r7rs/lists.ts`, never
+touched this wave) already emits — `Method(recv, "reduce", [Arrow([acc,
+item], Bin(op, Ref(acc), Ref(item))), identity])` — and offers a NAMING
+candidate keyed off the operator (`+` → "total", `*` → "product"), purely a
+census READ, zero coupling to arrival-core. `xs`'s literal-array receiver
+(`[1, 2, 3]`) has no derivable collection name (`elementNameOf` declines a
+bare `ArrayLit`), so the item stays the honest generic `__item` — "when
+singularization is a no-op, fall to generic, never force a bad name" applied
+literally.
+
+**The wider naming-lane wiring this golden is one instance of** (engine plan
+naming-leverage lane, `src/naming/{census,allocate,materialize,types}.ts`;
+`@here.build/lexical-namer` and `pluralize` are both pre-existing deps, wired
+not built):
+
+1. **`site.destructure` dissolves into the namer's `shapes` API.** Every
+   destructure-eligible site (positional car/cdr OR the new dict-field shape)
+   is now a RICH entity — `allocate.ts`'s `destructureShapes` builds a T100
+   "destructure" shape (bindings = the slots/fields, guaranteed-fit via a
+   50-deep `_2.._50` fallback tail, `shapeLadder`) alongside a T80 "bare"
+   shape (the site's ordinary ladder) — mirroring `@here.build/lexical-namer`'s
+   own `examples-destructure.test.ts` D1/D7 pattern exactly. A genuine gain
+   over the old hand-rolled SlotKey path: the resolver's all-or-nothing
+   selection now has a real escape hatch to bare on exhaustion (pinned by a
+   dedicated `naming.test.ts` row reserving all 50 fallback rungs) — the old
+   design had none once census decided "destructure."
+2. **Dict-field destructure (new capability)** — a param used ONLY via
+   literal-string-keyed `Index` access (`x["scores"]`, arrival's
+   keyword-accessor lowering) destructures to `({ scores }) => …` /
+   `const { scores } = x`. `census.ts`'s `analyzeFieldParam` is the
+   positional analysis's twin (all-or-nothing, "stray" on any other use),
+   syntactic only (reads the literal key off the `Lit` node — no type-lens
+   coupling). Required one small residual-algebra addition:
+   `residual/types.ts` grew `ObjectPattern`/`ObjectPatternProperty` (Pattern
+   was `Binding | ArrayPattern | RestBinding`; the file's own "no
+   ObjectPattern — arrival has no destructuring-at-declaration-site source
+   form" comment is now corrected — this is a NAMING-PHASE mint, never a
+   user source form) with renderer support in `residual/render.ts`
+   (shorthand `{ key }` iff the field key and allocated name are
+   byte-identical, else the alias form `{ "key": local }`).
+3. **The singularize gate broadens beyond `.map`** (`SINGULARIZE_METHODS` —
+   `map`/`filter`/`forEach`/`some`/`every`) — `.filter`'s Law-T truthiness-
+   guard wrapper is the other REAL site any registered emit rule constructs
+   today (`filterEmitRule`, arrival-core's `srfi-1.ts`); `forEach`/`some`/
+   `every` are forward-compat (r7rs `for-each`/`any`/`every` currently lower
+   to runtime-shim CALLS, not native methods) — unreached in practice,
+   covered by direct `naming.test.ts` unit rows instead of a corpus fixture.
+4. **The fold-role gate** (`foldRoleNames`, above).
+
+**A regression caught and fixed DURING this landing, not after** — broadening
+the singularize gate to `.filter` naively let a Law-T guard wrapper's fresh
+param steal a name from the REAL predicate parameter one scope down:
+`recs.filter(__x => (rec => zeroP(recScore(rec)))(__x) !== false)` would have
+become `recs.filter(rec => (rec_2 => …)(rec) !== false)` — the anonymous
+engine-glue wrapper claims "rec" (singularized from `recs`) BEFORE the real,
+user-authored `rec` parameter (one scope down) ever gets to compete for it,
+since parent scopes resolve before children. Fixed by `isLawTGuardWrapper` —
+a structurally EXACT match on the guard's three-node signature
+(`Bin("!==", Call(pred, [Ref(param)]), Lit(false))` as the WHOLE arrow body,
+not a generic "forwarded to a nested Arrow anywhere" search, which would have
+ALSO wrongly caught `mapEmitRule`'s legitimate multi-list zip shape
+(`Arrow([el, idx], Call(userFn, [Ref(el), ...rest]))` — no `!== false`
+wrapper — where `el` genuinely IS the element and must keep singularizing).
+Both directions are pinned in `naming.test.ts` (the guard-declines row and
+its "control: a DIRECT zip invocation... still singularizes" sibling) and
+verified against the real `inhuman-gepa-full`/`ai-winter-ebl-investigation`
+fixtures below (`failuresOf`, byte-identical; `privileged`, destructures
+correctly).
+
+**A second gap found and fixed the same way — sibling rich-entity
+declaration order.** `@here.build/lexical-namer` resolves rich (Shape-form)
+entities in a SEPARATE phase, after every simple entity in the scope,
+greedily, in `compareEntities`-sorted order; the DEFAULT `compareEntities`
+lexically compares `postfixFor`'s stringified counter, which is assigned on
+FIRST PROBE by `Array.prototype.sort` — not declaration order. Two sibling
+destructure-eligible params contesting the same field name (`complementary`'s
+`a`/`b`, both used only via `["via"]`) resolved in the wrong order at first
+(`b` keeping the bare name, `a` suffixed) — backwards from this package's own
+"first declared wins" convention every OTHER binding honors. Fixed by
+supplying `allocate.ts`'s OWN `compareEntities`, keyed off a `declOrderOf`
+map populated in the SAME pre-order traversal `toCandidateRecord`'s
+declaration-index already uses — verified inert for simple-entity tie-break
+(the RUNG_BAND-scaled priority encoding already makes same-priority ties
+dead code, so changing the comparator that only orders PROCESSING, never
+priority, cannot change a simple-entity outcome) and pinned by a dedicated
+3-sibling `naming.test.ts` row.
+
+**Fixture churn beyond this directory, reviewed the same way (names-only or
+destructure-shape-change class only, confirmed by diff and by
+`assertFixtureNamesOnly`, not assumed):** four `fixtures/emitted/*.ts` rows
+regenerated via `emitted-fixtures.test.ts`'s own `-u` workflow (no
+REBASE_LOG requirement of its own — logged here for the paper trail, same
+precedent as goldenEpoch 2's own entry below) plus
+`fixtures/cross-pass/apply-plus.golden.json` (logged in that directory's own
+`REBASE_LOG.md`, sibling entry):
+
+- **`apply-plus.ts`** — `__acc` → `total` (item 4). `assertFixtureNamesOnly`:
+  `equalModuloNames: true`, the single rename pair `['__acc', 'total']`.
+- **`ai-winter-ebl-investigation.ts`** — TWO clean dict-field destructures:
+  `devices.filter(__x => (d => …d["port"]…d["owner"]…)(__x) !== false)` →
+  `…(({ port, owner }) => …)…` (the Law-T wrapper `__x` correctly stays `__x`
+  — "device" singularizes fine but the guard fix declines it, per above);
+  `privileged.map(d => d["name"])` → `privileged.map(({ name }) => name)`.
+  `assertFixtureNamesOnly`: structural (Identifier → ObjectBindingPattern),
+  reviewed by hand against the fixture's own source — both destructures
+  match "used only via fields," confirmed by reading `ai-winter-ebl-
+  investigation.scm` directly.
+- **`inhuman-gepa-full.ts`** — the densest row: `trace`'s `ex` → `{ input,
+  id, expected }`; `instrOf`'s `c` → `{ analyze, decide }`; `scores`'s `c` →
+  `{ recs }`; `complementary`'s `(a, b)` → `({ via }, { via: via_2 })`
+  (declaration order, per the fix above); `merge`'s `(a, b)` → `({ via,
+  analyze, decide }, { decide: decide_2, analyze: analyze_2 })` (each
+  param's OWN field set, not shared — `b` never reads `.via` so it never
+  destructures that field); `total`'s reduce item → `score` (accumulator
+  STAYS `__acc` — "total" collides with the top-level `total` function's own
+  name, correctly declined, not forced); `select`'s reduce item → `weight`
+  (same "total" collision, same correct decline). `paretoWeight`,
+  `proposalBatchScore`, `parentBatchScore`'s own reduce sites are BYTE-
+  IDENTICAL (confirmed, not assumed) — their receivers (`.map(...)` chains,
+  `scoresOf(...)` calls) have no cleanly-singularizing name, so the item
+  stays `__item`; their accumulators hit the SAME "total" collision as the
+  two above. `mutate`'s own `candidate` param (`mercury-fixture-gepa`'s
+  sibling case, below) is the negative control this row doesn't need — see
+  that row instead.
+- **`mercury-fixture-gepa.ts`** — `failing`'s `candidate` → `{ scores }`;
+  `dominates?`'s `(a, b)` → `({ scores }, { scores: scores_2 })`. `mutate`'s
+  OWN `candidate` param (used via BOTH `candidate["instruction"]` and a bare
+  `failing(candidate)` pass-through) stays BARE — confirmed unchanged,
+  the mixed-use "compose" rule declining cleanly, exactly the negative
+  control the design needs and got for free from the real corpus.
+
+**Names-only-diff confirmation, run programmatically
+(`namesOnlyDiff`/`assertFixtureNamesOnly`, `src/oracle/names-diff.ts`) against
+every changed fixture**: `apply-plus` reports `equalModuloNames: true` (a
+pure bijective rename — genuinely names-only, no destructure shape moved).
+`inhuman-gepa-full`/`mercury-fixture-gepa`/`ai-winter-ebl-investigation`
+report `equalModuloNames: false`, each's FIRST divergence an `Identifier` vs
+`ObjectBindingPattern` at a param position — the tool's own documented
+behavior for a destructure-shape change (never silently classified as
+"just a rename"); judged by hand against each program's source (above) as
+the naming-policy win the churn class is.
+
+**Value preservation, verified directly, not just inferred from "same JS
+semantics":** ran `runOracle` (interpreter vs compiled) over six representative
+programs exercising every new mechanism — single/two/three-param dict-field
+destructure (including the sibling-order case), reduce `+`/`*` fold-role
+naming, a mixed-use param forced to bare, and the Law-T-guard-around-a-real-
+lambda shape (`(filter (lambda (rec) (zero? (modulo rec 2))) recs)`) — all
+six `{ agree: true }`. Positional (array) destructure re-verified unaffected
+by the Shape-API dissolution (`(car p) + (car (cdr p))` → `([first, second])
+=> first + second`, value agrees) and shown coexisting with field destructure
+in the SAME param scope (`([head], { x }) => head + x`, value agrees).
+
+**Verified the blast radius stops exactly here**: full `arrival-mercury`
+suite (53 files, 1137 pass / 17 expected-fail / 1 todo — the pre-existing
+1117/17/1 baseline plus 20 new `naming.test.ts` rows covering every
+mechanism above) green pre-regeneration-fix and post; `tsc --noEmit` and
+`check:stories` both clean; `gate1-report.json` is BYTE-IDENTICAL (`git diff
+--stat` empty) — naming never touches `classify()`'s raw tree gate 1
+measures off. `legibility.test.ts`'s own destructure/singularize/CSE
+end-to-end suite (the pre-existing positional-destructure coverage) is
+untouched, byte-identical, confirming the Shape-API dissolution is a
+behavior-preserving mechanism swap for the case it already handled.
+
 ## goldenEpoch 5 — R-G6: static prevaluation lands (2026-07-17)
 
 **One golden changed — the exact punch-list item this landing targets**
