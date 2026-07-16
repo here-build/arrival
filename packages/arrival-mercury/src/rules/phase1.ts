@@ -16,10 +16,8 @@
  *  - Law F + the read register (constitution §1) — a fact-directed clean/conservative
  *    split, fact absence takes the conservative form in the run register; the read
  *    register short-circuits to the clean form (glass is never executed — mirrors the
- *    walker's own `truthTest`). (`not` obeyed this law from this table and now obeys
- *    it from its own Contract; `filter` obeys it from BOTH — its table row (below)
- *    AND its Contract are byte-identical copies — see the relocation note below for
- *    why filter is the one exception that keeps a table-resident rule.)
+ *    walker's own `truthTest`). (`not`/`filter` both obeyed this law from this table
+ *    and now obey it from their own Contracts — see the relocation note below.)
  *  - §7 one-number — was `+ - * /` are plain folds/operators over JS numbers; no
  *    exactness dispatch EXISTS: not a fact, not a shim, not a branch. (`=`/`quotient`/
  *    `modulo`/`+`/`-`/`*`/`/` all obeyed this law from this table; they now obey it
@@ -105,35 +103,28 @@
  *
  *    `filter` grew the SAME Contract-side `emit` field this wave —
  *    foundations/arrival/arrival/src/env/srfi/srfi-1.ts carries `filterEmitRule`,
- *    byte-identical to `filterRule` below — but its TABLE ROW STAYS, unlike every
- *    other symbol in this list. **Discovered, not assumed:** `scheme/srfi-1` (the
- *    capability filter's Contract lives on) is NOT part of the oracle's harvested
- *    ambient — `emitRegistryOf(session.ambient)` sees `scheme/lists`/`scheme/
- *    numeric`/`scheme/equality` (verified: map/cons/apply/quotient/not/… all resolve
- *    from these Wave-1/2/3 Contracts through the REAL harvest) but has ZERO rows for
- *    ANY srfi-1 symbol (filter, take, drop, iota, zip, every?, any?, … — probed
- *    directly). Deleting `filter`'s table row reproduced the SAME
- *    `unresolved-identifier` door `every`/`any` are already guarded against below, but
- *    WORSE for filter specifically: a bare presence row (their fix) would route
- *    filter through the rung-3 RuntimeRef shim, changing its compiled shape (this
- *    file's own golden — the clean `.filter(pred)`/guarded-arrow form — vs a shim
- *    call), which fails this wave's OWN zero-golden-churn gate
- *    (cross-pass-fixtures.test.ts's/emitted-fixtures.test.ts's/bug-cell-corpus
- *    .test.ts's `filter-truthy-zero`/`ai-winter-ebl-investigation`/
- *    `inhuman-gepa-full`/`mercury-fixture-gepa` rows, all verified red on a bare-row
- *    attempt, all verified green with the table rule retained). Fixing the ambient
- *    gap (making `buildArrivalSession` include `scheme/srfi-1`) lives in
- *    `@inhuman.tools/arrival-run`/this package's `oracle/harness.ts` — outside this
- *    relocation's boundary (and `oracle/harness.ts` is mid-edit by a concurrent lane
- *    as of this wave) — flagged for a follow-up wave, not fixed here. Once it lands,
- *    deleting this table row is the same one-line move every other Wave-3 symbol
- *    already made.
+ *    byte-identical to the table's own (now-deleted) `filterRule` — but its TABLE ROW
+ *    stayed for a full follow-up wave, evidence-forced: `scheme/srfi-1` was not part
+ *    of the oracle's harvested ambient (`emitRegistryOf(session.ambient)` saw
+ *    `scheme/lists`/`scheme/numeric`/`scheme/equality` — map/cons/apply/quotient/
+ *    not/… all resolved from these Contracts — but ZERO rows for ANY srfi-1 symbol,
+ *    probed directly). **Ambient gap now CLOSED** (`oracle/harness.ts`'s
+ *    `greenfieldRegistryFor`): `scheme/srfi-1` can't simply join
+ *    `session.ambient.capabilities` — its own `deps` order conflicts with
+ *    `arrival/schema`'s (both always co-resident, both ordering `lists` vs
+ *    `equality` oppositely; a real `AssembleLinearizationError`, confirmed directly,
+ *    not a style question) — so harness.ts harvests it STATICALLY off the bare
+ *    capability instead (`emitRegistryOf`'s bare-tree input mode, no C3 involved) and
+ *    merges it under the real ambient's own harvest (ambient rows win on any name
+ *    overlap). `withRules`' fallthrough to that merged harvest row is what resolves
+ *    `filter` now — the same mechanism map/apply use, one layer earlier.
  *  - R2: the infer family's FIVE real Contract-backed symbols (`infer`, `infer/chat`,
  *    `infer/chat/system`, `infer/chat/user`, `infer/chat/assistant`) move onto their
  *    own Contracts in `@inhuman.tools/llm-plane-arrival-env`'s `src/infer.ts`
  *    (`arrivalInferCapability`) — the SAME `inferRule(verb)` factory this file used
  *    to hold, now named `inferEmitRule` there, byte-identical (`Call(ctx.runtime
- *    (verb), args)`). **Discovered, not assumed, and the OPPOSITE of filter's case:**
+ *    (verb), args)`). **Discovered, not assumed, and — unlike filter's (pre-fix)
+ *    ambient gap — no gap to close at all:**
  *    `registry-harvest.test.ts`'s own pre-existing assertion (`capability:
  *    "arrival/infer"` on the harvested `infer` row) already proved `arrival/infer`
  *    IS part of the oracle's harvested ambient — `arrivalAgenticCapability` (rooted
@@ -150,28 +141,31 @@
  *    ../peepholes/infer.ts), so no `arrival/infer` symbol is named "infer/scalar";
  *    there is no Contract for either to move to, ever. Law C holds: the peepholes
  *    themselves (cross-node idioms) stay engine-side, unmoved by this relocation.
- *  All eighteen fully-relocated symbols (the infer family this wave; thirteen from
- *  Waves 1-3) are byte-identical to the rules this file used to hold (verified: the
- *  oracle's bug-cell rows quotient-neg/modulo-neg/exact-vs-inexact-eq and the
- *  cross-pass/gate3 goldens are unchanged; the infer family and the rest have no
- *  dedicated bug-cell row of their own but are exercised pervasively across the
- *  existing corpus and model-spine/legibility's async-pipeline suites, also
- *  unchanged). `filter`'s table-resident rule (below) is likewise byte-identical to
- *  its new Contract twin — the two are proven equal by construction (one function,
- *  copied once, never re-derived) rather than merely "consistent."
+ *  All NINETEEN fully-relocated symbols (`filter`, its ambient gap now closed; the
+ *  infer family from R2; thirteen from Waves 1-3) are byte-identical to the rules
+ *  this file used to hold (verified: the oracle's bug-cell rows quotient-neg/
+ *  modulo-neg/exact-vs-inexact-eq and the cross-pass/gate3 goldens are unchanged;
+ *  the infer family and the rest have no dedicated bug-cell row of their own but are
+ *  exercised pervasively across the existing corpus and model-spine/legibility's
+ *  async-pipeline suites, also unchanged; filter's own bug-cell rows —
+ *  filter-truthy-zero/ai-winter-ebl-investigation/inhuman-gepa-full/
+ *  mercury-fixture-gepa — are unchanged too, now served by the harvested Contract
+ *  row instead of this table's deleted twin).
  */
 import type { EmitCtx, EmitRule } from "@here.build/arrival/emit";
 
 import type { Binding, R } from "../residual/types.js";
-import { Arrow, Bin, Call, Index, Lit, Method, Ref } from "../residual/types.js";
+import { Arrow, Call, Index, Lit, Method, Ref } from "../residual/types.js";
 import type { SymbolRuleTable } from "./overlay.js";
 
 /** The rules-side twin of the walker's `ruleOf` narrowing seam: `EmitCtx.fresh` is
  *  typed `unknown` in arrival core (deliberately opaque — the residual algebra lives in
  *  THIS package, §4.5 layering), while the walker's real `ctxFor` supplies the namer's
  *  `Binding`. One helper, one cast, documented — no rule touches `fresh` directly.
- *  Kept ONLY for `filterRule` below (map/apply's own copies of this helper now live on
- *  lists.ts, alongside their relocated rules). */
+ *  Kept for `carRule`'s `.ref` method (R5c's eta-expansion, below) — this table's only
+ *  remaining local user now that `filterRule` is deleted (its Contract's own copy
+ *  lives in srfi-1.ts; map/apply's copies live on lists.ts, alongside their
+ *  relocated rules). */
 const freshBinding = (ctx: EmitCtx<R>, hint: string): Binding => ctx.fresh(hint) as Binding;
 
 /** Fixed-arity refusal (see the module header's arity note). Returns the args
@@ -250,30 +244,14 @@ const cdrRule: EmitRule<R> = {
 // field in foundations/arrival/arrival/src/env/r7rs/lists.ts (`mapEmitRule`/
 // `applyEmitRule`). No rule body or table row remains here.
 
-// ─── filter — Law T on the predicate's VERDICT ────────────────────────────────────────
-// `Array.prototype.filter` keeps by JS truthiness, which drops Scheme-truthy `0`/`""`;
-// Scheme's filter keeps everything except `#f`. So the conservative form wraps the
-// predicate in the Law-T guard `(x) => f(x) !== false`; a provably-boolean predicate
-// (or the read register) passes `f` bare. This RECONCILES the component spec's §6
-// (bare `.filter(pred)` unconditionally — pre-reconciliation) against constitution
-// Law T, per the wave plan; single-list only (filter's own Contract, unlike map).
-//
-// TABLE-RESIDENT BY NECESSITY, not by choice (see the module header's relocation
-// note): this rule ALSO lives on filter's own Contract
-// (foundations/arrival/arrival/src/env/srfi/srfi-1.ts's `filterEmitRule`,
-// byte-identical), but `scheme/srfi-1` is not part of the oracle's harvested ambient,
-// so only THIS copy is reachable through the real compile pipeline today.
-
-const filterRule: EmitRule<R> = {
-  call: (args, ctx) => {
-    const [pred, xs] = exactly(ctx, "filter", args, 2);
-    if (ctx.config.register === "read" || ctx.argFacts[0]?.boolean === true) {
-      return Method(xs!, "filter", [pred!]);
-    }
-    const x = freshBinding(ctx, "x");
-    return Method(xs!, "filter", [Arrow([x], Bin("!==", Call(pred!, [Ref(x)]), Lit(false)))]);
-  },
-};
+// ─── filter — RELOCATED (see the module header's relocation note, Wave 3; its
+// ambient gap closed in oracle/harness.ts's `greenfieldRegistryFor`). Its Law-T
+// predicate-verdict guard (`Array.prototype.filter` keeps by JS truthiness, which
+// drops Scheme-truthy `0`/`""`, so the conservative form wraps the predicate in the
+// guard `(x) => f(x) !== false`; a provably-boolean predicate or the read register
+// passes `f` bare) now lives on its own Contract's `emit` field in
+// foundations/arrival/arrival/src/env/srfi/srfi-1.ts (`filterEmitRule`). No rule
+// body or table row remains here.
 
 // ─── infer/scalar / infer/chat/scalar — RELOCATED (R2), except these two ─────────────
 // The infer family's FIVE real Contract-backed symbols (`infer`, `infer/chat`,
@@ -311,27 +289,25 @@ const inferRule = (verb: string): EmitRule<R> => ({
 export const phase1Rules: SymbolRuleTable = {
   car: { emit: carRule, refPolicy: "eta" },
   cdr: { emit: cdrRule, refPolicy: "eta" },
-  // cons / not / null? / pair? / - / / / = / quotient / modulo / map / apply —
-  // RELOCATED onto their own Contracts (module header's relocation note); no table
+  // cons / not / null? / pair? / - / / / = / quotient / modulo / map / apply / filter
+  // — RELOCATED onto their own Contracts (module header's relocation note); no table
   // row remains for any of them. The bare "+"/"*" presence rows this comment used to
   // describe (needed only so `applyRule`'s FOLD_OPS structural recognition could
   // resolve a value-position "+"/"*" to `RuntimeRef` under this file's base-less test
   // overlay) are ALSO gone: `apply`'s own relocation (Wave 3) took that need with it —
   // no table-resident rule is left to exercise it, so no vestigial row remains either.
-  filter: { emit: filterRule },
-  // filter STAYS (see the module header's relocation note in full): its Contract
-  // ALSO carries `filterEmitRule` (srfi-1.ts), but `scheme/srfi-1` is invisible to
-  // the oracle's harvest, so the table row above is the only reachable copy today.
   //
-  // SRFI-1 every/any — REGISTRY PRESENCE ONLY (no emit rule; wave-C wiring fix). They
-  // are preamble/scope symbols the contract harvest cannot see (the 221-name harvest
-  // lacks them), so without these rows the walker's §4.2 ladder doors them
-  // `unresolved-identifier` while their stage-0 shims (the value-returning SRFI forms
-  // + STAGE0 manifest rows) sit unreachable. A table-only row rides rung 3
-  // (RuntimeRef shim) → FRAME → stage0 — the same path member/assoc take through
-  // their harvested rows. Replace with harvested Contracts when the SRFI-1 pack lands
-  // registry-side (the Phase-2 package-deal discipline) — filter's OWN Contract
-  // already landed this wave; only the ambient-visibility gap blocks the same move.
+  // SRFI-1 every/any — REGISTRY PRESENCE ONLY (no emit rule; wave-C wiring fix), STILL
+  // table-resident (unlike filter, above): now that oracle/harness.ts's
+  // `greenfieldRegistryFor` merges srfi-1's static harvest into the compiled registry
+  // (the same fix that closed filter's ambient gap), `every`/`any` DO resolve a real
+  // row from their own Contract too (kind "define", a real `.type` — srfi-1.ts declares
+  // no `.emit` for either, only filter's). These bare rows are therefore functionally
+  // redundant now (`withRules`' merge only reads `entry.emit`/`.narrows`/`.refPolicy`
+  // off this table — all three absent here — so an entry of `{}` changes nothing the
+  // base row doesn't already supply; verified: the walker's fallback ladder branches on
+  // `row.kind === "door"` only, never "native" vs "define"). Left in place — retiring
+  // them is a separate, ungated cleanup, not this gap's fix.
   every: {},
   any: {},
   // infer / infer/chat / infer/chat/system / infer/chat/user / infer/chat/assistant —

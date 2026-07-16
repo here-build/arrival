@@ -11,32 +11,29 @@
  *     `Required<EmitCtx<R>>` object literal, which forces this file to enumerate
  *     every field EmitCtx has — so a new field (parent-shaped or not) fails THIS
  *     file's own `tsc --strict` pass until reviewed here, never silently.
- *  2. RUNTIME: every `phase1Rules` emit rule (car/cdr/filter/infer-scalar/
- *     infer-chat-scalar — filter stays table-resident, see below; the scalar pair are
- *     peephole-only synthetic dispatch heads that never had a Contract to move to),
- *     plus the EIGHTEEN fully-RELOCATED Contract rules (`=`/`quotient`/`modulo` in
- *     foundations/arrival/arrival/src/env/r7rs/numeric.ts Wave 1; `+`/`-`/`*`/`/`
- *     joining them there, `cons` in .../lists.ts, and `not`/`null?`/`pair?` in
- *     .../equality.ts, Wave 2; `map`/`apply` joining `cons` in .../lists.ts, Wave 3;
- *     the infer family's five real symbols joining
- *     `@inhuman.tools/llm-plane-arrival-env`'s `src/infer.ts` Contracts, R2 — all
- *     moved off this table per rules/phase1.ts's own relocation note), is executed —
- *     across a spread of arities, so every `exactly()`-gated branch gets a turn —
- *     against a Proxy-wrapped ctx that records every property GET. Every recorded key
- *     must be in the documented-safe set: this catches a hypothetical
- *     `(ctx as any).parentOf(...)` escape a pure type-level check cannot (a cast
- *     bypasses `tsc`, never a runtime property read) — "cheap but real" per the
- *     mission's own framing. **`filter` is the one exception (Wave 3)**: its Contract
- *     (foundations/arrival/arrival/src/env/srfi/srfi-1.ts) ALSO carries an `emit`
- *     rule, but `scheme/srfi-1` is invisible to the oracle's harvest (phase1.ts's own
- *     relocation note has the full account), so it is checked here through the FIRST
- *     sweep (`phase1Rules`), not the second (the real harvest).
+ *  2. RUNTIME: every `phase1Rules` emit rule (car/cdr/infer-scalar/infer-chat-scalar
+ *     — the scalar pair are peephole-only synthetic dispatch heads that never had a
+ *     Contract to move to), plus the NINETEEN fully-RELOCATED Contract rules
+ *     (`=`/`quotient`/`modulo` in foundations/arrival/arrival/src/env/r7rs/numeric.ts
+ *     Wave 1; `+`/`-`/`*`/`/` joining them there, `cons` in .../lists.ts, and
+ *     `not`/`null?`/`pair?` in .../equality.ts, Wave 2; `map`/`apply`/`filter` joining
+ *     `cons` in .../lists.ts and .../srfi/srfi-1.ts, Wave 3 — `filter`'s own ambient
+ *     gap closed in oracle/harness.ts's `greenfieldRegistryFor`, so it now checks
+ *     through this SAME second sweep, not a first-sweep exception; the infer family's
+ *     five real symbols joining `@inhuman.tools/llm-plane-arrival-env`'s `src/infer.ts`
+ *     Contracts, R2 — all moved off this table per rules/phase1.ts's own relocation
+ *     note), is executed — across a spread of arities, so every `exactly()`-gated
+ *     branch gets a turn — against a Proxy-wrapped ctx that records every property
+ *     GET. Every recorded key must be in the documented-safe set: this catches a
+ *     hypothetical `(ctx as any).parentOf(...)` escape a pure type-level check cannot
+ *     (a cast bypasses `tsc`, never a runtime property read) — "cheap but real" per
+ *     the mission's own framing.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { EmitCtx } from "@here.build/arrival/emit";
 
-import { cleanupOracleScratch, emitRegistryOf, openOracleSession, phase1Rules, type OracleSession } from "../index.js";
+import { cleanupOracleScratch, greenfieldRegistryFor, openOracleSession, phase1Rules, type OracleSession } from "../index.js";
 import { Binding, Lit, RuntimeRef, type R } from "../residual/types.js";
 
 // ── 1a. type-level: EmitCtx's OWN surface carries no parent/ancestor field ───────────
@@ -158,13 +155,13 @@ describe("rule-lint — Law C's boundary: no emit rule inspects parent CoreForm"
       expectOnlySafeKeys(accessed, `phase1Rules["${name}"]`);
     }
     // A sweep over an accidentally-empty table would pass vacuously — assert it
-    // actually exercised a non-trivial number of rules (today's table: car/cdr/filter
-    // + infer/scalar/infer/chat/scalar carry an `emit`, five rows; `every`/`any` are
-    // registry-presence-only, no rule. The real infer family left this wave, R2 —
-    // see the module comment above). The bound stays well below today's count
-    // deliberately — a future wave could still shrink this table (e.g. if the
-    // srfi-1/ambient gap closes and filter's row can finally go), and a bound pinned
-    // to the exact count would need touching every wave for no safety gain.
+    // actually exercised a non-trivial number of rules (today's table: car/cdr +
+    // infer/scalar/infer/chat/scalar carry an `emit`, four rows; `every`/`any` are
+    // registry-presence-only, no rule; `filter` left this wave, its ambient gap now
+    // closed — see the module comment above). The bound stays well below today's
+    // count deliberately — a future wave could still shrink this table further, and a
+    // bound pinned to the exact count would need touching every wave for no safety
+    // gain.
     expect(checked).toBeGreaterThan(2);
   });
 
@@ -217,23 +214,25 @@ describe("rule-lint — Law C's boundary: no emit rule inspects parent CoreForm"
     expect(eta.t).toBe("Arrow");
   });
 
-  it("the eighteen fully-RELOCATED Contract rules (=, quotient, modulo, +, -, *, /, cons, not, null?, pair?, map, apply, infer, infer/chat, infer/chat/system, infer/chat/user, infer/chat/assistant) only read the documented EmitCtx surface", async () => {
+  it("the nineteen fully-RELOCATED Contract rules (=, quotient, modulo, +, -, *, /, cons, not, null?, pair?, map, apply, filter, infer, infer/chat, infer/chat/system, infer/chat/user, infer/chat/assistant) only read the documented EmitCtx surface", async () => {
     const session = await openOracleSession();
     try {
-      const registry = emitRegistryOf(session.ambient);
+      // `greenfieldRegistryFor` (NOT the bare `emitRegistryOf(session.ambient)`) —
+      // the SAME merged registry `compileGreenfield` actually compiles against,
+      // ambient harvest + srfi-1's static harvest (harness.ts's own note on the
+      // merge). `filter` resolves through THIS sweep now, not a first-sweep
+      // exception: its Contract lives on `scheme/srfi-1`, invisible to
+      // `session.ambient` alone but reachable through the merge.
+      const registry = greenfieldRegistryFor(session);
       // Wave 1 (=, quotient, modulo — numeric.ts) + Wave 2 (+, -, *, / — numeric.ts;
-      // cons — lists.ts; not, null?, pair? — equality.ts) + Wave 3 (map, apply —
-      // lists.ts) + R2 (infer, infer/chat, infer/chat/system, infer/chat/user,
-      // infer/chat/assistant — llm-plane-arrival-env's src/infer.ts). Eighteen names,
-      // eighteen symbols FULLY relocated across four waves so far. `filter` (also
-      // grown a Contract emit rule, Wave 3) is DELIBERATELY excluded from this list —
-      // its Contract lives on `scheme/srfi-1`, which the oracle's harvest cannot see,
-      // so `registry.lookup("filter")?.emit` is `undefined` here by design; its
-      // EmitCtx-surface proof runs through `phase1Rules` in the sweep above instead
-      // (the table row is the only reachable copy today — see phase1.ts's own
-      // relocation note). `infer/chat/system`/`user`/`assistant` are `kind: "define"`
-      // rows (unlike every other name in this list) — proof this sweep is genuinely
-      // kind-agnostic, not accidentally native/rosetta-only.
+      // cons — lists.ts; not, null?, pair? — equality.ts) + Wave 3 (map, apply,
+      // filter — lists.ts and srfi-1.ts) + R2 (infer, infer/chat,
+      // infer/chat/system, infer/chat/user, infer/chat/assistant —
+      // llm-plane-arrival-env's src/infer.ts). Nineteen names, nineteen symbols
+      // FULLY relocated across four waves so far. `infer/chat/system`/`user`/
+      // `assistant` are `kind: "define"` rows (unlike every other name in this
+      // list) — proof this sweep is genuinely kind-agnostic, not accidentally
+      // native/rosetta-only.
       for (const name of [
         "=",
         "quotient",
@@ -248,6 +247,7 @@ describe("rule-lint — Law C's boundary: no emit rule inspects parent CoreForm"
         "pair?",
         "map",
         "apply",
+        "filter",
         "infer",
         "infer/chat",
         "infer/chat/system",

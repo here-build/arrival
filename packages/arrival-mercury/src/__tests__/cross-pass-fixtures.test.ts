@@ -22,14 +22,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
   cleanupOracleScratch,
-  emitRegistryOf,
   extractFacts,
+  greenfieldRegistryFor,
   narrowsMembersOf,
   openOracleSession,
-  phase1Rules,
   render,
   walk,
-  withRules,
 } from "../index.js";
 import type {
   ClassifyResult,
@@ -160,10 +158,13 @@ describe("cross-pass fixtures — (virtual-TS, facts, residual) per corpus row (
 
   for (const rowName of ROWS) {
     it(`${rowName} — (virtualTs, facts, residual) matches the committed golden`, () => {
-      // Same per-session registry construction as the oracle's own
-      // `greenfieldRegistryFor` (harvest + Phase-1 overlay) — reused here via the
-      // public building blocks, never the oracle's private cache.
-      const registry = withRules(emitRegistryOf(session.ambient), phase1Rules);
+      // The oracle's own `greenfieldRegistryFor` (harvest + srfi-1's static merge +
+      // Phase-1 overlay — oracle/harness.ts's own note on the merge), now exported
+      // for exactly this reason: this file used to re-derive the same composition
+      // inline via `withRules(emitRegistryOf(session.ambient), phase1Rules)`, which
+      // silently fell out of step the moment the real function grew the srfi-1 merge
+      // (the ambient-gap fix) — one function, one registry, no second copy to drift.
+      const registry = greenfieldRegistryFor(session);
       const narrowsMembers = narrowsMembersOf(registry);
       const source = readFileSync(`${corpusDir}${rowName}.scm`, "utf8");
 

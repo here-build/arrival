@@ -11,6 +11,7 @@ export {
   evalCompiled,
   type EvalCompiledOptions,
   evalInterpreter,
+  greenfieldRegistryFor,
   openOracleSession,
   oracleEqual,
   OracleImportHangError,

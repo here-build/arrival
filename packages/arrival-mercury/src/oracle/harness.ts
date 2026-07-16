@@ -34,10 +34,14 @@
  * finds the workspace), and execute in-process through ONE shared tsx loader
  * registration guarded against pipeline hangs (see `importCaseModule`).
  *
- * Greenfield registry: `withRules(emitRegistryOf(session.ambient), phase1Rules)`
- * — harvested ONCE per session ambient and cached (the harvest itself memoizes
- * per capability instance, but the Law-N witness sweep and row-map build are
- * per-call; one registry per session is the §4.1 reuse contract applied here).
+ * Greenfield registry (`greenfieldRegistryFor`, below): `withRules(merged,
+ * phase1Rules)`, where `merged` is the ambient's own harvest
+ * (`emitRegistryOf(session.ambient)`) with `scheme/srfi-1`'s STATIC harvest
+ * (`emitRegistryOf([srfi1])`, never assembled live — see `greenfieldRegistryFor`'s
+ * own note for why) filled in underneath — harvested ONCE per session ambient and
+ * cached (the harvest itself memoizes per capability instance, but the Law-N
+ * witness sweep and row-map build are per-call; one registry per session is the
+ * §4.1 reuse contract applied here).
  */
 import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, rmdirSync, rmSync, writeFileSync } from "node:fs";
@@ -46,6 +50,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { execState, LexicalScope, parseGenerator, schemeToJsUntyped } from "@here.build/arrival";
 import type { AssembledAmbient } from "@here.build/arrival/env";
+import { srfi1 } from "@here.build/arrival/srfi";
 import { buildArrivalSession, BUILTIN_PREAMBLE, type InferFn } from "@inhuman.tools/arrival-run";
 import { DEFAULT_STRATEGY, projectToJsRaw, type Strategy } from "@inhuman.tools/mercury";
 import { register } from "tsx/esm/api";
@@ -54,7 +59,7 @@ import { legibility } from "../legibility/index.js";
 import { SchemeSemanticModel } from "../model/model.js";
 import { materializeAsyncness, materializeImports } from "../naming/index.js";
 import { peephole } from "../peepholes/index.js";
-import { emitRegistryOf } from "../registry/index.js";
+import { emitRegistryOf, type EmitRegistry } from "../registry/index.js";
 import { render } from "../residual/render.js";
 import type { CompilationUnit } from "../residual/types.js";
 import { Binding as mkBinding, Const, Export } from "../residual/types.js";
@@ -75,6 +80,11 @@ export interface OracleSession extends AsyncDisposable {
  * unbound symbol by capability withholding. `infer` is the required non-thunk
  * `InferFn` callback (`BuildArrivalEnvOpts.infer`); the stub keeps `(infer …)`
  * a BOUND symbol that fails loudly, never an "unbound variable" red herring.
+ *
+ * srfi-1 is deliberately NOT added to `capabilities` here — see
+ * `greenfieldRegistryFor`'s own note for the ambient-gap fix and why it lives at the
+ * HARVEST layer instead of here (a real `AssembleLinearizationError`, not just a style
+ * choice).
  */
 export async function openOracleSession(): Promise<OracleSession> {
   const infer: InferFn = () => {
@@ -279,10 +289,68 @@ export function cleanupOracleScratch(): void {
  *  redundant memo of the same cheap computation, model.ts's own header.) */
 const registryCache = new WeakMap<AssembledAmbient, OverlayEmitRegistry>();
 
-function greenfieldRegistryFor(session: OracleSession): OverlayEmitRegistry {
+/**
+ * THE AMBIENT-GAP FIX (rules/phase1.ts's own relocation note; R1's flagged
+ * follow-up): `scheme/srfi-1` cannot simply be ADDED to `openOracleSession`'s live
+ * `capabilities` — verified directly, not assumed. `srfi1`'s own `deps`
+ * (foundations/arrival/arrival/src/env/srfi/srfi-1.ts: `[equality, numeric,
+ * exceptions, vectors, lists]`, `lists` LAST) and `arrival/schema`'s own `deps`
+ * (.../env/schema.ts: `[lists, equality, strings, numeric, exceptions]`, `lists`
+ * FIRST) disagree about the relative order of `lists` vs `equality` — and
+ * `arrival/schema` is unconditionally rooted in `arrivalCapabilities()`, hence always
+ * present in `session.ambient.capabilities`. Assembling both roots in one
+ * `assembleEnv` call throws `AssembleLinearizationError` (confirmed empirically:
+ * `openOracleSession` with `capabilities: [srfi1]` fails at session build, every
+ * time). Reordering srfi-1.ts's `deps` to match schema.ts's would only trade one
+ * conflict for another — its own comment documents `vectors` must precede `lists`
+ * to satisfy `polyglot-clojure.ts`'s independent precedence, a constraint that's
+ * ACTUALLY exercised (BASE_PACKS assembles both today).
+ *
+ * So srfi-1 is harvested STATICALLY instead — off the bare `EnvCapability`, never
+ * assembled live — via `emitRegistryOf`'s OTHER documented input mode (harvest.ts:
+ * "or from a bare capability tree"), which walks the capability/deps GRAPH directly
+ * (a plain deps-first DFS, harvest.ts's own `visit`) with no C3 linearization and
+ * therefore no ordering conflict to trip over. Every capability in srfi-1's own dep
+ * closure (equality/numeric/exceptions/vectors/lists) declares its `symbols` as a
+ * plain object, never a builder function (verified: none of the five branches on
+ * `configuration`/`resources`), so the phantom/dry activation this bare-list path
+ * falls back to is BYTE-IDENTICAL to any "real" assembled activation's answer for
+ * all of them — there is no activation-dependent branch anywhere in this closure to
+ * diverge on. Computed once, module scope: `emitRegistryOf` takes no session/ambient
+ * input here, so there is nothing to key a per-session cache on.
+ *
+ * Behaviorally inert for everything this package already relied on: `scheme/lists`
+ * &c. still resolve through the REAL ambient (below, ambient-first precedence), byte
+ * -identical to before. This purely ADDS the names the ambient gap left dark —
+ * filter/take/drop/iota/zip/every/any/… — which is exactly (and only) what closes
+ * filter's ambient gap (rules/phase1.ts's now-deleted table row).
+ */
+const srfi1Registry = emitRegistryOf([srfi1]);
+
+/** Exported so tests can probe the REAL compiled-side registry directly instead of
+ *  re-deriving the ambient+srfi-1 merge inline — a prior inline re-derivation
+ *  (cross-pass-fixtures.test.ts) silently fell out of step the moment this function
+ *  grew the srfi-1 merge below; see that test's own note. Current external callers:
+ *  rule-lint.test.ts's EmitCtx-surface sweep over the fully-relocated Contract rules
+ *  (filter included, now that its ambient gap is closed) and
+ *  cross-pass-fixtures.test.ts's per-row compile. `compileGreenfield` below is the
+ *  internal caller — same registry, same cache, no divergence possible between what
+ *  a test inspects and what the pipeline actually compiles against. */
+export function greenfieldRegistryFor(session: OracleSession): OverlayEmitRegistry {
   let hit = registryCache.get(session.ambient);
   if (hit === undefined) {
-    hit = withRules(emitRegistryOf(session.ambient), phase1Rules);
+    const ambientRegistry = emitRegistryOf(session.ambient);
+    // Ambient rows win on any name they carry (the real, C3-consistent assembly);
+    // srfi-1's static harvest only fills in names the ambient never reaches. In
+    // practice these sets are disjoint on everything but srfi-1's OWN deps
+    // (lists/equality/numeric/exceptions/vectors), which the ambient already
+    // resolves via arrival/schema — so this fallback fires only for genuinely
+    // srfi-1-only symbols.
+    const withSrfi1: EmitRegistry = {
+      lookup: (name) => ambientRegistry.lookup(name) ?? srfi1Registry.lookup(name),
+      names: new Set([...ambientRegistry.names, ...srfi1Registry.names]),
+    };
+    hit = withRules(withSrfi1, phase1Rules);
     registryCache.set(session.ambient, hit);
   }
   return hit;

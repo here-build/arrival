@@ -6,33 +6,28 @@
  * Law-N witness gate, narrows carriage into the type-emit grammar's key set, and the
  * doorCategory seam.
  *
- * Fact-directed rules (`not`, `filter`) run their Law-F clean/conservative split
- * through THIS file's own `emitWithArgFacts` helper (facts absent → the conservative
- * form; `{ boolean: true }` on the ARGUMENT node, Law A — argument facts → the clean
- * flip; read register → clean unconditionally, constitution §1). `not` has since
- * relocated onto its own Contract (equality.ts, Wave 2) and carries that same proof at
- * the Contract level now (equality-emit.test.ts). `filter` ALSO grew a Contract emit
- * rule this wave (srfi-1.ts, Wave 3, proven independently by srfi-1-emit.test.ts) —
- * but UNLIKE `not`, its table row stays: `scheme/srfi-1` is invisible to the oracle's
- * harvest (see phase1.ts's own relocation note for the full account), so this file's
- * `emitWithArgFacts` proof below remains the reachable end-to-end coverage for
- * filter's fact-gated split, not a retired stand-in.
+ * Fact-directed rules (`not`, `filter`) used to run their Law-F clean/conservative
+ * split through THIS file's own `emitWithArgFacts` helper, against the EMPTY-based
+ * registry below. Both have since relocated onto their own Contract (`not`:
+ * equality.ts, Wave 2; `filter`: srfi-1.ts, Wave 3) and carry that same proof at the
+ * Contract level now (equality-emit.test.ts / srfi-1-emit.test.ts) — `filter`'s table
+ * row stayed for a full follow-up wave (`scheme/srfi-1` was invisible to the oracle's
+ * harvest; see phase1.ts's own relocation note), but that ambient gap is now closed
+ * (oracle/harness.ts's `greenfieldRegistryFor`), so `emitWithArgFacts` is RETIRED here
+ * — it has no registry left to be useful against (this file's EMPTY base can no
+ * longer resolve `filter` at all; the full-pipeline proof runs through the real
+ * harvest instead, exactly like `not`'s already did).
  */
 import { describe, expect, it } from "vitest";
 
-import type { TypeFacts } from "@here.build/arrival/emit";
-
 import {
-  type App as CfApp,
   classify,
   type ClassifyResult,
   type CompilationUnit,
-  type DefineFn,
   desugar,
   type EmitRegistry,
   type EmitRegistryRow,
   narrowsMembersOf,
-  type NodeId,
   parseSexprs,
   phase1Rules,
   render,
@@ -51,15 +46,6 @@ const cf = (src: string): ClassifyResult => classify(desugar(parseSexprs(src)));
 const compile = (src: string, over: Partial<WalkOptions> = {}): CompilationUnit =>
   walk(cf(src), { registry, register: "run", ...over });
 const emit = (src: string, over: Partial<WalkOptions> = {}): string => render(compile(src, over));
-
-/** Pin facts on ONE positional argument of the define-body's head App (Law A —
- *  the rules' clean branches key on ARGUMENT facts, never result types). */
-const emitWithArgFacts = (src: string, argIndex: number, argFacts: TypeFacts): string => {
-  const classified = cf(src);
-  const app = (classified.forms[0] as DefineFn).body[0] as CfApp;
-  const id: NodeId = app.positionalArgs[argIndex]!.id;
-  return render(walk(classified, { registry, register: "run", facts: new Map<NodeId, TypeFacts>([[id, argFacts]]) }));
-};
 
 // ── §2.1 representation collapse: car / cdr ─────────────────────────────────────────────
 
@@ -121,45 +107,33 @@ describe("car / cdr — syntax over the array representation (§4.3, Law U)", ()
 // `withRules(emitRegistryOf(session.ambient), phase1Rules)` — the harvested Contract
 // row, not this file's stand-in table.
 
-// ── map / apply — RELOCATED (Phase-2 relocation drill, constitution §9, Wave 3) ──────
-// Neither carries a RULE in `phase1Rules` anymore — both are now the `emit` field of
-// their own Contract in foundations/arrival/arrival/src/env/r7rs/lists.ts, so this
+// ── map / apply / filter — RELOCATED (Phase-2 relocation drill, constitution §9,
+// Wave 3) ──────────────────────────────────────────────────────────────────────────
+// None of the three carries a RULE in `phase1Rules` anymore — each is now the `emit`
+// field of its own Contract (map/apply: foundations/arrival/arrival/src/env/r7rs/
+// lists.ts; filter: foundations/arrival/arrival/src/env/srfi/srfi-1.ts), so this
 // file's EMPTY-based registry (`withRules(EMPTY, phase1Rules)`, above) can no longer
 // resolve their APPLICATION-position residuals (there is neither a table rule nor a
 // base row to fall through to). Their coverage now lives in two places: the
-// Contract-level rule-shape proof (foundations/arrival/arrival/src/env/r7rs/
-// __tests__/lists-emit.test.ts, calling `emit.call` directly against a synthetic ctx)
-// and the full-pipeline proof through the REAL harvest — cross-pass-fixtures.test.ts's/
-// gate3-goldens.test.ts's byte-level goldens (multi-list-map, apply-plus,
-// apply-map-transpose) and bug-cell-corpus.test.ts's value-level oracle rows, both of
-// which build their registry via `withRules(emitRegistryOf(session.ambient),
-// phase1Rules)` — the harvested Contract row, not this file's stand-in table.
-// (Neither has a dedicated bug-cell row of its own but both are exercised pervasively
-// across the existing corpus — also unchanged.)
+// Contract-level rule-shape proof (lists-emit.test.ts for map/apply,
+// srfi-1-emit.test.ts for filter, each calling `emit.call` directly against a
+// synthetic ctx) and the full-pipeline proof through the REAL harvest —
+// cross-pass-fixtures.test.ts's/gate3-goldens.test.ts's byte-level goldens
+// (multi-list-map, apply-plus, apply-map-transpose, filter-truthy-zero) and
+// bug-cell-corpus.test.ts's value-level oracle rows, all of which build their
+// registry via `withRules(emitRegistryOf(session.ambient), phase1Rules)` — the
+// harvested Contract row, not this file's stand-in table. (None of the three has a
+// dedicated bug-cell row of its own but all are exercised pervasively across the
+// existing corpus — also unchanged.)
 //
-// `filter` — the ONE Wave-3 symbol whose table row STAYS (and with it, this file's
-// describe block below): its Contract twin (srfi-1.ts's `filterEmitRule`, proven by
-// srfi-1-emit.test.ts) is unreachable through the real harvest because
-// `scheme/srfi-1` is not part of the oracle's ambient — see phase1.ts's own
-// relocation note for the full account.
-
-// ── filter — Law T on the predicate's verdict ─────────────────────────────────────────
-
-describe("filter — the Law-T predicate guard", () => {
-  const src = `(define (g p xs) (filter p xs))`;
-
-  it("no facts → the guard (x) => p(x) !== false (Scheme keeps everything except #f)", () => {
-    expect(emit(src)).toBe(`function g(p, xs) {\n    return xs.filter(__x => p(__x) !== false);\n}\n`);
-  });
-
-  it("argFacts[0].boolean on the predicate → bare .filter(p)", () => {
-    expect(emitWithArgFacts(src, 0, { boolean: true })).toBe(`function g(p, xs) {\n    return xs.filter(p);\n}\n`);
-  });
-
-  it("read register → bare .filter(p) unconditionally", () => {
-    expect(emit(src, { register: "read" })).toBe(`function g(p, xs) {\n    return xs.filter(p);\n}\n`);
-  });
-});
+// `filter` was the ONE Wave-3 symbol whose table row STAYED past this wave (and with
+// it, a describe block here running `emitWithArgFacts` against the EMPTY registry):
+// `scheme/srfi-1` was invisible to the oracle's harvest (see phase1.ts's own
+// relocation note for the full account). That ambient gap is now CLOSED
+// (oracle/harness.ts's `greenfieldRegistryFor` merges srfi-1's static harvest under
+// the real ambient's own) — filter's table row is deleted, `emitWithArgFacts` is
+// retired (see this file's header), and its fact-flip proof now runs exclusively
+// through the real harvest, same as `not`'s already did.
 
 // ── infer family — RELOCATED (R2, arrival-mercury constitution §9) ───────────────────
 // The infer family's five real Contract-backed symbols (infer, infer/chat,
@@ -209,11 +183,12 @@ describe("withRules — table-first lookup, base enrichment, names union", () =>
   });
 
   it("a table-only name synthesizes a row (capability «phase1-rules», kind native)", () => {
-    // "every" (was "modulo" pre-Wave-1, then "filter" — both since grew Contract-side
-    // rules; "every" is the durable exemplar: a bare-presence SRFI-1 wiring-fix row
-    // that stays table-only until the srfi-1 pack lands registry-side. "filter" would
-    // still work today — its row stays, see the relocation note above — but points at
-    // a row scheduled to leave.)
+    // "every" (was "modulo" pre-Wave-1, then "filter" pre-ambient-fix — both since
+    // grew Contract-side rules and left this table entirely; "every" is the durable
+    // exemplar here: a bare-presence SRFI-1 wiring-fix row that stays table-resident
+    // even though its own Contract now ALSO harvests (the same ambient-gap fix that
+    // let filter's row go) — see phase1.ts's own note on why `every`/`any` stay
+    // regardless.)
     const row = overlaid.lookup("every");
     expect(row?.capability).toBe("«phase1-rules»");
     expect(row?.kind).toBe("native");
