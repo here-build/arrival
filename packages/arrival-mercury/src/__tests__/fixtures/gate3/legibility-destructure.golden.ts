@@ -14,13 +14,12 @@
  * future work); `destructure.ts`'s `cdrOffsetOf` resolves either spelling to
  * the same tuple position.
  *
- * goldenEpoch: 1 — see ../gate3/REBASE_LOG.md before touching `golden` below.
+ * goldenEpoch: 3 — see ../gate3/REBASE_LOG.md before touching `golden` below.
  */
 export const source = `(map (lambda (pair) (+ (car pair) (car (cdr pair)))) (list (list 1 2) (list 3 4)))`;
 
-export const golden = `import { list } from "./stage0.mts";
-function OracleMain() {
-    return list(list(1, 2), list(3, 4)).map(([first, second]) => first + second);
+export const golden = `function OracleMain() {
+    return [[1, 2], [3, 4]].map(([first, second]) => first + second);
 }
 export { __oracleResult };
 const __oracleResult = OracleMain();

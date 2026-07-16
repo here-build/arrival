@@ -61,7 +61,11 @@ describe("Gate 3 — full-pipeline emitted TEXT goldens", () => {
     expect(multiListMap.golden).toContain(".map((__item, __i) =>");
     expect(asyncMapPromiseAll.golden).toContain("await Promise.all(");
     expect(applyPlus.golden).toContain(".reduce(");
-    expect(applyMapTranspose.golden).toContain("...list(");
+    // E2 ingestion fold (engine plan §2 E2): the transposed list-of-lists
+    // is now a literal array chunk, not a `list(...)` call — the spread
+    // still spreads a genuine array, `apply`'s own pattern under test
+    // (never degrading to a door) is unaffected.
+    expect(applyMapTranspose.golden).toContain("...[");
     expect(shortCircuitOr.golden).toContain("!== false ?");
     // goldenEpoch 2 (R5c): eta now expands `car` inline — the pattern under test
     // flipped from "eta degrades to shim" to "eta actually fires", so the honest

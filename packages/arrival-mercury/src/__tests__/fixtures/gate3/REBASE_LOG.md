@@ -1,5 +1,153 @@
 # Gate-3 goldens — rebase log
 
+## goldenEpoch 3 — E2 lands: the hybrid tree's hard side, `list(...)` shim dies for slot-safe data (2026-07-16)
+
+**Six of seven goldens changed — the folding-churn class the engine plan's
+E2 phase explicitly expects and welcomes** (`docs/working-proposals/
+arrival-mercury-engine-plan.md` §2 E2: "gate: oracle green; folding churn
+judged (literal arrays where list() shims stood, dead shim imports gone)").
+`TsChunk`/`ChunkExpr`/`ChunkStmt` land in `residual/types.ts` (the hybrid
+tree's hard node family, mirroring mercury's `IRASTExpression`/
+`IRASTStatement` — `ast` required verbatim, `slots` optional), with
+`residual/chunk.ts` (the `ts.factory` construction side) and
+`residual/render.ts` (verbatim-or-substitute printing, mutual recursion,
+expression/statement duality) alongside. `walker/walk.ts`'s ingestion fold
+(S2) then does two things at `lowerApp`/`datumToR`:
+
+1. **Quoted list data always folds** (`'(1 2 3)`, nested lists too) —
+   ALWAYS slot-free (a `QuoteDatum` can never hold a scheme variable), so
+   this leg changes the MECHANISM (`ArrayLit`-of-`Lit`s → a genuine
+   `ts.factory` chunk) but never the emitted bytes — confirmed zero-churn on
+   its own by the full suite staying green before any `list`-call change was
+   even made.
+2. **A `list` App call folds when every argument is "call-free"**
+   (`isCallFree`, walk.ts: no `Call`/`Method`/`New`/`Arrow` anywhere in its
+   lowered form) — a `Lit` argument embeds inline (no slot spent on a
+   constant, mercury's own "short-circuits known primitives" move); anything
+   else call-free (a bound `Ref`, a `car`/`+`-folded `Index`/`Bin` chain, a
+   bare registry symbol referenced as a VALUE) mints a slot; anything
+   containing a real call — a registry shim call, a lambda literal —
+   **aborts the WHOLE call's fold**, falling back to the unchanged
+   `Call(RuntimeRef("list"), args)` shape. The abort is fold-SCOPE POLICY
+   (keep this wave's churn to the literal-data class the plan names), never
+   a walker-safety requirement: chunks are NOT leaves to any walker —
+   mercury-ir.md's own law ("never assume AST chunks are leaf nodes") — see
+   the review-correction paragraph below.
+
+**Review correction, same landing (the leaf-treatment fix).** An earlier
+draft of this landing treated a chunk as a total LEAF in the generic
+walkers (render's `containsAwait` children, legibility/tree.ts's
+`childrenOf`/`mapChildren`, naming/asyncness.ts's own `childrenOf` and
+rewrite arms), arguing `isCallFree` kept anything interesting out of every
+slot. Review rejected that treatment by the substrate's own law, and the
+audit confirmed the rejection was not merely E2b-forward-looking — the leaf
+census had a TODAY-reachable wrong-code path (a param occurrence living
+inside a slot invisible to the destructure census: destructure fires on
+outer occurrences alone while the slot keeps referencing the now-undeclared
+param), plus a latent import-rewrite miss (a mangled-name `RuntimeRef` like
+`odd?` inside a slot skipped by `materializeImports`' `mapChildren` walk
+renders as the scheme-spelled identifier — invalid TS). Corrected in place:
+every walker now yields slot VALUES as children (the verbatim `ast` stays
+opaque — blind to the ts.Node tree, seeing to `slots`, exactly the memo's
+split), and asyncness's rewrite arms rebuild the slot map through the
+rewriter, so a promise-typed slot gets its `Await` minted INSIDE the slot
+and the enclosing def flips async. `isCallFree` survives as fold-scope
+policy only. **Zero additional fixture churn from the correction** —
+verified by the full suite passing against the already-regenerated fixtures
+(no committed corpus program has a destructure decision or awaited edge
+that flips through a slot). Four regression rows in
+`src/__tests__/chunk.test.ts` pin the corrected behavior, each failing
+under the leaf treatment: seeded-Call-in-slot flips the enclosing arrow
+async with the Await inside the slot's rendered form; render's
+`containsAwait` sees a slot Await (async IIFE, not the Law-W backstop
+throw); a param occurrence inside a slot reaches the destructure census
+(and the substitution reaches back through the slot); `odd?`-in-slot
+resolves through `materializeImports` (oracle-agreeing).
+
+**Golden-by-golden:**
+
+- **`multi-list-map.golden.ts`** — both `list(1, 2, 3)`/`list(10, 20, 30)`
+  calls are fully literal → fold; `list` drops out of the import line
+  entirely (only `plus` survives).
+- **`async-map-promise-all.golden.ts`** — `list("a", "b")` folds; `list`
+  drops from the import line (only `infer` survives). The `.map`'s own
+  `Promise.all` collapse (asyncness's Method-specific rewrite) is
+  untouched — it fires on the FOLDED array's `.map` call exactly as it did
+  on the shim call's.
+- **`apply-plus.golden.ts`** — `list(1, 2, 3)` folds; with no other runtime
+  symbol left, the `import` DECL itself disappears (the identity fast path
+  `materializeImports` already had for an empty symbol set — no new code,
+  just a set that's now empty for this program).
+- **`apply-map-transpose.golden.ts`** — `list(list(1, 2), list(3, 4))`
+  folds RECURSIVELY to one genuinely nested `[[1, 2], [3, 4]]` (the `"ast"`
+  splice, not a slot-per-level) — but `map(list, ...)`'s OWN `list` stays a
+  bare value reference (`mapEmitRule`'s arity-bridge passes the lowered
+  first argument straight through as the zip callback; that is a REGISTRY
+  RULE constructing its own `Call`, never routed through `lowerApp`'s rung-3
+  interception at all) — so the `list` IMPORT SURVIVES, unchanged. Updated
+  `gate3-goldens.test.ts`'s own sanity assertion (`toContain("...list(")` →
+  `toContain("...[")`) to match — the pattern under test (apply's transpose
+  via spread) is unaffected; only the substring proving it doesn't
+  silently degrade had to move with the bytes.
+- **`first-class-car-hof.golden.ts`** — `list(list(1, 2), list(3, 4))` (the
+  `xss` binding's init) folds the same recursive way; `car`'s own eta
+  expansion (R5c, goldenEpoch 2) is untouched — `xss.map(([head]) => head)`
+  is byte-identical past the `const xss = …` line. Per-file
+  `goldenEpoch:` comment bumped 2 → 3 (the ONLY file entering this landing
+  already above epoch 1).
+- **`legibility-destructure.golden.ts`** — same recursive-fold shape as
+  apply-map-transpose/first-class-car-hof; the destructure pass (`([first,
+  second]) => first + second`) is untouched past the receiver.
+- **`short-circuit-or.golden.ts`** — **unchanged, verified not assumed**
+  (regenerated via the same script as the other six; diff empty) — no
+  `list` call anywhere in its source.
+
+Regenerated by running the real, gate-authoritative
+`compileGreenfield(session, source)` against each fixture's UNCHANGED
+`source` and committing the observed bytes verbatim (same discipline as
+every prior entry) — a small script drove all seven through one shared
+`OracleSession`, diffing before/after per file; `short-circuit-or`'s
+`changed=false` readout is the direct confirmation above, not an assumption.
+
+**Verified the blast radius**: full `arrival-mercury` suite (51 files) green
+post-regeneration (1048 pass / 18 expected-fail / 1 todo — the pre-existing
+1012/18/1 baseline plus 36 new `chunk.test.ts` rows); `tsc --noEmit` and
+`check:stories` both clean; `cross-pass-fixtures.test.ts`'s four affected
+`.golden.json` rows (`filter-truthy-zero`, `multi-list-map`, `apply-plus`,
+`member-assoc` — a DIFFERENT fixture directory/log, `fixtures/cross-pass/
+REBASE_LOG.md`, this entry's sibling) and `emitted-fixtures.test.ts`'s
+eleven affected snapshot rows are regenerated and reviewed the same way;
+`gate1-measure.test.ts`'s committed report is BYTE-IDENTICAL post-change
+(gate 1 measures `car`/`cdr`/`if` type-availability, an orthogonal axis this
+landing never touches) — `cleanPct` stays 84.84848484848484 (~84.8%),
+confirmed, not just assumed from "we didn't touch that code."
+`legibility.test.ts`'s two inline expectations referencing a bare
+`list(1, 2)`/`list(1, 2, 3)` shape were updated to the folded array literal
+— unrelated to the destructure/CSE claims those two tests actually pin (see
+each test's own updated inline comment).
+
+`member-assoc` (`fixtures/emitted/member-assoc.ts` +
+`fixtures/cross-pass/member-assoc.golden.json`, not this directory, but the
+clearest worked example of the abort gate) is the load-bearing proof the
+gate is per-call-site, not per-program: `list(member(2, list(1, 2, 3)),
+assoc(2, list(list(1, "a"), list(2, "b"))))` → `list(member(2, [1, 2, 3]),
+assoc(2, [[1, "a"], [2, "b"]]))` — the OUTER `list` (wrapping two real
+`Call`s) does not fold, while every NESTED literal `list` — including ones
+buried two levels inside `assoc`'s own argument — folds independently. Same
+mechanism, applied bottom-up, no special-casing.
+
+**New substrate tests**: `src/__tests__/chunk.test.ts` (36 rows) — chunk
+rendering mechanics (verbatim, substituted-by-slot, the "ast"-splice nesting
+case, the mutual-recursion rule with a chunk-in-a-slot, both duality
+directions for `ChunkExpr`/`ChunkStmt`), the walker's fold/abort decisions
+(literal, mixed, call-containing, closure-containing, kwargs-present), the
+import census seeing through a slot, the four leaf-treatment regression
+rows (review-correction paragraph above), and oracle agreement over the
+real session (including the `infer`-inside-`list` abort case, verified by
+BYTES since `infer` always throws — untaxonomized, on both sides — in this
+harness by design; no existing suite runs the oracle over an
+`infer`-containing program for that reason).
+
 ## goldenEpoch 2 — E1a lands: names dissolve into census + allocate + materialize (2026-07-16)
 
 **Zero gate-3 goldens changed — verified, not assumed.** `git diff --stat` against this

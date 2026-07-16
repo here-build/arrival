@@ -15,7 +15,7 @@
  * open, and this package's own naming.ts already documents the same "adapt, don't
  * import" stance for copy-as-chunk material. Revisit if a fifth pass arrives.
  */
-import type { Binding, CompilationUnit, Decl, Pattern, R } from "../residual/types.js";
+import type { Binding, CompilationUnit, Decl, Pattern, R, SlotId } from "../residual/types.js";
 
 export type BlockR = Extract<R, { t: "Block" }>;
 
@@ -82,6 +82,20 @@ export function mapChildren(n: R, f: (child: R) => R): R {
       return { ...n, node: f(n.node) };
     case "Annotated":
       return { ...n, value: f(n.value) };
+    case "ChunkExpr":
+    case "ChunkStmt": {
+      // Slots are the fluid re-entry points (mercury-ir.md's mutual-recursion
+      // rule — "never assume AST chunks are leaf nodes"): rebuild the map with
+      // every value mapped, same keys; the verbatim `ast` stays opaque (blind
+      // to the ts.Node tree, seeing to `slots` — exactly the memo's split).
+      // This is what lets an occurrence rewrite (destructure substitution,
+      // materializeImports' RuntimeRef→Ref commit, CSE's Ref swap) reach a
+      // slot's fluid value exactly like any other child position.
+      if (n.slots === undefined) return n;
+      const slots = new Map<SlotId, R>();
+      for (const [id, v] of n.slots) slots.set(id, f(v));
+      return { ...n, slots };
+    }
   }
 }
 
@@ -145,6 +159,17 @@ export function childrenOf(node: R): readonly R[] {
       return [node.node];
     case "Annotated":
       return [node.value];
+    case "ChunkExpr":
+    case "ChunkStmt":
+      // The slot values — the fluid re-entry points (mercury-ir.md: "never
+      // assume AST chunks are leaf nodes"); `ast` stays opaque — blind to the
+      // ts.Node tree, seeing to `slots`, the memo's own split ("not by
+      // walking, by indexing"). Every consumer needs this: the destructure
+      // census counts a param occurrence living in a slot (missing it fires
+      // destructure on outer occurrences while the slot keeps the undeclared
+      // old name), CSE's candidate collection sees a slot's Call, and
+      // collectBoundNames sees a slot's Refs.
+      return node.slots === undefined ? [] : [...node.slots.values()];
   }
 }
 

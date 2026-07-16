@@ -71,7 +71,7 @@
  *    points — this pass only ever wraps existing edges, never restructures
  *    around them.
  */
-import type { Binding, CompilationUnit, Decl, NodeId, R, TsType } from "../residual/types.js";
+import type { Binding, ChunkExpr, ChunkStmt, CompilationUnit, Decl, NodeId, R, TsType } from "../residual/types.js";
 import { Binding as mkBinding, Call, Member, Ref } from "../residual/types.js";
 
 /**
@@ -211,6 +211,17 @@ function childrenOf(node: R): readonly R[] {
       return [node.node];
     case "Annotated":
       return [node.value];
+    case "ChunkExpr":
+    case "ChunkStmt":
+      // Slots are the fluid re-entry points (mercury-ir.md's mutual-recursion
+      // rule — "never assume AST chunks are leaf nodes"): the collection
+      // pre-pass finds seeds/defs/Law-W violations through them, and
+      // `containsAwaitShallow` sees a slot-minted Await when deciding a def's
+      // asyncness. The verbatim `ast` stays opaque — blind to the ts.Node
+      // tree, seeing to `slots`. Correctness must NOT lean on the walker's
+      // `isCallFree` fold gate (that is fold-scope policy, and E2b's
+      // rule-minted chunks won't pass through it at all).
+      return node.slots === undefined ? [] : [...node.slots.values()];
   }
 }
 
@@ -257,6 +268,26 @@ function makeRewriter(oracle: Pick<AsyncnessFacts, "typeOf" | "callType" | "arro
 
   const rewriteBlock = (b: BlockR): BlockR => ({ ...b, stmts: b.stmts.map(rewriteStmt) });
 
+  /**
+   * Chunk slots rebuilt through the rewriter (mercury-ir.md's mutual-recursion
+   * rule — never assume chunks are leaves): each slot value is an ordinary
+   * value-consuming position — the chunk's `ast` reads it inline, exactly like
+   * an ArrayLit element — so a promise-typed slot gets its Await minted INSIDE
+   * the rebuilt slot map. The chunk's own evaluated value is therefore always
+   * settled (`typeOf`'s "sync" default is exact — the Block precedent: the
+   * awaits land inside). The verbatim `ast` is never walked. No ArrayLit-style
+   * Promise.all batching across slots: the chunk's internal structure is
+   * opaque by design, so sibling-parallelism can't be asserted — sequential
+   * awaits are the conservative shape ("unknown edges stay
+   * sequential-awaited", module header).
+   */
+  const rewriteChunkSlots = (n: ChunkExpr | ChunkStmt): R => {
+    if (n.slots === undefined) return n;
+    const slots = new Map<string, R>();
+    for (const [id, v] of n.slots) slots.set(id, consume(v));
+    return { ...n, slots };
+  };
+
   const rewriteStmt = (n: R): R => {
     switch (n.t) {
       case "Const":
@@ -285,6 +316,18 @@ function makeRewriter(oracle: Pick<AsyncnessFacts, "typeOf" | "callType" | "arro
         return rewriteBlock(n);
       case "Comment":
         return { ...n, node: rewriteStmt(n.node) };
+      case "ChunkStmt":
+        // Statement-position chunk: slots rebuilt through the rewriter (see
+        // rewriteChunkSlots) — spelled explicitly (not the `default` below)
+        // so a chunk can never round-trip through BOTH functions' `default`
+        // arms and recurse forever.
+        return rewriteChunkSlots(n);
+      case "ChunkExpr":
+        // Bare expression statement — the SAME discard-but-resolve semantics
+        // as `default`, below; routes through rewriteExpr's own chunk arm
+        // (typeOf(chunk) is "sync" — slot awaits land inside — so consume
+        // never wraps an outer Await here).
+        return consume(n);
       default:
         // Bare expression statement: the value is discarded, but the
         // interpreter still RESOLVES it (its evaluation is complete before
@@ -389,6 +432,13 @@ function makeRewriter(oracle: Pick<AsyncnessFacts, "typeOf" | "callType" | "arro
       }
       case "Await":
         return lawWViolation("an `Await`", n.origin); // unreachable after collect — defense-in-depth
+      case "ChunkExpr":
+      case "ChunkStmt":
+        // Slots rebuilt through the rewriter (rewriteChunkSlots, above) — a
+        // slot whose content needs an Await gets it exactly like any other
+        // child position; never the `default` below (which would round-trip
+        // into `rewriteStmt`'s own `default` and recurse forever).
+        return rewriteChunkSlots(n);
       default:
         // Statement-only kinds cannot occupy an expression position (the
         // walker's position-pinned dispatch) — route through the statement

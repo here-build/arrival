@@ -16,8 +16,8 @@ function OracleMain() {
     const paretoset = examples;
     const trace = (analyze, decide, ex) => {
         const message = ex["input"];
-        const analysis = runAnalyze(list(analyze, message), { instruction: analyze, message: message });
-        const label = runDecide(list(decide, message, analysis), { instruction: decide, message: message, analysis: analysis });
+        const analysis = runAnalyze([analyze, message], { instruction: analyze, message: message });
+        const label = runDecide([decide, message, analysis], { instruction: decide, message: message, analysis: analysis });
         return { id: ex["id"], input: message, analysis: analysis, prediction: label, expected: ex["expected"] };
     };
     const evaluate = (analyze, decide, set) => set.map(it => trace(analyze, decide, it));
@@ -43,8 +43,8 @@ function OracleMain() {
         const current = instrOf(c, stage);
         const fails = failuresOf(batch);
         return fails.length === 0 ? false : (() => {
-            const improved = runReflect(list(stage, current, fails), { stage: stage, instruction: current, failures: fails });
-            return equalP(stage, "analyze") ? list(improved, c["decide"], "analyze") : list(c["analyze"], improved, "decide");
+            const improved = runReflect([stage, current, fails], { stage: stage, instruction: current, failures: fails });
+            return equalP(stage, "analyze") ? [improved, c["decide"], "analyze"] : [c["analyze"], improved, "decide"];
         })();
     };
     const complementary = (a, b) => equalP(a["via"], "analyze") && equalP(b["via"], "decide") || equalP(a["via"], "decide") && equalP(b["via"], "analyze");
@@ -59,7 +59,7 @@ function OracleMain() {
                 }
                 else {
                     if (complementary(as[0], bs[0])) {
-                        return list(as[0], bs[0]);
+                        return [as[0], bs[0]];
                     }
                     else {
                         bs = bs.slice(1);
@@ -99,13 +99,13 @@ function OracleMain() {
         throw new Error("unsupported-form/unresolved-identifier: `some` is not lexically bound and is not a registry symbol.");
     };
     const sampleBatch = (set, k, state) => {
-        let picked = list();
+        let picked = [];
         let tries = 3 * k;
         let s = state;
         /*[ts-base/self-tail-loop] named let `loop` → while*/
         while (true) {
             if (zeroP(tries) || ge(length_(picked), k) || ge(length_(picked), length_(set))) {
-                return list(picked, s);
+                return [picked, s];
             }
             else {
                 {
@@ -161,7 +161,7 @@ function OracleMain() {
         })(), (() => {
             throw new Error("unsupported-form/require: `(require \"decide-seed.txt\")` \u2014 module loading is not compiled in this slice (the loader/FRAME wave owns import planning).");
         })(), "seed");
-        const final = evolve(list(seed), BUDGET - length_(paretoset), SEEDRNG, 0);
+        const final = evolve([seed], BUDGET - length_(paretoset), SEEDRNG, 0);
         throw new Error("unsupported-form/unresolved-identifier: `max-by` is not lexically bound and is not a registry symbol.");
     };
     return gepa();

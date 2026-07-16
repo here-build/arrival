@@ -12,13 +12,13 @@
  * only so this async-seeded shape can compile and render end to end. This
  * golden pins the REWRITE SHAPE, not a real inference result.
  *
- * goldenEpoch: 1 — see ../gate3/REBASE_LOG.md before touching `golden` below.
+ * goldenEpoch: 3 — see ../gate3/REBASE_LOG.md before touching `golden` below.
  */
 export const source = `(map (lambda (x) (infer "fast" x)) (list "a" "b"))`;
 
-export const golden = `import { infer, list } from "./stage0.mts";
+export const golden = `import { infer } from "./stage0.mts";
 async function OracleMain() {
-    return await Promise.all(list("a", "b").map(async (x) => await infer("fast", x)));
+    return await Promise.all(["a", "b"].map(async (x) => await infer("fast", x)));
 }
 export { __oracleResult };
 const __oracleResult = await OracleMain();

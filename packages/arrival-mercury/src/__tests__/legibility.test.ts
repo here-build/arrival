@@ -126,8 +126,10 @@ describe("implicit destruction — now decided inside walk() (engine plan §2 E1
     // materialize.ts must handle explicitly (FnDecl.params/.body get the SAME
     // treatment, not just Arrow.params/.body). This exercises the Arrow (bare-lambda)
     // side.
+    // `(list 1 2)` folds to a literal array chunk (E2 ingestion fold, engine
+    // plan §2 E2) — unrelated to the destructure decision this test pins.
     expect(render(compile(`((lambda (pair) (+ (car pair) (car (cdr pair)))) (list 1 2))`))).toBe(
-      `(([first, second]) => first + second)(list(1, 2));\n`,
+      `(([first, second]) => first + second)([1, 2]);\n`,
     );
   });
 });
@@ -262,10 +264,12 @@ describe("legibility wired into compileGreenfield — the real pipeline, oracle 
 
   it("an unrelated program is untouched — no false singularize/CSE noise", () => {
     const out = compileGreenfield(session, `(map (lambda (x) (* x x)) (list 1 2 3))`);
+    // `list(1, 2, 3)` folds to a literal array chunk (E2 ingestion fold,
+    // engine plan §2 E2) — no `list` import survives; unrelated to the
+    // single-list-map "forward the callback verbatim" claim this test pins.
     expect(out).toBe(
-      `import { list } from "./stage0.mts";\n` +
-        `function OracleMain() {\n` +
-        `    return list(1, 2, 3).map(x => x * x);\n` +
+      `function OracleMain() {\n` +
+        `    return [1, 2, 3].map(x => x * x);\n` +
         `}\n` +
         `export { __oracleResult };\n` +
         `const __oracleResult = OracleMain();\n`,

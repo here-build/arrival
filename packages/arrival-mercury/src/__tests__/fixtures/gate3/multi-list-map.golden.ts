@@ -5,13 +5,13 @@
  * value position resolves through the stage-0 shim (`plus`, a variadic fold —
  * call position never reaches it, the `+` emit rule folds inline instead).
  *
- * goldenEpoch: 1 — see ../gate3/REBASE_LOG.md before touching `golden` below.
+ * goldenEpoch: 3 — see ../gate3/REBASE_LOG.md before touching `golden` below.
  */
 export const source = `(map + (list 1 2 3) (list 10 20 30))`;
 
-export const golden = `import { plus, list } from "./stage0.mts";
+export const golden = `import { plus } from "./stage0.mts";
 function OracleMain() {
-    return list(1, 2, 3).map((__item, __i) => plus(__item, list(10, 20, 30)[__i]));
+    return [1, 2, 3].map((__item, __i) => plus(__item, [10, 20, 30][__i]));
 }
 export { __oracleResult };
 const __oracleResult = OracleMain();

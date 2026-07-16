@@ -10,7 +10,7 @@
  */
 import ts from "typescript";
 
-import type { BinOp, CompilationUnit, Decl, ImportName, NodeId, Param, Pattern, R, TsType, UnOp } from "./types.js";
+import type { BinOp, ChunkExpr, ChunkStmt, CompilationUnit, Decl, ImportName, NodeId, Param, Pattern, R, TsType, UnOp } from "./types.js";
 
 const f = ts.factory;
 
@@ -138,6 +138,15 @@ function renderStmt(node: R, insideAsync: boolean): ts.Statement {
     }
     case "Comment":
       return leadingComment(renderStmt(node.node, insideAsync), node.text);
+    case "ChunkStmt":
+      return renderChunk(node, insideAsync) as ts.Statement;
+    case "ChunkExpr":
+      // Duality (E2, engine plan §2): an EXPRESSION-shaped chunk reaching
+      // statement position is a bare expression statement — the same
+      // fallback every other expression-only R kind takes below (this
+      // switch's own `default`), spelled explicitly here for auditability
+      // rather than relying on fallthrough.
+      return f.createExpressionStatement(renderExpr(node, insideAsync));
     default:
       // Bare expression at statement position. createExpressionStatement auto-parenthesizes
       // when the leftmost leaf is an object literal / function expression (`({a: 1});`).
@@ -250,6 +259,15 @@ function renderExpr(node: R, insideAsync: boolean): ts.Expression {
         "Annotated has exactly two legal shapes: wrapping an Arrow, or as the direct init of a Const/Let",
         node.origin,
       );
+    case "ChunkExpr":
+      return renderChunk(node, insideAsync) as ts.Expression;
+    case "ChunkStmt":
+      // Duality (E2, engine plan §2): a STATEMENT-shaped chunk reaching
+      // expression position resolves through the SAME IIFE-vs-block rule
+      // `Block` above takes — wrap in a synthetic one-statement Block and
+      // reuse `renderBlockAsIife` verbatim (its own `containsAwait` check
+      // included), never a bespoke wrapping.
+      return renderBlockAsIife({ t: "Block", stmts: [node] }, insideAsync);
     case "Const":
     case "Let":
     case "Assign":
@@ -361,9 +379,58 @@ function rChildren(node: R): readonly R[] {
       return [node.node];
     case "Annotated":
       return [node.value];
+    case "ChunkExpr":
+    case "ChunkStmt":
+      // Slots are the fluid re-entry points (mercury-ir.md's mutual-recursion
+      // rule — "never assume AST chunks are leaf nodes"): an Await living in a
+      // slot's fluid value belongs to the enclosing boundary exactly like any
+      // other child position, so `containsAwait` must see it — a Block holding
+      // an awaited-slot chunk becomes an ASYNC IIFE, never a sync one that
+      // would trip the Law-W backstop throw. The verbatim `ast` itself stays
+      // opaque — blind to the ts.Node tree, seeing to `slots`.
+      return node.slots === undefined ? [] : [...node.slots.values()];
     default:
       return exhausted(node);
   }
+}
+
+// ─── Chunks (E2, the hybrid tree's hard side) ────────────────────────────────────────
+// mercury-ir.md's "Two Population States" + mutual-recursion rule, arrival's instance.
+
+/**
+ * Print a chunk's `ast`: verbatim (Phase 1 — `slots` absent/empty) or
+ * substituted (Phase 2). Phase 2 is PRECOMPUTE-THEN-SUBSTITUTE, never
+ * discover-during-walk (mercury-ir.md's `resolveASTExpr`/`resolveASTStmt`
+ * rule, e2-substrate-evidence.md's own correction to the naive
+ * "printASTWithSlots" framing): every slot's fluid node is rendered FIRST, up
+ * front, through the ordinary `renderExpr` dispatch — "never assume chunks
+ * are leaves," so a slot that itself resolves to a further `ChunkExpr`/
+ * `ChunkStmt` (a nested `list`/quote fold) recurses back into THIS function
+ * via that same dispatch, not a special case — THEN one non-recursive
+ * `ts.transform`/`visitEachChild` pass substitutes the precomputed results
+ * into `ast` by TEXT match against each placeholder identifier (`SlotId`s are
+ * a reserved, package-controlled naming convention — see residual/types.ts's
+ * own doc on `SlotId` for why identity-based matching is unneeded). Pure:
+ * `ts.transform` never mutates the original `ast`, so a chunk with no live
+ * substitution (an unreachable branch, or a re-render) is always safe to
+ * print again.
+ */
+function renderChunk(node: ChunkExpr | ChunkStmt, insideAsync: boolean): ts.Node {
+  if (node.slots === undefined || node.slots.size === 0) return node.ast as ts.Node;
+  const rendered = new Map<string, ts.Expression>();
+  for (const [id, slotNode] of node.slots) rendered.set(id, renderExpr(slotNode, insideAsync));
+  const result = ts.transform(node.ast as ts.Node, [
+    (context) => (root: ts.Node): ts.Node => {
+      const visit = (n: ts.Node): ts.Node => {
+        const swap = ts.isIdentifier(n) ? rendered.get(n.text) : undefined;
+        return swap ?? ts.visitEachChild(n, visit, context);
+      };
+      return ts.visitNode(root, visit)!;
+    },
+  ]);
+  const transformed = result.transformed[0]!;
+  result.dispose();
+  return transformed;
 }
 
 // ─── Literals ────────────────────────────────────────────────────────────────────────

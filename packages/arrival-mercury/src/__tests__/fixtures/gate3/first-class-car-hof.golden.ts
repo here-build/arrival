@@ -29,14 +29,13 @@
  * or any other no-proof call site still needs the shim, and removing an
  * still-reachable stage-0 export is a separate, unrelated cleanup.
  *
- * goldenEpoch: 2 — see ../gate3/REBASE_LOG.md before touching `golden` below.
+ * goldenEpoch: 3 — see ../gate3/REBASE_LOG.md before touching `golden` below.
  */
 export const source = `(let ((xss (list (list 1 2) (list 3 4))))
   (map car xss))`;
 
-export const golden = `import { list } from "./stage0.mts";
-function OracleMain() {
-    const xss = list(list(1, 2), list(3, 4));
+export const golden = `function OracleMain() {
+    const xss = [[1, 2], [3, 4]];
     return xss.map(([head]) => head);
 }
 export { __oracleResult };

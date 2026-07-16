@@ -9,6 +9,17 @@
  * demonstrated emit-rule need + renderer support + oracle coverage. (The 29th, the
  * statement-position `If`, landed with the engine walker under exactly that rule —
  * see its constructor's doc for the demonstrated need.)
+ *
+ * E2 addition — the hybrid tree's hard side (engine plan §1 S1/S2, §2 E2;
+ * mercury-ir.md; docs/working-proposals/arrival-mercury/e2-substrate-evidence.md):
+ * `ChunkExpr`/`ChunkStmt` join the ~29 above as TWO more members, mirroring
+ * mercury's own `IRASTExpression`/`IRASTStatement` bifurcation of one shared
+ * `ast`+`slots?` mixin. Still pure data — `ast` is carried OPAQUELY (typed
+ * `OpaqueTsNode = unknown`, this module's existing `NodeId` discipline applied
+ * to a second opaque carrier), never a real `typescript` import here. `./chunk.ts`
+ * is the new sibling that DOES import `typescript` to build one (the walker's
+ * ingestion-fold call surface); `./render.ts` is the only module that ever casts
+ * the opaque value back and prints it.
  */
 
 /** coreform-ir.md's branded pre-order node id. Carried opaquely — never constructed,
@@ -17,6 +28,64 @@ export type NodeId = unknown;
 
 interface Base {
   readonly origin?: NodeId;
+}
+
+/**
+ * Opaque carrier for a verbatim `ts.Node` subtree (the hybrid tree's hard side,
+ * mercury-ir.md; engine plan §2 E2). This module imports nothing from
+ * `typescript` (module header) — `./chunk.ts` constructs the real
+ * `ts.Expression`/`ts.Statement` and hands it here as an opaque value, exactly
+ * `NodeId`'s own "carried opaquely, resolved by the one module that knows the
+ * real shape" discipline, above. `./render.ts` is the ONLY module that ever
+ * casts it back.
+ */
+export type OpaqueTsNode = unknown;
+
+/**
+ * A slot identifier — a synthetic placeholder name minted into `ast` at
+ * construction time (`__slot0`, `__slot1`, … — mercury's own `__slot${n}`
+ * convention, ported verbatim: e-substrate-evidence.md's slot-minting section).
+ * Found by TEXT match during substitution (render.ts), never by `ts.Node`
+ * identity: every chunk this package builds is constructed FROM SCRATCH by
+ * `./chunk.ts`'s own `ts.factory` calls (never parsed from arbitrary/pasted
+ * TypeScript text — rules do not construct chunks this wave, S3), so a
+ * reserved naming convention this package fully controls can never collide
+ * with real user-authored source.
+ */
+export type SlotId = string;
+
+/**
+ * The hybrid tree's hard node family — one shared mixin shape (mercury-ir.md;
+ * engine plan §1 S1: "one mixin, two shapes", mirroring `IRASTExpression`/
+ * `IRASTStatement`'s shared `ir.ast<Body>` generic). `ast` is REQUIRED — a
+ * chunk is unrepresentable without one; every constructor below supplies it
+ * unconditionally, so there is no "no AST" state to defend against anywhere
+ * downstream (mercury-ir.md's "Two Population States" table, ported: `ast`
+ * always present, `slots` is the only field that varies). `slots` is the
+ * bridge back to the fluid tree: OPTIONAL (absent or empty ⇒ Phase 1, print
+ * `ast` verbatim; non-empty ⇒ Phase 2, substitute at each slot then recurse —
+ * "never assume chunks are leaves") — never required, since a fully-literal
+ * chunk (a quoted datum, an all-constant `list` call) needs none.
+ */
+interface ChunkBase extends Base {
+  readonly ast: OpaqueTsNode;
+  readonly slots?: ReadonlyMap<SlotId, R>;
+}
+
+/** Expression-position hard chunk — `IRASTExpression`'s arrival instance. The
+ *  walker's ingestion fold (S2) mints these for quoted data and literal/
+ *  slot-safe `list` calls (`../walker/walk.ts`'s `datumToR`/`tryFoldListCall`). */
+export interface ChunkExpr extends ChunkBase {
+  readonly t: "ChunkExpr";
+}
+
+/** Statement-position hard chunk — `IRASTStatement`'s arrival instance. No
+ *  fold site mints one THIS wave (S2's ingestion folding only ever produces
+ *  expressions — quoted data and `list` calls are both rvalues); built out
+ *  fully (type + constructor + renderer duality support) because the
+ *  substrate — not today's two fold sites — is this wave's deliverable. */
+export interface ChunkStmt extends ChunkBase {
+  readonly t: "ChunkStmt";
 }
 
 /**
@@ -132,7 +201,9 @@ export type R =
   | (Base & { t: "If"; test: R; then: Extract<R, { t: "Block" }>; else?: R }) // statement-only; `else` is a Block or a chained If (render-asserted)
   | (Base & { t: "Throw"; value: R })
   | (Base & { t: "Comment"; text: string; node: R }) // LEADING block comment only
-  | (Base & { t: "Annotated"; value: R; type: TsType }); // legal shapes pinned in render.ts
+  | (Base & { t: "Annotated"; value: R; type: TsType }) // legal shapes pinned in render.ts
+  | ChunkExpr // E2 — the hybrid tree's hard side (see the module header)
+  | ChunkStmt;
 
 export interface ImportName {
   readonly imported: string;
@@ -322,6 +393,29 @@ export function Comment(text: string, node: R): R {
 
 export function Annotated(value: R, type: TsType): R {
   return { t: "Annotated", value, type };
+}
+
+/**
+ * Build a chunk-expression (E2, the hybrid tree's hard side — see the module
+ * header). `ast` is REQUIRED (constructor discipline: no chunk without one —
+ * there is no arity that omits it). `slots` omitted or empty ⇒ Phase 1
+ * (render.ts prints `ast` verbatim); non-empty ⇒ Phase 2 (render.ts
+ * substitutes at each slot, then recurses through the normal lowering path —
+ * mercury-ir.md's mutual-recursion rule, "never assume chunks are leaves").
+ * Normalizes an empty-but-present `slots` Map to the Phase-1 shape (omitted)
+ * so downstream readers have exactly one way to test "does this need
+ * substitution" (`slots !== undefined`, never also checking `.size`).
+ * The sanctioned callers this wave are `./chunk.ts`'s own fold helpers
+ * (the walker's ingestion fold) — rules do not construct chunks yet (S3).
+ */
+export function ChunkExpr(ast: OpaqueTsNode, slots?: ReadonlyMap<SlotId, R>): R {
+  return slots !== undefined && slots.size > 0 ? { t: "ChunkExpr", ast, slots } : { t: "ChunkExpr", ast };
+}
+
+/** Build a chunk-statement — `ChunkExpr`'s statement-position twin (see the
+ *  module header on `ChunkStmt`; same construction discipline). */
+export function ChunkStmt(ast: OpaqueTsNode, slots?: ReadonlyMap<SlotId, R>): R {
+  return slots !== undefined && slots.size > 0 ? { t: "ChunkStmt", ast, slots } : { t: "ChunkStmt", ast };
 }
 
 export function FnDecl(

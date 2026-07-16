@@ -57,6 +57,7 @@ import type {
 } from "../coreform/types.js";
 import { allocateNames, bindingCensusOf, materializeNames, recordOrigin } from "../naming/index.js";
 import type { EmitRegistry, EmitRegistryRow } from "../registry/harvest.js";
+import { arrayChunkAst, type ChunkElement } from "../residual/chunk.js";
 import type { Binding, CompilationUnit, Decl, Pattern, R } from "../residual/types.js";
 import { STAGE0 } from "../runtime/stage0.js";
 import {
@@ -67,6 +68,7 @@ import {
   Binding as mkBinding,
   Block,
   Call,
+  ChunkExpr,
   Comment,
   Cond,
   Const,
@@ -279,9 +281,39 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
 
   // ── Quote / Lit / Dict ─────────────────────────────────────────────────────────────
 
-  /** Representation law (§2.1): symbol → interned name STRING, list → array. A datum
-   *  never contains a bare dot (dotted pairs folded at classify time). Numeric text is
-   *  unconditional `Number(text)` — one-number RATIO ruling, zero dispatch (§7). */
+  /**
+   * E2 ingestion fold (engine plan §1 S2, §2 E2): QuoteDatum → ChunkElement.
+   * ALWAYS slot-free — a QuoteDatum is a mirror datatype that never contains a
+   * scheme variable reference at any depth (coreform/types.ts's own
+   * invariant: quoted data is never re-classified as CoreForm), so there is
+   * nothing to bridge back to. A nested list embeds its OWN chunk `ast`
+   * inline (the `"ast"` element kind — residual/chunk.ts's own doc) rather
+   * than a slot pointing at a second chunk, so `'(1 (2 3))` folds to ONE
+   * genuinely nested `ts.ArrayLiteralExpression`.
+   */
+  const quoteElementOf = (d: QuoteDatum): ChunkElement => {
+    switch (d.kind) {
+      case "number":
+        return { kind: "lit", value: Number(d.text) };
+      case "string":
+        return { kind: "lit", value: d.value };
+      case "boolean":
+        return { kind: "lit", value: d.value };
+      case "symbol":
+        return { kind: "lit", value: d.name };
+      case "list":
+        return { kind: "ast", node: arrayChunkAst(d.items.map(quoteElementOf)) };
+    }
+  };
+
+  /** Representation law (§2.1): symbol → interned name STRING, list → a
+   *  genuine `ts.factory` chunk (E2 ingestion fold — see `quoteElementOf`;
+   *  the `list(1, 2)` stage0 shim never even enters the picture for quoted
+   *  data, which was already shim-free before this wave — this fold changes
+   *  the MECHANISM `ArrayLit`→real-AST, never the emitted bytes). A datum
+   *  never contains a bare dot (dotted pairs folded at classify time).
+   *  Numeric text is unconditional `Number(text)` — one-number RATIO ruling,
+   *  zero dispatch (§7). */
   const datumToR = (d: QuoteDatum): R => {
     switch (d.kind) {
       case "number":
@@ -293,8 +325,151 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
       case "symbol":
         return Lit(d.name);
       case "list":
-        return ArrayLit(d.items.map(datumToR));
+        return ChunkExpr(arrayChunkAst(d.items.map(quoteElementOf)));
     }
+  };
+
+  /**
+   * E2's ingestion-fold SCOPE gate (engine plan §2 E2; S2's "mixed literal/
+   * variable… slots at variable positions", scoped conservatively this wave):
+   * true iff `r`'s subtree contains NO `Call`/`Method`/`New`/`Arrow` anywhere
+   * — i.e. the argument is data-like (literals, bound refs, accessor chains),
+   * not computation. This is fold-scope POLICY, not a correctness
+   * prerequisite: every generic walker sees through a chunk's slots
+   * (mercury-ir.md's mutual-recursion rule, "never assume AST chunks are leaf
+   * nodes" — residual/render.ts's `rChildren`, legibility/tree.ts's
+   * `childrenOf`/`mapChildren`, naming/asyncness.ts's own `childrenOf` +
+   * slot-rebuilding rewrite arms), so a Call or Arrow living in a slot is
+   * found by the asyncness fixpoint, CSE, the binding census, and the import
+   * materializer exactly like any other child position. The gate just keeps
+   * THIS wave's fold to the literal-data churn class the plan names ("literal
+   * arrays where list() shims stood") — widening it to computation-carrying
+   * slots is E2b's call, not blocked by any walker. A bare `RuntimeRef` VALUE
+   * (e.g. `(list 1 2 car)`, `car` unused as a call) passes this check —
+   * holding a function reference is data-like, and both the import census
+   * (`runtimeRefsOf` below) and the RuntimeRef→Ref import rewrite reach
+   * through the slot regardless.
+   */
+  const isCallFree = (r: R): boolean => {
+    switch (r.t) {
+      case "Call":
+      case "Method":
+      case "New":
+      case "Arrow":
+        return false;
+      case "Ref":
+      case "RuntimeRef":
+      case "Lit":
+      case "Continue":
+        return true;
+      case "Template":
+        return r.exprs.every(isCallFree);
+      case "Index":
+        return isCallFree(r.recv) && isCallFree(r.index);
+      case "Member":
+        return isCallFree(r.recv);
+      case "Bin":
+        return isCallFree(r.left) && isCallFree(r.right);
+      case "Un":
+        return isCallFree(r.arg);
+      case "Cond":
+        return isCallFree(r.test) && isCallFree(r.then) && isCallFree(r.else);
+      case "ArrayLit":
+        return r.elements.every(isCallFree);
+      case "ObjectLit":
+        return r.entries.every((e) => isCallFree(e.value));
+      case "Spread":
+      case "Await":
+      case "Throw":
+        return isCallFree(r.value);
+      case "Block":
+        return r.stmts.every(isCallFree);
+      case "Const":
+      case "Let":
+        return isCallFree(r.init);
+      case "Assign":
+        return isCallFree(r.value);
+      case "Return":
+        return r.value === undefined || isCallFree(r.value);
+      case "While":
+        return isCallFree(r.test) && isCallFree(r.body);
+      case "ForOf":
+        return isCallFree(r.iterable) && isCallFree(r.body);
+      case "If":
+        return isCallFree(r.test) && isCallFree(r.then) && (r.else === undefined || isCallFree(r.else));
+      case "Comment":
+        return isCallFree(r.node);
+      case "Annotated":
+        return isCallFree(r.value);
+      case "ChunkExpr":
+      case "ChunkStmt":
+        // Every chunk THIS function gates the construction of is call-free
+        // internally by construction — checked here defensively (not
+        // assumed) so this stays correct if a future wave (E2b: rules
+        // returning chunks) ever builds one a different way.
+        return r.slots === undefined || [...r.slots.values()].every(isCallFree);
+    }
+  };
+
+  /** Not a valid Lit payload (`undefined` is — `Lit(undefined)` is real,
+   *  legal data) — a distinct sentinel so `literalValueOf` can say "not a
+   *  literal at all" without colliding with the literal value `undefined`. */
+  const NOT_LITERAL: unique symbol = Symbol("not-literal");
+
+  /** Extract the raw JS value from an already-lowered `Lit` R-node, or
+   *  `NOT_LITERAL` iff `r` isn't one. `bigint` is host-value infra
+   *  (residual/types.ts's own note) — scheme lowering never produces one, so
+   *  it is excluded defensively rather than threaded through `ChunkElement`. */
+  const literalValueOf = (r: R): string | number | boolean | null | undefined | typeof NOT_LITERAL => {
+    if (r.t !== "Lit") return NOT_LITERAL;
+    switch (r.value.k) {
+      case "string":
+      case "number":
+      case "boolean":
+        return r.value.value;
+      case "null":
+        return null;
+      case "undefined":
+        return undefined;
+      case "bigint":
+        return NOT_LITERAL;
+    }
+  };
+
+  /**
+   * E2's ingestion fold for a `list` call (S2): try to build a data-only
+   * chunk-expression from ALREADY-LOWERED arguments (`argsR` — the same
+   * values `lowerApp` would otherwise pass straight to
+   * `Call(RuntimeRef("list"), argsR)`). `undefined` ⇒ abort: at least one
+   * argument's lowered form fails `isCallFree` (computation, not data — see
+   * that gate's doc: fold-scope policy this wave, never a walker-safety
+   * requirement) — the caller falls back to the ordinary shim call,
+   * unchanged. A `Lit`-shaped argument embeds INLINE (mercury's
+   * own "short-circuits known primitives" move — no slot spent on a
+   * constant); an already-folded, slot-free `ChunkExpr` (a nested `list`/
+   * quote) splices its `ast` inline too, so nested literal lists produce ONE
+   * genuinely nested AST, not a slot pointing at a second chunk.
+   */
+  const tryFoldListCall = (argsR: readonly R[]): R | undefined => {
+    const elements: ChunkElement[] = [];
+    const slots = new Map<string, R>();
+    let slotN = 0;
+    for (const arg of argsR) {
+      const lit = literalValueOf(arg);
+      if (lit !== NOT_LITERAL) {
+        elements.push({ kind: "lit", value: lit });
+        continue;
+      }
+      if (arg.t === "ChunkExpr" && arg.slots === undefined) {
+        elements.push({ kind: "ast", node: arg.ast });
+        continue;
+      }
+      if (!isCallFree(arg)) return undefined;
+      const id = `__slot${slotN++}`;
+      slots.set(id, arg);
+      elements.push({ kind: "slot", id });
+    }
+    return ChunkExpr(arrayChunkAst(elements), slots.size > 0 ? slots : undefined);
   };
 
   const lowerLit = (n: CfLit): R => {
@@ -683,6 +858,20 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
       if (row.kind === "door") return doorRowExpr(row);
       const rule = ruleOf(row); // the narrowing seam — see ruleOf
       if (rule !== undefined) return rule.call(argsR, ctxFor(argFacts, facts.get(n.id), n.id));
+      // rung 3: the named-import shim — E2's ingestion fold (S2) intercepts
+      // here for `list`: a data-only argument list folds directly to a
+      // chunk-expression (a genuine TS array literal), killing the stage-0
+      // `list(...)` shim call for exactly the class the mission names ("the
+      // list(1, 2) stage0 shim dies for literal data"). `tryFoldListCall`
+      // aborts (returns `undefined`) whenever any argument's lowered form
+      // isn't call-free (`isCallFree` — a fold-SCOPE policy, not a
+      // walker-safety gate: every walker sees through slots per
+      // mercury-ir.md's mutual-recursion rule), keeping this wave's churn to
+      // the literal-data class the plan names.
+      if (row.symbol === "list" && n.kwargs.length === 0) {
+        const folded = tryFoldListCall(argsR);
+        if (folded !== undefined) return folded;
+      }
       return Call(RuntimeRef(row.symbol), argsR); // rung 3: the named-import shim
     }
     // Any other callee shape (Lambda IIFE, computed fn, …): an ordinary call — the
@@ -866,6 +1055,17 @@ export function runtimeRefsOf(unit: CompilationUnit): ReadonlySet<string> {
         return;
       case "Annotated":
         visit(r.value);
+        return;
+      case "ChunkExpr":
+      case "ChunkStmt":
+        // The chunk `ast` itself is opaque syntax (never re-walked as
+        // ts.Node) — but `.slots` is the census's OWN bridge back to the
+        // fluid tree, mercury-ir.md's rule ("not by walking, by indexing"):
+        // a slot-safe `list` fold can still bridge to a bare `RuntimeRef`
+        // VALUE (e.g. `(list 1 2 car)` — `isCallFree` in this file's
+        // `lowerApp` section permits exactly that), so the import census
+        // must see through the slot or a required import silently vanishes.
+        if (r.slots !== undefined) for (const slot of r.slots.values()) visit(slot);
         return;
     }
   };

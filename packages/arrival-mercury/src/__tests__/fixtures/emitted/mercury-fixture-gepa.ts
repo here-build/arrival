@@ -10,8 +10,8 @@ function OracleMain() {
     const runImprove = (() => {
         throw new Error("unsupported-form/require: `(require \"improve.prompt\")` \u2014 module loading is not compiled in this slice (the loader/FRAME wave owns import planning).");
     })();
-    const ask = (instruction, input) => runPredict(list(instruction, input), { instruction: instruction, input: input });
-    const reflect = (instruction, failures) => runImprove(list(instruction, failures), { instruction: instruction, failures: failures });
+    const ask = (instruction, input) => runPredict([instruction, input], { instruction: instruction, input: input });
+    const reflect = (instruction, failures) => runImprove([instruction, failures], { instruction: instruction, failures: failures });
     const evaluate = instruction => examples.map(ex => {
         throw new Error("unsupported-form/unresolved-identifier: `metric` is not lexically bound and is not a registry symbol.");
     });

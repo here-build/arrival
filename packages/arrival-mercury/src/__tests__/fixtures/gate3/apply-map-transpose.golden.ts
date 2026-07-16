@@ -7,13 +7,13 @@
  * `map` in value position resolves through the stage-0 shim's n-ary zip
  * (`src/runtime/stage0.ts`'s `map`, "call position never reaches here").
  *
- * goldenEpoch: 1 — see ../gate3/REBASE_LOG.md before touching `golden` below.
+ * goldenEpoch: 3 — see ../gate3/REBASE_LOG.md before touching `golden` below.
  */
 export const source = `(apply map list (list (list 1 2) (list 3 4)))`;
 
 export const golden = `import { list, map } from "./stage0.mts";
 function OracleMain() {
-    return map(list, ...list(list(1, 2), list(3, 4)));
+    return map(list, ...[[1, 2], [3, 4]]);
 }
 export { __oracleResult };
 const __oracleResult = OracleMain();

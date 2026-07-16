@@ -1,6 +1,6 @@
-import { equalP, list } from "./stage0.mts";
+import { equalP } from "./stage0.mts";
 function OracleMain() {
-    return equalP(list(1, list(2, 3)), list(1, list(2, 3)));
+    return equalP([1, [2, 3]], [1, [2, 3]]);
 }
 export { __oracleResult };
 const __oracleResult = OracleMain();

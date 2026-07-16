@@ -72,5 +72,5 @@
       }
     }
   ],
-  "residual": "list(1, 2, 3).reduce((__acc, __item) => __acc + __item, 0);\n"
+  "residual": "[1, 2, 3].reduce((__acc, __item) => __acc + __item, 0);\n"
 }
