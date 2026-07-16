@@ -1,7 +1,13 @@
 /**
- * The infer-family peepholes — the opening pair (constitution §3.5/§6/§9 Phase-2
- * opening; mission: "PEEPHOLES land at Phase-2 opening: infer scalar-fold +
- * cache-key-elide").
+ * The infer-family idioms — the opening pair (constitution §3.5/§6/§9 Phase-2
+ * opening), now DECISION FUNCTIONS (engine plan §2 E2: "CSE and the peephole
+ * pair become sharing/idiom decision views… decided pre-census"), not a
+ * `Peephole` table entry. `../model/model.ts`'s `sm.idiomAt(node)` is the one
+ * caller — a per-node query the WALKER consults inline (`walker/walk.ts`'s
+ * `lowerApp`), never a whole-tree rewrite pass. `../peepholes/index.ts`
+ * composes these two into that single decision, including the recursive
+ * bottom-up ordering (cache-key-elide on the inner call must be visible to
+ * the outer scalar-fold) — see that module's header.
  *
  * Both rewrites are grounded against `arrivalInferCapability`
  * (inhuman/foundations/llm-plane-arrival-env/src/infer.ts) — the REAL contract
@@ -19,13 +25,12 @@
  * `schemaSlot` in the same file: "a scheme `#f` crosses the membrane as JS
  * `false`; treat it, `null`, and `undefined` uniformly as absent").
  */
-import type { App, CoreForm, Ref } from "../coreform/types.js";
-import type { Peephole, PeepholeCtx } from "./types.js";
+import type { App, CoreForm, NodeId, Ref } from "../coreform/types.js";
 
 /**
- * Every registry symbol name either peephole below keys its `match` on. Used
+ * Every registry symbol name either idiom below keys its decision on. Used
  * ONLY by index.ts's whole-program shadowing guard (see that module's header)
- * — NOT read by `match`/`rewrite` themselves, which stay pure per-node
+ * — NOT read by the decision functions themselves, which stay pure per-node
  * predicates per Law C.
  */
 export const INFER_PEEPHOLE_LOAD_BEARING_NAMES: readonly string[] = ["car", "infer", "infer/chat"];
@@ -68,58 +73,59 @@ const isFalseLiteral = (n: CoreForm): boolean => n.kind === "Lit" && n.value.kin
 //     `inferRule(verb)` factory every other infer-family entry already uses —
 //     `{ call: (args, ctx) => Call(ctx.runtime(verb), args) }`, no new Residual
 //     shape, no walker change;
-//   - is ASYNC-IFY-transparent for free: adding the two new verb strings to
-//     `inferAsyncSeeds` is the WHOLE integration — the cascade already keys
-//     asyncness off `RuntimeRef` symbol membership in that set, structurally
-//     blind to what the symbol name spells;
+//   - is ASYNC-IFY-transparent for free: the two verb strings are members of
+//     `inferAsyncSeeds` — the cascade already keys asyncness off `RuntimeRef`
+//     symbol membership in that set, structurally blind to what the symbol
+//     name spells;
 //   - gives the (future, Phase-2/3) runtime shim a real seam to answer
 //     differently (return the bare completion, never wrap it) without any
 //     compiler-side branching on "was this folded" — the SYMBOL NAME already
 //     carries that fact.
-export const inferScalarFold: Peephole = {
-  name: "infer-scalar-fold",
+//
+// COMPOSITION WITH cache-key-elide (E2b): the OLD bottom-up pass rewrote the
+// inner `(infer …)` call's cache-key argument away BEFORE the outer `car`
+// fold ever examined it, so the fused node's args were already trimmed. As a
+// per-node decision, this function accepts `effectiveInnerOf` — the caller's
+// own recursive `idiomAt` lookup, applied to the inner call — instead of
+// re-deriving that composition itself; see index.ts's `idiomDecisionAt` for
+// the actual wiring (never crossed here — this function never calls back
+// into the model).
+export function inferScalarFoldAt(
+  node: App,
+  effectiveInnerOf: (inner: App) => App,
+  mintId: () => NodeId,
+): App | undefined {
+  if (!isRef(node.fn) || node.fn.name !== "car") return undefined;
+  if (node.kwargs.length !== 0 || node.positionalArgs.length !== 1) return undefined;
+  const arg = node.positionalArgs[0]!;
+  if (!isApp(arg) || !isRef(arg.fn) || !Object.hasOwn(SCALAR_TARGET_OF, arg.fn.name)) return undefined;
 
-  match: (node): boolean => {
-    if (!isApp(node) || !isRef(node.fn) || node.fn.name !== "car") return false;
-    if (node.kwargs.length !== 0 || node.positionalArgs.length !== 1) return false;
-    const arg = node.positionalArgs[0]!;
-    return isApp(arg) && isRef(arg.fn) && Object.hasOwn(SCALAR_TARGET_OF, arg.fn.name);
-  },
+  const scalarName = SCALAR_TARGET_OF[arg.fn.name]!;
+  // The inner call, AFTER its own idiom decision (cache-key-elide) has already
+  // applied — matches the OLD pass's bottom-up guarantee that scalar-fold's
+  // fused args are already-trimmed.
+  const inner = effectiveInnerOf(arg);
 
-  rewrite: (node, ctx: PeepholeCtx): CoreForm => {
-    if (!isApp(node) || !isRef(node.fn) || node.fn.name !== "car" || node.positionalArgs.length !== 1) {
-      throw new Error("infer-scalar-fold: rewrite invoked on a node its own match() would reject — driver bug");
-    }
-    const inner = node.positionalArgs[0]!;
-    if (!isApp(inner) || !isRef(inner.fn)) {
-      throw new Error("infer-scalar-fold: rewrite invoked on a node its own match() would reject — driver bug");
-    }
-    const scalarName = SCALAR_TARGET_OF[inner.fn.name];
-    if (scalarName === undefined) {
-      throw new Error("infer-scalar-fold: rewrite invoked on a node its own match() would reject — driver bug");
-    }
-    // A brand-new logical node (fusing outer car-App + inner infer-App into
-    // one) — mint fresh ids for both the App and its head Ref (see
-    // PeepholeCtx's doc: no single original node honestly owns this identity).
-    // The outer call's span covers the whole `(car (infer …))` text; the head
-    // Ref keeps the INNER call's own span (where "infer"/"infer/chat" was
-    // actually written) — the more useful pointer for any future diagnostic.
-    // Source `;;` comments on the outer form are NOT carried forward (there
-    // are two candidate owners — outer and inner — and picking either would
-    // be arbitrary); this is a documented, deliberate limitation, not an
-    // oversight.
-    const fn: Ref = { kind: "Ref", id: ctx.mintId(), span: inner.fn.span, name: scalarName };
-    const fused: App = {
-      kind: "App",
-      id: ctx.mintId(),
-      span: node.span,
-      fn,
-      positionalArgs: inner.positionalArgs,
-      kwargs: inner.kwargs,
-    };
-    return fused;
-  },
-};
+  // A brand-new logical node (fusing outer car-App + inner infer-App into
+  // one) — mint fresh ids for both the App and its head Ref (see
+  // model.ts's idiom-id floor: no single original node honestly owns this
+  // identity). The outer call's span covers the whole `(car (infer …))` text;
+  // the head Ref keeps the INNER call's own span (where "infer"/"infer/chat"
+  // was actually written) — the more useful pointer for any future
+  // diagnostic. Source `;;` comments on the outer form are NOT carried
+  // forward (there are two candidate owners — outer and inner — and picking
+  // either would be arbitrary); this is a documented, deliberate limitation,
+  // not an oversight.
+  const fn: Ref = { kind: "Ref", id: mintId(), span: arg.fn.span, name: scalarName };
+  return {
+    kind: "App",
+    id: mintId(),
+    span: node.span,
+    fn,
+    positionalArgs: inner.positionalArgs,
+    kwargs: inner.kwargs,
+  };
+}
 
 // ─── (b) cache-key-elide ──────────────────────────────────────────────────────────────
 //
@@ -143,7 +149,7 @@ export const inferScalarFold: Peephole = {
 // throwaway legacy emitter (constitution §9 Phase 0: "knowingly
 // throwaway-by-Phase-3"), not a law to inherit uncritically.
 //
-// What this peephole actually implements — grounded against arrival's OWN
+// What this idiom actually implements — grounded against arrival's OWN
 // contract (`arrivalInferCapability`, not mercury) — is the mission's LITERAL
 // framing, made correct: `nullable()` in llm-plane-arrival-env/src/infer.ts
 // is arrival's real "omitted-cacheKey" law ("a scheme `#f` crosses the
@@ -152,29 +158,19 @@ export const inferScalarFold: Peephole = {
 // cacheKey"). So: drop the cache-key argument ONLY when it is the literal `#f`
 // sentinel (arrival's own "no cache key" spelling) — never when it carries a
 // real value, which is the one respect in which this is STRICTER (more
-// correct) than mercury's blanket drop. A symmetric `schema`-elide peephole
+// correct) than mercury's blanket drop. A symmetric `schema`-elide idiom
 // (mirroring mercury's actual #f-conditional on that slot) is a natural
 // Phase-2 companion but is intentionally NOT built here — the mission names
 // exactly this pair.
 const CACHE_KEY_ARITY = 4; // (model prompt schema cacheKey) — arrivalInferCapability's `type:` annotation
 const CACHE_KEY_VERBS: ReadonlySet<string> = new Set(["infer", "infer/chat"]);
 
-export const cacheKeyElide: Peephole = {
-  name: "cache-key-elide",
-
-  match: (node): boolean => {
-    if (!isApp(node) || !isRef(node.fn) || !CACHE_KEY_VERBS.has(node.fn.name)) return false;
-    if (node.positionalArgs.length !== CACHE_KEY_ARITY) return false;
-    return isFalseLiteral(node.positionalArgs[CACHE_KEY_ARITY - 1]!);
-  },
-
-  rewrite: (node): CoreForm => {
-    if (!isApp(node) || node.positionalArgs.length !== CACHE_KEY_ARITY) {
-      throw new Error("cache-key-elide: rewrite invoked on a node its own match() would reject — driver bug");
-    }
-    // A pure TRIM of an existing call, not a fusion — keep the SAME id/span
-    // (still "the same infer call", just with one fewer trailing argument;
-    // see PeepholeCtx's doc on when to mint vs. reuse). No `ctx` needed.
-    return { ...node, positionalArgs: node.positionalArgs.slice(0, CACHE_KEY_ARITY - 1) };
-  },
-};
+/** cache-key-elide's decision for a single App node, or `undefined`. A pure
+ *  TRIM of an existing call, not a fusion — keep the SAME id/span (still "the
+ *  same infer call", just with one fewer trailing argument). No id minting. */
+export function cacheKeyElideAt(node: App): App | undefined {
+  if (!isRef(node.fn) || !CACHE_KEY_VERBS.has(node.fn.name)) return undefined;
+  if (node.positionalArgs.length !== CACHE_KEY_ARITY) return undefined;
+  if (!isFalseLiteral(node.positionalArgs[CACHE_KEY_ARITY - 1]!)) return undefined;
+  return { ...node, positionalArgs: node.positionalArgs.slice(0, CACHE_KEY_ARITY - 1) };
+}

@@ -70,12 +70,12 @@ export {
 // ── the engine walker (engine-walker.md; constitution §3.5/§4.2/§5.2) ──
 export { runtimeRefsOf, walk, WalkDoorError, type WalkOptions } from "./walker/index.js";
 
-// ── LEGIBILITY — constitution §3.5's third-invention pass. As of E1a, pure-region
-//    CSE only; destructure/singularize dissolved into ./naming/ (see
-//    legibility/legibility.ts's header). Runs PRE-asyncness-materialization (a
-//    documented deviation from the constitution's pipeline diagram — see
-//    legibility.ts's header). ──
-export { elementNameOf, legibility, type LegibilityOptions, pureRegionCse } from "./legibility/index.js";
+// ── LEGIBILITY — constitution §3.5's third invention. All three legs have now
+//    dissolved into views (destructure/singularize into ./naming/ at E1a; pure-
+//    region CSE into ./naming/shared-bindings.ts at E2 — engine plan §2 E2); this
+//    directory survives only as the shared `R`-structural substrate every
+//    dissolution keeps importing (see legibility/index.ts's header). ──
+export { elementNameOf } from "./legibility/index.js";
 
 // ── NAMING — E1a's census + allocation phase (engine plan §2 E1a): the binding
 //    census view, the lexical-namer allocation adapter, and the materialize step
@@ -83,11 +83,15 @@ export { elementNameOf, legibility, type LegibilityOptions, pureRegionCse } from
 //    Plus E1b's import materialization (engine plan §2 E1b) — the RuntimeRef→
 //    Ref commit that replaced the dissolved `frame/` pass (constitution §3.4/§9
 //    Phase 1's minimal FRAME no longer exists; see naming/imports.ts's header
-//    for where its knowledge went) — and E1c's asyncness materialization
-//    (engine plan §2 E1c): `asyncnessOf` (the call-graph fixpoint, confined
-//    inside a model view — SchemeSemanticModel wraps it as `sm.asyncnessOf`)
-//    + `materializeAsyncness` (the mechanical Await/`.async` rewrite), the
-//    dissolved `async-ify/` post-pass's replacement. ──
+//    for where its knowledge went) — E1c's asyncness materialization (engine
+//    plan §2 E1c): `asyncnessOf` (the call-graph fixpoint, confined inside a
+//    model view — SchemeSemanticModel wraps it as `sm.asyncnessOf`) +
+//    `materializeAsyncness` (the mechanical Await/`.async` rewrite), the
+//    dissolved `async-ify/` post-pass's replacement — and E2's shared-bindings
+//    materialization (engine plan §2 E2, second half): `sharedBindingsOf` (the
+//    CSE decision view — SchemeSemanticModel wraps it as `sm.sharedBindingsOf`)
+//    + `materializeSharedBindings` (the mechanical splice/substitute/real-
+//    allocate rewrite), the dissolved `legibility/cse.ts` pass's replacement. ──
 export {
   allocateNames,
   AsyncnessDoorError,
@@ -96,7 +100,9 @@ export {
   materializeAsyncness,
   materializeImports,
   materializeNames,
+  materializeSharedBindings,
   MaterializeImportsDoorError,
+  sharedBindingsOf,
   type AsyncnessFacts,
   type AsyncType,
   type BindingCensus,
@@ -108,6 +114,8 @@ export {
   type MaterializeImportsOptions,
   type NameAllocation,
   type ScopeCensus,
+  type SharedBindingGroup,
+  type SharedBindingsView,
 } from "./naming/index.js";
 
 // ── the stage-0 runtime manifest (constitution §4.4 Stage 0; the module itself is

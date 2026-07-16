@@ -44,14 +44,17 @@
  *    to) is call-site-invisible. `./types.js`'s own header makes the same
  *    call for the spine's v1 ("no mobx… wraps this in the editor phase").
  */
-import type { ClassifyResult, CoreForm, NodeId } from "../coreform/types.js";
+import type { App, ClassifyResult, CoreForm, NodeId } from "../coreform/types.js";
 import { classify } from "../coreform/classify.js";
 import { desugar } from "../front/desugar.js";
 import { parseSexprs } from "../front/parse.js";
 import { asyncnessOf } from "../naming/asyncness.js";
 import type { AsyncnessFacts } from "../naming/asyncness.js";
 import { bindingCensusOf } from "../naming/census.js";
+import { sharedBindingsOf } from "../naming/shared-bindings.js";
 import type { BindingCensus } from "../naming/types.js";
+import type { SharedBindingsView } from "../naming/shared-bindings.js";
+import { idiomDecisionAt, maxNodeId, programShadowsPeepholeNames } from "../peepholes/index.js";
 import type { EmitRegistry, EmitRegistryRow } from "../registry/harvest.js";
 import type { CompilationUnit } from "../residual/types.js";
 import { narrowsMembersOf } from "../type-emit/narrows.js";
@@ -150,24 +153,78 @@ export class SchemeSemanticModel {
    * already has — re-deriving that decision procedure here would duplicate
    * it, dishonestly, the moment a future rule's policy changes).
    *
-   * Two honest, documented limits (Law F: never wrong, always visible), not
-   * hidden behind a green test:
-   *  1. a symbol lexically bound only by a scope OUTSIDE `node` resolves here
-   *     as free — harmless UNLESS that outer binding happens to SHADOW a real
-   *     registry name (an adversarial pattern absent from today's corpus): a
-   *     free symbol either finds a registry row or doors, it never invents a
-   *     WRONG `RuntimeRef`, so this is an over-approximation risk, never a
-   *     silent-wrong one.
-   *  2. answers for exactly the node it is HANDED — so a caller that queries
-   *     the model's own `sm.coreform` forms sees the PRE-peephole census: a
-   *     peephole-folded symbol (`infer` → `infer/scalar`) is E2's `sm.idiomAt`
-   *     integration ("CSE and the peephole pair become sharing/idiom decision
-   *     views… decided pre-census" — engine plan §2 E2), not E0's. Until E2,
-   *     the E1b consumer (`oracle/harness.ts`'s `compileGreenfield`) resolves
-   *     this at the call site by querying the view over the PEEPHOLED forms —
-   *     the program the walk actually lowers.
+   * One honest, documented limit (Law F: never wrong, always visible), not
+   * hidden behind a green test: a symbol lexically bound only by a scope
+   * OUTSIDE `node` resolves here as free — harmless UNLESS that outer binding
+   * happens to SHADOW a real registry name (an adversarial pattern absent
+   * from today's corpus): a free symbol either finds a registry row or
+   * doors, it never invents a WRONG `RuntimeRef`, so this is an
+   * over-approximation risk, never a silent-wrong one.
+   *
+   * DISSOLVED at E2 (engine plan §2 E2, the second half): this view used to
+   * carry a SECOND limit — it answers for exactly the node it is HANDED, so a
+   * caller querying `sm.coreform`'s own (pre-peephole) forms would see the
+   * WRONG census once the peephole pass folded a symbol (`infer` →
+   * `infer/scalar`), and `oracle/harness.ts`'s `compileGreenfield` had to
+   * work around it by querying over the PEEPHOLED forms instead — a
+   * caller-side rule pinned by `model-imports-agree.test.ts`. That rule is
+   * gone along with the pass it existed to route around:
+   * `computeImportsOf`'s own synthetic walk (below) now consults `idiomAt`
+   * exactly like the real pipeline's walk does, so `importsOf`'s answer over
+   * `sm.coreform`'s ORIGINAL forms already agrees with the emitted imports —
+   * the view and the tree agree BY CONSTRUCTION, not by a call-site
+   * discipline a future caller could forget.
    */
   readonly importsOf: (node: CoreForm) => ReadonlySet<string>;
+
+  /**
+   * E2's idiom decision-view (engine plan §2 E2, second half): "the peephole
+   * pair become… idiom decision views (`sm.idiomAt(node)`) — decided
+   * pre-census". Given an `App`, answers the cross-node idiom rewrite the
+   * dissolved `peephole()` PASS used to apply eagerly (infer-scalar-fold,
+   * cache-key-elide — `../peepholes/`) — or `undefined`. The WALKER consumes
+   * it inline (`../walker/walk.ts`'s `lowerApp`, at the top of its §4.2
+   * dispatch ladder) instead of the tree having been pre-rewritten; this
+   * view's OWN synthetic walk (`computeImportsOf`, below) passes the SAME
+   * function, so `importsOf` and the real emission path can never disagree
+   * about which symbols a folded call needs (see `importsOf`'s own doc,
+   * just above, for the caller-side rule this dissolves).
+   *
+   * Memoized per node identity (a `WeakMap`, matching `importsOf`'s own
+   * discipline) — `inferScalarFold`'s recursive lookup on its inner call
+   * (`../peepholes/index.ts`'s `idiomDecisionAt`, the `recurse` dependency)
+   * re-enters THIS same memoized entry point, never a private second
+   * traversal. `idiomShadowed`/`nextIdiomId` below are the two per-model,
+   * lazily-computed pieces of state `idiomDecisionAt` needs but does not own
+   * (the whole-program shadow verdict — computed ONCE, not per query — and a
+   * monotonically-increasing id-mint floor seeded above every id
+   * `classify()` produced): both are exactly the state the dissolved
+   * `peephole()` pass used to thread through a single whole-tree call,
+   * now threaded through a per-node view instead. No LSP consumer of its own
+   * yet (a hover/inlay-hint surface showing "this compiles to `infer/scalar`"
+   * is the natural one); compiler consumer: `walker/walk.ts`'s `lowerApp`,
+   * this view's own `computeImportsOf`.
+   */
+  readonly idiomAt: (node: App) => App | undefined;
+
+  /**
+   * E2's sharing decision-view (engine plan §2 E2, second half): "CSE…
+   * become… sharing… decision views (`sm.sharedBindingsOf(unit)`) — decided
+   * pre-census so shared bindings get named like everything else". Given a
+   * walked (post-`walk()`, fully-materialized-name) `CompilationUnit`,
+   * answers WHICH pure-region common-subexpression groups are shareable
+   * (provenance/cacheClass-gated — the exact eligibility rule the dissolved
+   * `legibility/cse.ts` pass read off `this.registry`, ported verbatim) —
+   * the DECISION only; `../naming/shared-bindings.ts`'s
+   * `materializeSharedBindings` is the mechanical commit (splice the hoisted
+   * `Const`s, substitute occurrences, then route their NAMES through the
+   * SAME `bindingCensusOf`/`allocateNames` machinery E1a's naming phase
+   * uses — "real allocated names", not a bespoke glue-minting helper). A
+   * THIN wrap over `sharedBindingsOf` — the SAME "delegate to the same
+   * machinery" discipline as every other view above. No LSP consumer of its
+   * own yet; compiler consumer: `oracle/harness.ts`'s `compileGreenfield`.
+   */
+  readonly sharedBindingsOf: (unit: CompilationUnit) => SharedBindingsView;
 
   /**
    * E1a's global binding census (engine plan §2 E1a item 1) — every binding
@@ -223,6 +280,19 @@ export class SchemeSemanticModel {
   // sees them, `#`-brand or not.
   private factsExtractionCache: FactsExtraction | undefined;
   private readonly importsCache = new WeakMap<CoreForm, ReadonlySet<string>>();
+  /** `idiomAt`'s own memo — keyed by `App` identity, `WeakMap`-valued so a
+   *  cached "no idiom applies" (`undefined`) is distinguishable from "never
+   *  queried" via `.has()` (see `idiomAt`'s field, below). */
+  private readonly idiomCache = new WeakMap<App, App | undefined>();
+  /** The whole-program shadow verdict `idiomDecisionAt` needs (its `shadowed`
+   *  dependency) — computed ONCE, lazily, on first `idiomAt` query, not per
+   *  query (mirrors `facts()`'s own lazy-cache discipline just below). */
+  private idiomShadowedCache: boolean | undefined;
+  /** The next id `idiomAt`'s fusions may mint — seeded lazily, above every id
+   *  `classify()` produced (`maxNodeId`, `../peepholes/index.ts`), then
+   *  incremented on every mint. A plain mutable field (not a getter/method —
+   *  the same field-only discipline this class's header requires). */
+  private nextIdiomId: number | undefined;
 
   constructor(source: string, registry: EmitRegistry) {
     this.source = source;
@@ -241,6 +311,17 @@ export class SchemeSemanticModel {
       this.importsCache.set(node, symbols);
       return symbols;
     };
+    this.idiomAt = (node) => {
+      if (this.idiomCache.has(node)) return this.idiomCache.get(node);
+      const decision = idiomDecisionAt(node, {
+        shadowed: this.isIdiomShadowed(),
+        mintId: () => this.mintIdiomId(),
+        recurse: this.idiomAt,
+      });
+      this.idiomCache.set(node, decision);
+      return decision;
+    };
+    this.sharedBindingsOf = (unit) => sharedBindingsOf(unit, this.registry);
   }
 
   /** The lazy, once-per-model whole-program extraction `factsAt`/`factsMap`
@@ -261,11 +342,39 @@ export class SchemeSemanticModel {
   /** `importsOf`'s cache-miss path: walk `node` as a synthetic one-form
    *  "program" (see `importsOf`'s doc for why this — not a hand-rolled
    *  re-derivation of the walker's dispatch ladder — is the honest
-   *  implementation), then read the same census `frame` reads today. */
+   *  implementation), then read the same census `frame` reads today.
+   *  `idiomAt: this.idiomAt` is the load-bearing addition E2 makes: this
+   *  synthetic walk must fold the SAME idioms the real pipeline's walk does,
+   *  or this view would under/over-count relative to the actual emitted
+   *  `RuntimeRef`s the moment a folded symbol (`infer` → `infer/scalar`) is
+   *  involved — see `importsOf`'s own doc for the caller-side rule this
+   *  dissolves. */
   private readonly computeImportsOf = (node: CoreForm): ReadonlySet<string> => {
     const oneForm: ClassifyResult = { forms: [node], originAtom: new Map(), parentOf: new Map(), doors: [] };
-    const unit = walk(oneForm, { registry: this.registry, facts: this.facts().facts, register: "run" });
+    const unit = walk(oneForm, {
+      registry: this.registry,
+      facts: this.facts().facts,
+      idiomAt: this.idiomAt,
+      register: "run",
+    });
     return runtimeRefsOf(unit);
+  };
+
+  /** `idiomAt`'s `shadowed` dependency — lazy, computed once (see the field's
+   *  own doc, above). Arrow-valued (not a method) for the same R11
+   *  prototype-allow-list reason `facts` is. */
+  private readonly isIdiomShadowed = (): boolean => {
+    if (this.idiomShadowedCache === undefined) {
+      this.idiomShadowedCache = programShadowsPeepholeNames(this.coreform.forms);
+    }
+    return this.idiomShadowedCache;
+  };
+
+  /** `idiomAt`'s `mintId` dependency — lazy floor, then monotonically
+   *  increasing (see the field's own doc, above). */
+  private readonly mintIdiomId = (): NodeId => {
+    if (this.nextIdiomId === undefined) this.nextIdiomId = maxNodeId(this.coreform.forms) + 1;
+    return this.nextIdiomId++ as NodeId;
   };
 
   nodeAt(_offset: number): CoreForm | undefined {

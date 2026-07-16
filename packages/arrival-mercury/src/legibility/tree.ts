@@ -1,17 +1,20 @@
 /**
- * Shared structural utilities for the LEGIBILITY pass (constitution §3.5's third
- * invention). All three legs (destructure, singularize, CSE) need the same three
- * primitives: a one-level "map children" reconstruction over `R`, an identity-based
- * deep substitution built on top of it, and a global bound-name census for
- * collision-safe minting.
+ * Shared structural utilities — originally built for constitution §3.5's third
+ * invention (the LEGIBILITY pass; all three legs — destructure, singularize, CSE —
+ * needed the same primitives: a one-level "map children" reconstruction over `R`, an
+ * identity-based deep substitution built on top of it, and a global bound-name census
+ * for collision-safe minting). All three legs have since dissolved into VIEWS
+ * elsewhere (destructure/singularize into ../naming/ at E1a; CSE into
+ * ../naming/shared-bindings.ts at E2 — engine plan §2), but this substrate outlives
+ * the pass it was built for: every dissolution keeps importing `childrenOf`/
+ * `mapChildren`/`substituteBy`/`collectBoundNames` directly rather than duplicating
+ * the `R`-children shape a fifth time (walker/walk.ts's `runtimeRefsOf`, ASYNC-IFY's
+ * own `childrenOf`, and FRAME's `childrenOf`/`takenNamesOf` were the pre-existing
+ * three independent copies this module was already the fourth of).
  *
- * This is a FOURTH independent copy of the `R`-children shape — the walker's
- * `runtimeRefsOf`, ASYNC-IFY's `childrenOf`, and FRAME's `childrenOf`/`takenNamesOf`
- * are the other three, and each of those modules' own header notes the tension
- * explicitly ("candidates for extraction only when a fourth appears", frame.ts).
- * Landing legibility as its own fourth copy — not a shared extraction — is the
- * deliberate choice here too: the three existing passes evolved independently on
- * purpose, unifying them now would touch three files this mission has no reason to
+ * This is a FOURTH independent copy of the `R`-children shape — landing it as its
+ * own copy, not a shared extraction, was the deliberate choice: the other passes
+ * evolved independently on purpose, unifying them would touch files with no reason to
  * open, and this package's own naming.ts already documents the same "adapt, don't
  * import" stance for copy-as-chunk material. Revisit if a fifth pass arrives.
  */
@@ -245,21 +248,6 @@ export function collectBoundNames(unit: CompilationUnit): Set<string> {
   for (const d of unit.decls) visitDecl(d);
   for (const s of unit.body) visit(s);
   return out;
-}
-
-/** Mint a collision-free `__`-prefixed binding, matching the walker's own `fresh()`
- *  convention exactly (walk.ts's header: "`fresh()` mints `__`-prefixed glue names"
- *  — `cleanName` can never itself emit a leading underscore, so this can never
- *  collide with a user binding). Reserved for ENGINE-GLUE names (CSE temps) — the
- *  user-facing ladder (destructure ordinals, singularized element names) uses
- *  `mintReadable` below instead (SIGN-OFF.md's own bar: "no `__` glue leaking into
- *  user-facing positions"). */
-export function mintFresh(hint: string, taken: Set<string>, cleanName: (s: string) => string): Binding {
-  const base = `__${cleanName(hint)}`;
-  let text = base;
-  for (let n = 2; taken.has(text); n++) text = `${base}${n}`;
-  taken.add(text);
-  return { t: "Binding", text };
 }
 
 /** Mint a collision-free READABLE binding (no prefix, no cleaning — callers already

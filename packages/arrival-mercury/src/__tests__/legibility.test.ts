@@ -1,22 +1,28 @@
 /**
- * LEGIBILITY gate tests (constitution §3.5's third invention; ../legibility/).
- * As of E1a (engine plan §2 E1a), destructure/singularize dissolved into
- * ../naming/ (census.ts's use-shape analysis + allocate.ts's naming policy) —
- * `walk()` itself now produces the destructured/singularized shape, so this
- * file's "composed pass" tests exercise `compile()` (== `walk()`) directly for
- * those two behaviors. Their own gate tests live in `naming.test.ts`. What
- * remains a genuinely independent, callable pass here is pure-region CSE
- * (leg 3) — a real post-walk pass, unaffected by E1a (see legibility.ts's own
- * header for why it stays post-walk). The final `describe` runs the REAL
- * wiring (`compileGreenfield`, one shared `OracleSession` per the
- * oracle-harness's §4.1 reuse contract) to verify end-to-end behavior against
- * the actual harvested `infer` capability, oracle-agreement included.
+ * LEGIBILITY gate tests (constitution §3.5's third invention). As of E1a
+ * (engine plan §2 E1a), destructure/singularize dissolved into ../naming/
+ * (census.ts's use-shape analysis + allocate.ts's naming policy) — `walk()`
+ * itself now produces the destructured/singularized shape, so this file's
+ * "composed pass" tests exercise `compile()` (== `walk()`) directly for
+ * those two behaviors. Their own gate tests live in `naming.test.ts`. Leg 3
+ * (pure-region CSE) DISSOLVED at E2 (engine plan §2 E2, second half) into
+ * `../naming/shared-bindings.ts`'s `sharedBindingsOf` (the decision view) +
+ * `materializeSharedBindings` (the mechanical commit) — a real post-walk
+ * pass still, unaffected by E1a, just no longer independently callable as
+ * `pureRegionCse`/`legibility()`; every golden below is UNCHANGED bytes,
+ * only the call shape moved (`materializeSharedBindings(sharedBindingsOf(u,
+ * registry))` replaces `pureRegionCse(u, registry)` / `legibility(u,
+ * {registry})`). The final `describe` runs the REAL wiring
+ * (`compileGreenfield`, one shared `OracleSession` per the oracle-harness's
+ * §4.1 reuse contract) to verify end-to-end behavior against the actual
+ * harvested `infer` capability, oracle-agreement included.
  */
 import { describe, expect, it, afterAll, beforeAll } from "vitest";
 
 import type { EmitRule } from "@here.build/arrival/emit";
 
 import type { EmitRegistry, EmitRegistryRow } from "../registry/index.js";
+import { materializeSharedBindings, sharedBindingsOf } from "../naming/shared-bindings.js";
 import { render } from "../residual/render.js";
 import { Arrow, Bin, Call, Index, Lit, Method, Ref, type Binding, type CompilationUnit, type R } from "../residual/types.js";
 import { phase1Rules } from "../rules/index.js";
@@ -25,8 +31,12 @@ import { classify } from "../coreform/index.js";
 import { desugar } from "../front/desugar.js";
 import { parseSexprs } from "../front/parse.js";
 import { compileGreenfield, openOracleSession, runOracle, type OracleSession } from "../oracle/harness.js";
-import { pureRegionCse } from "../legibility/cse.js";
-import { legibility } from "../legibility/legibility.js";
+
+/** `pureRegionCse`'s replacement call shape (module header): the decision,
+ *  then its mechanical commit — over the SAME registry the dissolved pass
+ *  read `cacheClass`/`provenance` off. */
+const sharedBindings = (u: CompilationUnit, registry: EmitRegistry): CompilationUnit =>
+  materializeSharedBindings(sharedBindingsOf(u, registry));
 
 // ── a hand-rolled registry (same convention as walker.test.ts/async-ify.test.ts) ──
 
@@ -159,59 +169,65 @@ describe("element-name singularization — now decided inside walk() (engine pla
   });
 });
 
-// ── leg 3: pure-region CSE (the one leg still an independent, callable pass) ──────
+// ── leg 3: pure-region CSE (dissolved into a decision view + materializer, E2) ────
 
-describe("pureRegionCse — pure-region common-subexpression elimination (constitution §3.5/§2.3)", () => {
+describe("sharedBindingsOf/materializeSharedBindings — pure-region common-subexpression elimination (constitution §3.5/§2.3)", () => {
   it("two identical pure calls dedupe to one Const, hoisted before the first use", () => {
-    expect(emit(`(define (f x) (+ (g x) (g x)))`, (u) => pureRegionCse(u, testRegistry))).toBe(
+    expect(emit(`(define (f x) (+ (g x) (g x)))`, (u) => sharedBindings(u, testRegistry))).toBe(
       `function f(x) {\n    const __g = g(x);\n    return __g + __g;\n}\n`,
     );
   });
 
   it("a sink-provenance call is NEVER deduped — even carrying cacheClass \"pure\" (the defensive veto)", () => {
     const src = `(define (f x) (+ (sinkop x) (sinkop x)))`;
-    expect(emit(src, (u) => pureRegionCse(u, testRegistry))).toBe(emit(src, (u) => u)); // unchanged
+    expect(emit(src, (u) => sharedBindings(u, testRegistry))).toBe(emit(src, (u) => u)); // unchanged
   });
 
   it("an infer pair dedupes — infer is cacheClass \"pure\" (constitution §2.3)", () => {
-    expect(emit(`(define (f x) (+ (infer x) (infer x)))`, (u) => pureRegionCse(u, testRegistry))).toBe(
+    expect(emit(`(define (f x) (+ (infer x) (infer x)))`, (u) => sharedBindings(u, testRegistry))).toBe(
       `function f(x) {\n    const __infer = infer(x);\n    return __infer + __infer;\n}\n`,
     );
   });
 
   it("a single occurrence never hoists (≥2 sites required)", () => {
     const src = `(define (f x) (g x))`;
-    expect(emit(src, (u) => pureRegionCse(u, testRegistry))).toBe(emit(src, (u) => u));
+    expect(emit(src, (u) => sharedBindings(u, testRegistry))).toBe(emit(src, (u) => u));
   });
 
   it("a registered symbol with no cacheClass declared at all is never eligible", () => {
     const src = `(define (f x) (+ (plainop x) (plainop x)))`;
-    expect(emit(src, (u) => pureRegionCse(u, testRegistry))).toBe(emit(src, (u) => u));
+    expect(emit(src, (u) => sharedBindings(u, testRegistry))).toBe(emit(src, (u) => u));
+  });
+
+  it("sharedBindingsOf's OWN decision is empty for a program with nothing to share (the identity fast-path)", () => {
+    const view = sharedBindingsOf(compile(`(define (f x) (g x))`), testRegistry);
+    expect(view.groups).toEqual([]);
+    expect(materializeSharedBindings(view)).toBe(view.unit); // same reference — no rewrite performed
   });
 });
 
-// ── the composed pass (now: walk()'s own destructure/singularize + CSE on top) ────
+// ── the composed pass (now: walk()'s own destructure/singularize + CSE view/materializer) ──
 
-describe("legibility — the composed pass (walk()'s destructure/singularize + CSE)", () => {
+describe("legibility — the composed pass (walk()'s destructure/singularize + shared bindings)", () => {
   it("destructure alone can collapse a doubly-nested car composition sharing one root into a single slot", () => {
     // `(car (car pairs))` occurring twice: `cdrOffsetOf` does not recognize a
     // NESTED Index as a cdr-composition (only Ref-direct or Method("slice",…)
     // chains — naming/census.ts's own header), so only the INNER `(car pairs)` at
     // each occurrence qualifies (both at position 0) — `pairs` destructures to a
     // single `[head]` slot, and the (still-present) outer `head[0]` reads are
-    // NOT further reachable by CSE (cse.ts's header: Call-only scope, Index
-    // chains are out of this wave's scope) — a real, verified, non-obvious
+    // NOT further reachable by CSE (shared-bindings.ts's header: Call-only scope,
+    // Index chains are out of this wave's scope) — a real, verified, non-obvious
     // interaction, not a hand-guessed no-op. `compile()` already produces the
-    // destructured shape; `legibility()` (CSE-only) is a no-op on top of it here
-    // (no duplicate Call nodes survive the destructure).
+    // destructured shape; the shared-bindings materializer is a no-op on top of
+    // it here (no duplicate Call nodes survive the destructure).
     const src = `(define (f pairs) (+ (car (car pairs)) (car (car pairs))))`;
-    const out = render(legibility(compile(src), { registry: testRegistry }));
+    const out = render(sharedBindings(compile(src), testRegistry));
     expect(out).toBe(`function f([head]) {\n    return head[0] + head[0];\n}\n`);
   });
 
   it("destructure + singularize compose: a destructured param is left alone by singularize (no double-rename)", () => {
     const src = `(define (f examples) (map (lambda (pair) (+ (car pair) (car (cdr pair)))) examples))`;
-    const out = render(legibility(compile(src), { registry: testRegistry }));
+    const out = render(sharedBindings(compile(src), testRegistry));
     // The map here is single-list (mapEmitRule forwards the lambda as-is — no fresh
     // param minted), so singularize has nothing to touch; destructure still fires
     // on the callback's own `pair` parameter (naming/census.ts's destructure
@@ -234,8 +250,8 @@ describe("legibility wired into compileGreenfield — the real pipeline, oracle 
   });
 
   it("an infer pair dedupes THROUGH the real ASYNC-IFY plane: one await, two sync Ref reads", () => {
-    // The load-bearing golden for the pipeline-ordering decision (legibility.ts's
-    // header): CSE runs pre-ASYNC-IFY, hoisting the duplicate infer call into an
+    // The load-bearing golden for the pipeline-ordering decision
+    // (naming/shared-bindings.ts's header): CSE runs pre-ASYNC-IFY, hoisting the duplicate infer call into an
     // ordinary sync-shaped Const BEFORE asyncness exists — ASYNC-IFY then awaits
     // that ONE Const's init exactly like any other seeded call, and both reads
     // are plain (unconditionally-sync) Refs. If this ever regresses to two

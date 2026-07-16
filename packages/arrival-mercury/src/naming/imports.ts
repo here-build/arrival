@@ -2,19 +2,32 @@
  * RUNTIME IMPORTS — E1b's cut-over (engine plan §2 E1b): commits the
  * `RuntimeRef`→`Ref` resolution the dissolved `frame/` pass used to own. The
  * SYMBOL SET now comes from the model (`sm.importsOf`, unioned over the
- * program's PEEPHOLED top-level forms — the forms `walk` actually lowers;
- * see `oracle/harness.ts`'s `compileGreenfield`) instead of a fresh
- * post-render tree scan; this module's own job shrinks to committing that
- * already-decided set onto the tree: prepend the runtime module's `Import`
- * decl, rewrite every surviving `RuntimeRef` node to a `Ref` against its
- * manifest-named `Binding`.
+ * program's top-level forms — see `oracle/harness.ts`'s `compileGreenfield`)
+ * instead of a fresh post-render tree scan; this module's own job shrinks to
+ * committing that already-decided set onto the tree: prepend the runtime
+ * module's `Import` decl, rewrite every surviving `RuntimeRef` node to a
+ * `Ref` against its manifest-named `Binding`.
+ *
+ * E2 UPDATE (engine plan §2 E2, second half — dissolves a caller-side rule
+ * this header used to state): this used to read "unioned over the program's
+ * PEEPHOLED top-level forms" — `compileGreenfield` had to query `sm.importsOf`
+ * over a separate `peephole()` pass's OUTPUT, because that pass folded
+ * symbols (`infer` → `infer/scalar`) `sm.coreform`'s own forms never showed.
+ * That pass, and the caller-side rule it forced, are both gone: folding now
+ * happens INSIDE `sm.idiomAt` (a per-node view the walker consults inline,
+ * `walker/walk.ts`'s `lowerApp`), and `importsOf`'s own synthetic walk
+ * (`model.ts`'s `computeImportsOf`) consults the SAME view — so `importsOf`
+ * queried over `sm.coreform`'s ORIGINAL forms already agrees with the
+ * emitted imports, by construction. See `model.ts`'s `importsOf` doc for the
+ * full account.
  *
  * ── Why this can't run inside walk()'s own census→allocate→materialize call ──
- * LEGIBILITY's CSE eligibility check (legibility/cse.ts) keys off
+ * The SHARED-BINDINGS view's eligibility check (`naming/shared-bindings.ts`,
+ * the dissolved `legibility/cse.ts`'s successor) keys off
  * `n.callee.t === "RuntimeRef"` to recognize a hoistable call — the marker
- * must survive CSE undisturbed. Resolving RuntimeRef→Ref any earlier (inside
- * walk()'s own materialize step, alongside the rest of E1a's naming commit)
- * would blind CSE to registry calls entirely. So this step keeps the
+ * must survive that pass undisturbed. Resolving RuntimeRef→Ref any earlier
+ * (inside walk()'s own materialize step, alongside the rest of E1a's naming
+ * commit) would blind it to registry calls entirely. So this step keeps the
  * pipeline POSITION `frame` used to occupy — after the asyncness
  * materializer (naming/asyncness.ts's `materializeAsyncness`), before render
  * — a genuine tree-shape constraint, not a reluctance to relocate the
@@ -38,11 +51,11 @@
  * to seed from has already become an opaque `Ref`: the whole-program "did
  * any seed fire" census silently answers "no" and every promise-typed call
  * renders un-awaited — a correctness regression, not a style miss. So: two
- * independent passes (LEGIBILITY's CSE, the asyncness materializer's seed
- * detection) key off the SAME `RuntimeRef` marker, each for its own
- * independent reason, and this file must run after BOTH. The dissolved
- * pass's NAME is gone from this sentence; its constraint is not — it moved
- * with the mechanism, to `naming/asyncness.ts`.
+ * independent passes (the shared-bindings materializer's eligibility check,
+ * the asyncness materializer's seed detection) key off the SAME `RuntimeRef`
+ * marker, each for its own independent reason, and this file must run after
+ * BOTH. The dissolved pass's NAME is gone from this sentence; its constraint
+ * is not — it moved with the mechanism, to `naming/asyncness.ts`.
  *
  * ── No collision ladder — the aliasing knowledge that actually moved ────────
  * `frame`'s dissolved implementation re-scanned the WHOLE finished tree for
@@ -60,11 +73,13 @@
  * guess re-deciding what allocation already decided.
  *
  * This relies on the `RuntimeRef` symbol set being STABLE from walk() through
- * LEGIBILITY/the asyncness materializer — neither mints a new registry call
- * nor folds one away this wave (verified: legibility's CSE and
- * `materializeAsyncness`'s seed detection both only READ `RuntimeRef` call
- * targets, never construct one; peephole's folds are PRE-walk, `model.ts`'s
- * own documented limit). `../__tests__/model-imports-agree.test.ts` is the
+ * the shared-bindings materializer and the asyncness materializer — neither
+ * mints a new registry call nor folds one away this wave (verified: the
+ * shared-bindings view and `materializeAsyncness`'s seed detection both only
+ * READ `RuntimeRef` call targets, never construct one; `sm.idiomAt`'s folds
+ * happen INSIDE `walk()` itself, at `lowerApp` — before ANY `RuntimeRef` this
+ * module ever sees is minted, never a separate stage this file's own
+ * ordering could race). `../__tests__/model-imports-agree.test.ts` is the
  * regression guard for this invariant.
  *
  * Two throws remain, both Law F ("never wrong, always visible"):

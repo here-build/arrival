@@ -106,6 +106,19 @@ export interface WalkOptions {
   /** TypeFacts side table, NodeId-keyed (typefacts-extraction.md's `.facts` field).
    *  Default empty ⇒ every decision conservative (Law F). */
   readonly facts?: ReadonlyMap<NodeId, TypeFacts>;
+  /**
+   * E2's idiom decision-view (engine plan §2 E2, second half:
+   * `SchemeSemanticModel.idiomAt` — model.ts). Consulted at the TOP of every
+   * `App` this walker lowers (see `lowerApp`, below) — the dissolved
+   * `peephole()` whole-tree PASS used to pre-rewrite the tree before `walk()`
+   * ever ran; this option is the SAME decision, consumed inline instead
+   * (mirrors how `facts`, above, is already consulted per-node rather than
+   * pre-baked into the tree). Default `undefined` ⇒ no idiom ever fires —
+   * `lowerApp` falls straight through to its ordinary §4.2 ladder, exactly
+   * the pre-E2 behavior (every existing hand-rolled-registry test in this
+   * package that never supplies `idiomAt` is unaffected).
+   */
+  readonly idiomAt?: (node: App) => App | undefined;
   /** `"run"` = executable artifact (Law T strict); `"read"` = glass (clean forms). */
   readonly register: "run" | "read";
 }
@@ -822,6 +835,17 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
   // ── App (the §4.2 dispatch ladder) ────────────────────────────────────────────────
 
   const lowerApp = (n: App): R => {
+    // E2's idiom decision, consulted FIRST (engine plan §2 E2, second half):
+    // the dissolved `peephole()` pass used to pre-rewrite the tree so this
+    // ladder never saw the un-folded shape at all; `idiomAt` is the SAME
+    // decision, asked inline. A decision recurses through the ordinary
+    // ladder (never re-entering THIS check a second time for the SAME
+    // reason it wouldn't have under the old pass — see `idiomDecisionAt`'s
+    // own header: the two idioms match disjoint head shapes, so a fused/
+    // trimmed node can never match either again).
+    const idiom = opts.idiomAt?.(n);
+    if (idiom !== undefined) return lowerApp(idiom);
+
     // Rung 0 (structural, pre-registry): keyword accessor `(:field obj)`. Index+Lit,
     // never Member — Dict writes raw keys, and the read MUST share that one key-fold
     // (engine-walker.md §5: `(let ((d (dict :max-words 5))) (:max-words d))`).

@@ -396,3 +396,46 @@ describe("oracle agreement over the real session", () => {
     expect(verdict.agree, verdict.detail).toBe(true);
   });
 });
+
+// ─── E2b — a Contract-side RULE returning a ChunkExpr (residual-lite's type acceptance) ──
+//
+// `@here.build/arrival/emit`'s residual-lite.ts now accepts `ChunkExpr` as a legal
+// `EmitRule<R>` return shape (type-level only — no constructor there; that file's own
+// growth discipline waits for a real Contract rule to need one). This package owns the
+// only `ChunkExpr` constructor that exists (`residual/types.ts`, via `chunk.ts`'s
+// `arrayChunkAst`), so this is the consuming-side proof the type acceptance is safe to
+// build on: a rule minting a chunk (exactly as a future Contract rule would) round-trips
+// through `walk`/`asyncnessOf`/`materializeAsyncness`/`render` — the walker's
+// slots-are-never-leaves discipline (E2a, the "chunks are never leaves" describe block
+// above) already covers a rule-minted chunk exactly like a fold-site-minted one; nothing
+// new is needed in the walker to make this safe, only proof that it IS safe.
+describe("E2b — a rule-minted ChunkExpr round-trips through walk/asyncness/render", () => {
+  /** A hand-written EmitRule whose `call` mints a ChunkExpr wrapping its OWN
+   *  (already-lowered) argument in a slot — structurally the shape a future
+   *  Contract rule would build once residual-lite grows a real constructor. */
+  const chunkRule: EmitRule<R> = {
+    call: (args) =>
+      ChunkExpr(
+        arrayChunkAst([{ kind: "lit", value: "before" }, { kind: "slot", id: "__slot0" }]),
+        new Map([["__slot0", args[0]!]]),
+      ),
+  };
+  const chunkRegistry = registryOf(row("magic-chunk", { emit: chunkRule }), row("infer"));
+
+  it("a rule-minted chunk is a legal App residual — no walker change needed to accept it", () => {
+    expect(emit(`(magic-chunk 1)`, { registry: chunkRegistry })).toBe('["before", 1];\n');
+  });
+
+  it("a seeded call living in the rule-minted chunk's slot flips asyncness and awaits INSIDE the slot", () => {
+    // `(magic-chunk (infer "m" x))`: the walker lowers `(infer "m" x)` FIRST (the
+    // ordinary argument-lowering step in `lowerApp`), then hands the ALREADY-LOWERED
+    // `Call(RuntimeRef("infer"), …)` to `chunkRule.call` as `args[0]` — exactly the
+    // shape a Contract rule inspecting/wrapping an argument would receive.
+    const unit = walk(cf(`(define (f x) (magic-chunk (infer "m" x)))`), { registry: chunkRegistry, register: "run" });
+    const facts = asyncnessOf(unit, new Set(["infer"]));
+    expect(facts.hasAsync).toBe(true); // the seed is found THROUGH the rule-minted slot
+    expect(render(materializeAsyncness(facts))).toBe(
+      'async function f(x) {\n    return ["before", await infer("m", x)];\n}\n',
+    );
+  });
+});

@@ -43,11 +43,43 @@
 // map/filter/apply's relocated rules use; nothing more. `RuntimeRef` joins the `R`
 // union as a TYPE ARM ONLY (no constructor — see its own doc comment below): the one
 // item in this wave's growth that isn't "a shape some rule constructs."
+//
+// E2b ADDITION (arrival-mercury engine plan §2 E2, second half): `ChunkExpr` joins the
+// `R` union, ALSO as a TYPE ARM ONLY, for the same reason `RuntimeRef` did — a Contract
+// rule MAY need to return the compiler's hybrid-tree hard chunk (mercury-ir.md;
+// `inhuman/foundations/arrival-mercury/src/residual/types.ts`'s own `ChunkExpr`) as its
+// residual, but the value would be MINTED by that compiler-package constructor (the
+// only one that imports `typescript` to build a real `ts.Node` — `residual/chunk.ts`),
+// never by anything in this arrival-core file (module header: "nothing here is ever
+// mutated... never a real `typescript` import here"). Structural typing (this file's
+// own STRUCTURAL, NOT NOMINAL discipline) is what lets that externally-minted value
+// satisfy `EmitRule<R>` here without this file needing to construct one itself.
+// Verified safe to consume, not merely type-legal: arrival-mercury's own
+// `__tests__/chunk.test.ts` proves a rule-returned `ChunkExpr` round-trips through
+// walk/asyncness/render — the walker's slots-are-never-leaves discipline (E2a) already
+// covers a RULE-minted chunk exactly like a fold-site-minted one. No Contract rule in
+// this wave's set actually returns one (verified against every relocated rule this file
+// backs — quotient/modulo/=, cons/not/null?/pair?/+/-/*//, map/filter/apply, the infer
+// family), so — this file's own growth discipline — only the type acceptance lands;
+// the constructor waits for the wave whose rule needs to mint one. `ChunkStmt` does
+// NOT join: `EmitRule.call` only ever returns an EXPRESSION-position residual (emit-
+// rule.ts: "Application position... → residual"), so a statement-position chunk has no
+// legal way to reach this surface at all.
 
 /** Opaque node-id carrier — mirrors residual/types.ts's own `NodeId = unknown` alias
  *  ("coreform-ir.md's branded pre-order node id... never constructed, never inspected
  *  here"). Nothing in this drill populates it; kept for origin-field shape parity. */
 export type NodeId = unknown;
+
+/** Opaque carrier for a verbatim `ts.Node` subtree — mirrors residual/types.ts's own
+ *  `OpaqueTsNode = unknown` alias verbatim (E2b, this module's header). Nothing in
+ *  THIS file ever constructs one — the compiler package's `residual/chunk.ts` is the
+ *  only module that imports `typescript` to build a real value here. */
+export type OpaqueTsNode = unknown;
+
+/** A slot identifier — mirrors residual/types.ts's own `SlotId = string` alias
+ *  verbatim (E2b, this module's header). */
+export type SlotId = string;
 
 interface Base {
   readonly origin?: NodeId;
@@ -138,7 +170,17 @@ export type R =
    * `R` instead of the compiler's real one — a first-of-its-kind need (inspecting,
    * not minting) this wave surfaces.
    */
-  | (Base & { readonly t: "RuntimeRef"; readonly symbol: string });
+  | (Base & { readonly t: "RuntimeRef"; readonly symbol: string })
+  /**
+   * TYPE ARM ONLY — no constructor below mints one (E2b, this module's header —
+   * same discipline as the `RuntimeRef` arm just above). Field-for-field identical
+   * to residual/types.ts's own `ChunkExpr` (`ast` required, `slots` optional). The
+   * compiler package's real `ChunkExpr(...)` constructor (residual/types.ts) is the
+   * only mint site that exists anywhere; a value it produces is structurally
+   * assignable here with zero adaptation, which is all a Contract rule needs to
+   * hand one back through `EmitRule<R>`'s bivariant `call`.
+   */
+  | (Base & { readonly t: "ChunkExpr"; readonly ast: OpaqueTsNode; readonly slots?: ReadonlyMap<SlotId, R> });
 
 // ─── Constructor functions — pure data, positional, field order matching
 // residual/types.ts's own constructors of the same name exactly. These are the ONLY

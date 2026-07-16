@@ -14,7 +14,8 @@
  *
  * Compiled side — SUBJECT-ROUTED (constitution §9 "the dual-path rule"): the
  * gate subject is `"greenfield"` (default) — the NEW pipeline end to end,
- * classify → extractFacts → PEEPHOLES → walk(overlay registry) → LEGIBILITY →
+ * classify → extractFacts → walk(overlay registry, sm.idiomAt) →
+ * materializeSharedBindings(sm.sharedBindingsOf) →
  * materializeAsyncness(sm.asyncnessOf) → materializeImports(sm.importsOf) →
  * render, with `RuntimeRef` shims resolved against the stage-0 runtime
  * module (a shim is a legitimate residual; Law F says so). `frame` (a
@@ -25,7 +26,16 @@
  * `{sync, promise}` rewriting pass) DISSOLVED at E1c (engine plan §2 E1c):
  * asyncness is now ALSO a MODEL VIEW (`sm.asyncnessOf`) plus its mechanical
  * materializer (`materializeAsyncness`, ../naming/asyncness.ts) — see that
- * module's header.
+ * module's header. `peephole()` (a whole-tree pre-walk rewrite) and
+ * `legibility()`'s CSE leg (a post-walk rewrite) both DISSOLVED at E2
+ * (engine plan §2 E2, second half): both are now MODEL VIEWS —
+ * `sm.idiomAt`, consulted INLINE by `walk()` itself (no separate pre-pass —
+ * see `../walker/walk.ts`'s `lowerApp`), and `sm.sharedBindingsOf`, whose
+ * mechanical materializer (`materializeSharedBindings`,
+ * `../naming/shared-bindings.ts`) runs at the exact pipeline POSITION the
+ * dissolved `legibility()` occupied (see that module's header for why: pure-
+ * region CSE still needs the finished, already-named tree, and still must
+ * run before asyncness materialization — Law W).
  * `"legacy"` keeps the mercury string path callable for A/B — a production bridge, never
  * gate-authoritative. Both subjects export the program's trailing value as
  * `export const __oracleResult = …` (no stdout/JSON round-trip, so `NaN`/`-0`
@@ -55,10 +65,8 @@ import { buildArrivalSession, BUILTIN_PREAMBLE, type InferFn } from "@inhuman.to
 import { DEFAULT_STRATEGY, projectToJsRaw, type Strategy } from "@inhuman.tools/mercury";
 import { register } from "tsx/esm/api";
 
-import { legibility } from "../legibility/index.js";
 import { SchemeSemanticModel } from "../model/model.js";
-import { materializeAsyncness, materializeImports } from "../naming/index.js";
-import { peephole } from "../peepholes/index.js";
+import { materializeAsyncness, materializeImports, materializeSharedBindings } from "../naming/index.js";
 import { emitRegistryOf, type EmitRegistry } from "../registry/index.js";
 import { render } from "../residual/render.js";
 import type { CompilationUnit } from "../residual/types.js";
@@ -379,38 +387,44 @@ function exportUnitResult(unit: CompilationUnit): CompilationUnit {
 /**
  * The greenfield pipeline, source → module text:
  *
- *   wrap → classify → extractFacts → PEEPHOLES → walk → exportResult → LEGIBILITY
+ *   wrap → classify → extractFacts → walk(sm.idiomAt) → exportResult
+ *     → materializeSharedBindings(sm.sharedBindingsOf)
  *     → materializeAsyncness(sm.asyncnessOf) → materializeImports(sm.importsOf) → render
  *
- * PEEPHOLES (constitution §3.1/§3.5, Law C) runs AFTER the type pass/TypeFacts
- * extraction and BEFORE the emit pass — the constitution's own ordering (§3.1's
- * diagram): the two analysis branches (type pass, TCO/liveness) sit ABOVE
- * PEEPHOLES, which sits ABOVE the emit pass. Concretely, this means:
+ * IDIOMS (constitution §3.1/§3.5, Law C — `sm.idiomAt`, engine plan §2 E2)
+ * are consulted DURING `walk()` itself (`../walker/walk.ts`'s `lowerApp`,
+ * before any other rung of its §4.2 dispatch ladder) — AFTER the type
+ * pass/TypeFacts extraction, matching the constitution's own ordering
+ * (§3.1's diagram: the two analysis branches sit ABOVE the idiom layer,
+ * which sits ABOVE the emit pass). Concretely, this still means:
  *   - extractFacts sees the ORIGINAL `car`/`infer` nodes — both real,
- *     type-annotated registry symbols the type-lens's ambient prelude already
- *     knows about. Running PEEPHOLES first would feed the virtual-TS an
- *     invented head name (`infer/scalar`) the prelude has never heard of.
- *   - the handful of nodes PEEPHOLES mints (scalar-fold's fused App) or trims
- *     (cache-key-elide's shortened arg list) simply have no entry in
+ *     type-annotated registry symbols the type-lens's ambient prelude
+ *     already knows about. `sm.idiomAt`'s decisions are never fed to
+ *     extractFacts at all now (there is no separate pre-rewritten tree to
+ *     feed it) — a strictly SIMPLER invariant than the dissolved
+ *     `peephole()` pass needed to maintain by ordering alone.
+ *   - the handful of nodes `idiomAt` mints (scalar-fold's fused App) or
+ *     trims (cache-key-elide's shortened arg list) simply have no entry in
  *     `extraction.facts` — Law F's "absence of a fact ⇒ the conservative
  *     residual" already covers this; no rule in `phase1Rules` reads facts on
- *     an infer-family node, so today this is a non-issue in practice, not just
- *     in theory.
+ *     an infer-family node, so today this is a non-issue in practice, not
+ *     just in theory.
  *
- * LEGIBILITY (constitution §3.5's third invention — implicit destruction +
- * element-name singularization + pure-region CSE) runs on the finished Residual
- * tree, BEFORE the asyncness materializer — a documented DEVIATION from the
- * constitution's §3.1 diagram and §3.5 table, which both draw it after. See
- * `../legibility/legibility.ts`'s header for the full reasoning; the short
- * version: CSE hoists duplicate `Call`s into an ordinary sync-shaped `Const`
- * BEFORE asyncness exists, so `materializeAsyncness`'s ordinary Const-handling
- * (await the init iff seeded; every `Ref` read is unconditionally sync) awaits
- * the ONE hoisted call correctly with zero changes to either pass. Running
- * LEGIBILITY after asyncness materialization would force CSE to see through
- * `Await` nodes — a Promise-aware code path Law W (rules/walker output is
- * async-BLIND) has no other reason to introduce. (E1c, engine plan §2 E1c,
- * carried this constraint forward unchanged from the dissolved `async-ify/`
- * pass onto its replacement — see ../naming/asyncness.ts's header and
+ * SHARED BINDINGS (constitution §3.5's third invention, leg 3 — pure-region
+ * CSE; `sm.sharedBindingsOf` + `materializeSharedBindings`, engine plan §2
+ * E2) runs on the finished Residual tree, BEFORE the asyncness materializer
+ * — a documented DEVIATION from the constitution's §3.1 diagram and §3.5
+ * table, which both draw it after. See `../naming/shared-bindings.ts`'s
+ * header for the full reasoning; the short version: CSE hoists duplicate
+ * `Call`s into an ordinary sync-shaped `Const` BEFORE asyncness exists, so
+ * `materializeAsyncness`'s ordinary Const-handling (await the init iff
+ * seeded; every `Ref` read is unconditionally sync) awaits the ONE hoisted
+ * call correctly with zero changes to either pass. Running it after
+ * asyncness materialization would force it to see through `Await` nodes — a
+ * Promise-aware code path Law W (rules/walker output is async-BLIND) has no
+ * other reason to introduce. (E1c, engine plan §2 E1c, carried this
+ * constraint forward unchanged from the dissolved `async-ify/` pass onto
+ * its replacement — see ../naming/asyncness.ts's header and
  * ../naming/imports.ts's header for the full account of what survived and
  * what didn't.)
  *
@@ -437,24 +451,23 @@ function exportUnitResult(unit: CompilationUnit): CompilationUnit {
  * `sm.coreform` / `sm.factsMap()` / `sm.registry` replace the bare
  * `classify(desugar(parseSexprs(...)))` / `extractFacts(...)` calls this
  * function used to make directly. The passes downstream of classification
- * (`peephole`, `walk`, `legibility`, `render`) are UNCHANGED — they still
- * read a plain `ClassifyResult`/registry/facts-map, exactly as before; only
- * WHERE those values come from moved. (`asyncIfy` was on this same
- * unchanged-list at E0's writing; E1c below is what changed it.)
+ * (`walk`, `render`) are UNCHANGED — they still read a plain
+ * `ClassifyResult`/registry/facts-map, exactly as before; only WHERE those
+ * values come from moved. (`asyncIfy`/`peephole`/`legibility` were on this
+ * same unchanged-list at E0's writing; E1c and E2 below are what changed
+ * them.)
  *
  * E1b cut-over (engine plan §2 E1b): `frame` (a post-render `RuntimeRef`
  * census + ad hoc collision-avoidance ladder) DISSOLVED. The import symbol
- * set below is `sm.importsOf`, unioned over the PEEPHOLED top-level forms
- * (the program `walk` actually lowers — see the inline comment at the union
- * for why pre-peephole forms would under-count) — a MODEL VIEW, not a fresh
- * tree scan — and `../naming/imports.ts`'s `materializeImports` commits it
- * (prepend the `Import` decl, rewrite every `RuntimeRef` to a `Ref`) at the
- * same pipeline POSITION `frame` occupied (still after the asyncness
- * materializer — see that module's header for why, and E1c's own note
- * below for how that survived asyncIfy's dissolution). No fixture bytes
- * should move by construction — `model-imports-agree.test.ts` pins
- * `sm.importsOf`'s answer against the actual emitted imports, including
- * through the peephole fold.
+ * set below is `sm.importsOf`, unioned over `sm.coreform`'s own top-level
+ * forms — a MODEL VIEW, not a fresh tree scan — and `../naming/imports.ts`'s
+ * `materializeImports` commits it (prepend the `Import` decl, rewrite every
+ * `RuntimeRef` to a `Ref`) at the same pipeline POSITION `frame` occupied
+ * (still after the asyncness materializer — see that module's header for
+ * why, and E1c's own note below for how that survived asyncIfy's
+ * dissolution). No fixture bytes should move by construction —
+ * `model-imports-agree.test.ts` pins `sm.importsOf`'s answer against the
+ * actual emitted imports, idiom folds included.
  *
  * E1c cut-over (engine plan §2 E1c): `async-ify/` (a post-emit `{sync,
  * promise}` rewriting pass over the finished Residual tree) DISSOLVED.
@@ -462,13 +475,29 @@ function exportUnitResult(unit: CompilationUnit): CompilationUnit {
  * inside one model view — ../naming/asyncness.ts's `asyncnessOf`, which
  * `SchemeSemanticModel` wraps verbatim) plus `materializeAsyncness` (the
  * mechanical Await-minting/`.async`-setting rewrite, same module) at the
- * exact pipeline POSITION `asyncIfy` occupied — after LEGIBILITY, before
- * `materializeImports` (see that module's header: the position survives
- * because `materializeAsyncness`'s own seed detection keys off `RuntimeRef`
- * symbol names exactly like the dissolved pass did). Seeded from the SAME
- * `inferAsyncSeeds` (rules/phase1.ts) the dissolved pass read — porting the
- * seeding, not re-deriving it. No fixture bytes should move: same fixpoint,
- * same rewrite table, different home.
+ * exact pipeline POSITION `asyncIfy` occupied — after the shared-bindings
+ * materializer, before `materializeImports` (see that module's header: the
+ * position survives because `materializeAsyncness`'s own seed detection
+ * keys off `RuntimeRef` symbol names exactly like the dissolved pass did).
+ * Seeded from the SAME `inferAsyncSeeds` (rules/phase1.ts) the dissolved
+ * pass read — porting the seeding, not re-deriving it. No fixture bytes
+ * should move: same fixpoint, same rewrite table, different home.
+ *
+ * E2 cut-over (engine plan §2 E2, second half): `peephole()` (a whole-tree
+ * pre-walk rewrite, `../peepholes/`) and `legibility()`'s CSE leg (a
+ * post-walk rewrite, the dissolved `../legibility/legibility.ts` +
+ * `../legibility/cse.ts`) both DISSOLVED. Idioms are now `sm.idiomAt`, a
+ * per-`App` decision `walk()` consults INLINE (no separate tree pass at
+ * all — the `WalkOptions.idiomAt` callback below); shared bindings are now
+ * `sm.sharedBindingsOf` (the decision) + `materializeSharedBindings` (the
+ * mechanical commit, `../naming/shared-bindings.ts`), at the exact pipeline
+ * POSITION `legibility()` occupied. Because idiom folding happens INSIDE
+ * `walk()` now, `sm.importsOf`'s own synthetic walk (model.ts's
+ * `computeImportsOf`) sees it too — the union below reads `sm.coreform`'s
+ * ORIGINAL forms directly; the caller-side "query over the peepholed forms"
+ * rule `model-imports-agree.test.ts` used to pin is gone WITH the pass (see
+ * that test's own updated row, and model.ts's `importsOf` doc). No fixture
+ * bytes should move: same decisions (idiom fold, CSE hoist), new home.
  */
 export function compileGreenfield(session: OracleSession, source: string): string {
   const registry = greenfieldRegistryFor(session);
@@ -490,26 +519,29 @@ export function compileGreenfield(session: OracleSession, source: string): strin
       "oracle evalCompiled: the program's last top-level form must be an expression (the value under test), got a definition",
     );
   }
-  const peepholed = peephole(classified);
-  const sync = walk(peepholed, { registry: sm.registry, facts: sm.factsMap(), register: "run" });
-  const legible = legibility(exportUnitResult(sync), { registry: sm.registry });
+  // idiomAt: this.idiomAt — the E2 decision-view, consulted INLINE by
+  // lowerApp; no separate peephole() pre-pass exists anymore.
+  const sync = walk(classified, { registry: sm.registry, facts: sm.factsMap(), idiomAt: sm.idiomAt, register: "run" });
+  // THE MODEL VIEW, not a post-walk rewriting pass (engine plan §2 E2) —
+  // the SAME eligibility/structural-equality decision the dissolved
+  // `legibility/cse.ts` computed, confined inside `sm.sharedBindingsOf`;
+  // `materializeSharedBindings` is the mechanical commit (splice, substitute,
+  // then real-allocate the hoisted names).
+  const shared = materializeSharedBindings(sm.sharedBindingsOf(exportUnitResult(sync)));
   // THE MODEL VIEW, not a post-emit rewriting pass (engine plan §2 E1c) —
   // the SAME call-graph fixpoint the dissolved `async-ify/` pass ran,
   // confined inside `sm.asyncnessOf`; `materializeAsyncness` is the pure,
   // mechanical reader that mints Await/sets `.async` from those facts.
-  const asyncified = materializeAsyncness(sm.asyncnessOf(legible, inferAsyncSeeds));
+  const asyncified = materializeAsyncness(sm.asyncnessOf(shared, inferAsyncSeeds));
   // THE MODEL VIEW, not a post-render scan (engine plan §2 E1b) — every
   // top-level form's own recursive `sm.importsOf`, unioned into the
-  // whole-program symbol set `materializeImports` needs. Queried over the
-  // PEEPHOLED forms — the program `walk` actually lowered — because peephole
-  // is the one eager pre-walk rewrite and it MOVES the symbol census:
-  // `(car (infer …))` folds to `infer/scalar`, so asking about the
-  // pre-peephole forms would answer `infer` for a tree that references
-  // `infer/scalar` (importsOf's documented limit 2, model.ts — resolved at
-  // this call site until E2's `sm.idiomAt` pulls the peephole itself into
-  // the model).
+  // whole-program symbol set `materializeImports` needs. Queried over
+  // `sm.coreform`'s ORIGINAL forms — `sm.idiomAt` folding happens INSIDE
+  // `walk()` (and inside `importsOf`'s own synthetic walk, model.ts's
+  // `computeImportsOf`), so the two can never disagree about which symbols a
+  // folded call needs (see importsOf's own doc, model.ts).
   const importSymbols = new Set<string>();
-  for (const form of peepholed.forms) for (const s of sm.importsOf(form)) importSymbols.add(s);
+  for (const form of classified.forms) for (const s of sm.importsOf(form)) importSymbols.add(s);
   const materialized = materializeImports(asyncified, { symbols: importSymbols, runtimeModule: `./${STAGE0_BASENAME}` });
   return render(materialized);
 }

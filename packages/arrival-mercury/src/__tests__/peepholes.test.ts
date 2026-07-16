@@ -1,20 +1,33 @@
 /**
- * PEEPHOLES — the opening pair (constitution §3.1/§3.5/§6, Law C), tested at the
- * CoreForm-shape layer peepholes/types.ts's own header calls out as the cheap
- * unit-test seam ("match/rewrite deliberately split... cheap to unit test in
- * isolation"), plus:
- *   - byte-level goldens through a LOCAL emit pipeline (classify → peephole →
- *     walk(phase1Rules) → render) mirroring rules-phase1.test.ts's own
- *     `compile`/`emit` helpers, with `peephole()` spliced in exactly where
- *     oracle/harness.ts's `compileGreenfield` now calls it;
- *   - one proof that the REAL `compileGreenfield` harness (mission item 4's
- *     wiring target) reaches the pass end to end, including the stage-0
- *     runtime-manifest rows (`infer/scalar`/`infer/chat/scalar`) FRAME needs to
- *     resolve the folded call without dooring.
+ * IDIOMS — the opening pair (constitution §3.1/§3.5/§6, Law C), tested at the
+ * CoreForm-shape layer, plus:
+ *   - byte-level goldens through a LOCAL emit pipeline (classify → walk(registry,
+ *     idiomAt)) mirroring rules-phase1.test.ts's own `compile`/`emit` helpers,
+ *     with `sm.idiomAt` wired in exactly where `oracle/harness.ts`'s
+ *     `compileGreenfield` wires it;
+ *   - one proof that the REAL `compileGreenfield` harness reaches the idiom
+ *     end to end, including the stage-0 runtime-manifest rows
+ *     (`infer/scalar`/`infer/chat/scalar`) the fold needs to resolve without
+ *     dooring.
+ *
+ * E2 REWRITE (engine plan §2 E2, second half): the dissolved whole-tree
+ * `peephole()` pass (`applyPeepholes`, `programShadowsPeepholeNames` as a
+ * driver, the `Peephole`/`PeepholeCtx` table shape) is gone — idioms are now
+ * `sm.idiomAt(node)`, a per-`App` decision view (`../model/model.ts`), backed
+ * by `../peepholes/index.ts`'s `idiomDecisionAt` + `../peepholes/infer.ts`'s
+ * `inferScalarFoldAt`/`cacheKeyElideAt`. Every "BEFORE"/"AFTER" pair below now
+ * reads: BEFORE = the node as `sm.coreform` classifies it; AFTER =
+ * `sm.idiomAt(before) ?? before` (idiomAt returns `undefined` when no idiom
+ * applies — the SAME "declining an optimization" fallback the dissolved
+ * pass's `rewriteForm` had, made explicit at the call site instead of
+ * folded into a whole-tree traversal). `programShadowsPeepholeNames` itself
+ * is UNCHANGED — still the whole-program shadow census, still exported from
+ * `../peepholes/index.js` verbatim.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { applyPeepholes, cacheKeyElide, inferScalarFold, peephole, programShadowsPeepholeNames } from "../peepholes/index.js";
+import { INFER_PEEPHOLE_LOAD_BEARING_NAMES, programShadowsPeepholeNames } from "../peepholes/index.js";
+import { SchemeSemanticModel } from "../model/model.js";
 import {
   type App,
   classify,
@@ -36,10 +49,10 @@ import {
 // ── the front pipeline coreform.test.ts / rules-phase1.test.ts both use ─────────────
 const cf = (src: string): ClassifyResult => classify(desugar(parseSexprs(src)));
 
-// ── the local emit pipeline: classify → peephole → walk(phase1Rules) → render ───────
-// (rules-phase1.test.ts's own `compile`/`emit` helpers, with `peephole()` spliced in
-// exactly where harness.ts's `compileGreenfield` now calls it — no FRAME/ASYNC-IFY
-// noise, so goldens stay the same bare byte-level shape that file already pins.)
+// ── the local emit pipeline: classify → walk(registry, sm.idiomAt) → render ─────────
+// (rules-phase1.test.ts's own `compile`/`emit` helpers, with `idiomAt` wired in exactly
+// where harness.ts's `compileGreenfield` wires it — no FRAME/ASYNC-IFY noise, so goldens
+// stay the same bare byte-level shape that file already pins.)
 const EMPTY: EmitRegistry = { lookup: () => undefined, names: new Set<string>() };
 // A bare "infer" presence row: `infer`'s own emit rule relocated onto its Contract
 // (R2, arrival-mercury constitution §9 — llm-plane-arrival-env/src/infer.ts) and left
@@ -51,7 +64,11 @@ const EMPTY: EmitRegistry = { lookup: () => undefined, names: new Set<string>() 
 // async-ify.test.ts's own `row("infer")` already relies on) — so this row exists
 // SOLELY to make the symbol resolvable, not to stand in for its compiled shape.
 const registry = withRules(EMPTY, { ...phase1Rules, infer: {} });
-const emit = (src: string): string => render(walk(peephole(cf(src)), { registry, register: "run" }));
+const modelOf = (src: string): SchemeSemanticModel => new SchemeSemanticModel(src, registry);
+const emit = (src: string): string => {
+  const sm = modelOf(src);
+  return render(walk(sm.coreform, { registry, idiomAt: sm.idiomAt, register: "run" }));
+};
 
 function assertKind<K extends CoreForm["kind"]>(f: CoreForm, kind: K): Extract<CoreForm, { kind: K }> {
   expect(f.kind).toBe(kind);
@@ -70,6 +87,18 @@ function bodyAppOf(result: ClassifyResult): App {
 
 const nameOf = (fn: CoreForm): string => assertKind(fn, "Ref").name;
 
+/** BEFORE/AFTER pair for a single source: the App as classified, and
+ *  `sm.idiomAt`'s decision for it (or the UNCHANGED node — idiomAt's own
+ *  "declining an optimization is always safe" fallback, made explicit here
+ *  instead of folded into a whole-tree traversal the way the dissolved
+ *  `peephole()` pass did it). */
+function idiomBeforeAfter(src: string): { readonly sm: SchemeSemanticModel; readonly before: App; readonly after: App } {
+  const sm = modelOf(src);
+  const before = bodyAppOf(sm.coreform);
+  const after = sm.idiomAt(before) ?? before;
+  return { sm, before, after };
+}
+
 describe("infer-scalar-fold — (car (infer …)) folds to the bare scalar call", () => {
   it("BEFORE: classifies as the un-folded App(car, [App(infer, […])]) shape", () => {
     const app = bodyAppOf(cf(`(define (f m p) (car (infer m p)))`));
@@ -80,9 +109,8 @@ describe("infer-scalar-fold — (car (infer …)) folds to the bare scalar call"
     expect(inner.positionalArgs).toHaveLength(2);
   });
 
-  it("AFTER: peephole() fuses outer+inner into ONE App(infer/scalar, [model, prompt])", () => {
-    const before = bodyAppOf(cf(`(define (f m p) (car (infer m p)))`));
-    const after = bodyAppOf(peephole(cf(`(define (f m p) (car (infer m p)))`)));
+  it("AFTER: sm.idiomAt fuses outer+inner into ONE App(infer/scalar, [model, prompt])", () => {
+    const { before, after } = idiomBeforeAfter(`(define (f m p) (car (infer m p)))`);
     expect(nameOf(after.fn)).toBe("infer/scalar");
     expect(after.positionalArgs).toHaveLength(2);
     expect(after.kwargs).toHaveLength(0);
@@ -95,7 +123,7 @@ describe("infer-scalar-fold — (car (infer …)) folds to the bare scalar call"
   });
 
   it("infer/chat folds to infer/chat/scalar", () => {
-    const after = bodyAppOf(peephole(cf(`(define (f m msgs) (car (infer/chat m msgs)))`)));
+    const { after } = idiomBeforeAfter(`(define (f m msgs) (car (infer/chat m msgs)))`);
     expect(nameOf(after.fn)).toBe("infer/chat/scalar");
     expect(after.positionalArgs).toHaveLength(2);
   });
@@ -105,20 +133,20 @@ describe("infer-scalar-fold — (car (infer …)) folds to the bare scalar call"
   });
 
   it("NON-MATCH control: car of an unrelated call is untouched", () => {
-    const after = bodyAppOf(peephole(cf(`(define (f x y) (car (cons x y)))`)));
+    const { after } = idiomBeforeAfter(`(define (f x y) (car (cons x y)))`);
     expect(nameOf(after.fn)).toBe("car");
     const inner = assertKind(after.positionalArgs[0]!, "App");
     expect(nameOf(inner.fn)).toBe("cons");
   });
 
   it("NON-MATCH control: plain (car xs) — no inner App at all — untouched", () => {
-    const after = bodyAppOf(peephole(cf(`(define (f xs) (car xs))`)));
+    const { after } = idiomBeforeAfter(`(define (f xs) (car xs))`);
     expect(nameOf(after.fn)).toBe("car");
     expect(after.positionalArgs[0]!.kind).toBe("Ref");
   });
 
   it("NON-MATCH control: the chat-message constructors are excluded on purpose (different contract shape — peepholes/infer.ts's own note)", () => {
-    const after = bodyAppOf(peephole(cf(`(define (f) (car (infer/chat/system "hi")))`)));
+    const { after } = idiomBeforeAfter(`(define (f) (car (infer/chat/system "hi")))`);
     expect(nameOf(after.fn)).toBe("car"); // untouched — "infer/chat/system" is not a key of SCALAR_TARGET_OF
   });
 });
@@ -130,19 +158,18 @@ describe("cache-key-elide — a literal #f cache-key argument drops", () => {
   });
 
   it("AFTER: trims to 3 args and REUSES the original call's id (a trim, not a fusion)", () => {
-    const before = bodyAppOf(cf(`(define (f m p s) (infer m p s #f))`));
-    const after = bodyAppOf(peephole(cf(`(define (f m p s) (infer m p s #f))`)));
+    const { before, after } = idiomBeforeAfter(`(define (f m p s) (infer m p s #f))`);
     expect(after.positionalArgs).toHaveLength(3);
     expect(after.id).toBe(before.id);
   });
 
   it("a REAL cache key is never dropped — stricter than mercury's blanket drop (peepholes/infer.ts's deviation note)", () => {
-    const after = bodyAppOf(peephole(cf(`(define (f m p s k) (infer m p s k))`)));
+    const { after } = idiomBeforeAfter(`(define (f m p s k) (infer m p s k))`);
     expect(after.positionalArgs).toHaveLength(4);
   });
 
   it("NON-MATCH control: wrong arity (3 args, no cache-key slot at all) is untouched", () => {
-    const after = bodyAppOf(peephole(cf(`(define (f m p s) (infer m p s))`)));
+    const { after } = idiomBeforeAfter(`(define (f m p s) (infer m p s))`);
     expect(after.positionalArgs).toHaveLength(3);
   });
 
@@ -151,9 +178,9 @@ describe("cache-key-elide — a literal #f cache-key argument drops", () => {
   });
 });
 
-describe("composition — both peepholes fire in ONE bottom-up pass (peepholes/index.ts's own worked example)", () => {
+describe("composition — both idioms fire in ONE recursive query (peepholes/index.ts's own worked example)", () => {
   it("(car (infer m p schema #f)) → infer/scalar(m, p, schema) — the inner trim is visible to the outer fold", () => {
-    const after = bodyAppOf(peephole(cf(`(define (f m p schema) (car (infer m p schema #f)))`)));
+    const { after } = idiomBeforeAfter(`(define (f m p schema) (car (infer m p schema #f)))`);
     expect(nameOf(after.fn)).toBe("infer/scalar");
     expect(after.positionalArgs).toHaveLength(3); // model, prompt, schema — cacheKey already gone
   });
@@ -165,15 +192,8 @@ describe("composition — both peepholes fire in ONE bottom-up pass (peepholes/i
   });
 });
 
-describe("single-pass — applyPeepholes with an explicit table matches peephole()'s default", () => {
-  it("peephole(classified) === applyPeepholes(classified, [inferScalarFold, cacheKeyElide])", () => {
-    const classified = cf(`(define (f m p schema) (car (infer m p schema #f)))`);
-    expect(applyPeepholes(classified, [inferScalarFold, cacheKeyElide])).toEqual(peephole(classified));
-  });
-});
-
 describe("the whole-program shadowing guard — the soundness net (peepholes/index.ts's own header)", () => {
-  it("a local rebind of a load-bearing name anywhere in the program disables BOTH peepholes for the WHOLE compile", () => {
+  it("a local rebind of a load-bearing name anywhere in the program disables BOTH idioms for the WHOLE compile", () => {
     const src = `
       (define (unrelated car) car)
       (define (f m p) (car (infer m p)))
@@ -181,21 +201,26 @@ describe("the whole-program shadowing guard — the soundness net (peepholes/ind
     const classified = cf(src);
     expect(programShadowsPeepholeNames(classified.forms)).toBe(true);
 
-    const after = peephole(classified);
-    const fDef = assertKind(after.forms[1]!, "DefineFn");
+    const sm = new SchemeSemanticModel(src, registry);
+    const fDef = assertKind(sm.coreform.forms[1]!, "DefineFn");
     const fBody = assertKind(fDef.body[0]!, "App");
-    expect(nameOf(fBody.fn)).toBe("car"); // untouched — the whole-compile bail fired,
+    expect(sm.idiomAt(fBody)).toBeUndefined(); // untouched — the whole-compile bail fired,
     // even though the shadow lives in `unrelated`, a function that never touches infer.
   });
 
   it("no shadow anywhere ⇒ false, and the fold proceeds normally", () => {
     const classified = cf(`(define (f m p) (car (infer m p)))`);
     expect(programShadowsPeepholeNames(classified.forms)).toBe(false);
-    expect(nameOf(bodyAppOf(peephole(classified)).fn)).toBe("infer/scalar");
+    const { after } = idiomBeforeAfter(`(define (f m p) (car (infer m p)))`);
+    expect(nameOf(after.fn)).toBe("infer/scalar");
+  });
+
+  it("INFER_PEEPHOLE_LOAD_BEARING_NAMES names exactly the three symbols either idiom keys its decision on", () => {
+    expect([...INFER_PEEPHOLE_LOAD_BEARING_NAMES].sort()).toEqual(["car", "infer", "infer/chat"]);
   });
 });
 
-describe("compileGreenfield wiring — PEEPHOLES runs end to end through the REAL harness (mission item 4)", () => {
+describe("compileGreenfield wiring — idioms run end to end through the REAL harness (mission item 4)", () => {
   let session: OracleSession;
   beforeAll(async () => {
     session = await openOracleSession();

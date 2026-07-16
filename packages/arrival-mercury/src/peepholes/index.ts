@@ -1,36 +1,38 @@
 /**
- * PEEPHOLES — the named cross-node idiom rewrite pass over CoreForm (constitution
- * §3.1/§3.5, Law C; docs/working-proposals/arrival-mercury/ — this is the opening
- * pair, landed at Phase-2 opening per §9's migration plan).
+ * IDIOMS — the named cross-node idiom decision (constitution §3.1/§3.5, Law C;
+ * docs/working-proposals/arrival-mercury/ — this is the opening pair, landed at
+ * Phase-2 opening per §9's migration plan). E2b's dissolution (engine plan §2
+ * E2: "CSE and the peephole pair become sharing/idiom decision views…
+ * decided pre-census"): the old whole-tree `peephole(classified)` PASS is
+ * gone. `idiomDecisionAt` is a per-node QUERY — `../model/model.ts`'s
+ * `sm.idiomAt(node)` wraps it (memoized, id-floor-tracking); the WALKER
+ * consults it inline (`../walker/walk.ts`'s `lowerApp`, at the top, before any
+ * other rung of the §4.2 dispatch ladder) instead of the tree having been
+ * pre-rewritten. Nothing here walks a tree anymore; every function is a pure
+ * per-node (or whole-program-shadow) predicate.
  *
- * `peephole(classified)` runs a SINGLE bottom-up (post-order) pass: every node's
- * children are rewritten first, then each registered peephole's `match` is tried
- * against the (already children-rewritten) node, in table order; the first match
- * wins and its `rewrite` replaces the node — no re-checking the REWRITTEN result
- * against the table at that same tree position. Single-pass, not fixpoint (the
- * mission's own allowance: "single-pass is fine for the pair"): the two shipped
- * peepholes never need a second look at their own output because they match on
- * DISJOINT head shapes (`car`-headed vs. `infer`/`infer/chat`-headed) — a
- * cache-key-elide result stays `infer`/`infer/chat`-headed (cache-key-elide never
- * touches `fn`), which is exactly the shape scalar-fold's OWN match still
- * recognizes one level up, so the pair composes correctly across ONE bottom-up
- * walk with no repeated visits:
+ * ORDERING, now recursive instead of bottom-up-tree-order: the OLD pass's
+ * single post-order walk guaranteed cache-key-elide (matching the INNER
+ * `infer`/`infer/chat` call) had already run by the time scalar-fold examined
+ * the OUTER `car` call, so the fused node's args were already trimmed:
  *
  *   (car (infer m p schema #f))
- *     ▸ bottom-up reaches the INNER App(infer, [m,p,schema,#f]) first
- *       → cache-key-elide matches (4 args, last is #f) → App(infer, [m,p,schema])
- *     ▸ THEN the OUTER App(car, [inner]) is tried
- *       → scalar-fold matches (car of an infer-headed App) → uses the ALREADY
- *         trimmed inner args → App(infer/scalar, [m,p,schema])
+ *     ▸ scalar-fold matches the OUTER App(car, [inner]) — inner is an
+ *       infer-headed App
+ *     ▸ to decide what the fused node's args ARE, it asks for the INNER
+ *       node's OWN idiom decision first (`effectiveInnerOf`, below) — that
+ *       recursive query lands on cache-key-elide (4 args, last is #f) →
+ *       App(infer, [m,p,schema])
+ *     ▸ the fused node reuses THOSE (already-trimmed) args →
+ *       App(infer/scalar, [m,p,schema])
  *
- * If a future peephole genuinely needs fixpoint (its own output can match a
- * DIFFERENT registered peephole, or itself again), loop `applyPeepholes` to a
- * fixpoint over `classified` at the call site — nothing here forecloses that;
- * this pass simply does not need it for the shipped pair, and looping
- * unconditionally would cost a full extra tree rebuild on every compile for zero
- * benefit today.
+ * This reproduces the pass's exact composition without ever visiting a node
+ * the walker itself doesn't already visit: `idiomDecisionAt`'s `recurse`
+ * parameter IS `sm.idiomAt` itself (model.ts wires it), so the inner query is
+ * memoized exactly like any other `idiomAt` call — never a second, private
+ * traversal.
  *
- * SOUNDNESS — the shadowing guard. A peephole matches on bare SYMBOL NAMES
+ * SOUNDNESS — the shadowing guard. An idiom matches on bare SYMBOL NAMES
  * (`"car"`, `"infer"`, `"infer/chat"`) with no scope information at all — unlike
  * the walker, which only reaches the registry for a name that resolve() proves is
  * NOT locally bound (walker.ts's `lowerApp`: "Resolved ⇒ ordinary lexical call —
@@ -41,42 +43,36 @@
  * that shadows `car` is corpus-authoring malpractice … the throw makes that
  * assumption an enforced invariant instead of a silent blind spot") — but where
  * that module throws (it is asserting an invariant about a fixed, curated
- * corpus), this pass instead SKIPS (constitution's own Law F stance: "the
- * failure mode of this design is always 'uglier output', never 'wrong output'"
- * — declining an optimization is always safe; hard-failing an otherwise-valid
- * compile over an unrelated local rebind is not). The over-approximation is
- * deliberately coarse — one flat, whole-program name census, no real scope
- * nesting (porting the walker's full `schemeFrames` stack just to answer "is
- * `car` ever shadowed" would cost as much machinery as `walk()` itself, exactly
- * gate1/measure.ts's own reasoning) — so a shadow ANYWHERE in the program (even
- * in a function that never touches `infer`) disables BOTH peepholes for the
- * WHOLE compile. Cheap, sound, and conservative; a future peephole keying on
- * different names should extend `INFER_PEEPHOLE_LOAD_BEARING_NAMES` (or, if the
- * table grows enough that a shared name touches unrelated peepholes, revisit
- * this as a per-peephole guard).
+ * corpus), this decision instead ANSWERS "no idiom applies" (constitution's own
+ * Law F stance: "the failure mode of this design is always 'uglier output',
+ * never 'wrong output'" — declining an optimization is always safe; hard-failing
+ * an otherwise-valid compile over an unrelated local rebind is not). The
+ * over-approximation is deliberately coarse — one flat, whole-program name
+ * census, no real scope nesting (porting the walker's full `schemeFrames` stack
+ * just to answer "is `car` ever shadowed" would cost as much machinery as
+ * `walk()` itself, exactly gate1/measure.ts's own reasoning) — so a shadow
+ * ANYWHERE in the program (even in a function that never touches `infer`)
+ * disables BOTH idioms for the WHOLE compile — computed ONCE per model (lazily,
+ * memoized — see model.ts), not per query. Cheap, sound, and conservative; a
+ * future idiom keying on different names should extend
+ * `INFER_PEEPHOLE_LOAD_BEARING_NAMES` (or, if the table grows enough that a
+ * shared name touches unrelated idioms, revisit this as a per-idiom guard).
  */
-import type { App, Binding, ClassifyResult, CoreForm, KwEntry, NodeId } from "../coreform/types.js";
-import { cacheKeyElide, inferScalarFold, INFER_PEEPHOLE_LOAD_BEARING_NAMES } from "./infer.js";
-import type { Peephole, PeepholeCtx } from "./types.js";
+import type { App, CoreForm, NodeId } from "../coreform/types.js";
+import { cacheKeyElideAt, inferScalarFoldAt, INFER_PEEPHOLE_LOAD_BEARING_NAMES } from "./infer.js";
 
-export type { Peephole, PeepholeCtx } from "./types.js";
-export { cacheKeyElide, inferScalarFold, INFER_PEEPHOLE_LOAD_BEARING_NAMES } from "./infer.js";
+export { cacheKeyElideAt, inferScalarFoldAt, INFER_PEEPHOLE_LOAD_BEARING_NAMES } from "./infer.js";
 
-/** The shipped registry, in match-priority order. Table order only matters
- *  when two peepholes could BOTH match the same (already-children-rewritten)
- *  node — the shipped pair never does (disjoint head shapes; see this
- *  module's header), so the order here is documentation, not load-bearing. */
-export const PEEPHOLES: readonly Peephole[] = [inferScalarFold, cacheKeyElide];
-
-// ── max-id scan — the fresh-id floor for this pass's PeepholeCtx ─────────────────────
+// ── max-id scan — the fresh-id floor `sm.idiomAt`'s fusions mint above ───────────────
 
 /** The highest NodeId anywhere in `forms` — every Base-carrying record classify()
  *  can mint (CoreForm nodes, Param, Binding, KwEntry), not just CoreForm nodes
  *  themselves (classify()'s own counter is shared across all of them, so this is
  *  the only way to get a floor no real id can collide with). -1 if `forms` is
  *  empty (an empty program) — `maxNodeId(...) + 1 === 0`, matching classify()'s
- *  own counter start. */
-function maxNodeId(forms: readonly CoreForm[]): number {
+ *  own counter start. Exported: `model.ts` computes its own idiom-id counter
+ *  from this floor (lazily, once per model — see its header). */
+export function maxNodeId(forms: readonly CoreForm[]): number {
   let max = -1;
   const bump = (id: NodeId): void => {
     if (id > max) max = id;
@@ -217,8 +213,8 @@ function collectBoundNames(forms: readonly CoreForm[]): ReadonlySet<string> {
   return names;
 }
 
-/** True iff the program ever locally binds a name either shipped peephole keys
- *  its `match` on — the whole-compile bail (see module header). Exported for
+/** True iff the program ever locally binds a name either idiom keys its
+ *  decision on — the whole-compile bail (see module header). Exported for
  *  direct testing (the driver's own soundness net deserves its own coverage,
  *  not just inference from end-to-end behavior). */
 export function programShadowsPeepholeNames(forms: readonly CoreForm[]): boolean {
@@ -226,117 +222,31 @@ export function programShadowsPeepholeNames(forms: readonly CoreForm[]): boolean
   return INFER_PEEPHOLE_LOAD_BEARING_NAMES.some((n) => bound.has(n));
 }
 
-// ── the bottom-up rewrite traversal ───────────────────────────────────────────────────
+// ── the combined per-node decision — `sm.idiomAt`'s underlying machinery ─────────────
 
-function rewriteBindings(bindings: readonly Binding[], table: readonly Peephole[], ctx: PeepholeCtx): readonly Binding[] {
-  return bindings.map((b) => ({ ...b, init: rewriteForm(b.init, table, ctx) }));
+/** External state `idiomDecisionAt` needs but does not own — supplied by the
+ *  caller (`model.ts`'s `sm.idiomAt`) per its own lazy/memoized lifecycle:
+ *  the whole-program shadow verdict (computed once, not per query), a
+ *  monotonically-increasing id-mint floor (seeded above every id `classify()`
+ *  produced), and `recurse` — the SAME memoized `sm.idiomAt` entry point,
+ *  fed back in so the inner-call composition (module header) never opens a
+ *  second, private traversal. */
+export interface IdiomDeps {
+  readonly shadowed: boolean;
+  readonly mintId: () => NodeId;
+  readonly recurse: (inner: App) => App | undefined;
 }
 
-function rewriteKwEntries(entries: readonly KwEntry[], table: readonly Peephole[], ctx: PeepholeCtx): readonly KwEntry[] {
-  return entries.map((e) => ({ ...e, value: rewriteForm(e.value, table, ctx) }));
-}
-
-/** Reconstruct `node` with every CoreForm-valued CHILD rewritten (one level of
- *  structural recursion via `rewriteForm`); `node`'s own Base fields (id/span/
- *  lead/trail) and non-CoreForm fields (letKind, loopName, rest, …) pass
- *  through untouched. Quoted data (`Quote.datum`) is a mirror datatype, never
- *  CoreForm (coreform/types.ts's own invariant) — never re-entered here. */
-function rewriteChildren(node: CoreForm, table: readonly Peephole[], ctx: PeepholeCtx): CoreForm {
-  switch (node.kind) {
-    case "Define":
-      return {
-        ...node,
-        value: rewriteForm(node.value, table, ctx),
-        overridableType: node.overridableType === undefined ? undefined : rewriteForm(node.overridableType, table, ctx),
-      };
-    case "DefineFn":
-      return {
-        ...node,
-        body: node.body.map((f) => rewriteForm(f, table, ctx)),
-        overridableType: node.overridableType === undefined ? undefined : rewriteForm(node.overridableType, table, ctx),
-      };
-    case "Lambda":
-      return { ...node, body: node.body.map((f) => rewriteForm(f, table, ctx)) };
-    case "If":
-      return {
-        ...node,
-        cond: rewriteForm(node.cond, table, ctx),
-        then: rewriteForm(node.then, table, ctx),
-        else: rewriteForm(node.else, table, ctx),
-      };
-    case "And":
-      return { ...node, args: node.args.map((a) => rewriteForm(a, table, ctx)) };
-    case "Or":
-      return { ...node, args: node.args.map((a) => rewriteForm(a, table, ctx)) };
-    case "Let":
-      return {
-        ...node,
-        bindings: rewriteBindings(node.bindings, table, ctx),
-        body: node.body.map((f) => rewriteForm(f, table, ctx)),
-      };
-    case "NamedLet":
-      return {
-        ...node,
-        bindings: rewriteBindings(node.bindings, table, ctx),
-        body: node.body.map((f) => rewriteForm(f, table, ctx)),
-      };
-    case "Begin":
-      return { ...node, body: node.body.map((f) => rewriteForm(f, table, ctx)) };
-    case "App": {
-      const rewritten: App = {
-        ...node,
-        fn: rewriteForm(node.fn, table, ctx),
-        positionalArgs: node.positionalArgs.map((a) => rewriteForm(a, table, ctx)),
-        kwargs: rewriteKwEntries(node.kwargs, table, ctx),
-      };
-      return rewritten;
-    }
-    case "Dict":
-      return { ...node, entries: rewriteKwEntries(node.entries, table, ctx) };
-    case "Ref":
-    case "Lit":
-    case "Quote":
-    case "Require":
-    case "Door":
-      return node;
-  }
-}
-
-/** Post-order: rewrite `node`'s children first, THEN try the table against the
- *  (already children-rewritten) node itself — see module header for why this
- *  order is what lets cache-key-elide's result already be in place by the time
- *  scalar-fold examines the enclosing `car`. Single-pass: the winning
- *  `rewrite`'s OWN output is never re-checked against `table` at this same
- *  position. */
-function rewriteForm(node: CoreForm, table: readonly Peephole[], ctx: PeepholeCtx): CoreForm {
-  const children = rewriteChildren(node, table, ctx);
-  for (const p of table) {
-    if (p.match(children)) return p.rewrite(children, ctx);
-  }
-  return children;
-}
-
-/** Run `table` over `classified` once (see module header for pass shape).
- *  `originAtom`/`parentOf`/`doors` pass through BY REFERENCE, unrewritten —
- *  documented, not a bug: they describe the PRE-peephole tree, which stays
- *  100% valid for every untouched node (same id, same object shape) and is
- *  simply silent-by-absence for a peephole-minted id (nothing downstream reads
- *  either table for a peephole-minted node today; `originAtom` is `walk()`'s
- *  own doc-cited seam for a FUTURE full lexical-namer, not consulted by this
- *  wave's walker at all, and `parentOf` exists FOR a peephole pass like this
- *  one to consult before rewriting, not as a promise to stay in sync after).
- *  A future consumer of either table on a POST-peephole tree needs its own
- *  incremental-update pass — out of scope for the opening pair. */
-export function applyPeepholes(classified: ClassifyResult, table: readonly Peephole[]): ClassifyResult {
-  if (programShadowsPeepholeNames(classified.forms)) return classified;
-  let counter = maxNodeId(classified.forms) + 1;
-  const ctx: PeepholeCtx = { mintId: () => counter++ as NodeId };
-  const forms = classified.forms.map((f) => rewriteForm(f, table, ctx));
-  return { ...classified, forms };
-}
-
-/** The mission's own top-level shape: `peephole(classified) → ClassifyResult`,
- *  defaulting to the shipped registry. */
-export function peephole(classified: ClassifyResult): ClassifyResult {
-  return applyPeepholes(classified, PEEPHOLES);
+/** `sm.idiomAt(node)`'s pure decision, given the caller's own state (`deps`).
+ *  Tries scalar-fold first, then cache-key-elide — order is documentation
+ *  only (see infer.ts's own header: the two match on disjoint head shapes,
+ *  `car` vs. `infer`/`infer/chat`, so at most one can ever fire for a given
+ *  node — see this module's header for how the ONE real composition, scalar-
+ *  fold consulting cache-key-elide on its OWN inner node, is threaded via
+ *  `recurse`, not by trying both here at the SAME node). */
+export function idiomDecisionAt(node: App, deps: IdiomDeps): App | undefined {
+  if (deps.shadowed) return undefined;
+  const scalarFold = inferScalarFoldAt(node, (inner) => deps.recurse(inner) ?? inner, deps.mintId);
+  if (scalarFold !== undefined) return scalarFold;
+  return cacheKeyElideAt(node);
 }

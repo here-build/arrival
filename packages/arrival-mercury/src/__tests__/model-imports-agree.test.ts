@@ -27,7 +27,6 @@ import { SchemeSemanticModel } from "../model/model.js";
 import { MULTI_SLOT, TWO_CROSSINGS } from "../model/__fixtures__.js";
 import { materializeImports } from "../naming/index.js";
 import { openOracleSession, type OracleSession } from "../oracle/harness.js";
-import { peephole } from "../peepholes/index.js";
 import type { EmitRegistry } from "../registry/harvest.js";
 import { emitRegistryOf } from "../registry/index.js";
 import { phase1Rules, withRules } from "../rules/index.js";
@@ -139,25 +138,29 @@ describe("SchemeSemanticModel — E0 compiler views", () => {
       expect(emittedImportsOf(TWO_CROSSINGS).sort()).toEqual(["infer", "stringAppend"]);
     });
 
-    it("the PEEPHOLE fold: importsOf must be queried over the PEEPHOLED forms (the E1b call-site rule)", () => {
-      // Regression pin for the bug the E1b cut-over surfaced live: peephole is
-      // the one eager pre-walk rewrite that MOVES the symbol census —
-      // `(car (infer …))` folds to `infer/scalar` — so a consumer querying
-      // `sm.importsOf` over the PRE-peephole forms answers `infer` for a tree
-      // that references `RuntimeRef("infer/scalar")` (importsOf's documented
-      // limit 2, model.ts; `materializeImports` fail-closes on the mismatch).
-      // `compileGreenfield` queries over the peepholed forms; this row pins
-      // that discipline at the unit level, per-form union vs whole-walk.
+    it("the IDIOM fold: importsOf agrees over the ORIGINAL forms — the E1b call-site rule DISSOLVES at E2", () => {
+      // Regression pin, FLIPPED at E2 (engine plan §2 E2, second half): a
+      // separate `peephole()` pre-walk pass used to MOVE the symbol census —
+      // `(car (infer …))` folds to `infer/scalar` — so E1b's own caller-side
+      // discipline was "query `sm.importsOf` over the PEEPHOLED forms, never
+      // the model's own `sm.coreform` forms" (importsOf's then-documented
+      // limit 2, model.ts). That pass is GONE: folding now happens INSIDE
+      // `sm.idiomAt`, consulted inline by BOTH the real walk (`walk()`'s
+      // `lowerApp`) and `importsOf`'s own synthetic walk
+      // (`model.ts`'s `computeImportsOf`, which passes `idiomAt: this.idiomAt`
+      // too) — so querying over `sm.coreform`'s ORIGINAL, un-folded forms
+      // already agrees with the emitted imports. This row now pins the
+      // DISSOLUTION: the workaround this test used to require no longer
+      // exists, and the naive (original-forms) query is simply correct.
       const source = `(define (f m p) (car (infer m p)))\n(f "gpt" "q")`;
       const sm = new SchemeSemanticModel(source, registry);
-      const peepholed = peephole(sm.coreform);
 
       const viaModel = new Set<string>();
-      for (const form of peepholed.forms) for (const s of sm.importsOf(form)) viaModel.add(s);
+      for (const form of sm.coreform.forms) for (const s of sm.importsOf(form)) viaModel.add(s);
       expect([...viaModel]).toContain("infer/scalar"); // the folded symbol, not bare `infer`
       expect([...viaModel]).not.toContain("infer");
 
-      const walked = walk(peepholed, { registry, facts: sm.factsMap(), register: "run" });
+      const walked = walk(sm.coreform, { registry, facts: sm.factsMap(), idiomAt: sm.idiomAt, register: "run" });
       expect([...viaModel].sort()).toEqual([...runtimeRefsOf(walked)].sort());
 
       const materialized = materializeImports(walked, { symbols: viaModel, runtimeModule: RUNTIME_MODULE });
@@ -199,11 +202,11 @@ describe("S5 — the dependency-rule lint (engine plan §1 S5; extended at E1's 
       "../naming/materialize.ts",
       "../naming/imports.ts",
       "../naming/origin.ts",
+      "../naming/shared-bindings.ts",
       "../walker/walk.ts",
-      "../legibility/legibility.ts",
-      "../legibility/cse.ts",
       "../legibility/tree.ts",
       "../peepholes/index.ts",
+      "../peepholes/infer.ts",
     ] as const;
     const EMITTED_OUTPUT = /residual\/render(\.js)?$/;
     let filesChecked = 0;
