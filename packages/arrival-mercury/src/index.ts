@@ -215,6 +215,10 @@ export type {
 // `circuitOf` doc for why). Exporting these is pure plumbing: no logic here
 // changes, every symbol is re-exported verbatim from its owning module. ──
 export { channels, circuitVerdict, planeOf, type Channels, type ChannelAnchor, type ChannelTerminals, type CircuitRole, type CircuitVerdict, type Plane } from "./verdict/circuit-verdict.js";
+// field-granular access (provenance-beautiful-child, lens 3, Wave 1) — PURE
+// subcircuit-valued lens over StaticProv, re-exported verbatim (also available
+// from the browser-safe `/circuit` subpath — see circuit.ts).
+export { fieldProv, type FieldPath, type FieldProvResult } from "./verdict/field-prov.js";
 export { seal, type LeafRole, type SealVerdict } from "./seal.js";
 export { leafVerdicts, type LeafVerdict, type LeafVerdictKind, type ProbeAttempt, type ProbeOutcome } from "./probe/verdict.js";
 export type { LeafPath as DynamicLeafPath } from "./probe/verdict.js";

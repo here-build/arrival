@@ -51,6 +51,11 @@ export {
 export { channels, circuitVerdict, dataShaped, judgmentShaped, planeOf } from "./verdict/circuit-verdict.js";
 export type { CircuitRole, CircuitVerdict, Plane } from "./verdict/circuit-verdict.js";
 
+// ── field-granular access (provenance-beautiful-child, lens 3, Wave 1): a PURE
+// subcircuit-valued lens over StaticProv — no probe, no run, no render dependency,
+// so it belongs in the browser-safe surface exactly like `channels` above. ──
+export { fieldProv, type FieldPath, type FieldProvResult } from "./verdict/field-prov.js";
+
 // ── the StaticProv circuit types ────────────────────────────────────────────────
 export type {
   BuildProv,
