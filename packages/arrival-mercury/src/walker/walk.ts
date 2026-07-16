@@ -158,6 +158,30 @@ export interface WalkOptions {
   readonly sameBranchOf?: (node: CfIf) => CoreForm | undefined;
   /** `"run"` = executable artifact (Law T strict); `"read"` = glass (clean forms). */
   readonly register: "run" | "read";
+  /**
+   * BUILD-MODE ADDITIVE HOOK (the loader/FRAME wave, `docs/working-proposals/
+   * inhuman-build-cli.md` §2/§3): consulted at every one of the four `"Require"`
+   * dispatch sites below (`lowerStmts`/`lowerTail`/`tailLoopForm`/`lowerExpr`) —
+   * mirrors `idiomAt`/`prevalueOf`'s own "decline is always safe" discipline.
+   * Default `undefined` ⇒ every existing caller (the oracle harness, every
+   * hand-rolled-registry test in this package) is BYTE-IDENTICAL to today: a
+   * `Require` node still lowers straight to `requireThrow` — oracle programs are
+   * self-contained single files, so the loader-owns-import-planning door is
+   * exactly the right answer there, unchanged.
+   *
+   * Under a build-mode caller (`../build/`), a `Require` node's PATH has already
+   * been resolved to a compiled sibling's import binding (either a whole-module
+   * default binding for a `(define x (require "y"))`/inline use, or — for the
+   * bare, unbound spill case — a binding the caller only needs the WALKER to
+   * accept as "handled" so the statement position emits nothing; the actual
+   * spilled NAMES resolve through registry rows the caller overlays separately,
+   * per the design doc's own module/program-face split). Returning a value here
+   * never implies a runtime import materializes at THIS textual position — the
+   * caller is responsible for hoisting its own `Import` decls onto the unit
+   * this `walk()` call returns; this hook only decides what a `Require` node
+   * ITSELF lowers to, in whichever position it was written.
+   */
+  readonly requireOf?: (node: CfRequire) => R | undefined;
 }
 
 /** Statement-sequence mode: `tail` returns the last form's value; `stmt` discards it;
@@ -596,8 +620,14 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
         return [Block(letStmts(n, "stmt"))]; // bare block — scoped, no Return inside
       case "Door":
         return [doorThrow(n.code, n.message)];
-      case "Require":
-        return [requireThrow(n)];
+      case "Require": {
+        // Statement position — the require's own value is discarded either way
+        // (the bare, unbound spill's actual payoff is the caller's registry
+        // overlay, not this position). `requireOf` returning anything at all
+        // means "handled" — emit nothing, the import is hoisted elsewhere.
+        const handled = opts.requireOf?.(n);
+        return handled !== undefined ? [] : [requireThrow(n)];
+      }
       default: {
         const e = lowerExpr(n);
         return [e.t === "Block" ? Call(Arrow([], e), []) : e];
@@ -615,8 +645,13 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
     switch (n.kind) {
       case "Door":
         return [doorThrow(n.code, n.message)];
-      case "Require":
-        return [requireThrow(n)];
+      case "Require": {
+        // Tail position — the require's value MAY be observed (a file whose
+        // trailing form is bare `(require "x")`), so a handled require returns
+        // its resolved value, conservatively.
+        const handled = opts.requireOf?.(n);
+        return handled !== undefined ? [Return(handled)] : [requireThrow(n)];
+      }
       case "Define":
       case "DefineFn":
         // A body whose LAST form is a define has unspecified value — bind, yield undefined.
@@ -815,8 +850,13 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
         return [Block(letStmts(n, mode))]; // nested block inside the while — Continue still binds the loop
       case "Door":
         return [doorThrow(n.code, n.message)];
-      case "Require":
-        return [requireThrow(n)];
+      case "Require": {
+        // Loop-tail position — same conservative "return the resolved value" as
+        // `lowerTail`, above (an edge case: a named-let tail landing on a bare
+        // require is exotic but not impossible).
+        const handled = opts.requireOf?.(n);
+        return handled !== undefined ? [Return(handled)] : [requireThrow(n)];
+      }
       default:
         break;
     }
@@ -1015,7 +1055,11 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
       case "Door":
         return doorExpr(n.code, n.message);
       case "Require":
-        return Block([requireThrow(n)]);
+        // Expression position — the require's value is genuinely consumed here
+        // (a define RHS, an inline call argument); a handled require IS its
+        // resolved value, unwrapped (no Block/Return wrapping needed, unlike
+        // the statement-position sites above).
+        return opts.requireOf?.(n) ?? Block([requireThrow(n)]);
     }
   };
 

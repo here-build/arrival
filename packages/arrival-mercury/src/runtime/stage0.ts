@@ -333,6 +333,19 @@ export function maxBy(f: (x: unknown) => number, xs: readonly unknown[]): unknow
   return best;
 }
 
+/**
+ * `string-ci=?` — R7RS §6.7 case-insensitive string equivalence, n-ary
+ * (vacuously `#t` under 2 args). Mirrors the interpreter's own definition
+ * verbatim (`foundations/arrival/arrival/src/env/r7rs/strings.ts`:
+ * `strs.slice(1).every((s) => stringValue(s).toLowerCase() === stringValue(strs[0]).toLowerCase())`).
+ * `inhuman build`'s GEPA example (`metric.scm`) is this shim's corpus driver.
+ */
+export function stringCiEq(...ss: string[]): boolean {
+  if (ss.length < 2) return true;
+  const first = ss[0]!.toLowerCase();
+  return ss.slice(1).every((s) => s.toLowerCase() === first);
+}
+
 export const STAGE0: Readonly<Record<string, string>> = {
   "<": "lt",
   "<=": "le",
@@ -353,6 +366,7 @@ export const STAGE0: Readonly<Record<string, string>> = {
   error: "error",
   list: "list",
   "string-append": "stringAppend",
+  "string-ci=?": "stringCiEq",
   every: "every",
   any: "any",
   some: "some",

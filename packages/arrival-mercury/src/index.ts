@@ -270,3 +270,26 @@ export { seal, type LeafRole, type SealVerdict } from "./seal.js";
 export { leafVerdicts, type LeafVerdict, type LeafVerdictKind, type ProbeAttempt, type ProbeOutcome } from "./probe/verdict.js";
 export type { LeafPath as DynamicLeafPath } from "./probe/verdict.js";
 export { witnessesFor, type Witness, type WitnessAxis, type WitnessOptions } from "./probe/witness.js";
+
+// ── `inhuman build` — the build-emitter surface (docs/working-proposals/
+//    inhuman-build-cli.md): module-faced emission composing the pipeline
+//    above (walk/materialize*/render), the require→import rewrite, and the
+//    export contract (module face + program face + v0's pipeline wrap). The
+//    CLI package (`@inhuman.tools/inhuman`) is the sole consumer; this is the
+//    ONE new public surface this lane adds — everything else above is
+//    untouched. ──
+export { buildProject, type BuildProjectOptions } from "./build/project.js";
+export type { BuildFile, BuildResult, BuildWarning, CompileFileOptions, CompileFileResult, ExportShape, RequireResolution } from "./build/types.js";
+export { compileDataFile, DATA_EXTENSIONS } from "./build/data-module.js";
+export { compileScmModule, type ScmCompileDeps } from "./build/scm-module.js";
+export { flattenTopBegins, hasProgramFace, scanRequires, topLevelDefineNames, type RequireOccurrence } from "./build/require-scan.js";
+export {
+  buildEnvChain,
+  envKeyFor,
+  foldCoercionTag,
+  liftOverridable,
+  OVERRIDABLE_SYMBOL,
+  overridableSymbolRule,
+  PIPELINE_PARAMS_SCHEME_NAME,
+  type CoercionTag,
+} from "./build/overridable.js";
