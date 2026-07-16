@@ -514,6 +514,51 @@ export class EvalTrace implements EvalTap {
   }
 
   /**
+   * Arm the cap for ONE run: zero the against-cap counter and the open-invocation count, WITHOUT
+   * touching the retained graph. Call at the top of every run, before the first `enter`.
+   *
+   * ─── WHY THIS EXISTS (a session-killing bug, found in benchmark trajectories 2026-07-14) ─────
+   *
+   * `maxEntries` is documented as a RUNAWAY-LOOP guard — "run produced too many steps" — but it was
+   * enforced against `#mintedSinceReset`, which only resets in {@link clear}. In a long-lived
+   * session (the MCP runner shares ONE tap across every REPL call, deliberately, so provenance
+   * resolves across calls) the counter is therefore a SESSION-LIFETIME budget wearing a per-run
+   * guard's error message.
+   *
+   * That alone would merely be misleading. What made it fatal:
+   *
+   *   1. A program legitimately exceeds the cap. `enter` THROWS mid-eval.
+   *   2. The eval unwinds — so the invocations already entered NEVER `exit`. `#openCount` stays > 0.
+   *   3. The runner's per-call GC calls `clear()` — which asserts `#openCount === 0`, and throws.
+   *      That throw is swallowed (it was written for a different case: an abandoned TIMEOUT eval,
+   *      still running, whose "the next call's clear() takes it" promise is true only because that
+   *      eval eventually exits. On the budget path nothing ever exits — the frames are gone).
+   *   4. `#mintedSinceReset` is now pinned at the cap forever. EVERY subsequent `enter` throws.
+   *
+   * The session was dead: `(+ 1 2)` threw "trace step budget exceeded", and with it every MCP tool
+   * call, for the rest of the conversation. One model burned 24 of its 36 rounds probing for a
+   * recovery door that did not exist, and scored 0.00 on a task it had the data for.
+   *
+   * A guard against a runaway loop must not be able to outlive the loop. Zeroing the counter per RUN
+   * makes the cap mean what its error message has always claimed it means, and makes step 4
+   * unreachable: a budget error can end a program, never a session.
+   *
+   * `#openCount` is zeroed too, and that is the point rather than a side effect: after an unwind the
+   * count is GARBAGE — it counts frames that no longer exist and can never exit. Carrying it forward
+   * is what jammed `clear()`. A straggler `exit` from an abandoned timeout eval may drive it
+   * negative afterwards; that is harmless (nothing reads it but `clear`'s guard, and a spurious
+   * "already zero" only ever permits a GC that was going to be correct anyway), and infinitely
+   * preferable to a count that can never reach zero.
+   *
+   * The retained graph is deliberately NOT touched: that is what `clear()` is for, and provenance
+   * must survive across calls (a value minted in call 1, read back in call 3).
+   */
+  beginRun(): void {
+    this.#mintedSinceReset = 0;
+    this.#openCount = 0;
+  }
+
+  /**
    * Honest memory estimate over the CURRENTLY RETAINED graph — no `sizeof` exists in JS, so this
    * is a documented approximation, not a measurement: `entries`/`points` count live invocations
    * (from `#invocationLog`, so both read 0 right after {@link clear}); `retainedValueBytes` sums,

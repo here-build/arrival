@@ -1115,9 +1115,22 @@ export class TraceBudgetError extends ArrivalError {
   public readonly name = "TraceBudgetError";
 
   constructor(public readonly maxEntries: number) {
+    // A DOOR, not a dead end. The old text said "bound the loop or raise ARRIVAL_TRACE_MAX" — and
+    // `ARRIVAL_TRACE_MAX` is an environment variable of the HOST PROCESS. A model reading this
+    // through an MCP tool cannot reach it; it can only re-read the sentence. One model checked the
+    // tool schema for the knob, found `eval-timeout-ms` / `response-size` and no trace cap, and
+    // concluded the sandbox was broken. Never offer a remedy the reader cannot perform.
+    //
+    // The second half matters as much: this error ends a PROGRAM, not a SESSION (EvalTrace.beginRun
+    // re-arms the cap per run). Say so — the model that hit this spent 24 rounds convinced its whole
+    // world was dead, because nothing told it otherwise.
     super(
-      `trace step budget exceeded (${maxEntries} entries) — run produced too many steps to ` +
-        `trace; bound the loop or raise ARRIVAL_TRACE_MAX.`,
+      `this program traced ${maxEntries} evaluation steps and was stopped — a loop this big is ` +
+        `almost always unintended.\n` +
+        `Your earlier definitions are INTACT and the session is fine — only this program was stopped.\n` +
+        `Try: bound the loop (fewer iterations), work on a slice first (e.g. \`(take xs 100)\`), or ` +
+        `use a built-in that does the work in one step (\`string-split\`, \`filter\`, \`assoc\`) ` +
+        `instead of walking char-by-char.`,
     );
   }
 }
