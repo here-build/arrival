@@ -14,7 +14,7 @@ import type { EmitRule } from "@here.build/arrival/emit";
 
 import type { EmitRegistry, EmitRegistryRow } from "../registry/index.js";
 import { render } from "../residual/render.js";
-import { Bin, Lit, type CompilationUnit, type R } from "../residual/types.js";
+import { Arrow, Bin, Call, Index, Lit, Method, Ref, type Binding, type CompilationUnit, type R } from "../residual/types.js";
 import { phase1Rules } from "../rules/index.js";
 import { walk } from "../walker/index.js";
 import { classify } from "../coreform/index.js";
@@ -51,14 +51,33 @@ const plusEmitRuleMirror: EmitRule<R> = {
   call: (args) => (args.length === 0 ? Lit(0) : args.reduce((acc, a) => Bin("+", acc, a))),
 };
 
-// car/cdr/map ride the REAL Phase-1 rules (phase1.ts) so the residual shapes this
-// suite destructures/singularizes/dedupes against are exactly what the gate-
-// authoritative pipeline itself produces — never a hand-approximated stand-in.
+// `map`'s real Contract now lives on foundations/arrival/arrival/src/env/r7rs/
+// lists.ts (Phase-2 relocation, Wave 3) — same deep-import restriction as `+`'s
+// mirror above. A byte-verified LOCAL mirror of lists.ts's own `mapEmitRule` (see
+// that file, and its own lists-emit.test.ts proof).
+const mapEmitRuleMirror: EmitRule<R> = {
+  call: (args, ctx) => {
+    if (args.length < 2) ctx.door(`\`map\` wants a function and at least one list, got ${args.length} argument${args.length === 1 ? "" : "s"}`);
+    const [f, ...lists] = args;
+    if (lists.length === 1) return Method(lists[0]!, "map", [f!]);
+    const el = ctx.fresh("item") as Binding;
+    const idx = ctx.fresh("i") as Binding;
+    const rest = lists.slice(1).map((l) => Index(l, Ref(idx)));
+    return Method(lists[0]!, "map", [Arrow([el, idx], Call(f!, [Ref(el), ...rest]))]);
+  },
+};
+
+// car/cdr ride the REAL Phase-1 rules (phase1.ts) so the residual shapes this suite
+// destructures/singularizes/dedupes against are exactly what the gate-authoritative
+// pipeline itself produces — never a hand-approximated stand-in. `+`/`map` ride
+// byte-verified LOCAL MIRRORS instead (see each's own comment, just above its
+// definition) — both relocated onto arrival-core Contracts this package cannot
+// deep-import.
 const testRegistry = registryOf(
   row("car", { emit: phase1Rules.car!.emit }),
   row("cdr", { emit: phase1Rules.cdr!.emit }),
   row("+", { emit: plusEmitRuleMirror }),
-  row("map", { emit: phase1Rules.map!.emit }),
+  row("map", { emit: mapEmitRuleMirror }),
   row("combine"), // bare shim — a value-position callback with no interesting rule
   row("list"), // bare shim — a plain, already-singular collection constructor
   row("g", { cacheClass: "pure" }), // a generic pure symbol, no emit rule (rung-3 shim)
@@ -108,9 +127,11 @@ describe("singularizeHofParams — element-name singularization (constitution §
   it("multi-list map's fresh __item param renames to the receiver's singular ('examples' → 'example')", () => {
     // Single-list map forwards its callback verbatim (no fresh param ever minted —
     // see the control below); the multi-list zip is THIS wave's only path that
-    // mints a generic callback param (`freshBinding(ctx, "item")`, mapRule in
-    // phase1.ts) — exactly what this leg improves. The index param (`__i`) is left
-    // alone: it has no natural name to derive from the collection.
+    // mints a generic callback param (`freshBinding(ctx, "item")`, `mapEmitRule` in
+    // foundations/arrival/arrival/src/env/r7rs/lists.ts, Phase-2 relocation Wave 3 —
+    // was `mapRule` in phase1.ts before the relocation) — exactly what this leg
+    // improves. The index param (`__i`) is left alone: it has no natural name to
+    // derive from the collection.
     expect(emit(`(define (f examples others) (map combine examples others))`, singularizeHofParams)).toBe(
       `function f(examples, others) {\n    return examples.map((example, __i) => combine(example, others[__i]));\n}\n`,
     );

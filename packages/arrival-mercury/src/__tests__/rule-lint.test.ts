@@ -11,16 +11,22 @@
  *     `Required<EmitCtx<R>>` object literal, which forces this file to enumerate
  *     every field EmitCtx has — so a new field (parent-shaped or not) fails THIS
  *     file's own `tsc --strict` pass until reviewed here, never silently.
- *  2. RUNTIME: every `phase1Rules` emit rule, plus the eight RELOCATED Contract rules
+ *  2. RUNTIME: every `phase1Rules` emit rule (car/cdr/filter/infer* — filter stays
+ *     table-resident, see below), plus the THIRTEEN fully-RELOCATED Contract rules
  *     (`=`/`quotient`/`modulo` in foundations/arrival/arrival/src/env/r7rs/numeric.ts
  *     Wave 1; `+`/`-`/`*`/`/` joining them there, `cons` in .../lists.ts, and
- *     `not`/`null?`/`pair?` in .../equality.ts, Wave 2 — all moved off this table per
- *     rules/phase1.ts's own relocation note), is executed — across a spread of
- *     arities, so every `exactly()`-gated branch gets a turn — against a Proxy-wrapped
- *     ctx that records every property GET. Every recorded key must be in the
- *     documented-safe set: this catches a hypothetical `(ctx as any).parentOf(...)`
- *     escape a pure type-level check cannot (a cast bypasses `tsc`, never a runtime
- *     property read) — "cheap but real" per the mission's own framing.
+ *     `not`/`null?`/`pair?` in .../equality.ts, Wave 2; `map`/`apply` joining `cons`
+ *     in .../lists.ts, Wave 3 — all moved off this table per rules/phase1.ts's own
+ *     relocation note), is executed — across a spread of arities, so every
+ *     `exactly()`-gated branch gets a turn — against a Proxy-wrapped ctx that records
+ *     every property GET. Every recorded key must be in the documented-safe set: this
+ *     catches a hypothetical `(ctx as any).parentOf(...)` escape a pure type-level
+ *     check cannot (a cast bypasses `tsc`, never a runtime property read) — "cheap but
+ *     real" per the mission's own framing. **`filter` is the one Wave-3 exception**:
+ *     its Contract (foundations/arrival/arrival/src/env/srfi/srfi-1.ts) ALSO carries
+ *     an `emit` rule, but `scheme/srfi-1` is invisible to the oracle's harvest
+ *     (phase1.ts's own relocation note has the full account), so it is checked here
+ *     through the FIRST sweep (`phase1Rules`), not the second (the real harvest).
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -147,22 +153,30 @@ describe("rule-lint — Law C's boundary: no emit rule inspects parent CoreForm"
       expectOnlySafeKeys(accessed, `phase1Rules["${name}"]`);
     }
     // A sweep over an accidentally-empty table would pass vacuously — assert it
-    // actually exercised a non-trivial number of rules (today's table: ~14 rows, ~12
-    // carry an `emit`; `every`/`any` are registry-presence-only, no rule). The bound
-    // stays well below today's count deliberately — each future relocation wave
-    // shrinks this table further, and a bound pinned to the exact count would need
-    // touching every wave for no safety gain.
-    expect(checked).toBeGreaterThan(8);
+    // actually exercised a non-trivial number of rules (today's table: ~12 rows, ~10
+    // carry an `emit` — car/cdr/filter + the seven-member infer family; `every`/`any`
+    // are registry-presence-only, no rule; map/apply left this wave, Wave 3; filter
+    // STAYS — see the module comment above). The bound stays well below today's count
+    // deliberately — each future relocation wave (R2, the infer family) shrinks this
+    // table further, and a bound pinned to the exact count would need touching every
+    // wave for no safety gain.
+    expect(checked).toBeGreaterThan(5);
   });
 
-  it("the eight RELOCATED Contract rules (=, quotient, modulo, +, -, *, /, cons, not, null?, pair?) only read the documented EmitCtx surface", async () => {
+  it("the thirteen fully-RELOCATED Contract rules (=, quotient, modulo, +, -, *, /, cons, not, null?, pair?, map, apply) only read the documented EmitCtx surface", async () => {
     const session = await openOracleSession();
     try {
       const registry = emitRegistryOf(session.ambient);
       // Wave 1 (=, quotient, modulo — numeric.ts) + Wave 2 (+, -, *, / — numeric.ts;
-      // cons — lists.ts; not, null?, pair? — equality.ts). Eleven names, eight
-      // symbols moved so far across the two waves (= counts once).
-      for (const name of ["=", "quotient", "modulo", "+", "-", "*", "/", "cons", "not", "null?", "pair?"]) {
+      // cons — lists.ts; not, null?, pair? — equality.ts) + Wave 3 (map, apply —
+      // lists.ts). Thirteen names, thirteen symbols FULLY relocated across three
+      // waves so far. `filter` (also grown a Contract emit rule this wave) is
+      // DELIBERATELY excluded from this list — its Contract lives on `scheme/srfi-1`,
+      // which the oracle's harvest cannot see, so `registry.lookup("filter")?.emit`
+      // is `undefined` here by design; its EmitCtx-surface proof runs through
+      // `phase1Rules` in the sweep above instead (the table row is the only
+      // reachable copy today — see phase1.ts's own relocation note).
+      for (const name of ["=", "quotient", "modulo", "+", "-", "*", "/", "cons", "not", "null?", "pair?", "map", "apply"]) {
         const rule = registry.lookup(name)?.emit;
         expect(rule, `expected a relocated emit rule for "${name}" on its own Contract — has it moved again?`).toBeDefined();
         const accessed = accessedCtxKeysAcrossArities(rule!);

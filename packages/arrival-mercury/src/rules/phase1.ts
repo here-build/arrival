@@ -13,12 +13,13 @@
  *    `infer`'s promise-typed edge → a local await).
  *  - Law A — fact-directed branches key on `ctx.argFacts` (argument facts), never on
  *    result types or parent nodes (cross-node idioms are Law-C engine peepholes).
- *  - Law F + the read register (constitution §1) — where a rule has a fact-directed
- *    clean/conservative split (`filter`), fact absence takes the conservative form in
- *    the run register; the read register short-circuits to the clean form (glass is
- *    never executed — mirrors the walker's own `truthTest`). (`not` obeyed the SAME
- *    law from this table; it now obeys it from its own Contract — see the relocation
- *    note below.)
+ *  - Law F + the read register (constitution §1) — a fact-directed clean/conservative
+ *    split, fact absence takes the conservative form in the run register; the read
+ *    register short-circuits to the clean form (glass is never executed — mirrors the
+ *    walker's own `truthTest`). (`not` obeyed this law from this table and now obeys
+ *    it from its own Contract; `filter` obeys it from BOTH — its table row (below)
+ *    AND its Contract are byte-identical copies — see the relocation note below for
+ *    why filter is the one exception that keeps a table-resident rule.)
  *  - §7 one-number — was `+ - * /` are plain folds/operators over JS numbers; no
  *    exactness dispatch EXISTS: not a fact, not a shim, not a branch. (`=`/`quotient`/
  *    `modulo`/`+`/`-`/`*`/`/` all obeyed this law from this table; they now obey it
@@ -58,29 +59,64 @@
  *    foundations/arrival/arrival/src/env/r7rs/equality.ts (`notEmitRule`/
  *    `nullQEmitRule`/`pairQEmitRule` — `null?`/`pair?`'s `narrows`/`refPolicy` moved
  *    WITH the rule, the full Law-N package deal).
- *  All eight are byte-identical to the rules this file used to hold (verified: the
- *  oracle's bug-cell rows quotient-neg/modulo-neg/exact-vs-inexact-eq and the
- *  cross-pass/gate3 goldens are unchanged; arithmetic/cons/not/null?/pair? have no
- *  dedicated bug-cell row of their own but are exercised pervasively across the
- *  existing corpus, also unchanged). No RULE-bearing table row remains for any of the
- *  eight — `withRules`' fallthrough to the harvested base row is what resolves them
- *  now. (`+`/`*` keep a bare, ruleless PRESENCE row — see the table below's own note —
- *  needed only by this package's OWN base-less overlay test convention, a no-op
- *  against the real harvest.) This is the pattern the remaining table rows will each
- *  follow.
+ *  - Wave 3: `map`/`apply` joined `cons` on lists.ts's own Contracts
+ *    (`mapEmitRule`/`applyEmitRule` — residual-lite grew `Arrow`/`Index` for these
+ *    two, plus a `RuntimeRef` TYPE ARM with no constructor, for `apply`'s structural
+ *    inspection of an already-lowered argument's own tag — see residual-lite.ts's own
+ *    doc comment). No RULE-bearing table row remains for either — `withRules`'
+ *    fallthrough to the harvested base row (capability `scheme/lists`, an
+ *    always-ambient R7RS base pack) is what resolves them now. The bare `"+": {}`/
+ *    `"*": {}` presence rows this note used to describe are ALSO deleted this wave:
+ *    their sole reason for existing — keeping `applyRule`'s FOLD_OPS shortcut
+ *    resolvable under this file's base-less test registry — left WITH `apply`'s rule;
+ *    no vestigial row remains for either.
+ *
+ *    `filter` grew the SAME Contract-side `emit` field this wave —
+ *    foundations/arrival/arrival/src/env/srfi/srfi-1.ts carries `filterEmitRule`,
+ *    byte-identical to `filterRule` below — but its TABLE ROW STAYS, unlike every
+ *    other symbol in this list. **Discovered, not assumed:** `scheme/srfi-1` (the
+ *    capability filter's Contract lives on) is NOT part of the oracle's harvested
+ *    ambient — `emitRegistryOf(session.ambient)` sees `scheme/lists`/`scheme/
+ *    numeric`/`scheme/equality` (verified: map/cons/apply/quotient/not/… all resolve
+ *    from these Wave-1/2/3 Contracts through the REAL harvest) but has ZERO rows for
+ *    ANY srfi-1 symbol (filter, take, drop, iota, zip, every?, any?, … — probed
+ *    directly). Deleting `filter`'s table row reproduced the SAME
+ *    `unresolved-identifier` door `every`/`any` are already guarded against below, but
+ *    WORSE for filter specifically: a bare presence row (their fix) would route
+ *    filter through the rung-3 RuntimeRef shim, changing its compiled shape (this
+ *    file's own golden — the clean `.filter(pred)`/guarded-arrow form — vs a shim
+ *    call), which fails this wave's OWN zero-golden-churn gate
+ *    (cross-pass-fixtures.test.ts's/emitted-fixtures.test.ts's/bug-cell-corpus
+ *    .test.ts's `filter-truthy-zero`/`ai-winter-ebl-investigation`/
+ *    `inhuman-gepa-full`/`mercury-fixture-gepa` rows, all verified red on a bare-row
+ *    attempt, all verified green with the table rule retained). Fixing the ambient
+ *    gap (making `buildArrivalSession` include `scheme/srfi-1`) lives in
+ *    `@inhuman.tools/arrival-run`/this package's `oracle/harness.ts` — outside this
+ *    relocation's boundary (and `oracle/harness.ts` is mid-edit by a concurrent lane
+ *    as of this wave) — flagged for a follow-up wave, not fixed here. Once it lands,
+ *    deleting this table row is the same one-line move every other Wave-3 symbol
+ *    already made.
+ *  All thirteen fully-relocated symbols (map/apply this wave; eleven from Waves 1-2)
+ *  are byte-identical to the rules this file used to hold (verified: the oracle's
+ *  bug-cell rows quotient-neg/modulo-neg/exact-vs-inexact-eq and the cross-pass/gate3
+ *  goldens are unchanged; the rest have no dedicated bug-cell row of their own but are
+ *  exercised pervasively across the existing corpus, also unchanged). `filter`'s
+ *  table-resident rule (below) is likewise byte-identical to its new Contract twin —
+ *  the two are proven equal by construction (one function, copied once, never
+ *  re-derived) rather than merely "consistent."
  */
 import type { EmitCtx, EmitRule } from "@here.build/arrival/emit";
 
-import type { Binding, BinOp, R } from "../residual/types.js";
-import { Arrow, Bin, Call, Index, Lit, Method, Ref, Spread } from "../residual/types.js";
+import type { Binding, R } from "../residual/types.js";
+import { Arrow, Bin, Call, Index, Lit, Method, Ref } from "../residual/types.js";
 import type { SymbolRuleTable } from "./overlay.js";
 
-/**
- * The rules-side twin of the walker's `ruleOf` narrowing seam: `EmitCtx.fresh` is
- * typed `unknown` in arrival core (deliberately opaque — the residual algebra lives in
- * THIS package, §4.5 layering), while the walker's real `ctxFor` supplies the namer's
- * `Binding`. One helper, one cast, documented — no rule touches `fresh` directly.
- */
+/** The rules-side twin of the walker's `ruleOf` narrowing seam: `EmitCtx.fresh` is
+ *  typed `unknown` in arrival core (deliberately opaque — the residual algebra lives in
+ *  THIS package, §4.5 layering), while the walker's real `ctxFor` supplies the namer's
+ *  `Binding`. One helper, one cast, documented — no rule touches `fresh` directly.
+ *  Kept ONLY for `filterRule` below (map/apply's own copies of this helper now live on
+ *  lists.ts, alongside their relocated rules). */
 const freshBinding = (ctx: EmitCtx<R>, hint: string): Binding => ctx.fresh(hint) as Binding;
 
 /** Fixed-arity refusal (see the module header's arity note). Returns the args
@@ -119,25 +155,12 @@ const cdrRule: EmitRule<R> = {
 // own Contract's `emit` field in foundations/arrival/arrival/src/env/r7rs/numeric.ts.
 // No rule body or table row remains here.
 
-// ─── map — the arity bridge, sync-shaped ALWAYS (Law W) ───────────────────────────────
-// Constitution §4.3 verbatim: single-list rides `Array.prototype.map`; multi-list is
-// the index-zip arrow (drives off lists[0]'s length — today's emitter behavior,
-// inherited deliberately; the length-mismatch question is phase1-symbol-rules.md Open
-// Q 4, not resolved here). If `f` is async, ASYNC-IFY sees `Promise<B>[]` meeting a
-// `B[]`-consumer and rewrites to `await Promise.all(...)` at the consuming edge — not
-// this rule's concern (it recognizes the `.map` shape structurally, post-emission).
-
-const mapRule: EmitRule<R> = {
-  call: (args, ctx) => {
-    if (args.length < 2) ctx.door(`\`map\` wants a function and at least one list, got ${args.length} argument${args.length === 1 ? "" : "s"}`);
-    const [f, ...lists] = args;
-    if (lists.length === 1) return Method(lists[0]!, "map", [f!]);
-    const el = freshBinding(ctx, "item");
-    const idx = freshBinding(ctx, "i");
-    const rest = lists.slice(1).map((l) => Index(l, Ref(idx)));
-    return Method(lists[0]!, "map", [Arrow([el, idx], Call(f!, [Ref(el), ...rest]))]);
-  },
-};
+// ─── map / apply — RELOCATED (see the module header's relocation note, Wave 3).
+// map's arity-bridge (single-list `.map`/multi-list index-zip arrow) and apply's
+// reduce/arity bridge (the `+`/`*` fold recognition, structural over an
+// already-lowered `RuntimeRef` argument) now live on their own Contract's `emit`
+// field in foundations/arrival/arrival/src/env/r7rs/lists.ts (`mapEmitRule`/
+// `applyEmitRule`). No rule body or table row remains here.
 
 // ─── filter — Law T on the predicate's VERDICT ────────────────────────────────────────
 // `Array.prototype.filter` keeps by JS truthiness, which drops Scheme-truthy `0`/`""`;
@@ -146,6 +169,12 @@ const mapRule: EmitRule<R> = {
 // (or the read register) passes `f` bare. This RECONCILES the component spec's §6
 // (bare `.filter(pred)` unconditionally — pre-reconciliation) against constitution
 // Law T, per the wave plan; single-list only (filter's own Contract, unlike map).
+//
+// TABLE-RESIDENT BY NECESSITY, not by choice (see the module header's relocation
+// note): this rule ALSO lives on filter's own Contract
+// (foundations/arrival/arrival/src/env/srfi/srfi-1.ts's `filterEmitRule`,
+// byte-identical), but `scheme/srfi-1` is not part of the oracle's harvested ambient,
+// so only THIS copy is reachable through the real compile pipeline today.
 
 const filterRule: EmitRule<R> = {
   call: (args, ctx) => {
@@ -155,40 +184,6 @@ const filterRule: EmitRule<R> = {
     }
     const x = freshBinding(ctx, "x");
     return Method(xs!, "filter", [Arrow([x], Bin("!==", Call(pred!, [Ref(x)]), Lit(false)))]);
-  },
-};
-
-// ─── apply — the reduce/arity bridge (constitution §6's preserved-knowledge row) ──────
-// `(apply + xs)` → a reduce with the correct identity. Recognition is STRUCTURAL over
-// the already-lowered operator residual (`+` in value position lowers to
-// `RuntimeRef("+")` via its shim refPolicy before this rule runs) — the same
-// residual-plane recognition ASYNC-IFY uses on `.map`'s method name; Law A forbids
-// peeking at SYNTAX or result types, not at the lowered value in hand.
-//
-// Generic `(apply f a b xs)` → `f(a, b, ...xs)` — SPREAD, not `f.apply(null, xs)`
-// (the mission's pick-one): spread is the idiomatic modern form (§1 human-grade (b)),
-// carries no `this`-binding noise, and composes with leading fixed args without an
-// argument-array concat.
-
-const FOLD_OPS: Readonly<Record<string, { readonly op: BinOp; readonly identity: number }>> = {
-  "+": { op: "+", identity: 0 },
-  "*": { op: "*", identity: 1 },
-};
-
-const applyRule: EmitRule<R> = {
-  call: (args, ctx) => {
-    if (args.length < 2) ctx.door("`apply` wants a function and a trailing argument list");
-    const f = args[0]!;
-    const last = args[args.length - 1]!;
-    if (args.length === 2 && f.t === "RuntimeRef") {
-      const fold = FOLD_OPS[f.symbol];
-      if (fold !== undefined) {
-        const acc = freshBinding(ctx, "acc");
-        const item = freshBinding(ctx, "item");
-        return Method(last, "reduce", [Arrow([acc, item], Bin(fold.op, Ref(acc), Ref(item))), Lit(fold.identity)]);
-      }
-    }
-    return Call(f, [...args.slice(1, -1), Spread(last)]);
   },
 };
 
@@ -218,25 +213,18 @@ const inferRule = (verb: string): EmitRule<R> => ({
 export const phase1Rules: SymbolRuleTable = {
   car: { emit: carRule, refPolicy: "eta" },
   cdr: { emit: cdrRule, refPolicy: "eta" },
-  // cons / not / null? / pair? / - / / / = / quotient / modulo — RELOCATED onto their
-  // own Contracts (module header's relocation note); no table row remains for any of
-  // them.
-  //
-  // "+" / "*" — REGISTRY PRESENCE ONLY (no emit rule — the real one lives on their
-  // own Contract, same relocation as above). Unlike every/any below, the harvest DOES
-  // see these two; this bare row exists solely so `applyRule`'s FOLD_OPS structural
-  // recognition (below) keeps a value-position "+"/"*" resolvable to `RuntimeRef`
-  // under a base-less overlay (`withRules(EMPTY, phase1Rules)`, the convention
-  // rules-phase1.test.ts's fast unit tests use). Harmless against a REAL harvested
-  // base: `withRules`'s merge always prefers the base row's `emit`/`refPolicy` when
-  // this entry sets neither (`entry.emit ?? b?.emit`), so overlaying this bare row
-  // onto the harvested Contract row is a no-op in production — identical to not
-  // having the row at all.
-  "+": {},
-  "*": {},
-  map: { emit: mapRule },
+  // cons / not / null? / pair? / - / / / = / quotient / modulo / map / apply —
+  // RELOCATED onto their own Contracts (module header's relocation note); no table
+  // row remains for any of them. The bare "+"/"*" presence rows this comment used to
+  // describe (needed only so `applyRule`'s FOLD_OPS structural recognition could
+  // resolve a value-position "+"/"*" to `RuntimeRef` under this file's base-less test
+  // overlay) are ALSO gone: `apply`'s own relocation (Wave 3) took that need with it —
+  // no table-resident rule is left to exercise it, so no vestigial row remains either.
   filter: { emit: filterRule },
-  apply: { emit: applyRule },
+  // filter STAYS (see the module header's relocation note in full): its Contract
+  // ALSO carries `filterEmitRule` (srfi-1.ts), but `scheme/srfi-1` is invisible to
+  // the oracle's harvest, so the table row above is the only reachable copy today.
+  //
   // SRFI-1 every/any — REGISTRY PRESENCE ONLY (no emit rule; wave-C wiring fix). They
   // are preamble/scope symbols the contract harvest cannot see (the 221-name harvest
   // lacks them), so without these rows the walker's §4.2 ladder doors them
@@ -244,7 +232,8 @@ export const phase1Rules: SymbolRuleTable = {
   // + STAGE0 manifest rows) sit unreachable. A table-only row rides rung 3
   // (RuntimeRef shim) → FRAME → stage0 — the same path member/assoc take through
   // their harvested rows. Replace with harvested Contracts when the SRFI-1 pack lands
-  // registry-side (the Phase-2 package-deal discipline).
+  // registry-side (the Phase-2 package-deal discipline) — filter's OWN Contract
+  // already landed this wave; only the ambient-visibility gap blocks the same move.
   every: {},
   any: {},
   infer: { emit: inferRule("infer") },

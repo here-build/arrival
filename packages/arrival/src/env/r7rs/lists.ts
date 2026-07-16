@@ -63,7 +63,7 @@ import type { AList, AListAlike, AProcedure, SchemeValue } from "../../values/ty
 // back from this tree): the compiler-facing rule surface a Contract may carry.
 // Constitution §4.1/§4.5 (arrival-ts-transpiler-design.md) + registry-emit.md.
 import type { EmitCtx, EmitRule } from "../../emit/emit-rule.js";
-import { ArrayLit, Spread, type R } from "../../emit/residual-lite.js";
+import { ArrayLit, Arrow, Bin, Call, Index, Lit, Method, Ref, Spread, type Binding, type BinOp, type R } from "../../emit/residual-lite.js";
 
 // A JS value used as a Scheme procedure IS the SchemeValue function member
 // `(...args: SchemeValue[]) => SchemeValue` (types.ts). `is_function`/`typeof`
@@ -263,18 +263,26 @@ function mapImpl(
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Contract.emit — THE PHASE-2 RELOCATION DRILL (constitution §9): cons moves here
-// from the compiler-side phase1 table (`inhuman/foundations/arrival-mercury/src/
-// rules/phase1.ts`) onto its OWN Contract's `emit` field — the same pattern
-// numeric.ts's quotient/modulo/=/+/-/*// relocation established. The residual shape
-// is BYTE-FOR-BYTE identical to the table rule it replaces (verified by diffing
-// against phase1.ts's pre-relocation `consRule`), built via `@here.build/arrival/
-// emit`'s residual-lite constructors (§4.5's seed of "residual types belong in
-// arrival core eventually").
+// Contract.emit — THE PHASE-2 RELOCATION DRILL (constitution §9): cons (Wave 2), then
+// map/apply (Wave 3) move here from the compiler-side phase1 table
+// (`inhuman/foundations/arrival-mercury/src/rules/phase1.ts`) onto their OWN
+// Contract's `emit` field — the same pattern numeric.ts's quotient/modulo/=/+/-/*//
+// relocation established. Every residual shape below is BYTE-FOR-BYTE identical to
+// the table rule it replaces (verified by diffing against phase1.ts's pre-relocation
+// `consRule`/`mapRule`/`applyRule`), built via `@here.build/arrival/emit`'s
+// residual-lite constructors (§4.5's seed of "residual types belong in arrival core
+// eventually") — `Arrow`/`Index` grew residual-lite this wave (map's zip arrow and
+// index-into-a-further-list; apply's fold-reduce arrow); `RuntimeRef` grew it as a
+// TYPE ARM ONLY, no constructor (apply's structural inspection of an incoming
+// argument's own tag — see residual-lite.ts's own doc comment on that arm).
 //
-// Law A holds trivially: the rule never branches on `ctx.argFacts` — §2.1's
-// representation-collapse ruling (lists/pairs/vectors all lower to arrays) fixes the
-// residual unconditionally; there is no type-directed choice to make.
+// Law A holds for all three: none branches on `ctx.argFacts` at all. cons's residual
+// is unconditional (§2.1's representation-collapse ruling — lists/pairs/vectors all
+// lower to arrays — fixes it outright); map/apply's branches key on ARITY (a static,
+// compile-time-known count, not a proof about argument VALUES) and, for apply, on the
+// ALREADY-LOWERED first argument's own residual tag (Law A's "argument facts, never
+// result types or syntax" reading extends to "the value in hand," never "what it
+// syntactically was").
 // ════════════════════════════════════════════════════════════════════════════
 
 /** Fixed-arity refusal — verbatim relocation of phase1.ts's own `exactly` helper (see
@@ -286,6 +294,15 @@ function exactly<T>(ctx: EmitCtx<R>, sym: string, args: readonly T[], n: number)
   return args;
 }
 
+/** The rules-side twin of the walker's `ruleOf` narrowing seam — verbatim relocation
+ *  of phase1.ts's own `freshBinding` helper: `EmitCtx.fresh` is typed `unknown` in
+ *  arrival core (deliberately opaque — the residual algebra lives in the COMPILER
+ *  package, §4.5 layering), while the walker's real `ctxFor` supplies the namer's
+ *  `Binding`. One helper, one cast, documented — no rule touches `fresh` directly. */
+function freshBinding(ctx: EmitCtx<R>, hint: string): Binding {
+  return ctx.fresh(hint) as Binding;
+}
+
 // ── §2.1 representation collapse: cons ──────────────────────────────────────────────
 // Constitution §4.3 verbatim: syntax over the array representation, not a library
 // call. No guard, no shim, no register branch — `[x, ...xs]` regardless of register
@@ -294,6 +311,58 @@ const consEmitRule: EmitRule<R> = {
   call: (args, ctx) => {
     const [x, xs] = exactly(ctx, "cons", args, 2);
     return ArrayLit([x!, Spread(xs!)]);
+  },
+};
+
+// ── map — the arity bridge, sync-shaped ALWAYS (Law W) ──────────────────────────────
+// Constitution §4.3 verbatim: single-list rides `Array.prototype.map`; multi-list is
+// the index-zip arrow (drives off lists[0]'s length — today's emitter behavior,
+// inherited deliberately; the length-mismatch question is phase1-symbol-rules.md Open
+// Q 4, not resolved here). If `f` is async, ASYNC-IFY sees `Promise<B>[]` meeting a
+// `B[]`-consumer and rewrites to `await Promise.all(...)` at the consuming edge — not
+// this rule's concern (it recognizes the `.map` shape structurally, post-emission).
+const mapEmitRule: EmitRule<R> = {
+  call: (args, ctx) => {
+    if (args.length < 2) ctx.door(`\`map\` wants a function and at least one list, got ${args.length} argument${args.length === 1 ? "" : "s"}`);
+    const [f, ...lists] = args;
+    if (lists.length === 1) return Method(lists[0]!, "map", [f!]);
+    const el = freshBinding(ctx, "item");
+    const idx = freshBinding(ctx, "i");
+    const rest = lists.slice(1).map((l) => Index(l, Ref(idx)));
+    return Method(lists[0]!, "map", [Arrow([el, idx], Call(f!, [Ref(el), ...rest]))]);
+  },
+};
+
+// ── apply — the reduce/arity bridge (constitution §6's preserved-knowledge row) ─────
+// `(apply + xs)` → a reduce with the correct identity. Recognition is STRUCTURAL over
+// the already-lowered operator residual (`+` in value position lowers to
+// `RuntimeRef("+")` via its shim refPolicy before this rule runs) — the same
+// residual-plane recognition ASYNC-IFY uses on `.map`'s method name; Law A forbids
+// peeking at SYNTAX or result types, not at the lowered value in hand.
+//
+// Generic `(apply f a b xs)` → `f(a, b, ...xs)` — SPREAD, not `f.apply(null, xs)`
+// (the mission's pick-one): spread is the idiomatic modern form (§1 human-grade (b)),
+// carries no `this`-binding noise, and composes with leading fixed args without an
+// argument-array concat.
+const FOLD_OPS: Readonly<Record<string, { readonly op: BinOp; readonly identity: number }>> = {
+  "+": { op: "+", identity: 0 },
+  "*": { op: "*", identity: 1 },
+};
+
+const applyEmitRule: EmitRule<R> = {
+  call: (args, ctx) => {
+    if (args.length < 2) ctx.door("`apply` wants a function and a trailing argument list");
+    const f = args[0]!;
+    const last = args[args.length - 1]!;
+    if (args.length === 2 && f.t === "RuntimeRef") {
+      const fold = FOLD_OPS[f.symbol];
+      if (fold !== undefined) {
+        const acc = freshBinding(ctx, "acc");
+        const item = freshBinding(ctx, "item");
+        return Method(last, "reduce", [Arrow([acc, item], Bin(fold.op, Ref(acc), Ref(item))), Lit(fold.identity)]);
+      }
+    }
+    return Call(f, [...args.slice(1, -1), Spread(last)]);
   },
 };
 
@@ -328,6 +397,8 @@ export default new EnvCapability("scheme/lists", {
             <A, B, C, R>(f: (a: A, b: B, c: C) => R, as: readonly A[], bs: readonly B[], cs: readonly C[]): readonly R[];
           }
         `,
+        // Compiler-facing (constitution §4.1) — the Phase-2 relocation drill, Wave 3.
+        emit: mapEmitRule,
       },
       (args, runCtx) => {
         const [fn, ...lists] = args;
@@ -469,6 +540,8 @@ export default new EnvCapability("scheme/lists", {
             <A, R>(proc: (...args: A[]) => R, ...argsThenList: [...A[], List<A>]): R;
           }
         `,
+        // Compiler-facing (constitution §4.1) — the Phase-2 relocation drill, Wave 3.
+        emit: applyEmitRule,
       },
       // The final tail element must be a PROPER list — `listToArray` (the shared
       // pack-helpers `to_array`) is the door: it rejects an improper/atom final arg loudly

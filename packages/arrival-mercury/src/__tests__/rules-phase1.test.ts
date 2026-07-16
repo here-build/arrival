@@ -6,9 +6,17 @@
  * Law-N witness gate, narrows carriage into the type-emit grammar's key set, and the
  * doorCategory seam.
  *
- * Fact-directed rules (`not`, `filter`) run in both regimes: facts absent → the Law-F
- * conservative form; `{ boolean: true }` on the ARGUMENT node (Law A — argument facts)
- * → the clean flip; read register → clean unconditionally (constitution §1).
+ * Fact-directed rules (`not`, `filter`) run their Law-F clean/conservative split
+ * through THIS file's own `emitWithArgFacts` helper (facts absent → the conservative
+ * form; `{ boolean: true }` on the ARGUMENT node, Law A — argument facts → the clean
+ * flip; read register → clean unconditionally, constitution §1). `not` has since
+ * relocated onto its own Contract (equality.ts, Wave 2) and carries that same proof at
+ * the Contract level now (equality-emit.test.ts). `filter` ALSO grew a Contract emit
+ * rule this wave (srfi-1.ts, Wave 3, proven independently by srfi-1-emit.test.ts) —
+ * but UNLIKE `not`, its table row stays: `scheme/srfi-1` is invisible to the oracle's
+ * harvest (see phase1.ts's own relocation note for the full account), so this file's
+ * `emitWithArgFacts` proof below remains the reachable end-to-end coverage for
+ * filter's fact-gated split, not a retired stand-in.
  */
 import { describe, expect, it } from "vitest";
 
@@ -78,12 +86,11 @@ describe("car / cdr — syntax over the array representation (§4.3, Law U)", ()
 // not/null?/pair?: .../equality.ts; +/-/*//: .../numeric.ts), so this file's
 // EMPTY-based registry (`withRules(EMPTY, phase1Rules)`, above) can no longer resolve
 // any of their APPLICATION-position residuals (there is neither a table rule nor a
-// base row to fall through to) — `-`/`/` have no table row left at all; `+`/`*` keep
-// a bare, ruleless PRESENCE row (see phase1.ts's own note on it) purely so the
-// `apply` describe block below can still exercise `applyRule`'s FOLD_OPS structural
-// recognition, which depends on a value-position `+`/`*` resolving to `RuntimeRef`
-// even under this base-less overlay. Their coverage now lives in two places: the
-// Contract-level rule-shape proof
+// base row to fall through to). `+`/`*` no longer carry even a bare presence row
+// either (Wave 3 deleted it — see phase1.ts's own note): the row existed solely so
+// the `apply` describe block below could exercise `applyRule`'s FOLD_OPS structural
+// recognition, and `apply` itself relocated out of this table the same wave. Their
+// coverage now lives in two places: the Contract-level rule-shape proof
 // (foundations/arrival/arrival/src/env/r7rs/__tests__/lists-emit.test.ts,
 // equality-emit.test.ts, numeric-emit.test.ts, calling `emit.call` directly against a
 // synthetic ctx) and the full-pipeline proof through the REAL harvest — cross-pass-
@@ -109,25 +116,27 @@ describe("car / cdr — syntax over the array representation (§4.3, Law U)", ()
 // `withRules(emitRegistryOf(session.ambient), phase1Rules)` — the harvested Contract
 // row, not this file's stand-in table.
 
-// ── map — the arity bridge, sync-shaped always (Law W) ────────────────────────────────
-
-describe("map — single-list .map / multi-list index-zip", () => {
-  it("single list → xs.map(f) bare", () => {
-    expect(emit(`(define (g f xs) (map f xs))`)).toBe(`function g(f, xs) {\n    return xs.map(f);\n}\n`);
-  });
-
-  it("multi-list → the index-zip arrow (the zip golden; drives off lists[0])", () => {
-    expect(emit(`(define (g f xs ys) (map f xs ys))`)).toBe(
-      `function g(f, xs, ys) {\n    return xs.map((__item, __i) => f(__item, ys[__i]));\n}\n`,
-    );
-  });
-
-  it("three lists zip the same way", () => {
-    expect(emit(`(define (g f xs ys zs) (map f xs ys zs))`)).toBe(
-      `function g(f, xs, ys, zs) {\n    return xs.map((__item, __i) => f(__item, ys[__i], zs[__i]));\n}\n`,
-    );
-  });
-});
+// ── map / apply — RELOCATED (Phase-2 relocation drill, constitution §9, Wave 3) ──────
+// Neither carries a RULE in `phase1Rules` anymore — both are now the `emit` field of
+// their own Contract in foundations/arrival/arrival/src/env/r7rs/lists.ts, so this
+// file's EMPTY-based registry (`withRules(EMPTY, phase1Rules)`, above) can no longer
+// resolve their APPLICATION-position residuals (there is neither a table rule nor a
+// base row to fall through to). Their coverage now lives in two places: the
+// Contract-level rule-shape proof (foundations/arrival/arrival/src/env/r7rs/
+// __tests__/lists-emit.test.ts, calling `emit.call` directly against a synthetic ctx)
+// and the full-pipeline proof through the REAL harvest — cross-pass-fixtures.test.ts's/
+// gate3-goldens.test.ts's byte-level goldens (multi-list-map, apply-plus,
+// apply-map-transpose) and bug-cell-corpus.test.ts's value-level oracle rows, both of
+// which build their registry via `withRules(emitRegistryOf(session.ambient),
+// phase1Rules)` — the harvested Contract row, not this file's stand-in table.
+// (Neither has a dedicated bug-cell row of its own but both are exercised pervasively
+// across the existing corpus — also unchanged.)
+//
+// `filter` — the ONE Wave-3 symbol whose table row STAYS (and with it, this file's
+// describe block below): its Contract twin (srfi-1.ts's `filterEmitRule`, proven by
+// srfi-1-emit.test.ts) is unreachable through the real harvest because
+// `scheme/srfi-1` is not part of the oracle's ambient — see phase1.ts's own
+// relocation note for the full account.
 
 // ── filter — Law T on the predicate's verdict ─────────────────────────────────────────
 
@@ -144,33 +153,6 @@ describe("filter — the Law-T predicate guard", () => {
 
   it("read register → bare .filter(p) unconditionally", () => {
     expect(emit(src, { register: "read" })).toBe(`function g(p, xs) {\n    return xs.filter(p);\n}\n`);
-  });
-});
-
-// ── apply — the reduce/arity bridge ───────────────────────────────────────────────────
-
-describe("apply — reduce bridge for operator folds, spread for the generic case", () => {
-  it("(apply + xs) → the reduce with identity 0 (the apply-plus golden)", () => {
-    const unit = compile(`(define (g xs) (apply + xs))`);
-    expect(render(unit)).toBe(`function g(xs) {\n    return xs.reduce((__acc, __item) => __acc + __item, 0);\n}\n`);
-    // The operator's RuntimeRef is CONSUMED by the bridge — no runtime import remains.
-    expect(runtimeRefsOf(unit)).toEqual(new Set());
-  });
-
-  it("(apply * xs) → identity 1", () => {
-    expect(emit(`(define (g xs) (apply * xs))`)).toBe(
-      `function g(xs) {\n    return xs.reduce((__acc, __item) => __acc * __item, 1);\n}\n`,
-    );
-  });
-
-  it("(apply f xs) generic → spread f(...xs) (the picked form — not f.apply(null, xs))", () => {
-    expect(emit(`(define (g f xs) (apply f xs))`)).toBe(`function g(f, xs) {\n    return f(...xs);\n}\n`);
-  });
-
-  it("leading fixed args compose: (apply f a xs) → f(a, ...xs)", () => {
-    expect(emit(`(define (g f a xs) (apply f a xs))`)).toBe(
-      `function g(f, a, xs) {\n    return f(a, ...xs);\n}\n`,
-    );
   });
 });
 
@@ -225,9 +207,12 @@ describe("withRules — table-first lookup, base enrichment, names union", () =>
   });
 
   it("a table-only name synthesizes a row (capability «phase1-rules», kind native)", () => {
-    // "filter" (not "modulo" — modulo relocated onto its own Contract this wave, see
-    // the file-level relocation note above; any name still IN the table works here).
-    const row = overlaid.lookup("filter");
+    // "every" (was "modulo" pre-Wave-1, then "filter" — both since grew Contract-side
+    // rules; "every" is the durable exemplar: a bare-presence SRFI-1 wiring-fix row
+    // that stays table-only until the srfi-1 pack lands registry-side. "filter" would
+    // still work today — its row stays, see the relocation note above — but points at
+    // a row scheduled to leave.)
+    const row = overlaid.lookup("every");
     expect(row?.capability).toBe("«phase1-rules»");
     expect(row?.kind).toBe("native");
     expect(row?.refPolicy).toBe("shim");
@@ -235,7 +220,7 @@ describe("withRules — table-first lookup, base enrichment, names union", () =>
 
   it("names is the union", () => {
     expect(overlaid.names.has("reverse")).toBe(true);
-    expect(overlaid.names.has("filter")).toBe(true);
+    expect(overlaid.names.has("every")).toBe(true);
     expect(overlaid.names.size).toBe(base.names.size + Object.keys(phase1Rules).length - 1); // "car" overlaps
   });
 
@@ -272,7 +257,7 @@ describe("withRules — narrows carriage (Law N) and the doorCategory seam", () 
     expect(narrowsMembersOf(synthetic)).toEqual(new Set(["foo?", "bar?"]));
   });
 
-  it("phase1Rules itself carries zero narrows-flagged rows post-relocation (car/cdr/map/filter/apply/infer* declare none)", () => {
+  it("phase1Rules itself carries zero narrows-flagged rows post-relocation (car/cdr/infer* declare none; map/filter/apply are gone from the table entirely, Wave 3)", () => {
     expect(narrowsMembersOf(registry)).toEqual(new Set());
   });
 
