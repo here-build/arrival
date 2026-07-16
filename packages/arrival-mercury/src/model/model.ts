@@ -48,7 +48,10 @@ import type { ClassifyResult, CoreForm, NodeId } from "../coreform/types.js";
 import { classify } from "../coreform/classify.js";
 import { desugar } from "../front/desugar.js";
 import { parseSexprs } from "../front/parse.js";
+import { bindingCensusOf } from "../naming/census.js";
+import type { BindingCensus } from "../naming/types.js";
 import type { EmitRegistry, EmitRegistryRow } from "../registry/harvest.js";
+import type { CompilationUnit } from "../residual/types.js";
 import { narrowsMembersOf } from "../type-emit/narrows.js";
 import type { FactsExtraction } from "../typefacts/facts.js";
 import { extractFacts } from "../typefacts/extract.js";
@@ -159,6 +162,23 @@ export class SchemeSemanticModel {
    */
   readonly importsOf: (node: CoreForm) => ReadonlySet<string>;
 
+  /**
+   * E1a's global binding census (engine plan §2 E1a item 1) — every binding
+   * site over a walked `CompilationUnit`, with entity kind and the use-shape
+   * facts (destructure/singularize candidacy) the naming policy needs. A THIN
+   * wrap over `bindingCensusOf` — the SAME function `walker/walk.ts` calls
+   * internally as the first step of its own naming pipeline (census →
+   * allocate → materialize), never a second derivation (matching `importsOf`'s
+   * own "delegate to the same machinery" discipline, just above). No LSP
+   * consumer of its own yet (`unit` is the walker's PROVISIONAL, pre-allocation
+   * tree — not yet a value an LSP caller can construct independently); named
+   * here per S4's discipline so the eventual consumer (rename-symbol /
+   * go-to-definition's binding-site enumeration, once emission's naming
+   * pipeline is itself a queryable model view rather than an internal walk()
+   * step) has a stable seam to land on.
+   */
+  readonly bindingCensus: (unit: CompilationUnit) => BindingCensus;
+
   // Internal-only caches, TS-`private` (compile-time) rather than `#`-native-
   // private: native `#` fields need `tslib`'s brand-check helpers under this
   // package's `importHelpers: true` (confirmed by isolated repro — the helper
@@ -179,6 +199,7 @@ export class SchemeSemanticModel {
     this.factsAt = (node) => this.facts().facts.get(node.id);
     this.factsMap = () => this.facts().facts;
     this.registryRow = (name) => this.registry.lookup(name);
+    this.bindingCensus = (unit) => bindingCensusOf(unit);
     this.importsOf = (node) => {
       const hit = this.importsCache.get(node);
       if (hit !== undefined) return hit;

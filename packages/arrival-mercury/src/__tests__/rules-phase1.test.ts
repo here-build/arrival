@@ -65,7 +65,13 @@ const emitWithArgFacts = (src: string, argIndex: number, argFacts: TypeFacts): s
 
 describe("car / cdr — syntax over the array representation (§4.3, Law U)", () => {
   it("car → xs[0], unconditionally (no guard, no shim, no mode)", () => {
-    expect(emit(`(define (f xs) (car xs))`)).toBe(`function f(xs) {\n    return xs[0];\n}\n`);
+    // `xs` is used ONLY through this single car access — engine plan §2 E1a
+    // moved implicit destruction INTO walk() itself (naming/census.ts's
+    // use-shape analysis + naming/allocate.ts's naming policy), so this now
+    // destructures to a one-slot ArrayPattern (see walker.test.ts's own
+    // analogous golden and legibility.test.ts's "implicit destruction"
+    // describe block).
+    expect(emit(`(define (f xs) (car xs))`)).toBe(`function f([head]) {\n    return head;\n}\n`);
   });
 
   it("cdr → xs.slice(1)", () => {

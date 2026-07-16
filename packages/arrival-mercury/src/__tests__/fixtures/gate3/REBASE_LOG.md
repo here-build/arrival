@@ -1,5 +1,64 @@
 # Gate-3 goldens — rebase log
 
+## goldenEpoch 2 — E1a lands: names dissolve into census + allocate + materialize (2026-07-16)
+
+**Zero gate-3 goldens changed — verified, not assumed.** `git diff --stat` against this
+directory and a fresh `gate3-goldens.test.ts`/`gate3-rubric.test.ts` run both confirm
+`multi-list-map`, `async-map-promise-all`, `apply-plus`, `apply-map-transpose`,
+`short-circuit-or`, `first-class-car-hof`, `legibility-destructure` are byte-identical to
+goldenEpoch 2's own baseline. Recorded here anyway (mirroring goldenEpoch 1's own "no
+existing golden changed" entry) because this landing is exactly the kind of engine change
+gate 3 exists to catch drift from — the engine plan's E1a phase
+(`docs/working-proposals/arrival-mercury-engine-plan.md` §2 E1a): a global binding census
+(`src/naming/census.ts`) feeds one `@here.build/lexical-namer` allocation
+(`src/naming/allocate.ts`), and `walker/walk.ts` now commits the result
+(`src/naming/materialize.ts`) before it ever returns — `fresh()`-at-emit's own ad hoc
+`${name}_${n}` collision loop is gone, and the legibility pass's destructure/singularize
+legs (`legibility/destructure.ts`, `legibility/singularize.ts`) are deleted, their analysis
+ported verbatim into the census as a READ instead of a decide-and-rewrite pass.
+
+**Two `fixtures/emitted/*.ts` fixtures DID change — pure renames, same discipline as
+goldenEpoch 2 (R5c)'s own `mercury-fixture-gepa.ts` note: that suite's header already
+frames snapshot drift as "regenerate after an emitter change... review the diff like a
+lockfile," no REBASE_LOG requirement of its own, logged here for the paper trail.**
+Verified names-only via `assertFixtureNamesOnly` (`src/oracle/names-diff.ts`) wherever the
+tool's positional-bijection check could confirm it cleanly; the two cases below hit the
+tool's own documented limit (no scope analysis — two DIFFERENT old names occupying
+disjoint sibling scopes both resolving to the same new bare name reports as a "collision"
+even though it is safe) and were verified by hand instead (both are genuinely independent,
+non-overlapping function scopes — see each entry).
+
+- **`inhuman-gepa-full.ts`** — 8 renames, all pure:
+  - `__x2 → __x` (the `frontier` function's `.filter` callback — a SEPARATE, sibling scope
+    from `failuresOf`'s own `__x`; the old ad hoc walker suffixed it purely because its
+    single-flat-stack collision tracking couldn't see the two were disjoint. Hit the
+    names-diff tool's collision limit — verified by hand: `failuresOf`/`frontier` are two
+    unrelated top-level `const`s, zero overlap.)
+  - `__acc2 → __acc`, `__item3 → __item` (`paretoWeight`'s `.reduce`)
+  - `__acc3 → __acc`, `__item4 → __item` (`select`'s `.reduce`)
+  - `picked → isPicked` (the `picked?` predicate function) and `picked_2 → picked` (the
+    named-let loop var, `sampleBatch`) — **the one semantic-reading improvement, not just
+    renumbering**: this is precisely the "gepa-full bug" `front/scheme-scope.ts`'s own
+    header names as the read-register namer's motivating case (a data binding and a
+    same-named predicate contesting one bare name) — the content-aware ladder trick
+    (predicate yields the bare name when a co-scoped plain binding wants it) now fires in
+    the RUN register too, for the first time. The DATA (the accumulated picked set) reads
+    as `picked`; the PREDICATE reads as `isPicked` — better than the old, backwards
+    assignment (`picked` the predicate, `picked_2` the data).
+  - `__acc4 → __acc`, `__item5 → __item` (`proposalBatchScore`'s `.reduce`)
+  - `__acc5 → __acc`, `__item6 → __item` (`parentBatchScore`'s `.reduce`)
+- **`mercury-fixture-gepa.ts`** — 2 renames, both the same disjoint-sibling-scope pattern:
+  `__x2 → __x` (`failing`'s `.filter`) and `__x3 → __x` (`frontier`'s `.filter`) — two
+  unrelated top-level `const`s, verified by hand for the same names-diff-tool-limit reason
+  as `inhuman-gepa-full.ts`'s `__x2` row above.
+
+Regenerated via `vitest run emitted-fixtures.test.ts -u` (the file's own documented
+workflow) against the real, gate-authoritative `compileGreenfield(session, source)`;
+every other `fixtures/emitted/*.ts`/`fixtures/gate1-corpus/*` fixture re-checked and
+confirmed byte-identical (no other corpus program exercises a sibling-scope glue name or a
+predicate/plain-binding same-bare-name contest).
+
+
 Constitution §9 golden discipline ("Golden discipline (two golden sets,
 epoch-stamped)"): a byte-change to any `*.golden.ts` file in this directory
 requires an entry here — "re-base once, explicitly" is a mechanism (this log),

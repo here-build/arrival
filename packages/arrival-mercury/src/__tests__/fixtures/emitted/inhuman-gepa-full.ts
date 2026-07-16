@@ -34,9 +34,9 @@ function OracleMain() {
     const dominates = (a, b) => every(ge, scores(a), scores(b)) && (() => {
         throw new Error("unsupported-form/unresolved-identifier: `some` is not lexically bound and is not a registry symbol.");
     })();
-    const frontier = pool => pool.filter(__x2 => (c => !(() => {
+    const frontier = pool => pool.filter(__x => (c => !(() => {
         throw new Error("unsupported-form/unresolved-identifier: `some` is not lexically bound and is not a registry symbol.");
-    })())(__x2) !== false);
+    })())(__x) !== false);
     const stageFor = iter => evenP(iter) ? "analyze" : "decide";
     const propose = (c, batch, iter) => {
         const stage = stageFor(iter);
@@ -71,7 +71,7 @@ function OracleMain() {
         return outer(pool);
     };
     const columnMaxima = pool => map(list, ...pool.map(scores)).map(it => max_(...it));
-    const paretoWeight = (c, maxima) => scores(c).map((score, __i) => ((s, m) => ge(s, m) ? 1 : 0)(score, maxima[__i])).reduce((__acc2, __item3) => __acc2 + __item3, 0);
+    const paretoWeight = (c, maxima) => scores(c).map((score, __i) => ((s, m) => ge(s, m) ? 1 : 0)(score, maxima[__i])).reduce((__acc, __item) => __acc + __item, 0);
     const rngNext = state => (state * 16807 % 2147483647 + 2147483647) % 2147483647;
     const rngInt = (state, n) => (state % max_(n, 1) + max_(n, 1)) % max_(n, 1);
     const weightedIndex = (weights, target) => {
@@ -92,32 +92,32 @@ function OracleMain() {
     const select = (pool, state) => {
         const maxima = columnMaxima(pool);
         const weights = pool.map(it => paretoWeight(it, maxima));
-        const target = rngInt(state, weights.reduce((__acc3, __item4) => __acc3 + __item4, 0));
+        const target = rngInt(state, weights.reduce((__acc, __item) => __acc + __item, 0));
         return list(listRef(pool, weightedIndex(weights, target)), rngNext(state));
     };
-    const picked = (ex, batch) => {
+    const isPicked = (ex, batch) => {
         throw new Error("unsupported-form/unresolved-identifier: `some` is not lexically bound and is not a registry symbol.");
     };
     const sampleBatch = (set, k, state) => {
-        let picked_2 = list();
+        let picked = list();
         let tries = 3 * k;
         let s = state;
         /*[ts-base/self-tail-loop] named let `loop` → while*/
         while (true) {
-            if (zeroP(tries) || ge(length_(picked_2), k) || ge(length_(picked_2), length_(set))) {
-                return list(picked_2, s);
+            if (zeroP(tries) || ge(length_(picked), k) || ge(length_(picked), length_(set))) {
+                return list(picked, s);
             }
             else {
                 {
                     const ex = listRef(set, rngInt(s, length_(set)));
-                    [picked_2, tries, s] = [picked(ex, picked_2) ? picked_2 : [ex, ...picked_2], tries - 1, rngNext(s)];
+                    [picked, tries, s] = [isPicked(ex, picked) ? picked : [ex, ...picked], tries - 1, rngNext(s)];
                     continue;
                 }
             }
         }
     };
-    const proposalBatchScore = (analyze, decide, batch) => scoresOf(evaluate(analyze, decide, batch)).reduce((__acc4, __item5) => __acc4 + __item5, 0);
-    const parentBatchScore = batch => scoresOf(batch).reduce((__acc5, __item6) => __acc5 + __item6, 0);
+    const proposalBatchScore = (analyze, decide, batch) => scoresOf(evaluate(analyze, decide, batch)).reduce((__acc, __item) => __acc + __item, 0);
+    const parentBatchScore = batch => scoresOf(batch).reduce((__acc, __item) => __acc + __item, 0);
     const BATCH = 4;
     const MERGEEVERY = 3;
     const evolve = (pool, budget, rng, iter) => le(budget, 0) ? pool : (() => {

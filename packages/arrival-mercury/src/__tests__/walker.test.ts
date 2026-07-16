@@ -253,7 +253,13 @@ describe("quote / dict / kwargs", () => {
 
 describe("App dispatch ladder", () => {
   it("rung 1: an emit rule produces the idiomatic residual through the narrowing seam", () => {
-    expect(emit(`(define (f xs) (car xs))`)).toBe(`function f(xs) {\n    return xs[0];\n}\n`);
+    // `xs` is used ONLY through a single car access — engine plan §2 E1a moved
+    // implicit destruction INTO walk() itself (naming/census.ts's use-shape
+    // analysis + naming/allocate.ts's naming policy), so this now destructures
+    // to a one-slot ArrayPattern, exactly as the constitution's worked example
+    // does for a two-slot tuple (see walker/../legibility.test.ts's own
+    // "implicit destruction" describe block).
+    expect(emit(`(define (f xs) (car xs))`)).toBe(`function f([head]) {\n    return head;\n}\n`);
   });
 
   it("rung 3: an unruled registry symbol calls through the RuntimeRef shim, and the census sees it", () => {

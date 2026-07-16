@@ -14,7 +14,12 @@
  * by design, Law W) are not carried.
  */
 
-const RESERVED = new Set([
+/** Exported for src/naming/allocate.ts: the ROOT-scope reservation set the
+ *  allocation phase unions with stage0 manifest exports + the pipeline's own
+ *  hardcoded globals ("Error"/"Math"/"Promise") — the same set `cleanName`
+ *  already escapes against below, so a reservation here never fights a
+ *  candidate ladder that already avoided it. */
+export const RESERVED = new Set([
   "break",
   "case",
   "catch",

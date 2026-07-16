@@ -24,13 +24,20 @@
  * The one compile-TIME refusal is `EmitCtx.door` (a rule declining a call site): that
  * throws `WalkDoorError` out of `walk()` itself.
  *
- * Scope/naming (this wave's minimal namer adapter): `cleanName`-ladder candidates +
- * scope-aware disambiguation — a binding whose candidate collides with ANY enclosing
- * open scope takes `${name}_${n}`, so nested scopes never shadow and splicing a tail
- * body into its parent block is unconditionally redeclare-safe (the same overlapping-
- * scope disambiguation the full lexical-namer performs). Disjoint scopes may reuse
- * names freely. `fresh()` mints `__`-prefixed glue names (`cleanName` can never emit
- * a leading underscore except the bare `_`, so user bindings cannot collide with them).
+ * Scope/naming (engine plan §2 E1a — the lookahead namer): this walk mints a Binding
+ * (via `declareJs`/`fresh`) at every scheme binding site or engine-glue need, but
+ * commits NO collision decision itself — every mint just records its scheme-name-or-
+ * hint origin (../naming/origin.ts) and returns a PROVISIONAL Binding. Once the whole
+ * tree is built, `walk()` hands it to `bindingCensusOf` (../naming/census.ts — every
+ * binding site, entity kind, scope shape, destructure/singularize use-shape) then
+ * `allocateNames` (../naming/allocate.ts — one global `@here.build/lexical-namer` pass:
+ * candidate ladders, collision resolution, destructure slot names) then
+ * `materializeNames` (../naming/materialize.ts — commits final text + destructure
+ * shape onto the tree this function returns). `fresh()`-at-emit dying means exactly
+ * this: no ad hoc `${name}_${n}` loop runs DURING the walk anymore — nested scopes
+ * still never shadow and splicing a tail body into its parent block is still
+ * unconditionally redeclare-safe, but that guarantee is now the allocation phase's
+ * (scope-tree reservations propagate down, exactly as they did here before).
  */
 import type { EmitConfig, EmitCtx, EmitRule, TypeFacts } from "@here.build/arrival/emit";
 
@@ -48,8 +55,10 @@ import type {
   QuoteDatum,
   Require as CfRequire,
 } from "../coreform/types.js";
+import { allocateNames, bindingCensusOf, materializeNames, recordOrigin } from "../naming/index.js";
 import type { EmitRegistry, EmitRegistryRow } from "../registry/harvest.js";
 import type { Binding, CompilationUnit, Decl, Pattern, R } from "../residual/types.js";
+import { STAGE0 } from "../runtime/stage0.js";
 import {
   ArrayLit,
   ArrayPattern,
@@ -78,7 +87,7 @@ import {
   Throw,
   While,
 } from "../residual/types.js";
-import { cleanName, nameCandidates } from "./names.js";
+import { cleanName } from "./names.js";
 
 /** A rule's typed refusal (`EmitCtx.door`) — the one COMPILE-time door. Surfaces as a
  *  compile diagnostic by escaping `walk()`; everything else the walker refuses becomes
@@ -120,15 +129,17 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
   const config: EmitConfig = { register: opts.register };
   const { registry } = opts;
 
-  // ── naming: scheme-name resolution frames + open JS-block name sets ─────────────
+  // ── naming: scheme-name resolution frames + provisional minting ─────────────────
+  //
+  // Collision avoidance no longer happens here (see the module header) — `declareJs`/
+  // `fresh` mint a Binding with a PROVISIONAL text (cleanName's tier-1 candidate, or
+  // the `__`-prefixed hint) and record its origin; `walk()`'s tail runs the census +
+  // allocation + materialize pipeline that commits FINAL, collision-free text before
+  // this function returns. `schemeFrames` (scheme-name → Binding resolution, for Ref
+  // lookups) is the one piece of scoping state still needed here — it decides WHICH
+  // binding a reference resolves to, which the naming phase never touches.
 
   const schemeFrames: Map<string, Binding>[] = [new Map()];
-  // Module frame pre-seeds the globals the pipeline references by minted binding:
-  // "Error" (door throws), "Math" (the quotient rule), "Promise" (ASYNC-IFY's
-  // Promise.all rewrites). A user binding cleaning to any of these disambiguates to
-  // `_2` instead of shadowing the global reference.
-  const jsFrames: Set<string>[] = [new Set(["Error", "Math", "Promise"])];
-  const freshUsed = new Set<string>();
 
   const resolve = (name: string): Binding | undefined => {
     for (let i = schemeFrames.length - 1; i >= 0; i--) {
@@ -137,33 +148,14 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
     }
     return undefined;
   };
-  const jsTaken = (text: string): boolean => freshUsed.has(text) || jsFrames.some((f) => f.has(text));
-  /** Mint the JS binding for a scheme name in the CURRENT JS block. Candidates ladder
-   *  (`cleanName`, then `isFoo` for predicates), then `_2`/`_3`… against every OPEN
-   *  scope — nested scopes never shadow (see module header). */
-  const declareJs = (schemeName: string): Binding => {
-    const candidates = nameCandidates(schemeName);
-    let text = candidates.find((c) => !jsTaken(c));
-    if (text === undefined) {
-      for (let n = 2; ; n++) {
-        const c = `${candidates[0]!}_${n}`;
-        if (!jsTaken(c)) {
-          text = c;
-          break;
-        }
-      }
-    }
-    jsFrames.at(-1)!.add(text);
-    return mkBinding(text);
-  };
-  const fresh = (hint: string): Binding => {
-    const base = `__${cleanName(hint)}`;
-    let text = base;
-    for (let n = 2; jsTaken(text); n++) text = `${base}${n}`;
-    freshUsed.add(text);
-    jsFrames.at(-1)!.add(text);
-    return mkBinding(text);
-  };
+  /** Mint the provisional Binding for a scheme binding site — text is a placeholder
+   *  (allocation decides the final, collision-free name); origin is recorded so the
+   *  census can classify + ladder it. */
+  const declareJs = (schemeName: string): Binding => recordOrigin(mkBinding(cleanName(schemeName)), { mint: "declared", text: schemeName });
+  /** Mint a provisional engine-glue Binding (`ctx.fresh`'s implementation, and the
+   *  guarded and/or cascade's own temp) — same provisional-text/origin-recording
+   *  discipline as `declareJs`. */
+  const fresh = (hint: string): Binding => recordOrigin(mkBinding(`__${cleanName(hint)}`), { mint: "fresh", text: hint });
   const bind = (name: string, b: Binding): void => {
     schemeFrames.at(-1)!.set(name, b);
   };
@@ -173,14 +165,6 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
       return fn();
     } finally {
       schemeFrames.pop();
-    }
-  };
-  const inJsFrame = <T>(fn: () => T): T => {
-    jsFrames.push(new Set());
-    try {
-      return fn();
-    } finally {
-      jsFrames.pop();
     }
   };
 
@@ -384,7 +368,7 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
       case "Begin":
         return bodySeq(n.body, "stmt"); // splices — begin introduces no bindings
       case "Let":
-        return [Block(inJsFrame(() => letStmts(n, "stmt")))]; // bare block — scoped, no Return inside
+        return [Block(letStmts(n, "stmt"))]; // bare block — scoped, no Return inside
       case "Door":
         return [doorThrow(n.code, n.message)];
       case "Require":
@@ -577,14 +561,14 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
         break;
       }
       case "If": {
-        const thenB = inJsFrame(() => Block(tailLoopForm(n.then, mode)));
-        const elseB = inJsFrame(() => Block(tailLoopForm(n.else, mode)));
+        const thenB = Block(tailLoopForm(n.then, mode));
+        const elseB = Block(tailLoopForm(n.else, mode));
         return [IfStmt(truthTest(n.cond), thenB, elseB)];
       }
       case "Begin":
         return bodySeq(n.body, mode);
       case "Let":
-        return [Block(inJsFrame(() => letStmts(n, mode)))]; // nested block inside the while — Continue still binds the loop
+        return [Block(letStmts(n, mode))]; // nested block inside the while — Continue still binds the loop
       case "Door":
         return [doorThrow(n.code, n.message)];
       case "Require":
@@ -609,7 +593,7 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
           return jb;
         });
         const decls = loopVars.map((jb, i) => LetStmt(jb, inits[i]!)); // `let` — reassigned by the loop step
-        const loopBody = inJsFrame(() => bodySeq(n.body, { loopName: n.loopName, loopVars }));
+        const loopBody = bodySeq(n.body, { loopName: n.loopName, loopVars });
         return [
           ...decls,
           // The fold marker: the one synthetic comment an axis-a rewrite leaves where
@@ -623,39 +607,35 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
     return inSchemeFrame(() => {
       const loopB = declareJs(n.loopName);
       bind(n.loopName, loopB);
-      const fn = inSchemeFrame(() =>
-        inJsFrame(() => {
-          const params = n.bindings.map((b) => {
-            const jb = declareJs(b.name);
-            bind(b.name, jb);
-            return jb;
-          });
-          return { params, stmts: bodySeq(n.body, "tail") };
-        }),
-      );
+      const fn = inSchemeFrame(() => {
+        const params = n.bindings.map((b) => {
+          const jb = declareJs(b.name);
+          bind(b.name, jb);
+          return jb;
+        });
+        return { params, stmts: bodySeq(n.body, "tail") };
+      });
       return [Const(loopB, Arrow(fn.params, collapseBody(fn.stmts))), Return(Call(Ref(loopB), inits))];
     });
   };
 
   // ── Lambda / DefineFn ──────────────────────────────────────────────────────────────
 
-  /** Params + body share ONE JS frame (TS params and body-block share a declaration
-   *  scope — a body-level redeclare of a param is an error, so the namer must see them
-   *  together). Sync-shaped by law: no `async` bit exists here (Law W). */
+  /** Params + body share ONE scheme frame (a body-level redeclare of a param is a
+   *  distinct scheme binding needing its own resolution entry). Sync-shaped by law:
+   *  no `async` bit exists here (Law W). */
   const lowerLambdaLike = (
     params: readonly CfParam[],
     body: readonly CoreForm[],
   ): { params: Pattern[]; stmts: R[] } =>
-    inSchemeFrame(() =>
-      inJsFrame(() => {
-        const ps: Pattern[] = params.map((p) => {
-          const jb = declareJs(p.name);
-          bind(p.name, jb);
-          return p.rest ? RestBinding(jb) : jb;
-        });
-        return { params: ps, stmts: bodySeq(body, "tail") };
-      }),
-    );
+    inSchemeFrame(() => {
+      const ps: Pattern[] = params.map((p) => {
+        const jb = declareJs(p.name);
+        bind(p.name, jb);
+        return p.rest ? RestBinding(jb) : jb;
+      });
+      return { params: ps, stmts: bodySeq(body, "tail") };
+    });
 
   /** `{ return e; }` → `e` — the expression-arrow collapse (`(x) => x`, not
    *  `(x) => { return x; }`). Anything else keeps its block. */
@@ -738,11 +718,11 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
         return Arrow(fn.params, collapseBody(fn.stmts));
       }
       case "Let":
-        return Block(inJsFrame(() => letStmts(n, "tail")));
+        return Block(letStmts(n, "tail"));
       case "NamedLet":
-        return Block(inJsFrame(() => namedLetStmts(n)));
+        return Block(namedLetStmts(n));
       case "Begin":
-        return n.body.length === 1 ? lowerExpr(n.body[0]!) : Block(inJsFrame(() => bodySeq(n.body, "tail")));
+        return n.body.length === 1 ? lowerExpr(n.body[0]!) : Block(bodySeq(n.body, "tail"));
       case "Define":
       case "DefineFn":
         // Bodies route defines through bodySeq; one reaching EXPRESSION position
@@ -776,7 +756,24 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
       body.push(...lowerStmts(form));
     }
   }
-  return { decls, body };
+  const provisional: CompilationUnit = { decls, body };
+
+  // ── the naming phase: census → allocate → materialize (engine plan §2 E1a) ────────
+  // Reservations: the stage-0 manifest's exported names for exactly the runtime
+  // symbols THIS unit still references (runtimeRefsOf — the SAME census FRAME's own
+  // import materializer runs over this unit later, post-legibility/ASYNC-IFY) — never
+  // the whole manifest: reserving an export no surviving RuntimeRef needs would
+  // needlessly block a same-named user binding
+  // (e.g. a local `car` shadow, or an unrelated `odd` binding, when this program never
+  // calls the stage-0 `odd?`/`car`-in-value-position exports). Plus the three
+  // hardcoded globals other passes reference by raw Binding — "Error" (this walker's
+  // own doorThrow), "Math" (the quotient rule), "Promise" (ASYNC-IFY's Promise.all
+  // rewrites) — matching the reservation this walker used to pre-seed into jsFrames[0]
+  // directly.
+  const stillNeeded = [...runtimeRefsOf(provisional)].map((s) => STAGE0[s]).filter((v): v is string => v !== undefined);
+  const census = bindingCensusOf(provisional);
+  const allocation = allocateNames(census, [...stillNeeded, "Error", "Math", "Promise"]);
+  return materializeNames(provisional, allocation);
 }
 
 // ── RuntimeRef census (minimal-FRAME's input; the frame-as-query mechanism §3.4) ──────

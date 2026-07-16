@@ -1,12 +1,16 @@
 /**
  * LEGIBILITY gate tests (constitution §3.5's third invention; ../legibility/).
- * Fast unit-style tests run the walker directly against a hand-rolled registry
- * (same convention as async-ify.test.ts/walker.test.ts — real Phase-1 rules are
- * extracted from `phase1Rules` where a golden needs their exact residual shape,
- * e.g. car/cdr/map). The final `describe` runs the REAL wiring
- * (`compileGreenfield`, one shared `OracleSession` per the oracle-harness's §4.1
- * reuse contract) to verify the pre-ASYNC-IFY placement against the actual
- * harvested `infer` capability, oracle-agreement included.
+ * As of E1a (engine plan §2 E1a), destructure/singularize dissolved into
+ * ../naming/ (census.ts's use-shape analysis + allocate.ts's naming policy) —
+ * `walk()` itself now produces the destructured/singularized shape, so this
+ * file's "composed pass" tests exercise `compile()` (== `walk()`) directly for
+ * those two behaviors. Their own gate tests live in `naming.test.ts`. What
+ * remains a genuinely independent, callable pass here is pure-region CSE
+ * (leg 3) — a real post-walk pass, unaffected by E1a (see legibility.ts's own
+ * header for why it stays post-walk). The final `describe` runs the REAL
+ * wiring (`compileGreenfield`, one shared `OracleSession` per the
+ * oracle-harness's §4.1 reuse contract) to verify end-to-end behavior against
+ * the actual harvested `infer` capability, oracle-agreement included.
  */
 import { describe, expect, it, afterAll, beforeAll } from "vitest";
 
@@ -21,8 +25,6 @@ import { classify } from "../coreform/index.js";
 import { desugar } from "../front/desugar.js";
 import { parseSexprs } from "../front/parse.js";
 import { compileGreenfield, openOracleSession, runOracle, type OracleSession } from "../oracle/harness.js";
-import { destructureParams } from "../legibility/destructure.js";
-import { singularizeHofParams } from "../legibility/singularize.js";
 import { pureRegionCse } from "../legibility/cse.js";
 import { legibility } from "../legibility/legibility.js";
 
@@ -90,65 +92,72 @@ const cf = (src: string) => classify(desugar(parseSexprs(src)));
 const compile = (src: string): CompilationUnit => walk(cf(src), { registry: testRegistry, register: "run" });
 const emit = (src: string, pass: (u: CompilationUnit) => CompilationUnit): string => render(pass(compile(src)));
 
-// ── leg 1: implicit destruction ───────────────────────────────────────────────────
+// ── implicit destruction + element-name singularization ──────────────────────────
+//
+// Both dissolved into ../naming/ this wave (engine plan §2 E1a) — `compile()` (==
+// `walk()`) now produces the destructured/singularized shape directly; there is no
+// longer an independently-callable `destructureParams`/`singularizeHofParams` pass to
+// unit-test in isolation. These golden shapes are re-pinned here (unchanged bytes —
+// see naming.test.ts for the census/allocation-level unit coverage of the underlying
+// analysis) so this file keeps its role as the constitution §3.5 worked-example gate.
 
-describe("destructureParams — implicit destruction (constitution §3.5)", () => {
+describe("implicit destruction — now decided inside walk() (engine plan §2 E1a)", () => {
   it("THE constitution example: a param used only through car/cdr-composed positional access destructures to [first, second]", () => {
     // The constitution spells the second access `(cadr pair)`; `cadr` is not yet a
     // registered symbol in this slice (registry/harvest.ts's own comment — the
     // generative cxr composition rung is future work), so this exercises the
     // semantically-identical `(car (cdr pair))` spelling that THIS slice's
-    // registered rules actually produce — destructure.ts's `cdrOffsetOf` resolves
-    // either spelling to the same tuple position (see its own header).
-    expect(emit(`(define (f pair) (+ (car pair) (car (cdr pair))))`, destructureParams)).toBe(
+    // registered rules actually produce — naming/census.ts's `cdrOffsetOf` resolves
+        // either spelling to the same tuple position (see its own header).
+    expect(render(compile(`(define (f pair) (+ (car pair) (car (cdr pair))))`))).toBe(
       `function f([first, second]) {\n    return first + second;\n}\n`,
     );
   });
 
   it("control: a parameter used WHOLE anywhere disqualifies the whole parameter — no partial destructure", () => {
-    const src = `(define (f pair) (+ (car pair) (g pair)))`;
-    expect(emit(src, destructureParams)).toBe(emit(src, (u) => u)); // byte-identical to no-op
+    expect(render(compile(`(define (f pair) (+ (car pair) (g pair)))`))).toBe(
+      `function f(pair) {\n    return pair[0] + g(pair);\n}\n`,
+    );
   });
 
   it("a param destructures the same way whether it is a top-level FnDecl or a bare/internal Arrow", () => {
     // Top-level `(define (f params…) body)` compiles straight to FnDecl (never an
     // Arrow) — a param-carrying shape distinct from the lambda case above, and one
-    // this leg must handle explicitly (FnDecl.params/.body get the SAME treatment,
-    // not just Arrow.params/.body). This exercises the Arrow (bare-lambda) side.
-    expect(emit(`((lambda (pair) (+ (car pair) (car (cdr pair)))) (list 1 2))`, destructureParams)).toBe(
+    // materialize.ts must handle explicitly (FnDecl.params/.body get the SAME
+    // treatment, not just Arrow.params/.body). This exercises the Arrow (bare-lambda)
+    // side.
+    expect(render(compile(`((lambda (pair) (+ (car pair) (car (cdr pair)))) (list 1 2))`))).toBe(
       `(([first, second]) => first + second)(list(1, 2));\n`,
     );
   });
 });
 
-// ── leg 2: element-name singularization ───────────────────────────────────────────
-
-describe("singularizeHofParams — element-name singularization (constitution §3.5)", () => {
+describe("element-name singularization — now decided inside walk() (engine plan §2 E1a)", () => {
   it("multi-list map's fresh __item param renames to the receiver's singular ('examples' → 'example')", () => {
     // Single-list map forwards its callback verbatim (no fresh param ever minted —
     // see the control below); the multi-list zip is THIS wave's only path that
-    // mints a generic callback param (`freshBinding(ctx, "item")`, `mapEmitRule` in
-    // foundations/arrival/arrival/src/env/r7rs/lists.ts, Phase-2 relocation Wave 3 —
-    // was `mapRule` in phase1.ts before the relocation) — exactly what this leg
-    // improves. The index param (`__i`) is left alone: it has no natural name to
-    // derive from the collection.
-    expect(emit(`(define (f examples others) (map combine examples others))`, singularizeHofParams)).toBe(
+    // mints a generic callback param (`ctx.fresh("item")`, `mapEmitRule` in
+    // foundations/arrival/arrival/src/env/r7rs/lists.ts) — exactly what
+    // naming/census.ts's singularize gate improves. The index param (`i`) is left
+    // alone: it has no natural name to derive from the collection.
+    expect(render(compile(`(define (f examples others) (map combine examples others))`))).toBe(
       `function f(examples, others) {\n    return examples.map((example, __i) => combine(example, others[__i]));\n}\n`,
     );
   });
 
   it("control: a user-authored lambda param is never renamed (mapRule forwards a single-list callback as-is)", () => {
     const src = `(define (f examples) (map (lambda (x) x) examples))`;
-    expect(emit(src, singularizeHofParams)).toBe(emit(src, (u) => u)); // byte-identical to no-op
+    expect(render(compile(src))).toBe(`function f(examples) {\n    return examples.map(x => x);\n}\n`);
   });
 
   it("control: a receiver shape with no derivable name (e.g. a Cond, not a Ref/Call/Index/Member) leaves the generic param alone", () => {
-    const src = `(define (f c xs ys others) (map combine (if c xs ys) others))`;
-    expect(emit(src, singularizeHofParams)).toBe(emit(src, (u) => u));
+    expect(render(compile(`(define (f c xs ys others) (map combine (if c xs ys) others))`))).toBe(
+      `function f(c, xs, ys, others) {\n    return (c !== false ? xs : ys).map((__item, __i) => combine(__item, others[__i]));\n}\n`,
+    );
   });
 });
 
-// ── leg 3: pure-region CSE ─────────────────────────────────────────────────────────
+// ── leg 3: pure-region CSE (the one leg still an independent, callable pass) ──────
 
 describe("pureRegionCse — pure-region common-subexpression elimination (constitution §3.5/§2.3)", () => {
   it("two identical pure calls dedupe to one Const, hoisted before the first use", () => {
@@ -179,18 +188,20 @@ describe("pureRegionCse — pure-region common-subexpression elimination (consti
   });
 });
 
-// ── the composed pass ──────────────────────────────────────────────────────────────
+// ── the composed pass (now: walk()'s own destructure/singularize + CSE on top) ────
 
-describe("legibility — the composed pass (destructure → singularize → CSE)", () => {
+describe("legibility — the composed pass (walk()'s destructure/singularize + CSE)", () => {
   it("destructure alone can collapse a doubly-nested car composition sharing one root into a single slot", () => {
     // `(car (car pairs))` occurring twice: `cdrOffsetOf` does not recognize a
     // NESTED Index as a cdr-composition (only Ref-direct or Method("slice",…)
-    // chains — destructure.ts's own header), so only the INNER `(car pairs)` at
+    // chains — naming/census.ts's own header), so only the INNER `(car pairs)` at
     // each occurrence qualifies (both at position 0) — `pairs` destructures to a
     // single `[head]` slot, and the (still-present) outer `head[0]` reads are
     // NOT further reachable by CSE (cse.ts's header: Call-only scope, Index
     // chains are out of this wave's scope) — a real, verified, non-obvious
-    // interaction between the two legs, not a hand-guessed no-op.
+    // interaction, not a hand-guessed no-op. `compile()` already produces the
+    // destructured shape; `legibility()` (CSE-only) is a no-op on top of it here
+    // (no duplicate Call nodes survive the destructure).
     const src = `(define (f pairs) (+ (car (car pairs)) (car (car pairs))))`;
     const out = render(legibility(compile(src), { registry: testRegistry }));
     expect(out).toBe(`function f([head]) {\n    return head[0] + head[0];\n}\n`);
@@ -199,9 +210,10 @@ describe("legibility — the composed pass (destructure → singularize → CSE)
   it("destructure + singularize compose: a destructured param is left alone by singularize (no double-rename)", () => {
     const src = `(define (f examples) (map (lambda (pair) (+ (car pair) (car (cdr pair)))) examples))`;
     const out = render(legibility(compile(src), { registry: testRegistry }));
-    // The map here is single-list (passableFn forwards the lambda as-is — no fresh
+    // The map here is single-list (mapEmitRule forwards the lambda as-is — no fresh
     // param minted), so singularize has nothing to touch; destructure still fires
-    // on the callback's own `pair` parameter.
+    // on the callback's own `pair` parameter (naming/census.ts's destructure
+    // precedence over singularize — see its `registerParams`).
     expect(out).toBe(
       `function f(examples) {\n    return examples.map(([first, second]) => first + second);\n}\n`,
     );
