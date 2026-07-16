@@ -46,6 +46,20 @@ export {
   type SourceLens,
   toComposeTemplate,
 } from "./model/compose-template.js";
+// The fifth projection (provenance-beautiful-child, control-plane-collapse.md):
+// the Q1+Q2 hierarchical state machine over the same StaticProv circuit.
+export {
+  collapseView,
+  type ControlMachine,
+  type ControlState,
+  type EgressRef,
+  type LensEdge,
+  type LensEdgeId,
+  type PortId,
+  type StateId,
+  type StateKind,
+  type StateRef,
+} from "./model/collapse-view.js";
 
 // ── the verdict channel (pure — for a consumer that wants the static reading) ────
 export { channels, circuitVerdict, dataShaped, judgmentShaped, planeOf } from "./verdict/circuit-verdict.js";

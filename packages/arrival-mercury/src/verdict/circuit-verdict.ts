@@ -446,7 +446,7 @@ function guardGroundsInEvidence(guard: StaticProv): boolean {
   return content.anchors.some((a) => a.integrity === "evidence") || selection.anchors.some((a) => a.integrity === "evidence");
 }
 
-interface ChoiceTower {
+export interface ChoiceTower {
   readonly guards: readonly StaticProv[];
   readonly leafAlts: readonly StaticProv[];
 }
@@ -462,7 +462,7 @@ interface ChoiceTower {
  * identically, since it checks every alt, not just the last. Finite by the
  * tree claim (header) — no separate depth budget needed.
  */
-function flattenChoiceTower(prov: ChoiceProv): ChoiceTower {
+export function flattenChoiceTower(prov: ChoiceProv): ChoiceTower {
   const guards: StaticProv[] = [...prov.guards];
   const leafAlts: StaticProv[] = [];
   for (const alt of prov.alts) {

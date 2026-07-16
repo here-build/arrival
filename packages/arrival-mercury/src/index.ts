@@ -72,17 +72,27 @@ export { runtimeRefsOf, walk, WalkDoorError, type WalkOptions } from "./walker/i
 // ── the ASYNC-IFY pass — post-emit {sync, promise} dataflow (Law W §5.2; async-await-plane.md) ──
 export { AsyncIfyDoorError, asyncIfy, type AsyncIfyOptions } from "./async-ify/index.js";
 
-// ── LEGIBILITY — the third-invention pass (constitution §3.5): implicit destruction +
-//    element-name singularization + pure-region CSE. Runs PRE-ASYNC-IFY (a documented
-//    deviation from the constitution's pipeline diagram — see legibility.ts's header). ──
+// ── LEGIBILITY — constitution §3.5's third-invention pass. As of E1a, pure-region
+//    CSE only; destructure/singularize dissolved into ./naming/ (see
+//    legibility/legibility.ts's header). Runs PRE-ASYNC-IFY (a documented deviation
+//    from the constitution's pipeline diagram — see legibility.ts's header). ──
+export { elementNameOf, legibility, type LegibilityOptions, pureRegionCse } from "./legibility/index.js";
+
+// ── NAMING — E1a's census + allocation phase (engine plan §2 E1a): the binding
+//    census view, the lexical-namer allocation adapter, and the materialize step
+//    walker/walk.ts drives internally before it ever returns a CompilationUnit. ──
 export {
-  destructureParams,
-  elementNameOf,
-  legibility,
-  type LegibilityOptions,
-  pureRegionCse,
-  singularizeHofParams,
-} from "./legibility/index.js";
+  allocateNames,
+  bindingCensusOf,
+  materializeNames,
+  type BindingCensus,
+  type BindingOrigin,
+  type BindingSite,
+  type DestructureShape,
+  type EntityKind,
+  type NameAllocation,
+  type ScopeCensus,
+} from "./naming/index.js";
 
 // ── minimal FRAME — the RuntimeRef→import materializer (constitution §3.4/§9 Phase 1) ──
 export { frame, FrameDoorError, type FrameOptions } from "./frame/index.js";
@@ -188,6 +198,21 @@ export {
   type SourceLens,
   toComposeTemplate,
 } from "./model/compose-template.js";
+// The fifth projection (provenance-beautiful-child, control-plane-collapse.md):
+// the Q1+Q2 hierarchical state machine over the same StaticProv circuit —
+// same browser-safe, pure-projection surface as the other four.
+export {
+  collapseView,
+  type ControlMachine,
+  type ControlState,
+  type EgressRef,
+  type LensEdge,
+  type LensEdgeId,
+  type PortId,
+  type StateId,
+  type StateKind,
+  type StateRef,
+} from "./model/collapse-view.js";
 export type {
   BuildProv,
   ChoiceProv,
