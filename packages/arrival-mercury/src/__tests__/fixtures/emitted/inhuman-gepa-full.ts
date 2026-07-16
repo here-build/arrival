@@ -1,4 +1,4 @@
-import { lt, le, gt, ge, equalP, evenP, every, length_, list, listRef, map, max_, maxBy, nullP, some, zeroP } from "./stage0.mts";
+import { lt, le, gt, ge, cons, equalP, evenP, every, length_, list, listRef, map, max_, maxBy, nullP, some, zeroP } from "./stage0.mts";
 function OracleMain() {
     throw new Error("unsupported-form/require: `(require \"metric.scm\")` \u2014 module loading is not compiled in this slice (the loader/FRAME wave owns import planning).");
     const examples = (() => {
@@ -104,7 +104,7 @@ function OracleMain() {
             else {
                 {
                     const ex = listRef(set, rngInt(s, length_(set)));
-                    [picked, tries, s] = [isPicked(ex, picked) ? picked : [ex, ...picked], tries - 1, rngNext(s)];
+                    [picked, tries, s] = [isPicked(ex, picked) ? picked : cons(ex, picked), tries - 1, rngNext(s)];
                     continue;
                 }
             }
@@ -119,7 +119,7 @@ function OracleMain() {
             const __and = zeroP((iter % MERGEEVERY + MERGEEVERY) % MERGEEVERY);
             return __and === false ? __and : findMerge(frontier(pool));
         })();
-        return pair !== false ? evolve(frontier([merge(pair[0], pair[1]), ...pool]), budget - length_(paretoset), rngNext(rng), iter + 1) : (() => {
+        return pair !== false ? evolve(frontier(cons(merge(pair[0], pair[1]), pool)), budget - length_(paretoset), rngNext(rng), iter + 1) : (() => {
             const sel = select(pool, rng);
             const parent = sel[0];
             const rng1 = sel[1];
@@ -133,7 +133,7 @@ function OracleMain() {
                 const pVia = prop[2];
                 const propScore = proposalBatchScore(pAnalyze, pDecide, batch);
                 const parentScore = parentBatchScore(batch);
-                return gt(propScore, parentScore) ? evolve(frontier([assess(pAnalyze, pDecide, pVia), ...pool]), budget - BATCH - length_(paretoset), rng2, iter + 1) : evolve(pool, budget - BATCH, rng2, iter + 1);
+                return gt(propScore, parentScore) ? evolve(frontier(cons(assess(pAnalyze, pDecide, pVia), pool)), budget - BATCH - length_(paretoset), rng2, iter + 1) : evolve(pool, budget - BATCH, rng2, iter + 1);
             })();
         })();
     })();

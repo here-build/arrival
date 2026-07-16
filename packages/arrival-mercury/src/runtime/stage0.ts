@@ -129,6 +129,19 @@ export function error(message: unknown, ...irritants: unknown[]): never {
 /** `list` — variadic construction; the array IS the list (§2.1). */
 export const list = (...xs: unknown[]): unknown[] => xs;
 
+/**
+ * `cons` — the UNKNOWN-tail case `consEmitRule`'s fact gate cannot resolve
+ * statically (foundations/arrival/arrival/src/env/r7rs/lists.ts): a tail PROVEN
+ * list/pair spreads inline (`[x, ...xs]`) and a tail PROVEN scalar is a bare
+ * 2-element literal (`[x, xs]`), both without ever reaching this shim. This is
+ * the total, always-correct fallback for a tail whose shape the type pass cannot
+ * pin (an inferred or higher-order result, the common case for a real alist
+ * entry) — array-backed spreads in, anything else becomes the second slot,
+ * matching the interpreter's own uniform pair construction (a pair whose cdr is
+ * a list IS that longer list, by Scheme's own equivalence).
+ */
+export const cons = (x: unknown, xs: unknown): unknown[] => (Array.isArray(xs) ? [x, ...xs] : [x, xs]);
+
 /** `string-append` — concatenation over primitive strings. */
 export const stringAppend = (...ss: string[]): string => ss.join("");
 
@@ -365,6 +378,7 @@ export const STAGE0: Readonly<Record<string, string>> = {
   assoc: "assoc",
   error: "error",
   list: "list",
+  cons: "cons",
   "string-append": "stringAppend",
   "string-ci=?": "stringCiEq",
   every: "every",

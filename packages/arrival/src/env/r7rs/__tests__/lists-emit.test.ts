@@ -1,19 +1,21 @@
 // lists-emit.test.ts — Contract.emit on cons/map/apply (the Phase-2 relocation drill,
 // constitution §9 — docs/working-proposals/arrival-ts-transpiler-design.md): proves
-// the rule logic relocated from the compiler-side phase1 table onto each symbol's own
-// Contract builds the exact residual-lite shape the table rule used to build, by
+// each symbol's own Contract builds the residual-lite shape its `emit` rule owns, by
 // calling `emit.call` directly against a synthetic EmitCtx. No compiler package, no
 // oracle session, no `typescript` import — matching this whole subpath's own
 // typescript-free discipline (§4.5). Mirrors numeric-emit.test.ts's own harness
 // exactly (same `testCtx`/`nativeDef`/`ref` shape) — see that file for the fuller
 // rationale comment.
 //
-// Byte-parity with the PRE-relocation compiler-side rule is proven on the mercury
-// side (inhuman/foundations/arrival-mercury): rules-phase1.test.ts's own
-// "cons → [x, ...xs]" (Wave 2) and "map"/"apply" (Wave 3) goldens moved to this
-// file's Contract-level proof once their table rows were deleted; the cross-pass/
-// gate3 goldens and bug-cell corpus exercise cons/map/apply through the REAL harvest
-// + walker + render pipeline, unchanged.
+// map/apply's residual shapes are still BYTE-PARITY with the PRE-relocation
+// compiler-side table rule (proven on the mercury side, inhuman/foundations/
+// arrival-mercury: rules-phase1.test.ts's own "map"/"apply" (Wave 3) goldens moved
+// to this file's Contract-level proof once their table rows were deleted). cons's
+// shape is NOT byte-parity with its own pre-relocation table rule — its residual now
+// depends on the tail argument's fact (see lists.ts's own `consEmitRule` section for
+// why an unconditional shape was unsound). The cross-pass/gate3 goldens and bug-cell
+// corpus exercise cons/map/apply through the REAL harvest + walker + render pipeline,
+// unchanged.
 import { describe, expect, it } from "vitest";
 
 import type { AEntity } from "../../../common/symbol.js";
@@ -38,19 +40,23 @@ function sequenceDef(name: string) {
   return def;
 }
 
-/** A synthetic EmitCtx — no namer, no runtime module, no register bias (`cons` never
- *  branches on register or facts). `door` throws — the SAME observable contract a
- *  real `ctx.door` has (a typed refusal, never a silent miss), so a mis-arity call is
- *  assertable via `toThrow`. `fresh` returns the hint AS the binding text (map/apply's
- *  own rules never inspect what `fresh` returns beyond wrapping it in `Ref`, so the
- *  test's own naming choice is the simplest one that makes assertions legible). */
+/** A synthetic EmitCtx — no namer, no runtime module, no register bias (none of
+ *  cons/map/apply ever branch on `config.register`). `door` throws — the SAME
+ *  observable contract a real `ctx.door` has (a typed refusal, never a silent
+ *  miss), so a mis-arity call is assertable via `toThrow`. `fresh` returns the
+ *  hint AS the binding text (map/apply's own rules never inspect what `fresh`
+ *  returns beyond wrapping it in `Ref`, so the test's own naming choice is the
+ *  simplest one that makes assertions legible). `runtime` throws by default:
+ *  map/apply never call it, and cons only does for an UNKNOWN tail fact (its
+ *  proven-array / proven-scalar branches never reach it) — the one test
+ *  exercising that branch overrides `runtime` explicitly. */
 function testCtx(over: Partial<EmitCtx<R>> = {}): EmitCtx<R> {
   return {
     argFacts: [],
     config: { register: "run" },
     fresh: (hint) => Binding(hint),
     runtime: (name) => {
-      throw new Error(`testCtx: runtime(${name}) not expected — cons/map/apply never emit a RuntimeRef`);
+      throw new Error(`testCtx: runtime(${name}) not expected — override \`runtime\` for the one branch that needs it`);
     },
     door: (reason) => {
       throw new Error(reason);
@@ -70,13 +76,35 @@ const ref = (name: string): R => Ref(Binding(name));
 const runtimeRef = (symbol: string): R => ({ t: "RuntimeRef", symbol }) as R;
 
 describe("lists Contract.emit — the Phase-2 relocation drill (cons)", () => {
-  it("cons: the Contract carries the emit rule; call builds [x, ...xs] (the spread golden)", () => {
+  it("cons: the Contract carries the emit rule", () => {
     const def = nativeDef("cons");
     expect(def.emit).toBeDefined();
     expect(def.narrows).toBeUndefined(); // not a Law-N narrowing leaf
+  });
+
+  it("cons: tail PROVEN list/pair/nonEmptyList → the spread [x, ...xs] (the proper-list golden)", () => {
+    const def = nativeDef("cons");
     const [x, xs] = [ref("x"), ref("xs")];
-    const residual = def.emit!.call([x, xs], testCtx());
-    expect(residual).toEqual(ArrayLit([x, Spread(xs)]));
+    for (const tailFact of [{ list: true }, { pair: true }, { nonEmptyList: true }] as const) {
+      const residual = def.emit!.call([x, xs], testCtx({ argFacts: [{}, tailFact] }));
+      expect(residual).toEqual(ArrayLit([x, Spread(xs)]));
+    }
+  });
+
+  it("cons: tail PROVEN scalar (stringy/numeric/boolean) → the clean 2-element pair [x, xs], no spread (the alist-entry golden)", () => {
+    const def = nativeDef("cons");
+    const [k, v] = [ref("k"), ref("v")];
+    for (const tailFact of [{ numeric: true }, { stringy: true }, { boolean: true }] as const) {
+      const residual = def.emit!.call([k, v], testCtx({ argFacts: [{}, tailFact] }));
+      expect(residual).toEqual(ArrayLit([k, v]));
+    }
+  });
+
+  it("cons: tail UNKNOWN (no fact proven either way) → the runtime cons shim, never a bare spread", () => {
+    const def = nativeDef("cons");
+    const [x, xs] = [ref("x"), ref("xs")];
+    const residual = def.emit!.call([x, xs], testCtx({ argFacts: [{}, {}], runtime: (name) => runtimeRef(name) }));
+    expect(residual).toEqual(Call(runtimeRef("cons"), [x, xs]));
   });
 
   it("cons: a mis-arity call doors (totality — never a silent miscompile)", () => {

@@ -267,22 +267,23 @@ function mapImpl(
 // map/apply (Wave 3) move here from the compiler-side phase1 table
 // (`inhuman/foundations/arrival-mercury/src/rules/phase1.ts`) onto their OWN
 // Contract's `emit` field — the same pattern numeric.ts's quotient/modulo/=/+/-/*//
-// relocation established. Every residual shape below is BYTE-FOR-BYTE identical to
-// the table rule it replaces (verified by diffing against phase1.ts's pre-relocation
-// `consRule`/`mapRule`/`applyRule`), built via `@here.build/arrival/emit`'s
-// residual-lite constructors (§4.5's seed of "residual types belong in arrival core
-// eventually") — `Arrow`/`Index` grew residual-lite this wave (map's zip arrow and
+// relocation established, built via `@here.build/arrival/emit`'s residual-lite
+// constructors (§4.5's seed of "residual types belong in arrival core eventually")
+// — `Arrow`/`Index` grew residual-lite this wave (map's zip arrow and
 // index-into-a-further-list; apply's fold-reduce arrow); `RuntimeRef` grew it as a
 // TYPE ARM ONLY, no constructor (apply's structural inspection of an incoming
-// argument's own tag — see residual-lite.ts's own doc comment on that arm).
+// argument's own tag — see residual-lite.ts's own doc comment on that arm). map/apply's
+// residual shapes below are BYTE-FOR-BYTE identical to the table rules they replaced
+// (verified by diffing against phase1.ts's pre-relocation `mapRule`/`applyRule`); cons's
+// shape is NOT — see its own section below for why an unconditional residual is unsound.
 //
-// Law A holds for all three: none branches on `ctx.argFacts` at all. cons's residual
-// is unconditional (§2.1's representation-collapse ruling — lists/pairs/vectors all
-// lower to arrays — fixes it outright); map/apply's branches key on ARITY (a static,
-// compile-time-known count, not a proof about argument VALUES) and, for apply, on the
-// ALREADY-LOWERED first argument's own residual tag (Law A's "argument facts, never
-// result types or syntax" reading extends to "the value in hand," never "what it
-// syntactically was").
+// Law A governs all three, but not uniformly. cons's residual DOES branch on
+// `ctx.argFacts` — the tail argument's own fact, never its syntax or result type
+// (exactly what Law A permits; see cons's own section below for the three-way gate).
+// map/apply stay fact-blind: their branches key on ARITY (a static, compile-time-known
+// count, not a proof about argument VALUES) and, for apply, on the ALREADY-LOWERED
+// first argument's own residual tag (Law A's "argument facts, never result types or
+// syntax" reading extends to "the value in hand," never "what it syntactically was").
 // ════════════════════════════════════════════════════════════════════════════
 
 /** Fixed-arity refusal — verbatim relocation of phase1.ts's own `exactly` helper (see
@@ -304,13 +305,43 @@ function freshBinding(ctx: EmitCtx<R>, hint: string): Binding {
 }
 
 // ── §2.1 representation collapse: cons ──────────────────────────────────────────────
-// Constitution §4.3 verbatim: syntax over the array representation, not a library
-// call. No guard, no shim, no register branch — `[x, ...xs]` regardless of register
-// or facts (matching car/cdr's own unconditional residual, still table-resident).
+// Constitution §2.1/§4.3: lists, pairs, and vectors all lower to arrays — a dotted
+// pair `(a . b)` and a proper cons `(a . (b …))` are not two primitives, just two
+// shapes of the same array (the interpreter side of this ruling — `(1 2)` and
+// `(1 . 2)` convert equal, one-way — is pinned by pair-cycle.test.ts). But the two
+// shapes need DIFFERENT array literals, not one shared residual: a list tail's OWN
+// elements become new slots (`[x, ...xs]`, the spread), while a non-list tail
+// becomes exactly one new slot (`[x, xs]`, no spread) — spreading a non-array tail
+// throws at construction instead ("xs is not iterable" for a scalar, a silent
+// char-explosion for a string), which is exactly the shape `(cons 'key value)`
+// takes when building an alist entry. The residual therefore reads the TAIL
+// argument's own fact (`ctx.argFacts[1]`, Law A: a fact about the argument, never
+// its syntax) three ways: PROVEN array (`provesArray`) → the spread; PROVEN scalar
+// (`provesScalar`, the disjoint complement) → the clean 2-element literal; UNKNOWN
+// (a runtime value the type pass cannot pin to either shape — an inferred or
+// higher-order result, the common case for a real alist entry) → the `cons`
+// stage-0 shim, which tests `Array.isArray` at runtime and is correct either way.
+// Collapsing the UNKNOWN case back to a bare, unconditional spread reintroduces
+// exactly the crash this gate exists to close.
+const provesArray = (f: { list?: true; pair?: true; nonEmptyList?: true } | undefined): boolean =>
+  f?.list === true || f?.pair === true || f?.nonEmptyList === true;
+
+/** The disjoint complement of `provesArray`: a scalar fact positively rules OUT
+ *  array-shape, so the two predicates are never both true for a sound static type
+ *  — a union claims a fact only when EVERY constituent claims it
+ *  (typefacts/derive.ts's `∀`-walk), so a genuinely mixed type (`string | number[]`)
+ *  claims neither and falls through to the shim below, never a false-positive
+ *  clean form. */
+const provesScalar = (f: { stringy?: true; numeric?: true; boolean?: true } | undefined): boolean =>
+  f?.stringy === true || f?.numeric === true || f?.boolean === true;
+
 const consEmitRule: EmitRule<R> = {
   call: (args, ctx) => {
     const [x, xs] = exactly(ctx, "cons", args, 2);
-    return ArrayLit([x!, Spread(xs!)]);
+    const tail = ctx.argFacts[1];
+    if (provesArray(tail)) return ArrayLit([x!, Spread(xs!)]);
+    if (provesScalar(tail)) return ArrayLit([x!, xs!]);
+    return Call(ctx.runtime("cons"), [x!, xs!]);
   },
 };
 
