@@ -286,31 +286,89 @@ export function extract(form: CoreForm, ctx: ExtractCtx): StaticProv {
   }
 }
 
-/** Program-level entry: walk the top-level forms with defines in scope (the
- *  named-helper forge's fix — DefineFn IS in the top-level scope), return the
- *  attribution of the LAST value form (the program's result, matching
- *  discovery-run's `userForms.at(-1)` convention). */
-export function extractProgram(forms: readonly CoreForm[], registry: HeadRegistry): StaticProv {
-  const names = new Map<string, Bound>();
-  const top: Scope = { names, parent: null };
-  for (const f of forms) {
-    if (f.kind === "Define") {
-      if (f.overridableType !== undefined) {
-        // A define/overridable is a program INPUT: bind it in scope as the
-        // synthetic InputProv (evidence-class), NOT as its fallback expr — the
-        // override is always supplied by the harness, and the fallback must
-        // never become the attribution. Binding through the ORDINARY scope
-        // (rather than a side-table inputs check) is load-bearing: an inner
-        // `(let ((e "FAB")) e)` shadow must attribute to the shadow's const,
-        // never to the input — the shadowed-input forge (corpus row 6).
-        names.set(f.name, { tag: "prov", prov: { kind: "input", site: f.id, name: f.name } });
-      } else {
-        names.set(f.name, { tag: "expr", expr: f.value, scope: top });
-      }
-    }
-    if (f.kind === "DefineFn") names.set(f.name, { tag: "expr", expr: f, scope: top });
+/** Which form in a defines-then-expressions body is the VALUE — the last
+ *  form that is neither a `Define` nor a `DefineFn` (R7RS's internal-define
+ *  idiom: defines pool at the front, in any position, and never compete to
+ *  be the body's own value). All-defines body: fall back to the body's own
+ *  last element (a bare top-level `Define` there attributes its value via
+ *  ARM-A's own Define case). Empty body: undefined — every caller's own
+ *  fail-closed opaque. Shared by `extractBody` (below — which ALSO builds
+ *  the scope those defines populate) and `recognizeTailFold` (arm-control.ts,
+ *  which only needs to KNOW which form is the value — a pure syntactic
+ *  pre-check against the raw CoreForm, run before any scope/extraction
+ *  machinery exists at all). */
+export function lastValueForm(body: readonly CoreForm[]): CoreForm | undefined {
+  let last: CoreForm | undefined;
+  for (const f of body) {
+    if (f.kind === "Define" || f.kind === "DefineFn") continue;
+    last = f;
   }
-  const last = forms.filter((f) => f.kind !== "Define" && f.kind !== "DefineFn").at(-1) ?? forms.at(-1);
-  if (!last) return { kind: "opaque", site: 0 as NodeId, reason: "empty-program" };
-  return extract(last, { scope: top, registry, reducing: new Set(), memo: new WeakMap(), riskProbes: [] });
+  return last ?? body.at(-1);
+}
+
+/** THE ONE defines-then-expressions body walk (R7RS internal-define idiom).
+ *  Every body-hosting construct shares this exact shape, so there is exactly
+ *  one place that decides it: Begin/Let bodies (ARM-A), a beta-reduced
+ *  callee's body (ARM-B), a fan lambda's body (ARM-C), and the program's own
+ *  top-level form list (`extractProgram`, below) all walk THIS. A
+ *  Define/DefineFn extends one body-local frame (visible to the rest of the
+ *  body, self-referential — mutual visibility among internal helpers,
+ *  letrec*-style); every other form is a candidate value, and the LAST one
+ *  seen (`lastValueForm`) is the one actually extracted — earlier candidates
+ *  are effect positions and are never walked (I1 needs their crossing sites
+ *  to exist in the SOURCE, not in this return value). Empty body:
+ *  `opaque(siteId, emptyReason)` — `emptyReason` lets each caller keep its
+ *  own diagnostic ("empty-body" for an ordinary Begin/Let/callee body,
+ *  "fan/empty-body" for a fan lambda, "empty-program" for a whole program
+ *  with no value forms at all).
+ *
+ *  `define/overridable` (a `Define` with `overridableType` set) ALWAYS binds
+ *  as a synthetic evidence-class InputProv, never its fallback expr, AT ANY
+ *  DEPTH — not only at the program's own top level. The harness supplies
+ *  overrides by NAME; nothing about that contract depends on how deeply the
+ *  declaration is lexically nested, so a single uniform rule (checked here,
+ *  once) is the honest policy — before this unification only
+ *  `extractProgram`'s own copy of this walk ever checked `overridableType`
+ *  at all, an accident of which copy happened to be written first, not a
+ *  deliberate restriction (a nested `(let () (define/overridable e
+ *  (s/string) "fallback") e)` used to silently attribute to "fallback"'s
+ *  const — the shadowed-input forge's shape, one level removed from the
+ *  case that fix already covers). `DefineFn`'s own `overridableType` (the
+ *  fn-shorthand spelling, `(define/overridable (f params…) type body…)`,
+ *  spec §4.8) is a SEPARATE, pre-existing gap: no copy of this walk ever
+ *  checked it, at any depth, so there is no inconsistency to resolve by
+ *  unifying — left exactly as-is, out of this fix's scope. */
+export function extractBody(
+  body: readonly CoreForm[],
+  ctx: ExtractCtx,
+  siteId: NodeId,
+  emptyReason = "empty-body",
+): StaticProv {
+  const names = new Map<string, Bound>();
+  const frame: Scope = { names, parent: ctx.scope };
+  for (const f of body) {
+    if (f.kind === "Define") {
+      names.set(
+        f.name,
+        f.overridableType !== undefined
+          ? { tag: "prov", prov: { kind: "input", site: f.id, name: f.name } }
+          : { tag: "expr", expr: f.value, scope: frame },
+      );
+    } else if (f.kind === "DefineFn") {
+      names.set(f.name, { tag: "expr", expr: f, scope: frame });
+    }
+  }
+  const target = lastValueForm(body);
+  if (target === undefined) return opaque(siteId, emptyReason);
+  return extract(target, { ...ctx, scope: frame });
+}
+
+/** Program-level entry: the top level is just the outermost body (parent
+ *  scope `null`) — `extractBody` (above) already IS this walk, so this is a
+ *  direct call, not a copy of it. Returns the attribution of the LAST value
+ *  form (the program's result, matching discovery-run's `userForms.at(-1)`
+ *  convention). */
+export function extractProgram(forms: readonly CoreForm[], registry: HeadRegistry): StaticProv {
+  const ctx: ExtractCtx = { scope: EMPTY_SCOPE, registry, reducing: new Set(), memo: new WeakMap(), riskProbes: [] };
+  return extractBody(forms, ctx, 0 as NodeId, "empty-program");
 }

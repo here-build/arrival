@@ -66,7 +66,7 @@
 import type { CoreForm, DefineFn, Dict, Lambda, NodeId } from "../coreform/types.js";
 import type { BuildProv, ChoiceProv, HeadClass, HeadRegistry, MintIntegrity, StaticProv } from "../model/static-prov.js";
 import { inferCollapse } from "./collapse.js";
-import { type Bound, type ExtractCtx, type Scope, checkReducing, extract, lookup, opaque } from "./index.js";
+import { type Bound, type ExtractCtx, type Scope, checkReducing, extract, extractBody, lookup, opaque } from "./index.js";
 
 export function extractContainer(form: Dict, ctx: ExtractCtx): StaticProv {
   return {
@@ -393,26 +393,12 @@ export function buildFan(
   }
   const frame: Scope = { names, parent: resolved.scope };
 
-  // Nested defines extend the frame (extractProgram's top-level pattern, mirrored
-  // per-body): a helper `define`d inside the lambda must resolve for the rest of
-  // the body, in the SAME frame it was declared in (self-referential for
-  // recursive helpers, matching letrec-style closure).
-  for (const f of target.body) {
-    if (f.kind === "Define") names.set(f.name, { tag: "expr", expr: f.value, scope: frame });
-    if (f.kind === "DefineFn") names.set(f.name, { tag: "expr", expr: f, scope: frame });
-  }
-
-  const last = target.body.filter((f) => f.kind !== "Define" && f.kind !== "DefineFn").at(-1);
-  if (!last) return opaque(target.id, "fan/empty-body");
-
-  const bodyCtx: ExtractCtx = {
-    scope: frame,
-    registry: ctx.registry,
-    reducing: new Set([...ctx.reducing, target]),
-    memo: ctx.memo,
-    riskProbes: ctx.riskProbes,
-  };
-  const body = extract(last, bodyCtx);
+  // The body walk (internal defines pooling into the frame, letrec-style
+  // self-reference for recursive helpers, the last non-define form as the
+  // value) is `extractBody` (index.ts) — the ONE defines-then-expressions
+  // walk every body-hosting construct shares, not a fan-specific copy of it.
+  const bodyCtx: ExtractCtx = { ...ctx, scope: frame, reducing: new Set([...ctx.reducing, target]) };
+  const body = extractBody(target.body, bodyCtx, target.id, "fan/empty-body");
 
   // Lambda-form combine: `(fold (lambda (acc x) (+ acc x)) …)` — the raw body
   // is exactly `(ac-head acc element)` over the two params, nothing else. Only

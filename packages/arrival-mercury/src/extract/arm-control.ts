@@ -54,11 +54,11 @@
  *                 ARGUMENT's OWN attribution evaluated in the CALLER's scope
  *                 — binding-site scoping, the mechanism that keeps a helper's
  *                 hidden guard visible (the reopened named-helper forge). The
- *                 body pools its own internal Define/DefineFn into one frame
- *                 and attributes the last non-define form (mirrors
- *                 extractProgram's and ARM-A's Begin/Let bodies — the same
- *                 R7RS "defines then expressions" idiom, so all three treat a
- *                 body identically).
+ *                 body walk is `extractBody` (index.ts) — the ONE
+ *                 defines-then-expressions walk every body-hosting construct
+ *                 shares, so a beta-reduced callee's body, ARM-A's Begin/Let
+ *                 bodies, and the program's own top level all treat a body
+ *                 identically.
  *             (3) a free (not-in-scope) Ref ⇒ ctx.registry.classifyHead(name) —
  *                 fuse/mux/build/string/mint/fan/choice/opaque per HeadClass.
  *                 kwargs FOLD into the flat arg list (positional order, then
@@ -90,7 +90,7 @@
  *           shape-matching that must not be attempted halfway — mislabeling
  *           is the only sin; opaque stays ALWAYS a correct answer.
  */
-import type { And, App, CoreForm, DefineFn, If, Lambda, NamedLet, NodeId, Or } from "../coreform/types.js";
+import type { And, App, CoreForm, DefineFn, If, Lambda, NamedLet, Or } from "../coreform/types.js";
 import type { HeadClass, StaticProv } from "../model/static-prov.js";
 // Circular with ./index.js by construction (same shape as ARM-A/ARM-C's own
 // note): index.ts imports extractControl to dispatch INTO this module; this
@@ -98,7 +98,7 @@ import type { HeadClass, StaticProv } from "../model/static-prov.js";
 // (a keyword accessor's operand, a fuse head's args, a callee's body — any of
 // which can be a Lit/Ref/Dict/etc.). Sound because every cross-cycle reference
 // happens from inside a function body, never at module-eval time.
-import { type Bound, type ExtractCtx, type Scope, checkReducing, extract, lookup, opaque } from "./index.js";
+import { type Bound, type ExtractCtx, type Scope, checkReducing, extract, extractBody, lastValueForm, lookup, opaque } from "./index.js";
 import { buildFan } from "./arm-containers.js";
 
 type ControlForm = App | DefineFn | Lambda | NamedLet | If | And | Or;
@@ -322,8 +322,10 @@ function containsRef(form: CoreForm, name: string): boolean {
  *  discipline `isBareAcLambdaBody` (arm-containers.ts) uses to read a
  *  combinator's identity before extraction erases it. Requires, in order
  *  (any failure ⇒ null, the caller's unchanged opaque("cyclic-binding") path):
- *   1. the body's value form (defines-then-expressions, same walk as
- *      `extractBody`) is a single `If` — no cond/nested-If nesting attempted.
+ *   1. the body's value form (`lastValueForm`, index.ts — the same
+ *      defines-then-expressions walk `extractBody` uses, minus the scope it
+ *      would also build) is a single `If` — no cond/nested-If nesting
+ *      attempted.
  *   2. exactly ONE of `then`/`else` is a direct tail self-call (both, or
  *      neither, bails — over-lifting guard).
  *   3. no OTHER reference to `fn.name` anywhere in the guard, the base
@@ -337,12 +339,7 @@ function containsRef(form: CoreForm, name: string): boolean {
  *      accumulator returned unchanged at the end of the loop. A computed
  *      base value (anything else) is a shape this lift does not attempt. */
 function recognizeTailFold(fn: DefineFn): TailFold | null {
-  let last: CoreForm | undefined;
-  for (const f of fn.body) {
-    if (f.kind === "Define" || f.kind === "DefineFn") continue;
-    last = f;
-  }
-  const target = last ?? fn.body.at(-1);
+  const target = lastValueForm(fn.body);
   if (target === undefined || target.kind !== "If") return null;
 
   const branches: readonly [CoreForm, CoreForm] = [target.then, target.else];
@@ -404,42 +401,6 @@ function buildRecursionFan(
   const body = extract(fold.updateExpr, { ...ctx, scope: frame, reducing });
 
   return { kind: "fan", site: fn.id, collection, body, collapse: "lowered" };
-}
-
-/** Begin-semantics body walk for a beta-reduced callee — deliberately the SAME
- *  algorithm as ARM-A's Begin/Let-body helper and `extractProgram`'s top-level
- *  pass (the R7RS "defines then expressions" idiom is one shape no matter which
- *  construct hosts it): every internal Define/DefineFn pools into ONE
- *  body-local frame regardless of its position relative to the selected value
- *  form (self-referential — mutual visibility among internal helpers, letrec*-
- *  style), and the LAST NON-DEFINE form is the body's value — a trailing
- *  define after it is scope-only, never re-selected as the value. All-defines
- *  body: fall back to the array's own last element (whose Define/DefineFn
- *  dispatch already attributes sensibly). Empty body: opaque, fail-closed —
- *  `Lambda`'s CoreForm shape does not itself guarantee non-emptiness the way
- *  `DefineFn`'s does (classify()'s `(lambda (x))` gap), so this must not index
- *  off the end of an empty array. */
-function extractBody(body: readonly CoreForm[], ctx: ExtractCtx, site: NodeId): StaticProv {
-  const names = new Map<string, Bound>();
-  const frame: Scope = { names, parent: ctx.scope };
-  let scope: Scope = ctx.scope;
-  let last: CoreForm | undefined;
-  for (const f of body) {
-    if (f.kind === "Define") {
-      names.set(f.name, { tag: "expr", expr: f.value, scope: frame });
-      scope = frame;
-      continue;
-    }
-    if (f.kind === "DefineFn") {
-      names.set(f.name, { tag: "expr", expr: f, scope: frame });
-      scope = frame;
-      continue;
-    }
-    last = f;
-  }
-  const target = last ?? body.at(-1);
-  if (target === undefined) return opaque(site, "empty-body");
-  return extract(target, { ...ctx, scope });
 }
 
 // ── known-head dispatch (path 3 — a free Ref, resolved via the registry) ────────
