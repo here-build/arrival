@@ -45,6 +45,92 @@
  * workbench change adding a real `const` arm should replace this mapping, not
  * layer on top of it.
  *
+ * ── `fabrication` is CONTENT-CHANNEL scoped, never bare `const`-kind scoped
+ *    (prov-render F1, 2026-07-17 — the over-flag fix) ───────────────────────
+ *
+ * `fabrication` is a SUBSET of `{idx : provKind.get(idx) === "const"}`, never
+ * the whole set: a `const` disqualifies grounding only where it sits in
+ * verdict/circuit-verdict.ts's CONTENT channel (`dataShaped`'s own check,
+ * "no content position anywhere carries a `const`") — the render must not
+ * claim MORE fabrication than the seal (verdict/circuit-verdict.ts + seal.ts)
+ * would ever refuse on. Two positions are SELECTION, not content, and a
+ * `const` living ONLY there is the author's own honest argument, never
+ * laundering:
+ *
+ *   - a `mint`'s OWN `closed` inputs (`projectMint`'s "closed" wires) —
+ *     static-prov.ts's `MintProv` doc: "closed is the attribution of the
+ *     crossing's own inputs... a mint is a fresh source, its inputs ground
+ *     the SELECTION story, never the content." `infer`'s own model-name/
+ *     slot-key literals are the canonical example: structurally required by
+ *     the call, not a forgery signal.
+ *   - a `choice`'s OWN `guards` (`projectChoice`'s "selector" wires) —
+ *     circuit-verdict.ts's `guardGroundsInEvidence` doc: "a guard MAY carry
+ *     `const`s (a comparison threshold is the author's judgment, not a
+ *     fabrication — the `1000` in `(< (:v e) 1000)`)"; `channelsFresh`'s
+ *     `choice` arm folds guards into SELECTION only, never content.
+ *
+ * Everything else a `const` can be wired into — a `fused`/`build`/`string`
+ * argument, a `choice`'s `alt`, a `fan`'s `body`/`collection` — is a
+ * content-preserving edge in `channelsFresh`'s fold (verdict/circuit-verdict.ts's
+ * header, "the absorptive lattice"): the CONTENT channel is transparent
+ * through exactly those positions, so a `const` reached only through them
+ * really does disqualify `dataShaped`, and `fabrication` keeps flagging it.
+ * `circuit-mermaid.ts`'s `contentHasConst` (the `"infer"` view's own
+ * fabrication check) already draws this SAME line — this file's `fabrication`
+ * now agrees with it instead of over-flagging the closed/guard cases
+ * `contentHasConst` was always careful to skip.
+ *
+ * SCOPE of THIS fix — the CHANNEL cut (closed-arg/guard), not where-provenance:
+ * a `mux`'s `source` INHERITS the channel (both here and in `contentHasConst`),
+ * so a `const` in a `mux`-narrowed-AWAY sibling — a decoy `:o "FAKE"` in
+ * `(:v (dict :v <evidence> :o "FAKE"))`, never read at runtime — is still
+ * flagged here even though the seal's `channels()` applies `narrowMux`
+ * (verdict/circuit-verdict.ts) and EXCLUDES it from content (`content.consts
+ * = 0`, `dataShaped = true`). That residual over-flag is a SEPARATE, finer
+ * finding than #41 (call it where-provenance / #42): it is shared identically
+ * by both renders (this file + `contentHasConst`) and by the studio's
+ * `contentPathFabrication` helper, so closing it means teaching the whole
+ * render family to consume the EXPORTED `narrowMux` partition (which changes
+ * per-part channel assignment inside a `build`, not just a marking) — out of
+ * scope for this channel cut. Until then `fabrication ⊆ seal` holds for the
+ * closed-arg/guard distinction (#41, what this fix proves) but NOT for the
+ * where-provenance sub-case; a consumer wanting the exact seal verdict on a
+ * mux-projected leaf must still gate on `channels(prov).content`, not this set
+ * alone.
+ *
+ * MECHANISM — a SEPARATE content-reachability pass, not a channel threaded
+ * through the graph walk. `fabrication` is computed by `collectContentConsts`
+ * (below), a walk that follows ONLY content edges (skips a `mint`'s `closed`
+ * and a `choice`'s `guards` — both selection; skips a `fan`'s `body` — a
+ * separate graph LEVEL whose consts its own nested `toWireframe` collects)
+ * and gathers the `ConstProv` objects it reaches, which `toWireframe` then
+ * maps to node indices through `Builder.seen`. The graph walk itself
+ * (`project`/`projectFresh`) is UNCHANGED — it still projects every reachable
+ * node with G2 dedup, so node/wire structure is identical; only which consts
+ * land in `fabrication` narrows.
+ *
+ * WHY a separate pass and not a channel on the graph walk: the graph walk
+ * dedups shared subtrees (G2), and a shared COMPOSITE first reached through a
+ * selection edge would cache under selection and its later content re-visit
+ * would hit the cache WITHOUT re-descending — silently UNDER-flagging a
+ * content-reachable const inside it (`(let ((f (list "TAG" x))) (if (member y
+ * f) f default))` — `f` is one shared object used in the guard AND returned
+ * as content; the guard visit caches it, the content visit can't re-open it).
+ * Under-flag is the DANGEROUS direction (a fabrication shown as grounded), so
+ * the fabrication pass must NOT share the graph walk's dedup. A content-only
+ * walk with its OWN object-dedup is sound precisely because EVERY edge it
+ * follows is content: any node it reaches is content-reachable regardless of
+ * how many selection references also point at it, so deduping cannot hide a
+ * content path. This is the exact walk `circuit-mermaid.ts`'s `contentHasConst`
+ * already runs (boolean instead of a node set) — one content-edge definition,
+ * two consumers.
+ *
+ * render ⊆ seal is asserted by test, not a runtime check here (this projection
+ * holds no seal-plane import and should not grow one to self-verify):
+ * `to-wireframe.test.ts` cross-checks representative closed-arg/guard/
+ * content-path circuits against `channels`/`dataShaped` (verdict/circuit-verdict.ts)
+ * directly.
+ *
  * ── span is a bare stringified NodeId, not `head@line:col` ─────────────────
  *
  * Same limit `circuit-sexpr.ts` documents: a `StaticProv` carries only a
@@ -162,11 +248,24 @@ export interface WireframeSideMaps {
   readonly buildShape: ReadonlyMap<number, { readonly ctor: BuildProv["ctor"]; readonly keys: readonly (string | number)[] }>;
   /** THE render-laundering guard. A node index is in this set iff it is a
    *  `const` (program-text fabrication mark) projected onto the closest
-   *  honest existing kind (`opaque`). A renderer/seal consumer MUST consult
-   *  this before treating an `opaque` node as "merely unresolvable" — a
-   *  `const` is a PROVEN fabrication, strictly worse than a gap. Never
-   *  derive this from `kind`/`op`; that is exactly the laundering this map
-   *  exists to prevent. */
+   *  honest existing kind (`opaque`) AND that const sits on the CONTENT
+   *  channel — never merely because `provKind` says `"const"` (see this
+   *  file's header, "`fabrication` is CONTENT-CHANNEL scoped"). A `const`
+   *  reachable ONLY through a `mint`'s `closed` inputs or a `choice`'s
+   *  `guards` (the SELECTION channel — an honest closed argument or
+   *  comparison threshold) is deliberately EXCLUDED: the seal
+   *  (verdict/circuit-verdict.ts's `dataShaped`) never disqualifies on it
+   *  either. This CHANNEL cut (#41) is the guarantee — `fabrication ⊆` the
+   *  seal's content-channel consts for the closed-arg/guard distinction. It
+   *  is NOT the seal's FULL verdict: a `mux`-narrowed-away decoy sibling is
+   *  still flagged here though `narrowMux` grounds it (see the header's
+   *  "SCOPE of THIS fix" note); a consumer needing the exact seal verdict on
+   *  a mux-projected leaf gates on `channels(prov).content`, not this set. A
+   *  renderer/seal consumer MUST consult this before treating an `opaque`
+   *  node as "merely unresolvable" — a flagged `const` is a program-text
+   *  const on the content path, strictly worse than a gap. Never derive this
+   *  from `kind`/`op` alone; that is exactly the laundering this map exists
+   *  to prevent. */
   readonly fabrication: ReadonlySet<number>;
   /** Per-`fan`-node (keyed by the OUTER graph's node index) the INNER
    *  `template` graph's own side maps — the body is a private interior with
@@ -298,10 +397,13 @@ function projectMint(b: Builder, prov: MintProv): number {
   return idx;
 }
 
+/** Fabrication marking is NOT decided here — a `const`'s node is created
+ *  unconditionally, and `toWireframe`'s content-reachability post-pass
+ *  (`collectContentConsts`) decides whether it lands in `fabrication`. See
+ *  this file's header, "MECHANISM," for why that must be a separate pass, not
+ *  a per-node decision at projection time. */
 function projectConst(b: Builder, prov: ConstProv): number {
-  const idx = pushNode(b, { kind: "opaque", op: "const", span: String(prov.site) }, "const");
-  b.fabrication.add(idx);
-  return idx;
+  return pushNode(b, { kind: "opaque", op: "const", span: String(prov.site) }, "const");
 }
 
 function projectFused(b: Builder, prov: FusedProv): number {
@@ -403,6 +505,61 @@ function projectFresh(b: Builder, prov: StaticProv): number {
   }
 }
 
+/**
+ * Collect every `const` reachable from `prov` following ONLY content edges —
+ * the seal's CONTENT channel (verdict/circuit-verdict.ts's `channels()`):
+ *   - a `mint`'s `closed` inputs are SELECTION → NOT followed (the mint's own
+ *     identity is the sole content anchor; static-prov.ts's `MintProv` doc);
+ *   - a `choice`'s `guards` are SELECTION → NOT followed, only `alts`
+ *     (circuit-verdict.ts's `channels()` `choice` arm — a comparison
+ *     threshold is the author's judgment, `guardGroundsInEvidence`'s doc);
+ *   - a `fan`'s `body` is a separate graph LEVEL → NOT followed (its own
+ *     nested `toWireframe` collects the body's consts into that template's
+ *     `fabrication`); only `collection` is at this level;
+ *   - a `mux`'s WHOLE `source` is followed (the documented where-provenance
+ *     coarseness — the seal's `narrowMux` would narrow to the read part; see
+ *     this file's header "SCOPE of THIS fix" — shared with
+ *     circuit-mermaid.ts's `contentHasConst`).
+ *
+ * Object-dedup via `visited` terminates on the shared DAG and is SOUND here
+ * precisely because every edge followed is content: a node reached is
+ * content-reachable no matter how many SELECTION references also point at it,
+ * so deduping can never hide a content path (contrast the graph walk's dedup,
+ * which — mixing both channels — could; see this file's header, "WHY a
+ * separate pass"). Exhaustive by tsc, same totality discipline as
+ * `projectFresh`. */
+function collectContentConsts(prov: StaticProv, into: Set<StaticProv>, visited: Set<StaticProv>): void {
+  if (visited.has(prov)) return;
+  visited.add(prov);
+  switch (prov.kind) {
+    case "const":
+      into.add(prov);
+      return;
+    case "input":
+    case "opaque":
+    case "mint": // closed = selection, never followed
+      return;
+    case "fused":
+      prov.sources.forEach((s) => collectContentConsts(s, into, visited));
+      return;
+    case "mux":
+      collectContentConsts(prov.source, into, visited);
+      return;
+    case "build":
+      prov.parts.forEach((p) => collectContentConsts(p.prov, into, visited));
+      return;
+    case "string":
+      prov.runs.forEach((r) => collectContentConsts(r, into, visited));
+      return;
+    case "choice":
+      prov.alts.forEach((a) => collectContentConsts(a, into, visited)); // guards = selection
+      return;
+    case "fan":
+      collectContentConsts(prov.collection, into, visited); // body = separate level
+      return;
+  }
+}
+
 /** `StaticProv` → node index within `b`, returning the SAME index for a
  *  `prov` object identity already projected earlier within THIS builder —
  *  the shared-DAG dedup (G2, 2026-07-16; the extract-side memo,
@@ -427,7 +584,13 @@ function projectFresh(b: Builder, prov: StaticProv): number {
  *  local to one `nodes` array, so a cross-level reference has nowhere to
  *  point without a bigger structural change to that type (out of scope
  *  here). Dedup WITHIN one level — the top graph, or one fan's own template —
- *  is unconditional and exact. */
+ *  is unconditional and exact.
+ *
+ *  This walk is CHANNEL-BLIND — it projects every reachable node for graph
+ *  structure and does NOT decide `fabrication` (that is
+ *  `collectContentConsts`'s content-only post-pass; see this file's header,
+ *  "WHY a separate pass," for why the fabrication decision must not ride this
+ *  dedup). */
 function project(b: Builder, prov: StaticProv): number {
   const existing = b.seen.get(prov);
   if (existing !== undefined) return existing;
@@ -449,6 +612,17 @@ export function toWireframe(prov: StaticProv): WireframeProjection {
   const portIdx = b.nodes.length;
   b.nodes.push({ kind: "port", direction: "out", span });
   b.wires.push(passthroughWire(rootIdx, { node: portIdx, slot: "out" }, span));
+  // FABRICATION (prov-render F1): a content-only pass, NOT the channel-blind
+  // graph walk above — only consts the seal's CONTENT channel would see are
+  // flagged (see this file's header, "MECHANISM"). Every collected const is a
+  // node at THIS level (the walk never crosses a fan-body boundary), so
+  // `b.seen` always resolves it; the `!== undefined` guard is defensive.
+  const contentConsts = new Set<StaticProv>();
+  collectContentConsts(prov, contentConsts, new Set());
+  for (const c of contentConsts) {
+    const idx = b.seen.get(c);
+    if (idx !== undefined) b.fabrication.add(idx);
+  }
   return {
     graph: { nodes: b.nodes, wires: b.wires, egress: portIdx },
     sideMaps: {

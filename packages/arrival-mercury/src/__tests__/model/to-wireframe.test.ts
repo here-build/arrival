@@ -23,6 +23,10 @@ import type {
   StaticProv,
   StringProv,
 } from "../../model/static-prov.js";
+// The seal's OWN authoritative channel fold (READ-ONLY single source, prov-render
+// F1) — every render-side "is this ⊆ what the seal proves" test below cross-checks
+// against these, never re-derives its own notion of grounded/fabricated.
+import { channels, dataShaped } from "../../verdict/circuit-verdict.js";
 
 const S = 0 as NodeId;
 
@@ -211,6 +215,96 @@ describe("toWireframe — the render-laundering guard (const)", () => {
     expect(constWireframe.graph.nodes[0].op).toBe("const");
     expect(opaqueWireframe.graph.nodes[0].op).toBe("unknown-head/frobnicate");
     expect(constWireframe.graph.nodes[0].op).not.toBe(opaqueWireframe.graph.nodes[0].op);
+  });
+});
+
+describe("toWireframe — fabrication is CONTENT-CHANNEL scoped (prov-render F1: render ⊆ seal)", () => {
+  it("a const bound as a mint's closed argument is NOT flagged — an honest closed-arg, never laundering", () => {
+    // infer's own model-name/slot-key literals are the canonical shape: a
+    // membrane crossing always needs SOME closed argument, and that argument
+    // is the author's declared parameter, not data standing in for content.
+    const circuit = mint("infer", "evidence", [konst()]);
+    const { sideMaps } = toWireframe(circuit);
+    expect(sideMaps.fabrication.size).toBe(0);
+    // Cross-check against the seal's OWN authoritative fold
+    // (verdict/circuit-verdict.ts): a mint's `closed` feeds SELECTION only, so
+    // this const never reaches the CONTENT channel either — the render's
+    // non-flag is consistent with (⊆) what `dataShaped` would ever refuse.
+    expect(channels(circuit).content.consts).toBe(0);
+    expect(dataShaped(circuit)).toBe(true);
+  });
+
+  it("a const used as a choice's guard is NOT flagged — a comparison threshold is the author's judgment, never laundering (mirrors mint.closed)", () => {
+    // circuit-verdict.ts's own `guardGroundsInEvidence` doc uses exactly this
+    // shape as its worked example: "the `1000` in `(< (:v e) 1000)`."
+    const circuit = choice([konst()], [input("a"), input("b")]);
+    const { sideMaps } = toWireframe(circuit);
+    expect(sideMaps.fabrication.size).toBe(0);
+    expect(channels(circuit).content.consts).toBe(0);
+    expect(dataShaped(circuit)).toBe(true);
+  });
+
+  it("a const substituted into a data/content position is STILL flagged — real laundering, matching the seal's content-channel disqualification", () => {
+    const circuit = fused(mint("infer", "evidence"), konst());
+    const { sideMaps } = toWireframe(circuit);
+    const constIdx = [...sideMaps.provKind.entries()].find(([, kind]) => kind === "const")?.[0];
+    expect(constIdx).toBeDefined();
+    expect(sideMaps.fabrication.has(constIdx!)).toBe(true);
+    // Cross-check: the seal's content channel DOES see this const, so
+    // `dataShaped` correctly refuses — the render's flag is consistent with
+    // (⊆, and here exactly equal to) what disqualifies the seal's verdict.
+    expect(channels(circuit).content.consts).toBeGreaterThan(0);
+    expect(dataShaped(circuit)).toBe(false);
+  });
+
+  it("guard-threshold const excluded, alt-position const included, in ONE circuit — the canonical guard-swap shape", () => {
+    // The guard is fused(evidence, threshold-const) — a `(< (:v e) 1000)`
+    // shape; one alt is a bare const (the forge), the other genuine evidence.
+    const circuit = choice([fused(input("v"), konst())], [konst(), input("fallback")]);
+    const { graph, sideMaps } = toWireframe(circuit);
+    // Exactly ONE const is flagged — the alt's, never the guard's threshold —
+    // even though both are the same StaticProv kind at the same tree depth.
+    expect(sideMaps.fabrication.size).toBe(1);
+    expect(channels(circuit).content.consts).toBe(1);
+    const [flaggedIdx] = sideMaps.fabrication;
+    const feedingWire = graph.wires.find((w) => w.paramRefs.some((ref) => ref.kind === "node" && ref.node === flaggedIdx));
+    // The flagged node is wired into an `arm*` (content) slot, never a
+    // `selector*` (selection) slot.
+    expect(feedingWire?.consumer.slot.startsWith("arm")).toBe(true);
+  });
+
+  it("a shared const reachable via BOTH a closed-arg path and a content path is flagged — content is absorptive, a clean path never wins", () => {
+    const shared = konst();
+    // `shared` is BOTH a mint's closed argument (selection) AND a fused
+    // source (content) — the shared-DAG dedup (G2) means it projects once;
+    // this proves the fabrication mark still reflects the CONTENT occurrence
+    // regardless of which path the walk happens to visit first.
+    const circuit = fused(mint("infer", "evidence", [shared]), shared);
+    const { sideMaps } = toWireframe(circuit);
+    expect(sideMaps.nodeIndex?.get(shared)).toBeDefined();
+    expect(sideMaps.fabrication.has(sideMaps.nodeIndex!.get(shared)!)).toBe(true);
+    expect(channels(circuit).content.consts).toBeGreaterThan(0);
+    expect(dataShaped(circuit)).toBe(false);
+  });
+
+  it("a shared COMPOSITE reached via a guard (selection) FIRST then as content still flags its const descendant — no under-flag from graph-dedup", () => {
+    // The soundness case the separate content-pass exists for: `shared` is one
+    // build object used BOTH as a choice guard (selection, visited first) AND
+    // as a content alt. A channel threaded through the DEDUPED graph walk would
+    // cache `shared` under selection on the guard visit and skip re-descending
+    // on the content visit — silently under-flagging the "TAG" const inside it
+    // (a fabrication shown as grounded, the dangerous direction). The
+    // content-only post-pass has its own dedup and cannot miss it.
+    const tag = konst();
+    const shared = build("vector", [{ key: 0, prov: tag }]);
+    const circuit = choice([shared], [shared, input("default")]);
+    const { sideMaps } = toWireframe(circuit);
+    const tagIdx = sideMaps.nodeIndex?.get(tag);
+    expect(tagIdx).toBeDefined();
+    expect(sideMaps.fabrication.has(tagIdx!)).toBe(true);
+    // Cross-check the seal agrees this is a real content-path fabrication.
+    expect(channels(circuit).content.consts).toBeGreaterThan(0);
+    expect(dataShaped(circuit)).toBe(false);
   });
 });
 
