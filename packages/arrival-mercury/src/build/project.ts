@@ -19,6 +19,7 @@ import { greenfieldRegistryFor, openOracleSession } from "../oracle/harness.js";
 import { defaultClassifier, type ClassifyFile } from "./classify.js";
 import { compileDataFile, DATA_EXTENSIONS } from "./data-module.js";
 import { foldOverridableExports, type FlowedUpOverridable, type OverridableExport } from "./overridable.js";
+import { cleanName } from "../walker/names.js";
 import { flattenTopBegins, hasProgramFace, scanRequires } from "./require-scan.js";
 import { aliasFromPath, compileScmModule } from "./scm-module.js";
 import type { BuildFile, BuildResult, BuildWarning, ExportShape, PendingWarning, RequireResolution } from "./types.js";
@@ -268,7 +269,22 @@ function resolveFlowUp(
   for (const { sourceRelPath, entry } of cone) {
     let exposedKey = entry.name;
     if (taken.has(exposedKey)) {
-      exposedKey = `${aliasFromPath(sourceRelPath)}.${entry.name}`;
+      // The basename alias (`aliasFromPath` — the module's own default-import
+      // alias convention) is the FIRST rung, but it is basename-only:
+      // `a/metric.scm` and `b/metric.scm` both alias `metric`, so a
+      // same-named knob from both would collapse onto ONE exposed key — one
+      // caller param silently setting two distinct upstream knobs. Re-check
+      // the namespaced key too and escalate to the path-qualified spelling
+      // (every path segment cleaned, dot-joined: `a.metric.threshold`) when
+      // the basename rung is itself taken. The numeric backstop is
+      // unreachable while cone entries are (path × name)-unique — kept so a
+      // future duplicate can never silently merge either.
+      const byBase = `${aliasFromPath(sourceRelPath)}.${entry.name}`;
+      const segments = sourceRelPath.replace(/\.[^.]+$/, "").split("/").map(cleanName);
+      const byPath = `${segments.join(".")}.${entry.name}`;
+      exposedKey = !taken.has(byBase) ? byBase : byPath;
+      let n = 2;
+      while (taken.has(exposedKey)) exposedKey = `${byPath}.${n++}`;
       warnings.push({
         code: "build/overridable-flow-up-namespaced",
         message: `"${entry.name}" (from "${sourceRelPath}") collided with an existing knob name in this pipeline's cone — exposed as "${exposedKey}" instead`,

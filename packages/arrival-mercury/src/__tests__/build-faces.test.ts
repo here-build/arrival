@@ -123,6 +123,26 @@ describe("build faces (program-face-always-function)", () => {
     expect((ns.default as (p?: object) => unknown)()).toEqual({ x: 7 });
   });
 
+  it("flow-up knobs from same-basename modules stay DISTINCT (path-qualified on double collision)", async () => {
+    // `a/metric.scm` and `b/metric.scm` both alias `metric` (basename-only),
+    // so with the entry's own local `threshold` taking the bare name, both
+    // used to flow up as ONE `metric.threshold` — a caller param setting two
+    // distinct upstream knobs at once. The second collision must escalate to
+    // the path-qualified key.
+    const result = await buildProject({
+      "a/metric.scm": "(define/overridable threshold s/number 1)\n(define (a-t) threshold)\n",
+      "b/metric.scm": "(define/overridable threshold s/number 2)\n(define (b-t) threshold)\n",
+      "main.scm": '(require "a/metric.scm")\n(require "b/metric.scm")\n(define/overridable threshold s/number 0)\n(list threshold (a-t) (b-t))\n',
+    });
+    const main = fileOf(result, "main.ts");
+    const keys = [...main.matchAll(/inhumanParams\["([^"]+)"\]/g)].map((m) => m[1]);
+    const uniqueNamespaced = new Set(keys.filter((k) => k !== "threshold"));
+    expect(uniqueNamespaced.size).toBe(2); // two distinct exposed keys, never one shared
+    expect(uniqueNamespaced).toEqual(new Set(["metric.threshold", "b.metric.threshold"]));
+    const ns = await importBuilt(result, "main.ts");
+    expect((ns.default as (p?: object) => unknown)()).toEqual([0, 1, 2]);
+  });
+
   it("ExportShape carries the face kind: scm defaults are functions, data defaults are values", async () => {
     // Structural pin of the contract bit itself (consumed by the require
     // machinery): rebuilding the same projects, the emitted CONSUMPTION shapes
