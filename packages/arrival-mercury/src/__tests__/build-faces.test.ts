@@ -20,11 +20,16 @@
  * scratch dir, entry imported through a namespaced tsx loader (the same
  * mechanism `oracle/harness.ts` uses, same one-registration discipline),
  * `.default()` called per the ruling.
+ *
+ * Each case's source project is a REAL fixture directory under
+ * `fixtures/build-faces/<case-name>/` (mirrors gate3's fs-based fixtures) —
+ * `readProject` reads it recursively into the `Record<string,string>` shape
+ * `buildProject` takes. No inline scheme/JSON strings in this file.
  */
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { randomBytes } from "node:crypto";
 import { register } from "tsx/esm/api";
 import { afterAll, describe, expect, it } from "vitest";
@@ -35,6 +40,28 @@ import type { BuildResult } from "../build/types.js";
 const SCRATCH = path.join(tmpdir(), `mercury-build-faces-${process.pid}-${randomBytes(4).toString("hex")}`);
 const loader = register({ namespace: `mercury-build-faces-${process.pid}` });
 let caseCounter = 0;
+
+const FIXTURES_DIR = fileURLToPath(new URL("./fixtures/build-faces", import.meta.url));
+
+/** Read a fixture project directory recursively into the
+ *  `{ relPath: content }` shape `buildProject` takes — posix-style relative
+ *  paths regardless of host OS. */
+function readProject(caseName: string): Record<string, string> {
+  const root = path.join(FIXTURES_DIR, caseName);
+  const files: Record<string, string> = {};
+  const walk = (relDir: string) => {
+    for (const entry of readdirSync(path.join(root, relDir), { withFileTypes: true })) {
+      const relPath = relDir ? `${relDir}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        walk(relPath);
+      } else {
+        files[relPath] = readFileSync(path.join(root, relPath), "utf8");
+      }
+    }
+  };
+  walk("");
+  return files;
+}
 
 afterAll(() => {
   rmSync(SCRATCH, { recursive: true, force: true });
@@ -67,7 +94,7 @@ describe("build faces (program-face-always-function)", () => {
     // Forced module classification: the default classifier calls a DAG-root
     // with a program face a pipeline; the module-face trailing-expression
     // shape needs an explicit classifier (as `build.classifier` configs do).
-    const result = await buildProject({ "mod.scm": "(define (double x) (* x 2))\n(double 21)\n" }, { classifyFile: () => "module" });
+    const result = await buildProject(readProject("module-face-trailing-expression"), { classifyFile: () => "module" });
     const code = fileOf(result, "mod.ts");
     expect(code).toContain("export default function Main()");
     expect(code).not.toMatch(/export default \w+;/); // the pre-ruling eager-binding suffix
@@ -77,10 +104,7 @@ describe("build faces (program-face-always-function)", () => {
   });
 
   it("pipeline face: exports `export default function run(…)`, no post-render suffix", async () => {
-    const result = await buildProject({
-      "lib.scm": "(define (helper x) (+ x 1))\n",
-      "main.scm": '(require "lib.scm")\n(helper 41)\n',
-    });
+    const result = await buildProject(readProject("pipeline-face-no-suffix"));
     const code = fileOf(result, "main.ts");
     expect(code).toMatch(/export default function run\(/);
     expect(code).not.toContain("export default run;");
@@ -92,10 +116,7 @@ describe("build faces (program-face-always-function)", () => {
     // lib2 is required (non-root) => module face with a program face; main2 is
     // the DAG root with a program face => pipeline. The audit's miscompile
     // bound the sibling's FUNCTION where the interpreter yields its VALUE.
-    const result = await buildProject({
-      "lib2.scm": "(define base 2)\n(* base 21)\n",
-      "main2.scm": '(define result (require "lib2.scm"))\n(+ result 1)\n',
-    });
+    const result = await buildProject(readProject("bound-require-function-face"));
     const lib = fileOf(result, "lib2.ts");
     expect(lib).toContain("export default function Main()");
     const main = fileOf(result, "main2.ts");
@@ -106,11 +127,7 @@ describe("build faces (program-face-always-function)", () => {
   });
 
   it("bound require of a data file (value face) reads the import directly and re-exports its allocated JS name", async () => {
-    const result = await buildProject({
-      "config.json": '{ "x": 7 }\n',
-      "lib3.scm": '(define parsed-config (require "config.json"))\n(define (config-x) parsed-config)\n',
-      "main3.scm": '(require "lib3.scm")\n(config-x)\n',
-    });
+    const result = await buildProject(readProject("bound-require-value-face"));
     const lib = fileOf(result, "lib3.ts");
     // Value face: direct import binding, never called.
     expect(lib).toContain('import { default as parsedConfig } from "./config.js"');
@@ -129,11 +146,7 @@ describe("build faces (program-face-always-function)", () => {
     // used to flow up as ONE `metric.threshold` — a caller param setting two
     // distinct upstream knobs at once. The second collision must escalate to
     // the path-qualified key.
-    const result = await buildProject({
-      "a/metric.scm": "(define/overridable threshold s/number 1)\n(define (a-t) threshold)\n",
-      "b/metric.scm": "(define/overridable threshold s/number 2)\n(define (b-t) threshold)\n",
-      "main.scm": '(require "a/metric.scm")\n(require "b/metric.scm")\n(define/overridable threshold s/number 0)\n(list threshold (a-t) (b-t))\n',
-    });
+    const result = await buildProject(readProject("flow-up-knobs-distinct"));
     const main = fileOf(result, "main.ts");
     const keys = [...main.matchAll(/inhumanParams\["([^"]+)"\]/g)].map((m) => m[1]);
     const uniqueNamespaced = new Set(keys.filter((k) => k !== "threshold"));
@@ -147,11 +160,7 @@ describe("build faces (program-face-always-function)", () => {
     // Structural pin of the contract bit itself (consumed by the require
     // machinery): rebuilding the same projects, the emitted CONSUMPTION shapes
     // are the observable — a call for a program face, a bare read for data.
-    const result = await buildProject({
-      "data.json": "[1, 2, 3]\n",
-      "prog.scm": "(list 1 2 3)\n",
-      "entry.scm": '(define d (require "data.json"))\n(define p (require "prog.scm"))\n(list d p)\n',
-    });
+    const result = await buildProject(readProject("export-shape-face-kind"));
     const entry = fileOf(result, "entry.ts");
     expect(entry).toContain("const p = pProgram()");
     expect(entry).not.toContain("const d = dProgram");
