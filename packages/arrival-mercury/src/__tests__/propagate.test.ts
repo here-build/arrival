@@ -191,12 +191,16 @@ describe("propagationDecisionAt — let/let*", () => {
   });
 });
 
-describe("propagateTopLevelDefines — literal-only, order-independent", () => {
-  it("a single literal define propagates and drops", () => {
+describe("propagateTopLevelDefines — literal-only, order-independent, NEVER deletes (finding #2)", () => {
+  it("a single literal define propagates into its sibling's use site but the origin define SURVIVES", () => {
     const { forms } = cf(`(define debug #f) (define (f) (if debug 1 2))`);
     const out = propagateTopLevelDefines(forms);
-    expect(out).toHaveLength(1); // the `define debug` form is gone
-    const fn = assertKind(out[0]!, "DefineFn");
+    // Both forms survive — deletion is shakeOf's decision, never this pass's.
+    expect(out).toHaveLength(2);
+    const defineDebug = assertKind(out[0]!, "Define");
+    expect(defineDebug.name).toBe("debug");
+    expect(defineDebug).toBe(forms[0]); // untouched — its own value has no self-reference
+    const fn = assertKind(out[1]!, "DefineFn");
     const ifNode = assertKind(fn.body[0]!, "If");
     expect(assertKind(ifNode.cond, "Lit").value).toEqual({ kind: "boolean", value: false });
   });
@@ -210,11 +214,14 @@ describe("propagateTopLevelDefines — literal-only, order-independent", () => {
   it("a bare-Ref copy at top level is deliberately NOT propagated (deferred — see module header)", () => {
     const { forms } = cf(`(define a 5) (define b a) (f b)`);
     const out = propagateTopLevelDefines(forms);
-    // `a` (a literal) drops; `b` (a copy of `a`) is NOT in scope for THIS
-    // function and survives as a real binding, substituted through with
-    // `a`'s propagated literal in place of the `a` reference in `b`'s own init.
-    expect(out).toHaveLength(2); // `define b` and `(f b)` — `define a` is gone
-    const defineB = assertKind(out[0]!, "Define");
+    // `a` (a literal) folds into every reference to it, INCLUDING `b`'s own
+    // init — but `a`'s own define survives, same as `debug`'s above. `b`
+    // itself is a copy, out of scope for THIS function (module header), so
+    // `b`'s define also survives, substituted through with `a`'s literal.
+    expect(out).toHaveLength(3); // `define a`, `define b`, `(f b)` — nothing dropped
+    const defineA = assertKind(out[0]!, "Define");
+    expect(defineA).toBe(forms[0]); // untouched
+    const defineB = assertKind(out[1]!, "Define");
     expect(defineB.name).toBe("b");
     expect(assertKind(defineB.value, "Lit").value).toEqual({ kind: "number", text: "5" });
   });
@@ -222,6 +229,40 @@ describe("propagateTopLevelDefines — literal-only, order-independent", () => {
   it("nothing to propagate returns the SAME forms array (identity fast path)", () => {
     const { forms } = cf(`(define (f x) x) (f 1)`);
     expect(propagateTopLevelDefines(forms)).toBe(forms);
+  });
+
+  it("a module-shaped call (walk() with NO propagationOf/shakeOf, exactly compileModuleFace's own shape) keeps the exported define's binding", () => {
+    // The regression this fix closes: module face never wires `propagationOf`
+    // or `shakeOf` into walk() (`../build/scm-module.ts`'s `compileModuleFace`).
+    // Every top-level define there becomes a named export — if propagation
+    // ever deleted `PI`'s binding while folding its value into `area`, the
+    // export would reference a name with no declaration left to back it.
+    const unit = walk(cf(`(define PI 3.14) (define (double) (* PI 2))`), {
+      registry: EMPTY,
+      register: "run",
+      // deliberately NO propagationOf, NO shakeOf — compileModuleFace's shape
+    });
+    const piDecl = unit.decls.find((d) => d.t === "ConstDecl");
+    expect(piDecl, "PI's declaration must still exist for the module's named-export list to reference").toBeDefined();
+    const out = render(unit);
+    expect(out).toContain("const PI = 3.14;"); // the export survives
+    expect(out.match(/\bPI\b/g)).toHaveLength(1); // AND its value still folds into double's body — no OTHER use-site reference to PI survives
+  });
+
+  it("a plain (let …) inside a module-shaped call still gets sound per-Let propagation with no propagationOf wired", () => {
+    // The other half of the same fix: letStmts used to gate its own always-safe
+    // per-`Let` fold on the SAME `opts.propagationOf` presence check the unsound
+    // top-level pass used — so declining to wire the top-level pass in (module
+    // face's own choice) silently lost this fold too. It must apply regardless.
+    const out = render(
+      walk(cf(`(define (f) (let ((flag #t)) (if flag "A" "B")))`), {
+        registry: EMPTY,
+        register: "run",
+        prevalueOf: prevalueDecisionAt,
+        // deliberately NO propagationOf — module face's own shape
+      }),
+    );
+    expect(out).toBe(`function f() {\n    return "A";\n}\n`);
   });
 });
 

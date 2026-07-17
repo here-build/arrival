@@ -424,9 +424,28 @@ export function propagationDecisionAt(node: Let): Let | undefined {
  * Whole-program pass for top-level `define` VALUE bindings (`Define`, never
  * `DefineFn`) — called directly by `../walker/walk.ts` (no per-model state
  * needed, so no `SchemeSemanticModel` view mediates it, mirroring how
- * `walk.ts` already calls its own `flattenTopBegins` directly). Applied to
- * the ALREADY-FLATTENED top-level forms (after `flattenTopBegins`, before
+ * `walk.ts` already calls its own `flattenTopBegins` directly), UNCONDITIONALLY
+ * (no opt-in gate — see "never deletes", below). Applied to the
+ * ALREADY-FLATTENED top-level forms (after `flattenTopBegins`, before
  * `preRegisterDefines`), so there is no top-level `Begin` left to consider.
+ *
+ * NEVER DELETES A BINDING (WALKER-NAMING audit finding #2's fix): an earlier
+ * version of this pass both substituted a folded define's value into every
+ * use site AND removed the define itself from the returned forms. That is
+ * unsound the moment a caller's face treats every top-level define as a
+ * named export (`../build/scm-module.ts`'s module face) — deleting the
+ * binding drops the export even though nothing about its VALUE changed.
+ * Whether a now-unreferenced define is safe to physically remove depends on
+ * rootedness knowledge (is this name exported? effectful?) this module does
+ * not have — that is exclusively `../shake/index.ts`'s `shakeTopLevel`
+ * decision, which runs immediately after this pass in `walk.ts` and DOES
+ * carry that knowledge, opt-in, per caller. This pass ONLY ever substitutes
+ * a literal value at its read sites; the origin `define` always survives,
+ * verbatim, for shake (or nothing, if the caller never wires shake in) to
+ * decide. Because nothing is ever deleted, running this pass is
+ * unconditionally SOUND for every caller — there is no on/off gate here,
+ * matching `propagationDecisionAt`'s own "not itself optional" default in
+ * `walk.ts`'s `propagationFor`.
  *
  * LITERAL/QUOTE ONLY — deliberately narrower than `propagationDecisionAt`'s
  * `let`/`let*` floor, which also allows a bare-`Ref` copy. Top level is
@@ -435,20 +454,35 @@ export function propagationDecisionAt(node: Let): Let | undefined {
  * `(define a b) (define b 5)` program has `a`'s copy-init referring to a
  * name defined LATER in program order. Chaining copy-propagation soundly
  * across that order needs a fixpoint (or a dependency-ordered pass) this
- * module does not build — attempting it with a naive single left-to-right
- * scan risks propagating a copy of a binding this SAME pass is about to
- * drop, leaving a dangling reference. A literal's value has no such
- * dependency (it never refers to another binding), so collecting every
- * single-definition, literal-valued top-level `define` in one
- * order-independent scan and substituting them all at once is
- * unconditionally safe regardless of declaration order. Copy-propagation
- * across top-level defines is deferred, not attempted unsound.
+ * module does not build — a naive single left-to-right scan would need to
+ * resolve `a`'s copy through `b` before `b`'s own literal is even reached,
+ * which one linear scan cannot do soundly regardless of whether the origin
+ * define is ever deleted. A literal's value has no such dependency (it
+ * never refers to another binding), so collecting every single-definition,
+ * literal-valued top-level `define` in one order-independent scan and
+ * substituting them all at once is unconditionally safe regardless of
+ * declaration order. Copy-propagation across top-level defines is
+ * deferred, not attempted unsound.
  *
  * A name defined more than once at top level (redefinition) is never
  * propagated — declines rather than guess which definition a reference
  * means. Identity fast path: returns `forms` itself, unchanged, when
  * nothing propagates (mirrors `materializeSharedBindings`'s own "no groups
  * ⇒ unit unchanged" convention).
+ *
+ * IMPLEMENTATION NOTE — substituted PER FORM (`forms.map((f) => substitute(f,
+ * map))`), never through `substituteBody(forms, map)`: `substituteBody`'s own
+ * shadow guard (`collectBodyShadowNames`) treats every name `forms` itself
+ * defines as a local shadow of that SAME body — correct when `forms` is a
+ * NESTED body and `map` came from an OUTER scope, but wrong here, where
+ * `map`'s keys are drawn from `forms`' OWN top-level defines: the guard
+ * would see each folded name "shadowing itself" and strip it from `map`
+ * before anything substitutes, silently defeating every fold. Calling
+ * `substitute` directly, per top-level form, skips only that outermost,
+ * self-referential shadow check; `substitute`'s own recursive dispatch still
+ * calls `substituteBody` (with correct shadow-protection) for every NESTED
+ * body a deeper `Lambda`/`DefineFn`/`Let` introduces, so a local same-named
+ * rebinding several scopes down still shadows correctly.
  */
 export function propagateTopLevelDefines(forms: readonly CoreForm[]): readonly CoreForm[] {
   const counts = new Map<string, number>();
@@ -457,7 +491,6 @@ export function propagateTopLevelDefines(forms: readonly CoreForm[]): readonly C
   }
 
   const map = new Map<string, CoreForm>();
-  const kept: CoreForm[] = [];
   for (const f of forms) {
     if (
       f.kind === "Define" &&
@@ -465,13 +498,11 @@ export function propagateTopLevelDefines(forms: readonly CoreForm[]): readonly C
       (f.value.kind === "Lit" || f.value.kind === "Quote")
     ) {
       map.set(f.name, f.value);
-      continue; // drop — every use substitutes to the literal/quote directly
     }
-    kept.push(f);
   }
 
   if (map.size === 0) return forms;
-  return substituteBody(kept, map);
+  return forms.map((f) => substitute(f, map));
 }
 
 // ── structural identity: same-branch `if` ──────────────────────────────────────────

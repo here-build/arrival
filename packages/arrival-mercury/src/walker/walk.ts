@@ -45,11 +45,14 @@
  * only the WALKER's OWN body stops branching on them directly; see the S5-extended
  * lint (`model-imports-agree.test.ts`) for the mechanical check.
  *
- * E3 — the shake (engine plan §2 E3): `opts.shakeOf`, an OPTIONAL hook mirroring
- * `propagationOf`'s own gating discipline, prunes dead-and-pure top-level
- * `Define`/`DefineFn` forms (effectful crossings survive — `../shake/index.ts`'s own
- * header) at the SAME point `propagateTopLevelDefines` already runs. Default
- * `undefined` ⇒ no shake ever fires.
+ * E3 — the shake (engine plan §2 E3): `opts.shakeOf`, an OPTIONAL hook, prunes
+ * dead-and-pure top-level `Define`/`DefineFn` forms (effectful crossings survive —
+ * `../shake/index.ts`'s own header) at the SAME point `propagateTopLevelDefines`
+ * already runs, unconditionally, just before it. Default `undefined` ⇒ no shake
+ * ever fires — `propagateTopLevelDefines`'s own fold (substitute, never delete)
+ * still applies regardless, so a caller without `shakeOf` keeps every top-level
+ * binding physically present: an exported define is never silently dropped just
+ * because nothing wired deletion in (WALKER-NAMING audit finding #2).
  *
  * Scope/naming (engine plan §2 E1a — the lookahead namer): this walk mints a Binding
  * (via `declareJs`/`fresh`) at every scheme binding site or engine-glue need, but
@@ -88,7 +91,7 @@ import type {
 import { guardFormOf, loweringDecisionAt } from "../lowering/index.js";
 import type { GuardForm, LoweringDecision } from "../lowering/index.js";
 import { allocateNames, bindingCensusOf, materializeNames, recordOrigin } from "../naming/index.js";
-import { propagateTopLevelDefines } from "../propagate/index.js";
+import { propagateTopLevelDefines, propagationDecisionAt } from "../propagate/index.js";
 import type { EmitRegistry } from "../registry/harvest.js";
 import { arrayChunkAst, type ChunkElement } from "../residual/chunk.js";
 import type { Binding, CompilationUnit, Decl, Pattern, R } from "../residual/types.js";
@@ -174,8 +177,19 @@ export interface WalkOptions {
    * body it returns is lowered, so a propagated literal is already in place
    * the moment `prevalueOf`, above, examines a nested `If`/`And`/`Or`
    * (`(let ((flag #t)) (if flag A B))` → propagate → `(if #t A B)` →
-   * prevalue folds → `A`). Default `undefined` ⇒ no propagation ever fires,
-   * exactly like `idiomAt`/`prevalueOf`'s own default.
+   * prevalue folds → `A`). UNLIKE `idiomAt`/`prevalueOf` (genuinely optional
+   * folds), this decision is unconditionally sound wherever a `Let`/`let*`
+   * appears — declining it is never REQUIRED, only ever a missed
+   * optimization — so `undefined` here does not mean "never fires": the
+   * walker's own `propagationFor` (below, mirroring `decisionFor`/
+   * `guardFor`'s supplied-view-or-direct-default split) falls back to
+   * calling `propagationDecisionAt` directly. Supplying a cached
+   * `sm.propagationOf` only changes WHICH implementation answers (memoized
+   * vs. recomputed), never WHETHER the fold applies — a bare `walk()` call
+   * or a module-face build (neither wires this in) still gets the fold.
+   * (Top-level `define` propagation is a separate, always-on pass — see
+   * `propagateTopLevelDefines`'s own call site, further down, and its own
+   * header for why it needs no gate at all.)
    */
   readonly propagationOf?: (node: CfLet) => CfLet | undefined;
   /**
@@ -293,6 +307,16 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
   // Law-T's guard form, per condition node: same supplied-view-or-relocated-default
   // split as `decisionFor`.
   const guardFor = opts.guardFormOf ?? ((n: CoreForm, register: "run" | "read") => guardFormOf(factsAt(n.id), register));
+
+  // The structural-optimization lane's per-`Let` propagation decision: same
+  // supplied-view-or-direct-default split as `decisionFor`/`guardFor` — unlike
+  // `idiomAt`/`prevalueOf`'s genuinely optional folds, this one is
+  // unconditionally sound everywhere a `Let`/`let*` can appear
+  // (`propagationDecisionAt`'s own header), so the default computes it
+  // directly instead of declining. Applies even where no `SchemeSemanticModel`
+  // caches it (a bare `walk()` call, a module-face build) — every caller gets
+  // the fold, cached or not (`WalkOptions.propagationOf`'s own doc).
+  const propagationFor = opts.propagationOf ?? propagationDecisionAt;
 
   // ── naming: scheme-name resolution frames + provisional minting ─────────────────
   //
@@ -752,12 +776,17 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
    */
   const letStmts = (n: CfLet, mode: SeqMode): R[] => {
     // The structural-optimization lane's propagation decision, consulted
-    // FIRST — mirrors `lowerApp`'s own `idiomAt` consultation. Runs BEFORE
-    // this function's own lowering (and therefore before `prevalueOf`/
-    // `sameBranchOf` ever see a nested If/And/Or in `effective.body`), so a
-    // propagated literal is already substituted in place by the time either
-    // of those views examines it (see `WalkOptions.propagationOf`'s own doc).
-    const effective = opts.propagationOf?.(n) ?? n;
+    // FIRST — mirrors `lowerApp`'s own `idiomAt` consultation, and
+    // `decisionFor`/`guardFor`'s own "supplied-view-or-direct-default" split
+    // (above): this decision isn't itself optional (unconditionally sound
+    // everywhere — `propagationDecisionAt`'s own header), so absent a cached
+    // model view the walker still computes it directly rather than
+    // declining. Runs BEFORE this function's own lowering (and therefore
+    // before `prevalueOf`/`sameBranchOf` ever see a nested If/And/Or in
+    // `effective.body`), so a propagated literal is already substituted in
+    // place by the time either of those views examines it (see
+    // `WalkOptions.propagationOf`'s own doc).
+    const effective = propagationFor(n) ?? n;
     return inSchemeFrame(() => {
       const consts: R[] = [];
       if (effective.letKind === "let") {
@@ -1204,20 +1233,29 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
   // just above. Runs BEFORE `preRegisterDefines`/the main loop so a
   // propagated top-level literal is already in place everywhere `walk()`
   // lowers, the same "propagation before prevaluation" ordering `letStmts`
-  // gives its own bindings. Gated on `opts.propagationOf` being supplied —
-  // the SAME opt-in signal `letStmts` uses for its own (per-`Let`)
-  // propagation, so a caller that never wires the feature in gets
-  // byte-identical output (matching `idiomAt`/`prevalueOf`'s own "default
-  // undefined ⇒ no fold ever fires" discipline) rather than this whole-
-  // program pass firing unconditionally for every existing walk() caller.
+  // gives its own bindings. UNCONDITIONAL, unlike the per-`Let` fold's
+  // supplied-view-or-default split (`propagationFor`, above): this pass
+  // NEVER deletes a binding (only substitutes a literal value at its use
+  // sites, leaving the origin `define` in place) — deletion of a now-dead
+  // define is exclusively `shakeOf`'s decision, below, which alone carries
+  // the rootedness/liveness knowledge a caller may or may not have wired
+  // in. Folding without deleting is sound for EVERY caller, including a
+  // real (unwrapped) module top level where every define is a named export
+  // (`../build/scm-module.ts`'s module face): the export survives untouched
+  // even though its value now also appears inlined at every internal read
+  // (WALKER-NAMING audit finding #2 — this pass and `letStmts`'s per-`Let`
+  // fold used to share ONE gate, `opts.propagationOf`'s presence, which
+  // meant a module face declining the unsound top-level half also lost the
+  // always-sound per-`Let` half; they are independent now).
   const flatForms = flattenTopBegins(classified.forms);
-  const propagatedForms = opts.propagationOf !== undefined ? propagateTopLevelDefines(flatForms) : flatForms;
+  const propagatedForms = propagateTopLevelDefines(flatForms);
   // E3's shake (../shake/index.ts's `shakeTopLevel`, `sm.shakeOf`) — runs AFTER
   // propagation so a define propagation makes unreferenced is shake-eligible too
   // (module header's own composition note), BEFORE `preRegisterDefines`/the main
   // loop so a pruned define never even reaches lowering. Gated on `opts.shakeOf`
-  // being supplied — the SAME opt-in discipline `propagateTopLevelDefines`, just
-  // above, already uses for the identical reason.
+  // being supplied: this IS the pass that actually deletes a binding, so it
+  // remains the only one of the two still opt-in — nothing is ever removed
+  // until a caller supplies real reachability/export knowledge.
   const forms = opts.shakeOf !== undefined ? opts.shakeOf(propagatedForms).forms : propagatedForms;
   const decls: Decl[] = [];
   const body: R[] = [];

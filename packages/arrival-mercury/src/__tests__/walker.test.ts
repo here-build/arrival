@@ -95,15 +95,28 @@ describe("define / lambda / begin", () => {
 });
 
 describe("let family", () => {
+  // NOTE (WALKER-NAMING audit finding #2): every fixture below binds through
+  // `(+ n 0)` rather than a bare literal/copy — the structural-optimization
+  // lane's per-`Let` propagation (`../propagate/index.ts`'s
+  // `propagationDecisionAt`) is now UNCONDITIONALLY consulted by `letStmts`
+  // (`walk.ts`'s own `propagationFor`, no opt-in gate), so a literal/copy
+  // binding no longer reaches this raw-lowering golden at all — it folds
+  // away before `render()` ever sees it. An `App` init is never trivially
+  // pure, so it survives untouched, keeping these goldens a true test of the
+  // WALKER's raw `let` lowering shape, isolated from the fold. (`car`/
+  // `reverse` were tried first and rejected here — a sole-use `(car param)`
+  // triggers this package's OWN destructuring heuristic, `[head]`-binding the
+  // param instead of leaving it a plain `Ref`, which is a different feature
+  // entirely and not what these goldens test.)
   it("plain let: Const sequence, spliced at tail position (no IIFE — the §6 sole-body invariant)", () => {
-    expect(emit(`(define (f) (let ((x 1) (y 2)) (+ x y)))`)).toBe(
-      `function f() {\n    const x = 1;\n    const y = 2;\n    return x + y;\n}\n`,
+    expect(emit(`(define (f) (let ((x (+ 1 0)) (y (+ 2 0))) (+ x y)))`)).toBe(
+      `function f() {\n    const x = 1 + 0;\n    const y = 2 + 0;\n    return x + y;\n}\n`,
     );
   });
 
   it("let* resolves progressively; emission is identical Consts", () => {
-    expect(emit(`(define (f) (let* ((x 1) (y x)) y))`)).toBe(
-      `function f() {\n    const x = 1;\n    const y = x;\n    return y;\n}\n`,
+    expect(emit(`(define (f) (let* ((x (+ 1 0)) (y x)) y))`)).toBe(
+      `function f() {\n    const x = 1 + 0;\n    const y = x;\n    return y;\n}\n`,
     );
   });
 
@@ -114,13 +127,15 @@ describe("let family", () => {
   });
 
   it("let in expression position → Block → renderer IIFE (position polymorphism, zero walker decisions)", () => {
-    expect(emit(`(define (f) (+ 1 (let ((x 2)) x)))`)).toBe(
-      `function f() {\n    return 1 + (() => {\n        const x = 2;\n        return x;\n    })();\n}\n`,
+    expect(emit(`(define (f) (+ 1 (let ((x (+ 2 0))) x)))`)).toBe(
+      `function f() {\n    return 1 + (() => {\n        const x = 2 + 0;\n        return x;\n    })();\n}\n`,
     );
   });
 
   it("a let binding shadowing a param renames instead of redeclaring (overlapping-scope disambiguation)", () => {
-    expect(emit(`(define (f x) (let ((x 2)) x))`)).toBe(`function f(x) {\n    const x_2 = 2;\n    return x_2;\n}\n`);
+    expect(emit(`(define (f x) (let ((x (+ x 0))) x))`)).toBe(
+      `function f(x) {\n    const x_2 = x + 0;\n    return x_2;\n}\n`,
+    );
   });
 });
 
