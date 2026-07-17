@@ -146,6 +146,14 @@ const NO_OWN_CROSSING = new Set<ProvenanceRole | undefined>([undefined, "pipe", 
 
 // ── free-name collection (flat, unscoped — see the module header) ──────────
 
+/** A missing case here silently drops that subtree's names/effects from the
+ *  census — exactly the incomplete-walk hazard the sibling `propagate`
+ *  module's guard exists for (its WALKER-NAMING audit finding #3): a future
+ *  `CoreForm` kind fails to COMPILE at these call sites instead. */
+function assertNever(f: never): never {
+  throw new Error(`shake: unhandled CoreForm kind: ${JSON.stringify(f)}`);
+}
+
 function freeNamesIn(node: CoreForm, out: Set<string>): void {
   switch (node.kind) {
     case "Ref":
@@ -192,6 +200,8 @@ function freeNamesIn(node: CoreForm, out: Set<string>): void {
     case "Require":
     case "Door":
       return;
+    default:
+      return assertNever(node);
   }
 }
 
@@ -258,6 +268,8 @@ function isEffectfulSubtree(node: CoreForm, registry: EmitRegistry): boolean {
       case "Require":
       case "Door":
         return;
+      default:
+        return assertNever(n);
     }
   };
   visit(node);
@@ -276,17 +288,19 @@ export function shakeTopLevel(forms: readonly CoreForm[], registry: EmitRegistry
 
   // Redefinition (module header): a multiply-defined name is EXCLUDED from
   // pruning consideration entirely — every define carrying it is kept,
-  // unconditionally. Still resolved LAST-WINS for the liveness fixpoint's own
-  // traversal (which define's body to scan when propagating liveness onward
-  // through a reference to this name) — matches `walk.ts`'s own
-  // `preRegisterDefines` (a `Map.set` per define, sequential, last write
-  // wins); harmless for a redefined name specifically, since it is never a
-  // pruning candidate regardless of which body gets scanned.
-  const nameCounts = new Map<string, number>();
-  for (const d of defines) nameCounts.set(d.name, (nameCounts.get(d.name) ?? 0) + 1);
-  const resolvedByName = new Map<string, Define | DefineFn>();
-  for (const d of defines) resolvedByName.set(d.name, d);
-  const singlyDefined = (name: string): boolean => nameCounts.get(name) === 1;
+  // unconditionally. The liveness fixpoint therefore scans EVERY definition's
+  // body when such a name is reached — every one of those bodies survives in
+  // the output, so a binding referenced solely from an EARLIER definition is
+  // just as live as one the last definition needs (scanning only the
+  // last-wins body pruned exactly that binding, leaving kept code with a
+  // dangling reference — the pass's own no-dangling invariant broken).
+  const defsByName = new Map<string, (Define | DefineFn)[]>();
+  for (const d of defines) {
+    const bucket = defsByName.get(d.name);
+    if (bucket) bucket.push(d);
+    else defsByName.set(d.name, [d]);
+  }
+  const singlyDefined = (name: string): boolean => defsByName.get(name)?.length === 1;
 
   // Effectfulness is a STATIC property of a define's own subtree (step 2 —
   // never depends on liveness), computed once, up front, for every
@@ -312,7 +326,7 @@ export function shakeTopLevel(forms: readonly CoreForm[], registry: EmitRegistry
     const reached = new Set<string>();
     const worklist: string[] = [];
     const markReached = (name: string): void => {
-      if (resolvedByName.has(name) && !reached.has(name)) {
+      if (defsByName.has(name) && !reached.has(name)) {
         reached.add(name);
         worklist.push(name);
       }
@@ -322,7 +336,7 @@ export function shakeTopLevel(forms: readonly CoreForm[], registry: EmitRegistry
     while (worklist.length > 0) {
       const name = worklist.pop()!;
       const refs = new Set<string>();
-      freeNamesIn(resolvedByName.get(name)!, refs);
+      for (const d of defsByName.get(name)!) freeNamesIn(d, refs);
       for (const n of refs) markReached(n);
     }
     return reached;

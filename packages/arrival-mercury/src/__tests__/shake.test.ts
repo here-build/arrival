@@ -170,6 +170,19 @@ describe("shakeTopLevel — the pure decision", () => {
     expect(decision.pruned).toEqual([]);
   });
 
+  it("a helper referenced ONLY from an earlier definition of a redefined name survives — every kept body's deps are live", () => {
+    // The audit's incomplete-closure sibling (E4b class): the fixpoint used to
+    // scan only the LAST definition's body, so `helper` — needed solely by the
+    // FIRST `g`, which is nonetheless KEPT (redefined names never prune) — was
+    // pruned out from under kept code.
+    const { forms } = cf(`(define helper (string-append "h" "i"))
+(define g (lambda () helper))
+(define g (lambda () "z"))
+(car (list (g)))`);
+    const decision = shakeTopLevel(forms, PROVENANCE_REGISTRY);
+    expect(decision.pruned).toEqual([]);
+  });
+
   it("identity fast path: nothing to prune returns the SAME forms array", () => {
     const { forms } = cf(`(define used (string-append "a" "b"))
 (car (list used))`);
