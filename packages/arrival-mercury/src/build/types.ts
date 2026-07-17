@@ -37,7 +37,24 @@ export interface NamedExport {
  *  a pipeline's program face is the parameterized function itself). */
 export interface ExportShape {
   readonly named: readonly NamedExport[];
-  readonly hasDefault: boolean;
+  /** The default export's calling convention, or absent when there is no
+   *  default at all. `"function"` — every compiled `.scm` program face
+   *  (reference-program-face-always-function: the artifact exports an
+   *  on-demand callable, NEVER an eager value; the value/function boundary
+   *  lives at the consumer, which CALLS `.default()`). `"value"` — a data
+   *  file's literal default (`data-module.ts`), which has no program to
+   *  defer and is read directly. This bit is what lets the require
+   *  machinery (`scm-module.ts`) emit the right consumption — a call for a
+   *  program, a bare reference for data — instead of guessing from a
+   *  boolean (the pre-ruling `hasDefault` shape, which bound a pipeline's
+   *  `run` FUNCTION where the interpreter's `require` yields its VALUE). */
+  readonly defaultFace?: "value" | "function";
+  /** Only meaningful when `defaultFace` is `"function"`: does calling the
+   *  default yield a promise (the compiled face came out `async` after
+   *  asyncness materialization)? The requiring side awaits the run-once
+   *  const it mints iff this is set — threaded here because the consumer
+   *  cannot see the sibling's emitted `async` keyword, only its shape. */
+  readonly defaultAsync?: boolean;
   /** This file's OWN top-level `define/overridable`s, folded to a portable
    *  triple (TASK #87 Q2) — `project.ts`'s cone walk unions these across the
    *  WHOLE transitive require-graph reachable from an entry pipeline, so its
@@ -182,8 +199,10 @@ export interface CompileFileOptions {
    *  calling the emitted function with zero arguments — the common case, every
    *  knob resolving from env/default — is no longer an arity error); `"module"`
    *  ⇒ ordinary module face (named exports) plus, if the file ends in a
-   *  trailing expression, a PLAIN (eager) `export default` — its OWN local
-   *  overridables still get a real (params-less) env-chain. */
+   *  trailing expression, `export default function Main() { … }` — the
+   *  program face is ALWAYS an on-demand callable, never an eager value
+   *  (reference-program-face-always-function); its OWN local overridables
+   *  still get a real (params-less) env-chain. */
   readonly isPipeline: boolean;
   /** TASK #87 Q2 — the pipeline's TRANSITIVE overridable cone: every
    *  overridable reachable via the require-graph from this file, already

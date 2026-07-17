@@ -11,16 +11,21 @@
  *     hoists — resolved by REQUIRE PATH, never by CoreForm node identity, so it
  *     is indifferent to which `classify()` pass produced the node it's asked
  *     about (see this file's own `buildRequireMachinery`).
- *  2. **The export contract** (design doc §3): module face (every top-level
+ *  2. **The export contract** (design doc §3, as amended by
+ *     reference-program-face-always-function): module face (every top-level
  *     define → named export, ALWAYS) and program face (a trailing non-define
- *     expression → `export default`) — either a plain, eager value, or, for a
- *     PIPELINE-classified file (`classify.ts`, TASK #87), a thunked,
- *     parameterized function with every `define/overridable` lifted into its
+ *     expression → `export default function`) — ALWAYS an on-demand callable,
+ *     never an eager value. A MODULE-classified file wraps its trailing
+ *     expression as `export default function Main() { … }`; a
+ *     PIPELINE-classified file (`classify.ts`, TASK #87) exports its thunked,
+ *     parameterized `run` with every `define/overridable` lifted into its
  *     env-chained params cone (`overridable.ts`) — INCLUDING every overridable
  *     transitively reachable through its own require-DAG (TASK #87 Q2's
  *     flow-up; `project.ts`'s cone walk). A MODULE-classified file's own
  *     local overridables still resolve a real (params-less) env chain, just
- *     with no explicit-argument tier of their own.
+ *     with no explicit-argument tier of their own. The value/function boundary
+ *     lives at the CONSUMER: a requiring sibling imports the function and
+ *     mints one run-once access const (`buildRequireMachinery`).
  *  3. **v0's pipeline wrap**: reusing the SAME "whole program as one synthetic
  *     function body" technique `oracle/harness.ts`'s `compileGreenfield` uses
  *     for its own (unrelated) reason — proven semantics-neutral there (a
@@ -29,7 +34,7 @@
  *     of zero-arg, and never immediately called (the whole point is deferral:
  *     nothing may run at import time).
  */
-import type { CoreForm, DefineFn, Require, Span } from "../coreform/types.js";
+import type { CoreForm, DefineFn, NodeId, Require, Span } from "../coreform/types.js";
 import { classify } from "../coreform/classify.js";
 import { desugar } from "../front/desugar.js";
 import { parseSexprs } from "../front/parse.js";
@@ -41,6 +46,7 @@ import { withRules } from "../rules/overlay.js";
 import { inferAsyncSeeds } from "../rules/index.js";
 import { render } from "../residual/render.js";
 import {
+  Await,
   Binding as mkBinding,
   Call,
   ConstDecl,
@@ -110,6 +116,12 @@ export function aliasFromPath(specifier: string): string {
 
 interface RequireMachinery {
   readonly importDecls: readonly Decl[];
+  /** The run-once access consts a `"function"`-faced default needs
+   *  (`const metric = [await ]metricProgram();`) — kept SEPARATE from
+   *  `importDecls` so the caller can print every import first, then every
+   *  access const, matching how a human orders a module head (and the
+   *  paradigm's imports-first materialization). */
+  readonly accessDecls: readonly Decl[];
   readonly overlayTable: SymbolRuleTable;
   readonly requireOf: (node: Require) => R | undefined;
   /** The `boundName`s of every `(define x (require "…"))` that resolved. Each
@@ -119,6 +131,14 @@ interface RequireMachinery {
    *  same JS name (`const examples = examples;` — a TDZ self-reference; this was
    *  a real bug caught by the GEPA smoke test, not a hypothetical). */
   readonly resolvedBoundNames: ReadonlySet<string>;
+  /** scheme `boundName` → the ACTUAL local JS identifier this machinery bound
+   *  it to (the import alias for a `"value"` face, the run-once const for a
+   *  `"function"` face). The module face's named-export list consults this for
+   *  bound-require re-exports — the walked tree has no decl for them (their
+   *  `Define` is dropped, see `resolvedBoundNames`), so without this map the
+   *  export list could only fall back to the RAW scheme name, emitting
+   *  uncompilable `export { parsed-config }` for any kebab/predicate name. */
+  readonly boundJsNames: ReadonlyMap<string, string>;
   readonly warnings: PendingWarning[];
 }
 
@@ -141,18 +161,28 @@ interface RequireMachinery {
  */
 function buildRequireMachinery(uses: readonly RequireOccurrence[], opts: CompileFileOptions): RequireMachinery {
   const importDecls: Decl[] = [];
+  const accessDecls: Decl[] = [];
   // Built mutably (the exported `RequireMachinery.overlayTable` field is the
   // read-only `SymbolRuleTable` view — structurally the same object, only the
   // TYPE narrows once construction is done).
   const overlayTable: Record<string, SymbolRule> = {};
   const warnings: PendingWarning[] = [];
   const uniqueAlias = makeUniqueAlias();
-  /** ONE default-import binding per distinct required PATH that's ever bound/
-   *  inline-used — several occurrences of the same require share it. */
-  const defaultImportOf = new Map<string, Binding>();
+  /** ONE value binding per distinct required PATH that's ever bound/inline-
+   *  used — several occurrences of the same require share it (run-once,
+   *  matching the interpreter's module cache). For a `"value"` face this is
+   *  the default-import alias itself; for a `"function"` face it is the
+   *  run-once access const (`accessDecls`) holding the called result. */
+  const defaultValueOf = new Map<string, Binding>();
   const spilledPaths = new Set<string>();
   const unresolvedPaths = new Set<string>();
   const resolvedBoundNames = new Set<string>();
+  const boundJsNames = new Map<string, string>();
+  const bindBound = (boundName: string, binding: Binding, path: string, span: Span): void => {
+    addOverlayRow(boundName, binding, `(define ${boundName} (require "${path}"))`, span);
+    resolvedBoundNames.add(boundName);
+    boundJsNames.set(boundName, binding.text);
+  };
 
   // `span` is always the CURRENT `RequireOccurrence.node.span` — the specific
   // require/define statement whose name is spilling/binding `exported` — never
@@ -205,17 +235,16 @@ function buildRequireMachinery(uses: readonly RequireOccurrence[], opts: Compile
       continue;
     }
     // "bound" | "inline" — needs the sibling's DEFAULT (program-face) export.
-    if (defaultImportOf.has(path)) {
+    const existing = defaultValueOf.get(path);
+    if (existing !== undefined) {
       // Already imported once (e.g. required both bound and inline, or bound
       // twice) — a "bound" occurrence still needs its OWN overlay row even on
-      // a repeat path, since each `boundName` is a distinct JS identifier.
-      if (use.kind === "bound") {
-        addOverlayRow(use.boundName, defaultImportOf.get(path)!, `(define ${use.boundName} (require "${path}"))`, span);
-        resolvedBoundNames.add(use.boundName);
-      }
+      // a repeat path, since each `boundName` is a distinct scheme identifier;
+      // both share the SAME value binding (run-once, module-cache semantics).
+      if (use.kind === "bound") bindBound(use.boundName, existing, path, span);
       continue;
     }
-    if (!res.shape.hasDefault) {
+    if (res.shape.defaultFace === undefined) {
       unresolvedPaths.add(path);
       warnings.push({
         code: "build/require-no-default",
@@ -225,23 +254,35 @@ function buildRequireMachinery(uses: readonly RequireOccurrence[], opts: Compile
       continue;
     }
     const aliasBase = use.kind === "bound" ? cleanName(use.boundName) : aliasFromPath(path);
-    const local = uniqueAlias(aliasBase);
-    const binding = mkBinding(local);
-    defaultImportOf.set(path, binding);
     // `{ imported: "default", local }` renders `import { default as local } from "…"` —
     // the ES2015-legal spelling of a default import, since the Residual `Import`
     // decl (residual/types.ts) has no dedicated default-import shape (see this
     // file's header note in the project report: never modified, only composed).
-    importDecls.push(Import([{ imported: "default", local }], res.importPath));
-    if (use.kind === "bound") {
-      addOverlayRow(use.boundName, binding, `(define ${use.boundName} (require "${path}"))`, span);
-      resolvedBoundNames.add(use.boundName);
+    let valueBinding: Binding;
+    if (res.shape.defaultFace === "function") {
+      // A program face is an on-demand callable (reference-program-face-always-
+      // function) — the interpreter's `require` yields the program's VALUE, so
+      // the compiled site imports the function and mints ONE run-once access
+      // const per path. Awaited iff the sibling's face came out async — the
+      // consumer owns the value/function (and sync/async) boundary, the
+      // artifact never bakes it in.
+      const fnLocal = uniqueAlias(`${aliasBase}Program`);
+      const fnBinding = mkBinding(fnLocal);
+      importDecls.push(Import([{ imported: "default", local: fnLocal }], res.importPath));
+      valueBinding = mkBinding(uniqueAlias(aliasBase));
+      const call = Call(Ref(fnBinding), []);
+      accessDecls.push(ConstDecl(valueBinding, res.shape.defaultAsync === true ? Await(call) : call));
+    } else {
+      valueBinding = mkBinding(uniqueAlias(aliasBase));
+      importDecls.push(Import([{ imported: "default", local: valueBinding.text }], res.importPath));
     }
+    defaultValueOf.set(path, valueBinding);
+    if (use.kind === "bound") bindBound(use.boundName, valueBinding, path, span);
   }
 
   const requireOf = (node: Require): R | undefined => {
     if (unresolvedPaths.has(node.path)) return undefined; // fall through to the existing door
-    const binding = defaultImportOf.get(node.path);
+    const binding = defaultValueOf.get(node.path);
     // A spill-only path has no default binding — harmless: every call site that
     // reaches this is a bare statement position (see walk.ts's own comment),
     // so ANY non-undefined return discards cleanly. A "bound" occurrence never
@@ -251,20 +292,42 @@ function buildRequireMachinery(uses: readonly RequireOccurrence[], opts: Compile
     return binding !== undefined ? Ref(binding) : { t: "Lit", value: { k: "undefined" } };
   };
 
-  return { importDecls, overlayTable, requireOf, resolvedBoundNames, warnings };
+  return { importDecls, accessDecls, overlayTable, requireOf, resolvedBoundNames, boundJsNames, warnings };
 }
 
-/** Pop the last body statement and rebind it as a top-level `const`, mirroring
- *  `oracle/harness.ts`'s `exportUnitResult` — BEFORE shared-bindings/asyncness/
- *  imports run (so those passes see a `Const` init, not a bare trailing
- *  statement, and can await/hoist it correctly), never after. */
-function popTrailingAsConst(unit: CompilationUnit, binding: Binding): CompilationUnit {
-  const body = [...unit.body];
-  const last = body.pop();
+/** The module face's program-face wrapper name — the trailing expression
+ *  compiles as `(define (__main) <trailing>)`, emitted `export default
+ *  function Main() { … }` (reference-program-face-always-function: the
+ *  artifact exports an on-demand callable, never an eager value — same
+ *  technique, and same reasoning, as `oracle/harness.ts`'s `__oracle-main`
+ *  wrap). The double-underscore scheme spelling cannot collide with a user
+ *  identifier's cleaned form: `cleanName("__main")` is `"Main"`, while a
+ *  user's own `main` cleans to `"main"` — and even a true JS-name collision
+ *  is the allocator's ordinary suffixing case, not a correctness hazard. */
+const SCM_MAIN = "__main";
+
+/** Wrap the trailing program-face form as a synthetic zero-arg `DefineFn` so
+ *  the walker lowers it as a real function body (tail position preserved,
+ *  asyncness landing INSIDE the function instead of as a top-level await) —
+ *  BEFORE `walk()` runs, never a post-pass over emitted output. */
+function wrapTrailingAsMain(forms: readonly CoreForm[], id: () => NodeId): CoreForm[] {
+  const last = forms.at(-1);
   if (last === undefined) {
-    throw new Error("scm-module: expected a trailing body statement for the program face — found none (internal invariant)");
+    throw new Error("scm-module: expected a trailing program-face form — found none (internal invariant)");
   }
-  return { decls: [...unit.decls, ConstDecl(binding, last)], body };
+  const wrapper: DefineFn = { kind: "DefineFn", id: id(), span: last.span, name: SCM_MAIN, params: [], body: [last] };
+  return [...forms.slice(0, -1), wrapper];
+}
+
+/** Mark the face's own FnDecl as the module's default export — the ONE decl
+ *  whose scheme-name origin is `mainName` (the synthetic `__main`, or the
+ *  pipeline wrapper's `run`). Post-`walk()`, pre-materialization; every
+ *  naming pass spread-rebuilds decls, so the flag survives to `render()`. */
+function exportMainAsDefault(unit: CompilationUnit, mainName: string): CompilationUnit {
+  const decls = unit.decls.map((d) =>
+    d.t === "FnDecl" && originOf(d.name)?.text === mainName ? { ...d, exported: "default" as const } : d,
+  );
+  return { ...unit, decls };
 }
 
 /** The params-cone parameter's own annotation — `Record<string, any>`.
@@ -360,7 +423,7 @@ export function compileScmModule(source: string, deps: ScmCompileDeps, opts: Com
   // the model) is fine; no throwaway pre-pass needed.
   const scanForms = flattenTopBegins(classify(desugar(parseSexprs(source))).forms);
   const uses = scanRequires(scanForms);
-  const { importDecls, overlayTable, requireOf, resolvedBoundNames, warnings } = buildRequireMachinery(uses, opts);
+  const { importDecls, accessDecls, overlayTable, requireOf, resolvedBoundNames, boundJsNames, warnings } = buildRequireMachinery(uses, opts);
 
   const flowedUpOverridables = opts.flowedUpOverridables ?? [];
   const fnLiftWarnings: PendingWarning[] = [];
@@ -401,13 +464,21 @@ export function compileScmModule(source: string, deps: ScmCompileDeps, opts: Com
 
   const result = opts.isPipeline
     ? compilePipelineFace(sm, flatForms, requireOf, resolvedBoundNames, opts.runtimeImportPath, flowedUpOverridables)
-    : compileModuleFace(sm, flatForms, requireOf, resolvedBoundNames, opts.runtimeImportPath);
+    : compileModuleFace(sm, flatForms, requireOf, resolvedBoundNames, boundJsNames, opts.runtimeImportPath);
 
-  const finalDecls: Decl[] = [...importDecls, ...result.decls];
-  const code = `${render({ decls: finalDecls, body: result.body })}${result.defaultSuffix ?? ""}`;
+  // Imports first, then the run-once access consts they feed, then the walked
+  // module — the order a human writes a module head in (and the only order
+  // that parses: an access const reads its own import binding).
+  const finalDecls: Decl[] = [...importDecls, ...accessDecls, ...result.decls];
+  const code = render({ decls: finalDecls, body: result.body });
   return {
     content: code,
-    shape: { named: result.named, hasDefault: result.defaultSuffix !== undefined, overridables: foldOverridableExports(scanForms) },
+    shape: {
+      named: result.named,
+      defaultFace: result.hasDefault ? "function" : undefined,
+      defaultAsync: result.hasDefault && result.defaultAsync ? true : undefined,
+      overridables: foldOverridableExports(scanForms),
+    },
     warnings: [...warnings, ...fnLiftWarnings],
   };
 }
@@ -416,26 +487,33 @@ interface FaceResult {
   readonly decls: readonly Decl[];
   readonly body: readonly R[];
   readonly named: readonly NamedExport[];
-  /** Present iff this file has a default export; the exact suffix text to
-   *  append after `render()` (see this file's header — `Export`'s residual
-   *  shape has no default/aliased form, so the default line is composed as
-   *  plain text over an already-real top-level binding `render()` produced). */
-  readonly defaultSuffix?: string;
+  /** Does this file export a default at all? When true it is ALWAYS the
+   *  `export default function` FnDecl already IN `decls` (rendered by
+   *  `residual/render.ts`'s own `exported: "default"` path — the old
+   *  post-`render()` `export default <binding>;` text suffix is gone with
+   *  the eager-value shape it existed to print). */
+  readonly hasDefault: boolean;
+  /** Did the default face come out `async` after asyncness materialization?
+   *  Threaded into `ExportShape.defaultAsync` so a requiring sibling knows
+   *  to await its run-once access const. */
+  readonly defaultAsync: boolean;
 }
 
 /** Ordinary module face: every top-level define is a named export; a trailing
- *  expression (if present) is a PLAIN, EAGER default export — module-level
- *  top-level define PROPAGATION is deliberately NOT enabled here
- *  (`propagationOf` omitted) because `walk()` gates its whole-program
- *  `propagateTopLevelDefines` pass on that same option: letting it run could
- *  eliminate a top-level define this file's named-export list has already
- *  promised exists. Per-node `idiomAt`/`prevalueOf`/`sameBranchOf` stay on —
- *  none of them touch the top-level decls/body split. */
+ *  expression (if present) compiles as `export default function Main() { … }`
+ *  (the `wrapTrailingAsMain` synthetic — reference-program-face-always-
+ *  function) — module-level top-level define PROPAGATION is deliberately NOT
+ *  enabled here (`propagationOf` omitted) because `walk()` gates its
+ *  whole-program `propagateTopLevelDefines` pass on that same option: letting
+ *  it run could eliminate a top-level define this file's named-export list has
+ *  already promised exists. Per-node `idiomAt`/`prevalueOf`/`sameBranchOf`
+ *  stay on — none of them touch the top-level decls/body split. */
 function compileModuleFace(
   sm: SchemeSemanticModel,
   flatForms: readonly CoreForm[],
   requireOf: (n: Require) => R | undefined,
   resolvedBoundNames: ReadonlySet<string>,
+  boundJsNames: ReadonlyMap<string, string>,
   runtimeImportPath: string,
 ): FaceResult {
   const named = topLevelDefineNames(flatForms);
@@ -446,9 +524,10 @@ function compileModuleFace(
   // real (params-less) env chain even though a module face has no params
   // cone of its own to consult an explicit argument from — see
   // overridable.ts's `liftLocalOverridable`/`MODULE_OVERRIDABLE_SYMBOL`.
-  const formsToWalk = droppedRequires.map((f) => (isLiftableOverridable(f) ? liftLocalOverridable(f, id) : f));
+  const lifted = droppedRequires.map((f) => (isLiftableOverridable(f) ? liftLocalOverridable(f, id) : f));
+  const formsToWalk = wantsDefault ? wrapTrailingAsMain(lifted, id) : lifted;
 
-  const sync = walk(
+  const walked = walk(
     { forms: formsToWalk, originAtom: sm.coreform.originAtom, parentOf: sm.coreform.parentOf, doors: sm.coreform.doors },
     {
       registry: sm.registry,
@@ -460,6 +539,7 @@ function compileModuleFace(
       register: "run",
     },
   );
+  const sync = wantsDefault ? exportMainAsDefault(walked, SCM_MAIN) : walked;
 
   // BUG #89 — the ONE source of truth for a top-level define's exported name:
   // `sync.decls`, read RIGHT NOW (before shared-bindings/asyncness/imports run
@@ -480,17 +560,16 @@ function compileModuleFace(
     const origin = originOf(d.name);
     if (origin !== undefined) jsNameOfScheme.set(origin.text, d.name.text);
   }
-  // Every published name paired with its real, allocated JS identifier. Falls
-  // back to the raw scheme name for the one acknowledged v0 edge case
-  // `dropResolvedBoundRequires` already documents (a resolved bound-require
-  // re-export has no local decl of its own to allocate a name for) —
-  // unchanged from today's behavior for that gap, never worse.
+  // A resolved bound-require's name has no walked decl of its own (its
+  // `Define` was dropped — `dropResolvedBoundRequires`), but the require
+  // machinery DID allocate its real local identifier (the import alias or the
+  // run-once access const) — `boundJsNames` closes the gap that used to fall
+  // back to the RAW scheme name here, emitting uncompilable
+  // `export { parsed-config }` for any kebab/predicate bound name.
+  for (const [scheme, js] of boundJsNames) if (!jsNameOfScheme.has(scheme)) jsNameOfScheme.set(scheme, js);
   const namedPairs: readonly NamedExport[] = named.map((scheme) => ({ scheme, js: jsNameOfScheme.get(scheme) ?? scheme }));
 
-  const defaultBinding = mkBinding("__default");
-  const withDefault = wantsDefault ? popTrailingAsConst(sync, defaultBinding) : sync;
-
-  const shared = materializeSharedBindings(sm.sharedBindingsOf(withDefault));
+  const shared = materializeSharedBindings(sm.sharedBindingsOf(sync));
   const asyncified = materializeAsyncness(sm.asyncnessOf(shared, inferAsyncSeeds));
   const importSymbols = new Set<string>();
   for (const form of sm.coreform.forms) for (const s of sm.importsOf(form)) importSymbols.add(s);
@@ -502,8 +581,17 @@ function compileModuleFace(
     decls,
     body: materialized.body,
     named: namedPairs,
-    defaultSuffix: wantsDefault ? `export default ${defaultBinding.text};\n` : undefined,
+    hasDefault: wantsDefault,
+    defaultAsync: faceIsAsync(asyncified),
   };
+}
+
+/** Did the default-exported FnDecl come out `async` after asyncness
+ *  materialization? Read off the ASYNCIFIED unit (imports materialization
+ *  never touches async flags) — the one place the compiled face's asyncness
+ *  is knowable, threaded into `ExportShape.defaultAsync` for consumers. */
+function faceIsAsync(unit: CompilationUnit): boolean {
+  return unit.decls.some((d) => d.t === "FnDecl" && d.exported === "default" && d.async === true);
 }
 
 /** v0's pipeline face (design doc §3): the WHOLE file becomes one synthetic
@@ -569,7 +657,7 @@ function compilePipelineFace(
   // default) is a real arity error under `--check` otherwise. Pure data
   // surgery over the ALREADY-WALKED tree (see `withParamsDefault`'s own doc) —
   // no re-lowering, no touching `walk()` itself.
-  const defaulted = withParamsDefault(sync);
+  const defaulted = withParamsDefault(exportMainAsDefault(sync, wrapperName));
 
   const shared = materializeSharedBindings(sm.sharedBindingsOf(defaulted));
   const asyncified = materializeAsyncness(sm.asyncnessOf(shared, inferAsyncSeeds));
@@ -581,6 +669,7 @@ function compilePipelineFace(
     decls: materialized.decls,
     body: materialized.body,
     named: [],
-    defaultSuffix: `export default ${wrapperName};\n`,
+    hasDefault: true,
+    defaultAsync: faceIsAsync(asyncified),
   };
 }
