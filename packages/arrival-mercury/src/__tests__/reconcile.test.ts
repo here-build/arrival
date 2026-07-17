@@ -1,9 +1,10 @@
 /**
  * reconcileForms + SchemeSemanticModel.reconcile — E4b's structural-sharing
  * splice (engine plan §E4; `../model/reconcile.ts`'s own header carries the
- * full design rationale — content-key soundness, NodeId collision handling).
+ * full design rationale — content-key soundness, NodeId collision handling,
+ * the reference-graph closure).
  *
- * Two concerns, two describe blocks:
+ * Three concerns, three describe blocks:
  *  - `reconcileForms` in isolation: the content key's soundness (adversarial
  *    near-miss pairs — a form that LOOKS similar but differs in a
  *    fact-relevant way must NOT be judged shared), NodeId collision-freedom
@@ -17,11 +18,17 @@
  *    program) lives in `src/__benchmarks__/incrementality.test.ts` per
  *    tests.md (a "number to compare over time" is a benchmark; this file's
  *    job is the pass/fail verdict, always gated).
+ *  - Cross-form type flow: the two blocks above both use fixtures where every
+ *    top-level form is independent (deliberately, for the first — the
+ *    benchmark's own header explains why). This block is the ADVERSARIAL
+ *    case for the reference-graph closure itself — a form whose own text is
+ *    untouched but whose CALLEE's return type changed, transitively, through
+ *    a chain of references.
  */
 import { describe, expect, it } from "vitest";
 
 import { classify } from "../coreform/classify.js";
-import type { And, CoreForm, If, Or } from "../coreform/types.js";
+import type { And, App, CoreForm, DefineFn, If, Or } from "../coreform/types.js";
 import { desugar } from "../front/desugar.js";
 import { parseSexprs } from "../front/parse.js";
 import { SchemeSemanticModel } from "../model/model.js";
@@ -346,5 +353,63 @@ describe("SchemeSemanticModel.reconcile — sharing must be transparent", () => 
       // touched them, which it must not (double's body has no If).
       2,
     );
+  });
+});
+
+// ── cross-form type flow — the reference-graph closure's own repro ──────────
+//
+// `f`'s return type flows into `g` (a direct caller) and, transitively, into
+// `h` (a caller of `g` that never mentions `f` in its own text). `k` is a
+// genuinely independent sibling — present to prove the closure does not
+// over-dirty the whole program, only the actual dependency chain.
+describe("reconcileForms + SchemeSemanticModel.reconcile — cross-form type flow (referential transparency)", () => {
+  const SOURCE = `(define (f) (list 1 2))
+(define (g) (car (f)))
+(define (h) (g))
+(define (k) 999)`;
+  const EDITED = `(define (f) 42)
+(define (g) (car (f)))
+(define (h) (g))
+(define (k) 999)`;
+
+  it("reconcileForms: g and h are NOT silently shared despite byte-identical text — only k (truly independent) stays shared", () => {
+    const prev = cf(SOURCE);
+    const { forms, shared, changed } = reconcileForms(prev, EDITED);
+    expect(forms).toHaveLength(4);
+    expect(shared.size, "only k has no dependency on the edited f").toBe(1);
+    expect(changed.size, "f itself, plus its two transitive dependents g and h").toBe(3);
+    expect(forms[0]).not.toBe(prev[0]); // f — directly edited
+    expect(forms[1]).not.toBe(prev[1]); // g — direct dependent (calls f)
+    expect(forms[2]).not.toBe(prev[2]); // h — TRANSITIVE dependent (calls g, never mentions f)
+    expect(forms[3]).toBe(prev[3]); // k — independent, reused verbatim
+  });
+
+  it("SchemeSemanticModel.reconcile: g and h's facts agree with a from-scratch model, node-for-node (the load-bearing gate, at this fixture)", () => {
+    const prev = new SchemeSemanticModel(SOURCE, registry);
+    prev.factsMap();
+
+    const reconciled = prev.reconcile(EDITED);
+    const fromScratch = new SchemeSemanticModel(EDITED, registry);
+
+    expect(reconciled.coreform.forms).toHaveLength(fromScratch.coreform.forms.length);
+    for (let i = 0; i < reconciled.coreform.forms.length; i++) {
+      assertSameAnswers(reconciled, reconciled.coreform.forms[i]!, fromScratch, fromScratch.coreform.forms[i]!);
+    }
+  });
+
+  it("pinned repro: g's call-to-f facts flip from list-shaped to numeric — the exact stale transplant this closure prevents", () => {
+    const prev = new SchemeSemanticModel(SOURCE, registry);
+    prev.factsMap();
+    const gBefore = prev.coreform.forms[1] as DefineFn; // (define (g) (car (f)))
+    const carAppBefore = gBefore.body[0] as App;
+    const fCallBefore = carAppBefore.positionalArgs[0] as App; // (f)
+    expect(prev.factsAt(fCallBefore)?.list, "f used to return a list").toBe(true);
+
+    const reconciled = prev.reconcile(EDITED);
+    const gAfter = reconciled.coreform.forms[1] as DefineFn;
+    const carAppAfter = gAfter.body[0] as App;
+    const fCallAfter = carAppAfter.positionalArgs[0] as App;
+    expect(reconciled.factsAt(fCallAfter)?.numeric, "f now returns a number").toBe(true);
+    expect(reconciled.factsAt(fCallAfter)?.list, "must NOT still show the stale list fact").toBeUndefined();
   });
 });

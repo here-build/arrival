@@ -7,15 +7,21 @@
  * A SYNTHETIC 6-define program stands in for "a trimmed gepa" (the plan names
  * both as acceptable) — deliberately built so every define is INDEPENDENT (no
  * define calls another): editing one define's body can then never ripple a
- * type-inference change into an unrelated define, which is exactly the
- * assumption `SchemeSemanticModel.reconcile`'s v1 transplant makes (facts
- * extraction is still whole-program tsc underneath — see `reconcile`'s own
- * doc in `../model/model.ts` for the "v1 boundary" this fixture is chosen to
- * stay inside of). A real gepa-scale fixture with cross-references would risk
- * the OPPOSITE demonstration — a define's inferred signature drifting because
- * SOME OTHER define changed — which is a real, documented, and DEFERRED risk
- * of blind whole-program transplant, not something this phase claims to
- * solve (a later phase's per-artifact TS catalog is where that gets closed).
+ * type-inference change into an unrelated define, so property 1's "zero
+ * misses" is unambiguous — a cross-referenced fixture couldn't isolate it
+ * cleanly, since a miss there could be EITHER "this form was wrongly shared"
+ * or "this form is a correct dependent of the edit, right where it should
+ * miss," muddying the sub-linear claim this file measures.
+ *
+ * This is no longer a soundness escape hatch: `reconcileForms`'s
+ * reference-graph closure (`../model/reconcile.ts`) closes the OPPOSITE case —
+ * a define whose inferred signature would drift because SOME OTHER define
+ * changed is promoted into `changed` and re-derives its facts, transitively,
+ * instead of being silently shared — pinned by `../__tests__/reconcile.test.ts`'s
+ * own cross-form-type-flow fixture (a dependent chain, deliberately absent
+ * here). What THIS fixture stays independent for is a distinct, still-live
+ * property: that a genuinely unrelated form keeps FULL structural sharing —
+ * zero misses, not merely "correctly re-derived."
  *
  * Two properties, "measured, not claimed":
  *  1. Zero recompute for unchanged forms — querying every view on the 5
