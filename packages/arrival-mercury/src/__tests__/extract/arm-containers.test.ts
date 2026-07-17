@@ -22,7 +22,7 @@ import { describe, expect, it } from "vitest";
 import { classify } from "../../coreform/index.js";
 import type { CoreForm, Dict, Lambda, NodeId } from "../../coreform/types.js";
 import { buildFan, defaultRegistry, extractContainer } from "../../extract/arm-containers.js";
-import { EMPTY_SCOPE, extract, extractProgram, type ExtractCtx, type Scope } from "../../extract/index.js";
+import { EMPTY_SCOPE, extract, extractProgram, type Bound, type ExtractCtx, type Scope } from "../../extract/index.js";
 import { desugar } from "../../front/desugar.js";
 import { parseSexprs } from "../../front/parse.js";
 import type { HeadClass, StaticProv } from "../../model/static-prov.js";
@@ -275,7 +275,10 @@ describe("buildFan — arity and fn-resolution errors (short-circuit before touc
 
   it("fn is a Ref bound to a synthetic prov (no expr to inline) → fan/fn-unresolvable", () => {
     const fn = parseForm("f");
-    const scope: Scope = { names: new Map([["f", { prov: { kind: "const", site: 0 as NodeId } }]]), parent: null };
+    const scope: Scope = {
+      names: new Map([["f", { tag: "prov", prov: { kind: "const", site: 0 as NodeId } }]]),
+      parent: null,
+    };
     expect(buildFan("map", 0 as NodeId, fn, collection, null, { ...baseCtx(), scope })).toEqual({
       kind: "opaque",
       site: fn.id,
@@ -286,12 +289,48 @@ describe("buildFan — arity and fn-resolution errors (short-circuit before touc
   it("fn is a Ref bound to a non-function expr → fan/fn-unresolvable", () => {
     const fn = parseForm("f");
     const litForm = parseForm("42");
-    const scope: Scope = { names: new Map([["f", { expr: litForm, scope: EMPTY_SCOPE }]]), parent: null };
+    const scope: Scope = { names: new Map([["f", { tag: "expr", expr: litForm, scope: EMPTY_SCOPE }]]), parent: null };
     expect(buildFan("map", 0 as NodeId, fn, collection, null, { ...baseCtx(), scope })).toEqual({
       kind: "opaque",
       site: fn.id,
       reason: "fan/fn-unresolvable",
     });
+  });
+
+  it("fn is a Ref bound to ANOTHER Ref, which resolves to a non-function expr → fan/fn-unresolvable (the chase terminates, never guesses)", () => {
+    // The chase (resolveCallee, index.ts) must fail closed at the end of a
+    // multi-hop chain exactly as it does at the end of a one-hop chain — this
+    // row is the two-hop analogue of the row directly above it.
+    const fn = parseForm("f");
+    const litForm = parseForm("42");
+    const gForm = parseForm("g");
+    // Self-referential scope (letrec-style — matches arm-atoms.ts's own
+    // `extendForLet` idiom): `f`'s Bound must resolve `g` in THIS scope, not
+    // an unrelated empty one, or the chase would (wrongly) bottom out on an
+    // unbound name instead of genuinely reaching `g`'s non-function value.
+    const names = new Map<string, Bound>();
+    const scope: Scope = { names, parent: null };
+    names.set("f", { tag: "expr", expr: gForm, scope });
+    names.set("g", { tag: "expr", expr: litForm, scope });
+    expect(buildFan("map", 0 as NodeId, fn, collection, null, { ...baseCtx(), scope })).toEqual({
+      kind: "opaque",
+      site: fn.id,
+      reason: "fan/fn-unresolvable",
+    });
+  });
+
+  it("fn is a Ref bound to ANOTHER Ref, which resolves to a DefineFn → resolves through the chase, NOT fan/fn-unresolvable (S6: single-sourced resolver)", () => {
+    // Before single-sourcing the resolver, `resolveFanFn` only checked ONE
+    // hop (`bound.tag === "expr" && isFnForm(bound.expr)`), so a fan target
+    // one alias removed from its DefineFn opaqued as unresolvable — the
+    // identical alias called directly (arm-control.ts's `resolveCallee`)
+    // already chased through as many hops as it takes. This row pins the fix:
+    // `(map step v)` with `step` bound to `Ref(inc)` now resolves.
+    const { forms } = classify(desugar(parseSexprs(`(define (inc y) (+ y 1))\n(define step inc)\n(map step (list 1 2 3))`)));
+    const prov = extractProgram(forms, defaultRegistry);
+    expect(prov).toMatchObject({ kind: "fan" });
+    if (prov.kind !== "fan") throw new Error("expected fan");
+    expect(prov.body).toMatchObject({ kind: "fused" });
   });
 
   it("cyclic binding: the resolved lambda is already in ctx.reducing → cyclic-binding (shared reason across arms)", () => {

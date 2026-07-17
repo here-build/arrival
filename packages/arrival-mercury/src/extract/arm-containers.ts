@@ -66,7 +66,7 @@
 import type { CoreForm, DefineFn, Dict, Lambda, NodeId } from "../coreform/types.js";
 import type { BuildProv, ChoiceProv, HeadClass, HeadRegistry, MintIntegrity, StaticProv } from "../model/static-prov.js";
 import { inferCollapse } from "./collapse.js";
-import { type Bound, type ExtractCtx, type Scope, checkReducing, extract, extractBody, lookup, opaque } from "./index.js";
+import { type Bound, type ExtractCtx, type Scope, checkReducing, extract, extractBody, lookup, opaque, resolveCallee } from "./index.js";
 
 export function extractContainer(form: Dict, ctx: ExtractCtx): StaticProv {
   return {
@@ -312,19 +312,29 @@ type FnForm = Lambda | DefineFn;
 const isFnForm = (f: CoreForm): f is FnForm => f.kind === "Lambda" || f.kind === "DefineFn";
 
 /** Resolve `fn` to a user-defined function plus the scope its body closes
- *  over — the same shape as `wire/derive.ts`'s `resolveCallee`. An inline
- *  Lambda closes over the CALL site's scope (it's written right there); a `Ref`
- *  closes over its BINDING's scope (hardening #2 — beta-reducing a callee's free
- *  names in the caller's scope is the named-helper forge's mechanism). `null` on
- *  anything else: a `Ref` bound to a synthetic `{prov}` value, an unbound `Ref`,
- *  or a non-function form. */
+ *  over. An inline Lambda closes over the CALL site's scope (it's written
+ *  right there — that ONE check stays here, since `resolveCallee` only ever
+ *  operates on an already-resolved `Bound`, never a raw callee CoreForm,
+ *  mirroring `extractApp`'s own IIFE case, arm-control.ts); a `Ref` chases
+ *  through however many ref-to-ref hops it takes via the SAME `resolveCallee`
+ *  (index.ts) ordinary calls use — never a fan-specific one-hop-only lookup.
+ *  That used to be this function's own weaker mechanism: a fan target one
+ *  alias removed from its DefineFn (`(map step v)` with `step` bound to
+ *  `Ref(generation)`) opaqued as unresolvable while the identical alias
+ *  called directly resolved through `resolveCallee`'s chase — single-sourcing
+ *  the resolver closes that precision gap (fail-closed either way, so no
+ *  soundness was ever at stake, only how much a fan target can reach). `null`
+ *  on anything else: a `Ref` bound to a synthetic `{prov}` value, an unbound
+ *  `Ref`, a ref-chain that bottoms out free or cyclic, or a non-function form
+ *  — `buildFan` keeps its own arity/shape policy on whatever this resolves
+ *  to. */
 function resolveFanFn(fn: CoreForm, ctx: ExtractCtx): { readonly fn: FnForm; readonly scope: Scope } | null {
   if (isFnForm(fn)) return { fn, scope: ctx.scope };
-  if (fn.kind === "Ref") {
-    const bound = lookup(ctx.scope, fn.name);
-    if (bound && bound.tag === "expr" && isFnForm(bound.expr)) return { fn: bound.expr, scope: bound.scope };
-  }
-  return null;
+  if (fn.kind !== "Ref") return null;
+  const bound = lookup(ctx.scope, fn.name);
+  if (bound === undefined) return null;
+  const resolution = resolveCallee(bound, ctx);
+  return resolution.kind === "fn" ? { fn: resolution.fn, scope: resolution.scope } : null;
 }
 
 const FAN_ARITY: Readonly<Record<"map" | "filter" | "fold", number>> = { map: 1, filter: 1, fold: 2 };
