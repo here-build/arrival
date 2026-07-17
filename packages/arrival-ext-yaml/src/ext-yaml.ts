@@ -1,6 +1,6 @@
 // ext/yaml — the `.yaml`/`.yml` file-type resolver as an opt-in capability.
 //
-// The dep-bearing data formats left `@here.build/arrival/loader`'s builtin table so the
+// The dep-bearing data formats left `@inhuman.tools/arrival/loader`'s builtin table so the
 // loader sheds its external deps (per .claude/rules/env-quasi-packages.md — split to
 // isolate an external dependency): this capability OWNS the `yaml` parser and registers
 // its resolver by name at bootstrap; `require`'s by-name overlay resolves it. The value
@@ -14,14 +14,14 @@
 // so every `.yaml` require died with "no resolver" (audience-loop / herebuild-* /
 // best-tagline / enrich-distant pinned exactly that). Same recovery class as the
 // `.prompt`/`.hbs` capabilities.
-import { EnvCapability } from "@here.build/arrival/capability";
+import { EnvCapability } from "@inhuman.tools/arrival/capability";
 import {
   type ContentResolver,
   type ExtensionHandler,
   normalizeToJson,
   type RequireTypeProvider,
   valueToTsType,
-} from "@here.build/arrival/loader";
+} from "@inhuman.tools/arrival/loader";
 import { parse as parseYaml } from "yaml";
 
 /** `.yaml`/`.yml` → `{ kind: "value" }` DATA (never a callable — the CALLABLE RULE's

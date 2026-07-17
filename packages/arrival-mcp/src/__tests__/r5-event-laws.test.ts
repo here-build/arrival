@@ -12,7 +12,7 @@
 //   • NON-STREAMING byte-identity — a call with no listener returns the byte-identical
 //     aggregate (events are additive observation; the R0 output-shape pins stay green).
 
-import type { ReplEvent, ReplStatementEvent, ReplTopologyEvent } from "@here.build/mcp-substrate";
+import type { ReplEvent, ReplStatementEvent, ReplTopologyEvent } from "@inhuman.tools/mcp-substrate";
 import { describe, expect, it } from "vitest";
 
 import { DiscoveryTool } from "../DiscoveryTool.js";

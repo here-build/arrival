@@ -17,8 +17,8 @@ import {
   type CapabilitySpec,
   EnvCapability,
   type SymbolDeclaration,
-} from "@here.build/arrival/capability";
-import type { Resource } from "@here.build/arrival/resources";
+} from "@inhuman.tools/arrival/capability";
+import type { Resource } from "@inhuman.tools/arrival/resources";
 import invariant from "tiny-invariant";
 import * as z from "zod";
 
@@ -62,7 +62,7 @@ export interface McpAnnotation {
    *  are runtime bindings only — they never enter the catalog (`allAnnotations` keys by the primary
    *  name), so they're undocumented shorthands an actor can call but the verb list won't advertise.
    *
-   *  Distinct from `symbol.alias` (`@here.build/arrival/symbol`): that factory dissolves into a
+   *  Distinct from `symbol.alias` (`@inhuman.tools/arrival/symbol`): that factory dissolves into a
    *  SECOND, uncatalogued key in the `symbols` record itself (core-level, capability-agnostic).
    *  This field stays for verbs that want an EXTRA name that still shares the primary's own
    *  catalog identity (same annotation object, same description) — a different shape than

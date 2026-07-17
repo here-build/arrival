@@ -8,12 +8,12 @@
 // rosetta `run` wrapper, `(tool :a v)` has already evaluated to `[:a, v]` (self-evaluating
 // keyword ASymbols, keyword-tagless-apply.md), so a UNIT test constructs that shape by hand.
 
-import { CONSTANT_CTX } from "@here.build/arrival";
-import { symbol, testCallCtx, type CacheClass } from "@here.build/arrival/symbol";
-import * as z from "@here.build/arrival/scheme-zod";
-import { AInexact } from "@here.build/arrival";
-import { AString } from "@here.build/arrival";
-import { ASymbol } from "@here.build/arrival";
+import { CONSTANT_CTX } from "@inhuman.tools/arrival";
+import { symbol, testCallCtx, type CacheClass } from "@inhuman.tools/arrival/symbol";
+import * as z from "@inhuman.tools/arrival/scheme-zod";
+import { AInexact } from "@inhuman.tools/arrival";
+import { AString } from "@inhuman.tools/arrival";
+import { ASymbol } from "@inhuman.tools/arrival";
 import { describe, expect, it } from "vitest";
 
 import { tool } from "../tool.js";

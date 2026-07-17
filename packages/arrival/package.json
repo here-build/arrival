@@ -1,5 +1,5 @@
 {
-  "name": "@here.build/arrival",
+  "name": "@inhuman.tools/arrival",
   "version": "0.1.0",
   "description": "R7RS-subset Scheme interpreter for AI-agent constraint-based execution — transparent provenance, capability sandbox, JS membrane",
   "keywords": [
@@ -125,7 +125,7 @@
     "workerd": "vitest run --config vitest.workerd.config.ts"
   },
   "dependencies": {
-    "@here.build/arrival-sugarcoat": "workspace:^",
+    "@inhuman.tools/arrival-sugarcoat": "workspace:^",
     "@here.build/error-invariant": "workspace:^",
     "@here.build/collections": "workspace:^",
     "fold-case": "1.0.0",

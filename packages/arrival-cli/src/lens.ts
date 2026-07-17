@@ -19,7 +19,7 @@
  * whichever lens is active — same stored text, two views, the round-trip law
  * (arrival-sugarcoat's own tested invariant) is what makes that honest.
  */
-import { schemeToSugarcoat } from "@here.build/arrival-sugarcoat";
+import { schemeToSugarcoat } from "@inhuman.tools/arrival-sugarcoat";
 
 export type Lens = "scheme" | "sugarcoat";
 

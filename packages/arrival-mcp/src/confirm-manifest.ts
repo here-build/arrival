@@ -14,9 +14,9 @@
  * an approved row (ConfirmBurstTool, confirm-burst.ts) — it only builds the artifact.
  */
 
-import { canonicalJson, type EffectEntry } from "@here.build/arrival";
-import { writeForm, type EvalTrace } from "@here.build/arrival/provenance";
-import { groundingVerdict } from "@here.build/arrival-provenance/verdict";
+import { canonicalJson, type EffectEntry } from "@inhuman.tools/arrival";
+import { writeForm, type EvalTrace } from "@inhuman.tools/arrival/provenance";
+import { groundingVerdict } from "@inhuman.tools/arrival-provenance/verdict";
 
 // `groundingVerdict`'s own `trace` param types as `CoreEvalTrace` — a LOCAL alias
 // (arrival-provenance/src/trace.ts) for core's plain `EvalTrace`, not re-exported under

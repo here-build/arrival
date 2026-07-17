@@ -18,7 +18,7 @@
 import { APair } from "../values/primitives/APair.js";
 import { deepProvenance } from "../values/deep-provenance.js";
 import { schemeToJs } from "../rosetta.js";
-import { schemeToSugarcoat } from "@here.build/arrival-sugarcoat";
+import { schemeToSugarcoat } from "@inhuman.tools/arrival-sugarcoat";
 
 import { carrierFieldEdges, scopedBindings, subtreeIds } from "./carrier-fields.js";
 import { userCallSite } from "./scope-id.js";

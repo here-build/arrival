@@ -33,7 +33,7 @@
  *                               Right home: read-only viewing of foreign / not-yet-owned code.
  *
  * Zero-dependency-leaf invariant: arrival-sugarcoat's `.` entry is a leaf consumed by codemirror.
- * This module is the `@here.build/arrival-sugarcoat/names` SUBPATH; with `sideEffects:false`, a
+ * This module is the `@inhuman.tools/arrival-sugarcoat/names` SUBPATH; with `sideEffects:false`, a
  * consumer importing `.` tree-shakes this file and its `lexical-namer` import away entirely.
  * `lexical-namer` is a workspace dep with zero external deps.
  */

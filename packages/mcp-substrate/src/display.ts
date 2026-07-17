@@ -41,15 +41,15 @@
 // `(if c (display a) (display b))` has two display forms and exactly one firing, so any positional
 // zip silently misattributes.
 
-import { APair, ASymbol, AString, type SchemeValue } from "@here.build/arrival";
-import * as z from "@here.build/arrival/scheme-zod";
-import { symbol, type CallCtx } from "@here.build/arrival/symbol";
-import type { SymbolDeclaration } from "@here.build/arrival/capability";
+import { APair, ASymbol, AString, type SchemeValue } from "@inhuman.tools/arrival";
+import * as z from "@inhuman.tools/arrival/scheme-zod";
+import { symbol, type CallCtx } from "@inhuman.tools/arrival/symbol";
+import type { SymbolDeclaration } from "@inhuman.tools/arrival/capability";
 // `writeForm` is the SOURCE writer (provenance/slice.ts) — it renders a parsed form back to the
 // text a human/model wrote. NOT `toSExprString`, which is the VALUE printer: that renders the
 // same form as DATA (`(list display (list "*" 2 3))`) instead of as code (`(display (* 2 3))`),
 // which would echo a spelling the model never typed and could not paste back.
-import { writeForm } from "@here.build/arrival/provenance";
+import { writeForm } from "@inhuman.tools/arrival/provenance";
 
 /** The name the MODEL writes. Never survives to evaluation — every call form is rewritten below, so
  *  arrival's own `notImplemented` door for `display` is untouched and still fires for the residual

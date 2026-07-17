@@ -1,4 +1,4 @@
-# @here.build/arrival-mcp-do
+# @inhuman.tools/arrival-mcp-do
 
 The Cloudflare Durable Object shell for [arrival-mcp](../arrival-mcp/) sessions: one DO per
 session, hosting the MCP transport, replaying the handshake after hibernation, decomposing

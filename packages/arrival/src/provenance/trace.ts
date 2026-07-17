@@ -31,12 +31,12 @@ import type { AListAlike, SchemeValue } from "../values/types.js";
 // (see {@link EvalTrace.markAuthoritativeProvenance}'s header), and the combination GC-froze the tab.
 // Chart reads plain `snapshotTrace` — objects stay plain.
 //
-// Class now in `@here.build/arrival` (core, mobx-free). The one reactive signal (entries counter
+// Class now in `@inhuman.tools/arrival` (core, mobx-free). The one reactive signal (entries counter
 // TraceGraph subscribed via `reaction`) split into two overridable SEAMS:
 //   - `_entries` / `bumpEntries()` — plain counter + protected mutator
 //   - `entries` getter — reads `_entries`
 // `enter`/`exit`/`markProvenancePoint` stay plain mutation (core touches nothing mobx-observable).
-// `@here.build/arrival-provenance`'s `ObservableEvalTrace`: keeps mobx, overrides bumpEntries/entries
+// `@inhuman.tools/arrival-provenance`'s `ObservableEvalTrace`: keeps mobx, overrides bumpEntries/entries
 // to wrap `observable.box`, wraps `enter` in `action(...)`. Restores reactive semantics for
 // `TraceGraph`/`arrival-chain` tests while core stays dependency-free.
 

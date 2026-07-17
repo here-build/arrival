@@ -58,9 +58,9 @@ import { mkdirSync, readFileSync, rmdirSync, rmSync, writeFileSync } from "node:
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { execState, LexicalScope, parseGenerator, schemeToJsUntyped } from "@here.build/arrival";
-import type { AssembledAmbient } from "@here.build/arrival/env";
-import { srfi1 } from "@here.build/arrival/srfi";
+import { execState, LexicalScope, parseGenerator, schemeToJsUntyped } from "@inhuman.tools/arrival";
+import type { AssembledAmbient } from "@inhuman.tools/arrival/env";
+import { srfi1 } from "@inhuman.tools/arrival/srfi";
 import { buildArrivalSession, BUILTIN_PREAMBLE, type InferFn } from "@inhuman.tools/arrival-run";
 import { DEFAULT_STRATEGY, projectToJsRaw, type Strategy } from "@inhuman.tools/mercury";
 import { register } from "tsx/esm/api";

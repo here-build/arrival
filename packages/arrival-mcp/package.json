@@ -1,5 +1,5 @@
 {
-  "name": "@here.build/arrival-mcp",
+  "name": "@inhuman.tools/arrival-mcp",
   "version": "0.1.0",
   "description": "Build Model Context Protocol tools as values (discovery + action tiers) on the official SDK",
   "keywords": [
@@ -50,10 +50,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@here.build/arrival": "workspace:^",
-    "@here.build/arrival-provenance": "workspace:^",
-    "@here.build/arrival-serializer": "workspace:^",
-    "@here.build/mcp-substrate": "workspace:^",
+    "@inhuman.tools/arrival": "workspace:^",
+    "@inhuman.tools/arrival-provenance": "workspace:^",
+    "@inhuman.tools/arrival-serializer": "workspace:^",
+    "@inhuman.tools/mcp-substrate": "workspace:^",
     "@modelcontextprotocol/sdk": "1.26.0",
     "date-fns": "4.1.0",
     "dedent": "1.7.2",

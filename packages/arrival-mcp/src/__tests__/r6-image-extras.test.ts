@@ -12,7 +12,7 @@
 //     silently, and past-quota leaves are NEVER base64-encoded (spied below).
 //   • R0 compatibility — a blob-free program still returns plain string[] (the output-shape pin).
 
-import type { ReplEvent, ReplStatementEvent } from "@here.build/mcp-substrate";
+import type { ReplEvent, ReplStatementEvent } from "@inhuman.tools/mcp-substrate";
 import { describe, expect, it, vi } from "vitest";
 
 import { DiscoveryTool } from "../DiscoveryTool.js";

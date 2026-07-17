@@ -1,8 +1,8 @@
-# @here.build/arrival-cli
+# @inhuman.tools/arrival-cli
 
-**The `arrival` command** — run, static-check, and REPL [arrival](https://www.npmjs.com/package/@here.build/arrival)
+**The `arrival` command** — run, static-check, and REPL [arrival](https://www.npmjs.com/package/@inhuman.tools/arrival)
 programs from the terminal. This page documents the CLI's process surface — argv, stdin, stdout/stderr,
-exit codes; the language itself (the membrane, provenance, capabilities) is `@here.build/arrival`'s README.
+exit codes; the language itself (the membrane, provenance, capabilities) is `@inhuman.tools/arrival`'s README.
 Every example on this page was executed as written; outputs are real.
 
 ```
@@ -14,7 +14,7 @@ arrival repl                 interactive session — persistent defines, Ctrl-D 
 ## Install
 
 ```sh
-npm install -g @here.build/arrival-cli   # installs the `arrival` bin
+npm install -g @inhuman.tools/arrival-cli   # installs the `arrival` bin
 arrival --help
 ```
 
@@ -48,7 +48,7 @@ your dataflow instead of streaming it out. Referenced at 1:0 — this program wo
 
 (exit 1, and — because validation runs before execution — nothing was evaluated.)
 
-**Rendering.** Values print as s-expression text through `@here.build/arrival-serializer`, budget-bounded
+**Rendering.** Values print as s-expression text through `@inhuman.tools/arrival-serializer`, budget-bounded
 (long structures shrink fairly, never tail-cut): `(filter (lambda (x) (> x 5)) (list 1 3 7 9 2))` prints
 `(list 7 9)`. One honest wrinkle: a **computed** string prints quoted (`"hello, world"` above), while a
 bare top-level string **literal** prints unquoted (`"done"` as a whole form prints `done`) — a known
@@ -107,7 +107,7 @@ any ES module exporting `EnvCapability` instance(s):
 
 ```js
 // jira.mjs
-import { EnvCapability, symbol, z } from "@here.build/arrival";
+import { EnvCapability, symbol, z } from "@inhuman.tools/arrival";
 
 export default new EnvCapability("demo/jira", {
   symbols: {
@@ -150,7 +150,7 @@ Two sharp edges, stated plainly:
   `--with jira.mjs` is a *bare npm specifier* and fails with `cannot load … Cannot find package`. Paths
   resolve from the **cwd you invoke from**, not the script's directory.
 - **The module resolves its own imports from its own location** — `jira.mjs` must be able to resolve
-  `@here.build/arrival` from where it sits (a project with the dependency installed). A stray file in a
+  `@inhuman.tools/arrival` from where it sits (a project with the dependency installed). A stray file in a
   bare directory fails with `cannot load`.
 
 **The config file** replaces repeated flags: `arrival.config.ts` / `arrival.config.json` auto-discovers
@@ -225,5 +225,5 @@ capability module itself executes during `check`.
 
 **[FSL-1.1-MIT](./LICENSE.md)** — Functional Source License 1.1, MIT Future License; each version
 converts to MIT two years after release. Same license and same plain-words boundary as
-`@here.build/arrival` — see the core README's "What Competing Use means here" for the clarification
+`@inhuman.tools/arrival` — see the core README's "What Competing Use means here" for the clarification
 (your own pipelines, agency work, and agents-as-users are always fair use). Questions: team@here.build

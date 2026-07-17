@@ -20,7 +20,7 @@
 // dynamicDescription welcome, personalized by the client) — registerTool registers ONE static schema.
 // Going through `.server` keeps that, and never names the deprecated `Server` symbol.
 
-import type { ReplEvent, ReplStatementEvent } from "@here.build/mcp-substrate";
+import type { ReplEvent, ReplStatementEvent } from "@inhuman.tools/mcp-substrate";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   CallToolRequestSchema,

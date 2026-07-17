@@ -1142,7 +1142,7 @@ const NUMBER_TO_STRING_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
 // follows. Residual shapes are BYTE-FOR-BYTE identical to the table rules they
 // replace (verified by diffing against phase1.ts's pre-relocation `plusRule`/
 // `minusRule`/`timesRule`/`divideRule`/`quotientRule`/`moduloRule`/`numEqRule` — see
-// that file's git history), built via `@here.build/arrival/emit`'s residual-lite
+// that file's git history), built via `@inhuman.tools/arrival/emit`'s residual-lite
 // constructors (§4.5's seed of "residual types belong in arrival core eventually";
 // arrival core cannot import the compiler's OWN residual constructors — the
 // dependency runs the other way).

@@ -1,4 +1,4 @@
-// @here.build/arrival/r7rs/host — R7RS §6.13 / §6.14 doors-only.
+// @inhuman.tools/arrival/r7rs/host — R7RS §6.13 / §6.14 doors-only.
 // Pure inference plane: no ports, no ambient system. implement-or-door totalized.
 // call-with-input-string lives in srfi-stubs (SRFI-6).
 import { EnvCapability } from "../../common/capability.js";

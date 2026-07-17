@@ -12,7 +12,7 @@
  *   • a config schema requiring ACTOR keys ⇒ no describe ambient — static catalog,
  *     the honest floor (and the legacy closure-form thunk still fires, receiver-free).
  */
-import type { Activation } from "@here.build/arrival/capability";
+import type { Activation } from "@inhuman.tools/arrival/capability";
 import { describe, expect, it } from "vitest";
 import * as z from "zod";
 

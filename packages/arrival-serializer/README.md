@@ -1,4 +1,4 @@
-# @here.build/arrival-serializer
+# @inhuman.tools/arrival-serializer
 
 S-expression serializer for Arrival - systematic conversion between JavaScript objects and Scheme/Lisp representations.
 
@@ -20,13 +20,13 @@ on data expression via s-expression syntax.
 ## Installation
 
 ```bash
-pnpm add @here.build/arrival-serializer
+pnpm add @inhuman.tools/arrival-serializer
 ```
 
 ## Quick Start
 
 ```typescript
-import { toSExpr, formatSExpr, toSExprString } from '@here.build/arrival-serializer';
+import { toSExpr, formatSExpr, toSExprString } from '@inhuman.tools/arrival-serializer';
 
 // Basic values
 toSExprString(42);              // "42"
@@ -394,7 +394,7 @@ This package is part of the Arrival ecosystem:
 
 - **@here.build/arrival-env** - Type definitions and protocols
 - **@here.build/arrival-scheme** - Scheme interpreter integration
-- **@here.build/arrival-serializer** - This package
+- **@inhuman.tools/arrival-serializer** - This package
 - **@here.build/arrival** - Umbrella package exposing everything
 
 ## License

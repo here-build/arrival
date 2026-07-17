@@ -13,8 +13,8 @@
 // and permanently abandoned the REPL for python. FIX: delete the per-collection enumeration,
 // emit ONE line that says the value is INTACT.
 
-import { LexicalScope } from "@here.build/arrival";
-import { assembleAmbient, type AssembledAmbient } from "@here.build/arrival/env";
+import { LexicalScope } from "@inhuman.tools/arrival";
+import { assembleAmbient, type AssembledAmbient } from "@inhuman.tools/arrival/env";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { AttachmentSink } from "../attachment-sink.js";

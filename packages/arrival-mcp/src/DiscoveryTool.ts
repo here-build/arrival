@@ -28,10 +28,10 @@ import {
   execState,
   is_callable_value,
   parse,
-} from "@here.build/arrival";
-import { EvalTrace } from "@here.build/arrival/provenance";
-import type { EnvCapability } from "@here.build/arrival/capability";
-import { type AssembledAmbient, assembleAmbient } from "@here.build/arrival/env";
+} from "@inhuman.tools/arrival";
+import { EvalTrace } from "@inhuman.tools/arrival/provenance";
+import type { EnvCapability } from "@inhuman.tools/arrival/capability";
+import { type AssembledAmbient, assembleAmbient } from "@inhuman.tools/arrival/env";
 import {
   type ExtrasState,
   type SerializedExtra,
@@ -39,8 +39,8 @@ import {
   initialExtrasState,
   serializeWithExtras,
   toSExprString,
-} from "@here.build/arrival-serializer";
-import type { AsyncSessionStore, ContentBlock, ReplEvent, StatementCounters } from "@here.build/mcp-substrate";
+} from "@inhuman.tools/arrival-serializer";
+import type { AsyncSessionStore, ContentBlock, ReplEvent, StatementCounters } from "@inhuman.tools/mcp-substrate";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { format } from "date-fns";
 import dedent from "dedent";
@@ -66,7 +66,7 @@ import {
 } from "./session-run-state.js";
 
 // ── execSerializedState: run scheme, serialize each top-level form's value (inlined from the
-// former @here.build/arrival umbrella — its only consumer was this tool). ──
+// former @inhuman.tools/arrival umbrella — its only consumer was this tool). ──
 
 // Total serialized-output budget for one MCP tool result (~10k tokens). Motivated by the
 // 158k-char "exceeds maximum allowed tokens" drop: the serializer streams per-element caps

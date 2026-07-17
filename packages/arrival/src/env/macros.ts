@@ -1,4 +1,4 @@
-// @here.build/arrival/macros — the scheme/macros pack: syntax-rules.
+// @inhuman.tools/arrival/macros — the scheme/macros pack: syntax-rules.
 //
 // syntax-rules was the last macro-family member stuck in the stdlib husk blob (a raw
 // `new Syntax` bound directly into global_env). It moves here, bound via `symbol.macro`

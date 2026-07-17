@@ -7,7 +7,7 @@
  *
  * Adaptations from the source chunk:
  *   - `Node` imports from the sibling copied parser (`./parse.js`) instead of
- *     `@here.build/arrival-sugarcoat`.
+ *     `@inhuman.tools/arrival-sugarcoat`.
  *   - `Atom`/`ListNode` carry the parser's `lead`/`trail` fields in their TYPE
  *     (the source file narrowed them away and downstream code cast to read them;
  *     CoreForm carries comments forward as source truth — coreform-ir.md §4.4 —

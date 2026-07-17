@@ -1,4 +1,4 @@
-# @here.build/arrival-sugarcoat
+# @inhuman.tools/arrival-sugarcoat
 
 **Sugarcoat** is the reversible view of Scheme.
 
@@ -23,14 +23,14 @@ The original driver is AI–human collaboration: the LLM writes canonical Scheme
 ## Quick start
 
 ```ts
-import { schemeToSugarcoat, sugarcoatToScheme } from "@here.build/arrival-sugarcoat";
+import { schemeToSugarcoat, sugarcoatToScheme } from "@inhuman.tools/arrival-sugarcoat";
 
 const scheme = "(map (lambda (it) (* it 2)) xs)";
 schemeToSugarcoat(scheme);                        // → "xs.map{ it * 2 }"
 sugarcoatToScheme("xs.map{ it * 2 }", scheme);    // → "(map (lambda (it) (* it 2)) xs)"
 ```
 
-`@here.build/arrival-codemirror` wires this into an editor: you type Sugarcoat, the buffer stores Scheme, live.
+`@inhuman.tools/arrival-codemirror` wires this into an editor: you type Sugarcoat, the buffer stores Scheme, live.
 
 **The full syntax — indentation, infix, subscripts, method chains, `it`, dicts, at-expressions — is a 5-minute read: [LEARN.md](./LEARN.md).**
 

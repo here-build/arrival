@@ -16,7 +16,7 @@
  *     ride one bag without knowing about each other).
  *
  * IDENTITY: `instanceof EnvCapability` is the primary check — pnpm workspaces dedupe
- * `@here.build/arrival`, so a loaded module and this CLI share one class object. The
+ * `@inhuman.tools/arrival`, so a loaded module and this CLI share one class object. The
  * duck fallback (constructor name + the {name, spec, lower} shape) covers the
  * duplicated-install case (two arrival copies in one graph) honestly instead of
  * rejecting a real capability over class identity.
@@ -31,7 +31,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { EnvCapability } from "@here.build/arrival/capability";
+import { EnvCapability } from "@inhuman.tools/arrival/capability";
 
 /** The host-armed set every verb threads: the capability instances + the ONE shared
  *  config bag their `lower()` calls all receive. */
@@ -115,7 +115,7 @@ export async function loadCapabilityModule(specifier: string, baseDir: string): 
     throw new Error(
       `arrival: ${specifier} is not a capability module — it has ${seen}.\n` +
         `Expected one or more EnvCapability exports, e.g.\n` +
-        `  import { EnvCapability } from "@here.build/arrival/capability";\n` +
+        `  import { EnvCapability } from "@inhuman.tools/arrival/capability";\n` +
         `  export default new EnvCapability("my/capability", { symbols: { … } });`,
     );
   }

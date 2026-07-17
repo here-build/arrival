@@ -2,8 +2,8 @@
 // enabling key (the loader's `fs` pattern). Present ⇒ the verb binds; absent under
 // `degradation: "doors"` ⇒ a cause-carrying door, which the static pass reports as
 // the causal "provide `greeting`" diagnostic (bucket c, missing-configuration).
-import { EnvCapability } from "@here.build/arrival/capability";
-import { custom } from "@here.build/arrival/scheme-zod";
+import { EnvCapability } from "@inhuman.tools/arrival/capability";
+import { custom } from "@inhuman.tools/arrival/scheme-zod";
 
 export const configGreetCapability = new EnvCapability("fixture/config-greet", {
   configuration: {

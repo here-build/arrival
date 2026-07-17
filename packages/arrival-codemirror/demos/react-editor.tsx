@@ -9,7 +9,7 @@
 
 import { useState } from "react";
 
-import { SchemeEditor } from "@here.build/arrival-codemirror/react";
+import { SchemeEditor } from "@inhuman.tools/arrival-codemirror/react";
 
 const INITIAL = `(define (greet name)
   (string-append "hello, " name))

@@ -33,8 +33,8 @@ import {
   isSessionRunState,
   type LogStatement,
   type SessionRunState,
-} from "@here.build/arrival-mcp";
-import type { AsyncSessionStore } from "@here.build/mcp-substrate";
+} from "@inhuman.tools/arrival-mcp";
+import type { AsyncSessionStore } from "@inhuman.tools/mcp-substrate";
 
 /** The storage surface this store touches — satisfied by `DurableObjectState.storage`. */
 export interface StorageLike {

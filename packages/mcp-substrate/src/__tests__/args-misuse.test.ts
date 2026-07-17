@@ -447,7 +447,7 @@ describe("args-misuse — localized door + escalation (docs/args-error-reporting
      *  our invention can never run as plausible data — the anti-copy-paste feature,
      *  example-call.ts's TypePlaceholder contract). */
     async function parsesAsOneForm(expr: string): Promise<boolean> {
-      const { parse } = await import("@here.build/arrival");
+      const { parse } = await import("@inhuman.tools/arrival");
       try {
         return (await parse(expr)).length === 1;
       } catch {

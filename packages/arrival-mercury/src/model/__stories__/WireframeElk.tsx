@@ -135,7 +135,7 @@ import ElkApiDefault from "elkjs/lib/elk-api.js";
 import type { ElkExtendedEdge, ElkNode } from "elkjs";
 import * as ElkFakeWorkerModule from "elkjs/lib/elk-worker.min.js";
 
-import type { Wire, WireframeGraph, WireframeNode } from "@here.build/arrival/provenance";
+import type { Wire, WireframeGraph, WireframeNode } from "@inhuman.tools/arrival/provenance";
 import type { WireframeProjection, WireframeSideMaps } from "../to-wireframe.js";
 
 interface FakeElkWorker {

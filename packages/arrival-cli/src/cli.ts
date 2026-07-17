@@ -22,8 +22,8 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
 
-import { exec, execState, LexicalScope, StaticValidationError } from "@here.build/arrival";
-import { EvalTrace } from "@here.build/arrival/provenance";
+import { exec, execState, LexicalScope, StaticValidationError } from "@inhuman.tools/arrival";
+import { EvalTrace } from "@inhuman.tools/arrival/provenance";
 
 import { armCapabilities, type ArmedCapabilities } from "./capabilities.js";
 import { resolveOutputMode, type OutputMode } from "./output-mode.js";

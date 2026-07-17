@@ -19,9 +19,9 @@ import { createDisplaySink,
   type EvalTap,
   type LexicalScope,
   type SchemeValue,
-} from "@here.build/arrival";
-import type { AssembledAmbient } from "@here.build/arrival/env";
-import { toSExprString, toSExprStringWithElisions, type ElisionRecord } from "@here.build/arrival-serializer";
+} from "@inhuman.tools/arrival";
+import type { AssembledAmbient } from "@inhuman.tools/arrival/env";
+import { toSExprString, toSExprStringWithElisions, type ElisionRecord } from "@inhuman.tools/arrival-serializer";
 
 import { ArgsFailureTracker, type ArgsFailureState } from "./args-failure-tracker.js";
 import { localizeFailingParam } from "./args-misuse.js";
@@ -227,7 +227,7 @@ export interface RunInput {
    *  regression this field avoids. Defaults to `tools.keys()` when omitted — a caller that
    *  passes a real `tools` registry needs nothing extra. */
   knownToolNames?: Iterable<string>;
-  /** Optional per-form evaluation tap (e.g. an `EvalTrace` — see @here.build/arrival's
+  /** Optional per-form evaluation tap (e.g. an `EvalTrace` — see @inhuman.tools/arrival's
    *  `provenance/trace.ts`), threaded straight into every `execState` call this run makes.
    *  The runner is per-CALL and never constructs one: a caller wanting provenance points
    *  to resolve ACROSS calls (a value minted in call 1, read back in call 3) must pass the

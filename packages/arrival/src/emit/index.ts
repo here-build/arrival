@@ -1,4 +1,4 @@
-// emit — the `@here.build/arrival/emit` subpath: compiler-facing PURE-DATA types
+// emit — the `@inhuman.tools/arrival/emit` subpath: compiler-facing PURE-DATA types
 // (constitution §4.5's IN-arrival-core layer). The whole transitive closure of this
 // barrel must stay `typescript`-free — the `type-layer/index.ts` co-bundling
 // anti-pattern (one barrel granting all-or-nothing access to LanguageService

@@ -1,4 +1,4 @@
-// `@here.build/arrival/provenance` — the mobx-free trace-capture spine
+// `@inhuman.tools/arrival/provenance` — the mobx-free trace-capture spine
 // (EvalTrace/Invocation/NodeRecord/computeProvenance), the plain trace
 // projection (snapshotTrace), scope identity (scopeId), and the full
 // analysis stack (forest/region/statechart/flow-graph/lineage/slice/uneval)
@@ -6,7 +6,7 @@
 // the tracing substrate: it captures a finished trace but never drives the
 // evaluator and carries no reactive/mobx dependency (P12).
 //
-// `@here.build/arrival-provenance` is now a thin re-export shim over this
+// `@inhuman.tools/arrival-provenance` is now a thin re-export shim over this
 // subpath (its two-tier public contract — default entry vs `/analysis` —
 // is preserved there, both drawing from this one flat module). Its
 // `EvalTrace` export is `ObservableEvalTrace`, a mobx-reactive subclass of

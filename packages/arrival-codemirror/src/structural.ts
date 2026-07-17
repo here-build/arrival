@@ -23,7 +23,7 @@ import {
   type TransactionSpec,
 } from "@codemirror/state";
 import { keymap, type KeyBinding } from "@codemirror/view";
-import { parseSexprs, type Node } from "@here.build/arrival-sugarcoat";
+import { parseSexprs, type Node } from "@inhuman.tools/arrival-sugarcoat";
 
 // ── structure kernel ────────────────────────────────────────────────────────
 

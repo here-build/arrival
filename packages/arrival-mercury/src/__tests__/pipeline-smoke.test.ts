@@ -22,7 +22,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import type { EmitRule } from "@here.build/arrival/emit";
+import type { EmitRule } from "@inhuman.tools/arrival/emit";
 
 import {
   classify,

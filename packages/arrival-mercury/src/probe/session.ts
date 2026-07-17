@@ -34,8 +34,8 @@
  * interpreter change, no carried metadata (P2) — the substitution happens
  * AT THE MEMBRANE, where effects already are.
  */
-import { execState, LexicalScope, parseGenerator, schemeToJsUntyped } from "@here.build/arrival";
-import type { AssembledAmbient } from "@here.build/arrival/env";
+import { execState, LexicalScope, parseGenerator, schemeToJsUntyped } from "@inhuman.tools/arrival";
+import type { AssembledAmbient } from "@inhuman.tools/arrival/env";
 import { buildArrivalSession, BUILTIN_PREAMBLE, type InferFn } from "@inhuman.tools/arrival-run";
 
 /**

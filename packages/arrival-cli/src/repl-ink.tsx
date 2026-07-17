@@ -16,14 +16,14 @@
 import React, { useCallback, useReducer, useRef, useState } from "react";
 import { Box, render, Static, Text, useApp, useInput, useStdout } from "ink";
 
-import { scan } from "@here.build/arrival/oracle";
+import { scan } from "@inhuman.tools/arrival/oracle";
 import {
   EMPTY_REPL_MODEL,
   foldReplEvent,
   type ReplBlock,
   type ReplBlockState,
   type ReplFoldModel,
-} from "@here.build/mcp-substrate";
+} from "@inhuman.tools/mcp-substrate";
 
 import { DISABLE_AUTOWRAP, ENABLE_AUTOWRAP } from "./ansi.js";
 import { emitForms } from "./form-emitter.js";

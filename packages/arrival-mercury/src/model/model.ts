@@ -85,7 +85,7 @@ import type {
 // `TypeFacts` is arrival core's canonical, dependency-free vocabulary (never
 // re-defined here — typefacts/facts.ts's own header forbids the adaptation
 // layer); imported directly, matching how walker/walk.ts already does it.
-import type { TypeFacts } from "@here.build/arrival/emit";
+import type { TypeFacts } from "@inhuman.tools/arrival/emit";
 
 /** Thrown by every not-yet-landed view — the red suite's expected signal. */
 export class Unimplemented extends Error {

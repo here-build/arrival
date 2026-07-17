@@ -1,5 +1,5 @@
 {
-  "name": "@here.build/mcp-substrate",
+  "name": "@inhuman.tools/mcp-substrate",
   "version": "0.1.0",
   "description": "Doors teaching system for MCP Scheme REPLs: error enrichment, session history replay, futility detection, and optional type hints. Env- and model-agnostic.",
   "license": "FSL-1.1-MIT",
@@ -34,8 +34,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@here.build/arrival": "workspace:^",
-    "@here.build/arrival-serializer": "workspace:^"
+    "@inhuman.tools/arrival": "workspace:^",
+    "@inhuman.tools/arrival-serializer": "workspace:^"
   },
   "devDependencies": {
     "@here.build/eslint-configs": "workspace:^",

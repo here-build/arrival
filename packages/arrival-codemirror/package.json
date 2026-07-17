@@ -1,5 +1,5 @@
 {
-  "name": "@here.build/arrival-codemirror",
+  "name": "@inhuman.tools/arrival-codemirror",
   "version": "0.1.0",
   "description": "CodeMirror 6 for arrival Scheme (classic + sugarcoat). Language, structural editing, ghost, param hints, and full IDE surface (lint/hover/completion/goto) over a SchemeIdeBackend seam.",
   "license": "FSL-1.1-MIT",
@@ -23,9 +23,12 @@
   ],
   "scripts": {
     "build": "tsc",
+    "build-storybook": "storybook build",
+    "demo": "vite demos",
     "dev": "tsc --watch",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "storybook": "storybook dev -p 6011",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.test.json --noEmit && tsc -p demos/tsconfig.json --noEmit"
@@ -36,23 +39,29 @@
     "@codemirror/lint": "6.9.5",
     "@codemirror/state": "6.6.0",
     "@codemirror/view": "6.43.0",
-    "@here.build/arrival-sugarcoat": "workspace:^",
-    "@here.build/arrival-sampler": "workspace:^",
+    "@inhuman.tools/arrival-sugarcoat": "workspace:^",
+    "@inhuman.tools/arrival-sampler": "workspace:^",
     "@inhuman.tools/arrival-type-lens": "workspace:^",
     "@here.build/editor-theme": "workspace:^",
     "@lezer/highlight": "1.2.1",
     "@uiw/react-codemirror": "4.25.9"
   },
   "peerDependencies": {
-    "react": "19.2.0"
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
   },
   "devDependencies": {
     "@here.build/eslint-configs": "workspace:^",
     "@here.build/tsconfig": "workspace:^",
+    "@storybook/react": "10.3.3",
+    "@storybook/react-vite": "10.3.3",
     "eslint": "9.39.2",
     "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "storybook": "10.3.3",
     "tslib": "2.8.1",
     "typescript": "6.0.2",
+    "vite": "7.2.7",
     "vitest": "4.1.0"
   }
 }

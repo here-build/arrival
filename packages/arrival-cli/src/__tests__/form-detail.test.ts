@@ -3,8 +3,8 @@
 // only) and the retained path (a root form's value, a rejection's error) are exercised.
 import { describe, expect, it } from "vitest";
 
-import { execState } from "@here.build/arrival";
-import { EvalTrace } from "@here.build/arrival/provenance";
+import { execState } from "@inhuman.tools/arrival";
+import { EvalTrace } from "@inhuman.tools/arrival/provenance";
 
 import { formDetail, renderFormDetail } from "../form-detail.js";
 import { stripAnsi } from "./ansi-strip.js";

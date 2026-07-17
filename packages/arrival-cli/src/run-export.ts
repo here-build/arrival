@@ -13,7 +13,7 @@
  * query (a full-fidelity dump would reopen the pruning leak at fib scale, and no agent
  * wants 796 rows by default).
  */
-import type { EvalTrace } from "@here.build/arrival/provenance";
+import type { EvalTrace } from "@inhuman.tools/arrival/provenance";
 
 import { runView, type TemplateNode } from "./run-view.js";
 

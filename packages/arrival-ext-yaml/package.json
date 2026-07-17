@@ -1,5 +1,5 @@
 {
-  "name": "@here.build/arrival-ext-yaml",
+  "name": "@inhuman.tools/arrival-ext-yaml",
   "description": "The .yaml/.yml require resolver as an opt-in EnvCapability - the package that OWNS the yaml parser dependency (dep-isolation per the env-quasi-packages rule).",
   "version": "0.1.0",
   "private": true,
@@ -28,7 +28,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@here.build/arrival": "workspace:^",
+    "@inhuman.tools/arrival": "workspace:^",
     "yaml": "2.9.0"
   },
   "devDependencies": {

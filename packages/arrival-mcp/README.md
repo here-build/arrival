@@ -1,4 +1,4 @@
-# @here.build/arrival-mcp
+# @inhuman.tools/arrival-mcp
 
 Build [Model Context Protocol](https://modelcontextprotocol.io) tools as **plain values** and register
 them on the official [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk)
@@ -23,7 +23,7 @@ not a Scheme env).
 ## Install
 
 ```sh
-pnpm add @here.build/arrival-mcp @modelcontextprotocol/sdk
+pnpm add @inhuman.tools/arrival-mcp @modelcontextprotocol/sdk
 ```
 
 ## Discovery tool — a read sandbox
@@ -33,7 +33,7 @@ supplies), and optional **resources** (per-call host handles the verbs read). `D
 into a read-only Scheme REPL.
 
 ```ts
-import { DiscoveryTool, McpEnvCapability } from "@here.build/arrival-mcp";
+import { DiscoveryTool, McpEnvCapability } from "@inhuman.tools/arrival-mcp";
 
 const capability = new McpEnvCapability("projects", {
   symbols: {
@@ -100,7 +100,7 @@ Actions are declared with **`FieldSpec`** types (not bare zod), because a contex
 **once per batch**, so N actions don't each re-declare it.
 
 ```ts
-import { ActionTool, str, defineRef, uuidShape, nameShape } from "@here.build/arrival-mcp";
+import { ActionTool, str, defineRef, uuidShape, nameShape } from "@inhuman.tools/arrival-mcp";
 
 const componentRef = defineRef<Component, { site: Site }>({
   typeName: "Component",
@@ -166,7 +166,7 @@ own inside it).
 
 ```ts
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { registerTools } from "@here.build/arrival-mcp";
+import { registerTools } from "@inhuman.tools/arrival-mcp";
 
 const server = new McpServer({ name: "my-app", version: "0.1.0" }, { capabilities: { tools: {} } });
 registerTools(server, [discovery, editing], (params) => ({ session: resolveSession(params) }));
@@ -192,7 +192,7 @@ object you supply — restart and it's gone; inject an `AsyncSessionStore` for d
 | `tool` | Verb-authoring sugar over `symbol.rosetta`, tagged-template head (`` tool`name: doc` ``): bare `tool` (unclassified — always re-runs on replay), `tool.view` (cross-run cacheable boundary snapshot; demands a serializable output codec), `tool.pure` (deterministic from args — recovery is re-call, never persisted), `tool.effect` (mutation: `provenance: "sink"`, void result), `tool.risky` (`tool.effect` + `risky: true` metadata). |
 | budgets | `DEFAULT_BUDGET_MS` (5 s wall-clock), `defaultHeapBudget()` (`ARRIVAL_HEAP_MAX`, 100 M cells), `defaultStatementCap()` (`MCP_SESSION_STATEMENT_CAP`, 512/session), `defaultAttachmentQuota()` (`MCP_ATTACHMENT_QUOTA`, 3/call). |
 | session state | `SessionRunState` + `encodeSessionRunState`/`decodeSessionRunState`, `SessionRunCache`, `SESSION_SEMANTICS_EPOCH` — the session's durable twin (the thing living at `session.state.__run__`, or in your injected store). |
-| the two stores | **Not interchangeable**: `ToolCallCtx.store` is an `AsyncSessionStore` (from `@here.build/mcp-substrate`) that persists the session's *run state*; `ArrivalSessionStore` / `InMemoryArrivalSessionStore` is the *interaction-record* store (who called what, phantom queries) fed by `ctx.record`. Wire "durable sessions" to the first, "audit what the agent did" to the second. |
+| the two stores | **Not interchangeable**: `ToolCallCtx.store` is an `AsyncSessionStore` (from `@inhuman.tools/mcp-substrate`) that persists the session's *run state*; `ArrivalSessionStore` / `InMemoryArrivalSessionStore` is the *interaction-record* store (who called what, phantom queries) fed by `ctx.record`. Wire "durable sessions" to the first, "audit what the agent did" to the second. |
 | `defineCluster`, `Act`, `ActBuilder` | Compose action groups authored against a `Ctx` (`Act`/`ActBuilder` are type-only). |
 | refs: `str` `num` `bool` `oneOf` `scalar` `stringRecord` `rawList` `optional` `defineRef` `uuidShape` `nameShape` `objectShape` `instanceShape` | The `FieldSpec` system backing action context + props (ctx-aware resolution). `uuidShape` is an *id*-shape: it matches any non-empty spaceless string (not RFC-4122) and falls through to `nameShape` on a resolve miss. |
 | `registerTools`, `serializeResult` | Wire onto / lower for the official SDK server. |
@@ -224,5 +224,5 @@ pnpm lint
 
 **[FSL-1.1-MIT](./LICENSE.md)** — Functional Source License 1.1, MIT Future License; each version
 converts to MIT two years after release. Same license and same plain-words boundary as
-`@here.build/arrival` — see the core README's "What Competing Use means here" (your own
+`@inhuman.tools/arrival` — see the core README's "What Competing Use means here" (your own
 pipelines, agency work, and agents-as-users are always fair use). Questions: team@here.build

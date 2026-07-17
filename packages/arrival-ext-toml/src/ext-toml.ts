@@ -5,7 +5,7 @@
 // parser, registers `.toml` by name at bootstrap, and projects the parsed value through
 // the shared `normalizeToJson` so a `.toml` require yields JSON-shaped data identical
 // to its `.json` twin (smol-toml's Dates → ISO strings, etc.).
-import { EnvCapability } from "@here.build/arrival/capability";
+import { EnvCapability } from "@inhuman.tools/arrival/capability";
 import { parse as parseToml } from "smol-toml";
 
 import {
@@ -14,7 +14,7 @@ import {
   type ContentResolver,
   type ExtensionHandler,
   type RequireTypeProvider,
-} from "@here.build/arrival/loader";
+} from "@inhuman.tools/arrival/loader";
 
 const RESOLVE = "ext/toml/resolve";
 

@@ -12,7 +12,7 @@
 // the DO materialization DECOMPOSES the same logical record over storage keys (meta +
 // chunked log + one key per cache entry) — that layout is R4's, in deployment territory.
 
-import { canonicalJson, type RunCache, type RunCacheEntry } from "@here.build/arrival";
+import { canonicalJson, type RunCache, type RunCacheEntry } from "@inhuman.tools/arrival";
 
 import { isConfirmManifest, type ConfirmManifest } from "./confirm-manifest.js";
 

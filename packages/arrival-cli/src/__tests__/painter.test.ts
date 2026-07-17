@@ -3,7 +3,7 @@
 // STATE TRANSITIONS are mcp-substrate's own suite (repl-fold.test.ts); this suite never
 // re-derives state, it only feeds hand-built `ReplBlock`s (every state, per §5's tint
 // vocabulary) through `renderBlock`/`renderTurn` and checks the stripped output.
-import type { ReplBlock } from "@here.build/mcp-substrate";
+import type { ReplBlock } from "@inhuman.tools/mcp-substrate";
 import { describe, expect, it } from "vitest";
 
 import { paintRegion, renderBlock, renderTurn, type Writer } from "../painter.js";

@@ -1,6 +1,6 @@
 // json-schema-to-ts — the S2 HARVEST: a tool's JSON Schema → a TypeScript type-string, and a
 // tool's declared shape → its full arrow signature. This SUPERSEDES the zod harvest
-// (`@here.build/arrival/type-layer`'s `assembleHarvestedPrelude(SymbolDef entries)`) for
+// (`@inhuman.tools/arrival/type-layer`'s `assembleHarvestedPrelude(SymbolDef entries)`) for
 // manifold's own type-hint prelude: bind.ts's kwargs contract decodes every property through
 // the scheme-identity codec (`z.value`) — every `SymbolDef.in`/`.out` is `unknown`-typed by
 // design (bind.ts: "Every property decodes through the scheme-identity codec — we call
@@ -33,7 +33,7 @@
 // R (the tool call's RETURN type) — see `toolArrowType`'s header comment for the bind.ts /
 // server.ts finding that pins it to `unknown` for v1.
 
-import { assemblePreludeFromSignatures, type HarvestedPrelude } from "@here.build/arrival/type-layer";
+import { assemblePreludeFromSignatures, type HarvestedPrelude } from "@inhuman.tools/arrival/type-layer";
 
 import type { JsonSchemaProperty, ToolJsonSchema } from "../tool-schema.js";
 

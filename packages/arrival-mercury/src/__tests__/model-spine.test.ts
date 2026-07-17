@@ -32,7 +32,7 @@
  *               R6  static where-transfer ⊇ live per-value provenance [live oracle]
  *               R7  dynamic edges ⊆ static wireMap (containment)      [live oracle]
  */
-import { deepProvenance } from "@here.build/arrival";
+import { deepProvenance } from "@inhuman.tools/arrival";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { openOracleSession } from "../index.js";
@@ -325,7 +325,7 @@ describe("dual-plane laws — the dynamic plane is the oracle for the static one
     // The live plane: run the program, read the eager Sets off the result value.
     const source = `(define response (infer "summarize" "hello"))
 (string-append "v:" (car response))`;
-    const { execState, LexicalScope, parseGenerator } = await import("@here.build/arrival");
+    const { execState, LexicalScope, parseGenerator } = await import("@inhuman.tools/arrival");
     const scope = LexicalScope.fresh("dual-plane-r6");
     let last: unknown;
     for (const form of await parseGenerator(source)) {

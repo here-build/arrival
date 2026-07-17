@@ -3,15 +3,15 @@
 //
 // The one non-default piece: demos import the package by its PUBLIC name
 // (copy-pasteable), so the self-name aliases to ./src here. In your own app
-// you install @here.build/arrival-codemirror and delete the aliases.
+// you install @inhuman.tools/arrival-codemirror and delete the aliases.
 
 const src = new URL("../src/", import.meta.url).pathname;
 
 export default {
   resolve: {
     alias: [
-      { find: "@here.build/arrival-codemirror/react", replacement: `${src}react/index.ts` },
-      { find: "@here.build/arrival-codemirror", replacement: `${src}index.ts` },
+      { find: "@inhuman.tools/arrival-codemirror/react", replacement: `${src}react/index.ts` },
+      { find: "@inhuman.tools/arrival-codemirror", replacement: `${src}index.ts` },
     ],
   },
   plugins: [

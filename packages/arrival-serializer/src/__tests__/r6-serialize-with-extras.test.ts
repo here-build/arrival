@@ -15,7 +15,7 @@
 //   • SHRINK-SAFETY — the shrink-to-fit re-render loop neither duplicates extras nor burns
 //     quota per pass; only the final pass's collection stands.
 
-import { parse } from "@here.build/arrival";
+import { parse } from "@inhuman.tools/arrival";
 import { describe, expect, it } from "vitest";
 
 import {

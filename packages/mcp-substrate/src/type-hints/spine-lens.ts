@@ -30,7 +30,7 @@
 // gate — `diagnose()` only OBSERVES a throwaway program; select.ts/deliver.ts (already built)
 // own every rendering/blocking decision downstream of this adapter.
 
-import { createDiagnoseLens } from "@here.build/arrival/type-layer";
+import { createDiagnoseLens } from "@inhuman.tools/arrival/type-layer";
 
 import type { BoundTool } from "../bound-tool.js";
 import { assembleManifoldPrelude } from "./json-schema-to-ts.js";

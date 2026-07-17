@@ -23,7 +23,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@here.build/arrival-serializer": "workspace:^",
+    "@inhuman.tools/arrival-serializer": "workspace:^",
     "@modelcontextprotocol/sdk": "1.26.0",
     "typescript": "6.0.2",
     "vscode-languageserver": "9.0.1",

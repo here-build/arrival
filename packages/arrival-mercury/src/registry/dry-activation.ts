@@ -26,8 +26,8 @@
  * conditionally OMITS a symbol key harvests the phantom-config branch; the
  * omitted symbol just falls down the fallback ladder to shim/door.
  */
-import type { Activation } from "@here.build/arrival/capability";
-import type { DoorSymbolDef } from "@here.build/arrival/symbol";
+import type { Activation } from "@inhuman.tools/arrival/capability";
+import type { DoorSymbolDef } from "@inhuman.tools/arrival/symbol";
 
 type AnyActivation = Activation<any, any>;
 type DegradationInfo = AnyActivation["degradation"];

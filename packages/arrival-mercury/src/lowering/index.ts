@@ -54,7 +54,7 @@
  * `sm.guardFormOf` are thin wraps, matching `registryRow`'s own "a second
  * cache layer here would earn nothing" precedent.
  */
-import type { EmitRule, TypeFacts } from "@here.build/arrival/emit";
+import type { EmitRule, TypeFacts } from "@inhuman.tools/arrival/emit";
 
 import type { EmitRegistry, EmitRegistryRow } from "../registry/harvest.js";
 import type { R } from "../residual/types.js";

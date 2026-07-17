@@ -1,5 +1,5 @@
 {
-  "name": "@here.build/arrival-sugarcoat",
+  "name": "@inhuman.tools/arrival-sugarcoat",
   "version": "0.1.0",
   "description": "Sugarcoat lens for Arrival — classic↔sugarcoat scheme-source rendering (indentation I-expressions, curly-infix, => lambda, method-dot, accessor subscripts, colon kwargs, at-expressions). A zero-dependency leaf consumed by the studio editor, codemirror, the chain-view compiler, and provenance rendering.",
   "keywords": [

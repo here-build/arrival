@@ -7,10 +7,10 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { EnvCapability } from "@here.build/arrival/capability";
-import type { EmitRule } from "@here.build/arrival/emit";
-import * as z from "@here.build/arrival/scheme-zod";
-import { symbol } from "@here.build/arrival/symbol";
+import { EnvCapability } from "@inhuman.tools/arrival/capability";
+import type { EmitRule } from "@inhuman.tools/arrival/emit";
+import * as z from "@inhuman.tools/arrival/scheme-zod";
+import { symbol } from "@inhuman.tools/arrival/symbol";
 
 import { openOracleSession, type OracleSession } from "../oracle/harness.js";
 import { emitRegistryOf } from "../registry/index.js";

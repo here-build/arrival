@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import type { EmitRule, TypeFacts } from "@here.build/arrival/emit";
+import type { EmitRule, TypeFacts } from "@inhuman.tools/arrival/emit";
 
 import { classify } from "../coreform/index.js";
 import type { And, ClassifyResult, DefineFn, If as CfIf, NodeId } from "../coreform/index.js";

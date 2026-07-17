@@ -41,8 +41,8 @@
  * §0: this DO adds ZERO privilege — it holds no secret the worker didn't already hold, and
  * every capability still walks a user-grade door in the subclass's plane.
  */
-import { type McpTool, registerTools } from "@here.build/arrival-mcp";
-import type { AsyncSessionStore } from "@here.build/mcp-substrate";
+import { type McpTool, registerTools } from "@inhuman.tools/arrival-mcp";
+import type { AsyncSessionStore } from "@inhuman.tools/mcp-substrate";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { DurableObject } from "cloudflare:workers";

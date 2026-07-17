@@ -35,7 +35,7 @@ async function withCap(cap: { lower: (o: { evalScheme: typeof evalScheme }) => u
 
 // INVARIANT: each of SRFI-1/13/43/189/128/26/8/2/235 assembles onto an env and its
 // representative verb runs correctly
-describe("@here.build/arrival/srfi", () => {
+describe("@inhuman.tools/arrival/srfi", () => {
   it("SRFI-1 list library", async () => {
     const num = await withCap(srfi1, "s1");
     expect(await num("(length+ (list 1 2 3 4))")).toBe(4);
@@ -101,7 +101,7 @@ describe("@here.build/arrival/srfi", () => {
 // `last-pair` already lived in the pack, so they are exercised here only for
 // completeness (1-element + improper/dotted list) — the new symbols are first…tenth.
 // Assembles srfi-1 EXPLICITLY (the accessors are not registered globally this round).
-describe("@here.build/arrival/srfi-1 — positional accessors", () => {
+describe("@inhuman.tools/arrival/srfi-1 — positional accessors", () => {
   async function accEnv() {
     const env = mintFrame(sandboxedEnv, `s1acc-${Math.random().toString(36).slice(2)}`);
     await assembleEnv(env as unknown as SchemeEnv, [srfi1.lower({ evalScheme }) as never]);

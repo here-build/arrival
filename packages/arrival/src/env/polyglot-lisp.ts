@@ -1,4 +1,4 @@
-// @here.build/arrival/polyglot-lisp — the Common Lisp dialect pack (see
+// @inhuman.tools/arrival/polyglot-lisp — the Common Lisp dialect pack (see
 // polyglot.ts's header for the sibling-pack map).
 //
 // The smallest of the three dialect packs, by design: CL's list-manipulation

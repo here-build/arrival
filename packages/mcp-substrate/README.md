@@ -1,4 +1,4 @@
-# @here.build/mcp-substrate
+# @inhuman.tools/mcp-substrate
 
 Session-scoped teaching apparatus for MCP Scheme REPL surfaces.
 
@@ -18,7 +18,7 @@ Session-scoped teaching apparatus for MCP Scheme REPL surfaces.
 ## Usage
 
 ```ts
-import { createDoorsRunner, KWARGS_STRATEGIES } from "@here.build/mcp-substrate";
+import { createDoorsRunner, KWARGS_STRATEGIES } from "@inhuman.tools/mcp-substrate";
 
 const runner = createDoorsRunner({
   toolNaming: { toolName: "scheme", argName: "expr" },

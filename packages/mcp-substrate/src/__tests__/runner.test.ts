@@ -31,8 +31,8 @@
 //      at all. This test pins the NOW-correct behavior and guards against regressing back to
 //      text-based execution.
 
-import { LexicalScope } from "@here.build/arrival";
-import { assembleAmbient, type AssembledAmbient } from "@here.build/arrival/env";
+import { LexicalScope } from "@inhuman.tools/arrival";
+import { assembleAmbient, type AssembledAmbient } from "@inhuman.tools/arrival/env";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { AttachmentSink } from "../attachment-sink.js";
@@ -271,7 +271,7 @@ describe("createDoorsRunner(...).run(...) — the import-form door (doors.ts's i
     });
 
     it("the notes block is a valid reader block comment — inert if pasted back (round-trip invariant)", async () => {
-      const { parse } = await import("@here.build/arrival");
+      const { parse } = await import("@inhuman.tools/arrival");
       const runner = makeRunner();
       const scope = freshScope("runner-introduced-roundtrip");
       const result = await runner.run({ expr: "(define x 41)", ambient, scope, tools: noTools });

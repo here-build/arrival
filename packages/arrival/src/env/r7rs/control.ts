@@ -1,4 +1,4 @@
-// @here.build/arrival/r7rs/control — the control-feature / dynamics OMISSIONS.
+// @inhuman.tools/arrival/r7rs/control — the control-feature / dynamics OMISSIONS.
 //
 // Lineage: R7RS-small (Shinn, Cowan & Gleckler, eds., 2013) — §6.10 Control
 // features (call/cc, call-with-current-continuation, dynamic-wind), §4.2.6 Dynamic

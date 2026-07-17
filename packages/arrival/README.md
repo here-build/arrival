@@ -1,4 +1,4 @@
-# @here.build/arrival
+# @inhuman.tools/arrival
 
 **The first ever language built for AI[^1], finally built for AI.** 
 
@@ -58,7 +58,7 @@ implementation. `exec` assembles the capabilities per call and returns plain JS 
 top-level form. This is the whole registration ceremony:
 
 ```typescript
-import { exec, EnvCapability, symbol, z } from '@here.build/arrival';
+import { exec, EnvCapability, symbol, z } from '@inhuman.tools/arrival';
 
 const weather = new EnvCapability("demo/weather", {
   symbols: {
@@ -119,7 +119,7 @@ they're out and what to use instead — exactly the symbols an LLM agent predict
 top-level `define`s accumulate across calls:
 
 ```typescript
-import { execState, schemeToJs, LexicalScope } from '@here.build/arrival';
+import { execState, schemeToJs, LexicalScope } from '@inhuman.tools/arrival';
 
 const scope = LexicalScope.fresh("agent-session");             // the session's mutable frame
 await execState(`(define (sq x) (* x x))`, { scope });         // turn 1 — defines land on the scope
@@ -200,8 +200,8 @@ membrane, through containers, past collapsing ops. The source verb from the firs
 already the whole setup:
 
 ```typescript
-import { execState, schemeToJs, deepProvenance } from '@here.build/arrival';
-import { EvalTrace } from '@here.build/arrival/provenance';
+import { execState, schemeToJs, deepProvenance } from '@inhuman.tools/arrival';
+import { EvalTrace } from '@inhuman.tools/arrival/provenance';
 
 const trace = new EvalTrace();
 const { values: [line] } = await execState(
@@ -238,7 +238,7 @@ that value** (the Galois-slicing `uneval` of Perera–Cheney; purity is the theo
 least slice exist). This runs, today:
 
 ```typescript
-import { EvalTrace, buildUneval } from '@here.build/arrival/provenance';
+import { EvalTrace, buildUneval } from '@inhuman.tools/arrival/provenance';
 
 const t = new EvalTrace();
 const src = `
@@ -274,7 +274,7 @@ grounding is read per-leaf off the lineage the value already carries. With trace
 membrane crossing answered from the recorded payload stream, the live world never consulted) this
 composes into a property nothing bolt-on offers: an output either traces end-to-end — and a third
 party can re-derive it — or it has no signature at all. The production whole-result walker is
-`groundingVerdict` in the sibling `@here.build/arrival-provenance` package (its `/verdict`
+`groundingVerdict` in the sibling `@inhuman.tools/arrival-provenance` package (its `/verdict`
 subpath); the `whyOf` / `whereOf` / `howOf` queries live one layer further up
 (`@here.build/arrival-chain`, the sift work — not shippable from this package). What lives *here*
 is the boundary that makes them sound — the carrying above, plus the **attestation brand** (the
@@ -333,7 +333,7 @@ a completion-*context* API driven by the same Σ∩T machinery that masks the sa
 go-to-definition, semantic tokens. It runs in-process, or behind a provided worker/SharedWorker
 protocol (`ls-client` / `ls-server`) so `tsc` never blocks an editor's main thread.
 
-**`@here.build/arrival-codemirror`** is the CodeMirror 6 plugin that consumes it: language modes
+**`@inhuman.tools/arrival-codemirror`** is the CodeMirror 6 plugin that consumes it: language modes
 for classic Scheme and Sugarcoat; `schemeIde(backend)` bundling linter squiggles, hover,
 completion, goto, and semantic highlight; **paredit-style structural editing** (expand/contract,
 slurp, barf, kill-sexp) over the real reader with a verify-reparse net so a structural op can
@@ -343,7 +343,7 @@ faces (edits forward to canonical Scheme today); structural ops are classic-only
 
 ## Sugarcoat — the reversible human face
 
-`@here.build/arrival-sugarcoat` is a bidirectional lens over canonical s-expressions: the stored
+`@inhuman.tools/arrival-sugarcoat` is a bidirectional lens over canonical s-expressions: the stored
 form is always Scheme; Sugarcoat renders it as syntax a JS/Python/Kotlin programmer parses at a
 glance — indentation-structured, curly-infix, subscripts, method chains, the `it` pronoun, dict
 literals, at-expressions — and folds human edits back losslessly:
@@ -360,11 +360,11 @@ sweetens it for the person reviewing, their tweaks convert back; neither side ev
 translation of the other's work. The package also ships the runtime-free s-expression reader
 (`parseSexprs` / `printScheme`) half the toolchain uses to parse Scheme without evaluating it, a
 TextMate grammar (`editors/`), and the formal grammar (`GRAMMAR.md`). The 5-minute syntax tour is
-`LEARN.md`, shipped inside the `@here.build/arrival-sugarcoat` package.
+`LEARN.md`, shipped inside the `@inhuman.tools/arrival-sugarcoat` package.
 
 ## Does the medium measurably help?
 
-Yes — measured, with the noise floor stated. `@here.build/arrival-manifold` collapses N upstream
+Yes — measured, with the noise floor stated. `@inhuman.tools/arrival-manifold` collapses N upstream
 MCP servers' per-tool JSON-schema tools into one `scheme-repl` tool whose argument is an arrival
 program. On **MCP-Atlas** (89 grounded multi-server tasks × 15 runs per configuration, LongCat-2.0
 judge, per-task fixed effects + paired contrasts, post-neutralization, strictly neutral client):
@@ -379,7 +379,7 @@ Composing multiple tool calls inside one program eliminates round-trips a schema
 native call can't avoid — pipe a result straight into the next call, filter/reduce before it ever
 re-enters the transcript — so the token surcharge buys task completion, not verbosity. The noise
 floor is real and no single run can be trusted alone; the methodology (and the forensics on the
-pre-neutralization runs) is in `@here.build/arrival-manifold`'s own README. A +7pt
+pre-neutralization runs) is in `@inhuman.tools/arrival-manifold`'s own README. A +7pt
 shift on a grounded benchmark is as heavy a claim as anything above — it gets the same treatment.
 
 ## What's in the box
@@ -444,19 +444,19 @@ Every symbol is declared with a contract — `{ input: [z.string], output: [z.nu
 the `scheme-zod` codec vocabulary; the schema DSL (`s/object`, `s/array`, `s/enum`, …) is the
 language's explicit-type syntax. A schema tag is a *proposition* discharging three ways from one
 canonical lowering: a runtime validator (zod), a wire schema (JSON Schema for structured
-outputs), and a static projection — `@here.build/arrival/type-layer` prints harvested signatures
+outputs), and a static projection — `@inhuman.tools/arrival/type-layer` prints harvested signatures
 as TypeScript, so the checker is `tsc` itself. A side effect worth naming: **the schema cannot
 drift** — wire schema, validator, and static type are three projections of one term.
 
 ### The oracle — the interpreter wired into the sampler
 
-`@here.build/arrival/oracle` exposes the interpreter's own knowledge — structural validity and
+`@inhuman.tools/arrival/oracle` exposes the interpreter's own knowledge — structural validity and
 the bound-symbol set (Σ) — as a **truncation-safe scanner**: pure, O(n), single pass, an
 unterminated string a reported state, never a throw — what a constrained decoder consulting it
 token-by-token needs. Under it an unbalanced program is *ungeneratable*; with a grant env, an
 unbound symbol is *ungeneratable*. Against the capability DAG that reads: an ungranted tool is
 **unwritable at generation time** — containment moves from the sandbox into the decoder. The
-consumer is `@here.build/arrival-sampler` (substrate-free mask kernel, Σ∩T type-lens narrowing,
+consumer is `@inhuman.tools/arrival-sampler` (substrate-free mask kernel, Σ∩T type-lens narrowing,
 node-llama-cpp wiring, an OpenAI-compatible server); the mask kernel is tested machinery, the
 decode strategies riding it keep the *experimental* tag.
 
@@ -478,18 +478,18 @@ borrowed JS sources at the membrane.
 | First-class special forms | special-ness travels with the keyword *value* — `(define => lambda)` aliases a form; full lexical shadowing is a documented gap, not a silent wrong answer |
 | Replay drivers | re-run a traced program with every membrane crossing answered from the recorded payload stream (`replayProgramWithPlayback`, exported from `/provenance`) |
 | Trace analysis stack | flow graphs, region folds, span attribution, MDL trace collapse — the trace is a queryable artifact, not a log (`src/provenance/`) |
-| `@here.build/arrival-serializer` | budget-bounded rendering: under a budget, per-element caps shrink fairly across siblings and re-render — never a tail-cut, every reduction signaled inline |
-| `@here.build/arrival-mcp` | the language as an MCP surface — discovery/action tools over the same capability envs, serializer budgets on every result |
-| `@here.build/arrival-manifold` | N MCP servers → one scheme-REPL tool (the measured claim above) |
+| `@inhuman.tools/arrival-serializer` | budget-bounded rendering: under a budget, per-element caps shrink fairly across siblings and re-render — never a tail-cut, every reduction signaled inline |
+| `@inhuman.tools/arrival-mcp` | the language as an MCP surface — discovery/action tools over the same capability envs, serializer budgets on every result |
+| `@inhuman.tools/arrival-manifold` | N MCP servers → one scheme-REPL tool (the measured claim above) |
 
 ## Quick Start
 
 ```bash
-npm install @here.build/arrival
+npm install @inhuman.tools/arrival
 ```
 
 ```typescript
-import { exec } from '@here.build/arrival';
+import { exec } from '@inhuman.tools/arrival';
 
 // One plain JS value per top-level form; the base assembles lazily on first call.
 const [result] = await exec(`(filter (lambda (x) (> x 5)) (list 1 3 7 9 2))`);

@@ -52,7 +52,7 @@ export {
 } from "./type-emit/index.js";
 
 // ── the TYPEFACTS extraction — the tsc→facts membrane (typefacts-extraction.md;
-//    constitution §3.3/§5.3). `TypeFacts` re-exports @here.build/arrival/emit's
+//    constitution §3.3/§5.3). `TypeFacts` re-exports @inhuman.tools/arrival/emit's
 //    canonical vocabulary — one type, two readers, no adaptation layer. ──
 export {
   type ClassifiedSource,

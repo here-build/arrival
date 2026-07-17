@@ -1,5 +1,5 @@
 /**
- * `@here.build/arrival/loader` — the arrival-scheme `(require …)` module system,
+ * `@inhuman.tools/arrival/loader` — the arrival-scheme `(require …)` module system,
  * a subpath quasi-package of the core (per .claude/rules/env-quasi-packages.md:
  * no external runtime deps, co-versioned with the interpreter — so it lives IN,
  * as `./loader`, not as a separate package). Public surface = the three modules

@@ -28,10 +28,10 @@ import {
   tokenize,
   type Diagnostic,
   type SessionScope,
-} from "@here.build/arrival";
-import { assembleAmbient, type AssembledAmbient } from "@here.build/arrival/env";
-import { arrivalLoaderCapability } from "@here.build/arrival/loader";
-import { toSExprString } from "@here.build/arrival-serializer";
+} from "@inhuman.tools/arrival";
+import { assembleAmbient, type AssembledAmbient } from "@inhuman.tools/arrival/env";
+import { arrivalLoaderCapability } from "@inhuman.tools/arrival/loader";
+import { toSExprString } from "@inhuman.tools/arrival-serializer";
 
 import type { ArmedCapabilities } from "./capabilities.js";
 import type { OutputMode } from "./output-mode.js";

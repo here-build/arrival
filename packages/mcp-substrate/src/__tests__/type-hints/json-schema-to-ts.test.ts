@@ -37,7 +37,7 @@
 // "whitelist gap, RESOLVED" test below.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 
-import { createDiagnoseLens } from "@here.build/arrival/type-layer";
+import { createDiagnoseLens } from "@inhuman.tools/arrival/type-layer";
 import { describe, expect, it } from "vitest";
 
 import type { JsonSchemaProperty, ToolJsonSchema } from "../../tool-schema.js";

@@ -15,10 +15,10 @@
 // A cold fold is forced with a FRESH DiscoveryTool instance (fresh warm map = process eviction in
 // miniature); the store variant rehydrates through the injected blob instead of the session bag.
 
-import { symbol } from "@here.build/arrival";
-import { port, type Resource } from "@here.build/arrival/resources";
-import * as sz from "@here.build/arrival/scheme-zod";
-import { createInMemorySessionStore } from "@here.build/mcp-substrate";
+import { symbol } from "@inhuman.tools/arrival";
+import { port, type Resource } from "@inhuman.tools/arrival/resources";
+import * as sz from "@inhuman.tools/arrival/scheme-zod";
+import { createInMemorySessionStore } from "@inhuman.tools/mcp-substrate";
 import { describe, expect, it, vi } from "vitest";
 import * as z from "zod";
 

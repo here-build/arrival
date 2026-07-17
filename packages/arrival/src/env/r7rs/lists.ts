@@ -267,7 +267,7 @@ function mapImpl(
 // map/apply (Wave 3) move here from the compiler-side phase1 table
 // (`inhuman/foundations/arrival-mercury/src/rules/phase1.ts`) onto their OWN
 // Contract's `emit` field — the same pattern numeric.ts's quotient/modulo/=/+/-/*//
-// relocation established, built via `@here.build/arrival/emit`'s residual-lite
+// relocation established, built via `@inhuman.tools/arrival/emit`'s residual-lite
 // constructors (§4.5's seed of "residual types belong in arrival core eventually")
 // — `Arrow`/`Index` grew residual-lite this wave (map's zip arrow and
 // index-into-a-further-list; apply's fold-reduce arrow); `RuntimeRef` grew it as a

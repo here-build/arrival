@@ -1,4 +1,4 @@
-// @here.build/arrival/overridable — the `arrival/overridable` capability: `define/overridable`
+// @inhuman.tools/arrival/overridable — the `arrival/overridable` capability: `define/overridable`
 // is, by default, plain `define` PLUS VALIDATION; the execution environment MAY override the
 // value, and exposing that behavior (argv, request props, form fields, configuration) is the
 // ENVIRONMENT'S responsibility, never this capability's. It is substrate for generalized
@@ -89,7 +89,7 @@ import { schemaCapability } from "./schema.js";
  *  into the canonical JS tagged-list form (a bare string, or an array the s/* constructors
  *  build) — to the zod schema that validates a JS value against it. Routes through the ONE
  *  canonical lowering (`tagToJsonSchema`) + zod's own JSON-Schema reconstruction — the same
- *  bridge `@here.build/arrival-schema-zod`'s `schemaToZod` uses (re-exported by arrival-chain,
+ *  bridge `@inhuman.tools/arrival-schema-zod`'s `schemaToZod` uses (re-exported by arrival-chain,
  *  defined in arrival-schema-zod) — so this capability can't drift from either the
  *  wire schema or the s/* authoring surface: EVERY tag the schema DSL can express (object,
  *  array, enum, bare primitive, the `/optional` compositor) is accepted, not just a hand-rolled

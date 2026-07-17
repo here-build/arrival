@@ -1,6 +1,6 @@
 import { type Extension, RangeSetBuilder } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
-import { paramHints, paramHintsSugarcoat, type ParamHint } from "@here.build/arrival-sugarcoat";
+import { paramHints, paramHintsSugarcoat, type ParamHint } from "@inhuman.tools/arrival-sugarcoat";
 
 /**
  * Parameter inlay hints (view-only widgets, no doc range).

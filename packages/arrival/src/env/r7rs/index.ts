@@ -1,4 +1,4 @@
-// @here.build/arrival/r7rs — the R7RS-small derived-syntax palette.
+// @inhuman.tools/arrival/r7rs — the R7RS-small derived-syntax palette.
 //
 // The portable Scheme control forms arrival supports as macros, expanded from
 // the small special-form core, split per R7RS section into one EnvCapability

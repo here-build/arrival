@@ -9,7 +9,7 @@
      — the membrane makes a boundary value its plain JS type, so the dialect bought
      nothing but noise. The aliases survive as the COMPAT BRIDGE the lens still
      needs resolvable: rosetta `type:` strings splice them (host-prelude.ts), the
-     `(require)` synthesizer emits them (@here.build/arrival/loader), and the
+     `(require)` synthesizer emits them (@inhuman.tools/arrival/loader), and the
      `.cases.ts` bite-guards assert against them. (The deferred numeric tower that
      once justified `SNum` is retired — V chose plain TS.) */
 // ─────────────────────────────────────────────────────────────────────────────

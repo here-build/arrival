@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { toSExprString } from "../serializer";
 // Import what we can from lips
-import { exec, AExact, EnvCapability, schemeToJs, AString, ASymbol, ANil, APair, LexicalScope } from "@here.build/arrival";
+import { exec, AExact, EnvCapability, schemeToJs, AString, ASymbol, ANil, APair, LexicalScope } from "@inhuman.tools/arrival";
 // Import custom matchers
-import "@here.build/arrival";
+import "@inhuman.tools/arrival";
 
 describe("LIPS Integration", () => {
   it("should handle simple lips evaluation results", async () => {

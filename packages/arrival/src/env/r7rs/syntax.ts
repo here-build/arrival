@@ -1,4 +1,4 @@
-// @here.build/arrival/r7rs/syntax — R7RS §4.3.1 (let-syntax/letrec-syntax) and
+// @inhuman.tools/arrival/r7rs/syntax — R7RS §4.3.1 (let-syntax/letrec-syntax) and
 // §5.3 (define-syntax) macro-binding forms.
 //
 // In a traditional Scheme these forms exist because macros live in a SEPARATE

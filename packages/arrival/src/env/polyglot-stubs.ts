@@ -1,4 +1,4 @@
-// @here.build/arrival/env/polyglot-stubs — the CROSS-DIALECT teaching-stub pack,
+// @inhuman.tools/arrival/env/polyglot-stubs — the CROSS-DIALECT teaching-stub pack,
 // sibling in spirit to `env/srfi/srfi-stubs.ts` but a DIFFERENT population:
 //
 //   srfi/srfi-stubs.ts     — SRFI symbols the SPEC defines that arrival omits.

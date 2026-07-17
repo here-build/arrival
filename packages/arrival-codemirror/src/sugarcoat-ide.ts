@@ -7,7 +7,7 @@
 // (editor keeps last good). Sugar positions have no classic token → empty.
 // Diagnostics inside sugar lift to enclosing paired node.
 
-import { alignSugarcoatClassic, type SugarcoatAlignment } from "@here.build/arrival-sugarcoat";
+import { alignSugarcoatClassic, type SugarcoatAlignment } from "@inhuman.tools/arrival-sugarcoat";
 
 import type {
   SchemeIdeBackend,

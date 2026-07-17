@@ -78,7 +78,7 @@
  * direction (Law F: declining an optimization is never wrong; the one wrong
  * direction — pruning something still needed — cannot happen this way).
  */
-import type { ProvenanceRole } from "@here.build/arrival/symbol";
+import type { ProvenanceRole } from "@inhuman.tools/arrival/symbol";
 
 import type { CoreForm, Define, DefineFn, NodeId } from "../coreform/types.js";
 import type { EmitRegistry } from "../registry/harvest.js";

@@ -11,8 +11,8 @@
 // This module is a sibling to the type-hints context ring. They observe the same events
 // but project different data (original source here vs. degraded `declare const ...` there).
 
-import { execState, type LexicalScope } from "@here.build/arrival";
-import type { AssembledAmbient } from "@here.build/arrival/env";
+import { execState, type LexicalScope } from "@inhuman.tools/arrival";
+import type { AssembledAmbient } from "@inhuman.tools/arrival/env";
 
 /** Detects a qualified tool name (`server/tool`) anywhere in a form.
  *

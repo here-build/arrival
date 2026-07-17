@@ -52,7 +52,7 @@ import { Bin, Call, Lit, Member, Un, type R } from "../../emit/residual-lite.js"
 // same pattern numeric.ts's quotient/modulo/=/+/-/*// relocation and lists.ts's cons
 // relocation established. Residual shapes are BYTE-FOR-BYTE identical to the table
 // rules they replace (verified by diffing against phase1.ts's pre-relocation
-// `notRule`/`nullQRule`/`pairQRule`), built via `@here.build/arrival/emit`'s
+// `notRule`/`nullQRule`/`pairQRule`), built via `@inhuman.tools/arrival/emit`'s
 // residual-lite constructors (§4.5's seed of "residual types belong in arrival core
 // eventually").
 //

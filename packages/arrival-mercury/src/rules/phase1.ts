@@ -152,7 +152,7 @@
  *  mercury-fixture-gepa — are unchanged too, now served by the harvested Contract
  *  row instead of this table's deleted twin).
  */
-import type { EmitCtx, EmitRule } from "@here.build/arrival/emit";
+import type { EmitCtx, EmitRule } from "@inhuman.tools/arrival/emit";
 
 import type { Binding, R } from "../residual/types.js";
 import { Arrow, Call, Index, Lit, Method, Ref } from "../residual/types.js";

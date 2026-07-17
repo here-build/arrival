@@ -20,10 +20,10 @@ import {
   StaticValidationError,
   type LexicalScope,
   type SchemeValue,
-} from "@here.build/arrival";
-import type { AssembledAmbient } from "@here.build/arrival/env";
-import { toSExprString } from "@here.build/arrival-serializer";
-import type { ContentBlock, ReplEvent } from "@here.build/mcp-substrate";
+} from "@inhuman.tools/arrival";
+import type { AssembledAmbient } from "@inhuman.tools/arrival/env";
+import { toSExprString } from "@inhuman.tools/arrival-serializer";
+import type { ContentBlock, ReplEvent } from "@inhuman.tools/mcp-substrate";
 
 import { formatDiagnostic } from "./session.js";
 

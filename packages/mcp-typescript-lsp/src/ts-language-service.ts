@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { sexpr, SEXPR_TAG, type SExprDefinition, type SExprSerializable } from "@here.build/arrival-serializer";
+import { sexpr, SEXPR_TAG, type SExprDefinition, type SExprSerializable } from "@inhuman.tools/arrival-serializer";
 import * as ts from "typescript";
 
 import { parseSelectorWithOccurrence } from "./selector-parser.js";

@@ -1,4 +1,4 @@
-// @here.build/arrival-sugarcoat — the sugarcoat-expression lens over scheme source.
+// @inhuman.tools/arrival-sugarcoat — the sugarcoat-expression lens over scheme source.
 //
 // A zero-dependency leaf (its own S-expr parser; only tiny-invariant). The classic↔sugarcoat view:
 // `schemeToSugarcoat` renders stored canonical scheme as a readable "sugarcoat" form (curly-infix, `=>`

@@ -112,7 +112,7 @@ users.filter{(u) => u[:age] < 30}
 
 The lens never renames *your* parameters — `u` stays `u`. When you want `it`-ification
 (or `items` → `item` recovery), that's the explicit opt-in `tidyBoundNames` pass from
-`@here.build/arrival-sugarcoat/names`, or its no-touch twin `boundNameHints` for editor
+`@inhuman.tools/arrival-sugarcoat/names`, or its no-touch twin `boundNameHints` for editor
 inlays.
 
 `=>` is just an alias of `lambda` — `(=> (y) y)` is legal — but `{(y) => y}` is the face.

@@ -1,4 +1,4 @@
-// @here.build/arrival/core — the irreducible scheme core pack.
+// @inhuman.tools/arrival/core — the irreducible scheme core pack.
 //
 // The base-most scheme defs that every other pack expands against: the essential
 // constants, the kernel keywords, and `gensym`. Pure scheme (the three

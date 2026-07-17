@@ -125,7 +125,7 @@ export { rosettaTypesOf } from "./env-registries.js";
 
 // The structural env contract cross-package packs/consumers type against (never the
 // concrete `AmbientRuntime` class) — re-surfaced from `./common/scheme-env.ts` (also
-// reachable via the `@here.build/arrival/scheme-env` subpath) for barrel-style consumers.
+// reachable via the `@inhuman.tools/arrival/scheme-env` subpath) for barrel-style consumers.
 export { type SchemeEnv, type RosettaSpec, type ResolverSpec } from "./common/scheme-env.js";
 
 // Number system: AExact (rationals) and AInexact (floats/complex).

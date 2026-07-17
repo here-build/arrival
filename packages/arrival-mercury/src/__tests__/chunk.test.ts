@@ -25,7 +25,7 @@ import { desugar } from "../front/desugar.js";
 import { parseSexprs } from "../front/parse.js";
 import { asyncnessOf, materializeAsyncness } from "../naming/asyncness.js";
 import { compileGreenfield, openOracleSession, runOracle, type OracleSession } from "../oracle/harness.js";
-import type { EmitRule } from "@here.build/arrival/emit";
+import type { EmitRule } from "@inhuman.tools/arrival/emit";
 import type { EmitRegistry, EmitRegistryRow } from "../registry/index.js";
 import { arrayChunkAst, type ChunkElement } from "../residual/chunk.js";
 import { render } from "../residual/render.js";
@@ -399,7 +399,7 @@ describe("oracle agreement over the real session", () => {
 
 // ─── E2b — a Contract-side RULE returning a ChunkExpr (residual-lite's type acceptance) ──
 //
-// `@here.build/arrival/emit`'s residual-lite.ts now accepts `ChunkExpr` as a legal
+// `@inhuman.tools/arrival/emit`'s residual-lite.ts now accepts `ChunkExpr` as a legal
 // `EmitRule<R>` return shape (type-level only — no constructor there; that file's own
 // growth discipline waits for a real Contract rule to need one). This package owns the
 // only `ChunkExpr` constructor that exists (`residual/types.ts`, via `chunk.ts`'s

@@ -47,7 +47,7 @@
     "build-storybook": "storybook build"
   },
   "dependencies": {
-    "@here.build/arrival": "workspace:^",
+    "@inhuman.tools/arrival": "workspace:^",
     "@here.build/lexical-namer": "workspace:^",
     "@inhuman.tools/arrival-run": "workspace:^",
     "@inhuman.tools/arrival-type-lens": "workspace:^",

@@ -158,7 +158,7 @@ interface AmbientInternals {
 
 /** The brand lives ON the ambient object under a PROCESS-GLOBAL registered symbol — never in a
  *  module-local side-table. A module-local WeakMap (or even a `globalThis`-pinned one) is
- *  fragile: a bundler can duplicate this module across the `@here.build/arrival` main entry
+ *  fragile: a bundler can duplicate this module across the `@inhuman.tools/arrival` main entry
  *  (`exec`) and the `/env` subpath (`assembleAmbient`), and Vite dev serves `exec-phases.js?t=…`
  *  as a FRESH module instance on every HMR — each copy gets its own WeakMap, so the brand
  *  `assembleAmbient` set is invisible to the `exec`-side check and every run doors. `Symbol.for`
@@ -166,7 +166,7 @@ interface AmbientInternals {
  *  itself, so any copy can read what any copy wrote — the value carries its own proof (the
  *  MCP_BREAK cross-boundary-identity pattern, applied to the ambient rather than a side map).
  *  Non-enumerable so it stays off `Object.keys`/spread/JSON — the privatization posture holds. */
-const ASSEMBLED_INTERNALS = Symbol.for("@here.build/arrival/assembled-ambient-internals");
+const ASSEMBLED_INTERNALS = Symbol.for("@inhuman.tools/arrival/assembled-ambient-internals");
 
 /** Stamp the internals onto a freshly-assembled ambient (called by `assembleAmbient`'s builder). */
 export function brandAssembledAmbient(ambient: AssembledAmbient, base: AmbientRuntime, lowered: readonly LoweredPack[]): void {

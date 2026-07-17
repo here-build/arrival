@@ -1,6 +1,6 @@
 # R7RS-small — Symbol → Chapter/Section Index
 
-> Reference artifact for the `@here.build/arrival` Scheme interpreter. For every symbol in the
+> Reference artifact for the `@inhuman.tools/arrival` Scheme interpreter. For every symbol in the
 > Revised⁷ Report on the Algorithmic Language Scheme (small language, 2013), this maps **where it is
 > normatively introduced** and **where else it is mentioned/explained**, plus **which standard library exports it**.
 

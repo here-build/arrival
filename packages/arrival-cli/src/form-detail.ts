@@ -15,8 +15,8 @@
  * turns it into lines. A `--form <scope>` flag drives it with no keyboard — the same data
  * a later interactive selection or a `--export json` would carry.
  */
-import { headOf, scopeId, type EvalTrace, type Invocation, type InvocationState } from "@here.build/arrival/provenance";
-import { toSExprString } from "@here.build/arrival-serializer";
+import { headOf, scopeId, type EvalTrace, type Invocation, type InvocationState } from "@inhuman.tools/arrival/provenance";
+import { toSExprString } from "@inhuman.tools/arrival-serializer";
 
 import { fileUrl, hyperlink } from "./osc.js";
 import { paint, type TintName } from "./tints.js";

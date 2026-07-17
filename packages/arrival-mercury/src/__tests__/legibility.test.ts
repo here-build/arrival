@@ -19,7 +19,7 @@
  */
 import { describe, expect, it, afterAll, beforeAll } from "vitest";
 
-import type { EmitRule } from "@here.build/arrival/emit";
+import type { EmitRule } from "@inhuman.tools/arrival/emit";
 
 import type { EmitRegistry, EmitRegistryRow } from "../registry/index.js";
 import { materializeSharedBindings, sharedBindingsOf } from "../naming/shared-bindings.js";

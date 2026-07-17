@@ -19,10 +19,10 @@
  * — arrival core keeps only the pure `EmitRule`/`EmitCtx`/`TypeFacts` types
  * and the Contract fields themselves.
  */
-import type { Activation, EnvCapability, SymbolDeclaration } from "@here.build/arrival/capability";
-import type { EmitRule, RefPolicy } from "@here.build/arrival/emit";
-import type { AssembledAmbient } from "@here.build/arrival/env";
-import type { AEntity, CacheClass, ProvenanceRole } from "@here.build/arrival/symbol";
+import type { Activation, EnvCapability, SymbolDeclaration } from "@inhuman.tools/arrival/capability";
+import type { EmitRule, RefPolicy } from "@inhuman.tools/arrival/emit";
+import type { AssembledAmbient } from "@inhuman.tools/arrival/env";
+import type { AEntity, CacheClass, ProvenanceRole } from "@inhuman.tools/arrival/symbol";
 
 import { dryActivation } from "./dry-activation.js";
 

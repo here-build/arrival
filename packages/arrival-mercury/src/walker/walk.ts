@@ -69,7 +69,7 @@
  * unconditionally redeclare-safe, but that guarantee is now the allocation phase's
  * (scope-tree reservations propagate down, exactly as they did here before).
  */
-import type { EmitConfig, EmitCtx, TypeFacts } from "@here.build/arrival/emit";
+import type { EmitConfig, EmitCtx, TypeFacts } from "@inhuman.tools/arrival/emit";
 
 import type {
   And,

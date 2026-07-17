@@ -11,7 +11,7 @@ Every example below runs against the shipped package as written.
 continues the same lexical session — definitions accumulate, nothing is resent:
 
 ```typescript
-import { execState } from "@here.build/arrival";
+import { execState } from "@inhuman.tools/arrival";
 
 const s1 = await execState(`(define base 40)`);
 const s2 = await execState(`(define bump (lambda (x) (+ x 2)))`, { scope: s1.scope });
@@ -28,7 +28,7 @@ When the session outlives one call chain — an agent turn loop, a notebook — 
 first and thread it:
 
 ```typescript
-import { execState, LexicalScope } from "@here.build/arrival";
+import { execState, LexicalScope } from "@inhuman.tools/arrival";
 
 const session = LexicalScope.fresh("agent-session");
 await execState(`(define greeting "hello")`, { scope: session });
@@ -80,6 +80,6 @@ REPL loop catches, reports, and continues.
 
 ## The CLI over this surface
 
-`@here.build/arrival-cli` is a REPL over exactly this scope/capability surface — one
+`@inhuman.tools/arrival-cli` is a REPL over exactly this scope/capability surface — one
 `LexicalScope` per session, budgets per form, capabilities armed per call. This doc
 deliberately stops at the library API; the CLI is its first consumer, not a different model.

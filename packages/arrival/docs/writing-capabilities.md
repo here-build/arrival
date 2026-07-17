@@ -37,7 +37,7 @@ exported as a value. No factories, no subclassing for behavior: the spec's five 
 closed taxonomy, configured by composition.
 
 ```typescript
-import { exec, EnvCapability, symbol, z } from "@here.build/arrival";
+import { exec, EnvCapability, symbol, z } from "@inhuman.tools/arrival";
 
 const inventory = new EnvCapability("demo/inventory", {
   symbols: {
@@ -102,7 +102,7 @@ fixture crossing untouched), an opaque handle threaded through, arbitrary-shaped
 codec names:
 
 ```typescript
-import { jsToScheme, schemeToJsUntyped, CONSTANT_CTX } from "@here.build/arrival";
+import { jsToScheme, schemeToJsUntyped, CONSTANT_CTX } from "@inhuman.tools/arrival";
 
 const shapes = new EnvCapability("demo/shapes", {
   symbols: {
@@ -145,8 +145,8 @@ origins (the seal-laundering class of bug), and the lineage reading is what the 
 seal and the reverse slicer stand on:
 
 ```typescript
-import { execState, schemeToJs, deepProvenance } from "@here.build/arrival";
-import { EvalTrace } from "@here.build/arrival/provenance";
+import { execState, schemeToJs, deepProvenance } from "@inhuman.tools/arrival";
+import { EvalTrace } from "@inhuman.tools/arrival/provenance";
 
 const feed = new EnvCapability("demo/feed", {
   symbols: {
@@ -240,7 +240,7 @@ host-side JS, nothing crosses the membrane), validated when the capability lower
 two imports; they are different vocabularies for different boundaries:
 
 ```typescript
-import { exec, EnvCapability, symbol, z as sz } from "@here.build/arrival";  // contracts
+import { exec, EnvCapability, symbol, z as sz } from "@inhuman.tools/arrival";  // contracts
 import { z } from "zod";                                                     // configuration
 
 const greeter = new EnvCapability("demo/greeter", {
@@ -286,8 +286,8 @@ behaviors: **lazy spawn** (opens on first verb touch, not at assembly), **parall
 next touch opens fresh; the `Ref` identity never changes).
 
 ```typescript
-import { assembleEnv, execState, EnvCapability, LexicalScope, symbol, z } from "@here.build/arrival";
-import { port } from "@here.build/arrival/resources";
+import { assembleEnv, execState, EnvCapability, LexicalScope, symbol, z } from "@inhuman.tools/arrival";
+import { port } from "@inhuman.tools/arrival/resources";
 
 let opens = 0;
 const db = new EnvCapability("demo/db", {
@@ -447,7 +447,7 @@ absence carries its cause and the assembly's `degraded` list enumerates it.
 
 ## Exposing a capability to agents (MCP)
 
-`@here.build/arrival-mcp` turns a capability DAG into one MCP tool whose argument is an
+`@inhuman.tools/arrival-mcp` turns a capability DAG into one MCP tool whose argument is an
 arrival program. `McpEnvCapability` is the thin subclass that carries the catalog layer:
 per-verb `description`, `inputSchema`, `aliases`, `isTool`, `risky` — written inline on the
 symbol defs (or riding a baked def's `metadata` bag), lifted off at construction into an
@@ -462,8 +462,8 @@ take kwargs shapes (`{ shape: { name: z.string } }`) and produce ordinary baked 
 nothing here is a new symbol kind.
 
 ```typescript
-import { DiscoveryTool, McpEnvCapability, tool } from "@here.build/arrival-mcp";
-import * as z from "@here.build/arrival/scheme-zod";
+import { DiscoveryTool, McpEnvCapability, tool } from "@inhuman.tools/arrival-mcp";
+import * as z from "@inhuman.tools/arrival/scheme-zod";
 
 const created: string[] = [];
 const notes: string[] = [];

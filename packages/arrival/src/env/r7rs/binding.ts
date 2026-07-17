@@ -1,4 +1,4 @@
-// @here.build/arrival/r7rs/binding — purity doors for binding-site omissions:
+// @inhuman.tools/arrival/r7rs/binding — purity doors for binding-site omissions:
 // set! (§4.1.6) + multi-return surface (§6.10 / §4.2.2 / §5.3.3). Same family as
 // call/cc (r7rs/control): one expression → one value. implement-or-door for every
 // name here. apply/map stay in lists; exceptions stay live.

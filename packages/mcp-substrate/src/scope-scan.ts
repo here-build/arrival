@@ -6,7 +6,7 @@
 // full reader. Over-collection is safe: a spurious "local" flag only affects teaching
 // opportunities, never correctness.
 
-import { tokenize } from "@here.build/arrival";
+import { tokenize } from "@inhuman.tools/arrival";
 
 interface Tok {
   token: string;

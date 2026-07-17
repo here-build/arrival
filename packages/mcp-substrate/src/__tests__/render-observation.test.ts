@@ -12,8 +12,8 @@
 // NOT re-parse (`exec("'hi'")` threw `expecting datum after '''`). See the positive
 // test below.
 
-import { exec, execState, LexicalScope } from "@here.build/arrival";
-import { assembleAmbient, type AssembledAmbient } from "@here.build/arrival/env";
+import { exec, execState, LexicalScope } from "@inhuman.tools/arrival";
+import { assembleAmbient, type AssembledAmbient } from "@inhuman.tools/arrival/env";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { DEFAULT_OBSERVATION_MAX_TOTAL_CHARS, renderObservation } from "../render-observation.js";

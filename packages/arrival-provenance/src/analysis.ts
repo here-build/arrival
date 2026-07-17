@@ -1,5 +1,5 @@
-// @here.build/arrival-provenance/analysis — thin re-export shim over
-// `@here.build/arrival/provenance` (core, per REWORK-DAG.md node C0): the
+// @inhuman.tools/arrival-provenance/analysis — thin re-export shim over
+// `@inhuman.tools/arrival/provenance` (core, per REWORK-DAG.md node C0): the
 // opt-in full-build analysis surface — render-models (statechart / flow
 // graph / forest-collapse) plus the reverse-chain slicer (uneval/slice) —
 // now lives in core alongside the rest of the tracing spine (P12). The
@@ -18,16 +18,16 @@ export {
   type ChartNode,
   type ChartEdge,
   type EdgeKind,
-} from "@here.build/arrival/provenance";
-export { carrierFieldEdges } from "@here.build/arrival/provenance";
+} from "@inhuman.tools/arrival/provenance";
+export { carrierFieldEdges } from "@inhuman.tools/arrival/provenance";
 export {
   traceToLineage,
   producerPluckFields,
   wireOpChains,
   type LineageGraph,
   type LineageWire,
-} from "@here.build/arrival/provenance";
-export { collapseMDL, type CollapseParams, type CollapseResult } from "@here.build/arrival/provenance";
+} from "@inhuman.tools/arrival/provenance";
+export { collapseMDL, type CollapseParams, type CollapseResult } from "@inhuman.tools/arrival/provenance";
 export {
   traceToFlowGraph,
   flowForwardCone,
@@ -37,15 +37,15 @@ export {
   type FlowGraphEdge,
   type FlowNodeKind,
   type FlowGraphOptions,
-} from "@here.build/arrival/provenance";
-export { traceToFlowGraphNaive } from "@here.build/arrival/provenance";
+} from "@inhuman.tools/arrival/provenance";
+export { traceToFlowGraphNaive } from "@inhuman.tools/arrival/provenance";
 export {
   traceToChain,
   type ProvenanceChain,
   type ChainNode,
   type ChainEdge,
-} from "@here.build/arrival/provenance";
-export { regionBoundaries, type RegionBoundary } from "@here.build/arrival/provenance";
+} from "@inhuman.tools/arrival/provenance";
+export { regionBoundaries, type RegionBoundary } from "@inhuman.tools/arrival/provenance";
 export {
   buildSlice,
   writeForm,
@@ -54,5 +54,5 @@ export {
   lastTopLevelForm,
   resolveReadIds,
   type Slice,
-} from "@here.build/arrival/provenance";
-export { buildUneval, type Uneval, type UnevalContainer } from "@here.build/arrival/provenance";
+} from "@inhuman.tools/arrival/provenance";
+export { buildUneval, type Uneval, type UnevalContainer } from "@inhuman.tools/arrival/provenance";

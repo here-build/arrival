@@ -1,5 +1,5 @@
-import { port, type Resource } from "@here.build/arrival/resources";
-import type { ReplEvent } from "@here.build/mcp-substrate";
+import { port, type Resource } from "@inhuman.tools/arrival/resources";
+import type { ReplEvent } from "@inhuman.tools/mcp-substrate";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";

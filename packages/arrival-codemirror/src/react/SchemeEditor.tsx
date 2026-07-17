@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { schemeToSugarcoat, sugarcoatToScheme } from "@here.build/arrival-sugarcoat";
+import { schemeToSugarcoat, sugarcoatToScheme } from "@inhuman.tools/arrival-sugarcoat";
 import { darcula, FONT_WRITING, overlayTheme } from "@here.build/editor-theme";
 import CodeMirror from "@uiw/react-codemirror";
 

@@ -19,7 +19,7 @@
  * narrowing-form grammar's key set — derives from overlay rows exactly as from
  * Contract-carried ones.
  */
-import type { EmitRule, RefPolicy } from "@here.build/arrival/emit";
+import type { EmitRule, RefPolicy } from "@inhuman.tools/arrival/emit";
 
 import type { EmitRegistry, EmitRegistryRow } from "../registry/index.js";
 import type { R } from "../residual/types.js";

@@ -4,7 +4,7 @@
 // entity; `instanceof McpEnvCapability` = catalogued, a plain `EnvCapability` dep = invisible
 // internal — no side bag handed to the runner.
 
-import { EnvCapability } from "@here.build/arrival/capability";
+import { EnvCapability } from "@inhuman.tools/arrival/capability";
 import { describe, expect, it } from "vitest";
 import * as z from "zod";
 

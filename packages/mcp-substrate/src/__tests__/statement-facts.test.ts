@@ -11,7 +11,7 @@
 //
 // REWORKED (2026-07-06): `analyzeStatement` now takes an ALREADY-PARSED `SchemeValue` (arrival's
 // real reader output), not source text. The `facts()` helper below is the ONE parse per test —
-// real `parse()` from `@here.build/arrival`, the same reader that executes model code. Every
+// real `parse()` from `@inhuman.tools/arrival`, the same reader that executes model code. Every
 // existing SOURCE STRING and asserted FACT VALUE below is unchanged from the pre-migration
 // version of this file, except: (a) every test is now `async` and calls `await facts(src)`,
 // always assigned to a local before its fields are read (never `(await facts(src)).field` inline
@@ -19,7 +19,7 @@
 // happens in `parse()` (the real syntax gate), not inside `analyzeStatement` itself; (c) the
 // "MORE than one top-level form" describe block is REMOVED — see its replacement comment below.
 
-import { parse } from "@here.build/arrival";
+import { parse } from "@inhuman.tools/arrival";
 import { describe, expect, it } from "vitest";
 
 import { analyzeStatement, type StatementFacts } from "../statement-facts.js";

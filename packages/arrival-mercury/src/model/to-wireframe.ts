@@ -209,7 +209,7 @@
  * this projection make the choice's alternative structure visible" and get
  * the SAME answer from all three.
  */
-import type { Wire, WireConsumer, WireframeGraph, WireframeNode } from "@here.build/arrival/provenance";
+import type { Wire, WireConsumer, WireframeGraph, WireframeNode } from "@inhuman.tools/arrival/provenance";
 
 import type {
   BuildProv,

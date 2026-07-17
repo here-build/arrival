@@ -18,8 +18,8 @@
 // default, §2.3); its `view`-classed twin does not (the penetration answers from the run cache) —
 // the membrane-level cache is exactly what makes pin (b) hold for penetrating defines.
 
-import { symbol } from "@here.build/arrival";
-import * as sz from "@here.build/arrival/scheme-zod";
+import { symbol } from "@inhuman.tools/arrival";
+import * as sz from "@inhuman.tools/arrival/scheme-zod";
 import { describe, expect, it } from "vitest";
 
 import { DiscoveryTool } from "../DiscoveryTool.js";

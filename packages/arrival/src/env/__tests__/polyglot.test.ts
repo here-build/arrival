@@ -24,7 +24,7 @@ async function exec(code: string, options?: ExecOptions) {
   return (await execState(code, options)).values.slice();
 }
 
-describe("@here.build/arrival/polyglot (shared core)", () => {
+describe("@inhuman.tools/arrival/polyglot (shared core)", () => {
   // INVARIANT: the polyglot capability installs @/@?/@keys/dict and compose/pipe/flow, and
   // they thread correctly (the -> / ~> threading-macro half of this invariant moved to the
   // per-dialect test files in the 2026-07-10 dialect split — no longer exercised here)
@@ -77,7 +77,7 @@ describe("@here.build/arrival/polyglot (shared core)", () => {
   });
 });
 
-describe("@here.build/arrival/polyglot — nil (LIPS dialect alias, shared)", () => {
+describe("@inhuman.tools/arrival/polyglot — nil (LIPS dialect alias, shared)", () => {
   it("nil is the empty list", async () => {
     // `(if …)` normalizes over the boxed-ABool representation (same convention
     // the sibling dialect test files use for boolean-verdict assertions).

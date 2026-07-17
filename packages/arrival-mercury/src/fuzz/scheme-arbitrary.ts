@@ -17,7 +17,7 @@
  * RENDERING, not passing JS values directly: the fuzzer builds a `.scm` SOURCE
  * string (`narrows-fuzz.ts`'s program synthesis), so a sampled value must round-trip
  * through arrival's own reader identically on both the interpreter side
- * (`@here.build/arrival`'s production parser) and the compiled side (this package's
+ * (`@inhuman.tools/arrival`'s production parser) and the compiled side (this package's
  * `front/parse.ts`, a copy-as-chunk of arrival-sugarcoat's classic-scheme parser).
  *
  * Why strings are scoped to a fixed safe charset (space through `~`, minus `"` and

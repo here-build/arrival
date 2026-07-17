@@ -1,17 +1,17 @@
-# @here.build/arrival-provenance
+# @inhuman.tools/arrival-provenance
 
 Read-only provenance analysis for [Arrival](../arrival/README.md): capture a finished evaluation trace, then derive render-models from it. It reads finished traces and **never drives the evaluator**.
 
 ## Install
 
 ```bash
-pnpm add @here.build/arrival-provenance
+pnpm add @inhuman.tools/arrival-provenance
 ```
 
 ## Usage
 
 ```ts
-import { traceToForest } from "@here.build/arrival-provenance";
+import { traceToForest } from "@inhuman.tools/arrival-provenance";
 
 const forest = traceToForest(trace);   // `trace`: a finished EvalTrace
 ```

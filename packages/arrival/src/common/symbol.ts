@@ -1,6 +1,6 @@
 // symbol — the stable entry for the `arrival.symbol*` EnvCapability symbol-definition API.
 //
-// This module is the package's public seam (`@here.build/arrival/symbol` subpath + the root
+// This module is the package's public seam (`@inhuman.tools/arrival/symbol` subpath + the root
 // re-export). It surfaces TWO things:
 //
 //   • the `symbol` NAMESPACE — `export * as symbol from "./symbols/index.js"`, one factory
@@ -20,7 +20,7 @@
 // `tsconfig.typecheck.json` re-includes the `*.test-d.ts` proofs, so a type regression fails CI as
 // a real test instead of riding the build.
 
-// The authored-extension symbol API. `import { symbol } from "@here.build/arrival/symbol"` (or
+// The authored-extension symbol API. `import { symbol } from "@inhuman.tools/arrival/symbol"` (or
 // the package root) → `symbol.native` + a `name: doc` template + `(contract, impl)`.
 export * as symbol from "./symbols/index.js";
 

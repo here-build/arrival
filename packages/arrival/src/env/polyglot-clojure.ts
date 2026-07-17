@@ -1,4 +1,4 @@
-// @here.build/arrival/polyglot-clojure — the Clojure dialect pack (see
+// @inhuman.tools/arrival/polyglot-clojure — the Clojure dialect pack (see
 // polyglot.ts's header for the sibling-pack map).
 //
 // Two families:

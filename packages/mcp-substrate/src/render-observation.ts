@@ -16,7 +16,7 @@ import {
   toSExprString,
   toSExprStringWithElisions,
   type SExpr,
-} from "@here.build/arrival-serializer";
+} from "@inhuman.tools/arrival-serializer";
 
 /** Default total observation budget. Overridable per server via the `observation.maxTotalChars`
  *  config knob (config.ts → manifold-tool.ts). 20k (2026-07-06 measurement: weakly-best budget

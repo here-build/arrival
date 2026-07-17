@@ -5,7 +5,7 @@
  * its capability vocabulary, its infer / loader armed into the ambient — and hands it to
  * `replFromSession` to get the same bottom-anchored TUI, syntax highlighting, and history.
  *
- * Import boundary: consumers use this barrel, never a deep `@here.build/arrival-cli/dist/…`
+ * Import boundary: consumers use this barrel, never a deep `@inhuman.tools/arrival-cli/dist/…`
  * path (there is no such export). The `arrival` bin is unaffected — it imports the same
  * modules directly.
  */

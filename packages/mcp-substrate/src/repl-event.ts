@@ -33,7 +33,7 @@
  * mechanically (that door is the call's whole output).
  */
 
-import type { Diagnostic } from "@here.build/arrival";
+import type { Diagnostic } from "@inhuman.tools/arrival";
 
 import type { ContentBlock } from "./content-block.js";
 

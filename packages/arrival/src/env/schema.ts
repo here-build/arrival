@@ -1,4 +1,4 @@
-// @here.build/arrival/schema — the `arrival/schema` capability: the s/* constructors
+// @inhuman.tools/arrival/schema — the `arrival/schema` capability: the s/* constructors
 // (`s/object`, `s/array`, `s/enum`, `s/optional`, `s/field`, `s/field/<type>`). No config, no
 // resources, no native verbs — every symbol below is a `symbol.define`, the scheme-bodied
 // declaration kind, applied as an ordinary capability or dependency.

@@ -9,7 +9,7 @@
  * one shared vocabulary.
  *
  * Duck-typed throughout (`.name` / `.cause.name` / message shapes), NOT
- * `instanceof`: only `ArrivalError` is exported from the `@here.build/arrival`
+ * `instanceof`: only `ArrivalError` is exported from the `@inhuman.tools/arrival`
  * barrel — `R7RSError`, `ExactOverflowError`, `PurityError`,
  * `UnboundVariableError` are internal (verified 2026-07-14), and a classifier
  * must not force a barrel-export change to read a name it can already see.

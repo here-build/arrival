@@ -8,7 +8,7 @@ import { closeBrackets } from "@codemirror/autocomplete";
 import { EditorView, lineNumbers } from "@codemirror/view";
 import { createBrowserSchemeLanguageService } from "@inhuman.tools/arrival-type-lens/browser";
 
-import { paramHintsExtension, schemeIde, schemeStructural, schemeSugarcoat } from "@here.build/arrival-codemirror";
+import { paramHintsExtension, schemeIde, schemeStructural, schemeSugarcoat } from "@inhuman.tools/arrival-codemirror";
 
 const doc = `(define (greet name)
   (string-append "hello, " name))

@@ -1,4 +1,4 @@
-# @here.build/arrival-codemirror
+# @inhuman.tools/arrival-codemirror
 
 **Paredit and a real language server, in the same editor.** CodeMirror 6 for
 [arrival](../arrival/README.md) Scheme — classic s-expressions and the
@@ -100,7 +100,7 @@ import { closeBrackets } from "@codemirror/autocomplete";
 import { createBrowserSchemeLanguageService } from "@here.build/arrival-type-lens/browser";
 import {
   paramHintsExtension, schemeIde, schemeStructural, schemeSugarcoat,
-} from "@here.build/arrival-codemirror";
+} from "@inhuman.tools/arrival-codemirror";
 
 new EditorView({
   parent: document.querySelector("#editor")!,

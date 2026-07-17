@@ -1,7 +1,7 @@
-// @here.build/arrival/srfi — the unified SRFI palette.
+// @inhuman.tools/arrival/srfi — the unified SRFI palette.
 //
 // Every SRFI we ship as a scheme-bootstrap capability, importable from ONE subpath:
-//   import { srfi1, srfi43, allSrfi } from "@here.build/arrival/srfi";
+//   import { srfi1, srfi43, allSrfi } from "@inhuman.tools/arrival/srfi";
 //
 // Each is a module-singleton `EnvCapability` (prelude, baked `symbols`, or both).
 // Assemble individually, pick a subset, or assemble the whole set via `allSrfi`.

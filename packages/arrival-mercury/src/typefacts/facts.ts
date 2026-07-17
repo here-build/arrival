@@ -3,17 +3,17 @@
  * reconciled against the constitution §3.3/§5.3, which wins on conflict).
  *
  * `TypeFacts` itself is NOT defined here: the canonical vocabulary lives in
- * `@here.build/arrival/emit` (types-only, dependency-free — §4.5 layering), and
+ * `@inhuman.tools/arrival/emit` (types-only, dependency-free — §4.5 layering), and
  * `EmitCtx.argFacts`/`selfFacts` consume it verbatim. Re-defining it here would
  * mint the exact adaptation layer spec §8 item 2 forbids. This module owns the
  * extraction-side shapes only: `HoleReason` (Gate-1's measurement instrument) and
  * the `FactsExtraction` envelope.
  */
-import type { TypeFacts } from "@here.build/arrival/emit";
+import type { TypeFacts } from "@inhuman.tools/arrival/emit";
 
 import type { ClassifyResult, NodeId } from "../coreform/index.js";
 
-export type { TypeFacts } from "@here.build/arrival/emit";
+export type { TypeFacts } from "@inhuman.tools/arrival/emit";
 
 /**
  * Why a node has no facts — Gate-1's measurement instrument (spec §7: the

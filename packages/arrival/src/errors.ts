@@ -1236,7 +1236,7 @@ export class TypeTagError extends ArrivalError {
       kind === "unrecognized-tag"
         ? `define/overridable ${bindingName}: unrecognized type tag ${expectedOrReason} — expected an s/* ` +
           `expression: (s/string)/(s/number)/(s/integer)/(s/boolean), (s/enum value...), ` +
-          `(s/object (s/field ...)...) or (s/array tag) (see @here.build/arrival/schema), optionally ` +
+          `(s/object (s/field ...)...) or (s/array tag) (see @inhuman.tools/arrival/schema), optionally ` +
           `wrapped in (s/optional ...)`
         : `define/overridable ${bindingName}: expected ${expectedOrReason}, got ${got} (from ${source}) — ` +
           `${

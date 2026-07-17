@@ -3,8 +3,8 @@
 // tap, assert the template nodes) so the 1:N template↔invocation reality is actually hit.
 import { describe, expect, it } from "vitest";
 
-import { execState } from "@here.build/arrival";
-import { EvalTrace } from "@here.build/arrival/provenance";
+import { execState } from "@inhuman.tools/arrival";
+import { EvalTrace } from "@inhuman.tools/arrival/provenance";
 
 import { aggregateState, runView, type TemplateNode } from "../run-view.js";
 

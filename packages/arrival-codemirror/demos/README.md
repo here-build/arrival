@@ -14,7 +14,8 @@ source (`pnpm typecheck` at the package root covers them); the first two run in 
 ```bash
 cd foundations/arrival/arrival-codemirror
 pnpm install            # workspace deps
-pnpm dlx vite demos     # → http://localhost:5173
+pnpm demo               # → http://localhost:5173  (vanilla + sugarcoat flip)
+pnpm storybook          # → http://localhost:6011  (React SchemeEditor live IDE)
 ```
 
 `index.html` mounts demos 1 and 2. The React demo is a component to drop into any React 19 app —

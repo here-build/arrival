@@ -20,9 +20,9 @@
  */
 import readline from "node:readline";
 
-import { execState, schemeToJs } from "@here.build/arrival";
-import { scan } from "@here.build/arrival/oracle";
-import { EMPTY_REPL_MODEL, foldReplEvent, type ReplBlock, type ReplFoldModel } from "@here.build/mcp-substrate";
+import { execState, schemeToJs } from "@inhuman.tools/arrival";
+import { scan } from "@inhuman.tools/arrival/oracle";
+import { EMPTY_REPL_MODEL, foldReplEvent, type ReplBlock, type ReplFoldModel } from "@inhuman.tools/mcp-substrate";
 
 import type { ArmedCapabilities } from "./capabilities.js";
 import { emitForms } from "./form-emitter.js";

@@ -9,7 +9,7 @@
  * lens buys.
  *
  * Method: for each small corpus program, run it for REAL
- * (`probe/session.ts`'s `recordRun`, over `@here.build/arrival`'s own
+ * (`probe/session.ts`'s `recordRun`, over `@inhuman.tools/arrival`'s own
  * interpreter — the SAME mechanism `probe-harness.test.ts` exercises) to get
  * the baseline egress value, walk its EXTRACTED circuit's `BuildProv` parts
  * recursively (mirrors mcp-worker's `attest-provider.ts::staticLeavesOf` —

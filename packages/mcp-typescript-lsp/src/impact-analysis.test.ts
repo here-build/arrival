@@ -3,7 +3,7 @@ import { TSLanguageServiceWrapper } from "./ts-language-service";
 import { mkdirSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { toSExpr } from "@here.build/arrival-serializer";
+import { toSExpr } from "@inhuman.tools/arrival-serializer";
 
 describe("Impact Analysis", () => {
   let service: TSLanguageServiceWrapper;

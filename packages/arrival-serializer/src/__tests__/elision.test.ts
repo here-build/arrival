@@ -7,7 +7,7 @@
 // `elideHead`/`elideTail` (presence = on); a caller that never sets them keeps today's
 // tail-truncation byte-for-byte (see truncation.test.ts / r0 pin — untouched by this feature).
 
-import { parse } from "@here.build/arrival";
+import { parse } from "@inhuman.tools/arrival";
 import { describe, expect, it } from "vitest";
 
 import { toSExprString, toSExprStringWithElisions } from "../serializer.js";

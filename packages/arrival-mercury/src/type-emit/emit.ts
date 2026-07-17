@@ -5,7 +5,7 @@
  *
  * Adaptations from the source chunk:
  *   - imports re-homed: parse/desugar/nodes/names/scheme-scope → `../front/` (this
- *     package's copies; `parseSexprs` no longer imports `@here.build/arrival-sugarcoat`),
+ *     package's copies; `parseSexprs` no longer imports `@inhuman.tools/arrival-sugarcoat`),
  *     stdlib → `./builtins.js` (roster-only reduction).
  *   - Law T upgraded from Phase 0 (wrap EVERY condition) to the §5.3 narrowing-form
  *     grammar: a condition that is an NForm over `opts.narrowsMembers` emits NATIVE

@@ -1,4 +1,4 @@
-// @here.build/arrival/srfi/srfi-stubs — the TEACHING-STUB pack.
+// @inhuman.tools/arrival/srfi/srfi-stubs — the TEACHING-STUB pack.
 //
 // A DOORS-ONLY capability, sibling in spirit to `r7rs/host.ts`. These are the
 // symbols an LLM agent PREDICTABLY reaches for (having seen the string / list /

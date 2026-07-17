@@ -1,7 +1,7 @@
 {
-  "name": "@here.build/arrival-provenance",
+  "name": "@inhuman.tools/arrival-provenance",
   "version": "0.1.0",
-  "description": "Thin re-export shim over @here.build/arrival's `/provenance` subpath (the trace-capture substrate + the full analysis stack — forest, statechart, region tree, flow graph, reverse-chain slicer — now live in core, per REWORK-DAG.md node C0). The one non-passthrough export is EvalTrace: this package's is the mobx-reactive ObservableEvalTrace, kept here so studio/UI consumers keep byte-identical reactive semantics without core taking on a mobx dependency.",
+  "description": "Thin re-export shim over @inhuman.tools/arrival's `/provenance` subpath (the trace-capture substrate + the full analysis stack — forest, statechart, region tree, flow graph, reverse-chain slicer — now live in core, per REWORK-DAG.md node C0). The one non-passthrough export is EvalTrace: this package's is the mobx-reactive ObservableEvalTrace, kept here so studio/UI consumers keep byte-identical reactive semantics without core taking on a mobx dependency.",
   "keywords": [
     "arrival",
     "provenance",
@@ -58,7 +58,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@here.build/arrival": "workspace:^",
+    "@inhuman.tools/arrival": "workspace:^",
     "mobx": "6.15.0",
     "tslib": "2.8.1"
   },

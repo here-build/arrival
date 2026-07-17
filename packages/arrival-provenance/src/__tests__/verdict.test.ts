@@ -27,8 +27,8 @@ import {
   nil,
   symbol,
   z,
-} from "@here.build/arrival";
-import { attestDeep } from "@here.build/arrival/attestation";
+} from "@inhuman.tools/arrival";
+import { attestDeep } from "@inhuman.tools/arrival/attestation";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { EvalTrace } from "../index.js";

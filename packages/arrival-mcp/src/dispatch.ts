@@ -1,4 +1,4 @@
-import type { AudioBlock, ImageBlock } from "@here.build/mcp-substrate";
+import type { AudioBlock, ImageBlock } from "@inhuman.tools/mcp-substrate";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 /** What a value-shape tool's `call` returns before transport lowering: plain text/object/Blob. */

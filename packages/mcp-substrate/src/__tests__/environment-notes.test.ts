@@ -9,8 +9,8 @@
 // RED test per the design doc: one call producing a define + an elision + a futility note yields
 // EXACTLY ONE notes block, labelled, after the data.
 
-import { LexicalScope } from "@here.build/arrival";
-import { assembleAmbient, type AssembledAmbient } from "@here.build/arrival/env";
+import { LexicalScope } from "@inhuman.tools/arrival";
+import { assembleAmbient, type AssembledAmbient } from "@inhuman.tools/arrival/env";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { AttachmentSink } from "../attachment-sink.js";
@@ -83,7 +83,7 @@ describe("runner.ts — consolidated environment-notes footer (E3)", () => {
     expect(text.toLowerCase()).toContain("t/search"); // futility note names the tool
 
     // the block-comment wrapper: parses to zero forms, inert if pasted back.
-    const { parse } = await import("@here.build/arrival");
+    const { parse } = await import("@inhuman.tools/arrival");
     const forms = await parse(text);
     expect(forms.length).toBe(0);
   });

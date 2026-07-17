@@ -31,7 +31,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import type { EmitCtx } from "@here.build/arrival/emit";
+import type { EmitCtx } from "@inhuman.tools/arrival/emit";
 
 import { cleanupOracleScratch, greenfieldRegistryFor, openOracleSession, phase1Rules, type OracleSession } from "../index.js";
 import { Binding, Lit, RuntimeRef, type R } from "../residual/types.js";

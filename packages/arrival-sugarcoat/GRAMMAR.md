@@ -7,7 +7,7 @@ implementation. Where the two disagree, the reader wins and this file has a bug.
 
 A ready-made TextMate derivation ships next to this file:
 [`editors/sugarcoat.tmLanguage.json`](./editors/sugarcoat.tmLanguage.json). The full-fidelity
-reference integration (highlighting + LSP over the lens) is `@here.build/arrival-codemirror`.
+reference integration (highlighting + LSP over the lens) is `@inhuman.tools/arrival-codemirror`.
 
 **Notation** — PEG-style: `←` defines, `/` is *ordered* choice, `*`/`+`/`?` repeat, terminals are
 quoted, `[…]` is a character class. Lexing is maximal-munch. Grammar is three stacked passes, each

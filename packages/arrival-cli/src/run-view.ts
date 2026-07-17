@@ -14,7 +14,7 @@
  * returns source-ordered `TemplateNode`s. No TTY, no ANSI — a test feeds a real trace and
  * asserts the nodes.
  */
-import { headOf, scopeId, type EvalTrace, type InvocationState } from "@here.build/arrival/provenance";
+import { headOf, scopeId, type EvalTrace, type InvocationState } from "@inhuman.tools/arrival/provenance";
 
 /** A source form's aggregated execution state. `unreached` = dim (no invocation yet);
  *  `running` = the one live glyph; `error` = at least one invocation rejected. */
