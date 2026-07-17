@@ -399,8 +399,16 @@ export function buildFan(
   const element: StaticProv = { kind: "mux", site: fn.id, key: null, source: collection };
 
   const names = new Map<string, Bound>();
+  // `acc` (null for map/filter, which have no accumulator param) is computed
+  // ONCE and reused for both the scope binding below and `inferCollapse`'s
+  // identity check, further down — never re-derived, or a second
+  // `opaque(site, "fan/fold-missing-init")` call would mint a DIFFERENT
+  // object and `inferCollapse`'s `p === acc` could never recognize the
+  // accumulator leaf even in the one case it legitimately should.
+  let acc: StaticProv | null = null;
   if (fanKind === "fold") {
-    names.set(target.params[0]!.name, { tag: "prov", prov: init ?? opaque(site, "fan/fold-missing-init") });
+    acc = init ?? opaque(site, "fan/fold-missing-init");
+    names.set(target.params[0]!.name, { tag: "prov", prov: acc });
     names.set(target.params[1]!.name, { tag: "prov", prov: element });
   } else {
     names.set(target.params[0]!.name, { tag: "prov", prov: element });
@@ -424,7 +432,7 @@ export function buildFan(
 
   if (fanKind === "filter") {
     const choice: ChoiceProv = { kind: "choice", site: fn.id, guards: [body], alts: [element] };
-    return { kind: "fan", site, collection, body: choice, collapse: inferCollapse(choice) };
+    return { kind: "fan", site, collection, body: choice, collapse: inferCollapse(choice, element, acc) };
   }
-  return { kind: "fan", site, collection, body, collapse: inferCollapse(body) };
+  return { kind: "fan", site, collection, body, collapse: inferCollapse(body, element, acc) };
 }

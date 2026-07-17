@@ -155,6 +155,29 @@ describe('adversarial — non-AC / hidden-const folds must NEVER be "combine" (g
   });
 });
 
+// ── S5: element/acc recognized by IDENTITY, never by shape alone ────────────────
+//
+// `inferCollapse`'s `isElement` used to recognize the fan's own element
+// structurally (`mux` + `key === null`) — but that exact shape is ALSO what
+// `dispatchMux`'s generic branch mints for ANY dynamically-keyed projection
+// whose key isn't statically known (`max-by`'s registry entry is exactly
+// this: its key arg is always the comparator function, never a `Lit`, so
+// `staticKeyOf` always returns null). A fold body reading `(max-by keyfn
+// other-list)` over some collection OTHER than the fold's own would
+// shape-match the fold's own element and mislabel as route-last — the body
+// is quietly reading something unrelated, not passing the element through.
+
+describe("S5 — a shape-matching mux from an UNRELATED collection is never mistaken for this fan's own element", () => {
+  it("(fold (lambda (acc x) (max-by keyfn other-list)) 0 (list 1 2 3)): body's mux SHAPE-matches (mux, key:null) but its SOURCE is a different collection entirely — must stay lowered, never route", () => {
+    const prov = run(
+      `(define other-list (list 10 20 30))\n` +
+        `(define (keyfn c) c)\n` +
+        `(fold (lambda (acc x) (max-by keyfn other-list)) 0 (list 1 2 3))`,
+    );
+    expect(collapseOf(prov)).toBe("lowered");
+  });
+});
+
 // ── hand-built leaves for the inferCollapse (route/lowered) surface ──────────────
 
 const SITE = 0 as unknown as NodeId;
@@ -172,25 +195,25 @@ const fused = (...sources: readonly StaticProv[]): FusedProv => ({ kind: "fused"
 describe('§2c "route" — inferCollapse over dnf@Fan bodies (it.fails until T3a-impl)', () => {
   it("(fold max s v) body: choice{guards:[compare(acc,element)], alts:[acc,element]} — both candidates stay gray", () => {
     const body: ChoiceProv = { kind: "choice", site: SITE, guards: [fused(ACC, element)], alts: [ACC, element] };
-    expect(inferCollapse(body)).toBe("route");
+    expect(inferCollapse(body, element, ACC)).toBe("route");
   });
 
   it("(fold min s v) body: same dnf@Fan shape — route is direction-blind (min/max share the regime, not a type)", () => {
     const body: ChoiceProv = { kind: "choice", site: SITE, guards: [fused(ACC, element)], alts: [ACC, element] };
-    expect(inferCollapse(body)).toBe("route");
+    expect(inferCollapse(body, element, ACC)).toBe("route");
   });
 
   it("(λ (acc x) x): body IS element, acc wholly unreferenced ⇒ route-last", () => {
-    expect(inferCollapse(element)).toBe("route");
+    expect(inferCollapse(element, element, ACC)).toBe("route");
   });
 
   it("(λ (acc x) acc): body IS acc, element wholly unreferenced ⇒ route-init", () => {
-    expect(inferCollapse(ACC)).toBe("route");
+    expect(inferCollapse(ACC, element, ACC)).toBe("route");
   });
 
   it("filter-survivor mask: choice{guards:[pred-over-element], alts:[element]} — single alt, no swappable else", () => {
     const body: ChoiceProv = { kind: "choice", site: SITE, guards: [fused(element)], alts: [element] };
-    expect(inferCollapse(body)).toBe("route");
+    expect(inferCollapse(body, element, ACC)).toBe("route");
   });
 });
 
@@ -233,7 +256,7 @@ describe('§2c fail-closed — inferCollapse ⇒ "lowered" forever (plain it, gr
 
   for (const row of LOWERED_ROWS) {
     it(row.name, () => {
-      expect(inferCollapse(row.body)).toBe("lowered");
+      expect(inferCollapse(row.body, element, ACC)).toBe("lowered");
     });
   }
 
@@ -255,7 +278,7 @@ describe("contract — inferCollapse is route|lowered only (the erasure is WHY)"
     // (that would forge `-`). The contract makes "combine" not its call at all;
     // this row pins that the answer stays inside {route, lowered}.
     const body: FusedProv = fused(ACC, element);
-    const result = inferCollapse(body);
+    const result = inferCollapse(body, element, ACC);
     expect(["route", "lowered"] satisfies readonly CollapseKind[]).toContain(result);
     expect(result).not.toBe("combine");
   });
