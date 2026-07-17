@@ -150,11 +150,17 @@ describe("extractFacts: flow-sensitive narrowing (the pair? row)", () => {
 
   it("the then-arm occurrence carries the narrowed proof: nonEmptyList + pair", () => {
     // tsc narrows List<number> by `v is Pair<unknown>` to the INTERSECTION
-    // List<number> & Pair<unknown, unknown> — the Pair member is a real 2-tuple
-    // (minLength 2), and intersections claim by ∃.
+    // List<number> & Pair<unknown, unknown> — the Pair member's tuple arity is 2
+    // ([head, tail]), but the tail slot is the CDR (rest-of-list), not a second
+    // list element, so the provable floor is the cons-chain reading (1: the CAR
+    // only — the cdr is `unknown`, not itself a Pair), not the tuple minLength.
+    // Reading minLength 2 here would overclaim index-1 safety on a genuine
+    // 1-element list (Law F: absence, never a wrong claim). Intersections still
+    // claim by ∃ — this is the max across members, just computed via the
+    // cons-chain floor instead of raw tuple arity.
     const f = r.facts.get(thenArm.id);
     expect(f?.nonEmptyList).toBe(true);
-    expect(f?.lengthAtLeast).toBe(2);
+    expect(f?.lengthAtLeast).toBe(1);
     expect(f?.list).toBe(true);
     expect(f?.pair).toBe(true); // alias-symbol + declaration-identity (E7's over-fire guard)
     expect(f?.elementFacts).toEqual({ numeric: true }); // number & unknown = number

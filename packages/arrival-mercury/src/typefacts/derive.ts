@@ -50,7 +50,7 @@ export function deriveFacts(type: ts.Type, ctx: DeriveContext, depth: number): T
 
   if (scalarClaim(type, ts.TypeFlags.BooleanLike)) facts.boolean = true;
 
-  const minLen = tupleClaim(type, checker);
+  const minLen = tupleClaim(type, ctx);
   if (minLen !== null && minLen >= 1) {
     facts.nonEmptyList = true;
     facts.lengthAtLeast = minLen;
@@ -85,15 +85,24 @@ function scalarClaim(t: ts.Type, flag: ts.TypeFlags): boolean {
   return false;
 }
 
-/** Tuple fixed-prefix depth (`target.minLength` — `[T, ...T[]]` has prefix 1,
- *  `Pair<H,T>` has 2), or `null` when not provably a tuple. */
-function tupleClaim(t: ts.Type, checker: ts.TypeChecker): number | null {
-  if (checker.isTupleType(t)) return (t as ts.TupleTypeReference).target.minLength;
+/** Tuple fixed-prefix depth (`target.minLength` — `[T, ...T[]]` has prefix 1), OR
+ *  the Pair cons-chain floor (`pairChainFloor`) for a `Pair<H,T>` alias
+ *  instantiation — checked FIRST at every node of the union/intersection walk,
+ *  never falling through to `isTupleType`'s raw minLength for a Pair. Reading
+ *  `Pair<H,T>`'s own tuple arity (2: `[head, tail]`) as a list length overclaims
+ *  a 1-element list (`Pair<number, Nil>`) by one — the tail slot is the CDR
+ *  (rest-of-list), not a second list element. Law F forbids that direction, so
+ *  Pair floors ALWAYS come from the cons-chain walk. `null` when not provably
+ *  either. */
+function tupleClaim(t: ts.Type, ctx: DeriveContext): number | null {
+  const pairFloor = pairChainFloor(t, ctx, 0);
+  if (pairFloor !== null) return pairFloor;
+  if (ctx.checker.isTupleType(t)) return (t as ts.TupleTypeReference).target.minLength;
   if (t.isUnion()) {
     if (t.types.length === 0) return null;
     let min = Number.POSITIVE_INFINITY;
     for (const m of t.types) {
-      const v = tupleClaim(m, checker);
+      const v = tupleClaim(m, ctx);
       if (v === null) return null;
       min = Math.min(min, v);
     }
@@ -102,12 +111,27 @@ function tupleClaim(t: ts.Type, checker: ts.TypeChecker): number | null {
   if (t.isIntersection()) {
     let max: number | null = null;
     for (const m of t.types) {
-      const v = tupleClaim(m, checker);
+      const v = tupleClaim(m, ctx);
       if (v !== null) max = max === null ? v : Math.max(max, v);
     }
     return max;
   }
   return null;
+}
+
+/** `Pair<H,T>`'s CONS-CHAIN floor: 1 (the CAR) plus however far the CDR's own
+ *  Pair-chain proves before hitting a non-Pair cdr (`List<T>`, `Nil`, `unknown`,
+ *  a narrowing target's default `T = unknown`, …). NOT the alias's own 2-element
+ *  tuple arity — see `tupleClaim`'s header. Depth-capped like every other nested
+ *  derivation (`DEPTH_CAP`) so a self-referential alias instantiation cannot loop
+ *  this walk forever. `null` when `t` is not provably the Pair alias at all
+ *  (the non-Pair case; `tupleClaim` falls through to its own tuple check). */
+function pairChainFloor(t: ts.Type, ctx: DeriveContext, depth: number): number | null {
+  if (!isPairAlias(t, ctx)) return null;
+  if (depth >= DEPTH_CAP) return 1;
+  const cdr = t.aliasTypeArguments?.[1];
+  const cdrFloor = cdr ? pairChainFloor(cdr, ctx, depth + 1) : null;
+  return 1 + (cdrFloor ?? 0);
 }
 
 function listClaim(t: ts.Type, checker: ts.TypeChecker): boolean {
@@ -120,11 +144,16 @@ function listClaim(t: ts.Type, checker: ts.TypeChecker): boolean {
 /** Alias-symbol detection ONLY, with the declaration-identity check (spec §3 +
  *  §6 E7: `aliasSymbol` does not survive every type operation — under-fire is
  *  accepted, Law F direction; the identity check guards the OVER-fire direction). */
-function pairClaim(t: ts.Type, ctx: DeriveContext): boolean {
+function isPairAlias(t: ts.Type, ctx: DeriveContext): boolean {
   const alias = t.aliasSymbol;
-  if (alias?.name === "Pair" && alias.declarations?.some((d) => d.getSourceFile().fileName === ctx.preludeFile)) {
-    return true;
-  }
+  return (
+    alias?.name === "Pair" &&
+    (alias.declarations?.some((d) => d.getSourceFile().fileName === ctx.preludeFile) ?? false)
+  );
+}
+
+function pairClaim(t: ts.Type, ctx: DeriveContext): boolean {
+  if (isPairAlias(t, ctx)) return true;
   if (t.isUnion()) return t.types.length > 0 && t.types.every((m) => pairClaim(m, ctx));
   if (t.isIntersection()) return t.types.some((m) => pairClaim(m, ctx));
   return false;
