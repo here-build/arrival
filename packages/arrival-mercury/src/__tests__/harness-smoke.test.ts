@@ -8,6 +8,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
+  assertProgramFace,
   cleanupOracleScratch,
   openOracleSession,
   runCorpusCase,
@@ -67,5 +68,32 @@ describe("oracle harness smoke", () => {
     const verdict = await runCorpusCase(session, "(+ 1 2)", { value: 3 });
     expect(verdict.failures).toEqual([]);
     expect(verdict.pass).toBe(true);
+  });
+
+  // Program-face regression (reference-program-face-always-function): a
+  // greenfield case module whose default export is absent or non-function is
+  // a compiler defect, never a legitimate `undefined`/plain-value result. No
+  // valid `.scm` source reaches this shape today (`compileGreenfield` always
+  // emits `export default function` by construction) — these rows exercise
+  // `assertProgramFace` directly against a fabricated module namespace, the
+  // same seam `evalCompiled` itself calls, rather than round-tripping a
+  // hand-corrupted case file through the compiler+loader.
+  it("program-face guard: greenfield subject with an absent default export throws loudly, never {kind:\"value\"}", () => {
+    expect(() => assertProgramFace(undefined, "greenfield")).toThrow(/program-face contract/);
+    expect(() => assertProgramFace(undefined, "greenfield")).toThrow(/no default export/);
+  });
+
+  it("program-face guard: greenfield subject with a non-function default export throws loudly", () => {
+    expect(() => assertProgramFace(42, "greenfield")).toThrow(/program-face contract/);
+    expect(() => assertProgramFace(42, "greenfield")).toThrow(/got a number/);
+  });
+
+  it("program-face guard: greenfield subject with a function default export passes silently", () => {
+    expect(() => assertProgramFace(() => 1, "greenfield")).not.toThrow();
+  });
+
+  it("program-face guard: legacy subject is exempt — a bare value default export is legitimate", () => {
+    expect(() => assertProgramFace(undefined, "legacy")).not.toThrow();
+    expect(() => assertProgramFace(42, "legacy")).not.toThrow();
   });
 });

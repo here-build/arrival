@@ -661,6 +661,31 @@ export interface EvalCompiledOptions {
 }
 
 /**
+ * Program-face contract guard (reference-program-face-always-function): the
+ * GREENFIELD subject's compiled default export is always a function by
+ * construction — an absent/non-function default there is a compiler defect
+ * (the export got dropped or mis-shaped), never a legitimate result, and must
+ * never be allowed to fall through to a `{kind:"value"}` outcome (that would
+ * false-agree with an interpreter `undefined` instead of flagging the
+ * miscompile). The LEGACY subject (`exportTrailingResult`) legitimately
+ * exports a bare VALUE, not a callable — exempt by construction, hence the
+ * `subject` gate. Exported standalone (not inlined in `evalCompiled`) because
+ * the miscompile shape it guards against isn't reachable through any valid
+ * `.scm` source today — `compileGreenfield`/`render` always emit
+ * `export default function` — so regression coverage exercises this check
+ * directly against a fabricated namespace instead of round-tripping a case
+ * file through the compiler.
+ */
+export function assertProgramFace(program: unknown, subject: OracleSubject): void {
+  if (subject === "greenfield" && typeof program !== "function") {
+    throw new OracleAuthoringError(
+      `oracle evalCompiled: compiled artifact violated the program-face contract — greenfield default export ` +
+        `must be a function, got ${program === undefined ? "no default export" : `a ${typeof program}`}`,
+    );
+  }
+}
+
+/**
  * Compile `source` under the routed subject and execute the artifact in-process.
  * Compile-time doors (walker `WalkDoorError`, `MaterializeImportsDoorError`, ASYNC-IFY doors,
  * parse failures, mercury's own doors) surface as classified throw-Outcomes — the
@@ -692,13 +717,17 @@ export async function evalCompiled(
   try {
     const ns = await importCaseModule(file);
     // Program face: the default export IS the program; run it to observe the value
-    // (reference-program-face-always-function). By construction it is always a function.
+    // (reference-program-face-always-function). `assertProgramFace` throws
+    // `OracleAuthoringError` — re-thrown below, never returned as a `{kind:"value"}`
+    // outcome — when the greenfield subject's default isn't a function.
     const program = ns.default;
+    assertProgramFace(program, subject);
     let value: unknown = typeof program === "function" ? program() : program;
     if (isThenable(value)) value = await value; // symmetric with the interpreter side
     return { kind: "value", value };
   } catch (e) {
     if (e instanceof OracleImportHangError) throw e; // infrastructure, never a verdict
+    if (e instanceof OracleAuthoringError) throw e; // program-face contract violation, never a verdict
     return { kind: "throw", errorClass: classifyCompiledError(e), message: messageOf(e), raw: e };
   }
 }

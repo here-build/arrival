@@ -6,6 +6,7 @@
 export { classifyCompiledError, classifyInterpreterError, type ErrorClass } from "./oracle/error-classifier.js";
 export {
   agreementOf,
+  assertProgramFace,
   cleanupOracleScratch,
   compileGreenfield,
   evalCompiled,
@@ -295,11 +296,24 @@ export { compileScmModule, type ScmCompileDeps } from "./build/scm-module.js";
 export { flattenTopBegins, hasProgramFace, scanRequires, topLevelDefineNames, type RequireOccurrence } from "./build/require-scan.js";
 export {
   buildEnvChain,
+  buildEnvOrDefault,
   envKeyFor,
   foldCoercionTag,
+  foldOverridableExports,
+  isLiftableOverridable,
+  liftFlowedUpOverridable,
+  liftLocalOverridable,
   liftOverridable,
+  MODULE_OVERRIDABLE_SYMBOL,
+  moduleOverridableSymbolRule,
   OVERRIDABLE_SYMBOL,
   overridableSymbolRule,
   PIPELINE_PARAMS_SCHEME_NAME,
   type CoercionTag,
+  type FlowedUpOverridable,
+  type OverridableExport,
 } from "./build/overridable.js";
+// TASK #87 — the pluggable file-classification seam: a project supplies its
+// own `ClassifyFile` (`inhuman.config.json`'s `build.classifier`, resolved by
+// the CLI's `build.ts`) instead of `buildProject`'s derivable default.
+export { defaultClassifier, pipelinesDirClassifier, type ClassifyFile, type FileClass } from "./build/classify.js";
