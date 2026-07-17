@@ -11,13 +11,15 @@
  *    (`materializeSharedBindings`), replacing the pass this file used to
  *    export as `pureRegionCse`/`legibility`.
  *
- * `tree.ts`'s `childrenOf`/`mapChildren`/`substituteBy`/`collectBoundNames`/
- * `mintFresh`/`mintReadable` and `names.ts`'s `elementNameOf` remain — every
- * dissolution above (naming/census.ts, naming/materialize.ts,
- * naming/imports.ts, naming/asyncness.ts, naming/shared-bindings.ts) imports
- * these directly rather than duplicating the `R`-children shape a fifth
- * time (tree.ts's own header). `elementNameOf` stays exported: census.ts
- * reuses it directly rather than duplicating the pluralize-backed
- * singular-name derivation.
+ * `tree.ts`'s `childrenOf`/`mapChildren`/`substituteBy`/`collectBoundNames`
+ * and `names.ts`'s `elementNameOf` remain — every dissolution above
+ * (naming/census.ts, naming/materialize.ts, naming/imports.ts,
+ * naming/asyncness.ts, naming/shared-bindings.ts) imports these directly
+ * rather than duplicating the `R`-children shape a fifth time (tree.ts's
+ * own header). `elementNameOf` stays exported: census.ts reuses it directly
+ * rather than duplicating the pluralize-backed singular-name derivation.
+ * (`mintFresh`/`mintReadable` — the dissolved pass's own bespoke naming —
+ * are both gone: E1a's lexical namer replaced them, and `mintReadable`'s
+ * own last caller went with it, leaving it an orphan until this cleanup.)
  */
 export { elementNameOf } from "./names.js";

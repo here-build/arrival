@@ -18,7 +18,7 @@
  * open, and this package's own naming.ts already documents the same "adapt, don't
  * import" stance for copy-as-chunk material. Revisit if a fifth pass arrives.
  */
-import type { Binding, CompilationUnit, Decl, Pattern, R, SlotId } from "../residual/types.js";
+import type { CompilationUnit, Decl, Pattern, R, SlotId } from "../residual/types.js";
 
 export type BlockR = Extract<R, { t: "Block" }>;
 
@@ -249,15 +249,4 @@ export function collectBoundNames(unit: CompilationUnit): Set<string> {
   for (const d of unit.decls) visitDecl(d);
   for (const s of unit.body) visit(s);
   return out;
-}
-
-/** Mint a collision-free READABLE binding (no prefix, no cleaning — callers already
- *  pass a valid-identifier candidate: an ordinal name or a pluralize-derived,
- *  cleanName-passed element name). `_2`-suffixes on collision, matching the
- *  walker's own `declareJs` ladder tail exactly. */
-export function mintReadable(name: string, taken: Set<string>): Binding {
-  let text = name;
-  for (let n = 2; taken.has(text); n++) text = `${name}_${n}`;
-  taken.add(text);
-  return { t: "Binding", text };
 }
