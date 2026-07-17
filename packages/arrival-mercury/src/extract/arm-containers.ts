@@ -131,12 +131,16 @@ const FUSE_HEADS: Readonly<Record<string, true>> = {
  *  `string-length`, the `->` casts) that must never combine — so `AC_HEADS`
  *  stays its own table rather than deriving from `FUSE_HEADS`'s membership.
  *  `string-append` (STRING_HEADS) and `cons` (BUILD_HEADS) are AC too; this
- *  table is fold-collapse-eligibility, not a duplicate of either registry. A
- *  5th member here is a closed-list violation (collapse-kind.test.ts pins the
- *  count) — extend only with a real associativity proof, never by convenience. */
+ *  table is fold-collapse-eligibility, not a duplicate of either registry.
+ *  Exported (as `AC_HEAD_SET`, below — a `Set`, not the array, so a test
+ *  asserts SIZE without caring about order) so collapse-kind.test.ts's
+ *  closed-count guard pins the REAL registry: a 5th member added here trips
+ *  that test directly, rather than the test comparing this table against its
+ *  own hand-copied duplicate (which a 5th member here would never touch) —
+ *  extend only with a real associativity proof, never by convenience. */
 const AC_HEADS = ["+", "*", "string-append", "cons"] as const;
 type AcHead = (typeof AC_HEADS)[number];
-const AC_HEAD_SET: ReadonlySet<AcHead> = new Set(AC_HEADS);
+export const AC_HEAD_SET: ReadonlySet<AcHead> = new Set(AC_HEADS);
 /** Membership guard doubling as a type predicate: the closed-4 invariant now
  *  lives in `AcHead`'s type (a 5th string here is a tsc error at every
  *  `AC_HEADS` literal, not just a runtime miss), and every call site narrows

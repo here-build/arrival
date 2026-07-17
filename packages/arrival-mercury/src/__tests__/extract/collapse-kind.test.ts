@@ -54,7 +54,7 @@ import { classify } from "../../coreform/index.js";
 import { desugar } from "../../front/desugar.js";
 import { parseSexprs } from "../../front/parse.js";
 import { extractProgram } from "../../extract/index.js";
-import { defaultRegistry } from "../../extract/arm-containers.js";
+import { AC_HEAD_SET, defaultRegistry } from "../../extract/arm-containers.js";
 import { inferCollapse } from "../../extract/collapse.js";
 import type {
   ChoiceProv,
@@ -105,8 +105,13 @@ describe('§2c "combine" — buildFan over real source, the closed AC list (it.f
   });
 
   it("the AC list has EXACTLY 4 members — a 5th going green is a violation, not progress", () => {
-    const AC_SYMBOLS = ["+", "*", "string-append", "cons"] as const;
-    expect(AC_SYMBOLS).toHaveLength(4);
+    // Asserts against arm-containers.ts's OWN exported `AC_HEAD_SET`, not a
+    // hand-copied duplicate of it: a duplicate can drift silently (adding a
+    // 5th member to the real, unexported table used to trip nothing here,
+    // since this row only ever compared the copy against itself). Reading
+    // the real registry is what makes a 5th member an actual test failure.
+    expect(AC_HEAD_SET.size).toBe(4);
+    expect(AC_HEAD_SET).toEqual(new Set(["+", "*", "string-append", "cons"]));
   });
 });
 
