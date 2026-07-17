@@ -83,6 +83,7 @@ import {
   type OracleSession,
   type OverlayEmitRegistry,
 } from "../index.js";
+import { collectAllBoundNames } from "../propagate/index.js";
 
 /** R7RS's generative cxr family, depth 1–4: car, cdr, caar, cadr, …, cddddr. */
 const CXR_RE = /^c[ad]{1,4}r$/;
@@ -180,44 +181,20 @@ function forEachNode(node: CoreForm, visit: (n: CoreForm) => void): void {
   }
 }
 
-/** Every name bound ANYWHERE in the program (params, let-family bindings,
- *  named-let loop names, defines) — a flat over-approximation of "could shadow
- *  a registry symbol", cheap enough to not need real scope nesting (see the
- *  module header's shadowing-gap note). */
-function collectBoundNames(forms: readonly CoreForm[]): ReadonlySet<string> {
-  const names = new Set<string>();
-  const visit = (n: CoreForm): void => {
-    switch (n.kind) {
-      case "Define":
-        names.add(n.name);
-        return;
-      case "DefineFn":
-        names.add(n.name);
-        for (const p of n.params) names.add(p.name);
-        return;
-      case "Lambda":
-        for (const p of n.params) names.add(p.name);
-        return;
-      case "Let":
-        for (const b of n.bindings) names.add(b.name);
-        return;
-      case "NamedLet":
-        names.add(n.loopName);
-        for (const b of n.bindings) names.add(b.name);
-        return;
-      default:
-        return;
-    }
-  };
-  for (const form of forms) forEachNode(form, visit);
-  return names;
-}
-
 /** Throws if any cxr-family name is ever locally bound — the one input
  *  `measureProgram`'s cheap registry-only check does not independently
- *  re-derive from the walker (see module header). */
+ *  re-derive from the walker (see module header). The census itself
+ *  (params, let-family bindings, named-let loop names, defines — a flat
+ *  over-approximation of "could shadow a registry symbol", cheap enough to
+ *  not need real scope nesting; see the module header's shadowing-gap note)
+ *  is `../propagate/index.ts`'s `collectAllBoundNames` — THE single source
+ *  for this walk (WALKER-NAMING audit finding #3): this file used to carry
+ *  its own independent re-derivation of the identical CoreForm walk, with
+ *  no `assertNever` on either copy's kind switch, so a future CoreForm kind
+ *  could silently go uncensused in one copy while the other (correctly or
+ *  not) picked it up. */
 function assertNoCxrShadowing(programName: string, forms: readonly CoreForm[]): void {
-  const bound = [...collectBoundNames(forms)].filter((n) => CXR_RE.test(n));
+  const bound = [...collectAllBoundNames(forms)].filter((n) => CXR_RE.test(n));
   if (bound.length > 0) {
     throw new Error(
       `gate1/measure: "${programName}" locally binds ${bound.join(", ")} — the cheap ` +

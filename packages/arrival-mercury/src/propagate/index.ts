@@ -114,15 +114,44 @@ function substituteBody(forms: readonly CoreForm[], subst: ReadonlyMap<string, C
   return forms.map((f) => substitute(f, inner));
 }
 
+/** Exhaustive-switch guard — a case list that reaches this (after every known
+ *  `CoreForm` kind is handled) has `f: never`; a future kind added to the
+ *  union without a corresponding case here fails to COMPILE at this call
+ *  site instead of silently falling through and returning an incomplete
+ *  census (WALKER-NAMING audit finding #3). Same idiom used package-wide
+ *  (e.g. `foundations/arrival/arrival/src/values/lineage.ts`'s own
+ *  `assertNever`). */
+function assertNever(f: never): never {
+  throw new Error(`collectBoundNames: unhandled CoreForm kind: ${JSON.stringify(f)}`);
+}
+
 /**
  * Every name bound ANYWHERE within `forms`, at ANY nesting depth —
  * `Define`/`DefineFn` names, `Lambda`/`DefineFn` params, `Let`/`NamedLet`
  * bindings (+ loop name) — recursing through every CoreForm shape. A flat,
- * whole-subtree over-approximation (no real scope-nesting distinction),
- * mirroring `../peepholes/index.ts`'s own `collectBoundNames` (an
- * independent copy, not an import — that module's own header explains why:
- * "the two modules evolve for different reasons… a private helper across
- * that boundary is the wrong coupling").
+ * whole-subtree over-approximation (no real scope-nesting distinction).
+ *
+ * THE SINGLE SOURCE for this census (WALKER-NAMING audit finding #3): also
+ * read directly by `../gate1/measure.ts`'s `assertNoCxrShadowing` (a
+ * SEPARATE, independent re-derivation of the identical walk used to live
+ * there — same node kinds, same names collected, two copies to drift). This
+ * one now carries the `assertNever` guard, above, so a future `CoreForm`
+ * kind that binds a name (or doesn't) is a compile-time decision for BOTH
+ * call sites at once, never a silent miss in one while the other happens to
+ * get updated.
+ *
+ * Two SEPARATE exclusions remain, for two different reasons:
+ *   - `../peepholes/index.ts`'s own `collectBoundNames` is the SAME domain
+ *     (`CoreForm`) but stays an independent copy by that module's own
+ *     documented choice ("the two modules evolve for different reasons… a
+ *     private helper across that boundary is the wrong coupling") — out of
+ *     this lane's boundary to revisit.
+ *   - `../legibility/tree.ts`'s `collectBoundNames` (the one
+ *     `../naming/shared-bindings.ts` reads its own reservations from) is a
+ *     DIFFERENT domain entirely: the RESIDUAL tree — post-walk,
+ *     post-allocation, real JS identifiers — not this module's pre-walk
+ *     `CoreForm`/scheme-name tree. Different IR, no shared shape to merge
+ *     into; that domain already has its own single source.
  *
  * Purpose (`propagationDecisionAt`'s capture-avoidance, below): a copy-init
  * `Ref(name)` is only safe to splice into a subtree if NOTHING inside that
@@ -134,7 +163,7 @@ function substituteBody(forms: readonly CoreForm[], subst: ReadonlyMap<string, C
  * `name` too, and `collectBodyShadowNames` does not see past the first
  * non-`Begin` boundary.
  */
-function collectAllBoundNames(forms: readonly CoreForm[]): Set<string> {
+export function collectAllBoundNames(forms: readonly CoreForm[]): Set<string> {
   const names = new Set<string>();
   const visit = (f: CoreForm): void => {
     switch (f.kind) {
@@ -194,6 +223,8 @@ function collectAllBoundNames(forms: readonly CoreForm[]): Set<string> {
       case "Require":
       case "Door":
         return;
+      default:
+        return assertNever(f);
     }
   };
   for (const f of forms) visit(f);
