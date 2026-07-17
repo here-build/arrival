@@ -212,3 +212,45 @@ describe("read-set soundness — row 4, three-way divergence (direct, once-neste
     expect(matches(nestedFCall.alts[0]!, cyclicOpaque)).toBe(true);
   });
 });
+
+describe("read-set soundness — row 5, cache-HIT replay (a→b two-hop defer — the fix's own repro)", () => {
+  // (define (idf x) x) (define b (idf 42)) (define a b) (define (f n) (if (=
+  // n 0) (idf a) (f (- n 1)))) — `a` defers to `b` (a TWO-HOP chain, unlike
+  // row 1's direct `shared`), and `f`'s base branch resolves `a` from INSIDE
+  // idf's own re-entrant reduction, so `(idf a)` must opaque there NO MATTER
+  // which top-level order extracted `a`/`b` first — a pure, immutable
+  // language guarantees order-independence; the analyzer owes it the same.
+  //
+  // THE BUG this pins: extracting `b` before `a` makes `a`'s own resolution
+  // of `b` a CACHE HIT (`b`'s memo entry already exists by the time `a` asks
+  // for it). A cache hit that never replays its entry's own reads into the
+  // caller's probe corrupts `a`'s memo entry, silently dropping the
+  // `idf`-reducing dependency `a` carries transitively through `b`. `f`'s
+  // base branch then reads that corrupted entry, wrongly reports a read-set
+  // MATCH, and serves the stale clean const instead of opaquing. Extracting
+  // `a` before `b` never takes this path (nothing is cached yet, so `a`'s own
+  // resolution runs fresh and naturally accumulates the complete read-set) —
+  // which is exactly why the bug is order-dependent in the first place.
+  const PROGRAM = `
+(define (idf x) x)
+(define b (idf 42))
+(define a b)
+(define (f n) (if (= n 0) (idf a) (f (- n 1))))
+`;
+
+  const nestedIdfCall = (order: string): StaticProv => {
+    const prov = run(`${PROGRAM}\n${order}`);
+    if (prov.kind !== "build") throw new Error("expected build");
+    const fCall = prov.parts[prov.parts.length - 1]!.prov; // `(f 0)` is always listed last
+    if (fCall.kind !== "choice") throw new Error("expected choice");
+    return fCall.alts[0]!; // the `(idf a)` base branch
+  };
+
+  it("b-then-a order: the nested `(idf a)` opaques — cyclic-binding, NOT a laundered const", () => {
+    expect(matches(nestedIdfCall("(list b a (f 0))"), cyclicOpaque)).toBe(true);
+  });
+
+  it("a-then-b order: the nested `(idf a)` opaques identically — order must never matter", () => {
+    expect(matches(nestedIdfCall("(list a b (f 0))"), cyclicOpaque)).toBe(true);
+  });
+});

@@ -120,23 +120,31 @@ export interface ExtractCtx {
    *
    *  `riskProbes` makes "which `reducing` memberships this extraction's
    *  answer depends on" a directly observable property instead of an
-   *  unreliable output-shape proxy: every one of the four
-   *  `ctx.reducing.has(...)` call sites in this package (extractRef here;
-   *  `resolveCallee`/`betaReduce` in arm-control.ts; `buildFan` in
-   *  arm-containers.ts — see `markRead`'s own doc) records the binding it
-   *  checked and what it observed into every CURRENTLY ACTIVE probe,
-   *  REGARDLESS of whether that check hits or misses — a miss recorded is a
-   *  miss required at reuse time. `extractRef` pushes a fresh probe before
+   *  unreliable output-shape proxy: `checkReducing` (below) is the ONE door
+   *  every `ctx.reducing` consultation in this package goes through —
+   *  `extractRef` here; `resolveCallee`/`betaReduce` in arm-control.ts;
+   *  `buildFan` in arm-containers.ts — so a consultation and its recording
+   *  can never come apart: asking "is `binding` reducing?" and recording the
+   *  answer into every CURRENTLY ACTIVE probe are the same step, REGARDLESS
+   *  of whether the check hits or misses — a miss recorded is a miss
+   *  required at reuse time. `extractRef` pushes a fresh probe before
    *  attempting a new (uncached, or cache-inapplicable) resolution and
    *  ALWAYS writes the result to `memo` alongside whatever read-set that
    *  probe accumulated (an empty read-set — nothing anywhere in the
    *  resolution ever consulted `reducing` — trivially matches every future
    *  context, which is the #46 behavior as the read-set's own vacuous case).
-   *  (Nested resolutions push their OWN probe but still mark every
-   *  ENCLOSING one: touching `reducing` at any depth is a real dependency of
-   *  every in-flight ancestor attempt, not just the innermost — read-
-   *  propagation, not just touch-propagation.) A probe list, not a single
-   *  probe, because attempts nest (a cached-or-not Bound can defer to
+   *  A served cache HIT replays its entry's own read-set into the current
+   *  probes too (`replayReads`, below): the cached value's dependencies are
+   *  exactly as load-bearing for an ENCLOSING attempt's own cacheability as
+   *  a fresh consultation would have been — skipping that replay is what
+   *  let a cache hit under-record an outer Bound's transitive dependencies
+   *  (the idf/shared/f counterexample two paragraphs up is the worked
+   *  failure this closes). (Nested resolutions push their OWN probe but
+   *  still mark every ENCLOSING one: touching `reducing` at any depth —
+   *  directly or via a replayed cache hit — is a real dependency of every
+   *  in-flight ancestor attempt, not just the innermost — read-propagation,
+   *  not just touch-propagation.) A probe list, not a single probe, because
+   *  attempts nest (a cached-or-not Bound can defer to
    *  ANOTHER Bound partway through its own extraction). This is why the
    *  Bound's OWN registry-checked-once invariants (`registry` is one constant
    *  instance for a whole `extractProgram` run; `inputs` is currently read
@@ -202,35 +210,56 @@ export interface RiskProbe {
   readonly reads: Map<CoreForm, boolean>;
 }
 
-/** Record one `ctx.reducing.has(binding)` consultation's OUTCOME into every
- *  currently-active risk probe — call this immediately after computing
- *  `observed` and before branching on it, at each of the four
- *  `ctx.reducing.has(...)` sites in this package, unconditionally (regardless
- *  of whether the check hits or misses: a MISS is still a consultation of
- *  `reducing`'s content, and it is exactly the thing that can differ between
- *  two ambient contexts — see `ExtractCtx.riskProbes`'s doc for the worked
- *  counterexample). A no-op when no memo attempt is in flight (`riskProbes`
- *  empty).
- *
- *  Every ENCLOSING probe is marked, not just the innermost (nested attempts
- *  propagate reads to ancestors, mirroring #46's touch-propagation): a
- *  cached-or-not Bound can defer to ANOTHER Bound partway through its own
- *  extraction, and that inner Bound's read is just as load-bearing for the
- *  OUTER Bound's own cacheability as it is for the inner one's — the outer
- *  result recursively depends on whatever the inner extraction observed.
+/** THE atomic door for every `ctx.reducing.has(binding)` consultation in this
+ *  package (`extractRef` here; `resolveCallee`/`betaReduce` in
+ *  arm-control.ts; `buildFan` in arm-containers.ts). Checking membership and
+ *  recording the read used to be two separate statements at each call site,
+ *  coordinated only by a repeated reminder comment — exactly the kind of
+ *  rule a future edit can forget to honor. This door makes the pairing
+ *  structural instead: there is no way to ask "is `binding` reducing?"
+ *  without the answer landing in every currently-active risk probe, because
+ *  asking IS recording — one function does both, in the same step. Returns
+ *  the membership test's own result so a call site can branch on it
+ *  directly: `if (checkReducing(ctx, binding)) return opaque(...)`. */
+export function checkReducing(ctx: ExtractCtx, binding: CoreForm): boolean {
+  const observed = ctx.reducing.has(binding);
+  markRead(ctx, binding, observed);
+  return observed;
+}
+
+/** Propagate an ALREADY-RECORDED read-set into every currently-active risk
+ *  probe — call this whenever a memo hit serves a cached result in place of
+ *  a fresh extraction (`extractRef`'s cache-hit branch, arm-atoms.ts),
+ *  instead of re-deriving it. The bindings that produced the cached value
+ *  are dependencies of THIS reference point's own answer too, exactly as if
+ *  they had been consulted here directly — omitting the replay is what let
+ *  a cache hit under-record an ENCLOSING attempt's own transitive
+ *  dependencies (`ExtractCtx.riskProbes`'s doc has the soundness argument
+ *  and the worked idf/shared/f counterexample this closes). A no-op when
+ *  `reads` is empty or no probe is in flight, same as `markRead` itself. */
+export function replayReads(ctx: ExtractCtx, reads: ReadonlyMap<CoreForm, boolean>): void {
+  for (const [binding, observed] of reads) markRead(ctx, binding, observed);
+}
+
+/** `checkReducing`/`replayReads`'s shared primitive — record one binding's
+ *  observed `reducing` membership into every currently-active probe. Not
+ *  exported: every consultation of `reducing`'s content goes through
+ *  `checkReducing`, and every replay of an already-recorded read-set goes
+ *  through `replayReads`; nothing else has a reason to touch a probe
+ *  directly.
  *
  *  Can the SAME probe ever observe two DIFFERENT answers for the SAME
- *  `binding`? No, by construction of the four call sites: each checks
- *  `ctx.reducing.has(binding)` and returns IMMEDIATELY (opaque) when it
- *  reads `true`, so a probe's subtree never continues past a `true` reading
- *  to re-check the identical binding later; and `reducing` only ever GROWS
- *  going down through a single call chain (fresh `Set`s built by adding to a
- *  copy, never by removing), so two consultations of the same binding within
- *  one still-open probe's subtree cannot see a `true`-then-`false`
- *  transition either. `.set()`'s overwrite semantics are therefore never
- *  actually exercised on a genuine disagreement — they are here only because
- *  a `Map` is the natural accumulator, not because a conflict is expected. */
-export function markRead(ctx: ExtractCtx, binding: CoreForm, observed: boolean): void {
+ *  `binding`? No, by construction of `checkReducing`'s call sites: each
+ *  returns IMMEDIATELY (opaque) when it reads `true`, so a probe's subtree
+ *  never continues past a `true` reading to re-check the identical binding
+ *  later; and `reducing` only ever GROWS going down through a single call
+ *  chain (fresh `Set`s built by adding to a copy, never by removing), so two
+ *  consultations of the same binding within one still-open probe's subtree
+ *  cannot see a `true`-then-`false` transition either. `.set()`'s overwrite
+ *  semantics are therefore never actually exercised on a genuine
+ *  disagreement — they are here only because a `Map` is the natural
+ *  accumulator, not because a conflict is expected. */
+function markRead(ctx: ExtractCtx, binding: CoreForm, observed: boolean): void {
   for (const p of ctx.riskProbes) p.reads.set(binding, observed);
 }
 

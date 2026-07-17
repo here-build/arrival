@@ -45,7 +45,18 @@ import type { StaticProv } from "../model/static-prov.js";
 // this module; this module imports extract to recurse back OUT for sub-forms. Sound because
 // both sides only reach across the cycle from inside function bodies, never at module-eval
 // time (the arm-group cut's own note — calls happen at runtime).
-import { type Bound, type ExtractCtx, type RiskProbe, type Scope, extract, lookup, markRead, opaque, readSetMatches } from "./index.js";
+import {
+  type Bound,
+  type ExtractCtx,
+  type RiskProbe,
+  type Scope,
+  checkReducing,
+  extract,
+  lookup,
+  opaque,
+  readSetMatches,
+  replayReads,
+} from "./index.js";
 
 type AtomForm = Lit | Ref | Quote | Define | Let | Begin | Require | Door;
 
@@ -109,11 +120,17 @@ function extractRef(form: Ref, ctx: ExtractCtx): StaticProv {
   // synthetic kinds (fan elements) keep their binder's site deliberately: the
   // element IS the axis's projection, not a per-use value.
   if (bound.tag === "prov") return bound.prov.kind === "input" ? { ...bound.prov, site: form.id } : bound.prov;
-  const reducingHit = ctx.reducing.has(bound.expr);
-  markRead(ctx, bound.expr, reducingHit); // consulting `reducing`'s content — see ExtractCtx.riskProbes
-  if (reducingHit) return opaque(form.id, "cyclic-binding");
+  if (checkReducing(ctx, bound.expr)) return opaque(form.id, "cyclic-binding");
   const cached = ctx.memo.get(bound);
-  if (cached !== undefined && readSetMatches(cached.reads, ctx.reducing)) return cached.result;
+  if (cached !== undefined && readSetMatches(cached.reads, ctx.reducing)) {
+    // The cached value's own dependencies are THIS reference's dependencies
+    // too — replay them into whatever probe is enclosing THIS reference
+    // point, or an outer Bound's memo entry under-records what it
+    // transitively depends on through this one (ExtractCtx.riskProbes's doc
+    // has the full argument and the worked counterexample).
+    replayReads(ctx, cached.reads);
+    return cached.result;
+  }
   const probe: RiskProbe = { reads: new Map() };
   const result = extract(bound.expr, {
     ...ctx,

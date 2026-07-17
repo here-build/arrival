@@ -66,7 +66,7 @@
 import type { CoreForm, DefineFn, Dict, Lambda, NodeId } from "../coreform/types.js";
 import type { BuildProv, ChoiceProv, HeadClass, HeadRegistry, MintIntegrity, StaticProv } from "../model/static-prov.js";
 import { inferCollapse } from "./collapse.js";
-import { type Bound, type ExtractCtx, type Scope, extract, lookup, markRead, opaque } from "./index.js";
+import { type Bound, type ExtractCtx, type Scope, checkReducing, extract, lookup, opaque } from "./index.js";
 
 export function extractContainer(form: Dict, ctx: ExtractCtx): StaticProv {
   return {
@@ -378,9 +378,7 @@ export function buildFan(
   if (target.params.length !== FAN_ARITY[fanKind] || target.params.some((p) => p.rest)) {
     return opaque(site, "fan/arity");
   }
-  const reducingHit = ctx.reducing.has(target);
-  markRead(ctx, target, reducingHit); // consulting `reducing`'s content — see ExtractCtx.riskProbes
-  if (reducingHit) return opaque(site, "cyclic-binding");
+  if (checkReducing(ctx, target)) return opaque(site, "cyclic-binding");
 
   // The distinguished one-of-collection projection — every fan-body param that
   // stands for "the current element" binds to this SAME synthetic value.
