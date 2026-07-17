@@ -1,6 +1,4 @@
 import { stringAppend } from "./stage0.mts";
-function OracleMain() {
+export default function OracleMain() {
     return "ab" === stringAppend("a", "b");
 }
-export { __oracleResult };
-const __oracleResult = OracleMain();

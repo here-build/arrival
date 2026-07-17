@@ -1,5 +1,5 @@
 import { lt, inferScalar } from "./stage0.mts";
-async function OracleMain() {
+export default async function OracleMain() {
     const raw = await inferScalar("fast", "read devices");
     const devices = (() => {
         throw new Error("unsupported-form/unresolved-identifier: `json/parse` is not lexically bound and is not a registry symbol.");
@@ -8,5 +8,3 @@ async function OracleMain() {
     const offenders = privileged.map(({ name }) => name);
     return offenders;
 }
-export { __oracleResult };
-const __oracleResult = await OracleMain();

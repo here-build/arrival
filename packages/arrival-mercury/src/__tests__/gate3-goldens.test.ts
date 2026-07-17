@@ -6,41 +6,49 @@
  *
  * Each fixture runs through `compileGreenfield` — the SAME gate-authoritative
  * subject the oracle's bug-cell corpus executes (constitution §9's dual-path
- * rule) — and its committed `golden` is the observed bytes, verbatim. This is
- * deliberately NOT `cross-pass-fixtures.test.ts`'s slice (facts → residual via
- * bare `walk()`/`render()`, no FRAME/ASYNC-IFY, no oracle wrap): Gate 3 pins
- * what the REAL emitted artifact looks like, imports and async plane included,
- * where cross-pass pins the type-facts→residual DECISION in isolation. Two
- * different questions, two different fixture directories, no collision — see
- * `fixtures/gate3/REBASE_LOG.md` (this suite's own rebase log, separate from
- * `fixtures/cross-pass/REBASE_LOG.md`).
+ * rule) — and its committed `.golden.ts` snapshot is the observed bytes,
+ * verbatim. This is deliberately NOT `cross-pass-fixtures.test.ts`'s slice
+ * (facts → residual via bare `walk()`/`render()`, no FRAME/ASYNC-IFY, no
+ * oracle wrap): Gate 3 pins what the REAL emitted artifact looks like,
+ * imports and async plane included, where cross-pass pins the type-facts→
+ * residual DECISION in isolation. Two different questions, two different
+ * fixture directories, no collision — see `fixtures/gate3/REBASE_LOG.md`
+ * (this suite's own rebase log, separate from `fixtures/cross-pass/
+ * REBASE_LOG.md`).
  *
- * A byte-change to any committed golden below is a REVIEWED diff, never
- * silent drift (constitution §8's regenerable-by-design stance): re-run,
- * confirm the new bytes are the intended lens/rule flip, and log it in
- * REBASE_LOG.md before committing the updated fixture.
+ * Fixtures are fs-based: `fixtures/gate3/<name>.scm` is a leading `;`-comment
+ * header (prose only, ignored by the parser) followed by the scheme program
+ * verbatim. `import.meta.glob` loads every `.scm` in the directory eagerly as
+ * raw text — no inline-string fixture modules, no hand-maintained case list.
+ *
+ * A byte-change to any committed `.golden.ts` snapshot below is a REVIEWED
+ * diff, never silent drift (constitution §8's regenerable-by-design stance):
+ * re-run with `-u`, confirm the new bytes are the intended lens/rule flip,
+ * and log it in REBASE_LOG.md before committing the updated fixture.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { compileGreenfield, openOracleSession } from "../index.js";
 import type { OracleSession } from "../index.js";
-import * as applyMapTranspose from "./fixtures/gate3/apply-map-transpose.golden.js";
-import * as applyPlus from "./fixtures/gate3/apply-plus.golden.js";
-import * as asyncMapPromiseAll from "./fixtures/gate3/async-map-promise-all.golden.js";
-import * as firstClassCarHof from "./fixtures/gate3/first-class-car-hof.golden.js";
-import * as legibilityDestructure from "./fixtures/gate3/legibility-destructure.golden.js";
-import * as multiListMap from "./fixtures/gate3/multi-list-map.golden.js";
-import * as shortCircuitOr from "./fixtures/gate3/short-circuit-or.golden.js";
 
-const CASES = [
-  { name: "multi-list map (the zip bridge)", fixture: multiListMap },
-  { name: "async-map → Promise.all (Law W's .map collapse)", fixture: asyncMapPromiseAll },
-  { name: "apply patterns: apply-plus reduce", fixture: applyPlus },
-  { name: "apply patterns: apply-map-transpose", fixture: applyMapTranspose },
-  { name: "short-circuit or-chain (guarded cascade, nested)", fixture: shortCircuitOr },
-  { name: "first-class car in HOF position (eta expands, goldenEpoch 2)", fixture: firstClassCarHof },
-  { name: "LEGIBILITY: implicit destruction (constitution §3.5's worked example)", fixture: legibilityDestructure },
-] as const;
+const sources = import.meta.glob("./fixtures/gate3/*.scm", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+}) as Record<string, string>;
+
+const nameOf = (path: string): string => path.replace(/^.*\//, "").replace(/\.scm$/, "");
+
+const sourceByName: Record<string, string> = Object.fromEntries(
+  Object.entries(sources).map(([path, source]) => [nameOf(path), source]),
+);
+const sourceNamed = (name: string): string => {
+  const source = sourceByName[name];
+  if (source === undefined) {
+    throw new Error(`gate3 fixture "${name}" not found — was fixtures/gate3/${name}.scm renamed or removed?`);
+  }
+  return source;
+};
 
 describe("Gate 3 — full-pipeline emitted TEXT goldens", () => {
   let session: OracleSession;
@@ -51,40 +59,49 @@ describe("Gate 3 — full-pipeline emitted TEXT goldens", () => {
     await session.dispose();
   });
 
-  for (const { name, fixture } of CASES) {
-    it(`${name} matches its committed golden`, () => {
-      expect(compileGreenfield(session, fixture.source)).toBe(fixture.golden);
+  for (const [path, source] of Object.entries(sources)) {
+    const name = nameOf(path);
+    it(`${name} matches its committed golden`, async () => {
+      await expect(compileGreenfield(session, source)).toMatchFileSnapshot(path.replace(/\.scm$/, ".golden.ts"));
     });
   }
 
   it("every case actually exercises the pattern it claims to (a golden that silently degrades to a door is not a golden)", () => {
-    expect(multiListMap.golden).toContain(".map((__item, __i) =>");
+    const multiListMap = compileGreenfield(session, sourceNamed("multi-list-map"));
+    const asyncMapPromiseAll = compileGreenfield(session, sourceNamed("async-map-promise-all"));
+    const applyPlus = compileGreenfield(session, sourceNamed("apply-plus"));
+    const applyMapTranspose = compileGreenfield(session, sourceNamed("apply-map-transpose"));
+    const shortCircuitOr = compileGreenfield(session, sourceNamed("short-circuit-or"));
+    const firstClassCarHof = compileGreenfield(session, sourceNamed("first-class-car-hof"));
+    const legibilityDestructure = compileGreenfield(session, sourceNamed("legibility-destructure"));
+
+    expect(multiListMap).toContain(".map((__item, __i) =>");
     // goldenEpoch 4 (R-G3): the tail-await elision drops the outer `await`
     // (nothing downstream of OracleMain's own return observes the resolved
     // value) — `Promise.all(` alone still proves the .map collapse fired
     // rather than silently degrading to a plain, unbatched `.map`.
-    expect(asyncMapPromiseAll.golden).toContain("Promise.all(");
-    expect(applyPlus.golden).toContain(".reduce(");
+    expect(asyncMapPromiseAll).toContain("Promise.all(");
+    expect(applyPlus).toContain(".reduce(");
     // E2 ingestion fold (engine plan §2 E2): the transposed list-of-lists
     // is now a literal array chunk, not a `list(...)` call — the spread
     // still spreads a genuine array, `apply`'s own pattern under test
     // (never degrading to a door) is unaffected.
-    expect(applyMapTranspose.golden).toContain("...[");
+    expect(applyMapTranspose).toContain("...[");
     // goldenEpoch 5 (R-G6): static prevaluation folds the whole three-operand
     // `or` to its one live value — there is no runtime guard left to assert
     // on. The honest non-degradation check flips from "the guard shape is
     // there" to "the dead branch is truly GONE, not merely unreached at
     // runtime": no `error` survives anywhere in the output (import or call),
     // and the surviving literal is exactly the provably-true second operand.
-    expect(shortCircuitOr.golden).not.toContain("error");
-    expect(shortCircuitOr.golden).toContain('return "a"');
+    expect(shortCircuitOr).not.toContain("error");
+    expect(shortCircuitOr).toContain('return "a"');
     // goldenEpoch 2 (R5c): eta now expands `car` inline — the pattern under test
     // flipped from "eta degrades to shim" to "eta actually fires", so the honest
     // non-degradation check is the opposite shape: no bare `car` shim survives
     // (neither as an import nor as a value-position reference), AND the eta-built
     // arrow is really there.
-    expect(firstClassCarHof.golden).not.toContain("car");
-    expect(firstClassCarHof.golden).toContain(".map(([head]) => head)");
-    expect(legibilityDestructure.golden).toContain("([first, second]) => first + second");
+    expect(firstClassCarHof).not.toContain("car");
+    expect(firstClassCarHof).toContain(".map(([head]) => head)");
+    expect(legibilityDestructure).toContain("([first, second]) => first + second");
   });
 });

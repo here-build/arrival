@@ -1,5 +1,5 @@
 import { gt, ge, append_, every, list, maxBy, some, zeroP } from "./stage0.mts";
-function OracleMain() {
+export default function OracleMain() {
     throw new Error("unsupported-form/require: `(require \"metric.scm\")` \u2014 module loading is not compiled in this slice (the loader/FRAME wave owns import planning).");
     const examples = (() => {
         throw new Error("unsupported-form/require: `(require \"examples.json\")` \u2014 module loading is not compiled in this slice (the loader/FRAME wave owns import planning).");
@@ -27,5 +27,3 @@ function OracleMain() {
         throw new Error("unsupported-form/require: `(require \"seed.txt\")` \u2014 module loading is not compiled in this slice (the loader/FRAME wave owns import planning).");
     })(), 4);
 }
-export { __oracleResult };
-const __oracleResult = OracleMain();

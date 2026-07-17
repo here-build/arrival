@@ -71,7 +71,6 @@ import { materializeAsyncness, materializeImports, materializeSharedBindings } f
 import { emitRegistryOf, type EmitRegistry } from "../registry/index.js";
 import { render } from "../residual/render.js";
 import type { CompilationUnit } from "../residual/types.js";
-import { Binding as mkBinding, Const, Export } from "../residual/types.js";
 import { inferAsyncSeeds, phase1Rules, withRules, type OverlayEmitRegistry } from "../rules/index.js";
 import { walk } from "../walker/index.js";
 import { classifyCompiledError, classifyInterpreterError, type ErrorClass } from "./error-classifier.js";
@@ -243,14 +242,14 @@ export class OracleImportHangError extends Error {
 /** Import a case module through the shared registration, guarded against the
  *  hang mode: race a generous timer, retry ONCE at a fresh path (a fresh URL
  *  cannot hit any wedged in-flight resolution), then fail loudly. */
-async function importCaseModule(file: string): Promise<{ __oracleResult?: unknown }> {
-  const attempt = async (p: string): Promise<{ __oracleResult?: unknown } | typeof HUNG> => {
+async function importCaseModule(file: string): Promise<{ default?: unknown }> {
+  const attempt = async (p: string): Promise<{ default?: unknown } | typeof HUNG> => {
     let timer: NodeJS.Timeout | undefined;
     const hangSignal = new Promise<typeof HUNG>((resolve) => {
       timer = setTimeout(() => resolve(HUNG), IMPORT_TIMEOUT_MS);
     });
     const imported = caseLoader.import(pathToFileURL(p).href, import.meta.url) as Promise<{
-      __oracleResult?: unknown;
+      default?: unknown;
     }>;
     try {
       return await Promise.race([imported, hangSignal]);
@@ -366,14 +365,14 @@ export function greenfieldRegistryFor(session: OracleSession): OverlayEmitRegist
 }
 
 const ORACLE_MAIN = "__oracle-main";
-const RESULT_NAME = "__oracleResult";
 
 /**
- * Turn the walked unit's trailing statement — by construction the wrap's
- * `(__oracle-main)` call — into `const __oracleResult = <expr>` + a trailing
- * named export. `export { x }` renders among the decls (textually before the
- * const), which ESM's hoisted export linkage makes legal; scratch modules are
- * executed, never `tsc`'d, so TS2448 aesthetics don't apply.
+ * Make the wrap's `(define (__oracle-main) …)` the module's DEFAULT EXPORT and drop the
+ * trailing `(__oracle-main)` call — the emitted artifact is a program-face MODULE
+ * (`export default function OracleMain(){…}`), never an inline execution or an eager value
+ * (reference-program-face-always-function; R-G1). The loader (`evalCompiled`) CALLS
+ * `ns.default()` to observe the program's value, so the value/function boundary lives at the
+ * consumer, not baked into the artifact — stable across a future pure→dynamic rework.
  */
 function exportUnitResult(unit: CompilationUnit): CompilationUnit {
   const body = [...unit.body];
@@ -381,8 +380,10 @@ function exportUnitResult(unit: CompilationUnit): CompilationUnit {
   if (last === undefined) {
     throw new OracleAuthoringError("oracle evalCompiled: wrapped unit has no trailing call — internal wrap invariant broken");
   }
-  body.push(Const(mkBinding(RESULT_NAME), last));
-  return { decls: [...unit.decls, Export([RESULT_NAME])], body };
+  // The wrap yields exactly one top-level FnDecl (the `__oracle-main` body); mark it the
+  // default export. `last` (the trailing call) is discarded — no inline execution.
+  const decls = unit.decls.map((d) => (d.t === "FnDecl" ? { ...d, exported: "default" as const } : d));
+  return { decls, body };
 }
 
 /**
@@ -690,7 +691,10 @@ export async function evalCompiled(
   writeFileSync(file, module, "utf8");
   try {
     const ns = await importCaseModule(file);
-    let value: unknown = ns.__oracleResult;
+    // Program face: the default export IS the program; run it to observe the value
+    // (reference-program-face-always-function). By construction it is always a function.
+    const program = ns.default;
+    let value: unknown = typeof program === "function" ? program() : program;
     if (isThenable(value)) value = await value; // symmetric with the interpreter side
     return { kind: "value", value };
   } catch (e) {

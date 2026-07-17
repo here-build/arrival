@@ -1,5 +1,5 @@
 import { lt, le, gt, ge, cons, equalP, evenP, every, length_, list, listRef, map, max_, maxBy, nullP, some, zeroP } from "./stage0.mts";
-function OracleMain() {
+export default function OracleMain() {
     throw new Error("unsupported-form/require: `(require \"metric.scm\")` \u2014 module loading is not compiled in this slice (the loader/FRAME wave owns import planning).");
     const examples = (() => {
         throw new Error("unsupported-form/require: `(require \"examples.json\")` \u2014 module loading is not compiled in this slice (the loader/FRAME wave owns import planning).");
@@ -150,5 +150,3 @@ function OracleMain() {
     };
     return gepa();
 }
-export { __oracleResult };
-const __oracleResult = OracleMain();

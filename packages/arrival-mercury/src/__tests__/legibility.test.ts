@@ -269,15 +269,13 @@ describe("legibility wired into compileGreenfield — the real pipeline, oracle 
     const out = compileGreenfield(session, `(define (f x) (+ (infer "sys" x) (infer "sys" x))) (f "hi")`);
     expect(out).toBe(
       `import { infer } from "./stage0.mts";\n` +
-        `function OracleMain() {\n` +
+        `export default function OracleMain() {\n` +
         `    const f = async (x) => {\n` +
         `        const __infer = await infer("sys", x);\n` +
         `        return __infer + __infer;\n` +
         `    };\n` +
         `    return f("hi");\n` +
-        `}\n` +
-        `export { __oracleResult };\n` +
-        `const __oracleResult = await OracleMain();\n`,
+        `}\n`,
     );
   });
 
@@ -294,11 +292,9 @@ describe("legibility wired into compileGreenfield — the real pipeline, oracle 
     // engine plan §2 E2) — no `list` import survives; unrelated to the
     // single-list-map "forward the callback verbatim" claim this test pins.
     expect(out).toBe(
-      `function OracleMain() {\n` +
+      `export default function OracleMain() {\n` +
         `    return [1, 2, 3].map(x => x * x);\n` +
-        `}\n` +
-        `export { __oracleResult };\n` +
-        `const __oracleResult = OracleMain();\n`,
+        `}\n`,
     );
   });
 });

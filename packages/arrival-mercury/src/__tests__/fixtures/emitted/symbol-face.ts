@@ -1,5 +1,3 @@
-function OracleMain() {
+export default function OracleMain() {
     return "hello";
 }
-export { __oracleResult };
-const __oracleResult = OracleMain();

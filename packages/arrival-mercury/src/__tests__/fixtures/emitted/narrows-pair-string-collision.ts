@@ -1,6 +1,4 @@
 import { pairP } from "./stage0.mts";
-function OracleMain() {
+export default function OracleMain() {
     return pairP("x");
 }
-export { __oracleResult };
-const __oracleResult = OracleMain();

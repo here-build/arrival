@@ -1,7 +1,5 @@
 import { length_ } from "./stage0.mts";
-function OracleMain() {
+export default function OracleMain() {
     const listOrString = flag => flag !== false ? [1, 2, 3] : "abc";
     return length_(listOrString(true));
 }
-export { __oracleResult };
-const __oracleResult = OracleMain();
