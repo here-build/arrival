@@ -100,9 +100,12 @@ export function extractAtom(form: AtomForm, ctx: ExtractCtx): StaticProv {
  *  extraction rather than laundering a context-dependent answer across
  *  reference points it was never computed for). Only a scope MISS is the
  *  evidence-handle convention: a free name is the input the harness binds
- *  (InputProv). ctx.inputs never bypasses scope — an inputs-first check let
- *  `(let ((e "FAB")) e)` attribute the shadow's const as evidence, which the
- *  static leg must never do. */
+ *  (InputProv). Program inputs are recognized ENTIRELY through ordinary
+ *  scope binding (`extractProgram` binds a `define/overridable` name as a
+ *  `Bound{tag:"prov", prov: InputProv}`, same as any other name) — there is
+ *  no side-table to check ahead of scope, so an inner `(let ((e "FAB")) e)`
+ *  shadow attributes to the shadow's const, never to the input, by
+ *  construction rather than by an ordering rule. */
 function extractRef(form: Ref, ctx: ExtractCtx): StaticProv {
   const bound = lookup(ctx.scope, form.name);
   if (bound === undefined) {

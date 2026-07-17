@@ -60,9 +60,6 @@ export interface ExtractCtx {
    *  reduced; a revisit means recursion through bindings ⇒ the arm returns
    *  `opaque("cyclic-binding")` rather than diverging. */
   readonly reducing: ReadonlySet<CoreForm>;
-  /** Program-input names (`define/overridable` params) — these Refs are
-   *  evidence-class InputProv, everything else resolves through scope. */
-  readonly inputs: ReadonlySet<string>;
   /** The shared-DAG memo (G2, 2026-07-16; upgraded to READ-SET memoization,
    *  #74, 2026-07-17): a Bound's `{tag:"expr"}` extraction, cached ON THE
    *  BOUND OBJECT — every Ref that `lookup()`s to the SAME Bound (a top-level
@@ -146,11 +143,10 @@ export interface ExtractCtx {
    *  not just touch-propagation.) A probe list, not a single probe, because
    *  attempts nest (a cached-or-not Bound can defer to
    *  ANOTHER Bound partway through its own extraction). This is why the
-   *  Bound's OWN registry-checked-once invariants (`registry` is one constant
-   *  instance for a whole `extractProgram` run; `inputs` is currently read
-   *  nowhere in this package, grepped) don't need their own probes — only
-   *  `reducing`'s content varies by call site, and it is the only one of the
-   *  four ctx fields any code path ever branches on.
+   *  Bound's OWN registry-checked-once invariant (`registry` is one constant
+   *  instance for a whole `extractProgram` run) doesn't need its own probe —
+   *  only `reducing`'s content varies by call site, and it is the only one
+   *  of the three ctx fields any code path ever branches on.
    *
    *  Immutability (the arrival-immutable-no-dynamics law) is what makes a
    *  MATCHED read permanent: the same binding, re-checked against the same
@@ -297,7 +293,6 @@ export function extract(form: CoreForm, ctx: ExtractCtx): StaticProv {
 export function extractProgram(forms: readonly CoreForm[], registry: HeadRegistry): StaticProv {
   const names = new Map<string, Bound>();
   const top: Scope = { names, parent: null };
-  const inputs = new Set<string>();
   for (const f of forms) {
     if (f.kind === "Define") {
       if (f.overridableType !== undefined) {
@@ -305,11 +300,10 @@ export function extractProgram(forms: readonly CoreForm[], registry: HeadRegistr
         // synthetic InputProv (evidence-class), NOT as its fallback expr — the
         // override is always supplied by the harness, and the fallback must
         // never become the attribution. Binding through the ORDINARY scope
-        // (rather than a scope-bypassing inputs check) is load-bearing: an
-        // inner `(let ((e "FAB")) e)` shadow must attribute to the shadow's
-        // const, never to the input — the shadowed-input forge (corpus row 6).
+        // (rather than a side-table inputs check) is load-bearing: an inner
+        // `(let ((e "FAB")) e)` shadow must attribute to the shadow's const,
+        // never to the input — the shadowed-input forge (corpus row 6).
         names.set(f.name, { tag: "prov", prov: { kind: "input", site: f.id, name: f.name } });
-        inputs.add(f.name);
       } else {
         names.set(f.name, { tag: "expr", expr: f.value, scope: top });
       }
@@ -318,5 +312,5 @@ export function extractProgram(forms: readonly CoreForm[], registry: HeadRegistr
   }
   const last = forms.filter((f) => f.kind !== "Define" && f.kind !== "DefineFn").at(-1) ?? forms.at(-1);
   if (!last) return { kind: "opaque", site: 0 as NodeId, reason: "empty-program" };
-  return extract(last, { scope: top, registry, reducing: new Set(), inputs, memo: new WeakMap(), riskProbes: [] });
+  return extract(last, { scope: top, registry, reducing: new Set(), memo: new WeakMap(), riskProbes: [] });
 }

@@ -397,12 +397,8 @@ export function buildFan(
   // per-body): a helper `define`d inside the lambda must resolve for the rest of
   // the body, in the SAME frame it was declared in (self-referential for
   // recursive helpers, matching letrec-style closure).
-  const inputs = new Set(ctx.inputs);
   for (const f of target.body) {
-    if (f.kind === "Define") {
-      names.set(f.name, { tag: "expr", expr: f.value, scope: frame });
-      if (f.overridableType !== undefined) inputs.add(f.name);
-    }
+    if (f.kind === "Define") names.set(f.name, { tag: "expr", expr: f.value, scope: frame });
     if (f.kind === "DefineFn") names.set(f.name, { tag: "expr", expr: f, scope: frame });
   }
 
@@ -413,7 +409,6 @@ export function buildFan(
     scope: frame,
     registry: ctx.registry,
     reducing: new Set([...ctx.reducing, target]),
-    inputs,
     memo: ctx.memo,
     riskProbes: ctx.riskProbes,
   };

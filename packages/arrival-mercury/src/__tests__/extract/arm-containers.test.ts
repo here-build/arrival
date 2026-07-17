@@ -35,7 +35,7 @@ function parseLambda(src: string): Lambda {
   return parseForm(src) as Lambda;
 }
 function baseCtx(): ExtractCtx {
-  return { scope: EMPTY_SCOPE, registry: defaultRegistry, reducing: new Set(), inputs: new Set(), memo: new WeakMap(), riskProbes: [] };
+  return { scope: EMPTY_SCOPE, registry: defaultRegistry, reducing: new Set(), memo: new WeakMap(), riskProbes: [] };
 }
 
 const collection: StaticProv = { kind: "input", site: 0 as NodeId, name: "xs" };
