@@ -72,6 +72,17 @@
  * always exactly `manifest[symbol]`, unconditionally, never a ladder-resolved
  * guess re-deciding what allocation already decided.
  *
+ * THIS ONLY HOLDS if `walk()`'s reservation and THIS function's `manifest`
+ * agree on every symbol's export name (WALKER-NAMING audit finding #6): two
+ * DIFFERENT manifests would reserve one name during allocation while handing
+ * out another here, and the "impossible by construction" collision guard
+ * above silently stops being true. `../walker/walk.ts`'s own `WalkOptions.manifest`
+ * is the matching seam — same field name, same `STAGE0` default, on purpose;
+ * a caller overriding either MUST pass the identical manifest object to both.
+ * Latent today (every current caller leaves both at the `STAGE0` default), but
+ * real the moment a second runtime stage's manifest is threaded through only
+ * one side.
+ *
  * This relies on the `RuntimeRef` symbol set being STABLE from walk() through
  * the shared-bindings materializer and the asyncness materializer — neither
  * mints a new registry call nor folds one away this wave (verified: the
@@ -116,7 +127,10 @@ export interface MaterializeImportsOptions {
    *  `"./stage0.mts"`; a real emitted project passes its own runtime path). */
   readonly runtimeModule: string;
   /** symbol → exported-name manifest; defaults to the stage-0 manifest. Override
-   *  seam for tests and for later runtime stages. */
+   *  seam for tests and for later runtime stages — but see the module header's
+   *  "No collision ladder" section: whoever overrides this MUST pass the SAME
+   *  manifest object to `../walker/walk.ts`'s `WalkOptions.manifest` too, or the
+   *  collision-safety invariant this module relies on silently breaks. */
   readonly manifest?: Readonly<Record<string, string>>;
 }
 

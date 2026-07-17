@@ -261,6 +261,28 @@ export interface WalkOptions {
    * `shakeOf` is unaffected.
    */
   readonly shakeOf?: (forms: readonly CoreForm[]) => ShakeDecision;
+  /**
+   * Symbol → exported-name manifest for the naming phase's reservation set
+   * (`stillNeeded`, below) — defaults to `STAGE0` (`../runtime/stage0.js`),
+   * mirroring `../naming/imports.ts`'s `MaterializeImportsOptions.manifest`
+   * default EXACTLY (same field name, same fallback, on purpose).
+   *
+   * MUST be the SAME object a caller passes to that later `materializeImports`
+   * call, if it ever overrides either: `materializeImports`'s "collision with
+   * a user binding is impossible by construction" claim (that module's own
+   * header, "No collision ladder") holds only because THIS reservation step
+   * and THAT materialization step agree on which export name every surviving
+   * `RuntimeRef` symbol gets. Two different manifests silently break the
+   * invariant — this walk would reserve one set of names while
+   * `materializeImports` hands out a DIFFERENT set, so a user binding could
+   * collide with an import neither step ever reserved against (WALKER-NAMING
+   * audit finding #6). Latent today: every current caller (module face,
+   * pipeline face, the oracle harness) leaves both at their `STAGE0` default,
+   * so both sides already agree — this field exists so a future SECOND
+   * runtime stage has a place to thread one shared manifest through both
+   * calls, instead of walk() being unable to hear about an override at all.
+   */
+  readonly manifest?: Readonly<Record<string, string>>;
 }
 
 /** Statement-sequence mode: `tail` returns the last form's value; `stmt` discards it;
@@ -1274,19 +1296,24 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
   const provisional: CompilationUnit = { decls, body };
 
   // ── the naming phase: census → allocate → materialize (engine plan §2 E1a) ────────
-  // Reservations: the stage-0 manifest's exported names for exactly the runtime
-  // symbols THIS unit still references (runtimeRefsOf — the SAME census
-  // `../naming/imports.ts`'s `materializeImports` runs over this unit later, post
-  // legibility/post-`../naming/asyncness.ts`'s `materializeAsyncness`) — never
-  // the whole manifest: reserving an export no surviving RuntimeRef needs would
-  // needlessly block a same-named user binding
-  // (e.g. a local `car` shadow, or an unrelated `odd` binding, when this program never
-  // calls the stage-0 `odd?`/`car`-in-value-position exports). Plus the three
-  // hardcoded globals other passes reference by raw Binding — "Error" (this walker's
-  // own doorThrow), "Math" (the quotient rule), "Promise" (`../naming/asyncness.ts`'s
-  // `materializeAsyncness`'s Promise.all rewrites) — matching the reservation this
-  // walker used to pre-seed into jsFrames[0] directly.
-  const stillNeeded = [...runtimeRefsOf(provisional)].map((s) => STAGE0[s]).filter((v): v is string => v !== undefined);
+  // Reservations: `opts.manifest`'s (default `STAGE0`'s) exported names for
+  // exactly the runtime symbols THIS unit still references (runtimeRefsOf —
+  // the SAME census `../naming/imports.ts`'s `materializeImports` runs over
+  // this unit later, post legibility/post-`../naming/asyncness.ts`'s
+  // `materializeAsyncness`) — never the whole manifest: reserving an export
+  // no surviving RuntimeRef needs would needlessly block a same-named user
+  // binding (e.g. a local `car` shadow, or an unrelated `odd` binding, when
+  // this program never calls the stage-0 `odd?`/`car`-in-value-position
+  // exports). Plus the three hardcoded globals other passes reference by raw
+  // Binding — "Error" (this walker's own doorThrow), "Math" (the quotient
+  // rule), "Promise" (`../naming/asyncness.ts`'s `materializeAsyncness`'s
+  // Promise.all rewrites) — matching the reservation this walker used to
+  // pre-seed into jsFrames[0] directly. `manifest` MUST be the same object a
+  // caller later passes to `materializeImports` (`WalkOptions.manifest`'s own
+  // doc — WALKER-NAMING audit finding #6): this reservation is the OTHER half
+  // of that module's "collision impossible by construction" claim.
+  const manifest = opts.manifest ?? STAGE0;
+  const stillNeeded = [...runtimeRefsOf(provisional)].map((s) => manifest[s]).filter((v): v is string => v !== undefined);
   const census = bindingCensusOf(provisional);
   const allocation = allocateNames(census, [...stillNeeded, "Error", "Math", "Promise"]);
   return materializeNames(provisional, allocation);

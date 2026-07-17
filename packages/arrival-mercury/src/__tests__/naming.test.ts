@@ -544,6 +544,29 @@ describe("walk() — the naming phase end to end", () => {
     expect(out).toContain("return car_2(xs);");
   });
 
+  // ── WalkOptions.manifest threading (WALKER-NAMING audit finding #6) ─────────
+  // `materializeImports`'s "collision with a user binding is impossible by
+  // construction" claim (naming/imports.ts's own header) depends on THIS
+  // reservation step and that later materialization step reading the SAME
+  // manifest. `custom-fn` is deliberately NOT a real stage-0 symbol — proves
+  // the reservation set comes from `opts.manifest` when supplied, not always
+  // from the hardcoded STAGE0 import.
+  const customFnRegistry = registryOf(row("custom-fn"));
+  const customManifest = { "custom-fn": "customFn" };
+  const customSrc = `(define pick custom-fn) (define (f) (let ((customFn (lambda () 99))) (customFn)))`;
+
+  it("a symbol absent from STAGE0 is never reserved without an explicit manifest", () => {
+    const out = render(walk(cf(customSrc), { registry: customFnRegistry, register: "run" }));
+    expect(out).toContain("const customFn = () => 99;"); // no collision reserved — no suffix
+  });
+
+  it("opts.manifest overrides STAGE0 for the reservation set — the SAME symbol now collides", () => {
+    const out = render(
+      walk(cf(customSrc), { registry: customFnRegistry, register: "run", manifest: customManifest }),
+    );
+    expect(out).toContain("const customFn_2 = () => 99;"); // reserved via the custom manifest, forced to suffix
+  });
+
   // ── field-destructure end to end (item 2) — keyword-accessor + `dict` are
   // walker-intrinsic special forms, so this needs no registry symbols at all ──
 
