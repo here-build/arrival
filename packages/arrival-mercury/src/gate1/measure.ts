@@ -22,28 +22,52 @@
  *       exact same two inputs `walk()` itself branches on for these two node
  *       kinds — without ever calling `walk()` or touching a `Residual` at all.
  *
- * (b) is cheaper AND at least as sound, because for these two site classes the
- * walker's decision has NO other input:
+ * (b) is cheaper and remains SOUND as a lower bound for these two site classes,
+ * but — UPDATED for the E2/E3-era decision views this module does NOT
+ * replicate (`idiomAt`/`prevalueOf`/`sameBranchOf`, `../walker/walk.ts`'s
+ * `WalkOptions`, all wired live by `compileGreenfield`, ../oracle/harness.ts) —
+ * it is no longer the walker's ONLY input for either site class:
  *
- *   - `If`: `walk.ts`'s `truthTest` is `register === "read" || facts.get(cond.id)
- *     ?.boolean === true` — under the frozen register `"run"`, clean is EXACTLY
- *     `facts.get(cond.id)?.boolean === true`. There is nothing else the walker
- *     reads to make this decision.
- *   - `App(car|cdr|…)`: `walk.ts`'s `lowerApp` only reaches the registry's rule
- *     (rung 1, the idiomatic residual) when the head is UNRESOLVED lexically
+ *   - `If`: `walk.ts`'s `truthTest` (via `guardFor`/`guardFormOf`,
+ *     `../lowering/index.ts`) is `register === "read" || facts.get(cond.id)
+ *     ?.boolean === true` — under the frozen register `"run"`, THIS is exactly
+ *     `facts.get(cond.id)?.boolean === true`, which is what this module
+ *     recomputes. But `truthTest` is only reached at all when `opts.prevalueOf`
+ *     and `opts.sameBranchOf` both DECLINE first (`lowerExpr`'s/`tailLoopForm`'s
+ *     "If" arms, consulted in that order, ahead of `truthTest`) — a
+ *     provably-constant guard or an identical-both-branches value folds the
+ *     whole `If` away, guard and all, even where `facts.boolean` is never
+ *     proven. Both folds are declared "decline is always safe" (`WalkOptions`'s
+ *     own doc) and only ever ADD clean residuals on top of the facts.boolean
+ *     path this module already counts — they never take one away. So this
+ *     module's `If`-clean count is a conservative UNDER-count of what the real
+ *     pipeline emits, not the exact figure the pre-E2/E3 argument here used to
+ *     claim.
+ *   - `App(car|cdr|…)`: `walk.ts`'s `lowerApp` consults `opts.idiomAt` FIRST,
+ *     before the registry ladder this module recomputes (`reachesEmitRule`,
+ *     below) — a matching idiom (`../peepholes/index.ts`'s scalar-fold,
+ *     matching exactly this `App(car, [inner])` shape) fuses the site into a
+ *     different residual entirely, bypassing the plain rung-1 reachability
+ *     check. Same direction as `If`: an optional, decline-is-safe fold this
+ *     module doesn't replicate, so its car-family clean count is likewise a
+ *     lower bound, not an exact reading. When the head IS resolved through the
+ *     ordinary ladder (no idiom fired), the rest of the original argument still
+ *     holds: `lowerApp` only reaches the registry's rule (rung 1, the
+ *     idiomatic residual) when the head is UNRESOLVED lexically
  *     (`resolve(name) === undefined`) and the registry row carries an `emit`
  *     rule (`row.kind !== "door" && row.emit !== undefined`) — car/cdr/cxr's
  *     Phase-1 rules are UNCONDITIONAL (no fact-gating: "No guard, no shim, no
- *     mode", constitution §4.3), so reaching the rule is the entire clean
- *     condition. The one input this module does not independently re-derive is
- *     lexical resolution (`resolve()` in walk.ts, scope-aware) — see
- *     `assertNoCxrShadowing` below for how that gap is closed cheaply instead
- *     of ported wholesale.
+ *     mode", constitution §4.3). The one input this module does not
+ *     independently re-derive is lexical resolution (`resolve()` in walk.ts,
+ *     scope-aware) — see `assertNoCxrShadowing` below for how that gap is
+ *     closed cheaply instead of ported wholesale.
  *
- * This means (b) is not an approximation of what `walk()` would decide — it is
- * the same two-input decision, read directly off the two structures that ARE
- * the inputs, one classify-tree walk away from PROOF instead of inference by
- * text-shape matching.
+ * This means (b) is not a text-shape-matching approximation — it reads two of
+ * the walker's real inputs (facts, registry) directly off the structures that
+ * ARE the inputs — but per the above it is a SOUND LOWER BOUND on `walk()`'s
+ * actual clean rate for `If` and car-family sites, not a byte-exact replica of
+ * every path to "clean": the metric can under-report, never over-report,
+ * relative to what `compileGreenfield` actually emits.
  *
  * ── The shadowing gap ────────────────────────────────────────────────────────
  * `walk()`'s registry rung is only reached when the symbol is not a LOCAL
@@ -73,12 +97,10 @@ import { fileURLToPath } from "node:url";
 import {
   classify,
   desugar,
-  emitRegistryOf,
   extractFacts,
+  greenfieldRegistryFor,
   narrowsMembersOf,
   parseSexprs,
-  phase1Rules,
-  withRules,
   type CoreForm,
   type OracleSession,
   type OverlayEmitRegistry,
@@ -250,6 +272,11 @@ export function measureProgram(name: string, sourcePath: string, source: string,
       ifSites++;
       // register "run" (the frozen metric): clean iff facts.boolean proves the
       // condition — walk.ts's truthTest verbatim, minus the "read"-register branch.
+      // NOTE this is a lower bound, not the walker's only path to clean here:
+      // `walk()` also consults `prevalueOf`/`sameBranchOf` (module header,
+      // "Instrument choice") ahead of truthTest, which can fold the whole `If`
+      // away even where facts.boolean is never proven — this module doesn't
+      // replicate those folds, so it can under-count If-clean, never over-count.
       if (extraction.facts.get(n.cond.id)?.boolean === true) ifClean++;
       return;
     }
@@ -352,7 +379,14 @@ const sum = (xs: readonly number[]): number => xs.reduce((a, b) => a + b, 0);
  *  §4.1 per-session reuse contract). Throws if the sample-size guard fails —
  *  a report is never returned for a corpus too thin to mean anything. */
 export function runGate1Measurement(session: OracleSession): Gate1Report {
-  const registry = withRules(emitRegistryOf(session.ambient), phase1Rules);
+  // The REAL compile-path registry (ambient harvest + srfi-1 static fallback +
+  // phase1Rules overlay) — never re-derive this inline. An earlier inline
+  // `withRules(emitRegistryOf(session.ambient), phase1Rules)` here skipped the
+  // srfi-1 merge `greenfieldRegistryFor` exists to apply, so this module scored
+  // `filter` (an srfi-1 symbol) 0% clean while the pipeline actually emits it
+  // clean — see `greenfieldRegistryFor`'s own doc (oracle/harness.ts) for the
+  // ambient-gap this closes.
+  const registry = greenfieldRegistryFor(session);
   const narrowsMembers = narrowsMembersOf(registry);
 
   const perProgram = GATE1_MANIFEST.map((entry) => {
