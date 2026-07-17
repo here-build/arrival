@@ -27,7 +27,7 @@ function OracleMain() {
     const scoresOf = recs => recs.map(recScore);
     const failuresOf = recs => recs.filter(__x => (rec => zeroP(recScore(rec)))(__x) !== false);
     const candidate = (analyze, decide, via, recs) => ({ analyze: analyze, decide: decide, via: via, recs: recs });
-    const instrOf = ({ analyze, decide }, stage) => equalP(stage, "analyze") ? analyze : decide;
+    const instrOf = ({ analyze, decide }, stage) => stage === "analyze" ? analyze : decide;
     const assess = (analyze, decide, via) => candidate(analyze, decide, via, evaluate(analyze, decide, paretoset));
     const scores = ({ recs }) => scoresOf(recs);
     const total = c => scores(c).reduce((__acc, score) => __acc + score, 0);
@@ -40,11 +40,11 @@ function OracleMain() {
         const fails = failuresOf(batch);
         return fails.length === 0 ? false : (() => {
             const improved = runReflect([stage, current, fails], { stage: stage, instruction: current, failures: fails });
-            return equalP(stage, "analyze") ? [improved, c["decide"], "analyze"] : [c["analyze"], improved, "decide"];
+            return stage === "analyze" ? [improved, c["decide"], "analyze"] : [c["analyze"], improved, "decide"];
         })();
     };
-    const complementary = ({ via }, { via: via_2 }) => equalP(via, "analyze") && equalP(via_2, "decide") || equalP(via, "decide") && equalP(via_2, "analyze");
-    const merge = ({ via, analyze, decide }, { decide: decide_2, analyze: analyze_2 }) => equalP(via, "analyze") ? assess(analyze, decide_2, "merge") : assess(analyze_2, decide, "merge");
+    const complementary = ({ via }, { via: via_2 }) => via === "analyze" && via_2 === "decide" || via === "decide" && via_2 === "analyze";
+    const merge = ({ via, analyze, decide }, { decide: decide_2, analyze: analyze_2 }) => via === "analyze" ? assess(analyze, decide_2, "merge") : assess(analyze_2, decide, "merge");
     const findMerge = pool => {
         const outer = as => nullP(as) ? false : (() => {
             let bs = pool;
@@ -98,7 +98,7 @@ function OracleMain() {
         let s = state;
         /*[ts-base/self-tail-loop] named let `loop` → while*/
         while (true) {
-            if (zeroP(tries) || ge(length_(picked), k) || ge(length_(picked), length_(set))) {
+            if (zeroP(tries) || ge(length_(picked), k) || length_(picked) >= length_(set)) {
                 return [picked, s];
             }
             else {
@@ -116,7 +116,7 @@ function OracleMain() {
     const MERGEEVERY = 3;
     const evolve = (pool, budget, rng, iter) => le(budget, 0) ? pool : (() => {
         const pair = (() => {
-            const __and = zeroP((iter % MERGEEVERY + MERGEEVERY) % MERGEEVERY);
+            const __and = (iter % MERGEEVERY + MERGEEVERY) % MERGEEVERY === 0;
             return __and === false ? __and : findMerge(frontier(pool));
         })();
         return pair !== false ? evolve(frontier(cons(merge(pair[0], pair[1]), pool)), budget - length_(paretoset), rngNext(rng), iter + 1) : (() => {

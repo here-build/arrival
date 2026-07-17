@@ -16,7 +16,7 @@ function OracleMain() {
         throw new Error("unsupported-form/unresolved-identifier: `metric` is not lexically bound and is not a registry symbol.");
     });
     const assess = instruction => ({ instruction: instruction, scores: evaluate(instruction) });
-    const failing = ({ scores }) => examples.map((example, __i) => list(example, scores[__i])).filter(__x => (([first, second]) => zeroP(second))(__x) !== false).map(([head]) => head);
+    const failing = ({ scores }) => examples.map((example, __i) => list(example, scores[__i])).filter(__x => (([first, second]) => second === 0)(__x) !== false).map(([head]) => head);
     const mutate = candidate => assess(reflect(candidate["instruction"], failing(candidate)));
     const dominates = ({ scores }, { scores: scores_2 }) => every(ge, scores, scores_2) && some(gt, scores, scores_2);
     const frontier = pool => pool.filter(__x => (c => !some(other => dominates(other, c), pool))(__x) !== false);

@@ -1,6 +1,5 @@
-import { stringAppend } from "./stage0.mts";
 function OracleMain() {
-    return "ab" === stringAppend("a", "b");
+    return [10, 20, 30][1];
 }
 export { __oracleResult };
 const __oracleResult = OracleMain();

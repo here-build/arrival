@@ -20,7 +20,7 @@ import { describe, expect, it } from "vitest";
 
 import type { AEntity } from "../../../common/symbol.js";
 import type { EmitCtx } from "../../../emit/emit-rule.js";
-import { ArrayLit, Arrow, Bin, Binding, Call, Index, Lit, Method, Ref, Spread, type R } from "../../../emit/residual-lite.js";
+import { ArrayLit, Arrow, Bin, Binding, Call, Index, Lit, Member, Method, Ref, Spread, type R } from "../../../emit/residual-lite.js";
 import listsPack from "../lists.js";
 
 const symbols = listsPack.spec.symbols as Record<string, AEntity>;
@@ -191,5 +191,62 @@ describe("lists Contract.emit — the Phase-2 relocation drill (apply — Wave 3
   it("apply: a sub-2-argument call doors (totality — never a silent miscompile)", () => {
     const def = nativeDef("apply");
     expect(() => def.emit!.call([ref("f")], testCtx())).toThrow(/wants a function and a trailing argument list/);
+  });
+});
+
+describe("lists Contract.emit — the SAME provesArray fact-gate as cons (length / list-ref)", () => {
+  it("length: xs PROVEN array-backed (list/pair/nonEmptyList) → the clean xs.length member read", () => {
+    const def = nativeDef("length");
+    expect(def.emit).toBeDefined();
+    expect(def.narrows).toBeUndefined(); // not a Law-N narrowing leaf
+    const xs = ref("xs");
+    for (const tailFact of [{ list: true }, { pair: true }, { nonEmptyList: true }] as const) {
+      const residual = def.emit!.call([xs], testCtx({ argFacts: [tailFact] }));
+      expect(residual).toEqual(Member(xs, "length"));
+    }
+  });
+
+  it("length: xs UNKNOWN (no fact proven) → the runtime length shim, never a bare .length (the string/vector-carrier case)", () => {
+    const def = nativeDef("length");
+    const xs = ref("xs");
+    const residual = def.emit!.call([xs], testCtx({ argFacts: [{}], runtime: (name) => runtimeRef(name) }));
+    expect(residual).toEqual(Call(runtimeRef("length"), [xs]));
+  });
+
+  it("length: a mis-arity call doors", () => {
+    const def = nativeDef("length");
+    expect(() => def.emit!.call([], testCtx())).toThrow(/wants exactly 1 argument/);
+    expect(() => def.emit!.call([ref("a"), ref("b")], testCtx())).toThrow(/wants exactly 1 argument/);
+  });
+
+  it("list-ref: xs PROVEN array-backed → the clean xs[k] index read", () => {
+    const def = nativeDef("list-ref");
+    expect(def.emit).toBeDefined();
+    expect(def.narrows).toBeUndefined();
+    const [xs, k] = [ref("xs"), ref("k")];
+    for (const tailFact of [{ list: true }, { pair: true }, { nonEmptyList: true }] as const) {
+      const residual = def.emit!.call([xs, k], testCtx({ argFacts: [tailFact, {}] }));
+      expect(residual).toEqual(Index(xs, k));
+    }
+  });
+
+  it("list-ref: xs UNKNOWN (no fact proven) → the runtime list-ref shim (spine-walk + OOB door), never a bare index", () => {
+    const def = nativeDef("list-ref");
+    const [xs, k] = [ref("xs"), ref("k")];
+    const residual = def.emit!.call([xs, k], testCtx({ argFacts: [{}, {}], runtime: (name) => runtimeRef(name) }));
+    expect(residual).toEqual(Call(runtimeRef("list-ref"), [xs, k]));
+  });
+
+  it("list-ref: the fact gate reads ONLY the list operand's fact (argFacts[0]), not the index's — an unproven index alongside a proven list still takes the clean path", () => {
+    const def = nativeDef("list-ref");
+    const [xs, k] = [ref("xs"), ref("k")];
+    const residual = def.emit!.call([xs, k], testCtx({ argFacts: [{ list: true }] })); // argFacts[1] absent entirely
+    expect(residual).toEqual(Index(xs, k));
+  });
+
+  it("list-ref: a mis-arity call doors", () => {
+    const def = nativeDef("list-ref");
+    expect(() => def.emit!.call([ref("xs")], testCtx())).toThrow(/wants exactly 2 arguments/);
+    expect(() => def.emit!.call([ref("xs"), ref("k"), ref("extra")], testCtx())).toThrow(/wants exactly 2 arguments/);
   });
 });

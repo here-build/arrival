@@ -148,3 +148,54 @@ describe("equality Contract.emit — the Phase-2 relocation drill (null? / pair?
     expect(() => def.emit!.call([], testCtx())).toThrow(/wants exactly 1 argument/);
   });
 });
+
+describe("equality Contract.emit — the primitive-proven gate (equal?)", () => {
+  it("equal?: the Contract carries the emit rule", () => {
+    const def = nativeDef("equal?");
+    expect(def.emit).toBeDefined();
+    expect(def.narrows).toBeUndefined(); // a value comparison narrows no type
+  });
+
+  it("equal?: BOTH operands proven primitive (numeric) → the clean 1 === 1 form (the happy path)", () => {
+    const def = nativeDef("equal?");
+    const [a, b] = [ref("a"), ref("b")];
+    const residual = def.emit!.call([a, b], testCtx({ argFacts: [{ numeric: true }, { numeric: true }] }));
+    expect(residual).toEqual(Bin("===", a, b));
+  });
+
+  it("equal?: ONLY ONE side proven primitive (numeric/stringy/boolean) → still === (asymmetric ||, not &&) — a primitive can never equal?-match a compound, and === agrees", () => {
+    const def = nativeDef("equal?");
+    const [a, b] = [ref("a"), ref("b")];
+    for (const primitiveFact of [{ numeric: true }, { stringy: true }, { boolean: true }] as const) {
+      // primitive fact on the FIRST operand only
+      expect(def.emit!.call([a, b], testCtx({ argFacts: [primitiveFact, {}] }))).toEqual(Bin("===", a, b));
+      // primitive fact on the SECOND operand only
+      expect(def.emit!.call([a, b], testCtx({ argFacts: [{}, primitiveFact] }))).toEqual(Bin("===", a, b));
+    }
+  });
+
+  it("equal?: the DISCRIMINATING PAIR — neither side proven primitive → the runtime structuralEqual shim, NEVER a bare === (the load-bearing soundness line: (equal? '(1) '(1)) is #t via deep-equal, but the compiled arrays are reference-distinct, so === would wrongly answer #f)", () => {
+    const def = nativeDef("equal?");
+    const [a, b] = [ref("a"), ref("b")];
+    // Neither side proves numeric/stringy/boolean — e.g. both sides are proven
+    // `list`/`pair` (compound), or simply unproven (Law F). Either way, no primitive
+    // fact fires, so the gate must fall to the shim.
+    for (const argFacts of [
+      [{}, {}],
+      [{ list: true }, { list: true }],
+      [{ pair: true }, { pair: true }],
+    ] as const) {
+      const residual = def.emit!.call(
+        [a, b],
+        testCtx({ argFacts: [...argFacts], runtime: (name) => Ref(Binding(`__runtime_${name}`)) }),
+      );
+      expect(residual).toEqual(Call(Ref(Binding("__runtime_equal?")), [a, b]));
+    }
+  });
+
+  it("equal?: a mis-arity call doors (totality — never a silent miscompile)", () => {
+    const def = nativeDef("equal?");
+    expect(() => def.emit!.call([ref("a")], testCtx())).toThrow(/wants exactly 2 arguments/);
+    expect(() => def.emit!.call([ref("a"), ref("b"), ref("c")], testCtx())).toThrow(/wants exactly 2 arguments/);
+  });
+});

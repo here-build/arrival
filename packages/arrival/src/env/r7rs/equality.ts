@@ -114,6 +114,39 @@ const pairQEmitRule: EmitRule<R> = {
   },
 };
 
+// ── equal? — the PRIMITIVE-proven gate, Law-A soundness line ────────────────────────
+// `equal?` is DEEP structural equality (structuralEqual), not `===` — for a COMPOUND
+// value (list/pair/vector), `===` is reference identity and would wrongly say `#f` for
+// two structurally-equal-but-distinct cells (`(equal? '(1) '(1))` is `#t`; the two
+// compiled arrays are NOT the same reference). So `===` may NEVER be the residual when
+// BOTH sides could be compound.
+//
+// But when EITHER side provably decodes to a bare JS primitive (`numeric`/`stringy`/
+// `boolean` — §3.3's ∀-over-union derivation, same nil-excluding guarantee the
+// comparisons in numeric.ts lean on), `===` agrees with `equal?` for ANY value on the
+// other side, proven or not: a primitive can only `equal?`-match a value of the SAME
+// primitive JS type and value, which is exactly what `===` tests, and it can never
+// `equal?`-match a compound value — `===` between a primitive and an object is always
+// `false`, and `structuralEqual` between a scalar and a compound is always `false` too
+// (a type mismatch, never a coincidental deep-equal). So ONE side proving primitive is
+// sufficient, not both — the check below is deliberately asymmetric (`||`, not `&&`).
+//
+// UNPROVEN on both sides (the common case for two arbitrary list operands) → the
+// runtime shim (`structuralEqual`'s real deep walk) — collapsing that to `===` would
+// silently flip every reference-distinct-but-equal compound pair to `#f` (the exact bug
+// this gate exists to prevent; see equality-emit.test.ts's discriminating pair).
+const provesPrimitive = (f: { numeric?: true; stringy?: true; boolean?: true } | undefined): boolean =>
+  f?.numeric === true || f?.stringy === true || f?.boolean === true;
+
+const equalQEmitRule: EmitRule<R> = {
+  call: (args, ctx) => {
+    const [a, b] = exactly(ctx, "equal?", args, 2);
+    return provesPrimitive(ctx.argFacts[0]) || provesPrimitive(ctx.argFacts[1])
+      ? Bin("===", a!, b!)
+      : Call(ctx.runtime("equal?"), [a!, b!]);
+  },
+};
+
 export default new EnvCapability("scheme/equality", {
   symbols: {
     // R7RS 6.3 Booleans
@@ -222,7 +255,9 @@ export default new EnvCapability("scheme/equality", {
     // operands union into the result, provenance-free operands still get `bool`'s
     // shared flyweight (mintVerdict's allocation-free path).
     "equal?": symbol.native`equal?: representation-blind structural equality`(
-      { input: [z.value, z.value], output: [z.boolean] },
+      // Compiler-facing (constitution §4.1) — the primitive-proven gate (see
+      // `equalQEmitRule`'s own doc comment above for the full soundness argument).
+      { input: [z.value, z.value], output: [z.boolean], emit: equalQEmitRule },
       function (this: CallCtx, a, b) { return mintVerdict([a, b], structuralEqual(a, b)); },
     ),
 

@@ -2,8 +2,8 @@
   "goldenEpoch": 1,
   "totalTopLevelForms": 9,
   "rungCounts": {
-    "rule": 21,
-    "shim": 5,
+    "rule": 23,
+    "shim": 3,
     "door": 7
   },
   "doors": [

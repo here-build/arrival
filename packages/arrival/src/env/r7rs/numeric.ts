@@ -26,7 +26,7 @@ import "@here.build/error-invariant";
 import { symbol, type Contract, type RestSpec, type VectorSpec } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import type { EmitCtx, EmitRule } from "../../emit/emit-rule.js";
-import { Bin, Binding, Lit, Method, Ref, Un, type BinOp, type R } from "../../emit/residual-lite.js";
+import { Bin, Binding, Call, Lit, Method, Ref, Un, type BinOp, type R } from "../../emit/residual-lite.js";
 import { type RunContext } from "../../values/primitives/RunContext.js";
 import { CallCtx } from "../../common/symbols/_bake.js";
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "../../values/primitives/AValue.js";
@@ -1237,6 +1237,63 @@ const numEqEmitRule: EmitRule<R> = {
   },
 };
 
+// ── §7 fact-gated relocation: < <= > >= — Law A, argFacts-gated (unlike =/+/-/*//) ──
+// `=`/+/-/*// above are unconditional: `=`'s runtime is `looseCompare("=", numEqOp)` —
+// no FL-Ord fallback, so its only non-numeric behavior is nil-tolerance, and nil
+// compiles to a `===`-comparable value (§7), making `===` sound for EVERY input. `<`/
+// `<=`/`>`/`>=` are different: their runtime is `looseCompare(sym, wrapOrd(op, sym))` —
+// `wrapOrd` ALSO dispatches non-numeric Ord entities (FL `arrival/tagless-final/lte` —
+// strings, chars, DateTime; op-helpers.ts's `isOrd`/`ORD_REL`) through a comparison
+// JS's raw `<`/`<=`/`>`/`>=` does not replicate, and `looseCompare`'s nil-tolerance
+// here runs `nilOrderCompare`'s nil-as-bottom rule (op-helpers.ts), not a bare `===`.
+// So an UNPROVEN operand could be nil or a non-numeric Ord type, either of which a
+// bare JS relational operator gets wrong. Only when EVERY operand proves `numeric`
+// (TypeFacts — §3.3's ∀-over-union-constituents derivation, which by construction
+// excludes any nil-including union: `null`/`undefined` share no TypeFlags with
+// NumberLike) can the value at this site never be nil or non-numeric-Ord — the raw JS
+// operator IS then the scheme numeric comparison (§7's one-number law). Any operand
+// missing the fact (Law F) → the full `looseCompare(wrapOrd(...))` runtime, unchanged.
+function compareEmitRule(sym: "<" | ">" | "<=" | ">="): EmitRule<R> {
+  return {
+    call: (args, ctx) => {
+      // R7RS: a 0/1-ary comparison is vacuously true — mirrors numEqEmitRule exactly.
+      if (args.length < 2) return Lit(true);
+      // ALL-OR-NOTHING over the whole call, not per-adjacent-pair: a middle operand
+      // appears in two comparisons, so proving only SOME operands numeric can't
+      // license splitting the chain into native/shim halves — one decision, matching
+      // numEqEmitRule's own single-shaped chain.
+      const allNumeric = args.every((_, i) => ctx.argFacts[i]?.numeric === true);
+      if (!allNumeric) return Call(ctx.runtime(sym), args);
+      if (args.length === 2) return Bin(sym, args[0]!, args[1]!);
+      // n-ary: a<b && b<c — middle operands appear twice; same double-evaluation
+      // §2.2 already licenses for numEqEmitRule's own n-ary chain.
+      let chain: R = Bin(sym, args[0]!, args[1]!);
+      for (let i = 2; i < args.length; i++) chain = Bin("&&", chain, Bin(sym, args[i - 1]!, args[i]!));
+      return chain;
+    },
+  };
+}
+
+const ltEmitRule = compareEmitRule("<");
+const gtEmitRule = compareEmitRule(">");
+const lteEmitRule = compareEmitRule("<=");
+const gteEmitRule = compareEmitRule(">=");
+
+// ── §7 fact-gated relocation: zero? ──────────────────────────────────────────────────
+// Same gate as the comparisons above: `zero?`'s runtime (`nativeNumericOp("zero?", …)`)
+// throws on a non-number (`coerceNumeric`), so an UNPROVEN operand can't silently be
+// nil — but it CAN be any non-numeric scheme value the type pass hasn't excluded, and
+// `x === 0` on e.g. a string or pair is simply the wrong question (not unsafe, just
+// not what `zero?` means for that domain — the shim's coercion+door is the honest
+// total behavior). Proven `numeric` (nil-excluding, see the comparisons' own note
+// above) → the value is always a bare JS number, so `x === 0` is exactly `isZeroFn`.
+const zeroEmitRule: EmitRule<R> = {
+  call: (args, ctx) => {
+    const [n] = exactly(ctx, "zero?", args, 1);
+    return ctx.argFacts[0]?.numeric === true ? Bin("===", n!, Lit(0)) : Call(ctx.runtime("zero?"), [n!]);
+  },
+};
+
 export default new EnvCapability("scheme/numeric", {
   symbols: {
     // ── Arithmetic ──────────────────────────────────────────────────────────────
@@ -1347,15 +1404,27 @@ export default new EnvCapability("scheme/numeric", {
       looseCompare("=", numEqOp),
     ),
     "<": symbol.native`<: strictly increasing (FL-Ord fallback, nil-tolerant)`(
-      contractFromSpec(ltSpec),
+      { ...contractFromSpec(ltSpec), emit: ltEmitRule },
       looseCompare("<", wrapOrd(ltOp, "<")),
     ),
-    ">": symbol.native`>: strictly decreasing`(contractFromSpec(gtSpec), looseCompare(">", wrapOrd(gtOp, ">"))),
-    "<=": symbol.native`<=: non-decreasing`(contractFromSpec(lteSpec), looseCompare("<=", wrapOrd(lteOp, "<="))),
-    ">=": symbol.native`>=: non-increasing`(contractFromSpec(gteSpec), looseCompare(">=", wrapOrd(gteOp, ">="))),
+    ">": symbol.native`>: strictly decreasing`(
+      { ...contractFromSpec(gtSpec), emit: gtEmitRule },
+      looseCompare(">", wrapOrd(gtOp, ">")),
+    ),
+    "<=": symbol.native`<=: non-decreasing`(
+      { ...contractFromSpec(lteSpec), emit: lteEmitRule },
+      looseCompare("<=", wrapOrd(lteOp, "<=")),
+    ),
+    ">=": symbol.native`>=: non-increasing`(
+      { ...contractFromSpec(gteSpec), emit: gteEmitRule },
+      looseCompare(">=", wrapOrd(gteOp, ">=")),
+    ),
 
     // ── Sign / parity predicates (throwing — coerce then test) ───────────────────
-    "zero?": symbol.native`zero?: #t iff n is zero`(contractFromSpec(zeroSpec), nativeNumericOp("zero?", zeroSpec)),
+    "zero?": symbol.native`zero?: #t iff n is zero`(
+      { ...contractFromSpec(zeroSpec), emit: zeroEmitRule },
+      nativeNumericOp("zero?", zeroSpec),
+    ),
     "positive?": symbol.native`positive?: #t iff n > 0`(
       contractFromSpec(positiveSpec),
       nativeNumericOp("positive?", positiveSpec),

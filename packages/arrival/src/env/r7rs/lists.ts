@@ -63,7 +63,7 @@ import type { AList, AListAlike, AProcedure, SchemeValue } from "../../values/ty
 // back from this tree): the compiler-facing rule surface a Contract may carry.
 // Constitution §4.1/§4.5 (arrival-ts-transpiler-design.md) + registry-emit.md.
 import type { EmitCtx, EmitRule } from "../../emit/emit-rule.js";
-import { ArrayLit, Arrow, Bin, Call, Index, Lit, Method, Ref, Spread, type Binding, type BinOp, type R } from "../../emit/residual-lite.js";
+import { ArrayLit, Arrow, Bin, Call, Index, Lit, Member, Method, Ref, Spread, type Binding, type BinOp, type R } from "../../emit/residual-lite.js";
 
 // A JS value used as a Scheme procedure IS the SchemeValue function member
 // `(...args: SchemeValue[]) => SchemeValue` (types.ts). `is_function`/`typeof`
@@ -397,6 +397,38 @@ const applyEmitRule: EmitRule<R> = {
   },
 };
 
+// ── length / list-ref — the SAME provesArray fact-gate cons above established ───────
+// §2.1's array representation collapse (list/pair/nonEmptyList all mean "this value IS
+// a JS array at runtime", the same disjoint-from-scalar reasoning `consEmitRule`'s own
+// section documents): PROVEN → the direct property/index read; UNKNOWN → the existing
+// runtime shim, which handles the wider carrier domain uniformly (a string, a vector,
+// or an unproven list-carrier all reach `length`'s own tf("length") dispatch /
+// list-ref's spine walk) — never a bare `.length`/`[k]` that would silently answer
+// something for a non-array value Law F has no proof about.
+//
+// OOB divergence (list-ref only, documented not fixed): a proven-array `xs[k]` with
+// `k` out of bounds returns JS `undefined`, where the interpreter's spine walk THROWS
+// ("list-ref: index out of bounds") — the fast path is only byte-identical to the shim
+// on the IN-BOUNDS case. This mirrors the already-accepted precedent of quotient/
+// modulo's emit rules not replicating the interpreter's divide-by-zero throw (Math
+// division silently produces Infinity/NaN instead) — the compiled artifact's fast
+// paths optimize the value-producing case; they were never asked to replicate every
+// interpreter throw. Not fixed here — flagged for the same ruling quotient/modulo
+// already received.
+const lengthEmitRule: EmitRule<R> = {
+  call: (args, ctx) => {
+    const [xs] = exactly(ctx, "length", args, 1);
+    return provesArray(ctx.argFacts[0]) ? Member(xs!, "length") : Call(ctx.runtime("length"), [xs!]);
+  },
+};
+
+const listRefEmitRule: EmitRule<R> = {
+  call: (args, ctx) => {
+    const [xs, k] = exactly(ctx, "list-ref", args, 2);
+    return provesArray(ctx.argFacts[0]) ? Index(xs!, k!) : Call(ctx.runtime("list-ref"), [xs!, k!]);
+  },
+};
+
 export default new EnvCapability("scheme/lists", {
   symbols: {
     // R7RS 6.10 — map. A combinator: ONE list dispatches to the operand's own arrival/tagless-final/
@@ -550,6 +582,8 @@ export default new EnvCapability("scheme/lists", {
             (xs: List<unknown> | readonly unknown[] | string): number;
           }
         `,
+        // Compiler-facing (constitution §4.1) — the fact-gated relocation drill.
+        emit: lengthEmitRule,
       },
       lengthImpl,
     ),
@@ -654,6 +688,8 @@ export default new EnvCapability("scheme/lists", {
             <T>(xs: List<T>, k: number): T;
           }
         `,
+        // Compiler-facing (constitution §4.1) — the fact-gated relocation drill.
+        emit: listRefEmitRule,
       },
       function (this: CallCtx, list, k) {
         const count = k.valueOf();
