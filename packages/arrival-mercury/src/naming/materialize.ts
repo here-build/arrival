@@ -2,11 +2,23 @@
  * MATERIALIZE — commits a `NameAllocation` onto the provisional
  * `CompilationUnit` walk() built: (a) renames every non-destructured Binding
  * IN PLACE (mutating `.text` — safe, and the only practical option: Binding
- * objects are shared by reference at every occurrence site, and nothing reads
- * `.text` for any DECISION anywhere downstream — legibility/CSE, ASYNC-IFY,
- * FRAME, and render() all key on Binding IDENTITY or read `.text` only at the
- * final print step; walker/walk.ts's own header audits this); (b) rewrites
- * every destructured param site structurally (Binding → ArrayPattern for
+ * objects are shared by reference at every occurrence site). Nothing
+ * downstream of THIS mutation depends on the PROVISIONAL (pre-mutation) text
+ * — the three passes that run later each decide by something else, or by
+ * text that's already final by the time they run:
+ *   - `../naming/shared-bindings.ts`'s CSE (`sharedBindingsOf`) DOES decide
+ *     by text (`structuralKey`'s JSON-stringify includes a `Ref`'s bound
+ *     name) — sound only because it runs AFTER this materializer, over the
+ *     already-final tree (that module's own header: "structural equality BY
+ *     TEXT… is only sound once names are collision-resolved and final").
+ *   - `../naming/asyncness.ts`'s `materializeAsyncness` and
+ *     `../naming/imports.ts`'s `materializeImports` (the dissolved
+ *     standalone `async-ify/`/`frame/` passes' successors) both decide by
+ *     `RuntimeRef.symbol` — a different field entirely, untouched by this
+ *     mutation regardless of ordering.
+ *   - `render()` reads `.text` only at the final print step.
+ *
+ * (b) rewrites every destructured param site structurally (Binding → ArrayPattern for
  * positional destructure, ObjectPattern for the dict-field shape —
  * naming lane item 2), substituting qualifying occurrences with `Ref`s to the
  * new slot/field bindings — the same tree surgery the dissolved

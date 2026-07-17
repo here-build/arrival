@@ -1275,27 +1275,31 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
 
   // ── the naming phase: census → allocate → materialize (engine plan §2 E1a) ────────
   // Reservations: the stage-0 manifest's exported names for exactly the runtime
-  // symbols THIS unit still references (runtimeRefsOf — the SAME census FRAME's own
-  // import materializer runs over this unit later, post-legibility/ASYNC-IFY) — never
+  // symbols THIS unit still references (runtimeRefsOf — the SAME census
+  // `../naming/imports.ts`'s `materializeImports` runs over this unit later, post
+  // legibility/post-`../naming/asyncness.ts`'s `materializeAsyncness`) — never
   // the whole manifest: reserving an export no surviving RuntimeRef needs would
   // needlessly block a same-named user binding
   // (e.g. a local `car` shadow, or an unrelated `odd` binding, when this program never
   // calls the stage-0 `odd?`/`car`-in-value-position exports). Plus the three
   // hardcoded globals other passes reference by raw Binding — "Error" (this walker's
-  // own doorThrow), "Math" (the quotient rule), "Promise" (ASYNC-IFY's Promise.all
-  // rewrites) — matching the reservation this walker used to pre-seed into jsFrames[0]
-  // directly.
+  // own doorThrow), "Math" (the quotient rule), "Promise" (`../naming/asyncness.ts`'s
+  // `materializeAsyncness`'s Promise.all rewrites) — matching the reservation this
+  // walker used to pre-seed into jsFrames[0] directly.
   const stillNeeded = [...runtimeRefsOf(provisional)].map((s) => STAGE0[s]).filter((v): v is string => v !== undefined);
   const census = bindingCensusOf(provisional);
   const allocation = allocateNames(census, [...stillNeeded, "Error", "Math", "Promise"]);
   return materializeNames(provisional, allocation);
 }
 
-// ── RuntimeRef census (minimal-FRAME's input; the frame-as-query mechanism §3.4) ──────
+// ── RuntimeRef census (the frame-as-query mechanism §3.4; `../naming/imports.ts`'s input) ──
 
 /** Every `RuntimeRef` symbol occurring in the unit, in first-occurrence order (decls
- *  before body, pre-order within each tree). The FRAME wave turns this census into
- *  the runtime-module import list; until then it is the derivable seam. */
+ *  before body, pre-order within each tree). `../naming/imports.ts`'s `materializeImports`
+ *  (via `model.ts`'s `sm.importsOf`, which walks a synthetic one-form unit through this
+ *  SAME function) turns this census into the runtime-module import list — the dissolved
+ *  standalone `frame/` pass's successor; this function is that seam, derivable rather
+ *  than tracked as separate state. */
 export function runtimeRefsOf(unit: CompilationUnit): ReadonlySet<string> {
   const out = new Set<string>();
   const visit = (r: R): void => {
