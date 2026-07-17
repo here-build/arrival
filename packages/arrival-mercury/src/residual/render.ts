@@ -584,6 +584,9 @@ function paramDecl(param: Param, isLast: boolean, origin: NodeId | undefined): t
     if (!isLast) {
       throw new ResidualRenderError("RestBinding must be the last Param's pattern", origin);
     }
+    if (param.default !== undefined) {
+      throw new ResidualRenderError("a rest parameter cannot carry a default initializer (no JS syntax for `...rest = x`)", origin);
+    }
     // The renderer attaches whatever TsType it is handed — a rest param's array-ness is
     // the constructor's responsibility, per the zero-idiom-inference discipline.
     return f.createParameterDeclaration(
@@ -601,7 +604,13 @@ function paramDecl(param: Param, isLast: boolean, origin: NodeId | undefined): t
     renderBindingPattern(param.pattern, origin),
     undefined,
     typeNode,
-    undefined,
+    // A parameter default/initializer (`Param.default`, residual/types.ts's additive
+    // field — BUG #90). Rendered `insideAsync=false` UNCONDITIONALLY, never threaded
+    // from the enclosing function: `await` is a SyntaxError inside a formal parameter
+    // list even under an `async` function (verified against V8/Node directly) — a
+    // parameter default can never legally contain one regardless of context, so this
+    // can never diverge from "the right answer" for any tree this renderer prints.
+    param.default === undefined ? undefined : renderExpr(param.default, false),
   );
 }
 

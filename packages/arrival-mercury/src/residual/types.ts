@@ -183,6 +183,21 @@ export interface RestBinding {
 export interface Param {
   readonly pattern: Pattern;
   readonly type?: TsType;
+  /**
+   * Optional default/initializer — `function f(x = default) {}` / `(x = default) => {}`.
+   * Additive (BUG #90 — the `inhuman build` pipeline wrapper's `inhumanParams = {}`;
+   * mirrors how `ObjectPattern` landed as an added `Pattern` variant): every existing
+   * `Param`-constructing call site is unaffected (`default` simply stays absent), so
+   * this needs no exhaustive-switch update anywhere. Illegal paired with a
+   * `RestBinding` pattern (no JS syntax for `...rest = x`) — `residual/render.ts`'s
+   * `paramDecl` throws if both are set. Always rendered as a SYNCHRONOUS position
+   * (never threaded from the enclosing function's own asyncness): `await` is a
+   * SyntaxError inside a formal parameter list even when the function itself is
+   * `async` (parameter defaults evaluate in their own, inherently-synchronous scope —
+   * verified directly against V8/Node, not assumed) — see render.ts's own comment at
+   * the render site.
+   */
+  readonly default?: R;
 }
 
 export type ObjectEntry =

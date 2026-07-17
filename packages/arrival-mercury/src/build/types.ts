@@ -6,13 +6,37 @@
 import type { Span } from "../coreform/types.js";
 import type { FlowedUpOverridable, OverridableExport } from "./overridable.js";
 
+/**
+ * One top-level module-face export — BUG #89's coherence pair. `scheme` is the
+ * RAW scheme identifier (`"over-threshold?"`) exactly as written in the
+ * source: this is the ONLY spelling an importing file's own source ever uses
+ * (`(over-threshold? …)`), so it is also the registry-overlay KEY
+ * `scm-module.ts`'s `buildRequireMachinery` binds a spilled import under —
+ * `require` spills scheme names into scope VERBATIM, there is no
+ * import-renaming syntax at the language level. `js` is the ACTUAL, allocated
+ * JS identifier the exporting module's own compiled body binds that define
+ * to — read directly off the walked tree's own `Binding.text` post-allocation
+ * (`naming/allocate.ts`'s census→allocate→materialize phase, run inside
+ * `walk()`), NEVER re-derived by an independent `cleanName` call out here
+ * (which could disagree with the allocator's own collision-resolved pick —
+ * e.g. a predicate `foo?` yielding `isFoo` instead of `foo` to a co-scoped
+ * plain `foo` binding — naming/allocate.ts's `declaredCandidates`). `js` is
+ * what BOTH the export list (`export { js }`) and every importer's import
+ * list (`import { js } from "…"`) print — the identical string, by
+ * construction, never cleaned twice.
+ */
+export interface NamedExport {
+  readonly scheme: string;
+  readonly js: string;
+}
+
 /** What a compiled sibling actually offers a `(require …)` site: the module face
  *  (named exports, always populated for a `.scm` file's top-level defines) and
  *  whether a program face exists at all (a `.json`/`.yaml`/`.txt` always has one —
  *  the whole value; a `.scm` file has one iff it ends in a non-define expression;
  *  a pipeline's program face is the parameterized function itself). */
 export interface ExportShape {
-  readonly named: readonly string[];
+  readonly named: readonly NamedExport[];
   readonly hasDefault: boolean;
   /** This file's OWN top-level `define/overridable`s, folded to a portable
    *  triple (TASK #87 Q2) — `project.ts`'s cone walk unions these across the
@@ -151,14 +175,14 @@ export interface CompileFileOptions {
    *  runtime module (e.g. `"./stage0.js"`, or `"../stage0.js"` when nested). */
   readonly runtimeImportPath: string;
   /** Which classifier verdict this file got (TASK #87): `"pipeline"` ⇒ the
-   *  WHOLE file becomes `export default function run(params) { … }` (thunked,
-   *  every `define/overridable` lifted to the env-chained params cone, PLUS
-   *  the transitive flow-up cone below — NOTE: `params` carries no declared
-   *  default of its own today, a pre-existing v0 gap this lane's report names
-   *  but doesn't fix — calling the emitted function with zero arguments is a
-   *  real arity error, out of TASK #87/#84's boundary); `"module"` ⇒ ordinary
-   *  module face (named exports) plus, if the file ends in a trailing
-   *  expression, a PLAIN (eager) `export default` — its OWN local
+   *  WHOLE file becomes `export default function run(params = {}) { … }`
+   *  (thunked, every `define/overridable` lifted to the env-chained params
+   *  cone, PLUS the transitive flow-up cone below — BUG #90 fixed `params`'s
+   *  own declared `= {}` default, `scm-module.ts`'s `withParamsDefault`, so
+   *  calling the emitted function with zero arguments — the common case, every
+   *  knob resolving from env/default — is no longer an arity error); `"module"`
+   *  ⇒ ordinary module face (named exports) plus, if the file ends in a
+   *  trailing expression, a PLAIN (eager) `export default` — its OWN local
    *  overridables still get a real (params-less) env-chain. */
   readonly isPipeline: boolean;
   /** TASK #87 Q2 — the pipeline's TRANSITIVE overridable cone: every

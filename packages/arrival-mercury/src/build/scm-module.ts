@@ -35,7 +35,7 @@ import { desugar } from "../front/desugar.js";
 import { parseSexprs } from "../front/parse.js";
 import { SchemeSemanticModel } from "../model/model.js";
 import { maxNodeId } from "../peepholes/index.js";
-import { materializeAsyncness, materializeImports, materializeSharedBindings } from "../naming/index.js";
+import { materializeAsyncness, materializeImports, materializeSharedBindings, originOf } from "../naming/index.js";
 import type { OverlayEmitRegistry, SymbolRule, SymbolRuleTable } from "../rules/overlay.js";
 import { withRules } from "../rules/overlay.js";
 import { inferAsyncSeeds } from "../rules/index.js";
@@ -46,11 +46,13 @@ import {
   ConstDecl,
   Export,
   Import,
+  ObjectLit,
   Ref,
   type Binding,
   type CompilationUnit,
   type Decl,
   type R,
+  type TsType,
 } from "../residual/types.js";
 import { cleanName } from "../walker/names.js";
 import { walk } from "../walker/walk.js";
@@ -69,7 +71,7 @@ import {
   type FlowedUpOverridable,
 } from "./overridable.js";
 import { flattenTopBegins, hasProgramFace, scanRequires, topLevelDefineNames, type RequireOccurrence } from "./require-scan.js";
-import type { CompileFileOptions, CompileFileResult, PendingWarning } from "./types.js";
+import type { CompileFileOptions, CompileFileResult, NamedExport, PendingWarning } from "./types.js";
 
 export interface ScmCompileDeps {
   /** The shared base registry — `greenfieldRegistryFor(session)` from
@@ -187,10 +189,18 @@ function buildRequireMachinery(uses: readonly RequireOccurrence[], opts: Compile
         });
         continue;
       }
-      const names = res.shape.named.map((exported) => ({ exported, local: uniqueAlias(exported) }));
-      for (const { exported, local } of names) addOverlayRow(exported, mkBinding(local), `(require "${path}")`, span);
+      // BUG #89: the overlay row's KEY is the RAW scheme name (`scheme`) — an
+      // importing file's own `(over-threshold? …)` call site spells the scheme
+      // identifier verbatim, never a cleaned JS one, so registry resolution
+      // must key on it unchanged. The imported/local JS text is `js` — the
+      // exporting module's own ALREADY-ALLOCATED identifier
+      // (`NamedExport`'s own doc, ./types.js) — never re-cleaned here a
+      // second time, so it agrees with that module's compiled body and
+      // export list by construction.
+      const names = res.shape.named.map(({ scheme, js }) => ({ scheme, js, local: uniqueAlias(js) }));
+      for (const { scheme, local } of names) addOverlayRow(scheme, mkBinding(local), `(require "${path}")`, span);
       importDecls.push(
-        Import(names.map(({ exported, local }) => ({ imported: exported, local: local === exported ? undefined : local })), res.importPath),
+        Import(names.map(({ js, local }) => ({ imported: js, local: local === js ? undefined : local })), res.importPath),
       );
       continue;
     }
@@ -255,6 +265,69 @@ function popTrailingAsConst(unit: CompilationUnit, binding: Binding): Compilatio
     throw new Error("scm-module: expected a trailing body statement for the program face — found none (internal invariant)");
   }
   return { decls: [...unit.decls, ConstDecl(binding, last)], body };
+}
+
+/** The params-cone parameter's own annotation — `Record<string, any>`.
+ *  Threaded in ALONGSIDE the `= {}` default (below): a bare `= {}` with no
+ *  annotation makes TypeScript INFER the parameter's type as the empty object
+ *  type `{}`, which has no index signature — so `inhumanParams.greeting`
+ *  (every knob read) becomes `Property 'greeting' does not exist on type
+ *  '{}'` under `--check`. The un-defaulted parameter was implicitly `any`
+ *  before (the emitted tsconfig runs `noImplicitAny: false`), so every knob
+ *  read typechecked freely — including the ones that FLOW ONWARD into a typed
+ *  position: `(inhumanParams.factor ?? …) * x`, `inhumanParams.threshold +
+ *  overLimit(…)`. `Record<string, unknown>` restores index ACCESS but NOT that
+ *  onward flow (`unknown` is not an arithmetic operand — "left-hand side of an
+ *  arithmetic operation must be of type 'any'/'number'/…"), so the honest
+ *  restatement of the old implicit-`any` contract is `Record<string, any>`: a
+ *  bag of knobs indexable by any key (bare `inhumanParams.greeting` OR
+ *  bracketed `inhumanParams["metric.threshold"]`, the flow-up namespaced form,
+ *  TASK #87 Q2) whose values stay `any` — exactly what a non-strict emitted
+ *  project (build.ts's `emittedTsconfig`: `strict:false`/`noImplicitAny:false`,
+ *  type-emit not yet wired) already runs on everywhere else. The `any` value
+ *  rides the EXISTING `ref` carrier (the same shape `naming/asyncness.ts` emits
+ *  `Promise<T>` through) — no new `TsType` variant, no residual-algebra change. */
+const PARAMS_CONE_TYPE: TsType = { k: "ref", name: "Record", args: [{ k: "prim", name: "string" }, { k: "ref", name: "any" }] };
+
+/**
+ * BUG #90 — the pipeline wrapper's own params-parameter needs a declared
+ * `= {}` default (design doc §3's example: `async function run(inhumanParams
+ * = {}) {…}`); today it has none, so the common zero-arg call `run()` (every
+ * knob resolving from env/default) is a real arity/type error under
+ * `--check`. `compilePipelineFace`'s `walk()` call always lowers EXACTLY one
+ * top-level form (`forms: [wrapper]` — the whole file becomes one synthetic
+ * `DefineFn`, this file's own header), so `unit.decls` has EXACTLY one
+ * `FnDecl` at this point — the wrapper's own — with EXACTLY one param
+ * (`PIPELINE_PARAMS_SCHEME_NAME`).
+ *
+ * Sets BOTH the `= {}` default AND the `Record<string, unknown>` annotation
+ * (`PARAMS_CONE_TYPE`'s own doc for why the annotation is load-bearing, not
+ * cosmetic). The annotation is only added when the param carries none of its
+ * own (the wrapper's never does — the walker doesn't annotate params) so this
+ * can never clobber a real type.
+ *
+ * Pure data surgery over the already-walked Residual tree (`Param.default`,
+ * residual/types.ts's additive field) — no re-lowering, and never touches
+ * `walk()` itself. Safe to run BEFORE shared-bindings/asyncness/imports
+ * materialize: each of those only ever SPREADS a `FnDecl`'s `.params` through
+ * unchanged when rebuilding it (verified against naming/shared-bindings.ts's,
+ * naming/asyncness.ts's, and naming/imports.ts's own `FnDecl` cases — none
+ * reconstructs `.params`), so the added default survives untouched all the
+ * way to `render()`.
+ */
+function withParamsDefault(unit: CompilationUnit): CompilationUnit {
+  let touched = false;
+  const decls = unit.decls.map((d) => {
+    if (d.t !== "FnDecl") return d;
+    const [first, ...rest] = d.params;
+    if (first === undefined) return d;
+    touched = true;
+    return { ...d, params: [{ ...first, type: first.type ?? PARAMS_CONE_TYPE, default: ObjectLit([]) }, ...rest] };
+  });
+  if (!touched) {
+    throw new Error("scm-module: expected the pipeline wrapper's own FnDecl with its params-cone parameter — found none (internal invariant)");
+  }
+  return { ...unit, decls };
 }
 
 /** Drop every `(define x (require "…"))` whose `x` resolved (per
@@ -342,7 +415,7 @@ export function compileScmModule(source: string, deps: ScmCompileDeps, opts: Com
 interface FaceResult {
   readonly decls: readonly Decl[];
   readonly body: readonly R[];
-  readonly named: readonly string[];
+  readonly named: readonly NamedExport[];
   /** Present iff this file has a default export; the exact suffix text to
    *  append after `render()` (see this file's header — `Export`'s residual
    *  shape has no default/aliased form, so the default line is composed as
@@ -388,6 +461,32 @@ function compileModuleFace(
     },
   );
 
+  // BUG #89 — the ONE source of truth for a top-level define's exported name:
+  // `sync.decls`, read RIGHT NOW (before shared-bindings/asyncness/imports run
+  // any further splicing), is exactly the ConstDecl/FnDecl set `walk()`'s own
+  // top-level loop pushed for `formsToWalk`'s Define/DefineFn forms — one per
+  // name — each still carrying its scheme-name mint origin (`originOf`,
+  // naming/origin.ts) alongside its ALREADY-ALLOCATED `.text` (walk()'s own
+  // internal census→allocate→materialize phase, naming/allocate.ts, already
+  // committed this before returning — see walker/walk.ts's own module header).
+  // Reading it here is the whole fix: NEVER call `cleanName` independently to
+  // guess the export name a second time — that could disagree with the
+  // allocator's own collision-resolved pick (a contested predicate `foo?`
+  // yielding `isFoo`, not `foo`, when a co-scoped plain `foo` binding also
+  // wants the bare name — naming/allocate.ts's `declaredCandidates`).
+  const jsNameOfScheme = new Map<string, string>();
+  for (const d of sync.decls) {
+    if (d.t !== "ConstDecl" && d.t !== "FnDecl") continue;
+    const origin = originOf(d.name);
+    if (origin !== undefined) jsNameOfScheme.set(origin.text, d.name.text);
+  }
+  // Every published name paired with its real, allocated JS identifier. Falls
+  // back to the raw scheme name for the one acknowledged v0 edge case
+  // `dropResolvedBoundRequires` already documents (a resolved bound-require
+  // re-export has no local decl of its own to allocate a name for) —
+  // unchanged from today's behavior for that gap, never worse.
+  const namedPairs: readonly NamedExport[] = named.map((scheme) => ({ scheme, js: jsNameOfScheme.get(scheme) ?? scheme }));
+
   const defaultBinding = mkBinding("__default");
   const withDefault = wantsDefault ? popTrailingAsConst(sync, defaultBinding) : sync;
 
@@ -398,11 +497,11 @@ function compileModuleFace(
   const materialized = materializeImports(asyncified, { symbols: importSymbols, runtimeModule: runtimeImportPath });
 
   const decls: Decl[] = [...materialized.decls];
-  if (named.length > 0) decls.push(Export(named));
+  if (namedPairs.length > 0) decls.push(Export(namedPairs.map((p) => p.js)));
   return {
     decls,
     body: materialized.body,
-    named,
+    named: namedPairs,
     defaultSuffix: wantsDefault ? `export default ${defaultBinding.text};\n` : undefined,
   };
 }
@@ -465,8 +564,14 @@ function compilePipelineFace(
       register: "run",
     },
   );
+  // BUG #90: the wrapper's own params-parameter carries no declared default —
+  // a zero-arg call `run()` (the common case: every knob resolves from env/
+  // default) is a real arity error under `--check` otherwise. Pure data
+  // surgery over the ALREADY-WALKED tree (see `withParamsDefault`'s own doc) —
+  // no re-lowering, no touching `walk()` itself.
+  const defaulted = withParamsDefault(sync);
 
-  const shared = materializeSharedBindings(sm.sharedBindingsOf(sync));
+  const shared = materializeSharedBindings(sm.sharedBindingsOf(defaulted));
   const asyncified = materializeAsyncness(sm.asyncnessOf(shared, inferAsyncSeeds));
   const importSymbols = new Set<string>();
   for (const s of sm.importsOf(wrapper)) importSymbols.add(s);
