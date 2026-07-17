@@ -227,18 +227,35 @@ export function resolveNames(forest: readonly Node[], reserved: readonly string[
     return fnScope(bindingAtoms(n.list[1]), n.list.slice(2));
   }
 
-  /** `(let ((x i)…) body)` / `let*` and named `(let loop ((x i)…) body)`. Inits are scanned
-   *  in the PARENT (their child scopes over-reserve against the let vars — safe); the body is an
-   *  ordinary scope (loop name + vars as the frame), so internal defines work there too. */
+  /** `(let ((x i)…) body)` / `let*` and named `(let loop ((x i)…) body)`. `let` inits are
+   *  scanned in the PARENT (their child scopes over-reserve against the let vars — safe);
+   *  `let*` inits are scanned sequentially — init `i` additionally sees bindings `0..i-1`
+   *  of the SAME let* (R7RS let* semantics: each init is evaluated in a scope extended by
+   *  all preceding bindings), so a ref to an earlier sibling (`(let* ((a 5) (b (+ a 1))) …)`)
+   *  must resolve to that sibling's binding atom, not fall through to the enclosing scope
+   *  (where it's either unbound or shadows a same-named outer binding). Mirrors the
+   *  `extendForLet`/`let*` chain in `../extract/arm-atoms.ts` and `../wire/derive.ts`. The
+   *  body is an ordinary scope (loop name + vars as the frame) either way, so internal
+   *  defines work there too. */
   function letScope(n: ListNode): ScopeSpec<Atom> {
+    const isStar = head(n) === "let*";
     const named = isAtom(n.list[1]);
     const loopAtom = named ? (n.list[1] as Atom) : undefined;
     const bindings = named ? n.list[2] : n.list[1];
     const bodyForms = n.list.slice(named ? 3 : 2);
     const vars = bindingAtoms(bindings);
     const initChildren: ScopeSpec<Atom>[] = [];
-    // init expressions live in the enclosing scope (vars not yet bound).
-    if (isList(bindings)) for (const b of bindings.list) if (isList(b) && b.list[1]) scanInto(b.list[1], initChildren);
+    if (isList(bindings)) {
+      // let*: push a running frame of already-scanned bindings so each subsequent init's
+      // refs resolve against them (same atom objects `vars`/`entity()` will bind later).
+      const seenSoFar = new Map<string, Atom>();
+      if (isStar) stack.push(seenSoFar);
+      for (const b of bindings.list) {
+        if (isList(b) && b.list[1]) scanInto(b.list[1], initChildren);
+        if (isStar && isList(b) && isAtom(b.list[0])) seenSoFar.set(b.list[0].atom, b.list[0]);
+      }
+      if (isStar) stack.pop();
+    }
     const inner = fnScope([...(loopAtom ? [loopAtom] : []), ...vars], bodyForms);
     return { entities: inner.entities, children: [...initChildren, ...(inner.children ?? [])] };
   }

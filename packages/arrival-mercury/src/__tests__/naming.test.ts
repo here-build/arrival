@@ -16,7 +16,9 @@ import { describe, expect, it } from "vitest";
 
 import { classify } from "../coreform/index.js";
 import { desugar } from "../front/desugar.js";
+import type { Atom, ListNode } from "../front/nodes.js";
 import { parseSexprs } from "../front/parse.js";
+import { resolveNames } from "../front/scheme-scope.js";
 import { allocateNames } from "../naming/allocate.js";
 import { bindingCensusOf } from "../naming/census.js";
 import { materializeNames } from "../naming/materialize.js";
@@ -578,5 +580,53 @@ describe("walk() — the naming phase end to end", () => {
   it("a mixed-use param (field access AND a bare pass-through) stays bare — no partial destructure", () => {
     const out = render(compile(`(define (f c) (dict :field (:a c) :whole c))`, registryOf()));
     expect(out).toBe(`function f(c) {\n    return { field: c["a"], whole: c };\n}\n`);
+  });
+});
+
+// ── resolveNames (front/scheme-scope.ts) — let*'s sequential-visibility fix ─
+//
+// scheme-scope.ts feeds the type-emit LSP namer (../type-emit/emit.ts), a
+// separate consumer from walk()'s residual naming above; these test
+// `resolveNames` directly rather than through an emitted-code round trip,
+// same level `allocateNames`'s direct unit coverage operates at above. A ref
+// this map does NOT cover is a free reference — the caller (emit.ts) falls
+// back to `cleanName`, so `nameOf.has(...)` is the right assertion for "did
+// scope resolution see this occurrence at all" (a Map absence, not a name
+// mismatch, is the bug's actual footprint: the emit-layer fallback is
+// naming-ladder-blind, so it silently mis-names the occurrence whenever the
+// resolved entity didn't land on its tier-1 cleanName).
+
+describe("resolveNames — let* sequential visibility", () => {
+  it("a later binding's init resolves a reference to an EARLIER sibling binding (R7RS: each let* init sees all previous bindings)", () => {
+    const letForm = parseSexprs("(let* ((a 5) (b (+ a 1))) b)")[0] as ListNode;
+    const bindings = letForm.list[1] as ListNode;
+    const aBinding = (bindings.list[0] as ListNode).list[0] as Atom; // `a` in `(a 5)`
+    const aRef = ((bindings.list[1] as ListNode).list[1] as ListNode).list[1] as Atom; // `a` in `(+ a 1)`
+
+    const nameOf = resolveNames([letForm], []);
+    expect(nameOf.get(aRef)).toBe(nameOf.get(aBinding));
+    expect(nameOf.get(aRef)).toBe("a");
+  });
+
+  it("let* redefining the same name mid-chain: the later init's own-named ref resolves to the EARLIER binding, not itself", () => {
+    // Mirrors ../extract/arm-atoms.ts's `extendForLet` + ../propagate/index.ts's
+    // documented `(let* ((x 1) (x (f x))) x)` case — the second `x`'s init sees
+    // the FIRST `x`, never its own (still-unbound) entity.
+    const letForm = parseSexprs("(let* ((x 1) (x (+ x 1))) x)")[0] as ListNode;
+    const bindings = letForm.list[1] as ListNode;
+    const firstX = (bindings.list[0] as ListNode).list[0] as Atom; // `x` in `(x 1)`
+    const secondXInitRef = ((bindings.list[1] as ListNode).list[1] as ListNode).list[1] as Atom; // `x` in `(+ x 1)`
+
+    const nameOf = resolveNames([letForm], []);
+    expect(nameOf.get(secondXInitRef)).toBe(nameOf.get(firstX));
+  });
+
+  it("plain let (not let*) does NOT extend this visibility — a sibling init stays a free reference (parallel-binding semantics)", () => {
+    const letForm = parseSexprs("(let ((a 5) (b a)) b)")[0] as ListNode;
+    const bindings = letForm.list[1] as ListNode;
+    const aRefInB = (bindings.list[1] as ListNode).list[1] as Atom; // `a` in `(b a)`'s init
+
+    const nameOf = resolveNames([letForm], []);
+    expect(nameOf.has(aRefInB)).toBe(false); // unresolved — free ref, falls to cleanName at the emit layer
   });
 });
