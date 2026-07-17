@@ -266,6 +266,11 @@ export type Decl =
       body: Extract<R, { t: "Block" }>;
       async?: boolean;
       returnType?: TsType;
+      // Program-face marker: renders `export default function name(){…}` — the module IS
+      // an on-demand callable, never an eager exported value (reference-program-face-always
+      // -function; inhuman-build-cli.md §3, R-G1). First-class here so the build face can
+      // retire its `defaultSuffix` string hack onto this too.
+      exported?: "default";
     })
   | (Base & { t: "ConstDecl"; name: Binding; init: R; type?: TsType })
   | (Base & { t: "Import"; names: readonly ImportName[]; from: string })
@@ -468,9 +473,17 @@ export function FnDecl(
   name: Binding,
   params: readonly (Pattern | Param)[],
   body: Extract<R, { t: "Block" }>,
-  opts?: { async?: boolean; returnType?: TsType },
+  opts?: { async?: boolean; returnType?: TsType; exported?: "default" },
 ): Decl {
-  return { t: "FnDecl", name, params: params.map(toParam), body, async: opts?.async, returnType: opts?.returnType };
+  return {
+    t: "FnDecl",
+    name,
+    params: params.map(toParam),
+    body,
+    async: opts?.async,
+    returnType: opts?.returnType,
+    exported: opts?.exported,
+  };
 }
 
 export function ConstDecl(name: Binding, init: R, type?: TsType): Decl {

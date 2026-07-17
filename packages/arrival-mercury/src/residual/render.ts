@@ -687,8 +687,19 @@ function renderDecl(decl: Decl): ts.Statement {
       // FnDecl exists for HOISTING (the self-hosted preamble's mutual recursion);
       // user-program defines emit ConstDecl. Which one a define becomes is upstream's call.
       const isAsync = decl.async === true;
+      // Program face (reference-program-face-always-function): `export default function name(){…}`.
+      // Modifier order is the emitted order — `export default async function`.
+      const modifiers =
+        decl.exported === "default" ?
+          [
+            f.createToken(ts.SyntaxKind.ExportKeyword),
+            f.createToken(ts.SyntaxKind.DefaultKeyword),
+            ...(isAsync ? [f.createToken(ts.SyntaxKind.AsyncKeyword)] : []),
+          ]
+        : isAsync ? [f.createToken(ts.SyntaxKind.AsyncKeyword)]
+        : undefined;
       return f.createFunctionDeclaration(
-        isAsync ? [f.createToken(ts.SyntaxKind.AsyncKeyword)] : undefined,
+        modifiers,
         undefined,
         f.createIdentifier(decl.name.text),
         undefined,
