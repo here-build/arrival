@@ -173,6 +173,43 @@ describe("reconcileForms — content-key soundness (adversarial near-miss pairs)
     expect(forms[0]).toBe(prev[1]);
   });
 
+  it("a REFERENCED define REMOVED: the surviving referrer is dirtied, never reused with stale facts", () => {
+    // The audit's stale-transplant hole: deleting `f` leaves no fresh form to
+    // be unmatched, so nothing seeded `f` into the dirty set — `g` content-key
+    // matched, was spliced as the prev OBJECT, and its facts (computed when
+    // `f` existed) transplanted verbatim. reconciled ≢ fresh.
+    const prev = cf(`(define (f) (list 1 2))\n(define (g) (car (f)))`);
+    const { forms, shared, changed } = reconcileForms(prev, `(define (g) (car (f)))`);
+    expect(forms).toHaveLength(1);
+    expect(shared.size).toBe(0);
+    expect(changed.size).toBe(1);
+    expect(forms[0]).not.toBe(prev[1]); // g must be re-minted — its environment changed
+  });
+
+  it("a REFERENCED define RENAMED away: dependents of the OLD name are dirtied too", () => {
+    const prev = cf(`(define (f) 1)\n(define (g) (f))`);
+    const { forms, changed } = reconcileForms(prev, `(define (f2) 1)\n(define (g) (f))`);
+    expect(changed.size).toBe(2); // f2 is new AND g's `f` went unbound
+    expect(forms[1]).not.toBe(prev[1]);
+  });
+
+  it("an UNREFERENCED define removed: bystanders still share (the seed dirties dependents only)", () => {
+    const prev = cf(`(define (f) 1)\n(define (g) 2)`);
+    const { forms, shared, changed } = reconcileForms(prev, `(define (g) 2)`);
+    expect(shared.size).toBe(1);
+    expect(changed.size).toBe(0);
+    expect(forms[0]).toBe(prev[1]);
+  });
+
+  it("a REDEFINED name losing its last (winning) definition dirties dependents, even though the survivor matched", () => {
+    const prev = cf(`(define v 1)\n(define v 2)\n(define (g) v)`);
+    const { forms, changed } = reconcileForms(prev, `(define v 1)\n(define (g) v)`);
+    // The surviving `(define v 1)` is content-identical — but the WINNER
+    // changed (2 → 1), so `g` must not transplant facts computed against 2.
+    expect(changed.has(forms[1]!)).toBe(true);
+    expect(forms[1]).not.toBe(prev[2]);
+  });
+
   it("duplicate identical top-level forms: FIFO matching never double-claims one prev object", () => {
     const prev = cf(`(display "hi")\n(display "hi")`);
     const { forms, shared, changed } = reconcileForms(prev, `(display "hi")\n(display "hi")\n(display "hi")`);

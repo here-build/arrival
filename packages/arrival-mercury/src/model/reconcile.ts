@@ -367,11 +367,14 @@ const topLevelNameOf = (form: CoreForm): string | undefined =>
 /**
  * `dirty = changed ∪ transitive-dependents` (module header). `matched[i]` is
  * `freshForms[i]`'s content-key twin from Pass 1, or `undefined` — an index
- * with no twin is dirty from the start. From there, a fixpoint over
- * `freshForms`' OWN free-ref/defines shape (never `prevForms` — a content-key
- * match already proves the two trees agree at this node, and an unmatched
- * form only ever exists in `freshForms`) closes over every sibling that
- * refers to a dirty form's name, transitively.
+ * with no twin is dirty from the start. `prevForms` contributes exactly one
+ * seeding fact of its own: names whose top-level definition sequence changed
+ * (deleted/renamed-away/redefinition-reordered defines have NO fresh form to
+ * be unmatched, yet dirty every surviving referrer — see below). From there,
+ * a fixpoint over `freshForms`' OWN free-ref/defines shape closes over every
+ * sibling that refers to a dirty name, transitively (a content-key match
+ * proves two trees agree at a node — never that the node's ENVIRONMENT
+ * agrees, which is precisely what the name seeds carry).
  *
  * Graph direction is the TRANSPOSE of `../shake/index.ts`'s own `closureOf`:
  * shake starts at ROOTS and follows "what does this reference" FORWARD to
@@ -383,7 +386,11 @@ const topLevelNameOf = (form: CoreForm): string | undefined =>
  * settle exactly once regardless of cycles (mutual recursion) or
  * self-reference.
  */
-function closeDirtySet(freshForms: readonly CoreForm[], matched: readonly (CoreForm | undefined)[]): boolean[] {
+function closeDirtySet(
+  prevForms: readonly CoreForm[],
+  freshForms: readonly CoreForm[],
+  matched: readonly (CoreForm | undefined)[],
+): boolean[] {
   const freeRefs = freshForms.map((f) => {
     const out = new Set<string>();
     freeRefsIn(f, out);
@@ -406,16 +413,41 @@ function closeDirtySet(freshForms: readonly CoreForm[], matched: readonly (CoreF
   const dirty = freshForms.map((_, i) => matched[i] === undefined);
   const dirtyNames = new Set<string>();
   const worklist: string[] = [];
-  const seedName = (i: number): void => {
-    const name = definedName[i];
-    if (name !== undefined && !dirtyNames.has(name)) {
+  const markName = (name: string): void => {
+    if (!dirtyNames.has(name)) {
       dirtyNames.add(name);
       worklist.push(name);
     }
   };
+  const seedName = (i: number): void => {
+    const name = definedName[i];
+    if (name !== undefined) markName(name);
+  };
   dirty.forEach((isDirty, i) => {
     if (isDirty) seedName(i);
   });
+
+  // A name whose top-level DEFINITION SEQUENCE changed between prev and fresh
+  // is dirty even when NO fresh form is — the deleted/renamed-away define has
+  // no fresh form to be unmatched, yet every surviving referrer's facts were
+  // computed against it (the stale-transplant hole: reconciled ≢ fresh on a
+  // plain deletion). The per-name sequence of content keys — not a bare name
+  // set — also covers a REDEFINED name losing/reordering one of its
+  // definitions, where the surviving define is content-identical but the
+  // winner changed. (An ADDED name needs no entry here: its defining form is
+  // unmatched ⇒ already seeded above.)
+  const defSequenceOf = (forms: readonly CoreForm[]): Map<string, string> => {
+    const seq = new Map<string, string>();
+    for (const f of forms) {
+      const name = topLevelNameOf(f);
+      if (name !== undefined) seq.set(name, `${seq.get(name) ?? ""} ${contentKeyOf(f)}`);
+    }
+    return seq;
+  };
+  const freshDefs = defSequenceOf(freshForms);
+  for (const [name, seq] of defSequenceOf(prevForms)) {
+    if (freshDefs.get(name) !== seq) markName(name);
+  }
 
   while (worklist.length > 0) {
     const name = worklist.pop()!;
@@ -461,7 +493,7 @@ export function reconcileForms(prevForms: readonly CoreForm[], newSource: string
     const bucket = byKey.get(contentKeyOf(freshForm));
     return bucket?.shift(); // FIFO — never double-claim one prev object
   });
-  const dirty = closeDirtySet(fresh.forms, matched);
+  const dirty = closeDirtySet(prevForms, fresh.forms, matched);
 
   const forms: CoreForm[] = [];
   const shared = new Set<CoreForm>();
