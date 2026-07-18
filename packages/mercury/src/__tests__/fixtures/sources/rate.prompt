@@ -1,0 +1,13 @@
+---
+model: qwen3.5-9b
+input:
+  schema:
+    review: string
+    rating: number
+    verified: boolean
+---
+{{role "user"}}
+Rating: {{rating}} stars.{{#if verified}} (verified purchase){{else}} (unverified){{/if}}
+Review: {{review}}
+
+Classify the sentiment as positive, negative, or neutral.

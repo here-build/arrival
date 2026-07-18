@@ -1,0 +1,7 @@
+---
+model: qwen3.5-9b
+---
+{{role "user"}}
+Summarize the following text in one sentence.
+
+{{text}}

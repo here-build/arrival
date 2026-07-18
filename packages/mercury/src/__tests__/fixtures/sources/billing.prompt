@@ -1,0 +1,8 @@
+---
+model: qwen3.5-9b
+---
+{{role "user"}}
+You handle billing questions. Answer helpfully, and mention that a receipt
+will follow by email.
+
+{{ticket}}

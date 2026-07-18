@@ -1,0 +1,8 @@
+---
+model: qwen3.5-9b
+---
+{{role "user"}}
+Classify this support ticket as either "billing" or "general".
+Reply with only the category word.
+
+{{ticket}}
