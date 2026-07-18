@@ -1,12 +1,12 @@
-# @here.build/arrival-type-lens
+# @inhuman.tools/arrival-type-lens
 
 The **Scheme→TS type lens** foundation: the shared `PRE` prelude that the 34
 builtin `.d.ts` leaves declaration-merge into, so arrival-chain Scheme programs
 **bite** under `tsc` (`(car 5)` and `(+ "a" 1)` produce real diagnostics that lift
 back to their `.scm` spans).
 
-This package owns **Wave A** of the
-[Scheme→TS type-lens DAG](../../../docs/package-specific/arrival-type-lens/scheme-ts-type-lens-dag-2026-06-10.md):
+This package owns **Wave A** of the Scheme→TS type-lens DAG
+(design doc, 2026-06-10, in the here.build monorepo docs):
 the package scaffold + the `PRE` prelude + the reference leaf. The 34-way builtin
 fan-out (Wave B) and the emitter/Volar plumbing (Waves C–E) build on top of it.
 

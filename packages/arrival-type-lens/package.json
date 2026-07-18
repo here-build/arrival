@@ -1,9 +1,21 @@
 {
   "name": "@inhuman.tools/arrival-type-lens",
-  "version": "0.1.0",
+  "version": "0.9.0",
   "description": "Scheme\u2192TS type lens \u2014 the shared PRE prelude (branded base types + Dict mapped type + __arr declaration-merge contract) the 34 builtin .d.ts leaves merge into, so arrival programs bite under tsc.",
+  "homepage": "https://github.com/here-build/arrival#readme",
+  "bugs": {
+    "url": "https://github.com/here-build/arrival/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/here-build/arrival.git",
+    "directory": "packages/arrival-type-lens"
+  },
   "license": "FSL-1.1-MIT",
   "author": "here.build",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "exports": {
     ".": {
@@ -47,7 +59,14 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
-    "src"
+    "src",
+    "!**/__tests__",
+    "!**/__research__",
+    "!**/__benchmarks__",
+    "!**/__custdev__",
+    "!**/__visual__",
+    "!**/*.test.*",
+    "!**/*.stories.*"
   ],
   "scripts": {
     "build": "npm run generate:bundles && tsc && vite build",

@@ -53,7 +53,7 @@ The second is why half the toolchain depends on a "syntax skin": anything that m
 
 - [LEARN.md](./LEARN.md) — the whole syntax, learn-x-in-y-minutes style.
 - [GRAMMAR.md](./GRAMMAR.md) — the formal grammar (layout → tokens → forms), precise enough to derive an editor mode; a ready TextMate grammar sits in [`editors/`](./editors/).
-- `docs/package-specific/arrival-sugarcoat/` — design derivations: the positioning note, the grammar spec (with the formal round-trip law), the at-expressions spec, bound-name recovery.
+- Design derivations (kept in the here.build monorepo docs, not shipped here): the positioning note, the grammar spec (with the formal round-trip law), the at-expressions spec, bound-name recovery.
 
 ## License
 

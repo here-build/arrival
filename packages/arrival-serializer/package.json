@@ -1,6 +1,6 @@
 {
   "name": "@inhuman.tools/arrival-serializer",
-  "version": "0.1.0",
+  "version": "0.9.0",
   "description": "S-expression serializer for Arrival - converts JavaScript objects to Scheme/Lisp representations",
   "keywords": [
     "arrival",
@@ -9,17 +9,20 @@
     "lisp",
     "scheme"
   ],
-  "homepage": "https://github.com/here-build/foundation#readme",
+  "homepage": "https://github.com/here-build/arrival#readme",
   "bugs": {
-    "url": "https://github.com/here-build/foundation/issues"
+    "url": "https://github.com/here-build/arrival/issues"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/here-build/foundation.git",
-    "directory": "arrival/arrival-serializer"
+    "url": "https://github.com/here-build/arrival.git",
+    "directory": "packages/arrival-serializer"
   },
   "license": "FSL-1.1-MIT",
   "author": "here.build",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "exports": {
     ".": {

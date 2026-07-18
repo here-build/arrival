@@ -1,6 +1,6 @@
 {
   "name": "@inhuman.tools/arrival-mercury",
-  "version": "0.1.0",
+  "version": "0.9.0",
   "description": "The mercury differential-oracle harness: interpreter (arrival-run session) vs compiled (mercury run-view executed via tsx tsImport), compared as black-box source-in/value-out outcomes. Owns the ErrorClass taxonomy, oracleEqual comparator, and the 3-way corpus check (oracle-harness.md §2-§4).",
   "keywords": [
     "arrival",
@@ -8,8 +8,20 @@
     "oracle",
     "differential-testing"
   ],
+  "homepage": "https://github.com/here-build/arrival#readme",
+  "bugs": {
+    "url": "https://github.com/here-build/arrival/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/here-build/arrival.git",
+    "directory": "packages/arrival-mercury"
+  },
   "license": "FSL-1.1-MIT",
   "author": "here.build",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "exports": {
     ".": {
@@ -43,7 +55,9 @@
     "typecheck": "tsc --noEmit && pnpm run check:stories",
     "check:stories": "tsc -p tsconfig.stories.json --noEmit",
     "storybook": "storybook dev -p 6007",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "dependencies": {
     "@inhuman.tools/arrival": "workspace:^",
@@ -58,6 +72,7 @@
     "zod": "4.3.6"
   },
   "devDependencies": {
+    "@here.build/eslint-configs": "workspace:^",
     "@here.build/tsconfig": "workspace:^",
     "@storybook/react-vite": "^10.0.0",
     "@types/node": "24.0.0",
@@ -66,6 +81,7 @@
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "5.2.0",
     "elkjs": "0.11.1",
+    "eslint": "9.39.2",
     "fast-check": "4.8.0",
     "mermaid": "11.16.0",
     "react": "19.2.0",

@@ -1,6 +1,6 @@
 {
   "name": "@inhuman.tools/arrival-sugarcoat",
-  "version": "0.1.0",
+  "version": "0.9.0",
   "description": "Sugarcoat lens for Arrival — classic↔sugarcoat scheme-source rendering (indentation I-expressions, curly-infix, => lambda, method-dot, accessor subscripts, colon kwargs, at-expressions). A zero-dependency leaf consumed by the studio editor, codemirror, the chain-view compiler, and provenance rendering.",
   "keywords": [
     "arrival",
@@ -10,17 +10,20 @@
     "scheme",
     "formatter"
   ],
-  "homepage": "https://github.com/here-build/foundation#readme",
+  "homepage": "https://github.com/here-build/arrival#readme",
   "bugs": {
-    "url": "https://github.com/here-build/foundation/issues"
+    "url": "https://github.com/here-build/arrival/issues"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/here-build/foundation.git",
-    "directory": "arrival/arrival-sugarcoat"
+    "url": "https://github.com/here-build/arrival.git",
+    "directory": "packages/arrival-sugarcoat"
   },
   "license": "FSL-1.1-MIT",
   "author": "here.build",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "sideEffects": false,
   "exports": {

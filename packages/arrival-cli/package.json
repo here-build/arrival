@@ -1,6 +1,6 @@
 {
   "name": "@inhuman.tools/arrival-cli",
-  "version": "0.1.0",
+  "version": "0.9.0",
   "description": "The arrival command — run programs, REPL, and static-check from the terminal. `arrival run file.scm` (whole-program diagnostics, then execute with (require …) rooted at the file's dir), `arrival repl` (persistent-scope session, teaching-door errors), `arrival check file.scm` (the eslint-style pass, no execution).",
   "keywords": [
     "arrival",
@@ -10,10 +10,17 @@
   ],
   "license": "FSL-1.1-MIT",
   "author": "here.build",
+  "publishConfig": {
+    "access": "public"
+  },
+  "homepage": "https://github.com/here-build/arrival#readme",
+  "bugs": {
+    "url": "https://github.com/here-build/arrival/issues"
+  },
   "repository": {
     "type": "git",
-    "url": "https://github.com/here-build/foundation.git",
-    "directory": "arrival/arrival-cli"
+    "url": "https://github.com/here-build/arrival.git",
+    "directory": "packages/arrival-cli"
   },
   "type": "module",
   "bin": {
@@ -39,7 +46,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "dependencies": {
     "@inhuman.tools/arrival": "workspace:^",
@@ -52,9 +61,11 @@
     "react-devtools-core": "7.0.1"
   },
   "devDependencies": {
+    "@here.build/eslint-configs": "workspace:^",
     "@here.build/tsconfig": "workspace:^",
     "@types/node": "24.0.0",
     "@types/react": "19.2.14",
+    "eslint": "9.39.2",
     "ink-testing-library": "4.0.0",
     "typescript": "6.0.2",
     "vitest": "4.1.0"

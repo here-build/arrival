@@ -1,6 +1,6 @@
 {
   "name": "@inhuman.tools/arrival-provenance",
-  "version": "0.1.0",
+  "version": "0.9.0",
   "description": "Thin re-export shim over @inhuman.tools/arrival's `/provenance` subpath (the trace-capture substrate + the full analysis stack — forest, statechart, region tree, flow graph, reverse-chain slicer — now live in core, per REWORK-DAG.md node C0). The one non-passthrough export is EvalTrace: this package's is the mobx-reactive ObservableEvalTrace, kept here so studio/UI consumers keep byte-identical reactive semantics without core taking on a mobx dependency.",
   "keywords": [
     "arrival",
@@ -9,17 +9,20 @@
     "dataflow",
     "slicing"
   ],
-  "homepage": "https://github.com/here-build/foundation#readme",
+  "homepage": "https://github.com/here-build/arrival#readme",
   "bugs": {
-    "url": "https://github.com/here-build/foundation/issues"
+    "url": "https://github.com/here-build/arrival/issues"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/here-build/foundation.git",
-    "directory": "arrival/arrival-provenance"
+    "url": "https://github.com/here-build/arrival.git",
+    "directory": "packages/arrival-provenance"
   },
   "license": "FSL-1.1-MIT",
   "author": "here.build",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "exports": {
     ".": {

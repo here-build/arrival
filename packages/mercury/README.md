@@ -1,9 +1,9 @@
 # @inhuman.tools/mercury
 
 Mercury — compilation for humans. A faithful, deterministic projection of an
-[arrival-chain](../../../foundations/arrival/arrival/README.md) Scheme program into a target
+[arrival-chain](../arrival/README.md) Scheme program into a target
 language — the read-view "glass" over a chain program. TS-only (stage 1, per
-`docs/working-proposals/inhuman-mercury-ts-dual-runtime.md`): the Python emitter,
+the dual-runtime decision): the Python emitter,
 the ax signature-DSL backend, and the dspy/langchain-py backends were deleted —
 every emitted module is TypeScript.
 

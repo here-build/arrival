@@ -36,9 +36,16 @@ whole-program optimization, and errors that teach instead of ban.
   tiers); `arrival-mcp-do` — the Durable Object session shell;
   `mcp-substrate` — the doors system: error enrichment, session replay,
   futility detection. Rejections teach and route; they do not ban.
+- `mercury` — the Mercury compiler: an arrival-chain program projected into
+  human-grade TypeScript, designed around the reader's mental model rather
+  than mechanically lowered.
+- `arrival-type-lens` — the Scheme→TS type lens: arrival programs bite under
+  `tsc`, and diagnostics lift back to their `.scm` spans.
+- `arrival-mercury` — the differential-oracle harness: interpreter vs
+  compiled output, compared as black-box source-in/value-out outcomes.
 
-The wider toolchain — run engine, type lens, mercury compiler, effect
-membrane — lives in
+The rest of the wider toolchain — the run engine, the effect membrane, the
+LLM-inference plane — lives in
 [inhuman-foundation](https://github.com/here-build/inhuman-foundation).
 LLM inference is deliberately **not** part of this repo: it is an environment
 capability pack built on arrival's extension mechanism, consumed by the

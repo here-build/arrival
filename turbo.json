@@ -16,6 +16,34 @@
     },
     "lint": {
       "outputs": []
+    },
+    "benchmarks": {
+      "dependsOn": ["build"],
+      "outputs": []
+    },
+    "experiments": {
+      "dependsOn": ["build"],
+      "outputs": []
+    },
+    "custdev": {
+      "dependsOn": ["build"],
+      "outputs": []
+    },
+    "research": {
+      "dependsOn": ["build"],
+      "outputs": []
+    },
+    "workerd": {
+      "dependsOn": ["build"],
+      "outputs": []
+    },
+    "test-d": {
+      "dependsOn": ["build"],
+      "outputs": []
+    },
+    "conformance": {
+      "dependsOn": ["build"],
+      "outputs": []
     }
   }
 }
