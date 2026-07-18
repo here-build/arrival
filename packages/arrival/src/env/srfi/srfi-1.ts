@@ -211,7 +211,7 @@ function findImpl(arg: (...args: unknown[]) => unknown, list: AListAlike, runCtx
 // rule grows here, onto its OWN Contract's `emit` field — the same pattern lists.ts's
 // cons/map/apply and numeric.ts's quotient/modulo/=/+/-/*// relocations established.
 // The residual shape is BYTE-FOR-BYTE identical to the compiler-side table rule
-// (`inhuman/foundations/arrival-mercury/src/rules/phase1.ts`'s `filterRule`), built
+// (`arrival/packages/arrival-mercury/src/rules/phase1.ts`'s `filterRule`), built
 // via `@inhuman.tools/arrival/emit`'s residual-lite constructors.
 //
 // ⚠ UNLIKE every other Wave-1/2/3 symbol, filter's TABLE ROW DOES NOT GO AWAY —

@@ -1137,7 +1137,7 @@ const NUMBER_TO_STRING_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
 // ════════════════════════════════════════════════════════════════════════════
 // Contract.emit — THE PHASE-2 RELOCATION DRILL (constitution §9): + / - / * / / /
 // quotient / modulo / = move here from the compiler-side phase1 table
-// (`inhuman/foundations/arrival-mercury/src/rules/phase1.ts`) onto their OWN
+// (`arrival/packages/arrival-mercury/src/rules/phase1.ts`) onto their OWN
 // Contract's `emit` field — the pattern every remaining table row's relocation
 // follows. Residual shapes are BYTE-FOR-BYTE identical to the table rules they
 // replace (verified by diffing against phase1.ts's pre-relocation `plusRule`/

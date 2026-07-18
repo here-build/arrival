@@ -1,6 +1,6 @@
 /**
  * COPY-AS-CHUNK (constitution §4.5 — greenfield package, never shared imports).
- * Source: inhuman/public-packages/mercury/src/names.ts (`cleanName`, `nameCandidates`,
+ * Source: arrival/packages/mercury/src/names.ts (`cleanName`, `nameCandidates`,
  * `RESERVED`), verbatim.
  *
  * The pure base of the lexical-naming ladder — kebab→camel, drop predicate `?` /

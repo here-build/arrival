@@ -8,8 +8,7 @@
     "oracle",
     "differential-testing"
   ],
-  "license": "UNLICENSED",
-  "private": true,
+  "license": "FSL-1.1-MIT",
   "author": "here.build",
   "type": "module",
   "exports": {

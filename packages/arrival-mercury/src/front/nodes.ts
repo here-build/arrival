@@ -1,6 +1,6 @@
 /**
  * COPY-AS-CHUNK (constitution §4.5 — greenfield package, never shared imports).
- * Source: inhuman/public-packages/mercury/src/nodes.ts.
+ * Source: arrival/packages/mercury/src/nodes.ts.
  *
  * Thin helpers over the `Node` parse forest. The classifier consumes this forest;
  * everything here is pure shape inspection — no emit, no naming.

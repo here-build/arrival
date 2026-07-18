@@ -171,7 +171,7 @@ Mechanical enforcement of the staging law ("no code path may emit
 `content-attested`/`selection-attested` until its leg is live" — and after J2, "except
 through the seal"). The test walks the three consumer surfaces from the repo root:
 
-- `inhuman/foundations/arrival-mercury/src`
+- `arrival/packages/arrival-mercury/src`
 - `inhuman/foundations/arrival-reflect/src`
 - `inhuman/saas/mcp-worker/src`
 

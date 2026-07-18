@@ -1,7 +1,7 @@
 /**
  * ADAPTED-AS-CHUNK (constitution §4.5's copy-as-chunk discipline, applied a second
  * time — ../walker/names.ts already did this once for `cleanName`/`nameCandidates`).
- * Source: `inhuman/public-packages/mercury/src/names.ts`'s `elementName`, RETARGETED
+ * Source: `arrival/packages/mercury/src/names.ts`'s `elementName`, RETARGETED
  * from the scheme parse AST (`Node`) to the Residual algebra's receiver expressions
  * (`R`) — the LEGIBILITY pass runs post-walk, over residuals, never over scheme
  * source (constitution §3.5's singularization leg). Same `pluralize` dependency,

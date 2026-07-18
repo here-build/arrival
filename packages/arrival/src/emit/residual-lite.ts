@@ -4,7 +4,7 @@
 // §9 — rather than built in full up front).
 //
 // WHY THIS EXISTS. Constitution §4.5 forbids arrival core importing the compiler's
-// residual constructors (`inhuman/foundations/arrival-mercury/src/residual/types.ts` —
+// residual constructors (`arrival/packages/arrival-mercury/src/residual/types.ts` —
 // the OUT package; arrival core must not depend on it, only the reverse). But a
 // Contract-carried `emit` rule (quotient/modulo/=, cons/not/null?/pair?/+/-/*//, and
 // this wave's map/filter/apply) still needs to BUILD `Bin`/`Lit`/`Method`/`Ref`/`Un`/
@@ -47,7 +47,7 @@
 // E2b ADDITION (arrival-mercury engine plan §2 E2, second half): `ChunkExpr` joins the
 // `R` union, ALSO as a TYPE ARM ONLY, for the same reason `RuntimeRef` did — a Contract
 // rule MAY need to return the compiler's hybrid-tree hard chunk (mercury-ir.md;
-// `inhuman/foundations/arrival-mercury/src/residual/types.ts`'s own `ChunkExpr`) as its
+// `arrival/packages/arrival-mercury/src/residual/types.ts`'s own `ChunkExpr`) as its
 // residual, but the value would be MINTED by that compiler-package constructor (the
 // only one that imports `typescript` to build a real `ts.Node` — `residual/chunk.ts`),
 // never by anything in this arrival-core file (module header: "nothing here is ever

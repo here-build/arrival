@@ -265,7 +265,7 @@ function mapImpl(
 // ════════════════════════════════════════════════════════════════════════════
 // Contract.emit — THE PHASE-2 RELOCATION DRILL (constitution §9): cons (Wave 2), then
 // map/apply (Wave 3) move here from the compiler-side phase1 table
-// (`inhuman/foundations/arrival-mercury/src/rules/phase1.ts`) onto their OWN
+// (`arrival/packages/arrival-mercury/src/rules/phase1.ts`) onto their OWN
 // Contract's `emit` field — the same pattern numeric.ts's quotient/modulo/=/+/-/*//
 // relocation established, built via `@inhuman.tools/arrival/emit`'s residual-lite
 // constructors (§4.5's seed of "residual types belong in arrival core eventually")

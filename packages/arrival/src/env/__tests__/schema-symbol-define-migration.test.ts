@@ -11,7 +11,7 @@
 //   validate-ONLY (`define-bake.ts`: "the decoded value is discarded... the original scheme
 //   args/return flow through unchanged") — this file pins the OUTPUT, byte-for-byte, via the
 //   same JSON.stringify-of-the-JS-projection convention `arrival-chain`'s own
-//   `schema-dsl.test.ts` established for this DSL. `inhuman/public-packages/mercury/src/
+//   `schema-dsl.test.ts` established for this DSL. `arrival/packages/mercury/src/
 //   __tests__/conformance/corpus/infer-schema.scm` is the cross-package canary for this same
 //   invariant — noted here, deliberately NOT run from this file (out of this pack's territory).
 //

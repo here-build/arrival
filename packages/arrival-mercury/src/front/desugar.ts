@@ -1,6 +1,6 @@
 /**
  * COPY-AS-CHUNK (constitution §4.5 — greenfield package, never shared imports).
- * Source: inhuman/public-packages/mercury/src/desugar.ts.
+ * Source: arrival/packages/mercury/src/desugar.ts.
  *
  * Macro-expansion pre-pass: rewrite the authoring-surface forms that are really sugar for
  * core forms (`lambda`, `let`, `if`, calls) BEFORE classification runs — so classify()

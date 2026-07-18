@@ -21,10 +21,9 @@ import { emitTypes } from "../types-emit.js";
 const { dirname, join } = path;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-// The lens prelude lives in inhuman/foundations since the 2026-07-12 llm-plane
-// relocation (the old second-foundation path is gone — a stale copy of it here
-// fails collection with ENOENT, masking every type-plane result).
-const LENS_PRELUDE = join(__dirname, "../../../../foundations/arrival-type-lens/src/prelude");
+// The lens prelude is a sibling package under arrival/packages/. A stale path
+// here fails collection with ENOENT, masking every type-plane result.
+const LENS_PRELUDE = join(__dirname, "../../../arrival-type-lens/src/prelude");
 const PRE = readFileSync(join(LENS_PRELUDE, "types.d.ts"), "utf8");
 
 // Load EVERY builtin leaf that currently exists (the 34-way fan-out lands

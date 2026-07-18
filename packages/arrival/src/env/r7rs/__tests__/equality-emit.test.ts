@@ -15,7 +15,7 @@
 // `null?` use.
 //
 // Byte-parity with the PRE-relocation compiler-side rule is proven on the mercury
-// side (inhuman/foundations/arrival-mercury): rules-phase1.test.ts's own "not"/
+// side (arrival/packages/arrival-mercury): rules-phase1.test.ts's own "not"/
 // "null?/pair?" goldens moved to this file's Contract-level proof once the table
 // rows were deleted; the narrows-carriage, narrows-fuzz, and cross-pass/gate3 tests
 // exercise these through the REAL harvest + walker + render pipeline, unchanged.

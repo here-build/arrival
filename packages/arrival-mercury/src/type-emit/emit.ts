@@ -1,6 +1,6 @@
 /**
  * COPY-AS-CHUNK (constitution §4.5 — greenfield package, never shared imports).
- * Source: inhuman/public-packages/mercury/src/types-emit.ts (already carrying
+ * Source: arrival/packages/mercury/src/types-emit.ts (already carrying
  * Phase 0's unconditional `__scmTruth` wrap in `emitIf`).
  *
  * Adaptations from the source chunk:

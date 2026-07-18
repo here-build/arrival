@@ -1,6 +1,6 @@
 /**
  * COPY-AS-CHUNK (constitution §4.5 — greenfield package, never shared imports).
- * Source: inhuman/public-packages/mercury/src/scheme-scope.ts (verbatim logic; only
+ * Source: arrival/packages/mercury/src/scheme-scope.ts (verbatim logic; only
  * the import homes changed — sibling `./names.js` / `./nodes.js` copies. The
  * `@here.build/lexical-namer` import STAYS a real dependency: the constitution's
  * pipeline keeps the "scope/naming — lexical-namer adapter" [§3.1, keep], and

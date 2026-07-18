@@ -1,6 +1,6 @@
 /**
  * COPY-AS-CHUNK (constitution §4.5 — greenfield package, never shared imports).
- * Sources: inhuman/public-packages/mercury/src/stdlib.ts (the name ROSTER only) +
+ * Sources: arrival/packages/mercury/src/stdlib.ts (the name ROSTER only) +
  * foundations/arrival/arrival-sugarcoat/src/sugarcoat-render.ts (`decodeAccessor`,
  * reduced to its acceptance test).
  *
