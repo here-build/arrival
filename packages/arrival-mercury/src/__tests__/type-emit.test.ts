@@ -15,7 +15,7 @@
 import { describe, expect, it } from "vitest";
 
 import { parseSexprs } from "../front/parse.js";
-import { emitTypes } from "../type-emit/index.js";
+import { emitTypes, type EmitTypesOptions } from "../type-emit/index.js";
 import { narrowsMembersOf } from "../type-emit/narrows.js";
 import type { EmitRegistry, EmitRegistryRow } from "../registry/index.js";
 
@@ -31,26 +31,130 @@ const HOSTS: ReadonlySet<string> = new Set(["null?", "pair?", "string?", "number
 const mappingAt = (r: { ts: string; mappings: { tsStart: number; tsLength: number; schemeStart: number; schemeLength: number }[] }, schemeStart: number, schemeLength: number) =>
   r.mappings.filter((m) => m.schemeStart === schemeStart && m.schemeLength === schemeLength);
 
+// ── the emit-shape protocol table: one row per (source, emission) claim ────
+// Every row runs `emitTypes(src, opts)` and asserts each `contains` fragment
+// IS present in `r.ts` (in row order), then each `excludes` fragment is NOT
+// (in row order) — exactly the assertions, and assertion order, of the
+// original its. `topic` names the topical describe the row lands in (each
+// describe loops its own rows). Rows whose assertion shape drifts beyond
+// contains/excludes (mapping-lens comparisons, multi-emit loops, the grammar
+// gates) stay plain its in their describes below.
+interface TypeEmitCase {
+  /** The topical describe this row lands in (describes filter their own rows). */
+  readonly topic: string;
+  /** The behavior claim — becomes the it name. */
+  readonly name: string;
+  readonly src: string;
+  readonly opts?: EmitTypesOptions;
+  /** Fragments asserted present via toContain, in assertion order. */
+  readonly contains: readonly string[];
+  /** Fragments asserted absent via not.toContain, in assertion order (after `contains`). */
+  readonly excludes?: readonly string[];
+}
+
+const TYPE_EMIT_CASES: readonly TypeEmitCase[] = [
+  {
+    topic: "type-emit: Law T wrap (default)",
+    name: "wraps the self-referencing headline shape — (if x x 'fallback)",
+    src: "(if x x 'fallback)",
+    contains: ['(__scmTruth(x) ? x : "fallback")'],
+  },
+  {
+    topic: "type-emit: Law T wrap (default)",
+    name: "wraps a bare literal condition — unconditional-wrap policy",
+    src: "(if 0 'a 'b)",
+    contains: ['(__scmTruth(0) ? "a" : "b")'],
+  },
+  {
+    topic: "type-emit: Law T wrap (default)",
+    name: "wraps a non-narrowing predicate call",
+    src: "(if (zero? n) 1 2)",
+    opts: { narrowsMembers: NARROWS },
+    contains: ['(__scmTruth(__arr["zero?"](n)) ? 1 : 2)'],
+  },
+  {
+    topic: "type-emit: Law T wrap (default)",
+    name: "wraps each nested if's condition independently — (if (if a b c) x y)",
+    src: "(if (if a b c) x y)",
+    contains: ["(__scmTruth((__scmTruth(a) ? b : c)) ? x : y)"],
+  },
+
+  {
+    topic: "type-emit: narrowing-form grammar (§5.3)",
+    name: "emits a flagged predicate bare — (if (null? xs) …)",
+    src: "(if (null? xs) 1 2)",
+    opts: { narrowsMembers: NARROWS },
+    contains: ['(__arr["null?"](xs) ? 1 : 2)'],
+    excludes: ["__scmTruth"],
+  },
+  {
+    topic: "type-emit: narrowing-form grammar (§5.3)",
+    name: "lowers not to native ! — (if (not (null? xs)) …)",
+    src: "(if (not (null? xs)) 1 2)",
+    opts: { narrowsMembers: NARROWS },
+    contains: ['(!__arr["null?"](xs) ? 1 : 2)'],
+    excludes: ["__scmTruth", "__arr.not"],
+  },
+  {
+    topic: "type-emit: narrowing-form grammar (§5.3)",
+    name: "lowers and to native && — the constitution's own second guard shape",
+    src: "(if (and (pair? x) (pair? (cdr x))) 1 2)",
+    opts: { narrowsMembers: NARROWS },
+    contains: ['((__arr["pair?"](x) && __arr["pair?"](__arr.cdr(x))) ? 1 : 2)'],
+    excludes: ["__scmTruth", "__arr.and"],
+  },
+  {
+    topic: "type-emit: narrowing-form grammar (§5.3)",
+    name: "lowers or (and not-inside-or) to native || / !",
+    src: "(if (or (string? x) (not (number? x))) 1 2)",
+    opts: { narrowsMembers: NARROWS },
+    contains: ['((__arr["string?"](x) || !__arr["number?"](x)) ? 1 : 2)'],
+    excludes: ["__scmTruth"],
+  },
+
+  {
+    topic: "type-emit: all-or-nothing (mixed clauses wrap whole)",
+    name: "wraps the WHOLE condition when one and-operand is not flagged",
+    src: "(if (and (pair? x) (f x)) 1 2)",
+    opts: { narrowsMembers: NARROWS, hostMembers: HOSTS },
+    contains: ['(__scmTruth(__arr.and(__arr["pair?"](x), f(x))) ? 1 : 2)'],
+    excludes: [" && "],
+  },
+  {
+    topic: "type-emit: all-or-nothing (mixed clauses wrap whole)",
+    name: "wraps on a bare-variable operand too — (and (string? x) flag)",
+    src: "(if (and (string? x) flag) 1 2)",
+    opts: { narrowsMembers: NARROWS, hostMembers: HOSTS },
+    contains: ['(__scmTruth(__arr.and(__arr["string?"](x), flag)) ? 1 : 2)'],
+  },
+  {
+    topic: "type-emit: all-or-nothing (mixed clauses wrap whole)",
+    name: "zero-arity (and) is a value form, not a guard — wraps, no invalid `()`",
+    src: "(if (and) 1 2)",
+    opts: { narrowsMembers: NARROWS },
+    contains: ["(__scmTruth(__arr.and()) ? 1 : 2)"],
+  },
+  {
+    topic: "type-emit: all-or-nothing (mixed clauses wrap whole)",
+    name: "wrong-arity not is not an NForm — (not a b) wraps",
+    src: "(if (not a b) 1 2)",
+    opts: { narrowsMembers: NARROWS },
+    contains: ["(__scmTruth(__arr.not(a, b)) ? 1 : 2)"],
+  },
+];
+
+const casesIn = (topic: string): readonly TypeEmitCase[] => TYPE_EMIT_CASES.filter((c) => c.topic === topic);
+
+const runTypeEmitCase = (c: TypeEmitCase): void => {
+  const r = emitTypes(c.src, c.opts);
+  for (const s of c.contains) expect(r.ts).toContain(s);
+  for (const s of c.excludes ?? []) expect(r.ts).not.toContain(s);
+};
+
 describe("type-emit: Law T wrap (default)", () => {
-  it("wraps the self-referencing headline shape — (if x x 'fallback)", () => {
-    const r = emitTypes("(if x x 'fallback)");
-    expect(r.ts).toContain('(__scmTruth(x) ? x : "fallback")');
-  });
-
-  it("wraps a bare literal condition — unconditional-wrap policy", () => {
-    const r = emitTypes("(if 0 'a 'b)");
-    expect(r.ts).toContain('(__scmTruth(0) ? "a" : "b")');
-  });
-
-  it("wraps a non-narrowing predicate call", () => {
-    const r = emitTypes("(if (zero? n) 1 2)", { narrowsMembers: NARROWS });
-    expect(r.ts).toContain('(__scmTruth(__arr["zero?"](n)) ? 1 : 2)');
-  });
-
-  it("wraps each nested if's condition independently — (if (if a b c) x y)", () => {
-    const r = emitTypes("(if (if a b c) x y)");
-    expect(r.ts).toContain("(__scmTruth((__scmTruth(a) ? b : c)) ? x : y)");
-  });
+  for (const c of casesIn("type-emit: Law T wrap (default)")) {
+    it(c.name, () => runTypeEmitCase(c));
+  }
 
   it("never declares __scmTruth — the lens prelude owns the ambient declaration", () => {
     const r = emitTypes("(if 0 1 2)");
@@ -60,31 +164,9 @@ describe("type-emit: Law T wrap (default)", () => {
 });
 
 describe("type-emit: narrowing-form grammar (§5.3)", () => {
-  it("emits a flagged predicate bare — (if (null? xs) …)", () => {
-    const r = emitTypes("(if (null? xs) 1 2)", { narrowsMembers: NARROWS });
-    expect(r.ts).toContain('(__arr["null?"](xs) ? 1 : 2)');
-    expect(r.ts).not.toContain("__scmTruth");
-  });
-
-  it("lowers not to native ! — (if (not (null? xs)) …)", () => {
-    const r = emitTypes("(if (not (null? xs)) 1 2)", { narrowsMembers: NARROWS });
-    expect(r.ts).toContain('(!__arr["null?"](xs) ? 1 : 2)');
-    expect(r.ts).not.toContain("__scmTruth");
-    expect(r.ts).not.toContain("__arr.not");
-  });
-
-  it("lowers and to native && — the constitution's own second guard shape", () => {
-    const r = emitTypes("(if (and (pair? x) (pair? (cdr x))) 1 2)", { narrowsMembers: NARROWS });
-    expect(r.ts).toContain('((__arr["pair?"](x) && __arr["pair?"](__arr.cdr(x))) ? 1 : 2)');
-    expect(r.ts).not.toContain("__scmTruth");
-    expect(r.ts).not.toContain("__arr.and");
-  });
-
-  it("lowers or (and not-inside-or) to native || / !", () => {
-    const r = emitTypes("(if (or (string? x) (not (number? x))) 1 2)", { narrowsMembers: NARROWS });
-    expect(r.ts).toContain('((__arr["string?"](x) || !__arr["number?"](x)) ? 1 : 2)');
-    expect(r.ts).not.toContain("__scmTruth");
-  });
+  for (const c of casesIn("type-emit: narrowing-form grammar (§5.3)")) {
+    it(c.name, () => runTypeEmitCase(c));
+  }
 
   it("keeps every mapping-relevant span through both variants of the same head", () => {
     // The SAME source form emits unwrapped (flagged) vs wrapped (unflagged) —
@@ -104,26 +186,9 @@ describe("type-emit: narrowing-form grammar (§5.3)", () => {
 });
 
 describe("type-emit: all-or-nothing (mixed clauses wrap whole)", () => {
-  it("wraps the WHOLE condition when one and-operand is not flagged", () => {
-    const r = emitTypes("(if (and (pair? x) (f x)) 1 2)", { narrowsMembers: NARROWS, hostMembers: HOSTS });
-    expect(r.ts).toContain('(__scmTruth(__arr.and(__arr["pair?"](x), f(x))) ? 1 : 2)');
-    expect(r.ts).not.toContain(" && ");
-  });
-
-  it("wraps on a bare-variable operand too — (and (string? x) flag)", () => {
-    const r = emitTypes("(if (and (string? x) flag) 1 2)", { narrowsMembers: NARROWS, hostMembers: HOSTS });
-    expect(r.ts).toContain('(__scmTruth(__arr.and(__arr["string?"](x), flag)) ? 1 : 2)');
-  });
-
-  it("zero-arity (and) is a value form, not a guard — wraps, no invalid `()`", () => {
-    const r = emitTypes("(if (and) 1 2)", { narrowsMembers: NARROWS });
-    expect(r.ts).toContain("(__scmTruth(__arr.and()) ? 1 : 2)");
-  });
-
-  it("wrong-arity not is not an NForm — (not a b) wraps", () => {
-    const r = emitTypes("(if (not a b) 1 2)", { narrowsMembers: NARROWS });
-    expect(r.ts).toContain("(__scmTruth(__arr.not(a, b)) ? 1 : 2)");
-  });
+  for (const c of casesIn("type-emit: all-or-nothing (mixed clauses wrap whole)")) {
+    it(c.name, () => runTypeEmitCase(c));
+  }
 });
 
 describe("type-emit: grammar gates (shadowing, Law F, value position)", () => {

@@ -77,132 +77,181 @@ const compile = (src: string, registry: EmitRegistry = PROVENANCE_REGISTRY, over
 const emit = (src: string, registry: EmitRegistry = PROVENANCE_REGISTRY, over: Partial<WalkOptions> = {}): string =>
   render(compile(src, registry, over));
 
-describe("shakeTopLevel — the pure decision", () => {
-  it("RED: a dead PURE define is pruned (string-append — pipe provenance)", () => {
-    const { forms } = cf(`(define used (infer "live" "u"))
+// ── the pure-decision protocol table: one row per behavior claim ───────────
+// Every row runs `cf(src)` → `shakeTopLevel(forms, registry)` and then makes
+// exactly the assertions its fields describe — an ABSENT optional field is an
+// assertion the original it never made (omitted, never defaulted: no
+// strengthening), and a present field runs the original assertion verbatim
+// (no weakening). The optional flags are the file's own assertion vocabulary,
+// one per assertion shape the its used. Assertion order inside the runner is
+// canonical (pruned → keptForEffect → identity → formsLength → absent-from-
+// forms); the identity-first rows assert the same SET either way.
+interface ShakeCase {
+  /** The behavior claim — becomes the it name. */
+  readonly name: string;
+  readonly src: string;
+  /** Registry override — defaults to PROVENANCE_REGISTRY; the Law F rows use EMPTY. */
+  readonly registry?: EmitRegistry;
+  /** Expected `decision.pruned` names — compared in decision order, or
+   *  order-insensitively under `sort` (rows whose original assertion .sort()ed:
+   *  decision ORDER is not under test there). */
+  readonly pruned?: readonly string[];
+  /** Expected `decision.keptForEffect` names — same ordering rules as `pruned`. */
+  readonly keptForEffect?: readonly string[];
+  /** The original assertion .sort()ed the name list before comparing. */
+  readonly sort?: boolean;
+  /** Assert the identity fast path: `decision.forms` IS the input array. */
+  readonly identity?: boolean;
+  /** Extra assertion on the surviving forms count. */
+  readonly formsLength?: number;
+  /** Belt-and-braces follow-through: no surviving form carries any pruned name. */
+  readonly prunedAbsentFromForms?: boolean;
+}
+
+const SHAKE_CASES: readonly ShakeCase[] = [
+  {
+    name: "RED: a dead PURE define is pruned (string-append — pipe provenance)",
+    src: `(define used (infer "live" "u"))
 (define unused (string-append "never" "read"))
-(infer "out" (car used))`);
-    const decision = shakeTopLevel(forms, PROVENANCE_REGISTRY);
-    expect(decision.pruned.map((e) => e.name)).toEqual(["unused"]);
-    expect(decision.keptForEffect).toEqual([]);
-    expect(decision.forms).toHaveLength(2); // `unused` gone; `used` + the trailing infer survive
-    expect(decision.forms.some((f) => "name" in f && f.name === "unused")).toBe(false);
-  });
-
-  it("RED: a dead EFFECTFUL define (infer — source provenance) is KEPT, not pruned", () => {
-    const { forms } = cf(`(define used (infer "live" "u"))
+(infer "out" (car used))`,
+    pruned: ["unused"],
+    keptForEffect: [],
+    // `unused` gone; `used` + the trailing infer survive
+    formsLength: 2,
+    prunedAbsentFromForms: true,
+  },
+  {
+    name: "RED: a dead EFFECTFUL define (infer — source provenance) is KEPT, not pruned",
+    src: `(define used (infer "live" "u"))
 (define unused-effect (infer "side" "never-referenced"))
-(infer "out" (car used))`);
-    const decision = shakeTopLevel(forms, PROVENANCE_REGISTRY);
-    expect(decision.pruned).toEqual([]);
-    expect(decision.keptForEffect.map((e) => e.name)).toEqual(["unused-effect"]);
-    expect(decision.forms).toBe(forms); // identity fast path — nothing REMOVED, even though something is dead
-    expect(decision.forms).toHaveLength(3);
-  });
-
-  it("a dead define reaching an effectful call NESTED several levels deep is still kept (whole-subtree scan)", () => {
-    const { forms } = cf(`(define (helper x) (string-append "wrap:" (car (list x))))
+(infer "out" (car used))`,
+    pruned: [],
+    keptForEffect: ["unused-effect"],
+    identity: true, // identity fast path — nothing REMOVED, even though something is dead
+    formsLength: 3,
+  },
+  {
+    name: "a dead define reaching an effectful call NESTED several levels deep is still kept (whole-subtree scan)",
+    src: `(define (helper x) (string-append "wrap:" (car (list x))))
 (define unused (helper (infer "buried" "deep")))
-(infer "out" "done")`);
-    const decision = shakeTopLevel(forms, PROVENANCE_REGISTRY);
-    expect(decision.pruned).toEqual([]);
+(infer "out" "done")`,
+    pruned: [],
     // `unused` survives on its own effect; `helper` survives BECAUSE `unused`
     // (kept) still calls it — see the dedicated soundness row below.
-    expect(decision.keptForEffect.map((e) => e.name).sort()).toEqual(["helper", "unused"]);
-  });
-
-  it("SOUNDNESS: an otherwise-dead-and-PURE define referenced ONLY by a dead-but-effectful sibling survives too — pruning it would dangle the sibling's own reference", () => {
-    const { forms } = cf(`(define (helper x) (string-append "wrap:" (car (list x))))
+    keptForEffect: ["helper", "unused"],
+    sort: true,
+  },
+  {
+    name: "SOUNDNESS: an otherwise-dead-and-PURE define referenced ONLY by a dead-but-effectful sibling survives too — pruning it would dangle the sibling's own reference",
+    src: `(define (helper x) (string-append "wrap:" (car (list x))))
 (define unused (helper (infer "buried" "deep")))
-"root"`);
-    const decision = shakeTopLevel(forms, PROVENANCE_REGISTRY);
-    expect(decision.pruned).toEqual([]); // neither survives on ROOT-reachability (there is none)…
+"root"`,
+    pruned: [], // neither survives on ROOT-reachability (there is none)…
     // …but BOTH survive: `unused` on its own effect, `helper` because `unused` (kept) still calls it.
-    expect(decision.keptForEffect.map((e) => e.name).sort()).toEqual(["helper", "unused"]);
-    expect(decision.forms).toBe(forms); // identity fast path — nothing was actually removed
-  });
-
-  it("conservative bucket: a dead define whose only call is FAN-provenance (map) is kept, not pruned", () => {
-    const { forms } = cf(`(define xs (list 1 2 3))
+    keptForEffect: ["helper", "unused"],
+    sort: true,
+    identity: true, // identity fast path — nothing was actually removed
+  },
+  {
+    name: "conservative bucket: a dead define whose only call is FAN-provenance (map) is kept, not pruned",
+    src: `(define xs (list 1 2 3))
 (define unused (map car xs))
-(car xs)`);
-    const decision = shakeTopLevel(forms, PROVENANCE_REGISTRY);
-    expect(decision.pruned).toEqual([]);
-    expect(decision.keptForEffect.map((e) => e.name)).toEqual(["unused"]);
-  });
-
-  it("mutual recursion: two dead pure defines referencing only each other are BOTH pruned", () => {
-    const { forms } = cf(`(define (ping n) (if (car n) (pong n) n))
+(car xs)`,
+    pruned: [],
+    keptForEffect: ["unused"],
+  },
+  {
+    name: "mutual recursion: two dead pure defines referencing only each other are BOTH pruned",
+    src: `(define (ping n) (if (car n) (pong n) n))
 (define (pong n) (ping n))
-"alive"`);
-    const decision = shakeTopLevel(forms, PROVENANCE_REGISTRY);
-    expect(decision.pruned.map((e) => e.name).sort()).toEqual(["ping", "pong"]);
-  });
-
-  it("mutual recursion reachable from a root: BOTH survive", () => {
-    const { forms } = cf(`(define (ping n) (if (car n) (pong n) n))
+"alive"`,
+    pruned: ["ping", "pong"],
+    sort: true,
+  },
+  {
+    name: "mutual recursion reachable from a root: BOTH survive",
+    src: `(define (ping n) (if (car n) (pong n) n))
 (define (pong n) (ping n))
-(ping (list #t))`);
-    const decision = shakeTopLevel(forms, PROVENANCE_REGISTRY);
-    expect(decision.pruned).toEqual([]);
-  });
-
-  it("a non-define root (a bare expression) is never a pruning candidate", () => {
-    const { forms } = cf(`(string-append "a" "b")`);
-    const decision = shakeTopLevel(forms, PROVENANCE_REGISTRY);
-    expect(decision.forms).toBe(forms);
-    expect(decision.pruned).toEqual([]);
-  });
-
-  it("requires are never pruned this wave, even when unreferenced (conservative, documented no-op)", () => {
-    const { forms } = cf(`(require "some-module")
-(string-append "a" "b")`);
-    const decision = shakeTopLevel(forms, PROVENANCE_REGISTRY);
-    expect(decision.forms).toBe(forms);
-    expect(decision.pruned).toEqual([]);
-  });
-
-  it("redefinition (a name defined more than once) is never pruned — declines entirely, matching propagateTopLevelDefines", () => {
-    const { forms } = cf(`(define x (string-append "a" "b"))
+(ping (list #t))`,
+    pruned: [],
+  },
+  {
+    name: "a non-define root (a bare expression) is never a pruning candidate",
+    src: `(string-append "a" "b")`,
+    pruned: [],
+    identity: true,
+  },
+  {
+    name: "requires are never pruned this wave, even when unreferenced (conservative, documented no-op)",
+    src: `(require "some-module")
+(string-append "a" "b")`,
+    pruned: [],
+    identity: true,
+  },
+  {
+    name: "redefinition (a name defined more than once) is never pruned — declines entirely, matching propagateTopLevelDefines",
+    src: `(define x (string-append "a" "b"))
 (define x (string-append "c" "d"))
-(car (list x))`);
-    const decision = shakeTopLevel(forms, PROVENANCE_REGISTRY);
-    expect(decision.pruned).toEqual([]);
-  });
-
-  it("a helper referenced ONLY from an earlier definition of a redefined name survives — every kept body's deps are live", () => {
+(car (list x))`,
+    pruned: [],
+  },
+  {
     // The audit's incomplete-closure sibling (E4b class): the fixpoint used to
     // scan only the LAST definition's body, so `helper` — needed solely by the
     // FIRST `g`, which is nonetheless KEPT (redefined names never prune) — was
     // pruned out from under kept code.
-    const { forms } = cf(`(define helper (string-append "h" "i"))
+    name: "a helper referenced ONLY from an earlier definition of a redefined name survives — every kept body's deps are live",
+    src: `(define helper (string-append "h" "i"))
 (define g (lambda () helper))
 (define g (lambda () "z"))
-(car (list (g)))`);
-    const decision = shakeTopLevel(forms, PROVENANCE_REGISTRY);
-    expect(decision.pruned).toEqual([]);
-  });
+(car (list (g)))`,
+    pruned: [],
+  },
+  {
+    name: "identity fast path: nothing to prune returns the SAME forms array",
+    src: `(define used (string-append "a" "b"))
+(car (list used))`,
+    identity: true,
+  },
+  {
+    name: "no defines at all: identity, no crash",
+    src: `(string-append "a" "b")`,
+    registry: EMPTY,
+    pruned: [],
+    keptForEffect: [],
+    identity: true,
+  },
+  {
+    name: "an unresolved (non-registry) symbol name is treated as pure — Law F's safe default, matching NO_OWN_CROSSING's `undefined` case",
+    src: `(define unused (totally-unregistered-symbol "x"))
+"done"`,
+    registry: EMPTY,
+    pruned: ["unused"],
+  },
+];
 
-  it("identity fast path: nothing to prune returns the SAME forms array", () => {
-    const { forms } = cf(`(define used (string-append "a" "b"))
-(car (list used))`);
-    expect(shakeTopLevel(forms, PROVENANCE_REGISTRY).forms).toBe(forms);
-  });
-
-  it("no defines at all: identity, no crash", () => {
-    const { forms } = cf(`(string-append "a" "b")`);
-    const decision = shakeTopLevel(forms, EMPTY);
-    expect(decision.forms).toBe(forms);
-    expect(decision.pruned).toEqual([]);
-    expect(decision.keptForEffect).toEqual([]);
-  });
-
-  it("an unresolved (non-registry) symbol name is treated as pure — Law F's safe default, matching NO_OWN_CROSSING's `undefined` case", () => {
-    const { forms } = cf(`(define unused (totally-unregistered-symbol "x"))
-"done"`);
-    const decision = shakeTopLevel(forms, EMPTY);
-    expect(decision.pruned.map((e) => e.name)).toEqual(["unused"]);
-  });
+describe("shakeTopLevel — the pure decision", () => {
+  for (const row of SHAKE_CASES) {
+    it(row.name, () => {
+      const { forms } = cf(row.src);
+      const decision = shakeTopLevel(forms, row.registry ?? PROVENANCE_REGISTRY);
+      if (row.pruned !== undefined) {
+        const actual = decision.pruned.map((e) => e.name);
+        expect(row.sort === true ? actual.sort() : actual).toEqual(row.pruned);
+      }
+      if (row.keptForEffect !== undefined) {
+        const actual = decision.keptForEffect.map((e) => e.name);
+        expect(row.sort === true ? actual.sort() : actual).toEqual(row.keptForEffect);
+      }
+      if (row.identity === true) expect(decision.forms).toBe(forms);
+      if (row.formsLength !== undefined) expect(decision.forms).toHaveLength(row.formsLength);
+      if (row.prunedAbsentFromForms === true) {
+        for (const name of row.pruned ?? []) {
+          expect(decision.forms.some((f) => "name" in f && f.name === name)).toBe(false);
+        }
+      }
+    });
+  }
 });
 
 describe("walker consumption — the shake fires INSIDE walk() (engine plan §2 E3)", () => {
