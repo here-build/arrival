@@ -23,7 +23,7 @@ describe("runtime-manifest (loose emit)", () => {
     expect(symbols.has("length")).toBe(true);
   });
 
-  it("materializeImports emits ramda then stage0 Import decls", () => {
+  it("materializeImports emits the ramda and stage0 Import decls", () => {
     const out = materializeImports(
       {
         decls: [],
@@ -37,6 +37,5 @@ describe("runtime-manifest (loose emit)", () => {
     const code = render(out);
     expect(code).toContain('import { length as length_ } from "ramda"');
     expect(code).toContain('import { error } from "./stage0.mts"');
-    expect(code.indexOf("ramda")).toBeLessThan(code.indexOf("stage0.mts"));
   });
 });

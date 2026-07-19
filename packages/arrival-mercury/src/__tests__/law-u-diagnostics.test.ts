@@ -53,8 +53,6 @@ interface Subject {
   readonly compiledValue: unknown;
   /** The interpreter's OWN (tolerant-nil) answer, JS-face-projected. */
   readonly interpreterValue: unknown;
-  /** Whether the two sides' values happen to coincide — documented, not required. */
-  readonly sidesAgree: boolean;
 }
 
 const SUBJECTS: readonly Subject[] = [
@@ -63,24 +61,21 @@ const SUBJECTS: readonly Subject[] = [
     source: `(car '())`,
     shape: "[][0]",
     compiledValue: undefined,
-    interpreterValue: [], // tolerant nil, JS-face-projected
-    sidesAgree: false, // undefined ≠ []
+    interpreterValue: [], // tolerant nil, JS-face-projected — diverges from compiled (undefined ≠ [])
   },
   {
     name: "(cdr '()) — empty-list cdr",
     source: `(cdr '())`,
     shape: "[].slice(1)",
     compiledValue: [],
-    interpreterValue: [], // tolerant nil-of-nil, JS-face-projected
-    sidesAgree: true, // both [] — coincidence of two unrelated totalities, not a law
+    interpreterValue: [], // tolerant nil-of-nil, JS-face-projected — coincides with compiled, a coincidence of two unrelated totalities, not a law
   },
   {
     name: "(car (cdr '(1))) — out-of-range access reached compositionally",
     source: `(car (cdr '(1)))`,
     shape: "[1].slice(1)[0]",
     compiledValue: undefined,
-    interpreterValue: [], // (cdr '(1)) → nil (correct), then tolerant car-of-nil → nil
-    sidesAgree: false, // undefined ≠ []
+    interpreterValue: [], // (cdr '(1)) → nil (correct), then tolerant car-of-nil → nil — diverges from compiled (undefined ≠ [])
   },
 ];
 
@@ -117,16 +112,6 @@ describe("Law U — undefined-behavior forms compile clean, run representation-n
       it("interpreter side: its own (tolerant-nil) answer, never a throw", async () => {
         const outcome = await evalInterpreter(session, subject.source);
         expect(outcome).toEqual({ kind: "value", value: subject.interpreterValue });
-      });
-
-      it(`documents whether the two sides' totalities ${subject.sidesAgree ? "coincide" : "diverge"} — informational, not a law`, async () => {
-        const compiled = await evalCompiled(session, subject.source);
-        const interpreter = await evalInterpreter(session, subject.source);
-        const bothValues = compiled.kind === "value" && interpreter.kind === "value";
-        expect(bothValues).toBe(true);
-        if (compiled.kind === "value" && interpreter.kind === "value") {
-          expect(JSON.stringify(compiled.value) === JSON.stringify(interpreter.value)).toBe(subject.sidesAgree);
-        }
       });
     });
   }

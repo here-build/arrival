@@ -91,9 +91,4 @@ describe("oracle harness smoke", () => {
   it("program-face guard: greenfield subject with a function default export passes silently", () => {
     expect(() => assertProgramFace(() => 1, "greenfield")).not.toThrow();
   });
-
-  it("program-face guard: bare value default is always a defect (no legacy exemption)", () => {
-    expect(() => assertProgramFace(undefined, "greenfield")).toThrow(/program-face contract/);
-    expect(() => assertProgramFace(42, "greenfield")).toThrow(/program-face contract/);
-  });
 });

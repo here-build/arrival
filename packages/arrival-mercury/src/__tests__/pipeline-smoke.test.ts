@@ -99,7 +99,11 @@ describe("pipeline smoke: classify → extractFacts → walk → render", () => 
   });
 
   it("a fresh classification (no extraction in sight) renders byte-identically to the empty regime", () => {
-    const unit = walk(classify(desugar(parseSexprs(SRC))), { registry, register: "run" });
-    expect(render(unit)).toBe(`function f(xs) {\n    return xs.length === 0 !== false ? 0 : car(xs);\n}\n`);
+    const fresh = walk(classify(desugar(parseSexprs(SRC))), { registry, register: "run" });
+    const emptyRegime = walk(extractFacts(SRC, { narrowsMembers: narrowsMembersOf(registry) }).classified!, {
+      registry,
+      register: "run",
+    });
+    expect(render(fresh)).toBe(render(emptyRegime));
   });
 });

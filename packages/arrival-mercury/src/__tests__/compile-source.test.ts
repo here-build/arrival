@@ -3,7 +3,13 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { compileSource, greenfieldRegistryFor, openOracleSession, type OracleSession } from "../index.js";
+import {
+  compileSource,
+  greenfieldRegistryFor,
+  openOracleSession,
+  type OracleSession,
+  SchemeSemanticModel,
+} from "../index.js";
 
 describe("compileSource (product API)", () => {
   let session: OracleSession;
@@ -17,11 +23,10 @@ describe("compileSource (product API)", () => {
   it("returns code and a SchemeSemanticModel over the same source", async () => {
     const source = `(define (greet name) (string-append "hi " name))\n(greet "x")`;
     const { code, model } = await compileSource(source, { registry: greenfieldRegistryFor(session) });
-    expect(code.length).toBeGreaterThan(0);
-    expect(model.constructor.name).toBe("SchemeSemanticModel");
+    expect(model).toBeInstanceOf(SchemeSemanticModel);
     expect(model.source).toBe(source);
-    // Module face / program face: some export or default present.
-    expect(code).toMatch(/export|string-append|stringAppend|hi /);
+    // Program face: a default export the program-face guard can call.
+    expect(code).toMatch(/export default/);
   });
 
   it("is deterministic under a fixed registry", async () => {

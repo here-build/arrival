@@ -8,8 +8,6 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import type { OracleSubject } from "../oracle/harness.js";
-
 const here = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(here, "../..");
 const monorepoRoot = path.resolve(packageRoot, "../../..");
@@ -47,11 +45,11 @@ describe("W9 gates — migration lock", () => {
       }
     }
     expect(hits, hits.join("\n")).toEqual([]);
-  });
+    // The walk is O(monorepo tree) and grows with every added package — it
+    // rides the 5s default at ~4s today; give it an honest budget.
+  }, 30_000);
 
   it("OracleSubject is greenfield-only (no legacy dual path)", () => {
-    const only: OracleSubject = "greenfield";
-    expect(only).toBe("greenfield");
     const harness = readFileSync(path.join(packageRoot, "src/oracle/harness.ts"), "utf8");
     expect(harness).not.toMatch(/subject\s*===\s*["']legacy["']/);
     expect(harness).not.toMatch(/projectToJsRaw/);
@@ -74,7 +72,9 @@ describe("W9 gates — migration lock", () => {
 
   it("type-lens service-core imports emitTypes only via /type-emit subpath", () => {
     const serviceCore = path.join(monorepoRoot, "arrival/packages/arrival-lsp/src/service-core.ts");
-    if (!existsSync(serviceCore)) return; // optional in partial checkouts
+    // Loud on relocation, per the scan-gate law (TESTING.md §4.2): a missing
+    // subject is a failed gate, never a silently vacuous pass.
+    expect(existsSync(serviceCore), `gate subject missing: ${serviceCore}`).toBe(true);
     const text = readFileSync(serviceCore, "utf8");
     expect(text).toMatch(/from ["']@inhuman\.tools\/arrival-mercury\/type-emit["']/);
     expect(text).not.toMatch(/from ["']@inhuman\.tools\/mercury/);
