@@ -1,14 +1,10 @@
-# Test Suite v2 — Design
+# Test Suite Architecture
 
-*The brave-new-world suite, designed before any code. Derived from PRINCIPLES.md: the suite's
-job is to enforce the constitution, and its strongest form is the coherence law (P15) — one
-invariant × a table of subjects, `describe.each`/`it.each` all the way down. Point tests exist
-only where a law genuinely has one subject.*
+*Derived from PRINCIPLES.md: the suite's job is to enforce the constitution, and its strongest
+form is the coherence law (P15) — one invariant × a table of subjects, `describe.each`/`it.each`
+all the way down. Point tests exist only where a law genuinely has one subject.*
 
-## 1. What the new suite ENFORCES (the invariant families)
-
-Every family below is new or newly-systematic — the v1 suite enforced many of these
-accidentally, per-file, per-carrier, with gaps exactly where the lies lived.
+## 1. What the suite enforces (the invariant families)
 
 **F1 — Term×Carrier coherence (P0/P8).** For every tagless term (map, filter, reduce, sort,
 concat, equals, length, car/cdr, toJS, print) × every carrier that implements it (APair,
@@ -33,14 +29,13 @@ the contradiction being visible in the diff (this is how R1 stays fixed once rul
 doors: every forbidden crossing (boxed into fromJS, raw into toJS, borrowed fn, AValue from
 JS) is an `it.each` over the violation table asserting the TAUGHT message.
 
-**F4 — Value-layer conformance (P15 coherence with the spec).** Chibi harness v2: one vitest
-test per scheme test form (separate design doc — chibi-harness-v2). r7rs-numbers/unicode/
-identity fold in as arrival-specific extension tables beside it.
+**F4 — Value-layer conformance (P15 coherence with the spec).** The chibi harness runs one
+vitest test per scheme test form (see `src/__tests__/conformance/README.md`);
+r7rs-numbers/unicode/identity fold in as arrival-specific extension tables beside it.
 
-**F5 — Region discipline (P6).** New, staged: reverse-lambda scoping laws (call-after-return
-throws, pending-at-return throws, abort cancels, per-scope wrapper identity) as `it.todo`
-stubs gated on the reverse-membrane landing — written NOW so the migration has its acceptance
-tests before its code.
+**F5 — Region discipline (P6).** Reverse-lambda scoping laws (call-after-return throws,
+pending-at-return throws, abort cancels, per-scope wrapper identity) in
+`membrane/region.law.test.ts`.
 
 **F6 — Doors (P5/errors-as-doors).** Registry-driven: `it.each(WELL_KNOWN_SYMBOLS)` asserts
 every stubbed/famous name doors with a message naming its alternative; every resource cap
@@ -84,27 +79,7 @@ Conventions:
   A helper that accepts boxed-or-raw is a P4 violation in test clothing.
 - **Every table row is individually addressable** in vitest output (`%s` naming from row
   fields) — a failing cell names its term, carrier, and law.
-- **Stubs-first discipline**: v2 lands as `it.todo` grids with the full tables populated —
-  the SHAPE of the suite (which cells exist) is reviewable before any assertion body is
-  written. A stub grid that can't express an invariant is a design bug caught free.
+- **Stubs-first discipline**: new law families land as `it.todo` grids with the full tables
+  populated — the SHAPE of the suite (which cells exist) is reviewable before any assertion
+  body is written. A stub grid that can't express an invariant is a design bug caught free.
 
-## 3. Migration
-
-*Status 2026-07-09: all five steps executed — G1 mechanical sweep (`db850bab44`), chibi v2
-cutover + G2 v1 retirement per REMOVAL-MANIFEST.md (`5d4919ad8f`), G3 single-runner cutover
-(`vitest.config.ts` is THE runner, suite green — known-red triage 35→0, `7d48e303c4`).*
-
-1. Stubs land (full grids, `it.todo` bodies) — reviewable shape. **[executed]**
-2. Chibi v2 harness lands per its own design; v1 harness retired at registry parity + floor.
-3. Mechanical sweep from VERDICTS.md runs against v1 files (flips/deletes/retags) — v1 stays
-   the gate while v2 fills in.
-4. Law bodies fill per family; each v1 survivor-row from REMOVAL-MANIFEST.md is deleted only
-   when its v2 cell goes green (or `it.fails` with the same gate).
-5. R1–R7 rulings unblock their gated cells as they land.
-
-## 4. Open dependencies — all since resolved
-
-- R1 (exit convention) blocked F3's exit column and the shared comparison helper — landed (`c0852b879c`).
-- R2 (container box) blocked four F1/F2 cells — ruled + landed (C1/C2/C4, `c27b2e8b62`).
-- Reverse-membrane landing blocked F5 bodies — B1–B3 landed (`9f622345d2` et al.).
-- Chibi v2 design doc defines F4's module layout — landed (`conformance/chibi-r7rs-v2.spec.ts` + `chibi/`).
