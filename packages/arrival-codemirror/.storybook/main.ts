@@ -27,7 +27,7 @@ const config: StorybookConfig = {
         name: "type-lens-glob-shim",
         enforce: "pre" as const,
         transform(code: string, id: string) {
-          if (!id.includes("arrival-type-lens") || !code.includes('query: "?raw"')) return null;
+          if (!id.includes("arrival-lsp") || !code.includes('query: "?raw"')) return null;
           return code
             .replaceAll(
               'import.meta.glob("typescript/lib/',

@@ -14,7 +14,7 @@
 //   • SERVICE view: createSchemeLanguageService(...).getCompletionContext — the
 //     scheme-coordinate role + slot.paramType the lens actually reports.
 //
-// Run: cd second-foundation/arrival-type-lens && node_modules/.bin/tsx scripts/spike-kwargs-completions.ts
+// Run: cd arrival/packages/arrival-lsp && node_modules/.bin/tsx scripts/spike-kwargs-completions.ts
 
 import { emitTypes } from "@inhuman.tools/arrival-mercury/type-emit";
 import ts from "typescript";

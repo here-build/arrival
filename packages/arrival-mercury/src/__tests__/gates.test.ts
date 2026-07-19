@@ -65,7 +65,7 @@ describe("W9 gates — migration lock", () => {
     for (const f of files) {
       const text = readFileSync(f, "utf8");
       // Live imports only (doc comments may mention the type-lens PRE).
-      if (/^import\s.+(arrival-type-lens|typefacts\/)/m.test(text)) {
+      if (/^import\s.+(arrival-lsp|typefacts\/)/m.test(text)) {
         bad.push(path.relative(packageRoot, f));
       }
     }
@@ -73,7 +73,7 @@ describe("W9 gates — migration lock", () => {
   });
 
   it("type-lens service-core imports emitTypes only via /type-emit subpath", () => {
-    const serviceCore = path.join(monorepoRoot, "arrival/packages/arrival-type-lens/src/service-core.ts");
+    const serviceCore = path.join(monorepoRoot, "arrival/packages/arrival-lsp/src/service-core.ts");
     if (!existsSync(serviceCore)) return; // optional in partial checkouts
     const text = readFileSync(serviceCore, "utf8");
     expect(text).toMatch(/from ["']@inhuman\.tools\/arrival-mercury\/type-emit["']/);

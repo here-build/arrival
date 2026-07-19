@@ -10,13 +10,13 @@ lineage's crown jewel (Emacs paredit, Calva, Cursive): the buffer is a tree, edi
 operations, unbalanced parens are impossible. Language servers are the ALGOL lineage's: hover
 types, red squiggles, ranked completion — powered by a type checker Lisps historically don't
 have. arrival gets both at once because of one architectural fact: **its type checker is `tsc`**.
-The `s/*` contract layer gives every symbol a TypeScript signature, `@here.build/arrival-type-lens`
+The `s/*` contract layer gives every symbol a TypeScript signature, `@inhuman.tools/arrival-lsp`
 lowers a Scheme program into a typed TS view, `tsc` checks that view, and every diagnostic lifts
 back to its `.scm` span. This package is where that pays out in an editor: slurp a form into a
 call *and watch the argument's type error appear* — the same buffer, the same keystroke ladder.
 
 Everything below ships and is exercised by the test suite (`src/__tests__/`, including drift
-guards that pin the real arrival-type-lens service against the backend seam).
+guards that pin the real arrival-lsp service against the backend seam).
 
 ## What's in the box
 
@@ -86,7 +86,7 @@ interface SchemeIdeBackend {
 ```
 
 Methods may answer sync or with a Promise, so an in-process service and a worker behind a
-message port satisfy the *same* seam — `@here.build/arrival-type-lens` fits directly, in either
+message port satisfy the *same* seam — `@inhuman.tools/arrival-lsp` fits directly, in either
 mode. The optional methods are presence-gated feature unlocks: `getSemanticClassifications`
 turns on semantic highlighting, `getCompletionContext` upgrades completion and the ghost to the
 Σ∩T-ranked pipeline. Coordinates are always classic Scheme; Sugarcoat buffers translate through
@@ -97,7 +97,7 @@ turns on semantic highlighting, `getCompletionContext` upgrades completion and t
 ```ts
 import { EditorView, lineNumbers } from "@codemirror/view";
 import { closeBrackets } from "@codemirror/autocomplete";
-import { createBrowserSchemeLanguageService } from "@here.build/arrival-type-lens/browser";
+import { createBrowserSchemeLanguageService } from "@inhuman.tools/arrival-lsp/browser";
 import {
   paramHintsExtension, schemeIde, schemeStructural, schemeSugarcoat,
 } from "@inhuman.tools/arrival-codemirror";

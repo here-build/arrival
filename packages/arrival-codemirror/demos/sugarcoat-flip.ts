@@ -8,7 +8,7 @@
 
 import { EditorView, lineNumbers } from "@codemirror/view";
 import { schemeToSugarcoat } from "@inhuman.tools/arrival-sugarcoat";
-import { createBrowserSchemeLanguageService } from "@inhuman.tools/arrival-type-lens/browser";
+import { createBrowserSchemeLanguageService } from "@inhuman.tools/arrival-lsp/browser";
 
 import { paramHintsExtension, schemeIde, schemeSugarcoat, sugarcoatIdeBackend } from "@inhuman.tools/arrival-codemirror";
 

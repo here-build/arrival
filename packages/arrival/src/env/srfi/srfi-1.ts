@@ -239,7 +239,7 @@ function findImpl(arg: (...args: unknown[]) => unknown, list: AListAlike, runCtx
 // about the PREDICATE'S RETURN type when called, which no shipped spec names (see
 // this wave's report for the full reasoning: no `returnFacts`-shaped field exists on
 // `TypeFacts.callable` in the constitution, typefacts-extraction.md, or registry-emit.md,
-// and the extraction code that would populate one lives in arrival-type-lens, outside
+// and the extraction code that would populate one lives in arrival-lsp, outside
 // this relocation's boundary).
 // ════════════════════════════════════════════════════════════════════════════
 

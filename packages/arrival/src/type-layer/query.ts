@@ -392,7 +392,7 @@ function typeAt(checker: ts.TypeChecker, sourceFile: ts.SourceFile, name: string
  *  bracket pairing (`(`→`)`, `[`→`]`, `{`→`}` — `[]`/`{}` are the vector/dict literals), so the
  *  suffix closes each open level with ITS OWN close char, innermost first. The suffix is
  *  appended at the END, so every cursor offset within the original prefix maps unchanged.
- *  Kept local (not imported from second-foundation/arrival-type-lens) to avoid a cross-package
+ *  Kept local (not imported from arrival/packages/arrival-lsp) to avoid a cross-package
  *  import. */
 function balance(scheme: string): string {
   const opens: string[] = [];

@@ -1,4 +1,4 @@
-// ide — the IDE extensions against the REAL arrival-type-lens language service.
+// ide — the IDE extensions against the REAL arrival-lsp language service.
 //
 // The service is a devDep on purpose: at runtime the package only knows the
 // structural `SchemeIdeBackend` seam; this suite (a) PINS that the real
@@ -11,7 +11,7 @@
 
 import { CompletionContext } from "@codemirror/autocomplete";
 import { EditorState } from "@codemirror/state";
-import { createSchemeLanguageService } from "@inhuman.tools/arrival-type-lens";
+import { createSchemeLanguageService } from "@inhuman.tools/arrival-lsp";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -22,7 +22,7 @@ import {
   type SchemeIdeBackend,
 } from "../ide.js";
 
-// THE drift guard: arrival-type-lens's service must satisfy the seam as-is.
+// THE drift guard: arrival-lsp's service must satisfy the seam as-is.
 const backend: SchemeIdeBackend = createSchemeLanguageService();
 
 describe("toCmDiagnostics — real diagnostics lift into @codemirror/lint shape", () => {
@@ -67,7 +67,7 @@ describe("schemeCompletionSource — completions through the seam, headless", ()
     // `from` anchors at the start of the partial atom `x`, so typing filters it.
     expect(result!.from).toBe(scheme.lastIndexOf("x"));
     // WHAT surfaces at a given position is the service's contract (pinned in
-    // arrival-type-lens's own suite); here we pin that its answers flow through.
+    // arrival-lsp's own suite); here we pin that its answers flow through.
     expect(result!.options.length).toBeGreaterThan(0);
     expect(result!.options.every((o) => typeof o.label === "string" && o.label.length > 0)).toBe(true);
   });

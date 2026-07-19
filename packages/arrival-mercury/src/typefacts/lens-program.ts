@@ -2,7 +2,7 @@
  * typefacts/lens-program — one checked virtual-TS program per extract call.
  *
  * The in-memory file map is the LENS PRELUDE ASSEMBLY (`getPreludeFiles()` from
- * `@inhuman.tools/arrival-type-lens` — PRE under `__pre.d.ts` + every
+ * `@inhuman.tools/arrival-lsp` — PRE under `__pre.d.ts` + every
  * `__leaf_*.d.ts` builtin) plus the emitted program under `__program.ts`. The
  * host shape (in-memory first, disk fallback so `lib.es2022.d.ts` resolves)
  * mirrors mercury's proven types-emit bite host — the loading approach is
@@ -13,7 +13,7 @@
  * batching several compiles over one DocumentRegistry is the later
  * optimization, noted, not built.
  */
-import { getPreludeFiles, PRELUDE_FILE, PROGRAM_FILE } from "@inhuman.tools/arrival-type-lens";
+import { getPreludeFiles, PRELUDE_FILE, PROGRAM_FILE } from "@inhuman.tools/arrival-lsp";
 import ts from "typescript";
 
 export { PRELUDE_FILE, PROGRAM_FILE };

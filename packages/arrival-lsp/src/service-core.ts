@@ -20,7 +20,7 @@ import { balancePrefix, stringLiteralType } from "./balance.js";
 import { Mapper } from "./span-map.js";
 import { PROGRAM_FILE } from "./virtual-files.js";
 
-// balancePrefix moved to balance.ts (alternative backends like arrival-type-lens-tsgo
+// balancePrefix moved to balance.ts (alternative backends like arrival-lsp-tsgo
 // import it without dragging `typescript` into their chunk); re-exported for consumers.
 export { balancePrefix } from "./balance.js";
 

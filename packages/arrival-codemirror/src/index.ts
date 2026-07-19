@@ -2,7 +2,7 @@
 //
 // Exports the language (schemeSugarcoat), param hints, structural editing, ghost,
 // and IDE surface (linter/hover/completion/goto/sem-highlight) over a
-// `SchemeIdeBackend` seam. The backend may be sync or async; arrival-type-lens
+// `SchemeIdeBackend` seam. The backend may be sync or async; arrival-lsp
 // (browser or worker) fits directly. All coordinates are classic Scheme.
 
 export { schemeSugarcoat } from "./scheme-sugarcoat.js";

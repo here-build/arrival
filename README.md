@@ -1,24 +1,56 @@
-# arrival
+# Arrival
 
-An R7RS-subset Scheme built for AI-agent constraint-based execution —
-transparent provenance, capability-safe environments, and tooling that treats
-an agent as a first-class programmer.
+**The first ever language built for AI[^1], finally built for AI.**
 
-The name is Ted Chiang's. In *Story of Your Life*, heptapod B is a language
-whose sentences hold all their readings at once. Arrival programs are built
-the same way: one semantic object, many simultaneous readings — the
-interpreter runs it, the provenance plane explains it, the type lens checks
-it, the compiler emits it as human-grade TypeScript. None of the readings is
-privileged; all of them are the program.
 
-## Why a Scheme, why for agents
+[^1]: Lisp was born in 1958 for AI research — the first language built *for* AI. arrival is a
+    Lisp dialect finally built for AI *as the user*: the agent writes the programs. ![Elegant weapons,
+    for a more civilized age.](https://imgs.xkcd.com/comics/lisp_cycles.png)
 
-Agents are good at intent and bad at materialization. Arrival is the
-intent-side language: immutable, no dynamics (`set!` and `call/cc` are
-structurally rejected), every effect crossing a declared capability membrane.
-Wrong states are impossible by construction, which is what makes the rest
-affordable — permanent narrowing proofs, non-exponential provenance, eager
-whole-program optimization, and errors that teach instead of ban.
+Arrival is a symbolic stack built around LLMs needs.
+It is not first attempt to create "special language for AI",
+and is not even a special language designed for AI.
+
+It is the behavior of language that matters.
+
+[Code Mode](https://blog.cloudflare.com/code-mode/) by Cloudflare proves the point:
+give agent the environment, and it will do everything it needs.
+
+[Toon](https://github.com/toon-format/toon) proves the second side:
+any format is good enough, as long as it's readable.
+
+Arrival, as a stack, is organic next move, consolidating all the prior art.
+
+## The language
+
+Agents are good at intent and bad at materialization.
+Arrival compensates that - Scheme was taken intentionally for multiple reasons.
+It is faithful R7RS sandbox without dynamics and mutability (`set!` and `call/cc` eliminated),
+and taking that away gives ability to make the strong predictions about output executed.
+
+Agents are not that good at writing Scheme, but they are good at writing Lisp in general.
+Cumulative dataset of dialects is large enough to teach agents;
+problem is, it's not Scheme or other dialect agents really know,
+but rather DeepDream output with brackets instead of dogs.
+
+So, it comes with a cost - the syntax was extended to support well-known features from Clojure, Racket and Common Lisp;
+Nothing that violates R7RS was done - only the spec-undefined behavior was adjusted.
+The attempts to violate the spec, however, are not ignored - grammar errors are classified to identify
+what exact expression LLM tried to write, and explains how to do it right.
+
+## The stack
+
+Everything else comes on top of it, in variety of shapes.
+
+Arrival MCP is a framework on top of Model Context Protocol,
+allowing to build the MCP servers that run the sandboxed code with predefined capabilities.
+
+Arrival Manifold is proxy that wraps other MCP tools into the integrated execution environment, seamlessly.
+
+Arrival Serializer is producing s-expressions as an output, producing more compact results.
+
+
+
 
 ## Packages
 
@@ -42,7 +74,7 @@ whole-program optimization, and errors that teach instead of ban.
 - `mercury` — the Mercury compiler: an arrival-chain program projected into
   human-grade TypeScript, designed around the reader's mental model rather
   than mechanically lowered.
-- `arrival-type-lens` — the Scheme→TS type lens: arrival programs bite under
+- `arrival-lsp` — the Scheme→TS type lens: arrival programs bite under
   `tsc`, and diagnostics lift back to their `.scm` spans.
 - `arrival-mercury` — the differential-oracle harness: interpreter vs
   compiled output, compared as black-box source-in/value-out outcomes.
@@ -56,21 +88,6 @@ whole-program optimization, and errors that teach instead of ban.
 - `arrival-ext-toml` / `arrival-ext-yaml` — opt-in EnvCapability packs that
   own the TOML/YAML parser dependencies (the extension mechanism's own
   examples of "package owns the dep").
-
-The rest of the wider toolchain — the run engine, the effect membrane, the
-LLM-inference plane — lives in
-[inhuman-foundation](https://github.com/here-build/inhuman-foundation).
-LLM inference is deliberately **not** part of this repo: it is an environment
-capability pack built on arrival's extension mechanism, consumed by the
-inhuman CLI — the same mechanism `arrival-effects` demonstrates in the open.
-
-## Repository shape
-
-A standalone pnpm/turbo workspace, and simultaneously an embedded directory
-of the here.build product monorepo (where day-to-day development happens).
-History is real development history — commits, dates, and messages as they
-happened, including the AI-collaboration co-author trailers: this language is
-built in extended collaboration with Claude, and that is part of the story.
 
 ## Status
 

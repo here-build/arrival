@@ -27,7 +27,7 @@ import type { AmbientRuntime } from "./AmbientRuntime.js";
 
 // -------------------------------------------------------------------------
 // :: Rosetta type signatures — the type-lens HARVEST surface. Populated on each
-// :: `defineRosetta` carrying a `type`, read per-env by arrival-type-lens's
+// :: `defineRosetta` carrying a `type`, read per-env by arrival-lsp's
 // :: `assembleHostPrelude([...registry])`.
 // -------------------------------------------------------------------------
 const rosettaTypesByEnv = new WeakMap<AmbientRuntime, Map<string, string>>();

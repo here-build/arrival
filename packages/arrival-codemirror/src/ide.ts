@@ -30,14 +30,14 @@ import { schemeGhost, type SchemeGhostOptions } from "./ghost.js";
 import { CONTROL_KEYWORDS, DEFINITION_KEYWORDS } from "./scheme-sugarcoat.js";
 
 // ── the backend seam ───────────────────────────────────────────────────────
-// Structural twins of arrival-type-lens's Scheme* types (a devDep typecheck in
+// Structural twins of arrival-lsp's Scheme* types (a devDep typecheck in
 // __tests__ pins assignability so drift is caught at `pnpm typecheck`). Widened
 // to MaybePromise: CodeMirror's lint/hover/completion sources all accept
 // promises, so a worker backend is the same seam.
 
 type MaybePromise<T> = T | Promise<T>;
 
-/** A diagnostic in Scheme coordinates (mirrors arrival-type-lens `SchemeDiagnostic`). */
+/** A diagnostic in Scheme coordinates (mirrors arrival-lsp `SchemeDiagnostic`). */
 export interface SchemeIdeDiagnostic {
   start: number;
   length: number;

@@ -26,7 +26,7 @@
  * types-emit — the TYPE-FAITHFUL Scheme→TS emitter for the type lens.
  *
  * Distinct from the RUN-faithful idiomatic emitters: this one emits virtual TS
- * that is *type-checked, never run*, against the `@here.build/arrival-type-lens`
+ * that is *type-checked, never run*, against the `@inhuman.tools/arrival-lsp`
  * prelude (`PRE`). Every builtin application lowers to a direct `__arr.<name>(…)`
  * call so TS checks it natively against the merged `ArrShape`; opaque heads fall
  * back to PRE's `sexpr<F>(…)`.
@@ -489,7 +489,7 @@ function emitIf(n: ListNode, ctx: Ctx): void {
  *
  * A narrowing form emits NATIVE so tsc's control-flow narrowing composes; every
  * other condition wraps in `__scmTruth` (`(x: unknown) => boolean` — declared by
- * the LENS PRELUDE, arrival-type-lens `src/prelude/types.d.ts`; this emitter only
+ * the LENS PRELUDE, arrival-lsp `src/prelude/types.d.ts`; this emitter only
  * REFERENCES it, never declares it). The plain-boolean wrapper carries no type
  * information back onto its argument, which blocks truthiness NARROWING of arm
  * references to the tested value — `(if x x 'fallback)` must not drop the
@@ -895,7 +895,7 @@ function decodeString(raw: string): string {
 /**
  * Emit type-faithful virtual TS for an arrival Scheme program, with a span lens
  * back to the source. The emitted module references the `@here.build/
- * arrival-type-lens` prelude globals (`__arr`, `sexpr`, `Dict`, `__scmTruth`) —
+ * arrival-lsp` prelude globals (`__arr`, `sexpr`, `Dict`, `__scmTruth`) —
  * prepend `PRE` (unmapped) before type-checking; nothing is declared here.
  *
  * Each top-level form is emitted under its own try/catch: a parse/emit failure on

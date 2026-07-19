@@ -1,12 +1,5 @@
 # @inhuman.tools/arrival
 
-**The first ever language built for AI[^1], finally built for AI.** 
-
-
-[^1]: Lisp was born in 1958 for AI research — the first language built *for* AI. arrival is a
-    Lisp finally built for AI *as the user*: the agent writes the programs. ![Elegant weapons,
-    for a more civilized age.](https://imgs.xkcd.com/comics/lisp_cycles.png)
-
 **Interactive computing's second user has arrived.**
 
 Little here is new, and that is the point. The reader that presents serialized text as
@@ -108,7 +101,10 @@ a documented gap is an `it.fails` that flips loudly the day it's fixed, never a 
 (today's ledger: 651 forms green, 142 documented `it.fails` gaps, 289 exclusions each naming
 the subtracted feature it exercises — of 1082 total). And
 the subset is deep where it counts: **proper tail calls** via a flat trampoline
-(Ganz–Friedman–Wand), **multiple values**, the **full R7RS exception tower**, an **exact numeric
+(Ganz–Friedman–Wand), **multiple values** inside the runtime (user-facing binders doored by design
+— `values` / `call-with-values` / SRFI-8 `receive`: free multi-return packaging is the weak form of
+continuation arity, and a value's identity is a single construction site), the **full R7RS exception
+tower**, an **exact numeric
 tower** (bigint-backed rationals — `(+ (/ 1 3) (/ 2 3))` is exactly `1`, not `0.999…`), **datum
 labels**. Real Scheme from the wider ecosystem is usable, not merely "inspirational": twelve
 SRFIs assemble by default (1, 2, 8, 13, 26, 28, 43, 95, 128, 151, 189, 235 — `src/env/srfi/`);
@@ -318,7 +314,7 @@ doored, with the reason and the working alternative.
 
 Two sibling packages turn the language into an editing experience, and both are real today:
 
-**`@here.build/arrival-type-lens`** is the Scheme→TypeScript type lens as a language service.
+**`@inhuman.tools/arrival-lsp`** is the Scheme→TypeScript type lens as a language service.
 Scheme programs lower into a typed TS view against a declaration-merged prelude (one `.d.ts` leaf
 per builtin), `tsc` checks that view, and diagnostics lift back to their `.scm` spans — `(car 5)`
 produces a real type error without arrival growing a type checker. And because the checker is
@@ -556,6 +552,12 @@ arrival's base reaches nothing ambient by construction — no filesystem, no pro
 host globals (`window` / `global` / `process` / `require`). But at 0.x, sandbox escape is still
 feasible — at least via property access and some rosetta-layer aspects — so do not yet treat the
 isolation as a hard security boundary for untrusted input.
+
+One shared-state default hosts must know: bare `exec` calls (no explicit `scope`) land their
+top-level `define`s on a realm-cached default root, so definitions accumulate across calls within
+the process — the documented session semantic for a single-tenant REPL, and the wrong default for
+a multi-tenant host. Give every tenant its own `LexicalScope.fresh()` (or a per-tenant assembled
+ambient); without one, one tenant's program can read and clobber another's top-level bindings.
 
 **Do not**:
 

@@ -16,7 +16,7 @@ export default {
   },
   plugins: [
     {
-      // arrival-type-lens's browser entry pulls TypeScript's stock lib.*.d.ts
+      // arrival-lsp's browser entry pulls TypeScript's stock lib.*.d.ts
       // and its prelude via `import.meta.glob(…, { query: "?raw" })`. Two
       // vite-7 shims: (a) bare globs must start with '/' or './' — rewrite the
       // typescript one relative to the importing file (dist/ → the package's
@@ -25,7 +25,7 @@ export default {
       name: "type-lens-glob-shim",
       enforce: "pre",
       transform(code, id) {
-        if (!id.includes("arrival-type-lens") || !code.includes('query: "?raw"')) return null;
+        if (!id.includes("arrival-lsp") || !code.includes('query: "?raw"')) return null;
         return code
           .replaceAll('import.meta.glob("typescript/lib/', 'import.meta.glob("../node_modules/typescript/lib/')
           .replaceAll('{ eager: true, query: "?raw" }', '{ eager: true, query: "?raw", import: "default" }');

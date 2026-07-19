@@ -1,14 +1,16 @@
-# @inhuman.tools/arrival-type-lens
+# @inhuman.tools/arrival-lsp
 
-The **Scheme→TS type lens** foundation: the shared `PRE` prelude that the 34
-builtin `.d.ts` leaves declaration-merge into, so arrival-chain Scheme programs
-**bite** under `tsc` (`(car 5)` and `(+ "a" 1)` produce real diagnostics that lift
-back to their `.scm` spans).
+Scheme language service for arrival: a **type lens** over TypeScript’s
+`LanguageService` (Volar-shaped — virtual TS, never run; diagnostics/completions/
+hover lifted back to Scheme spans). Ships **node + browser worker** runtimes so
+IDEs and tools (codemirror, mercury type-emit, MCP) share one substrate.
 
-This package owns **Wave A** of the Scheme→TS type-lens DAG
-(design doc, 2026-06-10, in the here.build monorepo docs):
-the package scaffold + the `PRE` prelude + the reference leaf. The 34-way builtin
-fan-out (Wave B) and the emitter/Volar plumbing (Waves C–E) build on top of it.
+The shared `PRE` prelude and builtin `.d.ts` leaves declaration-merge so Scheme
+programs **bite** under `tsc` (`(car 5)` and `(+ "a" 1)` produce real diagnostics
+on `.scm` spans).
+
+Formerly `arrival-type-lens`. Design lineage: Scheme→TS type-lens DAG
+(2026-06-10) — prelude + leaves + emitter/Volar plumbing.
 
 ## Layout
 

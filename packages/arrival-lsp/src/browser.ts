@@ -26,7 +26,7 @@ function getRawForLib(name: string): string {
   // The manifest and the barrel are two generated artifacts — guard their
   // drift at runtime.
   if (!(name in TS_LIB_RAW))
-    throw new Error(`[arrival-type-lens] missing bundled ?raw for ${name} (fix: pnpm generate:bundles)`);
+    throw new Error(`[arrival-lsp] missing bundled ?raw for ${name} (fix: pnpm generate:bundles)`);
   return TS_LIB_RAW[name];
 }
 
