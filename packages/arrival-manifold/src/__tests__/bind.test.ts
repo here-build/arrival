@@ -1,3 +1,7 @@
+// TODO(arrival exec-flip follow-up): the 11 `schemeToJs(exec(...))` sites in this file are
+// dead unwraps — exec now exits plain JS, so schemeToJs passes values straight through.
+// Migrate to direct plain-JS assertions (or execState where boxed state is the point) when
+// this file is next touched.
 import { exec, schemeToJs, type SchemeValue } from "@inhuman.tools/arrival";
 import { describe, expect, it, vi } from "vitest";
 

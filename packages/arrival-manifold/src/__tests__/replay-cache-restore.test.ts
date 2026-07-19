@@ -64,6 +64,11 @@ import { describe, expect, it } from "vitest";
 import { buildManifoldEnv, type BoundServer, type ManifoldEnv } from "../bind.js";
 import { createManifoldTool } from "../manifold-tool.js";
 
+// TODO(arrival exec-flip follow-up): the `String(await runExpr(...))` assertions in this file
+// pass for small ints by coincidence (String(1) ≡ the old boxed print form) and would diverge
+// for rationals, floats, and out-of-safe-range bigints. Assert the plain-JS value directly
+// when next touched.
+
 const runExpr = async (world: Pick<ManifoldEnv, "ambient" | "scope">, expr: string): Promise<unknown> => {
   const [value] = await exec(expr, { ambient: world.ambient, scope: world.scope });
   return value;
