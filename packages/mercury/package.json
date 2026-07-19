@@ -1,7 +1,7 @@
 {
   "name": "@inhuman.tools/mercury",
   "version": "0.9.0",
-  "description": "Mercury — compilation for humans: arrival-chain scheme projected into TypeScript (stage 1, TS-only) with strictly more expressive power than the source needs, so the output is designed around the reader's mental model, not a mechanical lowering. The read-view 'glass' over a chain program.",
+  "description": "DEPRECATED — legacy string-pipeline predecessor of the arrival Mercury instance (@inhuman.tools/arrival-mercury). Dissolving into the inhuman CLI. Do not add features.",
   "homepage": "https://github.com/here-build/arrival#readme",
   "bugs": {
     "url": "https://github.com/here-build/arrival/issues"

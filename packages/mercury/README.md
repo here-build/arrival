@@ -1,46 +1,33 @@
-# @inhuman.tools/mercury
+# @inhuman.tools/mercury — **DEPRECATED**
 
-Mercury — compilation for humans. A faithful, deterministic projection of an
-[arrival-chain](../arrival/README.md) Scheme program into a target
-language — the read-view "glass" over a chain program. TS-only (stage 1, per
-the dual-runtime decision): the Python emitter,
-the ax signature-DSL backend, and the dspy/langchain-py backends were deleted —
-every emitted module is TypeScript.
+> **Do not add features here.** This package is a **legacy predecessor** of the
+> arrival Mercury *instance* and is being **dissolved into the inhuman CLI**.
 
-The idea Mercury names: origin and target aren't conceptually different kinds of
-things, so a compiler can lower into a target with more expressive power than the
-source strictly needs — and spend that slack designing the output around the
-reader's mental model, not a mechanical translation. here.build has its own
-Mercury manifestation (its React/Next.js codegen); this is Inhuman's.
+## What went wrong (honest)
 
-## Install
+`@inhuman.tools/mercury` tried to be “compilation for humans” as a **string-concat
+pass pipeline** (desugar → lower → eslint/prettier). The [Mercury
+paradigm](../../../../docs/foundations/mercury/mercury-as-paradigm.md) is
+different: a **semantic model answers decisions**, then a dumb materializer
+prints via `ts.factory`. That instance lives at **`@inhuman.tools/arrival-mercury`**
+(`SchemeSemanticModel` + Residual + render).
 
-```bash
-pnpm add @inhuman.tools/mercury
-```
+| | This package (legacy) | Arrival Mercury instance |
+|--|----------------------|---------------------------|
+| Role | Pass pipeline / glass experiments | Sole scheme→TS compiler |
+| Middle-end | scattered analyses in lower | **`SchemeSemanticModel`** |
+| Emit | string templates | Residual → `ts.factory` |
+| Product client | was `inhuman compile` | **`inhuman build` / `inhuman compile`** → `buildProject` |
 
-## Usage
+## Where to go
 
-```ts
-import { projectToJs, compileProject } from "@inhuman.tools/mercury";
+- **Compiler / model / oracle / build:** `@inhuman.tools/arrival-mercury`
+- **CLI (disk I/O, flags):** `@inhuman.tools/inhuman` (`inhuman build`, `inhuman compile`)
+- **Paradigm definition:** `docs/foundations/mercury/mercury-as-paradigm.md`
 
-// Project a chain program's scheme into readable TS (the read-view).
-const ts = projectToJs(program);
-```
-
-Entry points:
-
-- `projectToJs` / `projectToJsRaw` — project a program into TS (formatted / raw).
-- `compileProject` — multi-file compile (`CompileTarget`, `EmittedFile`; the
-  `prompts` backend axis — today `langchain-js`, a second `ts-vercel-ai` backend
-  lands in a later wave).
-- `emitTypes` — emit a TypeScript type view.
-- `sliceToTypeScript`, `formatJs` — focused helpers.
-
-Subpath exports: `@inhuman.tools/mercury/browser` (browser-targeted entry) and `@inhuman.tools/mercury/types-emit`.
-
-The projection is **deterministic and faithful** — the same program always yields the same output, and the output round-trips the program's semantics rather than re-interpreting them.
+Package removal is the end of this migration. Until then, treat every export as
+unstable and non-authoritative for product emit.
 
 ## License
 
-[FSL-1.1-MIT](./LICENSE.md) — Functional Source License 1.1, MIT Future License. Each version converts to MIT two years after its release date.
+[FSL-1.1-MIT](./LICENSE.md) — Functional Source License 1.1, MIT Future License.

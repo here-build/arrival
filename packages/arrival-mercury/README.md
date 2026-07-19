@@ -1,27 +1,40 @@
 # @inhuman.tools/arrival-mercury
 
-The name is the pair it compares: **arrival** (the interpreter) vs **mercury**
-(the compiler). This is the differential-oracle harness that proves the two
-readings of a program agree — one semantic object, two simultaneous readings,
-and this package is where they are reconciled.
+**Arrival’s Mercury instance** — the scheme→TypeScript compiler that answers to
+the [Mercury paradigm](../../../../docs/foundations/mercury/mercury-as-paradigm.md).
 
-Programs are compared as black-box, source-in/value-out outcomes: the
-interpreter side runs an `arrival-run` session; the compiled side executes the
-mercury run-view via tsx `tsImport`. Neither side sees the other's internals —
-agreement is judged on observable results, not implementation echoes.
+**Mercury is a paradigm, not a package name** (same class of word as Roslyn): a
+semantic model answers questions; emission is the last, dumbest step. This
+package is one *instance* of that architecture. The visual-model→React instance
+lives under `@here.build/mercury*`. The failed pass-pipeline predecessor
+`@inhuman.tools/mercury` is deprecated and dissolving into the inhuman CLI.
 
-Owns:
+## The four organs
 
-- The `ErrorClass` taxonomy — compiler and interpreter errors classified into
-  one shared vocabulary so "both failed" can be distinguished from "disagreed".
-- `oracleEqual` — the verdict comparator.
-- The three-way corpus check (oracle, expected outcome, program face) the
-  tier-1 bug-cell tests consume.
+| Organ | Role | Code |
+|-------|------|------|
+| **1. Semantic model** | Middle-end. Roslyn-style handle: decisions, not raw analyses. Policy lives here (`importsOf`, `asyncnessOf`, `shakeOf`, `idiomAt`, `factsAt`, …). | `src/model/` — **`SchemeSemanticModel`** |
+| **2. Structural end** | All structural optimization before any backend sees the tree; shaken live artifact. | coreform + model views (`shakeOf`, …) |
+| **3. Hybrid slotted tree** | Fluid Residual IR + hard `ts.factory` chunks (slots back into IR). | `src/residual/`, walker → `R` |
+| **4. Lookahead materializer** | Census → allocate names → emit once top-down via `ts.factory`. Zero post-passes on text. | `src/naming/` materializers + `src/residual/render.ts` |
 
-Also carries the new pipeline's front end (`desugar`) and the CoreForm IR it
-produces — the copy-as-chunk surface the compiled reading lowers from.
+**Law:** if an emitter chooses *semantics*, that choice belongs on
+`SchemeSemanticModel`. Manifestation (spelling, ramda call shape, file layout)
+is the materializer’s only job.
 
-Entry points: `.` (oracle harness + front end), `./circuit`.
+`SchemeSemanticModel` is a **public** export and the product path’s named
+middle-end — not an anonymous internal of `build/`. It may re-home to a
+foundation package when LSP consumers land; the **name travels with it**.
+
+## Product surfaces
+
+- **`buildProject`** — multi-file in-memory project compile (CLI `inhuman build` / `inhuman compile` are disk clients of this).
+- **`SchemeSemanticModel`** — organ 1; construct explicitly, then materialize from its views.
+- **Oracle** — differential agreement: interpreter ≡ compiled (greenfield path only; legacy string emit is not gate-authoritative).
+
+Also owns: front-end desugar/nodes, CoreForm, type glass (`emitTypes`), stage-0 /
+cold-stdlib resolution, infer/mcp `RuntimeRef` surface (kept until @-symbol
+declaration work), residual algebra + printer.
 
 ## Testing
 
