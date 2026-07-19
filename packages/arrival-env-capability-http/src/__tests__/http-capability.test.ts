@@ -38,9 +38,9 @@ describe("(http/get …) — the read verb", () => {
     expect(seen).toEqual([{ kind: "http", method: "GET", label: "weather-api", path: "/forecast" }]);
   });
 
-  it("shapes (dict :query …) opts into the descriptor (scalars verbatim, nil entries omitted)", async () => {
+  it("shapes (dict :query …) opts into the descriptor (scalars verbatim)", async () => {
     const { resolve, seen } = recordingResolver(null);
-    await runScm(`(http/get "weather-api" "/forecast" (dict :query (dict :city "berlin" :days 3 :since (list))))`, resolve);
+    await runScm(`(http/get "weather-api" "/forecast" (dict :query (dict :city "berlin" :days 3)))`, resolve);
     expect(seen).toEqual([
       { kind: "http", method: "GET", label: "weather-api", path: "/forecast", query: { city: "berlin", days: 3 } },
     ]);
@@ -50,6 +50,17 @@ describe("(http/get …) — the read verb", () => {
     const { resolve } = recordingResolver(null);
     await expect(runScm(`(http/get "a" "/b" (dict :query (dict :f (dict :nested 1))))`, resolve)).rejects.toThrowError(
       /query param "f" must be a scalar/,
+    );
+  });
+
+  it("an empty-list :query value crosses the membrane as a JS array — and rejects as non-scalar", async () => {
+    // schemeToJs lowers `(list)`/`'()` to `[]` at every depth (there is no Nil
+    // instance on this path), so an empty-list field is a STRUCTURED value, not an
+    // omitted one. The omission discipline (`isAbsentValue`) covers null/undefined,
+    // which a scheme dict literal cannot express — it exists for JS-side callers.
+    const { resolve } = recordingResolver(null);
+    await expect(runScm(`(http/get "a" "/b" (dict :query (dict :since (list))))`, resolve)).rejects.toThrowError(
+      /query param "since" must be a scalar \(string\/number\/boolean\), got array/,
     );
   });
 });
@@ -64,10 +75,12 @@ describe("(http/post …) — the write verb", () => {
     ]);
   });
 
-  it("(dict :body (list)) means no request body — the Nil never reaches the descriptor", async () => {
+  it("(dict :body (list)) crosses as an empty ARRAY — structure is the payload, even when empty", async () => {
+    // schemeToJs lowers `(list)` to `[]`; `coerceHttpBody` drops only null/undefined,
+    // so the descriptor keeps `body: []` verbatim and the content key reflects it.
     const { resolve, seen } = recordingResolver(null);
     await runScm(`(http/post "crm" "/contacts" (dict :body (list)))`, resolve);
-    expect(seen).toEqual([{ kind: "http", method: "POST", label: "crm", path: "/contacts" }]);
+    expect(seen).toEqual([{ kind: "http", method: "POST", label: "crm", path: "/contacts", body: [] }]);
   });
 });
 

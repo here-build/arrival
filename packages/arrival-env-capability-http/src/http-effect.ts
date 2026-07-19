@@ -37,12 +37,12 @@
  * that keeps the engine safe when no host is present.
  */
 
-// Value-level `Nil`. The verb arg-coercion is inherently about the scheme
-// membrane's representation: an empty scheme list (`(list)` / `'()`) crosses the
-// rosetta boundary as a `Nil` instance, not a JS `[]`, so a coercion that builds a
-// positional param list MUST recognise it (the same `instanceof Nil` discipline
-// `project.ts`'s `isNilLike` uses). This couples only to the engine's own value
-// type, which this pack already depends on package-wide.
+// Value-level `Nil` — defence for DIRECT-JS callers of the coercions below. In the
+// exec path `schemeToJs(v, {})` lowers an empty scheme list (`(list)` / `'()`) to a
+// JS `[]` at every depth, so a Nil instance never reaches these functions from a
+// verb; the `instanceof ANil` arms cover a caller that hands over raw scheme values
+// without the conversion pass. This couples only to the engine's own value type,
+// which this pack already depends on package-wide.
 import { ANil } from "@inhuman.tools/arrival";
 
 /**
@@ -172,9 +172,13 @@ function isQueryScalar(v: unknown): v is string | number | boolean {
 }
 
 /** "No value" as it crosses the rosetta membrane: a missing dict field is JS
- *  `undefined`/`null`, and an empty scheme list (`'()` / `(list)`) arrives as a
- *  `Nil` instance — NOT a JS `[]`. A nil-valued query/header entry means
- *  "omit", so the canonical descriptor stays minimal: `{city}` and
+ *  `undefined`/`null`. (An empty scheme list is NOT "no value" on this path:
+ *  `schemeToJs` lowers `(list)`/`'()` to a JS `[]`, so an empty-list field arrives
+ *  as an ARRAY and is treated as a structured value — rejected for query/headers —
+ *  not omitted. A scheme dict literal cannot express undefined/null, so in practice
+ *  the omission arm fires for JS-side callers; the `ANil` arm is defence for
+ *  direct-JS callers holding raw scheme values.) A nil-valued query/header entry
+ *  means "omit", so the canonical descriptor stays minimal: `{city}` and
  *  `{city, since: nil}` must mint the SAME content key.
  *  (Duplicated in the sql pack by design: each capability pack is self-contained,
  *  depending only on arrival core — a three-line helper is not worth a shared
@@ -261,17 +265,20 @@ function coerceHttpHeaders(raw: unknown): HttpEffect["headers"] {
  * very thing POST exists to send.
  *
  * The ONE shaping the body needs is the membrane's nil discipline (the same fact
- * `coerceHttpQuery` encodes): an absent `:body`, an explicit `:body
- * nil`, and the empty scheme list all mean "no request body" → drop the slot. Two
- * reasons this matters and isn't a blind pass-through:
- *   - CONTENT KEY STABILITY — a bodyless POST and `(dict :body nil)` must mint the
- *     SAME effect key; if `nil` leaked through, the key would canonicalise the
- *     scheme `Nil` sentinel (`{provenance,kind:"nil"}`) and the two would diverge.
+ * `coerceHttpQuery` encodes): an absent `:body` (or a JS-side `null`) means "no
+ * request body" → drop the slot. Two reasons this matters and isn't a blind
+ * pass-through:
+ *   - CONTENT KEY STABILITY — a bodyless POST and an explicitly-null `:body` must
+ *     mint the SAME effect key; if a null leaked through, the key would
+ *     canonicalise it and the two would diverge.
  *   - CLEAN MATERIALISATION — the resolver receives `undefined` (no body to send),
- *     never a scheme-internal `Nil` object it would try to JSON-serialise.
+ *     never a scheme-internal sentinel it would try to JSON-serialise.
  *
- * Any real value (dict / list / scalar) passes through unchanged. `undefined` in
- * (no `:body` field) ⇒ `undefined` out (no `body` key on the effect at all).
+ * An empty scheme list is NOT dropped: `schemeToJs` lowers `(list)` to `[]`, which
+ * passes through verbatim as an empty-array body — structure is the payload, even
+ * when empty. Any other real value (dict / list / scalar) likewise passes through
+ * unchanged. `undefined` in (no `:body` field) ⇒ `undefined` out (no `body` key on
+ * the effect at all).
  */
 function coerceHttpBody(raw: unknown): HttpEffect["body"] {
   return isAbsentValue(raw) ? undefined : raw; // nil/absent ⇒ no body; structure ⇒ verbatim
