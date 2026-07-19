@@ -22,6 +22,17 @@ lives under `@here.build/mercury*`. The failed pass-pipeline predecessor
 `SchemeSemanticModel`. Manifestation (spelling, ramda call shape, file layout)
 is the materializer’s only job.
 
+### Gates (W8/W9)
+
+```bash
+pnpm --filter @inhuman.tools/arrival-mercury run check:gates
+# or from monorepo root:
+pnpm check:mercury-gates
+```
+
+Locks: no `@inhuman.tools/mercury` package/deps, oracle greenfield-only,
+type-emit free of type-lens imports, product APIs return `SchemeSemanticModel`.
+
 ### Emit contract = **loose** mode (not R7RS-strict)
 
 Arrival’s interpreter defaults to **loose** (`ExecOptions.strict` defaults false):
