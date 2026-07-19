@@ -1,0 +1,130 @@
+p1:
+  id: p1
+  versions:
+    - n: 1
+      state:
+        name: Maya
+        oneLine: Solo founder shipping a SaaS MVP alone, drowning in frontend boilerplate.
+        occupation: Solo founder / full-stack dev
+        pains:
+          - rebuilds the same auth + CRUD screens every single project
+          - a real design system would take weeks she doesn't have
+        goals:
+          - ship the MVP this month
+          - look credible to investors without hiring a designer
+        jobsToBeDone:
+          - turn a rough sketch into a deployable app
+          - iterate on screens without a frontend hire
+        currentToolStack:
+          - Next.js
+          - Tailwind
+          - Vercel
+          - Figma
+        dealbreakers:
+          - vendor lock-in
+          - can't export the code
+          - another no-code black box
+p2:
+  id: p2
+  versions:
+    - n: 1
+      state:
+        name: Priya
+        oneLine: Agency lead who rebuilds the same components for every client engagement.
+        occupation: Founder, 6-person product agency
+        pains:
+          - every client project re-implements the same UI from scratch
+          - junior devs ship inconsistent components
+        goals:
+          - bill more projects with the same team
+          - hand clients something they can maintain
+        jobsToBeDone:
+          - spin up a branded app skeleton in a day
+          - let a client edit copy without breaking layout
+        currentToolStack:
+          - React
+          - Storybook
+          - Webflow (for marketing)
+          - Linear
+        dealbreakers:
+          - per-seat pricing that punishes agencies
+          - output the client can't own
+          - slow editor on big projects
+p3:
+  id: p3
+  versions:
+    - n: 1
+      state:
+        name: Sam
+        oneLine: Indie hacker whose prototypes die in Figma and never become real apps.
+        occupation: Indie hacker / nights-and-weekends builder
+        pains:
+          - the gap between a Figma mock and a running app kills momentum
+          - hates wiring state and routing for the Nth time
+        goals:
+          - launch one of the 12 ideas in the backlog
+          - keep the whole thing in code he understands
+        jobsToBeDone:
+          - go from idea to deployed link in a weekend
+          - wire a wallet connect without reading 5 docs
+        currentToolStack:
+          - Vite
+          - React
+          - Supabase
+          - wagmi
+        dealbreakers:
+          - magic he can't debug
+          - a runtime he doesn't control
+          - monthly fee before he's shipped anything
+p4:
+  id: p4
+  versions:
+    - n: 1
+      state:
+        name: Dev
+        oneLine: Senior agency engineer, deeply skeptical of anything that generates code.
+        occupation: Staff frontend engineer
+        pains:
+          - inherits generated codebases nobody can refactor
+          - tools that demo well and rot in month two
+        goals:
+          - keep the codebase reviewable and testable
+          - not be the one maintaining a visual-builder export
+        jobsToBeDone:
+          - evaluate whether a tool's output passes code review
+          - find where the escape hatch to real code is
+        currentToolStack:
+          - TypeScript
+          - React
+          - Playwright
+          - pnpm
+        dealbreakers:
+          - unreadable generated code
+          - no git-friendly diffs
+          - can't drop down to hand-written code
+p5:
+  id: p5
+  versions:
+    - n: 1
+      state:
+        name: Lena
+        oneLine: Product designer who wants to ship her own designs without waiting on eng.
+        occupation: Senior product designer
+        pains:
+          - designs sit in a backlog for sprints before they ship
+          - handoff loses the details she cared about
+        goals:
+          - ship a real landing page herself
+          - stop translating Figma into tickets
+        jobsToBeDone:
+          - publish a page that matches the design exactly
+          - tweak spacing and copy live without a dev
+        currentToolStack:
+          - Figma
+          - Framer
+          - Notion
+          - Webflow
+        dealbreakers:
+          - having to learn to code
+          - output devs refuse to touch
+          - a builder that fights her design intent

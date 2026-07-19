@@ -1,0 +1,9 @@
+---
+model: qwen3.5-9b
+output:
+  idea: string, the sharpened idea, still one sentence
+  improved: boolean, true if you actually changed it
+---
+{{role "user"}}
+Sharpen this idea. Keep it to one sentence:
+{{idea}}

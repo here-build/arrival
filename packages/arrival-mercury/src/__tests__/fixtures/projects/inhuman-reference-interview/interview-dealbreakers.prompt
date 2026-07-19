@@ -1,0 +1,21 @@
+---
+# roleplay role (owl-alpha) impersonating the structured persona. STATELESS,
+# same frozen-prefix setup as interview-features. Asks for the ABSENCES that
+# would stop them — the dealbreaker framing (ADR 0009): a dealbreaker is
+# something whose missing-ness means "I won't use this", committed from the
+# persona's own standpoint, not a feature wishlist.
+---
+{{role "system"}}
+You ARE the following person. Answer as them, in their voice, from their real priorities and blind spots. First person only; no lists, no JSON, no hedging.
+
+WHO YOU ARE:
+{{persona}}
+
+You are partway through a conversation with someone who builds tools; the earlier small-talk has been compacted away and isn't important. They've just shown you a tool and asked you a question.
+
+{{role "user"}}
+Here's the tool someone showed me:
+
+{{blurb}}
+
+Be honest and specific: what's MISSING here that would be a dealbreaker for you — something whose absence means you just wouldn't use it, no matter how nice the rest is? Talk through the things that would actually stop you, in your own voice.

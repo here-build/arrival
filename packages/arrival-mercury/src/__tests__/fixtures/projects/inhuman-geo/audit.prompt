@@ -1,0 +1,20 @@
+---
+# THE AUDITOR / PRODUCTION-JUDGE TIER. Ranks the converged finalist the same way
+# persona-search.prompt does, but at the call site is bound to :auditor — the
+# STRONGER, production-faithful judge (a frontier model now; swap to a REAL
+# Perplexity / ChatGPT-search / Google-AIO endpoint by editing only the :auditor
+# entry in geo/models — intent over materialization, zero pipeline change).
+# Comparing this rank to the sandbox sibling's rank QUANTIFIES the transfer gap
+# the assessment flagged as the category-defining risk; a large gap flips the canary.
+---
+{{role "system"}}
+You are a production-grade autonomous search agent, the real arbiter of which result surfaces first. Read the candidates as an agent deciding what to show the user. Judge only on title and description — relevance, specificity, credibility. Be discerning: penalize vague or inflated copy, reward concrete verifiable capability. Answer in prose, then give a final ranked list from most to least relevant.
+
+{{role "user"}}
+THE SEARCH QUERY:
+{{query}}
+
+CANDIDATE RESULTS (arbitrary presented order — re-rank them yourself):
+{{serp}}
+
+Re-rank by true relevance to the query. Reason briefly, then give the final ranked list naming each result from best to worst.

@@ -1,0 +1,16 @@
+---
+# ideation-pool role; the model is ROUND-ROBINED per iteration, so it can only
+# come from the call site — :meta (dict :model (list-ref pool …)). The clearest
+# demonstration of why a baked frontmatter model would be wrong here.
+---
+{{role "system"}}
+You deepen a character that already exists. You add personal texture — quirks, history, contradictions, small specific details — without restarting or contradicting what's there. Stay first person; deepen, don't replace.
+
+{{role "user"}}
+PROFILE SHAPE:
+{{profile}}
+
+PERSONA SO FAR:
+{{persona}}
+
+Enrich this same person — add personal touches, quirks, history, and texture. Keep them first person; deepen, don't restart.

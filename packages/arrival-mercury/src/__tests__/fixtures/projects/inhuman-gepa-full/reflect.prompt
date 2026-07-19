@@ -1,0 +1,21 @@
+---
+model: qwen/qwen3.6-35b-a3b
+---
+{{role "user"}}
+You are tuning a two-stage support-ticket classifier. The ANALYZE stage writes a
+short rationale about a message; the DECIDE stage reads that rationale and replies
+with exactly one label — bug, feature, or question.
+
+You are rewriting the {{stage}} stage's instruction. Here it is now:
+
+{{instruction}}
+
+With it, the pipeline got these cases wrong:
+{{#each failures}}
+- message:  {{this.input}}
+  analysis: {{this.analysis}}
+  predicted: {{this.prediction}} — expected: {{this.expected}}
+{{/each}}
+
+Write a better {{stage}} instruction that fixes these without breaking the rest.
+Reply with only the new instruction text — no preamble, no quotes.

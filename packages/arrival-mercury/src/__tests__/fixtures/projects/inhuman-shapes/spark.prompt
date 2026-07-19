@@ -1,0 +1,9 @@
+---
+model: qwen3.5-9b
+output:
+  idea: string, one vivid idea in a single sentence
+  energy: number, 0 flat to 1 electric
+---
+{{role "user"}}
+Give me one idea for: {{topic}}.
+One sentence. Make it land.

@@ -1,0 +1,17 @@
+{
+  "p1": {
+    "name": "Maya",
+    "role": "Solo founder",
+    "pain": "ships every screen by hand — no time to build a design system"
+  },
+  "p2": {
+    "name": "Priya",
+    "role": "Agency lead",
+    "pain": "rebuilds the same components from scratch for every client"
+  },
+  "p3": {
+    "name": "Sam",
+    "role": "Indie hacker",
+    "pain": "prototypes die in Figma and never become real, shippable apps"
+  }
+}

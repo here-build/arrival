@@ -1,0 +1,19 @@
+---
+# structurer role (qwen) — step 2 of the consolidation loop. Given the problem
+# name from step 1, return EXACTLY the items from the list that are variants /
+# restatements of it (verbatim, so the caller can remove them from the remaining
+# list). The scheme loop guarantees progress even if this returns nothing.
+output:
+  items(array): string
+---
+{{role "system"}}
+You are a precise analyst. Given an underlying problem and a list of complaints, you return ONLY the complaints from the list that are restatements or variants of that same underlying problem — copied verbatim from the list, nothing invented, nothing reworded.
+
+{{role "user"}}
+UNDERLYING PROBLEM:
+{{name}}
+
+LIST OF COMPLAINTS:
+{{items}}
+
+Return every item from the list that is a variant or restatement of the underlying problem above. Copy each matching item exactly as it appears in the list. If an item is about a different problem, leave it out.
