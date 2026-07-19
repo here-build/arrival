@@ -1,10 +1,10 @@
-# R7RS-small Completeness Audit
+# R7RS-small Coverage
 
 > **As of:** 2026-07-13 / commit `17ebb36564` + follow-on (numeric S2, always, this refresh)  
 > **Policy:** Every R7RS-small export is **implemented** or a `symbol.notImplemented` door. Silent absence is a bug. Exceptions stay implemented. Continuations / multi-return / dynamics may be doors.  
 > **Immutable subset:** mutators and multi-return are doors with teaching reasons — we do not aim to make the full mutable R7RS work.  
 > **Aside:** `define-record-type` / record SRFIs are **out of scope** here (separate workstream).  
-> **Inventory source:** [`docs/reference/r7rs-symbol-map.md`](./reference/r7rs-symbol-map.md)
+> **Inventory source:** [`r7rs-symbol-map.md`](./r7rs-symbol-map.md)
 
 ---
 
@@ -47,9 +47,9 @@ Adjacent: `call-with-input-string` in `srfi-stubs` (SRFI-6).
 
 ---
 
-## Remaining silent absences (actionable)
+## Remaining silent absences
 
-**Out of scope this pass:** `define-record-type` (records / separate SRFI).
+**Out of scope:** `define-record-type` (records / separate SRFI).
 
 ### Structure / arity
 
@@ -76,15 +76,6 @@ Adjacent: `call-with-input-string` in `srfi-stubs` (SRFI-6).
 ### Residue (not silent)
 
 `Values` / `z.values` types still in tree with no producer — optional delete later.
-
----
-
-## Recommended next atoms
-
-1. Door `case-lambda` (or implement).  
-2. Door eval/load/env + retarget `sandbox-unification.test.ts`.  
-3. Door library forms (`include`, `cond-expand`, `import`, …).  
-4. Leave records aside.
 
 ---
 

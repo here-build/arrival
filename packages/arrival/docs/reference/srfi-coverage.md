@@ -1,12 +1,11 @@
-# SRFI Pack Completeness Audit
+# SRFI Pack Coverage
 
 **As of:** 2026-07-13 / after multi-return cut + host totalize + numeric S2 + SRFI-235 `always` fix + SRFI-1/13 implement-or-door batches.  
 **Policy (immutable subset + implement-or-door):** For every SRFI shipped as an `EnvCapability` under `src/env/srfi/`, every official export is either **(a) live** or **(b) a teaching door**. Silent absence is a bug.  
 We do **not** aim for full mutable R7RS/SRFI. Mutators / multi-return / dynamics: **door with reason**. Partial live surface without doors for the rest is still a bug.
 
-**Scope:** packs in [`src/env/srfi/index.ts`](../src/env/srfi/index.ts) (`allSrfi`).  
-**Aside:** record types / `define-record-type` — separate stream, not scored here.  
-**Detail plans:** `docs/srfi-1-immutable-door-plan.md`, `docs/srfi-13-immutable-door-plan.md` (sub-agent ledgers).
+**Scope:** packs in [`src/env/srfi/index.ts`](../../src/env/srfi/index.ts) (`allSrfi`).  
+**Aside:** record types / `define-record-type` — separate stream, not scored here.
 
 **Score rubric:**
 | Score | Meaning |
@@ -425,12 +424,11 @@ syntax-like procedure forms, `boolean`, … (rest of SRFI-235).
 | 12 | **SRFI-2** | COMPLETE | Low | `and-let*` live |
 | — | **srfi-stubs** | STUBS-ONLY | n/a | Deliberate non-shipped library doors |
 
-### Top actionable gaps (immutable subset)
+### Remaining gaps
 
-1. **Other PARTIAL packs:** door non-goals (mutators purity; pure-unshipped “not in subset”).  
+1. **Other PARTIAL packs:** non-goal exports neither live nor doored yet (mutators purity; pure-unshipped “not in subset”).  
 2. **SRFI-1 residual semantics:** `find` miss → `#f`; optional SRFI-shaped `unfold` / promote take-right/split-at.  
-3. **SRFI-13 residual:** optional P1 live (`string-filter`/`string-delete`/skip/index-right).  
-4. **Multi-return:** resolved — do not re-open.
+3. **SRFI-13 residual:** optional P1 live (`string-filter`/`string-delete`/skip/index-right).
 
 ### Packs that satisfy all-or-nothing
 
