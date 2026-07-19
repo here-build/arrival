@@ -1,0 +1,60 @@
+{
+  "name": "@inhuman.tools/arrival-env-capability-handlebars",
+  "version": "0.9.0",
+  "description": "Arrival EnvCapability for Handlebars: template/handlebars + .hbs require (import-executable pretreat) + pure scheme convert. Reference opt-in capability for mercury compile.",
+  "license": "FSL-1.1-MIT",
+  "author": "here.build",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime.d.ts",
+      "import": "./dist/runtime.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/**/*",
+    "src/**/*",
+    "!**/__tests__",
+    "!**/*.test.*",
+    "!**/__research__",
+    "!**/__benchmarks__",
+    "!**/__custdev__",
+    "!**/__visual__",
+    "!**/*.stories.*"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@inhuman.tools/arrival": "workspace:^",
+    "handlebars": "4.7.9",
+    "tiny-invariant": "1.3.3"
+  },
+  "devDependencies": {
+    "@here.build/eslint-configs": "workspace:^",
+    "@here.build/tsconfig": "workspace:^",
+    "@types/node": "24.0.0",
+    "typescript": "6.0.2",
+    "vitest": "4.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "homepage": "https://github.com/here-build/arrival#readme",
+  "bugs": {
+    "url": "https://github.com/here-build/arrival/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/here-build/arrival.git",
+    "directory": "packages/arrival-env-capability-handlebars"
+  }
+}
