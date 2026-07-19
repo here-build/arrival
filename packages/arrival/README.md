@@ -395,8 +395,7 @@ capability grant; the base stdlib itself is assembled from the same packs you wr
 
 No ports, no filesystem, no clock, no `random`. Not as a security posture — as an *algebraic* one:
 an ambient read has no construction site to root a value's lineage at, so admitting it would hole
-the one guarantee the language makes (the full argument: `why-no-io-dataflow-algebra.md`, in the
-monorepo's `docs/foundations/arrival-scheme/`).
+the one guarantee the language makes (the full argument: [`docs/design-history/why-no-io-dataflow-algebra.md`](./docs/design-history/why-no-io-dataflow-algebra.md)).
 Effects come back in as capability verbs that mint provenance at the membrane — a filesystem read
 is a recorded crossing that stamps its result, not a stream from nowhere.
 
@@ -582,7 +581,7 @@ compilable *toward* JavaScript (Python and others are plausible too) — so raw 
 
 The language stance — an R7RS-small sandboxed base, a forgiving superset layered *under* strict
 (never beside it), the reserved-zone rule keeping it non-conflicting with any SRFI — is the charter
-in `language-design-foundations.md` (the monorepo's `docs/foundations/arrival-scheme/`);
+in [`docs/design-history/language-design-foundations.md`](./docs/design-history/language-design-foundations.md);
 read it before adding a reader macro, literal, or borrowing. The governing principles of this
 package — the two-interpreter keystone, the value plane, the membrane, provenance, the surface
 rules — are [`docs/PRINCIPLES.md`](./docs/PRINCIPLES.md). Authoring your own capabilities — the
