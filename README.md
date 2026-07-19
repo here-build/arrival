@@ -88,6 +88,11 @@ Arrival Serializer is producing s-expressions as an output, producing more compa
 - `arrival-ext-toml` / `arrival-ext-yaml` — opt-in EnvCapability packs that
   own the TOML/YAML parser dependencies (the extension mechanism's own
   examples of "package owns the dep").
+- `arrival-env-capability-handlebars` — opt-in Handlebars pack (`.hbs`
+  import-executable + template verbs); reference capability for mercury.
+- `arrival-env-capability-sql` / `arrival-env-capability-http` — opt-in
+  `(sql/query)` / `(http/get|post)` effect packs (host-bound resolvers;
+  inert by default).
 
 ## Status
 
