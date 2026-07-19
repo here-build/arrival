@@ -81,6 +81,30 @@ const KNOWN_SAFE_CTX_KEYS: ReadonlySet<PropertyKey> = new Set([
   "door",
 ]);
 
+/** The fully-RELOCATED Contract rules under the sweep — the wave-by-wave
+ *  provenance lives at the sweep's describe below. */
+const RELOCATED_CONTRACT_RULES = [
+  "=",
+  "quotient",
+  "modulo",
+  "+",
+  "-",
+  "*",
+  "/",
+  "cons",
+  "not",
+  "null?",
+  "pair?",
+  "map",
+  "apply",
+  "filter",
+  "infer",
+  "infer/chat",
+  "infer/chat/system",
+  "infer/chat/user",
+  "infer/chat/assistant",
+] as const;
+
 // ── 2. runtime: a Proxy ctx that records every property access ──────────────────────
 
 function probeCtx(accessed: Set<PropertyKey>, over: Partial<EmitCtx<R>> = {}): EmitCtx<R> {
@@ -214,54 +238,46 @@ describe("rule-lint — Law C's boundary: no emit rule inspects parent CoreForm"
     expect(eta.t).toBe("Arrow");
   });
 
-  it("the nineteen fully-RELOCATED Contract rules (=, quotient, modulo, +, -, *, /, cons, not, null?, pair?, map, apply, filter, infer, infer/chat, infer/chat/system, infer/chat/user, infer/chat/assistant) only read the documented EmitCtx surface", async () => {
-    const session = await openOracleSession();
-    try {
-      // `greenfieldRegistryFor` (NOT the bare `emitRegistryOf(session.ambient)`) —
-      // the SAME merged registry `compileGreenfield` actually compiles against,
-      // ambient harvest + srfi-1's static harvest (harness.ts's own note on the
-      // merge). `filter` resolves through THIS sweep now, not a first-sweep
-      // exception: its Contract lives on `scheme/srfi-1`, invisible to
-      // `session.ambient` alone but reachable through the merge.
-      const registry = greenfieldRegistryFor(session);
-      // Wave 1 (=, quotient, modulo — numeric.ts) + Wave 2 (+, -, *, / — numeric.ts;
-      // cons — lists.ts; not, null?, pair? — equality.ts) + Wave 3 (map, apply,
-      // filter — lists.ts and srfi-1.ts) + R2 (infer, infer/chat,
-      // infer/chat/system, infer/chat/user, infer/chat/assistant —
-      // llm-plane-arrival-env's src/infer.ts). Nineteen names, nineteen symbols
-      // FULLY relocated across four waves so far. `infer/chat/system`/`user`/
-      // `assistant` are `kind: "define"` rows (unlike every other name in this
-      // list) — proof this sweep is genuinely kind-agnostic, not accidentally
-      // native/rosetta-only.
-      for (const name of [
-        "=",
-        "quotient",
-        "modulo",
-        "+",
-        "-",
-        "*",
-        "/",
-        "cons",
-        "not",
-        "null?",
-        "pair?",
-        "map",
-        "apply",
-        "filter",
-        "infer",
-        "infer/chat",
-        "infer/chat/system",
-        "infer/chat/user",
-        "infer/chat/assistant",
-      ]) {
+  // The RELOCATED sweep as a protocol: one row per relocated Contract rule, so
+  // a violation names its rule instead of failing a 19-iteration loop.
+  // Wave 1 (=, quotient, modulo — numeric.ts) + Wave 2 (+, -, *, / — numeric.ts;
+  // cons — lists.ts; not, null?, pair? — equality.ts) + Wave 3 (map, apply,
+  // filter — lists.ts and srfi-1.ts) + R2 (infer, infer/chat,
+  // infer/chat/system, infer/chat/user, infer/chat/assistant —
+  // llm-plane-arrival-env's src/infer.ts). Nineteen names, nineteen symbols
+  // FULLY relocated across four waves so far. `infer/chat/system`/`user`/
+  // `assistant` are `kind: "define"` rows (unlike every other name in this
+  // list) — proof this sweep is genuinely kind-agnostic, not accidentally
+  // native/rosetta-only.
+  describe("the fully-RELOCATED Contract rules only read the documented EmitCtx surface", () => {
+    let session: OracleSession;
+    // `greenfieldRegistryFor` (NOT the bare `emitRegistryOf(session.ambient)`) —
+    // the SAME merged registry `compileGreenfield` actually compiles against,
+    // ambient harvest + srfi-1's static harvest (harness.ts's own note on the
+    // merge). `filter` resolves through THIS sweep now, not a first-sweep
+    // exception: its Contract lives on `scheme/srfi-1`, invisible to
+    // `session.ambient` alone but reachable through the merge.
+    let registry: ReturnType<typeof greenfieldRegistryFor>;
+    beforeAll(async () => {
+      session = await openOracleSession();
+      registry = greenfieldRegistryFor(session);
+    }, 60_000);
+    afterAll(async () => {
+      await session.dispose();
+      cleanupOracleScratch();
+    });
+
+    it("still enumerates exactly the nineteen relocated rules (not accidentally 0 or drifted)", () => {
+      expect(RELOCATED_CONTRACT_RULES).toHaveLength(19);
+    });
+
+    for (const name of RELOCATED_CONTRACT_RULES) {
+      it(`"${name}" only reads the documented EmitCtx surface`, () => {
         const rule = registry.lookup(name)?.emit;
         expect(rule, `expected a relocated emit rule for "${name}" on its own Contract — has it moved again?`).toBeDefined();
         const accessed = accessedCtxKeysAcrossArities(rule!);
         expectOnlySafeKeys(accessed, `the relocated "${name}" Contract rule`);
-      }
-    } finally {
-      await session.dispose();
-      cleanupOracleScratch();
+      });
     }
-  }, 60_000);
+  });
 });
