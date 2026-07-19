@@ -1,5 +1,5 @@
 // exceptions-migration.test.ts — SYMBOL.DEFINE W4 law rows for `scheme/r7rs/exceptions`
-// (docs/working-proposals/symbol-define-static-program-validation.md §4). Behavioral
+// (docs/design-history/symbol-define-static-program-validation.md §4). Behavioral
 // semantic-equivalence for guard/raise is already covered by
 // `../../../__tests__/generator-exec.spec.ts`'s "guard (R7RS exception handling)" suite
 // and the chibi R7RS conformance corpus (`../../../__tests__/conformance/chibi-r7rs-v2

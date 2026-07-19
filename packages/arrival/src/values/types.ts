@@ -285,7 +285,7 @@ export type AList<Car extends SchemeValue = any, Cdr extends Car extends ANil ? 
   | ANil;
 
 // ── Egress projection modes + the membrane element exit ───────────────────────────
-// (docs/working-proposals/arrival-egress-membrane-exit.md — the two-protocol split:
+// (docs/design-history/arrival-egress-membrane-exit.md — the two-protocol split:
 // `arrival/toJS` = serialization projection, `arrival/toJSMembrane` = membrane exit.)
 
 /** The egress projection modes. `bare` = serialization (no options, callables

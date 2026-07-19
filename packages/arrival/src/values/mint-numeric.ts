@@ -1,5 +1,5 @@
 // mint-numeric.ts — the ONE choke point for minting a checked `AExact` under the
-// safe-operand invariant (docs/working-proposals/arrival-one-number-rework.md §0.2/§0.3,
+// safe-operand invariant (docs/design-history/arrival-one-number-rework.md §0.2/§0.3,
 // §2.1: "RATIO with crash-on-overflow"). Every exact-producing op should route its final
 // num/denom (or a bare integral result) through `mintExact`/`mintNumeric` rather than
 // calling `new AExact(...)` directly, so the crash-on-overflow law and the DEBUG

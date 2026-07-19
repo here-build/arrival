@@ -24,7 +24,7 @@ export const CROSSINGS: readonly CrossingRow[] = [
   { type: "boolean", entryForm: "ABool", exitForm: "boolean", roundTrip: true },
   { type: "safe-int number", entryForm: "AExact", exitForm: "number", roundTrip: true },
   { type: "float number", entryForm: "AInexact", exitForm: "number", roundTrip: true },
-  { type: "bigint", entryForm: "raw passthrough (opaque host value — not a scheme number)", exitForm: "raw (unchanged — same bigint identity)", roundTrip: true }, // §2.3: bigint is opaque, never boxed into an AExact (docs/working-proposals/arrival-one-number-rework.md)
+  { type: "bigint", entryForm: "raw passthrough (opaque host value — not a scheme number)", exitForm: "raw (unchanged — same bigint identity)", roundTrip: true }, // §2.3: bigint is opaque, never boxed into an AExact (docs/design-history/arrival-one-number-rework.md)
   { type: "string", entryForm: "AString", exitForm: "string", roundTrip: true },
   { type: "null", entryForm: "ANil (nil)", exitForm: "[] (the empty list's array face)", roundTrip: false }, // asymmetric BY LAW: ingress permissive (null→nil), egress canonical (nil→[]) — V ruling 2026-07-13
   { type: "undefined", entryForm: "AVoid", exitForm: "undefined", roundTrip: true },

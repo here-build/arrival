@@ -1,5 +1,5 @@
 // srfi-1-symbol-define.test.ts — W4/H3 pack migration rows for `scheme/srfi-1`
-// (docs/working-proposals/symbol-define-static-program-validation.md §1/§2.1/§4/§4.5).
+// (docs/design-history/symbol-define-static-program-validation.md §1/§2.1/§4/§4.5).
 //
 // Dep edges (current pack): `deps: [equality, numeric, exceptions, lists]` —
 // NATIVE free names (`not`/`equal?`/`pair?`/`null?`, `+`/`-`/…) + BASE free names

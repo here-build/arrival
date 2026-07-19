@@ -41,7 +41,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
   beforeEach(() => {
     // Create a minimal environment with basic operations
     // Note: SchemeExact has num/denom (for rationals), not value
-    // RE-PINNED (one-number rework, RATIO — docs/working-proposals/arrival-one-number-rework.md
+    // RE-PINNED (one-number rework, RATIO — docs/design-history/arrival-one-number-rework.md
     // §2.1): AExact's payload is a safe-int `number` now, not `bigint` — this hand-rolled test
     // env's arithmetic helpers ported bigint accumulators/comparisons to plain number ones
     // (`0`→`0`, `BigInt(...)`→direct number use, the dead `typeof arg === "bigint"` arm

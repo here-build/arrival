@@ -396,7 +396,7 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
     gate: "permanent — ports/IO omitted by design, no fix planned (harness-capability.ts prelude's own documented cascade)",
   },
   // -----------------------------------------------------------------------
-  // FIXED (2026-07-14, one-number rework, docs/working-proposals/arrival-one-number-rework.md):
+  // FIXED (2026-07-14, one-number rework, docs/design-history/arrival-one-number-rework.md):
   // the row for `(test #f (= 9007199254740992.0 9007199254740993))` is DEAD, not passing —
   // `9007199254740993` (2^53 + 1) now ParseErrors at read time (RATIO's safe-int-only exact
   // literal gate, §0.3), so the form never reaches a `TestStep` at all; it's a `registerUnreadable`
@@ -410,7 +410,7 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
     gate: "permanent — IEEE 754/tower edge, no fix planned",
   },
   // -----------------------------------------------------------------------
-  // One-number rework (RATIO, docs/working-proposals/arrival-one-number-rework.md §0.3): a
+  // One-number rework (RATIO, docs/design-history/arrival-one-number-rework.md §0.3): a
   // genuinely NEW expected failure, not a stale carry-over. The CLtL 12.3 transitivity example
   // (r7rs-tests.scm:838-841) computes `a = (/ 10.0 single-float-epsilon)` — JS's OWN double
   // epsilon (~2.22e-16), not a real single-float one, so `a` lands near 9e15, just past
@@ -428,7 +428,7 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
     reason:
       "one-number rework (RATIO): (exact a) on a/≈9.007e15 (just past Number.MAX_SAFE_INTEGER) throws by design " +
       "(§0.3 crash-on-overflow) — the corpus's own float epsilon computation lands just past the safe-int ceiling",
-    gate: "permanent — RATIO's safe-int component ceiling (docs/working-proposals/arrival-one-number-rework.md §0.3), no fix planned",
+    gate: "permanent — RATIO's safe-int component ceiling (docs/design-history/arrival-one-number-rework.md §0.3), no fix planned",
   },
   // (The former "One-number rework (RATIO) fallout" block — 13 xfail rules for the
   // env/r7rs/vectors.ts:149 / lists.ts BigInt-mint leftovers — was REMOVED 2026-07-14:

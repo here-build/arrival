@@ -1,6 +1,6 @@
 // One-Number Rework (RATIO, crash-on-overflow) — W0 RED-FIRST test file.
 //
-// Pins docs/working-proposals/arrival-one-number-rework.md v2.1 §0 (invariants) and
+// Pins docs/design-history/arrival-one-number-rework.md v2.1 §0 (invariants) and
 // §2 (target design) at the SCHEME surface. Every row named in the plan's §3 W0 list
 // becomes one assertion here (the §0.6 pinned-behaviors list is folded into the "box
 // identity" describe block below — same rows, same meaning).

@@ -124,7 +124,7 @@ function isPendingDatum(value: SchemeValue | PromiseLike<SchemeValue>): value is
 // ----------------------------------------------------------------------
 // Lifts a raw JS primitive to its Scheme value-type so member reads return
 // Scheme-typed values, not bare JS. Only strings/numbers need boxing; bigints
-// (an opaque HOST value per docs/working-proposals/arrival-one-number-rework.md
+// (an opaque HOST value per docs/design-history/arrival-one-number-rework.md
 // §2.3 — never a scheme number), objects, and arrays are handled by the membrane
 // at access time and pass through (the switch below has no `bigint` case, so it
 // falls straight to the identity return).

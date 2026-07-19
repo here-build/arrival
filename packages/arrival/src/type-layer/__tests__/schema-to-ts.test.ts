@@ -20,7 +20,7 @@ describe("printType — native identity primitives (scheme primitive → plain-T
   });
   // INVARIANT: the numeric tower prints exact and inexact both as "number" via the
   // name-keyed image, not the raw union — z.bigint is retired (exact is a safe-integer
-  // ratio of `number`s per docs/working-proposals/arrival-one-number-rework.md §2.3).
+  // ratio of `number`s per docs/design-history/arrival-one-number-rework.md §2.3).
   it("prints the numeric tower as exact=number / inexact=number", () => {
     // v2 makes these codecs/unions; the name-keyed image (bigint/exact/inexact→number) prints
     // them once, not the raw union OUT schema (which would be `number | number`).

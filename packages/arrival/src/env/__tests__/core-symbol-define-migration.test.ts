@@ -1,5 +1,5 @@
 // core-symbol-define-migration.test.ts — W4 pack migration rows for `scheme/core`
-// (docs/working-proposals/symbol-define-static-program-validation.md §1/§2.1/§4).
+// (docs/design-history/symbol-define-static-program-validation.md §1/§2.1/§4).
 //
 // SCOPE: this pack's `symbols` record is MOSTLY out of scope for this wave — the 20
 // `symbol.keyword` entries are `KEYWORD_SYNTAX_BASELINE` itself (define-bake.ts:91),

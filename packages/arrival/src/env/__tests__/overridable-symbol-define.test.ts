@@ -1,5 +1,5 @@
 // overridable-symbol-define.test.ts — W4-H2b pack migration rows for `arrival/overridable`
-// (docs/working-proposals/symbol-define-static-program-validation.md §1/§2/§4). Companion to
+// (docs/design-history/symbol-define-static-program-validation.md §1/§2/§4). Companion to
 // the pre-existing `overridable.test.ts`, which stays the behavioral baseline (define, override,
 // default, structured s/* forms, teaching-door messages) — this file pins ONLY the migration-
 // specific facts:

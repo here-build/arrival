@@ -148,7 +148,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
 
     case "bigint": {
       it(entryTitle, () => {
-        // Opaque HOST value (docs/working-proposals/arrival-one-number-rework.md §2.3)
+        // Opaque HOST value (docs/design-history/arrival-one-number-rework.md §2.3)
         // — NOT a scheme number: rides the same raw identity lane as
         // Uint8Array/ArrayBuffer/DataView, never boxed into an AExact. `number?`/
         // arithmetic coercion door on it explicitly (coerce-numeric.spec.ts,
@@ -888,12 +888,12 @@ describe("forgery guard: a borrowed object's own arrival/*-named key is DATA, ne
 // "egress of deferred carriers" (the force-on-egress contract for a live AHalfBaked
 // crossing exec's boundary) retired: AHalfBaked itself dissolved — VERDICT KILL, zero
 // production reachability, superseded by R2/C3 struct-fact wires. See
-// docs/working-proposals/halfbaked-existence-review.md. The three `it.fails` rows this
+// docs/design-history/halfbaked-existence-review.md. The three `it.fails` rows this
 // block carried ("live AHalfBaked escapes exec under speculate", ledger GAPS) are gone
 // because the gap became UNREACHABLE, not fixed — no carrier can exist anymore, so
 // there is nothing left for force-on-egress to force. See docs/RULINGS.md R4 (VERDICT KILL).
 
-// ── Egress membrane exit laws (docs/working-proposals/arrival-egress-membrane-exit.md) ──
+// ── Egress membrane exit laws (docs/design-history/arrival-egress-membrane-exit.md) ──
 // The two-protocol split: `arrival/toJS` = SERIALIZATION (callables stringify — a law,
 // not an accident), `arrival/toJSMembrane` = MEMBRANE crossing (options + reverse-membrane
 // wrappers reach every depth). Identity: bare=(box); membrane=(box, mode, SCOPE).
@@ -938,7 +938,7 @@ describe("egress membrane exit — the two protocols and their identity laws", (
   });
 
   // "nested forceBigInt: options reach container elements (the sibling defect, fixed)"
-  // RETIRED: `forceBigInt` is deleted (docs/working-proposals/arrival-one-number-rework.md
+  // RETIRED: `forceBigInt` is deleted (docs/design-history/arrival-one-number-rework.md
   // §2.3 — bigint is an opaque host value, not a numeric-projection choice; the scout
   // found no production setter, so this is a pure simplification). There is no longer
   // an option whose value should reach nested container elements differently, so

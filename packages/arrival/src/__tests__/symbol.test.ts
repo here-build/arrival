@@ -165,7 +165,7 @@ describe("the number codec FAMILY — exactness + range + JS-type declared by th
       // over-range AExact reaching a native's arg decode). Post-rework there is no later
       // gate to reach — AExact's own constructor enforces Number.isSafeInteger on every
       // component, so an over-range exact integer throws at construction, earlier than any
-      // codec ever sees it (docs/working-proposals/arrival-one-number-rework.md §0.2/§0.3).
+      // codec ever sees it (docs/design-history/arrival-one-number-rework.md §0.2/§0.3).
       expect(() => new AExact(CONSTANT_CTX, Number.MAX_SAFE_INTEGER + 10)).toThrow(/safe integer/i);
     });
 
@@ -190,7 +190,7 @@ describe("the number codec FAMILY — exactness + range + JS-type declared by th
     });
   });
 
-  // RE-PINNED (one-number rework, RATIO — docs/working-proposals/arrival-one-number-rework.md
+  // RE-PINNED (one-number rework, RATIO — docs/design-history/arrival-one-number-rework.md
   // §2.3): `z.bigint` is retired as the active numeric cast but KEPT exported as a thin
   // compat shim (scheme-zod.ts's own header comment on `bigint`) for consumers outside this
   // sweep's scope. It no longer carries arbitrary precision — AExact's payload is a safe-int
@@ -260,7 +260,7 @@ describe("symbol.notImplemented — errors-as-doors", () => {
     expect(def.reason).toMatch(/mutates/);
   });
 
-  // W0 (docs/working-proposals/symbol-define-static-program-validation.md) — signature/
+  // W0 (docs/design-history/symbol-define-static-program-validation.md) — signature/
   // return-shape SOURCE-COMPATIBILITY pin: the factory still bakes no `cause` at all. It
   // cannot know its own owning capability (it runs inside a `symbols` record literal,
   // before the `EnvCapability` wrapping it exists) — `common/capability.ts`'s door bind

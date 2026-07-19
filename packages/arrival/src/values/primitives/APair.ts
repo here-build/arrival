@@ -322,7 +322,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
         car = Number.isSafeInteger(car) ? new AExact(ctx, car) : new AInexact(ctx, car);
       }
       // A raw JS `bigint` element is left untouched: per the numeric-rework law
-      // (docs/working-proposals/arrival-one-number-rework.md §0/§2.3), bigint is an
+      // (docs/design-history/arrival-one-number-rework.md §0/§2.3), bigint is an
       // opaque host value, not a scheme number — it rides the same pass-through lane
       // the membrane's `fromJS(bigint)` uses, rather than auto-boxing into an AExact.
       result = new APair(ctx, car as SchemeValue, result);

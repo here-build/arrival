@@ -119,7 +119,7 @@ describe("scheme/lists Contract precision — genuinely REFINED schemas reject w
     expect(def.out.safeParse([properList(1, 2)]).success).toBe(false); // a Pair is not an array, was true before
   });
 
-  // INVERTED (docs/working-proposals/halfbaked-existence-review.md, VERDICT KILL): output was
+  // INVERTED (docs/design-history/halfbaked-existence-review.md, VERDICT KILL): output was
   // pinned z.value ONLY because a still-filling collection's Tier-2 speculation could hand back
   // a live AHalfBaked carrier instead of a settled number — the carrier is gone, so the
   // permissive schema was never really "genuinely representation-blind," it was a residue of a

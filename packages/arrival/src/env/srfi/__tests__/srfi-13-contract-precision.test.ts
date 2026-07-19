@@ -57,7 +57,7 @@ describe("scheme/srfi-13 Contract harvest precision — already-precise ops stay
     expect(signatureOf(def("string-reverse"))).toBe("(a: string) => string");
   });
 
-  // RE-PINNED (one-number rework, RATIO — docs/working-proposals/arrival-one-number-rework.md
+  // RE-PINNED (one-number rework, RATIO — docs/design-history/arrival-one-number-rework.md
   // §2.3): `z.exact`/`z.schemeNumber` now decode/encode plain `number`, not `bigint | number` —
   // every "bigint" in these three signatures dropped. Separately (unrelated to the rework,
   // discovered while re-verifying): `string-take`/`string-index`/`string-count` now carry a

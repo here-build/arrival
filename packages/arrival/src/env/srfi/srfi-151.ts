@@ -1,7 +1,7 @@
 // SRFI-151 — bitwise operations. DOORED IN FULL: here lieth the dragons.
 //
 // (V ruling 2026-07-14, ahead of the one-number rework —
-//  docs/working-proposals/arrival-one-number-rework.md.)
+//  docs/design-history/arrival-one-number-rework.md.)
 //
 // WHY THE DRAGONS: under the one-number representation, scheme exact integers are
 // safe-range JS numbers (|x| ≤ 2^53−1) — and JavaScript's native bitwise operators

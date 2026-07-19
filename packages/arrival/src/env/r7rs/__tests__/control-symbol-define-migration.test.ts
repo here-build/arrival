@@ -1,6 +1,5 @@
 // control-symbol-define-migration.test.ts — W4-H2 pack-migration law rows for
-// `scheme/r7rs/control` (docs/working-proposals/symbol-define-static-program-
-// validation.md §1/§2.1/§3.3b/§4.2).
+// `scheme/r7rs/control` (docs/design-history/symbol-define-static-program-validation.md §1/§2.1/§3.3b/§4.2).
 //
 // This pack is the narrowest possible migration case, narrower even than H1's
 // binding.ts (which at least had two `define-syntax` macros): control.ts's ENTIRE

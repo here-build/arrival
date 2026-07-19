@@ -1,5 +1,5 @@
 // srfi-235-symbol-define.test.ts — W4/H1 pack migration rows for `scheme/srfi-235`
-// (docs/working-proposals/symbol-define-static-program-validation.md §1/§2.1/§4).
+// (docs/design-history/symbol-define-static-program-validation.md §1/§2.1/§4).
 //
 // THE LATENT BUG this migration fixes (design doc §2.1's "live catch", §4.1's census
 // row): `complement`'s body called `compose` — a `scheme/polyglot` define — with NO

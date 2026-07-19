@@ -8,7 +8,7 @@
  * numbers.spec / r7rs-numbers. bridge.ts itself is deleted (lineage:
  * env/r7rs/error-objects.ts header).
  *
- * RE-PINNED (one-number rework, RATIO — docs/working-proposals/arrival-one-number-rework.md
+ * RE-PINNED (one-number rework, RATIO — docs/design-history/arrival-one-number-rework.md
  * §2.3): `AExact`'s payload is a safe-int `number` now, not `bigint` — every `.num`/`.denom`
  * assertion below dropped the trailing `n`. More substantively, §2.3 makes a raw host
  * `bigint` an OPAQUE pass-through value, never a scheme number — `coerceNumeric` (verified

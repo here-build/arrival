@@ -371,7 +371,7 @@ describe("membrane fromJS / toJS — round-trip + wrapper-cache identity", () =>
 
   // INVARIANT: bigint is an opaque host value — the membrane routes it through unboxed,
   // identical both directions (never a scheme number; see coerce-numeric.spec.ts for the
-  // arithmetic-coercion door and docs/working-proposals/arrival-one-number-rework.md §2.3).
+  // arithmetic-coercion door and docs/design-history/arrival-one-number-rework.md §2.3).
   it("bigint crosses as an opaque host value (never boxed into an exact)", () => {
     // host-agnostic: 10n stays 10n — arrival never reinterprets a host bigint as a scheme
     // number. fromJS rides the same raw identity lane Uint8Array/ArrayBuffer/DataView use.

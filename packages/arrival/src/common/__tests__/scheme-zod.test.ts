@@ -474,7 +474,7 @@ describe("scheme-zod z.undefinedResult / z.error — real codecs", () => {
   });
 });
 
-// RE-PINNED (one-number rework, RATIO — docs/working-proposals/arrival-one-number-rework.md
+// RE-PINNED (one-number rework, RATIO — docs/design-history/arrival-one-number-rework.md
 // §2.3): AExact's payload is a safe-int `number` now, not `bigint` (§0.2). The whole codec
 // family below flipped its JS face from `bigint`/`bigint | number` to plain `number` —
 // `z.exact`/`z.integer`/`z.number`/`z.schemeNumber` no longer accept or produce a raw JS

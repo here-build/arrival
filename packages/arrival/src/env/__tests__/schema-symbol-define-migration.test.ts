@@ -1,5 +1,5 @@
 // schema-symbol-define-migration.test.ts — W4-H2b pack migration rows for `arrival/schema`
-// (docs/working-proposals/symbol-define-static-program-validation.md §1/§2/§4). This pack's
+// (docs/design-history/symbol-define-static-program-validation.md §1/§2/§4). This pack's
 // former `prelude` was 13 pure `define`s and zero macros (unlike its `arrival/overridable`
 // sibling, which carried the one macro) — every entry below is now `kind: "define"`, and the
 // hard invariant this file pins is the ONE the migration brief calls out explicitly:

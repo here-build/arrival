@@ -675,7 +675,7 @@ const logFn = (z: number, base?: number): number => (base === undefined ? Math.l
 const atanFn = (y: number, x?: number): number => (x === undefined ? Math.atan(y) : Math.atan2(y, x));
 
 // ── Bitwise — DOORED: here lieth the dragons (V ruling 2026-07-14) ──────────────────
-// Doored AHEAD of the one-number rework (docs/working-proposals/arrival-one-number-rework.md):
+// Doored AHEAD of the one-number rework (docs/design-history/arrival-one-number-rework.md):
 // scheme exact integers become safe-range JS numbers, and JS's native bitwise operators
 // (`|` `&` `^` `~` `<<` `>>`) silently coerce their operands to 32 BITS — every result on
 // a value wider than 2^31 is silent corruption, precisely the wrong-value class the rework

@@ -1,6 +1,5 @@
 // syntax-symbol-define-migration.test.ts — W4-H2b pack-migration law rows for
-// `scheme/r7rs/syntax` (docs/working-proposals/symbol-define-static-program-
-// validation.md §4.2). Same narrow shape as r7rs/binding's H1 rows: this pack's
+// `scheme/r7rs/syntax` (docs/design-history/symbol-define-static-program-validation.md §4.2). Same narrow shape as r7rs/binding's H1 rows: this pack's
 // ENTIRE former `prelude` was three `define-macro` forms (`define-syntax`,
 // `let-syntax`, `letrec-syntax`) and nothing else — zero `symbol.define`
 // value/procedure defines to migrate, so no Pass-2 contract-authoring rows and

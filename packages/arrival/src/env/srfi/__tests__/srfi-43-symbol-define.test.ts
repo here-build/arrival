@@ -1,5 +1,5 @@
 // srfi-43-symbol-define.test.ts — W4/H2 pack migration rows for `scheme/srfi-43`
-// (docs/working-proposals/symbol-define-static-program-validation.md §1/§2.1/§4).
+// (docs/design-history/symbol-define-static-program-validation.md §1/§2.1/§4).
 //
 // THE SAME LUCK CLASS srfi-235 (W4/H1) found, for NATIVE_PACKS this time (srfi-43.ts's
 // header): every body below calls `vector-length`/`vector-ref` (scheme/vectors), `=`/

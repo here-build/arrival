@@ -65,7 +65,7 @@ describe("numeric Contract precision — the real exported ops reject wrongly-ty
     expect(def.in.safeParse([exact(1), "nope"]).success).toBe(false);
   });
 
-  // RE-PINNED (one-number rework, RATIO — docs/working-proposals/arrival-one-number-rework.md
+  // RE-PINNED (one-number rework, RATIO — docs/design-history/arrival-one-number-rework.md
   // §2.3): quotient's real contract flipped off `z.bigint` onto `z.schemeNumber` (numeric.ts:971
   // — `quotientSpec`'s `out`), matching every other numeric op post-rework. The old "output is a
   // genuine bigint codec" framing is gone: quotient's out-channel now encodes a plain safe-int

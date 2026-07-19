@@ -12,7 +12,7 @@ import { setoidLaws } from "./algebra-laws.js";
 import { tf } from "../values/tagless-final.js";
 
 // Exact rationals over a small domain (collisions exercise symmetry/transitivity).
-// RE-PINNED (one-number rework, RATIO — docs/working-proposals/arrival-one-number-rework.md
+// RE-PINNED (one-number rework, RATIO — docs/design-history/arrival-one-number-rework.md
 // §0.2): AExact's num/denom are safe-int `number`s now, not `bigint` — `fc.integer` replaces
 // `fc.bigInt` (fast-check's bigint arbitrary can't feed a number-only constructor at all).
 const exactArb = fc

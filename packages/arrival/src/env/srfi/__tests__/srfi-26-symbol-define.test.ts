@@ -1,5 +1,5 @@
 // srfi-26-symbol-define.test.ts — W4 pack migration rows for `scheme/srfi-26`
-// (docs/working-proposals/symbol-define-static-program-validation.md §1/§2.1/§3.4/§4).
+// (docs/design-history/symbol-define-static-program-validation.md §1/§2.1/§3.4/§4).
 //
 // `cut`/`cute` are the spec's own named hard case for the §2.1 bake FV law (rev 2's
 // "second live catch, macro-flavored"): their expansions introduce the placeholder

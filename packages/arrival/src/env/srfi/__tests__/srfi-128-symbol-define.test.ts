@@ -1,5 +1,5 @@
 // srfi-128-symbol-define.test.ts — W4/H2b pack migration rows for `scheme/srfi-128`
-// (docs/working-proposals/symbol-define-static-program-validation.md §1/§2.1/§4).
+// (docs/design-history/symbol-define-static-program-validation.md §1/§2.1/§4).
 //
 // THE LUCK CLASS, BOTH FLAVORS AT ONCE (srfi-128.ts's header): `pair?`/`eq?`/
 // `null?`/`boolean?`/`string?`/`symbol?`/`symbol->string`/`equal?`/`not`

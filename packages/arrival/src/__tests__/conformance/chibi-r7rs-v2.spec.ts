@@ -75,7 +75,7 @@ if (!fs.existsSync(CHIBI_TESTS_PATH)) {
       //
       // The label used to hardcode "complex tower (R7RS §6.2.3 omitted)" for EVERY unreadable
       // step — accurate when the complex tower was the only reader door in the corpus. The
-      // one-number rework (docs/working-proposals/arrival-one-number-rework.md §0.3/§2.5)
+      // one-number rework (docs/design-history/arrival-one-number-rework.md §0.3/§2.5)
       // added a second, unrelated reader door: an exact integer literal beyond
       // Number.isSafeInteger range now ParseErrors at read time instead of silently minting a
       // bigint (e.g. `4611686018427387904`, `9007199254740993`, and several
@@ -84,7 +84,7 @@ if (!fs.existsSync(CHIBI_TESTS_PATH)) {
       // it — classify by the actual reader error instead of assuming a single cause.
       const label = `${normalizeText(step.text).slice(0, 160)}  ${CHIBI_TESTS_PATH}:${step.line}`.slice(0, 300);
       const feature = step.readerError.includes("exceeds safe-integer range")
-        ? "exact literal beyond safe-integer range (docs/working-proposals/arrival-one-number-rework.md §0.3 — RATIO's safe-int-only exact components)"
+        ? "exact literal beyond safe-integer range (docs/design-history/arrival-one-number-rework.md §0.3 — RATIO's safe-int-only exact components)"
         : "complex tower (R7RS §6.2.3 omitted)";
       it.skip(
         `${label} — excluded: ${feature} [reader door: ${step.readerError.slice(0, 100)}]`.slice(0, 300),

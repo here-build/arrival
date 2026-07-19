@@ -26,7 +26,7 @@ export function sym(name: string): ASymbol {
 /**
  * Create a Scheme number (exact for integers, inexact for floats)
  *
- * RE-PINNED (one-number rework, RATIO — docs/working-proposals/arrival-one-number-rework.md
+ * RE-PINNED (one-number rework, RATIO — docs/design-history/arrival-one-number-rework.md
  * §0.2): AExact's payload is a safe-int `number` now, not `bigint` — the `bigint` overload
  * dropped (a raw host bigint is an opaque pass-through post-rework, §2.3, never a scheme
  * number a test helper should silently adopt as one).

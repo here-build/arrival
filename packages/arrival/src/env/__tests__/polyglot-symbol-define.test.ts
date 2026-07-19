@@ -1,5 +1,5 @@
 // polyglot-symbol-define.test.ts — W4/H3 pack migration rows for `scheme/polyglot`
-// (docs/working-proposals/symbol-define-static-program-validation.md §1/§2.1/§3.4/§4),
+// (docs/design-history/symbol-define-static-program-validation.md §1/§2.1/§3.4/§4),
 // RE-POINTED to the four post-split packs (V, 2026-07-10 dialect split —
 // polyglot.ts's header has the full rationale, per-pack test files carry the
 // bulk of the behavior coverage: polyglot.test.ts / polyglot-clojure.test.ts /

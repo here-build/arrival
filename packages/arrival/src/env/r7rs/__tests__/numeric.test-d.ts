@@ -16,7 +16,7 @@
 // static erasure above makes it type-unobservable — lives in the sibling
 // `numeric-contract-precision.test.ts`.
 //
-// Per docs/working-proposals/arrival-one-number-rework.md §2.3, the numeric pack's own
+// Per docs/design-history/arrival-one-number-rework.md §2.3, the numeric pack's own
 // NumSpecs have converged onto `z.schemeNumber` (the "scheme" face decodes to `ANumeric`,
 // i.e. `AExact | AInexact`) for essentially every op below, INCLUDING quotient/abs/zero? —
 // there is no surviving "AnyNum, plain number|bigint" shape in the live pack; the inline

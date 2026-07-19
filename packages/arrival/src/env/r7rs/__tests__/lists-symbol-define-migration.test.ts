@@ -1,6 +1,5 @@
 // lists-symbol-define-migration.test.ts — W4-H2 pack-migration law rows for
-// `scheme/lists` (docs/working-proposals/symbol-define-static-program-
-// validation.md §1/§2.1/§3.3b/§4.2).
+// `scheme/lists` (docs/design-history/symbol-define-static-program-validation.md §1/§2.1/§3.3b/§4.2).
 //
 // Unlike control.ts's H2 sibling (ALL doors) this pack is ALREADY the shape §4.2's
 // Pass 2 exists to migrate a pack TOWARD: 18 `symbol.native` + 1 `symbol.sequence`

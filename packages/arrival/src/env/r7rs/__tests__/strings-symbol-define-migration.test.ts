@@ -1,6 +1,5 @@
 // strings-symbol-define-migration.test.ts — W4-H2 pack-migration audit row for
-// `scheme/strings` (docs/working-proposals/symbol-define-static-program-
-// validation.md §1/§2/§4).
+// `scheme/strings` (docs/design-history/symbol-define-static-program-validation.md §1/§2/§4).
 //
 // THE FINDING (structural, verified against HEAD and the pack's entire git
 // history via `git log --all -p --follow -- src/env/r7rs/strings.ts`): this

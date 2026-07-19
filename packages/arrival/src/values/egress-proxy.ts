@@ -1,7 +1,7 @@
 /**
  * R9 lazy egress proxies — the container exit of the membrane.
  *
- * Design: RULINGS.md R9 + docs/working-proposals/arrival-egress-membrane-exit.md. A
+ * Design: RULINGS.md R9 + docs/design-history/arrival-egress-membrane-exit.md. A
  * native container (AVector / APair / ADict) exits as a lazy, observationally-plain-JS
  * proxy instead of an eager deep copy: elements materialize on first read, and a
  * tracker guarantees a stable identity per projection — where "projection" is now an

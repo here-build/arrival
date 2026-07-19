@@ -3,7 +3,7 @@
  * exact/inexact). Two classes based on exactness, both always present:
  * - AExact: safe-integer RATIO (`number` num/denom, both always `Number.isSafeInteger`)
  *   — represents integers AND rationals (denom=1 is the integer case). Per
- *   docs/working-proposals/arrival-one-number-rework.md §2.0/§2.1: a result whose
+ *   docs/design-history/arrival-one-number-rework.md §2.0/§2.1: a result whose
  *   num/denom would leave safe range THROWS (crash-on-overflow), never silently
  *   coerces — see `values/mint-numeric.ts` for the mint choke-point.
  * - AInexact: IEEE 754 binary64 real, boxed.

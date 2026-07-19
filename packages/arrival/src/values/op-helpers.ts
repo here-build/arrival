@@ -406,7 +406,7 @@ export function coerceNumeric(value: unknown, ctx: RunContext = CONSTANT_CTX): A
     case value instanceof AExact:
     case value instanceof AInexact:
       return value;
-    // §2.3's opaque-host-value law (docs/working-proposals/arrival-one-number-rework.md):
+    // §2.3's opaque-host-value law (docs/design-history/arrival-one-number-rework.md):
     // a bigint is NOT a scheme number — never silently minted into a (possibly
     // out-of-range) exact. Door here, the arithmetic-coercion entry point, naming the
     // explicit escape hatch (`bigint->number`, the safe-range-checked conversion).

@@ -1,6 +1,6 @@
 // AExact — exact number (integers and rationals) over SAFE-INTEGER `number` components.
 // Extracted from numbers.ts (one-class-per-file, like the other value primitives). Per
-// docs/working-proposals/arrival-one-number-rework.md §2.0/§2.1 ("RATIO with
+// docs/design-history/arrival-one-number-rework.md §2.0/§2.1 ("RATIO with
 // crash-on-overflow"): `num`/`denom` are both plain JS `number`s, each always satisfying
 // `Number.isSafeInteger` (the safe-operand invariant, §0.2) — never `bigint`. Given safe
 // operands, IEEE double arithmetic on integers is exact whenever the true result is in

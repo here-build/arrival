@@ -5,7 +5,7 @@
  * five (`bitwise-and`/`bitwise-ior`/`bitwise-xor`/`bitwise-not`/`arithmetic-shift`),
  * the LIPS aliases (`|` `&` `~` `>>` `<<`), and srfi-151's `bit-count` — must reject
  * with the dragons door, never compute. Rationale (env/srfi/srfi-151.ts header +
- * docs/working-proposals/arrival-one-number-rework.md): under the one-number
+ * docs/design-history/arrival-one-number-rework.md): under the one-number
  * representation, exact integers are safe-range JS numbers, and JS's native bitwise
  * operators silently truncate to 32 bits — a confident-wrong-answer factory above
  * 2^31. Doors, not dragons.
