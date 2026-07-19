@@ -35,8 +35,8 @@ import { AInexact } from "./values/primitives/AInexact.js";
 import { APair } from "./values/primitives/APair.js";
 // Intentional runtime cycle with rosetta.ts (which imports SchemeJSObject from
 // here). ESM resolves it: both fns are declared before any call site fires.
-import { jsToScheme, callableToHostFn, egressAValue } from "./rosetta.js";
-import { RedundantCrossingError } from "./errors.js";
+import { jsToScheme, callableToHostFn, egressAValue, errorToHost, schemeToJsUntyped } from "./rosetta.js";
+import { R7RSError, RedundantCrossingError } from "./errors.js";
 import { is_callable_value } from "./values/value-guards.js";
 import { Syntax } from "./eval/Syntax.js";
 import { type SchemeValue } from "./values/types.js";
@@ -111,8 +111,7 @@ export type BoxedSchemeValue =
  *     preserving; membrane.spec pins "preserves Uint8Array identity"), for the
  *     polymorphic bytevector ops rather than an owned `ABytevector` copy;
  *   • `Promise<unknown>` — stays raw for the evaluator trampoline to await.
- *   • `bigint` — an opaque HOST value (docs/working-proposals/
- *     arrival-one-number-rework.md §2.3), NOT a scheme number: never boxed into an
+ *   • `bigint` — an opaque HOST value, NOT a scheme number: never boxed into an
  *     `AExact` (arithmetic on it doors — op-helpers.ts's `coerceNumeric` — and
  *     `number?` answers #f), rides the same raw identity lane as the binary FFI row
  *     above. `bigintToNumber` (rosetta.ts) is the explicit, safe-range-checked door
@@ -198,7 +197,7 @@ const jsToWrapper = new DefaultedWeakMap<object, AJSArray | AJSObject>((key) =>
 export function fromJS<T>(value: [T] extends [AValue] ? never : T): FromJSResult {
   if (isSchemeValue(value)) throw new RedundantCrossingError("fromJS");
 
-  // Opaque host value (§2.3) — not a scheme number, never boxed into an AExact. Same
+  // Opaque host value — not a scheme number, never boxed into an AExact. Same
   // raw-identity treatment as the binary/Promise arms below, checked first since a
   // bigint is a JS primitive (would otherwise fall to the leaf jsToScheme call, which
   // already agrees via INBOUND_CLAIMS's own "bigint → raw passthrough" row — this
@@ -247,6 +246,17 @@ export function toJS(value: SchemeValue) {
   // values-returning program ((partition …), (exact-integer-sqrt …)) would die on
   // the strict-exit invariant below.
   if (value instanceof Values) return value.__values__.map((v) => toJS(v));
+  // An R7RS error object produced AS A VALUE (guard's `else` returning it,
+  // `raise-continuable` resuming with it) exits as a same-class host Error via the
+  // shared arm — before the strict-exit gate, since an R7RSError is deliberately a
+  // host Error subclass, not an AValue box. A RAISED error never reaches here (it
+  // takes the throw path). Irritants cross via schemeToJsUntyped, not toJS: their
+  // static type is unknowable here (boxed scheme values from `error`/`make-error-object`,
+  // or host-attached raw data on a host-constructed error) — exactly the crossing
+  // schemeToJsUntyped names.
+  if (value instanceof R7RSError) {
+    return errorToHost(value, (el) => schemeToJsUntyped(el));
+  }
   if (!isSchemeValue(value)) throw new RedundantCrossingError("toJS");
   // A scheme callable exits as its reverse-membrane region wrapper (so exec()'s
   // simple tier can return an ALambda/AProcedure as a callable host fn), NOT its

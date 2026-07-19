@@ -95,6 +95,7 @@ export class AJSObject extends AValue {
    */
   get(key: string | symbol): SchemeValue | Promise<SchemeValue> {
     this.freezeSource();
+    if (this.isHostErrorStackKey(key)) return nil;
     // Symbol keys skip the cache (sandbox already blocks most symbol access) — keeps
     // the Map<string, …> shape clean.
     const cacheKey = typeof key === "string" ? key : undefined;
@@ -162,6 +163,7 @@ export class AJSObject extends AValue {
 
   has(key: string | symbol): boolean {
     this.freezeSource();
+    if (this.isHostErrorStackKey(key)) return false;
     return accessHas(this.source, key);
   }
 
@@ -177,7 +179,20 @@ export class AJSObject extends AValue {
   /** Get own enumerable property keys (never includes inherited). */
   keys(): string[] {
     this.freezeSource();
-    return accessKeys(this.source);
+    const ks = accessKeys(this.source);
+    return this.source instanceof Error ? ks.filter((k) => k !== "stack") : ks;
+  }
+
+  /**
+   * A host Error crosses borrowed (rosetta's exotic-object row): its `stack` is a
+   * host-internals confession (file paths, call sites) the sandbox has no use for —
+   * the read collapses to absent (nil / not-has / unlisted), the same shape as a
+   * boundary violation. `message` / `name` / `cause` stay readable: they are the data
+   * face of an error, and `cause`'s chained Errors re-apply this rule on their own
+   * reads.
+   */
+  private isHostErrorStackKey(key: string | symbol): boolean {
+    return key === "stack" && this.source instanceof Error;
   }
 
   // Setoid (Fantasy Land): two wrappers are equal? iff same source (reference identity) —

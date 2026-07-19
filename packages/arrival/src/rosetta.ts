@@ -2,10 +2,9 @@
  * Scheme<->JS membrane: schemeToJs/jsToScheme marshal at FFI boundary, round-trip to
  * identity both directions (bifunctor framing: schemeToJs∘jsToScheme = id and
  * jsToScheme∘schemeToJs = id on the values each side owns).
- * `createRosettaWrapper` wraps a JS fn as a Scheme-callable rosetta — the retired public
- * `AmbientRuntime.defineRosetta` used to be its one caller; `AmbientRuntime.ts`'s internal
- * `bindRosetta` is the surviving wiring (capability.ts's legacy arm + replay.ts's
- * playback frame are its only two producers now).
+ * `createRosettaWrapper` wraps a JS fn as a Scheme-callable rosetta — wired through
+ * `AmbientRuntime.ts`'s internal `bindRosetta`, whose only two producers are
+ * capability.ts's legacy arm and replay.ts's playback frame.
  */
 
 import { AValue, EMPTY_PROVENANCE, mergeProvenance, pointProvenance, unionProvenance } from "./values/primitives/AValue.js";
@@ -46,11 +45,6 @@ interface RosettaOptions {
   // NOTE: a new field here must be classified in `modeKeyOf` below (projection-
   // affecting ⇒ new EgressMode member; wrapper-call-only ⇒ the Exclude list) — the
   // `_modeKeyExhaustive` type guard turns forgetting into a compile error.
-  //
-  // `forceBigInt` RETIRED (docs/working-proposals/arrival-one-number-rework.md §2.3):
-  // bigint is now an opaque host value, not a scheme number — there is no numeric
-  // projection left to force. The scout confirmed no production setter ever existed,
-  // so this is a pure simplification, zero production behavior change.
   returnEither?: boolean;
   /**
    * When true, attaches `this.argProvenance` (flat `CallCtx`, not nested `ctx.…`) — one DEEP provenance set per scheme arg (union of every reachable AValue). Needed: `(list a b c)` carries no spine provenance, only elements — shallow `arg.provenance` misses per-element origins. Computed before schemeToJs strips AValue identity.
@@ -58,13 +52,11 @@ interface RosettaOptions {
   argProvenance?: boolean;
 }
 
-/** The membrane-crossing cache mode for `options` — historically split `mem:0`/`mem:1`
- *  on `forceBigInt` (the one field that ever changed element projection); now retired
- *  (§2.3 — bigint is an opaque host value, no longer a numeric-projection choice), so
- *  every crossing resolves to the single non-bare mode. `returnEither`/`argProvenance`
- *  are read only inside createRosettaWrapper's call packaging, never by schemeToJsImpl
- *  or inbound jsToScheme — triad+Fable-verified. Feeds both the (box, mode, scope)
- *  container slots (egress-proxy) and the (callable, mode, scope) wrapper slots below.
+/** The membrane-crossing cache mode for `options` — every crossing resolves to the
+ *  single non-bare mode; `returnEither`/`argProvenance` are read only inside
+ *  createRosettaWrapper's call packaging, never by schemeToJsImpl or inbound
+ *  jsToScheme. Feeds both the (box, mode, scope) container slots (egress-proxy) and
+ *  the (callable, mode, scope) wrapper slots below.
  *  Kept as a function (not collapsed to the `EgressMode` constant `"mem"` at call
  *  sites) so a FUTURE projection-affecting option still has exactly one place to key
  *  from — see `_modeKeyExhaustive` below. */
@@ -185,6 +177,25 @@ export function schemeToJsUnrecognizedDoor(value: object): Error {
 }
 
 /**
+ * R7RSError exit arm: an R7RS error object produced AS A VALUE (guard's `else`
+ * returning it, `raise-continuable` resuming with it) exits as a same-class host
+ * `Error` — message preserved, irritants crossed elementwise through the caller's own
+ * exit fn, original stack carried over so the construction site survives the crossing.
+ * A RAISED error never touches this arm — it reaches the host through the throw path.
+ * R7RSError is deliberately a host `Error` subclass, NOT an AValue box (the
+ * `z.error` codec exists precisely because it isn't one — env/r7rs/exceptions.ts's
+ * `raisable` note), so the strict-exit invariant cannot carry it; this arm is its
+ * crossing. Shared by schemeToJsImpl and membrane.toJS so the two exits cannot drift
+ * (the egressAValue law).
+ */
+export function errorToHost(value: R7RSError, exitEl: (el: unknown) => unknown): R7RSError {
+  const Ctor = value.constructor as new (message: string, ...irritants: unknown[]) => R7RSError;
+  const crossed = new Ctor(value.message, ...value.irritants.map(exitEl));
+  crossed.stack = value.stack;
+  return crossed;
+}
+
+/**
  * Recursive body behind `schemeToJs`. `unknown`-typed, not `any`: recursion crosses raw JS intermediates no single generic can describe (raw array element, plain object field) — see `schemeToJs` doc for narrowing at public boundary.
  * LAZY: every boxed shape delegates to own `arrival/toJS` (one protocol, class-owned — P7). Containers egress as lazy readonly proxies (egress-proxy.ts); borrowed AJSObject/AJSArray unwrap to `source` IDENTITY (the borrowed-identity law); callables become inverse-rosetta region wrappers. Former ~90-line eager instanceof chain dissolved. HERE: only rosetta-specific surface protocol doesn't know: elementwise crossing of RAW JS containers (elements may be boxed), sequence-op-term preserve, FFI allow-list, P5 door.
  */
@@ -229,6 +240,11 @@ function schemeToJsImpl(value: unknown, options: RosettaOptions): unknown {
       (value as Record<PropertyKey, unknown>)[tf("reduce")] !== undefined
     ) {
       return value;
+    }
+    // R7RSError AS A VALUE (guard's `else`, `raise-continuable`) exits through the
+    // shared arm — a raised error never reaches here (it takes the throw path).
+    if (value instanceof R7RSError) {
+      return errorToHost(value, (el) => schemeToJsImpl(el, options));
     }
     // Raw FFI passthrough — never boxed, caller's responsibility (mirrors jsToScheme "Exotic objects (Promise, Buffer, …)" inbound carve-out): binary/async values that cross without being a scheme value aren't a membrane violation.
     if (
@@ -364,7 +380,7 @@ export const INBOUND_CLAIMS: readonly InboundClaim[] = [
     box: (ctx, v, p, seen) => {
       invariant(v instanceof AValue, "inbound claim 'AValue': box called off its predicate");
       if (p === EMPTY_PROVENANCE || p === v.provenance) return v;
-      // ADDITIVE (V's ruling, 2026-07-14): a crossing may ADD its origin, never ERASE the value's.
+      // ADDITIVE LAW: a crossing may ADD its origin, never ERASE the value's.
       //
       // A rosetta promises HOLISTIC causation — input-as-a-whole causes output-as-a-whole — because
       // a JS impl is opaque and we cannot see that it did not mix its inputs. That is an EDGE we are
@@ -570,18 +586,16 @@ export function jsToScheme<T>(
  * other ingress gate in the one-number rework (values/mint-numeric.ts's
  * crash-on-overflow law).
  *
- * PLACEMENT NOTE for the sweep that wires this up as a callable scheme verb
- * (`bigint->number`): this function is the JS-level conversion only. Binding it as
- * a `symbol.native` (the scheme-visible surface) belongs in whichever env/r7rs
- * cluster owns numeric verbs (env/r7rs/numeric.ts is the natural home, alongside
- * `exact->inexact`/`inexact->exact`) — that file is outside this sweep's scope, so
- * it is not wired here; see this sweep's own report for the exact call shape.
+ * JS-level conversion only. Binding it as a `symbol.native` (the scheme-visible
+ * surface, `bigint->number`) belongs in whichever env/r7rs cluster owns numeric
+ * verbs (env/r7rs/numeric.ts is the natural home, alongside
+ * `exact->inexact`/`inexact->exact`) — not wired here.
  */
 export function bigintToNumber(value: bigint): number {
   if (value > BigInt(Number.MAX_SAFE_INTEGER) || value < BigInt(Number.MIN_SAFE_INTEGER)) {
     throw new TypeError(
       `bigint->number: ${value} exceeds safe-integer range — arrival's exact numbers are safe-integer ` +
-        "ratios (docs/working-proposals/arrival-one-number-rework.md), so this host bigint cannot convert " +
+        "ratios (docs/design-history/arrival-one-number-rework.md), so this host bigint cannot convert " +
         "without precision loss",
     );
   }
