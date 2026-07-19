@@ -13,6 +13,11 @@
  * shapes (row 3 is a fold/fan row — ARM-C's `buildFan` body, not this arm) and
  * are re-run here directly against the SAME pattern matcher the J1 gate uses,
  * so a regression here is the same signal as a J1 regression.
+ *
+ * Everything below the corpus describe is ONE protocol table (`ARM_B_CASES`):
+ * `{ topic, name, src, expected }` — each row runs `extractProgram` and asserts
+ * `toMatchObject(expected)`. The topical describes are generated from the
+ * table; adding a case is appending a row.
  */
 import { describe, expect, it } from "vitest";
 
@@ -59,158 +64,194 @@ describe("fixture corpus — ARM-B's target rows (1, 2, 4, 5)", () => {
   }
 });
 
-describe("If — guard-swap shape", () => {
-  it("a literal alt stays a VISIBLE const, never swallowed by the guard", () => {
-    const prov = run(`(if (< (:v e) 1000) "SAFE" (number->string (:v e)))`);
-    expect(prov).toMatchObject({
+interface ArmBCase {
+  /** The topical describe this row lands in (describes are generated in first-seen order). */
+  readonly topic: string;
+  /** The behavior claim — becomes the it name. */
+  readonly name: string;
+  readonly src: string;
+  /** The `toMatchObject` shape the extracted StaticProv must satisfy. */
+  readonly expected: Record<string, unknown>;
+}
+
+const ARM_B_CASES: readonly ArmBCase[] = [
+  {
+    topic: "If — guard-swap shape",
+    name: "a literal alt stays a VISIBLE const, never swallowed by the guard",
+    src: `(if (< (:v e) 1000) "SAFE" (number->string (:v e)))`,
+    expected: {
       kind: "choice",
       guards: [{ kind: "fused" }],
       alts: [{ kind: "const" }, { kind: "fused" }],
-    });
-  });
-});
+    },
+  },
 
-describe("And / Or — n-ary chains", () => {
-  it("or: guards is the length-1 prefix, alts is every arg", () => {
-    const prov = run(`(or (:cached e) "DEFAULT")`);
-    expect(prov).toMatchObject({
+  {
+    topic: "And / Or — n-ary chains",
+    name: "or: guards is the length-1 prefix, alts is every arg",
+    src: `(or (:cached e) "DEFAULT")`,
+    expected: {
       kind: "choice",
       guards: [{ kind: "mux", key: "cached" }],
       alts: [{ kind: "mux", key: "cached" }, { kind: "const" }],
-    });
-  });
-
-  it("and: 3-ary — guards drops only the last arg, alts keeps all 3", () => {
-    const prov = run(`(and (:a e) (:b e) (:c e))`);
-    expect(prov).toMatchObject({
+    },
+  },
+  {
+    topic: "And / Or — n-ary chains",
+    name: "and: 3-ary — guards drops only the last arg, alts keeps all 3",
+    src: `(and (:a e) (:b e) (:c e))`,
+    expected: {
       kind: "choice",
       guards: [{ kind: "mux", key: "a" }, { kind: "mux", key: "b" }],
       alts: [{ kind: "mux", key: "a" }, { kind: "mux", key: "b" }, { kind: "mux", key: "c" }],
-    });
-  });
-});
+    },
+  },
 
-describe("App — beta-reduction", () => {
-  it("named-helper forge: beta-reduction exposes the callee's hidden guard", () => {
-    const prov = run(`(define (f x) (if (> x 5) "SAFE" x))\n(f (:score e))`);
-    expect(prov).toMatchObject({
+  {
+    topic: "App — beta-reduction",
+    name: "named-helper forge: beta-reduction exposes the callee's hidden guard",
+    src: `(define (f x) (if (> x 5) "SAFE" x))\n(f (:score e))`,
+    expected: {
       kind: "choice",
       guards: [{ kind: "fused" }],
       alts: [{ kind: "const" }, { kind: "mux", key: "score" }],
-    });
-  });
-
-  it("IIFE beta-reduces exactly like a resolved named user fn", () => {
-    const prov = run(`((lambda (x) (if (> x 5) "SAFE" x)) (:score e))`);
-    expect(prov).toMatchObject({
+    },
+  },
+  {
+    topic: "App — beta-reduction",
+    name: "IIFE beta-reduces exactly like a resolved named user fn",
+    src: `((lambda (x) (if (> x 5) "SAFE" x)) (:score e))`,
+    expected: {
       kind: "choice",
       guards: [{ kind: "fused" }],
       alts: [{ kind: "const" }, { kind: "mux", key: "score" }],
-    });
-  });
-
-  it("recursive fn hits the cycle guard: opaque(cyclic-binding), not infinite regress", () => {
-    const prov = run(`(define (loop x) (if (eq? x 0) 0 (loop x)))\n(loop (:n e))`);
-    expect(prov).toMatchObject({
+    },
+  },
+  {
+    topic: "App — beta-reduction",
+    name: "recursive fn hits the cycle guard: opaque(cyclic-binding), not infinite regress",
+    src: `(define (loop x) (if (eq? x 0) 0 (loop x)))\n(loop (:n e))`,
+    expected: {
       kind: "choice",
       alts: [{ kind: "const" }, { kind: "opaque", reason: "cyclic-binding" }],
-    });
-  });
-
-  it("arity mismatch (too few args): opaque(callee-arity)", () => {
-    const prov = run(`(define (f x y) x)\n(f (:a e))`);
-    expect(prov).toMatchObject({ kind: "opaque", reason: "callee-arity" });
-  });
-
-  it("a rest-param callee is beyond static beta-reduction: opaque(callee-arity)", () => {
-    const prov = run(`(define (f x . rest) x)\n(f (:a e) (:b e))`);
-    expect(prov).toMatchObject({ kind: "opaque", reason: "callee-arity" });
-  });
-
-  it("kwargs fold into the flat, positional arg list for beta-reduction too", () => {
+    },
+  },
+  {
+    topic: "App — beta-reduction",
+    name: "arity mismatch (too few args): opaque(callee-arity)",
+    src: `(define (f x y) x)\n(f (:a e))`,
+    expected: { kind: "opaque", reason: "callee-arity" },
+  },
+  {
+    topic: "App — beta-reduction",
+    name: "a rest-param callee is beyond static beta-reduction: opaque(callee-arity)",
+    src: `(define (f x . rest) x)\n(f (:a e) (:b e))`,
+    expected: { kind: "opaque", reason: "callee-arity" },
+  },
+  {
+    topic: "App — beta-reduction",
+    name: "kwargs fold into the flat, positional arg list for beta-reduction too",
     // 1 fixed param + 1 kwarg folds to 2 total args — matches `f`'s 2 params.
-    const prov = run(`(define (f x y) (+ x y))\n(f (:a e) :y 1)`);
-    expect(prov).toMatchObject({
+    src: `(define (f x y) (+ x y))\n(f (:a e) :y 1)`,
+    expected: {
       kind: "fused",
       sources: [{ kind: "mux", key: "a" }, { kind: "const" }],
-    });
-  });
-
-  it("an internal helper define inside a beta-reduced body is visible to the tail form", () => {
-    const prov = run(
-      `(define (f x)\n  (define helper (:tag e))\n  (if (> x 5) "SAFE" helper))\n(f (:score e))`,
-    );
-    expect(prov).toMatchObject({
+    },
+  },
+  {
+    topic: "App — beta-reduction",
+    name: "an internal helper define inside a beta-reduced body is visible to the tail form",
+    src: `(define (f x)\n  (define helper (:tag e))\n  (if (> x 5) "SAFE" helper))\n(f (:score e))`,
+    expected: {
       kind: "choice",
       guards: [{ kind: "fused" }],
       alts: [{ kind: "const" }, { kind: "mux", key: "tag" }],
-    });
-  });
+    },
+  },
+  {
+    topic: "App — beta-reduction",
+    name: "calling a name bound to a non-function value: opaque(unknown-callee)",
+    src: `(define x (:a e))\n(x (:b e))`,
+    expected: { kind: "opaque", reason: "unknown-callee" },
+  },
+  {
+    topic: "App — beta-reduction",
+    name: "a computed callee (not Ref/Lambda/keyword) is opaque(unknown-callee)",
+    src: `((if (eq? 1 1) car cdr) (:a e))`,
+    expected: { kind: "opaque", reason: "unknown-callee" },
+  },
+  {
+    topic: "App — beta-reduction",
+    name: "an empty-bodied IIFE (classify()'s `(lambda (x))` gap) is total, not a crash",
+    src: `((lambda (x)) 1)`,
+    expected: { kind: "opaque", reason: "empty-body" },
+  },
 
-  it("calling a name bound to a non-function value: opaque(unknown-callee)", () => {
-    const prov = run(`(define x (:a e))\n(x (:b e))`);
-    expect(prov).toMatchObject({ kind: "opaque", reason: "unknown-callee" });
-  });
-
-  it("a computed callee (not Ref/Lambda/keyword) is opaque(unknown-callee)", () => {
-    const prov = run(`((if (eq? 1 1) car cdr) (:a e))`);
-    expect(prov).toMatchObject({ kind: "opaque", reason: "unknown-callee" });
-  });
-
-  it("an empty-bodied IIFE (classify()'s `(lambda (x))` gap) is total, not a crash", () => {
-    const prov = run(`((lambda (x)) 1)`);
-    expect(prov).toMatchObject({ kind: "opaque", reason: "empty-body" });
-  });
-});
-
-describe("App — known-head dispatch (registry)", () => {
-  it("kwargs fold into a fuse head's sources — never silently dropped", () => {
-    const prov = run(`(+ (:a e) :bonus 5)`);
-    expect(prov).toMatchObject({
+  {
+    topic: "App — known-head dispatch (registry)",
+    name: "kwargs fold into a fuse head's sources — never silently dropped",
+    src: `(+ (:a e) :bonus 5)`,
+    expected: {
       kind: "fused",
       sources: [{ kind: "mux", key: "a" }, { kind: "const" }],
-    });
-  });
+    },
+  },
+  {
+    topic: "App — known-head dispatch (registry)",
+    name: "kwargs to a mux head are rejected outright: opaque(kwargs-unsupported-head)",
+    src: `(car (:xs e) :extra 1)`,
+    expected: { kind: "opaque", reason: "kwargs-unsupported-head" },
+  },
+  {
+    topic: "App — known-head dispatch (registry)",
+    name: "kwargs to a build head are rejected outright: opaque(kwargs-unsupported-head)",
+    src: `(cons (:a e) (:b e) :extra 1)`,
+    expected: { kind: "opaque", reason: "kwargs-unsupported-head" },
+  },
+  {
+    topic: "App — known-head dispatch (registry)",
+    name: "a kwargs-only call to an unknown head gets the specific opaque(kwargs-only-call)",
+    src: `(mystery-fn :only 1)`,
+    expected: { kind: "opaque", reason: "kwargs-only-call" },
+  },
+  {
+    topic: "App — known-head dispatch (registry)",
+    name: "mux (self-key, e.g. `car`) projects the operand under the head's own name",
+    src: `(car (:xs e))`,
+    expected: { kind: "mux", key: "car", source: { kind: "mux", key: "xs" } },
+  },
+  {
+    topic: "App — known-head dispatch (registry)",
+    name: "map desugars through ARM-C's buildFan into a FanProv",
+    src: `(map (lambda (x) x) (:xs e))`,
+    expected: { kind: "fan" },
+  },
 
-  it("kwargs to a mux head are rejected outright: opaque(kwargs-unsupported-head)", () => {
-    const prov = run(`(car (:xs e) :extra 1)`);
-    expect(prov).toMatchObject({ kind: "opaque", reason: "kwargs-unsupported-head" });
-  });
-
-  it("kwargs to a build head are rejected outright: opaque(kwargs-unsupported-head)", () => {
-    const prov = run(`(cons (:a e) (:b e) :extra 1)`);
-    expect(prov).toMatchObject({ kind: "opaque", reason: "kwargs-unsupported-head" });
-  });
-
-  it("a kwargs-only call to an unknown head gets the specific opaque(kwargs-only-call)", () => {
-    const prov = run(`(mystery-fn :only 1)`);
-    expect(prov).toMatchObject({ kind: "opaque", reason: "kwargs-only-call" });
-  });
-
-  it("mux (self-key, e.g. `car`) projects the operand under the head's own name", () => {
-    const prov = run(`(car (:xs e))`);
-    expect(prov).toMatchObject({ kind: "mux", key: "car", source: { kind: "mux", key: "xs" } });
-  });
-
-  it("map desugars through ARM-C's buildFan into a FanProv", () => {
-    const prov = run(`(map (lambda (x) x) (:xs e))`);
-    expect(prov.kind).toBe("fan");
-  });
-});
-
-describe("DefineFn / Lambda in value position", () => {
-  it("a Lambda literal used as a bare value (not applied) is opaque(fn-as-value)", () => {
-    const prov = run(`(+ (lambda (x) x) 1)`);
-    expect(prov).toMatchObject({
+  {
+    topic: "DefineFn / Lambda in value position",
+    name: "a Lambda literal used as a bare value (not applied) is opaque(fn-as-value)",
+    src: `(+ (lambda (x) x) 1)`,
+    expected: {
       kind: "fused",
       sources: [{ kind: "opaque", reason: "fn-as-value" }, { kind: "const" }],
-    });
-  });
-});
+    },
+  },
 
-describe("NamedLet — the sound default", () => {
-  it("is always opaque(named-let/unliftable), never a guessed lift", () => {
-    const prov = run(`(let loop ((acc 0) (n (:count e))) (if (eq? n 0) acc (loop (+ acc 1) n)))`);
-    expect(prov).toMatchObject({ kind: "opaque", reason: "named-let/unliftable" });
+  {
+    topic: "NamedLet — the sound default",
+    name: "is always opaque(named-let/unliftable), never a guessed lift",
+    src: `(let loop ((acc 0) (n (:count e))) (if (eq? n 0) acc (loop (+ acc 1) n)))`,
+    expected: { kind: "opaque", reason: "named-let/unliftable" },
+  },
+];
+
+const ARM_B_TOPICS = [...new Set(ARM_B_CASES.map((c) => c.topic))];
+for (const topic of ARM_B_TOPICS) {
+  describe(topic, () => {
+    for (const c of ARM_B_CASES.filter((x) => x.topic === topic)) {
+      it(c.name, () => {
+        expect(run(c.src)).toMatchObject(c.expected);
+      });
+    }
   });
-});
+}
