@@ -71,23 +71,33 @@ const compile = (src: string, registry: EmitRegistry = EMPTY, over: Partial<Walk
 const emit = (src: string, registry: EmitRegistry = EMPTY, over: Partial<WalkOptions> = {}): string =>
   render(compile(src, registry, over));
 
-describe("isTriviallyPure — the purity floor", () => {
-  it("Lit/Quote/Ref are trivially pure", () => {
-    expect(isTriviallyPure(assertKind(topFormOf(`5`), "Lit"))).toBe(true);
-    expect(isTriviallyPure(assertKind(topFormOf(`"a"`), "Lit"))).toBe(true);
-    expect(isTriviallyPure(assertKind(topFormOf(`#t`), "Lit"))).toBe(true);
-    expect(isTriviallyPure(assertKind(topFormOf(`'(1 2)`), "Quote"))).toBe(true);
-    expect(isTriviallyPure(assertKind(topFormOf(`x`), "Ref"))).toBe(true);
-  });
+/** One row per (source, kind, verdict) triple — the purity floor's whole law
+ *  surface, named per row so a regression points at the exact source (mirrors
+ *  `prevalue.test.ts`'s PV_ROWS). `kind` pins the CoreForm shape the source
+ *  must classify to (the original assertions' own `assertKind` half). */
+const PURE_ROWS: readonly { src: string; kind: CoreForm["kind"]; pure: boolean }[] = [
+  // Lit/Quote/Ref are trivially pure
+  { src: `5`, kind: "Lit", pure: true },
+  { src: `"a"`, kind: "Lit", pure: true },
+  { src: `#t`, kind: "Lit", pure: true },
+  { src: `'(1 2)`, kind: "Quote", pure: true },
+  { src: `x`, kind: "Ref", pure: true },
 
-  it("App/If/Let/Lambda/And/Or are never trivially pure — the one gate", () => {
-    expect(isTriviallyPure(assertKind(topFormOf(`(f x)`), "App"))).toBe(false);
-    expect(isTriviallyPure(assertKind(topFormOf(`(infer "m" "p")`), "App"))).toBe(false);
-    expect(isTriviallyPure(assertKind(topFormOf(`(if x 1 2)`), "If"))).toBe(false);
-    expect(isTriviallyPure(assertKind(topFormOf(`(let ((y 1)) y)`), "Let"))).toBe(false);
-    expect(isTriviallyPure(assertKind(topFormOf(`(lambda (x) x)`), "Lambda"))).toBe(false);
-    expect(isTriviallyPure(assertKind(topFormOf(`(and x y)`), "And"))).toBe(false);
-  });
+  // App/If/Let/Lambda/And/Or are never trivially pure — the one gate
+  { src: `(f x)`, kind: "App", pure: false },
+  { src: `(infer "m" "p")`, kind: "App", pure: false },
+  { src: `(if x 1 2)`, kind: "If", pure: false },
+  { src: `(let ((y 1)) y)`, kind: "Let", pure: false },
+  { src: `(lambda (x) x)`, kind: "Lambda", pure: false },
+  { src: `(and x y)`, kind: "And", pure: false },
+];
+
+describe("isTriviallyPure — the purity floor", () => {
+  for (const row of PURE_ROWS) {
+    it(`isTriviallyPure(${row.src}) → ${row.pure}`, () => {
+      expect(isTriviallyPure(assertKind(topFormOf(row.src), row.kind))).toBe(row.pure);
+    });
+  }
 });
 
 describe("propagationDecisionAt — let/let*", () => {

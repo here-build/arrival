@@ -11,7 +11,7 @@
  *   - one proof that the REAL `compileGreenfield` harness folds end to end,
  *     interpreter-agreeing, through the actual oracle session (OQ8a's own
  *     resolution — see `bug-cell-corpus.test.ts`'s `short-circuit-effect` row
- *     and `corpus/short-circuit-effect.expect.ts`).
+ *     and `corpus/expectations.ts`'s entry for it).
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -60,22 +60,53 @@ const emit = (src: string, over: Partial<WalkOptions> = {}): string => render(co
 describe("prevalue — the three-valued Scheme-truthiness judgment", () => {
   const pv = (src: string): string => prevalue(topFormOf(src));
 
-  it("only #f is false — every other literal is true (NOT JS truthiness)", () => {
-    expect(pv(`#f`)).toBe("false");
-    expect(pv(`#t`)).toBe("true");
-    expect(pv(`0`)).toBe("true"); // the JS-falsy trap this evaluator must not fall into
-    expect(pv(`""`)).toBe("true");
-    expect(pv(`"a"`)).toBe("true");
-    expect(pv(`(if #f 1)`)).toBe("true"); // the synthesized elided-else Lit(undefined)
-  });
+  /** One row per (source, verdict) pair — the judgment's whole law surface,
+   *  named per row so a regression points at the exact source. */
+  const PV_ROWS: readonly { src: string; verdict: string }[] = [
+    // only #f is false — every other literal is true (NOT JS truthiness)
+    { src: `#f`, verdict: "false" },
+    { src: `#t`, verdict: "true" },
+    { src: `0`, verdict: "true" }, // the JS-falsy trap this evaluator must not fall into
+    { src: `""`, verdict: "true" },
+    { src: `"a"`, verdict: "true" },
+    { src: `(if #f 1)`, verdict: "true" }, // the synthesized elided-else Lit(undefined)
 
-  it("quoted data: '#f is false, every other datum (including '() ) is true", () => {
-    expect(pv(`'#f`)).toBe("false");
-    expect(pv(`'#t`)).toBe("true");
-    expect(pv(`'()`)).toBe("true"); // the classic Lisp gotcha — Scheme's empty list is truthy
-    expect(pv(`'(1 2)`)).toBe("true");
-    expect(pv(`'hello`)).toBe("true");
-  });
+    // quoted data: '#f is false, every other datum (including '()) is true
+    { src: `'#f`, verdict: "false" },
+    { src: `'#t`, verdict: "true" },
+    { src: `'()`, verdict: "true" }, // the classic Lisp gotcha — Scheme's empty list is truthy
+    { src: `'(1 2)`, verdict: "true" },
+    { src: `'hello`, verdict: "true" },
+
+    // and/or/if built from provable parts recurse to a single verdict
+    { src: `(if #t #t #f)`, verdict: "true" },
+    { src: `(if #f #t #f)`, verdict: "false" },
+    { src: `(and #t #t)`, verdict: "true" },
+    { src: `(and #t #f)`, verdict: "false" },
+    { src: `(or #f #f)`, verdict: "false" },
+    { src: `(or #f #t)`, verdict: "true" },
+    { src: `(and)`, verdict: "true" }, // the identity element
+    { src: `(or)`, verdict: "false" },
+
+    // unknown is the safe default for everything this evaluator doesn't own
+    { src: `x`, verdict: "unknown" }, // Ref
+    { src: `(f x)`, verdict: "unknown" }, // App
+    { src: `(not 0)`, verdict: "unknown" }, // App — `not` is a registry symbol, not a special form
+    { src: `(let ((x 1)) x)`, verdict: "unknown" }, // Let
+    { src: `(list)`, verdict: "unknown" }, // a runtime call, not a literal — needs registry semantics
+
+    // a single unknown operand poisons the whole and/or chain, even with
+    // provable neighbors: (and #t x #t) — whether the chain even REACHES the
+    // trailing #t depends on x, so the whole judgment is unknown.
+    { src: `(and #t x #t)`, verdict: "unknown" },
+    { src: `(or #f x #f)`, verdict: "unknown" },
+  ];
+
+  for (const row of PV_ROWS) {
+    it(`pv(${row.src}) → ${row.verdict}`, () => {
+      expect(pv(row.src)).toBe(row.verdict);
+    });
+  }
 
   it("a bare keyword literal is honestly unknown, never guessed", () => {
     // `:kw` reaching a general expression position (here, an if-condition,
@@ -84,32 +115,6 @@ describe("prevalue — the three-valued Scheme-truthiness judgment", () => {
     // doors on at emit time — prevalue declines rather than picking a side.
     const n = assertKind(topFormOf(`(if :kw 1 2)`), "If");
     expect(prevalue(n.cond)).toBe("unknown");
-  });
-
-  it("and/or/if built from provable parts recurse to a single verdict", () => {
-    expect(pv(`(if #t #t #f)`)).toBe("true");
-    expect(pv(`(if #f #t #f)`)).toBe("false");
-    expect(pv(`(and #t #t)`)).toBe("true");
-    expect(pv(`(and #t #f)`)).toBe("false");
-    expect(pv(`(or #f #f)`)).toBe("false");
-    expect(pv(`(or #f #t)`)).toBe("true");
-    expect(pv(`(and)`)).toBe("true"); // the identity element
-    expect(pv(`(or)`)).toBe("false");
-  });
-
-  it("unknown is the safe default for everything this evaluator doesn't own", () => {
-    expect(pv(`x`)).toBe("unknown"); // Ref
-    expect(pv(`(f x)`)).toBe("unknown"); // App
-    expect(pv(`(not 0)`)).toBe("unknown"); // App — `not` is a registry symbol, not a special form
-    expect(pv(`(let ((x 1)) x)`)).toBe("unknown"); // Let
-    expect(pv(`(list)`)).toBe("unknown"); // a runtime call, not a literal — needs registry semantics
-  });
-
-  it("a single unknown operand poisons the whole and/or chain, even with provable neighbors", () => {
-    // (and #t x #t): x's truthiness is unknown, so whether the chain even
-    // REACHES the trailing #t depends on x — the whole judgment is unknown.
-    expect(pv(`(and #t x #t)`)).toBe("unknown");
-    expect(pv(`(or #f x #f)`)).toBe("unknown");
   });
 });
 
