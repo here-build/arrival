@@ -42,6 +42,15 @@ export {
 } from "./front/nodes.js";
 export { parseSexprs } from "./front/parse.js";
 
+// ── organ 1: semantic model (Roslyn-style handle) + product compile ──
+export { SchemeSemanticModel, Unimplemented } from "./model/model.js";
+export {
+  compileSource,
+  type CompileRegister,
+  type CompileSourceOptions,
+  type CompileSourceResult,
+} from "./product/compile-source.js";
+
 // ── the TYPE pass — Law T + the §5.3 narrowing-form grammar (type-emit-lawt.md) ──
 export {
   emitTypes,
