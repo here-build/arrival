@@ -1,4 +1,4 @@
-// Chibi harness v2 — runner.ts (design: docs/test-suite-v2/chibi-harness-v2.md §1, §2, §7, §9).
+// Chibi harness v2 — runner.ts (docs/test-suite-architecture.md F4).
 //
 // CorpusRunner owns the SINGLE shared env (built like `freshEnv()`, `_fresh-env.ts:35-45`, with
 // the v2 harness capability assembled on top via `assembleEnv` — the same path v1 uses and
@@ -84,7 +84,7 @@ export class CorpusRunner {
     }
     if (pos < this.cursorPos) {
       // Already advanced past this step's position without settling it — a genuine ordering
-      // violation (see the design doc §1's "it.each would reorder registration" note); this
+      // violation (the harness design's "it.each would reorder registration" note); this
       // guard is what makes that hazard loud instead of a silently-wrong outcome.
       throw new Error(
         `corpus steps executed out of order — check vitest sequence config (step ${step.index} at position ${pos}, cursor already past it at ${this.cursorPos})`,

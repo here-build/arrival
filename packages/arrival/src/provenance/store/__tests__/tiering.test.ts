@@ -2,7 +2,7 @@
  * tiering.test.ts — Q14's own unit coverage for `PayloadTierMachine` (the `ring` tier
  * + read-side envelope) and `tierGateFromSnapshot` (the egress-proxy integration).
  * Built entirely against `PayloadStoreFake` synthetic payloads, per
- * docs/PROVENANCE-PLAN.md Q14's "Depends: Q10 ONLY" scoping — no real emission, no
+ * Q14's scoping (docs/PROVENANCE.md §5 payload tiering) — no real emission, no
  * workerd adapter. `store-fakes.smoke.test.ts` already proves the do/pending/r2/stub
  * leg of the state machine directly against `PayloadStoreFake`; this file proves the
  * `ring` leg this module adds ON TOP of that, plus the envelope/gate this module owns.

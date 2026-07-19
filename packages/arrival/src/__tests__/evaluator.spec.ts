@@ -276,8 +276,8 @@ describe("Generator Evaluator with Real LIPS Types", () => {
     });
 
     describe("if", () => {
-      // [P15 redundancy] DELETED (2026-07-08 test-invariant-atlas sweep,
-      // docs/test-invariant-atlas/verdicts/evaluator.md): "then branch when true" /
+      // [P15 redundancy] DELETED (2026-07-08 invariant-verdict sweep):
+      // "then branch when true" /
       // "else branch when false" point-duplicated generator-exec.spec.ts's own
       // "should handle if expressions" (which asserts both branches already). Kept the
       // if-without-else, nil-truthy, and nested-if cases below (evaluator-only content).

@@ -1,5 +1,5 @@
-// F6 — Doors (docs/test-suite-v2/DESIGN.md §F6, P5 errors-as-doors). R6 ruling
-// (docs/test-suite-v2/RULINGS.md): `{:key value}` won the brace grammar; SRFI-105
+// F6 — Doors (docs/test-suite-architecture.md F6, P5 errors-as-doors). R6 ruling
+// (docs/RULINGS.md): `{:key value}` won the brace grammar; SRFI-105
 // curly-infix n-expressions (`{a * b}` → `(+ a b)`) are FORCE-ELIMINATED — the
 // reader's curly-infix mode (`ParserOptions.curlyInfix`, `read_curly_elements`,
 // `canonicalizeCurly`/`resolveNfx`/`FIXITY` in the now-deleted `reader/curly-infix.ts`)

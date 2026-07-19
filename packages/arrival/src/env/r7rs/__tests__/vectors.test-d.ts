@@ -43,9 +43,8 @@ const svec = z.vector(z.value);
 
 describe("scheme/vectors Contract precision — element/return precision (z.custom<unknown>() → z.value/z.vector)", () => {
   // 4 OLD-shape rows (vector / vector-append / vector-ref input / vector-ref-vector->list
-  // output) DELETED here (2026-07-08 test-invariant-atlas sweep, [P16]
-  // docs/test-invariant-atlas/verdicts/env.md, docs/test-suite-v2/REMOVAL-MANIFEST.md
-  // §B "env test-d museum rows") — each decoded a retired synthetic schema, no reachable
+  // output) DELETED here (2026-07-09 suite consolidation, [P16]
+  // "env test-d museum rows") — each decoded a retired synthetic schema, no reachable
   // production path. NEW-side rows below are the load-bearing proof.
   // INVARIANT: vector's element schema decodes to SchemeValue[] (the OLD flat-unknown[]
   // baseline rows were already retired — see the [P16] removal note above)

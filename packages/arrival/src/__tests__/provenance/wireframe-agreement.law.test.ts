@@ -1,7 +1,7 @@
 /**
  * LAW — wire-locality (GREEN at Q8a), W1 agreement (staged, Q9), I5 exterior collapse
- * (GREEN at Q8a) (docs/PROVENANCE.md §1 "Model", §3 I5, §7 law table;
- * docs/PROVENANCE-PLAN.md Q5's stub-file mapping table, Q8a's landing).
+ * (GREEN at Q8a) (docs/PROVENANCE.md §1 "Model", §3 I5, §7 law table —
+ * Q5's stub-file mapping, Q8a's landing).
  *
  * Three law families share this file because all three are properties OF THE
  * BUILDER'S OUTPUT (the wireframe graph), not of the retrospective stream:
@@ -509,7 +509,7 @@ describe("I5 — exterior collapse (§3: a region is ONE node from G) — FLIPPE
   );
 });
 
-describe("Q7 — program prelude: a pure helper stays a REFERENCE, the positive direction (§1 CHOSEN; PROVENANCE-PLAN.md Q7)", () => {
+describe("Q7 — program prelude: a pure helper stays a REFERENCE, the positive direction (docs/PROVENANCE.md §1 program prelude CHOSEN)", () => {
   // @ledger: Q7 — LANDED
   it(
     "a pure helper referenced by name from another define stays a REFERENCE: the " +

@@ -4,7 +4,7 @@
  * The second interpreter's conservation law, stated once, property-based:
  * no derivation drops lineage; only declared doors shed; only edges mint.
  *
- * BODIES FILLED (docs/test-suite-v2/DESIGN.md §F2). Mechanism REUSED from the v1
+ * BODIES FILLED (docs/test-suite-architecture.md F2). Mechanism REUSED from the v1
  * suite, not reinvented: `sStr`/`sNum`/`run`/`runRaw` (`./_lineage-test-helpers.js`,
  * the same helpers golden-prov-arithmetic/golden-prov-infer import), `provOf`
  * (`../values/lineage-shadow.js`, the canonical flat/eager stamp reader), and
@@ -26,7 +26,7 @@
  * plain `it`, not `it.fails`: append's rebuilt head and cdr's projected sub-spine
  * are stamped with the deep-collapsed union of their elements, and AVector's map
  * is box-preserving). A13 was the last outlier [GATE: G2] — CLOSED by the C1/C2/C4
- * batch (docs/test-suite-v2/RULINGS.md R2, docs/REWORK-DAG.md): `length` now reads
+ * batch (docs/RULINGS.md R2): `length` now reads
  * the container's own flat grouping/length-fact stamp (never a deep element union),
  * and every container-rebuilding op threads that stamp explicitly per one of three
  * named verbs — PROXIED / PROVENANCED / MINTED (§3's container-box rows, below, and
@@ -381,8 +381,8 @@ describe("conservation — every input id survives to the output or the trace", 
       },
     );
 
-    // FIXED (C4 interim fix, docs/test-suite-v2/RULINGS.md R2 + execution-plan-wireframe.md
-    // §7, batch C1/C2/C4 per docs/REWORK-DAG.md). Was `@ledger: A13 count-cone
+    // FIXED (C4 interim fix, docs/RULINGS.md R2 + execution-plan-wireframe.md
+    // §7, the R2 container structural-facts batch). Was `@ledger: A13 count-cone
     // over-attribution`, `it.fails`.
     it(
       "(length (map id xs)) — the count's cone is the MINIMAL grouping fact (no per-element ids), not every element id [GATE: G2 — CLOSED]",
@@ -430,7 +430,7 @@ describe("conservation — every input id survives to the output or the trace", 
   //                 tests, not re-asserted here).
   // P8 ("one algebra, every carrier") requires ONE answer across carriers — the paired
   // Pair/Vector assertions below check AGREEMENT directly. This closes the divergence
-  // VERDICTS.md/coercion-soundness.test.ts used to flag ("Pair-sort drops the container
+  // coercion-soundness.test.ts used to flag ("Pair-sort drops the container
   // box while Vector-sort preserves it"): both now PROXY identically.
   describe("container-box rows — PROXIED (map/sort) / PROVENANCED (filter), Pair and Vector agree (P8)", () => {
     const STAMP = new Set([7]);

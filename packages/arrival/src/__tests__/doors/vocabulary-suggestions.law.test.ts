@@ -20,7 +20,7 @@ import { describe, expect, it } from "vitest";
 import { exec } from "../../index.js";
 import { suggestFromVocabulary, unboundVariableError } from "../../unbound-variable.js";
 
-// DEAD (test-invariant-atlas, no longer testable — the OLD richErrorFor/well-known-symbols
+// DEAD (2026-07-08 invariant-verdict sweep, no longer testable — the OLD richErrorFor/well-known-symbols
 // table mechanism these described was itself dissolved by the vocabulary-sourced redesign
 // above; there is no curated table left to pin, and the new design deliberately narrows
 // hints to real vocabulary members only):

@@ -10,8 +10,7 @@
  * dependency on lips runtime (which patch_value requires).
  *
  * [RETAG — deliberate internal-module unit suite, not a test-only-API artifact]
- * (2026-07-08 test-invariant-atlas sweep, [P16] docs/test-invariant-atlas/verdicts/evaluator.md,
- * docs/test-suite-v2/REMOVAL-MANIFEST.md §A): `_lookupWithResolvers` is real production
+ * (2026-07-09 suite consolidation, [P16]): `_lookupWithResolvers` is real production
  * surface (`Resolver.ts`, `Capabilities.ts`, `LexicalScope.ts`, `common/capability.ts` all
  * call it — confirmed via grep), not a test-only hack. Checked the two candidate public-
  * altitude covers: `src/common/__tests__/capability.test.ts` explicitly does NOT exercise

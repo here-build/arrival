@@ -202,7 +202,7 @@ describe("scheme/lists Contract precision — STATIC-only fixes (documented, not
     expect(nativeDef("assq").in.safeParse(["anything-at-all", properList(properList(1, 2))]).success).toBe(false);
   });
 
-  // Bare-value purge EXECUTED (docs/test-invariant-atlas/verdicts/env.md, RULINGS.md R1,
+  // Bare-value purge EXECUTED (RULINGS.md R1,
   // op-helpers.ts withInputProvenance): `z.value`'s `isSchemeValue` predicate
   // (common/scheme-zod.ts) was never actually the permissive z.unknown()-alike this row's
   // prior form assumed — it is, and remains, `instanceof AValue || typeof === "function"`,
@@ -243,7 +243,7 @@ describe("scheme/lists Contract precision — STATIC-only fixes (documented, not
   // a bare fn's return is a value-layer-only term the box interpreter can't read (P1), not a
   // scalar escaping a boxed producer inside the membrane (P4, this purge's scope). It
   // retires when B4 (legacy bare-fn arm retirement) lands, not here — A4 and B4 are
-  // independent DAG tracks (docs/REWORK-DAG.md). This test itself never observed the raw
+  // independent tracks of the 2026-07-09 principle-first rework. This test itself never observed the raw
   // arm at runtime (both assertions use boxed `exact(1)` operands) — static-only, as titled.
   // INVARIANT: member/assoc accept any scheme value for obj; compare's declared return
   // type is unknown, not boolean
@@ -327,8 +327,8 @@ describe("scheme/lists Contract precision — blanket sweep: genuinely-variadic-
   });
 });
 
-// "is_pair-shadow swap byte-identical" spot-checks RETIRED (docs/test-suite-v2/
-// REMOVAL-MANIFEST.md §B, G2): a helper-equivalence impl-pin bypassing the interpreter to
+// "is_pair-shadow swap byte-identical" spot-checks RETIRED (2026-07-09 suite
+// consolidation, G2): a helper-equivalence impl-pin bypassing the interpreter to
 // prove `is_pair`/`is_nil` behave identically to `instanceof APair`/`instanceof ANil` —
 // the block's own comment already named its replacement as "the untouched existing suite
 // (cyclic-list-ops.test.ts, clone-identity.test.ts, r7rs-identity.test.ts)", which covers

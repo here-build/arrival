@@ -272,7 +272,7 @@ describe("lineage spike — quote / when / unless / letrec(*) classify correctly
 
 describe("lineage spike — a NAMED let is recursive ⇒ a cyclic binder, not opaque (Q3)", () => {
   it("(let loop ((a v1)) a) → binder{cycles:true} over its RHSs + body (the named-let branch)", async () => {
-    // Pre-Q3 this classified as `opaque`; PROVENANCE-PLAN.md Q3 / docs/PROVENANCE.md
+    // Pre-Q3 this classified as `opaque`; docs/PROVENANCE.md
     // §2's `loop` role reclassifies named-let as a recognized cyclic-binder STRUCTURE,
     // not a black box — see `laws/provenance-roles.law.test.ts`'s V2 row.
     const n = await skeleton(`(let loop ((a v1)) a)`);

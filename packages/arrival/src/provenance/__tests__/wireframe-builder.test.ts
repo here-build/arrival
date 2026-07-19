@@ -1,5 +1,5 @@
 /**
- * Q8a — WIREFRAME BUILDER CORE rows (PROVENANCE-PLAN.md wave 5; docs/PROVENANCE.md
+ * Q8a — WIREFRAME BUILDER CORE rows (docs/PROVENANCE.md
  * §1 "Model", §2 lowering, §3 I5). Unit rows for the builder itself; the LAW rows
  * (wire-locality at emission, I5 exterior collapse) live in
  * `src/__tests__/provenance/wireframe-agreement.law.test.ts` and flip with this

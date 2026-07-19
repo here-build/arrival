@@ -87,8 +87,8 @@ describe("lineage checkpoint — runtime stamping derives the SAME cone (correct
 });
 
 describe("lineage checkpoint — the static skeleton is constant in N (eager retained set is O(N) for a MINTED container)", () => {
-  // HONEST SCOPE (audit C1), UPDATED post-C4 (docs/test-suite-v2/RULINGS.md R2,
-  // docs/REWORK-DAG.md C1/C2/C4): `length` no longer deep-unions every element it
+  // HONEST SCOPE (audit C1), UPDATED post-C4 (docs/RULINGS.md R2 —
+  // the R2 container structural-facts batch): `length` no longer deep-unions every element it
   // touched — it reads the CONTAINER's own flat grouping-fact stamp. For a MINTED
   // container (built via the real `list` verb, env/r7rs/lists.ts), that stamp is
   // STILL the union of all N args' own provenance (the naive R2 strategy: named

@@ -1,6 +1,6 @@
 /**
  * tiering-egress-gate.test.ts — Q14's egress-proxy integration proof
- * (docs/PROVENANCE-PLAN.md Q14's NOTE): `egressContainerProxy`'s optional `gate`
+ * (docs/PROVENANCE.md §5 payload tiering): `egressContainerProxy`'s optional `gate`
  * param, wired against `tierGateFromSnapshot`. Lives under `store/__tests__` (not
  * `src/values/__tests__`, which doesn't exist and isn't whitelisted by
  * `vitest.config.ts`) — this file is the ONE place both modules' tests meet, since

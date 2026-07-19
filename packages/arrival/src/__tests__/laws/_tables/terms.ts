@@ -1,5 +1,5 @@
 /**
- * The tagless-term table — F1's row axis (docs/test-suite-v2/DESIGN.md).
+ * The tagless-term table — F1's row axis (docs/test-suite-architecture.md F1).
  *
  * Every term declares its BOX DISCIPLINE up front: that declaration IS the law the
  * term×carrier grid enforces (P0/P8 — one algebra, every carrier). A term whose
@@ -15,8 +15,8 @@
  *  - "projecting": the result IS one of the input's elements, box intact (car,
  *    cdr-of-dotted, vector-ref, assoc hit).
  *
- * containerBox (R2 RULED, docs/test-suite-v2/RULINGS.md; C1/C2/C4 per
- * docs/REWORK-DAG.md): what happens to a container's own TWO structural facts —
+ * containerBox (R2 RULED, docs/RULINGS.md — the R2 container
+ * structural-facts batch): what happens to a container's own TWO structural facts —
  * the GROUPING fact (its top-level provenance stamp, the R2 "collection-level
  * grouping fact") and, for sequence-shaped carriers, the LENGTH fact (postponed
  * for dicts: keyset) — with three explicit, NAMED verbs (naive-but-explicit: named
@@ -43,7 +43,7 @@
  * Declared ONCE per term (not per carrier): P8 requires every SUPPORTED carrier to
  * agree, so a term whose containerBox "depends on the carrier" is exactly the bug
  * class R2 closed (the old Pair-sort-drops/Vector-sort-preserves divergence,
- * VERDICTS.md/docs/test-invariant-atlas/verdicts/values.md) — the law-grid asserts
+ * 2026-07-09 suite consolidation) — the law-grid asserts
  * this agreement directly (term-carrier.law.test.ts's "container box" cell,
  * conservation.law.test.ts's "container-box rows" §3).
  */
@@ -74,7 +74,7 @@ export const TERMS: readonly TermRow[] = [
   // `bytevector-append` completes the verb list — ABytevector genuinely implements this term
   // (ABytevector.ts's `arrival/tagless-final/concat`) via its own dedicated native binding,
   // same shape as string-append/vector-append; the table was missing exactly the kind of
-  // absent-cell gap DESIGN.md warns about (the DR4 divergence hid in an absent cell too).
+  // absent-cell gap docs/test-suite-architecture.md F1 warns about (the DR4 divergence hid in an absent cell too).
   // containerBox: PROVENANCED — concat is length-changing; `concatPair` (APair.ts) mints the
   // rebuilt head's stamp as the deep-collapsed union of BOTH operands (a stronger, already-
   // correct realization of "union the container stamp with the decision lineage" — the

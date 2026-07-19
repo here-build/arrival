@@ -1,5 +1,5 @@
 /**
- * Q8c — WIREFRAME STRUCT-FACT WIRES rows (PROVENANCE-PLAN.md wave 7; docs/PROVENANCE.md
+ * Q8c — WIREFRAME STRUCT-FACT WIRES rows (docs/PROVENANCE.md
  * §2 R2 + A5, §6 demand lattice). Unit rows for `builder.ts`'s `factTagOf` (the fact TAG
  * on a value wire — A5: "ONE edge species, a tag not a second kind") and `loops.ts`'s
  * `reachableNodesForDemand` (the count-demand router). Mirrors `wireframe-builder.test.ts`'s

@@ -1,6 +1,6 @@
 /**
  * fold.test.ts — Q13's own unit suite for `store/fold.ts` (docs/PROVENANCE.md §5 C1;
- * docs/PROVENANCE-PLAN.md Q13). Direct, store-fake-backed exercise of the pure fold:
+ * §7 stream fold + monotonicity). Direct, store-fake-backed exercise of the pure fold:
  * shape correctness per record kind, purity (same input, same output, twice), and
  * `nextTrackOrdinal`'s collision-avoidance scoping. The LAW-FILE-HOMED assertions
  * (fold-as-recovery through real region-scope.ts machinery, monotonicity under

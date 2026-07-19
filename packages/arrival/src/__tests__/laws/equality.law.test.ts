@@ -11,9 +11,9 @@ import { ACharacter } from "../../values/primitives/ACharacter.js";
 
 // LAW — the equality contract: representation-blindness (R7RS §6.1) (P0/P8).
 //
-// Survivor of `equality-representation.test.ts` (docs/test-suite-v2/REMOVAL-MANIFEST.md §A):
-// the manifest originally scheduled these rows `[INVERTS: bare-value-purge/P4]`, expected to
-// flip to strict-door throws once the purge landed. A4 (docs/REWORK-DAG.md, landed) settled
+// Survivor of `equality-representation.test.ts` (retired in the 2026-07-09 suite
+// consolidation): the consolidation ledger originally scheduled these rows `[INVERTS: bare-value-purge/P4]`, expected to
+// flip to strict-door throws once the purge landed. The A4 bare-value purge (landed 2026-07-09) settled
 // the mechanism question instead — see each row's comment below for the per-type verdict —
 // so this file relocates as ONE plain law table, no more `[INVERTS]` framing.
 //
@@ -34,8 +34,8 @@ const eq = (a: unknown, b: unknown): boolean => structuralEqual(a, b);
 describe("equality contract — boxed ≡ unboxed (representation-blind)", () => {
   // STRINGS — the confirmed closure.scm bug. A boxed SchemeString MUST equal a content-identical
   // plain JS string, in both argument orders, while differing content stays unequal.
-  // Bare-value purge (A4/P4) VERDICT — mechanism, not aspiration (docs/REWORK-DAG.md A4,
-  // RULINGS.md R1): the purge (op-helpers.ts withInputProvenance always boxes now; ANil's
+  // Bare-value purge (A4/P4) VERDICT — mechanism, not aspiration (the A4 bare-value
+  // purge, landed 2026-07-09; RULINGS.md R1): the purge (op-helpers.ts withInputProvenance always boxes now; ANil's
   // length boxes; AmbientRuntime.set boxes every stored scalar) closes every INTERNAL producer
   // of a raw string reaching scheme execution — a chain-plane op can no longer hand `equal?`
   // an unboxed operand. But that does NOT make this row invert to a Setoid-level throw: this

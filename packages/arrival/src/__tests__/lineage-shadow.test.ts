@@ -29,7 +29,7 @@
  * run under the flag — `exec` would throw on them, which is the correct shadow
  * signal that they lie outside the provable set (they are covered as eager goldens
  * in golden-prov-*, and as the v0.1/v0.2 boundary in the design doc). `append` MOVED
- * out of this divergence set (conservation repair, docs/test-suite-v2/RULINGS.md
+ * out of this divergence set (conservation repair, docs/RULINGS.md
  * R2): the rebuilt spine's head now carries the deep-collapsed union of both
  * operands' elements, matching the static classifier's pure-op union exactly — see
  * the agreement test below, not the boundary describe. `length`-over-`map` ALSO
@@ -263,7 +263,7 @@ describe("SHADOW — bare fan result spine == eager golden ([] both paths)", () 
 describe("SHADOW — length-over-map fan: A13 CLOSED, static and eager now AGREE", () => {
   // MOVED here from the BOUNDARY describe below (was: "fan cardinality
   // over-attribution... static {} (spine), eager {100,101,102}", asserted to THROW).
-  // C4's interim fix (docs/test-suite-v2/RULINGS.md R2, docs/REWORK-DAG.md C1/C2/C4):
+  // C4's interim fix (docs/RULINGS.md R2, the R2 container structural-facts batch):
   // `length` now reads the container's own flat grouping-fact stamp instead of
   // deep-unioning every mapped element — for this UNMINTED source (`xs` built via a
   // plain `APair.fromArray`, no Rosetta-IN crossing), that stamp is EMPTY, matching

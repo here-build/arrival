@@ -1,4 +1,4 @@
-// F6 — Doors (docs/test-suite-v2/DESIGN.md §F6, P5 errors-as-doors). DECLARATION-DRIVEN:
+// F6 — Doors (docs/test-suite-architecture.md F6, P5 errors-as-doors). DECLARATION-DRIVEN:
 // every row below comes from the BASE_PACKS capability declarations themselves — the
 // `symbol.notImplemented` doors each pack authors (env/r7rs/host.ts, env/srfi/srfi-stubs.ts,
 // env/polyglot-stubs.ts, srfi-1's `fold`, …). Nothing here is hand-enumerated, and there is
@@ -7,7 +7,7 @@
 // about well-known-but-absent names is capability DATA resolving through the ordinary
 // chain, not a curated table inside the error path).
 //
-// Two laws, one subject (the declared doors), sharing this file per DESIGN.md's "law
+// Two laws, one subject (the declared doors), sharing this file per docs/test-suite-architecture.md's "law
 // files … contain ONE law (possibly many rows)" — the one law is "a declared door
 // behaves as declared," tested from two angles:
 //   1. every declared door FIRES AT APPLY: calling it throws the PurityError teaching

@@ -33,7 +33,7 @@ import { freshEnv } from "./_fresh-env.js";
 const env = await freshEnv();
 
 /** Coerce a Scheme result to a JS primitive — handles SchemeBool wrapper and raw JS booleans. */
-// INVERTED (RULINGS.md R1, docs/test-invariant-atlas/verdicts/evaluator.md): exec's
+// INVERTED (RULINGS.md R1): exec's
 // uniform plain-JS exit landed — `evalScheme` below always returns a plain boolean
 // now. Collapsed to that one asserted shape (was: tolerate boolean-as-raw AND
 // boxed-with-.value/valueOf simultaneously — the "accepts boxed or raw" contract P4
@@ -83,8 +83,8 @@ describe("r7rs identity — passing invariants (regression guards)", () => {
   });
 });
 
-// [STALE-LABEL] (2026-07-08 test-invariant-atlas sweep, [P15]
-// docs/test-invariant-atlas/verdicts/evaluator.md): this describe title + the per-test
+// [STALE-LABEL] (2026-07-08 invariant-verdict sweep, [P15]):
+// this describe title + the per-test
 // "Predicted failure value" comments claimed `it.fails` semantics, but every test here is
 // a plain `it(...)`. Ran the suite — all pass today, so the described bugs are already
 // FIXED. Relabeled to match r7rs-numbers.test.ts's own honest "FIXED at ..." convention.

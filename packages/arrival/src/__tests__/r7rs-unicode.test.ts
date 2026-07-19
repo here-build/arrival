@@ -30,7 +30,7 @@ import { freshEnv } from "./_fresh-env.js";
 const env = await freshEnv();
 
 /** Coerce a Scheme numeric result to a JS number (handles SchemeExact). */
-// INVERTED (RULINGS.md R1, docs/test-invariant-atlas/verdicts/evaluator.md): exec's
+// INVERTED (RULINGS.md R1): exec's
 // uniform plain-JS exit landed — `evalScheme` below always returns a plain
 // number/bigint now. Collapsed to that one asserted shape (was: tolerate
 // boxed-with-valueOf AND raw simultaneously — the "accepts boxed or raw" contract
@@ -71,8 +71,8 @@ describe("r7rs unicode — passing invariants (regression guards)", () => {
   });
 });
 
-// [STALE-LABEL] (2026-07-08 test-invariant-atlas sweep, [P15]
-// docs/test-invariant-atlas/verdicts/evaluator.md): this describe title + the per-test
+// [STALE-LABEL] (2026-07-08 invariant-verdict sweep, [P15]):
+// this describe title + the per-test
 // "Predicted failure value" comments claimed `it.fails` semantics, but every test here is
 // a plain `it(...)` — ran the suite, all pass today, so the bugs these describe are
 // already FIXED. Relabeled to match r7rs-numbers.test.ts's own honest "FIXED at ..."

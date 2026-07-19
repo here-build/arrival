@@ -1,4 +1,4 @@
-// Chibi harness v2 — registries.ts (design: docs/test-suite-v2/chibi-harness-v2.md §4, §11.2).
+// Chibi harness v2 — registries.ts (docs/test-suite-architecture.md F4).
 //
 // Typed rule tables replacing v1's substring/regex matching over stringified test names
 // (`chibi-r7rs.spec.ts:80-338`). A rule matches a `TestStep` by:
@@ -19,7 +19,7 @@
 // a `gate` — either the plan/issue that closes it, or an honest "permanent" note for the two
 // rows that are IEEE-754 floor effects, not gaps.
 //
-// Transcription notes (deviations from v1, each deliberate — see the design doc §11.2):
+// Transcription notes (deviations from v1, each deliberate):
 //   - v1's `(real? -2.5)` EXPECTED_FAILURE no longer matches: the corpus's real? tests now use
 //     genuine complex literals (`-2.5+0i`, `-2.5+0.0i`), which door at READ time (arrival omits
 //     the complex tower) and become `unreadable` steps — never reaching a TestStep at all.

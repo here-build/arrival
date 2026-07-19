@@ -1,7 +1,7 @@
 /**
  * LAW — track containment (I1), track separation (I3), R2 demand-monotonicity
- * (docs/PROVENANCE.md §3 "Tracks" + §6 "Queries", §7 law table; docs/PROVENANCE-PLAN.md
- * Q5's stub-file mapping table).
+ * (docs/PROVENANCE.md §3 "Tracks" + §6 "Queries", §7 law table — one of the stub
+ * files the law table's "stubs land before machinery" discipline maps).
  *
  * Per the grounded-audit-corrected mapping, track-containment is TWO SEPARATE describe
  * blocks (not one law flipping at one gate) because its two arms genuinely flip at

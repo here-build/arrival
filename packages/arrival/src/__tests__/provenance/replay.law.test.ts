@@ -1,7 +1,7 @@
 /**
  * LAW — wire-γ, replay-nondeterminism, pure-mux derivation, effect-track
- * replay-between-records (docs/PROVENANCE.md §4 "Regions and replay", §7 law table;
- * docs/PROVENANCE-PLAN.md Q16). ALL FOUR FLIPPED at Q16.
+ * replay-between-records (docs/PROVENANCE.md §4 "Regions and replay", §7 law table).
+ * ALL FOUR FLIPPED at Q16.
  *
  * R1 FRAMING (§4 CHOSEN, quoted — not a separate §7 row, but the ruling every law below
  * depends on): "replay from frozen port payloads is stable. Replay NEVER re-invokes a

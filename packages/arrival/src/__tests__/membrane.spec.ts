@@ -243,8 +243,8 @@ describe("Wrapper Layer", () => {
     });
 
     // Was a green pin of the apostrophe-prefixed-string exit shape with a stale
-    // "todo symbols gets transformed into opaque symbol" comment (docs/test-suite-v2/
-    // REMOVAL-MANIFEST.md §B) — the SAME still-undecided design question
+    // "todo symbols gets transformed into opaque symbol" comment (2026-07-09 suite
+    // consolidation) — the SAME still-undecided design question
     // membrane/crossing.law.test.ts's "registered symbol (Symbol.for)" exit cell already
     // stages as `it.todo` (ASymbol's opaque-exit mapping, two-tier-exec-api.md §9,
     // deferred separately from R1). Promoted to `it.todo` here too rather than pinning

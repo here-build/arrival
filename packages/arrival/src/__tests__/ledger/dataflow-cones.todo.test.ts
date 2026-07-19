@@ -1,18 +1,18 @@
 /**
  * LEDGER — staged spec: count-cone minimality vs. provenance-everything (R5).
  *
- * Survivor of `dataflow-thesis-probes.test.ts` (docs/test-suite-v2/REMOVAL-MANIFEST.md
- * §A): those FALSIFICATION PROBES pinned the current interpreter's behavior against the
+ * Survivor of `dataflow-thesis-probes.test.ts` (retired in the 2026-07-09 suite
+ * consolidation): those FALSIFICATION PROBES pinned the current interpreter's behavior against the
  * confluent-dataflow-IR design note while the underlying design question (R5) was still
- * undecided. R5 is now RULED (docs/test-suite-v2/RULINGS.md): both cone queries are
+ * undecided. R5 is now RULED (docs/RULINGS.md): both cone queries are
  * required ("why is this an input" / "what changes if I adjust this output"), and the
  * target architecture is a generalized execution-plan wireframe — the AST statically
  * evaluated into a base wireframe with static wires collapsed into single provenance
  * edges, real runtime provenance wiring into the abstract flow.
  *
- * A probe of an undecided question is a staged spec, not a green test (DESIGN.md's own
+ * A probe of an undecided question is a staged spec, not a green test (docs/test-suite-architecture.md's own
  * framing) — now that the question IS decided, the probes' job is done; what remains is
- * an IMPLEMENTATION gate (the wireframe, C3 in docs/REWORK-DAG.md), not a design gate.
+ * an IMPLEMENTATION gate (the wireframe — docs/PROVENANCE.md §1), not a design gate.
  * These `it.todo` stubs mark that: designed, not yet buildable.
  *
  * The two probed questions, for when C3 lands:

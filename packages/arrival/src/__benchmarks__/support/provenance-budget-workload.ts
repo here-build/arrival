@@ -1,6 +1,6 @@
 /**
- * support/provenance-budget-workload.ts — Q19 (docs/PROVENANCE-PLAN.md; the R3 HARD
- * GATE): a synthetic driver reproducing docs/PROVENANCE.md Appendix A's reference
+ * support/provenance-budget-workload.ts — Q19 (docs/PROVENANCE.md §5 storage-bound
+ * hard gate — the R3 HARD GATE): a synthetic driver reproducing docs/PROVENANCE.md Appendix A's reference
  * workload SHAPE ("~1000 SLOC agent-shaped program — 30 rosetta calls, 5 fans over
  * 100/500/1k/5k/10k elements (Σ≈16.6k), 3 loops to 10⁴, one nested map (10k×10)").
  *

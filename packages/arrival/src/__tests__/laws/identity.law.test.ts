@@ -1,9 +1,10 @@
 /**
  * LAW — every spine/guard treats a provenance-bearing Nil clone as nil (P0/P8).
  *
- * Survivor of `clone-identity.test.ts` (docs/test-suite-v2/REMOVAL-MANIFEST.md §A). The
- * war-story ledger (the original 14-site audit narrative) already lives at
- * `docs/archaeology/nil-clone-sweep.md`; this file carries the LIVE regression coverage
+ * Survivor of `clone-identity.test.ts` (retired in the 2026-07-09 suite
+ * consolidation). The
+ * war-story ledger (the original 14-site audit narrative) has moved to private docs;
+ * this file carries the LIVE regression coverage
  * forward as one law, per-site, rather than a standalone top-level test file.
  *
  * Background — what the bug is and why it matters

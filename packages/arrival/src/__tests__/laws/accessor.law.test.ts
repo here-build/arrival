@@ -1,10 +1,11 @@
 /**
  * LAW — keyword-as-accessor: `(:key obj)` extracts `obj[key]` (P0/P8).
  *
- * Survivor of `keyword-syntax.test.ts` (docs/test-suite-v2/REMOVAL-MANIFEST.md §A):
+ * Survivor of `keyword-syntax.test.ts` (retired in the 2026-07-09 suite
+ * consolidation):
  * that file's three vacuous exploratory blocks were deleted by the 2026-07-08
- * test-invariant-atlas sweep (G1); the remaining real cases move here as ONE law with
- * a small table, per DESIGN.md's F1 convention (one invariant × its subjects).
+ * invariant-verdict sweep (G1); the remaining real cases move here as ONE law with
+ * a small table, per docs/test-suite-architecture.md's F1 convention (one invariant × its subjects).
  *
  * THE LAW: a bare `:key` symbol, applied to a single argument, is a getter — it reads
  * `key` off the argument the same way `(dict-ref obj 'key)` or a JS `obj.key` would.
@@ -84,7 +85,7 @@ describe("keyword-as-getter composes: it's ordinary callable data, so HOFs take 
 // resolution (`|24|`), a reader/binding case adjacent to keyword syntax (both are
 // identifier-namespace edge cases) but NOT itself an accessor law — kept here so the
 // coverage isn't lost in the keyword-syntax.test.ts retirement (no closer-fitting home
-// exists yet; see docs/test-suite-v2/REMOVAL-MANIFEST.md §A keyword-syntax.test.ts row).
+// exists yet; see the keyword-syntax.test.ts retirement in the 2026-07-09 suite consolidation).
 describe("adjacent reader case: a pipe-quoted symbol resolves as an ordinary variable", () => {
   it("(list |24|) — |24| is a bound identifier, not a numeric literal", async () => {
     const result = await execOneBoxed(

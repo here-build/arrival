@@ -1,10 +1,10 @@
 /**
  * exec-seam.bench.test.ts — the survivor of `evaluator-benchmark.spec.ts`
- * (docs/test-suite-v2/REMOVAL-MANIFEST.md §A).
+ * (retired in the 2026-07-09 suite consolidation).
  *
  * The old file measured a "LIPS (promise-based)" side against a "Generator (flat
  * trampoline)" side and reported a "speedup" between them. That comparison was fiction:
- * `docs/test-invariant-atlas/verdicts/common-type-layer.md` traced both sides to the SAME
+ * both sides trace to the SAME
  * generator evaluator (`eval/evaluator.ts`'s `exec`/`run`) — the "LIPS" label survived only
  * because `eval/generator-exec.ts`'s public `exec()` re-exports it, a naming fossil from
  * before the `lips` handle was retired (0849de566b). What the old numbers actually measured

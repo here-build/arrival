@@ -1,5 +1,5 @@
 /**
- * Q16 (PROVENANCE-PLAN.md; docs/PROVENANCE.md §4 + §7) — the RECORD-THEN-REPLAY
+ * Q16 (docs/PROVENANCE.md §4 + §7) — the RECORD-THEN-REPLAY
  * harness the replay laws (`replay.law.test.ts`, `track-cone.law.test.ts`'s Q16 rows)
  * share. Where `w1-harness.ts` (Q9) compares two STATIC cones, this harness produces
  * the RETROSPECTIVE side a replay needs: a real run, with emission ON, whose membrane

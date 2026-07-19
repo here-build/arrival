@@ -1,6 +1,6 @@
 /**
  * LAW — the offload protocol (docs/PROVENANCE.md §4 CHOSEN "γ is offloadable" (C5) +
- * "semantics-epoch pinning" (C6); docs/PROVENANCE-PLAN.md Q18 "offload protocol").
+ * "semantics-epoch pinning" (C6) — Q18's offload protocol).
  * FLIPS at Q18. Gate: "standing + epoch-mismatch refusal rows + sampled-verification
  * rows."
  *

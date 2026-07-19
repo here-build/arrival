@@ -75,8 +75,8 @@ describe("ASSUMPTION — let is transparent (the graph is the object, not syntax
 });
 
 // A13/A18b (the "(length (map identity xs)) over-attributes through map" duplicate green
-// pins) DELETED here (2026-07-08 test-invariant-atlas sweep,
-// docs/test-suite-v2/REMOVAL-MANIFEST.md §B): both were verbatim duplicates of
+// pins) DELETED here (2026-07-09 suite consolidation):
+// both were verbatim duplicates of
 // golden-prov-fan.test.ts's own A13 leak, pinned green a second/third time in a
 // different file with no `it.fails`. The ONE surviving assertion of this invariant is
 // golden-prov-fan.test.ts's `it.fails` row (flipped in the same sweep) plus the canonical

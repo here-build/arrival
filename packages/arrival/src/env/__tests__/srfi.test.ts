@@ -82,8 +82,8 @@ describe("@inhuman.tools/arrival/srfi", () => {
 
   // INVARIANT: allSrfi exposes the whole set of 13 capabilities, including
   // srfi-1/13/95/235 (pins implementation, not behavior)
-  // [STALE-LABEL] fix (2026-07-08 test-invariant-atlas sweep, [P16]
-  // docs/test-invariant-atlas/verdicts/env.md): this count pin used to carry no rationale,
+  // [STALE-LABEL] fix (2026-07-08 invariant-verdict sweep, [P16]):
+  // this count pin used to carry no rationale,
   // unlike every sibling pack-count pin in this scope (11/22/23/32/81 all carry a "the
   // scope this fix/review must cover" comment). Added the same drift-alarm rationale — the
   // exact count is here to force a reviewer to touch this test when a SRFI pack is

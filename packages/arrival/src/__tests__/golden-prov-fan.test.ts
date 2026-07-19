@@ -71,8 +71,8 @@ const triple = () => APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 10
 // ============================================================================
 
 describe("GOLDEN (G2 oracle) — pure-map length over a Pair source: the A13 leak is CLOSED", () => {
-  // FIXED (C4 interim fix, docs/test-suite-v2/RULINGS.md R2 + execution-plan-wireframe.md
-  // §7, batch C1/C2/C4 per docs/REWORK-DAG.md): `length` now reads the CONTAINER's own
+  // FIXED (C4 interim fix, docs/RULINGS.md R2 + execution-plan-wireframe.md
+  // §7, the R2 container structural-facts batch): `length` now reads the CONTAINER's own
   // flat grouping/length-fact stamp instead of deep-unioning every element it touched
   // (values/primitives/APair.ts, AVector.ts, AJSArray.ts's `arrival/tagless-final/length`).
   // `map` is length-PRESERVING so it PROXIES the container's own stamp through unchanged

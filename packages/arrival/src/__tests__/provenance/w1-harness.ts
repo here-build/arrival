@@ -1,5 +1,5 @@
 /**
- * Q9 (PROVENANCE-PLAN.md; docs/PROVENANCE.md §7 W1 agreement) — the AGREEMENT
+ * Q9 (docs/PROVENANCE.md §7 W1 agreement) — the AGREEMENT
  * HARNESS shared by `wireframe-agreement.law.test.ts`'s W1 describe block and its
  * corpus (`w1-corpus.ts`). Two independent halves:
  *

@@ -1,6 +1,6 @@
 /**
  * emission-hooks.test.ts — Q11a's INTEGRATION exercise of the evaluator-side hook
- * (docs/PROVENANCE-PLAN.md Q11a; `eval/provenance-hooks.ts`, `eval/evaluator.ts`'s
+ * (docs/PROVENANCE.md §7 W3 port completeness; `eval/provenance-hooks.ts`, `eval/evaluator.ts`'s
  * generic apply site). Where `provenance/store/__tests__/emit.test.ts` drives the
  * emission core directly, this file drives it through a REAL interpreted program —
  * a `defineRosetta`-registered source, run under a tap (`EvalTrace`, exactly the

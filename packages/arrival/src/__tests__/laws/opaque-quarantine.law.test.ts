@@ -1,9 +1,9 @@
 /**
  * LAW (staged) — V3 opaque quarantine drift alarm (docs/PROVENANCE.md §2: "`opaque`
  * as a citizen — it is a quarantined escape hatch; corpus count is a shrink-only
- * drift alarm baselined AFTER W0"; docs/PROVENANCE-PLAN.md Q1: "opaque quarantine
- * drift alarm — MACHINERY only; the baseline NUMBER is a post-Q6 artifact, never
- * pinned here").
+ * drift alarm baselined AFTER W0"; Q1's scoping (docs/PROVENANCE.md §2 declaration
+ * vocabulary): MACHINERY only, the baseline NUMBER is a post-Q6 artifact, never
+ * pinned here).
  *
  * This file lands the MACHINERY Q1 owes: a counted walk over a `classify()` corpus,
  * exposed as a testable function (`countOpaqueNodes`, `values/lineage.ts`), plus this
@@ -13,7 +13,7 @@
  * before Q6 lands would be stale on arrival.
  *
  * PRE-LANDING NOTE for future Sonnets: this is a narrow slice of what
- * `PROVENANCE-PLAN.md`'s Q5 will build (`src/__tests__/laws/provenance-roles.law.test.ts`,
+ * Q5 (docs/PROVENANCE.md §7 law table) will build (`src/__tests__/laws/provenance-roles.law.test.ts`,
  * housing the full V1/V2/V3/V4 role-vocabulary rows). Q5 has NOT landed — this file
  * covers only V3's counted-walk machinery, scoped to Q1. Q5 may fold this row into
  * its stub file directly rather than duplicating it; do not read this file's
@@ -27,7 +27,7 @@ import { classify, countOpaqueNodes, type Classifier } from "../../values/lineag
 
 // Mirrors lineage-spike.test.ts's spike classifier — a minimal, deterministic
 // Classifier sufficient to exercise the corpus below (not the real env-backed one).
-// Q3 (PROVENANCE-PLAN.md) landed declaration-driven classification: `roleOf` is the
+// Q3 landed declaration-driven classification: `roleOf` is the
 // one read `classify()` consults now (docs/PROVENANCE.md §2's lowering table).
 const C: Classifier = {
   roleOf: (op) =>

@@ -1,5 +1,5 @@
 /**
- * Q9 (PROVENANCE-PLAN.md; docs/PROVENANCE.md §7 "generator corpus classes") — the
+ * Q9 (docs/PROVENANCE.md §7 "generator corpus classes") — the
  * EXTENDED GENERATOR CORPUS for W1 agreement. Hand-curated rows (one or more per
  * generator class the plan names, plus the task's own additions — loops, field
  * chains, prelude helpers), each hand-verified empirically against BOTH the real

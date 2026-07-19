@@ -1,10 +1,10 @@
-// F6 — Doors (docs/test-suite-v2/DESIGN.md §F6, P5 errors-as-doors). Registry-driven
+// F6 — Doors (docs/test-suite-architecture.md F6, P5 errors-as-doors). Registry-driven
 // form of the purity pass (docs/plan-2026-06-11-purity-pass.md): arrival is pure
 // dataflow — dynamics (call/cc, dynamic-wind, make-parameter, delay/force) and
 // mutators (set!, set-car!, vector-set!, …) are omitted BY DESIGN, each replaced
 // with a teaching `PurityError` naming the reason and (where honest) an
 // alternative. This file ABSORBS `../purity-doors.test.ts` into one `it.each`
-// table (that file is kept, not deleted — VERDICTS.md's migration sweep retires
+// table (that file is kept, not deleted — the suite consolidation retires
 // v1 survivors only once their v2 cell is green) and adds the one row that file
 // was missing: `set!` itself (r7rs/binding.ts's §4.1.6 door, verified via grep —
 // see `.claude` archaeology; no hardcoded "set!" special form exists anywhere in

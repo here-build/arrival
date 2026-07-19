@@ -25,9 +25,8 @@ import type { ACharacter } from "../../../values/primitives/ACharacter.js";
 import type { AString } from "../../../values/primitives/AString.js";
 
 describe("scheme/strings Contract precision — array-element tightening (string / comparisons / string-append / concat)", () => {
-  // OLD-shape row DELETED (2026-07-08 test-invariant-atlas sweep, [P16]
-  // docs/test-invariant-atlas/verdicts/env.md, docs/test-suite-v2/REMOVAL-MANIFEST.md
-  // §B "env test-d museum rows") — decoded a retired synthetic schema, no reachable
+  // OLD-shape row DELETED (2026-07-09 suite consolidation, [P16]
+  // "env test-d museum rows") — decoded a retired synthetic schema, no reachable
   // production path. NEW-side rows below are the load-bearing proof.
   // INVARIANT: string's element schema decodes to ACharacter[], not unknown[] (the OLD
   // flat-unknown[] baseline row was already retired — see the [P16] removal note above)

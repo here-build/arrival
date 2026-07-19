@@ -1,5 +1,5 @@
 // Chibi harness v2 — harness-capability.ts
-// (design: docs/test-suite-v2/chibi-harness-v2.md §5, §8, §9).
+// (docs/test-suite-architecture.md F4).
 //
 // A real `EnvCapability`, same shape v1's chibi-harness.ts uses (dogfooding the production
 // env-assembly model) — but the comparison moves ENTIRELY into scheme (P4/P9/P7,

@@ -1,6 +1,6 @@
 /**
  * aggregate.test.ts — Q12's own unit suite for `store/aggregate.ts`
- * (docs/PROVENANCE.md §5 A6 + round-3 m4; docs/PROVENANCE-PLAN.md Q12). Direct
+ * (docs/PROVENANCE.md §5 A6 + round-3 m4). Direct
  * exercise of `foldRuns`/`unfoldRun` (the pure RLE core) and
  * `AggregatingProvenanceStore` (the write-side hook) against the store fakes —
  * this file is what flips `src/__tests__/provenance/aggregation.law.test.ts`'s

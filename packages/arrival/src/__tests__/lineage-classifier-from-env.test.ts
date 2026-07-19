@@ -2,7 +2,7 @@
  * `classifierFromEnv` reads the ONE declared `provenance` role stamped onto each
  * bound callable (`.provenanceRole` — `common/capability.ts`, resolved from
  * `Contract.provenance` at bake time, `common/symbols/_bake.ts`). Q3
- * (PROVENANCE-PLAN.md) retired the caller-supplied `sources: ReadonlySet<string>`
+ * (docs/PROVENANCE.md §2) retired the caller-supplied `sources: ReadonlySet<string>`
  * seam this test used to exercise via `env.defineRosetta` + an explicit source
  * list — that heuristic no longer exists (docs/PROVENANCE.md §2 EXCLUDED). These
  * cases bind plain marker values directly (`.provenanceRole` stamped, no real

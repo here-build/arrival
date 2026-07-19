@@ -1,8 +1,8 @@
 /**
  * silent-region.test.ts — Q15's standing rows (docs/PROVENANCE.md §4 CHOSEN, round 2
- * A4; docs/PROVENANCE-PLAN.md Q15: "silent-region mode on B3 (doors active, emission
- * off)... Gate: standing + silent-region rows (a replay emits ZERO records —
- * asserted)").
+ * A4 — the silent region: doors active, emission
+ * off; gate: standing + silent-region rows (a replay emits ZERO records —
+ * asserted)).
  *
  * Three groups:
  *   A. `withSilentRegion`/`isSilentRegion` (`values/primitives/region-scope.ts`) —

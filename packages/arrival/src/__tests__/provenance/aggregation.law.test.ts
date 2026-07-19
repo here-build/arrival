@@ -1,7 +1,7 @@
 /**
  * LAW — Q12 aggregation (docs/PROVENANCE.md §5, round 2 A6's applicability table +
- * round 3 m4's path-scoped RLE; docs/PROVENANCE-PLAN.md Q12: "Gate: standing +
- * aggregation rows (pure loop = O(1)+count observed)"). This file is the LAW-FILE-
+ * round 3 m4's path-scoped RLE; Q12's gate: standing +
+ * aggregation rows (pure loop = O(1)+count observed)). This file is the LAW-FILE-
  * HOMED assertion of `store/aggregate.ts`'s properties — the SAME grain
  * `track-stream.law.test.ts`'s W3 block uses for Q11a/Q11b (direct, store-fake-
  * backed exercise, not through `region-scope.ts`'s real deciding-WHEN, which is a
@@ -36,7 +36,7 @@ function idAt(ordinal: number): RecordId {
   return { templateHash: TEMPLATE, regionEpoch: EPOCH, ordinalPath: appendOrdinal(PARENT, ordinal) };
 }
 
-describe("Q12 aggregation (§5 A6, round-3 m4; PROVENANCE-PLAN.md Q12)", () => {
+describe("Q12 aggregation (docs/PROVENANCE.md §5 A6, round-3 m4)", () => {
   // @ledger: Q12
   it(
     "pure loop = O(1)+count observed: a stable-wiring loop of n iterations lands ONE " +

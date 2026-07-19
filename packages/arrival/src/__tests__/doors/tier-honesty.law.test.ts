@@ -1,14 +1,14 @@
 /**
- * LAW — tier honesty (docs/PROVENANCE.md §5 A1 "payload tiering", §7 law table;
- * docs/PROVENANCE-PLAN.md Q5's stub-file mapping table). FULLY GREEN at Q17: the
+ * LAW — tier honesty (docs/PROVENANCE.md §5 A1 "payload tiering", §7 law table —
+ * Q5's stub-file mapping). FULLY GREEN at Q17: the
  * four rows below that were `it.todo` (@ledger: Q17) now compose Q14's payload
  * envelope (`store/tiering.ts`'s `recorded`/`stub` arms) with Q17's replay tiers
  * (`replay-memo.ts`'s `replayed`/`replayed-cached` arms) via `answerQuery` —
  * exactly the "Q17 SUPERSEDES a recorded answer with replayed/replayed-cached"
  * composition `store/tiering.ts`'s own header names.
  *
- * pure-mux derivation deliberately does NOT live here — PROVENANCE-PLAN.md's Q5
- * mapping table homes it in `provenance/replay.law.test.ts` (it flips at Q16, with
+ * pure-mux derivation deliberately does NOT live here — Q5's stub-file
+ * mapping (docs/PROVENANCE.md §7 law table) homes it in `provenance/replay.law.test.ts` (it flips at Q16, with
  * every other Q16-gated law row); this file houses tier-honesty ONLY, per that table.
  *
  * The `EvidenceTier` enum this whole law is ABOUT is ALREADY COMMITTED (Q10 —

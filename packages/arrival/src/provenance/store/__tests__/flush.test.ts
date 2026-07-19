@@ -1,6 +1,6 @@
 /**
  * flush.test.ts — Q13's own unit suite for `store/flush.ts` (docs/PROVENANCE.md §5
- * C3; docs/PROVENANCE-PLAN.md Q13). Direct, store-fake-backed exercise of
+ * C3; §7 stream fold + monotonicity). Direct, store-fake-backed exercise of
  * `ProvenanceRing`: buffering vs durability, the awaited barrier (`flush`/`atPort`),
  * the size/time backstops, the pre-hibernation hook, and write-failure fault
  * injection (buffer survives, retry re-emits safely). The LAW-FILE-HOMED

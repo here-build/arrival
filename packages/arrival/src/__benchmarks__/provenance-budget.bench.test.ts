@@ -1,6 +1,6 @@
 /**
- * provenance-budget.bench.test.ts — Q19: THE R3 HARD GATE (docs/PROVENANCE-PLAN.md
- * Q19; docs/PROVENANCE.md Appendix A). This file carries conjuncts C1 and C3 PLUS
+ * provenance-budget.bench.test.ts — Q19: THE R3 HARD GATE (docs/PROVENANCE.md §5
+ * storage-bound hard gate + Appendix A). This file carries conjuncts C1 and C3 PLUS
  * all four break-order probes — everything the task scopes to fakes. Conjunct C2
  * (forced mid-run eviction under REAL workerd) lives in the sibling
  * `provenance-budget-workerd.bench.test.ts`, gated by its own `vitest.workerd.config.ts`

@@ -26,9 +26,8 @@ import type { ANumeric } from "../../../values/numbers.js";
 import type { ABytevector } from "../../../values/primitives/ABytevector.js";
 
 describe("bytevector Contract precision — wholly-variadic homogeneous element domains", () => {
-  // Both OLD-shape rows DELETED (2026-07-08 test-invariant-atlas sweep, [P16]
-  // docs/test-invariant-atlas/verdicts/env.md, docs/test-suite-v2/REMOVAL-MANIFEST.md
-  // §B "env test-d museum rows"): decoded a retired synthetic schema, documentation-as-test
+  // Both OLD-shape rows DELETED (2026-07-09 suite consolidation, [P16]
+  // "env test-d museum rows"): decoded a retired synthetic schema, documentation-as-test
   // with no reachable production path. The NEW-side rows below are the load-bearing proof.
   // INVARIANT: the NEW bytevector shape decodes to ANumeric[] (the OLD flat-unknown[]
   // baseline row was already retired — see the [P16] removal note above)

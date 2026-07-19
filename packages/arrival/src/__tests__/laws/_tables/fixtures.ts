@@ -1,5 +1,5 @@
 /**
- * F1 shared minting kit (docs/test-suite-v2/DESIGN.md §F1).
+ * F1 shared minting kit (docs/test-suite-architecture.md F1).
  *
  * Every law cell needs a 3-element carrier whose elements are individually
  * provenance-stamped, so the term's box discipline is observable. This module is

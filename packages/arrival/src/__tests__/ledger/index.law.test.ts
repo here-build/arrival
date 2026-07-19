@@ -32,9 +32,9 @@ interface LedgerRow {
 }
 
 const GAPS: readonly LedgerRow[] = [
-  // "W4 accumulation death" (REWORK-DAG.md P10's own exit-gate phrase: "eager mode
+  // "W4 accumulation death" (P10's own exit-gate phrase: "eager mode
   // demoted to oracle; 186MB failure mode gone (R3 benchmark)") RETIRED at Q20b
-  // (PROVENANCE-PLAN.md; docs/PROVENANCE.md §4 C12): op-helpers.ts's
+  // (docs/PROVENANCE.md §4 "the eager stamp path is a TEST-ONLY oracle", C12): op-helpers.ts's
   // `eagerProvenanceOracleEnabled` default flipped false → production hot paths
   // accumulate ZERO stamps unless something explicitly opts in (a test's
   // beforeAll, the CI agreement oracle, or a replay running inside a silent
@@ -50,8 +50,8 @@ const GAPS: readonly LedgerRow[] = [
   // 186MB failure mode was a memory-growth characterization, not a law-test
   // gap) — recorded here per this ledger's "no ledger gate references a
   // ruling/migration that has already landed" spirit, so the P10 phrase has a
-  // present-tense home instead of only living in REWORK-DAG.md's superseded
-  // P-track.
+  // present-tense home instead of only living in the 2026-07-09 principle-first
+  // rework plan's superseded P-track.
   //
   // "append drops element provenance", "cdr spine unstamped", and "DR4 vector-map
   // re-box mints empty provenance" RETIRED (conservation repair landed): append's
@@ -78,7 +78,7 @@ const GAPS: readonly LedgerRow[] = [
   // "live AHalfBaked escapes exec under speculate" RETIRED (halfbaked-existence-review.md,
   // VERDICT KILL): AHalfBaked itself dissolved — the gap became UNREACHABLE, not fixed (no
   // carrier can exist anymore, so force-on-egress has nothing left to force). See
-  // docs/test-suite-v2/REMOVAL-MANIFEST.md for the survivor row.
+  // docs/RULINGS.md R4 (VERDICT KILL) for the ruling.
   { id: "null↔nil round-trip asymmetry", gate: "R1-adjacent ruling", replacedBy: "membrane/crossing null row" },
   { id: "schema-to-ts vector union not deduped", gate: "printer dedup follow-up", replacedBy: "type-layer suite" },
   // ── added by the two-tier-exec-api R8 mint sweep (step 2) ─────────────────────────
@@ -95,9 +95,9 @@ const GAPS: readonly LedgerRow[] = [
   // gap. With the fixture crossing its args honestly (V's hygiene law), AJSArray's cells pass on
   // their own merits. ADict's gap is real and stays open.
   { id: "ADict container carries no grouping-fact provenance", gate: "R2 container-provenance ruling", replacedBy: "laws/term-carrier equals cells (ADict)" },
-  // Carried from clone-identity.test.ts (docs/test-suite-v2/REMOVAL-MANIFEST.md §A) — the
-  // one still-open site of the `=== nil` identity-equality sweep (docs/archaeology/
-  // nil-clone-sweep.md). `schemeToJs`'s entry point special-cases `value === nil` instead
+  // Carried from clone-identity.test.ts (retired in the 2026-07-09 suite
+  // consolidation) — the
+  // one still-open site of the `=== nil` identity-equality sweep. `schemeToJs`'s entry point special-cases `value === nil` instead
   // of `instanceof ANil`, so a provenance-bearing Nil clone (minted by
   // `restrictControlFlowProvenance`) falls through to the generic `return value` branch
   // and hands back a Nil object where callers expect `null`.
@@ -110,7 +110,7 @@ const GAPS: readonly LedgerRow[] = [
   // test predates the LIPS-legacy dissolution sweep and needs retiring/redirecting, not a
   // reintroduced symbol.
   { id: "list->array phantom symbol", gate: "sunset-suite cleanup pass", replacedBy: "n/a — test retirement, not a feature to land" },
-  // ── Q9 W1 agreement corpus findings (PROVENANCE-PLAN.md Q9; provenance/
+  // ── Q9 W1 agreement corpus findings (docs/PROVENANCE.md §7 W1 agreement; provenance/
   // wireframe-agreement.law.test.ts's "FINDINGS" section) — surfaced running the
   // extended generator corpus against BOTH the eager oracle and the wireframe
   // builder. Territory this wave is test files only (builder.ts/uneval.ts are
@@ -159,8 +159,8 @@ const GAPS: readonly LedgerRow[] = [
 ] as const;
 
 const INVERSIONS: readonly LedgerRow[] = [
-  // "representation-blind equality (string/boolean boxed≡raw)" RETIRED (bare-value-purge/A4
-  // landed, docs/REWORK-DAG.md): op-helpers.ts withInputProvenance/ANil length/
+  // "representation-blind equality (string/boolean boxed≡raw)" RETIRED (the A4
+  // bare-value purge, landed 2026-07-09): op-helpers.ts withInputProvenance/ANil length/
   // AmbientRuntime.set no longer produce a raw scalar anywhere inside the membrane, so no
   // INTERNAL producer can hand equal?/eq?/eqv? an unboxed operand during real scheme
   // execution. VERDICT — not a strict-door throw: AString/ABool's Setoid-level
@@ -199,9 +199,9 @@ const INVERSIONS: readonly LedgerRow[] = [
 ] as const;
 
 /**
- * STAGED — §7 spec-law rows that are LEDGER-ONLY at Q5 (docs/PROVENANCE-PLAN.md: "Two
- * rows are LEDGER-ONLY, not stub files — they get an `@ledger` row citing their
- * flipping step but no law-test body yet"). The surviving row below has no `it.todo`/
+ * STAGED — §7 spec-law rows that are LEDGER-ONLY at Q5 (docs/PROVENANCE.md §7 law
+ * table; two rows are LEDGER-ONLY, not stub files — they get an `@ledger` row citing
+ * their flipping step but no law-test body yet). The surviving row below has no `it.todo`/
  * `it.fails` call anywhere in the six Q5 stub files (`laws/provenance-roles`,
  * `provenance/{wireframe-agreement,replay,track-cone,track-stream}`,
  * `doors/tier-honesty`) — this index entry IS its only test-suite presence today.
@@ -212,7 +212,7 @@ const INVERSIONS: readonly LedgerRow[] = [
 const STAGED: readonly LedgerRow[] = [
   {
     id: "loop-unroll",
-    gate: "first loop-cone consumer wave — the wireframe-walking driver / P11 drill-in (Q21 audit 2026-07-10: the row SURVIVED the reconciliation audit per PROVENANCE-PLAN.md Q21's explicit requirement, never silently dropped. docs/PROVENANCE.md §7: \"widened vs exact-via-count cones\" — grok finding #19. Both sides' machinery exists since Q16 — widened loop cones refuse per-wire γ with ReplayScopeError and reconstruct via aggregation count + playback — so the law is BODY-able; nobody has staged its body because no consumer demands the widened-vs-exact comparison yet)",
+    gate: "first loop-cone consumer wave — the wireframe-walking driver / P11 drill-in (the row SURVIVED the Q-track completion audit (2026-07-10), never silently dropped. docs/PROVENANCE.md §7: \"widened vs exact-via-count cones\" — grok finding #19. Both sides' machinery exists since Q16 — widened loop cones refuse per-wire γ with ReplayScopeError and reconstruct via aggregation count + playback — so the law is BODY-able; nobody has staged its body because no consumer demands the widened-vs-exact comparison yet)",
     replacedBy: "a future `provenance/track-cone.law.test.ts` it.todo row, once its consumer wave stages the body",
   },
   // "memory retention" RETIRED at Q21 (audit 2026-07-10): its gate — Q19, the R3 hard
@@ -226,7 +226,7 @@ const STAGED: readonly LedgerRow[] = [
 
 // The sunrise family dirs this walker governs — mirrors vitest.sunrise.config.ts's
 // include list (laws/membrane/provenance/ledger land now; conformance/doors/agreement
-// are pre-declared per docs/test-suite-v2/DESIGN.md §2 and simply won't exist on disk yet).
+// are pre-declared per docs/test-suite-architecture.md §2 and simply won't exist on disk yet).
 const SUNRISE_DIRS = ["laws", "membrane", "provenance", "ledger", "conformance", "doors", "agreement"] as const;
 
 const IT_FAILS_RE = /\bit\.fails\s*\(/;

@@ -22,9 +22,8 @@ import type { SchemeValue } from "../../../values/types.js";
 import type { APair } from "../../../values/primitives/APair.js";
 
 describe("lists Contract precision — cons: car/cdr are z.value (SchemeValue), not z.custom<unknown>()", () => {
-  // OLD-shape row DELETED (2026-07-08 test-invariant-atlas sweep, [P16]
-  // docs/test-invariant-atlas/verdicts/env.md, docs/test-suite-v2/REMOVAL-MANIFEST.md
-  // §B "env test-d museum rows") — decoded a retired synthetic schema, no reachable
+  // OLD-shape row DELETED (2026-07-09 suite consolidation, [P16]
+  // "env test-d museum rows") — decoded a retired synthetic schema, no reachable
   // production path. NEW-side row below is the load-bearing proof (converges to
   // numeric.test-d.ts's NEW-side-only shape).
   // INVARIANT: cons's car/cdr decode as [SchemeValue, SchemeValue] (the OLD flat-unknown

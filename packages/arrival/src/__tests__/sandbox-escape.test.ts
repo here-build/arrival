@@ -64,8 +64,8 @@ describe("CRITICAL: sandbox escape vectors", () => {
    * (i.e., the sandbox), NOT to global_env. Inside the sandbox, looking up
    * `+` should fail with Unbound — `+` isn't an exported sandbox binding.
    */
-  // [STALE-LABEL] (2026-07-08 test-invariant-atlas sweep, [P16]
-  // docs/test-invariant-atlas/verdicts/membrane.md): the test name/header comment narrate an
+  // [STALE-LABEL] (2026-07-08 invariant-verdict sweep, [P16]):
+  // the test name/header comment narrate an
   // "eval defaults to sandbox env, not global" fallback POLICY — but `eval` was deleted
   // outright (the host-language sweep), so there is no fallback decision left to make; the
   // actual assertion is just "Unbound." Harmless, but the title pins a stale internal
@@ -247,9 +247,8 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
    * Secure invariant: `make-string` with a length > some host-configured cap
    * must throw a cap-related error in O(1), not allocate.
    */
-  // REWRITE (2026-07-08 test-invariant-atlas sweep, [P5]
-  // docs/test-invariant-atlas/verdicts/membrane.md, docs/test-suite-v2/REMOVAL-MANIFEST.md
-  // §B "sandbox-escape weak doors"): was `caught === true` + timing only — never verified
+  // REWRITE (2026-07-09 suite consolidation, [P5]
+  // "sandbox-escape weak doors"): was `caught === true` + timing only — never verified
   // the thrown error IS the intended cap-policy door (vs. an engine RangeError). Verified
   // the actual thrown message (`op-helpers.ts`'s `assertAllocatable`): "make-string:
   // requested length 100000000 exceeds allocation limit 16777216" — teaches the op name,
@@ -412,8 +411,8 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
    * throw a Scheme-level error. Cyclic structures should compare via
    * structural-equality-with-occurs-check, not JSON.stringify.
    */
-  // REWRITE (2026-07-08 test-invariant-atlas sweep, [P16]
-  // docs/test-invariant-atlas/verdicts/membrane.md): the old assertion accepted EITHER
+  // REWRITE (2026-07-08 invariant-verdict sweep, [P16]):
+  // the old assertion accepted EITHER
   // outcome (returns-a-boolean OR throws-with-safe-message) — the "vacuous both-outcomes-
   // pass" shape P16 forbids. Ran it: `equal?` on two independently-cyclic (self-referencing,
   // not mutually-referencing) JS objects returns the boxed `#f` (an `ABool`, not a raw JS
@@ -493,7 +492,7 @@ describe("registry poisoning vectors", () => {
 // bypassing that discipline had zero production callers). The symbol-intern
 // pollution half of S6 remains live below.
 //
-// DEAD (test-invariant-atlas, no longer testable — the API itself is gone):
+// DEAD (2026-07-08 invariant-verdict sweep, no longer testable — the API itself is gone):
 //   - accessSet rejects "__proto__"/"constructor"/"prototype" as blocked keys
 //   - accessSet installs an own data property without firing inherited/poisoned setters
 // ============================================================================

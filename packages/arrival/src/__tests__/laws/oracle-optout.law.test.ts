@@ -1,5 +1,5 @@
-// Q20a/Q20b — eager-oracle opt-out/demotion law (PROVENANCE-PLAN.md Q20 split; the
-// sampler case, and the production-default flip).
+// Q20a/Q20b — eager-oracle opt-out/demotion law (docs/PROVENANCE.md §4 "the eager
+// stamp path is a TEST-ONLY oracle"; the sampler case, and the production-default flip).
 //
 // Q20a (LANDED 54e6347418) wired `setEagerProvenanceOracleEnabled(false)` as a
 // process-wide opt-OUT for provenance NON-consumers with real-time budgets
@@ -21,8 +21,9 @@
 //      accumulation — the oracle still exists, on demand.
 //   5. Round-trip: OFF → ON → OFF restores the (new) default exactly.
 //
-// W4 ACCUMULATION DEATH (REWORK-DAG.md P10's own exit-gate phrase: "eager mode
-// demoted to oracle; 186MB failure mode gone"): the last test below runs a REAL
+// W4 ACCUMULATION DEATH (P10's own exit-gate phrase: "eager mode
+// demoted to oracle; 186MB failure mode gone" — docs/PROVENANCE.md §4 "the eager stamp
+// path is a TEST-ONLY oracle"): the last test below runs a REAL
 // program through the REAL interpreter (`execState`, not a direct `withInputProvenance`
 // call) with the DEFAULT flags untouched, and asserts the egress carries EMPTY
 // provenance end-to-end — the production demotion is provable through the whole
@@ -94,7 +95,8 @@ describe("Q20b — eager-oracle demotion (@ledger: Q20b — LANDED)", () => {
 
   // ─────────────────────────────────────────────────────────────────────────────
   // W4 — the accumulation death, proven through a REAL exec (not a direct
-  // op-helpers.ts call). REWORK-DAG.md P10's own exit-gate phrase: "eager mode
+  // op-helpers.ts call). P10's own exit-gate phrase (docs/PROVENANCE.md §4 "the eager
+  // stamp path is a TEST-ONLY oracle"): "eager mode
   // demoted to oracle; 186MB failure mode gone (R3 benchmark)" — this is that demotion,
   // asserted end-to-end at the production default, no flag touched anywhere in this
   // test.

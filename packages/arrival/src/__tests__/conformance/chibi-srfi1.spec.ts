@@ -1,8 +1,8 @@
 /**
  * Chibi harness v2 — SECOND corpus: chibi's OWN SRFI-1 list-library suite
  * (`vendor/chibi-scheme/lib/srfi/1/test.sld`), run through the identical per-form harness
- * as `chibi-r7rs-v2.spec.ts` (design: docs/test-suite-v2/chibi-harness-v2.md; this file is
- * that design applied to a second corpus, not a new harness).
+ * as `chibi-r7rs-v2.spec.ts` (docs/test-suite-architecture.md F4; this file is
+ * that harness design applied to a second corpus, not a new harness).
  *
  * Structurally identical to the main spec — same three phases (manifest → runner →
  * registration), same `it`/`it.fails`/`it.skip`/`it.todo` dispatch, same anti-vacuity +

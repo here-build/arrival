@@ -1,21 +1,20 @@
 /**
  * Chibi harness v2 — the official chibi-scheme R7RS test suite, run per-form instead of
- * per-section (design: docs/test-suite-v2/chibi-harness-v2.md).
+ * per-section (docs/test-suite-architecture.md F4).
  *
  * Landed ALONGSIDE v1 (`../chibi-r7rs.spec.ts` + `../chibi-harness.ts`), untouched and still
- * gating — see the design doc §11 "Migration / coexistence". This is the SUNRISE runner
+ * gating — v1/v2 coexistence was the deliberate migration plan. This is the SUNRISE runner
  * (`vitest.sunrise.config.ts`): red here is information (a documented gap becomes `it.fails`,
  * which flips loudly the day it's fixed), not the CI gate.
  *
- * Three phases, one spec file (design §1):
+ * Three phases, one spec file:
  *   1. `buildManifest` (top-level await) — structural split + per-form reader parse + head-
  *      symbol classification → an ordered `Manifest` of steps.
  *   2. `CorpusRunner.create` (top-level await) — one shared, capability-assembled env; the
  *      runner drives `exec()` per step on demand, cursor-guarded against out-of-order calls.
  *   3. Registration (this file, synchronous) — ONE describe/it/it.fails/it.skip/it.todo row
  *      per test form, in CORPUS ORDER (a plain loop dispatching per row — NOT `it.each`
- *      partitioning, which would reorder registration and therefore execution; see design §1's
- *      "it.each note").
+ *      partitioning, which would reorder registration and therefore execution).
  */
 import fs from "fs";
 import path from "path";

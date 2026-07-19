@@ -1,5 +1,5 @@
 /**
- * Q8b — hashes, paths, order rows (PROVENANCE-PLAN.md wave 6; docs/PROVENANCE.md §5 D3,
+ * Q8b — hashes, paths, order rows (docs/PROVENANCE.md §5 D3,
  * §1 D6). Unit rows for `wireframe/hash.ts`'s `hashGraph`/`siteHash`/`rootOrdinalPath` —
  * mirrors `wireframe-builder.test.ts`'s harness (same synthetic classifier/base-name
  * shape). The template-store's OWN rows (put/get, the reverse-index amendment) live in

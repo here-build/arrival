@@ -182,8 +182,8 @@ describe("symbol contract — 2026-07-05 audit: for-each / string-map / string-f
   const forEachHead = z.lambda;
   const listRest = z.union([z.pair, z.nil]);
 
-  // OLD for-each shape row DELETED (2026-07-08 test-invariant-atlas sweep, [P16]
-  // docs/test-invariant-atlas/verdicts/values.md): decoded a retired synthetic schema,
+  // OLD for-each shape row DELETED (2026-07-09 suite consolidation, [P16]):
+  // decoded a retired synthetic schema,
   // documentation-as-test with no reachable production path. NEW-side row (below) is
   // the load-bearing proof.
   test("NEW for-each shape: [callable, ...list[]] — a Pair|Nil rest, not a flat array", () => {

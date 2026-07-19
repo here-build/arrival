@@ -1,6 +1,6 @@
 /**
- * provenance-budget-workerd.bench.test.ts — Q19 conjunct C2 (docs/PROVENANCE-PLAN.md
- * Q19; docs/PROVENANCE.md Appendix A.2's pass condition: "the recorded stream
+ * provenance-budget-workerd.bench.test.ts — Q19 conjunct C2 (docs/PROVENANCE.md §5
+ * storage-bound hard gate; docs/PROVENANCE.md Appendix A.2's pass condition: "the recorded stream
  * reconstructs regions (C1 fold) after a FORCED mid-run eviction"). THE MERGE
  * BLOCKER — fakes (this file's sibling, `provenance-budget.bench.test.ts`) prove the
  * fold LOGIC; this file proves the SAME logic survives a REAL Durable Object's

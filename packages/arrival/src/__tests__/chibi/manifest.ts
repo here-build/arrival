@@ -1,4 +1,4 @@
-// Chibi harness v2 — manifest.ts (design: docs/test-suite-v2/chibi-harness-v2.md §3, §6, §9).
+// Chibi harness v2 — manifest.ts (docs/test-suite-architecture.md F4).
 //
 // Builds an ordered `Manifest` of `Step`s from the raw r7rs-tests.scm corpus text, entirely at
 // collection time (top-level await in the spec). Two passes:
@@ -23,7 +23,7 @@
 //          `letrec-syntax`/`begin` head whose DIRECT body forms include at least one test-head
 //          form → a `block` step (§3.1 "Block steps"): the corpus is genuinely stateful (a
 //          `(let () (define count 0) …)` idiom), so these execute as ONE unit with k outcome
-//          slots. (Broader than the design doc's literal "let/letrec" phrasing — the corpus
+//          slots. (Broader than the harness design's literal "let/letrec" phrasing — the corpus
 //          also nests single test forms under `let-syntax`/`letrec-syntax`/`begin`, e.g. lines
 //          557-567 and 569-573; recognizing only bare `let` would silently drop those test rows
 //          from the manifest, which is worse than the minor scope broadening.)
@@ -438,7 +438,7 @@ function scanBalancedForm(text: string, i: number): number {
  *  comments, nested `#| … |#` block comments, `#\` char literals, `#;` datum comments) — no
  *  content patterns whatsoever. Promoted from v1's `stripComplexForms` scanner (which found
  *  form BOUNDARIES the same way, then additionally pattern-matched content — the content half
- *  is gone; see §6 of the design doc). */
+ *  is gone, dropped in the harness v2 redesign). */
 export function splitTopLevelForms(text: string): RawForm[] {
   const offsets = buildLineIndex(text);
   const forms: RawForm[] = [];

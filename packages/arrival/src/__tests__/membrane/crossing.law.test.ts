@@ -370,8 +370,8 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         const obj = { a: 1 };
         expect(exitJS(fromJS(obj))).toBe(obj);
       });
-      // Regression, carried from rosetta-environment.test.ts (docs/test-suite-v2/
-      // REMOVAL-MANIFEST.md §A): `Object.entries` in schemeToJs used to drop symbol keys, so
+      // Regression, carried from rosetta-environment.test.ts (retired in the 2026-07-09
+      // suite consolidation): `Object.entries` in schemeToJs used to drop symbol keys, so
       // opaque/private backing data on objects crossing the membrane was silently lost.
       // String keys must be unchanged; symbol-keyed slots must survive the round-trip.
       it(`${roundTripTitle} — symbol-keyed properties survive alongside string keys`, () => {
@@ -891,7 +891,7 @@ describe("forgery guard: a borrowed object's own arrival/*-named key is DATA, ne
 // docs/working-proposals/halfbaked-existence-review.md. The three `it.fails` rows this
 // block carried ("live AHalfBaked escapes exec under speculate", ledger GAPS) are gone
 // because the gap became UNREACHABLE, not fixed — no carrier can exist anymore, so
-// there is nothing left for force-on-egress to force. See REMOVAL-MANIFEST.md.
+// there is nothing left for force-on-egress to force. See docs/RULINGS.md R4 (VERDICT KILL).
 
 // ── Egress membrane exit laws (docs/working-proposals/arrival-egress-membrane-exit.md) ──
 // The two-protocol split: `arrival/toJS` = SERIALIZATION (callables stringify — a law,

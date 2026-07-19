@@ -19,9 +19,9 @@
  *      survives the coercion. These are the G6 guarantees, including the one this
  *      wave REPAIRED (the `collectElements` SchemeVector gap).
  *
- *   2. RULED (R2, docs/test-suite-v2/RULINGS.md) — the container's own grouping-
+ *   2. RULED (R2, docs/RULINGS.md) — the container's own grouping-
  *      fact stamp used to be silently dropped by every rebuilding op (`length`/
- *      `sort`/`map`/`filter`); the C1/C2/C4 batch (docs/REWORK-DAG.md) fixed this
+ *      `sort`/`map`/`filter`); the R2 container structural-facts batch fixed this
  *      at the root — length-PRESERVING ops (map/sort) PROXY the container's own
  *      stamp through, length-CHANGING ops (filter) PROVENANCE a fresh derived
  *      stamp, and `length` itself reads the container's OWN flat stamp instead of
@@ -148,7 +148,7 @@ describe("G6 sound — element provenance survives map/filter/sort", () => {
 // `__vector__`; the two near-twin deep-walkers disagreed (pre-mortem DR6). Fixed
 // by adding the symmetric SchemeVector branch.
 //
-// C4/A13 UPDATE (docs/test-suite-v2/RULINGS.md R2): the count no longer carries a deep
+// C4/A13 UPDATE (docs/RULINGS.md R2): the count no longer carries a deep
 // union of the ELEMENTS' own provenance (the over-attribution the A13 golden pinned) —
 // `length` now reads the CONTAINER's own flat grouping-fact stamp instead (see
 // _tables/terms.ts's `containerBox` column). The gap this describe block repaired
@@ -178,7 +178,7 @@ describe("G6 sound — collectElements over a SchemeVector (repaired)", () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// STRATUM 2 — RULED (R2, docs/test-suite-v2/RULINGS.md): the container's own
+// STRATUM 2 — RULED (R2, docs/RULINGS.md): the container's own
 // grouping-fact stamp is no longer silently dropped by a rebuild. C2 threads it
 // explicitly: length-PRESERVING ops (map/sort) PROXY the container's own stamp
 // through unchanged; length-CHANGING ops (filter) PROVENANCE a fresh derived

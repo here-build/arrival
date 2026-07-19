@@ -1,6 +1,6 @@
 /**
  * emit.test.ts — Q11a's own unit suite for `store/emit.ts` (docs/PROVENANCE.md §5;
- * docs/PROVENANCE-PLAN.md Q11a). Direct, store-fake-backed exercise of the emission
+ * §7 W3 port completeness). Direct, store-fake-backed exercise of the emission
  * core: the flag gate, all four kinds' record shapes, the header write-once, and —
  * the W3 law's real grounding — idempotent upsert under request retry AND under
  * write-failure fault injection (§5 C2/D1, C3).

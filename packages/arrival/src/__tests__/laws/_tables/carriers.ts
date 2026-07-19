@@ -1,5 +1,5 @@
 /**
- * The carrier table — F1's column axis (docs/test-suite-v2/DESIGN.md).
+ * The carrier table — F1's column axis (docs/test-suite-architecture.md F1).
  *
  * Every term×carrier cell is either implemented (and then obeys the term's declared
  * box discipline — P8) or an EXPLICIT `unsupported` entry. Absence is not a state:

@@ -1,6 +1,5 @@
 /**
- * Q8b — the TEMPLATE STORE (docs/PROVENANCE.md §5 C4; docs/PROVENANCE-PLAN.md Q8b's
- * AMENDMENT, elk-render research). `TemplateStoreFake` (`../fakes.js`) is the
+ * Q8b — the TEMPLATE STORE (docs/PROVENANCE.md §5 C4). `TemplateStoreFake` (`../fakes.js`) is the
  * fake-backed interface Q8b lands: put/get a template's graph by hash, plus the
  * reverse index — "records key on template-hash + ordinal-path, the plane keys on
  * site-hash... the template-store interface must expose ordinal-path → site-hash

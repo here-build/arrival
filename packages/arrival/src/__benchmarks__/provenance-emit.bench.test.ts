@@ -1,6 +1,6 @@
 /**
- * provenance-emit.bench.test.ts — Q11a's own overhead measurement (docs/PROVENANCE-PLAN.md
- * Q11a: "Risk: emission overhead on hot paths — measure in-step, budget ~µs/record").
+ * provenance-emit.bench.test.ts — Q11a's own overhead measurement (docs/PROVENANCE.md
+ * §7 W3 port completeness; risk: emission overhead on hot paths — measured in-step, budget ~µs/record).
  *
  * Three honest layers, same shape as `exec-seam.bench.test.ts`'s own three-layer split:
  *
@@ -116,8 +116,8 @@ describe("emission overhead — flag ON (real store/payload work per record)", (
 });
 
 /**
- * Q20b — the DEMOTION's own overhead measurement (docs/PROVENANCE-PLAN.md Q20:
- * "Gate: standing + perf delta recorded"), distinct from Q11a's record-EMISSION
+ * Q20b — the DEMOTION's own overhead measurement (docs/PROVENANCE.md §4 "the eager
+ * stamp path is a TEST-ONLY oracle"; gate: standing + perf delta recorded), distinct from Q11a's record-EMISSION
  * layers above: this measures op-helpers.ts's per-op ACCUMULATION cost (the filter
  * + union-set allocation `withInputProvenance`/`nativeNumericOp`'s `applyNumeric`
  * skip when the oracle is inactive) on a real interpreter run — the actual hot

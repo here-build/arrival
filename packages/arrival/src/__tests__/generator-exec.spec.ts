@@ -252,9 +252,8 @@ describe("generator-exec", () => {
     });
   });
 
-  // REWRITE (2026-07-08 test-invariant-atlas sweep, [P15]
-  // docs/test-invariant-atlas/verdicts/evaluator.md, docs/test-suite-v2/REMOVAL-MANIFEST.md
-  // §B): renamed from "async/promise handling" / "should handle promises returned from JS
+  // REWRITE (2026-07-09 suite consolidation, [P15]):
+  // renamed from "async/promise handling" / "should handle promises returned from JS
   // functions" — `async-add` here is a pure Scheme `(lambda (a b) (+ a b))`, no async fn, no
   // promise anywhere. It only tests that a lambda defined in one top-level form persists into
   // the next form's evaluation (a real, legitimate invariant) — mislabeled, not broken.

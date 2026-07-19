@@ -1,10 +1,10 @@
 /**
- * The membrane crossing table — F3 (docs/test-suite-v2/DESIGN.md).
+ * The membrane crossing table — F3 (docs/test-suite-architecture.md F3).
  *
  * ONE row per value type, BOTH directions, exit convention as a single column —
  * this table structurally cannot say "strings exit boxed, booleans exit raw"
  * without the contradiction appearing in a diff (P4). R1 RULED (2026-07-09,
- * docs/test-suite-v2/RULINGS.md): uniform plain-JS exit via the simple exec flow;
+ * docs/RULINGS.md): uniform plain-JS exit via the simple exec flow;
  * containers exit as lazy ref-tracking proxies (observationally plain JS — R9).
  * Exit LAW CELLS asserting these ruled forms go it.fails against today's
  * boxed-exit implementation until the uniform-exit change lands.

@@ -1,6 +1,6 @@
 /**
  * region-events.test.ts — Q11b's INTEGRATION exercise of `region-scope.ts`'s emission
- * hooks (docs/PROVENANCE-PLAN.md Q11b; `src/values/primitives/region-scope.ts`). Where
+ * hooks (docs/PROVENANCE.md §5 record kinds + host-schedule; `src/values/primitives/region-scope.ts`). Where
  * `provenance/store/__tests__/emit.test.ts` drives `emitTrackOpen`/`emitTrackClose`/
  * `emitHostSchedule` directly, this file drives them through REAL region discipline —
  * `openRegionScope`/`withRegionCall`/`closeRegionScope`, exactly the machinery

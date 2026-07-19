@@ -6,7 +6,7 @@
  * (_tables/terms.ts). The declaration is the law; a carrier cannot negotiate.
  *
  * METHODOLOGY. Every supported cell executes the term via its SCHEME VERB
- * (`term.verbs[0]`, per DESIGN.md), against a 3-element carrier minted by
+ * (`term.verbs[0]`, per docs/test-suite-architecture.md), against a 3-element carrier minted by
  * `_tables/fixtures.ts`'s `mint3` (each element individually provenance-stamped
  * by a harness `src` rosetta — one fresh point per call, P11). Two documented
  * departures from "always verbs[0]":
@@ -29,8 +29,8 @@
  *     scalar-result term, on the result's own provenance).
  *   - provenance conservation (P10): deep-collapsed result provenance ⊇ the
  *     consumed elements' minted ids.
- *   - container box (R2 RULED, docs/test-suite-v2/RULINGS.md; C1/C2/C4 per
- *     docs/REWORK-DAG.md): map/filter/sort each assert the term's declared
+ *   - container box (R2 RULED, docs/RULINGS.md — the R2 container
+ *     structural-facts batch): map/filter/sort each assert the term's declared
  *     `containerBox` verb (`_tables/terms.ts`) directly — PROXIED (map/sort: the
  *     container's own grouping-fact stamp threads through unchanged) or
  *     PROVENANCED (filter: a fresh stamp, union(input container's own stamp,

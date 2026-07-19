@@ -1,6 +1,5 @@
 /**
- * Q8b — `OrdinalPath` composition ops (docs/PROVENANCE.md §5 C2/D1, round 3 m4;
- * docs/PROVENANCE-PLAN.md Q8b). `ids.ts` already carried the `OrdinalPath` TYPE
+ * Q8b — `OrdinalPath` composition ops (docs/PROVENANCE.md §5 C2/D1, round 3 m4). `ids.ts` already carried the `OrdinalPath` TYPE
  * (Q10); this file's rows are for the ops Q8b adds beside it: `appendOrdinal` (the
  * z-axis nesting primitive), `parentOrdinalPath`/`trailingOrdinal` (the m4 path-scoped
  * aggregation split), `compareOrdinalPaths` (deterministic total order), and

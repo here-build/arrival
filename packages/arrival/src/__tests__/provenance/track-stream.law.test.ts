@@ -1,8 +1,8 @@
 /**
  * LAW — W3 port completeness (GREEN at Q11a); stream fold + monotonicity +
  * fold-as-recovery, and the I4 async-completion door (docs/PROVENANCE.md §3 I2/I4,
- * §5 "The retrospective stream", §7 law table; docs/PROVENANCE-PLAN.md Q5's stub-file
- * mapping table) — ALL GREEN as of Q13.
+ * §5 "The retrospective stream", §7 law table — Q5's stub-file
+ * mapping) — ALL GREEN as of Q13.
  *
  * Q5 CREATED this file as pure `it.todo` staged spec. W3 flipped at Q11a (real
  * emission hooks: `src/provenance/store/emit.ts`'s `emitMint`/`emitMuxDecision`/
@@ -19,7 +19,7 @@
  * `src/__tests__/provenance/region-events.test.ts` (Q11b's sibling of
  * `emission-hooks.test.ts`), not here.
  *
- * Q13 flips the remaining six rows (`docs/PROVENANCE-PLAN.md` Q13; §5 C1's
+ * Q13 flips the remaining six rows (docs/PROVENANCE.md §7 stream fold + monotonicity; §5 C1's
  * fold-as-recovery, §5 C3's flush/barrier policy, §3 I4's completion door):
  *   - fold-as-recovery + monotonicity + eviction-refold exercise REAL
  *     `region-scope.ts` machinery (`openRegionScope`/`withRegionCall`/
@@ -74,7 +74,7 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
   return { promise, resolve };
 }
 
-describe("W3 port completeness (§7; PROVENANCE-PLAN.md Q11a)", () => {
+describe("W3 port completeness (docs/PROVENANCE.md §7 law table)", () => {
   const REGION = "w3-region";
 
   // @ledger: Q11a — LANDED
@@ -145,7 +145,7 @@ describe("W3 port completeness (§7; PROVENANCE-PLAN.md Q11a)", () => {
   );
 });
 
-describe("region events + host-schedule (§5 A6 rows 5-6, D5; PROVENANCE-PLAN.md Q11b)", () => {
+describe("region events + host-schedule (docs/PROVENANCE.md §5 A6 rows 5-6, D5)", () => {
   const REGION = "q11b-region";
 
   // @ledger: Q11b — LANDED
@@ -208,7 +208,7 @@ describe("region events + host-schedule (§5 A6 rows 5-6, D5; PROVENANCE-PLAN.md
   );
 });
 
-describe("stream fold + monotonicity + fold-as-recovery (§5 C1; PROVENANCE-PLAN.md Q13)", () => {
+describe("stream fold + monotonicity + fold-as-recovery (docs/PROVENANCE.md §5 C1, §7 stream fold)", () => {
   const REGION = "q13-fold-region";
 
   // @ledger: Q13 — LANDED
@@ -304,9 +304,9 @@ describe("stream fold + monotonicity + fold-as-recovery (§5 C1; PROVENANCE-PLAN
         const closes = stream.filter((r) => r.kind === "track-close");
         expect(closes.map((r) => r.seq)).toEqual([...closes.map((r) => r.seq)].toSorted((x, y) => x - y));
 
-        // RISK note (PROVENANCE-PLAN.md Q13): "per-region seq must be settlement-
+        // RISK note (Q13, docs/PROVENANCE.md §7 stream fold + monotonicity): per-region seq must be settlement-
         // ordered under injected delays — use the fakes' setSettleDelayTicks/step to
-        // prove it." Drive an INDEPENDENTLY-timed R2 payload settlement on its own
+        // prove it. Drive an INDEPENDENTLY-timed R2 payload settlement on its own
         // virtual clock (PayloadStoreFake's OWN knobs) concurrently, and prove it never
         // perturbs the ProvenanceStore stream's seq order or this region's fold — the
         // two stores are genuinely independent timelines, exactly as §5 A1's tiering
