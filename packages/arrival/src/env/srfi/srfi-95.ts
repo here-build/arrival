@@ -38,21 +38,24 @@ export default new EnvCapability("scheme/srfi-95", {
         output: [z.value],
         // The z.custom optional comparator is unrepresentable to the harvest printer, collapsing the
         // whole signature to the degrade path `(...args: unknown[]) => unknown`. Author-assert the
-        // real shape: seq + optional binary comparator. seq/return stay `unknown` ON PURPOSE — sort is
-        // representation-agnostic (list→list, vector→vector), so a `List` narrowing would be false
-        // (unlike find, whose schema IS list-only). The comparator mirrors the `(a,b)=>unknown`
-        // AValue.ts declares for the sort protocol — the assertion states that shape, not an invention.
+        // real shape: seq + optional binary comparator. Representation-agnosticism is stated as an
+        // overload PAIR (List<T>→List<T>, readonly T[]→readonly T[]) rather than an `unknown` blur —
+        // the receiver's representation is preserved, which a bare `List` narrowing would falsify
+        // (sort is list→list, vector→vector via the receiver's own `arrival/tagless-final/sort`).
+        // The comparator mirrors the `(a,b)=>unknown` AValue.ts declares for the sort protocol —
+        // the assertion states that shape, not an invention.
         type: dedent`
           {
             <T>(seq: List<T>, less?: (a: T, b: T) => unknown): List<T>;
             <T>(seq: readonly T[], less?: (a: T, b: T) => unknown): readonly T[];
           }
         `,
-        // callbackRoles DECLARED (docs/PROVENANCE.md §2, Q4): pipe host with value egress —
-        // shape underdetermines. less? is `control` (the ORDERING return; the merged
-        // selector+decision role) — sort is the canonical host-schedule op (spec §5's
-        // `(left-ordinal, right-ordinal, verdict)` record cites exactly this comparator's
-        // verdicts). Roles align with LAMBDA arms: less? is arm 0 despite input position 1.
+        // callbackRoles DECLARED: sort is a pipe host with value egress, so shape alone
+        // underdetermines the comparator's role. less? is `control` (the ORDERING return;
+        // the merged selector+decision role) — sort is the canonical host-schedule op
+        // (spec §5's `(left-ordinal, right-ordinal, verdict)` record cites exactly this
+        // comparator's verdicts). Roles align with LAMBDA arms: less? is arm 0 despite
+        // input position 1.
         callbackRoles: ["control"],
       },
       (args, runCtx) => {

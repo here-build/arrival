@@ -11,12 +11,10 @@
 // its receiver to `["pair","nil"]` (list-only — NOT representation-agnostic like map/filter/sort), so
 // `List<unknown>` is the true input domain, and the matched car / nil result is any scheme value.
 //
-// `filter` was ALSO z.custom-degraded when this file was authored, and left un-overridden
-// (carriers.ts's closed tagless-algebra type was meant to be the one source of truth for it).
-// Since then, the uniform-vocabulary migration gave `z.lambda` a real printer image
-// (schema-to-ts.ts's IMAGE_BY_NAME) — it no longer THROWS on print, so filter's own
-// `[z.lambda, z.value] => [z.value]` contract now composes to a real (non-degraded)
-// signature via the normal path, without needing a `type:` override at all.
+// `filter` has since received the author-asserted treatment too: a generic overload set
+// (guard/non-guard × List/array receivers) declared via `type:` (srfi-1.ts), which the
+// harvest prefers over any schema-derived composition — so the pin is the declared
+// overload set verbatim.
 import { describe, expect, it } from "vitest";
 import srfi1 from "../srfi-1.js";
 import type { AEntity } from "../../../common/symbol.js";
@@ -33,12 +31,20 @@ describe("scheme/srfi-1 Contract harvest precision — author-asserted `type:` r
   // INVARIANT: find's harvested signature recovers arity, arg names, and the List<unknown>
   // receiver via Contract.type override (pins implementation, not behavior)
   it("find: recovers arity + arg names + the List receiver the z.custom predicate arg collapsed to (...args: unknown[]) => unknown", () => {
-    expect(signatureOf(def("find"))).toBe("(pred: (x: unknown) => unknown, list: List<unknown>) => unknown");
+    expect(signatureOf(def("find"))).toBe(`{
+  <T, S extends T>(p: (x: T) => x is S, xs: List<T>): S | null;
+  <T>(p: (x: T) => unknown, xs: List<T>): T | null;
+}`);
   });
 
-  // INVARIANT: filter's harvested signature composes directly from z.lambda's printer
-  // image, needing no type override anymore (pins implementation, not behavior)
-  it("filter: no `type:` override needed anymore — z.lambda's printer image composes a real signature directly", () => {
-    expect(signatureOf(def("filter"))).toBe("(a: (...args: unknown[]) => unknown, b: unknown) => unknown");
+  // INVARIANT: filter's author-asserted generic overload set (guard/non-guard ×
+  // List/array receivers) harvests verbatim (pins implementation, not behavior)
+  it("filter: author-asserted generic overload set harvests verbatim (guard × receiver pairs)", () => {
+    expect(signatureOf(def("filter"))).toBe(`{
+  <T, S extends T>(p: (x: T) => x is S, xs: List<T>): List<S>;
+  <T>(p: (x: T) => unknown, xs: List<T>): List<T>;
+  <T, S extends T>(p: (x: T) => x is S, xs: readonly T[]): readonly S[];
+  <T>(p: (x: T) => unknown, xs: readonly T[]): readonly T[];
+}`);
   });
 });

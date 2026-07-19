@@ -4,9 +4,10 @@
 // `signatureOf` collapses the whole op to the degrade path `(...args: unknown[]) => unknown` — hiding
 // the arity and the comparator's binary-callable shape. The author-asserted `type` recovers them.
 //
-// It deliberately keeps `seq` and the return as `unknown`: `sort` is representation-agnostic
-// (list→list, vector→vector via the receiver's own `arrival/tagless-final/sort`), so committing the
-// receiver/return to `List` would be a false narrowing (unlike find, whose input schema IS list-only).
+// Representation-agnosticism is stated as an overload PAIR — `List<T> → List<T>`,
+// `readonly T[] → readonly T[]` — so the receiver's representation is preserved rather
+// than blurred to `unknown` (a bare `List` narrowing would falsify vector sorts; `sort`
+// dispatches through the receiver's own `arrival/tagless-final/sort`).
 // The comparator type mirrors AValue.ts's own declared `(a: unknown, b: unknown) => unknown` for the
 // sort protocol — the override states that documented shape, not an invention.
 import { describe, expect, it } from "vitest";
@@ -25,7 +26,10 @@ describe("scheme/srfi-95 Contract harvest precision — author-asserted `type:` 
   // INVARIANT: sort's harvested signature recovers arity and the optional binary
   // comparator while keeping seq/return representation-blind via override (pins
   // implementation, not behavior)
-  it("sort: recovers arity + the optional binary comparator, keeping the receiver/return representation-blind (unknown)", () => {
-    expect(signatureOf(def("sort"))).toBe("(seq: unknown, less?: (a: unknown, b: unknown) => unknown) => unknown");
+  it("sort: recovers arity + the optional binary comparator as a receiver-preserving overload pair", () => {
+    expect(signatureOf(def("sort"))).toBe(`{
+  <T>(seq: List<T>, less?: (a: T, b: T) => unknown): List<T>;
+  <T>(seq: readonly T[], less?: (a: T, b: T) => unknown): readonly T[];
+}`);
   });
 });
