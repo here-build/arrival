@@ -50,6 +50,13 @@ export {
   type CompileSourceOptions,
   type CompileSourceResult,
 } from "./product/compile-source.js";
+export {
+  collectEmittedDependencies,
+  EMITTED_DEP_VERSIONS,
+  emittedPackageJson,
+  type EmittedFileLike,
+  type EmittedPackageJsonOptions,
+} from "./product/emitted-deps.js";
 
 // ── the TYPE pass — Law T + the §5.3 narrowing-form grammar (type-emit-lawt.md) ──
 export {
