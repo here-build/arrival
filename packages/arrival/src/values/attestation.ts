@@ -1,6 +1,6 @@
 /**
  * attestation — the branded-value registry behind the manifold's `s/*` family
- * (design: second-foundation/arrival-manifold/docs/attestation-design.md).
+ * (design: arrival-manifold/docs/attestation-design.md).
  *
  * PROVENANCE/TAINT-FLOW, NOT TYPING — and deliberately not the provenance set.
  * Provenance has union/forward algebra (survives computation via

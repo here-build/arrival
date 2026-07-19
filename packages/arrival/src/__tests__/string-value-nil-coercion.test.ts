@@ -1,4 +1,4 @@
-// B1 (second-foundation/arrival-manifold/docs/benchmark-defect-register.md) — `stringValue`
+// B1 (the manifold benchmark-defect register, private monorepo docs) — `stringValue`
 // (values/op-helpers.ts) silently coerced container/nil values via `String(x)`:
 // `String(nil)` → `"()"`, so `(string-length nil)` returned **2** instead of throwing. A
 // model in the 89x2 benchmark corpus saw exactly this, concluded "probably truncated," and

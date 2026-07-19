@@ -1,4 +1,4 @@
-// B3-REAL (second-foundation/arrival-manifold/docs/benchmark-defect-register.md §B3 +
+// B3-REAL (the manifold benchmark-defect register §B3, private monorepo docs +
 // LOAD-BEARING CONSTRAINT #1) — the `listAlike` codec is DEAD for scheme-bodied verbs, and the
 // consequence is an INFINITE LOOP, not a wrong answer.
 //

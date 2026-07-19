@@ -1,4 +1,4 @@
-// S1 (second-foundation/arrival-manifold/docs/benchmark-defect-register.md) — `sort` with a
+// S1 (the manifold benchmark-defect register, private monorepo docs) — `sort` with a
 // lambda comparator was SILENTLY WRONG, the worst defect in the 89x2 benchmark audit.
 //
 // `deriveSortCompare` (values/op-helpers.ts) invokes the comparator through `applyCallback`

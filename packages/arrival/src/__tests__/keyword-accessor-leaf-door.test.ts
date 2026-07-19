@@ -1,4 +1,4 @@
-// B2 (second-foundation/arrival-manifold/docs/benchmark-defect-register.md) — the
+// B2 (the manifold benchmark-defect register, private monorepo docs) — the
 // `:key` keyword accessor (`AKeywordSymbol["arrival/tagless-final/apply"]`, ASymbol.ts)
 // used to fall through to `nil` whenever its receiver declared no
 // `arrival/tagless-final/get` term at all — conflating two different facts:

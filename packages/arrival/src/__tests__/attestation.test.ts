@@ -1,5 +1,4 @@
-// Attestation core-walk suite (design: second-foundation/arrival-manifold/docs/
-// attestation-design.md §8 case 10). The registry (values/attestation.ts) is a
+// Attestation core-walk suite (design: arrival-manifold/docs/attestation-design.md §8 case 10). The registry (values/attestation.ts) is a
 // WeakSet keyed by box identity; the bakeRosetta return walk deep-attests SOURCE
 // rosetta returns (spine + leaves), the membrane wrappers inherit at the pluck
 // site, and computation drops attestation for free (fresh boxes). The manifold's

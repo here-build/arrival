@@ -1,4 +1,4 @@
-// B4 (second-foundation/arrival-manifold/docs/benchmark-defect-register.md) — a
+// B4 (the manifold benchmark-defect register, private monorepo docs) — a
 // POSITIONAL/variadic `symbol.rosetta` verb's decode gate (`common/symbols/rosetta.ts`)
 // used to let a raw `ZodError` propagate. zod v4's `ZodError.message` IS the
 // pretty-printed JSON of `.issues` — a 25-line nested-union dump naming no verb and no

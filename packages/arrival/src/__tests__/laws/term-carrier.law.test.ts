@@ -270,7 +270,7 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
       }
 
       case "arrival/tagless-final/sort": {
-        // S1 (second-foundation/arrival-manifold/docs/benchmark-defect-register.md):
+        // S1 (the manifold benchmark-defect register, private monorepo docs):
         // `deriveSortCompare` (values/op-helpers.ts) now throws an honest door the
         // instant a comparator's return resolves through a Promise — true of every
         // LAMBDA comparator (its body runs through the trampolined async evaluator),
