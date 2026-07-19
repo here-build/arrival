@@ -434,14 +434,12 @@ export const number = named(
   ]),
 );
 
-// `bigint` — RETIRED as this vocabulary's active numeric cast (§2.3: every numeric
-// op in env/r7rs/numeric.ts has flipped off it, onto `schemeNumber`/`integer`).
-// KEPT, mechanically ported to the new AExact shape (`number`-backed `num`/`denom`),
-// so consumers this sweep does NOT own (env/r7rs/chars.ts, strings.ts, srfi-13.ts —
-// Sweep 3's territory) keep a real, compiling export to flip away from at their own
-// pace rather than hitting a missing-export break as a SECOND, unrelated failure on
-// top of their own AExact-shape breakage. New code should reach for `integer`
-// (safe-int `number`, doors on a non-integer/out-of-range operand) instead.
+// `bigint` — legacy numeric cast, superseded by `schemeNumber`/`integer`. Kept,
+// mechanically ported to the new AExact shape (`number`-backed `num`/`denom`), so
+// consumers that still declare it keep a real, compiling export to flip away from
+// at their own pace rather than hitting a missing-export break. New code should
+// reach for `integer` (safe-int `number`, doors on a non-integer/out-of-range
+// operand) instead.
 export const bigint = named(
   "bigint",
   z.union([

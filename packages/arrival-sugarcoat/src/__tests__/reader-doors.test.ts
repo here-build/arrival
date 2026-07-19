@@ -1,7 +1,6 @@
 /**
  * Educational error surfaces (errors-as-doors). A rejection must name the actual
- * rule broken and point at the exit — not the nearest symptom. Sources: the `??`
- * removal (2026-07-08) and the LEARN.md custdev loop's trailing-lambda stumble.
+ * rule broken and point at the exit — not the nearest symptom.
  */
 import { describe, it, expect } from "vitest";
 import { readSugarcoat } from "../sugarcoat-read.js";

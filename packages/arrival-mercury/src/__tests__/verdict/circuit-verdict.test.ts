@@ -11,10 +11,9 @@
  * compare on it — see circuit-verdict.ts's `ChannelAnchor` doc), so every
  * hand-built node shares one dummy `NodeId`.
  *
- * UPDATE 2026-07-16 (Findings B and C, grok #2/#4 audit): `extract` now
- * exists — a handful of cases below (the "car/cdr accessors vs container
- * builds" describe block, the new vector-ref case in the mux-narrowing block,
- * and the guardless-choice case in the `judgmentShaped` block) call it FOR
+ * A handful of cases below (the "car/cdr accessors vs container builds"
+ * describe block, the vector-ref case in the mux-narrowing block, and the
+ * guardless-choice case in the `judgmentShaped` block) call `extract` FOR
  * REAL via the `run` helper, rather than hand-building, specifically where
  * fidelity to extract's own key-minting alphabet is the entire point of the
  * case and a hand-built fixture would risk re-encoding the same wrong
@@ -150,7 +149,7 @@ describe("fixture-corpus row 5 — plain fuse", () => {
   });
 });
 
-describe("fixture-corpus row 3 — hidden-const fold (longcat's forge)", () => {
+describe("fixture-corpus row 3 — hidden-const fold (the fold-collapse forge)", () => {
   // (fold (lambda (acc x) (if (eq? x "s") "FABRICATED" x)) "" (:xs e))
   // per extract/index.ts's Bound doc: the fan body's element binding is
   // MuxProv{key:null} over the collection — mirrored here concretely.
@@ -312,7 +311,7 @@ describe("mux narrows into the keyed part, not the whole container (BKT where-pr
   });
 });
 
-// ── car/cdr accessors vs container builds — the two key alphabets (Finding B, grok #2) ──
+// ── car/cdr accessors vs container builds — the two key alphabets ──
 
 describe("car/cdr accessors vs container builds — the two key alphabets", () => {
   // extract mints TWO DIFFERENT key alphabets for containers vs. their fixed
@@ -358,7 +357,7 @@ describe("car/cdr accessors vs container builds — the two key alphabets", () =
 // ── judgmentShaped: the per-guard existential, independent of the alts check ────
 
 describe("judgmentShaped — guards must each independently ground in evidence", () => {
-  it("FALSE when there are NO guards at all — a guardless choice is not a judgment, even with all-bare-const alts (Finding C, grok #4: the vacuous-every fix)", () => {
+  it("FALSE when there are NO guards at all — a guardless choice is not a judgment, even with all-bare-const alts (the vacuous-every fix)", () => {
     // (and "YES") — extractAndOr's `guards: provs.slice(0, -1)` (arm-control.ts)
     // is EMPTY for a single-argument and/or. Array.prototype.every vacuously
     // returns true on an empty array, so `guards.every(guardGroundsInEvidence)`

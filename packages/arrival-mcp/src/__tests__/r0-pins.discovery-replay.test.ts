@@ -1,21 +1,14 @@
-// R0 pins, FLIPPED to the R3 mechanism (docs/working-proposals/arrival-mcp-rework-over-phases.md,
-// Part IV — R0 → R3). The original file characterized HEAD's statement-level overlay replay
-// ("the ground truth R3's `fold = re-run log over cache` must reproduce for every class below").
-// R3 landed; each pin now asserts the class's RULED replacement, per the original pin's own
-// documented intent:
+// Session-replay pins: what a cold fold (a fresh DiscoveryTool instance over the same
+// session bag — process eviction in miniature, e.g. a stdio restart) must reproduce for
+// each statement class:
 //
-//   • wire-safe define, same config     → WARM-PAIR reuse (no fold at all): the penetration
-//     fires exactly once across N calls — same observable as the retired overlay restore.
-//   • closure define                    → warm: never re-run; cold fold (fresh instance = eviction
-//     in miniature): re-run, penetration-free for the define itself.
-//   • replay-time crash                 → the poison rule, now DROP-with-counter (the doc's §2.2/
-//     R3 "fold correctness inherits the poison rule" — the original file's IMPORTANT FINDING
-//     showed HEAD only *tolerated* poison; R3 lands the aspirational drop).
-//   • crash-stops-batch + crashed-statement-never-logged → unchanged semantics, asserted against
-//     the v2 log.
-//
-// A cold fold is forced with a FRESH DiscoveryTool instance over the same session bag — a fresh
-// warm map is process eviction in miniature (stdio restart / DO wake, §2.4).
+//   • wire-safe define, same config → WARM-PAIR reuse (no fold at all): the penetration
+//     fires exactly once across N calls.
+//   • closure define                → warm: never re-run; cold fold: re-run, penetration-free
+//     for the define itself (fold correctness inherits the poison rule below).
+//   • replay-time crash             → the poison rule: a fold-time crash DROPS the statement
+//     from the log (with a counter increment) rather than tolerating or retrying it.
+//   • crash-stops-batch + crashed-statement-never-logged → asserted against the v2 log.
 
 import { describe, expect, it, vi } from "vitest";
 
@@ -77,7 +70,7 @@ describe("R3 pin — a closure define: warm calls never re-run it; a cold fold r
     await warmTool.call({ expr: "(define f (mk))" }, { session });
     expect(builds).toBe(1);
     await warmTool.call({ expr: "(+ 1 1)" }, { session });
-    expect(builds).toBe(1); // warm reuse — the retired per-call fold is gone
+    expect(builds).toBe(1); // warm reuse — no fold runs at all while the pair stays warm
 
     const coldTool = new DiscoveryTool("mk", cap, { description: "mk tool" });
     await coldTool.call({ expr: "(+ 2 2)" }, { session }); // the fold re-ran the define…
@@ -176,8 +169,8 @@ describe("R3 pin — crash-stops-batch: earlier statements in the SAME call stan
   });
 });
 
-// ── The R0 FINDING block survives translated: multi-statement batches log EVERY form with its
-// exact source slice (the Lexer.peek() location fix), and all of them survive a cold fold. ──────
+// ── Multi-statement batches log EVERY form with its exact source slice, and all of them
+// survive a cold fold. ─────────────────────────────────────────────────────────────────
 describe("R3 pin — a multi-statement batch's statements ALL enter the log with exact source slices", () => {
   it("two defines in ONE call: both logged with their own exact source, both fold on a cold instance", async () => {
     const cap = new McpEnvCapability("demo-caps", { symbols: {}, annotations: {} });

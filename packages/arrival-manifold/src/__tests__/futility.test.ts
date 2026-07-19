@@ -8,17 +8,15 @@
 // ≥2 distinct arg sets) and duplicate-call (same tool + same args + same result twice in a row).
 //
 // The PURE shape-logic half (`FutilityTracker`/`normalizeResultText` exercised directly, no MCP
-// transport) moved to `@inhuman.tools/mcp-substrate`'s own `futility.test.ts` (2026-07-05 package
-// split) — this file keeps only the wiring-through-a-real-server coverage.
+// transport) lives in `@inhuman.tools/mcp-substrate`'s own `futility.test.ts` — this file keeps
+// only the wiring-through-a-real-server coverage.
 //
-// RE-PINNED per second-foundation/arrival-bench/docs/benchmark-defect-register.md §E3/§C2 — not one of the 4 files the re-pin
-// task named, but broken by the exact same landed fix: the futility Note used to be its OWN
-// standalone content block (`Note: ...`, first-word-prefixed). It now rides the consolidated
-// `#| ── environment notes ── … |#` trailing block alongside every other note-shaped producer,
-// and the door TEXT itself changed (§C2 — "give your best final answer" / "stop retrying" outcome
-// fine-tuning removed; "effectively the same result" — asserting degradation as settled fact —
-// became "the same result despite different arguments", a fact framed conditionally). See the
-// `notes()` helper and the two TRIGGER-1 assertions below for the concrete diffs.
+// The futility Note is not its own standalone content block: every note-shaped producer
+// (introduced-bindings, elision, futility, attachment) rides the consolidated
+// `#| ── environment notes ── … |#` trailing block. The door text itself asserts degradation as a
+// conditional fact ("the same result despite different arguments"), not a settled one, and
+// prescribes no specific next action — see the `notes()` helper and the two TRIGGER-1 assertions
+// below.
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -84,15 +82,12 @@ const textOf = (r: { content: unknown }): string =>
   blocksOf(r)
     .map((b) => b.text)
     .join("\n");
-// RE-PINNED per second-foundation/arrival-bench/docs/benchmark-defect-register.md §E3 — NOT one of the 4 files named in the
-// re-pin task, but the SAME root cause: mcp-substrate's runner.ts no longer emits a futility
-// advisory as its OWN standalone `Note:`-prefixed content block. Every note-shaped producer
-// (introduced-bindings, elision, futility, attachment) now accumulates and renders as ONE
-// trailing block labelled `#| ── environment notes ── … |#`; the individual door's `Note: …`
-// text (doors.ts DoorSession.renderNote, unchanged prefix) is just a LINE inside it. None of
+// A futility advisory is not its own standalone `Note:`-prefixed content block. Every
+// note-shaped producer (introduced-bindings, elision, futility, attachment) accumulates and
+// renders as ONE trailing block labelled `#| ── environment notes ── … |#`; the individual
+// door's `Note: …` text (doors.ts DoorSession.renderNote) is just a LINE inside it. None of
 // these fixtures ever trigger a second note-shaped producer in the same call, so "does the
-// consolidated block exist" is still exactly the invariant "did a futility note fire" — the
-// helper below adapts to the new envelope without weakening what it protects.
+// consolidated block exist" is exactly the invariant "did a futility note fire".
 const notes = (r: { content: unknown }): Block[] => blocksOf(r).filter((b) => b.text.includes("── environment notes ──"));
 const call = async (client: Client, expr: string): Promise<{ content: unknown; isError?: boolean }> =>
   (await client.callTool({ name: TOOL, arguments: { "repl-input-scheme-program": expr } })) as {
@@ -118,32 +113,27 @@ describe("futility door — TRIGGER 1: degraded tool (futile-retry)", () => {
     expect(blocksOf(r3)[0]!.text).toContain("bot detection triggered"); // the real result, verbatim
     const note = notes(r3);
     expect(note).toHaveLength(1);
-    // §C2 (benchmark-defect-register.md) — the door TEXT itself changed, not just the channel:
-    // "effectively the same result" (implying degradation as a settled fact) became "the same
-    // result despite different arguments" (a fact, framed conditionally); "stop retrying X" (an
-    // outcome-fine-tuning imperative — load-bearing constraint #6 — that pushed a model to
-    // abandon a recoverable search) was replaced with "change the arguments materially, or take
-    // a different route", which prescribes nothing about whether to keep using the tool.
+    // The door frames degradation as a conditional fact, not a settled one, and prescribes no
+    // specific next action — "stop retrying X" is an outcome-fine-tuning imperative that pushes a
+    // model to abandon a recoverable search; "change the arguments materially, or take a
+    // different route" leaves whether to keep using the tool up to the model.
     expect(note[0]!.text).toContain("the last 3 calls to up/degraded returned the same result despite different arguments");
     expect(note[0]!.text).toContain("change the arguments to up/degraded materially, or take a different route");
-    // §E3: the door's own text still leads with "Note: " (doors.ts DoorSession.renderNote is
-    // unchanged) — it just isn't the block's OWN prefix anymore; it's a line inside the
-    // consolidated `#| ── environment notes ── … |#` block.
+    // The door's own text still leads with "Note: " (doors.ts DoorSession.renderNote) — it just
+    // isn't the block's OWN prefix; it's a line inside the consolidated
+    // `#| ── environment notes ── … |#` block.
     expect(note[0]!.text.startsWith("#| ── environment notes ──")).toBe(true);
     expect(note[0]!.text).toContain("Note:");
     expect(note[0]!.text).not.toContain("Error:");
   });
 
-  // RE-PINNED, but NOT a §E3 channel/text change — a genuine, DELIBERATE behavior change from
-  // mcp-substrate's C1b "trigger surgery" (benchmark-defect-register.md ADDENDUM, REVISED WAVE
-  // ORDER item 3 / `futility.ts`'s `RingEntry.callId`): statements written in ONE program are
-  // authored by the model WITHOUT having seen any sibling statement's result yet — three
-  // identical results among THEM is not an "informed retry" (the door's whole premise), so both
-  // triggers now require `distinctCalls >= 2` (each `run()` bumps `callId` once via
-  // `tracker.beginCall()`). Unit-covered directly in mcp-substrate's own
-  // `futility.test.ts`: "(a) three identical results from ONE program's statements (no
-  // beginCall between them) fire NOTHING". This e2e case now asserts the SAME invariant through
-  // the real wire: same-call batching is silent, never a false "you're retrying" note.
+  // Statements written in ONE program are authored by the model WITHOUT having seen any sibling
+  // statement's result yet — three identical results among THEM is not an "informed retry" (the
+  // door's whole premise), so both triggers require `distinctCalls >= 2` (each `run()` bumps
+  // `callId` once via `tracker.beginCall()`). Unit-covered directly in mcp-substrate's own
+  // `futility.test.ts`: "three identical results from ONE program's statements (no beginCall
+  // between them) fire NOTHING". This e2e case asserts the SAME invariant through the real wire:
+  // same-call batching is silent, never a false "you're retrying" note.
   it("3 distinct-arg statements in ONE manifold call → NO note (C1b: same-call statements are not an informed retry)", async () => {
     const client = await manifoldClient();
     const r = await call(client, '(up/degraded :q "a") (up/degraded :q "b") (up/degraded :q "c")');
@@ -165,8 +155,8 @@ describe("futility door — TRIGGER 2: pure repeat (duplicate-call)", () => {
     const note = notes(r2);
     expect(note).toHaveLength(1);
     expect(note[0]!.text).toContain("you already have this exact up/degraded result above");
-    // §E3: same header/line split as the futile-retry case above — the door text (duplicate-call
-    // door, unchanged by §C2) still leads with "Note: " as a LINE inside the consolidated block.
+    // Same header/line split as the futile-retry case above — the duplicate-call door text still
+    // leads with "Note: " as a LINE inside the consolidated block.
     expect(note[0]!.text.startsWith("#| ── environment notes ──")).toBe(true);
     expect(note[0]!.text).toContain("Note:");
     expect(note[0]!.text).not.toContain("Error:");
@@ -200,28 +190,20 @@ describe("futility door — negative / discrimination cases", () => {
     expect(notes(r3)).toHaveLength(0);
   });
 
-  // RE-PINNED — INVERTED, not a §E3 channel/text change. This test used to prove digit-stripping
-  // (the old `DIGIT_RUN` regex in `normalizeResultText`) collapsed three byte-distinct "retry
-  // after N seconds" bodies to one shape key. §C1 (benchmark-defect-register.md) — V RULING:
-  // DELETE `DIGIT_RUN`. The 178-trajectory audit found digit-stripping never enabled a single
-  // TRUE positive (every real degraded-tool firing was byte-identical prose with NO digits at
-  // all — bot-detection pages, "No objects found") — it only manufactured FALSE ones:
-  // `get_file_info`'s pure labels+digits body normalized three genuinely DIFFERENT files (sizes
-  // 40435 / 810402 / 10266) to the same shape key, firing the door on legitimately distinct
-  // results. Digits are frequently the PAYLOAD (file sizes, counts, ids, prices), not a volatile
-  // token. The invariant this test protects is now the OPPOSITE of its old name: results that
+  // No digit-normalization: digits are frequently the PAYLOAD (file sizes, counts, ids, prices),
+  // not a volatile token, so a shape-key that strips them collapses genuinely distinct results
+  // (e.g. three different file sizes) into a false-positive "identical" match. Results that
   // differ only in digits must NOT be treated as identical.
   it("NO NORMALIZATION on digits (C1: DIGIT_RUN deleted) — results differing only in a counter are genuinely distinct, futile-retry does NOT fire", async () => {
     const client = await manifoldClient();
     // clocked returns "rate limited, retry after <n> seconds" with n incrementing each call —
-    // three byte-DISTINCT bodies, and (post-C1) three distinct shape-hashes too.
+    // three byte-DISTINCT bodies, and three distinct shape-hashes too.
     const r1 = await call(client, '(up/clocked :q "a")');
     const r2 = await call(client, '(up/clocked :q "b")');
     const r3 = await call(client, '(up/clocked :q "c")');
     expect(notes(r1)).toHaveLength(0);
     expect(notes(r2)).toHaveLength(0);
-    // Pre-C1 this would have wrongly fired (digit-stripped shapes collided); post-C1 the digits
-    // ARE the payload distinguishing three separate answers, so nothing fires.
+    // The digits ARE the payload distinguishing three separate answers, so nothing fires.
     expect(notes(r3)).toHaveLength(0);
   });
 

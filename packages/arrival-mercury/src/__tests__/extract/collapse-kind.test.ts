@@ -138,7 +138,7 @@ describe('adversarial — non-AC / hidden-const folds must NEVER be "combine" (g
     expect(collapseOf(run(`(fold (lambda (acc x) (- acc x)) 0 v)`))).toBe("lowered");
   });
 
-  it('longcat forge (fold (lambda (acc x) (if (eq? x "s") "FABRICATED" x)) "" v): "lowered" — the real forge path through buildFan', () => {
+  it('hidden-const fold forge (fold (lambda (acc x) (if (eq? x "s") "FABRICATED" x)) "" v): "lowered" — the real forge path through buildFan', () => {
     // fixture-corpus row 3, driven end-to-end this time (the corpus asserts the
     // extracted circuit shape; here we assert its collapse specifically). The
     // body is an `if`, not `(ac-head acc element)`, so combine is never even a
@@ -225,7 +225,7 @@ describe('§2c "route" — inferCollapse over dnf@Fan bodies (it.fails until T3a
 describe('§2c fail-closed — inferCollapse ⇒ "lowered" forever (plain it, green under the stub)', () => {
   const LOWERED_ROWS: readonly { readonly name: string; readonly body: StaticProv }[] = [
     {
-      name: "longcat body hand-built: choice{guards:[*], alts:[const, *]} — the FATAL forge shape, matches fixture-corpus row 3 body",
+      name: "hidden-const fold body hand-built: choice{guards:[*], alts:[const, *]} — the FATAL forge shape, matches fixture-corpus row 3 body",
       body: { kind: "choice", site: SITE, guards: [fused(element, constNode())], alts: [constNode(), element] },
     },
     {
@@ -260,7 +260,7 @@ describe('§2c fail-closed — inferCollapse ⇒ "lowered" forever (plain it, gr
     });
   }
 
-  it("longcat body ties back to fixture-corpus row 3 (drift in either file fails here)", () => {
+  it("hidden-const fold body ties back to fixture-corpus row 3 (drift in either file fails here)", () => {
     const body: ChoiceProv = { kind: "choice", site: SITE, guards: [fused(element, constNode())], alts: [constNode(), element] };
     const row3 = FIXTURE_CORPUS[2]!;
     if (row3.expected.kind !== "fan") throw new Error("fixture-corpus row 3 changed shape — update this tie-back");

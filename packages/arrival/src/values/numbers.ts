@@ -119,13 +119,12 @@ function parseSafeIntLiteral(magnitude: bigint, original: string): number {
   return Number(magnitude);
 }
 
-// PRE-RUN LEGITIMATE, re-verified (arrival-constant-ctx-audit-2026-07-11.md §2.5): a public,
-// host-facing string→number utility (re-exported off `index.ts`) with NO in-tree runtime
-// caller as of this pass (grep `parseNumber(` outside this file and its own spec finds only
-// test usage) — distinct from `utils/parsing.ts`'s near-namesake `parse_rational`/
-// `parse_integer`/`parse_float`, which ARE dual-use (called live by `string->number`). No
-// span/crossing concept applies to a bare host utility. If a live rosetta/MCP caller ever
-// appears, it should pass the crossing's own ctx rather than leaning on this default.
+// A public, host-facing string→number utility (re-exported off `index.ts`) — distinct
+// from `utils/parsing.ts`'s near-namesake `parse_rational`/`parse_integer`/
+// `parse_float`, which ARE dual-use (called live by `string->number`). No span/crossing
+// concept applies to a bare host utility, so it mints against `CONSTANT_CTX`; a live
+// rosetta/MCP caller should pass the crossing's own ctx rather than leaning on this
+// default.
 export function parseNumber(str: string): ANumeric {
   str = str.trim();
 

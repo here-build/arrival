@@ -178,15 +178,13 @@ export class ASymbol extends AValue {
   }
 
   ["arrival/toJS"](): string {
-    // ⚖️ Ruled 2026-07-14 (compiler campaign, representation law §2.1): symbol →
-    // the INTERNED NAME, plain. The former apostrophe prefix ("'hello") kept
-    // symbols distinguishable from strings on the JS face, but it leaked
-    // interpreter texture into every egress consumer (compiled artifacts, cache
-    // keys, infer args — llm-plane's stripSymbolMarker existed solely to undo
-    // it, and wrongly stripped user strings that legitimately start with an
-    // apostrophe). Symbol-vs-string distinguishability lives in the boxed world
-    // (symbol?/eq?); egress is a one-way fold, same family as nil→[] and
-    // dotted-pair→2-list: round trip = projection∘borrow, not identity.
+    // A symbol's JS face is the INTERNED NAME, plain — never an apostrophe-prefixed form.
+    // An apostrophe prefix ("'hello") would keep symbols distinguishable from strings on
+    // the JS face, but it leaks interpreter texture into every egress consumer (compiled
+    // artifacts, cache keys, infer args) and is ambiguous with a user string that legitimately
+    // starts with an apostrophe. Symbol-vs-string distinguishability lives in the boxed world
+    // (symbol?/eq?); egress is a one-way fold, same family as nil→[] and dotted-pair→2-list:
+    // round trip = projection∘borrow, not identity.
     return isString(this.__name__) ? this.__name__ : symbol_to_string(this.__name__ as symbol);
   }
 

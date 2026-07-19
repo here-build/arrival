@@ -1,16 +1,16 @@
-// R6 laws (docs/working-proposals/arrival-mcp-rework-over-phases.md, Part IV — R6, §2.6):
+// Attachment-extraction laws pinned by this suite:
 //
 //   • STREAMING-INLINE — a scheme program returning a structure with embedded Blobs streams
 //     the `#attachment` tags inline in the core text, with the pixels attached as separate
-//     blocks (per-extra label text block, then its binary block — the v1 downstream strategy).
-//   • AGGREGATE law (sharpened) — the final `CallToolResult` ≡ the ordered concatenation of the
-//     statement events' FULL ContentBlock lists, text AND binary alike (`serializeResult` lowers
-//     the aggregate's raw Blobs through the same `lowerBinaryBlob` the events used).
+//     blocks (a per-extra label text block, then its binary block).
+//   • AGGREGATE — the final `CallToolResult` ≡ the ordered concatenation of the statement
+//     events' FULL ContentBlock lists, text AND binary alike (`serializeResult` lowers the
+//     aggregate's raw Blobs through the same `lowerBinaryBlob` the events used).
 //   • TEXT-BUDGET — an extracted blob charges the s-expr text only its ~40-char tag.
 //   • QUOTA — per call (`attachmentQuota`, the AttachmentSink `beginCall(quota)` shape),
 //     consulted DURING the serializer walk: overflow drains a NOTE with the count, never
 //     silently, and past-quota leaves are NEVER base64-encoded (spied below).
-//   • R0 compatibility — a blob-free program still returns plain string[] (the output-shape pin).
+//   • OUTPUT-SHAPE COMPATIBILITY — a blob-free program still returns plain string[].
 
 import type { ReplEvent, ReplStatementEvent } from "@inhuman.tools/mcp-substrate";
 import { describe, expect, it, vi } from "vitest";
@@ -45,7 +45,7 @@ describe("R6 — streaming-inline: embedded Blobs tag inline, blocks attach", ()
 
     // Aggregate: core string (tag inline), label string, raw Blob — in statement order.
     expect(out).toHaveLength(3);
-    // (bare-word string rendering inside lists is the serializer's pre-existing formatting)
+    // (bare-word string rendering inside lists is generic serializer formatting)
     expect(out[0]).toBe('(list before #attachment "att-1 (image/png, 12B)" after)');
     expect(out[1]).toBe("attachment #1: att-1 (image/png, 12B)");
     expect(out[2]).toBeInstanceOf(Blob);

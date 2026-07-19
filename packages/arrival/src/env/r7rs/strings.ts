@@ -92,10 +92,10 @@ export default new EnvCapability("scheme/strings", {
     "string-ref": symbol.native`string-ref: the character at index k`(
       { input: [z.string, z.schemeNumber], output: [z.char] },
       function (this: CallCtx, str, k) {
-        // Bounds-checked (R7RS §6.7: "k must be a valid index"): OOB used to construct
-        // ACharacter(undefined) and crash later with a leaky internal error ("charValue
-        // is not iterable") — now a clean, catchable error at the call (2026-07-13 sweep,
-        // parity with list-ref's quality bar). Code-point indexing (the spread), not UTF-16.
+        // Bounds-checked (R7RS §6.7: "k must be a valid index") — an out-of-range index
+        // raises a clean, catchable RangeError here, matching list-ref's error quality
+        // (never a leaky internal "charValue is not iterable" from constructing
+        // ACharacter(undefined) on an OOB index). Code-point indexing (the spread), not UTF-16.
         const chars = [...stringValue(str)];
         const idx = Number(coerceNumeric(k).valueOf());
         if (!Number.isInteger(idx) || idx < 0 || idx >= chars.length) {
@@ -305,12 +305,11 @@ export default new EnvCapability("scheme/strings", {
     ),
 
     // proc is the fixed HEAD; the spread strings are the variadic TAIL (inputRest) — mirrors
-    // apply's head/rest split. The head is the established callable-schema convention
-    // (z.custom<(...args) => T>(), matching vector-map/vector-for-each/curry), and the rest
-    // is z.string (this file's own string-identity schema) rather than the
-    // representation-blind z.value the old contract used. Once the declared signature
-    // properly types the params, the old manual `const [proc, ...strings] = args as [...]`
-    // destructure-and-cast is redundant — proc/strings arrive as real typed parameters.
+    // apply's head/rest split. The head uses the established callable-schema convention
+    // (z.custom<(...args) => T>(), matching vector-map/vector-for-each/curry); the rest is
+    // z.string (this file's own string-identity schema, not the representation-blind
+    // z.value) so proc/strings arrive as real typed parameters — no manual destructure-
+    // and-cast needed at the call site.
     "string-map": symbol.native`string-map: map a procedure across the strings' characters`(
       // The z.custom callable head collapses signatureOf to the catch-all `(...args: unknown[])
       // => unknown` (losing the `string[]` rest + the string return). `type` author-asserts the
@@ -338,7 +337,7 @@ export default new EnvCapability("scheme/strings", {
         const minLen = Math.min(...strs.map((s) => s.length));
         const results: unknown[] = [];
         for (let i = 0; i < minLen; i++) {
-          // Seam-routed: `proc` is a callable VALUE now, not a bare fn.
+          // Seam-routed: `proc` is a callable VALUE (membrane-boxed), not a bare fn.
           results.push(applyCallback(proc, strs.map((s) => new ACharacter(runCtx, s[i])), runCtx));
         }
         const join = (chars: unknown[]) =>
@@ -355,8 +354,8 @@ export default new EnvCapability("scheme/strings", {
       },
     ),
 
-    // Same head/rest migration as string-map above (callable head, z.string rest);
-    // the manual destructure-and-cast is likewise redundant once the signature is typed.
+    // Same head/rest split as string-map above (callable head, z.string rest) — proc/
+    // strings arrive as real typed parameters, no manual destructure-and-cast needed.
     "string-for-each": symbol.native`string-for-each: apply a procedure across the strings' characters`(
       // Same degrade + author-assertion as string-map (the for-effect twin) → `void` (R7RS
       // unspecified; bare `void` as in env/core/core.ts's own hand-written type).
@@ -381,7 +380,7 @@ export default new EnvCapability("scheme/strings", {
           const ret = applyCallback(proc, strs.map((s) => new ACharacter(runCtx, s[i])), runCtx);
           if (is_promise(ret)) pending.push(ret);
         }
-        // R7RS "unspecified" is theVoid on the scheme face (was a bare JS undefined).
+        // R7RS "unspecified" is theVoid on the scheme face.
         if (pending.length > 0) return (promise_all(pending) as Promise<unknown[]>).then(() => theVoid);
         return theVoid;
       },

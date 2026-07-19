@@ -2,7 +2,7 @@
  * MDL collapse optimizer — behavioral + correctness proof (formally-correct
  * grammar model). Beyond "decisions look right," these pin the properties the
  * design's optimality claim rests on, and regression-guard the def/ref
- * double-count bug that adversarial review caught in the first prototype.
+ * double-count bug present in the first prototype.
  */
 import { describe, expect, it } from "vitest";
 

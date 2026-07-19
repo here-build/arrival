@@ -8,9 +8,9 @@
  * mirrors mercury's proven types-emit bite host — the loading approach is
  * copied, the prelude itself stays owned by the lens package (never vendored).
  *
- * One LanguageService per call is the spec's sanctioned v1 cost (Q4: one
- * `loadSource`-equivalent + a few thousand cached checker queries ≪ 1s);
- * batching several compiles over one DocumentRegistry is the later
+ * One LanguageService per call is the sanctioned v1 cost: one
+ * `loadSource`-equivalent + a few thousand cached checker queries ≪ 1s.
+ * Batching several compiles over one DocumentRegistry is the later
  * optimization, noted, not built.
  */
 import { getPreludeFiles, PRELUDE_FILE, PROGRAM_FILE } from "@inhuman.tools/arrival-lsp";
@@ -65,7 +65,7 @@ export function createFactsProgram(virtualTs: string): FactsProgram {
  * the TS-side containment half of the span join (spec §5's `nodeAt`, widened
  * from a point to the mapping's full range so an exact whole-form mapping
  * selects the call expression, never its `__arr` head token). Public-API
- * recursion, deliberately not `ts.getTouchingToken` (internal — spec Q3).
+ * recursion, deliberately not `ts.getTouchingToken` (a TS-internal API).
  * Ties prefer the deeper node. Returns `null` when only the SourceFile covers
  * the range (⇒ `"no-ts-node"`).
  */

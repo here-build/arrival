@@ -1,18 +1,15 @@
-// DiscoveryTool — a discovery tool as a VALUE, not a subclass.
-//
-// `new DiscoveryTool(name, capability, { description })`. Everything the old
-// `DiscoveryToolInteraction` subclass hand-declared now derives from the one
-// aggregating `McpEnvCapability` (`env`):
+// DiscoveryTool — one discovery tool bound to one aggregating McpEnvCapability, constructed as
+// a value: `new DiscoveryTool(name, capability, { description })`.
 //   • input schema = { expr, intent } ∪ the capability's `configuration` (the actor's typed args)
 //   • catalog      = `capability.allAnnotations()` (verbs, descriptions, dynamicDescription, aliases)
-//   • eval         = assembleAmbient({ capabilities: [capability], config }) — the exec-phases
-//                    phase-2 product (R7) — then per-form execState over `{ ambient, scope }`
+//   • eval         = assembleAmbient({ capabilities: [capability], config }), then per-form
+//                    execState over `{ ambient, scope }`
 //
 // The three host concerns enter at three membrane TIMES, never co-mingled:
-//   • eval-time  → the capability's `resources` (provider reads the per-call config; verbs read
-//                  `this.resources.x.live`). Authorization = a resource that won't spawn.
+//   • eval-time     → the capability's `resources` (provider reads the per-call config; verbs read
+//                     `this.resources.x.live`). Authorization = a resource that won't spawn.
 //   • dispatch-time → the `ToolCallCtx` (session, user, abort signal, record sink). It lives ABOVE
-//                  the eval membrane — a run can't reach it, so session/other-call state stays out.
+//                     the eval membrane — a run can't reach it, so session/other-call state stays out.
 //   • describe-time → infra closed over when the host built the capability (the welcome).
 
 import {
@@ -65,51 +62,48 @@ import {
   sessionConfigDigest,
 } from "./session-run-state.js";
 
-// ── execSerializedState: run scheme, serialize each top-level form's value (inlined from the
-// former @inhuman.tools/arrival umbrella — its only consumer was this tool). ──
+// ── execSerializedState: run scheme, serialize each top-level form's value ──
 
-// Total serialized-output budget for one MCP tool result (~10k tokens). Motivated by the
-// 158k-char "exceeds maximum allowed tokens" drop: the serializer streams per-element caps
-// and shrinks them to fit this budget rather than emitting an oversized payload the client
-// rejects. Split across the result elements so the SUM stays bounded.
+// Total serialized-output budget for one MCP tool result (~10k tokens) — bounds against a
+// client that rejects oversized payloads ("exceeds maximum allowed tokens"). The serializer
+// streams per-element caps and shrinks them to fit this budget rather than emit an oversized
+// one. Split across the result elements so the SUM stays bounded.
 const MCP_OUTPUT_BUDGET = 40_000;
 const perElementBudget = (count: number): number => Math.max(2_000, Math.floor(MCP_OUTPUT_BUDGET / Math.max(1, count)));
 
 interface ExecSerializedOptions {
-  /** The call's assembled ambient (exec-phases phase-2 product, R7) — CALLER-owned; exec never
-   *  disposes it. Warm-reuse and per-call disposal are both DiscoveryTool's (ownership table). */
+  /** The call's assembled ambient — CALLER-owned; exec never disposes it. Warm-reuse and
+   *  per-call disposal are both DiscoveryTool's responsibility. */
   ambient: AssembledAmbient;
-  /** The session's lexical accumulation (phase 3's caller-passed scope) — top-level `define`s
-   *  land HERE, never on the ambient's env, so REPL continuity is the designed
-   *  `execState({ scope })` idiom rather than glass-env mutation. */
+  /** The session's lexical accumulation — top-level `define`s land HERE, never on the ambient's
+   *  env, so REPL continuity is the `execState({ scope })` idiom, not glass-env mutation. */
   scope: LexicalScope;
   budgetMs?: number;
   /** Per-run allocation bound — see {@link defaultHeapBudget}. Undefined ⇒ unbounded (the `exec`
    *  primitive's own default; callers of this function always pass one, see `call` below). */
   heapBudget?: number;
   signal?: AbortSignal;
-  /** THE RUN CACHE (R2, `ExecOptions.cache`) — record mode on live input, replay mode on fold.
-   *  Undefined ⇒ no interception (sessionless calls — byte-identical fast path). */
+  /** THE RUN CACHE (`ExecOptions.cache`) — record mode on live input, replay mode on fold.
+   *  Undefined ⇒ no interception (sessionless calls — the byte-identical fast path). */
   cache?: RunCache;
-  /** Per-form serialization budget, computed ONCE per call from the PARSED form count —
-   *  §2.5's parse-first budget fix (closes §1.2's SUM regression: the per-exec
-   *  `perElementBudget(results.length)` default sees one form per exec in the REPL split, so
-   *  every form got the near-full budget and the batch SUM was unbounded). The REPL loop
-   *  (`runForms`) always passes `perElementBudget(forms.length)`; the fold — whose output is
-   *  discarded — keeps the per-exec default. */
+  /** Per-form serialization budget, computed ONCE per call from the PARSED form count, so the
+   *  batch SUM stays bounded — the per-exec `perElementBudget(results.length)` default sees
+   *  one form per exec in the REPL split, so every form would get the near-full budget and the
+   *  batch SUM would be unbounded. The REPL loop (`runForms`) always passes
+   *  `perElementBudget(forms.length)`; the fold — whose output is discarded — keeps the
+   *  per-exec default. */
   charBudget?: number;
-  /** R6 (§2.6): the call-level attachment numbering/quota. Present ⇒ values render through
+  /** The call-level attachment numbering/quota. Present ⇒ values render through
    *  `serializeWithExtras` (binary leaves extracted into `extras`, ~40-char tags in the core
-   *  text); absent ⇒ plain `toSExprString` — the byte-identical fast path (the fold — whose
-   *  output is discarded — stays here: no extraction work is wasted on it). */
+   *  text); absent ⇒ plain `toSExprString` — the byte-identical fast path (the fold, whose
+   *  output is discarded, stays here: no extraction work is wasted on it). */
   extrasState?: ExtrasState;
-  /** THE EFFECT LOG (arrival-provenance-confirmation.md, values/effect-log.ts W1). Present ⇒
-   *  every `sink`-classed penetration this form makes GATHERS onto the log instead of firing
-   *  (`exec`'s own `effects` option, threaded verbatim) — the confirmation design's
+  /** THE EFFECT LOG. Present ⇒ every `sink`-classed penetration this form makes GATHERS onto
+   *  the log instead of firing (`exec`'s own `effects` option, threaded verbatim) — the
    *  queries-then-effects-burst model. Absent (the fold path, sessionless calls) ⇒ sinks fire
-   *  immediately, byte-identical to pre-confirmation behavior. */
+   *  immediately. */
   effects?: EffectLog;
-  /** Lineage capture (default-on, §7.6's disable knob is the CALLER omitting this) — the
+  /** Lineage capture (default-on; the disable knob is the CALLER omitting this) — the
    *  `EvalTrace` a confirm-manifest's per-argument `groundingVerdict` annotation reads. Reused
    *  across every form of ONE call (the manifest's `forms` span the whole call, not one
    *  statement) so a later effect's arguments can trace back through an earlier statement's
@@ -120,8 +114,7 @@ interface ExecSerializedOptions {
 /** The standard base's full symbol vocabulary (sorted), advertised in the tool schema in place
  *  of a hardcoded builtin constant — so the docs stay FAITHFUL to the base every eval ambient
  *  augments. Realm-memoized (the base is realm-scoped); read off a throwaway BARE ambient's
- *  sealed chain (`names()`), the privatization-era replacement for the retired
- *  instance-env `allBoundNames()` chain walk. */
+ *  sealed chain (`names()`). */
 let baseEnvSymbolsMemo: Promise<readonly string[]> | undefined;
 function baseEnvSymbols(): Promise<readonly string[]> {
   return (baseEnvSymbolsMemo ??= (async () => {
@@ -134,12 +127,12 @@ function baseEnvSymbols(): Promise<readonly string[]> {
   })());
 }
 
-/** `execSerializedState`'s product: the serialized outputs plus this form's meter reads (§2.7). */
+/** `execSerializedState`'s product: the serialized outputs plus this form's meter reads. */
 interface ExecSerializedOutcome {
   out: string[];
-  /** R6: this form's extracted binary leaves, in encounter order (empty without `extrasState`). */
+  /** This form's extracted binary leaves, in encounter order (empty without `extrasState`). */
   extras: readonly SerializedExtra[];
-  /** R6: how many binary leaves THIS form rendered tag-only past quota (never collected, never
+  /** How many binary leaves THIS form rendered tag-only past quota (never collected, never
    *  base64-encoded) — the per-statement delta the drained note reports, never silently. */
   overflowDelta: number;
   /** The run's allocation-meter read (0 when the run carried no meter — never the case on
@@ -168,13 +161,12 @@ function isValuesTuple(value: unknown): value is { __values__: SchemeValue[] } {
 
 /**
  * Scheme→JS exit for SERIALIZATION — deliberately the bare `arrival/toJS` protocol, NOT
- * membrane.toJS's membrane crossing (they used to coincide; they no longer do — the
- * membrane exit gives a NESTED callable a live host fn via `arrival/toJSMembrane`, which
- * is exactly wrong for a wire serializer: the wire wants strings, and a nested callable
- * stringifying to `#<procedure …>` here IS the serialization contract, pinned as law in
- * arrival's crossing tests). Dispatches the PROTOCOL key directly (the same
- * cross-package convention arrival-serializer itself uses) because R5 lands no core
- * exports. Three arms:
+ * membrane.toJS's membrane crossing: the membrane exit gives a NESTED callable a live host fn
+ * via `arrival/toJSMembrane`, which is exactly wrong for a wire serializer — the wire wants
+ * strings, and a nested callable stringifying to `#<procedure …>` here IS the serialization
+ * contract, pinned as law in arrival's crossing tests. Dispatches the PROTOCOL key directly
+ * (the same cross-package convention arrival-serializer itself uses) since this module has no
+ * core exports of its own to reuse. Three arms:
  *   • multiple values exit as a JS ARRAY of unwrapped elements;
  *   • a TOP-LEVEL callable exits as the named function face (serializer: `<function>`);
  *   • everything else dispatches its own `arrival/toJS` term (containers egress as
@@ -190,12 +182,12 @@ function hostFace(value: SchemeValue): unknown {
 
 /**
  * Execute scheme source (or an already-parsed form) and serialize each top-level form's value
- * under the MCP output budget, returning the run's heap-meter reads alongside (R5, §2.7 — the
+ * under the MCP output budget, returning the run's heap-meter reads alongside (the
  * COMPLEX-tier `execState` is used precisely so the per-form `runCtx.heapMeter` is readable
  * once at the end; values exit through `hostFace`, the same membrane crossing `exec` performs).
  * `execState` already returns one `SchemeValue` per top-level form, and the caller's REPL split
  * (one already-parsed form per call) means there's nothing to coalesce: serialize the results
- * directly. No `(list …)` wrap-and-unwrap — that round-trip predated the REPL split.
+ * directly.
  */
 async function execSerializedState(
   expr: string | SchemeValue,
@@ -256,16 +248,15 @@ function argTypeName(item: z.ZodType): string {
   return `value${opt}${desc}`;
 }
 
-// ── REPL sessions: statement log + first-class run cache (R3, §2.2/§2.4; R7 warm pair) ─────────
+// ── REPL sessions: statement log + first-class run cache ───────────────────────────────────────
 // A session's durable twin is `(log, cache)`. Live, the warm `(AssembledAmbient, LexicalScope)`
 // pair is memoized on the call's config digest — same digest ⇒ reuse (zero fold cost); changed ⇒
 // dispose the old ambient, assemble fresh, drop the cache (configDigest is part of the
-// cache-validity identity), and FOLD:
-// re-run the log over the cache in replay mode, where every declared `view` penetration is
-// answered from the cache instead of re-fired, every `sink` tombstone skips, and `pure`/undeclared
-// statements re-run under their stable-behavior promise. The old statement-level `__cache__`
-// overlay (`jsonRoundTrippable` + `env.set` restore) is DISSOLVED (D3): a wire-safe define replays
-// as re-execution over cached penetrations, arriving at the same value through the honest path.
+// cache-validity identity), and FOLD: re-run the log over the cache in replay mode, where every
+// declared `view` penetration is answered from the cache instead of re-fired, every `sink`
+// tombstone skips, and `pure`/undeclared statements re-run under their stable-behavior promise.
+// A wire-safe define replays as re-execution over cached penetrations, arriving at the same
+// value through the honest path.
 
 const DEFINE_NAME = /^\(define\s+(?:\(\s*)?([^\s()]+)/;
 
@@ -314,13 +305,13 @@ function sourceTextFor(form: SchemeValue, index: number, forms: readonly SchemeV
  *  reach session identity or another call's state (the invariant the run isolation rests on). */
 export interface ToolCallCtx {
   /** The MCP session: its id + state bag. With no injected `store`, the session's durable twin
-   *  (`SessionRunState`) lives at `state.__run__` as ONE in-memory object (stdio mode — today's
-   *  zero-config behavior); a legacy `state.__repl__` history seeds the v2 log on first touch. */
+   *  (`SessionRunState`) lives at `state.__run__` as ONE in-memory object (the stdio-mode,
+   *  zero-config default); a legacy `state.__repl__` history seeds the v2 log on first touch. */
   session?: { id: string; state: Record<string, unknown> };
   /** Injected session persistence ("map but async"). When present, `SessionRunState` is
    *  encoded/decoded through it (keyed by the session id) and every write is AWAITED before the
    *  call responds — the "durably confirmed, not merely applied" bar. Absent ⇒ in-memory default
-   *  (the session bag), zero-config. The mcp-worker DO wiring over DO storage is R4's. */
+   *  (the session bag), zero-config. */
   store?: AsyncSessionStore;
   /** The authenticated principal (verified claims, never the request body) — stamped on the record. */
   user?: { sub: string; teamIds?: readonly string[] };
@@ -328,9 +319,9 @@ export interface ToolCallCtx {
   signal?: AbortSignal;
   /** Fire-and-forget interaction sink — never blocks the response. */
   record?: (interaction: InteractionLog) => void;
-  /** The per-statement event stream (R5, §2.5 — `ReplEvent` in mcp-substrate). DISPATCH-TIME,
-   *  exactly where `record` sits — ABOVE the eval membrane, so a run can never reach or forge
-   *  its own event channel. Receives the wireframe-then-record order: ONE topology event (the
+  /** The per-statement event stream (`ReplEvent` in mcp-substrate). DISPATCH-TIME, exactly
+   *  where `record` sits — ABOVE the eval membrane, so a run can never reach or forge its own
+   *  event channel. Receives the wireframe-then-record order: ONE topology event (the
    *  future trace, before index 0 ever runs), then one statement event per executed top-level
    *  form — strictly ordered, terminal-on-error. Events are SAME-PRINCIPAL (they echo program
    *  source/results the same client sent, on that call's own response stream) and ADDITIVE
@@ -351,15 +342,14 @@ export interface InteractionLog {
 }
 
 export interface DiscoveryToolOptions {
-  /** The tool's stable identity prose (the MCP `description`). Per-session/personalized text is the
-   *  verbs' `dynamicDescription` (it rides the catalog), so this is static.
+  /** The tool's stable identity prose (the MCP `description`). Per-session/personalized text is
+   *  the verbs' `dynamicDescription` (it rides the catalog), so this is static.
    *
-   *  OPTIONAL as of the fusion (arrival-mcp-extended-capability.md §2.1/§2.10): the CAPABILITY
-   *  itself is the self-contained home now (`McpEnvCapability`'s `description`/`dynamicDescription`
-   *  — CAP_DESCRIPTION/CAP_DYNAMIC_DESCRIPTION) — "no side bag handed to the runner." Set here
-   *  ONLY as a LEGACY, migration-time override: when present it WINS over the capability's own
+   *  OPTIONAL: the capability itself is the self-contained home for description text
+   *  (`McpEnvCapability`'s `description`/`dynamicDescription`) — "no side bag handed to the
+   *  runner." Set here ONLY as a LEGACY override: when present it WINS over the capability's own
    *  description (the same host-wins posture `config()`'s merge already takes); omitted ⇒
-   *  `describe()` resolves the capability's own channel-1 description instead. */
+   *  `describe()` resolves the capability's own description instead. */
   description?: string;
   /** Wall-clock eval budget (the interpreter TICK-checks it). Defaults to {@link DEFAULT_BUDGET_MS}. */
   budgetMs?: number;
@@ -368,15 +358,15 @@ export interface DiscoveryToolOptions {
    *  runaway the TICK-cadence wall-clock can't preempt). Defaults to {@link defaultHeapBudget}. */
   heapBudget?: number;
 
-  /** Per-session statement-count cap (Part III LIMIT — rehydration is O(n) in log size, bounded
-   *  honestly). Hitting it is a TEACHING error directing the client to a fresh session, never a
-   *  silent truncation. Defaults to {@link defaultStatementCap}. */
+  /** Per-session statement-count cap (rehydration is O(n) in log size, bounded honestly).
+   *  Hitting it is a TEACHING error directing the client to a fresh session, never a silent
+   *  truncation. Defaults to {@link defaultStatementCap}. */
   statementCap?: number;
 
-  /** Per-call attachment quota (R6, §2.6 — the `AttachmentSink.beginCall(quota)` shape, consulted
-   *  DURING the serializer walk): at most this many binary leaves are extracted + attached per
-   *  call; further leaves render tag-only in the core text (never collected, never base64-encoded)
-   *  and the overflow count drains into a note — never silently. Defaults to
+  /** Per-call attachment quota (the `AttachmentSink.beginCall(quota)` shape, consulted DURING
+   *  the serializer walk): at most this many binary leaves are extracted + attached per call;
+   *  further leaves render tag-only in the core text (never collected, never base64-encoded) and
+   *  the overflow count drains into a note — never silently. Defaults to
    *  {@link defaultAttachmentQuota}. */
   attachmentQuota?: number;
 
@@ -402,23 +392,18 @@ export interface DiscoveryToolOptions {
   exposableConfiguration?: readonly string[];
 
   /**
-   * Per-argument lineage annotation on a held confirm-manifest (arrival-provenance-
-   * confirmation.md §7.6 — RULED default-on with a disable knob). Default `true`: every
-   * session call installs an `EvalTrace` tap so a manifest (built only when the call
-   * gathers a risky effect) can annotate each row's arguments with a `groundingVerdict`.
-   * Set `false` for a small-context/degraded deployment that wants zero tracing tax —
-   * a manifest still builds (digest, decoded args, `invocationSource`), just without
-   * `argLineage`. Degraded confirmation POSTURES beyond this (always-confirm,
-   * pause-to-confirm) are OUT of scope for this design — a future family alongside the
-   * lineage knob, per the ruling's own note.
+   * Per-argument lineage annotation on a held confirm-manifest. Default `true`: every session
+   * call installs an `EvalTrace` tap so a manifest (built only when the call gathers a risky
+   * effect) can annotate each row's arguments with a `groundingVerdict`. Set `false` for a
+   * small-context/degraded deployment that wants zero tracing tax — a manifest still builds
+   * (digest, decoded args, `invocationSource`), just without `argLineage`.
    */
   lineage?: boolean;
 
   /**
-   * The per-effect rig-altered invariant seam (arrival-provenance-confirmation.md item 3,
-   * Part V.3/W4 of the effect-burst doc). Defaults to {@link noRigAlteredCheck} — an HONEST
-   * no-op (every row reports unaltered) because no host-generic re-derivation channel exists
-   * yet (that needs W3's live plexus burst executor). A host with one wires its own check.
+   * The per-effect rig-altered invariant seam. Defaults to {@link noRigAlteredCheck} — an
+   * HONEST no-op (every row reports unaltered) because no host-generic re-derivation channel
+   * exists yet. A host with one wires its own check.
    */
   rigAlteredCheck?: RigAlteredCheck;
 }
@@ -468,26 +453,26 @@ function assertSessionShape(
  *  handler timeout; this is the server-side bound). */
 export const DEFAULT_BUDGET_MS = 5000;
 
-/** Per-run allocation-bound default (arrival-promises completion plan, gap 1). The
- *  `discovery-run.ts` precedent (`ARRIVAL_HEAP_MAX ?? 100_000_000`) — a FUNCTION, not a frozen
- *  constant, so it's read LIVE at every call and a test can flip the env var per case.
- *  `DiscoveryToolOptions.heapBudget` / a per-call option always wins over this default. */
+/** Per-run allocation-bound default. Mirrors the `discovery-run.ts` precedent
+ *  (`ARRIVAL_HEAP_MAX ?? 100_000_000`) — a FUNCTION, not a frozen constant, so it's read LIVE at
+ *  every call and a test can flip the env var per case. `DiscoveryToolOptions.heapBudget` / a
+ *  per-call option always wins over this default. */
 export function defaultHeapBudget(): number {
   const raw = Number(process.env.ARRIVAL_HEAP_MAX);
   return Number.isFinite(raw) && raw > 0 ? raw : 100_000_000;
 }
 
-/** Per-session statement-count cap default (Part III LIMIT). A FUNCTION (like
- *  {@link defaultHeapBudget}) so it reads the env var live and tests can flip it per case. */
+/** Per-session statement-count cap default. A FUNCTION (like {@link defaultHeapBudget}) so it
+ *  reads the env var live and tests can flip it per case. */
 export function defaultStatementCap(): number {
   const raw = Number(process.env.MCP_SESSION_STATEMENT_CAP);
   return Number.isFinite(raw) && raw > 0 ? raw : 512;
 }
 
-/** Per-call attachment quota default (R6, §2.6). A FUNCTION (like {@link defaultHeapBudget}) so
- *  it reads the env var live. The default mirrors arrival-manifold's
- *  `DEFAULT_PASSTHROUGH_ATTACHMENTS` (3) — the same "first N binary blocks, in encounter order"
- *  posture on the other MCP surface. `0` is honored (attach nothing, tag everything). */
+/** Per-call attachment quota default. A FUNCTION (like {@link defaultHeapBudget}) so it reads
+ *  the env var live. The default mirrors arrival-manifold's `DEFAULT_PASSTHROUGH_ATTACHMENTS`
+ *  (3) — the same "first N binary blocks, in encounter order" posture on the other MCP surface.
+ *  `0` is honored (attach nothing, tag everything). */
 export function defaultAttachmentQuota(): number {
   const raw = Number(process.env.MCP_ATTACHMENT_QUOTA);
   return Number.isFinite(raw) && raw >= 0 ? raw : 3;
@@ -496,13 +481,12 @@ export function defaultAttachmentQuota(): number {
 /** A discovery tool bound to one aggregating capability. Construct once per CONNECTION (the host
  *  builds `capability` with its infra armed into the resources); `call` runs once per request. */
 export class DiscoveryTool {
-  /** Warm pairs `(AssembledAmbient, LexicalScope)` (R7 — exec-phases §3.5's assembly-reuse row),
-   *  memoized on the call's config digest (§2.4's one warm-reuse rule): same digest ⇒ reuse the
-   *  live ambient + the session's lexical accumulation (zero fold cost); changed ⇒ dispose the
-   *  old ambient, assemble fresh, fold. Keyed by session id — per-session state lives with the
-   *  session, never module-level. The ambient is CALLER-owned everywhere it's passed to exec
-   *  (the §3.3 ownership rule): this map's owner disposes it — digest change, `closeSession`,
-   *  or `dispose()`. */
+  /** Warm pairs `(AssembledAmbient, LexicalScope)`, memoized on the call's config digest: same
+   *  digest ⇒ reuse the live ambient + the session's lexical accumulation (zero fold cost);
+   *  changed ⇒ dispose the old ambient, assemble fresh, fold. Keyed by session id — per-session
+   *  state lives with the session, never module-level. The ambient is CALLER-owned everywhere
+   *  it's passed to exec: this map's owner disposes it — digest change, `closeSession`, or
+   *  `dispose()`. */
   private readonly warm = new Map<string, { digest: string; ambient: AssembledAmbient; scope: LexicalScope }>();
 
   constructor(
@@ -521,15 +505,14 @@ export class DiscoveryTool {
     };
   }
 
-  /** Channel-1 (human) description — the LEGACY host override (`options.description`) wins
-   *  when supplied (migration-only, §2.10); otherwise the capability's OWN `description`/
-   *  `dynamicDescription` (§2.2 CAP_DESCRIPTION/CAP_DYNAMIC_DESCRIPTION) is the self-contained
-   *  home. The dynamic arm resolves against the SAME describe ambient the per-verb catalog
-   *  channel already builds (§2.7/§2.8 of exec-phases-and-dynamic-metadata.md) — built lazily
-   *  ONLY when the capability actually declares a dynamic arm, so a purely-static capability
-   *  never pays the assembly cost. Resolving `undefined` (no capability description at all)
-   *  falls back to the empty string, never a thrown error — a missing `Tool.description` is a
-   *  host-authoring gap, not a runtime condition this method should crash over. */
+  /** Channel-1 (human) description — the LEGACY host override (`options.description`) wins when
+   *  supplied; otherwise the capability's OWN `description`/`dynamicDescription` is the
+   *  self-contained home. The dynamic arm resolves against the SAME describe ambient the
+   *  per-verb catalog channel already builds — built lazily ONLY when the capability actually
+   *  declares a dynamic arm, so a purely-static capability never pays the assembly cost.
+   *  Resolving `undefined` (no capability description at all) falls back to the empty string,
+   *  never a thrown error — a missing `Tool.description` is a host-authoring gap, not a runtime
+   *  condition this method should crash over. */
   private async resolveToolDescription(): Promise<string> {
     if (this.options.description !== undefined) return this.options.description;
     const ambient = this.capability.dynamicDescription === undefined ? undefined : await this.describeAmbient();
@@ -537,20 +520,19 @@ export class DiscoveryTool {
     return live ?? "";
   }
 
-  /** Evaluate `args.expr` under the dispatch-time ctx — §2.1's per-call walk. Warm scope for
-   *  this call's config digest? use it. Otherwise fold = re-run the session's statement log over
-   *  its run cache (replay mode — a declared `view` penetration answers from the cache, a `sink`
-   *  tombstone skips, everything else re-runs). New input then executes statement-by-statement in
-   *  record mode over the SAME cache — REPL-style, so earlier statements' values stand even if a
-   *  later one crashes — and the session's durable twin (log + cache + counters) is persisted
-   *  (awaited) before the response. A cancellation propagates; a runtime crash is surfaced as an
+  /** Evaluate `args.expr` under the dispatch-time ctx. Warm scope for this call's config digest?
+   *  use it. Otherwise fold = re-run the session's statement log over its run cache (replay mode
+   *  — a declared `view` penetration answers from the cache, a `sink` tombstone skips,
+   *  everything else re-runs). New input then executes statement-by-statement in record mode
+   *  over the SAME cache — REPL-style, so earlier statements' values stand even if a later one
+   *  crashes — and the session's durable twin (log + cache + counters) is persisted (awaited)
+   *  before the response. A cancellation propagates; a runtime crash is surfaced as an
    *  `(error …)` form and stops the rest of the input.
    *
-   *  R6 (§2.6): with binary leaves in the output, the array interleaves the core strings with
-   *  per-extra label strings + raw Blobs (in statement order) — `serializeResult` lowers each
-   *  element to one content block, so the aggregate ≡ the ordered concat of the statement
-   *  events' FULL block lists. A blob-free program still returns plain `string[]` (the R0
-   *  output-shape pin, byte-identical). */
+   *  With binary leaves in the output, the array interleaves the core strings with per-extra
+   *  label strings + raw Blobs (in statement order) — `serializeResult` lowers each element to
+   *  one content block, so the aggregate ≡ the ordered concat of the statement events' FULL
+   *  block lists. A blob-free program still returns plain `string[]`. */
   async call(args: DiscoveryArgs, ctx: ToolCallCtx = {}): Promise<(string | Blob)[]> {
     const startTime = Date.now();
     const budgetMs = this.options.budgetMs ?? DEFAULT_BUDGET_MS;
@@ -559,10 +541,10 @@ export class DiscoveryTool {
     if (session !== undefined) assertSessionShape(this.name, session);
     const cfg = await this.config(args);
 
-    // ── sessionless: per-call ambient, disposed in `finally` (§2.8's dispose row — the R7
-    // ownership table: THIS call assembled it ⇒ THIS call disposes it, kernel disposers + the
-    // FULL lowered closure's resource wind-down) — no log, no cache, nothing durable. The exec
-    // path carries no cache: byte-identical fast path.
+    // ── sessionless: per-call ambient, disposed in `finally` — THIS call assembled it ⇒ THIS
+    // call disposes it, kernel disposers + the FULL lowered closure's resource wind-down — no
+    // log, no cache, nothing durable. The exec path carries no cache: the byte-identical fast
+    // path.
     if (session === undefined) {
       const ambient = await this.assemble(cfg);
       try {
@@ -590,11 +572,11 @@ export class DiscoveryTool {
     };
     const state = await this.loadState(session, ctx.store, identity);
 
-    // FILL-OR-KILL (arrival-provenance-confirmation.md §7.3): a session with a pending
-    // manifest that runs a NEW program — this call, whatever it turns out to do — kills the
-    // old order unconditionally. "The manifest is an order; it fills now or dies; nothing
-    // rests on the book." The only path that ever ACTS on a pending manifest is
-    // `confirmBurst`, a separate method entirely — `call` always starts fresh.
+    // FILL-OR-KILL: a session with a pending manifest that runs a NEW program — this call,
+    // whatever it turns out to do — kills the old order unconditionally. "The manifest is an
+    // order; it fills now or dies; nothing rests on the book." The only path that ever ACTS on
+    // a pending manifest is `confirmBurst`, a separate method entirely — `call` always starts
+    // fresh.
     state.pendingManifest = undefined;
 
     const warm = this.warm.get(session.id);
@@ -603,17 +585,17 @@ export class DiscoveryTool {
         ? { ambient: warm.ambient, scope: warm.scope, entries: new Map(Object.entries(state.cache)) }
         : await this.foldIntoFreshAmbient(session.id, state, identity, cfg, { budgetMs, heapBudget, signal });
 
-    // Snapshot BEFORE running — the fill-or-kill revert point if this call ends up holding
-    // (§7.2/§7.3): a held manifest's statements/cache mutations must never commit ("nothing
-    // rests on the book"), so a hold reverts `state.log`/`entries` back to exactly this.
+    // Snapshot BEFORE running — the fill-or-kill revert point if this call ends up holding: a
+    // held manifest's statements/cache mutations must never commit ("nothing rests on the
+    // book"), so a hold reverts `state.log`/`entries` back to exactly this.
     const preLogLen = state.log.length;
     const preEntries = new Map(entries);
     const preCounters = { ...state.counters };
 
-    // THE EFFECT LOG (W1) + lineage tap (§7.6, default-on): every sink this call's forms
-    // touch GATHERS here instead of firing — the gather-then-decide model the hold rule
-    // needs. `lineageOn` governs ONLY whether a trace is installed to annotate a held
-    // manifest's arguments; it never affects whether effects gather (that's structural).
+    // THE EFFECT LOG + lineage tap (default-on): every sink this call's forms touch GATHERS
+    // here instead of firing — the gather-then-decide model the hold rule needs. `lineageOn`
+    // governs ONLY whether a trace is installed to annotate a held manifest's arguments; it
+    // never affects whether effects gather (that's structural).
     const effectLog = new MemoryEffectLog();
     const lineageOn = this.options.lineage !== false;
     const trace = lineageOn ? new EvalTrace() : undefined;
@@ -631,10 +613,9 @@ export class DiscoveryTool {
       tap: trace,
     });
 
-    // THE HOLD RULE (§7.2): any risky row present ⇒ the ENTIRE burst holds as a proposal —
-    // no split-commit, atomicity is the product claim. Risky-free programs burst immediately
-    // right here, before persisting — zero tax on the common case (same response shape, same
-    // persisted log/cache the pre-confirmation code produced).
+    // THE HOLD RULE: any risky row present ⇒ the ENTIRE burst holds as a proposal — no
+    // split-commit, atomicity is the product claim. Risky-free programs burst immediately right
+    // here, before persisting — zero tax on the common case.
     if (effectLog.entries.length > 0) {
       const riskyEntries = effectLog.entries.filter((e) => this.isRisky(e.verbName));
       if (riskyEntries.length === 0) {
@@ -698,21 +679,20 @@ export class DiscoveryTool {
   }
 
   /** Is `verbName` a `tool.risky` verb? The catalog's own annotation reflection
-   *  (`allAnnotations`, McpEnvCapability.ts) is the ONE lookup point — no second
-   *  registry (§7.5: riskiness rides the same static factory-declared metadata channel
-   *  `isTool`/`description` already use). */
+   *  (`allAnnotations`, McpEnvCapability.ts) is the ONE lookup point — no second registry;
+   *  riskiness rides the same static factory-declared metadata channel `isTool`/`description`
+   *  already use. */
   private isRisky(verbName: string): boolean {
     return this.capability.allAnnotations()[verbName]?.risky === true;
   }
 
-  /** Fire every gathered (non-risky) effect for real, in program order, right after
-   *  gathering — the immediate-burst arm of the hold rule (§7.2). Each entry's own
-   *  minimal re-runnable invocation (`buildInvocationSource`, built from the RAW
-   *  pre-decode args `EffectEntry.rawArgs` carries) is evaluated through the SAME
-   *  ambient/scope/cache this call already established, so the sink fires through the
-   *  ordinary `penetrateThroughCache` record-mode arm (tombstone written normally — a
-   *  later fold skips it exactly as if it had fired inline). Returns an error message on
-   *  the first entry that throws (stopping there, mirroring `runForms`'s own
+  /** Fire every gathered (non-risky) effect for real, in program order, right after gathering —
+   *  the immediate-burst arm of the hold rule. Each entry's own minimal re-runnable invocation
+   *  (`buildInvocationSource`, built from the RAW pre-decode args `EffectEntry.rawArgs` carries)
+   *  is evaluated through the SAME ambient/scope/cache this call already established, so the
+   *  sink fires through the ordinary `penetrateThroughCache` record-mode arm (tombstone written
+   *  normally — a later fold skips it exactly as if it had fired inline). Returns an error
+   *  message on the first entry that throws (stopping there, mirroring `runForms`'s own
    *  stop-on-first-crash REPL posture); `undefined` on a clean drain. */
   private async burstGatheredEffects(
     gathered: readonly EffectEntry[],
@@ -744,19 +724,17 @@ export class DiscoveryTool {
   }
 
   /**
-   * confirm-burst (arrival-provenance-confirmation.md, tool 2 of the confirmation design;
-   * see confirm-burst.ts's `ConfirmBurstTool` — a thin MCP-tool-shaped wrapper over THIS
-   * method, so confirmation reuses the same warm ambient / session state `call` itself
-   * holds, rather than a second implementation).
+   * confirm-burst — see confirm-burst.ts's `ConfirmBurstTool`, a thin MCP-tool-shaped wrapper
+   * over THIS method, so confirmation reuses the same warm ambient / session state `call`
+   * itself holds, rather than a second implementation.
    *
-   * Requires a session — a pending manifest lives in `SessionRunState`, so there is
-   * nothing to confirm sessionlessly. A wrong or absent digest is a "which manifest?"
-   * teaching door (§7.1: the digest answers manifest IDENTITY only). The approved subset
-   * fires in ORIGINAL program order (§5); each row goes through the rig-altered seam
-   * ({@link DiscoveryToolOptions.rigAlteredCheck}, default {@link noRigAlteredCheck}) —
-   * a row it flags doors THAT row alone, siblings still fire. Declined rows leave no
-   * durable trace (fill-or-kill, §7.3): only re-issuing the original program re-offers
-   * them.
+   * Requires a session — a pending manifest lives in `SessionRunState`, so there is nothing to
+   * confirm sessionlessly. A wrong or absent digest is a "which manifest?" teaching door — the
+   * digest answers manifest IDENTITY only. The approved subset fires in ORIGINAL program order;
+   * each row goes through the rig-altered seam ({@link DiscoveryToolOptions.rigAlteredCheck},
+   * default {@link noRigAlteredCheck}) — a row it flags doors THAT row alone, siblings still
+   * fire. Declined rows leave no durable trace (fill-or-kill): only re-issuing the original
+   * program re-offers them.
    */
   async confirmBurst(
     args: { digest: string; approvedEffectIndexes: readonly number[] },
@@ -878,10 +856,10 @@ export class DiscoveryTool {
   }
 
   /** Dispose one session's warm ambient (the host's session-close hook — `onsessionclosed`/
-   *  DELETE; the deployment wiring is R4's). The ambient's dispose is the R7 ownership-table
-   *  teardown: kernel pack disposers (LIFO) + EVERY lowered pack's resource wind-down across
-   *  the whole dep closure — every port the call ambient spawned is released, gateway included.
-   *  Idempotent; a session with no warm pair is a no-op. */
+   *  DELETE). The ambient's dispose is the full ownership-table teardown: kernel pack disposers
+   *  (LIFO) + EVERY lowered pack's resource wind-down across the whole dep closure — every port
+   *  the call ambient spawned is released, gateway included. Idempotent; a session with no warm
+   *  pair is a no-op. */
   async closeSession(sessionId: string): Promise<void> {
     const warm = this.warm.get(sessionId);
     if (warm === undefined) return;
@@ -904,8 +882,8 @@ export class DiscoveryTool {
 
   /** Load the session's durable twin: the injected store's blob (decoded), or the in-memory
    *  object in the session bag, or — v2 absent — a fresh state whose log is SEEDED from the
-   *  legacy `__repl__` define history (§2.2: the v2 log is a superset of it; the `__cache__`
-   *  value overlay is DISSOLVED, not migrated — D3). */
+   *  legacy `__repl__` define history (the v2 log is a superset of it; no `__cache__` value
+   *  overlay is carried forward). */
   private async loadState(
     session: { id: string; state: Record<string, unknown> },
     store: AsyncSessionStore | undefined,
@@ -956,7 +934,7 @@ export class DiscoveryTool {
    *  increment) rather than allowed to poison the session; cancellation propagates instead.
    *  Returns the warm pair plus the live entry map the new input's record-mode cache shares.
    *  The ambient's ownership transfers to the warm map only on success — a fold crash disposes
-   *  it in `finally` (§2.8's dispose row). */
+   *  it in `finally`. */
   private async foldIntoFreshAmbient(
     sessionId: string,
     state: SessionRunState,
@@ -982,7 +960,7 @@ export class DiscoveryTool {
       for (const stmt of state.log) {
         try {
           const run = await execSerializedState(stmt.src, { ambient, scope, ...opts, cache: foldCache });
-          state.counters.heapUsedTotal += run.heapUsed; // fold re-runs burn heap too — cumulative honesty (§2.7)
+          state.counters.heapUsedTotal += run.heapUsed; // fold re-runs burn heap too — cumulative honesty
           kept.push(stmt);
         } catch (error) {
           if (opts.signal?.aborted) throw error; // cancellation, not a poisoned statement
@@ -998,27 +976,27 @@ export class DiscoveryTool {
     }
   }
 
-  /** Parse + execute `expr` form-by-form (REPL semantics: earlier values stand, a crash stops the
-   *  rest). With a session `state`, every executed top-level statement — defines AND bare
-   *  expressions — is appended to the log in program order (§2.2), under the statement-count cap
-   *  (a TEACHING error at the cap, never silent truncation).
+  /** Parse + execute `expr` form-by-form (REPL semantics: earlier values stand, a crash stops
+   *  the rest). With a session `state`, every executed top-level statement — defines AND bare
+   *  expressions — is appended to the log in program order, under the statement-count cap (a
+   *  TEACHING error at the cap, never silent truncation).
    *
-   *  R5 (§2.5/§2.7): with an `onEvent` listener, the run streams wireframe-then-record — ONE
-   *  topology event (the future trace: all forms' exact LOCATION slices, before index 0 runs),
-   *  then one statement event per form {content blocks, counters, error? terminal}. The
-   *  per-form serialization budget is computed ONCE here from the parsed form count (the
-   *  bounded-SUM fix), and each form's heap-meter read accrues into the session's
-   *  `heapUsedTotal`. The aggregate `out` is byte-identical with or without a listener — the
-   *  statement events' FULL content IS `out`, sliced per form (the aggregate law).
+   *  With an `onEvent` listener, the run streams wireframe-then-record — ONE topology event
+   *  (the future trace: all forms' exact LOCATION slices, before index 0 runs), then one
+   *  statement event per form {content blocks, counters, error? terminal}. The per-form
+   *  serialization budget is computed ONCE here from the parsed form count, so the batch SUM
+   *  stays bounded, and each form's heap-meter read accrues into the session's `heapUsedTotal`.
+   *  The aggregate `out` is byte-identical with or without a listener — the statement events'
+   *  FULL content IS `out`, sliced per form (the aggregate law).
    *
-   *  R6 (§2.6): each form's values render through `serializeWithExtras` under ONE call-level
-   *  `ExtrasState` (ids `att-1…` unique per call; the attachment quota consulted DURING the
-   *  serializer walk). Extracted extras drain per form — the v1 downstream-owned strategy:
-   *  after the core text, per extra a label text block `attachment #N: att-N (mime, size)`
-   *  then its binary block (the ONE `dispatch.ts` base64 lowering, verbatim) — appended to
-   *  that statement's event content AND to the aggregate `out` (label string + raw Blob;
-   *  `serializeResult` lowers the Blob through the same branch, so aggregate ≡ concat holds
-   *  block-for-block). Quota overflow drains a note with the count, never silently. */
+   *  Each form's values render through `serializeWithExtras` under ONE call-level `ExtrasState`
+   *  (ids `att-1…` unique per call; the attachment quota consulted DURING the serializer walk).
+   *  Extracted extras drain per form: after the core text, per extra a label text block
+   *  `attachment #N: att-N (mime, size)` then its binary block (the ONE `dispatch.ts` base64
+   *  lowering, verbatim) — appended to that statement's event content AND to the aggregate
+   *  `out` (label string + raw Blob; `serializeResult` lowers the Blob through the same branch,
+   *  so aggregate ≡ concat holds block-for-block). Quota overflow drains a note with the count,
+   *  never silently. */
   private async runForms(
     expr: string,
     opts: {
@@ -1037,7 +1015,7 @@ export class DiscoveryTool {
     const { ambient, scope, budgetMs, heapBudget, signal, cache, state, onEvent, effects, tap } = opts;
     const cap = this.options.statementCap ?? defaultStatementCap();
     const attachmentQuota = this.options.attachmentQuota ?? defaultAttachmentQuota();
-    // R6: ONE shared numbering/quota across every form of THIS call (the beginCall(quota) shape).
+    // ONE shared numbering/quota across every form of THIS call (the beginCall(quota) shape).
     const extrasState = initialExtrasState(attachmentQuota);
     let attachmentOrdinal = 0;
     const out: (string | Blob)[] = [];
@@ -1050,9 +1028,8 @@ export class DiscoveryTool {
       counters: StatementCounters,
       error?: string,
     ): void => {
-      // R6 (landed): `extraBlocks` are the extracted extras' label/binary blocks, appended
-      // after the core text blocks; the aggregate law (§2.5) carries the FULL list, text and
-      // binary alike.
+      // `extraBlocks` are the extracted extras' label/binary blocks, appended after the core
+      // text blocks; the aggregate law carries the FULL list, text and binary alike.
       const blocks: ContentBlock[] = [...texts.map((text): ContentBlock => ({ type: "text", text })), ...extraBlocks];
       onEvent?.(
         error === undefined
@@ -1085,13 +1062,13 @@ export class DiscoveryTool {
       );
       return { out, crashed };
     }
-    // The future trace — emitted BEFORE index 0 ever runs (§2.5). Slices are the reader's exact
+    // The future trace — emitted BEFORE index 0 ever runs. Slices are the reader's exact
     // LOCATION spans (sourceTextFor), computed once and reused for the log append below.
     const sources = forms.map((form, index) => sourceTextFor(form, index, forms, expr));
     onEvent?.({ kind: "topology", total: forms.length, forms: sources.map((source, index) => ({ index, source })) });
-    // Parse-first budget fix (§2.5, closes §1.2 item 2): `total` is known at parse time, so the
-    // per-element budget is computed ONCE up front and each form serializes under its fair
-    // share at emit time — the SUM across the batch stays bounded by MCP_OUTPUT_BUDGET.
+    // `total` is known at parse time, so the per-element budget is computed ONCE up front and
+    // each form serializes under its fair share at emit time — the SUM across the batch stays
+    // bounded by MCP_OUTPUT_BUDGET.
     const charBudget = perElementBudget(forms.length);
     for (const [index, form] of forms.entries()) {
       const formStarted = Date.now();
@@ -1127,10 +1104,10 @@ export class DiscoveryTool {
           tap,
         });
         out.push(...run.out);
-        // R6 drain — the v1 rendering strategy (downstream-owned, §2.6): per extra, a label
-        // text block then its binary block, appended to THIS statement's content and to the
-        // aggregate. The binary block is only ENCODED when someone listens (the aggregate
-        // carries the raw Blob; `serializeResult` lowers it through the same base64 branch).
+        // Per extra, a label text block then its binary block, appended to THIS statement's
+        // content and to the aggregate. The binary block is only ENCODED when someone listens
+        // (the aggregate carries the raw Blob; `serializeResult` lowers it through the same
+        // base64 branch).
         const extraBlocks: ContentBlock[] = [];
         for (const extra of run.extras) {
           attachmentOrdinal += 1;
@@ -1157,7 +1134,7 @@ export class DiscoveryTool {
           extraBlocks.push({ type: "text", text: note });
         }
         const elapsedMs = Date.now() - formStarted;
-        if (state !== undefined) state.counters.heapUsedTotal += run.heapUsed; // §2.7 — monotonic contributions
+        if (state !== undefined) state.counters.heapUsedTotal += run.heapUsed; // monotonic contributions
         statement(index, run.out, extraBlocks, {
           heapUsed: run.heapUsed,
           heapMax: run.heapMax,
@@ -1165,10 +1142,9 @@ export class DiscoveryTool {
           // Each form's exec carries its OWN wall-clock budget + heap meter (a per-form
           // runCtx): the ONE-runCtx-per-call collapse (per-form deltas = two reads of one
           // meter, per-call bounds) stays blocked on core's ledgered runProgram gap — "a
-          // cumulative multi-form bound needs a shared RunContext, which no caller can
-          // inject yet" (generator-exec.ts, execExpr). The phase products (ambient/scope)
-          // are adopted (R7); the instance seam is core's follow-up. Wire shape is already
-          // the collapsed one: per-form heapUsed reads off the form's meter.
+          // cumulative multi-form bound needs a shared RunContext, which no caller can inject
+          // yet" (generator-exec.ts, execExpr). Wire shape is already the collapsed one:
+          // per-form heapUsed reads off the form's meter.
           budgetMsRemaining: Math.max(0, budgetMs - elapsedMs),
         });
       } catch (error) {
@@ -1198,7 +1174,7 @@ export class DiscoveryTool {
     return crashed === undefined ? { out } : { out, crashed };
   }
 
-  /** Capability names across the dep closure, sorted — the roster (§2.4: advisory for grants,
+  /** Capability names across the dep closure, sorted — the roster (advisory for grants,
    *  authoritative as a cache-validity component). */
   private roster(): readonly string[] {
     const names = new Set<string>();
@@ -1215,14 +1191,13 @@ export class DiscoveryTool {
 
   // ── ambient assembly: config from the actor args, resources armed by the capability ──
 
-  /** Assemble the phase-2 product for one config (R7 — exec-phases §3.1): the capability (and
-   *  its whole dep closure) lowered onto a fresh child of the standard base, sealed, returned
-   *  as an owning `AssembledAmbient` handle. Its `dispose()` IS the full ownership-table
-   *  teardown — kernel pack disposers (LIFO) + resource wind-down over the ENTIRE lowered
-   *  closure (roots + deps), replacing R3's interim root-only `pack.windDown()`, which never
-   *  reached a dep capability's cells. Vocabulary is added ONLY by the capability's deps (the
-   *  audited grant); the base chain is the same stdlib the old sandboxed inherit resolved
-   *  through. */
+  /** Assemble the phase-2 product for one config: the capability (and its whole dep closure)
+   *  lowered onto a fresh child of the standard base, sealed, returned as an owning
+   *  `AssembledAmbient` handle. Its `dispose()` IS the full ownership-table teardown — kernel
+   *  pack disposers (LIFO) + resource wind-down over the ENTIRE lowered closure (roots + deps);
+   *  a root-only teardown would never reach a dep capability's own resource cells. Vocabulary is
+   *  added ONLY by the capability's deps (the audited grant); the base chain is the same stdlib
+   *  every sandboxed ambient resolves through. */
   private assemble(cfg: Record<string, unknown>): Promise<AssembledAmbient> {
     return assembleAmbient({ capabilities: [this.capability], config: cfg });
   }
@@ -1287,8 +1262,7 @@ export class DiscoveryTool {
   /** The `expr` field's prose — the logic-bearing description an actor reads to use the REPL: the
    *  sandbox's base-env vocabulary (chain-walked, so the docs stay FAITHFUL to the env we run), the
    *  batch-query contract, the domain verbs, and — when any verb is live — the personalized,
-   *  timestamped welcome-screen note. Ported from the original DiscoveryToolInteraction.getToolSchema
-   *  so the migration to the value shape preserves it exactly. */
+   *  timestamped welcome-screen note. */
   private exprDescription(verbs: { text: string }[], dynamic: boolean, aiName: string, baseNames: readonly string[]): string {
     const baseSymbols = baseNames.join(", ");
     const preamble = dedent`
@@ -1328,18 +1302,16 @@ export class DiscoveryTool {
     return `${base}\n${liveNote}`;
   }
 
-  /** The DESCRIBE ambient (exec-phases §2.7): a HOST-CONFIG-ONLY `AssembledAmbient` (the
-   *  phase-2 product, R7), built lazily on the first catalog read that needs one (some verb
-   *  declares a `dynamicDescription`), memoized per tool (per CONNECTION — the class doc),
-   *  disposed with the tool. Its `activations` are the channel a metadata-declared dynamic
-   *  field resolves `this` against — the A2 read path riding the describe ambient product.
+  /** The DESCRIBE ambient: a HOST-CONFIG-ONLY `AssembledAmbient`, built lazily on the first
+   *  catalog read that needs one (some verb declares a `dynamicDescription`), memoized per tool
+   *  (per CONNECTION — the class doc), disposed with the tool. Its `activations` are the channel
+   *  a metadata-declared dynamic field resolves `this` against.
    *
-   *  LEDGERED (V-pending decision #6, resolved per the doc's own recommendation): describe
-   *  happens BEFORE any actor args exist — a dynamic description reads HOST infra and HOST
-   *  config ONLY (exactly what the closure form could reach, now through the declared channel).
-   *  Honest fallbacks, never a faked actor-args call: a FUNCTION-form `hostConfig` (needs the
-   *  per-call args) or a config schema requiring actor keys ⇒ NO describe ambient — dynamic
-   *  thunks then run with their legacy receiver (a closure-form thunk ignores `this`; a
+   *  Describe happens BEFORE any actor args exist — a dynamic description reads HOST infra and
+   *  HOST config ONLY (exactly what the closure form could reach, now through the declared
+   *  channel). Honest fallbacks, never a faked actor-args call: a FUNCTION-form `hostConfig`
+   *  (needs the per-call args) or a config schema requiring actor keys ⇒ NO describe ambient —
+   *  dynamic thunks then run with their legacy receiver (a closure-form thunk ignores `this`; a
    *  metadata-declared field reading `this.configuration` resolves `undefined` and the static
    *  description stands, un-flagged). */
   private describeCtx?: Promise<AssembledAmbient | undefined>;
@@ -1355,12 +1327,13 @@ export class DiscoveryTool {
     })());
   }
 
-  /** The verb catalog reflected off the capability's dep-closure annotations. A STATIC `inputSchema`
-   *  renders a sig; a getter (resource-resolving) is NOT invoked here (no live activation). A
-   *  `dynamicDescription` thunk resolves live (and flags the entry session-generated) — per read,
-   *  no memo, against the OWNING capability's describe-ambient activation when one is derivable
-   *  (the metadata channel); a closure-form legacy thunk ignores the receiver and behaves as
-   *  before. Resolving `undefined` falls back to the static description, NOT flagged dynamic. */
+  /** The verb catalog reflected off the capability's dep-closure annotations. A STATIC
+   *  `inputSchema` renders a sig; a getter (resource-resolving) is NOT invoked here (no live
+   *  activation). A `dynamicDescription` thunk resolves live (and flags the entry
+   *  session-generated) — per read, no memo, against the OWNING capability's describe-ambient
+   *  activation when one is derivable (the metadata channel); a closure-form legacy thunk
+   *  ignores the receiver. Resolving `undefined` falls back to the static description, NOT
+   *  flagged dynamic. */
   private async catalog(): Promise<{ text: string; dynamic: boolean }[]> {
     const entries = this.capability.allAnnotationEntries();
     const describeCtx = entries.some(({ annotation }) => annotation.dynamicDescription !== undefined)
@@ -1375,10 +1348,9 @@ export class DiscoveryTool {
         // annotation object (the legacy method-call receiver — byte-compatible).
         const live = thunk === undefined ? undefined : await thunk.call(describeCtx?.activations.get(owner) ?? a);
         const sigPart = sig ? ` ${sig}` : "";
-        // §2.5's exposure taxonomy, channel-2 rendering: an `isTool` verb is catalogued here
-        // AND (once a runner derives `tools/list` from it) its own top-level MCP tool — the
-        // REPL can compose it where a bare `tools/call` can't, so it stays advertised in both
-        // places rather than one replacing the other.
+        // An `isTool` verb is catalogued here AND (once a runner derives `tools/list` from it)
+        // as its own top-level MCP tool — the REPL can compose it where a bare `tools/call`
+        // can't, so it stays advertised in both places rather than one replacing the other.
         const exposedNote = a.isTool ? " [also a top-level tool]" : "";
         return { text: `(${name}${sigPart}) - ${live ?? a.description}${exposedNote}`, dynamic: live !== undefined };
       }),

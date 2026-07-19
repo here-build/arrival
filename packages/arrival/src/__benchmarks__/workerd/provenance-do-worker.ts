@@ -1,12 +1,12 @@
 /**
- * workerd/provenance-do-worker.ts — Q19 conjunct C2's `ProvenanceStore` adapter,
- * backed by a REAL Durable Object (docs/PROVENANCE.md §5 C1's fold-as-recovery:
- * "In-memory region state is a cache of the stream, never the source of truth").
+ * `ProvenanceStore` adapter backed by a REAL Durable Object (docs/PROVENANCE.md
+ * §4: "In-memory region state is a cache of the stream, never the source of
+ * truth").
  *
  * DELIBERATELY DUMB: `ProvenanceRegionDO` holds NO instance field beyond `ctx`/`env`
  * — every method reads/writes `ctx.storage` directly, every call. There is nothing
  * for a forced eviction (`DurableObjectState.abort()`) to lose, because nothing is
- * ever cached in JS-heap memory in the first place — this is the property §5 C1
+ * ever cached in JS-heap memory in the first place — this is the property §4
  * demands, made structurally true rather than merely tested for. One DO instance =
  * one region (the test binds a region via `idFromName(regionId)`); this class does
  * not itself branch on a `regionId` parameter the way the `ProvenanceStore`
@@ -16,7 +16,7 @@
  *   "seq"          → the region's monotonic sequence counter (number)
  *   "header"       → the region's `StreamHeader`, once written
  *   "rec:<idKey>"  → one `ProvenanceRecord`, keyed by `recordIdKey(record.id)` —
- *                    idempotent upsert by construction (§5 C2/D1), same as
+ *                    idempotent upsert by construction (§4), same as
  *                    `ProvenanceStoreFake`'s own Map-keyed-by-`recordIdKey` shape.
  *
  * `readStream`/`foldNow` page through `ctx.storage.list` (workerd's default list
@@ -37,18 +37,18 @@ export interface Env {
 const RECORD_PREFIX = "rec:";
 
 export class ProvenanceRegionDO extends DurableObject<Env> {
-  /** §5 C2/D1: idempotent upsert keyed by `recordIdKey(record.id)` — two `append`s
+  /** §4: idempotent upsert keyed by `recordIdKey(record.id)` — two `append`s
    *  for the same logical record land as ONE stored entry, exactly like
    *  `ProvenanceStoreFake.append`. Awaiting `ctx.storage.put` (no
    *  `allowUnconfirmed`) is what makes this method durable-write-barriered: the
    *  DO's output gate holds the RPC response back until the write is committed
-   *  (§5 C3: "Port completion BARRIERS on the durable write — this is exactly what
+   *  (§4: "Port completion BARRIERS on the durable write — this is exactly what
    *  DO output gates provide natively"). */
   async append(record: ProvenanceRecord): Promise<void> {
     await this.ctx.storage.put(`${RECORD_PREFIX}${recordIdKey(record.id)}`, record);
   }
 
-  /** §5 D4: "per-region monotonic sequence" — never resets, persisted in storage
+  /** §4: "per-region monotonic sequence" — never resets, persisted in storage
    *  (not an instance field) so it survives eviction exactly like every other
    *  piece of this DO's state. */
   async allocateSeq(): Promise<number> {
@@ -58,7 +58,7 @@ export class ProvenanceRegionDO extends DurableObject<Env> {
     return next;
   }
 
-  /** §5 D4: the region's total order, EMISSION order, sorted by `seq` ascending —
+  /** §4: the region's total order, EMISSION order, sorted by `seq` ascending —
    *  same contract as `ProvenanceStoreFake.readStream`. Pages through
    *  `ctx.storage.list` rather than assuming one call returns every key. */
   async readStream(): Promise<ProvenanceRecord[]> {

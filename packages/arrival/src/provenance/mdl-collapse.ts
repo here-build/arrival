@@ -12,8 +12,8 @@
  * single per-node cost (`n × bodyBits`) which re-charged a shared child's whole
  * body inside every inlined parent copy, producing answers up to 3.5× over
  * optimal whenever a collapsed box nested under an expanded one (the exact
- * binding-residual regime the design leans on). Adversarial review caught it
- * with a concrete counterexample; this module is the corrected rebuild.
+ * binding-residual regime the design leans on). This module is the corrected
+ * rebuild, closing the gap with a def/ref split.
  *
  * ── Why it's optimal AND a cheap two-pass DP ─────────────────────────────────
  * Candidates are GIVEN by the AST (every map/reduce=unfold/fold, cond/case=dnf,

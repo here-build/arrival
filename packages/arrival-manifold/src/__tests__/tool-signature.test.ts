@@ -89,10 +89,10 @@ describe("toolSignature", () => {
   });
 
   it("renders top-level object params as {field:type, ...} with descriptions as inline #|…|# comments", () => {
-    // The clinicaltrials lesson (MCP-Atlas 2026-07-11, −1.9pp): `:query value?` hid the
-    // nested keys and the model burned 34 blind guesses. The shape must show its keys,
-    // and a field's description rides as a reader-parseable block comment — but only
-    // when it says more than the field name itself (case-insensitive).
+    // A bare `:query value?` hides the nested keys, forcing the model to guess blindly at
+    // the shape underneath. The shape must show its keys, and a field's description rides
+    // as a reader-parseable block comment — but only when it says more than the field
+    // name itself (case-insensitive).
     const sig = toolSignature("ct_search", undefined, {
       type: "object",
       properties: {

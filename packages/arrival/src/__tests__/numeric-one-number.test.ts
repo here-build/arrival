@@ -1,7 +1,7 @@
 // One-Number Rework (RATIO, crash-on-overflow) — W0 RED-FIRST test file.
 //
-// Pins docs/design-history/arrival-one-number-rework.md v2.1 §0 (invariants) and
-// §2 (target design) at the SCHEME surface. Every row named in the plan's §3 W0 list
+// Pins docs/design-history/arrival-one-number-rework.md §0 (invariants) and
+// §2 (design) at the SCHEME surface. Every row named in the doc's §3 behavior-row list
 // becomes one assertion here (the §0.6 pinned-behaviors list is folded into the "box
 // identity" describe block below — same rows, same meaning).
 //
@@ -18,8 +18,8 @@
 // `exec()` on purpose.
 //
 // Rows commented "RED until the atom lands" are EXPECTED to fail on HEAD — this file
-// pins the plan's TARGET semantics before W2 (the representation atom) lands, per the
-// TDD discipline the plan's W0 package calls for. Every other row is an ALREADY-TRUE
+// pins the doc's TARGET semantics before the representation atom lands, red-first.
+// Every other row is an ALREADY-TRUE
 // pin: a regression guard proving present behavior (which the num/denom bigint→number
 // port must not accidentally break) survives the rework.
 import { describe, expect, it } from "vitest";
@@ -83,7 +83,7 @@ describe("overflow-throws — exact results whose components leave safe-integer 
   });
 
   it("(* 94906266 94906266 94906266) rejects — per-step overflow check in a variadic fold", async () => {
-    // RED until the atom lands. The plan's own W0 example (§3): a 3-arg `*` fold must
+    // RED until the atom lands. The doc's own example (§3): a 3-arg `*` fold must
     // catch the overflow at whichever step first leaves safe range, not just at the
     // final accumulated result.
     await expect(run("(* 94906266 94906266 94906266)")).rejects.toThrow(/exact overflow/i);

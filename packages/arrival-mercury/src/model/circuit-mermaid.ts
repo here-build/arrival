@@ -48,24 +48,23 @@
  * channels (Green-Karvounarakis-Tannen content vs Imieliński-Lipski
  * selection) at a glance, without reading a legend.
  *
- * `choice` ALTS are dashed too (2026-07-16, the cross-projection parity fix)
- * — a deliberate borrow of the selection styling, not a `channels()`
- * reclassification: an alt's own content still folds into the CONTENT
- * channel (circuit-verdict.ts's `channels()`), never selection. What earns it
- * the dashed treatment is a DIFFERENT, related fact: unlike a `fused`/
- * `build`/`string`/`fan` child (every one of which unconditionally
- * contributes), only ONE of a `choice`'s kept alts is realized per run — the
- * rest sit in the circuit unexercised (static-prov.ts: "All alternatives stay
- * in the circuit (gray wires)"). Dashing the edge flags exactly that
- * "kept, not-necessarily-realized" shape, the same thing `circuit-sexpr.ts`'s
- * `(gray …)` wrap flags at the sexpr layer and `to-wireframe.ts`'s
- * `choiceWireRole` side map flags at the data layer — a cross-model audit
- * found the three projections disagreeing about whether this structure was
- * visible at all; this keeps them in agreement. A true selection-channel edge
- * (`guard`, `closed`) and a borrowed one (`alt`) share the SAME dash pattern
- * on purpose (both mean "not a guaranteed pass-through, read the label to
- * know which"); the edge LABEL is what still tells them apart, exactly as
- * `guard` and `closed` already differ only by label today.
+ * `choice` ALTS are dashed too — a deliberate borrow of the selection
+ * styling, not a `channels()` reclassification: an alt's own content still
+ * folds into the CONTENT channel (circuit-verdict.ts's `channels()`), never
+ * selection. What earns it the dashed treatment is a DIFFERENT, related
+ * fact: unlike a `fused`/`build`/`string`/`fan` child (every one of which
+ * unconditionally contributes), only ONE of a `choice`'s kept alts is
+ * realized per run — the rest sit in the circuit unexercised (static-prov.ts:
+ * "All alternatives stay in the circuit (gray wires)"). Dashing the edge
+ * flags exactly that "kept, not-necessarily-realized" shape, the same thing
+ * `circuit-sexpr.ts`'s `(gray …)` wrap flags at the sexpr layer and
+ * `to-wireframe.ts`'s `choiceWireRole` side map flags at the data layer —
+ * keeping all three projections in agreement about whether this structure is
+ * visible. A true selection-channel edge (`guard`, `closed`) and a borrowed
+ * one (`alt`) share the SAME dash pattern on purpose (both mean "not a
+ * guaranteed pass-through, read the label to know which"); the edge LABEL is
+ * what still tells them apart, exactly as `guard` and `closed` already
+ * differ only by label today.
  *
  * ── gray, never taken/gray (same as circuit-sexpr.ts) ───────────────────────
  *
@@ -81,7 +80,7 @@
  * one against; see circuit-sexpr.ts's header for the full argument, which
  * applies here unchanged).
  *
- * ── determinism, and the shared-DAG dedup (G2, 2026-07-16) ─────────────────
+ * ── determinism, and the shared-DAG dedup ───────────────────────────────────
  *
  * Node ids (`n0`, `n1`, …) are assigned in a stable PRE-ORDER walk (own id
  * first, then children left-to-right in field-declaration order), WITH
@@ -91,16 +90,16 @@
  * subtree — the representation-sharing half of "a provenance circuit IS a
  * shared DAG" (Deutch-Milo-Roy-Tannen, ICDT 2014; the extract-side half is
  * `ExtractCtx.memo`, src/extract/index.ts, which is what makes two Refs to one
- * binding share the identical object in the first place). This is a pure
- * REPRESENTATION change — never semantics: a shared node renders as one box
+ * binding share the identical object in the first place). Dedup is a pure
+ * REPRESENTATION choice — never semantics: a shared node renders as one box
  * with multiple in-edges rather than a duplicated subtree, but the same
- * input StaticProv still always produces the exact same string (object
- * identity is fixed once `prov` is constructed, so the walk order — and
- * therefore every id and every line — is exactly as deterministic as before),
- * so a test can still assert against a golden string, and two runs of this
- * function still diff cleanly. A hand-built fixture with no aliasing anywhere
- * renders byte-identically to the pre-dedup output, since dedup only ever
- * changes anything when the SAME reference is seen twice.
+ * input StaticProv always produces the exact same string (object identity is
+ * fixed once `prov` is constructed, so the walk order — and therefore every
+ * id and every line — is fully determined by the DAG itself), so a test can
+ * assert against a golden string and two runs of this function always diff
+ * cleanly. A fixture with no aliasing anywhere is unaffected by the dedup
+ * check entirely, since it only ever changes anything when the SAME
+ * reference is seen twice.
  *
  * ── escaping ─────────────────────────────────────────────────────────────────
  *

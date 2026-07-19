@@ -1,10 +1,10 @@
 // args-misuse — the localization + escalation contract behind the localized args-misuse door
-// (second-foundation/arrival-manifold/docs/args-error-reporting-v2.md §7.2). The door replaces
+// (arrival-manifold/docs/args-error-reporting-v2.md §2.2-§2.4). The door replaces
 // the bare Signature + Example echo with a LOCALIZED teach — the failing parameter named, its
 // sub-schema taught, a copy-paste-correct retry shape — escalating on repeated failure of the
 // same (tool, param). S1 contracts `extractClues`, S2 `localizeFailingParam`, S3
 // `ArgsFailureTracker`, S4 `synthesizeExampleCall`'s hole rendering, S5 `buildRetryShape`
-// (the §2.6 composition — flipped from it.todo when args-misuse-door.ts landed).
+// (the composition step).
 
 import { describe, expect, it } from "vitest";
 
@@ -14,10 +14,10 @@ import { buildRetryShape, renderArgsMisuseTeaching } from "../args-misuse-door.j
 import { synthesizeExampleCall } from "../example-call.js";
 import type { JsonSchemaProperty, ToolJsonSchema } from "../tool-schema.js";
 
-// ─── S1 — extractClues: the 4-family table, over the 45edee verbatim fixtures ───
+// ─── S1 — extractClues: the 4-family table ───
 
-describe("args-misuse — localized door + escalation (docs/args-error-reporting-v2.md §7.2)", () => {
-  describe("S1 — extractClues: the 4-family table, over the 45edee verbatim fixtures (design doc §1, §2.2)", () => {
+describe("args-misuse — localized door + escalation (docs/args-error-reporting-v2.md §2.2-§2.4)", () => {
+  describe("S1 — extractClues: the clue-family table (design doc §2.2)", () => {
     it("python-jsonschema value-mismatch: \"'King Saud University' is not of type 'object'\"", () => {
       const text =
         '{"detail":"Failed to call tool \'clinicaltrialsgov-mcp-server_clinicaltrials_list_studies\': ' +
@@ -505,7 +505,7 @@ describe("args-misuse — localized door + escalation (docs/args-error-reporting
       expect(buildRetryShape(QUALIFIED, undefined, localized)).toBeUndefined();
     });
 
-    it("case-B rename DECLINES when the target key already exists on the sent object — a rename would clobber the model's own value while reading as an explicit fact (triad finding, 2026-07-11)", () => {
+    it("case-B rename DECLINES when the target key already exists on the sent object — a rename would clobber the model's own value while reading as an explicit fact", () => {
       const sentArgs = { query: { terms: "bad spelling", term: "the real one" } };
       const localized = localizeFailingParam(
         "Additional properties are not allowed ('terms' was unexpected)",
@@ -520,7 +520,7 @@ describe("args-misuse — localized door + escalation (docs/args-error-reporting
     });
   });
 
-  // ─── own-unknown-key — the strict decode's TOP-LEVEL typo family (triad finding) ───
+  // ─── own-unknown-key — the strict decode's TOP-LEVEL typo family ───
   describe("own-unknown-key — top-level keyword typos localize via the tight-match gate", () => {
     const SCHEMA: ToolJsonSchema = {
       type: "object",
@@ -555,9 +555,9 @@ describe("args-misuse — localized door + escalation (docs/args-error-reporting
     });
   });
 
-  // The discovery nudge (MCP-Atlas 2026-07-11 forensics, tasks …e8a/…fd3): a MISSING required
-  // arg — the model lacks a value it needs — must teach "discover it, don't ask the user",
-  // never on a type-mismatch (there the model HAS a value, just the wrong type).
+  // A MISSING required arg — the model lacks a value it needs — must teach "discover it, don't
+  // ask the user"; never on a type-mismatch, where the model already has a value, just the
+  // wrong type.
   describe("discovery nudge on missing-required args", () => {
     const SCHEMA: ToolJsonSchema = {
       type: "object",

@@ -1,10 +1,8 @@
-// ENV-LIFECYCLE-AGNOSTIC EQUIVALENCE — the CRUX property the future doors-steering-runner
-// extraction depends on (docs/working-proposals/arrival-manifold-package-split-2026-07-05.md,
-// "the env-lifecycle collision" / round 1 + round 2's stress point 1). The design's whole claim
-// that ONE runner can serve BOTH arrival-manifold (one persistent env, mutated call-to-call) AND
-// arrival-mcp (a FRESH env assembled per call, authorization-scoped) rests on this: running the
-// SAME sequence of top-level define+use statements must produce BYTE-IDENTICAL output whether the
-// env identity persists across calls, or a fresh env is rebuilt every call and
+// ENV-LIFECYCLE-AGNOSTIC EQUIVALENCE — the CRUX property a shared doors-steering runner would
+// depend on. ONE runner must be able to serve BOTH arrival-manifold (one persistent env, mutated
+// call-to-call) AND arrival-mcp (a FRESH env assembled per call, authorization-scoped). That only
+// works if running the SAME sequence of top-level define+use statements produces BYTE-IDENTICAL
+// output whether the env identity persists across calls, or a fresh env is rebuilt every call and
 // `replaySessionHistory` (session-history.ts) replays the prior successful defines into it first.
 //
 // Today NOTHING exercises the ITERATED form of this (call N → fresh env → replay → call N+1 →
@@ -34,25 +32,20 @@ import { createManifoldTool } from "../manifold-tool.js";
 type Block = { type: string; text: string };
 const textsOf = (r: { content: unknown }): string[] => (r.content as Block[]).map((b) => b.text);
 
-/** The introduced-names persistence note (mcp-substrate runner.ts, the void-result-trap fix). It
- *  rides BOTH mechanisms identically — a define is deterministic per-call in either the
- *  persistent env or fresh-env+replay — so the equivalence invariant this whole file protects
- *  ("persistent env vs fresh-env+replay produce IDENTICAL output") is untouched; only the
- *  CONCRETE TEXT changed, twice over:
+/** The introduced-names persistence note (mcp-substrate runner.ts's void-result-trap fix): a
+ *  bare `define` call produces this note rather than an empty block. It rides BOTH mechanisms
+ *  identically — deterministic per-call in either the persistent env or fresh-env+replay — so it
+ *  does not touch the equivalence invariant this file protects ("persistent env vs
+ *  fresh-env+replay produce IDENTICAL output"); only its CONCRETE TEXT is pinned here.
  *
- *  RE-PINNED per second-foundation/arrival-bench/docs/benchmark-defect-register.md §E3 (mcp-substrate runner.ts note
- *  consolidation): the old `#|introduced …|#` block WAS its own standalone trailing block. Every
- *  note-shaped producer (introduced-bindings, elision, futility, attachment) now accumulates into
- *  ONE combined `#| ── environment notes ── … |#` block instead — this fixture only ever has ONE
- *  producer active per call, so the wrapper is now visible around a single line rather than a
- *  bespoke `#|introduced …|#` shape.
+ *  Every note-shaped producer (introduced-bindings, elision, futility, attachment) accumulates
+ *  into ONE combined `#| ── environment notes ── … |#` block; this fixture only ever has ONE
+ *  producer active per call, so the wrapper is visible around a single line.
  *
- *  RE-PINNED per second-foundation/arrival-bench/docs/benchmark-defect-register.md ADDENDUM §B3: the wording itself changed too
- *  — "introduced X; now available for the rest of this session" became "X — also available in
- *  subsequent calls.", plus a NEW trailing clause, "(nothing was executed — these are bindings
- *  only)", whenever the call produced no other observation (every one of THIS file's calls is a
- *  single bare `define`, so the clause fires every time) — B3's fix for a kimi trajectory that
- *  read a define-only banner as evidence something had executed and lost a round. */
+ *  The trailing clause "(nothing was executed — these are bindings only)" fires whenever the
+ *  call produced no other observation (every call in this file is a single bare `define`, so it
+ *  fires every time): a define-only banner read on its own as evidence something had executed,
+ *  and cost a trajectory a round over it. */
 const intro = (...names: string[]): string =>
   [
     "#| ── environment notes ──",

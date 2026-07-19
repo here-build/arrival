@@ -1,5 +1,5 @@
-// R6 (docs/working-proposals/arrival-mcp-rework-over-phases.md §2.6): `serializeWithExtras` —
-// the additive {core, extras} sibling of `toSExprString`. Laws exercised here:
+// `serializeWithExtras` — the additive {core, extras} sibling of `toSExprString`. Laws exercised
+// here:
 //
 //   • EXTRACTION — a binary leaf (Blob, or an AValue-duck whose toJS projection is a Blob)
 //     collects into `extras` and renders in core as `#attachment "att-N (mime, size)"`.

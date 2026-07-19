@@ -4,10 +4,10 @@
 // the point of it all: nested tool composition — the failure class the manifold exists to
 // dissolve — actually composes.
 //
-// BINARY CONTENT BLOCKS (2026-07-05, attachments.ts): rule 4's "non-text blocks pass through
-// untouched" carve-out no longer applies to BINARY blocks (image/audio/embedded-resource blob)
-// — those stub in the value and pass through as separate response content blocks instead of
-// leaking raw base64 into the REPL text. See the dedicated describe blocks below.
+// BINARY CONTENT BLOCKS (attachments.ts): rule 4's "non-text blocks pass through untouched"
+// carve-out does not apply to BINARY blocks (image/audio/embedded-resource blob) — those stub
+// in the value and pass through as separate response content blocks instead of leaking raw
+// base64 into the REPL text. See the dedicated describe blocks below.
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -112,17 +112,11 @@ describe("unwrapToolResult (H-5, frozen rules)", () => {
     "rule 4: zero TEXT blocks, and MULTIPLE text blocks that don't fit the block-envelope " +
       "algebra (A1), pass the raw content array through untouched (regression pin, RE-PINNED)",
     () => {
-      // RE-PIN (second-foundation/arrival-bench/docs/benchmark-defect-register.md §A1): this test used to assert that
-      // EVERY multi-block response — regardless of shape — passed through raw, because
-      // server.ts's old rule was an ARITY gate ("blocks.length===1 && texts.length===1"),
-      // not a SHAPE gate: `detectParse` was structurally unreachable for any tool that
-      // emitted more than one text block (cli-mcp-server's `run_command` trailer,
-      // pubmed's JSONL-by-blocks). A1's block-level envelope algebra (detect.ts's
-      // `detectBlockEnvelope`) now classifies a multi-block response BEFORE falling back
-      // to raw passthrough — so this pin now covers only the residual "genuinely
-      // unclassifiable" case (mixed/unparseable blocks): zero-structural, or 2+
-      // structural blocks of MIXED top-level kind. A single-structural-block-plus-prose
-      // or all-structural-homogeneous shape is covered by the NEW tests below instead.
+      // This pin covers only the "genuinely unclassifiable" case: zero-structural blocks, or 2+
+      // structural blocks of MIXED top-level kind. detect.ts's `detectBlockEnvelope` classifies
+      // every other multi-block shape — a single structural block plus prose, or an
+      // all-structural-homogeneous set — before falling back to raw passthrough; those shapes
+      // are covered by the tests below instead.
       const multi = [
         { type: "text", text: "part 1" },
         { type: "text", text: "part 2" },
@@ -219,8 +213,7 @@ describe("unwrapToolResult (H-5, frozen rules)", () => {
 
   it("rule 4 EXCEPTION: a non-binary non-text block (resource_link, no payload) still passes through untouched", () => {
     // resource_link carries no base64 payload at all — isBinaryContentBlock excludes it, so the
-    // pre-existing untouched-passthrough behavior still applies (this is NOT the surplus the
-    // 2026-07-05 fix targets: there is no base64 to leak).
+    // untouched-passthrough behavior applies: there is no base64 to leak.
     const linked = [{ type: "resource_link", uri: "file:///report.pdf", name: "report" }];
     expect(unwrapToolResult({ content: linked })).toBe(linked);
   });
@@ -499,19 +492,15 @@ describe("tool results compose as values through the manifold (H-5, e2e)", () =>
   });
 });
 
-/** Response-shape pins for the attachment pass-through feature (2026-07-05): the manifold
- *  tool's OWN MCP response — not just the in-value stub — carries the original binary blocks.
+/** Response-shape pins for the attachment pass-through feature: the manifold tool's OWN MCP
+ *  response — not just the in-value stub — carries the original binary blocks.
  *
- *  RE-PINNED (5 cases below) per second-foundation/arrival-bench/docs/benchmark-defect-register.md §E3: the attachment
- *  hidden-note used to be its OWN standalone `#| N images hidden … |#` trailing block, emitted
- *  BEFORE the pass-through image blocks. `attachments.ts`'s `AttachmentCollector.drainNote()`
- *  itself is UNCHANGED — it still returns exactly that line — but mcp-substrate's runner.ts now
- *  collects every note-shaped producer (introduced-bindings, elision, futility, attachment) into
- *  one `notes: string[]` and renders ONE combined `#| ── environment notes ── … |#` block, always
- *  LAST (after real content, including the pass-through image blocks) — never interleaved as a
- *  peer block ahead of data, the exact channel-hygiene defect §E3 closes. The invariant these
- *  cases protect — "attachments over quota are named, with the right count/kind/quota" — is
- *  unchanged; only the wrapper and position moved. */
+ *  `attachments.ts`'s `AttachmentCollector.drainNote()` returns a standalone
+ *  `#| N images hidden … |#` line; mcp-substrate's runner.ts collects every note-shaped producer
+ *  (introduced-bindings, elision, futility, attachment) into one combined
+ *  `#| ── environment notes ── … |#` block, always LAST (after real content, including the
+ *  pass-through image blocks) — never interleaved as a peer block ahead of data. The invariant
+ *  these cases protect: attachments over quota are named, with the right count/kind/quota. */
 const envNotesBlock = (line: string): string => ["#| ── environment notes ──", line, "|#"].join("\n");
 
 describe("attachment pass-through (e2e, response shape)", () => {
@@ -564,9 +553,8 @@ describe("attachment pass-through (e2e, response shape)", () => {
     expect(textBlocks[0]!.text).toContain(`#<image 4:`);
     expect(textBlocks[0]!.text).toContain(`#<image ${MAX_PASSTHROUGH_ATTACHMENTS + 2}:`);
     expect(textBlocks[0]!.text).not.toContain("#<attachment 4:");
-    // §E3: the consolidated environment-notes block is appended once, AFTER the pass-through
-    // image blocks (it was BEFORE them under the old per-producer peer-block scheme — the note
-    // is now bookkeeping about the call as a whole, positioned last like every other note class).
+    // The consolidated environment-notes block is appended once, AFTER the pass-through image
+    // blocks — bookkeeping about the call as a whole, positioned last like every other note class.
     const noteIndex = content.findIndex((b) => b.text?.startsWith("#|"));
     const firstImageIndex = content.findIndex((b) => b.type === "image");
     expect(noteIndex).toBeGreaterThan(-1);
@@ -661,10 +649,9 @@ describe("attachment pass-through (e2e, response shape)", () => {
       expect(content.filter((b) => b.type === "image")).toHaveLength(DEFAULT_PASSTHROUGH_ATTACHMENTS);
     });
 
-    // Adversarial hunt (no bug found — pinned as verified-correct coverage): clampAttachmentQuota
-    // mirrors clampResponseSize's exact pattern (typeof === "number" && Number.isFinite ? clamp :
-    // default), which the 0/999/"lots" cases above don't exercise for negative, non-integer, or
-    // non-finite requests.
+    // clampAttachmentQuota mirrors clampResponseSize's exact pattern (typeof === "number" &&
+    // Number.isFinite ? clamp : default) — the cases below cover negative, non-integer, and
+    // non-finite requests that 0/999/"lots" above don't exercise.
     const imageCountFor = async (client: Awaited<ReturnType<typeof manifoldClient>>, value: number) => {
       const result = await client.callTool({
         name: "scheme-repl-with-all-mcp-tools",

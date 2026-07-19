@@ -1,6 +1,6 @@
-// DoorCause + DoorProcedure — W0 of docs/design-history/symbol-define-static-program-validation.md ("SYMBOL.DEFINE W0 — door metadata"). Pins the causal-chain UX's FIRST
-// link: a bound door is no longer an anonymous throwing closure (capability.ts's pre-W0
-// `env.set(verb, () => { throw … })`) — it's an introspectable `DoorProcedure` carrying
+// DoorCause + DoorProcedure — door metadata (docs/design-history/symbol-define-static-program-validation.md §3.3). Pins the causal-chain UX's FIRST
+// link: a bound door is not an anonymous throwing closure
+// (`env.set(verb, () => { throw … })`) — it's an introspectable `DoorProcedure` carrying
 // its baked `DoorSymbolDef` (`.door`), whose `cause` (owning capability + `needs`, both
 // additive) travels into the thrown `PurityError`'s `.owner` + message. Two unit planes:
 //   1. `DoorProcedure` in isolation (no capability/env involved) — `.door` exposure, the

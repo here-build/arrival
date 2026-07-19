@@ -13,13 +13,10 @@
  *    lands on the conservative residual, never the clean one.
  *  - Law A (arg-gating): registry rules receive per-argument facts, never result types.
  *  - §4.2 fallback ladder per free symbol: emit rule → eta (`rule.ref`, opt-in per
- *    symbol — R5c landed `car`'s instantiated-signature eta-expansion live; every OTHER
+ *    symbol — `car`'s instantiated-signature eta-expansion is live; every OTHER
  *    `refPolicy: "eta"` symbol still has no `.ref` and degrades to the shim rung, Law
  *    F's value-position analog: absence of proof ⇒ conservative, never a guess) →
- *    RuntimeRef shim → door. Silence is impossible by construction. STALE-COMMENT NOTE
- *    (E3, "verify before you cite"): this bullet used to read "eta: SKIPPED this wave" —
- *    that predates R5c and was already inaccurate for `car` specifically before this
- *    wave touched the file; corrected here, not introduced by E3.
+ *    RuntimeRef shim → door. Silence is impossible by construction.
  *
  * Door materialization (the door-throw contract, wave-plan gate finding): a `Door` that
  * reaches the emitted artifact is a `Throw` residual whose message BEGINS with the
@@ -1075,7 +1072,7 @@ export function walk(classified: ClassifyResult, opts: WalkOptions): Compilation
     // never Member — Dict writes raw keys, and the read MUST share that one key-fold
     // (engine-walker.md §5: `(let ((d (dict :max-words 5))) (:max-words d))`).
     //
-    // ALIST BRANCH (V's 2026-07-17 ruling): `obj` PROVEN array-backed (`list`/`pair`/
+    // ALIST BRANCH: `obj` PROVEN array-backed (`list`/`pair`/
     // `nonEmptyList` — the closed TypeFacts vocabulary's only "this is array-shaped"
     // signals; a Dict carries NONE of them — typefacts/facts.ts's own doc calls out
     // "a plain dict object" as a type the vocabulary has nothing to say about) AND

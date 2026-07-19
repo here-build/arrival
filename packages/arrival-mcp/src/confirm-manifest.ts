@@ -1,17 +1,16 @@
 /**
- * confirm-manifest — the provenance-offloaded confirmation artifact
- * (docs/working-proposals/arrival-provenance-confirmation.md, all §7 rulings).
+ * confirm-manifest — the provenance-offloaded confirmation artifact.
  *
  * A finished DiscoveryTool run's gathered `EffectLog` (values/effect-log.ts)
  * becomes ONE manifest: every effect the run WOULD have fired — risky and
- * non-risky alike, "the full burst is visible" (§5) — as a row carrying its decoded
+ * non-risky alike, "the full burst is visible" — as a row carrying its decoded
  * args, its own minimal re-runnable invocation, and (opt-in default-on) a
  * per-argument lineage read off the RAW pre-decode args `EffectEntry.rawArgs`
  * carries (see effect-log.ts for why raw rides ALONGSIDE decoded, never instead).
  *
- * This module has no opinion on WHEN to hold vs burst (that's DiscoveryTool.call,
- * §7.2's "any risky row ⇒ the whole burst holds") or on how confirm-burst re-fires
- * an approved row (ConfirmBurstTool, confirm-burst.ts) — it only builds the artifact.
+ * This module has no opinion on WHEN to hold vs burst (that's DiscoveryTool.call's
+ * "any risky row ⇒ the whole burst holds") or on how confirm-burst re-fires an
+ * approved row (ConfirmBurstTool, confirm-burst.ts) — it only builds the artifact.
  */
 
 import { canonicalJson, type EffectEntry } from "@inhuman.tools/arrival";
@@ -24,9 +23,9 @@ import { groundingVerdict } from "@inhuman.tools/arrival-provenance/verdict";
 type CoreEvalTrace = EvalTrace;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The digest — RULED (§7.1): manifest IDENTITY only ("which manifest are you
-// approving"), never a world/config-validity claim (that's the per-effect
-// rig-altered invariant, confirm-burst.ts's `RigAlteredCheck` seam).
+// The digest: manifest IDENTITY only ("which manifest are you approving"), never a
+// world/config-validity claim (that's the per-effect rig-altered invariant,
+// confirm-burst.ts's `RigAlteredCheck` seam).
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** FNV-1a over a prefixed canonical string — the codebase's one content-hash idiom
@@ -42,8 +41,8 @@ function fnv1a(prefix: string, canonical: string): string {
   return (h >>> 0).toString(16).padStart(8, "0");
 }
 
-/** `hash(sessionId ‖ statementIndex ‖ canonicalJson(effect list + decoded args))` —
- *  §7.1 verbatim. `canonicalJson` throws on non-JSON-representable decoded args (a
+/** `hash(sessionId ‖ statementIndex ‖ canonicalJson(effect list + decoded args))`.
+ *  `canonicalJson` throws on non-JSON-representable decoded args (a
  *  class instance, a function slipped through a `z.value` escape hatch); the
  *  fallback keys on verb NAMES only — coarser (two structurally-different calls to
  *  the same verb could collide), but still a real digest, never a thrown 500 from
@@ -67,8 +66,8 @@ export function manifestDigest(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Per-argument lineage — the groundingVerdict annotation (§5's "here's where each
-// and every argument is coming from"). Runs over the RAW (boxed, provenance-intact)
+// Per-argument lineage — the groundingVerdict annotation ("here's where each and
+// every argument is coming from"). Runs over the RAW (boxed, provenance-intact)
 // arg values `EffectEntry.rawArgs` carries; a value with no recorded read behind it
 // reports `origin: "input"` honestly rather than fabricating a source.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -78,7 +77,7 @@ export function manifestDigest(
  *  form (verdict.ts's `reverseChainOf`) — meaningless for an individual effect
  *  argument that was never the program's final result, so it is deliberately NOT
  *  surfaced here. The effect's OWN minimal re-runnable invocation is
- *  `ManifestRow.invocationSource` instead (built straight from `rawArgs`, §5's "each
+ *  `ManifestRow.invocationSource` instead (built straight from `rawArgs` — "each
  *  dangerous call becomes its own minimal re-runnable program") — a real slice at
  *  ROW granularity; per-argument backward-derivation slicing would need the
  *  invoking call's AST node threaded onto `EffectEntry` too, which it does not
@@ -120,9 +119,9 @@ function argLineageFor(rawArgs: readonly unknown[], trace: CoreEvalTrace, source
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The effect's own minimal re-runnable invocation (§5 "each dangerous call becomes
-// its own minimal re-runnable program"). Built from `rawArgs` (boxed AValue nodes,
-// still provenance-intact) via `writeForm` — the SAME re-parseable serializer the
+// The effect's own minimal re-runnable invocation ("each dangerous call becomes its
+// own minimal re-runnable program"). Built from `rawArgs` (boxed AValue nodes, still
+// provenance-intact) via `writeForm` — the SAME re-parseable serializer the
 // reverse-chain slicer uses — so `invocationSource` is real Scheme source a burst
 // executor (confirm-burst.ts) can `execState` verbatim, never a JSON reconstruction
 // that risks losing round-trip fidelity.
@@ -145,27 +144,27 @@ export interface ManifestRow {
    *  `inputRest`), unwrapped from `EffectEntry.decodedArgs`'s one-element array for
    *  direct readability. Falls back to the raw array for a verb shaped otherwise. */
   readonly decodedArgs: unknown;
-  /** `tool.risky` (§7.5, static factory-declared danger) — never derived from the
+  /** `tool.risky` (static factory-declared danger) — never derived from the
    *  argument VALUES themselves. */
   readonly risky: boolean;
   /** Present iff `EffectEntry.rawArgs` was captured (always true for a burst-arm
    *  gathered sink — see run-cache.ts's `penetration.rawArgs`). */
   readonly invocationSource?: string;
-  /** Present iff lineage is enabled (default-on, §7.6) AND `rawArgs` was captured. */
+  /** Present iff lineage is enabled (default-on) AND `rawArgs` was captured. */
   readonly argLineage?: readonly ManifestArgLineage[];
 }
 
 export interface ConfirmManifest {
-  /** §7.1: manifest IDENTITY only. */
+  /** Manifest IDENTITY only. */
   readonly digest: string;
   readonly sessionId: string;
   /** The session log's length just before this call's (held) statements — the
    *  position a re-submitted program would occupy; NOT persisted as committed,
-   *  since a held manifest's statements never join `state.log` (fill-or-kill,
-   *  §7.3 — "nothing rests on the book"). */
+   *  since a held manifest's statements never join `state.log` (fill-or-kill —
+   *  "nothing rests on the book"). */
   readonly statementIndex: number;
-  /** Every gathered effect, risky and non-risky alike (§5: "the full burst is
-   *  visible, only the risky subset requires explicit approval"). */
+  /** Every gathered effect, risky and non-risky alike ("the full burst is visible,
+   *  only the risky subset requires explicit approval"). */
   readonly rows: readonly ManifestRow[];
 }
 
@@ -174,7 +173,7 @@ export interface BuildConfirmManifestOptions {
   readonly statementIndex: number;
   readonly entries: readonly EffectEntry[];
   readonly isRisky: (verbName: string) => boolean;
-  /** Lineage context (default-on, §7.6's disable knob is the CALLER omitting this).
+  /** Lineage context (default-on; the disable knob is the CALLER omitting this).
    *  `trace` must be the SAME `EvalTrace` the run installed as its `tap` (the
    *  argument values' provenance points resolve against it); `source` is the
    *  call's program text (the typed-literal laundering gate reads it). */

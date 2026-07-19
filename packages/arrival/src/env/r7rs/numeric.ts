@@ -61,8 +61,7 @@ interface NumSpec {
   out: z.ZodTypeAny;
   fn: (...jsArgs: any[]) => any;
   /** Zero-arg identity mint — ONLY `+`/`*` (`(+)` ⇒ 0, `(*)` ⇒ 1) declare this.
-   * The identity literal must carry the invoking run's ctx, not CONSTANT_CTX
-   * (arrival-constant-ctx-audit-2026-07-11.md §2.4 numeric.ts:230,240,739), and
+   * The identity literal must carry the invoking run's ctx, never CONSTANT_CTX, and
    * `fn`'s own signature has no ctx parameter — so `marshalCall` intercepts the
    * zero-arg case BEFORE calling `fn`, minting the identity here under the real
    * runCtx it's threaded (never falls through to `fn`, which stays unreachable
@@ -674,17 +673,15 @@ const sqrtFn = (x: ANumeric): ANumeric => {
 const logFn = (z: number, base?: number): number => (base === undefined ? Math.log(z) : Math.log(z) / Math.log(base));
 const atanFn = (y: number, x?: number): number => (x === undefined ? Math.atan(y) : Math.atan2(y, x));
 
-// ── Bitwise — DOORED: here lieth the dragons (V ruling 2026-07-14) ──────────────────
-// Doored AHEAD of the one-number rework (docs/design-history/arrival-one-number-rework.md):
-// scheme exact integers become safe-range JS numbers, and JS's native bitwise operators
+// ── Bitwise — DOORED: here lieth the dragons ─────────────────────────────────────────
+// Scheme exact integers are safe-range JS numbers, and JS's native bitwise operators
 // (`|` `&` `^` `~` `<<` `>>`) silently coerce their operands to 32 BITS — every result on
-// a value wider than 2^31 is silent corruption, precisely the wrong-value class the rework
-// exists to abolish. Correct wide bitwise needs the arbitrary-precision ALU the one-number
-// representation deliberately gave up. Arrival's domain (LLM orchestration) has produced
-// zero demand for bitwise (no in-repo .scm uses it); when a real demand lands, implement
-// via split-limb words over safe integers — NEVER via the JS operators. Until then:
-// doors, not dragons. (The former bigint impls — correct, but stranded by the ruling —
-// died here; git has them.)
+// a value wider than 2^31 is silent corruption, precisely the wrong-value class the
+// one-number representation (docs/design-history/arrival-one-number-rework.md) exists to
+// abolish. Correct wide bitwise needs the arbitrary-precision ALU that representation
+// deliberately gave up. Arrival's domain (LLM orchestration) has produced zero demand for
+// bitwise (no in-repo .scm uses it); when a real demand lands, implement via split-limb
+// words over safe integers — NEVER via the JS operators. Until then: doors, not dragons.
 const BITWISE_DOOR =
   "doored under the one-number representation (safe-integer exacts, no bigints): JS bitwise operators truncate to 32 bits — silent corruption above 2^31; here lieth the dragons. See the Bitwise section note in env/r7rs/numeric.ts and arrival-one-number-rework.md";
 
@@ -965,11 +962,10 @@ const mulSpec: NumSpec = {
   zeroArgIdentity: (ctx) => new AExact(ctx, 1),
 };
 const divSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: divFn };
-// `z.bigint` RETIRED here (§2.3 — was the direct cause of the "quotient: argument 0
-// type mismatch" door instead of an "integer" message): quotient now shares the same
-// box-native `toIntegerPair` door every other integer-division op uses, via
-// `z.schemeNumber` in/out (bypasses the loose codecs entirely, same reasoning as
-// `schemeAbs`/`schemeFloor`).
+// `quotient` uses `z.schemeNumber` in/out, NOT `z.bigint`: it shares the same
+// box-native `toIntegerPair` door every other integer-division op uses (bypasses the
+// loose codecs entirely, same reasoning as `schemeAbs`/`schemeFloor`), so a type
+// mismatch names the argument and expects an "integer", not a bigint-shaped message.
 const quotientSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: quotientFn };
 const moduloSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: moduloFn };
 const floorQuotientSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: floorQuotientFn };
@@ -1005,10 +1001,10 @@ const minSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.
 const zeroSpec: NumSpec = { in: [z.schemeNumber], out: z.boolean, fn: isZeroFn };
 const positiveSpec: NumSpec = { in: [z.schemeNumber], out: z.boolean, fn: isPositiveFn };
 const negativeSpec: NumSpec = { in: [z.schemeNumber], out: z.boolean, fn: isNegativeFn };
-// `z.bigint` RETIRED — odd?/even? flip to `z.integer` (Scout's disposition table):
-// already the right codec (decodes either AExact/AInexact to a safe-int `number`,
-// doors on a non-integer/out-of-range operand with an "integer" message, matching
-// R7RS's own domain for these two predicates).
+// odd?/even? use `z.integer`, NOT `z.bigint`: `z.integer` decodes either
+// AExact/AInexact to a safe-int `number` and doors on a non-integer/out-of-range
+// operand with an "integer" message, matching R7RS's own domain for these two
+// predicates.
 const oddSpec: NumSpec = { in: [z.integer], out: z.boolean, fn: isOddFn };
 const evenSpec: NumSpec = { in: [z.integer], out: z.boolean, fn: isEvenFn };
 const floorSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: schemeFloor };
@@ -1045,10 +1041,10 @@ const lcmSpec: NumSpec = {
 // (output) — never a `NumSpec` borrowed from an unrelated helper. ─────────────────────
 
 /** Type-predicate contracts — total boolean at runtime; dual type-guard harvest.
- *  `z.bigint` RETIRED (§2.3): every scheme number (exact AND inexact) decodes to a
- *  plain JS `number` post-rework — there is no longer a JS-side type that
- *  distinguishes "exact" from "inexact" (that distinction is a scheme-plane box-class
- *  fact, not a JS shape one), so `NUMBER_GUARD`/`EXACT_GUARD` both narrow to `number`. */
+ *  Every scheme number (exact AND inexact) decodes to a plain JS `number` — there is
+ *  no JS-side type that distinguishes "exact" from "inexact" (that distinction is a
+ *  scheme-plane box-class fact, not a JS shape one), so `NUMBER_GUARD`/`EXACT_GUARD`
+ *  both narrow to `number`, never `bigint`. */
 const NUMBER_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.value],
   output: [z.boolean],

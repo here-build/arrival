@@ -4,26 +4,25 @@
 // A CallTool for anything other than the manifold tool is a boundary DOOR (errors-as-
 // doors): the server serves nothing else, and it says so as isError carrying the recovery.
 //
-// AUTO-PRESENT (docs/response-normalizer.md §3.5, V ruling 2026-07-13): a single-text-
-// block response that isn't valid JSON is now ALSO tried against `detectEnvelope`'s strict
-// recognizer family (ndjson/csv/tsv/toon/python-literal, plus prose-prefix/suffix
-// stripping — §A2) — same class as the pre-existing grandfathered JSON.parse below,
-// extended to the other strict formats; a refusal still falls back to the raw string
-// exactly as before (`unwrapToolResult`'s NEVER-throw contract). The FIRST time a tool's
-// response is auto-presented this way, its qualified name is latched by
-// `ObservedSignatureTracker` (normalizer/observed-signature.ts) and the tool's catalog
-// signature line gains an `[observed] <format> <shape>` annotation on the NEXT soft
-// refresh — see `softRefresh`/`runWithSoftRefresh` below.
+// AUTO-PRESENT (docs/response-normalizer.md §3.5): a single-text-block response that
+// isn't valid JSON is also tried against `detectEnvelope`'s strict recognizer family
+// (ndjson/csv/tsv/toon/python-literal, plus prose-prefix/suffix stripping) — same class
+// as the grandfathered JSON.parse below, extended to the other strict formats; a
+// refusal still falls back to the raw string (`unwrapToolResult`'s NEVER-throw
+// contract). The FIRST time a tool's response is auto-presented this way, its qualified
+// name is latched by `ObservedSignatureTracker` (normalizer/observed-signature.ts) and
+// the tool's catalog signature line gains an `[observed] <format> <shape>` annotation on
+// the NEXT soft refresh — see `softRefresh`/`runWithSoftRefresh` below.
 //
-// BLOCK-LEVEL ENVELOPE ALGEBRA (second-foundation/arrival-bench/docs/benchmark-defect-register.md §A1) — an ARITY gate,
-// not a SHAPE gate: a multi-TEXT-block response (cli-mcp-server's payload + invariant
-// "\nCommand completed with return code: 0" trailer; pubmed's one-complete-JSON-object-
-// per-block search results) is now ALSO classified by `detectBlockEnvelope`
-// (normalizer/detect.ts) before falling back to the untouched block-array passthrough —
-// exactly one structural block (with prose anywhere around it) becomes an envelope
-// `{value, prefix?, suffix?}`; every block structural AND homogeneous in top-level kind
-// becomes a vector of the parsed values; anything else (0 structural, or 2+ of mixed
-// kind) stays raw. See `unwrapToolResult`'s doc comment below for the full rule set.
+// BLOCK-LEVEL ENVELOPE ALGEBRA is an ARITY gate, not a SHAPE gate: a multi-TEXT-block
+// response (cli-mcp-server's payload + invariant "\nCommand completed with return code:
+// 0" trailer; pubmed's one-complete-JSON-object-per-block search results) is classified
+// by `detectBlockEnvelope` (normalizer/detect.ts) before falling back to the untouched
+// block-array passthrough — exactly one structural block (with prose anywhere around it)
+// becomes an envelope `{value, prefix?, suffix?}`; every block structural AND homogeneous
+// in top-level kind becomes a vector of the parsed values; anything else (0 structural,
+// or 2+ of mixed kind) stays raw. See `unwrapToolResult`'s doc comment below for the full
+// rule set.
 //
 // tools/listChanged (H-2): rebuild-the-world. `buildManifoldEnv` composes ALL servers'
 // tools onto one EnvCapability; there is no per-server layer to surgically rebind, so a
@@ -141,40 +140,40 @@ function defaultAttachmentStub(): (block: ContentBlockish) => string {
  *       `3` composes as the number 3 — MCP has no other channel for a typed scalar
  *       from a plain server), else raw string. A server needing a literal string that
  *       happens to be valid JSON declares an outputSchema and sends structuredContent.
- *         - A3 (benchmark-defect-register.md §A3) — DOUBLE-ENCODED JSON STRING: when
- *           `JSON.parse` SUCCEEDS and yields a STRING (not object/array — a server that
- *           double-JSON-encodes, or a plain prose payload that happens to arrive
- *           JSON-string-quoted), that string is re-fed through `detectEnvelope` ONCE
- *           (never recursing further — depth-0 past this single re-dispatch, per §3's
- *           "narrow and non-recursive" re-dispatch law). A genuinely double-encoded
- *           structure (met-museum-shaped: the block's text IS a JSON string whose OWN
- *           content is itself valid JSON) surfaces as that structure; ordinary prose
- *           (met-museum's actual colon-KV `"Object ID: …\nTitle: …"` shape) is refused
- *           by `detectEnvelope` exactly like any other unrecognized text and stays the
+ *         - A3 — DOUBLE-ENCODED JSON STRING: when `JSON.parse` SUCCEEDS and yields a
+ *           STRING (not object/array — a server that double-JSON-encodes, or a plain
+ *           prose payload that happens to arrive JSON-string-quoted), that string is
+ *           re-fed through `detectEnvelope` ONCE (never recursing further — depth-0 past
+ *           this single re-dispatch, per response-normalizer.md §3's "narrow and
+ *           non-recursive" re-dispatch law). A genuinely double-encoded structure
+ *           (met-museum-shaped: the block's text IS a JSON string whose OWN content is
+ *           itself valid JSON) surfaces as that structure; ordinary prose (met-museum's
+ *           actual colon-KV `"Object ID: …\nTitle: …"` shape) is refused by
+ *           `detectEnvelope` exactly like any other unrecognized text and stays the
  *           plain string — never silently coerced into something else.
- *         - AUTO-PRESENT (response-normalizer §3.5, V ruling 2026-07-13): when the text
- *           is NOT valid JSON, it is tried against `detectEnvelope` — A2
- *           (benchmark-defect-register.md §A2) widened this from the narrower
- *           `detectParse` (ndjson/csv/tsv/toon/python-literal, strict-or-refuse) to its
- *           strict superset, which ALSO strips a prose prefix/suffix around one embedded
- *           structure (desktop-commander get_config's `"Current configuration:\n{…}"`) —
- *           BEFORE falling back to the raw string. Only `.value.value` crosses; the
- *           envelope shell's own keys (`raw`/`prefix`/`suffix`) never enter the observed
- *           type (§4.2) — dropping the prose prefix here is a deliberate faithfulness
- *           trade AT THIS SINGLE-BLOCK SEAM (the block-level envelope below keeps
- *           `prefix`/`suffix` VISIBLE instead, because there the prose is already a
- *           separate block, not text sharing one block with the structure). Same
- *           never-throw contract either way. `onAutoPresent` fires (at most once per
- *           call, for any sub-case above) with the format tag and parsed value whenever
- *           this rule actually presents something other than the bare raw string — the
- *           caller's hook for the observed-signature latch (server.ts's `toBoundServer`).
+ *         - AUTO-PRESENT (response-normalizer.md §3.5): when the text is NOT valid JSON,
+ *           it is tried against `detectEnvelope` — a strict superset of the narrower
+ *           `detectParse` (ndjson/csv/tsv/toon/python-literal, strict-or-refuse) that
+ *           ALSO strips a prose prefix/suffix around one embedded structure
+ *           (desktop-commander get_config's `"Current configuration:\n{…}"`) — BEFORE
+ *           falling back to the raw string. Only `.value.value` crosses; the envelope
+ *           shell's own keys (`raw`/`prefix`/`suffix`) never enter the observed type
+ *           (response-normalizer.md §4.2) — dropping the prose prefix here is a
+ *           deliberate faithfulness trade AT THIS SINGLE-BLOCK SEAM (the block-level
+ *           envelope below keeps `prefix`/`suffix` VISIBLE instead, because there the
+ *           prose is already a separate block, not text sharing one block with the
+ *           structure). Same never-throw contract either way. `onAutoPresent` fires (at
+ *           most once per call, for any sub-case above) with the format tag and parsed
+ *           value whenever this rule actually presents something other than the bare raw
+ *           string — the caller's hook for the observed-signature latch (server.ts's
+ *           `toBoundServer`).
  *    4. more than one TEXT block, ALL blocks text (no binary in play — rule 5's binary
  *       pre-pass stays untouched and runs after this, exactly as before) — A1
- *       (benchmark-defect-register.md §A1) BLOCK-LEVEL ENVELOPE ALGEBRA, an ARITY-gate
- *       fix: `detectBlockEnvelope` (normalizer/detect.ts) partitions the blocks'
- *       texts by `detectParse` success. MCP block boundaries are EXACT (the server
- *       handed us the cuts), so — unlike rule 3's single-string envelope — prose on
- *       BOTH sides of the one structural block is unambiguous, never refused:
+ *       BLOCK-LEVEL ENVELOPE ALGEBRA, an ARITY-gate fix: `detectBlockEnvelope`
+ *       (normalizer/detect.ts) partitions the blocks' texts by `detectParse` success.
+ *       MCP block boundaries are EXACT (the server handed us the cuts), so — unlike
+ *       rule 3's single-string envelope — prose on BOTH sides of the one structural
+ *       block is unambiguous, never refused:
  *         - exactly ONE structural block (any number of prose blocks around it, either
  *           side) → an envelope `{value, prefix?, suffix?}` (cli-mcp-server's
  *           payload-block + invariant `"\nCommand completed with return code: 0"`
@@ -186,14 +185,14 @@ function defaultAttachmentStub(): (block: ContentBlockish) => string {
  *           through to rule 5/6 below, strict-or-refuse held exactly as at the string
  *           level.
  *    5. zero / non-text / unclassified-multi-text blocks → the untouched block array,
- *       EXCEPT (2026-07-05, attachments.ts): a BINARY block among them is never passed
- *       through raw. Its base64 payload is serialized REPL text; it is replaced by a
- *       compact `#<attachment N: mime/type, NNN bytes>` stub. A lone binary block
- *       collapses straight to that stub STRING (mirroring rule 3's single-value shape);
- *       a mix keeps every text block's own object, binary members swapped only. The
- *       original block is captured (via the `stub` callback, an `AttachmentCollector`)
- *       for the manifold tool's response to pass through as a separate content block. A
- *       call with no binary blocks takes the exact untouched path. */
+ *       EXCEPT (attachments.ts): a BINARY block among them is never passed through raw.
+ *       Its base64 payload is serialized REPL text; it is replaced by a compact
+ *       `#<attachment N: mime/type, NNN bytes>` stub. A lone binary block collapses
+ *       straight to that stub STRING (mirroring rule 3's single-value shape); a mix
+ *       keeps every text block's own object, binary members swapped only. The original
+ *       block is captured (via the `stub` callback, an `AttachmentCollector`) for the
+ *       manifold tool's response to pass through as a separate content block. A call
+ *       with no binary blocks takes the exact untouched path. */
 export function unwrapToolResult(
   result: {
     content?: unknown;
@@ -260,7 +259,7 @@ export function unwrapToolResult(
       return shell;
     }
     // blockOutcome.kind === "raw" — strict-or-refuse: fall through to rule 5/6 below,
-    // the untouched block-array passthrough, exactly as before this fix existed.
+    // the untouched block-array passthrough.
   }
   if (blocks.some(isBinaryContentBlock)) {
     if (blocks.length === 1) return stub(blocks[0]!);
@@ -409,8 +408,7 @@ function toBoundServer(
 }
 
 export interface BuildManifoldServerOptions extends Omit<ManifoldToolOptions, "typeHints" | "bypassResolution"> {
-  /** TYPE HINTS at the server boundary (docs/working-proposals/manifold-type-hints.md +
-   *  manifold-type-hints-s2-spine.md). The `mode` arrives from config/env (bin.ts); the
+  /** TYPE HINTS at the server boundary. The `mode` arrives from config/env (bin.ts); the
    *  `lens` is the diagnosis seam. When `lens` is OMITTED and the mode is not "off",
    *  the server builds the REAL spine adapter (`createSpineLens(env)`) per rebuilt
    *  world (same lifecycle as the tool — a tools/listChanged rebuild harvests the new
@@ -552,7 +550,7 @@ export async function buildManifoldServer(
     return { mode: serverTypeHints.mode, lens: serverTypeHints.lens ?? createSpineLens(tools) };
   };
 
-  // Fold every tool's OBSERVED-first-parse annotation (§3.5 V ruling 2026-07-13) into its
+  // Fold every tool's OBSERVED-first-parse annotation (response-normalizer.md §3.5) into its
   // rendered ToolSignature, positionally zipped against `qualifiedNames` — the SAME
   // binding-order convention bind.ts's `toBoundTools` relies on (signatures and
   // toolParts/signatureByName are pushed together, in the same loop, in

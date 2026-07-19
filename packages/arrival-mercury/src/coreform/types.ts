@@ -1,15 +1,11 @@
 /**
  * CoreForm IR — the classified, id-carrying view over the desugared parse forest.
  *
- * Shapes per docs/working-proposals/arrival-mercury/coreform-ir.md §2, reconciled
- * against the constitution (docs/working-proposals/arrival-ts-transpiler-design.md
- * §3.2, which wins on conflict):
- *   - the union is the constitution's 16 members — no `SetBang` node ((set! …)
- *     classifies straight to Door("prohibited-dynamics/set!"), §2.2) and no `Do`
- *     node (the spec's §4.14 proposal; the constitution's §3.2 listing omits it,
- *     so `do` doors as `unsupported-form/do` in v1 — spec §9 item 8's fallback).
- *   - the IR is immutable; every analysis result lives in side tables keyed by
- *     NodeId (the Roslyn rule, spec §4.2). Nothing here is ever mutated.
+ * The union has 16 members — no `SetBang` node (`(set! …)` classifies
+ * straight to `Door("prohibited-dynamics/set!")`) and no `Do` node (`do`
+ * doors as `unsupported-form/do`). The IR is immutable; every analysis
+ * result lives in side tables keyed by NodeId (the Roslyn rule). Nothing
+ * here is ever mutated.
  */
 import type { Atom } from "../front/nodes.js";
 

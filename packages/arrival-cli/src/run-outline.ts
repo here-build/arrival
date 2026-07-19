@@ -1,8 +1,8 @@
 /**
  * The first renderer over the run-view nav model (run-view.ts): a source-ordered outline
  * of the forms a run touched, each with its aggregated state and — the whole point — its
- * invocation `×N` multiplicity. This is "tint as a view over the model", the honest shape
- * the triad demanded: the model owns the 1:N truth, the renderer just shows it.
+ * invocation `×N` multiplicity. This is "tint as a view over the model": the model owns
+ * the 1:N truth, the renderer just shows it.
  *
  * SUBTLE by the scrub-widget bar: the state is carried by the glyph's COLOR, not by a loud
  * column of checkmarks. Reached-and-settled forms are a quiet green dot; not-yet-reached a

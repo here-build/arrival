@@ -130,11 +130,11 @@ export type SchemeValue =
 // ─────────────────────────────────────────────────────────────────────────────
 // JSWorldValue / JSWorldArray — the JS side of the membrane, AT THE TYPE LEVEL.
 //
-// V's hygiene law (2026-07-14): "Each membrane penetration should be tracked and
-// explicit. We should never accept both a monadic AValue and a primitive JSValue.
-// That is the hygienic discipline that makes every flip between a Scheme entity and
-// a native JS entity OBSERVED — the only way to have hygiene when the host is both
-// the interpreter runner and a Graal-style parallel world."
+// Hygiene law: every membrane penetration is tracked and explicit — no site accepts
+// both a monadic AValue and a primitive JSValue for the same slot. That discipline
+// is what makes every flip between a Scheme entity and a native JS entity OBSERVED —
+// the only way to have hygiene when the host is both the interpreter runner and a
+// Graal-style parallel world.
 //
 // A borrowed store (`AJSArray.source`, and the same rule for AJSObject) holds JS-WORLD
 // VALUES ONLY: primitives, plain objects/arrays, and reverse-membraned egress proxies.

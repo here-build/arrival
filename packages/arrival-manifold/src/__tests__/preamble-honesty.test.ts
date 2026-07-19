@@ -12,7 +12,7 @@
 //     assembled manifold env (buildManifoldEnv — the same assembly production uses).
 //   - `forbidden`: the claimed-forbidden path — exprs that must error AND whose error must
 //     NAME the forbidden head verb (an unbound OPERAND also says "Unbound variable" but names
-//     the wrong symbol — the set!-row false-pass from the 2026-07-08 adversarial audit).
+//     the wrong symbol — the failure mode that produces a false pass on the set!-row otherwise).
 //   - `contentBlocks`: claims about MESSAGE BOUNDARIES — [expr, exact content-block texts].
 //     Needed because textOf joins blocks with \n, erasing exactly the boundary such a claim
 //     is about (audit SEV-2).
@@ -105,11 +105,10 @@ const CLAIMS: readonly ClaimRow[] = [
   {
     claim: "no other IO — every §6.13 door errors",
     anchor: /no other\s+IO/,
-    // `(display "x")` USED to sit at the head of this list. It is gone from it deliberately, and NOT
-    // because the claim weakened: `display` is bound by the MCP HOST (bind.ts `hostExtensionSymbols`)
-    // as identity-plus-echo, and it performs no IO — it writes to no port, because there are no
-    // ports. The claim stays literally true of the language; `display` simply stopped being evidence
-    // FOR it and became a claim of its own (the row below). Every genuine §6.13 door still errors.
+    // `display` is bound by the MCP HOST (bind.ts `hostExtensionSymbols`) as identity-plus-echo,
+    // not by the language, and performs no IO — it writes to no port, because there are no ports.
+    // It is therefore not evidence for "no other IO"; that's the row below. Every genuine §6.13
+    // door still errors.
     forbidden: [
       "(newline)",
       '(write "x")',
@@ -266,12 +265,10 @@ const CLAIMS: readonly ClaimRow[] = [
     evals: [["(dict :a 1)", "{:a 1}"]],
   },
   {
-    // The collection-literal grammar rework landed (arrival reader, 2026-07 —
-    // docs/working-proposals/arrival-curly-vector-literals.md): `{:k v}` ≡ (dict :k v) with
-    // evaluated elements, `[…]` is a vector literal, print-back matches the literal written.
-    // The comma tolerance and suffix-keyword flip evals are ZIMMERFRAME (V, 2026-07-02): they
-    // silently hold the model up but are deliberately NOT advertised — behavior pinned here,
-    // preamble silence pinned in the zimmerframe table below.
+    // `{:k v}` ≡ (dict :k v) with evaluated elements, `[…]` is a vector literal, print-back
+    // matches the literal written. The comma tolerance and suffix-keyword flip evals are
+    // ZIMMERFRAME: they silently hold the model up but are deliberately NOT advertised —
+    // behavior pinned here, preamble silence pinned in the zimmerframe table below.
     claim: "Clojure-style {:key value} and [...] literals are first-class",
     anchor: /Clojure-style/,
     evals: [
@@ -384,8 +381,8 @@ describe("catalog preamble honesty (H-3) — claim ledger", () => {
 });
 
 // Zimmerframe silences + removed showcases — behaviors that hold the model up silently but
-// must never be ADVERTISED (we teach the canonical form only), and drift-compensation-adjacent
-// teaching removed in the 2026-07-03 diet that must not creep back.
+// must never be ADVERTISED (we teach the canonical form only); drift-compensation-adjacent
+// teaching must not creep back once removed.
 const PINNED_ABSENT: ReadonlyArray<{ guard: string; pattern: RegExp }> = [
   { guard: "comma tolerance stays silent (V, 2026-07-02)", pattern: /comma/i },
   // "suffix" as notation-teaching only — `string-suffix?` the library symbol is fine.
@@ -411,8 +408,8 @@ describe("catalog preamble honesty (H-3) — bespoke walks", () => {
     // writes, with an inline elision marker (serializer-elision plan — the manifold's default
     // middle-elision: a small head + tail around a LOUD "N ... were not rendered" marker, never
     // a near-complete-looking dump with the hazard buried at the very end). No top-of-output
-    // banner (removed 2026-07-06: measured null effect on task pass-rate). 100 × 3000-char
-    // strings render far past budget, so the shrink loop actually engages.
+    // banner — the elision marker itself is the only signal. 100 × 3000-char strings render far
+    // past budget, so the shrink loop actually engages.
     const result = await tool.call({ expr: String.raw`(map (lambda (x) (make-string 3000 #\a)) (iota 100))` });
     expect(result.isError).toBeFalsy();
     const text = textOf(result);
@@ -432,17 +429,11 @@ describe("catalog preamble honesty (H-3) — bespoke walks", () => {
     expect(textOf(long)).toMatch(/…\(\+\d+ chars\)/);
 
     const preamble = buildCatalog([]);
-    // RE-PINNED 2026-07-14 (benchmark-defect-register.md §B1, §D, §E2/S5). The old claim —
-    // "elided is gone; re-fetch it, never re-paste it" — was FALSE and expensive:
-    //   • FALSE: elision is DISPLAY-only. The bound value is intact in the session; only the
-    //     printout is sampled. Telling the model the data is gone is a lie about our own state.
-    //   • EXPENSIVE: both benchmark models read it as DATA LOSS and permanently abandoned the
-    //     REPL for mcp-code-executor python (36/178 trajectories fled; 54/89 kimi files contain
-    //     zero map/filter/fold/lambda). It also contradicted the dedup door ("do not re-run
-    //     identical calls") and the auto-exec note ("call through the REPL next time") — three
-    //     mechanisms issuing incompatible imperatives on the same situation (the guidance triangle).
+    // Elision is DISPLAY-only: the bound value stays intact in the session; only the printout is
+    // sampled. Claiming the elided data is "gone" is a lie about our own state, and models read it
+    // as data loss — abandoning the REPL rather than filtering the (still-intact) value in-program.
     // The honest claim — INTACT + filter in-program — is what the medium's whole thesis rests on.
-    // Marker spellings stay pinned (renderer's own spelling: middle-elision "N not rendered").
+    // Marker spellings stay pinned to the renderer's own spelling (middle-elision "N not rendered").
     expect(preamble).toMatch(/#\| N not rendered, total TOTAL \|#/);
     expect(preamble).toMatch(/…\(\+N chars\)/);
     expect(preamble).toMatch(/INTACT/);

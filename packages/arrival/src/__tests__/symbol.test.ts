@@ -260,7 +260,7 @@ describe("symbol.notImplemented — errors-as-doors", () => {
     expect(def.reason).toMatch(/mutates/);
   });
 
-  // W0 (docs/design-history/symbol-define-static-program-validation.md) — signature/
+  // DoorCause (docs/design-history/symbol-define-static-program-validation.md §3.3) — signature/
   // return-shape SOURCE-COMPATIBILITY pin: the factory still bakes no `cause` at all. It
   // cannot know its own owning capability (it runs inside a `symbols` record literal,
   // before the `EnvCapability` wrapping it exists) — `common/capability.ts`'s door bind

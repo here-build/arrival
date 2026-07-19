@@ -7,27 +7,26 @@
  *  No per-code granularity by design (G14) — the whitelist is a static constant. */
 export type TypeHintsMode = "off" | "telemetry" | "on-error";
 
-/** The whitelisted TS diagnostic codes (doc §3, revised §9b 2026-07-04 per the
- *  type-lowering-premises-audit corpus + synthetic-probe evidence — see the doc for the
- *  full mistake-class → code table). Static constant — demotion is a code edit driven by
- *  per-bench-run displaced-rate, never runtime mutation. */
+/** The whitelisted TS diagnostic codes — each entry below states the mistake class it
+ *  covers and its shadowing relationship to sibling codes. Static constant — demotion is a
+ *  code edit driven by per-bench-run displaced-rate, never runtime mutation. */
 export const HINT_WHITELIST = [
-  2322, // kwarg WRONG VALUE TYPE / enum violation — the actual code TS fires for this
-  // mistake (NOT 2345, the original assumption); §9b probe: (get_route :origin 5 …)
+  2322, // kwarg WRONG VALUE TYPE / enum violation — TS fires this code for the mistake, NOT
+  // 2345; confirmed by the probe case `(get_route :origin 5 …)`
   2561, // typo'd kwarg, a near name exists (did-you-mean) — shadows 2353 whenever TS finds
-  // one; without this the "kwargs dividend" (§5) was structurally unreachable
+  // one; without this whitelist entry the kwargs dividend is structurally unreachable
   2551, // typo'd PROPERTY READ, a near name exists (did-you-mean) — shadows 2339 the same
-  // way; needs arrival's diagnose.ts extractPayload arm (batch 1e)
-  2345, // argument type mismatch / missing required kwarg (unchanged)
-  2554, // arg count — too few (unchanged)
-  2555, // arg count — too many (unchanged)
-  2353, // unknown kwarg, NO near name (object-literal excess property) — fires only post
-  // kwargs-shape (§5); 2561 shadows this whenever a near name exists
+  // way; needs arrival's diagnose.ts extractPayload arm
+  2345, // argument type mismatch / missing required kwarg
+  2554, // arg count — too few
+  2555, // arg count — too many
+  2353, // unknown kwarg, NO near name (object-literal excess property) — fires only after
+  // kwargs-shape lowering; 2561 shadows this whenever a near name exists
   2339, // property does not exist, NO near name — 2551 shadows this whenever a near name exists
-  2349, // not callable — kept ONLY because the recursive quote-datum fix (batch 1a) removed
-  // its one proven false-positive class (a nested quoted list's string-literal head
-  // getting CALLED, e.g. '(("a" 1)) lowering to a call on "a"); post-fix the
-  // remaining 2349s are true positives (JSON-bracket arrays, string-head applications)
+  2349, // not callable — kept because the quote-datum handling eliminates the one known
+  // false-positive class (a nested quoted list's string-literal head getting CALLED, e.g.
+  // '(("a" 1)) lowering to a call on "a"); the remaining 2349s are true positives (JSON-bracket
+  // arrays, string-head applications)
 ] as const;
 export type HintableCode = (typeof HINT_WHITELIST)[number];
 

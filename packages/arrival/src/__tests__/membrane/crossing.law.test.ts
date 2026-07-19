@@ -7,13 +7,13 @@
  *
  * BODY PHASE: titles stay data-driven off the table (row.entryForm / row.exitForm /
  * row.roundTrip decide the TEXT); bodies are per-row because the table doesn't carry
- * a sample JS value. RULINGS.md R1 (two-tier-exec-api.md) settled the scalar exit
+ * a sample JS value. RULINGS.md R1 settled the scalar exit
  * convention — `exec`'s SIMPLE tier fully unwraps via `toJS`, so the boolean/
  * safe-int/float/bigint/string exit cells are now live, asserted against REAL
  * `exec` output (end-to-end through the parser/evaluator, not just `toJS` directly
  * — the other cells in this file already exercise `toJS` in isolation). The
  * registered-symbol exit cell stays `it.todo` — ASymbol's opaque-exit mapping is
- * still design-pending (two-tier-exec-api.md §9), unrelated to this ruling.
+ * still design-pending, unrelated to this ruling.
  */
 import { describe, expect, it, vi } from "vitest";
 import { CROSSINGS, VIOLATIONS } from "../laws/_tables/crossings.js";
@@ -276,7 +276,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         expect((entered as ASymbol).__name__).toBe(":test");
       });
       // Not R1-gated (R1 is settled) — ASymbol's opaque-exit mapping is its OWN
-      // deferred design (two-tier-exec-api.md §9, R1-doc'd separately); filling
+      // deferred design (still design-pending, R1-doc'd separately); filling
       // this now would invent that unrelated decision.
       it.todo(exitTitle);
       it(`${roundTripTitle} — a symbol exits as a string, never the original JS Symbol`, () => {
@@ -847,7 +847,7 @@ describe.each(VIOLATIONS.map((v) => [v.name, v] as const))("forbidden crossing: 
   }
 });
 
-describe("forgery guard: a borrowed object's own arrival/*-named key is DATA, never protocol (F3, key-taxonomy corollary — PRINCIPLES.md P7 / RULINGS.md 2026-07-09)", () => {
+describe("forgery guard: a borrowed object's own arrival/*-named key is DATA, never protocol (F3, key-taxonomy corollary — PRINCIPLES.md P7 / RULINGS.md key taxonomy)", () => {
   // The key taxonomy puts algebra instruction keys ("arrival/class", "arrival/toJS", …) in
   // plain-string space so every static interpreter can read them as data — which means a
   // FOREIGN object crossing fromJS can carry an own data property with that exact name by

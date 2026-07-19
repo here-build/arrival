@@ -10,14 +10,12 @@
  * statement-position `If`, landed with the engine walker under exactly that rule —
  * see its constructor's doc for the demonstrated need.)
  *
- * E2 addition — the hybrid tree's hard side (engine plan §1 S1/S2, §2 E2;
- * mercury-ir.md; docs/working-proposals/arrival-mercury/e2-substrate-evidence.md):
- * `ChunkExpr`/`ChunkStmt` join the ~29 above as TWO more members, mirroring
- * mercury's own `IRASTExpression`/`IRASTStatement` bifurcation of one shared
- * `ast`+`slots?` mixin. Still pure data — `ast` is carried OPAQUELY (typed
+ * `ChunkExpr`/`ChunkStmt` join the ~29 above as the hybrid tree's hard side,
+ * mirroring mercury's own `IRASTExpression`/`IRASTStatement` bifurcation of one
+ * shared `ast`+`slots?` mixin. Still pure data — `ast` is carried OPAQUELY (typed
  * `OpaqueTsNode = unknown`, this module's existing `NodeId` discipline applied
  * to a second opaque carrier), never a real `typescript` import here. `./chunk.ts`
- * is the new sibling that DOES import `typescript` to build one (the walker's
+ * is the sibling that DOES import `typescript` to build one (the walker's
  * ingestion-fold call surface); `./render.ts` is the only module that ever casts
  * the opaque value back and prints it.
  */

@@ -10,7 +10,7 @@ import run from "../eval/evaluator.js";
 // `execExpr` is the COMPLEX-tier form-at-a-time entry (SchemeValue in, boxed
 // SchemeValue out, never unwrapped) — the direct replacement for the retired
 // evaluator-internal `exec` wrapper this spec used to import (byte-identical
-// glass-env behavior; see two-tier-exec-api.md §3).
+// glass-env behavior; see RULINGS.md R1).
 //
 // String-based exec with the full default env (provides `=`, `-`, etc.) — used
 // only by the tail-call optimization test, which exercises the trampoline's
@@ -701,7 +701,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       const [, result] = await execSource("(define (loop n) (if (= n 0) 'done (loop (- n 1)))) (loop 10000)");
       // `execSource` (generator-exec `exec`, RULINGS.md R1) is the SIMPLE-tier
       // plain-JS exit: a symbol's toJS is apostrophe-prefixed (ASymbol's
-      // documented, deferred opaque-exit marker — two-tier-exec-api.md §9).
+      // documented, deferred opaque-exit marker — still design-pending).
       expect(String(result)).toBe("done"); // symbol egress = plain interned name (⚖️ 2026-07-14, constitution §2.1)
     }, 15000);
   });

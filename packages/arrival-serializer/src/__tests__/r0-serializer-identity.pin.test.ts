@@ -1,9 +1,7 @@
-// R0 pin (docs/working-proposals/arrival-mcp-rework-over-phases.md, Part IV — R0): byte-identity
-// of `toSExprString` on BOTH the no-caps path and the caps (truncation) path, pinned against the
-// working tree as it stands TODAY. This is the non-regression gate R6 must clear when it adds the
-// additive `serializeWithExtras` entry point (§2.6 of the doc): `toSExprString` itself must stay
-// byte-identical, and these two golden strings are the proof. A diff here on an unrelated change
-// means something in the render/caps/shrink path moved — investigate before touching R6.
+// Pins `toSExprString`'s byte-identity on BOTH the no-caps path and the caps (truncation) path.
+// `toSExprString` must stay byte-identical regardless of what else the serializer grows (e.g.
+// `serializeWithExtras`'s binary-leaf extraction) — a diff here on an unrelated change means
+// something in the render/caps/shrink path moved; investigate before touching anything downstream.
 //
 // The fixtures are held fixed and the expected strings are exact (`toBe`, never a fuzzy matcher or
 // an auto-approved snapshot) — a snapshot file can be silently re-approved with `-u`; a hardcoded

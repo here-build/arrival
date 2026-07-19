@@ -7,7 +7,7 @@
 //   3. `require/register-extension` is the capability's `preludeOnly` symbol: callable from a
 //      DEPENDENT capability's prelude during plain `assembleEnv` (the kernel's phase-gated
 //      prelude scope — no caller wiring), a plain unbound-variable error from user code.
-//   4. door-set degradation (design doc symbol-define-static-program-validation.md §3.7, W2):
+//   4. door-set degradation (design doc symbol-define-static-program-validation.md §3.7):
 //      under `degradation: "doors"`, postures 1's two withholds instead bind a cause-carrying
 //      door teaching "provide fs/loader (or extensionRegistry) to enable it". Posture 1's OWN
 //      tests are UNCHANGED — they don't pass `degradation`, so they exercise the default

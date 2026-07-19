@@ -11,8 +11,8 @@
  * Duck-typed throughout (`.name` / `.cause.name` / message shapes), NOT
  * `instanceof`: only `ArrivalError` is exported from the `@inhuman.tools/arrival`
  * barrel — `R7RSError`, `ExactOverflowError`, `PurityError`,
- * `UnboundVariableError` are internal (verified 2026-07-14), and a classifier
- * must not force a barrel-export change to read a name it can already see.
+ * `UnboundVariableError` are internal, and a classifier must not force a
+ * barrel-export change to read a name it can already see.
  */
 
 export type ErrorClass =
@@ -40,9 +40,9 @@ const causeNameOf = (e: unknown): string => {
  * `UnboundVariableError`, `ExactOverflowError`, `PurityError`, …) and wraps
  * everything else into a plain `ArrivalError` with the original as `.cause` —
  * which is how an R7RS `(error …)` raise arrives: `ArrivalError` whose
- * `.cause.name === "R7RSError"` (probed live 2026-07-14). tiny-invariant
- * throws (`"Invariant failed: Division by zero"`, `AExact.ts:41`) arrive the
- * same wrapped way, so those classify by message shape.
+ * `.cause.name === "R7RSError"`. tiny-invariant throws (`"Invariant failed:
+ * Division by zero"`, `AExact.ts:41`) arrive the same wrapped way, so those
+ * classify by message shape.
  */
 export function classifyInterpreterError(e: unknown): ErrorClass {
   const name = nameOf(e);

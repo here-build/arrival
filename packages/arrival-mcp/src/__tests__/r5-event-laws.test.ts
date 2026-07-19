@@ -1,16 +1,15 @@
-// R5 laws (docs/working-proposals/arrival-mcp-rework-over-phases.md, Part IV — R5, §2.5/§2.7):
+// The DiscoveryTool event-stream laws:
 //
 //   • EVENT-ORDER law — topology strictly FIRST (before index 0 ever runs), statement events
 //     strictly ordered by index, TERMINAL-ON-ERROR (no event follows the error statement).
 //   • AGGREGATE law — the final result ≡ the ordered concatenation of the statement events'
-//     FULL ContentBlock lists (text today; R6's binary extras append into the same lists).
+//     FULL ContentBlock lists (text and binary extras alike append into the same lists).
 //   • BUDGET law — the per-form serialization budget is computed ONCE from the PARSED form
-//     count (parse-first), so the SUM across a batch stays bounded by MCP_OUTPUT_BUDGET
-//     (closes §1.2 item 2's unbounded-SUM regression).
+//     count (parse-first), so the SUM across a batch stays bounded by MCP_OUTPUT_BUDGET.
 //   • COUNTERS law — heapUsed contributions are monotonic (session heapUsedTotal ≡ Σ statement
 //     heapUsed), heapMax is the default-ON 100M bound, elapsed is sane.
 //   • NON-STREAMING byte-identity — a call with no listener returns the byte-identical
-//     aggregate (events are additive observation; the R0 output-shape pins stay green).
+//     aggregate (events are additive observation, never altering the response shape).
 
 import type { ReplEvent, ReplStatementEvent, ReplTopologyEvent } from "@inhuman.tools/mcp-substrate";
 import { describe, expect, it } from "vitest";
@@ -26,9 +25,9 @@ function demoTool(options: { statementCap?: number } = {}): DiscoveryTool {
   });
 }
 
-/** Run one call collecting the event stream alongside the aggregate. (R6 widened `call` to
+/** Run one call collecting the event stream alongside the aggregate. `call` returns
  *  `(string | Blob)[]` — every program in THIS suite is blob-free, so `out` stays all-string;
- *  the type rides the widened union.) */
+ *  the type rides the wider union. */
 async function callWithEvents(
   tool: DiscoveryTool,
   expr: string,
@@ -140,7 +139,7 @@ describe("R5 — budget law (parse-first per-form budget; the SUM stays bounded)
     expect(texts).toHaveLength(4);
     for (const element of texts) expect(element.length).toBeLessThanOrEqual(12_000); // 40k/4 + shrink-loop slack
     const sum = texts.reduce((n, element) => n + element.length, 0);
-    expect(sum).toBeLessThanOrEqual(45_000); // bounded SUM — the §1.2 regression stays closed
+    expect(sum).toBeLessThanOrEqual(45_000); // bounded SUM — the batch budget, not a per-form one
   });
 });
 

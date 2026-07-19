@@ -14,18 +14,15 @@ export function setMembraneWarnings(enabled: boolean): void {
 /**
  * Each distinct warning text, and how many times it has been emitted.
  *
- * This warning TEACHES — "a JS `undefined` has no portable Scheme representation" is worth saying.
- * It is worth saying ONCE. It was being said PER VALUE, and on 2026-07-14 that killed a benchmark
- * facade: a tool returned a large JSON array whose objects carried nulls, every null crossing logged
- * a full paragraph, and the process wrote ~400k identical lines and then died with a 4GB heap —
- * taking 8 benchmark tasks down with it (they were skipped as "facade unavailable").
+ * This warning TEACHES — "a JS `undefined` has no portable Scheme representation" is worth
+ * saying, but only ONCE per distinct shape: a large payload whose values all trip the same
+ * warning can otherwise emit hundreds of thousands of identical lines and OOM the process
+ * before it finishes. The same reasoning the note-sink exists for: a fact ABOUT the crossing
+ * belongs to the RUN, not to each value that crosses it — repeating it per value does not
+ * teach harder, it drowns the log and turns an O(1) diagnostic into an O(n) one on the hot path.
  *
- * The lesson is the same one the note-sink exists for: a fact ABOUT the crossing belongs to the RUN,
- * not to each value that crosses. Repeating it per value does not teach harder — it drowns out
- * everything else in the log and turns an O(1) diagnostic into an O(n) one on the hot path.
- *
- * So: first WARN_LIMIT of each distinct text, then one suppression line, then silence. Bounded by the
- * number of distinct warning shapes (a handful), not by the size of the data crossing.
+ * So: first WARN_LIMIT of each distinct text, then one suppression line, then silence. Bounded by
+ * the number of distinct warning shapes (a handful), not by the size of the data crossing.
  */
 const emitted = new Map<string, number>();
 const WARN_LIMIT = 3;

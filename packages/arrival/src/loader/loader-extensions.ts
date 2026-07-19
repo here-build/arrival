@@ -24,7 +24,6 @@
 //     (`require/extension`) it is seeded onto the per-call discarded child scope. It is
 //     NEVER bound into the runtime env. A running program therefore CANNOT teach the
 //     loader a new file type mid-run.
-//     (See docs/package-specific/arrival-scheme/prelude-only-symbols-and-composable-prompt-2026-07-02.md §1.)
 
 import { ExtensionSuffixConflictError } from "../errors.js";
 import { Macro } from "../eval/Macro.js";

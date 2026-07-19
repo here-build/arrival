@@ -1,5 +1,5 @@
-// AUTO-PRESENT (docs/response-normalizer.md §3.5, V ruling 2026-07-13) — e2e coverage
-// through a REAL manifold server. Two things land together, at one seam:
+// AUTO-PRESENT — e2e coverage through a REAL manifold server. Two things land together,
+// at one seam:
 //
 //   1. A single-text-block response that isn't valid JSON is now ALSO tried against
 //      `detectParse`'s strict recognizer family (ndjson/csv/tsv/toon/python-literal),
@@ -186,16 +186,15 @@ describe("amendSignatureText — declared-wins guard (unit)", () => {
     );
   });
 
-  // RE-PIN (A5, second-foundation/arrival-bench/docs/benchmark-defect-register.md §A5): "declared wins" was BACKWARDS.
-  // The old guard suppressed amendment whenever a tool declared `-> {content}` — but the
-  // only way `amendSignatureText` is even CALLED for a tool is via the text-block
-  // auto-present path (server.ts's `toBoundServer`), which is reachable ONLY when
+  // The old guard suppressed amendment whenever a tool declared `-> {content}` — wrong,
+  // because the only way `amendSignatureText` is even CALLED for a tool is via the
+  // text-block auto-present path (server.ts's `toBoundServer`), reachable ONLY when
   // `structuredContent` did NOT arrive (unwrapToolResult's rule 2 already short-circuits
   // and returns before rule 3's auto-present ever runs — see the e2e "declared-tool"
   // test above). So an observation that reaches this function is BY CONSTRUCTION evidence
   // that the declared prior never materialized structurally this call — the catalog
-  // was actively lying about the tool's real shape. The declared shape is now demoted to
-  // a parenthetical note instead of suppressing the (ground-truth) observation.
+  // was actively lying about the tool's real shape. The declared shape is demoted to a
+  // parenthetical note instead of suppressing the (ground-truth) observation.
   it("A5: an OBSERVED shape AMENDS a DECLARED one — declared demotes to a parenthetical note", () => {
     const declared = "(t/declared-tool) -> {value:string} - Declares its own output shape";
     const amended = amendSignatureText(declared, "[observed] csv records {a, b}");

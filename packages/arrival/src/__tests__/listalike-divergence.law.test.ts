@@ -53,7 +53,7 @@
 // srfi-1.ts:45 even calls that union "SHALLOW pair-or-nil (listAlike)" — the two were conflated in
 // the comments long before they diverged in the code.
 //
-// THE FIX THIS GATE ACCEPTS (Fable + grok-triad, unanimous): the contract names the chart. The
+// THE FIX THIS GATE ACCEPTS: the contract names the chart. The
 // `z.union([z.pair, z.nil])` INPUT slots adopt to `listAlike`, and adoption mints an
 // `AJSArrayList` view (extends APair, lazy car/cdr, exhaustion → ANil at MINT). The impls then
 // field-read a real APair subclass and are correct by construction. Empty array adopts to `nil`,

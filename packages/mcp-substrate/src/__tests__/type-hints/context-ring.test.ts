@@ -1,13 +1,12 @@
-// RING-1 red test suite — src/type-hints/context-ring.ts (does not exist yet).
+// Pins the frozen ContextRing contract: the per-rebuild-world-object ring of successful
+// top-level `(define ...)` source, re-lowered into the current program's LoweredUnit context
+// region.
 //
-// Pins the frozen ContextRing contract (types.ts) per doc §2/G3/G13 (docs/working-proposals/
-// manifold-type-hints.md rev 3): the per-rebuild-world-object ring of successful top-level
-// `(define ...)` source, re-lowered into the current program's LoweredUnit context region.
-// See src/__red__/README.md for the migration path once context-ring.ts lands.
+// RED suite: context-ring.ts does not exist yet, by design. See src/__red__/README.md for
+// the migration path once it lands.
 
 import { describe, expect, it } from "vitest";
 
-// RED: this module does not exist yet, by design — that is the point of this suite.
 import { createContextRing } from "../../type-hints/context-ring.js";
 
 /** ~500-char entry generator for the FIFO-eviction suite below. Module-scoped (not a closure
@@ -79,7 +78,7 @@ describe("G13.3 — ~8k-char FIFO eviction", () => {
   });
 });
 
-describe("knownToolNames — closes the slugless-binding blind spot (found+fixed 2026-07-05)", () => {
+describe("knownToolNames — closes the slugless-binding blind spot", () => {
   // bind.ts: `qualifiedName = server.slug === "" ? tool.name : ...` — a slugless single-server
   // binding's qualified name is the tool's BARE name, verbatim. When that bare name has no
   // `/` either (a real tool literally named `price`), TOOL_SYMBOL alone cannot see it
@@ -134,7 +133,7 @@ describe("knownToolNames — closes the slugless-binding blind spot (found+fixed
   });
 });
 
-describe("§2 — name extraction (open question — see final report)", () => {
+describe("§2 — name extraction (open question)", () => {
   it("plain-variable define — push() takes `name` given directly by the caller", () => {
     const ring = createContextRing();
     ring.push("a", "(define a 1)");

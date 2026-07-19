@@ -430,8 +430,8 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
       // response with a persistence note (below) — the void-result affordance fix: a program
       // ending in `(define x (search …))` otherwise renders NOTHING (the void `define` result
       // is filtered at `!== theVoid`), which a model reads as "the search returned empty" and
-      // confabulates from (MCP-Atlas 2026-07-11 forensics, task …c909). Announcing the binding
-      // both kills that trap and teaches cross-call persistence proactively.
+      // confabulates from that assumption. Announcing the binding both kills that trap and
+      // teaches cross-call persistence proactively.
       const introduced: string[] = [];
       // Elisions collected across EVERY rendered observation this call, from every form —
       // rendered as ONE trailing `;; Note:` block below (never per-array, never per-form).
@@ -556,7 +556,7 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
               }
             }
           } else {
-            // THE ARGS-MISUSE PIPELINE (design doc §3 hook #2). Gated by the same
+            // THE ARGS-MISUSE PIPELINE (design doc §2.1-§2.4). Gated by the same
             // signature-echo decision as before (misuse shape + exactly one implicated tool
             // + a known signature — the strategies.ts seams a positional consumer overrides).
             // When the failure LOCALIZES to one param (args-misuse.ts, fed by the binder's

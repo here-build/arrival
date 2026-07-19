@@ -142,11 +142,10 @@ export interface DemandGraph {
 export interface RunnableSlice {
   /** The value-algebra reading of the chain program: scheme source that, run
    *  with the input anchors' recorded values bound to `params`, reproduces the
-   *  chain's output value. NOTE (post-perturbation): "grounding by
-   *  reconstruction" was RETIRED as unsound — the slice contains its own
-   *  literals, so re-running it proves nothing about grounding. Grounding is a
-   *  PROBE (perturb + validate), not a reconstruction. This slice is the
-   *  re-derivation substrate the probe perturbs, not a grounding proof itself. */
+   *  chain's output value. The slice contains its own literals, so re-running
+   *  it proves nothing about grounding — grounding is a PROBE (perturb +
+   *  validate), never a reconstruction. This slice is the re-derivation
+   *  substrate the probe perturbs, not a grounding proof itself. */
   readonly source: string;
   readonly params: readonly string[];
 }

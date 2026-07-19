@@ -1,48 +1,40 @@
-// REPLAY-CACHE SAFETY — ★ KNOWN GAP, NOT FIXED HERE (docs/working-proposals/
-// arrival-manifold-package-split-2026-07-05.md, round 2's "Stress point 1"). This file
-// CHARACTERIZES today's actual `replaySessionHistory` (session-history.ts) behavior around
-// tool-valued defines — it does not change session-history.ts, and it does not "fix" anything.
+// REPLAY-CACHE SAFETY — KNOWN GAP, NOT FIXED HERE. This file CHARACTERIZES today's actual
+// `replaySessionHistory` (session-history.ts) behavior around tool-valued defines — it does not
+// change session-history.ts, and it does not "fix" anything.
 //
-// THE DESIGN REVIEW'S CONCERN, RESTATED PRECISELY: `replaySessionHistory` has NO cache — for
-// every history entry it either (a) SKIPS a tool-valued define entirely (leaving the name
-// UNBOUND in the target env, `session-history.ts:182-185`) or (b) re-`exec`s a non-tool-valued
-// one unconditionally. Round 2 traces a hypothetical FUTURE hazard: if a later runner extraction
-// ever removes step (a)'s skip-guard while porting arrival-mcp's fresh-env-per-call model (e.g.
-// "just re-exec everything, the cache will restore the wire-safe ones") without ALSO porting
-// arrival-mcp's actual cache-restore mechanism, a tool-valued define would be RE-EXECUTED on
-// every replay — re-invoking the real upstream tool as a side effect of mere session
-// reconstruction, not just re-costing CPU.
+// `replaySessionHistory` has NO cache — for every history entry it either (a) SKIPS a tool-valued
+// define entirely (leaving the name UNBOUND in the target env, `session-history.ts:182-185`) or
+// (b) re-`exec`s a non-tool-valued one unconditionally. The hazard a future runner extraction must
+// avoid: if step (a)'s skip-guard is ever removed in favor of a fresh-env-per-call model's "just
+// re-exec everything, the cache will restore the wire-safe ones" WITHOUT also porting an actual
+// cache-restore mechanism, a tool-valued define would be RE-EXECUTED on every replay — re-invoking
+// the real upstream tool as a side effect of mere session reconstruction, not just re-costing CPU.
 //
-// EMPIRICAL FINDING (this file): today's shipped code does NOT have that hazard. The existing
-// skip-guard (`entry.toolValued`) is unconditional and always taken first — a tool-valued define
-// is unconditionally skipped, NEVER re-`exec`'d, so the upstream tool is never re-invoked by
-// replay as it stands today. This test file empirically confirms that with a call-counter spy
-// (①) and pins the ACTUAL current cost of the gap, which is not "unsafe re-invocation" but
-// "silent data loss": the tool-valued binding is not merely deferred, it is DROPPED — the fresh
-// env can never read that name at all (②), a strictly worse reconstruction than arrival-mcp's own
-// cache-restore, which recovers the wire-safe VALUE without re-firing. (③ additionally probes an
-// INDIRECT tool call — bound through a helper name — to rule out a back-door re-invocation path
-// the textual `TOOL_SYMBOL` heuristic might miss; it does not find one, for the concrete reason
-// explained there.)
+// Today's shipped code does NOT have that hazard. The existing skip-guard (`entry.toolValued`) is
+// unconditional and always taken first — a tool-valued define is unconditionally skipped, NEVER
+// re-`exec`'d, so the upstream tool is never re-invoked by replay as it stands. This test file
+// confirms that with a call-counter spy (①) and pins the ACTUAL current cost of the gap, which is
+// not "unsafe re-invocation" but "silent data loss": the tool-valued binding is not merely
+// deferred, it is DROPPED — the fresh env can never read that name at all (②), a strictly worse
+// reconstruction than a real cache-restore, which would recover the wire-safe VALUE without
+// re-firing. (③ additionally probes an INDIRECT tool call — bound through a helper name — to rule
+// out a back-door re-invocation path the textual `TOOL_SYMBOL` heuristic might miss; it does not
+// find one, for the concrete reason explained there.)
 //
-// The fix (porting arrival-mcp's cache-restore into the runner's replay) is real work the
-// migration must do — round 2 already designs it in full — but it is a decision for V to make
-// explicitly (fix now vs defer to the migration), not something to silently graft onto
-// session-history.ts as a side effect of writing a test. session-history.ts is UNTOUCHED by this
-// file.
+// Porting a real cache-restore into the runner's replay is the fix that closes this gap; it is
+// out of scope for this file, which only characterizes current behavior. session-history.ts is
+// UNTOUCHED by this file.
 //
-// NOTE ON A SEPARATE, ALREADY-CLOSED BLIND SPOT (found+fixed concurrently, same day, by other
-// work landing in this same package — see session-history.ts's own `TOOL_SYMBOL` doc and
-// session-declaration-persistence.test.ts's "regression (found+fixed 2026-07-05)" tests): the
-// `_`-shape heuristic alone DID miss a SLUGLESS tool binding whose bare name has no underscore
-// either (a real tool literally named `price`/`click`), which meant replay could genuinely
-// RE-INVOKE such a tool — a real instance of exactly the hazard this file's ③ probe goes
-// looking for (by a different route: an underscore-free name, not an indirect helper call).
-// That specific hole is closed (a roster-based `knownToolPattern` check, threaded from
-// manifold-tool.ts's real bound-tool list, ORs with the shape heuristic). It does NOT change
-// this file's own finding: even with that hole closed, there is still no cache — a correctly
-// tool-valued define is still SKIPPED-AND-DROPPED on replay, never restored. This file is about
-// THAT residual gap, which the roster-based detection fix does not touch.
+// A related, already-closed blind spot: the `_`-shape heuristic alone can miss a SLUGLESS tool
+// binding whose bare name has no underscore either (a real tool literally named `price`/`click`),
+// which would let replay genuinely RE-INVOKE such a tool — an instance of exactly the hazard this
+// file's ③ probe goes looking for (by a different route: an underscore-free name, not an indirect
+// helper call). That hole is closed by a roster-based `knownToolPattern` check, threaded from
+// manifold-tool.ts's real bound-tool list, that ORs with the shape heuristic (see
+// session-history.ts's own `TOOL_SYMBOL` doc). It does NOT change this file's own finding: even
+// with that hole closed, there is still no cache — a correctly tool-valued define is still
+// SKIPPED-AND-DROPPED on replay, never restored. This file is about THAT residual gap, which the
+// roster-based detection fix does not touch.
 
 import { exec } from "@inhuman.tools/arrival";
 import { replaySessionHistory } from "@inhuman.tools/mcp-substrate";

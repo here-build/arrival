@@ -34,13 +34,12 @@ const EMPTY_CHILDREN: readonly unknown[] = Object.freeze([]);
  * inherit (raw JS input) and the run-neutral CONSTANT_CTX is correct. An honest
  * instanceof narrowing — never a cast — so it stays sound when the input is raw.
  *
- * `fallback` (the CONSTANT_CTX audit §2.6, AValue.ts:34 row): the raw-JS arm's
- * "no run to inherit" claim is true for a value
- * with genuinely no crossing context, but a membrane-adjacent caller DOES have one —
- * the crossing's own live RunContext — even when the operand itself is a bare
- * scalar. Optional and defaulted to `CONSTANT_CTX` so every existing bare `ctxOf(x)`
- * call keeps today's exact meaning; a caller that HAS a crossing ctx passes it
- * explicitly instead of silently losing it to the raw-JS arm.
+ * `fallback`: the raw-JS arm's "no run to inherit" claim is true for a value with
+ * genuinely no crossing context, but a membrane-adjacent caller DOES have one — the
+ * crossing's own live RunContext — even when the operand itself is a bare scalar.
+ * Optional and defaulted to `CONSTANT_CTX` so every existing bare `ctxOf(x)` call
+ * keeps today's exact meaning; a caller that HAS a crossing ctx passes it explicitly
+ * instead of silently losing it to the raw-JS arm.
  */
 export function ctxOf(x: SchemeValue, fallback: RunContext = CONSTANT_CTX): RunContext {
   return x instanceof AValue ? x.ctx : fallback;
@@ -294,7 +293,7 @@ export function unionProvenance(args: readonly AValue[]): ReadonlySet<number> {
 /**
  * ADD an origin, never REPLACE one — the inbound membrane's stamping rule.
  *
- * ─── WHY THE MEMBRANE MUST BE ADDITIVE (V, 2026-07-14) ──────────────────────────────────────
+ * ─── WHY THE MEMBRANE MUST BE ADDITIVE ───────────────────────────────────────────────────────
  *
  * A crossing is entitled to make a HOLISTIC claim — "the output is caused by the inputs, as a
  * whole" — because a JS impl is opaque and we cannot see that it didn't mix them. That claim is an

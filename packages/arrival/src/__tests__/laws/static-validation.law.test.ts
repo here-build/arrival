@@ -1,7 +1,7 @@
 /**
- * static-validation.law.test.ts — THE STATIC VALIDATION PASS (W3 of docs/working-
- * proposals/symbol-define-static-program-validation.md §3). Pins the law rows the
- * wave's own spec names:
+ * static-validation.law.test.ts — THE STATIC VALIDATION PASS (docs/design-history/
+ * symbol-define-static-program-validation.md §3). Pins the law rows the
+ * spec names:
  *
  *  LAW 1 (FLAGSHIP, end-to-end): a program using `(require …)` under a doors-degraded,
  *    loader-less assembly yields ONE diagnostic — cause = the missing `fs` key, EVERY
@@ -25,10 +25,10 @@
  *  LAW 5 (SPECIAL_FORMS no-FP, §2.1/§3.5): `while`/`try` programs are clean — the
  *    KEYWORD_SYNTAX baseline + the try/catch scope arm.
  *
- *  LAW 6 (internal defines, §3.5's W3 prerequisite — option (i) IMPLEMENTED): body-
+ *  LAW 6 (internal defines, §3.5's body-sequence pre-pass): body-
  *    sequence letrec* scoping; `(define (a) (b)) (define (b) …)` sibling references
  *    are bound in both directions, at top level and inside bodies. No warning
- *    demotion was needed.
+ *    demotion is needed.
  *
  *  LAW 7 (error-tier soundness statement, §3.5 — pinned): the error tier is SOUND
  *    modulo the EXCLUDED reachability strictness — a dead-branch reference REPORTS by
@@ -274,7 +274,7 @@ describe("LAW 5 — while/try programs validate clean (KEYWORD_SYNTAX baseline +
 });
 
 // ============================================================================
-// LAW 6 — internal-define letrec* scoping (§3.5 prerequisite, option (i))
+// LAW 6 — internal-define letrec* scoping (§3.5's body-sequence pre-pass)
 // ============================================================================
 
 describe("LAW 6 — internal define sequences have letrec* name visibility", () => {

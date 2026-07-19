@@ -17,6 +17,11 @@
 // value terms must stay evaluator-free (no currentRunEnv import; the meter is run-scoped context
 // state, not a value-algebra concern) — `to_array` alone can't see ops that bypass it.
 //
+// BLIND SPOTS (by construction — it meters minted list cells, nothing else): string building in
+// a loop and bigint growth allocate no list cells and pass under any cap; a borrowed host container
+// is zero-copy — reading one is not materializing it. Bound the data your capabilities MINT, never
+// the data they BORROW; a deadline that must also cover a slow native call needs `signal`, not this.
+//
 // OWNERSHIP: the meter lives on `RunContext.heapMeter` ONLY, minted once per `exec()` (see
 // `makeRunContext`). Every value built during that run carries the SAME RunContext reference
 // (`AValue.ctx` — see `ctxOf`), so a charge site reads `ctxOf(operand).heapMeter` (or the `runCtx`

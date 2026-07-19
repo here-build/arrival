@@ -1,10 +1,8 @@
 /**
  * CONSTANT / COPY PROPAGATION — the unconditionally-sound floor of structural
- * optimization (arrival-mercury engine campaign, structural-optimization lane;
- * `docs/working-proposals/arrival-mercury/gate3-human-grade-rulings.md`'s
- * governing principle: behavioral equivalence is the floor, optimal shape is
- * the goal). Composes WITH `../prevalue/index.ts` (R-G6 static prevaluation,
- * landed): this module runs FIRST, so a propagated constant becomes a literal
+ * optimization: behavioral equivalence is the floor, optimal shape is the
+ * goal. Composes WITH `../prevalue/index.ts` (R-G6 static prevaluation): this
+ * module runs FIRST, so a propagated constant becomes a literal
  * guard `../prevalue/index.ts` can then fold —
  * `(let ((flag #t)) (if flag A B))` → propagate `flag` → `(if #t A B)` →
  * prevalue folds → `A` — two small, independently-sound passes composing into

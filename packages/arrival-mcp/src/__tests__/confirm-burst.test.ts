@@ -1,9 +1,8 @@
-// The provenance-offloaded confirmation flow end to end
-// (docs/working-proposals/arrival-provenance-confirmation.md, all §7 rulings).
+// The provenance-offloaded confirmation flow end to end.
 //
 // A tiny capability with ONE risky sink (`create-widget`, tool.risky) and ONE non-risky sink
-// (`log-note`, tool.effect) drives every scenario: the hold rule fires only when a RISKY row is
-// present (§7.2 — "any risky row present ⇒ the ENTIRE burst holds"), never on plain effects.
+// (`log-note`, tool.effect) drives every scenario: the hold rule fires only when a RISKY row
+// is present — any risky row present ⇒ the ENTIRE burst holds — never on plain effects.
 
 import * as z from "@inhuman.tools/arrival/scheme-zod";
 import { describe, expect, it } from "vitest";

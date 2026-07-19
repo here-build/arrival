@@ -1,18 +1,18 @@
 // kwargs-rejection — the kwargs zod-decode humanizer + strict decode door
-// (arrival-manifold docs/args-error-reporting-v2.md §2.5, §7.3 Phase 1).
+// (arrival-manifold docs/args-error-reporting-v2.md §2.5).
 //
-// This file OWNS the frozen rejection strings (H-4-adjacent — the manifold's
-// error-contract freezes line HEADS against them; mcp-substrate's own-decode clue
-// family parses `:<param> —` line heads off them). Change them only with the
-// design doc + the manifold re-freeze in the same motion.
+// This file OWNS the frozen rejection strings — the manifold's error-contract freezes
+// line HEADS against them; mcp-substrate's own-decode clue family parses `:<param> —`
+// line heads off them. Change them only with the design doc + the manifold re-freeze
+// in the same motion.
 //
 // Grammar:
 //   <qualified>: arguments rejected — <n> problem(s):
 //     :<path> — <humanized issue>
 //
-// Two silent-strip hazards close here (both verified against zod 4.3.6):
+// Two silent-strip hazards close here:
 //   - key level: `z.object`'s default strip mode drops a misspelled OPTIONAL key with
-//     no rejection at all → `z.strictObject` (design doc Open Question 1);
+//     no rejection at all → `z.strictObject` closes it (design doc §2.5);
 //   - value level: `z.object` accepts ANY typeof-object input — a boxed AValue sent
 //     where a field declares a plain-JS shape "passes" by stripping to `{}` → the
 //     scheme-face guard below rejects it (an AValue can only be consumed by a schema
@@ -119,10 +119,8 @@ function issueLines(
  *  substrate/manifold layers that assert against (or parse) the grammar.
  *
  *  A genuinely ANONYMOUS def (empty parsed name) drops the name segment rather than
- *  rendering the broken `: arguments rejected` head. (Manifold tool defs are NOT this
- *  case anymore — their NAME_DOC_TEMPLATE was a malformed 2-part template that parsed
- *  every def as anonymous, fixed 2026-07-11 in arrival-manifold bind.ts — but the
- *  headless degradation stays for any true anonymous rosetta.) */
+ *  rendering the broken `: arguments rejected` head — the headless degradation exists
+ *  for any true anonymous rosetta. */
 export function formatKwargsRejection(qualifiedName: string, problems: readonly ProblemLine[]): string {
   const head = qualifiedName === "" ? "arguments rejected" : `${qualifiedName}: arguments rejected`;
   return `${head} — ${problems.length} problem(s):\n${problems.join("\n")}`;

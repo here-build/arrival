@@ -30,7 +30,7 @@ describe("JS-interop: numbers", () => {
     expect(`${n}`).toBe("3");
   });
 
-  // PROMOTED (RULINGS.md R1, two-tier-exec-api.md §8 step 4): `exec`'s uniform
+  // PROMOTED (RULINGS.md R1): `exec`'s uniform
   // plain-JS exit landed — a safe-int result is a bare JS number now, no BigInt
   // backing to throw on. The it.fails gap this row named is closed.
   it("exact numbers SHOULD JSON.stringify to their value", async () => {
@@ -58,7 +58,7 @@ describe("JS-interop: strings & booleans (boxed scheme faces — the Face split)
     expect(JSON.stringify(String(s))).toBe('"abc"');
   });
 
-  // INVERTED (RULINGS.md R1, two-tier-exec-api.md §8 step 4): the SIMPLE exec tier
+  // INVERTED (RULINGS.md R1): the SIMPLE exec tier
   // now maps `toJS` over every result — R8's uniform ABool mint (step 2) still boxes
   // every verdict INSIDE the membrane, but `exec`'s plain-JS exit unwraps it before
   // it reaches the caller, same as every other scalar. Natural JS-boolean auto-unwrap
@@ -84,7 +84,7 @@ describe("JS-interop: characters", () => {
 
 describe("JS-interop: symbols", () => {
   // REBASELINED (RULINGS.md R1): ASymbol's toJS is apostrophe-prefixed (its own
-  // deferred opaque-exit marker — two-tier-exec-api.md §9, unchanged by this
+  // deferred opaque-exit marker — still design-pending, unchanged by this
   // migration) — ⚖️ 2026-07-14 symbol-egress ruling (constitution §2.1): the
   // apostrophe marker died; a symbol's JS face IS the plain interned name.
   it("symbol coerces to its plain interned name in a template literal", async () => {

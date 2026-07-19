@@ -1,35 +1,20 @@
-// runner.test — end-to-end regression coverage for the 2026-07-06 migration off the retired
-// arrival-sugarcoat spike parser (statement-facts.ts's module header has the full account). Two
-// things this file exists to prove, neither provable at the `statement-facts.ts`
-// unit level alone, because both require the REAL `createDoorsRunner(...).run(...)` loop
-// (runner.ts) — the syntax gate, the forms/statements alignment logic, and real `exec()`:
+// Two invariants provable only through the REAL `createDoorsRunner(...).run(...)` loop
+// (runner.ts) — the syntax gate, the forms/statements alignment logic, and real `exec()` —
+// never at the `statement-facts.ts` unit level alone:
 //
-//   1. THE CRASH REGRESSION: a live MCP-Atlas benchmark run crashed twice on ordinary R7RS code
-//      (`(char=? #\" (car chars))`, a model writing a CSV parser) because `runner.ts`'s
-//      `analyzeStatement` call used to run that retired spike parser on the SAME source text
-//      independently of the real interpreter — and that spike parser's own file header listed
-//      "no vectors / #\char" as a known v0 limitation. Feeding the exact crash shape through the
-//      REAL `run()` must now return a normal (non-throwing, non-crashing) result, proving the
-//      production bug is fixed by the actual migration (not merely by the earlier, narrower
-//      character-literal patch to that retired reader, which is now provably UNREACHABLE from
-//      this path — see Point 6's dependency removal in the migration task).
-//   2. THE `#;` R7RS-CORRECTNESS CASE: `runner.ts` now executes/analyzes exclusively from
-//      `forms` (the real parser's output), never from `splitTopLevel`'s text-statement count —
-//      so a `#;`-commented-out form must never execute. THIS WAS A LATENT, PRE-EXISTING BUG,
-//      NOW FIXED BY THIS MIGRATION — confirmed empirically (not assumed): `splitTopLevel`'s
-//      `isSkippable` only skips the bare `#;` MARKER token itself; it does NOT skip the datum
-//      that follows. Tracing the real tokenizer on `(define x 1) #;(set! x 999) x` shows `#;`
-//      and the following `(` arrive as two SEPARATE tokens, and `between` is left `true` across
-//      the skipped `#;` token — so the very next token still starts a FRESH text statement.
-//      `splitTopLevel` therefore yields THREE text statements for that input — `(define x 1)`,
-//      `(set! x 999)`, and `x` — with the `#;` marker simply stripped out of the slice, not the
-//      datum it comments out. The OLD code's statement loop `exec`'d each of `splitTopLevel`'s
-//      text statements directly, so it WOULD have executed `(set! x 999)` for real, mutating
-//      `x` to 999 — a real R7RS-incorrectness bug that predates this migration. The NEW
-//      forms-based loop fixes this as a side effect: `parse()` genuinely drops a `#;`-commented
-//      form from `forms` (never a text-slicing approximation), so it is never handed to `exec`
-//      at all. This test pins the NOW-correct behavior and guards against regressing back to
-//      text-based execution.
+//   1. THE CRASH REGRESSION: ordinary R7RS code with a character literal (e.g.
+//      `(char=? #\" (car chars))`) must return a normal, non-throwing result. A retired spike
+//      parser used to run redundantly on the same source text, independently of the real
+//      interpreter, and choke on `#\"`; the real interpreter has always handled it fine.
+//   2. THE `#;` R7RS-CORRECTNESS CASE: `runner.ts` executes/analyzes exclusively from `forms`
+//      (the real parser's output), never from `splitTopLevel`'s text-statement count — so a
+//      `#;`-commented-out form must never execute. A text-based split leaves the `#;` marker
+//      stripped from its slice but does NOT skip the datum that follows: `splitTopLevel`'s
+//      `isSkippable` only recognizes the bare `#;` marker token, so the tokenizer still starts
+//      a fresh text statement at the very next token. Executing text statements directly (as
+//      opposed to `forms`, where `parse()` genuinely drops a `#;`-commented form) would run the
+//      commented-out code for real. This test pins the forms-based behavior and guards against
+//      regressing back to text-based execution.
 
 import { LexicalScope } from "@inhuman.tools/arrival";
 import { assembleAmbient, type AssembledAmbient } from "@inhuman.tools/arrival/env";
@@ -86,9 +71,8 @@ describe("createDoorsRunner(...).run(...) — end-to-end regression, real reader
       scope,
       tools: noTools,
     });
-    // This is the actual production crash: the statement-facts analysis step used to throw on
-    // a bare #\" character literal BEFORE any real execution happened, killing the whole call
-    // even though arrival's real interpreter handles this code fine.
+    // A bare #\" character literal must not crash the statement-facts analysis step before real
+    // execution even begins — arrival's real interpreter handles this code fine.
     expect(result.isError).not.toBe(true);
     expect(result.content.some((b) => b.type === "text" && /Error:/.test(b.text))).toBe(false);
   });
@@ -151,10 +135,10 @@ describe("createDoorsRunner(...).run(...) — end-to-end regression, real reader
 });
 
 describe("createDoorsRunner(...).run(...) — the import-form door (doors.ts's importDoor)", () => {
-  // Forensic finding (2026-07-06): a benchmark model prepended `(import (scheme base))` (a
-  // malformed R7RS import — this REPL has no module system at all) to every program in an
-  // 11-repeat run, never redirected. `importDoor` fires on the two unbound heads that produces
-  // (`import`, `scheme`); these tests drive it through the REAL runner, not the pure door builder.
+  // This REPL has no module system at all — a model may still prepend `(import (scheme base))`
+  // (a malformed R7RS import) to a program. `importDoor` fires on the two unbound heads that
+  // produces (`import`, `scheme`); these tests drive it through the REAL runner, not the pure
+  // door builder.
 
   it("`(scheme base)` alone: the door teaches (stdlib already in scope / drop the form), and the rest of the program still computes", async () => {
     const runner = makeRunner();
@@ -217,16 +201,13 @@ describe("createDoorsRunner(...).run(...) — the import-form door (doors.ts's i
     }
   });
 
-  // The void-result-trap fix (MCP-Atlas 2026-07-11 forensics, task …c909): a program whose
-  // only top-level result is a void `define` used to render NOTHING — the model read the empty
-  // observation as "the tool returned no data" and confabulated an empty result. Every program
-  // that binds into session scope now gets a persistence note, so a define is never a silent
-  // success.
+  // A program whose only top-level result is a void `define` must never render as an empty
+  // observation — an empty observation reads as "the tool returned no data," not "a binding was
+  // made." Every program that binds into session scope gets a persistence note, so a define is
+  // never a silent success.
   //
-  // E3 (benchmark-defect-register.md §E) consolidated this into the trailing
-  // `── environment notes ──` block (it moved from LEADING to TRAILING, alongside the elision/
-  // futility/attachment notes — one labelled footer, not a peer block next to the data) and
-  // reworded it per V away from the `#|introduced X; now available...|#` block-comment phrasing.
+  // The environment-notes block is a trailing footer — alongside the elision/futility/
+  // attachment notes, one labelled footer — never a leading block or a peer next to the data.
   describe("introduced-names persistence note (void-result-trap fix, consolidated by E3)", () => {
     it("a define-only program's environment notes announce the binding AND that nothing else executed (B3)", async () => {
       const runner = makeRunner();
@@ -237,8 +218,8 @@ describe("createDoorsRunner(...).run(...) — the import-form door (doors.ts's i
       const text = (result.content[0] as { text: string }).text;
       expect(text).toContain("── environment notes ──");
       expect(text).toContain("x — also available in subsequent calls.");
-      // B3 (ADDENDUM) — a define-only program's bare banner used to read as "success"; a model
-      // lost a round assuming something had run. Name explicitly that nothing executed.
+      // A define-only program must name explicitly that nothing else executed — an unqualified
+      // success banner reads as "something ran" to a model consuming the observation.
       expect(text).toContain("nothing was executed — these are bindings only");
     });
 
@@ -252,12 +233,12 @@ describe("createDoorsRunner(...).run(...) — the import-form door (doors.ts's i
         tools: noTools,
       });
       const texts = result.content.map((b) => (b.type === "text" ? b.text : ""));
-      // the value observation (b = 15) rides BEFORE the trailing notes block now.
+      // The value observation (b = 15) precedes the trailing notes block.
       expect(texts.slice(0, -1).join("\n")).toContain("15");
       const notes = texts.at(-1)!;
       expect(notes).toContain("── environment notes ──");
       expect(notes).toContain("a, b — also available in subsequent calls.");
-      // a real value WAS observed (b = 15) — the "nothing executed" clause must not appear.
+      // A real value is observed (b = 15) — the "nothing executed" clause must not appear.
       expect(notes).not.toContain("nothing was executed");
     });
 

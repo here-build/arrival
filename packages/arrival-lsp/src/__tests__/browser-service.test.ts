@@ -24,11 +24,11 @@ describe("prelude bundle — drift guard", () => {
 });
 
 describe("stripped-lib world — internal coherence guard", () => {
-  // The value-strip must leave the lib chain SELF-CONSISTENT. The audit
-  // (2026-06-10) found 93 internal errors when `Symbol`'s value was dropped
-  // (computed properties like `[Symbol.iterator]()` resolve through it) — all
-  // invisible through the program-file-only public API while silently degrading
-  // type relations. This walks EVERY file of the world and demands zero.
+  // The value-strip must leave the lib chain SELF-CONSISTENT: dropping a value
+  // (e.g. `Symbol`, which computed properties like `[Symbol.iterator]()` resolve
+  // through) can silently degrade type relations elsewhere in the chain —
+  // invisible through the program-file-only public API. This walks EVERY file
+  // of the world and demands zero internal diagnostics.
   it("the prelude + stripped libs compile with zero internal diagnostics", () => {
     const files = getPreludeFiles();
     const libs = new Map(TS_LIB_FILES);

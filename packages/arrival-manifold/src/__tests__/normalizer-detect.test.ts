@@ -1,8 +1,8 @@
-// Composition-layer tests for the response-normalizer's detection surface
-// (docs/response-normalizer.md §3 Stage B, §3.5, §4.2). `detectParse` is pure delegation
-// over the four strict recognizers in priority order; `detectEnvelope` is the end-anchored
-// prose+embedded-STRUCTURE recognizer. Design law under test throughout: strict-or-refuse
-// — a refusal is free, a misparse (or a fabricated envelope) is silent corruption.
+// Composition-layer tests for the response-normalizer's detection surface. `detectParse`
+// is pure delegation over the four strict recognizers in priority order; `detectEnvelope`
+// is the end-anchored prose+embedded-STRUCTURE recognizer. Design law under test
+// throughout: strict-or-refuse — a refusal is free, a misparse (or a fabricated envelope)
+// is silent corruption.
 
 import { describe, expect, it } from "vitest";
 
@@ -174,11 +174,10 @@ describe("detectEnvelope", () => {
   });
 });
 
-// A1 (second-foundation/arrival-bench/docs/benchmark-defect-register.md §A1) — block-level envelope algebra: the ARITY
-// gate `server.ts:169` used to route EVERY multi-block response to raw passthrough before
-// `detectParse` ever ran on any of it. Fixtures below mirror the REAL MCP wire shapes
-// pulled from vendor/mcp-atlas/results-2026-07-11/scm-kimi89f — never single-text-block
-// stand-ins.
+// Block-level envelope algebra: the arity gate (server.ts's block-count check) used to
+// route EVERY multi-block response to raw passthrough before `detectParse` ever ran on
+// any of it. Fixtures below mirror real multi-block MCP wire shapes actually seen from
+// upstream servers — never single-text-block stand-ins.
 describe("detectBlockEnvelope", () => {
   it(
     "cli-mcp-server `run_command :command \"cat 'Barber Shop.csv'\"` shape: CSV payload block + " +

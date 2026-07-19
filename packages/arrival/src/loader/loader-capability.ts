@@ -246,7 +246,7 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
       },
     };
 
-    // Door-set degradation (design doc symbol-define-static-program-validation.md §3.7, W2):
+    // Door-set degradation (design doc symbol-define-static-program-validation.md §3.7):
     // under `degradation: "doors"`, an absent `fs`/`loader` no longer WITHHOLDS `require`
     // entirely (the header's "capability withholding by absence" posture) — it binds a
     // cause-carrying door instead, teaching "provide fs (or loader) to enable it". Under the

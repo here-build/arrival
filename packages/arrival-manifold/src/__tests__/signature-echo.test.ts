@@ -1,9 +1,9 @@
 // SIGNATURE-ECHO — e2e coverage through a REAL manifold server (doors.ts's signatureEchoFor +
 // DoorSession.echoSignature + manifold-tool.ts's catch hook + bind.ts's signatureByName +
 // server.ts wiring). The pure unit coverage of the detection logic itself (`isToolMisuseError`,
-// `implicatedTool`, `signatureEchoFor`/`DoorSession.echoSignature` in isolation) moved to
-// `@inhuman.tools/mcp-substrate`'s own `signature-echo.test.ts` (2026-07-05 package split) — this
-// file keeps only the wiring-through-a-real-server matrix. Measured problem: ~15% of eval errors
+// `implicatedTool`, `signatureEchoFor`/`DoorSession.echoSignature` in isolation) lives in
+// `@inhuman.tools/mcp-substrate`'s own `signature-echo.test.ts` — this file keeps only the
+// wiring-through-a-real-server matrix. Measured problem: ~15% of eval errors
 // are tool MISUSE (wrong kwarg name, dangling keyword, wrong arg type/shape) — the model gets the
 // error but not the CONTRACT, so it guesses again. The manifold already holds every tool's
 // one-line signature; echoing the relevant one below a misuse error teaches "this is how this
@@ -106,10 +106,10 @@ describe("signature-echo — e2e through the manifold server (misuse → Signatu
 
   it("wrong keyword name (typo on a required param → strict own-decode rejection) → Signature", async () => {
     const client = await manifoldClient();
-    // `:aa` is not a param — arrival's kwargs decode is STRICT (args-error-reporting-v2
-    // Phase 1, z.strictObject): the unknown key is REJECTED at our own layer, never silently
-    // dropped, and `:a` is reported missing in the same rejection. The frozen head is
-    // kwargs-rejection.ts's grammar; the echoed signature still shows the real keyword names.
+    // `:aa` is not a param — arrival's kwargs decode is STRICT (z.strictObject): the unknown
+    // key is REJECTED at our own layer, never silently dropped, and `:a` is reported missing
+    // in the same rejection. The frozen head is kwargs-rejection.ts's grammar; the echoed
+    // signature still shows the real keyword names.
     const r = await call(client, "(toy/add :aa 1 :b 2)");
     expect(r.isError).toBe(true);
     const text = textOf(r);
@@ -136,8 +136,7 @@ describe("signature-echo — e2e through the manifold server (misuse → Signatu
     expect(text.split("\n")[0]).toBe("Error: invalid arguments for add: a: Expected number, received string");
     expect(text).toContain("Signature: (toy/add :a number :b number :label string?)");
     // …and the example call is APPENDED after it, never replacing it — required params only
-    // (`a`, `b`), `label` (optional) omitted; each non-enum slot is a type-placeholder hole
-    // (design doc second-foundation/arrival-manifold/docs/args-error-reporting-v2.md §2.3/§2.6),
+    // (`a`, `b`), `label` (optional) omitted; each non-enum slot is a type-placeholder hole,
     // not a fabricated concrete value.
     expect(text).toContain("Example: (toy/add :a #|number|# :b #|number|#)");
     expect(text.indexOf("Signature:")).toBeLessThan(text.indexOf("Example:"));
@@ -170,7 +169,8 @@ describe("signature-echo — e2e through the manifold server (misuse → Signatu
     const r = await call(client, "(add :a 1 :b 2)");
     expect(r.isError).toBe(true);
     const text = textOf(r);
-    // did-you-mean suffix landed 07-10 (unbound-variable.ts, additive-only) — frozen WITH suggestion.
+    // did-you-mean is an ADDITIVE suffix (unbound-variable.ts) — the frozen first line still
+    // matches, now WITH the suggestion appended.
     expect(text.split("\n")[0]).toBe("Error: Unbound variable `add' — did you mean `and`?");
     expect(text).toContain("the symbol you want is `toy/add`");
     expect(text).not.toContain("Signature:");

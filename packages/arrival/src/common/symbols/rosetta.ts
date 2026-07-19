@@ -32,11 +32,10 @@ import {
   type VectorSpec,
 } from "./_bake.js";
 
-/** THE Z.VALUE-CALLABLE DOOR (longcat thesis-2 attack 3 adjudication, Ruling A,
- *  the 2026-07-11 longcat design review) — a plain teaching
- *  throw, deliberately NOT a class: a parallel pass is extracting the errors-as-doors corpus
- *  into individual classes (the 2026-07-11 doors inventory); this
- *  stays a bare `throw new Error` so that pass can absorb it later without a merge collision.
+/** THE Z.VALUE-CALLABLE DOOR (Ruling A) — a plain teaching throw, deliberately NOT a
+ *  class: the errors-as-doors corpus is migrating to individual classes elsewhere;
+ *  staying a bare `throw new Error` here lets that migration absorb it later without a
+ *  merge collision.
  *
  *  `z.value` is the declared raw escape hatch (scheme-zod.ts's own doc on `value`): its decode
  *  performs NO transform (`value` is a bare predicate, not a codec), so the impl receives the
@@ -67,8 +66,8 @@ function assertNotBareCallableInValueSlot(symbolName: string, value: unknown, po
  *  DECODED args at exactly those positions. `undefined` when the contract carries no `z.value`
  *  slot at all (the overwhelming majority — zero cost). Deliberately scoped IDENTICAL to
  *  `contractMayCarryCallable`'s own shallow slots: a callable buried inside a CONTAINER argument
- *  (`z.list(z.value)`, `z.vector(z.value)`, a dict field) is the shallow-gate-recursion gap
- *  (thesis-2 attack 1), a different, already-tracked finding, not this door's job to catch. */
+ *  (`z.list(z.value)`, `z.vector(z.value)`, a dict field) is the shallow-gate-recursion gap —
+ *  a separate, already-tracked finding, not this door's job to catch. */
 function buildValueSlotCheck(
   symbolName: string,
   inSchema: z.ZodTypeAny,

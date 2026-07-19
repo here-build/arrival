@@ -1,10 +1,9 @@
-// DiscoveryTool-heap-budget.test.ts — gap 1 of the arrival-promises completion plan (the
-// "B-budget" tranche): `DiscoveryTool.call` is a PROGRAM-SCOPED production entry (§3.7's caller
-// split), so it opts the `exec` primitive's heap bound ON by default — the primitive itself stays
-// opt-in (proven by `foundations/arrival/arrival/src/__tests__/heap-budget-sequence-ops.test.ts`,
-// which exercises the RAW `exec()` and shows it's unbounded absent an explicit `heapBudget`).
-// Wall-clock was already bounded (`DEFAULT_BUDGET_MS`, DiscoveryTool.ts:223) — this file only
-// covers the NEW heap axis.
+// `DiscoveryTool.call` is a PROGRAM-SCOPED production entry, so it opts the `exec` primitive's
+// heap bound ON by default — the primitive itself stays opt-in (proven by
+// `foundations/arrival/arrival/src/__tests__/heap-budget-sequence-ops.test.ts`, which exercises
+// the raw `exec()` and shows it's unbounded absent an explicit `heapBudget`).
+// Wall-clock is already bounded (`DEFAULT_BUDGET_MS`, DiscoveryTool.ts:223) — this file covers
+// only the heap axis.
 
 import { describe, expect, it, afterEach } from "vitest";
 import { DiscoveryTool, defaultHeapBudget } from "../DiscoveryTool.js";

@@ -6,14 +6,14 @@
 // surface backs any transport. The SDK's per-request AbortSignal (`extra.signal` — cancel / timeout /
 // disconnect) is threaded straight into the eval's TICK check; the host supplies the rest of the
 // dispatch ctx (session/user/record). Whatever `call` returns — a DiscoveryTool's `(string | Blob)[]`
-// REPL output (core texts + R6's per-extra label strings and raw Blobs, §2.6) or an ActionTool's
-// result object — is lowered by the one `serializeResult` (string→text, Blob→image/audio base64,
-// object→JSON, `success:false`→isError), so both tiers register identically.
+// REPL output (core texts, per-extra label strings, and raw Blobs) or an ActionTool's result object —
+// is lowered by the one `serializeResult` (string→text, Blob→image/audio base64, object→JSON,
+// `success:false`→isError), so both tiers register identically.
 //
-// R5 (§2.5): each tools/call is also wired to the per-statement event stream — `ToolCallCtx.onEvent`
-// feeds the DUAL notification channel (progress tier + full-ReplEvent rich tier) riding the call's
-// own SSE/stdio response stream; the aggregate CallToolResult stays byte-identical (additive
-// observation, the ruled law).
+// Each tools/call is also wired to the per-statement event stream — `ToolCallCtx.onEvent` feeds the
+// DUAL notification channel (progress tier + full-ReplEvent rich tier) riding the call's own
+// SSE/stdio response stream; the aggregate CallToolResult stays byte-identical — events are additive
+// observation, never a mutation of the final result.
 //
 // We drive `McpServer.server` (the low-level escape hatch) rather than `McpServer.registerTool`,
 // because our catalog is DYNAMIC: `describe(clientInfo)` regenerates per `tools/list` (the
@@ -32,7 +32,7 @@ import {
 import type { ToolCallCtx } from "./DiscoveryTool.js";
 import { serializeResult, type UserlandCallToolResult } from "./dispatch.js";
 
-/** The rich-tier notification method (R5, §2.5): carries the full `ReplEvent`. Unknown-method
+/** The rich-tier notification method: carries the full `ReplEvent`. Unknown-method
  *  notifications are droppable by spec, so a client that doesn't know it degrades to silence
  *  harmlessly; our own clients/custdev loops subscribe to it for the wireframe-then-record trace. */
 export const ARRIVAL_EVENT_METHOD = "notifications/arrival/event";
@@ -46,7 +46,7 @@ function coreText(event: ReplStatementEvent): string {
     .join("\n");
 }
 
-/** Wire one call's `onEvent` to `extra.sendNotification` — the DUAL channel (§2.5, ruled):
+/** Wire one call's `onEvent` to `extra.sendNotification` — the DUAL channel:
  *  `notifications/progress` when the client sent `_meta.progressToken` (spec-blessed interop
  *  tier: topology ⇒ progress 0/total, statement ⇒ index+1/total + core text), PLUS
  *  `ARRIVAL_EVENT_METHOD` carrying the full `ReplEvent` (rich tier). Sends are chained on one
@@ -117,8 +117,9 @@ export function registerTools(mcp: McpServer, tools: readonly McpTool[], resolve
 
     const base = (await resolveCtx?.(request.params, clientInfo())) ?? {};
     const args = request.params.arguments ?? {};
-    // R5 dual channel: the adapter always wires the notification tiers; a host-resolved
-    // `onEvent` (from `resolveCtx`) still observes every event — fan-out, never replacement.
+    // The dual notification channel: the adapter always wires the notification tiers; a
+    // host-resolved `onEvent` (from `resolveCtx`) still observes every event — fan-out, never
+    // replacement.
     const channel = notificationChannel(extra);
     const hostOnEvent = base.onEvent;
     const onEvent = (event: ReplEvent): void => {
@@ -128,8 +129,8 @@ export function registerTools(mcp: McpServer, tools: readonly McpTool[], resolve
     try {
       // `call` returns `string[]` (DiscoveryTool) or a result object (ActionTool) — both are
       // `UserlandCallToolResult`-shaped; the one serializer lowers either. The aggregate is
-      // UNCHANGED by streaming (§2.5's law): events are additive observation, and a
-      // non-streaming client sees the byte-identical full result.
+      // UNCHANGED by streaming: events are additive observation, and a non-streaming client
+      // sees the byte-identical full result.
       const result = (await tool.call(args, { ...base, signal: extra.signal, onEvent })) as
         | UserlandCallToolResult
         | UserlandCallToolResult[];

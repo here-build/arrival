@@ -128,9 +128,8 @@ function isPendingDatum(value: SchemeValue | PromiseLike<SchemeValue>): value is
 // §2.3 — never a scheme number), objects, and arrays are handled by the membrane
 // at access time and pass through (the switch below has no `bigint` case, so it
 // falls straight to the identity return).
-// NOTE (hermetic-Environment ruling, 2026-07-11): AmbientRuntime.get no longer calls
-// this — a raw JS scalar found in env storage is an invariant DOOR there, never a
-// silent re-box (the audit's #1 provenance drop). Remaining callers are the reader/
+// AmbientRuntime.get does not call this — a raw JS scalar found in env storage is an
+// invariant DOOR there, never a silent re-box. Remaining callers are the reader/
 // parse-time and pending-entry settle paths (PARSE_CTX territory) + the public barrel.
 // ----------------------------------------------------------------------
 // `ctx` is the caller's identity claim for the minted box (a parse ctx on parse-time
@@ -153,9 +152,9 @@ export function box(object: unknown, ctx: RunContext = CONSTANT_CTX): SchemeValu
 // ----------------------------------------------------------------------
 // Settles a value read out of a binding/member before handing back to Scheme:
 // a Pair is cycle-marked then quoted (so the evaluator treats it as data, not
-// a call); everything else is boxed. AmbientRuntime.get's read path no longer routes
-// here (it inlines the pair arm and DOORS on raw scalars — hermetic ruling); this
-// stays a public value-repr helper for host-side member settling.
+// a call); everything else is boxed. AmbientRuntime.get's read path does not route
+// here — it inlines the pair arm and DOORS on raw scalars directly; this stays a
+// public value-repr helper for host-side member settling.
 // ----------------------------------------------------------------------
 export function patch_value(value: unknown, ctx: RunContext = CONSTANT_CTX): SchemeValue {
   if (value instanceof APair) {

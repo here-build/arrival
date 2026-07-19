@@ -1,7 +1,7 @@
 /**
  * The static wire descriptor's own contract
  * (docs/foundations/arrival-scheme/provenance-by-perturbation.md §3). The KEY row
- * is longcat's fabrication-in-the-middle: a guard that reads a crossing but returns
+ * is the fabrication-in-the-middle: a guard that reads a crossing but returns
  * one of two hand-written literals must derive as SELECTION, never content — the
  * whole reason the three-way verdict exists instead of v1's "grounding = movement."
  */
@@ -172,7 +172,7 @@ describe("and/or as value-returning control (craft-review #2 — was a Hole)", (
   });
 });
 
-describe("Fable review — Tier-1 soundness", () => {
+describe("Tier-1 soundness", () => {
   it("finding 1: a cyclic binding TERMINATES as an honest Hole, never hangs the static walk", () => {
     // (define x x) x — the reference resolves to itself forever. The static plane
     // has no fuel bound; the threat model is "the model writes the program", so this

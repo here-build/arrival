@@ -1,6 +1,6 @@
 /**
- * The interactive-run NAV MODEL — the semantic handle the render sits on, built (per the
- * triad's insistence) BEFORE any tint, so the projection is honest by construction.
+ * The interactive-run NAV MODEL — the semantic handle the render sits on, built BEFORE
+ * any tint, so the projection is honest by construction.
  *
  * The load-bearing fact, confirmed by real traces (docs/interactive-run-design.md's
  * probe): one source form (a parser Pair = a TEMPLATE, keyed by `scopeId`) maps to N

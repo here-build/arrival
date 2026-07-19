@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Bite cases for the combinators family (combinators.d.ts) — expect-type
-// assertions over the ambient `__arr`. Only the LIVE members remain: `always`,
-// `clone`, `repr`, `when`, `unless` (the Ramda-derived `identity`/`id`/`constant`/
-// `negate`/`type`/`where` + inline `tap` were cut 2026-06-16 — see the leaf header).
+// assertions over the ambient `__arr`. Only the LIVE members are covered:
+// `always`, `clone`, `repr`, `when`, `unless` (see the leaf header for what
+// was cut and why).
 // Base vocab (`List`/`number`/`string`/`Nil`) is ambient from ../types.d.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 import { expectTypeOf } from "vitest";

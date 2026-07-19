@@ -1,6 +1,6 @@
-// attestation-flows — the branded-attestation test plan (docs/attestation-design.md §8,
-// cases 1-9; case 10's core-walk suite lives in arrival's src/__tests__/attestation.test.ts).
-// The flow algebra under test (§3): literals/computed values are FRESH boxes and rejected
+// attestation-flows — the branded-attestation flow cases (docs/attestation-design.md §2;
+// the core-walk suite lives in arrival's src/__tests__/attestation.test.ts).
+// The flow algebra under test (§2): literals/computed values are FRESH boxes and rejected
 // at a tool boundary in "required" mode; `s/*`-wrapped values, tool results, and plucks
 // from either are attested and pass; reference-passing (`let`, lambda args, `if` selects)
 // preserves the verdict; computation drops it — the model re-attests deliberately.

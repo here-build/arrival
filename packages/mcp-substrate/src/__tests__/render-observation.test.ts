@@ -5,12 +5,10 @@
 // arrival-curly-vector-literals.md), closing the loop between what the model reads
 // back and what it itself writes.
 //
-// String leaves round-trip too (arrival-serializer, 2026-07): toSExpr/formatSExpr now
-// print strings as R7RS double-quoted literals (`"Ada"`) with full `\\`/`\"`/`\n`/`\t`/
-// `\r` escaping, verified against arrival's own reader. This closes a gap the suite
-// used to carve out deliberately — the earlier single-quote convention (`'Ada'`) did
-// NOT re-parse (`exec("'hi'")` threw `expecting datum after '''`). See the positive
-// test below.
+// String leaves round-trip too: toSExpr/formatSExpr print strings as R7RS double-quoted
+// literals (`"Ada"`) with full `\\`/`\"`/`\n`/`\t`/`\r` escaping, verified against arrival's
+// own reader — the earlier single-quote convention (`'Ada'`) did NOT re-parse
+// (`exec("'hi'")` threw `expecting datum after '''`). See the positive test below.
 
 import { exec, execState, LexicalScope } from "@inhuman.tools/arrival";
 import { assembleAmbient, type AssembledAmbient } from "@inhuman.tools/arrival/env";
@@ -83,9 +81,8 @@ describe("renderObservation — real arrival exec() results", () => {
 
   it("renders nested values head-recursively at any depth (values-wrapped lists still bracket)", async () => {
     const env = freshEnv();
-    // The Values BOX is a tooling read — R1's two-tier rule routes it to execState
-    // (exec's plain-JS exit unwraps multiple values to a JS ARRAY by convention —
-    // the arrival membrane's Values arm — so values-ness is only observable boxed).
+    // Multiple return values are only observable boxed: exec's plain-JS exit unwraps them to
+    // a JS array by convention (the arrival membrane's Values arm), so this reads execState.
     const state = await execState("(partition odd? '(1 2 3 4))", { ambient, scope: env });
     expect(renderObservation(state.values[0])).toBe("(values\n  [1 3]\n  [2 4])");
   });
@@ -151,10 +148,9 @@ describe("renderObservation — round-trip sanity (renders PARSE under the arriv
 
 describe("renderObservation — caps + shrink ride the brace notation natively", () => {
   it("reduces an oversize result to fit the budget WITHOUT leaving the brace notation", async () => {
-    // SerializeOpts.format: the brace formatter is plugged into toSExprString's own
-    // streaming caps + fair shrink-to-fit — no more parens fallback for oversize results.
-    // No top-of-output banner (removed 2026-07-06) — the inline `+N more of TOTAL` marker
-    // is the only signal, and the budget is genuinely honored (no ⚠/"output reduced" text).
+    // SerializeOpts.format wires the brace formatter into toSExprString's own streaming caps +
+    // fair shrink-to-fit. The inline `+N more of TOTAL` marker is the only truncation signal —
+    // no banner, no ⚠/"output reduced" text — and the budget is genuinely honored.
     const env = freshEnv();
     const [value] = await run(env, String.raw`(map (lambda (x) (make-string 3000 #\a)) (iota 100))`);
     const rendered = renderObservation(value);
@@ -190,11 +186,10 @@ describe("renderObservation — caps + shrink ride the brace notation natively",
 });
 
 describe("renderObservation — raw top-level string truncation carries an inline elision marker, no banner", () => {
-  // A provenance-less native string (e.g. a bare JS string returned top-level, not boxed
-  // in an AString) hits the shortcut branch in renderObservation directly. Truncation is
-  // signaled INLINE (the `…(+N chars)` suffix, matching the serializer's own `capString`
-  // convention) — there is no separate top-of-output banner (removed 2026-07-06: measured
-  // null effect on task pass-rate).
+  // A provenance-less native string (e.g. a bare JS string returned top-level, not boxed in
+  // an AString) hits the shortcut branch in renderObservation directly. Truncation is signaled
+  // INLINE (the `…(+N chars)` suffix, matching the serializer's own `capString` convention) —
+  // there is no separate banner.
   const raw = "x".repeat(1000);
 
   it("caps the string and appends the inline elision marker", () => {

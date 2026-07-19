@@ -159,13 +159,11 @@ const DOOR_SYMBOLS = Object.fromEntries(
 const isWhitespace = (c: string): boolean => /\s/u.test(c);
 
 /** Per-character match flags for a criterion; a promise when the predicate is async.
- * `runCtx` is REQUIRED (not optional/defaulted to CONSTANT_CTX) — the audit's worst
- * bug in this cluster (arrival-constant-ctx-audit-2026-07-11.md §2.4, srfi-13.ts:71):
- * a user-supplied criterion predicate is arbitrary scheme code, invoked through
- * `applyCallback`'s runCtx slot — passing CONSTANT_CTX there ran every
- * trim/index/count/tokenize predicate unmetered, off cache/effects/abort, regardless
- * of what the invoking run actually configured. Every caller below threads its own
- * `this.runCtx`. */
+ * `runCtx` is REQUIRED (never defaulted to CONSTANT_CTX): a user-supplied criterion
+ * predicate is arbitrary scheme code, invoked through `applyCallback`'s runCtx slot —
+ * a defaulted CONSTANT_CTX would run every trim/index/count/tokenize predicate
+ * unmetered, off cache/effects/abort, regardless of what the invoking run actually
+ * configured. Every caller below threads its own `this.runCtx`. */
 function criterionFlags(
   criterion: unknown,
   chars: readonly string[],
@@ -175,7 +173,7 @@ function criterionFlags(
     const ch = charValue(criterion);
     return chars.map((c) => c === ch);
   }
-  // Seam-routed: the criterion predicate is a callable VALUE now, not a bare fn.
+  // Seam-routed: the criterion predicate is a callable VALUE (membrane-boxed), not a bare fn.
   const results = chars.map((c) => applyCallback(criterion, [new ACharacter(runCtx, c)], runCtx));
   const collapse = (rs: unknown[]) => rs.map((v) => !is_false(v)); // R7RS: only #f is false
   // pred may be an async membrane callback → await before deciding (see string-map).
@@ -500,7 +498,7 @@ export default new EnvCapability("scheme/srfi-13", {
       ),
 
     // Official SRFI-13 names not live above — purity / subset doors (see DOORS).
-    // string-filter lives here (was stubs-only) so the pack owns the full index.
+    // string-filter lives here so the pack owns the full index.
     ...DOOR_SYMBOLS,
   },
 });

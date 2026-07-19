@@ -113,10 +113,10 @@ export function extractAtom(form: AtomForm, ctx: ExtractCtx): StaticProv {
 function extractRef(form: Ref, ctx: ExtractCtx): StaticProv {
   const bound = lookup(ctx.scope, form.name);
   if (bound === undefined) {
-    // F23 (architecture review, 2026-07-15): a free name that the registry
-    // KNOWS is a builtin head is a fn-as-value, not evidence — `(car (list +))`
-    // must not launder `+` into an evidence-class input. Only registry-unknown
-    // free names are the evidence-handle convention.
+    // A free name that the registry KNOWS is a builtin head is a fn-as-value,
+    // not evidence — `(car (list +))` must not launder `+` into an
+    // evidence-class input. Only registry-unknown free names are the
+    // evidence-handle convention.
     if (ctx.registry.classifyHead(form.name).role !== "opaque") return opaque(form.id, "builtin-as-value");
     return { kind: "input", site: form.id, name: form.name };
   }

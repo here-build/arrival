@@ -1,24 +1,13 @@
 // RING 3 — SPINE FIXTURE TABLE for the manifold type-hints feature
 // (docs/working-proposals/manifold-type-hints-s2-spine.md; docs/working-proposals/
-// manifold-type-hints.md rev 3).
+// manifold-type-hints.md).
 //
-// LANDED (migrated out of src/__red__/type-hints/ once spine-lens.ts existed — see git
-// history for the prior red-gated revision). Exercises the full Ring 3 pipeline end to end
-// — createSpineLens → selectHints → renderHint — against REAL manifold-bindable tools,
-// harvested exactly as production would (buildManifoldEnv, not a mock).
+// Exercises the full Ring 3 pipeline end to end — createSpineLens → selectHints →
+// renderHint — against REAL manifold-bindable tools, harvested exactly as production would
+// (buildManifoldEnv, not a mock).
 //
-// FIXTURE TABLE — see FIXTURES.md (sibling) for the human-readable acceptance contract.
-//
-// REVISION (2026-07-04): the original table assumed kwargs mistakes fire 2345/2353. Two
-// independent audits (docs/working-proposals/research/type-lowering-premises-audit.md +
-// this package's own src/__tests__/json-schema-to-ts.test.ts integration matrix) found the
-// checker actually fires 2322 (wrong kwarg VALUE type) and shadows 2353 with 2561
-// (did-you-mean) whenever a near-name candidate exists. HINT_WHITELIST was revised to match
-// (docs/working-proposals/manifold-type-hints-s2-spine.md §9b) and this fixture table is
-// rewritten to the observed codes/shapes — see FIXTURES.md's revision note for the full
-// per-row rationale, including the accessor-misuse row DROPPED because a tool's return type
-// is `unknown` for v1 by design (json-schema-to-ts.ts), making that class structurally
-// unreachable given the current harvest.
+// FIXTURE TABLE — see FIXTURES.md (sibling) for the human-readable acceptance contract,
+// including the per-row rationale for each expected TS diagnostic code.
 
 import { tokenize } from "@inhuman.tools/arrival";
 import { createSpineLens, renderHint, selectHints, type BoundTool } from "@inhuman.tools/mcp-substrate";
@@ -139,7 +128,7 @@ function headOf(statementSource: string): string {
   return match[1]!;
 }
 
-// ── Row 2/3 activation-policy caveat (unchanged from the prior revision — see FIXTURES.md):
+// ── Row 2/3 activation-policy caveat (see FIXTURES.md's "Coverage boundaries" section):
 // the kwargs-typo calls do NOT themselves runtime-error (arrival's kwargs runtime tolerantly
 // DROPS an unknown keyword), so `erroredStatementIndexes: [0]` is supplied BY FIAT to isolate
 // the spine's diagnostic MECHANICS from the separate, undecided ACTIVATION question.
@@ -154,7 +143,7 @@ describe("type-hints spine fixtures (Ring 3 — full pipeline)", () => {
   const select = selectHints;
   const render = renderHint;
 
-  // ── Row 1 — wrong kwarg VALUE TYPE (TS2322, not the originally assumed 2345) ──
+  // ── Row 1 — wrong kwarg VALUE TYPE (TS2322) ──
   it('fixture 1: (fx/set_count :count "five") → exactly one TS2322 hint, rendered with (string->number', async () => {
     const { env, tools } = await fixtureEnv();
     const program = '(fx/set_count :count "five")';

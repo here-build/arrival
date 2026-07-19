@@ -57,7 +57,7 @@ export interface EnvPack<E = unknown> {
  *  capability.ts's bindTarget only ever writes. In BOOTSTRAP assembly this is the kernel's own
  *  Map-backed shim (see `assembleEnv`); in MID-RUN application it is the caller's adapter over
  *  a real, discarded child frame (loader-capability.ts wraps the module-internal `bindValue` —
- *  `SchemeEnv` itself carries no write member; hermetic-Environment ruling, 2026-07-11). */
+ *  `SchemeEnv` itself carries no write member; hermetic-Environment ruling). */
 export interface PreludeBindTarget {
   set(name: string, value: unknown): unknown;
 }

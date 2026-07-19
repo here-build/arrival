@@ -246,10 +246,10 @@ describe("Wrapper Layer", () => {
     // "todo symbols gets transformed into opaque symbol" comment (2026-07-09 suite
     // consolidation) — the SAME still-undecided design question
     // membrane/crossing.law.test.ts's "registered symbol (Symbol.for)" exit cell already
-    // stages as `it.todo` (ASymbol's opaque-exit mapping, two-tier-exec-api.md §9,
+    // stages as `it.todo` (ASymbol's opaque-exit mapping still design-pending,
     // deferred separately from R1). Promoted to `it.todo` here too rather than pinning
     // one arbitrary shape as if it were the settled design.
-    it.todo("converts SchemeSymbol via its own toJS protocol — opaque-symbol exit design pending (two-tier-exec-api.md §9)");
+    it.todo("converts SchemeSymbol via its own toJS protocol — opaque-symbol exit design pending");
 
     // INVARIANT: APair converts to a JS array
     it("keeps Pair as-is", () => {

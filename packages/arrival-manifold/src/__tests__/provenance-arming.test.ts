@@ -3,12 +3,11 @@
 // tool-response value bound via `define` carries a provenance point that resolves
 // back to its originating tool invocation through `EvalTrace.invocationById`.
 //
-// Before this wiring, `createRosettaWrapper` (arrival's rosetta.ts) only minted a
-// provenance point when `ctx.currentInvocation` was set, which requires a tap —
-// and the manifold's runner called `execState` with no tap at all. This test proves
-// the tap is now armed, SESSION-scoped (one `EvalTrace` per `ManifoldEnv`, shared
-// across every call against that world — never re-minted per call), and that ids
-// stay resolvable across calls without colliding.
+// `createRosettaWrapper` (arrival's rosetta.ts) only mints a provenance point when
+// `ctx.currentInvocation` is set, which requires a tap — so the manifold's runner must supply
+// one for provenance to exist at all. This test proves the tap is armed, SESSION-scoped (one
+// `EvalTrace` per `ManifoldEnv`, shared across every call against that world — never re-minted
+// per call), and that ids stay resolvable across calls without colliding.
 
 import { AValue } from "@inhuman.tools/arrival";
 import { describe, expect, it } from "vitest";
@@ -42,10 +41,9 @@ describe("provenance arming + per-call GC — points mint during a call, the gra
     await tool.call({ expr: "(define r (t/fake-tool))" });
     // manifold-tool.call()'s finally runs trace.clear() (execute → consume → dump):
     // the invocation graph — which retains every tool call's FULL boxed value at its
-    // provenance point (the empirically-confirmed within-task OOM driver, 2026-07-14) —
-    // must be gone the moment the call returns. Session semantics survive by design:
-    // the session's truth is the statement log + effect cache (re-execution model),
-    // never the trace.
+    // provenance point, a real OOM driver over a long session — must be gone the moment
+    // the call returns. Session semantics survive by design: the session's truth is the
+    // statement log + effect cache (re-execution model), never the trace.
     const stats = manifoldEnv.trace.stats();
     expect(stats.entries).toBe(0);
     expect(stats.points).toBe(0);

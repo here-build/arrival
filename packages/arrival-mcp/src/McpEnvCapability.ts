@@ -68,19 +68,19 @@ export interface McpAnnotation {
    *  catalog identity (same annotation object, same description) — a different shape than
    *  dissolution's "invisible duplicate." */
   aliases?: readonly string[];
-  /** STATIC exposure flag (arrival-mcp-extended-capability.md §2.5) — `true` iff this verb is
-   *  ALSO its own structured MCP tool (once a runner derives `tools/list` from the catalog),
-   *  never just an fn-truthy value: `tools/list` membership must be stable data. Written by
-   *  `tool.view`/`tool.pure`/`tool.effect`/`tool.risky` (arrival-mcp/src/tool.ts) via the same
-   *  metadata channel `description`/`dynamicDescription` already ride. Absent (or a plain
-   *  `description`-only verb) ⇒ a DECLARED ACTION — bound + catalogued, but not its own tool. */
+  /** STATIC exposure flag — `true` iff this verb is ALSO its own structured MCP tool (once a
+   *  runner derives `tools/list` from the catalog), never just an fn-truthy value: `tools/list`
+   *  membership must be stable data. Written by `tool.view`/`tool.pure`/`tool.effect`/`tool.risky`
+   *  (arrival-mcp/src/tool.ts) via the same metadata channel `description`/`dynamicDescription`
+   *  already ride. Absent (or a plain `description`-only verb) ⇒ a DECLARED ACTION — bound +
+   *  catalogued, but not its own tool. */
   isTool?: true;
-  /** STATIC danger classification (arrival-provenance-confirmation.md §7.5 — "danger is an
-   *  attribute of the action, not the arguments set"). Written ONLY by `tool.risky`
-   *  (arrival-mcp/src/tool.ts), never by a caller argument or a runtime condition. Lifted here
-   *  (added to {@link MCP_ANNOTATION_KEYS}) so `allAnnotations()` — already the catalog's one
-   *  reflection point — is also the confirm-manifest builder's one lookup point for "does this
-   *  verb name require the hold rule": no second registry, no second convention. */
+  /** STATIC danger classification — "danger is an attribute of the action, not the arguments
+   *  set." Written ONLY by `tool.risky` (arrival-mcp/src/tool.ts), never by a caller argument or
+   *  a runtime condition. Lifted here (added to {@link MCP_ANNOTATION_KEYS}) so `allAnnotations()`
+   *  — already the catalog's one reflection point — is also the confirm-manifest builder's one
+   *  lookup point for "does this verb name require the hold rule": no second registry, no second
+   *  convention. */
   risky?: true;
 }
 
@@ -120,18 +120,17 @@ export interface McpCapabilitySpec<
    *  `inputSchema` getter's `this` is the `Activation` at call time (bound via `Reflect.get`),
    *  but TS can't type accessor `this` — so getter bodies assert the activation shape. */
   annotations?: Record<string, McpAnnotation>;
-  /** The CAPABILITY's own human-channel description (arrival-mcp-extended-capability.md §2.2
-   *  CAP_DESCRIPTION) — the FUSION this class exists for: a self-contained declaration carries
-   *  its own top-level `Tool.description` instead of a runner-side `DiscoveryToolOptions.description`
-   *  side bag. Static text, always present when this field is set; shown unless `dynamicDescription`
-   *  resolves to a string. */
+  /** The CAPABILITY's own human-channel description — the FUSION this class exists for: a
+   *  self-contained declaration carries its own top-level `Tool.description` instead of a
+   *  runner-side `DiscoveryToolOptions.description` side bag. Static text, always present when
+   *  this field is set; shown unless `dynamicDescription` resolves to a string. */
   description?: string;
-  /** CAP_DYNAMIC_DESCRIPTION — the capability-level dual of a verb's `dynamicDescription`: a
-   *  per-connection "welcome screen" for the discovery tool ITSELF, resolved lazily at
-   *  describe/catalog time against this capability's own describe-ambient `Activation`, per
-   *  read, no memo. Resolving `undefined` falls back to the static `description` above, NOT
-   *  flagged session-generated — the same A2 honest-fallback contract every per-verb dynamic
-   *  field already obeys (see `./metadata.js`'s `resolveMetadata` at the core-package altitude). */
+  /** The capability-level dual of a verb's `dynamicDescription`: a per-connection "welcome
+   *  screen" for the discovery tool ITSELF, resolved lazily at describe/catalog time against
+   *  this capability's own describe-ambient `Activation`, per read, no memo. Resolving
+   *  `undefined` falls back to the static `description` above, NOT flagged session-generated —
+   *  the same honest-fallback contract every per-verb dynamic field already obeys (see
+   *  `./metadata.js`'s `resolveMetadata`). */
   dynamicDescription?: (this: Activation<C, R>) => MaybePromise<string | undefined>;
 }
 
@@ -266,9 +265,9 @@ export class McpEnvCapability<
   C extends Record<string, z.ZodType> = any,
   R extends Record<string, Resource<unknown>> = any,
 > extends EnvCapability<C, R> {
-  /** CAP_DESCRIPTION — see `McpCapabilitySpec.description`. */
+  /** See `McpCapabilitySpec.description`. */
   readonly description?: string;
-  /** CAP_DYNAMIC_DESCRIPTION — see `McpCapabilitySpec.dynamicDescription`. */
+  /** See `McpCapabilitySpec.dynamicDescription`. */
   readonly dynamicDescription?: (this: Activation<C, R>) => MaybePromise<string | undefined>;
 
   /**
@@ -312,13 +311,13 @@ export class McpEnvCapability<
     this.dynamicDescription = spec.dynamicDescription;
   }
 
-  /** Resolve THIS capability's own human-channel (CAP_DESCRIPTION/CAP_DYNAMIC_DESCRIPTION)
-   *  description — dynamic arm first (against `activation` when supplied), honest fallback
-   *  to the static sibling on `undefined` resolution (the A2 contract, one altitude up from
-   *  the per-verb read `./metadata.js`'s `resolveMetadata` already implements). `activation`
-   *  omitted ⇒ the dynamic arm runs with `this` = the capability itself — the same
-   *  receiver-free posture the legacy per-verb closure form takes when no describe ambient is
-   *  derivable (a function-form `hostConfig` / an actor-required config key). */
+  /** Resolve THIS capability's own human-channel description — dynamic arm first (against
+   *  `activation` when supplied), honest fallback to the static sibling on `undefined`
+   *  resolution (one altitude up from the per-verb read `./metadata.js`'s `resolveMetadata`
+   *  already implements). `activation` omitted ⇒ the dynamic arm runs with `this` = the
+   *  capability itself — the same receiver-free posture the legacy per-verb closure form takes
+   *  when no describe ambient is derivable (a function-form `hostConfig` / an actor-required
+   *  config key). */
   async resolveDescription(activation?: Activation<C, R>): Promise<string | undefined> {
     if (this.dynamicDescription !== undefined) {
       // `Reflect.apply`'s `thisArgument` is honestly `any` (unlike `.call`, which — under
@@ -356,11 +355,11 @@ export class McpEnvCapability<
 
   /**
    * `allAnnotations` with the OWNING capability carried per entry — the describe-time
-   * metadata read path (exec-phases-and-dynamic-metadata.md §2.4/§2.7) needs the owner
-   * to look up that capability's ACTIVATION (`AssembledEnv.activations` is keyed by pack
-   * = capability name) so a dynamic `dynamicDescription` resolves against the right
-   * `this`. Same walk, same last-write-wins precedence: deps-first, self-last — a nearer
-   * capability's entry (and its owner stamp) replaces a dep's on a name clash.
+   * metadata read path needs the owner to look up that capability's ACTIVATION
+   * (`AssembledEnv.activations` is keyed by pack = capability name) so a dynamic
+   * `dynamicDescription` resolves against the right `this`. Same walk, same
+   * last-write-wins precedence: deps-first, self-last — a nearer capability's entry
+   * (and its owner stamp) replaces a dep's on a name clash.
    */
   allAnnotationEntries(): ReadonlyArray<{ owner: string; name: string; annotation: McpAnnotation }> {
     const out = new Map<string, { owner: string; name: string; annotation: McpAnnotation }>();

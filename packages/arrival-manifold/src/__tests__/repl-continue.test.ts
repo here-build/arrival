@@ -1,19 +1,16 @@
-// REPL continue semantics (errors-as-doors Rule 2, discovery phase). CHARACTERIZATION of
-// the pre-change behavior (2026-07-02, verified live before the rework): a multi-statement
-// expr where statement 2 of 4 errored returned ONE `Error:` block with `isError: true` —
-// statement 1's result was discarded and statements 3/4 never ran (exec threw at the first
-// failure). NEW CONTRACT (manifold-tool.ts, the REPL CONTINUE block): independent top-level
-// statements CONTINUE after a failure; each statement's result or error appears AT ITS
-// POSITION in the content blocks (the python bridge labels them `;; result N:`); `isError`
-// is true iff ALL statements failed — partial success is success with inline errors.
-// Whole-call exceptions (syntax, timeout) stay single-block; see the contract comment.
+// REPL continue semantics (errors-as-doors Rule 2, discovery phase). Independent top-level
+// statements in a multi-statement expr (manifold-tool.ts, the REPL CONTINUE block) CONTINUE
+// after a failure — each statement's result or error appears AT ITS POSITION in the content
+// blocks (the python bridge labels them `;; result N:`); `isError` is true iff ALL
+// statements failed — partial success is success with inline errors. Whole-call exceptions
+// (syntax, timeout) stay single-block; see the contract comment.
 //
 // Dependency attribution (skip-with-reason for a statement referencing a failed define) is
 // still out of scope — the REPL never skips a sibling statement. But the natural unbound-
-// variable error a dependent statement surfaces IS now enriched by doors.ts's scope-confusion
-// door (docs/working-proposals/manifold-scope-confusion-door.md, the "same-program cascade"
-// case) — see the test below: the frozen `Error: Unbound variable \`X'` first line is preserved
-// verbatim (H-4), with a teaching suffix appended pointing at the ROOT failing statement.
+// variable error a dependent statement surfaces IS enriched by doors.ts's scope-confusion
+// door (the "same-program cascade" case) — see the test below: the frozen
+// `Error: Unbound variable \`X'` first line is preserved verbatim (H-4), with a teaching
+// suffix appended pointing at the ROOT failing statement.
 
 import { describe, expect, it } from "vitest";
 

@@ -1,8 +1,7 @@
 /**
- * toWireframe — StaticProv → WireframeGraph, the render-compat projection
- * (T7a, docs/working-proposals/scheme-semantic-model-synthesis.md §2f, "the
- * money table" + "Design: one static object, two projections (bifunctor
- * discipline)"). `extract` (P4) produces StaticProv; this proves it renders
+ * toWireframe — StaticProv → WireframeGraph, the render-compat projection:
+ * one static object, two projections (bifunctor discipline). `extract`
+ * produces StaticProv; this proves it renders
  * through the EXISTING workbench pane (`WireframeGraph`, the studio's ELK
  * pane target) UNCHANGED — no studio edit, no new node kind added to the
  * workbench's union. Semantics ride SIDE MAPS, never baked onto a
@@ -26,9 +25,9 @@
  *   fan             │ fan                │ collapse, fanTemplates   | template = nested projection
  *   opaque          │ opaque             │ —                        | exact, reason surfaces as `op`
  *
- * ── THE GAP (report this, per the task brief) ───────────────────────────────
+ * ── THE GAP ──────────────────────────────────────────────────────────────
  *
- * `WireframeNode` has no `const` arm — the money table (§2f) names it as
+ * `WireframeNode` has no `const` arm — the money table above names it as
  * "the one node kind to add," but adding a union member is a studio-workbench
  * change (`foundations/arrival/arrival/src/provenance/wireframe/types.ts`),
  * out of bounds for this pure projection. The closest HONEST existing kind is
@@ -45,8 +44,7 @@
  * workbench change adding a real `const` arm should replace this mapping, not
  * layer on top of it.
  *
- * ── `fabrication` is CONTENT-CHANNEL scoped, never bare `const`-kind scoped
- *    (prov-render F1, 2026-07-17 — the over-flag fix) ───────────────────────
+ * ── `fabrication` is CONTENT-CHANNEL scoped, never bare `const`-kind scoped ──
  *
  * `fabrication` is a SUBSET of `{idx : provKind.get(idx) === "const"}`, never
  * the whole set: a `const` disqualifies grounding only where it sits in
@@ -80,23 +78,22 @@
  * now agrees with it instead of over-flagging the closed/guard cases
  * `contentHasConst` was always careful to skip.
  *
- * SCOPE of THIS fix — the CHANNEL cut (closed-arg/guard), not where-provenance:
- * a `mux`'s `source` INHERITS the channel (both here and in `contentHasConst`),
+ * SCOPE: the CHANNEL cut (closed-arg/guard), not where-provenance: a `mux`'s
+ * `source` INHERITS the channel (both here and in `contentHasConst`),
  * so a `const` in a `mux`-narrowed-AWAY sibling — a decoy `:o "FAKE"` in
  * `(:v (dict :v <evidence> :o "FAKE"))`, never read at runtime — is still
  * flagged here even though the seal's `channels()` applies `narrowMux`
  * (verdict/circuit-verdict.ts) and EXCLUDES it from content (`content.consts
  * = 0`, `dataShaped = true`). That residual over-flag is a SEPARATE, finer
- * finding than #41 (call it where-provenance / #42): it is shared identically
- * by both renders (this file + `contentHasConst`) and by the studio's
- * `contentPathFabrication` helper, so closing it means teaching the whole
- * render family to consume the EXPORTED `narrowMux` partition (which changes
- * per-part channel assignment inside a `build`, not just a marking) — out of
- * scope for this channel cut. Until then `fabrication ⊆ seal` holds for the
- * closed-arg/guard distinction (#41, what this fix proves) but NOT for the
- * where-provenance sub-case; a consumer wanting the exact seal verdict on a
- * mux-projected leaf must still gate on `channels(prov).content`, not this set
- * alone.
+ * case (where-provenance): it is shared identically by both renders (this
+ * file + `contentHasConst`) and by the studio's `contentPathFabrication`
+ * helper, so closing it means teaching the whole render family to consume
+ * the EXPORTED `narrowMux` partition (which changes per-part channel
+ * assignment inside a `build`, not just a marking) — out of scope for this
+ * channel cut. Until then `fabrication ⊆ seal` holds for the closed-arg/guard
+ * distinction but NOT for the where-provenance sub-case; a consumer wanting
+ * the exact seal verdict on a mux-projected leaf must still gate on
+ * `channels(prov).content`, not this set alone.
  *
  * MECHANISM — a SEPARATE content-reachability pass, not a channel threaded
  * through the graph walk. `fabrication` is computed by `collectContentConsts`
@@ -154,7 +151,7 @@
  *
  * `CollapseKind` (combine/route/lowered) is a DIFFERENT axis than
  * length-preservation — `StaticProv` deliberately does not carry a
- * map/filter/fold tag (the fan zoo vanishes into unwind/wind, §2c). There is
+ * map/filter/fold tag (the fan zoo vanishes into unwind/wind). There is
  * no honest derivation of `lengthPreserving` from `collapse` alone.
  * `lengthPreserving: collapse === "lowered"` is used as a conservative
  * proxy (never overclaims for the two collapse-kinds that are provably
@@ -163,7 +160,7 @@
  * signal. Report this as a second gap: a true `lengthPreserving` bit needs a
  * field `extract` does not populate on `FanProv` today.
  *
- * ── shared-DAG dedup, scoped per graph level (G2, 2026-07-16) ──────────────
+ * ── shared-DAG dedup, scoped per graph level (G2) ───────────────────────────
  *
  * `project` (below) recognizes a `StaticProv` object identity already
  * projected earlier and reuses its node index instead of re-projecting the
@@ -180,7 +177,7 @@
  * cross-level slot to point a shared reference at without a bigger change to
  * `WireframeGraph` itself. Dedup WITHIN one level is unconditional and exact.
  *
- * ── choiceWireRole: closing the cross-projection parity gap (2026-07-16) ───
+ * ── choiceWireRole: cross-projection parity for a choice's alternatives ────
  *
  * A `choice`'s own wires are the one place a `WireframeNode`'s incoming wires
  * are NOT uniformly one channel: `guards` → SELECTION, `alts` → CONTENT
@@ -188,26 +185,21 @@
  * alts attribute the CONTENT"). Every other kind's wires are unambiguous from
  * `provKind` alone (a `mint`'s `closed*` wires are always selection; a
  * `fused`/`build`/`string`/`mux`/`fan`'s argument wires are always content),
- * so only `choice` needs a per-wire map. Before this field, the only signal
- * was the `selector*`/`arm*` slot-name CONVENTION already documented on
- * `WireSlot` (arrival's `wireframe/types.ts`) — a string prefix a consumer
- * had to parse, never a first-class fact. `choiceWireRole` makes it one,
- * keyed by the exact same `(node, slot)` pair a `Wire.consumer` already
- * carries (`wireKey`, below) — no new identity invented, just a typed lookup
- * over data that was always there.
+ * so only `choice` needs a per-wire map. The `selector*`/`arm*` slot-name
+ * CONVENTION on `WireSlot` (arrival's `wireframe/types.ts`) carries the same
+ * fact implicitly — a string prefix a consumer would otherwise have to parse.
+ * `choiceWireRole` makes it a first-class, typed lookup instead, keyed by the
+ * exact same `(node, slot)` pair a `Wire.consumer` already carries (`wireKey`,
+ * below) — no new identity invented.
  *
- * This is the WIREFRAME leg of a three-projection parity fix: a cross-model
- * audit found `circuit-sexpr.ts` renders a `choice`'s kept, non-taken
- * alternatives distinctly (the `(gray …)` wrap) while `circuit-mermaid.ts`
- * rendered them as plain solid edges (indistinguishable from data flow) and
- * this projection exposed no distinct channel for them at all — three
- * projections of the same circuit disagreeing about what is visible, drift
- * risk on a security review surface. `circuit-mermaid.ts` now dashes a
+ * This is the WIREFRAME leg of a three-projection parity requirement:
+ * `circuit-sexpr.ts` renders a `choice`'s kept, non-taken alternatives
+ * distinctly (the `(gray …)` wrap), and `circuit-mermaid.ts` dashes a
  * `choice`'s alt edges too (its own header explains why that is a deliberate
  * borrow, not a `channels()` reclassification); `choiceWireRole` is this
- * file's side of the same fix — a reviewer (or a test) can now ask "does
- * this projection make the choice's alternative structure visible" and get
- * the SAME answer from all three.
+ * file's side of the same requirement — a reviewer (or a test) can now ask
+ * "does this projection make the choice's alternative structure visible" and
+ * get the SAME answer from all three.
  */
 import type { Wire, WireConsumer, WireframeGraph, WireframeNode } from "@inhuman.tools/arrival/provenance";
 
@@ -255,11 +247,11 @@ export interface WireframeSideMaps {
    *  `guards` (the SELECTION channel — an honest closed argument or
    *  comparison threshold) is deliberately EXCLUDED: the seal
    *  (verdict/circuit-verdict.ts's `dataShaped`) never disqualifies on it
-   *  either. This CHANNEL cut (#41) is the guarantee — `fabrication ⊆` the
+   *  either. This CHANNEL cut is the guarantee — `fabrication ⊆` the
    *  seal's content-channel consts for the closed-arg/guard distinction. It
    *  is NOT the seal's FULL verdict: a `mux`-narrowed-away decoy sibling is
    *  still flagged here though `narrowMux` grounds it (see the header's
-   *  "SCOPE of THIS fix" note); a consumer needing the exact seal verdict on
+   *  "SCOPE" note); a consumer needing the exact seal verdict on
    *  a mux-projected leaf gates on `channels(prov).content`, not this set. A
    *  renderer/seal consumer MUST consult this before treating an `opaque`
    *  node as "merely unresolvable" — a flagged `const` is a program-text
@@ -284,7 +276,7 @@ export interface WireframeSideMaps {
   readonly choiceWireRole?: ReadonlyMap<string, "guard" | "alt">;
   /** `StaticProv` object identity → its node index in THIS SAME level's `nodes` array — the
    *  bridge from a cone (a `fieldProv` answer, object-identity-valued) to render highlighting
-   *  (node indexes), field-granular-access.md §6.2 / README.md C3. Literally `Builder.seen`,
+   *  (node indexes). Literally `Builder.seen`,
    *  exposed instead of discarded — `project` (below) already builds this exact map for its own
    *  shared-DAG dedup; this field just hands the caller the same lookup. Optional/additive, same
    *  pattern as `choiceWireRole`: absent on a `WireframeSideMaps` built before this field existed
@@ -332,7 +324,7 @@ interface Builder {
   readonly fanTemplates: Map<number, WireframeSideMaps>;
   /** `choice` wires only — see `WireframeSideMaps.choiceWireRole`'s doc. */
   readonly choiceWireRole: Map<string, "guard" | "alt">;
-  /** Shared-DAG dedup (G2, 2026-07-16), scoped to THIS builder/graph level —
+  /** Shared-DAG dedup (G2), scoped to THIS builder/graph level —
    *  see `project`'s doc for why a fan's nested `template` graph (its own
    *  Builder, its own index space — the "private interior" discipline this
    *  file's header already documents) is a SEPARATE dedup scope, not a gap in
@@ -518,7 +510,7 @@ function projectFresh(b: Builder, prov: StaticProv): number {
  *     `fabrication`); only `collection` is at this level;
  *   - a `mux`'s WHOLE `source` is followed (the documented where-provenance
  *     coarseness — the seal's `narrowMux` would narrow to the read part; see
- *     this file's header "SCOPE of THIS fix" — shared with
+ *     this file's header "SCOPE" note — shared with
  *     circuit-mermaid.ts's `contentHasConst`).
  *
  * Object-dedup via `visited` terminates on the shared DAG and is SOUND here
@@ -562,7 +554,7 @@ function collectContentConsts(prov: StaticProv, into: Set<StaticProv>, visited: 
 
 /** `StaticProv` → node index within `b`, returning the SAME index for a
  *  `prov` object identity already projected earlier within THIS builder —
- *  the shared-DAG dedup (G2, 2026-07-16; the extract-side memo,
+ *  the shared-DAG dedup (G2; the extract-side memo,
  *  `ExtractCtx.memo` in src/extract/index.ts, is what makes two Refs to one
  *  binding return the identical `StaticProv` object in the first place). The
  *  CALLER still pushes its own `Wire` unconditionally (see `wireChildren`,
@@ -612,7 +604,7 @@ export function toWireframe(prov: StaticProv): WireframeProjection {
   const portIdx = b.nodes.length;
   b.nodes.push({ kind: "port", direction: "out", span });
   b.wires.push(passthroughWire(rootIdx, { node: portIdx, slot: "out" }, span));
-  // FABRICATION (prov-render F1): a content-only pass, NOT the channel-blind
+  // FABRICATION: a content-only pass, NOT the channel-blind
   // graph walk above — only consts the seal's CONTENT channel would see are
   // flagged (see this file's header, "MECHANISM"). Every collected const is a
   // node at THIS level (the walk never crosses a fan-body boundary), so

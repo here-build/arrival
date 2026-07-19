@@ -1,12 +1,8 @@
 // statement-facts — extract key facts from a top-level Scheme form using the real parser.
 //
-// Replaces several previous regex + custom tokenizer passes over statement source text with
-// a single analysis over the already-parsed `SchemeValue` produced by arrival's reader.
-//
-// Benefits:
-// - Correct handling of vectors, characters, datum comments, etc.
-// - Comments are naturally ignored (trivia).
-// - Cycle-safe walking for R7RS datum labels.
+// Operates on the already-parsed `SchemeValue` produced by arrival's reader, never on raw
+// source text — so vectors, characters, and datum comments are handled correctly for free,
+// comments are naturally ignored (trivia), and R7RS datum-label cycles are walked safely.
 //
 // This module only *reads* the value tree; it never allocates in the execution heap.
 
@@ -126,12 +122,11 @@ interface WalkAccumulator {
 /** Collect a lambda's parameter list into `acc.localBindings`: a flat list of symbols, the
  *  single-symbol variadic form (`(lambda args ...)`), or a dotted rest-arg (`(lambda (a . b)
  *  ...)`, `(lambda (a b . rest) ...)`) — this dialect never destructures a parameter, so one
- *  shallow spine-walk is exact (mirrors scope-scan.ts's `collectParamList`). Unlike the old
- *  spike-parser version, there is no literal `.` marker to skip: the real reader parses a
- *  dotted param list directly to an IMPROPER cons spine (`(a . b)` = `APair(a, ASymbol(b))`, no
- *  intervening "." atom at all), so {@link spineItems}'s own dotted-tail return already IS the
- *  rest-arg name — collected the same way a whole-list name would be, from ANY position, not
- *  just the lambda-params special case the old code hard-coded. */
+ *  shallow spine-walk is exact (mirrors scope-scan.ts's `collectParamList`). There is no literal
+ *  `.` marker to skip: the real reader parses a dotted param list directly to an IMPROPER cons
+ *  spine (`(a . b)` = `APair(a, ASymbol(b))`, no intervening "." atom at all), so
+ *  {@link spineItems}'s own dotted-tail return already IS the rest-arg name — collected the same
+ *  way a whole-list name would be, from ANY position, not just the lambda-params case. */
 function collectParamNames(paramsNode: SchemeValue | undefined, acc: WalkAccumulator): void {
   if (paramsNode === undefined) return;
   const variadicName = symbolName(paramsNode); // `(lambda args ...)` — the single bound name
@@ -168,10 +163,10 @@ function collectParamNames(paramsNode: SchemeValue | undefined, acc: WalkAccumul
  *  be a compound expression. The two surfaces differ ONLY in whether that name sits bare at the
  *  top of the slot (whole-list) or wrapped in its own pair-sublist (per-element), so the first
  *  element's shape — atomish vs. structural — is a total discriminator. Testing every element
- *  (names AND values) was the old spike-parser-era bug this module inherited and fixed: a single
- *  compound VALUE (`[a 1 b (+ 1 2)]` — a call, a `(lambda …)`, a nested `(let …)`; the everyday
- *  Clojure idiom of computing a binding from a prior one) must never mis-route the whole slot to
- *  the per-element branch and silently drop every real bare-atom name. */
+ *  (names AND values) is the wrong rule: a single compound VALUE (`[a 1 b (+ 1 2)]` — a call, a
+ *  `(lambda …)`, a nested `(let …)`; the everyday Clojure idiom of computing a binding from a
+ *  prior one) must never mis-route the whole slot to the per-element branch and silently drop
+ *  every real bare-atom name. */
 function collectLetBindingNames(bindingsNode: SchemeValue | undefined, acc: WalkAccumulator): void {
   const items = bindingElements(bindingsNode);
   if (items.length === 0) return;
@@ -193,20 +188,18 @@ function collectLetBindingNames(bindingsNode: SchemeValue | undefined, acc: Walk
 /** Recurse into a let-family form's BINDINGS-SLOT VALUE expressions ONLY — never the raw
  *  `(name value)` pair treated as a freestanding form. Mirrors `collectLetBindingNames`'s OWN
  *  first-element shape test (whole-list vs. per-element) IN LOCKSTEP, so the two functions always
- *  agree on which elements are "names" versus "values" for the same input — a divergence here
- *  would be strictly worse than the original bug (the two would disagree about the very split
- *  they exist to compute).
+ *  agree on which elements are "names" versus "values" for the same input — the two must never
+ *  disagree about the very split they exist to compute.
  *
- *  THE BUG THIS FIXES (ported from the prior version of this module): a blanket recursion over
- *  every child of a let-family form — including the bindings-list container itself, and with it
- *  each raw `(name value)` pair — would re-dispatch a pair whose NAME happens to equal a scope
- *  keyword (`let`/`let*`/`letrec`/`letrec*`/`lambda`/`define`) as if it were a fresh form of that
- *  kind, misreading the VALUE as phantom parameters/loop-names/bindings. `walk`'s LET_FORMS
- *  branch instead recurses into binding VALUES (this function) and BODY forms explicitly,
- *  never falling through to a blanket recursion over the raw bindings-list container. Values
- *  still need walking — a lambda genuinely nested inside a binding's value, or a trigger word
- *  used there, must still be found — just not by re-interpreting the NAME slot as a dispatchable
- *  head. */
+ *  WHY NOT A BLANKET RECURSION: recursing into every child of a let-family form — including the
+ *  bindings-list container itself, and with it each raw `(name value)` pair — would re-dispatch a
+ *  pair whose NAME happens to equal a scope keyword (`let`/`let*`/`letrec`/`letrec*`/`lambda`/
+ *  `define`) as if it were a fresh form of that kind, misreading the VALUE as phantom
+ *  parameters/loop-names/bindings. `walk`'s LET_FORMS branch instead recurses into binding VALUES
+ *  (this function) and BODY forms explicitly, never falling through to a blanket recursion over
+ *  the raw bindings-list container. Values still need walking — a lambda genuinely nested inside
+ *  a binding's value, or a trigger word used there, must still be found — just not by
+ *  re-interpreting the NAME slot as a dispatchable head. */
 function walkLetBindingValues(
   bindingsNode: SchemeValue | undefined,
   depth: number,
@@ -233,12 +226,12 @@ function walkLetBindingValues(
 
 /** One recursive pass over a statement's parsed form. A symbol is checked against both trigger
  *  families (never a string, never a comment — comments never materialize as a `SchemeValue` at
- *  all, which is the #2 false-positive fix); a structural node is checked for a binding-
+ *  all, so they can never trigger a false positive); a structural node is checked for a binding-
  *  introducing shape (lambda / let-family / a NESTED define) before recursing into ALL of its
  *  children regardless — the blanket recursion is what reaches a lambda nested inside a
- *  binding's own VALUE (e.g. `(letrec ((f (lambda (n) n))) (f))`'s `n`), and is also what
- *  reproduces the old regex's over-inclusive match on a trigger word used purely as quoted DATA
- *  (never specifically excluded, matching "like-for-like").
+ *  binding's own VALUE (e.g. `(letrec ((f (lambda (n) n))) (f))`'s `n`), and is also what lets a
+ *  trigger word used purely as quoted DATA still register (never specifically excluded) —
+ *  over-inclusive is the deliberately safe direction here, matching "like-for-like" scanning.
  *
  *  `seen` is `walk`'s OWN cross-call cycle guard (module header): a structural node is marked the
  *  first time `walk` itself descends into it, and a re-encountered node (only possible via a

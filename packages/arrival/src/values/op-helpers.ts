@@ -127,18 +127,12 @@ export function assertAllocatable(len: number, fnName: string): void {
 /**
  * Unwrap an `ACharacter`. Refuses anything else — it does NOT silently mint a wrong value.
  *
- * B1-SIBLING (found by the cross-chart divergence gate, 2026-07-14). This was a BLIND CAST:
- * `(char as ACharacter).__char__`. Handed anything that is not a character — an `AString`, a
- * number, `nil` — it read `undefined` off a value that has no such field, and the caller then
- * did `chars.join("")`, which turns `undefined` into `""` and swallows the evidence whole. So
- * `(list->string '(1 2))` answered `""`. Not an error. Not a wrong string. THE EMPTY STRING —
- * indistinguishable from a correct answer over an empty list.
- *
- * It is exactly the failure `stringValue` above was hardened against a few hours earlier — a
- * coercion helper minting a plausible-looking wrong value instead of a door — and it survived that
- * audit because the audit swept `stringValue`'s call sites and never turned to look at its
- * neighbour. The class, not the instance, is the thing to fix: a coercion helper in this tree may
- * never answer with a value it had to invent.
+ * A coercion helper in this tree may never answer with a value it had to invent: a blind
+ * `(char as ACharacter).__char__` cast on a non-character (`AString`, a number, `nil`)
+ * silently reads `undefined` off a value with no such field, and a caller doing
+ * `chars.join("")` swallows that into `""` — `(list->string '(1 2))` would answer the
+ * empty string, indistinguishable from a correct empty-list result. Same discipline
+ * `stringValue` below enforces.
  */
 export function charValue(char: unknown): string {
   if (char instanceof ACharacter) return char.__char__;
@@ -148,18 +142,14 @@ export function charValue(char: unknown): string {
   );
 }
 
-// B1 (benchmark-defect-register.md) — container/nil kinds `stringValue` refuses to
-// silently coerce. `String(nil)` → `"()"` (a plausible-looking but WRONG string)
-// propagated through all 51 string ops (`(string-length nil)` → 2, `(string-append "x"
-// nil)` → `"x()"`, `(string=? nil "()")` → `#t`); one model saw the length-2 result,
-// concluded "probably truncated," and fled to Python. AUDITED (all ~40 call sites in
-// strings.ts/srfi-13.ts/srfi-28.ts/bytevectors.ts/vectors.ts/equality.ts): every one
-// declares a `z.string`-typed argument and expects a genuine AString — none depends on
-// coercing a container. `symbol.native`'s contracts are TYPE-ONLY (never runtime-
-// validated, `_bake.ts`'s own doctrine) — a container reaching here is exactly the
-// unchecked-native-tier hole the register calls out, not a caller doing it on purpose.
-// Leaf/scalar kinds (character, symbol, number, boolean) KEEP the `String(x)` fallback —
-// narrower than "throw on anything non-AString" per the register's explicit ruling.
+// Container/nil kinds `stringValue` refuses to silently coerce: `String(nil)` → `"()"`
+// is a plausible-looking but WRONG string (e.g. `(string-length nil)` would answer 2).
+// None of the string-op call sites (strings.ts/srfi-13.ts/srfi-28.ts/bytevectors.ts/
+// vectors.ts/equality.ts) depend on coercing a container — each declares a
+// `z.string`-typed argument and expects a genuine AString. `symbol.native` contracts
+// are TYPE-ONLY, never runtime-validated (`_bake.ts`'s own doctrine), so a container
+// reaching here is an unchecked-native-tier hole, not a caller doing it on purpose.
+// Leaf/scalar kinds (character, symbol, number, boolean) KEEP the `String(x)` fallback.
 const STRING_COERCION_REFUSED_KINDS = new Set(["pair", "nil", "vector", "object", "dict"]);
 
 /** Best-effort short preview for a door message — never throws, truncated. */
@@ -195,7 +185,6 @@ interface VectorLike {
   "arrival/tagless-final/vector?"(): boolean;
   __vector__: SchemeValue[];
 }
-// todo smell, eliminate
 function isVectorLike(obj: unknown): obj is VectorLike {
   return obj != null && typeof (obj as Record<string, unknown>)["arrival/tagless-final/vector?"] === "function";
 }
@@ -318,13 +307,12 @@ export function deriveSortCompare(
   if (comparator !== undefined && comparator !== null) {
     // Comparator is a callable VALUE (ANativeProcedure) — invoke through the seam, not bare fn.
     // Sort sync; native cmp returns settled value (lambda cmp → promise, pre-existing limitation).
-    // `runCtx` threaded (Wave 1, arrival-constant-ctx-audit-2026-07-11.md §2.5 — was the
-    // audit's own top-5 row): both callers (APair/AVector's own `sort` term) already hold a
-    // required, live `runCtx` one hop away. NOTE: this closes the ctx-honesty gap only —
-    // region-scope.ts's own header names a SEPARATE, still-open gap (no `RegionScope` opens
-    // around this comparator loop, so host-schedule/order-attribution provenance isn't
-    // recorded here); that needs `withRegionCall` wiring, a distinct Wave-4 design task this
-    // fix does not invent.
+    // `runCtx` threaded here because both callers (APair/AVector's own `sort` term)
+    // already hold a required, live `runCtx` one hop away. NOTE: this closes the
+    // ctx-honesty gap only — region-scope.ts's own header names a SEPARATE, still-open
+    // gap (no `RegionScope` opens around this comparator loop, so host-schedule/
+    // order-attribution provenance isn't recorded here); that needs `withRegionCall`
+    // wiring, a distinct design task this fix does not invent.
     const call = (a: unknown, b: unknown): unknown => applyCallback(comparator, [a, b], runCtx);
     // Host-schedule wiring: `sort`'s comparator is the canonical order-dependent
     // selector host — its verdict SEQUENCE (not any single verdict) is the record
@@ -347,13 +335,13 @@ export function deriveSortCompare(
     let callOrdinal = 0;
     return (a, b) => {
       const v = call(a, b);
-      // S1 (benchmark-defect-register.md) — a LAMBDA comparator's settled value is a
-      // Promise (lambda bodies run through the trampolined async evaluator; a native/
-      // rosetta comparator never is). None of the three verdict branches below recognize
-      // a Promise, so the `is_false` fallthrough minted a CONSTANT -1 for every pair —
-      // TimSort then emits a deterministic wrong order (= reverse(input)) with NO error.
-      // Interim honest door (full async threading is a Wave-4-sized rework of `sort`'s
-      // own term algebra — see the register): throw instead of silently mis-sorting.
+      // A LAMBDA comparator's settled value is a Promise (lambda bodies run through the
+      // trampolined async evaluator; a native/rosetta comparator never is). None of the
+      // three verdict branches below recognize a Promise, so the `is_false` fallthrough
+      // would mint a CONSTANT -1 for every pair — TimSort then emits a deterministic
+      // wrong order (= reverse(input)) with NO error. Interim honest door (full async
+      // threading is a future rework of `sort`'s own term algebra): throw instead of
+      // silently mis-sorting.
       if (is_promise(v)) {
         throw attachOffendingValue(
           new TypeError(
@@ -392,14 +380,13 @@ export function deriveSortCompare(
 // Numeric coercion into SchemeExact/SchemeInexact tower
 
 /**
- * THREADING GAP, confessed (arrival-constant-ctx-audit-2026-07-11.md §2.5): the boxed-operand
- * arm below correctly preserves the operand's OWN `.ctx`; the raw JS bigint/number arms have
- * no operand ctx to preserve and mint fresh under `ctx`. `ctx` is OPTIONAL, defaulting to
- * `CONSTANT_CTX` — every current caller (`env/r7rs/numeric.ts`'s `applyNumeric`,
- * `env/r7rs/strings.ts`, `env/r7rs/chars.ts`) lives in the env/r7rs cluster (a parallel
- * agent's file scope, out of bounds here) and does not yet pass one. The honest completion —
- * each of those call sites threading its own live `runCtx`/`ctxOf(value)` — is THAT cluster's
- * job; this signature exists so it can be wired without a second signature change.
+ * The boxed-operand arm below correctly preserves the operand's OWN `.ctx`; the raw JS
+ * bigint/number arms have no operand ctx to preserve and mint fresh under `ctx`. `ctx`
+ * is OPTIONAL, defaulting to `CONSTANT_CTX` — every current caller (`env/r7rs/
+ * numeric.ts`'s `applyNumeric`, `env/r7rs/strings.ts`, `env/r7rs/chars.ts`) does not yet
+ * pass one. The honest completion — each of those call sites threading its own live
+ * `runCtx`/`ctxOf(value)` — is that cluster's own job; this signature exists so it can
+ * be wired without a second signature change.
  */
 export function coerceNumeric(value: unknown, ctx: RunContext = CONSTANT_CTX): ANumeric {
   switch (true) {
@@ -495,10 +482,9 @@ export function withInputProvenance<T>(args: readonly unknown[], result: T): T {
     if (result instanceof AValue) return result;
     const t = typeof result;
     if (t === "string" || t === "number" || t === "bigint" || t === "boolean") {
-      // PRE-RUN LEGITIMATE, re-verified (arrival-constant-ctx-audit-2026-07-11.md §2.5):
-      // scans `args` for the first boxed operand and inherits ITS ctx — CONSTANT_CTX only
-      // when literally no boxed operand exists among `args` (a genuinely ctx-less call),
-      // the correct `ctxOf`-style idiom already inlined here.
+      // Scans `args` for the first boxed operand and inherits ITS ctx — CONSTANT_CTX
+      // only when literally no boxed operand exists among `args` (a genuinely ctx-less
+      // call), the correct `ctxOf`-style idiom already inlined here.
       let ctx = CONSTANT_CTX;
       for (const a of args) {
         if (a instanceof AValue) {
@@ -518,8 +504,8 @@ export function withInputProvenance<T>(args: readonly unknown[], result: T): T {
   }
   const t = typeof result;
   if (t === "string" || t === "number" || t === "bigint" || t === "boolean") {
-    // PRE-RUN LEGITIMATE, re-verified — same idiom as the inactive-oracle branch above:
-    // CONSTANT_CTX only when `inputs` is empty (no boxed operand to inherit from).
+    // Same idiom as the inactive-oracle branch above: CONSTANT_CTX only when `inputs`
+    // is empty (no boxed operand to inherit from).
     const ctx = inputs.length > 0 ? inputs[0].ctx : CONSTANT_CTX;
     const prov = inputs.length > 0 ? unionProvenance(inputs) : EMPTY_PROVENANCE;
     return fromJs(ctx, result, prov) as T;

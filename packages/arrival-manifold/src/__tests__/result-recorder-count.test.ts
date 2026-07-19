@@ -1,8 +1,7 @@
-// RESULT-RECORDER SIDE-EFFECT COUNT — a safety property, not a correctness one
-// (docs/working-proposals/arrival-manifold-package-split-2026-07-05.md, "Test safety net" gap
-// #7). The design breaks the A↔futility↔doors package cycle by passing the futility tracker's
-// narrow `record(name, args, result)` closure from the binder (bind.ts's `rosettaDef`) to the
-// runner (today: manifold-tool.ts's drain). The failure modes are COUNT-shaped:
+// RESULT-RECORDER SIDE-EFFECT COUNT — a safety property, not a correctness one. The design
+// breaks the A↔futility↔doors package cycle by passing the futility tracker's narrow
+// `record(name, args, result)` closure from the binder (bind.ts's `rosettaDef`) to the runner
+// (today: manifold-tool.ts's drain). The failure modes are COUNT-shaped:
 //   • recorded ZERO times per invocation — the wire is silently dropped (a tool built without a
 //     tracker never records, exactly like today's `tracker?.record(...)` optional-chained call —
 //     futility detection silently dies without anyone noticing, since nothing THROWS).

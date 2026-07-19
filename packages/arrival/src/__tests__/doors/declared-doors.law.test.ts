@@ -131,7 +131,7 @@ describe("F6 doors — every DECLARED notImplemented door fires at apply with te
     },
   );
 
-  // W0 (docs/design-history/symbol-define-static-program-validation.md) — the causal-
+  // DoorCause (docs/design-history/symbol-define-static-program-validation.md §3.3) — the causal-
   // chain UX's first link, wired through EVERY declared door: `common/capability.ts`'s door
   // bind arm derives `cause = { owner: <this capability's name>, needs: [] }` for a
   // `notImplemented` door (which never sets one itself), so the thrown message now leads

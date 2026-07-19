@@ -15,14 +15,14 @@ function parseHead(tpl: TemplateStringsArray, sub: (string | number)[]): { name:
  *  beside `description` (parsed off the tagged-template head — never a `meta` field, so a
  *  verb can't declare two conflicting descriptions).
  *
- *  `isTool: true` is the STATIC exposure flag (arrival-mcp-extended-capability.md §2.5): a
- *  verb so marked is BOTH a declared action AND (once a runner derives `tools/list` from it)
- *  its own structured MCP tool. Boolean, never a fn — `tools/list` membership must be stable
- *  data (a per-read exposure flip would make the catalog lie between list and call).
+ *  `isTool: true` is the STATIC exposure flag: a verb so marked is BOTH a declared action AND
+ *  (once a runner derives `tools/list` from it) its own structured MCP tool. Boolean, never a
+ *  fn — `tools/list` membership must be stable data (a per-read exposure flip would make the
+ *  catalog lie between list and call).
  *
- *  `dynamicDescription` is the A2 read-time channel: resolved lazily, per catalog read (no
- *  memo), against the OWNING capability's describe-ambient `Activation` — the same channel
- *  bare `tool``` already forwards (`dynamic-metadata.test.ts` pins its end-to-end path).
+ *  `dynamicDescription` is the read-time channel: resolved lazily, per catalog read (no memo),
+ *  against the OWNING capability's describe-ambient `Activation` — the same channel bare
+ *  `tool``` already forwards.
  *
  *  Anything else (`risky`, a dashboard grouping tag, …) rides the bag INERT — a plain data
  *  field the catalog carries but assigns no meaning to unless a specific reader (e.g. the
@@ -49,11 +49,10 @@ function toolFn<S extends z.ZodRawShape, const O extends VectorSpec, M extends R
   return (
     contract: Contract<[] /* todo: map S to I */, O, undefined> & {
       shape: S;
-      /** A DYNAMIC metadata field (exec-phases-and-dynamic-metadata.md §2.7): resolved
-       *  lazily at describe/catalog time against the assembly's activation (`this` —
-       *  host config + host resources; actor args don't exist at describe time), per
-       *  read, no memo. Resolving `undefined` falls back to the static `description`
-       *  and is NOT flagged session-generated (the honest-failure contract). */
+      /** A DYNAMIC metadata field: resolved lazily at describe/catalog time against the
+       *  assembly's activation (`this` — host config + host resources; actor args don't exist
+       *  at describe time), per read, no memo. Resolving `undefined` falls back to the static
+       *  `description` and is NOT flagged session-generated. */
       dynamicDescription?: (this: Activation<any, any>) => string | undefined | Promise<string | undefined>;
     },
     impl: (args: any) => any,
@@ -81,8 +80,8 @@ function toolFn<S extends z.ZodRawShape, const O extends VectorSpec, M extends R
   };
 }
 
-/** `tool.view`` — a boundary snapshot worth persisting (cross-run cacheable, R2 substrate
- *  inherited whole: record-mode overwrite, replay-mode serve, single-flight). DEMANDS a real
+/** `tool.view`` — a boundary snapshot worth persisting (cross-run cacheable, inheriting the
+ *  substrate whole: record-mode overwrite, replay-mode serve, single-flight). DEMANDS a real
  *  output codec vector — unlike bare `tool``, `output` is REQUIRED here, never the `[sz.value]`
  *  escape hatch, because the `assertCacheClassShape` gate throws at bake on a `view`
  *  whose contract carries a `z.value`/`z.lambda` slot (a cache entry must serialize). */
@@ -172,9 +171,8 @@ function toolRisky<S extends z.ZodRawShape>(tpl: TemplateStringsArray, ...sub: (
 /** The `tool` factory family: `tool`` (bare, unclassified) plus three pre-applied arms —
  *  `tool.view` / `tool.pure` / `tool.effect` — and `tool.risky` (a `tool.effect` convenience).
  *  All five are SUGAR over `symbol.rosetta`, same tagged-template head, differing only in
- *  which `Contract` fields + metadata keys they pre-apply (arrival-mcp-extended-capability.md
- *  §2.3). Nothing here is a new symbol kind — a `tool.view` def is byte-shape a
- *  `RosettaSymbolDef` with `cacheClass: "view"`. */
+ *  which `Contract` fields + metadata keys they pre-apply. Nothing here is a new symbol kind —
+ *  a `tool.view` def is byte-shape a `RosettaSymbolDef` with `cacheClass: "view"`. */
 export const tool = Object.assign(toolFn, {
   view: toolView,
   pure: toolPure,

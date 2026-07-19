@@ -61,10 +61,10 @@ const GAPS: readonly LedgerRow[] = [
   // now plain `it()` rows.
   //
   // "equal? verdict is empty-provenance flyweight" RETIRED (R8 mint landed,
-  // two-tier-exec-api.md §8 step 2): equal?/eq?/eqv? now route through
+  // RULINGS.md R8): equal?/eq?/eqv? now route through
   // op-helpers.mintVerdict — see laws/term-carrier equals cells, now plain `it()`.
   // "container toJS leaves boxed element residue" RETIRED (R9 lazy egress landed,
-  // two-tier-exec-api.md §5 step 3): AVector/APair/ADict egress as lazy ref-tracking
+  // RULINGS.md R9): AVector/APair/ADict egress as lazy ref-tracking
   // proxies (values/egress-proxy.ts) — elements unwrap through their own arrival/toJS
   // on first read; see laws/term-carrier toJS cells (now plain `it()`) and
   // membrane/crossing's R9 egress-law block. AJSArray was reframed, not fixed: a
@@ -81,7 +81,7 @@ const GAPS: readonly LedgerRow[] = [
   // docs/RULINGS.md R4 (VERDICT KILL) for the ruling.
   { id: "null↔nil round-trip asymmetry", gate: "R1-adjacent ruling", replacedBy: "membrane/crossing null row" },
   { id: "schema-to-ts vector union not deduped", gate: "printer dedup follow-up", replacedBy: "type-layer suite" },
-  // ── added by the two-tier-exec-api R8 mint sweep (step 2) ─────────────────────────
+  // ── added by the RULINGS.md R8 mint sweep ─────────────────────────
   // Surfaced while flipping the equal?-verdict flyweight rows above: mintVerdict
   // faithfully forwards operand provenance, but AJSArray (`borrow-array`'s `fromJS`)
   // and ADict (`dict`'s `new ADict(CONSTANT_CTX, ...)`, env/polyglot.ts) never stamp
@@ -192,7 +192,7 @@ const INVERSIONS: readonly LedgerRow[] = [
   // landed 2026-07-09): membrane/region.law.test.ts's "z.procedure decode adopts the same
   // scope token" row is now a plain green `it()`; no `it.fails()` referenced this id.
   // "boolean raw exit via op-helpers short-circuit" RETIRED (R1 landed,
-  // two-tier-exec-api.md §8 step 4): `exec`'s uniform plain-JS exit + the R8 mint
+  // RULINGS.md R1): `exec`'s uniform plain-JS exit + the R8 mint
   // (step 2) together mean every predicate/comparison result is boxed BEFORE the
   // uniform unwrap — see membrane/crossing.law.test.ts's boolean exit row (now
   // plain `it()`, asserted against real `exec` output).
@@ -212,7 +212,7 @@ const INVERSIONS: readonly LedgerRow[] = [
 const STAGED: readonly LedgerRow[] = [
   {
     id: "loop-unroll",
-    gate: "first loop-cone consumer wave — the wireframe-walking driver / P11 drill-in (the row SURVIVED the Q-track completion audit (2026-07-10), never silently dropped. docs/PROVENANCE.md §7: \"widened vs exact-via-count cones\" — grok finding #19. Both sides' machinery exists since Q16 — widened loop cones refuse per-wire γ with ReplayScopeError and reconstruct via aggregation count + playback — so the law is BODY-able; nobody has staged its body because no consumer demands the widened-vs-exact comparison yet)",
+    gate: "first loop-cone consumer wave — the wireframe-walking driver / P11 drill-in (the row SURVIVED the Q-track completion audit (2026-07-10), never silently dropped. docs/PROVENANCE.md §7: \"widened vs exact-via-count cones\" (finding #19). Both sides' machinery exists since Q16 — widened loop cones refuse per-wire γ with ReplayScopeError and reconstruct via aggregation count + playback — so the law is BODY-able; nobody has staged its body because no consumer demands the widened-vs-exact comparison yet)",
     replacedBy: "a future `provenance/track-cone.law.test.ts` it.todo row, once its consumer wave stages the body",
   },
   // "memory retention" RETIRED at Q21 (audit 2026-07-10): its gate — Q19, the R3 hard

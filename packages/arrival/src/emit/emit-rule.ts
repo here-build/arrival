@@ -45,9 +45,8 @@ export interface EmitConfig {
 }
 
 /** Everything an emit rule may consult. Assembled by the engine per call site as a plain
- *  object literal (no masking constructor — `argAsync` and `buildEmitCtx` were deleted by
- *  the 2026-07-13 "async-ify by cascade on type data" ruling: a rule can no longer see,
- *  or branch on, asyncness in any form).
+ *  object literal — no masking constructor, no `argAsync`: a rule can no longer see, or
+ *  branch on, asyncness in any form (Law W, below).
  *
  *  `R` = the Residual algebra (opaque here; see the module header). */
 export interface EmitCtx<R = unknown> {

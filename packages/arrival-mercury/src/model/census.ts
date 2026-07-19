@@ -1,23 +1,22 @@
 /**
- * census — the shared identity-dedup pass over a `StaticProv` circuit (C2,
- * docs/working-proposals/provenance-beautiful-child/README.md §5: "one shared
- * census pass numbers holes/ids across ALL projections... cross-readability
- * for one cheap pass").
+ * census — the shared identity-dedup pass over a `StaticProv` circuit: one
+ * pass numbers holes/ids across every projection so cross-projection
+ * numbering can never drift by construction (docs/working-proposals/
+ * provenance-beautiful-child/README.md §5 motivates the shared pass).
  *
- * EXTRACTED from `circuit-sexpr.ts`'s original `countOccurrences`/`:id`
- * mechanism (G2, 2026-07-16) — a pure REPRESENTATION-sharing walk, never
- * semantics: a circuit with no aliasing anywhere produces an empty `idOf`
- * (see `circuit-sexpr.ts`'s own header for the byte-identical-when-unshared
- * guarantee, which this move preserves exactly).
+ * A pure REPRESENTATION-sharing walk, never semantics: a circuit with no
+ * aliasing anywhere produces an empty `idOf` (see `circuit-sexpr.ts`'s own
+ * header for the byte-identical-when-unshared guarantee, which this module
+ * preserves exactly).
  *
- * Two consumers today: `circuit-sexpr.ts` (its `:id N`/`(ref N)` dedup —
- * REFACTORED to consume this module, output BYTE-IDENTICAL to before) and
- * `compose-template.ts` (R2's where-clause lift — a shared node's `♯k` id IS
- * this module's `idOf` number, so a human can cross-read `♯3` in a formula
- * straight to `:id 3`/`(ref 3)` in the sexpr dump of the SAME root). Future
- * consumers (the collapse-view machine's state badges, per-field access
- * cones) read the same map for the same reason: one census, so numbering can
- * never drift between projections by construction.
+ * Two consumers today: `circuit-sexpr.ts` (its `:id N`/`(ref N)` dedup
+ * consumes this module directly) and `compose-template.ts` (the
+ * where-clause lift — a shared node's `♯k` id IS this module's `idOf`
+ * number, so a human can cross-read `♯3` in a formula straight to `:id 3`/
+ * `(ref 3)` in the sexpr dump of the SAME root). Future consumers (the
+ * collapse-view machine's state badges, per-field access cones) read the
+ * same map for the same reason: one census, so numbering can never drift
+ * between projections by construction.
  *
  * ── why one pass answers both "is this shared" and "what number" ───────────
  *
@@ -29,12 +28,10 @@
  * alts; fan→collection then body), and mints a fresh id for a ≥2-count node
  * the FIRST time its subtree finishes processing — a node's children (if
  * also shared) always mint before their parent, since `assignIds` recurses
- * into children before minting its own id (matching `circuit-sexpr.ts`'s
- * original `renderNode`, which minted a shared node's id only AFTER
- * `renderNodeFresh` — i.e. the full child recursion — returned). This is a
- * POST-ORDER, first-occurrence numbering, deterministic given the DAG's own
- * structure (object identity is fixed once a circuit is constructed, so two
- * calls to `census` on the same root always agree).
+ * into children before minting its own id. This is a POST-ORDER,
+ * first-occurrence numbering, deterministic given the DAG's own structure
+ * (object identity is fixed once a circuit is constructed, so two calls to
+ * `census` on the same root always agree).
  *
  * Both passes stop descending on a revisit (a node already counted / already
  * assigned) — linear in the DAG's DISTINCT-node count, never exponential
@@ -64,8 +61,7 @@ export interface Census {
  *  descending on a REPEAT visit — a shared node's children were already
  *  counted the first time THAT reference was reached. Exhaustive over
  *  StaticProv's ten members WITHOUT a default arm — tsc's return-type check
- *  is the totality proof (verbatim from `circuit-sexpr.ts`'s original
- *  `countOccurrences`, relocated unchanged). */
+ *  is the totality proof. */
 function countOccurrences(prov: StaticProv, counts: Map<StaticProv, number>): void {
   const before = counts.get(prov) ?? 0;
   counts.set(prov, before + 1);

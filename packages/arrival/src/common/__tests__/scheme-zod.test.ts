@@ -302,7 +302,7 @@ describe("scheme-zod z.dict(shape)/z.dict() — keyed to ADict.get()'s own proto
   });
 
   it("z.dict() bare (open-record) is the shallow BOXED record — the inside-the-sandbox shape, NOT the membrane exit", () => {
-    // Rebaselined for R9 (two-tier-exec-api.md §5): `arrival/toJS` now egresses a lazy
+    // Rebaselined for R9 (RULINGS.md R9): `arrival/toJS` now egresses a lazy
     // proxy with values already unwrapped to plain JS — the OUTSIDE shape. This codec
     // feeds its out-schema (`z.record(z.string(), value)`) per-field, so its decode
     // builds the boxed record from keys()/get() directly and must NOT route through the

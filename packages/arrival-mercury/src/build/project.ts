@@ -66,7 +66,7 @@ function importSpecifierBetween(fromRelPath: string, toRelPath: string): string 
  *  order, mirroring require-scan.ts's own convention (§4.2's "first
  *  occurrence is the one that's named"). Kept alongside `target` (not
  *  discarded, v0's original shape) so `topoSort` can attribute a require
- *  cycle to the ANCESTOR's own closing statement (TASK #84) instead of the
+ *  cycle to the ANCESTOR's own closing statement instead of the
  *  revisited node. */
 interface RequireEdge {
   readonly target: string;
@@ -86,12 +86,12 @@ interface FileInfo {
    *  forms end in a genuine program-face expression (require-scan.ts's
    *  `hasProgramFace`)? Computed here, from the SAME parse `deps` already
    *  needed, so `classify.ts`'s default classifier never re-parses a file it
-   *  has already been parsed once for (TASK #87). `false` for every
+   *  has already been parsed once for. `false` for every
    *  non-`.scm` file. */
   readonly hasProgramFace: boolean;
   /** This file's OWN top-level `define/overridable` names (cleaned, bare —
    *  pre-collision), from the SAME parse — seeds a pipeline's flow-up
-   *  collision check (TASK #87 Q2) with names that must NEVER be
+   *  collision check with names that must NEVER be
    *  namespaced away, since they're the pipeline's own pre-existing,
    *  already-shipped signature. Empty for every non-`.scm` file. */
   readonly localOverridableNames: readonly string[];
@@ -99,8 +99,8 @@ interface FileInfo {
 
 /** Parse `source` exactly ONCE and extract every project-graph fact
  *  `project.ts` needs about it: its resolved require edges (with span, for
- *  TASK #84's honest cycle attribution), whether it has a program face, and
- *  its own local overridable names (for TASK #87 Q2's collision seeding) —
+ *  honest cycle attribution), whether it has a program face, and
+ *  its own local overridable names (for the flow-up collision seed) —
  *  replacing three separate re-parses of the same file (`scanScmDeps`'s own
  *  parse, the old inline `isPipeline` re-parse, and a hypothetical fourth
  *  for overridable names) with one. */
@@ -122,8 +122,8 @@ function analyzeScmFile(relPath: string, source: string, files: Readonly<Record<
 
 /**
  * DFS post-order topological sort — leaves first (a file's own deps are
- * compiled, and their `shape`s known, before it is). TASK #84's ruling on the
- * v0.1 finding: a require cycle is honestly a LOADER question, not a graph
+ * compiled, and their `shape`s known, before it is). A require cycle is
+ * honestly a LOADER question, not a graph
  * one — a lazy-reference cycle (this cycle's closing require is never
  * evaluated at module-eval time, only referenced) is legal in ESM the same
  * way it's legal here; a true VALUE cycle (the closing require's result is
@@ -144,10 +144,10 @@ function analyzeScmFile(relPath: string, source: string, files: Readonly<Record<
  * once its (partial) DFS subtree returns — a 2-file mutual cycle still
  * compiles BOTH files; nothing is excluded here.
  *
- * TASK #84's span fix: the cycle check moved from "top of visit()" (which
- *  only ever sees the REVISITED node — no CoreForm site of its own to point
- *  at) to the LOOP that's ABOUT TO RECURSE — at that point `relPath` is the
- *  ANCESTOR file whose OWN `(require …)` statement closes the loop, and
+ * The cycle check runs at the LOOP that is ABOUT TO RECURSE, never at "top of
+ *  visit()" — the latter only ever sees the REVISITED node, which has no
+ *  CoreForm site of its own to point at. At the recursion point `relPath` is
+ *  the ANCESTOR file whose OWN `(require …)` statement closes the loop, and
  *  `dep.span` is that statement's REAL, exact position (threaded through
  *  from `analyzeScmFile`'s parse) — never a fabricated or misattributed one.
  */
@@ -205,7 +205,7 @@ export interface BuildProjectOptions {
   /** Output basename for the copied stage-0 runtime module (no extension).
    *  Default `"stage0"`. */
   readonly stage0Basename?: string;
-  /** TASK #87 — the pluggable file-classification seam (`classify.ts`).
+  /** The pluggable file-classification seam (`classify.ts`).
    *  Omitted ⇒ `defaultClassifier`, built from this project's own require-DAG
    *  facts (v0's exact "DAG-root + program-face" derivation, unchanged). A
    *  project supplies its own to opt out of that derivation entirely (e.g.
@@ -224,7 +224,7 @@ function rootAnchored(relPath: string): string {
 
 /** BFS over `infos`' require-DAG from `startRelPath` (EXCLUDING itself),
  *  collecting every reachable dependency's OWN published overridables
- *  (`ExportShape.overridables`) — TASK #87 Q2's "transitive knob cone". A
+ *  (`ExportShape.overridables`) — the transitive knob cone. A
  *  dependency that never got a recorded `shape` (an upstream cycle/data-
  *  parse-error/`.prompt` gap) contributes nothing — an already-warned gap
  *  elsewhere, not a new failure here. `visited` guards a diamond dependency
@@ -342,7 +342,7 @@ export async function buildProject(files: Readonly<Record<string, string>>, opts
 
   const order = topoSort(infos, warnings);
 
-  // TASK #87: the file-classification seam (`classify.ts`). `requiredBy`/
+  // The file-classification seam (`classify.ts`). `requiredBy`/
   // `hasProgramFaceOf` are whole-project facts ONLY `defaultClassifier` needs
   // (a per-file policy structurally cannot see them) — computed once here,
   // regardless of whether they end up used, since a project's OWN classifier
@@ -404,13 +404,12 @@ export async function buildProject(files: Readonly<Record<string, string>>, opts
         continue;
       }
 
-      // .scm — TASK #87: the classifier seam decides pipeline vs module (the
-      // ambiguity v0's own DAG-root+program-face detector got fuzzy — data
+      // .scm — the classifier seam decides pipeline vs module (data
       // files stay extension-routed above, unambiguous either way, so the
       // seam's ONLY job here is the split that actually needed one).
       const isPipeline = classifyFile(relPath, rootAnchored(relPath)) === "pipeline";
 
-      // TASK #87 Q2: a pipeline's params cone is the TRANSITIVE knob set —
+      // A pipeline's params cone is the TRANSITIVE knob set —
       // every overridable reachable through its own require-DAG, collision-
       // resolved against its OWN local overridable names (unchanged, always
       // bare). A module face never computes this (empty, the default).

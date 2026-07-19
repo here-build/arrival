@@ -1,13 +1,13 @@
-// SIGNATURE-ECHO — pure unit coverage of the detection logic (no MCP wiring). Split from
-// arrival-manifold's `signature-echo.test.ts` (2026-07-05 package split): the e2e-through-a-
-// real-manifold-server half (doors.ts's signatureEchoFor + DoorSession.echoSignature + manifold-
-// tool.ts's catch hook + bind.ts's signatureByName + server.ts wiring) stays there. Measured
-// problem: ~15% of eval errors are tool MISUSE (wrong kwarg name, dangling keyword, wrong
-// arg type/shape) — the model gets the error but not the CONTRACT, so it guesses again. The
-// manifold already holds every tool's one-line signature; echoing the relevant one below a
-// misuse error teaches "this is how this symbol works". It is a SIBLING of the unbound did-you-mean
-// enrichment, on the DISJOINT tool-misuse family — and it NEVER fires on a tool that ran and
-// failed on domain grounds (its args were fine), nor on an unbound-variable wall.
+// signature-echo — pure unit coverage of the detection logic (no MCP wiring); the
+// e2e-through-a-real-manifold-server half (doors.ts's signatureEchoFor + DoorSession.echoSignature
+// + manifold-tool.ts's catch hook + bind.ts's signatureByName + server.ts wiring) lives in the
+// sibling arrival-manifold package. Measured problem: ~15% of eval errors are tool MISUSE (wrong
+// kwarg name, dangling keyword, wrong arg type/shape) — the model gets the error but not the
+// CONTRACT, so it guesses again. The manifold already holds every tool's one-line signature;
+// echoing the relevant one below a misuse error teaches "this is how this symbol works". It is a
+// SIBLING of the unbound did-you-mean enrichment, on the DISJOINT tool-misuse family — and it
+// NEVER fires on a tool that ran and failed on domain grounds (its args were fine), nor on an
+// unbound-variable wall.
 
 import { describe, expect, it } from "vitest";
 
@@ -199,7 +199,7 @@ describe("A — a downstream -32602 'Input validation error' gets a synthesized 
     expect(suffix).toContain("\nSignature: ");
     expect(suffix).toContain("\nExample: ");
     // Non-enum slot: the type-placeholder hole (design doc
-    // second-foundation/arrival-manifold/docs/args-error-reporting-v2.md §2.3/§2.6), never a
+    // arrival-manifold/docs/args-error-reporting-v2.md §2.3/§2.6), never a
     // fabricated concrete value.
     expect(example).toBe(`(${qualified} :query {:condition #|string|#})`);
   });

@@ -19,8 +19,8 @@ import {
 } from "@inhuman.tools/arrival-serializer";
 
 /** Default total observation budget. Overridable per server via the `observation.maxTotalChars`
- *  config knob (config.ts → manifold-tool.ts). 20k (2026-07-06 measurement: weakly-best budget
- *  across the tested range, +2.8pp pass rate [0.0,+5.6] vs 8k) — down from the earlier 40k. */
+ *  config knob (config.ts → manifold-tool.ts). 20k is the best-performing budget across the
+ *  tested range — +2.8pp pass rate over an 8k budget, 95% CI [0.0, +5.6]. */
 export const DEFAULT_OBSERVATION_MAX_TOTAL_CHARS = 20_000;
 
 /** Streaming-cap seeds for the normal (under-budget) case: generous enough that a real
@@ -216,8 +216,7 @@ function format(node: SExpr, indent = 0): string {
  * Truncation: this formatter rides `toSExprString`'s OWN caps machinery via
  * `SerializeOpts.format` — streaming per-collection/per-string caps, the fair
  * shrink-to-fit loop, and `#| +N more of TOTAL |#` markers all apply NATIVELY to the
- * brace rendering (this replaced the earlier post-check that fell back to the parens
- * s-expr form past 40k chars). The seeds are sized so the caps only ever bite once the
+ * brace rendering. The seeds are sized so the caps only ever bite once the
  * total budget is actually exceeded: a single string may span the whole budget, and any
  * collection past SEED_MAX_ITEMS items overflows it anyway. An under-budget observation
  * renders byte-identically to the uncapped formatter.

@@ -111,22 +111,13 @@ describe("manifold error contract (H-4, frozen)", () => {
     // pins the door through the frozen single-statement error shape.)
     await tool.call({ expr: "(define settable 1)" });
     const setBang = await expectError(tool, "(set! settable 2)");
-    // Owner clause landed 07-10 (arrival "doors know their owners", 98641484b3) — frozen WITH owner.
     expect(setBang.split("\n")[0]).toBe("Error: set! @ scheme/r7rs/binding is not available.");
     expect(setBang).toContain("Why:"); // the door teaches the immutability rationale
-    // `write` carries the no-IO exemplar now. `display` USED to sit here — and it no longer doors,
-    // deliberately (V's ruling, 2026-07-14): the MCP runner binds `display` as a HOST AFFORDANCE
-    // (mcp-substrate/display.ts) and rewrites the call form before evaluation, so arrival's door
-    // never fires for it.
-    //
-    // ARRIVAL'S LAW IS UNCHANGED — ports and IO remain omitted by design, and `display` is still a
-    // door IN THE LANGUAGE (a bare `display` used as a VALUE still teaches). What changed is that the
-    // HOST answers the model's intent instead of refusing its spelling: `(display x)` cost a door and
-    // a wasted round on 32% of tasks in the 89-task corpus, for a verb whose meaning ("show me this")
-    // the runner can satisfy perfectly without any IO surface.
-    //
-    // The CONTRACT this test pins is intact: a disabled verb's first line is frozen, and a door may
-    // carry a teaching tail. Only the exemplar moved.
+    // `write` carries the no-IO exemplar. `display` is a HOST AFFORDANCE (mcp-substrate/display.ts):
+    // the MCP runner rewrites the call form before evaluation, so arrival's door never fires for it.
+    // Arrival's law is unchanged — ports and IO remain omitted by design, and `display` is still a
+    // door IN THE LANGUAGE (a bare `display` used as a VALUE still teaches); only the host-satisfiable
+    // exemplar moved, because the host can answer "show me this" without any IO surface.
     const write = await expectError(tool, '(write "x")');
     expect(write.split("\n")[0]).toBe("Error: write @ scheme/r7rs/host is not available.");
     expect(write).toContain("Why:"); // the door teaches the no-IO rationale
@@ -214,16 +205,14 @@ describe("manifold error contract (H-4, frozen)", () => {
   });
 });
 
-// ─── H-4 RE-FREEZE — args-error-reporting v2 (docs/args-error-reporting-v2.md §4, §7.2) ───
+// ─── args-error-reporting v2 — line-head freeze ───
 //
-// Authored RED in Phase 0 (it.fails), FLIPPED in the one-commit C3 flip together with
-// second-foundation/arrival-bench/bridge/arrival_bridge_parity.py's parity rows and the two old-misuse-grammar pins
-// (doors.test.ts's bypass row, signature-echo.test.ts's wrong-keyword row) — the H-4
-// one-commit rule: pinned strings change only together with every consumer.
+// Same H-4 one-commit rule as the contract above: these strings change only together with
+// every consumer (arrival_bridge_parity.py's parity rows, doors.test.ts's bypass row,
+// signature-echo.test.ts's wrong-keyword row).
 //
-// The doc freezes LINE HEADS only (§4: "freeze the heads, not full lines... the
-// interpolated content is schema-derived and must stay free to follow the schema") — so
-// every assertion below pins a head substring, never a fully-interpolated line.
+// Only LINE HEADS are frozen, never full lines — the interpolated content is schema-derived
+// and must stay free to follow the schema — so every assertion below pins a head substring.
 const H4_WIRE_NAME = "clinicaltrialsgov-mcp-server_clinicaltrials_list_studies";
 
 /** Fixture shared by every H-4 re-freeze row below — a trimmed 2-key `query` param, the
@@ -275,21 +264,21 @@ async function queryFixtureTool() {
   return createManifoldTool(manifoldEnv, "CATALOG", { tools: toBoundTools(manifoldEnv) });
 }
 
-describe("H-4 re-freeze — args-error-reporting v2 new line-heads (docs/args-error-reporting-v2.md §4)", () => {
-  it(String.raw`L1 fact line: '\n  Failing argument: :<param> — ' (design doc §4)`, async () => {
+describe("Frozen args-misuse line-heads (docs/args-error-reporting-v2.md §3)", () => {
+  it(String.raw`L1 fact line: '\n  Failing argument: :<param> — ' (design doc §3)`, async () => {
     const tool = await queryFixtureTool();
     const text = await expectError(tool, '(clinicaltrialsgov-mcp-server/clinicaltrials_list_studies :query "x")');
     expect(text).toContain("\n  Failing argument: :query — ");
   });
 
-  it(String.raw`L1 script line: '\n  Retry shape: ' (design doc §4)`, async () => {
+  it(String.raw`L1 script line: '\n  Retry shape: ' (design doc §3)`, async () => {
     const tool = await queryFixtureTool();
     const text = await expectError(tool, '(clinicaltrialsgov-mcp-server/clinicaltrials_list_studies :query "x")');
     expect(text).toContain("\n  Retry shape: ");
   });
 
   it(
-    "case-B explicit-fact clause: 'the key you want is :<key>.' (design doc §4 — the one full-sentence " +
+    "case-B explicit-fact clause: 'the key you want is :<key>.' (design doc §3 — the one full-sentence " +
       "freeze, bridges may machine-read the rename)",
     async () => {
       const tool = await queryFixtureTool();
@@ -304,7 +293,7 @@ describe("H-4 re-freeze — args-error-reporting v2 new line-heads (docs/args-er
   );
 
   it(
-    String.raw`L2 head: '\n  Parameter :<param> in full — ' + the closed-world clause when it's a fact (design doc §4)`,
+    String.raw`L2 head: '\n  Parameter :<param> in full — ' + the closed-world clause when it's a fact (design doc §3)`,
     async () => {
       const tool = await queryFixtureTool();
       const expr = '(clinicaltrialsgov-mcp-server/clinicaltrials_list_studies :query "x")';
@@ -315,7 +304,7 @@ describe("H-4 re-freeze — args-error-reporting v2 new line-heads (docs/args-er
   );
 
   it(
-    String.raw`L3 head: '\n  This is rejected shape #<n> for :<param> on this tool.' (design doc §4)`,
+    String.raw`L3 head: '\n  This is rejected shape #<n> for :<param> on this tool.' (design doc §3)`,
     async () => {
       const tool = await queryFixtureTool();
       const expr = '(clinicaltrialsgov-mcp-server/clinicaltrials_list_studies :query "x")';
@@ -326,10 +315,9 @@ describe("H-4 re-freeze — args-error-reporting v2 new line-heads (docs/args-er
     },
   );
 
-  // The own-decode humanizer's NEW frozen first line (design doc §2.5, §4) — replaces
-  // today's raw ZodError dump at OUR (manifold) kwargs layer. Exercised via a REQUIRED
-  // kwarg omitted entirely (the design doc's own note: "at OUR layer only missing-required
-  // realistically fires today" — the manifold's tool contracts are z.value-per-param).
+  // The own-decode humanizer's frozen first line, at OUR (manifold) kwargs layer. Exercised
+  // via a REQUIRED kwarg omitted entirely: the manifold's tool contracts are z.value-per-param,
+  // so a missing-required arg is the case this layer's own-decode humanizer fires for.
   it(
     "own-decode humanizer's new frozen first line: 'Error: <name>: arguments rejected — <n> problem(s):' + " +
       String.raw`'\n  :<param> — <issue>' (design doc §2.5, §4 — replaces today's raw ZodError dump)`,

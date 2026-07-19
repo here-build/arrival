@@ -1,18 +1,15 @@
-// args-misuse-door — e2e suite for the localized args-misuse door
-// (docs/args-error-reporting-v2.md §7.2; authored RED in Phase 0, flipped GREEN when the
-// full pipeline landed — mcp-substrate's localization/renderers/tracker + the manifold's
-// membrane-metadata wiring). Each row exercises the e2e surface (buildManifoldEnv +
-// createManifoldTool with a fake upstream that rejects with the design doc's
-// jsonschema-family error text); M4 pins the unlocalizable Signature + Example fallback,
-// which stayed green throughout the landing (design doc §2.1: "where localization fails …
-// today's Signature + Example echo remains the fallback, byte-identical").
+// args-misuse-door — e2e suite for the localized args-misuse door (docs/args-error-reporting-v2.md
+// §2.1-§2.3). Each row exercises the e2e surface (buildManifoldEnv + createManifoldTool with a fake
+// upstream that rejects with the design doc's jsonschema-family error text); M4 pins the
+// unlocalizable Signature + Example fallback (design doc §2.1: "where localization fails … today's
+// Signature + Example echo remains the fallback, byte-identical").
 //
-// Fixture: a trimmed 2-key subset of the 45edee clinicaltrials `query` param (design doc
-// §1, §2.3) — `{cond, term}` instead of the full 8-key shape; `additionalProperties: false`
-// so the L2 closed-world clause (design doc §2.3, T10) is a fact for this fixture. The doc
-// itself notes only the TEMPLATE (line heads + structure) is frozen (§4) — schema-derived
-// content stays free to follow whatever schema a real caller declares — so every assertion
-// below pins a line HEAD, never the full interpolated key-list prose.
+// Fixture: a trimmed 2-key subset of a clinicaltrials-shaped `query` param (design doc §1,
+// §2.3) — `{cond, term}` instead of the full 8-key shape; `additionalProperties: false` so
+// the L2 closed-world clause (design doc §2.3) is a fact for this fixture. The doc itself
+// notes only the TEMPLATE (line heads + structure) is frozen (§3) — schema-derived content
+// stays free to follow whatever schema a real caller declares — so every assertion below
+// pins a line HEAD, never the full interpolated key-list prose.
 
 import { describe, expect, it } from "vitest";
 
@@ -88,7 +85,7 @@ async function misuseFixtureCall(expr: string) {
   return { result, text: textOf(result as { content: unknown }) };
 }
 
-describe("args-misuse-door — L1/L2/L3 localized teach (docs/args-error-reporting-v2.md §7.2)", () => {
+describe("args-misuse-door — L1/L2/L3 localized teach (docs/args-error-reporting-v2.md §2.3)", () => {
   // M1: L1, the FIRST misuse failure for (tool, param) — the design doc's "lean: localize +
   // retry shape" rung (§2.3 Level 1). The upstream's verbatim first line survives (H-4);
   // below it, a `Failing argument:` fact line names the param, and a `Retry shape:` script
@@ -110,7 +107,7 @@ describe("args-misuse-door — L1/L2/L3 localized teach (docs/args-error-reporti
       const retryLine = text.split("\n").find((l) => l.trimStart().startsWith("Retry shape: "));
       expect(retryLine).toBeDefined();
       // The hole is an UNFILLABLE type-placeholder comment, never the sent scalar relocated
-      // as though it were a real fix (design doc §2.3's construction rules, V 2026-07-11).
+      // as though it were a real fix (design doc §2.3's construction rules).
       expect(retryLine).toContain("#|");
       expect(retryLine).not.toContain(sent);
       expect(text).toContain("\nSignature: ");
@@ -158,11 +155,10 @@ describe("args-misuse-door — L1/L2/L3 localized teach (docs/args-error-reporti
 
   // M4: the do-no-harm guard — an UNLOCALIZABLE misuse (the clue names a key that appears
   // NOWHERE in the sent-args tree, so localizeFailingParam's "never guess" rule yields zero
-  // candidates) keeps TODAY's Signature + Example fallback byte-identical (design doc §2.1,
-  // §7.2 M4). Plain `it` (not it.fails) — this MUST pass today and stay green through every
-  // phase of the landing; a regression here breaks the "never guess as fact" discipline.
-  // Expected text captured from a live run against this fixture at authoring time
-  // (2026-07-11) — pin only what's actually observed, never an assumed shape.
+  // candidates) keeps the Signature + Example fallback byte-identical (design doc §2.1, §7.2
+  // M4); a regression here breaks the "never guess as fact" discipline. The text pinned below is
+  // what a live run against this fixture actually produces — pin only what's observed, never an
+  // assumed shape.
   it(
     "M4 — unlocalizable misuse (clue names a key absent from sent-args) keeps the byte-identical " +
       "Signature + Example fallback — the do-no-harm guard that must never break during landing",
@@ -198,7 +194,7 @@ describe("args-misuse-door — L1/L2/L3 localized teach (docs/args-error-reporti
     },
   );
 
-  // M5: membrane metadata (design doc §2.2 "where sentArgs come from", §3 hook #1) — the
+  // M5: membrane metadata (design doc §2.2 "where sentArgs come from") — the
   // rejection error object carries {qualifiedName, sentArgs} under a SYMBOL-keyed property
   // (never inline in the message: H-4's verbatim-pass-through is about the MESSAGE, not the
   // object), so error.message stays byte-unchanged through `attachArgsRejection`. Exercised
@@ -217,7 +213,7 @@ describe("args-misuse-door — L1/L2/L3 localized teach (docs/args-error-reporti
   it(
     "M5 — membrane metadata: findArgsRejection(err) recovers {qualifiedName, sentArgs} through " +
       "arrival's ArrivalError wrap (metadata rides .cause, never the top-level error); error.message " +
-      "stays byte-identical to the upstream text (design doc §2.2, §3 hook #1, bind.ts's tool.invoke catch)",
+      "stays byte-identical to the upstream text (design doc §2.2, bind.ts's tool.invoke catch)",
     async () => {
       const { exec } = await import("@inhuman.tools/arrival");
       const manifoldEnv = await misuseFixtureTool();

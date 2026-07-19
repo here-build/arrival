@@ -83,11 +83,10 @@ type Field<O, K extends keyof O> = O[K];
 type HasField<_O extends object, _K extends string> = boolean;
 type FieldKeys<O extends object> = (keyof O & string)[];
 
-// (The DEPTH half of the accessor moat — `PathValue<O, Ks>` for `path`/`get-in`/`dig`/
-// `navigate` — was removed 2026-06-16: those depth accessors were Ramda-derived and
-// cut in the 2026-06-15 eviction, so the type had no live consumer. The one-hop moat
-// (`Field<O, K>` via `@`/`:key`) remains. Re-add `PathValue` if the depth accessors
-// are ever re-sourced at runtime.)
+// Only the one-hop accessor moat (`Field<O, K>` via `@`/`:key`) is typed here.
+// There is no `PathValue<O, Ks>` for `path`/`get-in`/`dig`/`navigate` — those
+// depth accessors have no live runtime consumer to type against. Re-add
+// `PathValue` if they are ever re-sourced.
 
 // ── Typed-apply HOF fallback ─────────────────────────────────────────────────
 // `sexpr<F>(f, ...args)` is the fallback for higher-order / indirect application

@@ -89,7 +89,7 @@ export let mintResolvingFrame!: (
  * Resolver/LexicalScope/Capabilities model, deliberately NOT renamed to "Scope"
  * (which {@link LexicalScope} owns) or "Frame".
  *
- * MONADIC FROM JS (hermetic-Environment ruling, extended 2026-07-11): an env can only
+ * MONADIC FROM JS (hermetic-Environment ruling): an env can only
  * be BORN (assembled) and READ — never mutated, never extended, from the JS side. The
  * old public birth surface (`inherit()`/`merge()` methods, the bindings-record/parent
  * constructor arm) is gone from the public type; frame birth is the module-internal
@@ -153,14 +153,11 @@ export class AmbientRuntime {
   }
 
   /**
-   * The read face. What used to be `patch_value(directValue)` here — a box-on-the-way-out
-   * coercion of raw JS scalars found in storage — is now an INVARIANT DOOR: storage is
-   * inside the membrane (hermetic-Environment ruling, 2026-07-11), every writer boxes at
-   * its own boundary before {@link bindValue}, so a raw JS scalar surfacing on a read
-   * means a writer bypassed the membrane (a direct `__env__` poke, a cast-through
-   * `mintFrame(parent, name, bindings)` record) — teach and refuse, never silently re-box under the
-   * run-neutral ctx (that silent re-box was the audit's #1 provenance drop:
-   * the CONSTANT_CTX audit §2.3, values-repr box ← AmbientRuntime.get).
+   * The read face — an INVARIANT DOOR: storage is inside the membrane (hermetic-Environment
+   * ruling), every writer boxes at its own boundary before {@link bindValue}, so a raw JS
+   * scalar surfacing on a read means a writer bypassed the membrane (a direct `__env__`
+   * poke, a cast-through `mintFrame(parent, name, bindings)` record) — teach and refuse,
+   * never silently re-box under the run-neutral ctx.
    *
    * The APair arm survives: a stored pair is cycle-marked + quoted on the way out so a
    * host-read (or hygiene's `lookupSettled` copy) hands back DATA the evaluator won't

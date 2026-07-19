@@ -1,6 +1,6 @@
 /**
  * The tint palette (D4): derived from Delta's OKLCH emphasis scale
- * (`second-foundation/delta-css/src/factors-properties.css` — the `--⚙️hue-emphasis-*`
+ * (`delta/delta-css/src/factors-properties.css` — the `--⚙️hue-emphasis-*`
  * custom properties), NOT a standalone terminal palette invented ad hoc. Delta is the
  * studio's internal design system (CLAUDE.md's Delta⊥Mercury boundary), and this is an
  * internal-tooling consumer of it — the recipe (hue in degrees, a lightness/chroma
@@ -35,7 +35,7 @@ const CHROMA = { primary: 0.15, tertiary: 0.08, neutral: 0 } as const;
 
 /** Delta's `oklch(0.6 …)` mid-lightness (application.css) for saturated foreground
  *  text on a dark terminal background; dim/neutral text sits lower for the
- *  desaturated-card read (§5's "pending: dim gray"). */
+ *  `pending`/`skipped`/`gutter` desaturated-card read below. */
 const LIGHTNESS = { normal: 0.72, dim: 0.5 } as const;
 
 function oklchToSrgb(l: number, c: number, hDeg: number): [number, number, number] {
@@ -58,9 +58,8 @@ function oklchToSrgb(l: number, c: number, hDeg: number): [number, number, numbe
 
 export type TintName = "pending" | "running" | "done" | "error" | "skipped" | "accent" | "gutter" | "variant";
 
-/** One entry per tint (§5's vocabulary table, terminal column). `[L, C, H]` — `H`
- *  unused when `C` is 0 (neutral gray, spec-honest: OKLCH hue is undefined at zero
- *  chroma). */
+/** One entry per tint. `[L, C, H]` — `H` unused when `C` is 0 (neutral gray,
+ *  spec-honest: OKLCH hue is undefined at zero chroma). */
 const TINT_LCH: Record<TintName, readonly [number, number, number]> = {
   pending: [LIGHTNESS.dim, CHROMA.neutral, 0],
   running: [LIGHTNESS.normal, CHROMA.primary, HUE.accent],
@@ -107,7 +106,7 @@ export function paint(text: string, tint: TintName, mode: ReturnType<typeof colo
 
 /**
  * The repo's compensated-Darcula TOKEN palette — copied from
- * `second-foundation/editor-theme/theme-darcula.ts` (the source of truth; re-sync if it
+ * `arrival/packages/editor-theme/src/theme-darcula.ts` (the source of truth; re-sync if it
  * changes). Used by BOTH the code highlighter (`highlight.ts`) and the value colorizer
  * (`sexpr-color.ts`) so the input line, the settled-block source, and the output value all
  * share ONE palette — a `:keyword` is the same purple everywhere, a number the same blue.

@@ -1,22 +1,20 @@
 // The FUTILITY DOOR's pure shape-logic (futility.ts + doors.ts futile/duplicate generators).
-// Split from arrival-manifold's `futility.test.ts` (2026-07-05 package split): the full MCP-wiring
-// half (a real upstream + a real manifold server observing the advisory Note: blocks) stays in
-// arrival-manifold (server.ts/manifold-tool.ts are binder-owned); this half tests `FutilityTracker`
-// and `normalizeResultText` directly, with no MCP transport at all.
+// The full MCP-wiring half (a real upstream + a real manifold server observing the advisory
+// Note: blocks) lives in arrival-manifold (server.ts/manifold-tool.ts are binder-owned); this
+// half tests `FutilityTracker` and `normalizeResultText` directly, with no MCP transport at all.
 
 import { describe, expect, it } from "vitest";
 
 import { FutilityTracker, normalizeResultText } from "../futility.js";
 
 describe("normalizeResultText", () => {
-  // C1 (benchmark-defect-register.md §C) — `DIGIT_RUN` used to strip EVERY digit run, so
-  // `get_file_info`'s pure labels+digits body (no path echo) normalized THREE genuinely
-  // different files (sizes 40435 / 810402 / 10266) to the SAME shape key, firing the futility
-  // door on legitimately distinct results. Audited: DIGIT_RUN never enabled a single TRUE
-  // positive across 178 trajectories (every real positive was byte-identical prose with NO
-  // digits — ddg bot-detection, "No objects found", empty memory) — it only manufactured false
-  // ones. V RULING: delete it. UUID / HEX_RUN / WHITESPACE stay (those really are volatile
-  // per-request tokens, never the payload itself).
+  // C1 — digits are signal, not noise: `DIGIT_RUN` (a normalizer that once stripped every
+  // digit run) collapsed `get_file_info`'s labels+digits body for three genuinely different
+  // files (sizes 40435 / 810402 / 10266) into the SAME shape key, firing the futility door on
+  // legitimately distinct results — and across a 178-trajectory audit it never caught a single
+  // TRUE positive (every real positive was byte-identical prose with NO digits at all: ddg
+  // bot-detection, "No objects found", empty memory). UUID / HEX_RUN / WHITESPACE stay — those
+  // really are volatile per-request tokens, never the payload itself.
   it("digits are SIGNAL, not noise — three results differing only in digits stay distinct (C1)", () => {
     const a = normalizeResultText("name: report.pdf size: 40435 modified: 20260101");
     const b = normalizeResultText("name: report.pdf size: 810402 modified: 20260101");
@@ -88,14 +86,12 @@ describe("FutilityTracker (pure)", () => {
     expect(drained[0]!.door.code).toBe("envelope/duplicate-call");
   });
 
-  // C1b (benchmark-defect-register.md ADDENDUM B2/"Tier C" + REVISED WAVE ORDER item 3) —
-  // TRIGGER SURGERY: (a) statements within ONE program (one `run()` call, several statements
-  // the model wrote WITHOUT having seen any of their results yet) must never count as retries
-  // against each other — the door's whole premise is an INFORMED retry (model saw a bad result,
-  // then tried again anyway). (b) as a direct consequence, the door must never fire when its
-  // firing window is really a same-call batch that ALSO contains a success — observed in the
-  // wild: the door fired directly beneath a successful, different result in the SAME
-  // observation, flatly contradicting its own "the tool looks degraded" claim.
+  // C1b — statements within ONE program (one `run()` call, several statements the model wrote
+  // WITHOUT having seen any of their results yet) must never count as retries against each
+  // other: the door's whole premise is an INFORMED retry (model saw a bad result, then tried
+  // again anyway). As a direct consequence, the door must never fire beneath a same-call batch
+  // that also contains a real success — firing there would contradict the door's own
+  // "the tool looks degraded" claim.
   it("(a) three identical results from ONE program's statements (no beginCall between them) fire NOTHING", () => {
     const t = new FutilityTracker();
     t.beginCall();

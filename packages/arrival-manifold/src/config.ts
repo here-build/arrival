@@ -46,9 +46,8 @@ const mcpServersFile = z.object({
   /** Opt-in metadata prompt-fields (focused-reasoning substrate; enabled per-deploy
    *  when it helps, dead weight on strong models). */
   promptFields: z.object({ intent: z.boolean().optional(), successCriteria: z.boolean().optional() }).optional(),
-  /** Type-hints whole-feature kill switch (docs/working-proposals/manifold-type-hints.md).
-   *  Absent ⇒ "telemetry" (safe default; measure, don't render). Per-code demotion is a
-   *  code edit, never a config knob. */
+  /** Type-hints whole-feature kill switch. Absent ⇒ "telemetry" (safe default; measure,
+   *  don't render). Per-code demotion is a code edit, never a config knob. */
   typeHints: z.enum(["off", "telemetry", "on-error"]).optional(),
 });
 

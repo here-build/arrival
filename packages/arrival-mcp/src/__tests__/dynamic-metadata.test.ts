@@ -1,16 +1,14 @@
 /**
- * A2 — the MCP metadata read path (exec-phases-and-dynamic-metadata.md §2.7).
- *
- * Pins the closed drop + the activation channel end-to-end:
- *   • tool``'s `dynamicDescription` is FORWARDED into the baked def's metadata bag
- *     (previously declared-and-dropped) and lifted into the catalog annotation.
- *   • catalog resolution binds `this` = the OWNING capability's describe-ambient
- *     activation (host config + host resources — decision #6: actor args don't exist
- *     at describe time), per read, no memo.
- *   • `undefined` resolution falls back to the static description, NOT flagged
- *     session-generated (the honest-failure contract, preserved verbatim).
- *   • a config schema requiring ACTOR keys ⇒ no describe ambient — static catalog,
- *     the honest floor (and the legacy closure-form thunk still fires, receiver-free).
+ * The MCP metadata read path pins the closed drop + the activation channel end-to-end:
+ *   • tool``'s `dynamicDescription` is forwarded into the baked def's metadata bag and
+ *     lifted into the catalog annotation.
+ *   • catalog resolution binds `this` = the owning capability's describe-ambient
+ *     activation (host config + host resources — actor args don't exist at describe
+ *     time), per read, no memo.
+ *   • `undefined` resolution falls back to the static description, never flagged
+ *     session-generated (the honest-failure contract).
+ *   • a config schema requiring actor keys has no describe ambient — static catalog
+ *     is the honest floor (and the legacy closure-form thunk still fires, receiver-free).
  */
 import type { Activation } from "@inhuman.tools/arrival/capability";
 import { describe, expect, it } from "vitest";

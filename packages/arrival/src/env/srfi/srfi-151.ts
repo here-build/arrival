@@ -1,7 +1,6 @@
 // SRFI-151 — bitwise operations. DOORED IN FULL: here lieth the dragons.
 //
-// (V ruling 2026-07-14, ahead of the one-number rework —
-//  docs/design-history/arrival-one-number-rework.md.)
+// See docs/design-history/arrival-one-number-rework.md for the full rationale.
 //
 // WHY THE DRAGONS: under the one-number representation, scheme exact integers are
 // safe-range JS numbers (|x| ≤ 2^53−1) — and JavaScript's native bitwise operators
@@ -10,8 +9,8 @@
 // no error, no warning, a confidently wrong number. That is precisely the
 // wrong-value class the one-number rework exists to abolish, and correct wide
 // bitwise needs the arbitrary-precision ALU the representation deliberately gave
-// up. The former implementations here and in env/r7rs/numeric.ts were bigint-based
-// and correct — but stranded by the ruling; git has them.
+// up. The former bigint-based implementations here and in env/r7rs/numeric.ts were
+// correct but are stranded by this rework; git has them.
 //
 // Arrival's domain (LLM orchestration — counts, indices, scores, temperatures) has
 // produced zero demand for bitwise: no in-repo .scm uses any of these verbs. If a

@@ -1,8 +1,7 @@
-// THE SCOPE-CONFUSION DOOR — e2e coverage through a REAL manifold tool (docs/working-proposals/
-// manifold-scope-confusion-door.md, V-specified 2026-07-04). The pure unit coverage of the
-// classifier itself (`scopeConfusionDoor`, `scanLocalBindings`, `createLocalBindingTracker`)
-// moved to `@inhuman.tools/mcp-substrate`'s own `scope-confusion.test.ts` (2026-07-05 package
-// split) — this file keeps only the wiring-through-a-real-tool matrix.
+// THE SCOPE-CONFUSION DOOR — e2e coverage through a REAL manifold tool. The pure unit coverage of
+// the classifier itself (`scopeConfusionDoor`, `scanLocalBindings`, `createLocalBindingTracker`)
+// lives in `@inhuman.tools/mcp-substrate`'s own `scope-confusion.test.ts` — this file keeps only
+// the wiring-through-a-real-tool matrix.
 
 import { DoorSession } from "@inhuman.tools/mcp-substrate";
 import { describe, expect, it } from "vitest";

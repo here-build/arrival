@@ -123,11 +123,10 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
 
   /** Deep re-stamp (the inbound membrane's AValue claim, moved onto the class — see the
    *  base declaration in AValue.ts). Fresh vector under the CROSSING's ctx, elements
-   *  re-stamped through the closed child fold — no casts (the dissolved router arm
-   *  carried one of the membrane's two sanctioned casts because it couldn't see that
-   *  `__vector__` is always SchemeValue[]). Deliberately does NOT copy `evalElements`
-   *  (unlike shallow `withProvenance`) — byte-stable with the dissolved jsToSchemeImpl
-   *  arm, which minted a bare `new AVector(ctx, …, p)`. */
+   *  re-stamped through the closed child fold — no cast needed: `__vector__` is always
+   *  `SchemeValue[]`. Deliberately does NOT copy `evalElements` (unlike shallow
+   *  `withProvenance`): a membrane-crossed vector is a constructed value, never a
+   *  reader-minted `[…]` literal. */
   ["arrival/withProvenanceDeep"](
     ctx: RunContext,
     p: ReadonlySet<number>,
@@ -218,13 +217,11 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     });
     // loose: the rest AS A VECTOR SLICE — a genuine vector stays a genuine vector.
     //
-    // This is deliberately NOT an `AJSArrayList` spine view, and the reason is the whole lesson of
-    // the B3 rework. The infinite-loop bug was never about genuine vectors: a scheme vector literal
-    // `#(1 2 3)` is never produced by an MCP tool — every tool result arrives as an `AJSArray`. The
-    // hang came from `AJSArray` DELEGATING its car/cdr into `vec()` and landing here, so the fix
-    // belongs there (AJSArray now projects its own spine view straight off its borrowed `source`),
-    // not here. A stopgap that made THIS `cdr` terminate in `nil` was patching the wrong type — it
-    // taught vectors to lie about being lists to fix a bug that lived in the borrowed array.
+    // This is deliberately NOT an `AJSArrayList` spine view. A genuine vector literal is
+    // never produced by an MCP tool (every tool result arrives as an `AJSArray`), so making
+    // THIS `cdr` project a list-spine view would be patching the wrong type — it would teach
+    // vectors to lie about being lists to paper over a bug that belongs to the borrowed array
+    // (`AJSArray` projects its own spine view straight off its borrowed `source`).
     //
     // Keeping the view out of here also keeps `AJSArrayList` honest: its backing store is then
     // ALWAYS raw JSON from a tool, so its `car` is always a genuine (lazy) plane crossing. Pointing
@@ -268,12 +265,6 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
       alternative: "use `vector-map` for vectors",
     });
     chargeHeap(runCtx, this.__vector__.length);
-    // Wave 1 (arrival-constant-ctx-audit-2026-07-11.md §4): the confession this comment
-    // used to document is closed — `runCtx` is now REQUIRED (mirrors APair's map, "one
-    // algebra, every carrier"; AValue.ts's protocol declaration). The sole production
-    // dispatcher (`env/r7rs/lists.ts`'s single-list `map` arm) already threaded a live
-    // `this.runCtx` through `resolveMethod(seq, tf("map")).call(seq, fn, runCtx)` before
-    // this fix — `?? CONSTANT_CTX` was dead code on every real call path.
     const results = this.__vector__.map((v) => applyCallback(fn, [v], runCtx));
     // RULINGS.md R2: map is LENGTH-PRESERVING — PROXY the container's own
     // grouping/length-fact stamp through unchanged (mirrors APair's map — "one algebra,
@@ -304,8 +295,6 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     const pred = arg instanceof RegExp ? (x: SchemeValue) => String(x).match(arg) : arg;
     const out: SchemeValue[] = [];
     for (const v of this.__vector__) {
-      // Wave 1 (see map above) — `runCtx` required, confession closed; `env/srfi/srfi-1.ts`'s
-      // `filter` dispatcher already threads a live `this.runCtx` on every real call.
       const verdict = await applyCallback(pred, [v], runCtx);
       if (!is_false(verdict)) out.push(v); // R7RS: only #f is false — nil verdicts keep
     }
@@ -334,8 +323,6 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     });
     chargeHeap(runCtx, this.__vector__.length);
     let acc = initial;
-    // Wave 1 (see map above) — `runCtx` required, confession closed; `symbol.tagless`'s
-    // dispatcher (the sole caller of this term) always threads a live `this.runCtx`.
     for (const v of this.__vector__) acc = (await applyCallback(fn, [v, acc], runCtx)) as Acc;
     return acc;
   }
@@ -354,8 +341,6 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   ): AVector {
     chargeHeap(runCtx, this.__vector__.length);
     const out = [...this.__vector__];
-    // `runCtx` threaded (Wave 1 — see APair's sort for the full note): the comparator now
-    // runs under THIS invocation's live ctx, not CONSTANT_CTX.
     out.sort(deriveSortCompare(comparator as ((a: unknown, b: unknown) => unknown) | undefined, runCtx));
     return withInputProvenance([this], new AVector(this.ctx, out));
   }
@@ -459,10 +444,9 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   }
 
   // Indexed access — `(vector-ref vec k)` dispatches here (the builtin forwards the index k).
-  // Bounds-checked (R7RS §6.8: "it is an error if k is not a valid index"): an OOB read
-  // used to leak a raw JS `undefined` past the interop boundary — the silent-wrong-value
-  // class the 2026-07-13 conformance sweep flagged as its top fix. Clean, catchable error,
-  // same quality bar as list-ref's.
+  // Bounds-checked (R7RS §6.8: "it is an error if k is not a valid index"): an
+  // out-of-range index throws a clean, catchable RangeError — same quality bar as
+  // list-ref's — rather than leaking a raw JS `undefined` past the interop boundary.
   ["arrival/tagless-final/vector-ref"](k: number): SchemeValue {
     if (!Number.isInteger(k) || k < 0 || k >= this.__vector__.length) {
       throw new RangeError(`vector-ref: index ${k} out of range for a vector of length ${this.__vector__.length}`);

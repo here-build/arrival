@@ -1,14 +1,13 @@
 /**
- * LEARN.md teachability — LLM-as-reader custdev loop (2026-07-08 methodology).
+ * LEARN.md teachability — LLM-as-reader custdev loop.
  *
  * A foreign model gets ONLY LEARN.md and writes sugarcoat programs plus the canonical
  * scheme it believes each lowers to; the real reader arbitrates. MISMATCHes are the
  * yield: each is either a doc gap (add a ✗-example to LEARN.md) or a silent reader
- * misparse. History: round 1 found 3 at-expr/method-arg doc gaps; round 2 found the
- * let-body regroup bug + naked-infix gap; round 3 scored 10/10.
+ * misparse.
  *
  * Opt-in category (fires a real LLM). Loud-skips unless BOTH are present:
- *   - the `grok` CLI (V's headless agent runner; any OpenAI-compatible runner works
+ *   - the `grok` CLI (a headless agent runner; any OpenAI-compatible runner works
  *     with small edits) — NEVER pass --json-schema: it silently reroutes to the hosted
  *     grok-build model regardless of -m;
  *   - a model to run it on (default `longcat`, override via CUSTDEV_MODEL).

@@ -1,5 +1,5 @@
 // args-failure-tracker — escalation state for the localized args-misuse door
-// (second-foundation/arrival-manifold/docs/args-error-reporting-v2.md §2.4). A deliberate
+// (arrival-manifold/docs/args-error-reporting-v2.md §2.4). A deliberate
 // SIBLING of `FutilityTracker` (futility.ts) — same injection pattern, same export/import
 // discipline for session round-trips — but the INVERSE gradient: futility's `seen` set is
 // monotonic verbose-once-then-terse (repetition earns LESS teaching); this tracker's counter
@@ -7,7 +7,7 @@
 // script). Mixing the two state machines would corrupt both contracts, hence a separate file
 // (design doc §2.4's "NOT in DoorSession" decision) rather than a shared class.
 //
-// NOT unified with FutilityTracker (design doc §2.4 open question 2, deliberately deferred):
+// NOT unified with FutilityTracker (design doc's "Known limits", deliberately deferred):
 // futility watches SUCCESSFUL non-progress, this watches FAILURES — different reset triggers.
 
 /** Serialized tracker state — session-store round-trip shape (mirrors `FutilityTracker`'s own
@@ -18,9 +18,9 @@ export interface ArgsFailureState {
 }
 
 /** Composite key for one (tool, param) counter: `${qualifiedName}\0${paramPathJoined}`, with
- *  `"⊥"` standing in for an UNLOCALIZED misuse (design doc §2.4: "the ⊥ key escalates too" —
- *  Level ⊥'s eventual "show everything" backstop needs its own counter, same monotone rule as
- *  a named param). A multi-segment path joins on `.` — the same dotted-path convention the
+ *  `"⊥"` standing in for an UNLOCALIZED misuse — the ⊥ key escalates too: Level ⊥'s eventual
+ *  "show everything" backstop needs its own counter, same monotone rule as a named param.
+ *  A multi-segment path joins on `.` — the same dotted-path convention the
  *  own-decode humanizer's per-issue lines use (design doc §2.5). The NUL separator can appear
  *  in neither half (MCP tool names are `^[a-zA-Z0-9_-]+$` on the wire; a JSON string never
  *  carries a raw NUL), so `recordSuccess`'s prefix-clear cannot cross tools — a space or any
@@ -43,8 +43,8 @@ export class ArgsFailureTracker {
 
   /** Record one misuse failure for `(qualifiedName, paramPath)`; returns the level to render.
    *  Monotone 1→2→3, then holds at 3 (never a hash-dedup gate, unlike futility's
-   *  `firedFutileHash` — design doc §2.4: "count identical retries too… 34 near-identical
-   *  retries is exactly the case escalation exists for"). `paramPath` absent ⇒ the `⊥` key. */
+   *  `firedFutileHash`) — identical repeated retries count too: escalation exists precisely
+   *  for the near-identical-retry case. `paramPath` absent ⇒ the `⊥` key. */
   recordFailure(qualifiedName: string, paramPath: readonly string[] | undefined): ArgsFailureLevel {
     const key = trackerKey(qualifiedName, paramPath);
     const level = Math.min((this.byToolParam.get(key) ?? 0) + 1, MAX_LEVEL) as ArgsFailureLevel;

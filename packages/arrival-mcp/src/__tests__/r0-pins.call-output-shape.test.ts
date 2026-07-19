@@ -1,10 +1,6 @@
-// R0 pin (docs/working-proposals/arrival-mcp-rework-over-phases.md, Part IV — R0):
-// "per-call output today's exact shape". `DiscoveryTool.call` returns `Promise<string[]>` — a
-// PLAIN array, one element per top-level form of `args.expr`, in program order, with no envelope
-// (no `{results: […]}` wrapper, no per-form metadata). This is the exact shape §2.5's `ReplEvent`
-// aggregation law must remain compatible with: "the final `CallToolResult` ≡ the ordered
-// concatenation of the statement events' FULL `ContentBlock` lists" — i.e. today's `string[]` is
-// the degenerate (unstreamed) case of that same ordered-concatenation law.
+// `DiscoveryTool.call` return-shape contract: `Promise<string[]>` — a PLAIN array, one
+// element per top-level form of `args.expr`, in program order, with no envelope (no
+// `{results: […]}` wrapper, no per-form metadata).
 
 import { describe, expect, it } from "vitest";
 

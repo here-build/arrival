@@ -1,16 +1,15 @@
-// RING-1 red test suite — src/type-hints/render.ts (does not exist yet).
+// Pins the frozen RenderHint contract: TS carrier vocabulary must NEVER leak into the
+// rendered scheme-facing string (the bifunctor discipline). Returns null — never a
+// half-rendered hint — whenever any part is unrenderable: a skipped hint is invisible, a
+// wrong hint is poison.
 //
-// Pins the frozen RenderHint contract (types.ts) per doc §4 (docs/working-proposals/
-// manifold-type-hints.md rev 3): the bifunctor discipline — TS carrier vocabulary must
-// NEVER leak into the rendered scheme-facing string. Returns null (not a half-rendered
-// hint) whenever ANY part is unrenderable — "a skipped hint is invisible, a wrong hint is
-// poison" (doc §3). See src/__red__/README.md for the migration path once render.ts lands.
+// RED suite: render.ts does not exist yet, by design. See src/__red__/README.md for the
+// migration path once it lands.
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { renderHint } from "../../type-hints/render.js";
 import type { MappedDiagnostic, SelectedHint } from "../../type-hints/types.js";
-// RED: this module does not exist yet, by design — that is the point of this suite.
 
 // ─── fixture factories ───
 
@@ -24,7 +23,7 @@ function hint(diagnostic: MappedDiagnostic, statementIndex = 0): SelectedHint {
   return { statementIndex, diagnostic };
 }
 
-// ─── the TS-never-leaks vocabulary blacklist (doc §4/§7) — the ONE output-blacklist ───
+// ─── the TS-never-leaks vocabulary blacklist — the ONE output-blacklist ───
 //
 // Every test in this file that expects a rendered (non-null) string MUST go through this
 // `render` helper instead of calling `renderHint` directly, so the blacklist is checked
@@ -90,9 +89,8 @@ describe("§4 — unrenderable → null (never a half-rendered hint)", () => {
   });
 
   it("generic nesting depth > 3 in `expected` → null", () => {
-    // 4 levels of Array<...> nesting — unambiguously past any depth>3 threshold, whatever
-    // the exact depth-counting algorithm turns out to be (see final report: the doc does
-    // not pin the counting method, only the "depth>3" cutoff).
+    // 4 levels of Array<...> nesting — unambiguously past any depth>3 threshold, regardless
+    // of the exact depth-counting algorithm: only the ">3" cutoff is pinned, not the method.
     const out = render(
       hint(diag({ code: 2345, expected: "Array<Array<Array<Array<number>>>>", actual: "string" })),
       "f",
@@ -121,7 +119,7 @@ describe("§4 — action-by-mismatch-kind (the action comes from the mismatch SH
     // NB: types.ts does not pin which MappedDiagnostic field carries the parameter list
     // for an arity mismatch (unlike 2353, where propertyName/candidateProperties are
     // explicitly documented). Both plausible carriers are populated here so the fixture
-    // is valid regardless of which one the implementation reads from — see final report.
+    // is valid regardless of which one the implementation reads from.
     const out = render(
       hint(
         diag({

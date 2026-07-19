@@ -4,8 +4,8 @@
 // diagnostics; this harvest reads the tool's JSON Schema directly).
 //
 // ─────────────────────────────────────────────────────────────────────────────────────────────
-// OBSERVED TS DIAGNOSTIC CODES (recorded from an actual run against `createDiagnoseLens`, not
-// assumed from the HINT_WHITELIST — "observation beats expectation" per the task brief):
+// OBSERVED TS DIAGNOSTIC CODES against `createDiagnoseLens` — the actual codes the checker
+// emits, not the codes HINT_WHITELIST would predict a priori:
 //
 //   (a) wrong value type, `(shop/list-orders :count "five")` where `count:number`
 //       → TS2322 (type not assignable), reported at the specific PROPERTY (`count: "five"`)
@@ -27,14 +27,12 @@
 //   (f) property read on typed output — SKIPPED. `toolArrowType`'s R is pinned to `unknown` for
 //       v1 (see json-schema-to-ts.ts's header comment on `unwrapToolResult`'s H-5 rules), so
 //       there is no typed return shape to read a property from; a property read on an `unknown`
-//       return is TS18046 ("'x' is of type 'unknown'"), a different (non-whitelisted, doc §3)
-//       code — not a meaningful case for this harvest.
+//       return is TS18046 ("'x' is of type 'unknown'"), a different (non-whitelisted) code — not
+//       a meaningful case for this harvest.
 //
-// ✅ RESOLVED (2026-07-04, docs/working-proposals/manifold-type-hints-s2-spine.md §9b): this
-// file's own evidence (cases (a)/(d) firing 2322, not the assumed 2345; (b)/(c) firing
-// 2561/2353 depending on whether a near-name candidate exists) is what the whitelist
-// revision cites. `HINT_WHITELIST` now includes 2322/2561/2551 — see the dedicated
-// "whitelist gap, RESOLVED" test below.
+// `HINT_WHITELIST` includes 2322/2561/2551 on the strength of the codes observed above (cases
+// (a)/(d) firing 2322, not 2345; (b)/(c) firing 2561/2353 depending on whether a near-name
+// candidate exists) — see the dedicated "whitelist gap" test below.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 
 import { createDiagnoseLens } from "@inhuman.tools/arrival/type-layer";
@@ -188,15 +186,14 @@ describe("assembleManifoldPrelude — integration: real mistakes bite via create
     return { prelude, lens: createDiagnoseLens(prelude) };
   }
 
-  it("assembles a `declare const _` namespace entry for each non-identifier qualified name — the `/` join character needs escaping (ROLLED BACK 2026-07-06)", () => {
+  it("assembles a `declare const _` namespace entry for each non-identifier qualified name — the `/` join character needs escaping", () => {
     const { prelude } = buildLens();
     expect(prelude.prelude).toContain("declare const _:");
     // "shop/list-orders": the `/` join char is NOT a valid TS identifier char (name-escape.ts's
     // NAMED map escapes it to `$slash$`), and the hyphen inside "list-orders" also needs escaping.
     expect(prelude.prelude).toContain("shop$slash$list$dash$orders");
-    // "weather/get" (slug + tool, no hyphen anywhere) still needs the slash escaped — under the
-    // restored `/`-joined convention every qualified name needs at least the slash escaped,
-    // unlike the interim `_`-joined convention where a hyphen-free name was a fixed point.
+    // "weather/get" (slug + tool, no hyphen anywhere) still needs the slash escaped — every
+    // qualified name needs at least the slash escaped, regardless of whether it also has hyphens.
     expect(prelude.prelude).toContain("weather$slash$get");
     expect(prelude.members).toEqual(["shop/list-orders", "shop/find-customer", "weather/get"]);
   });
@@ -253,9 +250,8 @@ describe("assembleManifoldPrelude — integration: real mistakes bite via create
   });
 
   it(
-    "whitelist gap, RESOLVED (docs/working-proposals/manifold-type-hints-s2-spine.md §9b): " +
-      "the harvest's own evidence (this file) drove the whitelist revision — 2322 (wrong-value-type " +
-      "kwarg) is now whitelisted, so it reaches select.ts instead of being silently dropped",
+    "whitelist gap: 2322 (wrong-value-type kwarg) is whitelisted, so it reaches select.ts " +
+      "instead of being silently dropped",
     () => {
       const { lens } = buildLens();
       const { diagnostics } = lens.diagnose('(shop/list-orders :count "five")', []);

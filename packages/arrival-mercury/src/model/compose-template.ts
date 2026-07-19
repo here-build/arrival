@@ -1,9 +1,8 @@
 /**
  * compose-template — StaticProv → ComposeTemplate (T-compose), the FOURTH
- * pure projection beside circuit-sexpr / circuit-mermaid / to-wireframe
- * (docs/working-proposals/provenance-beautiful-child/compose-phase.md §4;
- * consolidation README §2/§7 Wave 1). Same source (`StaticProv`), same
- * totality discipline (exhaustive 10-arm switch, no default — tsc's
+ * pure projection beside circuit-sexpr / circuit-mermaid / to-wireframe.
+ * Same source (`StaticProv`), same totality discipline (exhaustive 10-arm
+ * switch, no default — tsc's
  * return-type check is the totality proof, I1), same identity-keyed dedup
  * (the C2 census), derived-never-stored, and the seal never reads it.
  *

@@ -9,9 +9,9 @@ function asArray<T>(value: T | T[]): T[] {
 }
 
 /** THE base64 lowering — one Blob → its MCP binary content block. `serializeResult`'s
- *  image/audio branch and R6's per-form extras drain (DiscoveryTool, §2.6) share it verbatim,
- *  so the aggregate and the statement events lower binary identically. Callers gate on the
- *  mime family first: only `image/*` / `audio/*` blobs have a block kind to lower into. */
+ *  image/audio branch and DiscoveryTool's per-form extras drain share it verbatim, so the
+ *  aggregate and the statement events lower binary identically. Callers gate on the mime
+ *  family first: only `image/*` / `audio/*` blobs have a block kind to lower into. */
 export async function lowerBinaryBlob(blob: Blob): Promise<ImageBlock | AudioBlock> {
   let binary = "";
   const bytes = new Uint8Array(await blob.arrayBuffer());
@@ -28,9 +28,6 @@ export async function lowerBinaryBlob(blob: Blob): Promise<ImageBlock | AudioBlo
  * shared lowering: `registerTools` (sdk-adapter) uses it for the official transport, and the custdev
  * loops use it directly. Convention: an object with `success: false` marks the call as an error WITHOUT
  * throwing — so a tool can report a soft failure (e.g. validation) as data, not an exception.
- *
- * (The legacy class-array dispatch — `dispatchTool` / `getToolDefinitions` — was removed with the
- * `ToolInteraction` stack; value-shape tools are dispatched by `registerTools` / `.call()` directly.)
  */
 export async function serializeResult(
   callToolResult: UserlandCallToolResult | UserlandCallToolResult[],

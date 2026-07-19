@@ -16,8 +16,11 @@
  * actually found and killed (session history, provenance-by-perturbation.md §3),
  * frozen here as a permanent guard:
  *   row 1  guard-swap        (the FATAL v2 forge — probe alone said content)
- *   row 2  named-helper      (Fable audit reopening — beta-reduction's reason)
- *   row 3  hidden-const fold (longcat ≥2-agree — "wind collapses clean" killed)
+ *   row 2  named-helper      (beta-reduction's reason — without it the helper
+ *                             call reads as opaque forwarding and the guard's
+ *                             literal hides)
+ *   row 3  hidden-const fold (a const behind an if inside a fold body — collapse
+ *                             must stay "lowered", never combine)
  *   rows 4-5 genuine content / plain fuse (the innocent twins the forges imitate)
  */
 import type { CollapseKind, Integrity, StaticProv } from "../../model/static-prov.js";
@@ -179,7 +182,7 @@ export const FIXTURE_CORPUS: readonly FixtureRow[] = [
       guards: [{ kind: "fused", sources: [muxOf("score", "e"), { kind: "const" }] }],
       alts: [{ kind: "const" }, muxOf("score", "e")],
     },
-    why: "The Fable-audit reopening: without beta-reduction the helper call reads as opaque forwarding and the guard's literal hides. Beta must inline f's body with x bound to the argument's attribution.",
+    why: "Without beta-reduction the helper call reads as opaque forwarding and the guard's literal hides. Beta must inline f's body with x bound to the argument's attribution.",
     landed: true,
   },
   {

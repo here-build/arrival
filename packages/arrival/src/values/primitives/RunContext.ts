@@ -161,8 +161,8 @@ export const CONSTANT_CTX: RunContext = Object.freeze({
  * ADDS over CONSTANT_CTX is provenance as a stated fact: `origin: "parse"` plus the
  * `SourceLocation` the Parser computes for every datum — which, for leaf literals
  * (symbols, strings, numbers, chars, vectors, bytevectors, dicts), is the FIRST source
- * identity they have ever carried (only APair has a location slot; see the 2026-07-11
- * parse-ctx consumer map).
+ * identity they have ever carried (only APair has a location slot — every other node
+ * kind's source identity lives on the ctx channel alone).
  *
  * Migration contract (staged — this wave): the ctx channel CARRIES the location;
  * `APair.setLocation` stays a derived MIRROR the Parser also writes, so every existing

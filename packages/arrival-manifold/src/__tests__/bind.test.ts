@@ -146,11 +146,6 @@ describe("buildManifoldEnv", () => {
     ).rejects.toThrow('tool name collision on "search"');
   });
 
-  // The underscore-join collision test ("met_museum"+"x" vs "met"+"museum_x" joining to the
-  // identical string) is DELETED here — impossible under the restored `/` join (2026-07-06
-  // separator revert): `/` never appears inside a slug or bare tool name, so two DISTINCT
-  // (slug, tool) pairs can no longer join to the same qualifiedName.
-
   it("namespaces same-named tools across different servers without collision", async () => {
     const githubInvoke = vi.fn(async () => "github-result");
     const slackInvoke = vi.fn(async () => "slack-result");

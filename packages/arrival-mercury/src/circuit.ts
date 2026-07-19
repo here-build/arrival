@@ -46,8 +46,8 @@ export {
   type SourceLens,
   toComposeTemplate,
 } from "./model/compose-template.js";
-// The fifth projection (provenance-beautiful-child, control-plane-collapse.md):
-// the Q1+Q2 hierarchical state machine over the same StaticProv circuit.
+// The fifth projection: the hierarchical state machine over the same
+// StaticProv circuit.
 export {
   collapseView,
   type ControlMachine,

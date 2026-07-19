@@ -1,14 +1,14 @@
-// THE SCOPE-CONFUSION DOOR (docs/working-proposals/manifold-scope-confusion-door.md, V-specified
-// 2026-07-04). SIBLING of the unbound-in-expr did-you-mean door, on the DISJOINT class of names
-// the MODEL ITSELF defined: a same-program cascade (an earlier statement failed so a later
-// top-level define never bound), a cross-scope reference (X was only ever let/lambda-bound,
-// never at top level), or the ≥2-local "don't force an implementation" case. Runs LAST in the
-// unbound-in-expr classifier — after the three-tier tool-name door and the data-literal quoting
-// hint (both unboundInExprDoor), and after arrival's own polyglot-rich-errors enrichment (which
-// rides inline in the raw message by the time this door would run).
+// scopeConfusionDoor covers names the MODEL ITSELF defined but couldn't reach: a same-program
+// cascade (an earlier statement failed so a later top-level define never ran), a cross-scope
+// reference (X was only ever let/lambda-bound, never at top level), or the ≥2-local case where
+// neither binding is forced as the intended one. It is a SIBLING of the unbound-in-expr
+// did-you-mean door, on this disjoint name class, and runs LAST in the unbound-in-expr
+// classifier — after the three-tier tool-name door and the data-literal quoting hint, and after
+// arrival's own polyglot-rich-errors enrichment (which rides inline in the raw message by the
+// time this door would run).
 //
-// PURE unit coverage only (no MCP wiring) — split from arrival-manifold's `scope-confusion.test.ts`
-// (2026-07-05 package split); the e2e-through-a-real-manifold-tool half stays there.
+// Pure unit coverage only (no MCP wiring) — the e2e-through-a-real-manifold-tool half lives in
+// the sibling arrival-manifold package.
 
 import { describe, expect, it } from "vitest";
 

@@ -7,7 +7,7 @@ import type { Span } from "../coreform/types.js";
 import type { FlowedUpOverridable, OverridableExport } from "./overridable.js";
 
 /**
- * One top-level module-face export — BUG #89's coherence pair. `scheme` is the
+ * One top-level module-face export: a `scheme`/`js` coherence pair. `scheme` is the
  * RAW scheme identifier (`"over-threshold?"`) exactly as written in the
  * source: this is the ONLY spelling an importing file's own source ever uses
  * (`(over-threshold? …)`), so it is also the registry-overlay KEY
@@ -56,7 +56,7 @@ export interface ExportShape {
    *  cannot see the sibling's emitted `async` keyword, only its shape. */
   readonly defaultAsync?: boolean;
   /** This file's OWN top-level `define/overridable`s, folded to a portable
-   *  triple (TASK #87 Q2) — `project.ts`'s cone walk unions these across the
+   *  triple — `project.ts`'s cone walk unions these across the
    *  WHOLE transitive require-graph reachable from an entry pipeline, so its
    *  signature is the transitive knob set, not just its own file's. Always
    *  populated (module or pipeline face alike), even when nothing ever
@@ -91,7 +91,7 @@ export type BuildWarningCode =
    *  reason — dangling (no such file in the project), or the target itself
    *  never got a shape recorded (an upstream cycle/data-parse-error). */
   | "build/unresolved-require"
-  /** A cycle in the require graph (`project.ts`'s `topoSort`). TASK #84: `path`
+  /** A cycle in the require graph (`project.ts`'s `topoSort`). `path`
    *  + `span` name the ANCESTOR file's own closing `(require …)` statement —
    *  the one whose target is still mid-compile on the DFS stack — never the
    *  REVISITED node (which has no CoreForm site of its own for this warning
@@ -113,13 +113,13 @@ export type BuildWarningCode =
   /** A `.json`/`.yaml`/`.txt` file that failed to parse. No span: a data-file
    *  parse error has no CoreForm position (see this lane's report). */
   | "build/data-parse-error"
-  /** TASK #87 Q2: a flowed-up overridable's bare name collided (with the
+  /** A flowed-up overridable's bare name collided (with the
    *  entry pipeline's own local overridable names, or with another cone
    *  entry's) and was namespaced `<moduleAlias>.<name>` instead. No span: the
    *  collision is a whole-project fact (`project.ts`'s cone walk), not one
    *  CoreForm site's — attached to the entry pipeline's own path. */
   | "build/overridable-flow-up-namespaced"
-  /** TASK #87 Q2: a flowed-up overridable's declared default (in the
+  /** A flowed-up overridable's declared default (in the
    *  REQUIRING file, not the one that declared it) wasn't a plain literal —
    *  it still gets a full explicit-arg/env chain, only the innermost
    *  fallback becomes `undefined` rather than silently re-deriving a value
@@ -189,20 +189,20 @@ export interface CompileFileOptions {
   /** Relative import specifier this file should use to reach the copied stage-0
    *  runtime module (e.g. `"./stage0.js"`, or `"../stage0.js"` when nested). */
   readonly runtimeImportPath: string;
-  /** Which classifier verdict this file got (TASK #87): `"pipeline"` ⇒ the
+  /** Which classifier verdict this file got: `"pipeline"` ⇒ the
    *  WHOLE file becomes `export default function run(params = {}) { … }`
    *  (thunked, every `define/overridable` lifted to the env-chained params
-   *  cone, PLUS the transitive flow-up cone below — BUG #90 fixed `params`'s
-   *  own declared `= {}` default, `scm-module.ts`'s `withParamsDefault`, so
-   *  calling the emitted function with zero arguments — the common case, every
-   *  knob resolving from env/default — is no longer an arity error); `"module"`
+   *  cone, PLUS the transitive flow-up cone below — `params`'s own declared
+   *  `= {}` default, `scm-module.ts`'s `withParamsDefault`, means calling the
+   *  emitted function with zero arguments — the common case, every knob
+   *  resolving from env/default — is never an arity error); `"module"`
    *  ⇒ ordinary module face (named exports) plus, if the file ends in a
    *  trailing expression, `export default function Main() { … }` — the
    *  program face is ALWAYS an on-demand callable, never an eager value
    *  (reference-program-face-always-function); its OWN local overridables
    *  still get a real (params-less) env-chain. */
   readonly isPipeline: boolean;
-  /** TASK #87 Q2 — the pipeline's TRANSITIVE overridable cone: every
+  /** The pipeline's TRANSITIVE overridable cone: every
    *  overridable reachable via the require-graph from this file, already
    *  collision-resolved (`project.ts`'s cone walk — see `FlowedUpOverridable`'s
    *  own doc for the namespacing rule). Empty when `isPipeline` is false;

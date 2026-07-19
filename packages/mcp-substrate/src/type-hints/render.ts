@@ -1,4 +1,4 @@
-// render — Ring 1 pure rendering (doc §4, docs/working-proposals/manifold-type-hints.md rev 3).
+// render — Ring 1 pure rendering (docs/working-proposals/manifold-type-hints.md §4).
 // The bifunctor discipline: the model never learns the program was lowered to TypeScript, so
 // the TS carrier vocabulary (`Cons<T> | null`, `readonly T[]`, `Promise<R>`, `TS\d{4}`,
 // literal "undefined") must NEVER surface. Two fixed tables:

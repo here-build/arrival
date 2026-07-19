@@ -1,17 +1,10 @@
-// RING-2 red integration test suite — src/type-hints/{select,render,context-ring}.ts do
-// NOT exist yet (RING-1, see sibling select.test.ts/render.test.ts), and on top of that
-// `ManifoldToolOptions.typeHints` does not exist yet EITHER — that is RING-2's own gap.
-// This suite exercises the REAL manifold tool (createManifoldTool / buildManifoldServer,
-// the actual statement loop, the real DoorSession, the real listChanged world-rebuild)
-// with a STUB TypeHintLens injected through a future-shaped options object, cast down to
-// ManifoldToolOptions at the call boundary (see `withTypeHints` below). Every assertion
-// here pins END-TO-END WIRING behavior the design doc (docs/working-proposals/
-// manifold-type-hints.md, rev 3) promises — §1 (activation/race/G6), §3 (G7 telemetry,
-// G5/G12 cap+trailing-block), G13.2 (ring lifecycle) — NOT the pure Ring-1 select/render/
-// context-ring logic, which the sibling files in this directory already pin in isolation.
-//
-// See src/__red__/README.md for the migration path once the option lands: once
-// `typeHints` is real, this file moves to src/__tests__/type-hints/integration.test.ts.
+// Integration suite for manifold type-hints — exercises the REAL manifold tool
+// (createManifoldTool / buildManifoldServer, the actual statement loop, the real
+// DoorSession, the real listChanged world-rebuild) with a STUB TypeHintLens injected
+// through `ManifoldToolOptions.typeHints`. Every assertion here pins END-TO-END WIRING
+// behavior — activation/race, telemetry, cap+trailing-block delivery, ring lifecycle —
+// NOT the pure select/render/context-ring logic, which the sibling files in this
+// directory already pin in isolation.
 
 import { LexicalScope } from "@inhuman.tools/arrival";
 import { assembleAmbient, type AssembledAmbient } from "@inhuman.tools/arrival/env";
@@ -55,11 +48,8 @@ const textOf = (r: { content: unknown }): string =>
     .map((b) => b.text)
     .join("\n");
 
-/** `typeHints` is a real `ManifoldToolOptions` field now (Phase 2 of the 2026-07-05 package
- *  split) — this helper is a plain builder, kept for call-site brevity across this whole suite
- *  rather than repeating `{ ...base, typeHints: { mode, lens } }` at every `createManifoldTool`
- *  call (no cast needed any more — the RED-era scaffolding this file used before the option was
- *  wired for real is gone). */
+/** Plain builder, kept for call-site brevity across this whole suite rather than repeating
+ *  `{ ...base, typeHints: { mode, lens } }` at every `createManifoldTool` call. */
 function withTypeHints(base: ManifoldToolOptions, mode: TypeHintsMode, lens: TypeHintLens): ManifoldToolOptions {
   return { ...base, typeHints: { mode, lens } };
 }
@@ -522,7 +512,7 @@ describe("RING-2 (integration) — manifold type-hints, through the REAL tool + 
       // SAME code's second occurrence (post-rebuild) renders terse, not verbose again.
       const postRebuild = await call("(alpha)");
       // `alpha`'s inputSchema is `{ type: "object" }` (no properties/required) — its synthesized
-      // example call degrades to a bare `(up/alpha)` (example-call.ts's V's design, 2026-07-05).
+      // example call degrades to a bare `(up/alpha)` (example-call.ts).
       expect(textOf(postRebuild)).toBe(
         "Error: Unbound variable `alpha'\n  the symbol you want is `up/alpha` — e.g. (up/alpha).",
       );

@@ -1,23 +1,14 @@
-// CALIBRATION-CONSTANT DEFAULT-VALUE TABLE — the drift guard for "constant → injected option"
-// (docs/working-proposals/arrival-manifold-package-split-2026-07-05.md, round 1's "MODEL-AGNOSTIC
-// / HARNESS-AGNOSTIC AUDIT" + "Test safety net" gap #6). Round 1 mandates that every calibration
-// constant become an injected runner option, defaulted to TODAY'S value, once the doors-steering-
-// runner is extracted — a classic site for a default to silently drift during that conversion
-// (`10`→`8`, `0.7`→`0.75`, …). Some constants were already pinned (manifold-tool.test.ts pins the
-// response-size/attachments SCHEMA defaults verbatim) — this file adds the ones that were not:
-// futility.ts's RING_SIZE, and doors.ts's TIER3_TOP/isCloseName distance-gate constants.
-// (competence.ts's WINDOW_SIZE/STABLE_THRESHOLD were pinned here too until 2026-07-06, when the
-// whole COMPETENCE v2 remedy-gradient mechanism was removed alongside the truncation banner it
-// fed — a measured null effect on task pass-rate.)
+// CALIBRATION-CONSTANT DEFAULT-VALUE TABLE — pins today's value of every calibration constant
+// that is not already covered elsewhere (manifold-tool.test.ts pins the response-size/attachments
+// SCHEMA defaults). Currently: futility.ts's RING_SIZE, and doors.ts's TIER3_TOP/isCloseName
+// distance-gate constants. The guard exists because these constants are candidates to become
+// injected runner options — a classic site for a default to silently drift during that kind of
+// conversion (`10`→`8`, `0.7`→`0.75`, …); pinning them literally here makes any such drift fail
+// loudly instead of shipping silently.
 //
-// THIS FILE ADDS `export` TO PREVIOUSLY MODULE-PRIVATE CONSTANTS (futility.ts's RING_SIZE,
-// doors.ts's TIER3_TOP) AND ONE FUNCTION (doors.ts's isCloseName) — see each symbol's own doc
-// comment for the one-line justification. This is the ONLY production-code touch anywhere in
-// this test-safety-net batch: purely additive (an `export` keyword), zero behavior change, and
-// it is exactly what Round 1 already calls for as a first, minimal step toward "these become
-// injected options" — done here as "these become OBSERVABLE" only, deliberately stopping short
-// of actually wiring them as options (that is real design work for the migration itself, not a
-// side effect of writing a test).
+// futility.ts's RING_SIZE and doors.ts's TIER3_TOP/isCloseName are exported here purely so this
+// file can observe them — a strictly additive `export`, zero behavior change to the modules
+// themselves. They are not yet wired as configurable options; that remains real design work.
 
 import { describe, expect, it } from "vitest";
 
@@ -47,14 +38,14 @@ describe("calibration-constant registry — today's documented defaults, pinned 
     });
 
     it("edit distance 2 on a SHORT (<8 char) name is NOT close — the length gate bites", () => {
-      // "never" (5) vs "every" (5): substituting n→e is distance... let's use an unambiguous
-      // distance-2 pair with no prefix relation: "abcde" vs "abfge" (2 substitutions), length 5.
+      // "abcde" vs "abfge": 2 substitutions, no prefix relation, length 5 — isolates the
+      // length-gate boundary from the separate prefixPair branch.
       expect(isCloseName("abcde", "abfge", noParts)).toBe(false);
     });
 
     it("edit distance 2 on a LONG (>=8 char) name IS close — the widened bar for realistic tool names", () => {
-      // "search_files" (12) vs "search_fales" (2 substitutions: i->a, e removed/added — construct
-      // a clean 2-edit pair): "directory_tree" (14) vs "directery_tred" (2 substitutions), both >=8.
+      // "directory_tree" (14) vs "directery_tred" (2 substitutions), both >=8 chars — the
+      // widened bar applies at this length.
       expect(isCloseName("directery_tred", "directory_tree", noParts)).toBe(true);
     });
 

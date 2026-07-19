@@ -1,14 +1,14 @@
 /**
- * R7RS numeric-tower conformance — bug ledger (RATIO rework, v2.1).
+ * R7RS numeric-tower conformance — bug ledger (RATIO representation).
  *
  * Why this file was inverted
  * ---------------------------
  * This file used to pin the bigint-rational representation (`AExact = (num:
  * bigint, denom: bigint)`, arbitrary precision). `docs/design-history/
- * arrival-one-number-rework.md` (v2.1, ruled 2026-07-14) replaced that with
+ * arrival-one-number-rework.md` replaced that with
  * **RATIO**: `AExact = (num: number, denom: number)`, both JS `number`s,
  * `Number.isSafeInteger` at all times, gcd-normalized, `denom > 0`. The load
- * -bearing invariant (plan §0.2-0.3): exact arithmetic on safe operands is
+ * -bearing invariant (its §0.2-§0.3): exact arithmetic on safe operands is
  * exact — but the moment a result's numerator or denominator would leave
  * safe-integer range, the operation THROWS a teaching error instead of
  * silently widening to bigint or silently rounding to a float. This is the

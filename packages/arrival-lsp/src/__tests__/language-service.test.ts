@@ -199,10 +199,9 @@ describe("getCompletionsAtPosition — completions in Scheme coordinates", () =>
 
   // BACKPORTING: tsc's own completion list answers in EMITTED terms — `cleanName` (mercury's
   // types-emit.ts) collapses a non-identifier-safe scheme name to a camelCase TS identifier
-  // (`config/audience` → `configAudience`) so the lowered program compiles. Before this fix,
-  // that EMITTED spelling leaked straight into the completion list — a real, user-visible bug
-  // (screenshot, 2026-07-05): selecting it would insert a name that doesn't exist in scheme,
-  // silently breaking the reference. `computeEntries` now maps each candidate back through
+  // (`config/audience` → `configAudience`) so the lowered program compiles. Left unmapped,
+  // that emitted spelling would leak into the completion list and, if selected, insert a name
+  // that doesn't exist in scheme. `computeEntries` maps each candidate back through
   // `programDeclaredNames` (populated at the mint site in emitTypes — the transform is
   // lossy/many-to-one, so there is no general inverse function, only a tracked mapping).
   it("backports a slash-bearing define/overridable name to its ORIGINAL scheme spelling, not the emitted camelCase", () => {
@@ -227,8 +226,8 @@ describe("getCompletionsAtPosition — completions in Scheme coordinates", () =>
 });
 
 describe("completion subtraction — exact, not name-greedy", () => {
-  // Audited 2026-06-10: name-only subtraction ate a program local that collides
-  // with a substrate (type-only) name. Keys are `name kind` pairs now.
+  // Subtraction keys on `name kind` pairs, not name alone — a program local
+  // that collides with a substrate (type-only) name must survive subtraction.
   it("a local shadowing a substrate type name (Array) still completes", () => {
     const scheme = `(define Array (list 1 2))\n(Arr`;
     const names = new Set(ls.getCompletionsAtPosition(scheme, scheme.length).map((e) => e.name));
@@ -347,9 +346,9 @@ describe("getTypeValidCandidates — Layer T, the type-narrowed mask", () => {
   });
 
   it("narrows a FULL-ROSTER pool without truncation loss (the typeToString cutoff bug)", () => {
-    // Audited 2026-06-10: reading the probe tuple via typeToString truncated
-    // past ~160 chars, silently keeping every candidate beyond the cutoff.
-    // Element-wise checker reads narrow the whole pool — the tail included.
+    // Element-wise checker reads narrow the whole pool, tail included — reading the
+    // probe as a single tuple via typeToString truncates past ~160 chars, which
+    // would silently keep every candidate beyond the cutoff.
     const pool = ls.getCompletionsAtPosition("(car ", 5).map((e) => e.name);
     expect(pool.length).toBeGreaterThan(50); // the full roster reaches the probe
     const narrowed = new Set(ls.getTypeValidCandidates("(car ", 5, pool));

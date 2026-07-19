@@ -336,21 +336,16 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
   }
 
   private boxElement(raw: unknown): SchemeValue {
-    // ─── THE HYGIENE LAW (V, 2026-07-14), ENFORCED AT THE PENETRATION POINT ──────────────────
+    // ─── THE HYGIENE LAW, ENFORCED AT THE PENETRATION POINT ──────────────────────────────────
     //
-    //   "Each membrane penetration should be tracked and explicit. We should never accept both a
-    //    monadic AValue and a primitive JSValue. That is the hygienic discipline that makes every
-    //    flip between a Scheme entity and a native JS entity OBSERVED — the only way to have
-    //    hygiene when the host is both the interpreter runner and a Graal-style parallel world."
-    //
-    //   "AJSArray's source should contain JS values PURELY — only values that moved into the JS
-    //    world. It may include reverse-membraned dict proxies, as a special case of the
-    //    matryoshka-style processing we already do."
-    //
-    // So `source` holds the UNBOXED world only: JS primitives, plain objects/arrays, and egress
-    // proxies. The proxy carve-out needs no clause of its own — an egress proxy is a Proxy over a
-    // plain target, so `instanceof AValue` is already false for it. It IS a JS-world value; that is
-    // the entire point of the reverse membrane.
+    // Each membrane penetration must be tracked and explicit: nothing here may accept both a
+    // monadic AValue and a primitive JSValue at the same slot. That is the hygienic discipline
+    // that makes every flip between a Scheme entity and a native JS entity OBSERVED — the only
+    // way to have hygiene when the host is both the interpreter runner and a Graal-style parallel
+    // world. So `source` holds the UNBOXED world only: JS primitives, plain objects/arrays, and
+    // egress proxies (a reverse-membraned dict proxy, as a special case of the matryoshka-style
+    // processing already done elsewhere). The proxy carve-out needs no clause of its own — an
+    // egress proxy is a Proxy over a plain target, so `instanceof AValue` is already false for it.
     //
     // The check lives HERE, at the crossing, and not in the constructor on purpose. A borrowed
     // array's whole contract is that it is LAZY — `.length` and `schemeToJs` never touch the
@@ -361,9 +356,9 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
     // An AValue arriving here means someone pushed a SCHEME value into a JS-world store: the flip
     // went unobserved, and `jsToScheme` below would then DEEP-RE-STAMP that value with this
     // container's provenance (rosetta.ts's inbound AValue claim re-stamps unless the provenance is
-    // empty or identical), silently destroying its lineage. That is not hypothetical — it is what
-    // corrupted per-element provenance when a spine view was briefly projected over an owned
-    // vector, and only the term-carrier law noticed. Fail loudly instead.
+    // empty or identical), silently destroying its lineage. That is not hypothetical — a spine view
+    // once projected over an owned vector corrupted per-element provenance exactly this way, caught
+    // only by the term-carrier law. Fail loudly instead.
     Error.invariant(
       !(raw instanceof AValue),
       "AJSArray: `source` must hold JS-world values only — an AValue here means a scheme value was " +

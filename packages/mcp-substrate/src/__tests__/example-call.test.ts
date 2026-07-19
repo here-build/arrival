@@ -4,11 +4,10 @@
 // imported).
 //
 // Non-enum scalar stubs render as TYPE-PLACEHOLDER holes (`#|string|#`, `#|number|#`,
-// `#|boolean|#`), never a fabricated concrete value (docs/args-error-reporting-v2.md §2.3/§2.6
-// in second-foundation/arrival-manifold: concrete examples drift — models copy rendered exprs
-// verbatim, so an invented value becomes the model's next call). An enum slot is EXEMPT (a
-// real declared member is schema fact, not invention) and a schema-authored real value
-// (`const`/`examples`/`default`) wins over synthesis entirely — see the "real-value
+// `#|boolean|#`), never a fabricated concrete value: concrete examples drift — models copy
+// rendered exprs verbatim, so an invented value becomes the model's next call. An enum slot is
+// EXEMPT (a real declared member is schema fact, not invention) and a schema-authored real
+// value (`const`/`examples`/`default`) wins over synthesis entirely — see the "real-value
 // precedence" describe block below.
 
 import { describe, expect, it } from "vitest";
@@ -435,21 +434,18 @@ describe("synthesizeExampleCall — rendering conventions (mirrors doors.ts's re
 });
 
 describe("synthesizeExampleCall — FIXED: a non-bare TOP-LEVEL property name no longer renders invalid scheme", () => {
-  // ★ This WAS a bug, now fixed — but NOT by quoting. There are TWO key renderers here:
-  //   • renderLiteral (nested object keys): `BARE_KEY.test(k) ? ":${k}" : '"${...}"'` — QUOTES a
-  //     non-bare key. The test just below proves this works for a nested object.
-  //   • renderCall (TOP-LEVEL kwargs): used to emit `:${k}` unconditionally, no bare-key guard.
-  // The obvious-looking fix ("just reuse renderLiteral's quoting here too") turns out to be
-  // WRONG: verified empirically against the real reader that `:"weird key"` does NOT parse as a
-  // quoted-keyword atom at all — it splits into a bare `:` plus a stray string, producing an
-  // unrelated "Unbound variable" error, never a working call. Quoting only exists as a DICT
-  // LITERAL key (a `{...}` object's key slot); the `:key value` kwargs-call grammar has no
-  // quoted-key form to fall back on — a non-bare-identifier property name is STRUCTURALLY
-  // inexpressible as a kwarg at all, however it's spelled.
-  // So the actual fix: `renderCall` now detects any non-bare-identifier key among its entries
-  // and degrades to the SAME safe bare-call fallback this file already uses for "no schema" /
-  // "all-optional" — `(qualifiedName)` alone — rather than emit syntax that would silently fail
-  // to parse as intended. Never a crash, never a fabricated-looking but broken argument.
+  // Two key renderers exist. renderLiteral (nested `{...}` object-literal keys) QUOTES a
+  // non-bare key: `BARE_KEY.test(k) ? ":${k}" : '"${...}"'` — the test just below proves this
+  // for a nested object. renderCall (TOP-LEVEL `:key value` kwargs) has no quoted-key form to
+  // fall back on: `:"weird key"` does not parse as a quoted-keyword atom — the reader splits it
+  // into a bare `:` plus a stray string, producing an unrelated "Unbound variable" error, never
+  // a working call. Quoting only exists at a DICT LITERAL key slot (a `{...}` object's key); the
+  // `:key value` kwargs-call grammar has no quoted-key fallback — a non-bare-identifier property
+  // name is STRUCTURALLY inexpressible as a kwarg, however it's spelled. So `renderCall` detects
+  // any non-bare-identifier key among its entries and degrades to the SAME safe bare-call
+  // fallback this file already uses for "no schema" / "all-optional" — `(qualifiedName)` alone —
+  // rather than emit syntax that would silently fail to parse as intended. Never a crash, never
+  // a fabricated-looking but broken argument.
   it("a space in a required top-level key degrades to the bare call — no broken kwargs emitted", () => {
     const schema: ToolJsonSchema = {
       type: "object",

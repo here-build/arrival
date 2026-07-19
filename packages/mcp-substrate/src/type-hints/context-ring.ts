@@ -41,8 +41,8 @@ const AFTER = String.raw`(?:$|[\s()\[\]{}])`;
 
 /** The ROSTER-BASED half of tool-valued detection (see `TOOL_SYMBOL`'s blind-spot doc above):
  *  a token-boundary-aware regex matching any of `names` as a whole symbol, or `undefined` when
- *  `names` is empty (no roster supplied — the caller falls back to `TOOL_SYMBOL` alone,
- *  byte-identical to this module's pre-2026-07-05 behavior). Escapes each name defensively:
+ *  `names` is empty (no roster supplied — the caller falls back to `TOOL_SYMBOL` alone).
+ *  Escapes each name defensively:
  *  a real bound tool's qualified name is wire-constrained to `^[a-zA-Z0-9_-]+$` (bind.ts) and
  *  so never actually needs it, but nothing here can enforce that on a misbehaving upstream
  *  server — a regex-metacharacter name should degrade to "doesn't match", never a malformed
@@ -58,7 +58,7 @@ function knownToolPattern(names: Iterable<string>): RegExp | undefined {
  *  when the caller has one — closes `TOOL_SYMBOL`'s slugless-binding blind spot (see its doc
  *  above) without weakening the existing shape heuristic (both checks OR together). Optional and
  *  defaulted to empty so every existing direct caller (this package's own unit tests, which
- *  construct a ring with no env/roster at all) keeps today's exact behavior. Note this is a
+ *  construct a ring with no env/roster at all) keeps working unchanged. Note this is a
  *  constructor-only parameter — {@link ContextRing}'s `push`/`entries` contract (the part
  *  documented as frozen) is untouched. */
 export function createContextRing(knownToolNames: Iterable<string> = []): SerializableContextRing {

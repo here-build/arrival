@@ -1,15 +1,10 @@
 /**
- * exec-seam.bench.test.ts — the survivor of `evaluator-benchmark.spec.ts`
- * (retired in the 2026-07-09 suite consolidation).
- *
- * The old file measured a "LIPS (promise-based)" side against a "Generator (flat
- * trampoline)" side and reported a "speedup" between them. That comparison was fiction:
- * both sides trace to the SAME
- * generator evaluator (`eval/evaluator.ts`'s `exec`/`run`) — the "LIPS" label survived only
- * because `eval/generator-exec.ts`'s public `exec()` re-exports it, a naming fossil from
- * before the `lips` handle was retired (0849de566b). What the old numbers actually measured
- * was the cost of the PUBLIC EXEC SEAM — string parse, `Resolver`/`Capabilities` assembly,
- * `RunContext` minting — layered on top of one evaluator, not two evaluators racing.
+ * exec-seam.bench.test.ts measures the cost of the PUBLIC EXEC SEAM — string parse,
+ * `Resolver`/`Capabilities` assembly, `RunContext` minting — layered on top of ONE
+ * evaluator (`eval/evaluator.ts`'s `exec`/`run`, re-exported by `eval/generator-exec.ts`).
+ * There is only one evaluator: any two measurements here differ solely in how much of
+ * the seam runs, never in which evaluator ran, so no number in this file is a
+ * "speedup" between implementations.
  *
  * This file measures that seam honestly, as three nested costs for the SAME expression
  * `(+ 1 2 3 4 5)`, each isolating one more layer:
@@ -87,7 +82,7 @@ describe("exec seam overhead — one evaluator, three measurement layers", () =>
     report("run(evaluate(ast))", ITERATIONS, performance.now() - start);
   });
 
-  // ── THE CUT PATH (ENV T2 of the environment-resolution-chain design) ──
+  // ── THE CUT PATH (the environment-resolution-chain's compiled default) ──
   // The layers above run GLASS ({ env }): the resolver wraps the custom env's live
   // `__parent__` walk, which the compiled resolution chain deliberately does not touch.
   // The chain's promised win is the DEFAULT (cut) path — `Capabilities.assembled(user_env)`

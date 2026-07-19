@@ -26,8 +26,8 @@ const SURFACE_LINT_INTERP_SUBSCRIPT = 90001;
  * reject them; prose is prose) but near-certainly not what the author meant.
  *
  * `@id[` — an at-body interpolation stops at the bare name, so a tight `[:key]`
- * after it is literal prose, silently. Found by the LEARN.md custdev loop
- * (LongCat wrote `@s[:baseline]` expecting keyed access). Excluded: `,@` splices,
+ * after it is literal prose, silently. Found by the LEARN.md custdev loop (an
+ * agent wrote `@s[:baseline]` expecting keyed access). Excluded: `,@` splices,
  * spaced brackets, and the explicit-boundary form `@|id|[` — an author who wrote
  * the boundary already decided where the name ends, so trailing prose brackets
  * are plausibly deliberate. A bare tight `@id[` has no other plausible intent.

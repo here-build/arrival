@@ -1,13 +1,10 @@
 /**
- * IDIOMS — the named cross-node idiom decision (constitution §3.1/§3.5, Law C;
- * docs/working-proposals/arrival-mercury/ — this is the opening pair, landed at
- * Phase-2 opening per §9's migration plan). E2b's dissolution (engine plan §2
- * E2: "CSE and the peephole pair become sharing/idiom decision views…
- * decided pre-census"): the old whole-tree `peephole(classified)` PASS is
- * gone. `idiomDecisionAt` is a per-node QUERY — `../model/model.ts`'s
+ * IDIOMS — the named cross-node idiom decision. `idiomDecisionAt` is a
+ * per-node QUERY, not a whole-tree pass — the old whole-tree
+ * `peephole(classified)` PASS is gone. `../model/model.ts`'s
  * `sm.idiomAt(node)` wraps it (memoized, id-floor-tracking); the WALKER
  * consults it inline (`../walker/walk.ts`'s `lowerApp`, at the top, before any
- * other rung of the §4.2 dispatch ladder) instead of the tree having been
+ * other rung of its dispatch ladder) instead of the tree having been
  * pre-rewritten. Nothing here walks a tree anymore; every function is a pure
  * per-node (or whole-program-shadow) predicate.
  *
@@ -43,11 +40,10 @@
  * that shadows `car` is corpus-authoring malpractice … the throw makes that
  * assumption an enforced invariant instead of a silent blind spot") — but where
  * that module throws (it is asserting an invariant about a fixed, curated
- * corpus), this decision instead ANSWERS "no idiom applies" (constitution's own
- * Law F stance: "the failure mode of this design is always 'uglier output',
- * never 'wrong output'" — declining an optimization is always safe; hard-failing
- * an otherwise-valid compile over an unrelated local rebind is not). The
- * over-approximation is deliberately coarse — one flat, whole-program name
+ * corpus), this decision instead ANSWERS "no idiom applies" — declining an
+ * optimization is always safe; hard-failing an otherwise-valid compile over an
+ * unrelated local rebind is not. The over-approximation is deliberately
+ * coarse — one flat, whole-program name
  * census, no real scope nesting (porting the walker's full `schemeFrames` stack
  * just to answer "is `car` ever shadowed" would cost as much machinery as
  * `walk()` itself, exactly gate1/measure.ts's own reasoning) — so a shadow

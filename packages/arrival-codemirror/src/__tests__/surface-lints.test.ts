@@ -1,7 +1,7 @@
 /**
  * Sugarcoat surface lints — valid-but-suspicious patterns the reader must not reject
  * (faithful-where-valid) but the editor should flag. Origin: LEARN.md custdev loop,
- * LongCat wrote `@s[:baseline]` expecting keyed access and got literal prose.
+ * an agent wrote `@s[:baseline]` expecting keyed access and got literal prose.
  */
 import { describe, it, expect } from "vitest";
 import { sugarcoatSurfaceLints } from "../sugarcoat-ide.js";

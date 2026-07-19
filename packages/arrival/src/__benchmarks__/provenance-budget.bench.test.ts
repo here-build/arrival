@@ -1,16 +1,17 @@
 /**
- * provenance-budget.bench.test.ts — Q19: THE R3 HARD GATE (docs/PROVENANCE.md §5
- * storage-bound hard gate + Appendix A). This file carries conjuncts C1 and C3 PLUS
- * all four break-order probes — everything the task scopes to fakes. Conjunct C2
- * (forced mid-run eviction under REAL workerd) lives in the sibling
- * `provenance-budget-workerd.bench.test.ts`, gated by its own `vitest.workerd.config.ts`
- * (opt-in, MERGE BLOCKER — see that file's header for why it cannot live here).
+ * The storage-bound hard gate (docs/PROVENANCE.md §4 + Appendix A), everything
+ * scoped to fakes: the memory-budget assertion, the tier-honesty assertion, and
+ * all four break-order probes. Forced mid-run eviction under REAL workerd lives in
+ * the sibling `provenance-budget-workerd.bench.test.ts`, gated by its own
+ * `vitest.workerd.config.ts` — that half of the pass condition cannot be exercised
+ * against fakes, so it cannot live here.
  *
  * Pass condition, quoted verbatim (Appendix A.2): "the reference workload completes
  * with full provenance inside 128MB with tiering active; the recorded stream
- * reconstructs regions (C1 fold) after a FORCED mid-run eviction; and every drill-in
- * answer carries an honest evidence tier." (The middle clause is C2/workerd's job —
- * this file's C1 asserts the memory budget, C3 asserts the tier-honesty clause.)
+ * reconstructs regions (the stream-fold law) after a FORCED mid-run eviction; and
+ * every drill-in answer carries an honest evidence tier." (The middle clause is the
+ * workerd sibling's job; this file asserts the memory budget and the tier-honesty
+ * clause.)
  */
 import { beforeAll, describe, expect, it } from "vitest";
 
@@ -56,10 +57,10 @@ function ingressFromMints(mints: readonly RecordedMint[]): OffloadIngress {
   return { slots: {}, sources };
 }
 
-// §5 A2 "Program live set" row: "~20MB (workload's own data — what a non-provenanced
-// run uses)." Allocated and held for the C1 measurement's duration so the 128MB
-// assertion is honest about the TOTAL a real run pays, not just provenance's own
-// overhead — see the block's own comment for the full accounting split.
+// Appendix A.2's "Program live set" row: "~20MB (workload's own data — what a
+// non-provenanced run uses)." Allocated and held for this measurement's duration
+// so the 128MB assertion is honest about the TOTAL a real run pays, not just
+// provenance's own overhead — see the block below for the full accounting split.
 const PROGRAM_LIVE_SET_BYTES = 20 * 1024 * 1024;
 
 function allocateProgramLiveSet(bytes: number): Uint8Array {
@@ -105,7 +106,7 @@ describe("C1 — reference workload completes with full provenance inside 128MB 
     await runReferenceWorkload(h);
     const { recordBytes, runBytes } = await storeMetadataBytes(h);
 
-    // §5 A1/A2's own in-memory column: ring (bounded, ~4-8MB) + record/run metadata
+    // Appendix A.2's own in-memory column: ring (bounded, ~4-8MB) + record/run metadata
     // (small once aggregated) + wireframe/template store (~0.2MB placeholder — this
     // workload emits no real WireframeGraph, so we charge the budgeted constant
     // directly rather than fabricate one) + program's own live set. EXCLUDES
@@ -208,7 +209,7 @@ describe("C3 — drill-in answers carry an honest evidence tier (Q18's executor 
       memo,
       key,
       replay: async () => {
-        // §4 R1: "Replay NEVER re-invokes a source; retrospective mint records are
+        // §4: "Replay NEVER re-invokes a source; retrospective mint records are
         // authoritative" — a mint-payload demand is, by construction, outside γ's
         // claimed scope. This is the teaching door, not a stand-in for a bug.
         throw new ReplayScopeError("mint", "mint-node@0", "a mint's payload is recorded, never re-derived by γ");
@@ -226,7 +227,7 @@ describe("C3 — drill-in answers carry an honest evidence tier (Q18's executor 
     const tierMachine = new PayloadTierMachine(payloads);
     const hash = "c3-stub-hash";
     await payloads.put(hash, { value: 99, stampIds: [11] });
-    await tierMachine.evict(hash); // FORCED eviction — §5 A1 tier 4
+    await tierMachine.evict(hash); // FORCED eviction — §4's payload-tiering list, tier 4 (hash-only stub)
 
     const memo = new ReplayMemo();
     const key: ReplayMemoKey = { templateHash: "mint-node", ordinalPath: [1], demand: "value" };
@@ -309,13 +310,13 @@ describe("break-order probe 2 — R2 settle latency on oversize payloads", () =>
     await payloads.put(hash, { value: "x".repeat(64), stampIds: [1] });
 
     expect((await tierMachine.read(hash)).storageTier).toBe("pending");
-    expect((await tierMachine.read(hash)).tier).toBe("recorded"); // pending still answers recorded (§5)
+    expect((await tierMachine.read(hash)).tier).toBe("recorded"); // pending still answers recorded (§4)
 
     await payloads.settle(hash, "settled");
     // Not yet applied — the delay is real (5 ticks), asserted BOUNDED below.
     expect((await tierMachine.read(hash)).storageTier).toBe("pending");
 
-    const MAX_TICKS = 10; // the settle-lag tolerance this probe asserts — "bounded by request lifetime" (§5 A1)
+    const MAX_TICKS = 10; // the settle-lag tolerance this probe asserts — "bounded by request lifetime" (Appendix A's break-order list, item 2)
     let settledAtTick = -1;
     for (let t = 1; t <= MAX_TICKS; t++) {
       payloads.step(1);

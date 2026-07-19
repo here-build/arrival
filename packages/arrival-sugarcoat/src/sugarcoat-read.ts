@@ -236,8 +236,7 @@ const QUOTE_WRAP: Record<string, string> = {
 // `@head{ text }` → (head <part>…); headless `@{…}` defaults to `str`; `@dedent{…}`
 // dissolves to (str <dedented>). Inside a body the only escape is `@`: `@id`
 // interpolates, `@(datum)` grafts code, `@head{…}` nests. Everything else — quotes,
-// newlines, balanced `{}` — is literal text. Spec:
-// docs/package-specific/arrival-sugarcoat/arrival-sugarcoat-at-expressions-2026-07-05.md.
+// newlines, balanced `{}` — is literal text.
 
 // head of `@head{`: any non-delimiter run (str, string-append, dedent, config/x).
 const AT_HEAD = /[^\s{}()[\]"@]/;

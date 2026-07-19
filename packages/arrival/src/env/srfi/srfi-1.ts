@@ -20,14 +20,13 @@
 //
 // DEVIATIONS FROM SRFI-1 (read before porting):
 //   • Multi-return doored on binding; span/break/partition products are (list a b).
-//   • (resolved 2026-07-13) any/every now split by name: `?`-suffixed (any?/every?)
-//     are the HONEST boolean predicates (the old #t/#f-only behavior, relocated
-//     here); bare any/every are SRFI-1's OWN value-returning quantifiers — any →
-//     first truthy predicate RESULT or #f; every → LAST predicate RESULT if every
-//     element-tuple is truthy, #t on empty, #f on first falsy. `some` (Ramda-
-//     familiar name) aliases any? exactly, staying boolean.
-//   • (fixed 2026-07-13) find miss → #f per SRFI-1; predicate verdicts use R7RS
-//     truthiness (only #f is false — '() counts as a match, same as some/every/if).
+//   • any/every are split by name: `?`-suffixed (any?/every?) are the HONEST
+//     #t/#f-only boolean predicates; bare any/every are SRFI-1's OWN value-returning
+//     quantifiers — any → first truthy predicate RESULT or #f; every → LAST predicate
+//     RESULT if every element-tuple is truthy, #t on empty, #f on first falsy. `some`
+//     (Ramda-familiar name) aliases any? exactly, staying boolean.
+//   • find miss → #f per SRFI-1; predicate verdicts use R7RS truthiness (only #f is
+//     false — '() counts as a match, same as some/every/if).
 //   • unfold is NOT SRFI's (p f g seed); historical (fn init) pair-or-#f protocol.
 //   • take/drop/filter/reduce may be representation-polymorphic; SRFI is list-only.
 //     take/drop reject non-collection receivers even at n=0.
@@ -188,17 +187,18 @@ const listAlike = z.listAlike;
 // srfi-13.ts), so the cast restates the TS-declared `AListAlike` shape, not a runtime-verified one.
 // `runCtx` is a required parameter (not a defaulted CONSTANT_CTX) — a plain recursive
 // call (not a dispatch-bound `this: CallCtx`) can't recover the live ctx any other
-// way, so it's threaded explicitly through every recursive step (THREADING GAP,
-// arrival-constant-ctx-audit-2026-07-11.md §2.4, srfi-1.ts:117). The `find` binding
+// way, so it's threaded explicitly through every recursive step. The `find` binding
 // below is the thin dispatch-bound wrapper that supplies it from `this.runCtx`.
 function findImpl(arg: (...args: unknown[]) => unknown, list: AListAlike, runCtx: RunContext): SchemeValue {
   if (list instanceof ANil) {
-    return schemeFalse; // SRFI-1: `find` returns #f on no-match — never '() (was a spec break)
+    // SRFI-1: `find` returns #f on no-match — '() is R7RS-truthy, so it can't double
+    // as the miss sentinel the way it would in a nil-as-false dialect.
+    return schemeFalse;
   }
-  // Seam-routed: `arg` is a callable VALUE now (ANativeProcedure), not a bare fn.
+  // Seam-routed: `arg` is a callable VALUE (an ANativeProcedure), not a bare fn.
   return maybeThen(applyCallback(arg, [list.car], runCtx), function (value) {
     // R7RS truthiness: only #f is false — a '()-returning predicate IS a match
-    // (matches some/every/if; the nil-as-false clause here was a private fork).
+    // (matches some/every/if; nil is never treated as false here).
     if (!is_false(value)) {
       return list.car;
     }
@@ -365,10 +365,9 @@ export default new EnvCapability("scheme/srfi-1", {
     // fold — SRFI-1's bare LEFT fold is deliberately NOT bound under this name: `reduce`
     // (above) IS the left fold here, same fn(element, acc) convention with an explicit
     // seed, and `fold-right` (symbol.define below) covers the right-associative shape. A
-    // teaching door beside its family (errors-as-doors), not a silent absence — formerly
-    // the one "famous-but-absent" row of the dissolved polyglot-rich-errors registry,
-    // now DECLARED capability data resolving through the ordinary chain (which also
-    // makes it typo-suggestible for free — see src/unbound-variable.ts).
+    // teaching door beside its family (errors-as-doors), not a silent absence: DECLARED
+    // capability data resolving through the ordinary chain, which also makes it
+    // typo-suggestible for free (see src/unbound-variable.ts).
     fold: symbol.notImplemented`fold: SRFI-1's bare fold is not bound under this name — use reduce (left fold, fn(element, acc) convention, explicit seed) or fold-right (right-associative); both are bound here`,
     find: symbol.native`find: first list element matching the predicate, else nil`(
       {
@@ -396,16 +395,16 @@ export default new EnvCapability("scheme/srfi-1", {
 
     // ============ SRFI-1 (list library completion) ============
 
-    // take-while / drop-while — tagless-final dispatchers, NOT scheme-spine bodies: the
-    // old `(and (pair? xs) …)` named-let was #f on a vector (`pair?` never holds), so a
-    // tool-result vector silently answered '() instead of raising — a real production
-    // bug, not a hypothetical one. Receiver-LAST, exactly like `reduce` above (scheme
-    // surface is `(take-while pred xs)`; symbol.tagless's convention takes the LAST
-    // scheme arg as receiver, so `xs` lands there and `pred` passes through leading).
-    // The term (`arrival/tagless-final/take-while` — AValue.ts) OWNS the algebra: list
-    // AND vector both answer (list→fresh list; vector→fresh vector, same-kind), and a
-    // receiver declaring NEITHER hits `symbol.tagless`'s own TaglessProtocolError door —
-    // loud, not the old silent '(). pred's role is "control": a selector deciding
+    // take-while / drop-while — tagless-final dispatchers, NOT scheme-spine bodies: a
+    // spine-walking `(and (pair? xs) …)` named-let is #f on a vector (`pair?` never
+    // holds there), so a tool-result vector would silently answer '() instead of
+    // raising. Receiver-LAST, exactly like `reduce` above (scheme surface is
+    // `(take-while pred xs)`; symbol.tagless's convention takes the LAST scheme arg as
+    // receiver, so `xs` lands there and `pred` passes through leading). The term
+    // (`arrival/tagless-final/take-while` — AValue.ts) OWNS the algebra: list AND
+    // vector both answer (list→fresh list; vector→fresh vector, same-kind), and a
+    // receiver declaring NEITHER hits `symbol.tagless`'s own TaglessProtocolError door,
+    // loud rather than a silent '(). pred's role is "control": a selector deciding
     // prefix membership, the same override reasoning as `filter`'s callbackRoles above.
     "take-while": withCallbackRoles(
       {
@@ -438,19 +437,17 @@ export default new EnvCapability("scheme/srfi-1", {
     // scheme surface is `(take xs n)` — xs is FIRST, not last, so symbol.tagless's
     // last-arg-is-receiver convention cannot serve here. Mirrors this file's own
     // `filter` above / lists.ts's `map` instead: `resolveMethod`/`tf` term-lookup IS
-    // the type gate, and a receiver declaring no `arrival/tagless-final/take|drop`
-    // term crashes loudly (TypeError) rather than the old silent '() on a non-pair
-    // (the same production bug take-while/drop-while had — `pair?` is #f on a vector).
-    // The receiver slot stays `z.value` (filter/map's representation-agnostic idiom):
-    // the result is in the RECEIVER'S OWN representation (list or vector), so no
-    // richer scheme-zod collection type is honest for every call site. `n` normalizes
-    // via `.valueOf()`, the vectors.ts `vector-ref` idiom.
+    // the type gate — a receiver declaring no `arrival/tagless-final/take|drop` term
+    // crashes loudly (TypeError), never a silent '() on a non-pair (`pair?` is #f on a
+    // vector, the same hazard take-while/drop-while guard against above). The receiver
+    // slot stays `z.value` (filter/map's representation-agnostic idiom): the result is
+    // in the RECEIVER'S OWN representation (list or vector), so no richer scheme-zod
+    // collection type is honest for every call site. `n` normalizes via `.valueOf()`,
+    // the vectors.ts `vector-ref` idiom.
     //
-    // DELIBERATE BEHAVIOR CHANGE from the old scheme body: SRFI-1's "lis may be any
-    // value once n hits 0" tolerance is GONE — `(take 5 0)` now crashes (does not
-    // support take) instead of silently answering `'()`. Strict types over silent
-    // tolerance: a silent '() on a non-list receiver was the disease this migration
-    // cures, not a feature to preserve.
+    // Strict types over silent tolerance: SRFI-1's "lis may be any value once n hits 0"
+    // tolerance is not honored — `(take xs 0)` on a non-collection receiver is a type
+    // error, not '() (see the file header's DEVIATIONS).
     take: symbol.sequence`take: the first n elements of xs, in xs's own representation (list→fresh list, dotted tails tolerated per SRFI-1; vector→fresh vector)`(
       {
         input: [z.value, z.schemeNumber],
@@ -1055,9 +1052,9 @@ export default new EnvCapability("scheme/srfi-1", {
 
     // any?/every? — HONEST boolean quantifiers over parallel lists (arrival's
     // ?-naming convention); bare any/every are SRFI-1's OWN value-returning
-    // quantifiers (2026-07-13 ruling — see the file header's DEVIATIONS). `some`
-    // is the Ramda-familiar name for SRFI-1's `any`, kept boolean: it aliases any?
-    // exactly (symbol.alias — a byte-identical duplicate binding, never a wrapper).
+    // quantifiers (see the file header's DEVIATIONS). `some` is the Ramda-familiar
+    // name for SRFI-1's `any`, kept boolean: it aliases any? exactly (symbol.alias —
+    // a byte-identical duplicate binding, never a wrapper).
     // %any-null?/%some/%any/%every/%every-value are private helpers; any?/some must
     // precede zip and list-index, which call `some` (forward references across
     // defines in the same capability are legal — checked eagerly, not by textual
@@ -1111,10 +1108,8 @@ export default new EnvCapability("scheme/srfi-1", {
         `(lambda (fn . lists)
          (%some fn lists))`,
       ),
-    // Ramda-familiar name for any? — #t/#f, arrival's historical shape for this verb
-    // (2026-07-13: any? is now the honestly-named primary def; `some` — which used
-    // to BE the primary def, pre-split — dissolves to it byte-for-byte via
-    // symbol.alias).
+    // Ramda-familiar name for any? — #t/#f; dissolves to any? byte-for-byte via
+    // symbol.alias (never its own wrapper).
     some: symbol.alias`any?`,
 
     "%any":
@@ -1128,9 +1123,8 @@ export default new EnvCapability("scheme/srfi-1", {
                  (if r r (loop (map cdr lists)))))))`,
       ),
 
-    // 2026-07-13 ruling: bare `any` is SRFI-1's OWN `any` — the first truthy
-    // predicate RESULT (not the element, not a collapsed #t), or #f. See any?/some
-    // for the honest boolean twin.
+    // Bare `any` is SRFI-1's OWN `any` — the first truthy predicate RESULT (not the
+    // element, not a collapsed #t), or #f. See any?/some for the honest boolean twin.
     any: symbol.define`any: SRFI-1's \`any\` — the first truthy predicate RESULT across the parallel lists (not the element!), or #f; R7RS truthiness means a '()-returning predicate yields '() itself (see any? / some for the honest boolean)`(
       {
         input: [z.lambda],
@@ -1191,10 +1185,10 @@ export default new EnvCapability("scheme/srfi-1", {
                      #f)))))`,
       ),
 
-    // 2026-07-13 ruling: bare `every` is SRFI-1's OWN `every` — the LAST predicate
-    // RESULT once every element-tuple has been truthy, #t on the empty list
-    // (vacuous truth, matches every?), #f on the first falsy result (short-
-    // circuits, same as every?). See every? for the honest boolean twin.
+    // Bare `every` is SRFI-1's OWN `every` — the LAST predicate RESULT once every
+    // element-tuple has been truthy, #t on the empty list (vacuous truth, matches
+    // every?), #f on the first falsy result (short-circuits, same as every?). See
+    // every? for the honest boolean twin.
     every:
       symbol.define`every: SRFI-1's \`every\` — the LAST predicate RESULT if every element-tuple across the parallel lists is truthy, #t on the empty list, #f on the first falsy result (see every? for the honest boolean)`(
         {

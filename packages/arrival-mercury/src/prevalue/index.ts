@@ -1,14 +1,11 @@
 /**
  * STATIC PREVALUATION — a three-valued constant evaluator over CoreForm's
- * `if`/`and`/`or` (docs/working-proposals/arrival-mercury/dnf-prevaluation-
- * evidence.md; gate3-human-grade-rulings.md's R-G6, "not a sidecar re-ruling").
- * Ported in SPIRIT, not code, from here.build's `analyzeExprSemantics` (the
- * evidence memo's §3/§6: "a generic three-valued expression-semantics
- * evaluator... needing re-derivation only at the syntax-dispatch layer"): the
- * same three-valued short-circuit table (literal / and / or / if), re-derived
- * over Scheme forms instead of `ts.SyntaxKind`. What does NOT transfer (per
- * the evidence memo §6): cascade ordering, variant scope-pruning, SAT — this
- * package has no variant space, so none of that has an analog here.
+ * `if`/`and`/`or` (R-G6, "not a sidecar re-ruling"). Ported in SPIRIT, not
+ * code, from here.build's `analyzeExprSemantics`: the same three-valued
+ * short-circuit table (literal / and / or / if), re-derived over Scheme forms
+ * instead of `ts.SyntaxKind`. What does NOT transfer: cascade ordering,
+ * variant scope-pruning, SAT — this package has no variant space, so none of
+ * that has an analog here.
  *
  * SCHEME TRUTHINESS, not JS truthiness — the whole point R-G6's worked
  * examples name explicitly: ONLY `#f` is false. `0`, `""`, `'()`, and every

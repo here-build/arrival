@@ -1,11 +1,9 @@
 /**
- * ASYNCNESS — E1c's cut-over (engine plan §2 E1c; docs/working-proposals/
- * arrival-mercury/async-await-plane.md's Mechanics 1-8). Asyncness becomes a
- * MODEL FACT (`SchemeSemanticModel.asyncnessOf`, model.ts) instead of a
- * post-emit rewriting pass; the dissolved `async-ify/async-ify.ts` is
- * deleted entirely. Its two-phase mechanism survives byte-for-byte, split
- * across two entry points so the ANALYSIS becomes a pure, queryable view and
- * the REWRITE stays a positioned pipeline step:
+ * ASYNCNESS (docs/working-proposals/arrival-mercury/async-await-plane.md's
+ * Mechanics 1-8). Asyncness is a MODEL FACT (`SchemeSemanticModel.asyncnessOf`,
+ * model.ts), not a post-emit rewriting pass. The mechanism is two-phase, split
+ * across two entry points so the ANALYSIS is a pure, queryable view and the
+ * REWRITE stays a positioned pipeline step:
  *
  *  - `asyncnessOf(unit, seeds)` — Phase 1, ported verbatim: the call-graph
  *    fixpoint (declared-bottom iteration; monotone over the finite
@@ -107,11 +105,9 @@ import { Binding as mkBinding, Call, Member, Ref } from "../residual/types.js";
  * input-contract assert (a pre-existing `Await`/`async: true` — rules and
  * the walker are sync-shaped by construction; `asyncnessOf`/
  * `materializeAsyncness` must be the first and only place asyncness is
- * introduced). Ported verbatim from the dissolved `AsyncIfyDoorError`,
- * renamed for this module's new home; the message CODES (e.g.
- * `filter-async-predicate`, `law-w/input-not-sync-shaped`) are unchanged —
- * only the class name and the door-message prefix ("asyncness door:" in
- * place of "async-ify door:") reflect the new home.
+ * introduced). Message CODES (e.g. `filter-async-predicate`,
+ * `law-w/input-not-sync-shaped`) are stable identifiers — the door-message
+ * prefix is "asyncness door:".
  */
 export class AsyncnessDoorError extends Error {
   readonly origin?: NodeId;

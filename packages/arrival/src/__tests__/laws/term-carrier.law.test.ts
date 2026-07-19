@@ -557,7 +557,7 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
         // egress as R9 lazy proxies (egress-proxy.ts): elements unwrap through their own
         // `arrival/toJS` on first read, so nothing boxed is ever OBSERVABLE past the exit —
         // the "container toJS leaves boxed element residue" GAPS row retired with this flip
-        // (two-tier-exec-api.md §5, RULINGS R9). `rawDeepIds` (not `deepIds`, which only
+        // (RULINGS.md R9). `rawDeepIds` (not `deepIds`, which only
         // knows how to walk the INSIDE-the-sandbox carriers) actually looks inside the raw
         // object/array shape toJS hands back — through a lazy proxy that walk IS the
         // materialization, which is exactly the point.

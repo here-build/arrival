@@ -1,14 +1,10 @@
-// COMBINED-TEACHING GOLDEN/CHARACTERIZATION TEST — the zero-behavior-change regression net that
-// did not exist in any form (docs/working-proposals/arrival-manifold-package-split-2026-07-05.md,
-// "Test safety net" gap #4). Every teaching mechanism is tested in ISOLATION elsewhere in this
-// package, but block ORDERING and COEXISTENCE when several fire on the SAME call are load-bearing
-// and were completely untested: `manifold-tool.ts`'s statement loop appends, in a FIXED order,
+// COMBINED-TEACHING GOLDEN/CHARACTERIZATION TEST — pins block ORDERING and COEXISTENCE when
+// several teaching mechanisms fire on the SAME call. Every mechanism is tested in ISOLATION
+// elsewhere in this package, but `manifold-tool.ts`'s statement loop appends, in a FIXED order,
 // statement-result blocks → futility `Note:` blocks → the type-hint trailing block → the
-// attachment hidden-note → the attachment pass-through blocks. A future binder→runner extraction
-// that re-homes these drains into the new package could reorder or silently drop a block class
-// while every mechanism's OWN isolated test still passes — this is the one test that would catch
-// that. There was NO `toMatchSnapshot`/`toMatchInlineSnapshot`/`__snapshots__` anywhere in this
-// package before this file.
+// attachment hidden-note → the attachment pass-through blocks. A refactor that re-homes these
+// drains could reorder or silently drop a block class while every mechanism's OWN isolated test
+// still passes — this is the one test that would catch that.
 //
 // One representative call fires FOUR mechanisms at once, through the REAL `buildManifoldServer` →
 // `CallTool` path (never a hand-injected `createManifoldTool` call):
@@ -21,17 +17,10 @@
 // Own this as a deliberate characterization LOCK: it should change only when block semantics
 // intentionally change, never as a side effect of refactor plumbing.
 //
-// RE-PINNED per second-foundation/arrival-bench/docs/benchmark-defect-register.md §E3 (mcp-substrate runner.ts consolidation,
-// landed in @inhuman.tools/mcp-substrate): the futility `Note:` block and the attachment
-// hidden-note are NO LONGER separate peer text blocks interleaved with real data — the old
-// assertion pinned exactly the channel-hygiene bug §E3 diagnosed (note-shaped producers reading
-// as PEER DATA, one of them unshifted so it LED the response). Every note-shaped producer now
-// accumulates into `notes: string[]` and renders as exactly ONE trailing block, labelled
+// Every note-shaped producer (introduced-bindings, elision, futility, attachment) accumulates
+// into `notes: string[]` and renders as exactly ONE trailing block, labelled
 // `── environment notes ──`, AFTER every real block (statement results, type-hint, attachment
-// pass-through content) — never interleaved. The invariant this test protects — "every teaching
-// class is present, in a stable order, when several fire on the same call" — still holds; only
-// the futility-note and attachment-hidden-note CLASSES now co-occupy one combined block instead
-// of two separate ones.
+// pass-through content) — never interleaved.
 
 import { createSpineLens } from "@inhuman.tools/mcp-substrate";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -146,20 +135,17 @@ describe("combined-teaching golden — statement result, futility Note, type hin
     expect(result.isError).toBeFalsy(); // partial success: 3 of 4 statements succeeded (REPL-continue)
     const blocks = blocksOf(result);
 
-    // THE GOLDEN SHAPE: exactly 7 blocks, in this fixed order (was 8 before the §E3 note
-    // consolidation — the futility Note and the attachment hidden-note used to be TWO separate
-    // trailing blocks; they now render as lines inside ONE combined `environment-notes` block).
-    // A normalized "class" descriptor per block (never the full text — attachment byte counts /
-    // hash-derived note wording would make a literal full-text snapshot brittle for no safety
-    // benefit) is what's actually pinned.
+    // THE GOLDEN SHAPE: exactly 7 blocks, in this fixed order. A normalized "class" descriptor
+    // per block (never the full text — attachment byte counts / hash-derived note wording would
+    // make a literal full-text snapshot brittle for no safety benefit) is what's actually pinned.
     const shapeOf = (b: Block): string => {
       if (b.type !== "text") return `block:${b.type}`;
       const text = b.text ?? "";
       if (text.startsWith("Type (")) return "type-hint";
-      // §E3: the futility `Note:` line and the attachment hidden-note line both live INSIDE this
-      // one `#| ── environment notes ── ... |#` block now — there is no longer a standalone
-      // "Note:"-prefixed block to distinguish (renderEnvironmentNotes wraps every note-shaped
-      // producer together, in declaration order: introduced-bindings, elision, futility, attachment).
+      // The futility `Note:` line and the attachment hidden-note line both live INSIDE this one
+      // `#| ── environment notes ── ... |#` block — there is no standalone "Note:"-prefixed block
+      // to distinguish (renderEnvironmentNotes wraps every note-shaped producer together, in
+      // declaration order: introduced-bindings, elision, futility, attachment).
       if (text.startsWith("#|")) return "environment-notes";
       if (text.startsWith("Error:")) return "statement-error";
       return "statement-result";
@@ -171,7 +157,7 @@ describe("combined-teaching golden — statement result, futility Note, type hin
       "statement-error", // stmt3: (fx/set_count :count "five") → Error: ...
       "type-hint", // the lens's trailing block
       "block:image", // the ONE within-quota block, passed through as its ORIGINAL content type
-      "environment-notes", // §E3: futility Note + attachment hidden-note, ONE consolidated trailing block, LAST
+      "environment-notes", // futility Note + attachment hidden-note, ONE consolidated trailing block, LAST
     ]);
 
     // Spot-check the substantive content behind each class — proves the classes are the RIGHT
@@ -182,10 +168,6 @@ describe("combined-teaching golden — statement result, futility Note, type hin
     expect(blocks[3]!.text).toBe("Error: set_count: expected :count to be a number");
     expect(blocks[4]!.text).toContain("(string->number");
     expect(blocks[5]!.type).toBe("image");
-    // §E3/C2: the old assertion pinned "...returned effectively the same result" and asserted a
-    // standalone block; the door text itself changed too (benchmark-defect-register.md §C2 — the
-    // "give your best final answer" outcome-fine-tuning script was removed, and "effectively"
-    // dropped since the door no longer claims to know the results are only APPROXIMATELY equal).
     expect(blocks[6]!.text).toContain("── environment notes ──");
     expect(blocks[6]!.text).toContain("the last 3 calls to fx/degraded returned the same result despite different arguments");
     expect(blocks[6]!.text).toContain("1 images hidden (quota 1) — raise the 'response-attachments' tool argument");

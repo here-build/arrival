@@ -4,8 +4,8 @@
 import { parseNameDoc, type DoorSymbolDef } from "./_bake.js";
 
 /** errors-as-doors — an OMITTED verb carrying only a teaching reason, no contract/impl.
- *  Signature + return shape are SOURCE-COMPATIBLE across the W0 `DoorCause` design
- *  (docs/design-history/symbol-define-static-program-validation.md §W0): this factory
+ *  Signature + return shape are SOURCE-COMPATIBLE across the `DoorCause` design
+ *  (docs/design-history/symbol-define-static-program-validation.md §3.3): this factory
  *  still bakes `{kind, name, reason}` alone — it has no owning capability to stamp yet
  *  (it runs inside a `symbols` record literal, before the `EnvCapability` wrapping it
  *  exists). `common/capability.ts`'s door bind arm derives `.cause` from the binding

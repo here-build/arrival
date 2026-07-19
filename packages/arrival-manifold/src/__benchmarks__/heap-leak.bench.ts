@@ -1,7 +1,8 @@
-// heap-leak.bench — empirical build→use→drop memory harness for a manifold world
-// (second-foundation/arrival-bench/docs/atlas-v2-vendor-rebuild.md incident, 2026-07-14: the atlas facade OOM'd node's
-// heap after ~15 tasks under 1M-token budgets. Each task built a FRESH manifold world
-// (buildManifoldEnv → tool calls with multi-MB text responses → world abandoned).
+// heap-leak.bench — empirical build→use→drop memory harness for a manifold world. A
+// caller that builds a FRESH manifold world per task (buildManifoldEnv → tool calls with
+// multi-MB text responses → world abandoned) can exhaust node's heap after enough tasks
+// if some component survives past the task that created it — this harness measures
+// whether that happens, and if so, isolates which component.
 //
 // THIS FILE MEASURES, it does not assume. Four variants of the SAME build→use→drop
 // cycle, run N=20 times each, heapUsed sampled (after a forced double-GC) at the end of
@@ -12,9 +13,9 @@
 //   d. (a) but 1KB responses — isolates response-SIZE dependence from a structural leak.
 //
 // A variant that PLATEAUS (near-zero slope) means the JS references genuinely drop and
-// GC reclaims the world — the incident's cause lies elsewhere (or is bounded by response
-// size). A variant that GROWS (slope persists across 20 cycles, not just noise) names an
-// actual retained-per-cycle component.
+// GC reclaims the world for that configuration (or growth is bounded by response size,
+// per variant d). A variant that GROWS (slope persists across 20 cycles, not just noise)
+// names an actual retained-per-cycle component.
 //
 // Run: npx tsx --expose-gc src/__benchmarks__/heap-leak.bench.ts
 // (--expose-gc is REQUIRED — the harness refuses to run without it: an unforced GC makes
@@ -25,7 +26,7 @@ import { createManifoldTool } from "../manifold-tool.js";
 
 const CYCLES = 20;
 const CALLS_PER_CYCLE = 5;
-const BIG_RESPONSE_BYTES = 2_000_000; // ~2MB — the incident's "multi-MB text response" shape
+const BIG_RESPONSE_BYTES = 2_000_000; // ~2MB — a real upstream tool's bulk text response shape
 const SMALL_RESPONSE_BYTES = 1000; // ~1KB — variant (d)'s response-size-independence probe
 const SLOPE_WINDOW = 15; // least-squares over the LAST 15 of 20 cycles (lets early-cycle
 // warmup — first capability assembly, JIT, etc. — fall outside the fitted window)
@@ -34,7 +35,7 @@ const DESIGNED_TEARDOWN_SLOPE_BOUND_MB = 2; // the invariant this bench GATES: v
 // is not actually sufficient and something else is leaking.
 
 /** A ~N-byte CSV-ish blob — same shape class as a real upstream tool's bulk text response
- *  (the incident's actual trigger: "multi-MB text responses"). MUST produce a genuinely
+ *  (the shape this harness is built to catch: multi-MB text responses). MUST produce a genuinely
  *  FLAT string, not a lazy V8 ConsString rope: `row.repeat(n)` looks like it allocates
  *  ~N bytes but actually builds an unflattened cons-tree over the SAME short `row`
  *  backing buffer (V8 flattens only on-demand, e.g. on a regex/char scan — `.length` is
@@ -52,8 +53,8 @@ function csvBlobOfBytes(bytes: number): string {
 const BIG_RESPONSE_FACTORY = (): string => csvBlobOfBytes(BIG_RESPONSE_BYTES);
 const SMALL_RESPONSE_FACTORY = (): string => csvBlobOfBytes(SMALL_RESPONSE_BYTES);
 
-/** ONE fake tool, slug `t` (so calls read `(t/fake)` — the shape the incident's real
- *  upstream tools bind as). `invoke` builds a FRESH blob every call via `makeResponse`
+/** ONE fake tool, slug `t` (so calls read `(t/fake)` — the shape a real upstream tool
+ *  binds as). `invoke` builds a FRESH blob every call via `makeResponse`
  *  — a shared constant string here would let every "response" alias the SAME backing
  *  buffer across all 5 calls × 20 cycles, hiding the very per-call growth being
  *  measured (a real upstream tool never returns the identical string object twice). */

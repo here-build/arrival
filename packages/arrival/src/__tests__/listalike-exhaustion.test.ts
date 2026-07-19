@@ -2,7 +2,7 @@
 // LOAD-BEARING CONSTRAINT #1) — the `listAlike` codec is DEAD for scheme-bodied verbs, and the
 // consequence is an INFINITE LOOP, not a wrong answer.
 //
-// The chain, verified against the code (grok-triad review, 2026-07-14):
+// The chain, verified against the code:
 //   1. `listAlike` (env/srfi/srfi-1.ts) was made a `z.codec` materializing AJSArray → pair-list.
 //   2. But its consumers are `symbol.define` (scheme bodies), and define-bake.ts's impl does
 //      `if (def.validate) z.decode(def.in, args)` — the decoded value is DISCARDED, and NO verb in

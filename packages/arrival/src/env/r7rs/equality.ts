@@ -341,7 +341,7 @@ export default new EnvCapability("scheme/equality", {
       // undefined→theVoid before any value enters the language — so the legacy
       // global_env's `|| null || undefined` nullish tolerance is dissolved.
       //
-      // ── PLUS one TOLERANCE, scoped to the BORROWED array (V's ruling to confirm) ────────────
+      // ── PLUS one TOLERANCE, scoped to the BORROWED array ──────────────────────────────────
       //
       // An EMPTY tool-returned JSON array also answers #t.
       //
@@ -360,10 +360,9 @@ export default new EnvCapability("scheme/equality", {
       // the ELSE branch, called `(car [])`, got a tolerant nil, and reported confident garbage. A
       // "nothing here" that will not admit it is nothing.
       //
-      // FLAGGED FOR V: this is a semantic ruling, not a mechanical fix. It buys seamlessness at the
-      // cost of one value answering #t to both `null?` and `vector?`. Reverting it is a one-line
-      // change (drop the second disjunct) plus the `null? on empty` row in
-      // listalike-divergence.law.test.ts.
+      // Known deliberate ruling, not a mechanical fix: it buys seamlessness at the cost of one
+      // value answering #t to both `null?` and `vector?`. Reverting it is a one-line change (drop
+      // the second disjunct) plus the `null? on empty` row in listalike-divergence.law.test.ts.
       function (this: CallCtx, obj) {
         return bool(obj instanceof ANil || (obj instanceof AJSArray && obj.source.length === 0));
       },

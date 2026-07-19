@@ -20,7 +20,7 @@ import { inferenceEnv as sandboxedEnv } from "../inference-env.js";
 const val = (rs: unknown[]) => schemeToJs(rs[rs.length - 1] as never, {});
 // `exec` (RULINGS.md R1) now returns the plain-JS unwrap: a symbol's toJS is
 // apostrophe-prefixed (ASymbol's documented, deferred opaque-exit marker —
-// two-tier-exec-api.md §9 — unchanged by this migration, only newly VISIBLE
+// still design-pending — unchanged by this migration, only newly VISIBLE
 // through exec's exit instead of a boxed `.toString()`).
 const repr = (rs: unknown[]) => String(rs[rs.length - 1]);
 

@@ -1,22 +1,19 @@
-// R0 pins, FLIPPED to the R3 mechanism (docs/working-proposals/arrival-mcp-rework-over-phases.md,
-// Part IV — R0 → R3). The original file characterized the `__repl__`/`__cache__` overlay; R3
-// dissolved that overlay (D3), so these pins now gate what their own headers said they would
-// become:
+// Regression pins for the v2 SessionRunState log/fold mechanism:
 //
-//   (a) "`__repl__` → the SEEDED define entries of `log`": the v2 `SessionRunState.log` holds ALL
-//        top-level statements (defines AND bare expressions, §2.2 — the sink tombstone-skip is
-//        unreachable if only defines replay), and a legacy `__repl__` history seeds the log's
-//        define entries on first touch (the v2 log is a SUPERSET, not a rename).
+//   • The log holds ALL top-level statements — defines AND bare expressions — each define entry
+//     carrying its bound name. Bare expressions must appear in the log too: if only defines
+//     replayed, the sink tombstone-skip path would be unreachable. A legacy `__repl__` history
+//     seeds the log's define entries on first touch (the log is a superset of that history, not
+//     a rename).
 //
-//   (b) The SEMANTIC pin that replaced rev 1's retired `__cache__` byte-compat pin: "fold(log,
-//        cache) reproduces the same bindings the overlay restore produced for every wire-safe
-//        define in the existing suite." Fold is forced by a FRESH DiscoveryTool instance over the
-//        same session bag (a fresh warm map = process eviction in miniature).
+//   • fold(log, cache) reproduces the same bindings for every wire-safe define — forced by a
+//     FRESH DiscoveryTool instance over the same session bag (a fresh warm map models process
+//     eviction).
 //
-// The boundary condition at the bottom is the original file's third pin, kept and sharpened: an
-// UNCLASSIFIED impure verb legitimately diverges on cold fold (regenerateable is the RULED-safe
-// default, §2.3); its `view`-classed twin does not (the penetration answers from the run cache) —
-// the membrane-level cache is exactly what makes pin (b) hold for penetrating defines.
+//   • An UNCLASSIFIED impure verb diverges on cold fold — undeclared classification defaults to
+//     regenerateable — while its `view`-classed twin does not: fold answers a `view` penetration
+//     from the run cache instead of re-firing it, which is what makes the fold-equivalence pin
+//     above hold even for verbs that penetrate the membrane.
 
 import { symbol } from "@inhuman.tools/arrival";
 import * as sz from "@inhuman.tools/arrival/scheme-zod";
@@ -66,7 +63,7 @@ describe("R3 pin — the v2 log holds ALL top-level statements, in program order
 
   it("migration: a legacy __repl__ history SEEDS the define entries of the v2 log — and the bindings fold back", async () => {
     const tool = demoTool();
-    // A pre-R3 session bag: only the legacy define history, no v2 state.
+    // A legacy session bag: only the __repl__ define history, no v2 state.
     const session = {
       id: "legacy",
       state: { __repl__: ["(define x 1)", "(define y (+ x 1))"] } as Record<string, unknown>,
@@ -82,9 +79,8 @@ describe("R3 pin — the v2 log holds ALL top-level statements, in program order
 
 describe("R3 semantic pin — fold(log, cache) reproduces the overlay-restore bindings", () => {
   it("golden pin: the exact readback the overlay mechanism produced for a chain of pure wire-safe defines", async () => {
-    // Pure/deterministic defines — no membrane penetration, so the pin is stable under either
-    // the retired restore-from-overlay OR honest re-execution (both reach the same value by
-    // construction). Pinned output text is byte-identical to the pre-R3 golden pin.
+    // Pure/deterministic defines have no membrane penetration, so the readback is stable under
+    // either fold path — restore or honest re-execution reach the same value by construction.
     const tool = demoTool();
     const session = { id: "s1", state: {} as Record<string, unknown> };
     await tool.call({ expr: "(define x 1)" }, { session });
@@ -116,10 +112,9 @@ describe("R3 semantic pin — fold(log, cache) reproduces the overlay-restore bi
 
   it("boundary, sharpened: an UNCLASSIFIED impure verb diverges on cold fold (regenerateable — the ruled-safe default); its `view` twin does not", async () => {
     // `tick` is wire-safe (an integer) but IMPURE (a shared counter). Unclassified ⇒ fold re-runs
-    // it (§2.3: undeclared = regenerateable) and the binding advances — the RULED behavior, where
-    // the retired overlay silently pinned the original value. `tick-view` declares `view` ⇒ the
-    // penetration is answered from the run cache on fold and the binding is stable across
-    // rehydrations — the membrane-level mechanism pin (b) rests on.
+    // it (undeclared = regenerateable) and the binding advances. `tick-view` declares `view` ⇒
+    // the penetration is answered from the run cache on fold, so the binding stays stable across
+    // rehydrations.
     let plainCalls = 0;
     let viewCalls = 0;
     const cap = new McpEnvCapability("tick-caps", {

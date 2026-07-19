@@ -1,8 +1,7 @@
 /**
- * NAMES-ONLY DIFF — the E1a review lens (engine plan risk 2:
- * `docs/working-proposals/arrival-mercury-engine-plan.md`).
+ * NAMES-ONLY DIFF — a review lens for diffs that are pure renaming.
  *
- * E1a (binding census → lexical-namer allocation) regenerates the committed
+ * Binding-census / lexical-namer allocation regenerates the committed
  * emission fixtures with byte churn that is *supposed* to be pure renaming.
  * This checker splits that review: `namesOnlyDiff(committed, regenerated)`
  * answers "is this diff ONLY naming?" and, when yes, hands the judge the exact
@@ -238,7 +237,7 @@ export function namesOnlyDiff(oldTs: string, newTs: string): NamesDiff {
 }
 
 /**
- * The E1a regeneration-review seam: called once per emitted fixture with the
+ * The regeneration-review seam: called once per emitted fixture with the
  * committed text and the regenerated text. Equal-modulo-names → returns the
  * rename table (the judge reads these tables AS the naming review); anything
  * else → throws, surfacing the first structural divergence for ordinary

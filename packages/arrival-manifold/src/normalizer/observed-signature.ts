@@ -1,5 +1,5 @@
 // normalizer/observed-signature — the OBSERVED half of the response-normalizer's
-// auto-present ruling (docs/response-normalizer.md §3.5, V ruling 2026-07-13): once the
+// auto-present ruling (docs/response-normalizer.md §3.5): once the
 // membrane auto-presents a tool's raw text as a parsed value (server.ts's
 // `unwrapToolResult`, extended past the grandfathered single-block JSON.parse to the
 // full `detectParse` family), the model should SEE the shape it is about to receive, not
@@ -66,16 +66,16 @@ function renderAnnotation(format: string, value: unknown): string {
 /** Splice `-> annotation` into a rendered `ToolSignature.signatureText`
  *  (`(head params...)[ -> shape][ - description]`, tool-signature.ts).
  *
- *  A5 (second-foundation/arrival-bench/docs/benchmark-defect-register.md §A5) — "declared wins" was BACKWARDS. The only
- *  way this function is ever CALLED for a tool is via the text-block auto-present path
- *  (server.ts's `toBoundServer`, wired to `unwrapToolResult`'s `onAutoPresent` hook),
- *  which is reachable ONLY when `structuredContent` did NOT arrive this call —
- *  `unwrapToolResult`'s rule 2 (`structuredContent` present) short-circuits and returns
- *  BEFORE rule 3's auto-present logic ever runs. So an observation that reaches here is,
- *  by construction, evidence that a DECLARED prior never materialized structurally this
- *  call: the catalog's `-> {declared shape}` line is not ground truth, and suppressing
- *  the real observation would let the catalog keep actively lying. The declared shape is
- *  therefore demoted to a parenthetical note rather than winning outright:
+ *  A5 — "declared wins" was BACKWARDS. The only way this function is ever CALLED for a
+ *  tool is via the text-block auto-present path (server.ts's `toBoundServer`, wired to
+ *  `unwrapToolResult`'s `onAutoPresent` hook), which is reachable ONLY when
+ *  `structuredContent` did NOT arrive this call — `unwrapToolResult`'s rule 2
+ *  (`structuredContent` present) short-circuits and returns BEFORE rule 3's auto-present
+ *  logic ever runs. So an observation that reaches here is, by construction, evidence
+ *  that a DECLARED prior never materialized structurally this call: the catalog's
+ *  `-> {declared shape}` line is not ground truth, and suppressing the real observation
+ *  would let the catalog keep actively lying. The declared shape is therefore demoted to
+ *  a parenthetical note rather than winning outright:
  *  `-> [observed] <shape> (declared: <declared shape>)`.
  *
  *  IDEMPOTENCY (still required — `applyObservedAmendments`, server.ts, re-runs this on

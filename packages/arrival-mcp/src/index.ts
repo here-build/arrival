@@ -1,22 +1,21 @@
-// NOTE: relative imports carry explicit .js extensions (house style, see the other
+// Relative imports carry explicit .js extensions (house style, see the other
 // foundations/arrival packages) so the EMITTED dist/*.d.ts resolves under nodenext
 // consumers (sift). Extensionless specifiers type-check here (bundler-resolution
 // consumers too) but silently drop every re-export for a nodenext consumer.
-// The legacy ToolInteraction class stack (ToolInteraction / DiscoveryToolInteraction /
-// ActionToolInteraction) is gone — both tiers are value-shape (DiscoveryTool / ActionTool).
-// EnvCapability + per-verb { description, inputSchema } the discovery tool reflects into
-// its catalog + input schema — so the transport offloads the whole verb definition here,
-// and this package can compact toward a standalone MCP lib.
+//
+// Both tool tiers are value-shape, not a subclass stack: EnvCapability + per-verb
+// { description, inputSchema } is what the discovery tool reflects into its catalog +
+// input schema — so the transport offloads the whole verb definition here.
 export * from "./McpEnvCapability.js";
 // Value-shaped discovery tool: `new DiscoveryTool(name, capability, {description})` — the
 // subclass-free shell that derives schema + catalog + eval from the one aggregating capability.
 export * from "./DiscoveryTool.js";
-// SessionRunState v2 — the session's durable twin (statement log + first-class run cache),
-// encode/decode, the cache-validity identity, and the interim config digest (R3).
+// SessionRunState — the session's durable twin (statement log + first-class run cache),
+// encode/decode, the cache-validity identity, and the interim config digest.
 export * from "./session-run-state.js";
 // Value-shaped mutation tool: `new ActionTool(name, {description, context, clusters})` — the
-// subclass-free, FieldSpec-typed, receiver-dispatched, clustered batch tier. Absorbed the interim
-// `kernel.defineActionTool`; `defineCluster` + the refs/primitives back its action declarations.
+// subclass-free, FieldSpec-typed, receiver-dispatched, clustered batch tier; `defineCluster` +
+// the refs/primitives back its action declarations.
 export * from "./ActionTool.js";
 // FieldSpec/Ref system (str/num/oneOf/defineRef/uuidShape/…) backing ActionTool context + props.
 export * from "./refs.js";

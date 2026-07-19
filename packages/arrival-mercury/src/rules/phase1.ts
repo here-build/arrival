@@ -141,16 +141,6 @@
  *    ../peepholes/infer.ts), so no `arrival/infer` symbol is named "infer/scalar";
  *    there is no Contract for either to move to, ever. Law C holds: the peepholes
  *    themselves (cross-node idioms) stay engine-side, unmoved by this relocation.
- *  All NINETEEN fully-relocated symbols (`filter`, its ambient gap now closed; the
- *  infer family from R2; thirteen from Waves 1-3) are byte-identical to the rules
- *  this file used to hold (verified: the oracle's bug-cell rows quotient-neg/
- *  modulo-neg/exact-vs-inexact-eq and the cross-pass/gate3 goldens are unchanged;
- *  the infer family and the rest have no dedicated bug-cell row of their own but are
- *  exercised pervasively across the existing corpus and model-spine/legibility's
- *  async-pipeline suites, also unchanged; filter's own bug-cell rows —
- *  filter-truthy-zero/ai-winter-ebl-investigation/inhuman-gepa-full/
- *  mercury-fixture-gepa — are unchanged too, now served by the harvested Contract
- *  row instead of this table's deleted twin).
  */
 import type { EmitCtx, EmitRule } from "@inhuman.tools/arrival/emit";
 
@@ -382,10 +372,10 @@ export const phase1Rules: SymbolRuleTable = {
   // `some` is NOT SRFI-1's value-returning `any` — it aliases `any?`, the HONEST
   // boolean quantifier (#t iff SOME element-tuple's predicate result is
   // scheme-truthy; plain #t/#f, never the witness). `every`'s bare form stays
-  // genuinely value-returning (LAST result) — the two are asymmetric by the
-  // interpreter's own 2026-07-13 any/every split ruling, not one shape copied onto
-  // both names. stage0.ts's `some` mirrors the boolean shape; `any` (already
-  // exported there) stays the value-returning witness-finder untouched.
+  // genuinely value-returning (LAST result) — the two are asymmetric by design,
+  // not one shape copied onto both names. stage0.ts's `some` mirrors the
+  // boolean shape; `any` (already exported there) stays the value-returning
+  // witness-finder untouched.
   some: {},
   // max-by — NOT Contract-backed at all (unlike every/any/some, which are at least
   // DECLARED in srfi-1.ts): grepped, confirmed absent from every

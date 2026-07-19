@@ -41,8 +41,7 @@ export class Unterminated extends Error {
   /** Type identity for CLASS-brand readers (`type()`), same convention as ArrivalError below. */
   static [CLASS] = "unterminated";
 
-  /** The `ConstructorParameters`-typed static invariant (the errors-as-doors idiom —
-   *  see the 2026-07-11 doors inventory §0(b)/§3.3 (private monorepo docs)):
+  /** The `ConstructorParameters`-typed static invariant (the errors-as-doors idiom):
    *  `X.invariant(cond, ...factsMatchingX'sCtor)` throws the RECEIVER, never a bare
    *  `Error`. Repeated per-class (not inherited from one root) because `Unterminated`/
    *  `ParseError` do not extend `ArrivalError`. */
@@ -134,8 +133,7 @@ export class ArrivalError extends Error {
   static [CLASS] = "arrival-error";
   public readonly name: string = "ArrivalError";
 
-  /** The `ConstructorParameters`-typed static invariant (errors-as-doors idiom, see
-   *  the 2026-07-11 doors inventory §0(b)/§3.3 (private monorepo docs)):
+  /** The `ConstructorParameters`-typed static invariant (errors-as-doors idiom):
    *  `MyError.invariant(cond, ...factsMatchingMyError'sCtor)` throws the RECEIVER
    *  (`new this(...)`), never a bare `Error` — inherited by EVERY `ArrivalError`
    *  subclass through the ctor prototype chain, structured ctors included, so no
@@ -527,16 +525,12 @@ export class DefineForwardReferenceError extends ArrivalError {
 }
 
 // ===========================================================================
-// errors-as-doors extraction, wave 1/2/3 (2026-07-11) — see
-// the 2026-07-11 doors inventory (private monorepo docs). Each class below
-// promotes a previously-unclassed teaching door (a bare `throw new Error(...)`, a
-// tiny-invariant call, or an exported `xDoor()`/`xError()` factory) into a named
-// class carrying its facts as typed readonly fields — the message is built HERE,
-// ONCE, from those facts; every call site becomes a one-line `throw new X(facts…)`
-// (or `X.invariant(cond, facts…)`). Message TEXT is preserved byte-for-byte from
-// the door it replaces wherever a test or classifier matches on it — enrichment
-// (dropping tiny-invariant's "Invariant failed: " prefix) happens only where no
-// site depended on the old wording.
+// Each class below is a named door: it carries its facts as typed readonly
+// fields, and the message is built HERE, ONCE, from those facts — every call
+// site is a one-line `throw new X(facts…)` (or `X.invariant(cond, facts…)`).
+// Where a test or classifier matches on message text, that text is preserved
+// byte-for-byte across refactors (only wording no site depends on may change,
+// e.g. dropping tiny-invariant's "Invariant failed: " prefix).
 // ===========================================================================
 
 // -------------------------------------------------------------------------
@@ -696,7 +690,7 @@ export class RegionIncompleteError extends ArrivalError {
  *  self-teaching) instead of nesting it under a fresh wrapper's `.cause` — so
  *  `.enriched` rides directly on the caught error at a live throw site, never
  *  under `.cause` (vocabulary-suggestions.law.test.ts's LIVE `.enriched` law pins
- *  this — the pin was updated deliberately when this class was promoted). */
+ *  this). */
 export class UnboundVariableError extends ArrivalError {
   static [CLASS] = "unbound-variable-error";
   public readonly name = "UnboundVariableError";
@@ -788,8 +782,8 @@ export class ResolvedNonValueError extends ArrivalError {
 // would be taxonomy noise. Converges in SHAPE on the bracket-bindings exemplar
 // above (`EvalError` + `E-LET-BRACKET-*` codes: form/code carried as facts,
 // message built once); `code` stays optional here since most of these sites
-// predate the spec-corpus code convention — backfilling one per form is a later,
-// V-reviewed prose pass (the 2026-07-11 doors inventory W2).
+// predate the spec-corpus code convention; backfilling one per form remains
+// future work.
 // -------------------------------------------------------------------------
 export class SpecialFormShapeError extends ArrivalError {
   static [CLASS] = "special-form-shape-error";
@@ -1115,15 +1109,15 @@ export class TraceBudgetError extends ArrivalError {
   public readonly name = "TraceBudgetError";
 
   constructor(public readonly maxEntries: number) {
-    // A DOOR, not a dead end. The old text said "bound the loop or raise ARRIVAL_TRACE_MAX" — and
-    // `ARRIVAL_TRACE_MAX` is an environment variable of the HOST PROCESS. A model reading this
-    // through an MCP tool cannot reach it; it can only re-read the sentence. One model checked the
-    // tool schema for the knob, found `eval-timeout-ms` / `response-size` and no trace cap, and
-    // concluded the sandbox was broken. Never offer a remedy the reader cannot perform.
+    // A DOOR, not a dead end: never offer a remedy the reader cannot perform. An
+    // MCP-facing model cannot reach a host-process env var (there is no
+    // `ARRIVAL_TRACE_MAX` knob in the tool schema) — only actionable fixes belong
+    // in the message (bound the loop, work on a slice, use a built-in that does
+    // the work in one step).
     //
-    // The second half matters as much: this error ends a PROGRAM, not a SESSION (EvalTrace.beginRun
-    // re-arms the cap per run). Say so — the model that hit this spent 24 rounds convinced its whole
-    // world was dead, because nothing told it otherwise.
+    // Say explicitly that this ends a PROGRAM, not a SESSION (EvalTrace.beginRun
+    // re-arms the cap per run) — an agent not told this may read the whole world
+    // as dead and stop making progress instead of continuing past it.
     super(
       `this program traced ${maxEntries} evaluation steps and was stopped — a loop this big is ` +
         `almost always unintended.\n` +

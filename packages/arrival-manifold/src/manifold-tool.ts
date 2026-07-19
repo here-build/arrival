@@ -91,10 +91,10 @@ function envHeapDefault(): number {
 /** Tool naming threaded into the runner (replaces doors.ts's direct names.ts import). */
 const TOOL_NAMING = { toolName: TOOL_NAME, argName: ARG_NAME };
 
-/** The manifold's own middle-elision defaults (serializer-elision plan §7) — the fix for the
- *  real MCP-Atlas grounding failure: a 100-item array rendered ~93-deep with a tiny `+N more`
- *  marker buried at the very end was read by the model as a complete result, and the answer
- *  was in the hidden tail. A small per-array display cap (`maxItems`) plus a generous
+/** The manifold's own middle-elision defaults. A 100-item array rendered ~93-deep with a
+ *  tiny `+N more` marker buried at the very end reads to the model as a complete result,
+ *  with the answer sitting in the hidden tail — the failure mode these defaults exist to
+ *  prevent. A small per-array display cap (`maxItems`) plus a generous
  *  `topLevelArrayLimit`/`secondLevelArrayLimit` means a moderately-sized array (≤100) still
  *  renders in FULL — only genuinely long arrays middle-elide, with a loud marker + a trailing
  *  note (runner.ts) instead of a buried footnote. ADJUSTABLE: a caller overrides via
@@ -145,8 +145,7 @@ export interface ManifoldToolOptions {
   /** Env-side bypass-resolution map, serialized onto `describe()`'s returned Tool
    *  at `_meta.bypassResolution` for the python bridge. */
   bypassResolution?: ReadonlyMap<string, BypassResolution>;
-  /** Type hints (`docs/working-proposals/manifold-type-hints.md`) — the type-layer
-   *  as an error-reporting surface. Absent ⇒ entirely inert. */
+  /** Type hints — the type-layer as an error-reporting surface. Absent ⇒ entirely inert. */
   typeHints?: { mode: TypeHintsMode; lens: TypeHintLens };
   /** Deployment calibration override (futility ring size, response-size clamp,
    *  timeout, observation budget, hint race budget). Absent ⇒
@@ -408,10 +407,10 @@ export function createManifoldTool(
         // Provenance GC (execute → consume → dump): every consumer of this call's trace
         // (the stringly-collection enricher, door rendering) has run inside runner.run,
         // so the invocation graph — which retains every tool call's FULL boxed value at
-        // its provenance point — is dumped here, bounding heap at single-call scale
-        // (the empirically-confirmed OOM driver was WITHIN-task accumulation, 2026-07-14).
-        // Session semantics survive by design: the session's truth is the statement log
-        // + effect cache (re-execution model), never the trace. clear() throws while an
+        // its provenance point — is dumped here, bounding heap at single-call scale (the
+        // OOM driver is WITHIN-task accumulation, not across-task). Session semantics
+        // survive by design: the session's truth is the statement log + effect cache
+        // (re-execution model), never the trace. clear() throws while an
         // eval is still open — exactly the timeout path, whose abandoned eval finishes
         // in the background; skipping the dump there is correct (the next call's finally
         // clears), so the guard exception is swallowed deliberately.

@@ -63,7 +63,7 @@ describe("instanceof McpEnvCapability — catalogued vs invisible internal", () 
   });
 });
 
-describe("per-verb isTool metadata flows through the catalog (§2.5 exposure taxonomy)", () => {
+describe("per-verb isTool metadata flows through the catalog", () => {
   it("a verb marked isTool: true carries the flag on its lifted annotation", () => {
     const cap = new McpEnvCapability("tool-flagged", {
       symbols: {

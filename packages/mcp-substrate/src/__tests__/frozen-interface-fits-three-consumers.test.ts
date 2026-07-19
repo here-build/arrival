@@ -1,6 +1,6 @@
 // Phase 0 exit criterion: the frozen interface must typecheck against THREE shapes — the real
-// binder (arrival-manifold), the runner's own internals, and an arrival-mcp-shaped skeleton
-// (Fable's addition — proves the third consumer's fit at design time, not discovered later).
+// binder (arrival-manifold), the runner's own internals, and an arrival-mcp-shaped skeleton —
+// proving the third consumer's fit at design time instead of leaving it to be discovered later.
 // This is a compile-time check; the `it()` bodies are trivial, the VALUE is that the file
 // typechecks at all under `tsc`/`vitest`.
 

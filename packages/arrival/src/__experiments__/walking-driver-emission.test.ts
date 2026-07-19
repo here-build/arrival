@@ -1,14 +1,15 @@
 /**
  * WALKING-DRIVER SPIKE (`__experiments__/` — opt-in via `pnpm experiments`, NEVER a
- * CI gate; see the 2026-07-11 walking-driver design).
+ * CI gate).
  *
  * Proves the emission SEAM the walking driver rides, end-to-end, with zero
  * production edits:
  *
  *   1. SKELETON — `buildWireframe` over the parse tree yields the pre-run graph;
  *      every designated node carries `span = scopeId(surface form)`, so the driver
- *      can mark the designated Pairs (here: by span-string; production: a WeakSet
- *      over the SHARED parse, see design doc §2.3) before a single form executes.
+ *      can mark the designated Pairs before a single form executes (here: by
+ *      span-string; a real driver would use a WeakSet over the shared parse
+ *      instead, for identity rather than string comparison).
  *   2. WALK — a THIN `EvalTap` (O(1) invocation stubs, retains nothing) plus
  *      `ExecOptions.nodeFilter` makes the evaluator's landed tap gate
  *      (`evaluator.ts` "LOCATION in code") fire ONLY at designated nodes — the
@@ -20,11 +21,10 @@
  *      id joins back to the skeleton node via `siteHash(templateHash, siteOf(node))`,
  *      which is exactly the skeleton⋈stream join the studio overlay renders.
  *
- * What this spike deliberately does NOT have (the T1 build, not the spike): the
- * coordinate ADVANCE primitive — `withRecordCoordinateAsync` installs one static
- * coordinate for the whole run, so this program has exactly one mint-designated
- * node. A multi-port program needs the driver tap to advance the ambient
- * coordinate per designated enter (design doc §2.4).
+ * What this spike deliberately does NOT have: the coordinate ADVANCE primitive —
+ * `withRecordCoordinateAsync` installs one static coordinate for the whole run, so
+ * this program has exactly one mint-designated node. A multi-port program needs
+ * the driver tap to advance the ambient coordinate per designated enter.
  */
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 

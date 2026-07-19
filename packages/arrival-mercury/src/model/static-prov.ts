@@ -1,5 +1,5 @@
 /**
- * StaticProv — the attribution circuit (G1 type freeze, 2026-07-15).
+ * StaticProv — the attribution circuit.
  *
  * The static plane of provenance-by-perturbation: a PURE, transformation-blind
  * attribution value computed by `extract` over CoreForm — which sources reach a
@@ -46,20 +46,15 @@ import type { NodeId } from "../coreform/types.js";
  *  it directly); a `mint` anchor carries whatever `MintProv.integrity`
  *  recorded.
  *
- *  REMOVED 2026-07-16 (Finding E): a third member, `"program-text"` (written
- *  by the (adversarial) author — bottom integrity), was carried here from the
- *  original 3-tier design draft. After `MintIntegrity`'s introduction (commit
- *  d4d0de8a3a, "MintIntegrity hardening") narrowed every REAL producer to 2
- *  members, no code path ever minted a `"program-text"` `ChannelAnchor`:
- *  `InputProv` has no `integrity` field to carry it, and `MintProv.integrity`
- *  / `HeadClass`'s mint arm were already typed to the narrower
- *  `MintIntegrity` below, never this wider `Integrity`. The member survived
- *  only in the type and in prose — a dead alphabet slot, not a security gap
- *  (fail-closed logic never depended on it being reachable). The fabrication
- *  case it was meant to name is handled by a COMPLETELY different mechanism —
+ *  Deliberately 2-member, not 3: there is no `"program-text"` member (written
+ *  by the (adversarial) author — bottom integrity). `InputProv` has no
+ *  `integrity` field to carry it, and `MintProv.integrity`/`HeadClass`'s mint
+ *  arm are typed to the narrower `MintIntegrity` below, never this wider
+ *  `Integrity` — no code path ever mints a `"program-text"` `ChannelAnchor`.
+ *  The fabrication case is handled by a COMPLETELY different mechanism —
  *  `ConstProv` below is its own `StaticProv` KIND with its own
  *  empty-where-provenance semantics, not an anchor-integrity tag — so
- *  removing the member drops no real coverage. `Integrity` and
+ *  a `"program-text"` member would drop no real coverage. `Integrity` and
  *  `MintIntegrity` now happen to share the same 2 members; they stay
  *  separately named because they document different ROLES (the general
  *  anchor-reporting alphabet vs. specifically what a mint's registry may
@@ -158,7 +153,7 @@ export interface ChoiceProv {
  *              all-gray, the recorded activation mask lights the path;
  *  `lowered` = everything else: the body's FULL dialect program is kept, every
  *              internal `if` a visible `choice`, every literal a visible
- *              `const` (the fold-collapse forge, longcat's row, dies here). */
+ *              `const` (the fold-collapse forge dies here). */
 export type CollapseKind = "combine" | "route" | "lowered";
 
 /** The variable-arity aggregation boundary — `map/filter/fold` DESUGAR to this

@@ -1235,7 +1235,7 @@ export function createSchemeLanguageServiceCore(
     // offset is unchanged (closers append at the end). Query tsc at the ATOM'S
     // START, not the raw cursor: the end of a partial atom falls off its token
     // mapping into the enclosing form's mapping (→ `__arr.car`), where tsc
-    // answers MEMBER completions — the whole scope vanished (caught 2026-06-10).
+    // answers MEMBER completions — the whole scope vanishes.
     const mapper = loadSource(balancePrefix(scheme));
     const tsOffset = mapper.toTs(atomBoundsAt(scheme, schemeOffset)[0]);
     if (tsOffset === null) return [];
@@ -1256,8 +1256,8 @@ export function createSchemeLanguageServiceCore(
     for (const e of completions?.entries ?? []) {
       // Subtraction matches name AND kind: a program LOCAL that happens to
       // collide with a substrate name (`(define Array …)` — a const, vs the
-      // baseline's type-only `Array` interface) must survive. Audited
-      // 2026-06-10: name-only matching ate such locals.
+      // baseline's type-only `Array` interface) must survive. Name-only
+      // matching would treat it as the baseline entry and drop it.
       if (baseline.has(`${e.name} ${e.kind}`) || e.name.startsWith("__") || seen.has(e.name)) continue;
       seen.add(e.name);
       // Backport: tsc answers in EMITTED terms (`cleanName` may have renamed a program
@@ -1289,9 +1289,9 @@ export function createSchemeLanguageServiceCore(
       // probe's subject is the EMPTY program, not the caller's real document. Restore
       // afterward (and bump the version once more) so a completion request that
       // triggers this one-time warm-up mid-flight doesn't lose the real program's
-      // state to it (2026-07-05: the FIRST-EVER completion in a fresh service saw
-      // `programDeclaredNames` clobbered back to empty by this probe, silently
-      // undoing the backport for that one request).
+      // state to it — a fresh service's very first completion request would
+      // otherwise see `programDeclaredNames` clobbered back to empty, silently
+      // undoing the backport for that request.
       const saved = { text: programText, declaredNames: programDeclaredNames, depUnits };
       loadSource("");
       const c = service.getCompletionsAtPosition(PROGRAM_FILE, 0, undefined);
@@ -1379,7 +1379,7 @@ export function createSchemeLanguageServiceCore(
 
   /** Resolve a probe module and read the tuple type of `declare const <name>: […]`
    *  element by element off the checker — never through a whole-tuple
-   *  `typeToString` (truncates past ~160 chars; audited 2026-06-10). */
+   *  `typeToString`, which truncates past ~160 chars. */
   function readProbeTuple(probeProgramText: string, name: string): readonly ts.Type[] | null {
     programText = probeProgramText;
     programVersion += 1;

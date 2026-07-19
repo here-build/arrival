@@ -144,18 +144,16 @@ describe("bypass auto-exec — an UNAMBIGUOUS direct call is translated and EXEC
     // fakeUpstream's "ok" crosses as a plain scheme string, hence the rendered quotes. The
     // attempted name is wire-underscored ("filesystem_search_files"); it resolves to the real
     // `/`-joined qualified symbol via bypassFormsOf's wire-form translation (bind.ts).
-    // THE ADVISORY MOVED (2026-07-14). It used to be a bare block PREPENDED to the answer:
-    //   [auto-executed as (…) — call through … next time]
-    //   "ok"
-    // It now rides the CONSOLIDATED notes channel, AFTER the answer:
+    // The auto-exec advisory rides the CONSOLIDATED notes channel, AFTER the answer:
     //   "ok"
     //   #| ── environment notes ──
     //   auto-executed as (…) — call through … next time.
     //   |#
-    // Prepending made it a SECOND, unlabelled notification channel — the model had to learn twice
-    // where bookkeeping lives, and the one place it is guaranteed to read (the answer) opened with
-    // a non-answer. The advisory is bookkeeping ABOUT the call, exactly like the define-introduction
-    // and elision notes it now sits beside.
+    // It never PREPENDS to the answer: that would make it a SECOND, unlabelled notification
+    // channel — the model would have to learn twice where bookkeeping lives, and the one place
+    // it is guaranteed to read (the answer) would open with a non-answer. The advisory is
+    // bookkeeping ABOUT the call, exactly like the define-introduction and elision notes it sits
+    // beside.
     expect(text).toBe(
       '"ok"\n#| ── environment notes ──\nauto-executed as (filesystem/search_files :path "/data" :pattern "log") — call through scheme-repl-with-all-mcp-tools next time.\n|#',
     );
@@ -242,8 +240,8 @@ describe("bypass auto-exec — an UNAMBIGUOUS direct call is translated and EXEC
   });
 
   it("an executed bypass's OWN failure travels through untouched, note prepended — auto-exec never masks it", async () => {
-    // A dedicated upstream declaring `path` REQUIRED. Since args-error-reporting-v2 Phase 1,
-    // arrival's kwargs decode is strict — the missing required kwarg is rejected at OUR
+    // A dedicated upstream declaring `path` REQUIRED. arrival's kwargs decode is strict
+    // (args-error-reporting-v2.md §2.5) — the missing required kwarg is rejected at OUR
     // layer (kwargs-rejection.ts's frozen grammar) before the upstream is ever invoked; the
     // bypass path must carry that failure through untouched the same way it carries an
     // upstream domain failure.

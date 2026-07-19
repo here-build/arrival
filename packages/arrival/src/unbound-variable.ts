@@ -6,10 +6,9 @@
 // The suggestion machinery below stays zero-imports (the throw sites sit at/below the
 // eval layer, so this module must be importable from anywhere in the graph with no
 // cycle risk — the same constraint the dissolved `env/polyglot-rich-errors/registry.ts`
-// documented). The one exception is `UnboundVariableError` itself, promoted into
-// `errors.ts` (the errors-as-doors extraction, 2026-07-11) — that class has zero
-// imports of its own beyond `ArrivalError`, so importing it here carries no cycle risk
-// either.
+// documented). The one exception is `UnboundVariableError` itself, which lives in
+// `errors.ts` and has zero imports of its own beyond `ArrivalError`, so importing it
+// here carries no cycle risk either.
 //
 // There is deliberately no static curated table of "well-known" names here (the old
 // dissolved registry kept one, matching typos against it). That table was declaration

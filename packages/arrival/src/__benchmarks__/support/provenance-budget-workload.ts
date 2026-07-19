@@ -1,14 +1,12 @@
 /**
- * support/provenance-budget-workload.ts — Q19 (docs/PROVENANCE.md §5 storage-bound
- * hard gate — the R3 HARD GATE): a synthetic driver reproducing docs/PROVENANCE.md Appendix A's reference
+ * A synthetic driver reproducing docs/PROVENANCE.md Appendix A's reference
  * workload SHAPE ("~1000 SLOC agent-shaped program — 30 rosetta calls, 5 fans over
  * 100/500/1k/5k/10k elements (Σ≈16.6k), 3 loops to 10⁴, one nested map (10k×10)").
  *
- * TERRITORY NOTE (per this node's own task brief): a "synthetic program" here means
- * the SAME idiom `__benchmarks__/provenance-emit.bench.test.ts` (Q11a's own overhead
- * benchmark) already established — driving `store/emit.ts`'s real emission core
- * directly against real stores, not hand-parsing 1000 lines of Scheme source through
- * the interpreter. Every category below cites the exact Appendix A row it stands in
+ * A "synthetic program" here means the SAME idiom `provenance-emit.bench.test.ts`
+ * already established — driving `store/emit.ts`'s real emission core directly
+ * against real stores, not hand-parsing 1000 lines of Scheme source through the
+ * interpreter. Every category below cites the exact Appendix A row it stands in
  * for, so the arithmetic is traceable, not invented.
  *
  * ── A.2's categories, and how this file realizes each one ─────────────────────────
@@ -21,9 +19,10 @@
  *  Σ16.6k × ~3 records × ~64B ≈ 2.5MB; pressure" / A.2's fix: "RLE aggregation...
  *  active." Each fan emits `fan-instantiation` + `ingress-binding` records over
  *  STABLE wiring (one templateHash per fan, contiguous ordinals 0..N-1) through
- *  `AggregatingProvenanceStore` — §5 A6 marks both kinds aggregatable, so the raw
- *  Σ33.2k facts (2 kinds × Σ16.6k) fold to exactly 10 `AggregationRun`s (2 kinds × 5
- *  fans), O(1)+count each, never N raw appends to the base store.
+ *  `AggregatingProvenanceStore` — §4's record-kinds table marks both kinds
+ *  aggregatable, so the raw Σ33.2k facts (2 kinds × Σ16.6k) fold to exactly 10
+ *  `AggregationRun`s (2 kinds × 5 fans), O(1)+count each, never N raw appends to
+ *  the base store.
  *
  *  "3 loops to 10⁴" — SPLIT per A.1's own two DIFFERENT arithmetic rows, because a
  *  "loop" is not one shape:
@@ -31,33 +30,34 @@
  *      records (no RLE) ... 6MB; fixed by aggregation." Folds to 2 runs.
  *    - 1 AGENT loop: a `MintRecord` payload (≈2KB) per iteration, 10⁴ iterations —
  *      A.1/A.2's "Mint payloads: ... 10⁴-iteration agent loop @2KB ≈ 20MB —
- *      IRREDUCIBLE INFORMATION, governed by tiering." Mints NEVER aggregate (§5 A6
- *      never-list); this is the category that actually stresses the ring/tier
- *      budget, by design.
+ *      IRREDUCIBLE INFORMATION, governed by tiering." Mints NEVER aggregate
+ *      (§4's record-kinds table, never-list); this is the category that actually
+ *      stresses the ring/tier budget, by design.
  *
  *  "one nested map (10k×10)" — A.1's "nested map +10⁵ tracks ≈ +15MB worst case
- *  pressure." Round-3 m4: "aggregation runs are PATH-SCOPED... inner-loop/fan
- *  ordinals restart per outer element, so runs never span parents." Realized
- *  faithfully: 10⁴ OUTER iterations, each opening its OWN inner `ingress-binding`
- *  run of count 10 (a fresh `parentOrdinalPath` per outer element) — 10⁵ raw facts
- *  folding to 10⁴ small runs, NOT one giant run. This is intentionally the category
- *  that demonstrates aggregation's LIMIT (many small runs, not one O(1) run) as
+ *  pressure." §4: "aggregation runs are PATH-SCOPED... inner-loop/fan ordinals
+ *  restart per outer element, so runs never span parents." Realized faithfully:
+ *  10⁴ OUTER iterations, each opening its OWN inner `ingress-binding` run of count
+ *  10 (a fresh `parentOrdinalPath` per outer element) — 10⁵ raw facts folding to
+ *  10⁴ small runs, NOT one giant run. This is intentionally the category that
+ *  demonstrates aggregation's LIMIT (many small runs, not one O(1) run) as
  *  honestly as its bulk win elsewhere.
  *
- *  Mux decisions — A.1's "10⁴–10⁵ recorded, pure noise" is the PRE-amendment number;
- *  A.2's own fix is "pure-mux collapse" (§1 A2: only PORT-COUPLED muxes are ever
- *  recorded, a pure-selector mux collapses into its wire and is never recorded). This
- *  workload therefore emits a SMALL, bounded number of port-coupled mux decisions
- *  (never aggregated, §5 A6) — demonstrating the fix by construction, not by asserting
- *  a large number away.
+ *  Mux decisions — A.1's "10⁴–10⁵ recorded, pure noise" is the pre-mux-collapse
+ *  number; A.2's own fix is the mux-collapse rule (§1: only PORT-COUPLED muxes are
+ *  ever recorded, a pure-selector mux collapses into its wire and is never
+ *  recorded). This workload therefore emits a SMALL, bounded number of
+ *  port-coupled mux decisions (never aggregated, per §4's record-kinds table) —
+ *  demonstrating the fix by construction, not by asserting a large number away.
  *
  * ── Ring/tiering wiring ─────────────────────────────────────────────────────────
  * Mint payloads (rosetta + agent-loop) land RING-resident first
  * (`PayloadTierMachine.ringPut`), then flush to the durable `PayloadStore` once the
- * harness's own FIFO-by-byte-cap policy exceeds `ringCapBytes` (§5 A1 point 1: "ring
- * cap (~4-8MB, configurable)"; §5 C3's real policy is "flush AT PORTS" — this harness's
- * simple oldest-first-over-cap policy is a reasonable stand-in for a benchmark driver,
- * not a re-implementation of the port-boundary trigger, which is Q13/Q15's job).
+ * harness's own FIFO-by-byte-cap policy exceeds `ringCapBytes` (§4's payload-tiering
+ * list: "ring cap (~4-8MB, configurable)"; §4's real flush policy is "AT PORTS" —
+ * this harness's simple oldest-first-over-cap policy is a reasonable stand-in for a
+ * benchmark driver, not a re-implementation of the port-boundary trigger, which is
+ * a separate concern this file does not take on).
  */
 import {
   AggregatingProvenanceStore,
@@ -99,7 +99,7 @@ export const WORKLOAD_SHAPE = {
   portCoupledMuxDecisions: 128,
 } as const;
 
-export const DEFAULT_RING_CAP_BYTES = 6 * 1024 * 1024; // "~4-8MB, configurable" (§5 A1 point 1)
+export const DEFAULT_RING_CAP_BYTES = 6 * 1024 * 1024; // "~4-8MB, configurable" (§4's payload-tiering list, point 1)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Byte estimation — same idiom as `store/fakes.ts`'s own `estimateSizeBytes` (a
@@ -143,10 +143,11 @@ export interface WorkloadHarness {
   readonly regionId: RegionId;
   readonly ringCapBytes: number;
   /** Bytes currently ring-resident (this harness's own accounting — the "in-memory
-   *  hot layer," §5 A1 point 1 — `PayloadTierMachine` does not expose a byte total
-   *  of its own, so the harness tracks alongside every `ringPut`/`flush` call). */
+   *  hot layer" of §4's payload-tiering list, point 1 — `PayloadTierMachine` does
+   *  not expose a byte total of its own, so the harness tracks alongside every
+   *  `ringPut`/`flush` call). */
   ringBytesResident: number;
-  /** Cumulative bytes moved past the ring into the durable store (§5 A1: in a real
+  /** Cumulative bytes moved past the ring into the durable store (§4: in a real
    *  deployment these live in DO storage/R2, off V8 heap — the fakes retain them in
    *  an in-memory `Map` regardless, a KNOWN fakes limitation this benchmark reports
    *  on explicitly rather than papering over). */
@@ -178,7 +179,7 @@ export function createWorkloadHarness(
   };
 }
 
-/** Land one mint through the ring-first pipeline (§5 A1 points 1-2), then enforce
+/** Land one mint through the ring-first pipeline (§4's payload-tiering list, points 1-2), then enforce
  *  the ring's byte cap by flushing the OLDEST resident payloads until back under
  *  budget. Returns the record's `payloadHash` (for later tier-honesty reads). */
 async function mintThroughRing(
@@ -214,9 +215,9 @@ async function mintThroughRing(
 }
 
 /** One aggregatable run's raw facts, driven directly through the harness's
- *  `AggregatingProvenanceStore` so the SAME write-side hook Q12 built folds them —
- *  this function does not fold anything itself, it only emits the raw per-ordinal
- *  appends the hook observes. */
+ *  `AggregatingProvenanceStore` so the store's own write-side aggregation hook
+ *  folds them — this function does not fold anything itself, it only emits the
+ *  raw per-ordinal appends the hook observes. */
 async function emitAggregatableRun(
   h: WorkloadHarness,
   kind: "fan-instantiation" | "ingress-binding" | "track-open" | "track-close",
@@ -277,8 +278,8 @@ export interface WorkloadReport {
  *  every field traceable to an Appendix A row (module doc). Mints route through
  *  the ring/tier pipeline; the four aggregatable kinds route through
  *  `AggregatingProvenanceStore`; mux decisions (never-list) route through the real
- *  `emitMuxDecision` (Q11a's own emission core, flag-gated — this function flips
- *  the flag ON for its own extent, restoring it in `finally`). */
+ *  `emitMuxDecision` (the flag-gated emission core — this function flips the flag
+ *  ON for its own extent, restoring it in `finally`). */
 export async function runReferenceWorkload(h: WorkloadHarness): Promise<WorkloadReport> {
   setEmissionEnabled(true);
   try {
@@ -292,7 +293,7 @@ export async function runReferenceWorkload(h: WorkloadHarness): Promise<Workload
       await emitAggregatableRun(h, "track-close", templateHash, [], 1);
     }
     // Flush here — each rosetta call's trackOpen/trackClose is its own natural
-    // "port" (§5 C3: "flush AT PORTS... durability boundaries coincide with
+    // "port" (§4: "flush AT PORTS... durability boundaries coincide with
     // meaning boundaries"), so this category's runs close before the fan
     // category opens its own (never mixed into one combined delta below).
     await h.aggregating.flush(h.regionId);
@@ -386,9 +387,10 @@ export async function runReferenceWorkload(h: WorkloadHarness): Promise<Workload
  *  `h.payloadStore`'s own backing `Map` — the module doc's documented exclusion:
  *  once a payload is flushed past the ring, a REAL deployment's bytes live in DO
  *  storage/R2, off V8 heap; `PayloadStoreFake` retains them anyway (a fakes
- *  limitation, not a production behavior) — see the benchmark's own C1 block for
- *  the complementary raw `process.memoryUsage()` cross-check, which DOES include
- *  that retained volume, and the gap between the two numbers this implies. */
+ *  limitation, not a production behavior) — see `provenance-budget.bench.test.ts`'s
+ *  memory-budget test for the complementary raw `process.memoryUsage()` cross-check,
+ *  which DOES include that retained volume, and the gap between the two numbers
+ *  this implies. */
 export async function storeMetadataBytes(h: WorkloadHarness): Promise<{ recordBytes: number; runBytes: number }> {
   const stream = await h.base.readStream(h.regionId);
   const runsList = await h.runs.readRuns(h.regionId);

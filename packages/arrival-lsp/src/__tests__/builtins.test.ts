@@ -55,9 +55,9 @@ const diagnostics = compileCasesProgram();
 
 describe("builtins — every leaf bites across the merged cases program", () => {
   it("found the full fan-out (every non-template leaf has a cases file)", () => {
-    // Floor lowered 45 → 43 on 2026-06-16: the `conversions-ext`, `object-accessors`,
-    // and `ramda-collection` leaves (Ramda-derived vocab cut in the 2026-06-15 eviction)
-    // were deleted to keep the lens a faithful mirror of the live inference env.
+    // The floor tracks the live-bound vocab count, not a round number: it drops
+    // whenever a leaf's builtins are cut from the inference env, to keep the lens
+    // a faithful mirror of what actually runs.
     expect(leafFiles.length).toBeGreaterThanOrEqual(43);
     expect(caseFiles.length).toBeGreaterThanOrEqual(43);
     const missing = leafFiles

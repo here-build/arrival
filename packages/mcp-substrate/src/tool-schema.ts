@@ -1,8 +1,8 @@
-// Runner-owned half of manifold's tool-signature.ts split (Opus Round 3 finding): the JSON-Schema
-// shape types and the `orderedFields` traversal are needed by runner-bound files (doors.ts,
-// example-call.ts) — only the kwargs-specific `toolSignature()` catalog-text RENDERER stays
-// binder-side (arrival-manifold/src/tool-signature.ts), since a positional consumer renders a
-// signature differently. Kept byte-identical to the pre-split shapes/logic — a pure relocation.
+// Runner-owned half of manifold's tool-signature.ts split: the JSON-Schema shape types and the
+// `orderedFields` traversal are needed by runner-bound files (doors.ts, example-call.ts) — only
+// the kwargs-specific `toolSignature()` catalog-text RENDERER stays binder-side
+// (arrival-manifold/src/tool-signature.ts), since a positional consumer renders a signature
+// differently. Kept byte-identical to the pre-split shapes/logic — a pure relocation.
 
 export interface JsonSchemaProperty {
   /** JSON Schema allows a type ARRAY (e.g. ["string","null"]) — a scalar union. */
@@ -19,8 +19,8 @@ export interface JsonSchemaProperty {
   required?: readonly string[];
   /** Closed-world marker — `false` means "only the declared `properties` exist"; the L2
    *  parameter dump's "only these keys exist (any other key is rejected)" clause is only a
-   *  FACT under it (args-error-reporting-v2 T10). A schema-valued form (JSON Schema allows
-   *  one) is not closed-world and reads the same as absent here. */
+   *  FACT under it (args-error-reporting-v2.md §2.3). A schema-valued form (JSON Schema
+   *  allows one) is not closed-world and reads the same as absent here. */
   additionalProperties?: boolean | JsonSchemaProperty;
   minimum?: number;
   maximum?: number;

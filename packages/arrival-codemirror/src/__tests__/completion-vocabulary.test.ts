@@ -62,7 +62,7 @@ describe("the Σ∩T-ranked pipeline (rich backend)", () => {
     const names = result!.options.find((o) => o.label === "names")!;
     expect(names.detail).toBe("List<string>");
     // The signature is already inline — a signature-only side panel would be a
-    // duplicate tooltip (V, 2026-06-10). Fitting entries carry NO info…
+    // duplicate tooltip. Fitting entries carry NO info…
     expect(names.info).toBeUndefined();
     // …demoted entries keep it for the "doesn't fit this slot" note.
     const greet = result!.options.find((o) => o.label === "greet")!;

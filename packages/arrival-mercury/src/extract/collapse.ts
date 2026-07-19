@@ -1,5 +1,5 @@
 /**
- * T3a — collapse-kind inference (IMPLEMENTED; contract CORRECTED 2026-07-15).
+ * Collapse-kind inference for a Fan's `collapse` axis.
  *
  * A Fan's `collapse` says whether its axis may fold. §2c has two collapsing
  * regimes and a fail-closed default:
@@ -12,14 +12,14 @@
  *               statically all-gray, the recorded activation lights the path.
  *   "lowered" — everything else: the body's full dialect program stays, every
  *               internal choice and const visible. ALWAYS sound (the default
- *               the fold-collapse forge — longcat's row — died against).
+ *               the fold-collapse forge died against).
  *
  * ─── THE SPLIT (why `inferCollapse` cannot decide "combine") ────────────────────
  *
  * "combine" needs the COMBINATOR'S IDENTITY, and that identity is ERASED before
  * a body-only view exists: `+`, `-`, `*` all classify to `role:"fuse"` and
- * extract to a BIT-IDENTICAL `FusedProv{sources:[acc,element]}` (verified
- * 2026-07-15). A function of the body alone therefore CANNOT tell the AC `+`
+ * extract to a BIT-IDENTICAL `FusedProv{sources:[acc,element]}`. A function
+ * of the body alone therefore CANNOT tell the AC `+`
  * from the non-AC `-` — returning "combine" for the `+`-shape would return it
  * for the `-`-shape too (same input), and erase a non-associative fold's
  * structure. That is a forge.

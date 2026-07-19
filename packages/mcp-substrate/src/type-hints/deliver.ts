@@ -1,5 +1,4 @@
-// deliver — Ring 2 orchestration (doc §1/§3/G6/G7/G12, docs/working-proposals/
-// manifold-type-hints.md rev 3). The post-loop lens race: ONE lens run per manifold call,
+// deliver — Ring 2 orchestration. The post-loop lens race: ONE lens run per manifold call,
 // started after the statement loop completes, bounded by HINT_RACE_BUDGET_MS, tagged with a
 // per-process generation counter so a call-N result never renders for call N+1.
 //

@@ -85,12 +85,11 @@ export class ALambda extends AValue {
     runner: (args: SchemeValue[], runCtx: RunContext, canBounce: boolean) => CallResult;
     ctx?: RunContext;
   }) {
-    // PRE-RUN LEGITIMATE, re-verified (arrival-constant-ctx-audit-2026-07-11.md §2.5): a
-    // lambda's IDENTITY is minted at bake/define time (evalLambda, named-let), not per
+    // A lambda's IDENTITY is minted at bake/define time (evalLambda, named-let), not per
     // invocation — live work threads `runCtx` per-call through `impl(args, runCtx)`
     // instead. (evaluator.ts's `ctx.runCtx ?? CONSTANT_CTX` upstream fallback at the two
-    // call sites that construct a LONG-LIVED user lambda is a separate, already-closed
-    // Wave-0 concern — not this ctor.)
+    // call sites that construct a LONG-LIVED user lambda is a separate concern — not
+    // this ctor.)
     super(opts.ctx ?? CONSTANT_CTX);
     this.name = opts.name;
     this.arity = opts.arity;
@@ -137,9 +136,9 @@ export class ANativeProcedure extends AValue {
   readonly #impl: CallableImpl;
 
   constructor(opts: { name: string | symbol; arity: Arity; contract: unknown; impl: CallableImpl; ctx?: RunContext }) {
-    // PRE-RUN LEGITIMATE, re-verified — same reasoning as ALambda's ctor above: a native
-    // procedure's IDENTITY is bound once at capability-assembly time (common/capability.ts),
-    // never per invocation; `impl(args, runCtx)` carries the live per-call ctx instead.
+    // Same reasoning as ALambda's ctor above: a native procedure's IDENTITY is bound
+    // once at capability-assembly time (common/capability.ts), never per invocation;
+    // `impl(args, runCtx)` carries the live per-call ctx instead.
     super(opts.ctx ?? CONSTANT_CTX);
     this.name = opts.name;
     this.arity = opts.arity;
@@ -196,9 +195,8 @@ export class ARosettaProcedure extends AValue {
     impl: CallableImpl;
     ctx?: RunContext;
   }) {
-    // PRE-RUN LEGITIMATE, re-verified — same reasoning as ALambda/ANativeProcedure's ctors
-    // above: bound once at capability-assembly time (scheme-zod.ts's `z.procedure`), never
-    // per invocation.
+    // Same reasoning as ALambda/ANativeProcedure's ctors above: bound once at
+    // capability-assembly time (scheme-zod.ts's `z.procedure`), never per invocation.
     super(opts.ctx ?? CONSTANT_CTX);
     this.name = opts.name;
     this.arity = opts.arity;
@@ -260,9 +258,9 @@ export class DoorProcedure extends AValue {
     readonly door: DoorSymbolDef,
     ctx?: RunContext,
   ) {
-    // PRE-RUN LEGITIMATE, re-verified — same reasoning as the sibling ctors above: a door
-    // is bound once at capability-assembly time; it never mints run-tagged output (its
-    // `apply` term unconditionally throws before touching any value).
+    // Same reasoning as the sibling ctors above: a door is bound once at
+    // capability-assembly time; it never mints run-tagged output (its `apply` term
+    // unconditionally throws before touching any value).
     super(ctx ?? CONSTANT_CTX);
   }
 
@@ -315,13 +313,11 @@ export type ACallable = ALambda | ANativeProcedure | ARosettaProcedure | DoorPro
 // `fn` is `unknown` for the same reason: every decoded callback argument funnels here,
 // and a non-callable is doored at runtime (the `not applicable` throw), not silently
 // tolerated by a type-level cast at each of the ~dozen call sites.
-// `runCtx` has no default (Wave 0 of the CONSTANT_CTX rework §2.6): the `= CONSTANT_CTX`
-// default used to be
-// ACTIVELY leaned on — loader-capability.ts's `require` resolver dispatch omitted the
-// argument entirely (now threads `this.runCtx`, one hop away). Every remaining CONSTANT_CTX
-// at a call site (op-helpers.ts's `deriveSortCompare`, srfi-1/srfi-13's callback seams) is
-// already a literal, grep-able confession rather than a silent fallback — later waves fix
-// those (§4 of the audit).
+// `runCtx` has no default: a `= CONSTANT_CTX` default would let a caller omit the
+// argument silently (loader-capability.ts's `require` resolver dispatch used to do
+// exactly that; it now threads `this.runCtx`, one hop away). Every remaining
+// CONSTANT_CTX at a call site (op-helpers.ts's `deriveSortCompare`, srfi-1/srfi-13's
+// callback seams) is a literal, grep-able confession rather than a silent fallback.
 export function applyCallback(fn: unknown, args: readonly unknown[], runCtx: RunContext): CallResult {
   const term = (fn as Partial<ALambda> | null | undefined)?.[tf("apply")];
   if (typeof term === "function") {

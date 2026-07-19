@@ -63,15 +63,15 @@ let activeLineageEnvelopes = false;
  *  list still PARSES (the comment is ignored) — it round-trips to the shown sample. */
 const truncatedMarker = (note: string): SExpr => ({ [TRUNCATED_MARKER]: note });
 
-// ── R6 (§2.6): {core, extras} — serializer-side binary-leaf extraction ─────────────────────────
+// ── {core, extras}: serializer-side binary-leaf extraction ─────────────────────────────────
 // The seam lives HERE because this is the one place that walks every output value under the caps
 // machinery: position (the in-text tag) and payload (the collected blob) never desync because one
 // walk produced both. Extraction happens iff the caller used the `serializeWithExtras` entry
-// point; `toSExprString` itself stays byte-identical (the R0 pins prove it).
+// point; `toSExprString` itself stays byte-identical.
 
 /** One extracted binary leaf: the id baked into the core text's `#attachment` tag + the blob
- *  itself. Rendering strategy is DOWNSTREAM-owned (Ruling A Q5) — this contract carries
- *  everything any strategy needs. */
+ *  itself. Rendering strategy is DOWNSTREAM-owned — this contract carries everything any
+ *  strategy needs. */
 export interface SerializedExtra {
   /** Call-scoped attachment id — `att-N` — the same id inside the core tag. */
   id: string;
@@ -91,7 +91,7 @@ export interface SerializedOutput {
 
 /** ONE call's shared attachment numbering + quota, threaded across its renders so ids stay
  *  unique per call and the quota is global to the call (the `AttachmentSink.beginCall(quota)`
- *  shape, consulted DURING the walk — §2.6's triad-audit fix). */
+ *  shape, consulted DURING the walk). */
 export interface ExtrasState {
   /** Next `att-N` ordinal (1-based). */
   next: number;
@@ -137,7 +137,7 @@ const beginCollectorPass = (): void => {
 };
 
 /** The binary leaf under `obj`, if it is one: a `Blob` itself, or an AValue whose `toJS`
- *  projection is a Blob (§2.6) — the same `"arrival/toJS"` protocol-key dispatch as the
+ *  projection is a Blob — the same `"arrival/toJS"` protocol-key dispatch as the
  *  empty-provenance branch below, but provenance-blind: the pixels are the leaf either way. */
 const binaryLeafOf = (obj: any): Blob | undefined => {
   if (obj instanceof Blob) return obj;
@@ -301,8 +301,8 @@ function capWithElision<T>(items: readonly T[], limit: number, render: (item: T)
 
 /** Same middle-elision, for Map/dict ENTRIES — each entry renders as TWO `SExpr`s
  *  (`:key`, value), so the head/tail slicing and flattening differ from `capWithElision`.
- *  Per the elision plan: dicts/maps use the fixed descriptor word `"entries"` — no shape scan
- *  (a key/value pair doesn't have "a shape" the way array elements do). */
+ *  Dicts/maps use the fixed descriptor word `"entries"` — no shape scan (a key/value pair
+ *  doesn't have "a shape" the way array elements do). */
 function capEntriesWithElision<T>(entries: readonly T[], limit: number, renderEntry: (entry: T) => [SExpr, SExpr]): SExpr[] {
   const head = activeCaps.elideHead;
   const tail = activeCaps.elideTail;
@@ -351,8 +351,8 @@ const unwrapForSelection = (value: unknown): unknown => {
 
 type PrimarySelection = { array: readonly unknown[]; kind: "top" | "second" } | null;
 
-/** Choose the ONE array (by reference) that earns an elevated limit — §2 of the elision plan.
- *  Runs ONCE per `toSExprString` call (before the shrink-to-fit loop), using the INITIAL
+/** Choose the ONE array (by reference) that earns an elevated limit. Runs ONCE per
+ *  `toSExprString` call (before the shrink-to-fit loop), using the INITIAL
  *  (unshrunk) `maxItems` as the "is this array big enough to matter" threshold: the root
  *  itself, if it's an array; else, among a plain-object root's own enumerable values, the
  *  SINGLE array-valued one longer than `maxItems` (zero or multiple such arrays ⇒ no
@@ -404,8 +404,8 @@ export type SerializeOpts = {
    *  tree AFTER the streaming caps applied during `toSExpr` (truncation markers included);
    *  default `formatSExpr` at `indent`. The shrink loop re-invokes it on every pass. */
   format?: (sexpr: SExpr) => string;
-  /** Elevated per-array limit for an array that IS the observation root (§2, elision plan).
-   *  Ignored unless the root actually is an array; falls back to `maxItems` when unset. */
+  /** Elevated per-array limit for an array that IS the observation root. Ignored unless the
+   *  root actually is an array; falls back to `maxItems` when unset. */
   topLevelArrayLimit?: number;
   /** Elevated per-array limit for the SINGLE dominant array one level below the root (a plain
    *  object with exactly one array-valued property longer than `maxItems`). Falls back to
@@ -526,11 +526,11 @@ function toSExprDispatch(obj: any, visited: Set<any>): SExpr {
   // Handle LIPS-specific types before generic Symbol.toSExpr
   if (obj && typeof obj === "object") {
     // SchemeExact (exact integers/rationals) — num/denom are safe-integer `number`s,
-    // never bigint (docs/working-proposals/arrival-one-number-rework.md §2.1: exact
-    // is a gcd-normalized (num, denom) ratio of `number`s). The out-of-range branch
-    // below is now unreachable for a well-formed AExact (the class invariant keeps
-    // both components safe-integer at all times) — kept as a defensive fallback
-    // since this file duck-types the shape rather than `instanceof`-checking it.
+    // never bigint: exact is a gcd-normalized (num, denom) ratio of `number`s, and the
+    // class invariant keeps both components safe-integer at all times, so the
+    // out-of-range branch below is unreachable for a well-formed AExact. It stays as a
+    // defensive fallback because this file duck-types the shape rather than
+    // `instanceof`-checking it.
     if (obj.constructor?.name === "AExact" && "num" in obj && "denom" in obj) {
       if (obj.denom === 1) {
         const value = obj.num as number;
@@ -607,7 +607,11 @@ function toSExprDispatch(obj: any, visited: Set<any>): SExpr {
     }
   }
 
-  // Has custom serialization with Symbol.toSExpr
+  // Has custom serialization with Symbol.toSExpr. The head tag resolves through a fixed
+  // fallback chain: an explicit `Symbol.SExpr` override wins, then own/constructor
+  // `displayName`, then own/constructor `name` — so an anonymous instance still tags with its
+  // class name. `Symbol.toSExpr` returns the PARTS only; the head is supplied here and every
+  // part is recursed through `processItem` (nested `Symbol.toSExpr` applied where present).
   if (obj && typeof obj === "object" && (obj as any)[Symbol.toSExpr]) {
     const displayName =
       obj[Symbol.SExpr]?.() ?? obj.displayName ?? obj.constructor.displayName ?? obj.name ?? obj.constructor.name;
@@ -661,10 +665,10 @@ function toSExprDispatch(obj: any, visited: Set<any>): SExpr {
     return ["set", ...capItems([...obj], (item) => toSExpr(item, visited))];
   }
 
-  // R6 (§2.6): binary-leaf extraction — ONLY when the render came through
-  // `serializeWithExtras` (a collector is active); the plain `toSExprString` path never
-  // enters here and stays byte-identical. Sits ABOVE the AValue branches so a Blob-projecting
-  // AValue is intercepted whole; a raw Blob also lands here (nothing above claims it).
+  // Binary-leaf extraction — ONLY when the render came through `serializeWithExtras` (a
+  // collector is active); the plain `toSExprString` path never enters here and stays
+  // byte-identical. Sits ABOVE the AValue branches so a Blob-projecting AValue is
+  // intercepted whole; a raw Blob also lands here (nothing above claims it).
   if (activeCollector !== null && typeof obj === "object") {
     const blob = binaryLeafOf(obj);
     if (blob !== undefined) return collectBinaryLeaf(activeCollector, blob);
@@ -1101,9 +1105,9 @@ function toSExprStringImpl(obj: any, opts: SerializeOpts, format: (sexpr: SExpr)
   // floor for what's shown) — floor there instead of the generic `FLOOR_ITEMS`.
   const arrayLimitFloor = elisionRequested ? elideHead + elideTail : FLOOR_ITEMS;
 
-  // Primary-array selection (§2, elision plan): runs ONCE, by reference, against the INITIAL
-  // (unshrunk) `maxItems` — the shrink loop below only rescales the LIMIT values, never
-  // re-selects which array is primary.
+  // Primary-array selection runs ONCE, by reference, against the INITIAL (unshrunk)
+  // `maxItems` — the shrink loop below only rescales the LIMIT values, never re-selects
+  // which array is primary.
   const primarySelection = selectPrimaryArray(obj, maxItems);
   let topLevelArrayLimit = opts.topLevelArrayLimit;
   let secondLevelArrayLimit = opts.secondLevelArrayLimit;
@@ -1150,9 +1154,8 @@ function toSExprStringImpl(obj: any, opts: SerializeOpts, format: (sexpr: SExpr)
   // Floor still over budget (pathological nesting) → hard-cut the CONTENT as the genuine
   // last resort. The reduction is still signaled INLINE (errors-as-doors: a shrink must
   // never be silent) via this hard-cut marker plus the per-collection/per-string elision
-  // markers `capItems`/`capString` already wove into the content itself — there is no
-  // separate top-of-output banner (measured null effect on task pass-rate, 2026-07-06;
-  // removed to stop spending tokens on a line that taught nothing).
+  // markers `capItems`/`capString` already wove into the content itself — there is
+  // deliberately no separate top-of-output banner; the inline markers carry the signal.
   if (out.length > maxTotalChars) {
     out = `${out.slice(0, maxTotalChars)}\n#| … output hard-truncated at ${maxTotalChars} chars |#`;
   }
@@ -1160,7 +1163,7 @@ function toSExprStringImpl(obj: any, opts: SerializeOpts, format: (sexpr: SExpr)
 }
 
 /**
- * Serialize a value to `{text, elisions}` (§5, elision plan) — the additive sibling of
+ * Serialize a value to `{text, elisions}` — the additive sibling of
  * `toSExprString` for callers that need the collected `ElisionRecord`s to build a trailing
  * note (mcp-substrate's `runner.ts`). The SAME walk + caps + shrink-to-fit machinery renders
  * `text`; `toSExprString` itself never sets the sink, so its behaviour is untouched.
@@ -1183,7 +1186,7 @@ export type SerializeWithExtrasOpts = SerializeOpts & {
 };
 
 /**
- * Serialize a value to `{core, extras}` (R6, §2.6) — the additive sibling of `toSExprString`.
+ * Serialize a value to `{core, extras}` — the additive sibling of `toSExprString`.
  *
  * The SAME walk + caps + shrink-to-fit machinery renders `core`, with every binary leaf (a
  * `Blob`, or an AValue whose `toJS` projection is a Blob) collected into `extras` and rendered

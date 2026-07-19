@@ -1,13 +1,13 @@
-// R3 session laws (docs/working-proposals/arrival-mcp-rework-over-phases.md, Part IV — R3 gate):
+// DiscoveryTool session laws:
 //
 //   • fold-idempotence      — fold ∘ persist ∘ fold = fold
 //   • penetration-count     — a `view` penetration fires exactly ONCE across N rehydrations
-//                             (arrival-mcp's own verbs are unclassified today — D4's lazy scope —
-//                             so the law runs over a test capability declaring `view`/`sink`)
+//                             (arrival-mcp's own verbs are unclassified by default, so the law
+//                             runs over a test capability declaring `view`/`sink`)
 //   • config-change         — same session, changed data-config ⇒ cache dropped (hit must miss),
 //                             log kept
 //   • dispose-spy (INTERIM) — sessionless per-call assembly disposes in `finally`; a config-digest
-//                             change disposes the stale warm pair (§2.8's bar column, tranche 1)
+//                             change disposes the stale warm pair
 //   • store injection       — `AsyncSessionStore` round-trip: persisted (awaited) blob rehydrates
 //                             on a fresh instance; zero-config default keeps the session bag
 //   • statement cap         — the teaching error at the cap, never silent truncation
@@ -79,7 +79,7 @@ describe("R3 law — penetration-count: a `view` penetration fires exactly once 
     }
     expect(counts.view).toBe(1); // the classified penetration NEVER re-fired
     expect(runState(session).counters.rehydrations).toBe(3);
-    expect(runState(session).counters.cacheHits).toBe(3); // the cache economy is observable (§2.7)
+    expect(runState(session).counters.cacheHits).toBe(3); // the cache economy is observable
   });
 
   it("a `sink` effect statement is tombstone-skipped on every fold — one live effect, ever", async () => {
@@ -223,7 +223,7 @@ describe("R3 law — INTERIM dispose-spy (§2.8, first tranche)", () => {
     await t.call({ expr: "(greet)", who: "bob" }, { session }); // digest change ⇒ old warm disposed
     expect(disposeSpy).toHaveBeenCalledOnce();
 
-    await t.closeSession(session.id); // the session-close hook (R4 wires the transport event)
+    await t.closeSession(session.id); // the session-close hook (a host wires this to its transport's close event)
     expect(disposeSpy).toHaveBeenCalledTimes(2);
   });
 });

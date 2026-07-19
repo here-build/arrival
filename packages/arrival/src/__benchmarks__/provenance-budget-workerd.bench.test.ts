@@ -1,25 +1,23 @@
 /**
- * provenance-budget-workerd.bench.test.ts — Q19 conjunct C2 (docs/PROVENANCE.md §5
- * storage-bound hard gate; docs/PROVENANCE.md Appendix A.2's pass condition: "the recorded stream
- * reconstructs regions (C1 fold) after a FORCED mid-run eviction"). THE MERGE
- * BLOCKER — fakes (this file's sibling, `provenance-budget.bench.test.ts`) prove the
- * fold LOGIC; this file proves the SAME logic survives a REAL Durable Object's
- * forced eviction (`DurableObjectState.abort()`, workerd's genuine hibernation
- * primitive — not a fake standing in for one).
+ * The storage-bound hard gate's pass condition (docs/PROVENANCE.md §4, Appendix
+ * A.2): "the recorded stream reconstructs regions (the stream-fold law) after a
+ * FORCED mid-run eviction." The sibling `provenance-budget.bench.test.ts` proves
+ * the fold LOGIC against fakes; this file proves the SAME logic survives a REAL
+ * Durable Object's forced eviction (`DurableObjectState.abort()`, workerd's
+ * genuine hibernation primitive — not a fake standing in for one).
  *
  * Run via `pnpm workerd` (its own `vitest.workerd.config.ts`) — opt-in, never part
- * of `pnpm test`/`pnpm benchmarks` (see that config's own header for why a graceful
- * in-test skip isn't meaningful here: if this file is executing, workerd already
+ * of `pnpm test`/`pnpm benchmarks`: if this file is executing, workerd already
  * started successfully, and a pool that CAN'T start fails loudly at bootstrap,
- * before any test body runs).
+ * before any test body runs, so a graceful in-test skip isn't meaningful here.
  *
  * SCOPE: `ProvenanceRegionDO` (`workerd/provenance-do-worker.ts`) implements the
  * `ProvenanceStore` contract ONLY (append/allocateSeq/readStream/getHeader/
- * putHeader) — Appendix A.2's C2 pass condition names the FOLD, not payload/R2
- * tiering, so this file drives a REPRESENTATIVE, bounded slice of record volume
- * (hundreds, not the full ~150k-fact reference workload C1 exercises against
- * fakes) — the fold LAW holds at any N by construction (a pure fold over whatever
- * `readStream` returns); C1 is what proves the numbers hold AT SCALE.
+ * putHeader) — the pass condition names the FOLD, not payload/R2 tiering, so this
+ * file drives a REPRESENTATIVE, bounded slice of record volume (hundreds, not the
+ * full ~150k-fact reference workload the fakes-based benchmark exercises) — the
+ * fold LAW holds at any N by construction (a pure fold over whatever `readStream`
+ * returns); the fakes-based benchmark is what proves the numbers hold AT SCALE.
  */
 import { env, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
@@ -117,14 +115,13 @@ describe("C2 — MERGE BLOCKER: forced mid-run eviction + fold-reconstruction un
     //    persists. Complete the run's SECOND half through this "fresh" instance.
     //    Track-close uses ordinal 1 (open used ordinal 0) — a real track's
     //    open/close pair are TWO DISTINCT designated instances under an
-    //    incrementing `trackOrdinal` (§5 C2/D1's identity rule + `store/fold.ts`'s
-    //    `nextTrackOrdinal` doc; `values/primitives/region-scope.ts`'s
-    //    `mintTrackId` mints a fresh ordinal per event). Reusing ordinal 0 for
-    //    both would collide on `recordIdKey` — `RecordId` intentionally excludes
-    //    `kind` from its identity triple — and the close would silently
-    //    idempotent-upsert OVER the open (found empirically while building this
-    //    fixture; a bug in THIS test's first draft, not a store defect — real
-    //    emission never mints two different kinds under one identical id). ──
+    //    incrementing `trackOrdinal` (`store/fold.ts`'s `nextTrackOrdinal` doc;
+    //    `values/primitives/region-scope.ts`'s `mintTrackId` mints a fresh
+    //    ordinal per event). Reusing ordinal 0 for both would collide on
+    //    `recordIdKey` — `RecordId` intentionally excludes `kind` from its
+    //    identity triple — so the close would silently idempotent-upsert OVER
+    //    the open; real emission never mints two different kinds under one
+    //    identical id. ──
     for (let i = 0; i < 100; i++) {
       const rec = trackClose(`wd-track-${i}`, 1, await stub.allocateSeq(), true);
       await stub.append(rec);
@@ -157,8 +154,8 @@ describe("C2 — MERGE BLOCKER: forced mid-run eviction + fold-reconstruction un
 
     const streamBack = await stub.readStream();
     expect(streamBack).toHaveLength(written.length);
-    // Idempotent-upsert identity (§5 C2/D1): every written record's id round-trips
-    // to exactly one stored record — sort both sides by seq and compare directly.
+    // Idempotent-upsert identity (§4): every written record's id round-trips to
+    // exactly one stored record — sort both sides by seq and compare directly.
     const sortedWritten = [...written].toSorted((a, b) => a.seq - b.seq);
     expect(streamBack).toEqual(sortedWritten);
 

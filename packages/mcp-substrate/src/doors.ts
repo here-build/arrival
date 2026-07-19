@@ -260,8 +260,8 @@ export function bareToolCallDoor(
  *  tool — either because it ties across multiple bound tools (`candidates.length > 1`, the
  *  same bare/wire-form spelling shared by several servers) or because its canonical spelling
  *  ALSO names an existing GLOBAL scheme symbol unrelated to any tool (`candidates.length ===
- *  1`, `globalCollision` set — a builtin, an `s/*` validator, or any other bound name). Per
- *  V's tolerance rule (2026-07-05): never guess across variance, always ask. Reuses
+ *  1`, `globalCollision` set — a builtin, an `s/*` validator, or any other bound name).
+ *  Never guess across variance — always ask. Reuses
  *  {@link bareToolCallDoor}'s retry-expr rendering (it already lists "alternates" for a
  *  multi-candidate tie); the global-collision case appends one sentence naming the colliding
  *  symbol so the model understands why an exact-looking match still wasn't auto-applied. */
@@ -445,10 +445,10 @@ function isTightMatch(attempted: string, candidate: string, tools: ReadonlyMap<s
   return editDistance(a, bare) <= 1 || editDistance(a, full) <= 1;
 }
 
-/** KEY-level tight match (design doc §2.2's observation 2 — `isTightMatch` applied one level
- *  down, to a sub-schema's KEYS instead of tool names): canonical-form equality, or an edit
- *  distance of 1 between canonical forms (a single typo / one-off insertion-deletion — the
- *  45edee `terms`→`term` rename was exactly one edit). Deliberately as narrow as the tool-name
+/** KEY-level tight match (`isTightMatch` applied one level down, to a sub-schema's KEYS instead
+ *  of tool names): canonical-form equality, or an edit distance of 1 between canonical forms (a
+ *  single typo / one-off insertion-deletion — a `terms`→`term` rename is exactly one edit).
+ *  Deliberately as narrow as the tool-name
  *  gate: a distance-2 key is a plausible GUESS, and the key-rename clause renders as an
  *  explicit fact ("the key you want is :term."), so only certainty qualifies. */
 export function isTightKeyMatch(attempted: string, candidate: string): boolean {
@@ -1073,7 +1073,7 @@ export class DoorSession {
    *  tool is the intent (the model still has the wrong contract until it stops). The frozen first
    *  line (H-4) is preserved by the caller; this only ever adds a line below it.
    *
-   *  `example` (V's design, 2026-07-05) is a synthesized working call (example-call.ts) for the
+   *  `example` is a synthesized working call (example-call.ts) for the
    *  SAME tool, APPENDED as its own `Example: ` line below `Signature: ` — never replacing it.
    *  Optional so a caller with no schema map (or omitting it entirely) keeps today's
    *  Signature-only shape byte-for-byte. */
@@ -1084,7 +1084,7 @@ export class DoorSession {
     return `\nSignature: ${signatureText}${exampleLine}`;
   }
 
-  /** ARGS-MISUSE TEACHING render + telemetry (design doc §3 hook #4 — echoSignature's sibling,
+  /** ARGS-MISUSE TEACHING render + telemetry (design doc §2.4 — echoSignature's sibling,
    *  same log-and-return-suffix shape): emits one `{door, seq, tool, param, level}` stderr line
    *  under `envelope/args-misuse` and returns `body` (the pre-rendered L1/L2/L3 teaching lines,
    *  built by args-misuse-door.ts) to append below the preserved verbatim first line. `param` is

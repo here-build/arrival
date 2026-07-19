@@ -63,7 +63,7 @@ export type {
 } from "./symbols/_bake.js";
 export { makeCallCtx, testCallCtx } from "./symbols/_bake.js";
 
-// Q4 callback-role machinery (docs/PROVENANCE.md §2): `withCallbackRoles` is the
+// Callback-role machinery (docs/PROVENANCE.md §2): `withCallbackRoles` is the
 // declaration channel for the contract-less kinds (tagless/tagless-guard — reduce's
 // acc-chain marker rides it); `declaresAccChain` is the data-read for the chained
 // track-composition operator (spec §3); `extractCallbackRoles` is surfaced for the

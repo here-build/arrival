@@ -1,14 +1,12 @@
 /**
- * collapse-view — StaticProv → ControlMachine, the FIFTH pure projection
- * beside circuit-sexpr / circuit-mermaid / to-wireframe / compose-template
- * (docs/working-proposals/provenance-beautiful-child/control-plane-collapse.md
- * §3; consolidation README §2/§7 Wave 1, item 3). Same source (`StaticProv`),
- * same totality discipline, derived-never-stored, and the seal never reads
- * it (INV-4).
+ * collapse-view — StaticProv → ControlMachine, the fifth pure projection
+ * beside circuit-sexpr / circuit-mermaid / to-wireframe / compose-template.
+ * Same source (`StaticProv`), same totality discipline, derived-never-
+ * stored, and the seal never reads it.
  *
  * ── the one-line idea ────────────────────────────────────────────────────
  *
- * `planeOf` (verdict/circuit-verdict.ts, C1) already splits every node into
+ * `planeOf` (verdict/circuit-verdict.ts) already splits every node into
  * transparent/active/const. Q1 (the plane quotient) contracts every maximal
  * transparent region into ONE lens edge; Q2 (the site quotient) merges
  * active instances that share a program point into ONE state. The result is
@@ -21,64 +19,61 @@
  *
  * `toComposeTemplate` (compose-template.ts) already makes every channel-
  * active node a HOLE and every channel-transparent node inline formula
- * structure (its own header: "R1... every channel-moving kind is a hole").
- * That IS Q1's contraction boundary. So a "port" here is built by calling
+ * structure (its own header: "every channel-moving kind is a hole"). That
+ * IS Q1's contraction boundary. So a "port" here is built by calling
  * `toComposeTemplate` on the child StaticProv reachable from that port: the
  * resulting `ComposeTemplate.root` is the port's lens-edge formula, and every
  * non-`"shared"` hole in `ComposeTemplate.holes` is exactly the set of
  * upstream control states this edge `feeds` (a `"shared"` hole is lens 2's
  * own where-clause data-plane sharing — never a control state). This module
  * therefore does none of Q1's segmentation work twice; it only (a) decides
- * WHICH child StaticProv nodes are ports of WHICH active states (Q1's
- * control side — the walk §3 describes), and (b) applies Q2 on top.
+ * WHICH child StaticProv nodes are ports of WHICH active states, and (b)
+ * applies Q2 on top.
  *
  * ── Q2 — the site quotient ───────────────────────────────────────────────
  *
- * Two disjoint merge rules, by design (§6.4, README C6):
+ * Two disjoint merge rules, by design:
  *   1. OBJECT IDENTITY (global, always sound, free): the exact same
  *      StaticProv object reached from two different ports is the exact same
- *      program value (already memo-shared by `ExtractCtx.memo`/G2) — it is
+ *      program value (already memo-shared by `ExtractCtx.memo`) — it is
  *      ONE state no matter how many places reference it. Tracked with one
  *      `Map<StaticProv, StateId>` shared across the WHOLE `collapseView`
  *      call (not reset per level), because object identity is a fact about
  *      the VALUE, independent of which machine level's walk reaches it
  *      first.
- *   2. STRUCTURAL EQUALITY (per machine level, §6.4's fail-closed rule): two
- *      DIFFERENT objects sharing `(kind, site)` — the ordinary shape of a
- *      beta-reduced helper called from more than one place at the SAME
- *      level — merge into one state IFF a cheap topology fingerprint
- *      (`shapeFingerprint`, below) agrees. The fingerprint compares state
- *      kind, site, kind-specific shape metadata, and — recursively, per
- *      port — whether that port reaches an active node of the same shape,
- *      but DELIBERATELY treats the pure-formula LEAF CONTENT feeding a port
- *      (which literal, which specific access chain) as significant too —
- *      this is the CONSERVATIVE (fail-closed) reading: under-merging is
- *      never unsound, only less pretty, whereas the design's own words are
- *      "the strictness IS the honesty" (README C6). A divergence in whether
- *      a port even REACHES an active node at all (e.g. one call's argument
- *      is a bare const, another's is a further crossing) is exactly the
- *      shadowed-input class (§6.4) and correctly blocks the merge.
+ *   2. STRUCTURAL EQUALITY (per machine level): two DIFFERENT objects
+ *      sharing `(kind, site)` — the ordinary shape of a beta-reduced helper
+ *      called from more than one place at the SAME level — merge into one
+ *      state IFF a cheap topology fingerprint (`shapeFingerprint`, below)
+ *      agrees. The fingerprint compares state kind, site, kind-specific
+ *      shape metadata, and — recursively, per port — whether that port
+ *      reaches an active node of the same shape, but DELIBERATELY treats the
+ *      pure-formula LEAF CONTENT feeding a port (which literal, which
+ *      specific access chain) as significant too — this is the CONSERVATIVE
+ *      (fail-closed) reading: under-merging is never unsound, only less
+ *      pretty; the strictness is the honesty. A divergence in whether a
+ *      port even REACHES an active node at all (e.g. one call's argument is
+ *      a bare const, another's is a further crossing) correctly blocks the
+ *      merge.
  *
- * `templates` (Q2-hoisting, §7/#47) is populated ONLY for the case that
- * actually has a `ControlMachine`-shaped thing to hoist: a `fan` state
- * merged (rule 2, not object identity) from ≥2 distinct instances at ONE
- * level shares its `interior` under `templates.get(site)` (see
- * `bumpInstances`). Non-fan kinds (mint/choice/opaque/input) have no
- * interior machine to hoist — they simply merge into one `ControlState`
- * with `instances > 1`, which is already the complete representation. Full
- * CROSS-LEVEL hoisting (the general #47 shape, where the same helper is
- * reached from genuinely different hierarchical contexts on different sides
- * of a fan boundary) is explicitly staged as Wave 3 work by the
- * consolidation doc (§7's own staging table) and is NOT attempted here;
- * this module's structural-equality Q2 dedup is scoped per machine level
- * (mirrors `to-wireframe.ts`'s own documented per-`Builder` dedup scope —
- * see that file's "SCOPE" note on `project`). A state discovered again from
- * a DIFFERENT level is never re-derived (object identity is global, rule 1
- * above) but is reported as a captured cross-boundary reference
- * (`capturePorts`, §6.2) on the compound state whose interior reached it,
- * rather than silently duplicated.
+ * `templates` (Q2-hoisting) is populated ONLY for the case that actually has
+ * a `ControlMachine`-shaped thing to hoist: a `fan` state merged (rule 2,
+ * not object identity) from ≥2 distinct instances at ONE level shares its
+ * `interior` under `templates.get(site)` (see `bumpInstances`). Non-fan
+ * kinds (mint/choice/opaque/input) have no interior machine to hoist — they
+ * simply merge into one `ControlState` with `instances > 1`, which is
+ * already the complete representation. Full CROSS-LEVEL hoisting (the
+ * general shape where the same helper is reached from genuinely different
+ * hierarchical contexts on different sides of a fan boundary) is not
+ * attempted here; this module's structural-equality Q2 dedup is scoped per
+ * machine level (mirrors `to-wireframe.ts`'s own documented per-`Builder`
+ * dedup scope — see that file's "SCOPE" note on `project`). A state
+ * discovered again from a DIFFERENT level is never re-derived (object
+ * identity is global, rule 1 above) but is reported as a captured
+ * cross-boundary reference (`capturePorts`) on the compound state whose
+ * interior reached it, rather than silently duplicated.
  *
- * ── opaque never absorbs (§6.1) ──────────────────────────────────────────
+ * ── opaque never absorbs ──────────────────────────────────────────────────
  *
  * `toComposeTemplate` already guarantees this: `opaque` is channel-active
  * (`planeOf`), hence ALWAYS a hole (`reason:"opaque"`), NEVER inlined into a
@@ -86,7 +81,7 @@
  * unconditionally `[]` by construction of the shared helper this module
  * reuses — asserted, not computed, and cited here rather than re-derived.
  *
- * ── the lifted loop's guard (§6.5) ───────────────────────────────────────
+ * ── the lifted loop's guard ────────────────────────────────────────────────
  *
  * `FanProv` (static-prov.ts) has no field for a recursion-lifted fan's
  * base-case guard at all — `buildRecursionFan` (arm-control.ts) extracts
@@ -95,43 +90,39 @@
  * channel is invented here (considered and declined): `ControlState` for a
  * `fan` carries no guard-shaped field, and that absence — not a
  * placeholder, not a zero-filled channel — IS the honest answer until
- * extract itself carries the guard's attribution (filed for consolidation,
- * §6.5/§6 point 1). A caption for the guard's TEXT (e.g. `(zero? n)`) is a
- * presentation concern for a later CoreForm-side-table lens, exactly like
- * every other state's caption — see "labels", below.
+ * extract itself carries the guard's attribution. A caption for the guard's
+ * TEXT (e.g. `(zero? n)`) is a presentation concern for a later
+ * CoreForm-side-table lens, exactly like every other state's caption — see
+ * "labels", below.
  *
  * ── labels are a seam, not built here ────────────────────────────────────
  *
- * Every `ControlState` already carries `site: NodeId` (kept from the
- * spec's own sketch). A caption ("evaluate", a loop guard's source text,
- * a `.prompt` name) is recoverable from a CoreForm side-table exactly the
- * way `compose-template.ts`'s `SourceLens` recovers operator/literal text —
- * this module does not build that resolution (no CoreForm forest is even
- * in scope here; `collapseView`'s only input is `StaticProv`, per the
- * spec's own signature). `site` IS the seam a future renderer combines with
- * a `SourceLens`-shaped lens; nothing new needs to exist on `ControlState`
- * for that to work.
+ * Every `ControlState` already carries `site: NodeId`. A caption
+ * ("evaluate", a loop guard's source text, a `.prompt` name) is recoverable
+ * from a CoreForm side-table exactly the way `compose-template.ts`'s
+ * `SourceLens` recovers operator/literal text — this module does not build
+ * that resolution (no CoreForm forest is even in scope here; `collapseView`'s
+ * only input is `StaticProv`). `site` IS the seam a future renderer combines
+ * with a `SourceLens`-shaped lens; nothing new needs to exist on
+ * `ControlState` for that to work.
  *
  * ── egress modeling ──────────────────────────────────────────────────────
  *
- * `StateKind` includes `"egress"` (spec §2.2: "states = program points of
- * the five control kinds plus egress"). An ACTIVE root needs no synthetic
+ * `StateKind` includes `"egress"` — states are the program points of the
+ * five control kinds plus egress. An ACTIVE root needs no synthetic
  * wrapper — `ControlMachine.egress` points at its own state directly
- * (`{kind:"state", ...}`). A DATA-PLANE root (GEPA's own shape — the
- * top-level `max-by(...)` over the loop is a mux, i.e. transparent; the
- * task brief's own words: "egress = a lens edge") needs a lens edge, and
- * that edge needs a `(state, port)` home: exactly one synthetic
- * `"egress"`-kind state is minted for this case only, never for the
- * active-root case where it would be a pointless wrapper around an
- * already-well-defined terminal.
+ * (`{kind:"state", ...}`). A DATA-PLANE root (e.g. a top-level
+ * `max-by(...)` over a loop is a mux, i.e. transparent — egress is then a
+ * lens edge) needs a lens edge, and that edge needs a `(state, port)` home:
+ * exactly one synthetic `"egress"`-kind state is minted for this case only,
+ * never for the active-root case where it would be a pointless wrapper
+ * around an already-well-defined terminal.
  *
  * ── `flattenChoiceTower` is IMPORTED from the verdict (never reimplemented) ──
  *
- * The spec (§3 step 4) requires reusing `verdict/circuit-verdict.ts`'s tower
- * flatten verbatim so a decision state's guards/alts can never drift from
- * what the verdict itself judges. The lane that authored this file found it
- * unexported and carried a marked byte-copy; the export landed the same
- * night and the copy was deleted — one function, two callers, zero drift.
+ * A decision state's guards/alts reuse `verdict/circuit-verdict.ts`'s tower
+ * flatten verbatim, so they can never drift from what the verdict itself
+ * judges.
  */
 import type { NodeId } from "../coreform/types.js";
 import { channels, flattenChoiceTower, planeOf } from "../verdict/circuit-verdict.js";
@@ -149,8 +140,8 @@ import type { ChoiceProv, CollapseKind, FanProv, MuxProv, StaticProv } from "./s
 type ActiveProv = Extract<StaticProv, { kind: "input" | "mint" | "choice" | "fan" | "opaque" }>;
 
 /** The exact, sole source of truth for "is this node a state" — literally
- *  `planeOf`, so this can never drift from the verdict's own boundary
- *  (C1). Also narrows `p`'s type to `ActiveProv` at every call site. */
+ *  `planeOf`, so this can never drift from the verdict's own boundary.
+ *  Also narrows `p`'s type to `ActiveProv` at every call site. */
 function isActive(p: StaticProv): p is ActiveProv {
   return planeOf(p) === "active";
 }
@@ -183,13 +174,12 @@ export type LensEdgeId = number & { readonly __collapseLensEdgeId: unique symbol
 export type PortId = string;
 
 /**
- * `egress: StateRef | LensEdgeId` (spec §3) cannot be told apart at RUNTIME
- * by a bare `number` union — both ids are plain numbers once the branded
- * compile-time type erases, so a consumer holding just a number could never
- * know which table to look it up in. This is a necessary, minimal
- * elaboration of the spec's sketch: a tagged union carrying the SAME two
- * alternatives, safely discriminable. See "egress modeling" above for when
- * each arm is produced.
+ * `egress: StateRef | LensEdgeId` cannot be told apart at RUNTIME by a bare
+ * `number` union — both ids are plain numbers once the branded compile-time
+ * type erases, so a consumer holding just a number could never know which
+ * table to look it up in. A tagged union carrying the SAME two alternatives,
+ * safely discriminable, is the minimal fix. See "egress modeling" above for
+ * when each arm is produced.
  */
 export type EgressRef = { readonly kind: "state"; readonly ref: StateRef } | { readonly kind: "edge"; readonly ref: LensEdgeId };
 
@@ -209,8 +199,8 @@ export interface ControlState {
   readonly guardPorts?: readonly PortId[];
   readonly armPorts?: readonly PortId[];
   /** Bare-const leaf alts (`isBareConst`) — a vocabulary chip, never a lens
-   *  edge (INV-2: every const site is either an edge's `absorbedConsts` or
-   *  a decision's `judgmentAlts`, never both). */
+   *  edge: every const site is either an edge's `absorbedConsts` or a
+   *  decision's `judgmentAlts`, never both. */
   readonly judgmentAlts?: readonly NodeId[];
 
   // ── fan ──
@@ -226,17 +216,16 @@ export interface ControlState {
   /** The body's machine (compound state) — present iff `maskRow` is not
    *  (mutually exclusive; see `buildFanState`). */
   readonly interior?: ControlMachine;
-  /** Cross-fan-boundary references (§6.2): named ports of THIS fan's
-   *  `interior` whose lens edges feed a state owned by an ANCESTOR level
-   *  (a genuine capture, not a fresh discovery) — see `captureBoundary`
-   *  below. Absent when the interior discovers nothing pre-existing. */
+  /** Cross-fan-boundary references: named ports of THIS fan's `interior`
+   *  whose lens edges feed a state owned by an ANCESTOR level (a genuine
+   *  capture, not a fresh discovery) — see `captureBoundary` below. Absent
+   *  when the interior discovers nothing pre-existing. */
   readonly capturePorts?: readonly PortId[];
-  /** The route-fan synthetic survivor-mask choice (§6.6), merged as a lens
-   *  edge over its OWN predicate rather than rendered as its own decision
-   *  state — present only when `body.kind === "choice" && collapse ===
-   *  "route"` AND that choice has exactly the one guard `buildFan`'s filter
-   *  path always constructs (never guessed at any other shape — §6.6's own
-   *  words). */
+  /** The route-fan synthetic survivor-mask choice, merged as a lens edge
+   *  over its OWN predicate rather than rendered as its own decision state —
+   *  present only when `body.kind === "choice" && collapse === "route"` AND
+   *  that choice has exactly the one guard `buildFan`'s filter path always
+   *  constructs (never guessed at any other shape). */
   readonly maskRow?: LensEdgeId;
 
   // ── mint ──
@@ -270,8 +259,7 @@ export interface LensEdge {
   /**
    * `channels(child)`'s own fold over this port's root value, cached once
    * — BOTH halves (content and selection), not a single projected value.
-   * A necessary elaboration of the spec's `ChannelTerminals` sketch: a
-   * lossless reconstruction (INV-1) genuinely needs both — `channelsFresh`'s
+   * A lossless reconstruction genuinely needs both — `channelsFresh`'s
    * own per-kind rules (circuit-verdict.ts) sometimes route a child's
    * CONTENT into the parent's selection (a `fan`'s route-collapse promotes
    * `collection.content`) while ALWAYS routing a guard/closed child's full
@@ -290,8 +278,8 @@ export interface ControlMachine {
   readonly states: readonly ControlState[];
   readonly lensEdges: readonly LensEdge[];
   readonly egress: EgressRef;
-  /** Q2-hoisted multi-context fan interiors (§7/#47) — see this file's
-   *  header for the deliberately narrow scope (same-level, fan-only). Empty
+  /** Q2-hoisted multi-context fan interiors — see this file's header for
+   *  the deliberately narrow scope (same-level, fan-only). Empty
    *  when nothing at this level qualifies (an honest, reportable outcome,
    *  not a gap to force). */
   readonly templates: ReadonlyMap<NodeId, ControlMachine>;
@@ -432,10 +420,10 @@ function desugarCombine(p: StaticProv): StaticProv {
  *  every active hole it discovers (the edge's `feeds`), and record the
  *  edge under `level.lensEdges`. `binders` defaults to the level's own
  *  (every ordinary port); the fan mask-row port passes the FAN's OWN
- *  element binder explicitly even though the mask stays at the fan's
- *  OUTER level (§6.6 — no new level opens for a mask row, but its formula
- *  can still reference the element, so it needs the same R3 binder an
- *  interior would have gotten). Returns the new edge's id. */
+ *  element binder explicitly even though the mask stays at the fan's OUTER
+ *  level (no new level opens for a mask row, but its formula can still
+ *  reference the element, so it needs the same R3 binder an interior would
+ *  have gotten). Returns the new edge's id. */
 function buildLensEdge(
   level: LevelCtx,
   state: StateId,
@@ -638,7 +626,7 @@ function shapeFingerprint(p: StaticProv): string {
 
 /** Increment the `instances` badge on an already-built state (rule-2 merge
  *  — see this file's header). For a `fan` whose `interior` is defined, this
- *  is also the ONE place `templates` (§7/#47) gets populated: the second
+ *  is also the ONE place `templates` gets populated: the second
  *  (and every later) merged instance promotes the shared interior into the
  *  OWNING level's `templates` map, keyed by site. `global` is threaded in
  *  explicitly (never ambient/module-level state — this whole package's own
@@ -735,7 +723,7 @@ function buildFanState(level: LevelCtx, id: StateId, node: FanProv): ControlStat
   const origin: "desugar" | "recursion" | undefined = element === undefined ? undefined : element.site === node.site ? "recursion" : "desugar";
   const nextBinders: ReadonlyMap<StaticProv, string> = element === undefined ? level.binders : new Map([...level.binders, [element, "ex"]]);
 
-  // §6.6 — the route-fan synthetic survivor mask merges as a lens edge over
+  // The route-fan synthetic survivor mask merges as a lens edge over
   // its own predicate; any other shape (including "route" bodies that are
   // NOT this exact synthetic choice) recurses as an ordinary interior.
   // "Never guess a mask" — the ONLY recognized shape is EXACTLY the one
@@ -760,7 +748,7 @@ function buildFanState(level: LevelCtx, id: StateId, node: FanProv): ControlStat
   };
 }
 
-/** §6.2 — after building a fan's interior, find every state IT references
+/** After building a fan's interior, find every state IT references
  *  that is NOT one of its own (i.e. owned by an ancestor level). Since a
  *  fan's interior is the only way to descend a level, and ownership is
  *  assigned once at first discovery and never reassigned, any fed state

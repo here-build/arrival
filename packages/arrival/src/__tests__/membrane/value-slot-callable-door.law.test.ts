@@ -1,6 +1,5 @@
 /**
- * LAW — the z.value-callable door (Ruling A, longcat thesis-2 attack 3 adjudication,
- * the 2026-07-11 longcat design review).
+ * LAW — the z.value-callable door (Ruling A).
  *
  * The hole this closes: a `z.value` slot is the declared raw escape hatch — its decode
  * performs NO transform, so an impl receiving a raw callable through it does its OWN

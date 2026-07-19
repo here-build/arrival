@@ -1,10 +1,8 @@
 /**
- * `.json` / `.yaml` / `.txt` (and any other "structural load" — design doc §2's
- * "other assets" row) → `export default {…} as const;`. Nothing clever: parse to
- * a plain JS value, print it back as a literal. `as const` is the whole payoff
- * (design doc §2): literal types feed the type lens and raise gate-1's clean
- * rate on real pipelines — R-G6 phase-2 (type-directed folding) consumes exactly
- * this shape.
+ * `.json` / `.yaml` / `.txt` (and any other structural-load asset) →
+ * `export default {…} as const;`. Nothing clever: parse to a plain JS value,
+ * print it back as a literal. `as const` is the whole payoff: literal types
+ * feed the type lens, letting type-directed folding consume this shape as-is.
  *
  * Deliberately NOT the Residual algebra (`../residual/`): a parsed JSON/YAML
  * value is already a plain, finite, acyclic JS value (arrays/objects/scalars) —
@@ -25,10 +23,10 @@ function parseDataFile(ext: string, content: string): unknown {
   throw new Error(`data-module: unhandled data extension "${ext}"`);
 }
 
-/** `.json`/`.yaml`/`.yml`/`.txt` are supported (the design doc's dep-free set —
- *  matching arrival core's own `loader.ts` `defaultResolvers`/`ext/yaml`
- *  built-ins exactly, so a project's require-time semantics and its build-time
- *  semantics agree on which extensions exist at all). */
+/** `.json`/`.yaml`/`.yml`/`.txt` are supported — a dependency-free set matching
+ *  arrival core's own `loader.ts` `defaultResolvers`/`ext/yaml` built-ins
+ *  exactly, so a project's require-time semantics and its build-time semantics
+ *  agree on which extensions exist at all. */
 export const DATA_EXTENSIONS: ReadonlySet<string> = new Set([".json", ".yaml", ".yml", ".txt"]);
 
 /**
@@ -46,11 +44,11 @@ export function compileDataFile(ext: string, content: string, path: string): Com
   const printed = JSON.stringify(value, null, 2) ?? "null";
   return {
     content: `// Generated from ${path} by @inhuman.tools/arrival-mercury — do not edit.\nexport default ${printed} as const;\n`,
-    // A data file declares no `define/overridable`s of its own — TASK #87
-    // Q2's cone walk (project.ts) still reads this field unconditionally, so
-    // it must be present, not omitted. `defaultFace: "value"` — a literal has
-    // no program to defer; the eager default is the honest shape here, and the
-    // require machinery reads the imported binding directly (never calls it).
+    // A data file declares no `define/overridable`s of its own, but the field
+    // must be present, not omitted — project.ts's cone walk reads it
+    // unconditionally. `defaultFace: "value"`: a literal has no program to
+    // defer, so the eager default is the honest shape here, and the require
+    // machinery reads the imported binding directly (never calls it).
     shape: { named: [], defaultFace: "value", overridables: [] },
     warnings: [],
   };

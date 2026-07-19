@@ -185,11 +185,11 @@ function formsOf(code: unknown): SchemeValue[] {
  *  `(define (f args) body…)` already classifies today. A non-lambda body (a
  *  constant) keeps the plain `(define name value)` shape unchanged.
  *
- *  CONSTANT_CTX here is a verified STRUCTURAL SENTINEL, not a dropped run ctx
- *  (constant-ctx audit 2026-07-11, define-bake row): the synthesized form is
- *  genuinely PRE-RUN bake work — fed only to `classifyProgramPrelude`/`freeVars`
- *  (structural walks with zero `.ctx` reads) and discarded after classification.
- *  It never enters a run, so there is no meter to charge and no identity to carry. */
+ *  CONSTANT_CTX here is a verified STRUCTURAL SENTINEL, not a dropped run ctx: the
+ *  synthesized form is genuinely PRE-RUN bake work — fed only to
+ *  `classifyProgramPrelude`/`freeVars` (structural walks with zero `.ctx` reads) and
+ *  discarded after classification. It never enters a run, so there is no meter to
+ *  charge and no identity to carry. */
 function synthesizeDefine(name: string, body: SchemeValue): SchemeValue {
   const nameSym = new ASymbol(CONSTANT_CTX, name);
   if (

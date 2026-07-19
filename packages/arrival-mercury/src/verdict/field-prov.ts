@@ -1,13 +1,13 @@
 /**
- * `fieldProv` — field-granular provenance access, Wave 1 (U1 of BC-2's slice
- * of the "beautiful child" triad). The subcircuit-valued refinement of the
- * verdict's own narrowing: `channels()`'s mux arm folds a projection down to
- * a TERMINAL-set answer (content/selection channels); this module answers
- * the SAME where-provenance question but returns the SUBCIRCUIT itself — a
- * `StaticProv` any later consumer (a per-field seal, a render highlight, the
- * MCP `:at` verb — all LATER lanes, not built here) can fold however it
- * needs. Lives beside `channels`/`narrowMux` (circuit-verdict.ts) because it
- * IS a reading of the same algebra, never a second one — see
+ * `fieldProv` — field-granular provenance access: the subcircuit-valued
+ * refinement of the verdict's own narrowing. `channels()`'s mux arm folds a
+ * projection down to a TERMINAL-set answer (content/selection channels);
+ * this module answers the SAME where-provenance question but returns the
+ * SUBCIRCUIT itself — a `StaticProv` any later consumer (a per-field seal, a
+ * render highlight, the MCP `:at` verb — all LATER lanes, not built here)
+ * can fold however it needs. Lives beside `channels`/`narrowMux`
+ * (circuit-verdict.ts) because it IS a reading of the same algebra, never a
+ * second one — see
  * docs/working-proposals/provenance-beautiful-child/field-granular-access.md
  * §2/§3 for the full design; this header only restates the load-bearing
  * decisions the code below depends on.

@@ -1,10 +1,10 @@
 /**
- * provenance-emit.bench.test.ts — Q11a's own overhead measurement (docs/PROVENANCE.md
- * §7 W3 port completeness; risk: emission overhead on hot paths — measured in-step, budget ~µs/record).
+ * Emission overhead on hot paths, measured in-step against the §7 "port
+ * completeness" law's real call sites — budget ~µs/record.
  *
  * Three honest layers, same shape as `exec-seam.bench.test.ts`'s own three-layer split:
  *
- *   1. flag OFF   — `emitMint` called N times while disabled: the "sunset byte-identical"
+ *   1. flag OFF   — `emitMint` called N times while disabled: the byte-identical
  *                   cost, i.e. what every real call site pays TODAY (nothing wires a
  *                   coordinate/sink in production yet, so this is also the current
  *                   steady-state cost of the `notePotentialRosettaExit` hook itself).
@@ -13,12 +13,13 @@
  *                   the full per-record cost once a coordinate/sink IS installed.
  *   3. the other three kinds ON — `emitMuxDecision`/`emitFanInstantiation`/
  *                   `emitIngressBinding` (no payload hashing/put — cheaper than a mint
- *                   by construction, §5 A6: "no payload of its own").
+ *                   by construction: per §4's record-kinds table, these three kinds
+ *                   carry no payload of their own).
  *
  * No cloud/DO/R2 involved — the fakes are in-memory `Map`s (per store/fakes.ts's own
  * header: "DETERMINISTIC BY CONSTRUCTION... default CI, no cloud"), so these numbers
  * are a LOWER BOUND on real DO-storage latency, not an upper one; they measure the
- * emission CORE's own overhead, which is what this node's risk note is about.
+ * emission CORE's own overhead.
  */
 import { describe, it, expect } from "vitest";
 
@@ -116,13 +117,13 @@ describe("emission overhead — flag ON (real store/payload work per record)", (
 });
 
 /**
- * Q20b — the DEMOTION's own overhead measurement (docs/PROVENANCE.md §4 "the eager
- * stamp path is a TEST-ONLY oracle"; gate: standing + perf delta recorded), distinct from Q11a's record-EMISSION
- * layers above: this measures op-helpers.ts's per-op ACCUMULATION cost (the filter
- * + union-set allocation `withInputProvenance`/`nativeNumericOp`'s `applyNumeric`
- * skip when the oracle is inactive) on a real interpreter run — the actual hot
- * path Q20b's default flip targets, exercised through arithmetic (the highest-
- * traffic op family per the sweep) and string-append (a genuine multi-arg union).
+ * The eager-stamp oracle's own overhead (docs/PROVENANCE.md §4: "the eager stamp
+ * path is a TEST-ONLY oracle"), distinct from the record-EMISSION layers above:
+ * this measures op-helpers.ts's per-op ACCUMULATION cost (the filter + union-set
+ * allocation `withInputProvenance`/`nativeNumericOp`'s `applyNumeric` skip when the
+ * oracle is inactive) on a real interpreter run — the hot path the production
+ * default-OFF setting targets, exercised through arithmetic (the highest-traffic op
+ * family) and string-append (a genuine multi-arg union).
  */
 describe("Q20b — eager-oracle accumulation overhead: default-OFF vs forced-ON exec throughput", () => {
   const EXEC_ITERATIONS = 2000;
@@ -141,11 +142,10 @@ describe("Q20b — eager-oracle accumulation overhead: default-OFF vs forced-ON 
 
   // exec() itself (parse + generator-driven eval) dwarfs op-helpers.ts's own
   // filter+union cost on a 1-2-operand array — an UN-warmed-up single pass mostly
-  // measures V8 JIT warmup order, not the flag. Warm BOTH variants (discarded)
-  // before measuring EITHER, so the recorded numbers isolate the accumulation
-  // delta instead of a cold-start artifact (confirmed empirically: without this,
-  // whichever variant ran SECOND in-process came out ~40% faster regardless of
-  // which flag value it used).
+  // measures V8 JIT warmup order, not the flag: whichever variant runs SECOND
+  // in-process comes out ~40% faster regardless of which flag value it used. Warm
+  // BOTH variants (discarded) before measuring EITHER, so the recorded numbers
+  // isolate the accumulation delta instead of this cold-start artifact.
   it(`exec × ${EXEC_ITERATIONS}, oracle OFF (Q20b production default) vs FORCED ON (CI agreement oracle), both JIT-warmed first`, async () => {
     setEagerProvenanceOracleEnabled(false);
     await runExecLoop(WARMUP_ITERATIONS);
@@ -171,11 +171,11 @@ describe("Q20b — eager-oracle accumulation overhead: default-OFF vs forced-ON 
 
   // The above, isolated: parse+eval overhead per exec() call (~265µs) dwarfs
   // op-helpers.ts's own filter+union cost on a 1-2-operand array, so the
-  // whole-exec() delta is noise (±2%, confirmed over repeated runs). This row
-  // measures the ISOLATED accumulation cost directly against `withInputProvenance`/
-  // `mintVerdict` — the shape of arrival-sampler's actual hot loop (Q20a's
-  // original motivation: ~513 interpreter calls/decode-step, no re-parse per
-  // call), where the demotion's saving is NOT amortized against parse overhead.
+  // whole-exec() delta is noise (±2%). This row measures the ISOLATED
+  // accumulation cost directly against `withInputProvenance`/`mintVerdict` — the
+  // shape of arrival-sampler's actual hot loop (~513 interpreter calls per
+  // decode-step, no re-parse per call), where the saving is NOT amortized
+  // against parse overhead.
   it(`withInputProvenance × ${EXEC_ITERATIONS * 10} direct calls, oracle OFF vs FORCED ON (the sampler's actual hot-loop shape)`, () => {
     const DIRECT_ITERATIONS = EXEC_ITERATIONS * 10;
     const a = jsToScheme(CONSTANT_CTX, 10, {}, new Set([100]));

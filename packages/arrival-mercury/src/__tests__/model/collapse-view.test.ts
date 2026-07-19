@@ -338,7 +338,7 @@ describe("INV-4 — collapse-view.ts is imported by render/tests only (S5-lint s
 
 // ── the adversarial row — the fold-collapse forge surfaces INSIDE the fan ──
 
-describe("the adversarial row — longcat's fold-collapse forge surfaces as a decision state inside the fan's interior", () => {
+describe("the adversarial row — the fold-collapse forge surfaces as a decision state inside the fan's interior", () => {
   const source = FIXTURE_CORPUS.find((r) => r.name === "hidden-const fold (longcat)")!.source;
 
   it("sanity: the row is present and landed", () => {

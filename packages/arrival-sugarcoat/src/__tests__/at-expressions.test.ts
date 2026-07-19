@@ -6,7 +6,6 @@ import { readSugarcoatExpr, readSugarcoat } from "../sugarcoat-read.js";
 const read = (sugarcoat: string): string => printScheme(readSugarcoatExpr(sugarcoat));
 const readAll = (sugarcoat: string): string => readSugarcoat(sugarcoat).map((f) => printScheme(f)).join("\n");
 
-// Spec: docs/package-specific/arrival-sugarcoat/arrival-sugarcoat-at-expressions-2026-07-05.md
 // @head{text} → (head <part>…); headless → str; @dedent{…} dissolves to (str <dedented>).
 describe("read: at-expressions → (head part…)", () => {
   const cases: Array<[string, string]> = [

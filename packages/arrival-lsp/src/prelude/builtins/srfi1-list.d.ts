@@ -1,20 +1,20 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// L?? — the SRFI-1-ADJACENT LIST FAMILY that is ACTUALLY LIVE in the inference env:
-// `take`, `drop`, `concat`, `flatten`, `fold`, `nth`, `for-each`, `count`, `remove`.
+// L?? — the SRFI-1-adjacent list family bound in the inference env: `take`,
+// `drop`, `concat`, `flatten`, `fold`, `nth`, `for-each`, `count`, `remove`.
 //
-// EMPIRICAL CULL (probed against the constructed inference env, 2026-06-16):
-//   • `head` / `tail` / `rest` / `init` are NO LONGER BOUND — Ramda-derived heads cut
-//     in the 2026-06-15 eviction. Removed (they were typed as "LIVE" but resolve to
-//     absent at runtime).
-//   • `remove` relocated here from the deleted `ramda-collection` leaf — it is the
-//     live inverse-filter (drop the matching elements), a predicate-filter, NOT an
-//     index splice.
-//   • The bootstrap SRFI-1 procedures (`take-while` `drop-while` `span` `partition`
-//     `find-tail` `fold-right` `concatenate` …) are defined into user_env but the
-//     inference env's own surface does not re-home them, so they are NOT typed here.
+// NOT typed here, despite SRFI-1-familiar names — unbound in the inference env,
+// so typing them would advertise symbols the sampler can select but the
+// compiled program can't call:
+//   • `head` / `tail` / `rest` / `init`.
+//   • the SRFI-1 bootstrap procedures (`take-while` `drop-while` `span`
+//     `partition` `find-tail` `fold-right` `concatenate` …) — defined into
+//     user_env, but the inference env's own surface does not re-home them.
+//
+// `remove` is the inverse-filter (drop the elements matching pred) — a
+// predicate-filter, NOT an index splice.
 //
 // The lens models a Scheme list as PRE's `List<T>` = `readonly T[]`. Semantics that
-// change the signatures (still true):
+// change the signatures:
 //   • take / drop  — COUNT-first, list-LAST: prefix / suffix of length n.
 //   • concat       — ⚠️ the LIVE `concat` is the LIPS STRING concat, variadic over
 //                    strings → a string. It is NOT list append (`(concat (list 1 2) …)`
@@ -54,6 +54,6 @@ interface ArrShape {
   // Count elements satisfying a predicate. Pred-first, list-last; result is a number.
   count<A>(pred: (a: A) => unknown, xs: List<A>): number;
 
-  // Inverse filter — drop the elements matching pred (relocated from ramda-collection).
+  // Inverse filter — drop the elements matching pred.
   remove<T>(pred: (x: T) => boolean, xs: List<T>): List<T>;
 }

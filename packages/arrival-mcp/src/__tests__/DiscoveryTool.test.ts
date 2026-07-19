@@ -75,10 +75,9 @@ describe("DiscoveryTool (value-shaped, capability-derived)", () => {
   });
 
   it("warm-pair reuse: same-config calls share the live env — a penetration-define's verb is NOT re-fired", async () => {
-    // `tick` stands in for a membrane penetration — its call count is observable. (R3: the
-    // statement-level `__cache__` overlay is dissolved; the observable — one fire across calls —
-    // now rests on warm-pair memoization; across EVICTIONS it rests on the run cache, gated by
-    // the `view`-class laws in r3-session-laws.test.ts.)
+    // `tick` stands in for a membrane penetration — its call count is observable. One fire
+    // across calls rests on warm-pair memoization; across evictions it rests on the run cache,
+    // gated by the `view`-class laws in r3-session-laws.test.ts.
     let calls = 0;
     const cap = new McpEnvCapability("tick-caps", {
       symbols: { tick: { fn: () => ++calls } },

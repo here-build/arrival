@@ -1,5 +1,5 @@
 // args-misuse-door — render the LOCALIZED args-misuse teaching (design doc
-// second-foundation/arrival-manifold/docs/args-error-reporting-v2.md §2.3, §2.6).
+// arrival-manifold/docs/args-error-reporting-v2.md §2.3, §2.6).
 //
 // args-misuse.ts answers "WHICH param failed" (localization, pure); this file answers
 // "WHAT to say about it" (rendering, pure); the tracker answers "HOW MUCH to say"
@@ -62,8 +62,8 @@ function dumpToken(prop: JsonSchemaProperty, depth = 0): string {
 const MAX_GLOSS_CHARS = 80;
 
 /** A sentence "boundary" that is actually a common abbreviation — `e.g. distance(...)`
- *  must not truncate the gloss to "…, e.g." (triad review: abbreviation splits render
- *  misleading menus). */
+ *  must not truncate the gloss to "…, e.g." (an abbreviation split would render a
+ *  misleading menu). */
 const ABBREV_TAIL = /\b(?:e\.g|i\.e|etc|vs|cf)\.$/i;
 
 function firstClause(description: string | undefined): string | undefined {
@@ -115,8 +115,7 @@ function tightKeyRename(localized: Localized): { renamed: Record<string, unknown
   const to = matches[0]!;
   // The target key ALREADY EXISTS on the sent object (the model sent both `term` and
   // `terms`, thrashing) — a rename would silently CLOBBER the model's own `term` value and
-  // still read as an explicit fact. Decline; the menu path teaches without destroying data
-  // (triad review finding, 2026-07-11).
+  // still read as an explicit fact. Decline; the menu path teaches without destroying data.
   if (to in sentValue) return undefined;
   const renamed: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(sentValue)) renamed[k === bad ? to : k] = v;
@@ -140,7 +139,7 @@ function retryParamValue(localized: Localized): { rendered: string; menu?: strin
     // stubValue, not a blind #|string|# hole: an enum/const first field shows a REAL
     // member (schema fact, hole rule exempt), a typed scalar shows its own type's hole,
     // a nested object its required-key skeleton — the same rules synthesizeExampleCall
-    // follows (triad review: a blind string hole mis-teaches an enum slot's type).
+    // follows: a blind string hole would mis-teach an enum slot's type.
     const skeleton = { [first.name]: stubValue(first.prop, 0) };
     const menuEntries = fields
       .map(({ name, prop }) => {
@@ -150,8 +149,8 @@ function retryParamValue(localized: Localized): { rendered: string; menu?: strin
       .join(", ");
     // No trailing "see the signature" pointer: the menu's glosses come from the SAME
     // schema descriptions the signature renders — when they exist they're already inline
-    // here, and when they don't, the signature has none either (a pointer would be a
-    // false claim — triad round-3 lead, verified).
+    // here, and when they don't, the signature has none either, so a pointer there would
+    // be a false claim.
     return {
       rendered: renderExampleLiteral(skeleton),
       menu: `:${first.name} is one example key; pick the key matching your intent: ${menuEntries}`,
@@ -182,10 +181,10 @@ export function buildRetryShape(
   return { expr: `(${qualifiedName} ${kwargs})`, ...(menu ? { menu } : {}) };
 }
 
-/** The discovery nudge appended to a MISSING-REQUIRED fact line (MCP-Atlas 2026-07-11
- *  forensics: the model froze on a missing `repo_path` / resource locator and asked the user
- *  instead of enumerating it — the manifold hides tools behind one REPL so a missing arg reads
- *  as blocking). A required value you lack is a cue to DISCOVER, not to ask: another bound tool
+/** The discovery nudge appended to a MISSING-REQUIRED fact line: a model missing a required
+ *  value (e.g. a `repo_path` / resource locator) tends to freeze and ask the user instead of
+ *  enumerating it — the manifold hides tools behind one REPL, so a missing arg reads as
+ *  blocking. A required value you lack is a cue to DISCOVER, not to ask: another bound tool
  *  usually lists/searches for it. Deliberately tool-agnostic (no invented tool name — the
  *  never-guess discipline); the signature list already shows what's bound. */
 const DISCOVERY_NUDGE =
@@ -244,8 +243,7 @@ function parameterDump(paramHead: string, subSchema: JsonSchemaProperty, clue: A
   // closed-world about the TOP-LEVEL parameter names, but this dump describes the failing
   // param's INNER keys — validated by the upstream, whose openness we only know from the
   // schema's own additionalProperties or from an unexpected-keys rejection it just emitted.
-  // Marking own-decode clues closed-world here would over-claim one level down (triad
-  // round-3 finding, adjudicated: level confusion — rejected).
+  // Marking own-decode clues closed-world here would over-claim one level down.
   const closedWorld = subSchema.additionalProperties === false || clue.kind === "unexpected-keys";
   const fields = orderedFields(subSchema);
   if (fields.length === 0) {

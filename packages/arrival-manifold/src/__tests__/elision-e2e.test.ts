@@ -1,11 +1,10 @@
-// elision-e2e — the full path (serializer-elision plan): a REAL bound-tool upstream returns a
-// too-long array, through `createManifoldTool`'s default calibration (which now sets
-// `DEFAULT_MANIFOLD_OBSERVATION_ELISION` — no test-side override), and the observation the
-// model reads back is middle-elided (small head + LOUD "N ... were not rendered" marker + small
-// tail) with a trailing `;; Note:` content block. This is the grounding-failure fix itself:
-// the real MCP-Atlas forensics (task 6896416f...c8c7) found a 100-book array rendered ~93-deep
-// with a tiny `+7 more of 100` marker buried at the very end, read by the model as complete —
-// the answer book was in the hidden 7.
+// elision-e2e — the full path: a REAL bound-tool upstream returns a too-long array, through
+// `createManifoldTool`'s default calibration (`DEFAULT_MANIFOLD_OBSERVATION_ELISION` — no
+// test-side override), and the observation the model reads back is middle-elided (small head +
+// LOUD "N ... were not rendered" marker + small tail) with a trailing consolidated
+// environment-notes block. This guards against a real grounding failure: a large array rendered
+// near-complete with a tiny "+N more" marker buried at the very end reads to the model as
+// complete, hiding the answer in the elided remainder.
 
 import { describe, expect, it } from "vitest";
 
@@ -55,19 +54,13 @@ describe("elision e2e — a real bound-tool result that is a too-long array", ()
     expect(observation).not.toContain(":id 75"); // the hidden middle is genuinely absent
   });
 
-  // RE-PINNED per second-foundation/arrival-bench/docs/benchmark-defect-register.md §E2/§S5: the old `;; Note:` block enumerated
-  // ONE line PER elided collection (measured across the benchmark corpus: 1805 lines / 171
-  // blocks / 67 files, one file at 125,571 bytes = 33% of the file) and restated the per-shape
-  // tautology the serializer's own inline `#| N similar items were not rendered … |#` marker
-  // (arrival-serializer/src/serializer.ts) already carries at the elision site — 100% redundant
-  // AND worse: both models in the forensic corpus read the enumeration as proof the VALUE itself
-  // had been destroyed and permanently abandoned the REPL for python. The invariant this test
-  // protects — "exactly ONE note summarizes the elision, regardless of how many collections
-  // elided" — still holds; what changed is (a) the note is now ONE line unconditionally (never
-  // per-collection), (b) it rides the consolidated `#| ── environment notes ── … |#` trailing
-  // block (§E3) instead of a standalone `;; Note:`-prefixed block, and (c) — the actual point of
-  // the fix — it now says explicitly that the value is INTACT, the exact missing sentence that
-  // drove the python defections.
+  // The invariant this test protects: exactly ONE note summarizes the elision, regardless of how
+  // many collections elided — riding the consolidated `#| ── environment notes ── … |#` trailing
+  // block, never a standalone per-collection block. A per-collection enumeration is redundant
+  // with the serializer's own inline `#| N similar items were not rendered … |#` marker
+  // (arrival-serializer/src/serializer.ts) already carried at the elision site, and models have
+  // misread that redundant enumeration as proof the value itself was destroyed — so the note
+  // also states explicitly that the value is intact.
   it("carries exactly ONE trailing note summarizing the elision, and it says the value is intact", async () => {
     const tool = await libraryTool();
     const result = await tool.call({ expr: "(library/list-books)" });
@@ -75,14 +68,13 @@ describe("elision e2e — a real bound-tool result that is a too-long array", ()
     const blocks = texts(result);
     const noteBlocks = blocks.filter((t) => t.includes("── environment notes ──"));
     expect(noteBlocks).toHaveLength(1);
-    // The whole point of E2/S5: the model must be told the FULL value survives, so it binds and
-    // filters in-program instead of concluding the data was lost (the python-defection driver).
+    // The model must be told the full value survives, so it binds and filters in-program
+    // instead of concluding the data was lost.
     expect(noteBlocks[0]).toContain("the full value is intact in the session");
     expect(noteBlocks[0]).toContain("bind it and filter/aggregate in-program");
     expect(noteBlocks[0]).toContain("large results were sampled for display");
-    // No more per-collection enumeration/tautology ("array of 150 items:" / "same shape as
-    // shown") — the note is ONE line about the FACT the value survives, not a re-description of
-    // what was shown.
+    // The note states only that the value survives — never a per-collection
+    // enumeration/tautology re-describing what was shown.
     expect(noteBlocks[0]).not.toContain("array of 150 items:");
   });
 
@@ -105,9 +97,8 @@ describe("elision e2e — a real bound-tool result that is a too-long array", ()
 
     const blocks = texts(result);
     expect(blocks.some((t) => t.includes("were not rendered"))).toBe(false);
-    // §E3: a standalone `;; Note:` block no longer exists at all — but the invariant this
-    // asserted (nothing elided ⇒ no elision advisory) still needs checking against the new
-    // consolidated channel's header.
+    // Nothing elided ⇒ no elision advisory — checked against the consolidated
+    // environment-notes channel's header, the sole surviving advisory block.
     expect(blocks.some((t) => t.includes("── environment notes ──"))).toBe(false);
   });
 });

@@ -2,9 +2,7 @@
  * CHUNK CONSTRUCTION — the `typescript`-importing sibling of ./types.ts (which
  * stays pure per its own header: "imports nothing from `typescript`"). Builds
  * the actual `ts.factory` AST a chunk's opaque `ast` field carries, from
- * already-classified/-lowered data — the walker's ingestion-fold call surface
- * (engine plan §1 S1/S2, §2 E2; docs/working-proposals/arrival-mercury/
- * e2-substrate-evidence.md).
+ * already-classified/-lowered data — the walker's ingestion-fold call surface.
  *
  * Deliberately CoreForm-agnostic (no import from `../coreform/`): this module
  * knows how to build one shape — a `ts.ArrayLiteralExpression` from a flat

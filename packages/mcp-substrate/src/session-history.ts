@@ -36,7 +36,7 @@ const AFTER = String.raw`(?:$|[\s()\[\]{}])`;
 /** The ROSTER-BASED half of tool-valued detection (see `TOOL_SYMBOL`'s blind-spot doc
  *  above): a token-boundary-aware regex matching any of `names` as a whole symbol, or
  *  `undefined` when `names` is empty (no roster supplied — the caller falls back to
- *  `TOOL_SYMBOL` alone, byte-identical to this module's pre-2026-07-05 behavior). Escapes
+ *  `TOOL_SYMBOL` alone). Escapes
  *  each name defensively before interpolating: a real bound tool's qualified name is
  *  wire-constrained to `^[a-zA-Z0-9_-]+$` (bind.ts) and so never actually needs it, but nothing
  *  here can enforce that on a misbehaving upstream server — a regex-metacharacter name should
@@ -78,7 +78,7 @@ export interface SessionHistory {
  *  when the caller has one — closes `TOOL_SYMBOL`'s slugless-binding blind spot (see its doc
  *  above) without weakening the existing shape heuristic (both checks OR together; either one
  *  seeing a tool reference is enough). Optional and defaulted to empty so every existing direct
- *  caller (this package's own unit tests) keeps today's exact behavior. */
+ *  caller (this package's own unit tests) keeps working unchanged. */
 export function createSessionHistory(knownToolNames: Iterable<string> = []): SessionHistory {
   // Insertion-ordered store; rebind moves the name to newest (delete-then-set) — same
   // last-wins rule as context-ring.ts, independently implemented (see file header).

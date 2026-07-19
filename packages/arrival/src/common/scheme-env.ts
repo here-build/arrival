@@ -81,7 +81,7 @@ export interface ResolverSpec {
 /** The minimal surface a scheme-env pack touches. arrival-scheme's `AmbientRuntime`
  *  satisfies this structurally — packs type against THIS, not the concrete class.
  *
- *  There is deliberately NO `set` member (hermetic-Environment ruling, 2026-07-11)
+ *  There is deliberately NO `set` member (hermetic-Environment ruling)
  *  and NO `inherit`/`merge` member (the same ruling extended to birth: an env can
  *  only be BORN — assembled — and READ from JS; frame birth is the module-internal
  *  `mintFrame`, AmbientRuntime.ts): the env is opaque from the JS side — values enter

@@ -1,6 +1,5 @@
 /**
- * circuitToSexpr — StaticProv → homoiconic sexpr, `dag`'s STATIC sibling
- * (T6b, docs/working-proposals/scheme-semantic-model-synthesis.md §2g).
+ * circuitToSexpr — StaticProv → homoiconic sexpr, `dag`'s STATIC sibling.
  *
  * `arrival-reflect`'s `(dag h)` renders the RUNTIME computation DAG (one run's
  * traced dataflow). This renders the COMPILE-TIME attribution CIRCUIT `extract`
@@ -23,9 +22,9 @@
  * integer would be exactly the kind of invented structure I1 forbids
  * elsewhere; rendering `:site N` honestly is the sound choice. Full
  * `head@line:col` interop with `(blast h)`/`(where h)` needs a caller that
- * holds BOTH the circuit and the CoreForm forest it was extracted from (a
- * later wave's concern — see handle-provenance.ts's `circuitOf` doc for
- * exactly why that caller doesn't exist yet).
+ * holds BOTH the circuit and the CoreForm forest it was extracted from —
+ * see handle-provenance.ts's `circuitOf` doc for exactly why that caller
+ * doesn't exist yet.
  *
  * ── gray, never taken/gray ───────────────────────────────────────────────────
  *
@@ -35,7 +34,7 @@
  * "taken" to distinguish without a trace to overlay, and inventing one would
  * misrepresent an unexercised branch as chosen.
  *
- * ── shared-DAG dedup (G2, 2026-07-16) ───────────────────────────────────────
+ * ── shared-DAG dedup (G2) ────────────────────────────────────────────────────
  *
  * A circuit IS a shared DAG (Deutch-Milo-Roy-Tannen, ICDT 2014), and since the
  * extract-side memo (`ExtractCtx.memo`, src/extract/index.ts) makes two Refs
@@ -49,9 +48,9 @@
  * with no aliasing anywhere (object identity never repeats) renders exactly
  * as it did before this dedup existed, with no `:id`/`:ref` anywhere.
  *
- * SHARED CENSUS (C2, provenance-beautiful-child consolidation, 2026-07-16):
- * the occurrence-count + id-assignment walk that used to live privately here
- * (`countOccurrences` + the render-time `nextId` mint) is extracted to
+ * SHARED CENSUS (C2): the occurrence-count + id-assignment walk that used
+ * to live privately here (`countOccurrences` + the render-time `nextId`
+ * mint) is extracted to
  * `census.ts` so the compose projection's where-clause `♯k` labels and this
  * file's `:id k` tags come from ONE pass and can never drift — a human
  * cross-reads `♯1` in a formula straight to `(build :id 1 …)`/`(ref 1)` in
@@ -78,7 +77,7 @@ import type {
 const s = (x: string): string => JSON.stringify(x);
 const key = (k: string | number): string => (typeof k === "number" ? String(k) : s(k));
 
-/** Shared-DAG dedup (G2, 2026-07-16; census extracted per C2 — see this
+/** Shared-DAG dedup (G2; census extracted per C2 — see this
  *  file's header and census.ts). `idOf` is the shared census's numbering: a
  *  node reachable ≥2 times by object identity has an id, everything else is
  *  absent — so an UNSHARED circuit renders byte-identical to before dedup
@@ -172,7 +171,7 @@ function withId(rendered: string, id: number): string {
 }
 
 /** `StaticProv` → sexpr, returning the string for `prov` itself —
- *  SHARED-DAG AWARE (G2, 2026-07-16): a `prov` object identity already
+ *  SHARED-DAG AWARE (G2): a `prov` object identity already
  *  rendered earlier in this SAME `circuitToSexpr` call emits the compact
  *  `(ref N)` form instead of re-rendering the whole subtree; a node reachable
  *  only once never gets tagged at all (see `withId`'s doc and this file's

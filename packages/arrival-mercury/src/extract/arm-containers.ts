@@ -21,8 +21,8 @@
  *      through the shared `extract()` dispatcher in a frame closed over the
  *      lambda's OWN defining scope (never the call site's — the same
  *      binding-site-scoping rule `wire/derive.ts`'s `resolveCallee` uses for
- *      ordinary beta-reduction). Collapse (T3a, contract-corrected 2026-07-15,
- *      see `collapse.ts`'s header for the full split): `buildFan` ALONE decides
+ *      ordinary beta-reduction). Collapse (see `collapse.ts`'s header for the
+ *      full split): `buildFan` ALONE decides
  *      "combine" — a RAW-COREFORM check against the closed AC list (`AC_HEADS`,
  *      below) against the raw `fn` this arm still holds, BEFORE that identity
  *      is erased by extraction (`+`/`-`/`*` all extract to a bit-identical
@@ -38,27 +38,21 @@
  * attribution. A key is program text, not data: `{:a 1}` and `{:b 1}` attribute
  * identically — only entry VALUES flow into the circuit, never key spellings.
  *
- * GEPA sweep (2026-07-15) — the real `gepa.scm` algorithm surfaced almost
- * nothing before this pass: every data-carrying head it calls that the
- * registry didn't yet know (`max-by`, `append`, `cadr`, the three predicates,
- * `infer/chat/user`) fell through to the unknown-head opaque default, and
- * `max-by` wraps the ENTIRE program's return value, so its opaque discarded
- * the whole circuit. The classifications added below (see each table's own
- * comments for the per-head seal claim) surface the chain; `max-by`'s mux
- * entry is the load-bearing one. `s/object`/`s/field/string` were left
- * unclassified BY THIS SWEEP (still opaque via the unknown-head fallback) on
- * the theory that `infer/chat`'s output-schema arg never carries evidence —
- * RECLASSIFIED 2026-07-16 (V's ruling, `classifyHead`'s own `s/`-namespace
- * rule below has the full account): that theory undercounted the cost. The
- * schema arg's opaque still flows into the mint's `closed` (a crossing's own
- * inputs — static-prov.ts's `MintProv` doc), which grounds the SELECTION
- * channel, and an opaque anywhere in a guard's selection fails
- * `guardGroundsInEvidence` (circuit-verdict.ts) even when the guard's own
- * evidence anchor is real — an evidence-grounded judgment was reading as
- * not-attestable purely because its schema arg was miscategorized. `every`/
- * `some` stay unclassified (still opaque via the unknown-head fallback)
- * because they never carry evidence: they are the higher-order predicate
- * combinators inside `dominates?`, never on a path this sweep needs to open;
+ * Several data-carrying heads (`max-by`, `append`, `cadr`, the three
+ * predicates, `infer/chat/user`) would otherwise fall through the
+ * unknown-head opaque default; `max-by`'s mux entry (below) is the
+ * load-bearing one, since `max-by` commonly wraps a program's ENTIRE return
+ * value — an opaque there discards the whole circuit. `s/object`/
+ * `s/field/string` classify as `fuse` (see `classifyHead`'s `s/`-namespace
+ * rule below) rather than staying opaque: an opaque schema arg still flows
+ * into the mint's `closed` (a crossing's own inputs — static-prov.ts's
+ * `MintProv` doc), which grounds the SELECTION channel, and an opaque
+ * anywhere in a guard's selection fails `guardGroundsInEvidence`
+ * (circuit-verdict.ts) even when the guard's own evidence anchor is real —
+ * an evidence-grounded judgment would otherwise read as not-attestable purely
+ * because its schema arg was miscategorized. `every`/`some` stay unclassified
+ * (opaque via the unknown-head fallback) because they never carry evidence:
+ * they are the higher-order predicate combinators inside `dominates?`.
  * `apply` is `max-by`'s KEY function (arg0) — `dispatchMux` only ever walks
  * the SOURCE arg (arg1), so `apply` is never even passed to `extract` and its
  * classification is moot either way.
@@ -106,22 +100,21 @@ const FUSE_HEADS: Readonly<Record<string, true>> = {
   "string->number": true,
   "symbol->string": true,
   "string->symbol": true,
-  // GEPA sweep (2026-07-15) — predicates: the runtime boolean depends on
-  // every operand, same ⊗-over-all-args rule as `=`/`<`/… above (comparisons
-  // included since the WINNING value is dynamic, so statically every operand
-  // is a potential contributor).
+  // Predicates: the runtime boolean depends on every operand, same
+  // ⊗-over-all-args rule as `=`/`<`/… above (comparisons included since the
+  // WINNING value is dynamic, so statically every operand is a potential
+  // contributor).
   "zero?": true,
   "null?": true,
   "string-ci=?": true,
-  // GEPA sweep: list concatenation — every arg contributes to the fused
-  // list, all visible; the pool-growth fuse in `generation`
-  // (`(append pool (map mutate pool))`) is what lets the mutate/reflect/infer
-  // subtree flow into the circuit instead of vanishing behind an
-  // unclassified opaque (the worst offender before max-by itself).
+  // List concatenation — every arg contributes to the fused list, all
+  // visible; a pool-growth fuse like `(append pool (map mutate pool))` is
+  // what lets the mutate/reflect/infer subtree flow into the circuit
+  // instead of vanishing behind an unclassified opaque.
   append: true,
 };
 
-/** The CLOSED fold-combinator AC list (§2c) — exactly 4 members: associative,
+/** The CLOSED fold-combinator AC list — exactly 4 members: associative,
  *  void-free, arity-liftable. This is `buildFan`'s "combine" check, against the
  *  RAW `fn` CoreForm (a bare `Ref` or a lambda's literal one-line body) — never
  *  against an extracted `FusedProv`, which has already forgotten which head
@@ -159,15 +152,14 @@ const MUX_HEADS: Readonly<Record<string, number | "self">> = {
   "vector-ref": 1, // (vector-ref v index)
   assoc: 0, // (assoc key alist) — R7RS key-first order
   "dict-ref": 1, // (dict-ref d key) — container-first, matching vector-ref/nth
-  // GEPA sweep (2026-07-15) — `cadr` = car-of-cdr, the pair's SECOND element:
-  // a unary accessor, same shape as car/cdr/first/rest above, so it takes the
-  // same "self" arm (unary arity, source = the one operand) — dispatchMux's
-  // "self" branch stamps `key` as the head's own name ("cadr"), not a literal
-  // numeric 1: the dispatch contract has no unary-plus-fixed-key shape to ask
-  // for a bare index instead, and extending it is out of this sweep's scope.
-  // Sound regardless: key is where-provenance METADATA, never a gate on
-  // whether the source flows — the pair's attribution passes through
-  // unconditionally either way.
+  // `cadr` = car-of-cdr, the pair's SECOND element: a unary accessor, same
+  // shape as car/cdr/first/rest above, so it takes the same "self" arm
+  // (unary arity, source = the one operand) — dispatchMux's "self" branch
+  // stamps `key` as the head's own name ("cadr"), not a literal numeric 1:
+  // the dispatch contract has no unary-plus-fixed-key shape to ask for a
+  // bare index instead (not attempted here). Sound regardless: key is
+  // where-provenance METADATA, never a gate on whether the source flows —
+  // the pair's attribution passes through unconditionally either way.
   cadr: "self",
   // `(max-by keyfn list)` returns SOME element of `list` — a coarse
   // element-projection, MuxProv{key:null} ("statically unknown index",
@@ -175,15 +167,13 @@ const MUX_HEADS: Readonly<Record<string, number | "self">> = {
   // keyArg-supplies-the-key convention with keyArg:0 gets this for free
   // *and* stays honest: arg0 is always the comparator function (a
   // Lambda/Ref), never a Lit, so `staticKeyOf` resolves it to null on every
-  // real call — arg1 (the list) is the source. THE seal claim: this is
-  // GEPA's OUTPUT WRAPPER — before this entry, max-by was an unknown head
-  // and its opaque swallowed the entire program (the worst single-node
-  // discard in the corpus); this entry passes the list's attribution
-  // (the whole iterate/generation fan, with every infer/chat crossing
-  // beneath it) through instead of discarding it. The comparator function
-  // itself (arg0, `(lambda (c) (apply + (:scores c)))`) is never even
-  // extracted — dispatchMux only walks the source arg — so `apply` staying
-  // opaque in the registry never matters here; it is simply never reached.
+  // real call — arg1 (the list) is the source. Classifying `max-by` this way
+  // matters because it commonly wraps a program's ENTIRE return value:
+  // leaving it opaque would discard the whole circuit, whereas this entry
+  // passes the list's attribution through instead. The comparator function
+  // itself (arg0) is never even extracted — dispatchMux only walks the
+  // source arg — so `apply` staying opaque in the registry never matters
+  // here; it is simply never reached.
   "max-by": 0,
 };
 
@@ -201,13 +191,13 @@ const BUILD_HEADS: Readonly<Record<string, BuildProv["ctor"]>> = {
   vector: "vector",
   dict: "dict",
   "make-vector": "vector",
-  // GEPA sweep (2026-07-15) — `(infer/chat/user content)` builds a chat
-  // message struct; its one positional arg (the content string) becomes a
-  // BUILD part, so the content stays a VISIBLE source — never a mux (which
-  // could coarsen it to a single key) and never opaque (which would drop it
-  // entirely). This is the const-preserving requirement itself:
-  // `(infer/chat/user "FABRICATED")` must keep "FABRICATED" a visible
-  // `const` part, exactly as any other BUILD ctor preserves its parts.
+  // `(infer/chat/user content)` builds a chat message struct; its one
+  // positional arg (the content string) becomes a BUILD part, so the content
+  // stays a VISIBLE source — never a mux (which could coarsen it to a single
+  // key) and never opaque (which would drop it entirely). This is the
+  // const-preserving requirement itself: `(infer/chat/user "FABRICATED")`
+  // must keep "FABRICATED" a visible `const` part, exactly as any other
+  // BUILD ctor preserves its parts.
   "infer/chat/user": "dict",
 };
 
@@ -252,14 +242,14 @@ const FAN_HEADS: Readonly<Record<string, "map" | "filter" | "fold">> = {
   filter: "filter",
   fold: "fold",
   reduce: "fold",
-  // fold-left / fold-right REMOVED (orchestrator, 2026-07-15): SRFI-1's
-  // fold-right calls its kons `(elem acc)` — REVERSED vs this dialect's
-  // positional fold — and HeadClass.fanKind has no arg-order metadata, so the
-  // acc/element binding would mislabel. Not a mark-erasure forge (consts stay
-  // visible either way), but T3a's collapse-kind inference READS which param
-  // the body uses (route-init vs route-last) — a swapped binding yields wrong
-  // collapse claims. Fail-closed per I1: unknown-head → opaque, until a
-  // per-head arg-order field lands with T3a.
+  // fold-left / fold-right are NOT registered: SRFI-1's fold-right calls its
+  // kons `(elem acc)` — REVERSED vs this dialect's positional fold — and
+  // HeadClass.fanKind has no arg-order metadata, so the acc/element binding
+  // would mislabel. Not a mark-erasure forge (consts stay visible either
+  // way), but collapse-kind inference READS which param the body uses
+  // (route-init vs route-last) — a swapped binding yields wrong collapse
+  // claims. Fail-closed per I1: unknown-head → opaque, until a per-head
+  // arg-order field lands.
   "for-each": "map",
 };
 
@@ -271,7 +261,7 @@ export const defaultRegistry: HeadRegistry = {
     if (Object.hasOwn(STRING_HEADS, name)) return { role: "string" };
     if (Object.hasOwn(MINT_HEADS, name)) return { role: "mint", integrity: MINT_HEADS[name]! };
     if (Object.hasOwn(FAN_HEADS, name)) return { role: "fan", fanKind: FAN_HEADS[name]! };
-    // `s/` — the reserved TYPE-SYNTAX namespace (V's ruling, 2026-07-16): every
+    // `s/` — the reserved TYPE-SYNTAX namespace: every
     // head under this prefix (`s/object`, `s/field/string`, `s/enum`, …) is
     // arrival's type vocabulary, not a value operator (type-emit/emit.ts's own
     // comment: "s/* — s/enum, s/object, … — is the only type vocabulary,

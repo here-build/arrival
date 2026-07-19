@@ -4,10 +4,10 @@
 // the call shape rather than just the name.
 //
 // Stubs minimal values for required parameters. Uses the same literal grammar as the
-// retry-expr renderer (keyword pairs, braces, nil, etc.).
-// rather than imported: doors.ts calls `synthesizeExampleCall` (the unbound-in-expr door
-// upgrade), so importing the renderer back FROM doors.ts would cycle. The two renderers must
-// stay byte-identical — a future change to either literal grammar must be applied to both.
+// retry-expr renderer (keyword pairs, braces, nil, etc.), duplicated here rather than
+// imported: doors.ts calls `synthesizeExampleCall` (the unbound-in-expr door upgrade), so
+// importing the renderer back FROM doors.ts would cycle. The two renderers must stay
+// byte-identical — a future change to either literal grammar must be applied to both.
 
 import { orderedFields, type JsonSchemaProperty, type ToolJsonSchema } from "./tool-schema.js";
 
@@ -62,9 +62,8 @@ function renderCall(qualifiedName: string, args: Record<string, unknown>): strin
 // ─── stub synthesis ───
 
 /** A TYPE-PLACEHOLDER hole — what a non-enum slot renders instead of a fabricated concrete
- *  value (second-foundation/arrival-manifold/docs/args-error-reporting-v2.md §2.3's
- *  construction rules, §2.6): concrete examples drift — models copy rendered exprs verbatim,
- *  so an invented value becomes the model's next call. `renderLiteral` renders this as
+ *  value: concrete examples drift — models copy rendered exprs verbatim, so an invented value
+ *  becomes the model's next call. `renderLiteral` renders this as
  *  `#|<token>|#` — the reader's OWN block-comment syntax — directly in value position,
  *  UNQUOTED, so a hole is never a value: our invention can never run as plausible data.
  *  Blind copy-paste fails, but WHERE depends on shape (verified against the real reader):

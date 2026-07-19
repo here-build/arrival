@@ -160,9 +160,8 @@ export interface AssembleAmbientOptions {
  * is an `AsyncDisposable`). This is `assembleCapabilityBase` made whole: a fresh
  * `user_env` child with the supplied capabilities assembled on top (AUGMENTING the
  * standard base, never replacing it; fresh child per assembly = no cross-call bleed),
- * sealed (ENV T2), and — the fix for dispose-drop site #4 — returning the HANDLE instead
- * of dropping it: `dispose()` runs the kernel's pack disposers AND every lowered pack's
- * resource wind-down.
+ * sealed (ENV T2), and returning the HANDLE instead of dropping it: `dispose()` runs the
+ * kernel's pack disposers AND every lowered pack's resource wind-down.
  */
 export async function assembleAmbient(opts: AssembleAmbientOptions = {}): Promise<AssembledAmbient> {
   await ensureBaseAssembled();
@@ -250,9 +249,8 @@ export interface ExecOptions {
    */
   config?: object;
   /**
-   * SEAMLESS PARAMETER INJECTION for `define/overridable` (V, 2026-07-10: "no
-   * jsToScheme at all — it should be seamless"). Sugar over the cut: when set,
-   * `arrival/overridable` is appended to this run's `capabilities` (identity-deduped
+   * SEAMLESS PARAMETER INJECTION for `define/overridable`. Sugar over the cut: when
+   * set, `arrival/overridable` is appended to this run's `capabilities` (identity-deduped
    * by the kernel if already listed) and this record is merged into
    * `config.params` (override wins key-wise). The program declares the parameter,
    * its s/* type, and its default; the host supplies the value; `overridable/resolve`
@@ -426,7 +424,7 @@ export interface ExecOptions {
    */
   freezeRosettaReturns?: boolean;
   /**
-   * THE STATIC VALIDATION PASS (W3, symbol-define-static-program-validation.md §3.6).
+   * THE STATIC VALIDATION PASS (symbol-define-static-program-validation.md §3.6).
    * `"on"` runs `validateProgram` over the parsed forms — against the run's SEALED
    * chain + session scope — after parse, before the first form evaluates; error-tier
    * diagnostics throw ONE `StaticValidationError` carrying the COMPLETE list (V's
@@ -436,16 +434,16 @@ export interface ExecOptions {
    * present to validate), so an absent OPTIONAL enabling config key surfaces as a
    * parse-phase causal-chain diagnostic instead of a mid-run unbound throw.
    *
-   * DEFAULT — `"off"` (opt-in), RESOLVED at W4-H4 (not a staging compromise). The
+   * DEFAULT — `"off"` (opt-in), the resolved posture (not a staging compromise). The
    * `exec` PRIMITIVE stays opt-in because it is the low-level building block that the
    * door/purity/typo LAW suites and internal provisioning evals use to exercise
    * RUNTIME behavior — a global default flip here conflates that primitive with the
-   * program-scoped production ENTRY points and (measured, W4-H4) turns ~313 law/behavior
+   * program-scoped production ENTRY points and (measured) turns ~313 law/behavior
    * assertions across 14 suites into parse-phase throws, several of them deliberate
    * runtime invariants (door-fires-at-apply, typo-at-runtime), not stale pins. §3.7's
    * caller split is the actual posture: strictness is CALLER-scoped — the production
    * entry points (DiscoveryTool.call, runProgram) opt IN by passing `"on"` (the "doors
-   * as the real production entry" line), which is their remaining W3 wiring, NOT a flip
+   * as the real production entry" line), which is their own wiring, NOT a flip
    * of this primitive's default. GLASS (`env`) runs never validate regardless — a live,
    * embedder-mutable frame chain has no seal, so the pass makes no claims there
    * (§3.5); the runtime doors remain the backstop.
@@ -592,11 +590,10 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
   // §3.4: a glass caller holds a live frame; exec makes no claims about it), cut-for-
   // default, refined by capabilities/scope/ambient. `env` wins over every cut refinement.
   // The §3.3 OWNERSHIP RULE (phase 5): `owned` = THIS call assembled it — per-call
-  // `{ capabilities }` assemblies are disposed in the `finally` below (LEDGERED, V-pending
-  // #5 resolved per the doc's own recommendation: a behavior change from leak to teardown —
-  // `onDispose` teardowns + resource wind-downs now fire at run end, every run, including
-  // throw paths; a caller wanting warm reuse across runs uses the designed idiom instead:
-  // `assembleAmbient` once, pass `{ ambient }`, which exec never disposes). The realm
+  // `{ capabilities }` assemblies are disposed in the `finally` below: `onDispose`
+  // teardowns + resource wind-downs fire at run end, every run, including throw paths.
+  // A caller wanting warm reuse across runs uses the designed idiom instead:
+  // `assembleAmbient` once, pass `{ ambient }`, which exec never disposes. The realm
   // default is never disposed (realm-scoped memo by design); glass has no handle at all.
   let ambient: AssembledAmbient | undefined;
   let owned = false;
@@ -623,7 +620,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
         config: effectiveConfig,
         degradation: validating ? "doors" : undefined,
       });
-      owned = true; // phase 5 fires in the `finally` — dispose-drop site #4, fixed structurally
+      owned = true; // disposed in the `finally` below (PHASE 5)
     } else {
       ambient = defaultAmbient(); // the realm-scoped memo — ownership row "never"
     }
@@ -700,9 +697,9 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     for (let i = 0; i < forms.length; i++) {
       const expr = forms[i];
       const remaining = budgetMs === undefined ? undefined : budgetMs - (performance.now() - start);
-      // Audit-#42 wrapOperator contract: run() wraps every non-ArrivalError —
-      // including the TypeError wrapOperator throws to name operator + arg types —
-      // in an ArrivalError, masking both the TypeError class and its membrane cause.
+      // wrapOperator contract: run() wraps every non-ArrivalError — including the
+      // TypeError wrapOperator throws to name operator + arg types — in an
+      // ArrivalError, masking both the TypeError class and its membrane cause.
       // Surface the original TypeError so the user-visible error shape survives.
       let result: SchemeValue;
       // THE READ-TRACKING REGION (W2, values/read-guard.ts, §2.4): one top-level form is
@@ -873,7 +870,7 @@ export async function parse(code: string, source?: string): Promise<SchemeValue[
 }
 
 /**
- * Execute a single pre-parsed expression. COMPLEX tier (two-tier-exec-api §3) — the
+ * Execute a single pre-parsed expression. COMPLEX tier (RULINGS.md R1) — the
  * internal form-at-a-time entry (require, prelude eval); returns one boxed
  * SchemeValue, never unwrapped. Use this when you've already parsed the code.
  */

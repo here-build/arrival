@@ -1,7 +1,6 @@
-// confirm-manifest — the digest's IDENTITY-ONLY contract (arrival-provenance-confirmation.md
-// §7.1: "sessionId + statement index + hash of (effect list, decoded args)"). Pure unit tests —
-// no interpreter, no session — the interpreter-backed end-to-end scenarios live in
-// confirm-burst.test.ts.
+// manifestDigest — an IDENTITY-only digest: sessionId + statement index + hash of (effect
+// list, decoded args). Pure unit tests — no interpreter, no session — the interpreter-backed
+// end-to-end scenarios live in confirm-burst.test.ts.
 
 import { describe, expect, it } from "vitest";
 

@@ -32,20 +32,16 @@
 // genuinely absent, not deferred and not a void/placeholder. Reading it throws `Unbound variable
 // `priced'`.
 //
-// ── THE TARGET (V's design, verbatim) ────────────────────────────────────────────────────────────
-// docs/working-proposals/arrival-manifold-package-split-2026-07-05.md, "Stress point 1" §1.2-1.3
-// (lines 555-599) and section 3 (lines 813-816) spec the fix in full. §3 line 816(a), the assertion
-// this file's Test A implements verbatim:
-//   "after a tool-valued define, replay into a fresh env restores the name to the cached value with
-//    the upstream `invoke` spy still at exactly 1 call (never re-fired)."
-// The reference implementation is arrival-mcp's DiscoveryTool.ts:
-//   • cache write (:254-255): `js = schemeToJs(env.get(name)); if (jsonRoundTrippable(js)) cache[src] = JSON.stringify(js)`
-//   • restore     (:228-230): `env.set(name, jsToScheme(CONSTANT_CTX, JSON.parse(cache[src])))` — a
-//     PURE value reconstruction that consults no tool, so it restores tool-independently.
-//   • wire-safety gate `jsonRoundTrippable` (:130-148): scalars + plain arrays/objects thereof cache;
-//     closures/opaque handles/bigint do NOT — those stay skipped (green today; see Test-D prose and
-//     replay-cache-safety.test.ts ③). This file only asserts the WIRE-SAFE case, whose target is
-//     unambiguous.
+// ── THE TARGET ────────────────────────────────────────────────────────────────────────────────────
+// After a tool-valued define, replay into a fresh env must restore the name to its cached value with
+// the upstream `invoke` spy still at exactly 1 call (never re-fired) — the assertion Test A
+// implements. The reference implementation is arrival-mcp's DiscoveryTool.ts: cache the wire-safe
+// result at push time (`jsonRoundTrippable(js) ? cache[src] = JSON.stringify(js) : …`), restore via
+// a PURE value reconstruction (`env.set(name, jsToScheme(CONSTANT_CTX, JSON.parse(cache[src])))`)
+// that consults no tool, so it restores tool-independently. `jsonRoundTrippable` gates what caches:
+// scalars + plain arrays/objects thereof cache; closures/opaque handles/bigint do NOT and stay
+// skipped (green today; see Test-D prose and replay-cache-safety.test.ts). This file only asserts
+// the WIRE-SAFE case, whose target is unambiguous.
 //
 // ── ALTITUDE ─────────────────────────────────────────────────────────────────────────────────────
 // Every test drives the PUBLIC path only — `tool.call()` → `tool.sessionHistory()` →

@@ -239,8 +239,8 @@ const SECTION_SCOPE = { name: "in scope", rank: 2 };
 const SECTION_BUILTINS = { name: "builtins", rank: 3 };
 const SECTION_FORMS = { name: "forms", rank: 4 };
 
-// Section is load-bearing for ORDER: CM puts unsectioned items first.
-// Without it keywords pile above "fits"/scope (observed 2026-06-10).
+// Section is load-bearing for ORDER: CM puts unsectioned items first, so an
+// unsectioned keyword would rank above the sectioned "fits"/scope entries.
 // Forms deliberately last.
 const FORM_COMPLETIONS: Completion[] = [...DEFINITION_KEYWORDS, ...CONTROL_KEYWORDS].map((name) => ({
   label: name,
@@ -248,7 +248,7 @@ const FORM_COMPLETIONS: Completion[] = [...DEFINITION_KEYWORDS, ...CONTROL_KEYWO
   section: SECTION_FORMS,
 }));
 
-// ── Σ∩T-ranked completion (research notes 2026-06-10) ────────────────────────
+// ── Σ∩T-ranked completion ────────────────────────────────────────────────
 // Craft rules (anti-patterns called out):
 //   • TIERED BOOST never filter: fits rise, unfit demote but stay visible.
 //     (Hidden "smart complete" is undiscoverable; demotion is not.)

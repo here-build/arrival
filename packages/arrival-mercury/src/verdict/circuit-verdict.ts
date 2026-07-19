@@ -7,8 +7,8 @@
  * module answers the SAME two questions over the circuit that retires it —
  * `StaticProv` (src/model/static-prov.ts) — so the seal's static leg can
  * re-point from `wire/policy` to `extract`'s output
- * (docs/working-proposals/scheme-semantic-model-synthesis.md §2g, task T4;
- * the J1 re-point). Mirrors `wire/policy.ts`'s naming (`dataShaped`,
+ * (docs/working-proposals/scheme-semantic-model-synthesis.md §2g). Mirrors
+ * `wire/policy.ts`'s naming (`dataShaped`,
  * `judgmentShaped`) so that re-point is mechanical. Imports NOTHING from
  * `wire/` — the circuit stands alone on the `StaticProv` types.
  *
@@ -197,7 +197,7 @@ export type MuxNarrowing =
  * over a base, not a build). So a statically-resolvable key partitions
  * three ways — see `MuxNarrowing`.
  *
- * THE ONE SHARED HELPER (R3 of the beautiful-child consolidation): this rule
+ * THE ONE SHARED HELPER: this rule
  * has two callers — `channels()`'s mux arm (the verdict fold) and the compose
  * projection's `access.dead` mark (`compose-template.ts`) — and any future
  * `fieldProv` descent. One function, N callers, so the narrowing rule can
@@ -225,11 +225,11 @@ export function narrowMux(prov: MuxProv): MuxNarrowing {
 
 /**
  * Fold a circuit into its two attribution channels, bottom-up, in ONE pass —
- * MEMOIZED by `StaticProv` object identity within this one top-level call
- * (G2, 2026-07-16: the shared-DAG follow-through — `extract`'s own memo,
+ * MEMOIZED by `StaticProv` object identity within this one top-level call —
+ * the shared-DAG follow-through: `extract`'s own memo,
  * `ExtractCtx.memo` in src/extract/index.ts, is what makes two Refs to one
  * binding share the identical object; this is what a CONSUMER of that
- * sharing does with it). Safe to call again on any sub-circuit (a guard, a
+ * sharing does with it. Safe to call again on any sub-circuit (a guard, a
  * collection) exactly as on the whole circuit — `judgmentShaped` does this
  * per guard, each such call getting its OWN fresh memo (`channels` creates
  * one per invocation, below) — see the header for why no fuel is needed
@@ -485,7 +485,7 @@ export function flattenChoiceTower(prov: ChoiceProv): ChoiceTower {
  * of the tower, grounds in evidence (`guardGroundsInEvidence`). A non-`choice`
  * root is never judgment-shaped.
  *
- * THE `guards.length > 0` CONJUNCT (2026-07-16, Finding C): without it,
+ * THE `guards.length > 0` CONJUNCT: without it,
  * `guards.every(guardGroundsInEvidence)` is VACUOUSLY true on an empty guard
  * list — `Array.prototype.every` returns `true` for "every element of the
  * empty set satisfies P" regardless of P, which cannot distinguish "every
@@ -493,15 +493,15 @@ export function flattenChoiceTower(prov: ChoiceProv): ChoiceTower {
  * guardless choice IS a reachable shape, not a hypothetical: `extractAndOr`
  * (arm-control.ts) gives `and`/`or` `guards: provs.slice(0, -1)`, which is
  * EMPTY for a single-argument call — `(and "YES")` extracts to
- * `ChoiceProv{guards:[], alts:[const]}`. Before this fix, that shape read as
- * `judgment-shaped`: a bare author-written literal with nothing grounding
- * WHY it was selected (there is no selection — there is only one option)
- * passed the same check as a genuine evidence-guarded judgment. This never
- * reached the live seal as an over-grant (`seal.ts`'s probe conjunct still
- * requires an observed `"selection"` crossing, which a guardless choice never
- * produces), but the STATIC certificate alone was wrong, which is what this
- * module exists to get right. A judgment with nothing grounding its
- * selection is not a judgment.
+ * `ChoiceProv{guards:[], alts:[const]}`. Without this conjunct that shape
+ * would read as `judgment-shaped`: a bare author-written literal with nothing
+ * grounding WHY it was selected (there is no selection — there is only one
+ * option) would pass the same check as a genuine evidence-guarded judgment.
+ * This never reaches the live seal as an over-grant (`seal.ts`'s probe
+ * conjunct still requires an observed `"selection"` crossing, which a
+ * guardless choice never produces), but the STATIC certificate alone would be
+ * wrong, which is what this module exists to get right. A judgment with
+ * nothing grounding its selection is not a judgment.
  */
 export function judgmentShaped(prov: StaticProv): boolean {
   if (prov.kind !== "choice") return false;

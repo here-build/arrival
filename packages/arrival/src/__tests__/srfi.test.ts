@@ -46,7 +46,7 @@ describe("SRFI-43 — vector library (pure)", () => {
     expect(await run("(vector-fold + 0 #(1 2 3 4))")).toBe("10");
     expect(await run("(vector-fold-right + 0 #(1 2 3 4))")).toBe("10");
   });
-  // R8 mint (RULINGS.md R8, two-tier-exec-api.md §6, landed): arrival predicate
+  // R8 mint (RULINGS.md R8, landed): arrival predicate
   // builtins (=, eq?, pair?, null?, …) used to leak a raw JS boolean when no
   // provenance rode the operands (stringifying "true"/"false") — the empty-
   // provenance fast path op-helpers.mintVerdict replaces. Every boolean verdict

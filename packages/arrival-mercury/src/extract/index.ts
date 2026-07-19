@@ -1,5 +1,5 @@
 /**
- * extract — CoreForm → StaticProv, TOTAL (G1 scaffold, 2026-07-15).
+ * extract — CoreForm → StaticProv, TOTAL.
  *
  * THE LAW (I1): total and fail-closed. Every CoreForm kind lifts to a
  * StaticProv or becomes `opaque` with a stable reason code. Mislabeling is the
@@ -60,8 +60,7 @@ export interface ExtractCtx {
    *  reduced; a revisit means recursion through bindings ⇒ the arm returns
    *  `opaque("cyclic-binding")` rather than diverging. */
   readonly reducing: ReadonlySet<CoreForm>;
-  /** The shared-DAG memo (G2, 2026-07-16; upgraded to READ-SET memoization,
-   *  #74, 2026-07-17): a Bound's `{tag:"expr"}` extraction, cached ON THE
+  /** The shared-DAG memo, READ-SET memoized: a Bound's `{tag:"expr"}` extraction, cached ON THE
    *  BOUND OBJECT — every Ref that `lookup()`s to the SAME Bound (a top-level
    *  `define`, a `let`-binding) shares the identical StaticProv object
    *  reference on every use WHOSE `reducing` set agrees with the entry's own
@@ -81,9 +80,9 @@ export interface ExtractCtx {
    *  not a 1-bit flag. A Bound's extraction is sound to cache-and-reuse ONLY
    *  where `ctx.reducing`'s CONTENT agrees with what the ORIGINAL extraction
    *  observed — not merely "never hits a cycle," and not merely "never
-   *  consulted `reducing` at all" (that first upgrade, #46, was already a
-   *  refinement of a hypothetical all-or-nothing rule; this is the second:
-   *  cache the CONDITION, not just its absence). A weaker rule — cache
+   *  consulted `reducing` at all" — either would be a refinement of a
+   *  hypothetical all-or-nothing rule; the read-set caches the CONDITION, not
+   *  just its absence. A weaker rule — cache
    *  unless the result contains an `opaque("cyclic-binding")` anywhere — is
    *  UNSOUND: a Bound can extract cleanly through a non-recursive helper `h`
    *  on one path, yet the SAME Bound referenced from a DIFFERENT point
@@ -160,7 +159,7 @@ export interface ExtractCtx {
 
 /** One cached extraction outcome, paired with the READ-SET that makes it
  *  safe to reuse — see `ExtractCtx.memo`/`riskProbes`'s doc for the full
- *  soundness argument. `result` alone (the pre-#74 shape) is not enough: a
+ *  soundness argument. `result` alone is not enough: a
  *  Bound's extraction can be context-dependent on `reducing`'s content, so
  *  the entry must carry exactly WHICH consultations produced it, so a future
  *  reference point can check whether it would have observed the same

@@ -1,24 +1,19 @@
-// kwargs-decode-errors — RED suite for the kwargs zod-decode humanizer (Phase 0 of
-// docs/args-error-reporting-v2.md's landing strategy, §7.2). Coordinates with
-// arrival-manifold docs/args-error-reporting-v2.md — the frozen strings below are
-// H-4-adjacent; do not implement piecemeal.
+// kwargs-decode-errors — pins the kwargs zod-decode humanizer's frozen shape (coordinates
+// with arrival-manifold docs/args-error-reporting-v2.md §2.5 — those strings must change
+// only together with the manifold's own re-freeze; do not edit one side alone).
 //
-// Today (rosetta.ts:114, `z.decode(kwargsSchema, collectKwargsObject(args))`), a rejected
-// kwargs decode propagates the raw ZodError issues dump — no per-issue humanization, no
-// stable line grammar. §2.5 of the design doc freezes the intended shape:
+// A rejected kwargs decode (rosetta.ts's `z.decode(kwargsSchema, collectKwargsObject(args))`)
+// humanizes to the frozen shape design doc §2.5 defines:
 //
 //   <name>: arguments rejected — <n> problem(s):
 //     :<path> — <humanized issue>
 //
-// so the localized args-misuse door (mcp-substrate, landed later) can parse `:<path> —`
-// off the FIRST line with no heuristics (the own-decode clue family, §2.5 point 2). Every
-// row here is `it.fails`: it must fail NOW (today's raw dump doesn't match the frozen
-// shape) and flip mechanically — silently, loudly if it flips green before the humanizer
-// lands (P15) — the moment `common/kwargs-rejection.ts` (design doc §7.3 Phase 1) ships.
+// so the localized args-misuse door (mcp-substrate) can parse `:<path> —` off the FIRST
+// line with no heuristics (the own-decode clue family, design doc §2.5).
 //
 // Harness: mirrors common/__tests__/kwargs-runtime.test.ts's UNIT plane — a `symbol.rosetta`
 // kwargs contract exercised directly via `def.run.call(testCallCtx(), ...pluck pairs...)`,
-// no evaluator round trip needed to reach rosetta.ts:114's decode chokepoint.
+// no evaluator round trip needed to reach the decode chokepoint.
 
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
@@ -33,10 +28,10 @@ function pluck(key: string): unknown {
   return new ASymbol(CONSTANT_CTX, `:${key}`);
 }
 
-describe("kwargs decode rejection — humanized frozen shape (docs/args-error-reporting-v2.md §2.5, §7.2 R1-R3)", () => {
-  // R1: a single value-mismatch issue (the 45edee trajectory's attempt 1 shape — a scalar
-  // sent where the kwargs field declares an object) humanizes to the frozen head + one
-  // per-issue line, instead of today's raw ZodError issues dump.
+describe("kwargs decode rejection — humanized frozen shape (docs/args-error-reporting-v2.md §2.5)", () => {
+  // R1: a single value-mismatch issue (a scalar sent where the kwargs field declares an
+  // object) humanizes to the frozen head + one per-issue line, instead of a raw ZodError
+  // issues dump.
   it(
     "R1 — a single-issue kwargs rejection humanizes to '<name>: arguments rejected — 1 problem(s):' " +
       "+ one ':<param> — expected <type>, got <type>: <preview>' line (today: raw ZodError dump — the " +
@@ -59,21 +54,15 @@ describe("kwargs decode rejection — humanized frozen shape (docs/args-error-re
     },
   );
 
-  // R2: THE SILENT-STRIP PROBE (Open Question 1). zod's `z.object` default STRIPS unknown
-  // keys rather than rejecting them — verified empirically against zod 4.3.6 (this
-  // package's pinned version) on 2026-07-11: `z.decode(z.object({query: z.string(),
-  // pageSize: z.number().optional()}), {query: "x", pagesize: 50})` succeeds silently with
-  // `pageSize` left `undefined` — the misspelled OPTIONAL key vanishes with NO rejection at
-  // all, exactly the "worse than any error" silent failure the design doc's Open Question 1
-  // warns about. This row pins that a misspelled kwarg key is REJECTED, never silently
-  // dropped — CONFIRMED FAILING at authoring time (2026-07-11): the call below resolves
-  // instead of rejecting. Stays `it.fails` until the strictObject fix (design doc Open
-  // Question 1 — a separate commit, since it changes accept/reject behavior, not just
-  // reporting) lands; flips to a plain pin the day this hazard is disproven for real.
+  // R2: THE SILENT-STRIP PROBE. `z.object`'s default mode STRIPS unknown keys rather than
+  // rejecting them — a misspelled OPTIONAL key would otherwise vanish with NO rejection at
+  // all, a silent failure worse than any error. The kwargs decode is strict (`z.strictObject`,
+  // design doc §2.5) precisely to close this: this row pins that a misspelled kwarg key is
+  // REJECTED, never silently dropped.
   it(
     "R2 — THE SILENT-STRIP PROBE: a misspelled OPTIONAL kwarg key (:pagesize vs declared :pageSize) is " +
-      "REJECTED, never silently dropped (CONFIRMED failing 2026-07-11 — z.object's default strip mode lets " +
-      "it through with pageSize left undefined; z.strictObject is the fix, design doc Open Question 1)",
+      "REJECTED, never silently dropped (strict decode closes z.object's default silent-strip mode, " +
+      "design doc §2.5)",
     async () => {
       const def = symbol.rosetta`search: kwargs search`(
         { input: [], inputRest: { query: z.string, pageSize: z.number.optional() }, output: [z.string] },

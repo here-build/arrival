@@ -429,9 +429,9 @@ describe("buildFan — map/filter/fold desugar shapes (bodies stay within ARM-A 
   });
 });
 
-// ── the hidden-const fold shape (longcat's forge) ────────────────────────────────
+// ── the hidden-const fold shape ──────────────────────────────────────────────────
 
-describe("hidden-const fold shape (longcat's ≥2-agree forge, fixture-corpus row 3)", () => {
+describe("hidden-const fold shape (adversarial forge, fixture-corpus row 3)", () => {
   // Gated on ARM-B: the body is `(if (= x "s") "FABRICATED" x)` — If is
   // arm-control.ts's case, still a G1 stub as of this writing (`extractControl`
   // returns opaque("unimplemented/arm-b/If")), so `body` below is that opaque

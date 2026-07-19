@@ -230,7 +230,7 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
   // documents an ACTUAL divergence between the eager oracle and the wireframe,
   // root-caused, with the exact program + expected/got cones. Territory this wave
   // is test files only (builder.ts/types.ts/uneval.ts are Q8c's) — none of these
-  // are fixed here; each is named for Fable escalation. Three are Q8a's OWN
+  // are fixed here; each is named here for follow-up. Three are Q8a's OWN
   // documented first-landing limits (builder.ts's header comment); two are NEWLY
   // surfaced by this corpus (named distinctly, not conflated with the three).
   // ═══════════════════════════════════════════════════════════════════════════

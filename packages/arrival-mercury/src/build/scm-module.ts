@@ -1,5 +1,5 @@
 /**
- * The per-`.scm`-file BUILD compiler (design doc §3/§4) — module-faced emission
+ * The per-`.scm`-file BUILD compiler — module-faced emission
  * composing the EXISTING greenfield pipeline (classify → extractFacts →
  * walk → materializeSharedBindings → materializeAsyncness → materializeImports
  * → render), never rewriting any of those passes. Three things this module
@@ -11,17 +11,16 @@
  *     hoists — resolved by REQUIRE PATH, never by CoreForm node identity, so it
  *     is indifferent to which `classify()` pass produced the node it's asked
  *     about (see this file's own `buildRequireMachinery`).
- *  2. **The export contract** (design doc §3, as amended by
- *     reference-program-face-always-function): module face (every top-level
+ *  2. **The export contract**: module face (every top-level
  *     define → named export, ALWAYS) and program face (a trailing non-define
  *     expression → `export default function`) — ALWAYS an on-demand callable,
  *     never an eager value. A MODULE-classified file wraps its trailing
  *     expression as `export default function Main() { … }`; a
- *     PIPELINE-classified file (`classify.ts`, TASK #87) exports its thunked,
+ *     PIPELINE-classified file (`classify.ts`) exports its thunked,
  *     parameterized `run` with every `define/overridable` lifted into its
  *     env-chained params cone (`overridable.ts`) — INCLUDING every overridable
- *     transitively reachable through its own require-DAG (TASK #87 Q2's
- *     flow-up; `project.ts`'s cone walk). A MODULE-classified file's own
+ *     transitively reachable through its own require-DAG (`project.ts`'s
+ *     cone walk). A MODULE-classified file's own
  *     local overridables still resolve a real (params-less) env chain, just
  *     with no explicit-argument tier of their own. The value/function boundary
  *     lives at the CONSUMER: a requiring sibling imports the function and
@@ -103,10 +102,9 @@ function makeUniqueAlias(): (base: string) => string {
 }
 
 /** A require path's basename, cleaned to a JS identifier — the alias an
- *  `"inline"` require falls back to when there's no user-chosen `define` name
- *  to borrow (design doc §3's bound-require aliasing; see this file's header).
- *  Exported: `project.ts`'s cone walk (TASK #87 Q2) reuses this EXACT alias
- *  convention to namespace a flowed-up overridable on collision
+ *  `"inline"` require falls back to when there's no user-chosen `define`
+ *  name to borrow. Exported: `project.ts`'s cone walk reuses this EXACT
+ *  alias convention to namespace a flowed-up overridable on collision
  *  (`<moduleAlias>.<name>`), so a module's own default-import alias and its
  *  knob namespace always agree. */
 export function aliasFromPath(specifier: string): string {
@@ -186,7 +184,7 @@ function buildRequireMachinery(uses: readonly RequireOccurrence[], opts: Compile
 
   // `span` is always the CURRENT `RequireOccurrence.node.span` — the specific
   // require/define statement whose name is spilling/binding `exported` — never
-  // a fabricated position (DX memo item 2).
+  // a fabricated position.
   const addOverlayRow = (exported: string, binding: Binding, context: string, span: Span): void => {
     if (Object.hasOwn(overlayTable, exported)) {
       warnings.push({
@@ -219,7 +217,7 @@ function buildRequireMachinery(uses: readonly RequireOccurrence[], opts: Compile
         });
         continue;
       }
-      // BUG #89: the overlay row's KEY is the RAW scheme name (`scheme`) — an
+      // The overlay row's KEY is deliberately the RAW scheme name (`scheme`) — an
       // importing file's own `(over-threshold? …)` call site spells the scheme
       // identifier verbatim, never a cleaned JS one, so registry resolution
       // must key on it unchanged. The imported/local JS text is `js` — the
@@ -344,8 +342,8 @@ function exportMainAsDefault(unit: CompilationUnit, mainName: string): Compilati
  *  arithmetic operation must be of type 'any'/'number'/…"), so the honest
  *  restatement of the old implicit-`any` contract is `Record<string, any>`: a
  *  bag of knobs indexable by any key (bare `inhumanParams.greeting` OR
- *  bracketed `inhumanParams["metric.threshold"]`, the flow-up namespaced form,
- *  TASK #87 Q2) whose values stay `any` — exactly what a non-strict emitted
+ *  bracketed `inhumanParams["metric.threshold"]`, the flow-up namespaced form)
+ *  whose values stay `any` — exactly what a non-strict emitted
  *  project (build.ts's `emittedTsconfig`: `strict:false`/`noImplicitAny:false`,
  *  type-emit not yet wired) already runs on everywhere else. The `any` value
  *  rides the EXISTING `ref` carrier (the same shape `naming/asyncness.ts` emits
@@ -353,12 +351,13 @@ function exportMainAsDefault(unit: CompilationUnit, mainName: string): Compilati
 const PARAMS_CONE_TYPE: TsType = { k: "ref", name: "Record", args: [{ k: "prim", name: "string" }, { k: "ref", name: "any" }] };
 
 /**
- * BUG #90 — the pipeline wrapper's own params-parameter needs a declared
- * `= {}` default (design doc §3's example: `async function run(inhumanParams
- * = {}) {…}`); today it has none, so the common zero-arg call `run()` (every
- * knob resolving from env/default) is a real arity/type error under
- * `--check`. `compilePipelineFace`'s `walk()` call always lowers EXACTLY one
- * top-level form (`forms: [wrapper]` — the whole file becomes one synthetic
+ * The pipeline wrapper's own params-parameter needs a declared `= {}`
+ * default (`async function run(inhumanParams = {}) {…}`) — without it, the
+ * common zero-arg call `run()` (every knob resolving from env/default) is a
+ * real arity/type error under `--check`, since the walker itself never
+ * annotates a params-parameter with one. `compilePipelineFace`'s `walk()`
+ * call always lowers EXACTLY one top-level form (`forms: [wrapper]` — the
+ * whole file becomes one synthetic
  * `DefineFn`, this file's own header), so `unit.decls` has EXACTLY one
  * `FnDecl` at this point — the wrapper's own — with EXACTLY one param
  * (`PIPELINE_PARAMS_SCHEME_NAME`).
@@ -404,9 +403,8 @@ function withParamsDefault(unit: CompilationUnit): CompilationUnit {
  *  (One acknowledged v0 edge case, absent from every real fixture: a form that
  *  is BOTH `define/overridable` and bound to a bare `(require …)` default —
  *  `overridableType !== undefined` AND `value.kind === "Require"` — would
- *  match both this filter and `isLiftableOverridable`; nothing in the design
- *  doc or this lane's fixtures constructs that shape, so it is left
- *  unresolved rather than guessed at.) */
+ *  match both this filter and `isLiftableOverridable`; no fixture constructs
+ *  that shape, so it is left unresolved rather than guessed at.) */
 function dropResolvedBoundRequires(forms: readonly CoreForm[], resolvedBoundNames: ReadonlySet<string>): CoreForm[] {
   return forms.filter((f) => !(f.kind === "Define" && f.value.kind === "Require" && resolvedBoundNames.has(f.name)));
 }
@@ -428,11 +426,11 @@ export function compileScmModule(source: string, deps: ScmCompileDeps, opts: Com
   const flowedUpOverridables = opts.flowedUpOverridables ?? [];
   const fnLiftWarnings: PendingWarning[] = [];
   // `.find`, not `.some` — the FIRST offending node's own span is a real,
-  // exact position (DX memo item 2); a boolean check would leave this
+  // exact position; a boolean check would leave this
   // warning span-less for no reason (only the first occurrence is named
   // when several exist, a deliberate v0 simplification — see require-scan's
   // own "first-encounter order" convention for the same call). Checked for
-  // BOTH faces (TASK #87): a module-face fn-shorthand overridable is just as
+  // BOTH faces: a module-face fn-shorthand overridable is just as
   // silently un-lifted as a pipeline-face one now that `compileModuleFace`
   // ALSO lifts its plain-value overridables (below).
   const overridableFnShorthand = scanForms.find((f): f is DefineFn => f.kind === "DefineFn" && f.overridableType !== undefined);
@@ -446,9 +444,9 @@ export function compileScmModule(source: string, deps: ScmCompileDeps, opts: Com
   }
   // Which registry row (if either) this file needs: a pipeline overlays the
   // params-aware symbol when it has local overridables OR a transitive
-  // flow-up cone (TASK #87 Q2); a module overlays the params-less symbol
-  // when it has local overridables of its own (TASK #87 Q2's prerequisite —
-  // see overridable.ts's module-face section). A file with neither needs no
+  // flow-up cone; a module overlays the params-less symbol
+  // when it has local overridables of its own (see overridable.ts's
+  // module-face section). A file with neither needs no
   // overlay row at all, matching v0's original "only overlay when used".
   const hasLocalOverridables = scanForms.some(isLiftableOverridable);
   let overlay = overlayTable;
@@ -520,7 +518,7 @@ function compileModuleFace(
   const wantsDefault = hasProgramFace(flatForms);
   const id = idMinter(maxNodeId(sm.coreform.forms) + 1);
   const droppedRequires = dropResolvedBoundRequires(flatForms, resolvedBoundNames);
-  // TASK #87 Q2's prerequisite: a LOCAL `define/overridable` still gets a
+  // A LOCAL `define/overridable` still gets a
   // real (params-less) env chain even though a module face has no params
   // cone of its own to consult an explicit argument from — see
   // overridable.ts's `liftLocalOverridable`/`MODULE_OVERRIDABLE_SYMBOL`.
@@ -541,7 +539,7 @@ function compileModuleFace(
   );
   const sync = wantsDefault ? exportMainAsDefault(walked, SCM_MAIN) : walked;
 
-  // BUG #89 — the ONE source of truth for a top-level define's exported name:
+  // The ONE source of truth for a top-level define's exported name:
   // `sync.decls`, read RIGHT NOW (before shared-bindings/asyncness/imports run
   // any further splicing), is exactly the ConstDecl/FnDecl set `walk()`'s own
   // top-level loop pushed for `formsToWalk`'s Define/DefineFn forms — one per
@@ -549,7 +547,7 @@ function compileModuleFace(
   // naming/origin.ts) alongside its ALREADY-ALLOCATED `.text` (walk()'s own
   // internal census→allocate→materialize phase, naming/allocate.ts, already
   // committed this before returning — see walker/walk.ts's own module header).
-  // Reading it here is the whole fix: NEVER call `cleanName` independently to
+  // Reading it here is the guarantee: NEVER call `cleanName` independently to
   // guess the export name a second time — that could disagree with the
   // allocator's own collision-resolved pick (a contested predicate `foo?`
   // yielding `isFoo`, not `foo`, when a co-scoped plain `foo` binding also
@@ -594,18 +592,17 @@ function faceIsAsync(unit: CompilationUnit): boolean {
   return unit.decls.some((d) => d.t === "FnDecl" && d.exported === "default" && d.async === true);
 }
 
-/** v0's pipeline face (design doc §3): the WHOLE file becomes one synthetic
+/** v0's pipeline face: the WHOLE file becomes one synthetic
  *  `DefineFn` ("the wrap" — see the module header), its own top-level
  *  `define/overridable`s PLUS the entire transitive flow-up cone
- *  (`flowedUpOverridables` — TASK #87 Q2) lifted into the params cone
+ *  (`flowedUpOverridables`) lifted into the params cone
  *  (`overridable.ts`), then exported as a plain `export default` of that
  *  function — thunked BY CONSTRUCTION (a function body never runs at import;
- *  v0 treats every pipeline as unconditionally deferred, per this lane's
- *  directive — "simplest sound choice; the effect-derived refinement is the
- *  documented end-state, not yours"). No named exports: this is a DIFFERENT
- *  cone than design doc §3's stated end-state (still deferred) — that one
- *  is INTRA-file (which of THIS file's own defines close over params vs.
- *  escape as named exports); TASK #87 Q2's cone is INTER-file (which
+ *  v0 treats every pipeline as unconditionally deferred — the simplest sound
+ *  choice; an effect-derived refinement is future work). No named exports:
+ *  this is a DIFFERENT cone than a per-file intra-file lift (still not
+ *  built) — that one would decide which of THIS file's own defines close
+ *  over params vs. escape as named exports; this cone is INTER-file (which
  *  OTHER files' overridables flow up into THIS file's signature). */
 function compilePipelineFace(
   sm: SchemeSemanticModel,
@@ -619,7 +616,7 @@ function compilePipelineFace(
   const wrapperSpan = flatForms[0]?.span ?? ([0, 0] as const);
   const formsForBody = dropResolvedBoundRequires(flatForms, resolvedBoundNames);
   const liftedBody = formsForBody.map((f) => (isLiftableOverridable(f) ? liftOverridable(f, id) : f));
-  // TASK #87 Q2: every overridable transitively reached through this
+  // Every overridable transitively reached through this
   // pipeline's require-DAG (project.ts's cone walk — already collision-
   // resolved) lifts ALONGSIDE this file's own local ones, prepended so the
   // params cone reads as one coherent block of declared knobs ahead of the
@@ -652,7 +649,7 @@ function compilePipelineFace(
       register: "run",
     },
   );
-  // BUG #90: the wrapper's own params-parameter carries no declared default —
+  // The wrapper's own params-parameter carries no declared default from `walk()` —
   // a zero-arg call `run()` (the common case: every knob resolves from env/
   // default) is a real arity error under `--check` otherwise. Pure data
   // surgery over the ALREADY-WALKED tree (see `withParamsDefault`'s own doc) —

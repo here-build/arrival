@@ -1,14 +1,9 @@
-// futileRetryDoor text — C2/B2 (benchmark-defect-register.md §C + ADDENDUM B2). ~60% of the
-// door's real-world firings were WORKING tools truthfully returning empty (met-museum "No
-// objects found", memory empty), yet the old text asserted "the tool looks degraded or
-// rate-limited" as FACT and prescribed "give your best final answer" — pushing a model to
-// abandon a recoverable search and confabulate. Observed harm: the model proposed the WINNING
-// query and the door vetoed it (5 of 6 claims lost); the fabricated diagnosis leaked into
-// user-facing final answers twice.
-//
-// V RULING: report the FACT, frame the interpretation CONDITIONALLY, prescribe NOTHING. No
-// "give your best final answer" anywhere — that is outcome fine-tuning (load-bearing constraint
-// #6 in the register), not teaching.
+// futileRetryDoor text reports the FACT (same result, different arguments), frames the
+// interpretation CONDITIONALLY, and prescribes NOTHING — never "give your best final answer",
+// which is outcome fine-tuning, not teaching. ~60% of the door's real-world firings are WORKING
+// tools truthfully returning empty (e.g. "No objects found"); asserting "the tool looks degraded
+// or rate-limited" as fact and telling the model to abandon a recoverable search once vetoed the
+// winning query outright and leaked a fabricated diagnosis into a user-facing answer.
 
 import { describe, expect, it } from "vitest";
 
@@ -17,16 +12,10 @@ import { futileRetryDoor } from "../doors.js";
 describe("futileRetryDoor — fact-only, conditionally-framed, no outcome prescription (C2/B2)", () => {
   const door = futileRetryDoor("srv_search");
 
-  // A NEGATIVE-ONLY TEST IS A WEAK TEST — flagged by an adversarial review (2026-07-14).
-  //
-  // This test used to assert ONLY what the door must NOT say (three `not.toContain`). An EMPTY door
-  // would have satisfied every one of them. The file as a whole is still a gate — its siblings below
-  // assert positively on `fact` and `reason`, so a door that said nothing would fail those — but
-  // THIS test, the one guarding the exact wording change that was asked for, could not tell a
-  // correctly-reworded door from a deleted one.
-  //
-  // Absence of a lie is not the presence of the truth. So it now asserts BOTH: the removed
-  // over-claims stay removed, AND the conditional framing that replaced them is actually there.
+  // A negative-only test cannot distinguish a correctly-reworded assertion from a deleted one —
+  // an empty door would satisfy every `not.toContain` below. Absence of a lie is not the presence
+  // of the truth: assert BOTH that the removed over-claims stay removed, AND that the conditional
+  // framing that replaced them is actually present.
   it("says the RIGHT thing (conditional, fact-first) and not the wrong thing (diagnosis, outcome-prescription)", () => {
     const rendered = `${door.fact} ${door.reason} ${door.script}`.toLowerCase();
 

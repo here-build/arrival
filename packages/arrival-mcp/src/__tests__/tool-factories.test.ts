@@ -1,7 +1,7 @@
-// tool.view / tool.pure / tool.effect / tool.risky — the pre-applied `tool` factory family
-// (arrival-mcp-extended-capability.md §2.3 + the postdating rulings: `isTool: true` boolean,
-// `tool.risky` = `tool.effect` + a static `risky` metadata key, riding the SAME landed
-// bake-time metadata channel every `tool.*` arm already writes `description` through).
+// tool.view / tool.pure / tool.effect / tool.risky — the pre-applied `tool` factory family.
+// `isTool: true` is a plain boolean; `tool.risky` is `tool.effect` plus a static `risky`
+// metadata key, riding the SAME bake-time metadata channel every `tool.*` arm already writes
+// `description` through.
 //
 // UNIT plane only (direct `def.run(...)`, manually-built `:key` pluck pairs) — mirrors
 // arrival core's own `kwargs-runtime.test.ts` convention: by the time a call's args reach a

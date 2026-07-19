@@ -1,28 +1,23 @@
-// ASSEMBLED-SERVER TEACHING WIRING — the regression net for the binder→runner re-plumbing
-// (docs/working-proposals/arrival-manifold-package-split-2026-07-05.md, "Test safety net" gap
-// #1). Teaching mechanisms were, until now, proven only by HAND-INJECTING their options into a
-// directly-constructed `createManifoldTool(env, catalog, { ...options I pass myself })` — never
-// through the REAL `buildManifoldServer(...)` → `CallTool` wiring (`server.ts`'s `rebuild()`
-// constructs the `DoorSession`/`FutilityTracker`/`AttachmentCollector`, builds the spine lens per
-// world, and threads options into `createManifoldTool`). A future binder→runner extraction could
-// silently stop SUPPLYING one of these through the real wire and every hand-injected test would
-// stay green, because the hand-injected test supplies the option itself.
+// ASSEMBLED-SERVER TEACHING WIRING — the regression net for the binder→runner wiring.
+// Teaching mechanisms are proven here through the REAL `buildManifoldServer(...)` →
+// `CallTool` wiring (`server.ts`'s `rebuild()` constructs the `DoorSession`/
+// `FutilityTracker`/`AttachmentCollector`, builds the spine lens per world, and threads
+// options into `createManifoldTool`) — never by hand-injecting options into a
+// directly-constructed `createManifoldTool(env, catalog, { ...options })`. A future
+// binder→runner extraction could silently stop supplying one of these through the real
+// wire while every hand-injected test stays green, because the hand-injected test
+// supplies the option itself.
 //
 // CONCERNS NAMED:
-//   • scope-confusion  — genuinely UNCOVERED at the assembled-server boundary before this file
+//   • scope-confusion — genuinely UNCOVERED at the assembled-server boundary before this file
 //     (scope-confusion.test.ts's e2e describe block drives `createManifoldTool` directly with
 //     hand-passed `{ session, signatureByName, toolParts }`, never `buildManifoldServer`).
-//   • competence window — REMOVED 2026-07-06 along with the whole COMPETENCE v2 remedy-gradient
-//     mechanism and the truncation banner it fed (measured null effect on task pass-rate); the
-//     describe block that lived here is gone, not merely relocated.
-//   • type-hint delivery via a SERVER-BUILT `createSpineLens` — ALREADY COVERED. Verified: commit
-//     be0007b7df ("activate the type-hint spine in the server path") added
+//   • type-hint delivery via a SERVER-BUILT `createSpineLens` is already covered by
 //     `src/__tests__/type-hints/server-activation.test.ts`, which drives
-//     `buildManifoldServer([upstream], { typeHints: { mode }, session })` with NO lens injected —
-//     exactly proving server.ts builds the real spine adapter and threads it through. Adding a
-//     second, near-duplicate test here would be redundant coverage, not a new regression net —
-//     so this file does NOT add one (matching the design doc's own "verified already adequate: do
-//     NOT add coverage here" discipline).
+//     `buildManifoldServer([upstream], { typeHints: { mode }, session })` with NO lens
+//     injected — proving server.ts builds the real spine adapter and threads it through.
+//     A second, near-duplicate test here would be redundant coverage, not a new
+//     regression net, so this file does not add one.
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";

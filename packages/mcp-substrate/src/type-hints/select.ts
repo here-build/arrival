@@ -1,4 +1,4 @@
-// select — Ring 1 pure selection (doc §3, docs/working-proposals/manifold-type-hints.md rev 3).
+// select — Ring 1 pure selection.
 // The four selection rules, applied in the order types.ts documents them:
 //   1. drop diagnostics with span.start < unit.programStartOffset   (context/prelude, G4)
 //   2. drop codes not in HINT_WHITELIST                              (whitelist-never-blacklist)

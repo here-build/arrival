@@ -186,7 +186,6 @@ export class AExact extends AValue {
 
   // Setoid — exact ≡ exact ONLY, never equal to inexact (R7RS eqv?). structuralEqual/equal?
   // consult this BEFORE the valueOf fast path, which is what makes `(equal? 1 1.0)` #f.
-  // (plan-2026-06-10-algebras-in-entities.md)
   ["arrival/tagless-final/equals"](other: unknown): boolean {
     return other instanceof AExact && this.equals(other);
   }

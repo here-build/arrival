@@ -7,13 +7,6 @@
 // projects through the SAME `normalizeToJson` the builtin data resolvers use (one
 // definition, no drift), so `(require "personas.yaml")` yields exactly what the same
 // data as `.json` would.
-//
-// NOTE this file was named by `loader.ts`'s migration comment ("each is now its own
-// opt-in ext capability (arrival-chain `packs/ext-yaml.ts` / `ext-toml.ts`)") but got
-// LOST IN TRANSLATION during the env-loader extraction — the registration never landed,
-// so every `.yaml` require died with "no resolver" (audience-loop / herebuild-* /
-// best-tagline / enrich-distant pinned exactly that). Same recovery class as the
-// `.prompt`/`.hbs` capabilities.
 import { EnvCapability } from "@inhuman.tools/arrival/capability";
 import {
   arrivalLoaderCapability,
@@ -35,8 +28,7 @@ const resolveYaml: ContentResolver = (contents) => ({
 
 /** The editor twin of `resolveYaml` — same parser, same `normalizeToJson` projection,
  *  routed to a TS type STRING instead of a runtime value (one definition per format,
- *  no drift between what the runtime returns and what the lens types). Lost when this
- *  capability was recovered post-extraction (see the file header); restored here. */
+ *  no drift between what the runtime returns and what the lens types). */
 const typeYaml: RequireTypeProvider = (source) => {
   try {
     return valueToTsType(normalizeToJson(parseYaml(source)));

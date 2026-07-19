@@ -1,5 +1,5 @@
 /**
- * `define/overridable` → the pipeline's env-chained parameter cone (design doc §3):
+ * `define/overridable` → the pipeline's env-chained parameter cone:
  *
  *   export default async function run(inhumanParams = {}) {
  *     const budget = inhumanParams.budget ?? (process.env.INHUMAN_BUDGET !== undefined
@@ -30,10 +30,10 @@
  * all. One `SymbolRule` resolves EVERY such call (the tag/name/env-key travel
  * as per-call-site literal arguments, not per-symbol registrations, so several
  * overridables of different declared types in one pipeline file share the row
- * without colliding) — the SAME §4.2 dispatch ladder every other registry
+ * without colliding) — the SAME dispatch ladder every other registry
  * symbol goes through; no post-walk tree surgery anywhere.
  *
- * v0 scope (per this lane's directive): only the plain-VALUE `define/overridable`
+ * v0 scope: only the plain-VALUE `define/overridable`
  * form lifts. A `define/overridable`'s fn-shorthand (`(define/overridable (f
  * params…) type body…)` — an overridable whose "default" is a function body, not
  * a value) has no sensible env-string coercion and is NOT part of the design
@@ -91,9 +91,8 @@ export function foldCoercionTag(t: CoreForm | undefined): CoercionTag {
   return "string";
 }
 
-/** `INHUMAN_<SCREAMING_SNAKE>` — design doc §3's flat env convention (v0's Q3
- *  lean; project/pipeline-scoped prefixing stays the open question the doc
- *  names, not decided here). */
+/** `INHUMAN_<SCREAMING_SNAKE>` — a flat env convention (project/pipeline-scoped
+ *  prefixing stays an open question, not decided here). */
 export function envKeyFor(schemeName: string): string {
   return `INHUMAN_${schemeName
     .replace(/[?!]/g, "")
@@ -144,13 +143,13 @@ function literalString(r: R, what: string): string {
  *  import bindings (`scm-module.ts`): never routed through the walker's own
  *  name-allocation phase (there is no local declaration site to collide with in
  *  the ordinary case — `--check` is the backstop for the rare pathological
- *  collision, per this lane's report). */
+ *  collision). */
 function processEnvAccess(key: string): R {
   return Member(Member(Ref(mkBinding("process")), "env"), key);
 }
 
 /** `raw` when the coercion tag needs none (`"string"`); otherwise the JS
- *  coercion the design doc's own example uses (`Number(...)` for numeric tags,
+ *  coercion this needs (`Number(...)` for numeric tags,
  *  a `=== "true"` string compare for boolean — env vars are ALWAYS strings, so
  *  this only ever coerces the STRING SIDE of the chain, never the (already
  *  correctly-typed) declared default — see `buildEnvChain`'s own doc for why
@@ -165,12 +164,12 @@ function coerce(raw: R, tag: CoercionTag): R {
  * `env present ? coerce(env) : declaredDefault` — the 2-tier core every
  * overridable resolves through, REGARDLESS of whether a `params` cone even
  * exists (a module-face overridable has none — see `MODULE_OVERRIDABLE_SYMBOL`,
- * below, TASK #87 Q2's prerequisite fix: v0 built this tier only inline inside
- * `buildEnvChain`, so a REQUIRED, non-pipeline file's OWN `define/overridable`
- * compiled as an inert plain value, the annotation silently dropped — never
- * even reading its env var). Factored out so `buildEnvChain` (params-aware,
- * below) and `moduleOverridableSymbolRule` (params-less) share the identical
- * env-or-default logic instead of forking it.
+ * below: without this factoring, a REQUIRED, non-pipeline file's OWN
+ * `define/overridable` would compile as an inert plain value, its annotation
+ * silently dropped — never even reading its env var). Factored out so
+ * `buildEnvChain` (params-aware, below) and `moduleOverridableSymbolRule`
+ * (params-less) share the identical env-or-default logic instead of forking
+ * it.
  *
  * The branch is a `Cond`, not a plain `??`: `process.env.X` is a
  * `string | undefined`, and coercing `undefined` (`Number(undefined)` = `NaN`,
@@ -192,7 +191,7 @@ export function buildEnvChain(paramsRefR: R, name: string, envKey: string, tag: 
 
 /** The ONE registry row for {@link OVERRIDABLE_SYMBOL} — resolves every
  *  synthetic call `liftOverridable` mints to the real env-chain, via the
- *  ordinary §4.2 registry dispatch ladder (no special-casing anywhere in
+ *  ordinary registry dispatch ladder (no special-casing anywhere in
  *  `walk()` itself). `args[3]` (the already-WALKED declared-default
  *  expression) and `args[4]` (the already-WALKED, already-lexically-resolved
  *  params reference) are used exactly as the walker lowered them — a compound
@@ -213,14 +212,14 @@ export const overridableSymbolRule: SymbolRule = {
   },
 };
 
-// ─── Module-face overridables (TASK #87 Q2's prerequisite) ─────────────────────
+// ─── Module-face overridables ────────────────────────────────────────────────
 //
 // A `define/overridable` in a file that compiles as an ordinary MODULE (not a
 // pipeline) has no `params` cone to consult at all — there is no wrapping
 // function, so there is no explicit-argument tier. It still deserves the
-// SAME env-or-default resolution every pipeline-local overridable gets
-// (design doc §3's priority chain is stated as a property of the LANGUAGE
-// FEATURE, not of "being inside a pipeline"): `buildEnvOrDefault`'s 2-tier
+// SAME env-or-default resolution every pipeline-local overridable gets (the
+// priority chain is a property of the LANGUAGE FEATURE, not of "being inside
+// a pipeline"): `buildEnvOrDefault`'s 2-tier
 // core, spliced in via the identical registry-symbol-dispatch technique as
 // {@link OVERRIDABLE_SYMBOL} — a SEPARATE, 3-arg symbol (no name/params to
 // carry) rather than overloading the 5-arg one with a sentinel "no params"
@@ -268,10 +267,10 @@ export function liftLocalOverridable(def: Define, id: () => NodeId): Define {
   return { ...def, value: call };
 }
 
-// ─── Cross-file flow-up (TASK #87 Q2) ───────────────────────────────────────────
+// ─── Cross-file flow-up ──────────────────────────────────────────────────────
 //
-// "The pipeline's signature should be the transitive knob set" (design doc §5's
-// Q2 lean): an overridable declared in a REQUIRED module is folded to a
+// "The pipeline's signature should be the transitive knob set": an
+// overridable declared in a REQUIRED module is folded to a
 // portable (name/envKey/tag/default) triple that survives the require
 // boundary as plain data (`ExportShape.overridables`, below — `project.ts`'s
 // cone walk collects it from every transitively-required file's shape) and
@@ -293,7 +292,7 @@ export function liftLocalOverridable(def: Define, id: () => NodeId): Define {
  *  literal (a computed expression) — an honest, named gap (project.ts's
  *  `build/overridable-flow-up-nonliteral-default`): the value can't be
  *  re-embedded in a DIFFERENT file's parse tree without re-parsing/
- *  re-lowering machinery this lane doesn't build. */
+ *  re-lowering machinery not built here. */
 export interface OverridableExport {
   readonly name: string;
   readonly envKey: string;
@@ -317,8 +316,7 @@ export function foldOverridableExports(forms: readonly CoreForm[]): OverridableE
 /** One overridable, transitively reached from an entry pipeline, ready to lift
  *  into ITS OWN params cone — {@link OverridableExport} plus the EXPOSED key
  *  `project.ts`'s cone walk decided (bare unless a collision forced the
- *  `<moduleAlias>.<name>` namespaced form — design doc Q2: "metric.threshold
- *  style"). */
+ *  `<moduleAlias>.<name>` namespaced form, e.g. `"metric.threshold"`). */
 export interface FlowedUpOverridable {
   readonly exposedKey: string;
   readonly envKey: string;

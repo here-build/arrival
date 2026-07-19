@@ -311,9 +311,7 @@ export class SchemeSemanticModel {
   readonly idiomAt: (node: App) => App | undefined;
 
   /**
-   * R-G6's static-prevaluation decision-view (gate3-human-grade-rulings.md;
-   * docs/working-proposals/arrival-mercury/dnf-prevaluation-evidence.md —
-   * the here.build DNF-fold peek): given an `If`/`And`/`Or` node whose
+   * The static-prevaluation decision-view: given an `If`/`And`/`Or` node whose
    * guard/operands are PROVABLY constant (Scheme truthiness —
    * `../prevalue/index.ts`'s `prevalue`), answers the REPLACEMENT node
    * that carries the same value — dropping every unreachable branch

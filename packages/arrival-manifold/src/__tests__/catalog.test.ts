@@ -3,14 +3,12 @@ import { describe, expect, it } from "vitest";
 
 import { buildCatalog } from "../catalog.js";
 
-// Lean catalog (2026-07-08): anchors + storytelling chain replaced the verbose preamble.
-//
 // The preamble is asserted as STORYTELLING BEATS, not scattered phrase pins. Each beat row
 // carries: the narrative role, WHY its anchors are the load-bearing phrases (so a failing
 // regex explains itself), the anchors that must be present, and the anti-patterns that must
-// stay absent (negative-form guards and hype registers that earlier drafts carried). Two
-// properties no phrase pin can express are asserted separately: the beats appear in chain
-// order, and the whole preamble stays under its token budget.
+// stay absent (negative-form guards and hype registers). Two properties no phrase pin can
+// express are asserted separately: the beats appear in chain order, and the whole preamble
+// stays under its token budget.
 
 interface Beat {
   beat: string;
@@ -97,25 +95,21 @@ describe("buildCatalog — storytelling beats", () => {
   });
 
   it.each([
-    // RE-BASELINED 2026-07-14. The prior row (2400/2900/2100) carried measurements from 2026-07-08;
-    // committed prose since then had already eaten ~140 chars of the headroom silently, and the
-    // `display` HOST EXTENSION line (~110 chars) tipped `available` past the cap. Both facts are
-    // stated rather than absorbed: the guard is only worth having if a breach means something, and a
-    // cap quietly re-measured is a cap that has stopped guarding.
+    // The cap is a live guard, not a one-time measurement: it must be re-measured whenever
+    // committed preamble prose grows, or a quietly-stale cap stops guarding anything.
     //
-    // The 110 chars are BOUGHT, not conceded: `(display …)` hit a hard door on 32% of the 89-task
-    // corpus, costing a full wasted round each time. One line of preamble against a third of all runs
-    // losing a round is the trade the budget exists to let us make deliberately.
+    // The `display` HOST EXTENSION line's headroom is BOUGHT, not conceded: `(display …)`
+    // hits a hard door on a meaningful fraction of real task runs, costing a full wasted
+    // round each time. One line of preamble against that many runs losing a round is a
+    // trade worth making deliberately.
     { mode: "available", cap: CATALOG_CAPS.available },
     { mode: "required", cap: CATALOG_CAPS.required },
     { mode: "off", cap: CATALOG_CAPS.off },
   ] as const)("stays lean in attestation '$mode' — measured size + ~8% headroom", ({ mode, cap }) => {
-    // The cap is the anti-creep guard: the preamble rides EVERY LLM call. At ~4 chars/token the
-    // available-mode preamble is ~550 tokens vs the pre-diet ~1150 (4.6k chars) — roughly 600
-    // tokens/call, ≈1M tokens per full 89-task × ~20-turn bench run. Any addition must displace
-    // something or move behind a door. Signatures are excluded deliberately: they scale with the
-    // bound-tool count, not with prose creep (audit SEV-3: every mode is capped, not just the
-    // default).
+    // The cap is the anti-creep guard: the preamble rides EVERY LLM call, so any addition
+    // must displace something or move behind a door. Signatures are excluded deliberately —
+    // they scale with the bound-tool count, not with prose creep — and every mode is capped,
+    // not just the default.
     expect(buildCatalog([], { attestation: mode }).length).toBeLessThan(cap);
   });
 });

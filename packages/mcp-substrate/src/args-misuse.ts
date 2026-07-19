@@ -1,5 +1,5 @@
 // args-misuse — localize an upstream (or own-decode) misuse rejection to the ONE failing
-// top-level kwarg, per second-foundation/arrival-manifold/docs/args-error-reporting-v2.md
+// top-level kwarg, per arrival-manifold/docs/args-error-reporting-v2.md
 // §2.2. Two pure functions, no session state (mirrors doors.ts's door-generator discipline):
 //
 //   extractClues(errorText)              — upstream prose → a family-tagged clue list.
@@ -19,8 +19,8 @@
 // value-mismatch and unexpected-keys walk the SENT-ARGS tree (args are ground truth);
 // required-key walks the SCHEMA (a missing key has no sent-args leaf to find).
 //
-// This file does not render prose (that's the `argsMisuseDoor` scope, design doc §3 hook #3)
-// — it only ever answers "which param, if any, does this evidence name with certainty."
+// This file does not render prose (that's the `argsMisuseDoor` scope, design doc §2.3) —
+// it only ever answers "which param, if any, does this evidence name with certainty."
 
 import { isTightKeyMatch } from "./doors.js";
 import type { JsonSchemaProperty, ToolJsonSchema } from "./tool-schema.js";
@@ -66,8 +66,8 @@ export interface Localized {
 
 /** TS SDK / zod issues JSON: captures the CONTENTS of a `"path": [...]` array literal —
  *  intersected with the surrounding text rather than requiring the whole message to be one
- *  JSON blob, since the upstream frequently wraps issues JSON inside its own prose (see the
- *  45edee fixture's `Input validation error: Invalid arguments for tool X: [{...}]` shape).
+ *  JSON blob, since the upstream frequently wraps issues JSON inside its own prose (e.g.
+ *  `Input validation error: Invalid arguments for tool X: [{...}]`).
  *  An incidental `"path"` fragment elsewhere in wrapped prose CAN match, but it only ever
  *  becomes a Localized after `walkSchema` verifies the path against the tool's own schema —
  *  a coincidental match either names a real declared param or is discarded, never invents
@@ -124,8 +124,7 @@ export function extractClues(errorText: string): ArgsClue[] {
   // failing param natively in a grammar WE freeze, so it outranks even zod-path). Within
   // them, UNKNOWN-KEY lines outrank the rest: a top-level keyword typo usually CAUSES the
   // sibling missing-required issue (`:qeury` typo ⇒ `:query` missing) — teaching the rename
-  // fixes both, while teaching the missing key first never names the typo (triad review
-  // finding, 2026-07-11).
+  // fixes both, while teaching the missing key first never names the typo.
   if (OWN_DECODE_HEAD_RE.test(errorText)) {
     const unknownKeys: ArgsClue[] = [];
     const paths: ArgsClue[] = [];

@@ -1,10 +1,8 @@
-// spine-lens — Ring 3: `createSpineLens(tools): TypeHintLens`, the ONE undone piece
-// connecting arrival's `createDiagnoseLens` (foundations/arrival/arrival/src/type-layer/
-// diagnose.ts) to this package's frozen `TypeHintLens` contract (types.ts).
-//
-// docs/working-proposals/manifold-type-hints-s2-spine.md is the design this file implements
-// (§4/§6 end-to-end data flow). Three things happen here, once per `createSpineLens(tools)`
-// call (NOT per `diagnose()` call — the harvested prelude is built ONCE and captured):
+// spine-lens — `createSpineLens(tools): TypeHintLens`, the adapter connecting arrival's
+// `createDiagnoseLens` (foundations/arrival/arrival/src/type-layer/diagnose.ts) to this
+// package's frozen `TypeHintLens` contract (types.ts). Three things happen here, once per
+// `createSpineLens(tools)` call (NOT per `diagnose()` call — the harvested prelude is built
+// ONCE and captured):
 //
 //   1. Recover the bound tools' JSON Schemas from the `BoundTool` registry (bound-tool.ts) —
 //      arrival-manifold's original MVP recovery mechanism (an ambient-keyed WeakMap ride-on-
@@ -26,9 +24,9 @@
 //      already scheme-facing, since arrival's `signatureToString` never surfaces the internal
 //      `_.`-escaped callee name, only its parameter list + return type).
 //
-// Per doc §9 decision 1 (V, 2026-07-04): these diagnostics are ADVISORY WARNINGS, never a
-// gate — `diagnose()` only OBSERVES a throwaway program; select.ts/deliver.ts (already built)
-// own every rendering/blocking decision downstream of this adapter.
+// These diagnostics are advisory warnings, never a gate — `diagnose()` only observes a
+// throwaway program; select.ts/deliver.ts own every rendering/blocking decision downstream
+// of this adapter.
 
 import { createDiagnoseLens } from "@inhuman.tools/arrival/type-layer";
 

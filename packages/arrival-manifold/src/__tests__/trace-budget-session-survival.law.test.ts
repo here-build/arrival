@@ -1,17 +1,8 @@
 // A RUNAWAY LOOP ENDS A PROGRAM. IT MUST NEVER END A SESSION.
 //
-// Found in a real benchmark trajectory (kimi89L, task 68a398aa…, 2026-07-14). The model bound a 34k
-// page, then wrote a char-walking `let loop` over it — a genuine runaway. The trace cap fired, which
-// was CORRECT. Then this happened:
-//
-//   [21] (+ 1 2)                          -> Error: trace step budget exceeded (500000 entries)
-//   [25] (define x 1)                     -> Error: trace step budget exceeded (500000 entries)
-//   [51] (string-length "hello")          -> Error: trace step budget exceeded (500000 entries)
-//   [57] (fetch/fetch :url "example.com") -> Error: trace step budget exceeded (500000 entries)
-//
-// EVERY subsequent evaluation, and with it EVERY MCP tool, for the rest of the conversation. The
-// model spent 24 of its 36 rounds probing for a recovery door that did not exist, and scored 0.00 on
-// a task whose data it could have reached in three calls.
+// A real trajectory hit this: a char-walking `let loop` runaway legitimately tripped the trace
+// cap, but every eval after it — arithmetic, `define`, string builtins, every MCP tool — kept
+// failing for the rest of the session, with no recovery door back in.
 //
 // ─── THE CHAIN ──────────────────────────────────────────────────────────────────────────────────
 //
@@ -34,9 +25,9 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// A single 500k-step burn costs ~35s of real interpreter time (measured 2026-07-16, M4 Max),
-// and every NEGATIVE case arms one in beforeEach. The law needs the production cap — a small
-// cap would pass without exercising the real burn — so the price is the timeout, not the size.
+// A single 500k-step burn costs roughly 35s of real interpreter time, and every NEGATIVE case
+// arms one in beforeEach. The law needs the production cap — a small cap would pass without
+// exercising the real burn — so the price is the timeout, not the size.
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 300_000 });
 
 import { EvalTrace } from "@inhuman.tools/arrival/provenance";
@@ -56,16 +47,16 @@ const session = async (cap: number) => {
     (await tool.call({ expr })).content.map((b) => b.text).join(" ");
 };
 
-/** THE SHAPE THAT ACTUALLY KILLS — copied from the failing trajectory (round [12]).
+/** THE SHAPE THAT MATTERS: a char-walking `let loop`, not a `(map (lambda …) (iota N))` runaway.
  *
- *  This matters, and it is why the first version of this file was a FALSE GATE: a runaway built from
- *  `(map (lambda …) (iota N))` unwinds CLEANLY when the cap fires, so the per-call `clear()` still
- *  succeeds and the session survives even with the bug present. The test passed without the fix.
+ *  A `map`/`iota` runaway unwinds CLEANLY when the cap fires, so the per-call `clear()` still
+ *  succeeds and the session survives even if the counter-pinning bug above is present — that
+ *  shape cannot exercise or gate the fix.
  *
  *  A char-walking `let loop` does NOT unwind cleanly — the throw leaves entered frames open, so
  *  `#openCount` stays > 0, `clear()`'s invariant throws, the runner swallows it, and the counter is
- *  pinned at the ceiling for the rest of the session. Reproduce the bug with the shape that caused
- *  it, not with the shape that merely resembles it. */
+ *  pinned at the ceiling for the rest of the session. Reproduce the bug with the shape that causes
+ *  it, not with a shape that merely resembles it. */
 const PAGE = '(define full-page (string-join (map (lambda (i) "https://www.rottentomatoes.com/m/x abcdefghijklmnopqrst") (iota 600)) " "))';
 const RUNAWAY = `(define (find-all-rt-urls s)
   (let loop ((start 0) (acc '()))

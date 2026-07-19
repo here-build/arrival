@@ -46,9 +46,8 @@ export class ANil extends AValue {
     return {};
   }
 
-  // STRUCTURAL SENTINEL, re-verified (arrival-constant-ctx-audit-2026-07-11.md §2.5):
-  // zero callers repo-wide — scheme `append`/`cons` route through `concatPair`/`APair`'s own
-  // ctor, both of which thread ctx correctly. Fix under the same recipe if this is ever wired.
+  // No caller today — scheme `append`/`cons` route through `concatPair`/`APair`'s own ctor,
+  // both of which thread ctx correctly. If this is ever wired, thread a live ctx the same way.
   append<T extends SchemeValue>(x: T): APair<T, ANil> {
     return new APair<T, ANil>(CONSTANT_CTX, x, nil);
   }
@@ -59,12 +58,11 @@ export class ANil extends AValue {
 
   ["arrival/toJS"](): never[] {
     // '()'s JS face is [] — the empty case of the ONE list projection (a proper list
-    // egresses as an array; emptiness must not flip the JS type to `null`). Ruled by V
-    // 2026-07-13 ("nil-as-array"); this also matches what the compiled world emits for
-    // '(), so interpreter face and compiled face agree (the differential oracle compares
-    // through this face). Ingress stays permissive: JS null → nil, JS arrays → borrowed
-    // vectors — egress is canonical, ingress is forgiving; the container round trip is
-    // projection∘borrow, not identity.
+    // egresses as an array; emptiness must not flip the JS type to `null`). This matches
+    // what the compiled world emits for '(), so interpreter face and compiled face agree
+    // (the differential oracle compares through this face). Ingress stays permissive: JS
+    // null → nil, JS arrays → borrowed vectors — egress is canonical, ingress is forgiving;
+    // the container round trip is projection∘borrow, not identity.
     return [];
   }
 
@@ -141,20 +139,16 @@ export class ANil extends AValue {
 
   // Length of the EMPTY list is 0 — the authoritative empty-count (mirrors the map/filter/
   // reduce empty cases above; the fl-interop `length` overlay's nil-branch dissolved ONTO
-  // the term). No elements ⇒ no provenance to carry, but P4 still requires a boxed AValue
-  // (a raw `0` is a bare-value-purge violation — the sibling of the `number->string` bug,
-  // c0852b879c): a fresh empty-provenance `AExact`.
+  // the term). No elements ⇒ no provenance to carry, but a raw `0` is a bare-value-purge
+  // violation (every arithmetic result must be a boxed AValue) — so this mints a fresh
+  // empty-provenance `AExact`.
   //
-  // THREADING GAP, confessed (arrival-constant-ctx-audit-2026-07-11.md §2.5, top-5-adjacent):
-  // `_runCtx` is discarded, minting under CONSTANT_CTX instead — but this is NOT a one-hop
-  // fix. The sole caller, `env/r7rs/lists.ts`'s `length` builtin (out of THIS cluster's file
-  // scope), dispatches via `m.call(obj)` with NO runCtx argument at all today — so even if
-  // this term read its param, it would still receive `undefined`. The honest completion
-  // needs that call site to thread its own live runCtx (`m.call(obj, runCtx)`), a change
-  // owned by the env/r7rs cluster; wiring only THIS side would still leave the fallback
-  // firing. `nil` itself is always CONSTANT_CTX (the shared singleton — see below), so even
-  // a fixed local read would still resolve to CONSTANT_CTX until that caller-side thread
-  // lands — no functional regression from leaving it as a literal here.
+  // `_runCtx` is intentionally unread: `nil` itself is always CONSTANT_CTX (the shared
+  // singleton — see below), and the sole caller (`env/r7rs/lists.ts`'s `length` builtin)
+  // dispatches via `m.call(obj)` with no runCtx argument at all — so threading this
+  // parameter alone would not change what gets minted. Fixing that requires the caller to
+  // thread its own live runCtx (`m.call(obj, runCtx)`) first; that change is owned by the
+  // env/r7rs cluster, not this term.
   ["arrival/tagless-final/length"](_runCtx?: unknown): AExact {
     return new AExact(CONSTANT_CTX, 0);
   }

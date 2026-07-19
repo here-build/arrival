@@ -246,8 +246,8 @@ export {
   toComposeTemplate,
 } from "./model/compose-template.js";
 // The fifth projection (provenance-beautiful-child, control-plane-collapse.md):
-// the Q1+Q2 hierarchical state machine over the same StaticProv circuit —
-// same browser-safe, pure-projection surface as the other four.
+// the hierarchical state machine over the same StaticProv circuit — same
+// browser-safe, pure-projection surface as the other four.
 export {
   collapseView,
   type ControlMachine,
@@ -337,7 +337,7 @@ export {
   type FlowedUpOverridable,
   type OverridableExport,
 } from "./build/overridable.js";
-// TASK #87 — the pluggable file-classification seam: a project supplies its
-// own `ClassifyFile` (`inhuman.config.json`'s `build.classifier`, resolved by
+// The pluggable file-classification seam: a project supplies its own
+// `ClassifyFile` (`inhuman.config.json`'s `build.classifier`, resolved by
 // the CLI's `build.ts`) instead of `buildProject`'s derivable default.
 export { defaultClassifier, pipelinesDirClassifier, type ClassifyFile, type FileClass } from "./build/classify.js";

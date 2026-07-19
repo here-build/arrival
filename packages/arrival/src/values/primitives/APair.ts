@@ -350,12 +350,10 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     return nil;
   }
 
-  // Applicative — single-element list. STRUCTURAL SENTINEL, re-verified
-  // (arrival-constant-ctx-audit-2026-07-11.md §2.5): zero dispatchers/callers of
-  // `tagless-final/of` repo-wide as of this pass (`grep '"arrival/tagless-final/of"\]'`).
-  // A no-arg static has no crossing to derive a live ctx from — if a Monoid/Applicative
-  // dispatcher ever lands, this needs a designed answer (a caller-supplied ctx param),
-  // not a threaded param invented here.
+  // Applicative — single-element list. No dispatcher/caller of `tagless-final/of` exists
+  // today. A no-arg static has no crossing to derive a live ctx from — if a Monoid/
+  // Applicative dispatcher ever lands, this needs a designed answer (a caller-supplied
+  // ctx param), not a threaded param invented here.
   static ["arrival/tagless-final/of"](value: SchemeValue): AListAlike {
     return new APair(CONSTANT_CTX, value, nil);
   }
@@ -699,14 +697,6 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     // term when it's a callable VALUE and otherwise invokes a host fn with an explicit
     // `this = makeCallCtx(runCtx)` (flat `CallCtx`) — fixes the `this=undefined` crash a bare
     // `fn(x)` caused when the callback (e.g. `cadr`, a rosetta) reads `this.runCtx`.
-    // Wave 1 (arrival-constant-ctx-audit-2026-07-11.md §4): the confession this comment
-    // used to document is closed — `runCtx` is now a REQUIRED param (AValue.ts's protocol
-    // declaration, mirrored here), so there is no fallback left to reach for. The sole
-    // production dispatcher (`env/r7rs/lists.ts`'s single-list `map` arm) already threaded
-    // a live, defined `this.runCtx` through `resolveMethod(seq, tf("map")).call(seq, fn,
-    // runCtx)` before this fix — `?? CONSTANT_CTX` was dead code on every real call path,
-    // verified via the dispatch chain (`common/symbols/sequence.ts`'s wrapper always
-    // supplies `this.runCtx`, non-optional since Wave 0's `CallCtx` fix).
     const results = elements.map((x) => applyCallback(fn, [x], runCtx));
     // RULINGS.md R2 (naive-but-explicit strategy): map is
     // LENGTH-PRESERVING — the container's own grouping/length-fact stamp is PROXIED through
@@ -746,8 +736,6 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     }
     // Seam-routed (see map above): `pred` is the user callable OR the RegExp-matcher closure —
     // both invoked with a defined `this`, no bare `pred(x)` crash on a `this.runCtx`-reading callee.
-    // Wave 1 (see map above) — `runCtx` required, confession closed; `env/srfi/srfi-1.ts`'s
-    // `filter` dispatcher already threads a live `this.runCtx` on every real call.
     const verdicts = elements.map((x) => applyCallback(pred, [x], runCtx));
     // R7RS truthiness: ONLY #f is false — a '()-returning predicate KEEPS the element
     // (nil-as-false here was a private truthiness fork; some/every/if never had it).
@@ -786,8 +774,6 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
       if (p.car === undefined && p.cdr instanceof ANil) break; // empty-pair sentinel
       // Seam-routed. The dispatch erases the generic `Acc` return to `CallResult`, so cast back
       // at this boundary — the reducer's result IS an `Acc` (a scheme value).
-      // Wave 1 (see map above) — `runCtx` required, confession closed; `symbol.tagless`'s
-      // dispatcher (the sole caller of this term) always threads a live `this.runCtx`.
       acc = (await applyCallback(fn, [p.car, acc], runCtx)) as Acc;
       node = p.cdr;
     }
@@ -815,13 +801,12 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
       out.push(p.car);
       node = p.cdr;
     }
-    // `runCtx` threaded (Wave 1, arrival-constant-ctx-audit-2026-07-11.md §2.5's
-    // deriveSortCompare row): the comparator now runs under THIS invocation's live ctx,
-    // not CONSTANT_CTX — closes the metering/cache/effects leak. The SEPARATE host-schedule/
-    // RegionScope wiring `region-scope.ts`'s own header names ("routing a real host
-    // comparator loop through withRegionCall so a scope is open around it") is NOT done
-    // here — that's order-attribution provenance tracking, a distinct Wave-4 design task,
-    // not a ctx-honesty fix.
+    // `runCtx` is threaded into the comparator so it runs under THIS invocation's live ctx,
+    // not CONSTANT_CTX — closing the metering/cache/effects leak a stale ctx would otherwise
+    // open. The SEPARATE host-schedule/RegionScope wiring (routing a real host comparator loop
+    // through `withRegionCall` so a scope stays open around it, region-scope.ts) is intentionally
+    // NOT done here — that's order-attribution provenance tracking, a distinct concern from
+    // ctx-honesty.
     out.sort(deriveSortCompare(comparator, runCtx));
     return withInputProvenance([this], APair.fromArray(this.ctx, out, false));
   }
@@ -1007,7 +992,6 @@ type AConcatPair<Car extends SchemeValue, Cdr extends AListAlike> =
       : APair<Car, AConcatPair<Cadr, Cdr>>
     : APair<Car, Cdr>;
 
-// todo move to tagless-final/concat
 // Pure list append (the Semigroup) — fresh spine of `a`'s elements, then `b`. Iterative (was
 // self-recursive on `a`'s cdr → O(depth) host stack): collect a's cars in order, then prepend
 // them onto `b` (shared by reference — purity: a's spine is fresh, b untouched). An improper
@@ -1055,15 +1039,12 @@ function countPairElements(head: APair<any, any> | ANil): number {
 
 // AJSArrayList — the SPINE reading of a borrowed JS array. Zero-copy, O(1) per step.
 //
-// ─── THE LAW THIS IMPLEMENTS (V, 2026-07-14) ─────────────────────────────────────────────────
+// ─── THE MANIFOLD LAW THIS IMPLEMENTS ────────────────────────────────────────────────────────
 //
-//   "The membrane has a nature similar to the manifold. Its design purpose is to provide a
-//    seamless experience, with adjustments and attunements unnoticeable, in multiple layers of
-//    computation."
-//
-// A manifold is CHARTS + TRANSITION MAPS: each chart is locally an ordinary, total coordinate
-// system, and moving between charts is invisible. So a borrowed JS array is ONE POINT (the backing
-// `source` + its provenance) with TWO CHARTS over it:
+// The membrane's design purpose is a seamless experience: adjustments and attunements between
+// layers of computation stay unnoticeable. A manifold is CHARTS + TRANSITION MAPS: each chart is
+// locally an ordinary, total coordinate system, and moving between charts is invisible. So a
+// borrowed JS array is ONE POINT (the backing `source` + its provenance) with TWO CHARTS over it:
 //
 //   AJSArray  (the INDEXED chart) — `vector?` #t, vector-ref/length/map/…, prints `#(1 2 3)`
 //   AJSArrayList (the SPINE chart) — `pair?` #t, car/cdr, terminates in ANil, prints `(1 2 3)`

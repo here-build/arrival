@@ -174,11 +174,10 @@ function indexMappings(mappings: readonly Mapping[]): Map<string, Mapping[]> {
 /**
  * The instantiated-signature probe (spec §4) for a Ref in argument position.
  *
- * Empirically verified (2026-07-14, tsc 6.0.2, this repo's prelude): for
- * `(map car xs)` → `__arr.map(car, xs)` — `car` a FREE identifier, since
+ * For `(map car xs)` → `__arr.map(car, xs)` — `car` a FREE identifier, since
  * value-position lowering has not landed (spec §4's flagged prerequisite) —
- * `getContextualType` ALREADY delivers `(a: number) => unknown` with the param
- * side instantiated from `xs`'s element type. The probe is positional, not
+ * `getContextualType` delivers `(a: number) => unknown` with the param side
+ * instantiated from `xs`'s element type. The probe is positional, not
  * resolution-dependent, so the prerequisite gap costs the identifier's OWN type
  * (`any` — no base facts), not the slot's expected type — and eta needs the
  * slot ("what the slot demands, not what the symbol offers"). The secondary
@@ -249,15 +248,14 @@ export function extractFacts(input: string | ClassifiedSource, opts?: ExtractFac
 }
 
 /**
- * The fact DAG's TOP layer, made re-derivable (E4): given an already-emitted
- * virtual-TS lens (`emitTypes` — the Law-V glass, no facts in it) and its built
+ * The fact DAG's TOP layer: given an already-emitted virtual-TS lens
+ * (`emitTypes` — the Law-V glass, no facts in it) and its built
  * `FactsProgram` (the tsc epoch), query every node's type facts. Split out of
  * `extractFacts` so `SchemeSemanticModel` can stage the three layers
  * independently — `sm.virtualTs` (emit) → `sm.program` (the LS) → `sm.factsAt`
- * (this) — and cache each on its own, the "one model, two registers, staged by
- * the fact DAG" shape the engine plan's §E4 names. `extractFacts` above is now
- * the all-in-one composition of the same three steps; its result is
- * byte-identical to calling them in sequence.
+ * (this) — and cache each on its own. `extractFacts` above is the all-in-one
+ * composition of the same three steps; its result is byte-identical to
+ * calling them in sequence.
  */
 export function queryFacts(
   classified: ClassifyResult,

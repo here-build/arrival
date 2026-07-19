@@ -109,7 +109,7 @@ describe("registerTools (official @modelcontextprotocol/sdk round-trip)", () => 
   });
 });
 
-describe("R5 — the dual notification channel over the official SDK (§2.5)", () => {
+describe("the dual notification channel over the official SDK", () => {
   it("rich tier: every ReplEvent rides notifications/arrival/event, in event order, BEFORE the final result lands", async () => {
     const client = await connectedClient([demoTool()]);
     const events: ReplEvent[] = [];

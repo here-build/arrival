@@ -1,5 +1,4 @@
-// SessionRunState v2 — THE durable twin of an MCP session (R3,
-// docs/working-proposals/arrival-mcp-rework-over-phases.md §2.1/§2.2/§2.4).
+// SessionRunState v2 — THE durable twin of an MCP session.
 //
 // A session's durable form is `statement log + first-class run cache`; rehydration is
 // *re-running the log over the same cache* (replay mode — every declared `view`
@@ -7,10 +6,11 @@
 // re-run under their stable-behavior promise). Values are never restored around
 // execution — execution is repeated, and the cache absorbs the membrane.
 //
-// Storage honesty (§2.4): in-memory/stdio the blob is ONE object (this module's
-// encode/decode round-trips it as one JSON string for an injected `AsyncSessionStore`);
-// the DO materialization DECOMPOSES the same logical record over storage keys (meta +
-// chunked log + one key per cache entry) — that layout is R4's, in deployment territory.
+// Storage honesty: in-memory/stdio the blob is ONE object (this module's encode/decode
+// round-trips it as one JSON string for an injected `AsyncSessionStore`); a durable-object
+// materialization DECOMPOSES the same logical record over storage keys instead (meta +
+// chunked log + one key per cache entry) — a deployment-layer concern this module has no
+// opinion on beyond producing the one logical record either layout can serve from.
 
 import { canonicalJson, type RunCache, type RunCacheEntry } from "@inhuman.tools/arrival";
 
@@ -26,30 +26,30 @@ import { isConfirmManifest, type ConfirmManifest } from "./confirm-manifest.js";
  *  drops every stored cache and re-records — the log survives). */
 export const SESSION_SEMANTICS_EPOCH = "arrival-mcp-session-v2";
 
-/** The MANDATORY four-member cache-validity identity (§2.2): a stored cache is valid
- *  only under the exact identity it was recorded against. Any mismatch ⇒ drop the
- *  cache, KEEP the log, re-run with live penetrations (record mode) — the session
- *  self-heals into a fresh recording. */
+/** The MANDATORY four-member cache-validity identity: a stored cache is valid only under
+ *  the exact identity it was recorded against. Any mismatch ⇒ drop the cache, KEEP the
+ *  log, re-run with live penetrations (record mode) — the session self-heals into a
+ *  fresh recording. */
 export interface SessionRunIdentity {
   v: 2;
   /** {@link SESSION_SEMANTICS_EPOCH}. */
   semanticsEpoch: string;
   /** Capability names (dep closure, sorted). ADVISORY for grants — the host re-derives
    *  authority per call, a stored roster never authorizes anything. AUTHORITATIVE as a
-   *  cache-validity component — a roster mismatch drops the cache (§2.4). */
+   *  cache-validity component — a roster mismatch drops the cache. */
   roster: readonly string[];
-  /** INTERIM config digest (Part III LIMIT): the hash of `canonicalJson` of the call's
-   *  data-config — the same canonicalization the run-cache keys use. Upgrades to the C6
-   *  digest when C6 lands (the upgrade is itself a digest change ⇒ one clean cache drop). */
+  /** INTERIM config digest: the hash of `canonicalJson` of the call's data-config — the
+   *  same canonicalization the run-cache keys use. A future exact-config digest would
+   *  itself be a digest change ⇒ one clean cache drop, never a silent mismatch. */
   configDigest: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The state (§2.4's normative shape)
+// The state
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Cumulative session counters (§2.7) — persisted, so a session's burn (including its
- *  cache economy) is visible across rehydrations. */
+/** Cumulative session counters — persisted, so a session's burn (including its cache
+ *  economy) is visible across rehydrations. */
 export interface SessionCounters {
   /** Top-level statements executed (new input, successful). */
   statements: number;
@@ -63,8 +63,8 @@ export interface SessionCounters {
   cacheMisses: number;
   /** Replay-mode `sink` tombstone skips. */
   effectsSkipped: number;
-  /** Cumulative per-form heap-meter reads (`runCtx.heapMeter.used`, wired by R5 — new input
-   *  AND fold re-runs; a crashed form contributes 0, its meter being unobservable). */
+  /** Cumulative per-form heap-meter reads (`runCtx.heapMeter.used` — new input AND fold
+   *  re-runs; a crashed form contributes 0, its meter being unobservable). */
   heapUsedTotal: number;
   elapsedMsTotal: number;
   /** How many times this session was cold-folded (log re-run over cache). */
@@ -72,14 +72,14 @@ export interface SessionCounters {
 }
 
 /** One top-level statement of the log — ALL statements, defines AND expression/effect
- *  statements, in program order (§2.2; the sink tombstone-skip is unreachable if only
- *  defines replay). `definedName` marks the `(define …)` statements. */
+ *  statements, in program order (the sink tombstone-skip is unreachable if only defines
+ *  replay). `definedName` marks the `(define …)` statements. */
 export interface LogStatement {
   src: string;
   definedName?: string;
 }
 
-/** The session's durable twin — ONE logical record (§2.4). */
+/** The session's durable twin — ONE logical record. */
 export interface SessionRunState {
   v: 2;
   semanticsEpoch: string;
@@ -93,11 +93,10 @@ export interface SessionRunState {
   counters: SessionCounters;
   createdAt: number;
   lastCallAt: number;
-  /** The held confirm-manifest (arrival-provenance-confirmation.md), if a prior call
-   *  gathered a risky effect and returned it instead of bursting (§7.2's hold rule).
-   *  FILL-OR-KILL (§7.3): a NEW program call kills any manifest already pending
-   *  (DiscoveryTool.call clears this before running) — "the manifest is an order; it
-   *  fills now or dies." Absent when there is nothing held. */
+  /** The held confirm-manifest, if a prior call gathered a risky effect and returned it
+   *  instead of bursting (the hold rule). FILL-OR-KILL: a NEW program call kills any
+   *  manifest already pending (DiscoveryTool.call clears this before running) — "the
+   *  manifest is an order; it fills now or dies." Absent when there is nothing held. */
   pendingManifest?: ConfirmManifest;
 }
 
@@ -189,10 +188,10 @@ export function encodeSessionRunState(state: SessionRunState): string {
 /**
  * Decode a persisted blob. A well-formed v2 blob round-trips whole. Anything else is
  * SALVAGED per the identity rule ("any identity mismatch ⇒ drop the cache, keep the
- * log", §2.2): if a `log` of well-formed statements can be recovered, return a state
- * carrying that log with an EMPTY cache and a never-matching identity (the caller's
- * validity check then re-records — self-heal); otherwise `undefined` (treated as a
- * fresh session).
+ * log"): if a `log` of well-formed statements can be recovered, return a state carrying
+ * that log with an EMPTY cache and a never-matching identity (the caller's validity
+ * check then re-records — self-heal); otherwise `undefined` (treated as a fresh
+ * session).
  */
 export function decodeSessionRunState(blob: string): SessionRunState | undefined {
   let parsed: unknown;
@@ -212,8 +211,8 @@ export function decodeSessionRunState(blob: string): SessionRunState | undefined
   return salvaged;
 }
 
-/** Is the stored cache valid under the CURRENT identity? (§2.2's four-member check —
- *  `v` equality is already enforced by the decode guard, both sides being literal 2 by
+/** Is the stored cache valid under the CURRENT identity? (The four-member check — `v`
+ *  equality is already enforced by the decode guard, both sides being literal 2 by
  *  type; roster compared element-wise, both sides sorted at construction.) */
 export function cacheValidFor(state: SessionRunState, identity: SessionRunIdentity): boolean {
   return (
@@ -225,7 +224,7 @@ export function cacheValidFor(state: SessionRunState, identity: SessionRunIdenti
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The interim config digest (§2.2 / Part III LIMIT)
+// The interim config digest
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** FNV-1a over a prefixed canonical string — the codebase's one content-hash idiom.
@@ -246,8 +245,8 @@ function fnv1a(prefix: string, canonical: string): string {
  * canonicalization the run-cache keys use (core's `canonicalJson`, reused). The
  * data-config is the JSON-representable subset of the call's lowered config; host
  * services (functions, per-request resources — `hostConfig`'s domain) cannot
- * canonicalize and stay OUTSIDE the interim digest by construction. Upgrades to the C6
- * digest when C6 lands (Part III LIMIT — the upgrade is itself one clean cache drop).
+ * canonicalize and stay OUTSIDE the interim digest by construction. A future exact
+ * digest would itself be one clean cache drop, never a silent mismatch.
  */
 export function sessionConfigDigest(config: Record<string, unknown>): string {
   const data: Record<string, unknown> = {};
@@ -272,8 +271,8 @@ export function sessionConfigDigest(config: Record<string, unknown>): string {
  * it never flips a live one") — the fold builds a `"replay"` view, the new-input run a
  * `"record"` view, both over the SAME map, so fold-recorded misses are visible to the
  * live run and everything serializes from one place. Replay-mode reads tick the session
- * counters (§2.7: "the cache is observable"); record mode never reads (the mode law),
- * so the counters meter exactly the replay economy.
+ * counters ("the cache is observable"); record mode never reads (the mode law), so the
+ * counters meter exactly the replay economy.
  */
 export class SessionRunCache implements RunCache {
   constructor(

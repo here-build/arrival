@@ -219,11 +219,11 @@ function multiListMap(
 // list", whereas multiListMap lets listToArray raise its own circular-list error.
 // Unifying the two is a deferred behavior-preserving cleanup.
 //
-// `runCtx` is a real, required parameter (not the rest tail) — Wave 0 of the
-// CONSTANT_CTX rework (the audit §2.1, "fires today"): the sole caller (for-each's
-// impl, below) now threads its own
-// `this.runCtx`, closing the bug where every for-each callback ran under CONSTANT_CTX
-// (`call_function(fn, args, {})`) — no abort signal, no heap meter, forced non-strict.
+// `runCtx` is a real, required parameter (not the rest tail): the sole caller
+// (for-each's impl, below) threads its own `this.runCtx`, so every for-each callback
+// observes the run's real signal/heap-meter/strict — never CONSTANT_CTX
+// (`call_function(fn, args, {})`, which would give no abort signal, no heap meter,
+// forced non-strict).
 function mapImpl(
   runCtx: RunContext,
   fn: SchemeValue,
@@ -508,8 +508,8 @@ export default new EnvCapability("scheme/lists", {
       },
       // Runs mapImpl for its side effects and discards the result list. `this: CallCtx`
       // (not an arrow) — the dispatch-delivered `this.runCtx` is threaded into mapImpl so
-      // every for-each callback observes the run's real signal/meter/strict, not
-      // CONSTANT_CTX (Wave 0, arrival-constant-ctx-audit-2026-07-11.md §2.1).
+      // every for-each callback observes the run's real signal/meter/strict, never
+      // CONSTANT_CTX.
       function (this: CallCtx, fn, ...lists) {
         const ret = mapImpl(this.runCtx, fn, lists);
         // R7RS "unspecified" is theVoid on the scheme face (Face split; the bare JS
@@ -907,10 +907,9 @@ export default new EnvCapability("scheme/lists", {
         // despite input position 2.
         callbackRoles: ["control"],
       },
-      // `this: CallCtx` (not an arrow) — Wave 0 of the CONSTANT_CTX rework
-      // (arrival-constant-ctx-audit-2026-07-11.md §2.1): the dispatch-delivered
-      // `this.runCtx` is threaded to `call_function` so a user-supplied `compare`
-      // observes the run's real signal/meter/strict.
+      // `this: CallCtx` (not an arrow) — the dispatch-delivered `this.runCtx` is
+      // threaded to `call_function` so a user-supplied `compare` observes the run's
+      // real signal/meter/strict.
       function (this: CallCtx, obj, list, compare = defaultCompare) {
         let current: unknown = list;
         // Same ANil-short-circuit reasoning as memv above — isCircularList needs a Pair.

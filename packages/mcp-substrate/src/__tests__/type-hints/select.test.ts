@@ -1,23 +1,19 @@
-// RING-1 red test suite — src/type-hints/select.ts (does not exist yet).
-//
-// Pins the frozen SelectHints contract (types.ts) per doc §3 (docs/working-proposals/
-// manifold-type-hints.md rev 3): a pure function, no I/O, no async — see src/__red__/
-// README.md for the migration path once select.ts lands.
-//
-// The four selection rules, in the ORDER types.ts documents them (each is independently
-// tested, not just as a chain — see the G4 test below, which deliberately constructs a
-// pathological unit to prove rule 1 fires as its own gate rather than being merely
-// subsumed by rule 3's intersection check):
+// Pins the frozen SelectHints contract: a pure function, no I/O, no async. The four
+// selection rules, applied in order (each is independently tested, not just as a chain —
+// see the G4 test below, which deliberately constructs a pathological unit to prove rule 1
+// fires as its own gate rather than being merely subsumed by rule 3's intersection check):
 //   1. drop diagnostics with span.start < unit.programStartOffset   (context/prelude, G4)
-//   2. drop codes not in HINT_WHITELIST                              (§3, whitelist-never-blacklist)
-//   3. keep only diagnostics whose span intersects an ERRORED statement's span (§3)
+//   2. drop codes not in HINT_WHITELIST                              (whitelist-never-blacklist)
+//   3. keep only diagnostics whose span intersects an ERRORED statement's span
 //   4. per errored statement keep the ONE nearest to the statement start (cap-1, G5)
+//
+// RED suite: select.ts does not exist yet, by design. See src/__red__/README.md for the
+// migration path once it lands.
 
 import { describe, expect, it } from "vitest";
 
 import { selectHints } from "../../type-hints/select.js";
 import { HINT_WHITELIST, type LoweredUnit, type MappedDiagnostic, type SchemeSpan } from "../../type-hints/types.js";
-// RED: this module does not exist yet, by design — that is the point of this suite.
 
 // ─── fixture factories ───
 

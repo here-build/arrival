@@ -1,7 +1,7 @@
 // provenance-gc-release — proves `EvalTrace.clear()` is not merely a no-op bookkeeping
-// call but the ACT that frees real heap: the empirically-confirmed within-task OOM driver
-// (2026-07-14, see `manifold-tool.ts`'s `call()` `finally` and `provenance-arming.test.ts`)
-// was a provenance point retaining a tool call's FULL boxed value forever. That fix is
+// call but the ACT that frees real heap: the within-task OOM driver (see `manifold-tool.ts`'s
+// `call()` `finally` and `provenance-arming.test.ts`) is a provenance point retaining a tool
+// call's FULL boxed value forever. That fix is
 // pinned at the STRUCTURE level (`trace.stats().entries === 0` after a call) by
 // `provenance-arming.test.ts` already; this file pins it at the MEMORY level — a `WeakRef`
 // taken on the exact retained object, proving it survives on the trace alone and dies once

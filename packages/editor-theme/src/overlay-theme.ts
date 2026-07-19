@@ -1,10 +1,10 @@
 // overlay-theme — the editor's overlay chrome in the studio's visual language.
 //
-// ONE container vocabulary across every floating/docked surface (V's spec,
-// 2026-06-10/11): dark panel #2b2b2b, oklch hairline border, layered oklch
-// shadows, squircle corners (corner-shape superellipse(4) @ radius 100px,
-// runtime-feature-detected — the fallback is a DIFFERENT radius, 4px, so a JS
-// branch beats @supports inside style-mod). Applied to:
+// ONE container vocabulary across every floating/docked surface: dark panel
+// #2b2b2b, oklch hairline border, layered oklch shadows, squircle corners
+// (corner-shape superellipse(4) @ radius 100px, runtime-feature-detected —
+// the fallback is a DIFFERENT radius, 4px, so a JS branch beats @supports
+// inside style-mod). Applied to:
 //   • the completion popup (+ its row/section/detail typography),
 //   • the diagnostics HOVER tooltip,
 //   • the diagnostics PANEL — the container minus the corners (a docked panel

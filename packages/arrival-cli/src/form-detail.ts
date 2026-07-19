@@ -1,7 +1,7 @@
 /**
  * Drill-down: select one form from the outline (its `scopeId`) and see WHAT its N
- * invocations were. The triad's hard constraint (3/3): this must AGGREGATE, not dump —
- * `if ×177` shown as 177 lines is a firehose, not a reveal. So a form's detail is a small
+ * invocations were. This must AGGREGATE, not dump — `if ×177` shown as 177 lines is a
+ * firehose, not a reveal. So a form's detail is a small
  * fixed-size summary of a possibly-huge invocation set:
  *
  *   • a header — the aggregate: `×N`, state breakdown, call-depth range, tail/cached counts;

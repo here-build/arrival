@@ -39,31 +39,22 @@
  *
  * Seal = static ∧ probe, fail closed on ANY disagreement or indeterminacy.
  *
- * ─── T6c CLOSED (2026-07-16): the re-point ──────────────────────────────────────
- *
- * This function used to consume `WireVerdict` from `wire/policy` — the OLD,
- * purely-structural static leg with no integrity concept — and this block
- * documented that migration as "KNOWN MIGRATION STATE" while it was in flight.
- * T6c is closed: `seal()` now takes `CircuitVerdict` (verdict/circuit-verdict.ts)
- * directly, whose `dataShaped`/`judgmentShaped` check `Integrity`
- * (evidence/ambient, invention I3 — 2-member; see static-prov.ts's `Integrity`
- * doc for why the original 3-tier draft's `program-text` member was removed)
- * — an ambient-rooted leaf (`(now)`/`(uuid)`) is refused by a DESIGNED
- * boundary, not an accident of probe coverage. The vocabulary check (a
- * judgment leaf's selection against the DECLARED output schema) is carried by
- * the caller alongside the re-pointed static leg — see mcp-worker's
+ * `seal()` takes `CircuitVerdict` (verdict/circuit-verdict.ts) directly, whose
+ * `dataShaped`/`judgmentShaped` check `Integrity` (evidence/ambient — a
+ * 2-member type; see static-prov.ts's `Integrity` doc for why a `program-text`
+ * member doesn't exist) — an ambient-rooted leaf (`(now)`/`(uuid)`) is refused
+ * by a DESIGNED boundary, not an accident of probe coverage. The vocabulary
+ * check (a judgment leaf's selection against the DECLARED output schema) is
+ * carried by the caller alongside the static leg — see mcp-worker's
  * `attest-provider.ts::judgmentVocabularyOf` for the live conjunction's own
- * derivation of that vocabulary. The probe-coverage
- * ordering constraint this block used to warn about (never generalize the probe
- * to non-infer/ambient crossings BEFORE this re-point lands) is now a PROVED
- * invariant, not a posture — see `src/__tests__/seal-ambient-ordering.test.ts`.
+ * derivation of that vocabulary. The ordering constraint — the probe must
+ * never generalize to non-infer/ambient crossings — is a PROVED invariant,
+ * checked by `src/__tests__/seal-ambient-ordering.test.ts`.
  *
  * `wire/policy.ts`'s `WireVerdict`/`dataShaped`/`judgmentShaped`/`verdictFor`
- * remain in the tree as the PREDECESSOR plane: `probe-adversarial.test.ts` and
- * `wire-descriptor.test.ts` still exercise them directly (TESTING.md §2/§3:
- * "stays green until wire/ dissolves, per losable-legacy") as an independent,
- * still-passing mechanism check — that dissolution is a separate, explicit step,
- * not a side effect of this re-point.
+ * remain in the tree as a PREDECESSOR plane: `probe-adversarial.test.ts` and
+ * `wire-descriptor.test.ts` exercise them directly as an independent,
+ * still-passing mechanism check, independent of this module.
  */
 import type { LeafVerdictKind } from "./probe/verdict.js";
 import type { CircuitVerdict } from "./verdict/circuit-verdict.js";

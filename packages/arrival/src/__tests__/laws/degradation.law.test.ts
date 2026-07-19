@@ -1,8 +1,8 @@
 /**
- * degradation.law.test.ts — door-set degradation (W2 of docs/design-history/
- * symbol-define-static-program-validation.md §3.7). W0 (commit 98641484b3) shipped the
- * introspectable `DoorProcedure` + `DoorCause` shape with `needs: []` stamped everywhere;
- * this law suite pins the W2 MECHANISM that actually mints non-empty `needs` — the
+ * degradation.law.test.ts — door-set degradation (docs/design-history/
+ * symbol-define-static-program-validation.md §3.7). The introspectable
+ * `DoorProcedure` + `DoorCause` shape (§3.3) stamps `needs: []` everywhere;
+ * this law suite pins the MECHANISM that actually mints non-empty `needs` — the
  * `degradation:` mode knob on `EnvCapability.lower()`, `Activation.degradation`
  * (common/degradation.ts), and `AssembledEnv.degraded` (common/kernel.ts).
  *
@@ -15,8 +15,8 @@
  *   `configuration: { infer: z.custom<InferFn>() }` was named as "the non-optional key"
  *   fixture, but verified against the installed zod (4.3.6): `z.custom()` with NO predicate
  *   answers `.isOptional()` `true` and `schema.parse({})` SUCCEEDS — infer's config is a
- *   known no-op validator (design doc §8 decision item 9, explicitly out of THIS wave's
- *   scope), so it does not actually throw today, mode or no mode. Asserting a throw against
+ *   known no-op validator (design doc §3.7's required-config note, explicitly out of this
+ *   suite's scope), so it does not actually throw today, mode or no mode. Asserting a throw against
  *   it would pin a falsehood. This suite instead (a) proves a REAL required key throws, and
  *   (b) proves `missingOptionalKeys` correctly refuses to classify infer's shape as
  *   "optional" — the structural check (`instanceof ZodOptional | ZodDefault`) that keeps
