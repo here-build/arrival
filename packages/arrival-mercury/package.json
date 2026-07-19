@@ -1,12 +1,13 @@
 {
   "name": "@inhuman.tools/arrival-mercury",
   "version": "0.9.0",
-  "description": "The mercury differential-oracle harness: interpreter (arrival-run session) vs compiled (mercury run-view executed via tsx tsImport), compared as black-box source-in/value-out outcomes. Owns the ErrorClass taxonomy, oracleEqual comparator, and the 3-way corpus check (oracle-harness.md §2-§4).",
+  "description": "Arrival Mercury instance — scheme→TS compiler (SchemeSemanticModel + Residual + ts.factory) and differential oracle (interpreter ≡ compiled). Paradigm: docs/foundations/mercury/mercury-as-paradigm.md.",
   "keywords": [
     "arrival",
     "mercury",
+    "compiler",
     "oracle",
-    "differential-testing"
+    "semantic-model"
   ],
   "homepage": "https://github.com/here-build/arrival#readme",
   "bugs": {
@@ -31,6 +32,10 @@
     "./circuit": {
       "types": "./dist/circuit.d.ts",
       "default": "./dist/circuit.js"
+    },
+    "./front": {
+      "types": "./dist/front/index.d.ts",
+      "default": "./dist/front/index.js"
     }
   },
   "main": "./dist/index.js",
@@ -64,7 +69,6 @@
     "@here.build/lexical-namer": "workspace:^",
     "@inhuman.tools/arrival-run": "workspace:^",
     "@inhuman.tools/arrival-type-lens": "workspace:^",
-    "@inhuman.tools/mercury": "workspace:^",
     "pluralize": "8.0.0",
     "tsx": "4.22.4",
     "typescript": "6.0.2",

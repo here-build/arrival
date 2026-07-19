@@ -1,20 +1,13 @@
 /**
- * Macro-expansion pre-pass: rewrite the authoring-surface forms that are really sugar for
- * core forms (`lambda`, `let`, `if`, calls) BEFORE the namer, async-analysis, and lowering
- * run — so every later pass sees only the core language and handles these forms for free.
+ * TEMPORARY FORK — door policy aligned with the canonical front at
+ * `@inhuman.tools/arrival-mercury` `src/front/desugar.ts` (arrival Mercury instance).
+ * This package is deprecated; this file dies with it. Do not diverge doors again:
+ * `case` / unexpandable `cond` clauses leave the form intact (total desugar);
+ * classify/lower doors downstream — never throw here.
  *
- * Why a pre-pass instead of expanding at emit time: when `cut` is turned into a lambda only
- * inside the emitter, the async-analysis and `isAsyncFn` never see the lambda, so a
- * `(map (cut trace … <>) xs)` over an async `trace` is neither tainted async nor
- * `Promise.all`-wrapped — it silently emits `xs.map(async … )` returning an array of
- * Promises. Expanding `cut` here makes it an ordinary lambda everywhere, and the existing
- * lambda machinery (taint, `Promise.all`, naming) handles it with no special cases.
- *
- * Currently expands: SRFI-26 `cut`; the threading family `->`/`~>` (thread-first),
- * `->>`/`~>>` (thread-last); and `compose`/`comp` (right-to-left) + `pipe`/`flow`
- * (left-to-right). Semantics match the arrival-scheme bootstrap macros EXACTLY — the view
- * must agree with execution. (`-->` method-chaining and `..` dot-access are JS-interop and
- * deliberately NOT expanded here yet — a separate concern.)
+ * Macro-expansion pre-pass: rewrite authoring sugar to core forms before later passes.
+ * Expands: SRFI-26 `cut`; `->`/`~>`/`->>`/`~>>`; `compose`/`comp`/`pipe`/`flow`;
+ * `when`/`unless`/`cond` → `if`. Matches arrival-scheme bootstrap macros.
  */
 import { type Atom, isAtom, isList, type ListNode, type Node } from "./nodes.js";
 
@@ -50,12 +43,15 @@ function expand(n: Node): Node {
       return withSpan(n, { list: [SYM.if, list[1]!, body(list.slice(2))] });
     case "unless":
       return withSpan(n, { list: [SYM.if, { list: [SYM.not, list[1]!] }, body(list.slice(2))] });
-    case "cond":
-      return withSpan(n, expandCond(list.slice(1)));
+    case "cond": {
+      // Unexpandable clause shapes (`=>`, bare `(test)`) leave the whole form intact —
+      // same door policy as arrival-mercury front (classify/lower doors, not throw here).
+      const expanded = expandCond(list.slice(1));
+      return expanded === undefined ? { ...n, list } : withSpan(n, expanded);
+    }
     case "case":
-      // Unused by any example; its datum eqv/quoting semantics are subtle enough that a clean
-      // door beats a possibly-divergent expansion. Desugar to `cond` (or-of-`equal?`) if needed.
-      throw new Error("`case` is not yet desugared — rewrite as `cond`");
+      // Left unexpanded for downstream door (`unsupported-form/case`) — total desugar.
+      return { ...n, list };
   }
   return { ...n, list };
 }
@@ -72,12 +68,10 @@ const isElse = (n: Node): boolean => isAtom(n) && !n.str && n.atom === "else";
 
 /**
  * `(cond (t1 e1…) (t2 e2…) (else e…))` → nested `(if t1 e1 (if t2 e2 e))`, built right-to-left.
- * The lowerer turns nested `if` into a chained ternary (both JS and Python), so a `cond` is an
- * expression in either language — no statement-position needed. Matches the bootstrap `cond`
- * macro for the `(test body…)` + `else` clause forms; the rarer `=>` / bare-`(test)` clauses
- * (used by no example) are a loud door rather than a silent mis-expansion.
+ * `=>` / bare-`(test)` clauses return `undefined` so the caller leaves the form intact
+ * (aligned with arrival-mercury front — never throw).
  */
-function expandCond(clauses: Node[]): Node {
+function expandCond(clauses: Node[]): Node | undefined {
   let acc: Node | undefined;
   for (let i = clauses.length - 1; i >= 0; i--) {
     const c = clauses[i];
@@ -88,7 +82,7 @@ function expandCond(clauses: Node[]): Node {
       continue;
     }
     if (c.list.length === 1 || (isAtom(c.list[1]) && !(c.list[1] as Atom).str && (c.list[1] as Atom).atom === "=>")) {
-      throw new Error("`cond` `=>` / bare-test clauses are not yet desugared — use `(test body)`");
+      return undefined;
     }
     const e = body(c.list.slice(1));
     acc = acc === undefined ? { list: [SYM.if, test, e] } : { list: [SYM.if, test, e, acc] };

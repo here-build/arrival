@@ -25,7 +25,7 @@ export {
 } from "./oracle/harness.js";
 export { type CorpusVerdict, type ExpectedOutcome, outcomeMatches, runCorpusCase } from "./oracle/expected.js";
 
-// ── the new pipeline's front end (copy-as-chunk, constitution §4.5) + CoreForm IR ──
+// ── front (canonical desugar/nodes/parse) + CoreForm IR ──
 export { desugar } from "./front/desugar.js";
 export {
   type Atom,

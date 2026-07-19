@@ -36,12 +36,12 @@
  * dissolved `legibility()` occupied (see that module's header for why: pure-
  * region CSE still needs the finished, already-named tree, and still must
  * run before asyncness materialization — Law W).
- * `"legacy"` keeps the mercury string path callable for A/B — a production bridge, never
- * gate-authoritative. Both subjects export the program's trailing value as
- * `export const __oracleResult = …` (no stdout/JSON round-trip, so `NaN`/`-0`
- * survive), write a scratch `.mts` INSIDE this package tree (Node
+ * Gate subject is greenfield only (the legacy `@inhuman.tools/mercury` string
+ * path was deleted — one pipeline). The artifact exports a program-face default
+ * function; values are observed by calling it (no stdout/JSON round-trip, so
+ * `NaN`/`-0` survive). Scratch `.mts` lives INSIDE this package tree (Node
  * bare-specifier resolution walks up for `node_modules`; `os.tmpdir()` never
- * finds the workspace), and execute in-process through ONE shared tsx loader
+ * finds the workspace). Execution is in-process via ONE shared tsx loader
  * registration guarded against pipeline hangs (see `importCaseModule`).
  *
  * Greenfield registry (`greenfieldRegistryFor`, below): `withRules(merged,
@@ -62,7 +62,6 @@ import { execState, LexicalScope, parseGenerator, schemeToJsUntyped } from "@inh
 import type { AssembledAmbient } from "@inhuman.tools/arrival/env";
 import { srfi1 } from "@inhuman.tools/arrival/srfi";
 import { buildArrivalSession, BUILTIN_PREAMBLE, type InferFn } from "@inhuman.tools/arrival-run";
-import { DEFAULT_STRATEGY, projectToJsRaw, type Strategy } from "@inhuman.tools/mercury";
 import { register } from "tsx/esm/api";
 
 import type { ClassifyResult } from "../coreform/types.js";
@@ -133,64 +132,13 @@ export async function evalInterpreter(session: OracleSession, source: string): P
   }
 }
 
-/**
- * R7RS `(error …)` support for the LEGACY artifact world only: mercury lowers
- * `(error …)` to a bare `error(…)` call with no runtime behind it, so the
- * legacy path supplies the deterministic throwing shim (the "user-error"
- * ErrorClass's compiled half). The greenfield path never sees this preamble —
- * its `error` is a real stage-0 runtime import (`SchemeUserError`).
- * Function declaration ⇒ hoisted, callable from any emitted position; a corpus
- * program that (pathologically) defines its own `error` collides loudly with a
- * SyntaxError instead of silently shadowing the probe.
- */
-const COMPILED_PREAMBLE = `// ── oracle harness preamble (arrival-mercury, generated — never committed) ──
-class __OracleUserError extends Error {
-  readonly irritants: readonly unknown[];
-  constructor(message: unknown, irritants: readonly unknown[]) {
-    super(String(message));
-    this.name = "OracleUserError";
-    this.irritants = irritants;
-  }
-}
-function error(message: unknown, ...irritants: unknown[]): never {
-  throw new __OracleUserError(message, irritants);
-}
-`;
-
 /** Corpus-authoring misuse (no trailing expression to observe, unparseable wrap)
- *  escapes `evalCompiled` as a REAL throw, never an Outcome — the same contract
- *  `exportTrailingResult` has always had, made nominal so the greenfield path's
- *  compile-door catch can re-throw it. */
+ *  escapes `evalCompiled` as a REAL throw, never an Outcome. */
 class OracleAuthoringError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "OracleAuthoringError";
   }
-}
-
-/**
- * LEGACY-path trailing-result surgery: rewrite the compiled module's LAST
- * top-level chunk (raw `assemble` output joins forms with `\n\n`; a single
- * lowered form never contains a blank line) into
- * `export const __oracleResult = <expr>;` — the exporting twin of
- * `compile-project.ts::printEntryResult`. Throws a plain harness error (never
- * an Outcome) when the program has no trailing EXPRESSION to observe: that is
- * corpus-authoring misuse, not a semantics divergence.
- */
-function exportTrailingResult(compiled: string): string {
-  const cut = compiled.lastIndexOf("\n\n");
-  const head = cut === -1 ? "" : compiled.slice(0, cut);
-  const tail = (cut === -1 ? compiled : compiled.slice(cut + 2)).trim();
-  if (tail === "") {
-    throw new OracleAuthoringError("oracle evalCompiled: empty compiled output — no trailing expression to observe");
-  }
-  if (/^(const|let|var|function|class|import|export|type|interface|enum|declare)\b/.test(tail)) {
-    throw new OracleAuthoringError(
-      `oracle evalCompiled: the program's last top-level form must be an expression (the value under test), got a statement: ${tail.slice(0, 80)}`,
-    );
-  }
-  const expr = tail.replace(/;$/, "");
-  return `${head === "" ? "" : `${head}\n\n`}export const __oracleResult = ${expr};\n`;
 }
 
 const SCRATCH_ROOT = fileURLToPath(new URL("../../.oracle-tmp/", import.meta.url));
@@ -649,37 +597,25 @@ function stageRuntimeModule(): void {
   stage0Staged = true;
 }
 
-/** `"greenfield"` — the new pipeline, gate-authoritative from Phase 1 (§9);
- *  `"legacy"` — the mercury string path, kept callable for A/B only. */
-export type OracleSubject = "greenfield" | "legacy";
+/** Gate subject — greenfield only (legacy string path removed). */
+export type OracleSubject = "greenfield";
 
 export interface EvalCompiledOptions {
-  /** Default `"greenfield"` — the dual-path rule's gate subject. */
+  /** Default `"greenfield"`. Kept for API stability; only greenfield is valid. */
   readonly subject?: OracleSubject;
-  /** Legacy-path strategy knob; ignored by the greenfield subject. */
-  readonly strategy?: Strategy;
 }
 
 /**
  * Program-face contract guard (reference-program-face-always-function): the
- * GREENFIELD subject's compiled default export is always a function by
- * construction — an absent/non-function default there is a compiler defect
- * (the export got dropped or mis-shaped), never a legitimate result, and must
- * never be allowed to fall through to a `{kind:"value"}` outcome (that would
- * false-agree with an interpreter `undefined` instead of flagging the
- * miscompile). The LEGACY subject (`exportTrailingResult`) legitimately
- * exports a bare VALUE, not a callable — exempt by construction, hence the
- * `subject` gate. Exported standalone (not inlined in `evalCompiled`) because
- * the miscompile shape it guards against isn't reachable through any valid
- * `.scm` source today — `compileGreenfield`/`render` always emit
- * `export default function` — so regression coverage exercises this check
- * directly against a fabricated namespace instead of round-tripping a case
- * file through the compiler.
+ * compiled default export is always a function by construction — an
+ * absent/non-function default is a compiler defect and must never fall through
+ * to a `{kind:"value"}` outcome. `subject` is kept for call-site stability
+ * (always `"greenfield"`).
  */
-export function assertProgramFace(program: unknown, subject: OracleSubject): void {
-  if (subject === "greenfield" && typeof program !== "function") {
+export function assertProgramFace(program: unknown, _subject: OracleSubject = "greenfield"): void {
+  if (typeof program !== "function") {
     throw new OracleAuthoringError(
-      `oracle evalCompiled: compiled artifact violated the program-face contract — greenfield default export ` +
+      `oracle evalCompiled: compiled artifact violated the program-face contract — default export ` +
         `must be a function, got ${program === undefined ? "no default export" : `a ${typeof program}`}`,
     );
   }
@@ -697,16 +633,11 @@ export async function evalCompiled(
   source: string,
   opts?: EvalCompiledOptions,
 ): Promise<Outcome> {
-  const subject = opts?.subject ?? "greenfield";
+  const subject: OracleSubject = opts?.subject ?? "greenfield";
   let module: string;
   try {
-    if (subject === "legacy") {
-      const compiled = projectToJsRaw(source, { target: "run", strategy: opts?.strategy ?? DEFAULT_STRATEGY });
-      module = `${COMPILED_PREAMBLE}\n${exportTrailingResult(compiled)}`;
-    } else {
-      stageRuntimeModule();
-      module = compileGreenfield(session, source);
-    }
+    stageRuntimeModule();
+    module = compileGreenfield(session, source);
   } catch (e) {
     if (e instanceof OracleAuthoringError) throw e;
     return { kind: "throw", errorClass: classifyCompiledError(e), message: messageOf(e), raw: e };
@@ -716,10 +647,7 @@ export async function evalCompiled(
   writeFileSync(file, module, "utf8");
   try {
     const ns = await importCaseModule(file);
-    // Program face: the default export IS the program; run it to observe the value
-    // (reference-program-face-always-function). `assertProgramFace` throws
-    // `OracleAuthoringError` — re-thrown below, never returned as a `{kind:"value"}`
-    // outcome — when the greenfield subject's default isn't a function.
+    // Program face: the default export IS the program; run it to observe the value.
     const program = ns.default;
     assertProgramFace(program, subject);
     let value: unknown = typeof program === "function" ? program() : program;

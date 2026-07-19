@@ -1,25 +1,11 @@
 /**
- * COPY-AS-CHUNK (constitution §4.5 — greenfield package, never shared imports).
- * Source: arrival/packages/mercury/src/desugar.ts.
+ * Canonical front desugar for the arrival Mercury instance (organ boundary:
+ * sugar → core forms before CoreForm classification). Total: never throws;
+ * unexpandable `case` / `cond` clauses leave the form for classify() to door.
  *
- * Macro-expansion pre-pass: rewrite the authoring-surface forms that are really sugar for
- * core forms (`lambda`, `let`, `if`, calls) BEFORE classification runs — so classify()
- * sees only the core language and handles these forms for free (coreform-ir.md §4.1:
- * "desugar ends, classification begins").
- *
- * Currently expands: SRFI-26 `cut`; the threading family `->`/`~>` (thread-first),
- * `->>`/`~>>` (thread-last); `compose`/`comp` (right-to-left) + `pipe`/`flow`
- * (left-to-right); and `when`/`unless`/`cond` → `if`. Semantics match the
- * arrival-scheme bootstrap macros EXACTLY — the view must agree with execution.
- * `and`/`or` deliberately do NOT desugar (constitution §3.2): they become dedicated
- * CoreForm nodes so Law T's narrowing-form grammar sees them intact.
- *
- * Adaptations from the source chunk (coreform-ir.md §9 item 3's sentinel proposal,
- * resolved in-package — desugar() is now TOTAL, classify() doors what it leaves):
- *   - `case` no longer throws: the form is left unexpanded (children still expand)
- *     and classify() doors it as `unsupported-form/case`.
- *   - a `cond` containing a `=>` / bare-`(test)` clause no longer throws: the whole
- *     `cond` is left unexpanded and classify() doors it as `unsupported-form/cond-clause`.
+ * Expands: SRFI-26 `cut`; `->`/`~>`/`->>`/`~>>`; `compose`/`comp`/`pipe`/`flow`;
+ * `when`/`unless`/`cond` → `if`. `and`/`or` do NOT desugar (CoreForm nodes for Law T).
+ * Semantics match arrival-scheme bootstrap macros.
  */
 import { type Atom, isAtom, isList, type ListNode, type Node } from "./nodes.js";
 

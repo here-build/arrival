@@ -1,17 +1,7 @@
 /**
- * COPY-AS-CHUNK (constitution §4.5 — greenfield package, never shared imports).
- * Source: arrival/packages/mercury/src/nodes.ts.
- *
- * Thin helpers over the `Node` parse forest. The classifier consumes this forest;
- * everything here is pure shape inspection — no emit, no naming.
- *
- * Adaptations from the source chunk:
- *   - `Node` imports from the sibling copied parser (`./parse.js`) instead of
- *     `@inhuman.tools/arrival-sugarcoat`.
- *   - `Atom`/`ListNode` carry the parser's `lead`/`trail` fields in their TYPE
- *     (the source file narrowed them away and downstream code cast to read them;
- *     CoreForm carries comments forward as source truth — coreform-ir.md §4.4 —
- *     so the fields are typed honestly here).
+ * Canonical front node helpers for the arrival Mercury instance. Pure shape
+ * inspection over the parse forest — no emit, no naming. `Atom`/`ListNode`
+ * carry `lead`/`trail` honestly (CoreForm comment carriage).
  */
 import type { Node } from "./parse.js";
 

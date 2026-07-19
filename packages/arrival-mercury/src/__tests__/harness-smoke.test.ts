@@ -92,8 +92,8 @@ describe("oracle harness smoke", () => {
     expect(() => assertProgramFace(() => 1, "greenfield")).not.toThrow();
   });
 
-  it("program-face guard: legacy subject is exempt — a bare value default export is legitimate", () => {
-    expect(() => assertProgramFace(undefined, "legacy")).not.toThrow();
-    expect(() => assertProgramFace(42, "legacy")).not.toThrow();
+  it("program-face guard: bare value default is always a defect (no legacy exemption)", () => {
+    expect(() => assertProgramFace(undefined, "greenfield")).toThrow(/program-face contract/);
+    expect(() => assertProgramFace(42, "greenfield")).toThrow(/program-face contract/);
   });
 });
