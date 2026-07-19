@@ -9,7 +9,9 @@
  *    near-miss pairs — a form that LOOKS similar but differs in a
  *    fact-relevant way must NOT be judged shared), NodeId collision-freedom
  *    in the spliced tree, and add/remove/duplicate handling. Pure-function
- *    tests — no registry, no tsc.
+ *    tests — no registry, no tsc. The twelve near-miss / add / remove rows
+ *    are ONE protocol table (`RECONCILE_ROWS`) — adding a case is appending
+ *    a row.
  *  - `SchemeSemanticModel.reconcile`: THE LOAD-BEARING SOUNDNESS GATE —
  *    sharing must be transparent (`reconcile(prev, edited).factsAt(n) ===
  *    fromScratch(edited).factsAt(n)` for every node, same for every decision
@@ -104,111 +106,155 @@ function allIds(forms: readonly CoreForm[]): number[] {
   return ids;
 }
 
+/** One row per reconcileForms scenario — `{ name, prev, next, ... }`: the
+ *  `length`/`shared`/`changed` set sizes are asserted when present, and the
+ *  identity pins are optional `[formsIdx, prevIdx]` columns (`kept` asserts
+ *  `toBe` — the REUSED object, not a lookalike; `thrown` asserts `not.toBe`
+ *  — re-minted, never reused with stale facts; `changedIncludes` asserts
+ *  membership in the `changed` set). Adding a case is appending a row. */
+interface ReconcileRow {
+  /** The behavior claim — becomes the it name. */
+  readonly name: string;
+  readonly prev: string;
+  readonly next: string;
+  /** `forms.length` after the splice — asserted when present. */
+  readonly length?: number;
+  /** `shared.size` — asserted when present. */
+  readonly shared?: number;
+  /** `changed.size` — asserted when present. */
+  readonly changed?: number;
+  /** `[formsIdx, prevIdx]` pairs asserted `toBe` — the REUSED object, not a lookalike. */
+  readonly kept?: readonly (readonly [number, number])[];
+  /** `[formsIdx, prevIdx]` pairs asserted `not.toBe` — re-minted, never reused with stale facts. */
+  readonly thrown?: readonly (readonly [number, number])[];
+  /** `forms` indices asserted to be members of the `changed` set. */
+  readonly changedIncludes?: readonly number[];
+}
+
+const RECONCILE_ROWS: readonly ReconcileRow[] = [
+  {
+    name: "byte-identical source: every form is shared, BY REFERENCE (not just by value)",
+    prev: `(define x 5)\n(define (f a) (+ a 1))`,
+    next: `(define x 5)\n(define (f a) (+ a 1))`,
+    shared: 2,
+    changed: 0,
+    kept: [
+      [0, 0], // reference equality — the REUSED object, not a lookalike
+      [1, 1],
+    ],
+  },
+  {
+    name: "near-miss: a changed LITERAL must not be shared (else a stale fact leaks)",
+    prev: `(define x 5)\n(define y 10)`,
+    next: `(define x 5)\n(define y 11)`,
+    shared: 1,
+    changed: 1,
+    kept: [[0, 0]], // x unchanged — shared
+    thrown: [[1, 1]], // y's literal changed — must NOT reuse prev's object
+  },
+  {
+    name: "near-miss: a changed nested string literal must not be shared",
+    prev: `(define (f x) (if (> x 0) "pos" "neg"))`,
+    next: `(define (f x) (if (> x 0) "pos" "neg!"))`,
+    shared: 0,
+    changed: 1,
+  },
+  {
+    name: "near-miss: a renamed REFERENCED symbol (a called function) must not be shared",
+    prev: `(define (f) (helper-a))\n(define (g) 1)`,
+    next: `(define (f) (helper-b))\n(define (g) 1)`,
+    shared: 1,
+    changed: 1,
+    kept: [[1, 1]], // g is untouched
+    thrown: [[0, 0]], // f's callee renamed
+  },
+  {
+    name: "near-miss: a renamed BOUND symbol (a parameter) must not be shared",
+    prev: `(define (f a) (+ a 1))`,
+    next: `(define (f b) (+ b 1))`,
+    shared: 0,
+    changed: 1,
+  },
+  {
+    name: "near-miss: a reordered argument list must not be shared",
+    prev: `(define (f a b) (- a b))`,
+    next: `(define (f a b) (- b a))`,
+    shared: 0,
+    changed: 1,
+  },
+  {
+    name: "a form ADDED at the end: the originals stay shared, the new one is changed",
+    prev: `(define x 1)\n(define y 2)`,
+    next: `(define x 1)\n(define y 2)\n(define z 3)`,
+    length: 3,
+    shared: 2,
+    changed: 1,
+    kept: [
+      [0, 0],
+      [1, 1],
+    ],
+  },
+  {
+    name: "a form REMOVED: the survivor stays shared, nothing invents a replacement",
+    prev: `(define x 1)\n(define y 2)`,
+    next: `(define y 2)`,
+    length: 1,
+    shared: 1,
+    changed: 0,
+    kept: [[0, 1]],
+  },
+  // The audit's stale-transplant hole: deleting `f` leaves no fresh form to
+  // be unmatched, so nothing seeded `f` into the dirty set — `g` content-key
+  // matched, was spliced as the prev OBJECT, and its facts (computed when
+  // `f` existed) transplanted verbatim. reconciled ≢ fresh.
+  {
+    name: "a REFERENCED define REMOVED: the surviving referrer is dirtied, never reused with stale facts",
+    prev: `(define (f) (list 1 2))\n(define (g) (car (f)))`,
+    next: `(define (g) (car (f)))`,
+    length: 1,
+    shared: 0,
+    changed: 1,
+    thrown: [[0, 1]], // g must be re-minted — its environment changed
+  },
+  {
+    name: "a REFERENCED define RENAMED away: dependents of the OLD name are dirtied too",
+    prev: `(define (f) 1)\n(define (g) (f))`,
+    next: `(define (f2) 1)\n(define (g) (f))`,
+    changed: 2, // f2 is new AND g's `f` went unbound
+    thrown: [[1, 1]],
+  },
+  {
+    name: "an UNREFERENCED define removed: bystanders still share (the seed dirties dependents only)",
+    prev: `(define (f) 1)\n(define (g) 2)`,
+    next: `(define (g) 2)`,
+    shared: 1,
+    changed: 0,
+    kept: [[0, 1]],
+  },
+  // The surviving `(define v 1)` is content-identical — but the WINNER
+  // changed (2 → 1), so `g` must not transplant facts computed against 2.
+  {
+    name: "a REDEFINED name losing its last (winning) definition dirties dependents, even though the survivor matched",
+    prev: `(define v 1)\n(define v 2)\n(define (g) v)`,
+    next: `(define v 1)\n(define (g) v)`,
+    changedIncludes: [1],
+    thrown: [[1, 2]],
+  },
+];
+
 describe("reconcileForms — content-key soundness (adversarial near-miss pairs)", () => {
-  it("byte-identical source: every form is shared, BY REFERENCE (not just by value)", () => {
-    const src = `(define x 5)\n(define (f a) (+ a 1))`;
-    const prev = cf(src);
-    const { forms, shared, changed } = reconcileForms(prev, src);
-    expect(changed.size).toBe(0);
-    expect(shared.size).toBe(2);
-    expect(forms[0]).toBe(prev[0]); // reference equality — the REUSED object, not a lookalike
-    expect(forms[1]).toBe(prev[1]);
-  });
-
-  it("near-miss: a changed LITERAL must not be shared (else a stale fact leaks)", () => {
-    const prev = cf(`(define x 5)\n(define y 10)`);
-    const { forms, shared, changed } = reconcileForms(prev, `(define x 5)\n(define y 11)`);
-    expect(shared.size).toBe(1);
-    expect(changed.size).toBe(1);
-    expect(forms[0]).toBe(prev[0]); // x unchanged — shared
-    expect(forms[1]).not.toBe(prev[1]); // y's literal changed — must NOT reuse prev's object
-  });
-
-  it("near-miss: a changed nested string literal must not be shared", () => {
-    const prev = cf(`(define (f x) (if (> x 0) "pos" "neg"))`);
-    const { shared, changed } = reconcileForms(prev, `(define (f x) (if (> x 0) "pos" "neg!"))`);
-    expect(shared.size).toBe(0);
-    expect(changed.size).toBe(1);
-  });
-
-  it("near-miss: a renamed REFERENCED symbol (a called function) must not be shared", () => {
-    const prev = cf(`(define (f) (helper-a))\n(define (g) 1)`);
-    const { forms, shared, changed } = reconcileForms(prev, `(define (f) (helper-b))\n(define (g) 1)`);
-    expect(shared.size).toBe(1);
-    expect(changed.size).toBe(1);
-    expect(forms[1]).toBe(prev[1]); // g is untouched
-    expect(forms[0]).not.toBe(prev[0]); // f's callee renamed
-  });
-
-  it("near-miss: a renamed BOUND symbol (a parameter) must not be shared", () => {
-    const prev = cf(`(define (f a) (+ a 1))`);
-    const { shared, changed } = reconcileForms(prev, `(define (f b) (+ b 1))`);
-    expect(shared.size).toBe(0);
-    expect(changed.size).toBe(1);
-  });
-
-  it("near-miss: a reordered argument list must not be shared", () => {
-    const prev = cf(`(define (f a b) (- a b))`);
-    const { shared, changed } = reconcileForms(prev, `(define (f a b) (- b a))`);
-    expect(shared.size).toBe(0);
-    expect(changed.size).toBe(1);
-  });
-
-  it("a form ADDED at the end: the originals stay shared, the new one is changed", () => {
-    const prev = cf(`(define x 1)\n(define y 2)`);
-    const { forms, shared, changed } = reconcileForms(prev, `(define x 1)\n(define y 2)\n(define z 3)`);
-    expect(forms).toHaveLength(3);
-    expect(shared.size).toBe(2);
-    expect(changed.size).toBe(1);
-    expect(forms[0]).toBe(prev[0]);
-    expect(forms[1]).toBe(prev[1]);
-  });
-
-  it("a form REMOVED: the survivor stays shared, nothing invents a replacement", () => {
-    const prev = cf(`(define x 1)\n(define y 2)`);
-    const { forms, shared, changed } = reconcileForms(prev, `(define y 2)`);
-    expect(forms).toHaveLength(1);
-    expect(shared.size).toBe(1);
-    expect(changed.size).toBe(0);
-    expect(forms[0]).toBe(prev[1]);
-  });
-
-  it("a REFERENCED define REMOVED: the surviving referrer is dirtied, never reused with stale facts", () => {
-    // The audit's stale-transplant hole: deleting `f` leaves no fresh form to
-    // be unmatched, so nothing seeded `f` into the dirty set — `g` content-key
-    // matched, was spliced as the prev OBJECT, and its facts (computed when
-    // `f` existed) transplanted verbatim. reconciled ≢ fresh.
-    const prev = cf(`(define (f) (list 1 2))\n(define (g) (car (f)))`);
-    const { forms, shared, changed } = reconcileForms(prev, `(define (g) (car (f)))`);
-    expect(forms).toHaveLength(1);
-    expect(shared.size).toBe(0);
-    expect(changed.size).toBe(1);
-    expect(forms[0]).not.toBe(prev[1]); // g must be re-minted — its environment changed
-  });
-
-  it("a REFERENCED define RENAMED away: dependents of the OLD name are dirtied too", () => {
-    const prev = cf(`(define (f) 1)\n(define (g) (f))`);
-    const { forms, changed } = reconcileForms(prev, `(define (f2) 1)\n(define (g) (f))`);
-    expect(changed.size).toBe(2); // f2 is new AND g's `f` went unbound
-    expect(forms[1]).not.toBe(prev[1]);
-  });
-
-  it("an UNREFERENCED define removed: bystanders still share (the seed dirties dependents only)", () => {
-    const prev = cf(`(define (f) 1)\n(define (g) 2)`);
-    const { forms, shared, changed } = reconcileForms(prev, `(define (g) 2)`);
-    expect(shared.size).toBe(1);
-    expect(changed.size).toBe(0);
-    expect(forms[0]).toBe(prev[1]);
-  });
-
-  it("a REDEFINED name losing its last (winning) definition dirties dependents, even though the survivor matched", () => {
-    const prev = cf(`(define v 1)\n(define v 2)\n(define (g) v)`);
-    const { forms, changed } = reconcileForms(prev, `(define v 1)\n(define (g) v)`);
-    // The surviving `(define v 1)` is content-identical — but the WINNER
-    // changed (2 → 1), so `g` must not transplant facts computed against 2.
-    expect(changed.has(forms[1]!)).toBe(true);
-    expect(forms[1]).not.toBe(prev[2]);
-  });
+  for (const row of RECONCILE_ROWS) {
+    it(row.name, () => {
+      const prev = cf(row.prev);
+      const { forms, shared, changed } = reconcileForms(prev, row.next);
+      if (row.length !== undefined) expect(forms).toHaveLength(row.length);
+      if (row.shared !== undefined) expect(shared.size).toBe(row.shared);
+      if (row.changed !== undefined) expect(changed.size).toBe(row.changed);
+      for (const [formIdx, prevIdx] of row.kept ?? []) expect(forms[formIdx]).toBe(prev[prevIdx]);
+      for (const [formIdx, prevIdx] of row.thrown ?? []) expect(forms[formIdx]).not.toBe(prev[prevIdx]);
+      for (const formIdx of row.changedIncludes ?? []) expect(changed.has(forms[formIdx]!)).toBe(true);
+    });
+  }
 
   it("duplicate identical top-level forms: FIFO matching never double-claims one prev object", () => {
     const prev = cf(`(display "hi")\n(display "hi")`);

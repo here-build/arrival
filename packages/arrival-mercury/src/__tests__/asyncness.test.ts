@@ -6,7 +6,9 @@
  * `asyncIfy` call. Everything runs through the REAL pipeline — parse →
  * desugar → classify → walk → asyncnessOf → materializeAsyncness → render —
  * against inline goldens (pinned typescript@6.0.2 printer bytes, matching
- * walker.test.ts).
+ * walker.test.ts). The 11 emit(src) → byte-golden rows are ONE protocol table
+ * (`ASYNCNESS_ROWS`: `{ topic, name, src, golden }`); each section's describe
+ * loops its own topic's rows — adding a golden case is appending a row.
  *
  * The strict-compile check at the bottom is the "emitted text typechecks" gate
  * the mission asks for: a programmatic `ts.createProgram` over an in-memory
@@ -87,64 +89,133 @@ const compile = (src: string): CompilationUnit =>
 const asyncified = (src: string): CompilationUnit => materializeAsyncness(asyncnessOf(compile(src), SEEDS));
 const emit = (src: string): string => render(asyncified(src));
 
-// ── plain insertion ────────────────────────────────────────────────────────────────────
+/** One row per emit(src) → byte-golden case — `{ topic, name, src, golden }`:
+ *  the topical describe this row lands in, the behavior claim (becomes the it
+ *  name), the source, and the exact bytes `emit(src)` must produce. Adding a
+ *  case is appending a row. */
+interface AsyncnessRow {
+  /** The topical describe this row lands in (its section's own describe). */
+  readonly topic: string;
+  /** The behavior claim — becomes the it name. */
+  readonly name: string;
+  readonly src: string;
+  /** The exact bytes `emit(src)` must produce (pinned typescript@6.0.2 printer bytes). */
+  readonly golden: string;
+}
 
-describe("await insertion at value-consuming positions", () => {
+const ASYNCNESS_ROWS: readonly AsyncnessRow[] = [
   // R-G3 (gate3-human-grade-rulings.md): a bare tail return of a promise-typed
   // value needs neither `await` nor `async` — `f` still returns a promise to
   // its own callers (facts.arrowAsync stays true, exercised indirectly by the
   // NEXT test's cascade), it just no longer spells out the keyword to do it.
-  it("seed call in TAIL position → neither async nor await (R-G3); a plain pass-through", () => {
-    expect(emit(`(define (f x) (infer x))`)).toBe(`function f(x) {\n    return infer(x);\n}\n`);
-  });
-
-  it("cascade through a helper: f and g are BOTH pass-throughs (R-G3) — g still forwards f's promise untouched", () => {
-    expect(emit(`(define (f x) (infer x)) (define (g y) (f y))`)).toBe(
-      `function f(x) {\n    return infer(x);\n}\nfunction g(y) {\n    return f(y);\n}\n`,
-    );
-  });
-
+  {
+    topic: "await insertion at value-consuming positions",
+    name: "seed call in TAIL position → neither async nor await (R-G3); a plain pass-through",
+    src: `(define (f x) (infer x))`,
+    golden: `function f(x) {\n    return infer(x);\n}\n`,
+  },
+  {
+    topic: "await insertion at value-consuming positions",
+    name: "cascade through a helper: f and g are BOTH pass-throughs (R-G3) — g still forwards f's promise untouched",
+    src: `(define (f x) (infer x)) (define (g y) (f y))`,
+    golden: `function f(x) {\n    return infer(x);\n}\nfunction g(y) {\n    return f(y);\n}\n`,
+  },
   // R-G3 KEEP case: `strlen(...)` reads THROUGH infer's resolved value (a
   // further call argument, the ruling's own example of what must NOT elide)
   // — this await sits inside a Call's arg list, never the bare tail value
   // consumeTail inspects, so it is untouched and `f` stays async.
-  it("argument position: the await lands INSIDE the outer call (no whole-node wrapping — C1)", () => {
-    expect(emit(`(define (f s) (strlen (infer s)))`)).toBe(
-      `async function f(s) {\n    return strlen(await infer(s));\n}\n`,
-    );
-  });
-
-  it("top-level seed call awaits with no enclosing def (module top level is TLA-legal)", () => {
-    expect(emit(`(infer "q")`)).toBe(`await infer("q");\n`);
-  });
-
-  it("Cond joins its branches at a TAIL position — R-G3 elides the join's own await too", () => {
-    expect(emit(`(define (f p x) (if p (infer x) "n"))`)).toBe(
-      `function f(p, x) {\n    return p !== false ? infer(x) : "n";\n}\n`,
-    );
-  });
-
+  {
+    topic: "await insertion at value-consuming positions",
+    name: "argument position: the await lands INSIDE the outer call (no whole-node wrapping — C1)",
+    src: `(define (f s) (strlen (infer s)))`,
+    golden: `async function f(s) {\n    return strlen(await infer(s));\n}\n`,
+  },
+  {
+    topic: "await insertion at value-consuming positions",
+    name: "top-level seed call awaits with no enclosing def (module top level is TLA-legal)",
+    src: `(infer "q")`,
+    golden: `await infer("q");\n`,
+  },
+  {
+    topic: "await insertion at value-consuming positions",
+    name: "Cond joins its branches at a TAIL position — R-G3 elides the join's own await too",
+    src: `(define (f p x) (if p (infer x) "n"))`,
+    golden: `function f(p, x) {\n    return p !== false ? infer(x) : "n";\n}\n`,
+  },
   // R-G3 KEEP case: the Const init is not a tail position (its value is read
   // back TWICE by the guard's own Cond, `__and === false ? __and : y`) — a
   // genuinely-consumed await, untouched by consumeTail. The RETURN itself
   // (`__and === false ? __and : y`) is already a plain Cond of two Refs
   // (always sync — see makeRewriter's boxed note), so there was never a
   // tail-position await here to elide in the first place.
-  it("guarded and-chain: the await lands once, at the guard temp's Const init", () => {
-    expect(emit(`(define (f x y) (and (infer x) y))`)).toBe(
-      `async function f(x, y) {\n    const __and = await infer(x);\n    return __and === false ? __and : y;\n}\n`,
-    );
-  });
-
+  {
+    topic: "await insertion at value-consuming positions",
+    name: "guarded and-chain: the await lands once, at the guard temp's Const init",
+    src: `(define (f x y) (and (infer x) y))`,
+    golden: `async function f(x, y) {\n    const __and = await infer(x);\n    return __and === false ? __and : y;\n}\n`,
+  },
   // R-G3 KEEP case: the await is a Bin ("+") operand (arithmetic, the
   // ruling's own example of what must NOT elide) — untouched, and the
   // render-time async-IIFE synthesis (residual/render.ts, out of R-G3's
   // boundary) is unaffected since asyncness.ts never wraps a Block itself.
-  it("value-position Block gains an Await → the renderer synthesizes an async IIFE, awaited inline", () => {
-    expect(emit(`(define (f x y) (+ 1 (and (infer x) y)))`)).toBe(
-      `async function f(x, y) {\n    return 1 + await (async () => {\n        const __and = await infer(x);\n        return __and === false ? __and : y;\n    })();\n}\n`,
-    );
-  });
+  {
+    topic: "await insertion at value-consuming positions",
+    name: "value-position Block gains an Await → the renderer synthesizes an async IIFE, awaited inline",
+    src: `(define (f x y) (+ 1 (and (infer x) y)))`,
+    golden: `async function f(x, y) {\n    return 1 + await (async () => {\n        const __and = await infer(x);\n        return __and === false ? __and : y;\n    })();\n}\n`,
+  },
+  // R-G3 dedicated KEEP case at Arrow level (mirrors the FnDecl-level
+  // guarded/arithmetic KEEP cases above, but for an Arrow whose OWN body
+  // consumes the promise arithmetically rather than merely returning it) —
+  // proves the elision is shape-restricted at the Arrow level too, not just
+  // for FnDecl. `f` itself stays a plain pass-through (constructing a
+  // closure is always sync — makeRewriter's Arrow row); the RETURNED
+  // closure independently keeps async+await for its own arithmetic.
+  {
+    topic: "await insertion at value-consuming positions",
+    name: "KEEP at Arrow level: arithmetic on the awaited value keeps both async and await",
+    src: `(define (f x) (lambda (y) (+ 1 (infer y))))`,
+    golden: `function f(x) {\n    return async (y) => 1 + await infer(y);\n}\n`,
+  },
+
+  // R-G3's OWN worked example (gate3-human-grade-rulings.md): the map
+  // collapse still fires exactly as before (the golden's REWRITE mechanism
+  // is unchanged — see async-await-plane.md Mechanics 3), but BOTH the
+  // callback's `async (x) => await infer(x)` and the outer `await
+  // Promise.all(...)` sit at tail positions now elided — a plain map/filter
+  // pass-through, matching the target's own "reads like a human wrote it".
+  {
+    topic: "rewrite table",
+    name: "map with an async callback → Promise.all(xs.map(...)) — the R-G3 golden, both tail awaits elided",
+    src: `(define (f xs) (map (lambda (x) (infer x)) xs))`,
+    golden: `function f(xs) {\n    return Promise.all(xs.map(x => infer(x)));\n}\n`,
+  },
+  {
+    topic: "rewrite table",
+    name: "ArrayLit of two independent seed calls → ONE Promise.all (§2.3 by-right parallelization), tail-elided (R-G3)",
+    src: `(define (f x y) (list (infer x) (infer y)))`,
+    golden: `function f(x, y) {\n    return Promise.all([infer(x), infer(y)]);\n}\n`,
+  },
+  // R-G3 KEEP case: the lone `await infer(x)` sits as ONE element of a
+  // two-element ArrayLit (`[await infer(x), y]`) — the RETURNED value is the
+  // ArrayLit itself, never a bare Await, so there is nothing at the tail for
+  // consumeTail to strip; `f` correctly stays async.
+  {
+    topic: "rewrite table",
+    name: "a single promise sibling does NOT batch — plain element-wise await (unaffected by R-G3: not a bare tail Await)",
+    src: `(define (f x y) (list (infer x) y))`,
+    golden: `async function f(x, y) {\n    return [await infer(x), y];\n}\n`,
+  },
+];
+
+// ── plain insertion ────────────────────────────────────────────────────────────────────
+
+describe("await insertion at value-consuming positions", () => {
+  for (const r of ASYNCNESS_ROWS.filter((x) => x.topic === "await insertion at value-consuming positions")) {
+    it(r.name, () => {
+      expect(emit(r.src)).toBe(r.golden);
+    });
+  }
 
   // R-G3 dedicated KEEP case (task's own named example): `const y = await
   // f(); return y + 1;` — the resolved value is read back arithmetically, so
@@ -184,51 +255,16 @@ describe("await insertion at value-consuming positions", () => {
     };
     expect(render(materializeAsyncness(asyncnessOf(unit, SEEDS)))).toBe(`const f = x => {\n    return infer(x);\n};\n`);
   });
-
-  // R-G3 dedicated KEEP case at Arrow level (mirrors the FnDecl-level
-  // guarded/arithmetic KEEP cases above, but for an Arrow whose OWN body
-  // consumes the promise arithmetically rather than merely returning it) —
-  // proves the elision is shape-restricted at the Arrow level too, not just
-  // for FnDecl. `f` itself stays a plain pass-through (constructing a
-  // closure is always sync — makeRewriter's Arrow row); the RETURNED
-  // closure independently keeps async+await for its own arithmetic.
-  it("KEEP at Arrow level: arithmetic on the awaited value keeps both async and await", () => {
-    expect(emit(`(define (f x) (lambda (y) (+ 1 (infer y))))`)).toBe(
-      `function f(x) {\n    return async (y) => 1 + await infer(y);\n}\n`,
-    );
-  });
 });
 
 // ── the rewrite table ──────────────────────────────────────────────────────────────────
 
 describe("rewrite table", () => {
-  // R-G3's OWN worked example (gate3-human-grade-rulings.md): the map
-  // collapse still fires exactly as before (the golden's REWRITE mechanism
-  // is unchanged — see async-await-plane.md Mechanics 3), but BOTH the
-  // callback's `async (x) => await infer(x)` and the outer `await
-  // Promise.all(...)` sit at tail positions now elided — a plain map/filter
-  // pass-through, matching the target's own "reads like a human wrote it".
-  it("map with an async callback → Promise.all(xs.map(...)) — the R-G3 golden, both tail awaits elided", () => {
-    expect(emit(`(define (f xs) (map (lambda (x) (infer x)) xs))`)).toBe(
-      `function f(xs) {\n    return Promise.all(xs.map(x => infer(x)));\n}\n`,
-    );
-  });
-
-  it("ArrayLit of two independent seed calls → ONE Promise.all (§2.3 by-right parallelization), tail-elided (R-G3)", () => {
-    expect(emit(`(define (f x y) (list (infer x) (infer y)))`)).toBe(
-      `function f(x, y) {\n    return Promise.all([infer(x), infer(y)]);\n}\n`,
-    );
-  });
-
-  // R-G3 KEEP case: the lone `await infer(x)` sits as ONE element of a
-  // two-element ArrayLit (`[await infer(x), y]`) — the RETURNED value is the
-  // ArrayLit itself, never a bare Await, so there is nothing at the tail for
-  // consumeTail to strip; `f` correctly stays async.
-  it("a single promise sibling does NOT batch — plain element-wise await (unaffected by R-G3: not a bare tail Await)", () => {
-    expect(emit(`(define (f x y) (list (infer x) y))`)).toBe(
-      `async function f(x, y) {\n    return [await infer(x), y];\n}\n`,
-    );
-  });
+  for (const r of ASYNCNESS_ROWS.filter((x) => x.topic === "rewrite table")) {
+    it(r.name, () => {
+      expect(emit(r.src)).toBe(r.golden);
+    });
+  }
 
   it("filter with a promise-typed predicate is a door, not silently-wrong output", () => {
     expect(() => asyncified(`(define (f xs) (filter (lambda (x) (infer x)) xs))`)).toThrow(AsyncnessDoorError);
