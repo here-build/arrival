@@ -14,9 +14,9 @@ normative content, the working proposals it fuses (`execution-plan-wireframe.md`
 `provenance-design-challenges.md`, all in repo-root `docs/working-proposals/`; those
 remain as design history and evidence). Language: **CHOSEN** (normative) ·
 **EXCLUDED (because …)** · **DEFERRED (until …)** · **LIMIT** (accepted, documented).
-Implementation sequencing: Q-track in `PROVENANCE-PLAN.md` — EXECUTED TO COMPLETION
-(Q1–Q21 landed on main, 2026-07-09/10; per-node commits, the CHOSEN→law cross-check,
-and open findings live in that file's "Q21 audit" section).*
+Implementation sequencing (the Q-track): EXECUTED TO COMPLETION — Q1–Q21 landed on main,
+2026-07-09/10 (the plan document and its completion audit live in the private monorepo
+docs; this spec is the normative residue).*
 
 **Deployment target (normative):** provenance cheap enough that a ~1000-SLOC arrival
 program runs WITH full provenance inside one Cloudflare Durable Object (128MB isolate,
@@ -250,8 +250,8 @@ inspection, the dominant UI pattern.
 compiled out of production hot paths. EXCLUDED: permanent production dual-run (panel
 C12 — two provenance mechanisms in tension forever is the fragmentation P0 forbids).
 
-**CHOSEN — replay-level cones include port-coupled CONTROL dependencies** (Q16
-finding 1, law-caught): a port-coupled mux's result carries the SELECTOR's
+**CHOSEN — replay-level cones include port-coupled CONTROL dependencies** (law-caught
+during the replay-driver implementation): a port-coupled mux's result carries the SELECTOR's
 provenance, not only the taken arm's — the eager oracle always stamped this, the
 wireframe's backward walk traverses the selector wire, and the replay driver must
 union it too (`replay.ts` `withUnionedProvenance`). All three interpretations agree
@@ -388,27 +388,27 @@ stratum-1 question with stratum-3 material; that is why they go unused.
 
 ## 7. Laws (the test spec — stubs land before machinery)
 
-Gate homes are the implementation plan's Q-nodes (`PROVENANCE-PLAN.md`; final
-adjudication re-homed the flip column from coarse P-gates).
+Every law below landed with the Q-track implementation (2026-07-09/10); the status
+column records that, not a gate.
 
-| Law | Statement | Flips at |
+| Law | Statement | Status |
 |---|---|---|
-| wire-locality | FV(wire body) ⊆ params ∪ prelude-names, at emission | Q8a (assembly-time check) |
-| wire-γ | apply(wire, recorded ingress) = recorded egress; subsumes segment losslessness, loop-free scope | Q16 |
-| replay-nondeterminism | frozen-payload replay stable under a deliberately mutated external world; interior gensym/source/clock programs generated | Q16 |
-| W1 agreement | eager-oracle cone == wireframe cone, generated corpus — SCOPED per the m3 trade: exact on port-coupled decisions + non-mux segments; abstract both-arms on pure-mux wires | Q9 |
-| W3 port completeness | every mint/decision/instantiation/ingress exactly once PER RECORD ID, idempotent under request retry/re-emission | Q11a |
-| track containment (stamp) | I1 over stamp sets vs oracle | Q9 |
-| track containment (replay) | I1 under replay | Q16 |
-| track separation | zero inter-track edges except declared acc chain | Q16 |
-| stream fold + monotonicity | fold(events) = final region state; completed ≤ started monotone, over emission orders; the SAME fold reconstructs region state on DO wake (C1 — the law is the recovery mechanism) | Q13 |
-| pure-mux derivation | γ over frozen ingress rederives every collapsed mux decision; ground truth = the eager oracle's recorded arm choices on the agreement corpus (A2's soundness) | Q16 |
-| effect-track replay-between-records | pure stretches applied, recorded port events interleaved verbatim (§4 CHOSEN) | Q16 (sub-gate) |
-| tier honesty | every drill-in answer carries its evidence tier from the envelope enum `replayed \| replayed-cached \| recorded \| stub`; a stub or cached answer never presents as freshly replayed | Q17 |
-| R2 demand monotonicity | cone(count) ⊆ cone(value); cone(field-k) ⊆ cone(whole); count-demand traverses fact wires only (§6 lattice) | Q17 (machinery at Q8c) |
-| I5 exterior collapse | a region is ONE wireframe node from G | Q8a |
-| loop-unroll | widened vs exact-via-count cones | staged it.todo (ledger-visible through Q21) |
-| memory retention | sealed-value growth measured against Appendix A budget | Q19 (rides the R3 gate) |
+| wire-locality | FV(wire body) ⊆ params ∪ prelude-names, at emission | landed (assembly-time check) |
+| wire-γ | apply(wire, recorded ingress) = recorded egress; subsumes segment losslessness, loop-free scope | landed |
+| replay-nondeterminism | frozen-payload replay stable under a deliberately mutated external world; interior gensym/source/clock programs generated | landed |
+| W1 agreement | eager-oracle cone == wireframe cone, generated corpus — SCOPED per the m3 trade: exact on port-coupled decisions + non-mux segments; abstract both-arms on pure-mux wires | landed |
+| W3 port completeness | every mint/decision/instantiation/ingress exactly once PER RECORD ID, idempotent under request retry/re-emission | landed |
+| track containment (stamp) | I1 over stamp sets vs oracle | landed |
+| track containment (replay) | I1 under replay | landed |
+| track separation | zero inter-track edges except declared acc chain | landed |
+| stream fold + monotonicity | fold(events) = final region state; completed ≤ started monotone, over emission orders; the SAME fold reconstructs region state on DO wake (C1 — the law is the recovery mechanism) | landed |
+| pure-mux derivation | γ over frozen ingress rederives every collapsed mux decision; ground truth = the eager oracle's recorded arm choices on the agreement corpus (A2's soundness) | landed |
+| effect-track replay-between-records | pure stretches applied, recorded port events interleaved verbatim (§4 CHOSEN) | landed |
+| tier honesty | every drill-in answer carries its evidence tier from the envelope enum `replayed \| replayed-cached \| recorded \| stub`; a stub or cached answer never presents as freshly replayed | landed |
+| R2 demand monotonicity | cone(count) ⊆ cone(value); cone(field-k) ⊆ cone(whole); count-demand traverses fact wires only (§6 lattice) | landed |
+| I5 exterior collapse | a region is ONE wireframe node from G | landed |
+| loop-unroll | widened vs exact-via-count cones | staged it.todo |
+| memory retention | sealed-value growth measured against Appendix A budget | landed (rides the R3 gate) |
 
 **CHOSEN — generator corpus classes** (the panel's F2-too-pure finding): interior
 sources · nested regions (map-in-map, map-in-fold) · first-class HOFs · structured
