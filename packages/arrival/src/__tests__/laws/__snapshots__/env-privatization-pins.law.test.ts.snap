@@ -47,6 +47,8 @@ exports[`V0 pin — barrel surface > the full exported-name set is otherwise unc
   "coerceNumeric",
   "countCone",
   "countOpaqueNodes",
+  "createDisplaySink",
+  "createNoteSink",
   "createRosettaWrapper",
   "currentRunEnv",
   "deepProvenance",

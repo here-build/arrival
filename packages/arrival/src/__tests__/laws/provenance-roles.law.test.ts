@@ -451,12 +451,12 @@ describe("V2 — declaration-driven classifier (§2; PROVENANCE-PLAN.md Q3)", ()
 
       // UNDERDETERMINED + UNDECLARED = honest holes, never guesses:
       // call-with-values was the classic two-lambda underdetermined host — multi-return
-      // is now a purity door (no contract/callbackRoles). procedure? remains the pin:
-      // a z.lambda it NEVER INVOKES (introspection subject, not a callback) returns a
-      // boolean — a host-boolean-return rule would door it as a decision callback, which
-      // is exactly the guess extraction refuses to make.
+      // is now a purity door (no contract/callbackRoles). procedure?'s subject arg is
+      // z.value (the callable question rides the type-guard `type:` override, not the
+      // schema) — no z.lambda arm in the contract ⇒ no callbackRoles field content,
+      // exactly the cons rule below.
       expect(rolesOf(binding, "call-with-values")).toBeUndefined(); // door — no arms
-      expect(rolesOf(equality, "procedure?")).toEqual([undefined]);
+      expect(rolesOf(equality, "procedure?")).toBeUndefined();
 
       // No z.lambda arm at all ⇒ no callbackRoles field content (undefined, not []).
       expect(rolesOf(lists, "cons")).toBeUndefined();

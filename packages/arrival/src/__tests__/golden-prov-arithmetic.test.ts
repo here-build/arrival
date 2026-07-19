@@ -20,7 +20,7 @@
  * byte-equivalence — the static path must reproduce the eager engine's current
  * behavior here, warts and all, or G2 fails. The cdr-of-list-spine and
  * append-rebuild asymmetries this file used to pin here were REPAIRED
- * (docs/test-suite-v2/RULINGS.md R2, conservation.law.test.ts's §2 rows) — cdr's
+ * (docs/RULINGS.md R2, conservation.law.test.ts's §2 rows) — cdr's
  * projected sub-spine and append's rebuilt head now carry the deep-collapsed
  * union of their elements instead of dropping to empty; see the fixed goldens
  * below, no longer under "documented asymmetries".
