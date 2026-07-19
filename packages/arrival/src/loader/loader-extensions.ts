@@ -16,22 +16,26 @@
 //     Global vocabulary, per-scope capability.
 //
 //   • PRELUDE-ONLY registration (the interpreter nuance — read this before you're confused).
-//     `require/register-extension` is a `preludeOnly: true` symbol declared by
-//     `arrivalLoaderCapability` (loader-capability.ts): during BOOTSTRAP assembly it lives in
-//     the kernel's phase-gated prelude scope (assembleEnv's per-assembly Map + resolver — see
-//     kernel.ts), callable from every later-applied capability's prelude and gone once the C3
-//     loop ends; during MID-RUN application (`require/extension`, §1.4) it is seeded onto the
-//     per-call discarded child scope by `defineRegisterExtensionRosetta` below. It is NEVER
-//     bound into the runtime env, so there is nothing to seal — the phase flag (bootstrap) /
-//     the dropped child (mid-run) IS the seal. A running program therefore CANNOT teach the
-//     loader a new file type mid-run: naming `require/register-extension` from user code is a
-//     plain unbound-variable error, the ordinary consequence of the name genuinely not being in
-//     scope. This is not an oversight or a missing feature — it is the wrong-state-impossible
-//     guarantee: a `.prompt`/`.hbs` resolver is a CAPABILITY GRANT (it can run inference, read
-//     templates), not user data, so only a capability's prelude may install one.
+//     `require/register-extension` is a `preludeOnly: true` MACRO (loader-capability.ts):
+//     MACRO so the resolver name is UNEVALUATED — write
+//       (require/register-extension ".prompt" ext/prompt/resolve)
+//     not a quoted string forced by "if I write the bare symbol it evaluates to the
+//     function, and String(fn) becomes the registry key". During BOOTSTRAP assembly it
+//     lives in the kernel's phase-gated prelude scope; during MID-RUN application
+//     (`require/extension`) it is seeded onto the per-call discarded child scope. It is
+//     NEVER bound into the runtime env. A running program therefore CANNOT teach the
+//     loader a new file type mid-run.
 //     (See docs/package-specific/arrival-scheme/prelude-only-symbols-and-composable-prompt-2026-07-02.md §1.)
 
 import { ExtensionSuffixConflictError } from "../errors.js";
+import { Macro } from "../eval/Macro.js";
+import { ANil } from "../values/primitives/ANil.js";
+import { nil } from "../values/primitives/ANil.js";
+import { APair } from "../values/primitives/APair.js";
+import { AString } from "../values/primitives/AString.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
+import type { SchemeValue } from "../values/types.js";
+import invariant from "tiny-invariant";
 
 /** ext-suffix (e.g. `".prompt"`) → the NAME of the resolver verb that handles it. Process-
  *  global + idempotent: the same (suffix, name) re-registers as a no-op across runs (the
@@ -39,10 +43,29 @@ import { ExtensionSuffixConflictError } from "../errors.js";
  *  suffix is a conflict and throws. */
 const RESOLVERS = new Map<string, string>();
 
-/** Coerce a `(require/register-extension)` name argument (a quoted symbol `'handlebars/lambda`
- *  or a string) to the bound verb name. */
+/** Coerce a name argument (string, AString, ASymbol, or (quote SYMBOL)) to the bound verb name. */
 function resolverNameOf(raw: unknown): string {
-  return typeof raw === "string" ? raw : String(raw);
+  if (typeof raw === "string") return raw;
+  if (raw instanceof AString) return String(raw.valueOf());
+  if (raw instanceof ASymbol) return raw.literal();
+  // (quote name) — designed surface still accepts a quoted symbol.
+  if (raw instanceof APair) {
+    const head = raw.car;
+    if (head instanceof ASymbol && head.literal() === "quote" && raw.cdr instanceof APair) {
+      const body = raw.cdr.car;
+      if (body instanceof ASymbol) return body.literal();
+      if (body instanceof AString) return String(body.valueOf());
+    }
+  }
+  return String(raw);
+}
+
+/** Suffix form → leading-dot string (string literal or symbol `.prompt` / `prompt`). */
+function suffixOf(raw: unknown): string {
+  if (typeof raw === "string") return raw;
+  if (raw instanceof AString) return String(raw.valueOf());
+  if (raw instanceof ASymbol) return raw.literal();
+  return String(raw);
 }
 
 /** Normalize a suffix to a leading-dot form (`"hbs"` and `".hbs"` both → `".hbs"`). */
@@ -55,11 +78,35 @@ function normalizeSuffix(ext: string): string {
  *  last-write-wins — two capabilities claiming `.hbs` differently is a real configuration
  *  bug). */
 export function registerExtension(ext: unknown, resolverName: unknown): void {
-  const suffix = normalizeSuffix(String(ext));
+  const suffix = normalizeSuffix(suffixOf(ext));
   const name = resolverNameOf(resolverName);
   const existing = RESOLVERS.get(suffix);
   ExtensionSuffixConflictError.invariant(existing === undefined || existing === name, suffix, existing ?? name, name);
   RESOLVERS.set(suffix, name);
+}
+
+/**
+ * The MACRO body of `require/register-extension` — shared by bootstrap (capability symbols)
+ * and mid-run (`require/extension`'s discarded prelude child). Args are UNEVALUATED forms:
+ *   (require/register-extension ".prompt" ext/prompt/resolve)
+ *   (require/register-extension ".prompt" "ext/prompt/resolve")  ; string still ok
+ *   (require/register-extension ".prompt" 'ext/prompt/resolve)   ; quote still ok
+ * Side-effects the registry; expands to nil (effect form).
+ */
+export function makeRegisterExtensionMacro(): Macro {
+  return new Macro(
+    "require/register-extension",
+    function (rest: SchemeValue) {
+      invariant(rest instanceof APair, "require/register-extension: expected (suffix resolver-name)");
+      const suffixForm = rest.car;
+      invariant(rest.cdr instanceof APair, "require/register-extension: missing resolver-name");
+      const nameForm = rest.cdr.car;
+      invariant(rest.cdr.cdr instanceof ANil || rest.cdr.cdr == null, "require/register-extension: expected exactly 2 args");
+      registerExtension(suffixForm, nameForm);
+      return nil;
+    },
+    "registers a file extension resolver used by require (assembly time only; unevaluated resolver name)",
+  );
 }
 
 /** The resolver verb name for a path, by LONGEST matching suffix (so `.spec.json` can beat

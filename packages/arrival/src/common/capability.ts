@@ -542,8 +542,10 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
               case "macro":
                 // A non-evaluating MACRO form: bind the raw transformer (Macro/Syntax) as-is.
                 // Not arg-evaluating (native/rosetta) nor evaluator-dispatched (keyword) — the
-                // generic is_macro/is_syntax eval hook expands it. Home of syntax-rules.
-                bindValue(env, verb, def.macro);
+                // generic is_macro/is_syntax eval hook expands it. Home of syntax-rules +
+                // preludeOnly assembly macros (`require/register-extension`). Routes through
+                // `bindTarget` so `preludeOnly: true` lands on the assembly overlay.
+                bindTarget(def).set(verb, def.macro);
                 break;
             }
             continue;

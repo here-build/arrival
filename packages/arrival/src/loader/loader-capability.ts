@@ -33,13 +33,14 @@
 //     assembler for dispose-folding). They delete the day the pack is surfaced — the resources are
 //     already the single source of truth.
 //
-//   • `require/register-extension` is a `preludeOnly: true` symbol: the kernel's phase-gated prelude
-//     scope (assembleEnv) makes it callable from every LATER-APPLIED capability's prelude
-//     (`.hbs`/`.prompt`/`ext/*` registering their file types) and a plain unbound-variable error at
-//     runtime. The phase flag IS the seal. ⚠ ORDERING: this capability must apply BEFORE the
-//     capabilities whose preludes call the verb — list it LAST in the assembly's root set (lowest
-//     precedence ⇒ applied first, the slot loader-core occupied), or make the ext capabilities dep
-//     on it.
+//   • `require/register-extension` is a `preludeOnly: true` MACRO: unevaluated resolver NAME so
+//     preludes write `(require/register-extension ".prompt" ext/prompt/resolve)` without string
+//     quotes (a bare symbol would otherwise evaluate to the function, and String(fn) would poison
+//     the registry key). The kernel's phase-gated prelude scope makes it callable from every
+//     LATER-APPLIED capability's prelude and a plain unbound-variable error at runtime. ⚠ ORDERING:
+//     this capability must apply BEFORE the capabilities whose preludes call it — list it LAST in
+//     the assembly's root set (lowest precedence ⇒ applied first), or make the ext capabilities
+//     dep on it.
 //
 // The configuration slice mirrors `BuildArrivalEnvOpts`' loader-facing fields, so the ONE shared
 // config bag (`exec(src, { capabilities, config })` / `buildArrivalEnv(opts)`) feeds this capability
@@ -55,13 +56,12 @@ import { type CallCtx, symbol } from "../common/symbol.js";
 import * as z from "../common/scheme-zod.js";
 import { applyCallback } from "../values/primitives/ACallable.js";
 import { is_callable_value } from "../values/value-guards.js";
-import { nil } from "../values/primitives/ANil.js";
 import { theVoid } from "../values/primitives/AVoid.js";
 import invariant from "tiny-invariant";
 import { RequireCycleError, RequireResolverError } from "../errors.js";
 
 import { bindValue, AmbientRuntime, type AmbientValue, mintFrame, isAmbientRuntime } from "../AmbientRuntime.js";
-import { lookupExtensionResolver, registerExtension } from "./loader-extensions.js";
+import { lookupExtensionResolver, makeRegisterExtensionMacro } from "./loader-extensions.js";
 import {
   type ContentResolver,
   dataToScheme,
@@ -235,15 +235,15 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
     void requireCache;
     void assembler;
     const defs: Record<string, SymbolDeclaration> = {
-      // Assembly-time-only (the kernel's phase-gated prelude scope): callable from every
-      // later-applied capability's prelude, unbound everywhere at runtime.
-      "require/register-extension": symbol.native`require/register-extension: registers a file extension resolver used by require (assembly time only)`(
-        { input: [z.value, z.value], output: [z.value], preludeOnly: true },
-        function (this: CallCtx, suffix, resolverName) {
-          registerExtension(suffix, resolverName);
-          return nil; // effect verb — unspecified-as-nil, never a raw JS `undefined`/`null`
-        },
-      ),
+      // Assembly-time-only MACRO (kernel's phase-gated prelude scope): callable from every
+      // later-applied capability's prelude, unbound everywhere at runtime. MACRO so the
+      // resolver name is unevaluated — see makeRegisterExtensionMacro.
+      "require/register-extension": {
+        kind: "macro" as const,
+        name: "require/register-extension",
+        macro: makeRegisterExtensionMacro(),
+        preludeOnly: true,
+      },
     };
 
     // Door-set degradation (design doc symbol-define-static-program-validation.md §3.7, W2):
@@ -477,14 +477,7 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
             "require/extension: the run env is not an arrival AmbientRuntime — a mid-run prelude scope must be minted off a real frame to receive bindings.",
           );
           const preludeScope = mintFrame(env, `prelude/${name}`);
-          bindValue(preludeScope, "require/register-extension", symbol.native`require/register-extension: registers a file extension resolver used by require (assembly time only)`(
-            { input: [z.value, z.value], output: [z.value], preludeOnly: true },
-            function (this: CallCtx, suffix, resolverName) {
-              registerExtension(suffix, resolverName);
-
-              return nil; // effect verb — unspecified-as-nil, never a raw JS `undefined`/`null`
-            },
-          ).impl);
+          bindValue(preludeScope, "require/register-extension", makeRegisterExtensionMacro());
           await assembler.require(pack, {
             // The kernel's bind-target face over the same frame (PreludeBindTarget is the
             // `.set`-only shim shape; the frame itself no longer carries `set`).

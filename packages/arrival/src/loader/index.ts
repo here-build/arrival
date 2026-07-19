@@ -16,22 +16,22 @@
  * A "custom loader" teaches `(require …)` a new file type. There are three
  * production-grade registration surfaces, ordered by how far the new type reaches:
  *
- * 1. **A capability prelude calling `(require/register-extension ".x" 'x/resolve)`**
- *    — THE designed surface. The registry (loader-extensions.ts) maps a file
- *    suffix to the NAME of a resolver verb; the verb itself is a symbol the
- *    registering capability declares. `require`, on hitting a `.x` file, resolves
- *    that name against the CURRENT run's composed resolver (late-bound, per env) and
- *    calls it as `(resolver-verb contents {path})`; it must return a
- *    `ResolverResult` (loader.ts): `{ kind: "value" | "eval" | "load", … }` —
- *    data files return `value`, callable files return `eval` forms yielding a
- *    scheme lambda (THE CALLABLE RULE, loader.ts), scheme libraries return `load`.
+ * 1. **A capability prelude calling `(require/register-extension ".x" x/resolve)`**
+ *    — THE designed surface. MACRO so the resolver name is UNEVALUATED (a bare
+ *    symbol, not a string forced by evaluating a function binding). The registry
+ *    (loader-extensions.ts) maps a file suffix to the NAME of a resolver verb;
+ *    the verb itself is a symbol the registering capability declares. `require`,
+ *    on hitting a `.x` file, resolves that name against the CURRENT run's
+ *    composed resolver (late-bound, per env) and calls it as
+ *    `(resolver-verb contents {path})`; it must return a `ResolverResult`
+ *    (loader.ts): `{ kind: "value" | "eval" | "load", … }` — data files return
+ *    `value`, callable files return `eval` forms yielding a scheme lambda
+ *    (THE CALLABLE RULE, loader.ts; `.prompt`/`.hbs` convert file bytes → scheme
+ *    then eval/compile that scheme), scheme libraries return `load`.
  *    `require/register-extension` is `preludeOnly: true` — callable ONLY from a
  *    capability's prelude during assembly (and from a pack applied mid-run via
  *    `require/extension`), never from user code: a resolver is a capability
- *    GRANT, not user data. See `ext/yaml` / `ext/toml`
- *    (second-foundation/arrival-ext-*) for the reference shape: the capability
- *    OWNS its parser dep, declares the resolver verb, and its one-line prelude
- *    registers the suffix.
+ *    GRANT, not user data.
  *
  * 2. **`configuration.extensionRegistry`** — a host-armed
  *    `Map<name, EnvPack<RunEnv>>` enabling `(require/extension :name)`: the

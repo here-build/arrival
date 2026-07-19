@@ -56,14 +56,10 @@ export const yamlHandler: ExtensionHandler = { resolve: resolveYaml, type: typeY
 
 export const arrivalYamlCapability = new EnvCapability("ext/yaml", {
   symbols: { "ext/yaml/resolve": { value: resolveYaml } },
-  // QUOTED: `require/register-extension` stores the resolver verb's NAME (a string), not its
-  // value — an unquoted `ext/yaml/resolve` here evaluates the symbol to the raw function
-  // BEFORE the call, so `registerExtension` would receive the function itself (then
-  // `String(fn)` its source) instead of "ext/yaml/resolve", and every later `env.get(name)`
-  // lookup at require-time would miss. See `ext-toml.ts` / `prompt.ts` / `utils.ts` for the
-  // same quoted pattern.
+  // Bare symbol — `require/register-extension` is a MACRO so the resolver name is
+  // unevaluated (no String(fn) registry poison). Strings still work for compat.
   prelude: `
-  (require/register-extension ".yaml" "ext/yaml/resolve")
-  (require/register-extension ".yml" "ext/yaml/resolve")
+  (require/register-extension ".yaml" ext/yaml/resolve)
+  (require/register-extension ".yml" ext/yaml/resolve)
 `,
 });

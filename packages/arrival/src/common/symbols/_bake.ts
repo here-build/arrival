@@ -584,6 +584,13 @@ export interface MacroSymbolDef {
   readonly kind: "macro";
   readonly name: string;
   readonly macro: Macro;
+  /**
+   * Assembly-time-only binding (same contract as `Contract.preludeOnly` on native/rosetta):
+   * binds onto the kernel's prelude overlay, never the runtime env. Used by
+   * `require/register-extension` — a macro so the resolver name is UNEVALUATED
+   * (a bare symbol, not a string forced by evaluation of a function binding).
+   */
+  readonly preludeOnly?: boolean;
   /** Extension bag — see `MetadataRecord` (kind-agnostic; every def carries the slot). */
   readonly metadata?: MetadataRecord;
 }

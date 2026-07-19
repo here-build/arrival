@@ -40,5 +40,6 @@ export const tomlHandler: ExtensionHandler = { resolve: resolveToml, type: typeT
 
 export const arrivalTomlCapability = new EnvCapability("ext/toml", {
   symbols: { [RESOLVE]: { value: resolveToml } },
-  prelude: `(require/register-extension ".toml" "${RESOLVE}")`,
+  // Bare symbol — `require/register-extension` is a MACRO (unevaluated resolver name).
+  prelude: `(require/register-extension ".toml" ${RESOLVE})`,
 });
