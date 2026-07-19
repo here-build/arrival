@@ -92,11 +92,3 @@ Three roles, one mechanism each:
 Migrations to ride the next batch: `CLASS` → `"arrival/class"`; F3 gains the forgery-guard
 law row ("a borrowed object's own `arrival/*`-named data key is DATA, never protocol").
 
-## Next-session lead (sequenced)
-1. Bug batch + conservation repair (isSchemeValue completeness, append P5 door,
-   parseNameDoc colon fix, canonicalize collisions, flat-stamp union for append/cdr, DR4)
-   — flips ~30 it.fails.
-2. Chibi parity triage (72× let*-hygiene gap first).
-3. Reverse-membrane pilot (cxr → ANativeProcedure).
-New design items spawned by the rulings: two-tier exec API, sub-union lattice, HalfBaked
-review, execution-plan wireframe, infix ban door, letrec lowering + mercury check.
