@@ -22,6 +22,18 @@ lives under `@here.build/mercury*`. The failed pass-pipeline predecessor
 `SchemeSemanticModel`. Manifestation (spelling, ramda call shape, file layout)
 is the materializer’s only job.
 
+### Emit contract = **loose** mode (not R7RS-strict)
+
+Arrival’s interpreter defaults to **loose** (`ExecOptions.strict` defaults false):
+nil-tolerance, list-ish ops on array/vector spines, extra reader conveniences.
+**Strict** (`strict: true`) is opt-in portability testing via `strictGate` /
+`PortabilityError`.
+
+This compiler emits for **loose only**. We do not compile R7RS-strict throws
+(car of `()`, car of a vector, …). Residuals match the default interpreter so
+the oracle (also loose by default) can agree without a second “strict residual”
+axis. That is intentional simplicity, not incompleteness.
+
 `SchemeSemanticModel` is a **public** export and the product path’s named
 middle-end — not an anonymous internal of `build/`. It may re-home to a
 foundation package when LSP consumers land; the **name travels with it**.
@@ -37,10 +49,10 @@ Also owns: front-end desugar/nodes, CoreForm, type glass (`emitTypes`),
 stdlib), infer/mcp `RuntimeRef` surface (kept until @-symbol work), residual
 algebra + printer.
 
-Cold stdlib: prefer `ramda` (`length`, `car`/`cdr` as `head`/`tail`, …). Keep
-stage0 for Law T / n-ary / wrong-arity-in-ramda shapes (`max-by` ≠ ramda
-`maxBy`, `list-ref` ≠ `nth` arg order, `eq?`/`equal?`, …). Divergences listed
-in `RAMDA_DIVERGENCES`.
+Cold stdlib: prefer `ramda` when arity/order match **loose** faces (e.g.
+`length`). Keep stage0 for Law T, n-ary, wrong ramda shape (`max-by`,
+`list-ref`), and **loose nil-tolerance** shims (`car`/`cdr` empty → `[]`).
+See `RAMDA_DIVERGENCES` and `RUNTIME_MANIFEST`.
 
 ## Testing
 

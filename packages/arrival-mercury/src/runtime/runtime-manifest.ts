@@ -1,14 +1,17 @@
 /**
  * Runtime import census — scheme RuntimeRef symbols → where they load from.
  *
- * Two sources (not a Strategy axis):
- *  - `"stage0"` — Scheme-texture / Law-T / n-ary shapes ramda cannot mean honestly
- *  - `"ramda"`  — cold HOF/structural stdlib (R6: prefer well-known libs)
+ * **Emit contract = loose mode** (interpreter default: `ExecOptions.strict` false).
+ * Residuals and shims match nil-tolerance and sequence polymorphism, never R7RS-strict
+ * throws (`PortabilityError` / car-of-() TypeError). Strict is opt-in on the interpreter
+ * only — the compiler does not target it.
  *
- * Divergence vs interpreter is catalogued, not papered over (V: extract variance later).
+ * Two sources (not a Strategy axis):
+ *  - `"stage0"` — Scheme-texture / Law-T / n-ary / loose-nil shims
+ *  - `"ramda"`  — cold HOF/structural stdlib when arity+order match loose faces
  *
  * Local names are reserved at walk allocation time (`RUNTIME_LOCALS`); imported names
- * may differ (e.g. scheme `list-ref` → ramda `nth` aliased as `listRef`).
+ * may differ (e.g. `length` → `length as length_`).
  */
 export type RuntimeSource = "stage0" | "ramda";
 
@@ -62,18 +65,16 @@ export const RUNTIME_MANIFEST: Readonly<Record<string, RuntimeEntry>> = {
   "infer/scalar": e("inferScalar", "stage0"),
   "infer/chat/scalar": e("inferChatScalar", "stage0"),
 
-  // max-by stays stage0: ramda maxBy is a *binary* key-comparator (arity 3 curry),
-  // not list-argmax — scheme (max-by f xs) is a reduce over the list.
+  // max-by: ramda maxBy is binary key-comparator, not list-argmax
   "max-by": e("maxBy", "stage0"),
-  // list-ref stays stage0: ramda nth is index-first; scheme is list-first.
+  // list-ref: ramda nth is index-first; scheme is list-first
   "list-ref": e("listRef", "stage0"),
+  // car/cdr RuntimeRef: stage0 LOOSE shims (empty → []; not ramda head → undefined)
+  car: e("car", "stage0"),
+  cdr: e("cdr", "stage0"),
 
-  // ── cold stdlib → ramda (catalogue Scheme divergences in RAMDA_DIVERGENCES) ─
-  // length: ramda length; local `length_` keeps reservation non-property-shaped
+  // ── cold stdlib → ramda (loose-friendly polymorphism) ─────────────────────
   length: e("length_", "ramda", "length"),
-  // car/cdr value-position → ramda head/tail, local remains car/cdr
-  car: e("car", "ramda", "head"),
-  cdr: e("cdr", "ramda", "tail"),
 };
 
 /** scheme → local name — WalkOptions.manifest / reservation set. */
@@ -87,25 +88,18 @@ export const STAGE0 = RUNTIME_LOCALS;
 /** Default npm specifier for ramda cold imports. */
 export const RAMDA_MODULE = "ramda";
 
-/**
- * Divergence ledger (honest, not aspirational).
- * Expand when oracle rows pin a row; do not silence by inventing shims.
- */
+/** Honest notes vs interpreter (loose). Emit is not R7RS-strict. */
 export const RAMDA_DIVERGENCES: readonly { symbol: string; note: string }[] = [
   {
     symbol: "length",
-    note: "ramda length accepts strings/objects; scheme length is list-shaped — unproven host values may differ",
-  },
-  {
-    symbol: "car",
-    note: "ramda head on empty is undefined; scheme car on () is error — same UB class as array [0]",
-  },
-  {
-    symbol: "cdr",
-    note: "ramda tail on empty is []; scheme cdr on () is error — representation-collapse array spine",
+    note: "ramda length is polymorphic (list/vector/string) — aligned with loose length carrier",
   },
   {
     symbol: "max-by",
-    note: "NOT mapped to ramda.maxBy — that is a binary key-comparator, not list argmax; stays stage0",
+    note: "stage0 — ramda.maxBy is binary key-comparator, not list argmax",
+  },
+  {
+    symbol: "list-ref",
+    note: "stage0 — ramda.nth is index-first; scheme is list-first",
   },
 ];

@@ -229,8 +229,12 @@ export async function inferChatScalar(..._args: unknown[]): Promise<unknown> {
   );
 }
 
-// car/cdr value-position → ramda head/tail (runtime-manifest.ts). Call position
-// still folds inline to xs[0] / xs.slice(1) via emit rules.
+// car/cdr value-position (RuntimeRef / eta): LOOSE nil-tolerance — empty → [] (nil face),
+// not undefined and not R7RS throw. Call position uses the same algebra in phase1 carRule.
+/** Loose `car` — empty sequence → nil (`[]`); else first element. */
+export const car = (xs: readonly unknown[]): unknown => (xs.length === 0 ? [] : xs[0]);
+/** Loose `cdr` — rest as array (empty → []). */
+export const cdr = (xs: readonly unknown[]): unknown[] => xs.slice(1);
 
 // ─── numeric tail (corpus-driven; §7 one-number — plain JS arithmetic) ────────────────
 

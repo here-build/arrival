@@ -55,8 +55,8 @@ export default function OracleMain() {
                     return outer(as.slice(1));
                 }
                 else {
-                    if (complementary(as[0], bs[0])) {
-                        return [as[0], bs[0]];
+                    if (complementary(as.length === 0 ? [] : as[0], bs.length === 0 ? [] : bs[0])) {
+                        return [as.length === 0 ? [] : as[0], bs.length === 0 ? [] : bs[0]];
                     }
                     else {
                         bs = bs.slice(1);
@@ -77,11 +77,11 @@ export default function OracleMain() {
         let acc = 0;
         /*[ts-base/self-tail-loop] named let `walk` → while*/
         while (true) {
-            if (ws.slice(1).length === 0 || lt(target, acc + ws[0])) {
+            if (ws.slice(1).length === 0 || lt(target, acc + (ws.length === 0 ? [] : ws[0]))) {
                 return i;
             }
             else {
-                [ws, i, acc] = [ws.slice(1), i + 1, acc + ws[0]];
+                [ws, i, acc] = [ws.slice(1), i + 1, acc + (ws.length === 0 ? [] : ws[0])];
                 continue;
             }
         }
@@ -120,16 +120,16 @@ export default function OracleMain() {
             const __and = (iter % MERGEEVERY + MERGEEVERY) % MERGEEVERY === 0;
             return __and === false ? __and : findMerge(frontier(pool));
         })();
-        return pair !== false ? evolve(frontier(cons(merge(pair[0], pair[1]), pool)), budget - length_(paretoset), rngNext(rng), iter + 1) : (() => {
+        return pair !== false ? evolve(frontier(cons(merge(pair.length === 0 ? [] : pair[0], pair[1]), pool)), budget - length_(paretoset), rngNext(rng), iter + 1) : (() => {
             const sel = select(pool, rng);
-            const parent = sel[0];
+            const parent = sel.length === 0 ? [] : sel[0];
             const rng1 = sel[1];
             const smp = sampleBatch(parent["recs"], BATCH, rng1);
-            const batch = smp[0];
+            const batch = smp.length === 0 ? [] : smp[0];
             const rng2 = smp[1];
             const prop = propose(parent, batch, iter);
             return prop === false ? evolve(pool, budget - BATCH, rng2, iter + 1) : (() => {
-                const pAnalyze = prop[0];
+                const pAnalyze = prop.length === 0 ? [] : prop[0];
                 const pDecide = prop[1];
                 const pVia = prop[2];
                 const propScore = proposalBatchScore(pAnalyze, pDecide, batch);

@@ -155,7 +155,7 @@
 import type { EmitCtx, EmitRule } from "@inhuman.tools/arrival/emit";
 
 import type { Binding, R } from "../residual/types.js";
-import { Arrow, Call, Index, Lit, Method, Ref } from "../residual/types.js";
+import { ArrayLit, Arrow, Bin, Call, Cond, Index, Lit, Member, Method, Ref } from "../residual/types.js";
 import type { SymbolRuleTable } from "./overlay.js";
 
 /** The rules-side twin of the walker's `ruleOf` narrowing seam: `EmitCtx.fresh` is
@@ -175,42 +175,22 @@ function exactly(ctx: EmitCtx<R>, sym: string, args: readonly R[], n: number): r
   return args;
 }
 
-// ─── §2.1 representation collapse: car / cdr ──────────────────────────────────────────
-// Constitution §4.3 verbatim: syntax over the array representation, not library
-// symbols. No guard, no shim, no register branch (the component spec's guarded-branch
-// draft predates the representation-collapse ruling and is superseded by §4.3).
+// ─── §2.1 representation collapse: car / cdr (LOOSE emit contract) ───────────────────
+// Compile target is the interpreter DEFAULT: loose mode (ExecOptions.strict defaults
+// false). Loose car/cdr of empty → nil (`[]` on the array face); of a vector/array
+// spine is first/rest (strictGate would PortabilityError — we never emit that path).
+// R7RS-strict throws are intentionally NOT compiled.
 
 const carRule: EmitRule<R> = {
-  call: (args, ctx) => Index(exactly(ctx, "car", args, 1)[0]!, Lit(0)),
-  // ── R5c: eta-`ref`, value position (`(map car xss)`) — constitution §4.2/§4.5's
-  // refPolicy design, phase1-symbol-rules.md §1, arrival-ts-transpiler-design.md §4.2's
-  // named Gate-3 golden (fixtures/gate3/first-class-car-hof.golden.ts's own "⚠ UPGRADE
-  // MARKER"). `car`'s table row already declares `refPolicy: "eta"`; only this `.ref`
-  // method was missing, so the walker's ladder (`registryValueRef`) fell through to
-  // the rung-3 shim every time — TODAY it takes this branch first.
-  //
-  // Eta-expands `call` against the INSTANTIATED use-site signature
-  // (`ctx.selfFacts?.callable` — `TypeFacts.callable`, "the instantiated signature at
-  // THIS use site": tsc has already instantiated `car<T>` against the consuming HOF's
-  // element type). The extraction side needed NO new work — typefacts/extract.ts's
-  // `probeCallable` already fires for exactly this shape ("Value-position probe —
-  // single-occurrence Refs in argument position"), the once-unverified assumption
-  // this design confessed ("whether the lens delivers instantiated signatures in
-  // argument position") now proven live (the Wave-B readout).
-  //
-  // No proven signature, or a proven arity other than 1 (car is fixed-arity — an
-  // unbounded/mismatched arity has no honest 1-param arrow to build) ⇒ the exact same
-  // shim the walker's own fallback rung would have produced (Law F's value-position
-  // analog: absence of proof ⇒ conservative, never a guess). `carRule.call` itself
-  // never branches on `argFacts` (car's residual is unconditional — §2.1), so
-  // threading `paramFacts` through changes nothing FOR CAR TODAY; it's still the
-  // honest general shape (a future fact-driven `.ref` reuses the same plumbing).
-  //
-  // `cdr` is the natural, structurally identical follow-up — deliberately NOT done
-  // here (no golden names it yet; this wave lands exactly the case that's pinned).
+  call: (args, ctx) => {
+    const xs = exactly(ctx, "car", args, 1)[0]!;
+    // loose nil-tolerance: empty → []; non-empty → [0] (never bare xs[0], which is undefined)
+    return Cond(Bin("===", Member(xs, "length"), Lit(0)), ArrayLit([]), Index(xs, Lit(0)));
+  },
+  // Eta-`ref` for value position (`(map car xss)`): same loose residual as call.
   ref: (ctx) => {
     const callable = ctx.selfFacts?.callable;
-    if (callable?.arity !== 1) return ctx.runtime("car"); // Law F: no proof ⇒ shim
+    if (callable?.arity !== 1) return ctx.runtime("car"); // Law F: no proof ⇒ stage0 loose shim
     const x = freshBinding(ctx, "x");
     const innerCtx: EmitCtx<R> = { ...ctx, argFacts: [callable.paramFacts?.[0] ?? {}] };
     return Arrow([x], carRule.call([Ref(x)], innerCtx));
@@ -218,7 +198,15 @@ const carRule: EmitRule<R> = {
 };
 
 const cdrRule: EmitRule<R> = {
+  // loose: empty → [] via slice(1); non-empty → rest. Matches ANil/AJSArray loose.
   call: (args, ctx) => Method(exactly(ctx, "cdr", args, 1)[0]!, "slice", [Lit(1)]),
+  ref: (ctx) => {
+    const callable = ctx.selfFacts?.callable;
+    if (callable?.arity !== 1) return ctx.runtime("cdr");
+    const x = freshBinding(ctx, "x");
+    const innerCtx: EmitCtx<R> = { ...ctx, argFacts: [callable.paramFacts?.[0] ?? {}] };
+    return Arrow([x], cdrRule.call([Ref(x)], innerCtx));
+  },
 };
 
 // ─── §2.1 representation collapse, compound family: cadr / caddr / cddr / … ───────────
