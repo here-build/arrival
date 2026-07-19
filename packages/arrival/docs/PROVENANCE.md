@@ -9,9 +9,9 @@
 
 *Ratified 2026-07-09 (V + Fable); amended same day after critique rounds 2 and 3
 against the deployment target. Normative fusion of the design arc — supersedes, for
-normative content, the working proposals it fuses (`execution-plan-wireframe.md`,
-`provenance-vocabulary-v2.md`, `callback-track-graphs.md`, `provenance-lineage.md`,
-`provenance-design-challenges.md`, all in repo-root `docs/working-proposals/`; those
+normative content, the working proposals it fuses ([`execution-plan-wireframe.md`](design-history/execution-plan-wireframe.md),
+[`provenance-vocabulary-v2.md`](design-history/provenance-vocabulary-v2.md), [`callback-track-graphs.md`](design-history/callback-track-graphs.md), [`provenance-lineage.md`](design-history/provenance-lineage.md),
+[`provenance-design-challenges.md`](design-history/provenance-design-challenges.md), all in [`design-history/`](design-history/); those
 remain as design history and evidence). Language: **CHOSEN** (normative) ·
 **EXCLUDED (because …)** · **DEFERRED (until …)** · **LIMIT** (accepted, documented).
 Implementation sequencing (the Q-track): EXECUTED TO COMPLETION — Q1–Q21 landed on main,
@@ -414,7 +414,7 @@ column records that, not a gate.
 sources · nested regions (map-in-map, map-in-fold) · first-class HOFs · structured
 multi-field egress · macro-expanded bodies (post-W0) · deep mux nesting.
 
-## 8. Prior art (normative positioning; full lineage in `provenance-lineage.md`)
+## 8. Prior art (normative positioning; full lineage in [`design-history/provenance-lineage.md`](design-history/provenance-lineage.md))
 
 Adopted terms: prospective/retrospective provenance (workflow lineage) ·
 backward/forward slice (Weiser; FOW PDG) · confinement/declassification (I1's frame —

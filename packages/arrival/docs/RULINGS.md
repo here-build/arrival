@@ -34,7 +34,7 @@ full value primitive. Review its reason-to-exist; IF it stays, `arrival/toJS` on
 becomes a **MaybePromise resolving when the value bakes** — not a marker, not a throw.
 The `{__halfBaked__}` marker shape dies either way.
 
-**RESOLVED — VERDICT KILL** (docs/working-proposals/halfbaked-existence-review.md, 2026-07-09):
+**RESOLVED — VERDICT KILL** ([design-history/halfbaked-existence-review.md](design-history/halfbaked-existence-review.md), 2026-07-09):
 zero production reachability (the flag was set only by the feature's own tests), and R2/C3's
 struct-fact wires supersede it as the principled version of the same idea. `AHalfBaked`
 dissolved; the `{__halfBaked__}` marker died with it. The motivating program
@@ -76,7 +76,7 @@ reach-back (non-primitive reads re-enter the boxed world). Cost: one proxy + on-
 generation instead of a full copy.
 
 AMENDED (egress-membrane-exit rework, 2026-07-12 —
-`docs/working-proposals/arrival-egress-membrane-exit.md`): proxy identity is per
+[`design-history/arrival-egress-membrane-exit.md`](design-history/arrival-egress-membrane-exit.md)): proxy identity is per
 PROJECTION, not one global slot. Bare (serialization `arrival/toJS`) = (box) forever;
 membrane (`arrival/toJSMembrane`, rosetta/exec crossings — options honored at every
 depth, nested callables become host fns) = (box, mode, exporting RegionScope); gated
