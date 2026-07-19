@@ -7,6 +7,12 @@
  * Door goldens assert the CODE PREFIX (`"<category>/<slug>: …"`), not the teaching
  * message — the code is the stable identity, the wording is free to move
  * (errors-as-doors Rule 3 + the door-throw contract).
+ *
+ * The five `emit(src)` → byte-golden describes are ONE protocol table
+ * (`WALKER_CASES`): `{ topic, name, src, golden }` — each row runs `emit(src)` and
+ * asserts `toBe(golden)`; the topical describes are generated from the table in
+ * first-seen order, so adding a case is appending a row. Rows carrying walk options
+ * (`facts` / `register`) or a second assertion stay plain `it`s in their describes.
  */
 import { describe, expect, it } from "vitest";
 
@@ -64,37 +70,57 @@ const emit = (src: string, over: Partial<WalkOptions> = {}): string => render(co
 
 // ── special forms ─────────────────────────────────────────────────────────────────────
 
-describe("define / lambda / begin", () => {
-  it("top-level define → ConstDecl; top-level DefineFn → FnDecl", () => {
-    expect(emit(`(define x 1) (define (f y) y)`)).toBe(`const x = 1;\nfunction f(y) {\n    return y;\n}\n`);
-  });
+interface WalkerCase {
+  /** The topical describe this row lands in (describes are generated in first-seen order). */
+  readonly topic: string;
+  /** The behavior claim — becomes the it name. */
+  readonly name: string;
+  readonly src: string;
+  /** The exact bytes `emit(src)` must render (pinned typescript@6.0.2 printer bytes). */
+  readonly golden: string;
+}
 
-  it("lambda → arrow with expression-body collapse", () => {
-    expect(emit(`(define f (lambda (x) x))`)).toBe(`const f = x => x;\n`);
-  });
+/** Every `emit(src)` → byte-golden row of the special-form describes, one row per
+ *  behavior claim. Rows carrying walk options (`facts` / `register`) or a second
+ *  assertion stay plain `it`s in their describes below. */
+const WALKER_CASES: readonly WalkerCase[] = [
+  {
+    topic: "define / lambda / begin",
+    name: "top-level define → ConstDecl; top-level DefineFn → FnDecl",
+    src: `(define x 1) (define (f y) y)`,
+    golden: `const x = 1;\nfunction f(y) {\n    return y;\n}\n`,
+  },
+  {
+    topic: "define / lambda / begin",
+    name: "lambda → arrow with expression-body collapse",
+    src: `(define f (lambda (x) x))`,
+    golden: `const f = x => x;\n`,
+  },
+  {
+    topic: "define / lambda / begin",
+    name: "rest param → RestBinding",
+    src: `(define (f . xs) xs)`,
+    golden: `function f(...xs) {\n    return xs;\n}\n`,
+  },
+  {
+    topic: "define / lambda / begin",
+    name: "begin: all-but-last as statements, last as the value",
+    src: `(define (f) (begin 1 2 3))`,
+    golden: `function f() {\n    1;\n    2;\n    return 3;\n}\n`,
+  },
+  {
+    topic: "define / lambda / begin",
+    name: "internal defines are letrec*-flavored — mutual recursion resolves",
+    src: `(define (f n) (define (even) (odd)) (define (odd) (even)) (even))`,
+    golden: `function f(n) {\n    const even = () => odd();\n    const odd = () => even();\n    return even();\n}\n`,
+  },
+  {
+    topic: "define / lambda / begin",
+    name: "top-level defines are letrec*-flavored too (forward reference through a lambda)",
+    src: `(define (f) (g)) (define (g) 1)`,
+    golden: `function f() {\n    return g();\n}\nfunction g() {\n    return 1;\n}\n`,
+  },
 
-  it("rest param → RestBinding", () => {
-    expect(emit(`(define (f . xs) xs)`)).toBe(`function f(...xs) {\n    return xs;\n}\n`);
-  });
-
-  it("begin: all-but-last as statements, last as the value", () => {
-    expect(emit(`(define (f) (begin 1 2 3))`)).toBe(`function f() {\n    1;\n    2;\n    return 3;\n}\n`);
-  });
-
-  it("internal defines are letrec*-flavored — mutual recursion resolves", () => {
-    expect(emit(`(define (f n) (define (even) (odd)) (define (odd) (even)) (even))`)).toBe(
-      `function f(n) {\n    const even = () => odd();\n    const odd = () => even();\n    return even();\n}\n`,
-    );
-  });
-
-  it("top-level defines are letrec*-flavored too (forward reference through a lambda)", () => {
-    expect(emit(`(define (f) (g)) (define (g) 1)`)).toBe(
-      `function f() {\n    return g();\n}\nfunction g() {\n    return 1;\n}\n`,
-    );
-  });
-});
-
-describe("let family", () => {
   // NOTE (WALKER-NAMING audit finding #2): every fixture below binds through
   // `(+ n 0)` rather than a bare literal/copy — the structural-optimization
   // lane's per-`Let` propagation (`../propagate/index.ts`'s
@@ -108,36 +134,117 @@ describe("let family", () => {
   // triggers this package's OWN destructuring heuristic, `[head]`-binding the
   // param instead of leaving it a plain `Ref`, which is a different feature
   // entirely and not what these goldens test.)
-  it("plain let: Const sequence, spliced at tail position (no IIFE — the §6 sole-body invariant)", () => {
-    expect(emit(`(define (f) (let ((x (+ 1 0)) (y (+ 2 0))) (+ x y)))`)).toBe(
-      `function f() {\n    const x = 1 + 0;\n    const y = 2 + 0;\n    return x + y;\n}\n`,
-    );
-  });
+  {
+    topic: "let family",
+    name: "plain let: Const sequence, spliced at tail position (no IIFE — the §6 sole-body invariant)",
+    src: `(define (f) (let ((x (+ 1 0)) (y (+ 2 0))) (+ x y)))`,
+    golden: `function f() {\n    const x = 1 + 0;\n    const y = 2 + 0;\n    return x + y;\n}\n`,
+  },
+  {
+    topic: "let family",
+    name: "let* resolves progressively; emission is identical Consts",
+    src: `(define (f) (let* ((x (+ 1 0)) (y x)) y))`,
+    golden: `function f() {\n    const x = 1 + 0;\n    const y = x;\n    return y;\n}\n`,
+  },
+  {
+    topic: "let family",
+    name: "letrec emits identically to let (letKind steers resolution only) — forward refs work",
+    src: `(define (f) (letrec ((even (lambda (n) (odd n))) (odd (lambda (n) (even n)))) (even 2)))`,
+    golden: `function f() {\n    const even = n => odd(n);\n    const odd = n => even(n);\n    return even(2);\n}\n`,
+  },
+  {
+    topic: "let family",
+    name: "let in expression position → Block → renderer IIFE (position polymorphism, zero walker decisions)",
+    src: `(define (f) (+ 1 (let ((x (+ 2 0))) x)))`,
+    golden: `function f() {\n    return 1 + (() => {\n        const x = 2 + 0;\n        return x;\n    })();\n}\n`,
+  },
+  {
+    topic: "let family",
+    name: "a let binding shadowing a param renames instead of redeclaring (overlapping-scope disambiguation)",
+    src: `(define (f x) (let ((x (+ x 0))) x))`,
+    golden: `function f(x) {\n    const x_2 = x + 0;\n    return x_2;\n}\n`,
+  },
 
-  it("let* resolves progressively; emission is identical Consts", () => {
-    expect(emit(`(define (f) (let* ((x (+ 1 0)) (y x)) y))`)).toBe(
-      `function f() {\n    const x = 1 + 0;\n    const y = x;\n    return y;\n}\n`,
-    );
-  });
+  {
+    topic: "and / or — value semantics",
+    name: "(or a b): fresh temp, evaluated once, value-returning guard",
+    src: `(define (f a b) (or a b))`,
+    golden: `function f(a, b) {\n    const __or = a;\n    return __or !== false ? __or : b;\n}\n`,
+  },
+  {
+    topic: "and / or — value semantics",
+    name: "(or a b c): nested else-position Block → IIFE — b never evaluates unless a is #f-false",
+    src: `(define (f a b c) (or a b c))`,
+    golden: `function f(a, b, c) {\n    const __or = a;\n    return __or !== false ? __or : (() => {\n        const __or2 = b;\n        return __or2 !== false ? __or2 : c;\n    })();\n}\n`,
+  },
+  {
+    topic: "and / or — value semantics",
+    name: "(and a b): the flipped check — first #f short-circuits with itself",
+    src: `(define (f a b) (and a b))`,
+    golden: `function f(a, b) {\n    const __and = a;\n    return __and === false ? __and : b;\n}\n`,
+  },
+  {
+    topic: "and / or — value semantics",
+    name: "(and) → #t, (or) → #f, single operand → itself",
+    src: `(define (f x) (and)) (define (g x) (or)) (define (h x) (or x))`,
+    golden: `function f(x) {\n    return true;\n}\nfunction g(x) {\n    return false;\n}\nfunction h(x) {\n    return x;\n}\n`,
+  },
+  {
+    topic: "and / or — value semantics",
+    name: "statement position: the cascade wraps in an explicit IIFE so its Return cannot escape",
+    src: `(define (f a b) (begin (or a b) 1))`,
+    golden: `function f(a, b) {\n    (() => {\n        const __or = a;\n        return __or !== false ? __or : b;\n    })();\n    return 1;\n}\n`,
+  },
 
-  it("letrec emits identically to let (letKind steers resolution only) — forward refs work", () => {
-    expect(emit(`(define (f) (letrec ((even (lambda (n) (odd n))) (odd (lambda (n) (even n)))) (even 2)))`)).toBe(
-      `function f() {\n    const even = n => odd(n);\n    const odd = n => even(n);\n    return even(2);\n}\n`,
-    );
-  });
+  {
+    topic: "named let",
+    name: "self-tail-only → while(true) with simultaneous ArrayPattern reassign + the fold marker",
+    src: `(define (sum n) (let loop ((i 0) (acc 0)) (if (= i n) acc (loop (+ i 1) (+ acc i)))))`,
+    golden: `function sum(n) {\n    let i = 0;\n    let acc = 0;\n    /*[ts-base/self-tail-loop] named let \`loop\` → while*/\n    while (true) {\n        if (i === n !== false) {\n            return acc;\n        }\n        else {\n            [i, acc] = [i + 1, acc + i];\n            continue;\n        }\n    }\n}\n`,
+  },
+  {
+    topic: "named let",
+    name: "a non-tail recursive use refuses TCO → the declared stack-bound arrow, faithfully",
+    src: `(define (f n) (let loop ((i n)) (if (= i 0) 0 (+ 1 (loop (- i 1))))))`,
+    golden: `function f(n) {\n    const loop = i => i === 0 !== false ? 0 : 1 + loop(i - 1);\n    return loop(n);\n}\n`,
+  },
 
-  it("let in expression position → Block → renderer IIFE (position polymorphism, zero walker decisions)", () => {
-    expect(emit(`(define (f) (+ 1 (let ((x (+ 2 0))) x)))`)).toBe(
-      `function f() {\n    return 1 + (() => {\n        const x = 2 + 0;\n        return x;\n    })();\n}\n`,
-    );
-  });
+  {
+    topic: "quote / dict / kwargs",
+    name: "quoted data: scalars raw, symbols as strings, lists as arrays",
+    src: `'(1 "two" three (4 5))`,
+    golden: `[1, "two", "three", [4, 5]];\n`,
+  },
+  {
+    topic: "quote / dict / kwargs",
+    name: "folded-dot datum: '(1 . 2) compiles as [1, 2] (⚖️ ruled — classify folds the dot)",
+    src: `'(1 . 2)`,
+    golden: `[1, 2];\n`,
+  },
+  {
+    topic: "quote / dict / kwargs",
+    name: "dict writes RAW keys and the keyword accessor reads through Index — one shared key-fold",
+    src: `(define d (dict :max-words 5)) (:max-words d)`,
+    golden: `const d = { "max-words": 5 };\nd["max-words"];\n`,
+  },
+  {
+    topic: "quote / dict / kwargs",
+    name: "App kwargs collapse to ONE trailing options object with cleanName'd keys (a different key space than dict)",
+    src: `(define (go f) (f 1 :max-words 5))`,
+    golden: `function go(f) {\n    return f(1, { maxWords: 5 });\n}\n`,
+  },
+];
 
-  it("a let binding shadowing a param renames instead of redeclaring (overlapping-scope disambiguation)", () => {
-    expect(emit(`(define (f x) (let ((x (+ x 0))) x))`)).toBe(
-      `function f(x) {\n    const x_2 = x + 0;\n    return x_2;\n}\n`,
-    );
+const WALKER_TOPICS = [...new Set(WALKER_CASES.map((c) => c.topic))];
+for (const topic of WALKER_TOPICS) {
+  describe(topic, () => {
+    for (const c of WALKER_CASES.filter((x) => x.topic === topic)) {
+      it(c.name, () => {
+        expect(emit(c.src)).toBe(c.golden);
+      });
+    }
   });
-});
+}
 
 // ── Law T ────────────────────────────────────────────────────────────────────────────
 
@@ -169,30 +276,6 @@ describe("Law T — if", () => {
 });
 
 describe("and / or — value semantics", () => {
-  it("(or a b): fresh temp, evaluated once, value-returning guard", () => {
-    expect(emit(`(define (f a b) (or a b))`)).toBe(
-      `function f(a, b) {\n    const __or = a;\n    return __or !== false ? __or : b;\n}\n`,
-    );
-  });
-
-  it("(or a b c): nested else-position Block → IIFE — b never evaluates unless a is #f-false", () => {
-    expect(emit(`(define (f a b c) (or a b c))`)).toBe(
-      `function f(a, b, c) {\n    const __or = a;\n    return __or !== false ? __or : (() => {\n        const __or2 = b;\n        return __or2 !== false ? __or2 : c;\n    })();\n}\n`,
-    );
-  });
-
-  it("(and a b): the flipped check — first #f short-circuits with itself", () => {
-    expect(emit(`(define (f a b) (and a b))`)).toBe(
-      `function f(a, b) {\n    const __and = a;\n    return __and === false ? __and : b;\n}\n`,
-    );
-  });
-
-  it("(and) → #t, (or) → #f, single operand → itself", () => {
-    expect(emit(`(define (f x) (and)) (define (g x) (or)) (define (h x) (or x))`)).toBe(
-      `function f(x) {\n    return true;\n}\nfunction g(x) {\n    return false;\n}\nfunction h(x) {\n    return x;\n}\n`,
-    );
-  });
-
   it("all operands proven boolean → native && (the clean fold)", () => {
     const classified = cf(`(define (f a b) (and a b))`);
     const and = (classified.forms[0] as DefineFn).body[0] as And;
@@ -207,23 +290,11 @@ describe("and / or — value semantics", () => {
       `function f(a, b) {\n    return a || b;\n}\n`,
     );
   });
-
-  it("statement position: the cascade wraps in an explicit IIFE so its Return cannot escape", () => {
-    expect(emit(`(define (f a b) (begin (or a b) 1))`)).toBe(
-      `function f(a, b) {\n    (() => {\n        const __or = a;\n        return __or !== false ? __or : b;\n    })();\n    return 1;\n}\n`,
-    );
-  });
 });
 
 // ── named let ────────────────────────────────────────────────────────────────────────
 
 describe("named let", () => {
-  it("self-tail-only → while(true) with simultaneous ArrayPattern reassign + the fold marker", () => {
-    expect(emit(`(define (sum n) (let loop ((i 0) (acc 0)) (if (= i n) acc (loop (+ i 1) (+ acc i)))))`)).toBe(
-      `function sum(n) {\n    let i = 0;\n    let acc = 0;\n    /*[ts-base/self-tail-loop] named let \`loop\` → while*/\n    while (true) {\n        if (i === n !== false) {\n            return acc;\n        }\n        else {\n            [i, acc] = [i + 1, acc + i];\n            continue;\n        }\n    }\n}\n`,
-    );
-  });
-
   it("reassignment is simultaneous — the swap survives (never sequential)", () => {
     const out = emit(`(define (f p a b) (let loop ((a a) (b b)) (if p (loop b a) a)))`);
     expect(out).toBe(
@@ -231,36 +302,6 @@ describe("named let", () => {
     );
     // exactly one fold marker per rewritten loop
     expect(out.match(/self-tail-loop/g)).toHaveLength(1);
-  });
-
-  it("a non-tail recursive use refuses TCO → the declared stack-bound arrow, faithfully", () => {
-    expect(emit(`(define (f n) (let loop ((i n)) (if (= i 0) 0 (+ 1 (loop (- i 1))))))`)).toBe(
-      `function f(n) {\n    const loop = i => i === 0 !== false ? 0 : 1 + loop(i - 1);\n    return loop(n);\n}\n`,
-    );
-  });
-});
-
-// ── quote / dict / kwargs ────────────────────────────────────────────────────────────
-
-describe("quote / dict / kwargs", () => {
-  it("quoted data: scalars raw, symbols as strings, lists as arrays", () => {
-    expect(emit(`'(1 "two" three (4 5))`)).toBe(`[1, "two", "three", [4, 5]];\n`);
-  });
-
-  it("folded-dot datum: '(1 . 2) compiles as [1, 2] (⚖️ ruled — classify folds the dot)", () => {
-    expect(emit(`'(1 . 2)`)).toBe(`[1, 2];\n`);
-  });
-
-  it("dict writes RAW keys and the keyword accessor reads through Index — one shared key-fold", () => {
-    expect(emit(`(define d (dict :max-words 5)) (:max-words d)`)).toBe(
-      `const d = { "max-words": 5 };\nd["max-words"];\n`,
-    );
-  });
-
-  it("App kwargs collapse to ONE trailing options object with cleanName'd keys (a different key space than dict)", () => {
-    expect(emit(`(define (go f) (f 1 :max-words 5))`)).toBe(
-      `function go(f) {\n    return f(1, { maxWords: 5 });\n}\n`,
-    );
   });
 });
 

@@ -15,6 +15,13 @@
  *    registry style).
  *  - Oracle agreement over the real session — the gate this wave answers to
  *    (values byte-strict, never bytes).
+ *
+ *  The walker-layer describes (quoted-data folding, the three `list`-folding
+ *  topics, the import census) are ONE protocol table (`CHUNK_CASES`):
+ *  `{ topic, name, src, golden?, refs? }` — `golden` rows assert
+ *  `emit(src) === golden` byte-for-byte; `refs` rows assert the
+ *  `runtimeRefsOf(compile(src))` census with `toEqual`. The topical describes
+ *  are generated from the table in first-seen order.
  */
 import ts from "typescript";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -184,80 +191,151 @@ const compile = (src: string, over: Partial<WalkOptions> = {}): CompilationUnit 
   walk(cf(src), { registry: testRegistry, register: "run", ...over });
 const emit = (src: string, over: Partial<WalkOptions> = {}): string => render(compile(src, over));
 
-describe("quoted-data folding (always slot-free)", () => {
-  it("a quoted list of constants folds to a literal array — byte-identical to the old ArrayLit path", () => {
-    expect(emit(`'(1 2 3)`)).toBe("[1, 2, 3];\n");
-  });
+/** One walker-layer protocol row: `golden` present → `expect(emit(src)).toBe(golden)`;
+ *  `refs` present → `expect(runtimeRefsOf(compile(src))).toEqual(new Set(refs))`.
+ *  Exactly one of the two is set on any row. */
+interface ChunkCase {
+  /** The topical describe this row lands in (describes are generated in first-seen order). */
+  readonly topic: string;
+  /** The behavior claim — becomes the it name. */
+  readonly name: string;
+  readonly src: string;
+  /** The exact bytes `emit(src)` must render — the emit-golden rows. */
+  readonly golden?: string;
+  /** The import census `runtimeRefsOf(compile(src))` must equal — the census rows. */
+  readonly refs?: readonly string[];
+}
 
-  it("nested quoted lists fold to ONE genuinely nested array (the \"ast\" splice, not a slot)", () => {
-    expect(emit(`'(1 (2 3) "a")`)).toBe('[1, [2, 3], "a"];\n');
-  });
+const CHUNK_CASES: readonly ChunkCase[] = [
+  {
+    topic: "quoted-data folding (always slot-free)",
+    name: "a quoted list of constants folds to a literal array — byte-identical to the old ArrayLit path",
+    src: `'(1 2 3)`,
+    golden: `[1, 2, 3];\n`,
+  },
+  {
+    topic: "quoted-data folding (always slot-free)",
+    name: "nested quoted lists fold to ONE genuinely nested array (the \"ast\" splice, not a slot)",
+    src: `'(1 (2 3) "a")`,
+    golden: `[1, [2, 3], "a"];\n`,
+  },
+  {
+    topic: "quoted-data folding (always slot-free)",
+    name: "quoted symbols intern as strings (representation law §2.1), inside a nested list too",
+    src: `'(a b (c))`,
+    golden: `["a", "b", ["c"]];\n`,
+  },
+  {
+    topic: "quoted-data folding (always slot-free)",
+    name: "the empty quoted list still folds to []",
+    src: `'()`,
+    golden: `[];\n`,
+  },
 
-  it("quoted symbols intern as strings (representation law §2.1), inside a nested list too", () => {
-    expect(emit(`'(a b (c))`)).toBe('["a", "b", ["c"]];\n');
-  });
+  {
+    topic: "`list` call folding — literal data (S2's named example)",
+    name: "a fully-literal `list` call folds to an array literal — the stage-0 shim never appears",
+    src: `(list 1 2 3)`,
+    golden: `[1, 2, 3];\n`,
+  },
+  {
+    topic: "`list` call folding — literal data (S2's named example)",
+    name: "zero-argument `(list)` folds to []",
+    src: `(list)`,
+    golden: `[];\n`,
+  },
+  {
+    topic: "`list` call folding — literal data (S2's named example)",
+    name: "nested `list` calls fold to one genuinely nested array (recursive ast-splice)",
+    src: `(list (list 1 2) (list 3 4))`,
+    golden: `[[1, 2], [3, 4]];\n`,
+  },
 
-  it("the empty quoted list still folds to []", () => {
-    expect(emit(`'()`)).toBe("[];\n");
-  });
-});
+  {
+    topic: "`list` call folding — mixed literal/variable (slots at variable positions)",
+    name: "a bound variable argument mints a slot",
+    src: `(define (f x) (list 1 x 2))`,
+    golden: `function f(x) {\n    return [1, x, 2];\n}\n`,
+  },
+  // The Index(x, 0) occurrence lives INSIDE the slot; the census counts it
+  // (chunks are never leaves), so the param destructures and the
+  // substitution reaches through the slot: `[head]`, not a stale `x[0]`
+  // referencing a parameter the census thought was never chain-accessed.
+  {
+    topic: "`list` call folding — mixed literal/variable (slots at variable positions)",
+    name: "a call-free derived expression (car folds inline to Index) is slot-safe — and the destructure census sees it there",
+    src: `(define (f x) (list (car x) 2))`,
+    golden: `function f([head]) {\n    return [head, 2];\n}\n`,
+  },
+  {
+    topic: "`list` call folding — mixed literal/variable (slots at variable positions)",
+    name: "a bare registry symbol used as a VALUE (never called) is slot-safe",
+    src: `(define (f) (list 1 car 2))`,
+    golden: `function f() {\n    return [1, car, 2];\n}\n`,
+  },
 
-describe("`list` call folding — literal data (S2's named example)", () => {
-  it("a fully-literal `list` call folds to an array literal — the stage-0 shim never appears", () => {
-    expect(emit(`(list 1 2 3)`)).toBe("[1, 2, 3];\n");
-  });
+  {
+    topic: "`list` call folding — the conservative abort gate (isCallFree)",
+    name: "an argument containing a real Call aborts the WHOLE fold — falls back to the shim, unchanged",
+    src: `(define (f x) (list 1 (reverse x) 2))`,
+    golden: `function f(x) {\n    return list(1, reverse(x), 2);\n}\n`,
+  },
+  {
+    topic: "`list` call folding — the conservative abort gate (isCallFree)",
+    name: "an embedded lambda (Arrow) aborts the fold — computation, not data (fold-scope policy; see isCallFree's doc)",
+    src: `(list 1 (lambda (y) y) 2)`,
+    golden: `list(1, y => y, 2);\n`,
+  },
+  {
+    topic: "`list` call folding — the conservative abort gate (isCallFree)",
+    name: "kwargs present aborts the fold — `list` taking a trailing options object is not the folded shape",
+    src: `(list 1 :a 2)`,
+    golden: `list(1, { a: 2 });\n`,
+  },
+  // Mirrors member-assoc.ts's real committed shape: the outer `list` (wrapping
+  // `reverse`-shaped calls) does not fold, but a NESTED literal `list` used as
+  // one of THOSE calls' own arguments still folds independently.
+  {
+    topic: "`list` call folding — the conservative abort gate (isCallFree)",
+    name: "folding is per-call-site: an outer call wrapping a Call-shaped argument still folds ITS OWN literal siblings/nested list arguments",
+    src: `(define (f x) (list (reverse (list 1 2)) x))`,
+    golden: `function f(x) {\n    return list(reverse([1, 2]), x);\n}\n`,
+  },
 
-  it("zero-argument `(list)` folds to []", () => {
-    expect(emit(`(list)`)).toBe("[];\n");
-  });
+  {
+    topic: "import census sees through a slot (runtimeRefsOf, walker/walk.ts's own copy)",
+    name: "a `list` call fully literal needs NO import at all",
+    src: `(list 1 2 3)`,
+    refs: [],
+  },
+  {
+    topic: "import census sees through a slot (runtimeRefsOf, walker/walk.ts's own copy)",
+    name: "a bare registry symbol bridged through a slot is still found for the import census",
+    src: `(define (f) (list 1 car 2))`,
+    refs: ["car"],
+  },
+  {
+    topic: "import census sees through a slot (runtimeRefsOf, walker/walk.ts's own copy)",
+    name: "an aborted fold's Call is found the ordinary way (list itself needed too)",
+    src: `(define (f x) (list 1 (reverse x) 2))`,
+    refs: ["list", "reverse"],
+  },
+];
 
-  it("nested `list` calls fold to one genuinely nested array (recursive ast-splice)", () => {
-    expect(emit(`(list (list 1 2) (list 3 4))`)).toBe("[[1, 2], [3, 4]];\n");
+const CHUNK_TOPICS = [...new Set(CHUNK_CASES.map((c) => c.topic))];
+for (const topic of CHUNK_TOPICS) {
+  describe(topic, () => {
+    for (const c of CHUNK_CASES.filter((x) => x.topic === topic)) {
+      it(c.name, () => {
+        if (c.refs !== undefined) {
+          expect(runtimeRefsOf(compile(c.src))).toEqual(new Set(c.refs));
+        } else {
+          expect(emit(c.src)).toBe(c.golden);
+        }
+      });
+    }
   });
-});
-
-describe("`list` call folding — mixed literal/variable (slots at variable positions)", () => {
-  it("a bound variable argument mints a slot", () => {
-    expect(emit(`(define (f x) (list 1 x 2))`)).toBe("function f(x) {\n    return [1, x, 2];\n}\n");
-  });
-
-  it("a call-free derived expression (car folds inline to Index) is slot-safe — and the destructure census sees it there", () => {
-    // The Index(x, 0) occurrence lives INSIDE the slot; the census counts it
-    // (chunks are never leaves), so the param destructures and the
-    // substitution reaches through the slot: `[head]`, not a stale `x[0]`
-    // referencing a parameter the census thought was never chain-accessed.
-    expect(emit(`(define (f x) (list (car x) 2))`)).toBe("function f([head]) {\n    return [head, 2];\n}\n");
-  });
-
-  it("a bare registry symbol used as a VALUE (never called) is slot-safe", () => {
-    expect(emit(`(define (f) (list 1 car 2))`)).toBe("function f() {\n    return [1, car, 2];\n}\n");
-  });
-});
-
-describe("`list` call folding — the conservative abort gate (isCallFree)", () => {
-  it("an argument containing a real Call aborts the WHOLE fold — falls back to the shim, unchanged", () => {
-    expect(emit(`(define (f x) (list 1 (reverse x) 2))`)).toBe(
-      "function f(x) {\n    return list(1, reverse(x), 2);\n}\n",
-    );
-  });
-
-  it("an embedded lambda (Arrow) aborts the fold — computation, not data (fold-scope policy; see isCallFree's doc)", () => {
-    expect(emit(`(list 1 (lambda (y) y) 2)`)).toBe("list(1, y => y, 2);\n");
-  });
-
-  it("kwargs present aborts the fold — `list` taking a trailing options object is not the folded shape", () => {
-    expect(emit(`(list 1 :a 2)`)).toBe('list(1, { a: 2 });\n');
-  });
-
-  it("folding is per-call-site: an outer call wrapping a Call-shaped argument still folds ITS OWN literal siblings/nested list arguments", () => {
-    // Mirrors member-assoc.ts's real committed shape: the outer `list` (wrapping
-    // `reverse`-shaped calls) does not fold, but a NESTED literal `list` used as
-    // one of THOSE calls' own arguments still folds independently.
-    expect(emit(`(define (f x) (list (reverse (list 1 2)) x))`)).toBe(
-      "function f(x) {\n    return list(reverse([1, 2]), x);\n}\n",
-    );
-  });
-});
+}
 
 describe("chunks are never leaves — slots are every walker's fluid re-entry points (mercury-ir.md's mutual-recursion rule)", () => {
   // The regression net for the review correction: an earlier draft treated a
@@ -314,20 +392,6 @@ describe("chunks are never leaves — slots are every walker's fluid re-entry po
     expect(emit(`(define (f pair) (reverse (car pair) (list (car pair) 9)))`)).toBe(
       "function f([head]) {\n    return reverse(head, [head, 9]);\n}\n",
     );
-  });
-});
-
-describe("import census sees through a slot (runtimeRefsOf, walker/walk.ts's own copy)", () => {
-  it("a `list` call fully literal needs NO import at all", () => {
-    expect(runtimeRefsOf(compile(`(list 1 2 3)`))).toEqual(new Set());
-  });
-
-  it("a bare registry symbol bridged through a slot is still found for the import census", () => {
-    expect(runtimeRefsOf(compile(`(define (f) (list 1 car 2))`))).toEqual(new Set(["car"]));
-  });
-
-  it("an aborted fold's Call is found the ordinary way (list itself needed too)", () => {
-    expect(runtimeRefsOf(compile(`(define (f x) (list 1 (reverse x) 2))`))).toEqual(new Set(["list", "reverse"]));
   });
 });
 
