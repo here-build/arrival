@@ -204,5 +204,4 @@ Headless `@{…}` defaults to `(str …)`. Racket's `at-exp` is the ancestor.
 
 That's the surface. The machinery behind it — the round-trip law, span alignment for
 editors (`alignSugarcoatClassic`), parameter hints, the runtime-free `parseSexprs` reader —
-is in the [README](./README.md) and the design docs in
-`docs/package-specific/arrival-sugarcoat/`.
+is in the [README](./README.md).

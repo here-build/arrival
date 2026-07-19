@@ -6,23 +6,25 @@
 
 ## Source & method
 
-- **Primary source:** the official LaTeX source of R7RS-small, `johnwcowan/r7rs-spec`, branch `errata` (the published-with-errata text), directory `spec/`.
-  - Repository: <https://github.com/johnwcowan/r7rs-spec/tree/errata/spec>
-  - Raw files used: `struct.tex` (ch.1), `lex.tex` (ch.2), `basic.tex` (ch.3), `expr.tex` (ch.4), `prog.tex` (ch.5), `procs.tex` (ch.6), `syn.tex`/`sem.tex`/`derive.tex` (ch.7), `stdmod.tex` (Appendix A — libraries), `features.tex` (Appendix B), `notes.tex` (back-matter), `commands.tex` (macro definitions).
-  - e.g. <https://raw.githubusercontent.com/johnwcowan/r7rs-spec/errata/spec/procs.tex>
-- **Canonical PDF (for page cross-reference):** <https://small.r7rs.org/attachment/r7rs.pdf>
-- **Method:** LaTeX was parsed mechanically (no PDF text-extraction, so no OCR/column gaps). The report's own index macros are the spine:
-  - **Introduced at** = the *defining* index occurrence: `\proto{name}{args}{cat}` / `\rproto{…}` (a procedure or syntax entry) or a standalone `\mainschindex{name}` (keyword/lexical syntax). These are exactly the bold/primary entries in the report's printed "Alphabetic index".
-  - **Also-mentioned-at** = every *secondary* index occurrence (`\ide{name}`, `\schindex{name}`) in a different section, plus any additional defining occurrence.
-  - **Kind** = the entry's own category macro: `\exprtype`→`syntax`, `\auxiliarytype`→`auxiliary syntax`, plus `procedure` / `lexical syntax` / `… library procedure`.
-  - **Library** = the export lists in Appendix A (`stdmod.tex`), the authoritative `(scheme …)` → symbol mapping.
+Primary source: the official LaTeX source of R7RS-small, `johnwcowan/r7rs-spec`, branch `errata`
+(the published-with-errata text), directory `spec/` — <https://github.com/johnwcowan/r7rs-spec/tree/errata/spec>.
+Canonical PDF for page cross-reference: <https://small.r7rs.org/attachment/r7rs.pdf>.
 
-### Parsing caveats
+Column semantics, taken from the report's own index macros: **Introduced at** = the defining index
+occurrence (a procedure/syntax entry, or a standalone keyword/lexical-syntax entry) — the
+bold/primary entries in the report's printed alphabetic index. **Also-mentioned-at** = every
+secondary index occurrence in a different section. **Kind** = the entry's own category (`syntax`,
+`auxiliary syntax`, `procedure`, `lexical syntax`, `… library procedure`). **Library** = the export
+lists in Appendix A, the authoritative `(scheme …)` → symbol mapping.
 
-- A few forms are typeset with the low-level `\pproto` macro (or only in running `{\cf …}` text) and therefore carry **no index entry**: `syntax-rules`, `...` (ellipsis), `unquote`, `unquote-splicing`, and the R5RS aliases `exact->inexact` / `inexact->exact`. Their "introduced at" was set **by hand** from the spec text (marked _(curated)_ below) so the map is complete.
-- Plain `{\cf name}` occurrences in prose are **not** indexed by the report (only `\ide`/`\schindex` are), so "also-mentioned-at" reflects the report's own index granularity, not every textual appearance.
-- Reader/lexical tokens are listed under their glyph: `'` (quote), `` ` `` (quasiquote), `,` (unquote), `,@` (unquote-splicing), `;` (line comment). Datum-label notation (`#n=` / `#n#`) is grammar, not a callable symbol, and is omitted.
-- Chapter **7 (Formal syntax and semantics)** introduces **no new symbols** — it is BNF grammar + denotational semantics referencing forms defined in ch. 4–6. It appears only in "also-mentioned-at" columns (`7.1.*` grammar, `7.2.*` semantics, `7.3` derived-form expansions).
+Caveats: a few forms (`syntax-rules`, `...`, `unquote`, `unquote-splicing`, and the R5RS aliases
+`exact->inexact`/`inexact->exact`) carry no index entry in the source; their "introduced at" was
+set by hand and is marked `_(curated)_` below. "Also-mentioned-at" reflects the report's own index
+granularity, not every textual appearance — plain prose mentions outside the index are not
+counted. Reader/lexical tokens are listed under their glyph (`'`, `` ` ``, `,`, `,@`, `;`);
+datum-label notation (`#n=`/`#n#`) is grammar, not a callable symbol, and is omitted. Chapter 7
+(Formal syntax and semantics) introduces no new symbols — it is grammar + denotational semantics
+over forms defined in ch. 4–6, and appears only in "also-mentioned-at" columns.
 
 ## Chapter map
 
@@ -110,13 +112,6 @@ Each table = one section; rows = symbols **introduced** there. Columns: **symbol
 | `let*-values` | syntax | 5.3.2, 7.3 | base |
 | `letrec` | syntax | 5.3.2, 7.3 | base, r5rs |
 | `letrec*` | syntax | 5.3.2, 7.3 | base |
-
-> **Arrival extension — bracket bindings.** The bindings slot of `let`, `let*`, `letrec`,
-> `letrec*`, named `let`, and `do` (4.2.4) additionally accepts a vector datum
-> (`(let [a 1 b 2] …)`, `(let* ([a 1] [b 2]) …)`), a form-contract-level superset that lowers
-> byte-identically to the parenthesized image. The reader is unchanged (`[…]` is a vector
-> everywhere). Spec: the bracket-binding section header in `src/eval/evaluator.ts`
-> (`normalizeBindings` / `normalizeClause`).
 
 ### 4.2.3 Sequencing
 
@@ -695,10 +690,7 @@ Plus open-ended OS/CPU/endianness flags and the implementation name/version (e.g
 
 ## Cross-check & completeness
 
-- **346** distinct symbols have a normative definition site (procedures, syntax, auxiliary/lexical syntax, reader glyphs).
-- **41** sections introduce at least one symbol.
+- **346** distinct symbols have a normative definition site (procedures, syntax, auxiliary/lexical syntax, reader glyphs), across **41** sections.
 - **16** standard libraries; `(scheme base)` exports 238, `(scheme r5rs)` re-exports 222.
-- Library-listed symbols with **no separate body entry** (all accounted for by curation above): none.
-- Symbols with more than one defining section: `let` (4.2.2, 4.2.4).
-
-_Generated by mechanical LaTeX parse of the `errata`-branch source; see “Source & method”. Spot-checked against the report’s printed alphabetic index._
+- Every library-listed symbol has a body entry (accounted for by the curation above).
+- `let` is the only symbol with more than one defining section (4.2.2, 4.2.4).

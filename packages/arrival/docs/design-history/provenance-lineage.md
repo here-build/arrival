@@ -1,11 +1,9 @@
 # Provenance stack — academic lineage
 
-*Two web-verified surveys (PL-theory axis + provenance-systems axis, 2026-07-09), merged.
-Purpose: name the shared origins of every concept in the arrival provenance stack so
-future work imports theorems and vocabulary instead of re-proving and re-naming.
-Companions: execution-plan-wireframe.md, provenance-vocabulary-v2.md,
-callback-track-graphs.md. All citations verified against ACM DL / IEEE / dblp / arXiv
-except where marked.*
+*Names the shared origin of every concept in the arrival provenance stack — one axis
+through PL theory, one through provenance systems — so future work imports theorems and
+vocabulary instead of re-proving and re-naming. Companions: execution-plan-wireframe.md,
+provenance-vocabulary-v2.md, callback-track-graphs.md.*
 
 ## 1. The import table
 
@@ -27,19 +25,16 @@ except where marked.*
 | Replay-not-store thesis | Zaharia et al. *RDD*, NSDI 2012 (Best Paper); Mokhov–Mitchell–Peyton Jones ICFP 2018; Unison; rr / deterministic record-replay (CACM) | **recompute-from-lineage; early cutoff; store-nondeterminism-replay-determinism** | Spark = the thesis at partition granularity for fault tolerance; we push it to value-level cones with membrane boundaries. rr's spectrum ("storage > recomputation for sparse access") names our tradeoff — we cut it at port crossings |
 | Drill-in-by-replay | Lewis ODB, AADEBUG 2003; Ko & Myers *Whyline*, CHI 2004 | omniscient debugging; **interrogative debugging** | we are omniscient debugging's storage-dual: same "why did" query power at record-replay footprint |
 
-## 2. Vocabulary to adopt now
+## 2. The coeffect frame (adjacent, not yet adopted)
 
-- **Prospective / retrospective provenance** — the workflow field's exact names for our
-  static-wireframe / runtime-routes layers. Rename in docs where "static/dynamic layer"
-  appears; instant shared ground with a 20-year literature.
-- **Backward / forward slice** — the cone queries' classical names (minimal cone =
-  backward, sealing cone = forward), with our demand lattice as the stated refinement.
-- **Confinement / declassification** — I1's frame: a track declassifies into the main
-  graph through exactly one channel. Imports the Denning→Myers proof tradition.
+The adopted vocabulary (prospective/retrospective, backward/forward slice,
+confinement/declassification) is normative in [`PROVENANCE.md`](../PROVENANCE.md) §8. One
+frame stays noted but unadopted:
+
 - **Coeffects** (Petricek–Orchard–Mycroft ICALP 2013 / ICFP 2014; Granule ICFP 2019) —
   effects describe what a computation does TO the world; coeffects what it CONSUMES from
   context. Track ingress ("the consumption to highlight") is coeffect-shaped; graded
-  comonads are its type-theoretic home. Our vocabulary is currently effect-worded for an
+  comonads are its type-theoretic home. The vocabulary is currently effect-worded for an
   ingress-centric model — the coeffect frame fits the sealed-preamble reading natively.
 
 ## 3. Must-engage prior art (the measuring bar)
@@ -54,14 +49,14 @@ except where marked.*
    interpreter line; the literature any paper here is judged against. Independently
    confirms cone-as-dependency.
 3. **DfAnalyzer / Souza–Mattoso** (FGCS) — runtime provenance as live monitoring + user
-   steering in HPC workflows. **Contests our §3 claim**: provenance-driven live progress
+   steering in HPC workflows. **Contests our novelty claim**: provenance-driven live progress
    monitoring EXISTS. Corrected claim → what remains ours: progress as a *pure fold with
    proved monotonicity* (P2 = the completion door in stream form) and *drill-in unified
    with post-hoc explanation through one replay machinery*.
 4. **Lazy provenance materialization** — a named database technique; cite it so the
    storage-optimality claim lands as a principled point on a known tradeoff curve.
 
-Unverified this session: **Ciel (Murray et al., NSDI 2011)** — confirm before citing.
+**Ciel** (Murray et al., NSDI 2011) — unverified.
 
 ## 4. The honest novelty statement
 

@@ -12,7 +12,6 @@ source (`pnpm typecheck` at the package root covers them); the first two run in 
 ## Run
 
 ```bash
-cd foundations/arrival/arrival-codemirror
 pnpm install            # workspace deps
 pnpm demo               # → http://localhost:5173  (vanilla + sugarcoat flip)
 pnpm storybook          # → http://localhost:6011  (React SchemeEditor live IDE)

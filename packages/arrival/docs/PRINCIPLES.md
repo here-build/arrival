@@ -1,10 +1,10 @@
 # Arrival — Foundational Principles
 
-*Ejected 2026-07-08 from the test-invariant audit: every principle below was revealed by a
-specific place where the codebase asserts the OPPOSITE of itself (a "lie" — current-broken
-behavior pinned green, or two invariants that cannot both be design). The lie is cited under
-each principle. When code and this document disagree, one of them is a bug; decide which
-before writing a line.*
+*Each principle below is anchored to a live counter-example in the codebase: a specific place
+where the code asserts the OPPOSITE of itself (a "lie" — current-broken behavior pinned green,
+or two invariants that cannot both be design). The counter-example is cited under each
+principle as "Revealed by:". When code and this document disagree, one of them is a bug;
+decide which before writing a line.*
 
 The one-sentence version: **arrival executes every program twice at once — as computation
 over values and as provenance over boxes — and everything else in this document is what it
@@ -33,6 +33,18 @@ classifier (the provenance reading computed without running the program). Tagles
 exactly the property that lets N interpreters share one program; the two runtime layers are
 the ones that must run in lock-step, the static ones must AGREE with them — and that
 agreement is a law, tested as one (see P15).
+
+*The operational rider (stated so this principle and the shipped default stop
+contradicting):* the box layer is always CONSTRUCTED — every value is a term both
+interpreters can execute (P1) — but it does not always RUN. A production run is
+value-plane hot until the host arms observation (a `tap` trace, eager stamps, store
+emission); the lock-step law binds in the test suite, not on the default hot path. The
+asymmetry is sanctioned because lineage is a property of observed runs — an unarmed run
+is a run nobody questions — and it has exactly one footgun, stated in the README: an
+unarmed run's provenance reads `[]` while its values look correct. The forbidden states
+remain the two old ones: a value the second interpreter cannot execute (unboxed), and a
+trace that lies (stamps that disagree with the value plane). An empty trail is not a
+lying trail — it is the absence of evidence, and hosts that audit must arm.
 
 *Revealed by:* every provenance lie in the audit, seen at once — append's drop, vector-map's
 strip, the unstamped cdr spine. Each looked like a local style inconsistency; together they
@@ -88,7 +100,7 @@ Inside: boxed AValues, because both interpreters run. Outside: plain JS, because
 value reading crosses — the provenance reading STAYS, in the run's trace, keyed by scope.
 So the conversion is total and uniform in both directions for every type: boxes exist exactly
 where the second interpreter runs, and a bare value inside (or a box outside) is a piece of
-one world lost in the other. Two refinements (ruled 2026-07-09, RULINGS.md R1/R9): the exec
+one world lost in the other. Two refinements: the exec
 API is two-tier — the SIMPLE flow ("run, get JS") is a true exit and fully unwraps; the
 COMPLEX flow ("run, get reusable state") deliberately hands boxed state to JS-side TOOLING
 and is not a crossing, it is a session handle into the inside. And "plain JS" means
@@ -142,8 +154,8 @@ codec encode/decode arms re-describing what classes already know.
 vector serializes; codecs with hand-written transform bodies for representation (contract
 refinement — ranges, arity, element types — is the codec's real job and stays).
 
-*Corollary — the key taxonomy (ruled 2026-07-09, RULINGS.md).* Protocol keys come in three
-roles, one mechanism each, never mixed:
+*Corollary — the key taxonomy.* Protocol keys come in three roles, one mechanism each, never
+mixed:
 - **Algebra instruction keys** (`arrival/tagless-final/*`, `arrival/toJS`, `arrival/print`,
   `arrival/class`) are STRINGS — every static interpreter (type lens, oracle, lineage
   classifier, trace, MCP harvest) consumes instruction names as data (P0's N-interpreter
@@ -163,9 +175,9 @@ aesthetics — a term whose box discipline varies by carrier is a term whose pro
 is UNDEFINED: the second interpreter executes a different program depending on which
 container the data happens to sit in. Representation chooses storage and iteration, never
 meaning.
-*Revealed by:* vector-map stripping boxes (the DR4 "cross-out impersonator") while
-vector-FILTER preserves them and pair-map preserves them — three answers to one question on
-overlapping carriers, each pinned green by its own test.
+*Revealed by:* vector-map stripping boxes while vector-filter preserves them and pair-map
+preserves them — three answers to one question on overlapping carriers, each pinned green by
+its own test.
 *Forbids:* per-carrier semantic divergence "for interop convenience"; blessing an accident as
 "deliberately softer"; goldens that freeze the divergence.
 
@@ -184,9 +196,9 @@ by whether the input was reconstructible.
 **P10. Provenance is total or it is nothing** *(P0's conservation law)*.
 Every derivation propagates lineage — the second interpreter never skips an instruction. The
 ONLY shed is named, explicit, semantic: egress past the membrane (the trace keeps it; the
-JS value doesn't). (`exact->inexact` was hypothesized as a second shed when this document was
-first written; the conservation suite MEASURED it propagating lineage fully — the exactness
-loss is the value layer's, the box layer keeps its history. The shed list is egress, only.) An op that "rebuilds and therefore
+JS value doesn't). (`exact->inexact` looks like a second shed but is not: the conservation
+suite measures it propagating lineage fully — the exactness loss is the value layer's, the
+box layer keeps its history.) The shed list is egress, only. An op that "rebuilds and therefore
 drops" is a bug, full stop — rebuilding is an implementation detail of the value layer, and
 the value layer does not get to abort the box layer.
 *Revealed by:* `append` rebuilding the spine and dropping every element's provenance; `cdr`
@@ -208,7 +220,9 @@ a principle because everything else leans on it.)
 **P12. Tracing is core, not equipment — the trace is the second interpreter's OUTPUT.**
 An optional trace is an optional interpreter, which is P0 denied outright. The spine
 (EvalTrace, scope-ids, snapshots) lives in the interpreter and is always available; analysis
-lenses and reactivity adapters layer on top, downstream, outside.
+lenses and reactivity adapters layer on top, downstream, outside. (Always-available is not
+always-running — the per-run arming asymmetry and its one footgun are P0's operational
+rider. What P12 forbids is the spine living somewhere a consumer can simply not wire.)
 *Revealed by:* the spine living in an opt-in package a consumer could simply not wire.
 *Forbids:* core features whose lineage story depends on an external package being installed;
 observability frameworks (mobx et al.) as core dependencies — adapters wrap the seam outside.

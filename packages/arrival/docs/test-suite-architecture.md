@@ -12,7 +12,9 @@ AVector, AJSArray, AString where applicable, ADict where applicable): the VALUE 
 matches the reference semantics AND the BOX discipline matches the law's declaration
 (box-preserving / box-unioning / container-minting). One `describe.each(TERMS)` ×
 `it.each(CARRIERS)` grid. A carrier that legitimately doesn't implement a term is an explicit
-`unsupported` cell, not an absent row — absence is how the DR4 divergence hid.
+`unsupported` cell, not an absent row — an absent row is indistinguishable from an untested
+one, which is exactly how a carrier can ship `map` and silently lack `filter` without the
+grid ever showing a gap.
 
 **F2 — Provenance conservation (P10/P11).** Property-based + golden:
 - conservation: for generated pure programs, every input provenance id is reachable in the
@@ -25,9 +27,10 @@ The eager goldens (golden-prov-*) stay as the oracle side of the static-lineage 
 **F3 — Membrane crossing laws (P4/P5).** ONE table: every value type × both directions ×
 (representation-in, representation-out, round-trip promise yes/no). The exit convention is a
 single column — the table structurally cannot express "strings boxed, booleans raw" without
-the contradiction being visible in the diff (this is how R1 stays fixed once ruled). Strict
-doors: every forbidden crossing (boxed into fromJS, raw into toJS, borrowed fn, AValue from
-JS) is an `it.each` over the violation table asserting the TAUGHT message.
+the contradiction being visible in the diff, which is what keeps the convention from drifting
+once it's decided. Strict doors: every forbidden crossing (boxed into fromJS, raw into toJS,
+borrowed fn, AValue from JS) is an `it.each` over the violation table asserting the TAUGHT
+message.
 
 **F4 — Value-layer conformance (P15 coherence with the spec).** The chibi harness runs one
 vitest test per scheme test form (see `src/__tests__/conformance/README.md`);
@@ -75,8 +78,8 @@ Conventions:
 - **Law files are named `<subject>.law.test.ts`** and contain ONE law (possibly many rows).
 - **Tables are data modules** (`_tables/*.ts`), typed, imported by law files AND usable by
   future interpreters (the static lineage classifier can consume CARRIERS/TERMS too).
-- **No helper tolerance**: comparison helpers assert ONE representation (post-R1 contract).
-  A helper that accepts boxed-or-raw is a P4 violation in test clothing.
+- **No helper tolerance**: comparison helpers assert ONE representation (the P4 exit
+  convention). A helper that accepts boxed-or-raw is a P4 violation in test clothing.
 - **Every table row is individually addressable** in vitest output (`%s` naming from row
   fields) — a failing cell names its term, carrier, and law.
 - **Stubs-first discipline**: new law families land as `it.todo` grids with the full tables

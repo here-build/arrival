@@ -1,7 +1,7 @@
 # @inhuman.tools/arrival-mercury
 
 **Arrival’s Mercury instance** — the scheme→TypeScript compiler that answers to
-the [Mercury paradigm](../../../../docs/foundations/mercury/mercury-as-paradigm.md).
+the Mercury paradigm.
 
 **Mercury is a paradigm, not a package name** (same class of word as Roslyn): a
 semantic model answers questions; emission is the last, dumbest step. This
@@ -22,7 +22,7 @@ lives under `@here.build/mercury*`. The failed pass-pipeline predecessor
 `SchemeSemanticModel`. Manifestation (spelling, ramda call shape, file layout)
 is the materializer’s only job.
 
-### Gates (W8/W9)
+### Gates
 
 ```bash
 pnpm --filter @inhuman.tools/arrival-mercury run check:gates
@@ -57,8 +57,7 @@ foundation package when LSP consumers land; the **name travels with it**.
 
 Also owns: front-end desugar/nodes, CoreForm, type glass (`emitTypes`),
 **runtime imports** (`RUNTIME_MANIFEST`: stage0 Scheme-texture + **ramda** cold
-stdlib), infer/mcp `RuntimeRef` surface (kept until @-symbol work), residual
-algebra + printer.
+stdlib), infer/mcp `RuntimeRef` surface, residual algebra + printer.
 
 Cold stdlib: prefer `ramda` when arity/order match **loose** faces (e.g.
 `length`). Keep stage0 for Law T, n-ary, wrong ramda shape (`max-by`,

@@ -177,8 +177,8 @@ distinction is semantic, not lexical.
 - **No neoteric** `f(x)`/`f[x]` glue-calls (SRFI-105 tier 2) — collides with subscripts and
   trailing lambdas. A tight `(` binds only after a method-DOT word.
 - **No `$nfx$` / `$bracket-apply$`** — the precedence ladder (§4) and index classification (§3)
-  replace them (departures D2/D3 of the grammar spec).
-- **No `??`** — removed 2026-07-08; `(if x x y)` renders as a plain `if`.
+  replace them.
+- **No `??`** — `(if x x y)` renders as a plain `if`.
 - **No indentation in the store** — §1 exists only in this face.
 
 ## 8. Editor wiring — the minimal token classes
@@ -206,6 +206,6 @@ tooling through the lens, the way `arrival-codemirror` does.
 
 ## Conformance
 
-The grammar above is exercised by the package tests (`src/__tests__/`) and the round-trip corpus
-in `arrival-chain` (`sugarcoat-read/-render/-save.test.ts`): every construct must satisfy
-`read(render(x)) ≡ x` on the corpus. A grammar change without a corpus change is suspect.
+The grammar above is exercised by the package tests (`src/__tests__/`), which double as the
+round-trip corpus: every construct must satisfy `read(render(x)) ≡ x` on the corpus. A grammar
+change without a corpus change is suspect.

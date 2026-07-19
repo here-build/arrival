@@ -3,7 +3,6 @@
 **The `arrival` command** — run, static-check, and REPL [arrival](https://www.npmjs.com/package/@inhuman.tools/arrival)
 programs from the terminal. This page documents the CLI's process surface — argv, stdin, stdout/stderr,
 exit codes; the language itself (the membrane, provenance, capabilities) is `@inhuman.tools/arrival`'s README.
-Every example on this page was executed as written; outputs are real.
 
 ```
 arrival run <file.scm>       validate, then execute — prints each top-level form's value
@@ -124,12 +123,12 @@ indirection — the verb's declared name IS the identifier:
 
 ```scheme
 ; ticket.scm
-(jira-ticket "HER-1")
+(jira-ticket "ACME-1")
 ```
 
 ```
 $ arrival run --with ./jira.mjs ticket.scm
-"[HER-1] Fix the flux capacitor"
+"[ACME-1] Fix the flux capacitor"
 ```
 
 And `check` validates against the **armed** vocabulary — a typo'd or un-armed verb is a diagnostic

@@ -9,9 +9,6 @@ The shared `PRE` prelude and builtin `.d.ts` leaves declaration-merge so Scheme
 programs **bite** under `tsc` (`(car 5)` and `(+ "a" 1)` produce real diagnostics
 on `.scm` spans).
 
-Formerly `arrival-type-lens`. Design lineage: Scheme→TS type-lens DAG
-(2026-06-10) — prelude + leaves + emitter/Volar plumbing.
-
 ## Layout
 
 ```
@@ -20,13 +17,13 @@ src/
     types.d.ts                 ← PRE: base types + Dict + accessors + sexpr + ArrShape merge contract
     builtins/
       _TEMPLATE.d.ts           ← copy-paste stub for a leaf
-      car.d.ts                 ← L01, the reference leaf
-      <slug>.d.ts              ← 33 more, one per fan-out agent
+      car.d.ts                 ← the reference leaf
+      <slug>.d.ts              ← one per builtin
   __tests__/
     prelude.test.ts            ← bite + merge proof (verdict)
 ```
 
-## The leaf-authoring contract (read this if you are a fan-out agent)
+## The leaf-authoring contract (read this before adding a builtin leaf)
 
 You own **exactly one** file: `src/prelude/builtins/<slug>.d.ts`. You never read
 another leaf. Everything you need is `PRE` (`../types.d.ts`) + your spec stub.
@@ -101,10 +98,7 @@ Each leaf adds a tiny verdict proving its signature bites. Mirror the cases in
 - **NEGATIVE** — a mis-typed call → exactly one diagnostic.
   e.g. `__arr.cdr(5)` → one diagnostic (5 is not a list).
 
-Self-check `vitest run` green against PRE before reporting. Do **not** commit (the
-orchestrator gates the build + merged typecheck and commits with explicit
-pathspecs). Report: your file path, pass/fail, and the diagnostic message you
-observed (so the orchestrator can spot all-`any` regressions early).
+Run `vitest run` green against PRE before considering a leaf done.
 
 ## `typecheck` / `test`
 
@@ -113,11 +107,10 @@ pnpm typecheck   # tsc --noEmit over src (prelude + leaves compile & merge)
 pnpm test        # vitest: the bite + merge proof
 ```
 
-## Emitter contract (NEXT WAVE — recorded here so it is not lost)
+## Emitter contract (planned)
 
-The emitter (`types-emit.ts`, Wave C, lands in `arrival-chain-view`) lowers Scheme
-forms to **virtual TS that is type-checked, never run**. The load-bearing
-consequence for binding forms:
+The emitter (`types-emit.ts`) lowers Scheme forms to **virtual TS that is
+type-checked, never run**. The load-bearing consequence for binding forms:
 
 - **`(let ((x v)) body)` / `(let* …)` → a pure TS block statement**, NOT an IIFE:
   ```ts

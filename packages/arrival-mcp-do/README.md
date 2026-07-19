@@ -19,7 +19,7 @@ export class MyRunnerDO extends ArrivalMcpRunnerDO<MyEnv> {
 }
 ```
 
-See the [umbrella README](../README.md) for where this sits in the arrival story.
+See the [umbrella README](../../README.md) for where this sits in the arrival story.
 
 Licensed FSL-1.1-MIT — see [LICENSE.md](./LICENSE.md) and the plain-words boundary in the
 [arrival core README](../arrival/README.md).

@@ -1,94 +1,153 @@
-# Rulings R1–R9 + key taxonomy (V, 2026-07-09)
+# RULINGS — design rules R1–R9 + key taxonomy
 
-Resolved by interview. Each ruling unblocks the gated cells that cite it; the ledger's gate
-column now points here.
+Numbered design rules for arrival's value, provenance, and membrane layers. Code and
+tests cite them by ID ("RULINGS.md R2"); the IDs are stable anchors.
 
 ## R1 — Exit convention: uniform plain-JS, two-tier API
-`toJS`/`schemeToJs`/exec egress always fully unwraps — outside the membrane only plain JS
-exists, provenance stays in the trace. AND the API splits into two tiers:
-- **simple flow**: "run, get JS" — the default exec surface;
-- **complex flow**: "run, get reusable state" — raw boxed outputs, lexical scope, provenance
-  metadata (session continuation, tooling, law tests).
-First iteration: simple wraps complex (simple = complex + final unwrap). The boolean
-op-helpers shortcut dies with the uniform exit.
+
+Egress (`toJS`/`schemeToJs`/`exec`) always fully unwraps — outside the membrane only
+plain JS exists; provenance stays in the trace. The API splits into two tiers:
+
+- **SIMPLE tier** (`exec`): "run, get JS" — the default surface, plain-JS values only;
+- **COMPLEX tier** (`execState`): "run, get reusable state" — raw boxed outputs,
+  lexical scope, provenance metadata (session continuation, tooling, law tests).
+
+Simple wraps complex (simple = complex + final unwrap), so there is exactly one exit
+point to audit. The unwrap is a **strict door**: a raw, unboxed value reaching the
+exit is refused, never silently passed through — an unrecognized value at the
+boundary is a boxing bug upstream, and passing it along would hide it.
+
+Rejected alternative: per-type exit shortcuts (e.g. boolean op-helpers returning raw
+booleans while other types stay boxed). Two representations of "outside" force every
+caller to branch on type, and provenance leaks inconsistently depending on which
+shortcut fired.
 
 ## R2 — Container provenance: grouping fact + private structural facts
-The container's own provenance = the collection-level grouping fact (G2 minimal-cone
-design). ADDITIONALLY each container kind carries private structural facts:
-- arrays/vectors: **length** — PROXIED through length-preserving ops (map/sort thread it),
-  PROVENANCED in length-changing ops (filter mints it as a derived fact);
-- dicts: **keyset** (postponable).
-This enables shortcut evaluation — `(< (length (sort …)) 5)` decidable without provenancing
-the sorted data. Implement the NAIVE strategy now but EXPLICITLY (named fields, not
-emergent), so the shortcut path is a later optimization, not a redesign.
 
-## R3 — Recognition: instanceof AValue + sub-union stratification (new work item)
-Keep the concrete union for type narrowing; recognition = `instanceof AValue` plus the few
-explicit non-AValue arms. NEW INVESTIGATION: SchemeValue is too broad — stratify into
-lifecycle sub-unions (e.g. EOF cannot sit inside a pair; Values/Keyword have their own
-admissibility). Design the sub-union lattice before mechanically fixing isSchemeValue.
+A container's own provenance is the collection-level **grouping fact** (the
+minimal-cone design). Additionally, each container kind carries private
+**structural facts**:
 
-## R4 — AHalfBaked: existence review first (new work item)
-HalfBaked is a speculative-execution optimization, possibly no longer earning its keep as a
-full value primitive. Review its reason-to-exist; IF it stays, `arrival/toJS` on a carrier
-becomes a **MaybePromise resolving when the value bakes** — not a marker, not a throw.
-The `{__halfBaked__}` marker shape dies either way.
+- arrays/vectors/lists: **length** — PROXIED through length-preserving ops (map/sort
+  thread it unchanged), PROVENANCED in length-changing ops (filter mints it as a
+  fresh derived fact);
+- dicts: **keyset** (same scheme, independently adoptable).
 
-**RESOLVED — VERDICT KILL** ([design-history/halfbaked-existence-review.md](design-history/halfbaked-existence-review.md), 2026-07-09):
-zero production reachability (the flag was set only by the feature's own tests), and R2/C3's
-struct-fact wires supersede it as the principled version of the same idea. `AHalfBaked`
-dissolved; the `{__halfBaked__}` marker died with it. The motivating program
-(`(if (>= (length (filter pred items)) 2) …)` deciding early) moved into
-execution-plan-wireframe.md as an acceptance criterion for struct-fact wires.
+This enables shortcut evaluation — `(< (length (sort …)) 5)` is decidable without
+provenancing the sorted elements. The strategy is **naive but explicit**: structural
+facts live in named fields, not emergent behavior, so the shortcut path is a later
+optimization rather than a redesign.
 
-## R5 — Cones: both queries + the execution-plan wireframe (major design item)
-Both reads are required: "why is this an input" (minimal cone) and "what changes if I adjust
-this output" (full/sealing cone) — two queries over one representation. AND the target
-architecture: a **generalized execution plan** — the AST statically evaluated into a base
-wireframe holding every mux/bifurcation, with static wires COLLAPSED into procedural nodes
-(`(+ (* x x) 5)` = ONE provenance edge, not four), real runtime provenance wiring into the
-abstract flow. This is the provenance memory optimization that fits CF worker limits.
-Aligns with the existing static-lineage G-gates; supersedes the per-op accumulation model.
+Rejected alternative: deriving the container fact as the union of element provenance.
+A length query then drags whole-collection lineage — O(n) unions for an O(1) fact —
+and early decisions over aggregates become impossible without materializing the data.
 
-## R6 — Curly-infix: force-eliminate n-expressions, ban door
-`{:key value}` (Clojure dict literal) won the brace grammar. `{a * b}` becomes near-illegal:
-**explicitly detected and BANNED** with an educational door (not silently misparsed as a
-dict). Neoteric/n-expressions live in the sugarcoat syntax layer ONLY. The ~40-invariant
-curly-infix suite shrinks to the ban-door tests + dict-literal grammar; the reader's
-curly-infix mode is deleted.
+## R3 — Recognition: `instanceof AValue` + sub-union stratification
+
+The concrete value union stays (it is what type narrowing consumes); recognition is
+`instanceof AValue` plus the few explicit non-AValue arms. One base-class check
+cannot be forged by structural coincidence and cannot rot the way an enumerated
+per-class list does.
+
+Open design note: SchemeValue is too broad — the honest shape is lifecycle
+**sub-unions** with their own admissibility (EOF cannot sit inside a pair;
+Values/Keyword have positions where they are and are not legal). The sub-union
+lattice is a design problem to be solved as a whole; mechanically tightening
+`isSchemeValue` call-site by call-site just moves the imprecision around.
+
+## R4 — AHalfBaked: removed (VERDICT KILL)
+
+There is no half-baked value primitive and no `{__halfBaked__}` marker shape.
+Speculative half-evaluation as a *value* had zero production reachability, and
+container structural facts (R2) plus the execution-plan wireframe (R5) are the
+principled form of the same idea: deciding `(if (>= (length (filter pred items)) 2) …)`
+early belongs to structural-fact wires, not to a special carrier that every egress
+path must know how to force. Full argument:
+[design-history/halfbaked-existence-review.md](design-history/halfbaked-existence-review.md).
+
+## R5 — Cones: two queries, one execution-plan wireframe
+
+Both provenance reads are required — "why is this an input" (minimal cone) and "what
+changes if I adjust this output" (full/sealing cone) — as **two queries over one
+representation**, not two stores. The representation is a **generalized execution
+plan**: the AST statically evaluated into a base wireframe holding every
+mux/bifurcation, with static wires COLLAPSED into procedural nodes
+(`(+ (* x x) 5)` is ONE provenance edge, not four); runtime provenance wires into
+that abstract flow. Design note:
+[design-history/execution-plan-wireframe.md](design-history/execution-plan-wireframe.md).
+
+Rejected alternative: per-op provenance accumulation. Its log grows with executed
+operations, not with program shape — unbounded memory that no constrained runtime
+(e.g. an edge worker) can hold, and both cone queries still have to reconstruct the
+plan the wireframe stores directly.
+
+## R6 — Curly-infix: dict literal wins the brace, infix is a banned door
+
+`{:key value}` (dict literal) is the brace grammar. `{a * b}` infix is **explicitly
+detected and BANNED** with an educational door pointing to the prefix form — never
+silently misparsed as a dict. Neoteric/n-expressions live in the sugarcoat syntax
+layer ONLY; the core reader has no curly-infix mode.
+
+Rejected alternative: SRFI-105 curly-infix in the core reader. Braces then carry two
+grammars at once, and an infix expression that happens to be dict-shaped (or vice
+versa) misparses silently — the worst failure mode a reader can have. A ban door
+keeps the error loud and teaches the correct form.
 
 ## R7 — letrec lowering: fix at root
-Lower letrec to a shape where the binding is in scope for its own initializer (s.letrec
-combinator; consider `function name() {}` declaration style for the circularity). ALSO:
-check how letrec lowers in the inhuman/mercury compiler pipeline — same bug class may exist
-there. Drops-only law holds absolutely; no advisory-false-positive carve-out.
+
+letrec lowers to a shape where the binding is in scope for its own initializer (the
+`s.letrec` combinator; function-declaration style carries the circularity). The
+drops-only law holds absolutely: a lowering either produces the correct scope or is
+rejected — no advisory-false-positive carve-out. A carve-out turns a scope bug into
+an accepted lint, and every consumer downstream inherits the wrong binding silently.
 
 ## R8 — Boolean provenance: conditional mint
-Provenance-free operands → shared flyweight (hot paths stay allocation-free); stamped
-operands → fresh ABool carrying the union. Today's op-helpers shortcut becomes principled:
-a verdict derived from lineage carries it, a verdict derived from constants doesn't.
+
+A verdict derived from lineage carries it: stamped operands mint a fresh ABool with
+the union of their provenance. A verdict derived from constants does not:
+provenance-free operands share a flyweight, so hot comparison paths stay
+allocation-free.
+
+Rejected alternatives, one per direction: always mint fresh — an allocation on every
+comparison for provenance that is empty; never stamp — provenance conservation
+breaks at every branch, because the branch verdict is exactly where lineage must
+survive to explain a downstream value.
 
 ## R9 — Container toJS: deep unwrap via lazy ref-tracking proxies
-Deep unwrap everywhere — but through **lazy-materializing recursive proxies** with a
-ref-tracker (multi-referenced values stay singletons). No full materialization at egress;
-the proxy lenses in depth on demand. Future bonus: deep field access can preserve provenance
-reach-back (non-primitive reads re-enter the boxed world). Cost: one proxy + on-demand
-generation instead of a full copy.
 
-AMENDED (egress-membrane-exit rework, 2026-07-12 —
-[`design-history/arrival-egress-membrane-exit.md`](design-history/arrival-egress-membrane-exit.md)): proxy identity is per
-PROJECTION, not one global slot. Bare (serialization `arrival/toJS`) = (box) forever;
-membrane (`arrival/toJSMembrane`, rosetta/exec crossings — options honored at every
-depth, nested callables become host fns) = (box, mode, exporting RegionScope); gated
-(tier-state) = (gate, box). Singleton/aliasing law holds WITHIN a slot; cross-slot
-identity was never coherent once projection depends on options/scope.
+Containers deep-unwrap everywhere — through **lazy-materializing recursive proxies**
+with a ref-tracker, so multi-referenced values stay singletons. No full
+materialization at egress; the proxy lenses in depth on demand. Deep field access
+can preserve provenance reach-back (non-primitive reads re-enter the boxed world).
+Cost: one proxy plus on-demand generation instead of a full copy.
 
-## Key taxonomy — PRINCIPLES P7 corollary, migrate now
-Three roles, one mechanism each:
-- **algebra instruction keys** → strings (`arrival/...`) — every static interpreter consumes
-  instruction names as data (P0's N-interpreter argument);
-- **capability brands** → module-local symbols, never Symbol.for (forgeability = escape);
-- **metadata slots** → Symbol.for (enumeration-invisible; survives dual module instances).
-Migrations to ride the next batch: `CLASS` → `"arrival/class"`; F3 gains the forgery-guard
-law row ("a borrowed object's own `arrival/*`-named data key is DATA, never protocol").
+Proxy identity is per PROJECTION, not one global slot:
 
+- **bare** (serialization `arrival/toJS`) — keyed by (box), forever;
+- **membrane** (`arrival/toJSMembrane`, rosetta/exec crossings — options honored at
+  every depth, nested callables become host fns) — keyed by (box, mode, exporting
+  RegionScope);
+- **gated** (tier-state) — keyed by (gate, box).
+
+The singleton/aliasing law holds WITHIN a slot; cross-slot identity is incoherent by
+construction once the projection depends on options and scope. Full design:
+[design-history/arrival-egress-membrane-exit.md](design-history/arrival-egress-membrane-exit.md).
+
+Rejected alternative: eager full materialization at egress — pays the whole copy up
+front, loses aliasing (two references to one list become two arrays), and forecloses
+provenance reach-back on deep reads.
+
+## Key taxonomy — PRINCIPLES P7 corollary
+
+Three key roles, one mechanism each:
+
+- **algebra instruction keys** → strings (`arrival/...`) — every static interpreter
+  consumes instruction names as data (P0's N-interpreter argument);
+- **capability brands** → module-local symbols, never `Symbol.for` — a
+  globally-reachable brand is forgeable, and forgeability is escape;
+- **metadata slots** → `Symbol.for` — enumeration-invisible, and survives dual
+  module instances.
+
+Forgery-guard corollary: a borrowed object's own `arrival/*`-named data key is DATA,
+never protocol. Protocol recognition must never key off a string a foreign object
+can simply carry.

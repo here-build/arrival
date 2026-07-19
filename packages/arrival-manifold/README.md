@@ -2,7 +2,7 @@
 
 An MCP proxy that collapses N upstream MCP servers' per-tool JSON-schema tools into **one**
 tool: `scheme-repl-with-all-mcp-tools`. Its single argument (`repl-input-scheme-program`) is a
-Scheme program that the real [arrival](../../foundations/arrival/arrival) interpreter evaluates;
+Scheme program that the real [arrival](../arrival) interpreter evaluates;
 every upstream tool becomes a callable symbol `(server/tool :arg value)` inside that program.
 Nothing here is a toy interpreter or a regex bridge — it is arrival's actual R7RS-subset
 evaluator, wired to a live MCP client fleet.
@@ -13,23 +13,17 @@ The machinery under this proxy is, without embarrassment, an **expert system**: 
 of recognizer rules that know some response shapes cold and hand back everything else
 untouched — the 1970s paradigm, the one that ran on Lisp machines and *was* "artificial
 intelligence" before the winter took the word away. Here it is again, doing what it was always
-good at — brittle precision, held honestly — one layer beneath a neural model, so far under
-suspicion that a benchmark-integrity audit files it as *competent middleware, not cheating*.
-What was once the whole field no longer even registers as intelligence. That is not a
-demotion; it is the tenure of infrastructure.
+good at — brittle precision, held honestly — one layer beneath a neural model. What was once
+the whole field no longer even registers as intelligence. That is not a demotion; it is the
+tenure of infrastructure.
 
 The irony completes in both directions. Expert systems died of the knowledge-acquisition
 bottleneck — hand-authoring rules never scaled past their authors. This rule base was
-surveyed, derived, and adversarially validated across 169 real MCP servers **by LLM agent
-fleets**: the new AI dissolved the old AI's fatal flaw. And LLMs flail exactly where expert
+surveyed, derived, and adversarially validated across 169 real MCP servers: the new AI
+dissolved the old AI's fatal flaw. And LLMs flail exactly where expert
 systems are sound — serialized structure, strict boundaries, knowing when you don't know — so
 the old AI now supplies what the new one lacks. Each cures the other's cause of death.
-Neither is cheating; together they are the medium.
-
-Every design decision below is stated as **claim → mechanism → measured number**, because the
-audience for this doc includes agents deciding whether to adopt this package, not just humans.
-Numbers carry confidence intervals where we have them; where a result is statistically null, we
-say so and explain why the null itself is a real design signal (see the truncation banner, §3).
+Together they are the medium.
 
 ## What it replaces
 
@@ -53,20 +47,15 @@ trusted alone).
 | Best scheme-REPL proxy (strictly neutral client)¹ | 0.72–0.73 | 62–63% | ~1.15–1.25x |
 | **Delta** | **+7pt** | **+6pp** | **+15–25%** |
 
-¹ Measured with zero client-side translation and zero coaching. This footnote exists because it
-wasn't always true: every pre-2026-07-05 benchmark run carried a harness-side "bypass
-auto-translation" that silently executed native-style tool calls by translating them into the
-REPL — 753 auto-executed calls across 67/89 tasks in the last such run. Those runs partially
-measured native function-calling behind a translating proxy, not this surface. The headline
-numbers above are post-neutralization and match/beat the inflated-era scores honestly — see the
-Methodology section for the per-task forensics.
+¹ Measured with zero client-side translation and zero coaching. An earlier harness silently
+auto-translated native-style tool calls into the REPL; every headline number here postdates
+its removal (see the Methodology section's client-neutrality note).
 
 Mechanism: composing multiple tool calls inside one program eliminates round-trips a
 schema-constrained native call can't avoid (pipe a result straight into the next call, filter/
 reduce before it ever re-enters the transcript) — the token surcharge buys higher task
 completion, not just verbosity. See `docs/attestation-design.md` for the taint-flow design this
-composition model depends on, and `token-metrics.md`-style accounting (scratchpad) for the
-full cost breakdown, including the retry/rewrite share of the surplus.
+composition model depends on.
 
 ## Design decisions
 
@@ -77,7 +66,7 @@ full cost breakdown, including the retry/rewrite share of the surplus.
 | No truncation banner | rendering it added pure token cost with no behavior change | Δcoverage −0.009 [−0.105, +0.086] — null, so the code was deleted |
 | Default response budget 20,000 chars | starves below ~8k, plateaus above 20k | 20k vs 8k: +2.8pp pass [0.0, +5.6]; 4k: −5.9pp [−10.1, 0.0]; 40k over 20k: −1.2pp (noise) |
 | Server-side unknown-tool catchall stays | every surveyed MCP client forwards `tools/call` without client-side validation | reachable across the whole surveyed client ecosystem; worst case never fires |
-| No client-side coaching assumed | real clients give bare "unknown tool" errors | all headline numbers measured under a strictly neutral client (pre-2026-07-05 runs were not — footnote¹) |
+| No client-side coaching assumed | real clients give bare "unknown tool" errors | all headline numbers measured under a strictly neutral client (footnote¹) |
 | Statement-facts runs on arrival's real parser, not an approximation | a spike/regex stand-in hides crash classes the real reader has | +2.5pt coverage, +2.2pp pass; crash count 3→1 (remaining 1 is an upstream server bug) |
 | Package split (binder vs runner) is architecture-only | proves the split didn't change behavior, only where the code lives | pkg_split factor ≈ null once de-aliased: −0.4pp [−4.4, +2.6] |
 
@@ -85,7 +74,7 @@ full cost breakdown, including the retry/rewrite share of the surplus.
 
 `/` is the manifold's own namespace separator and is never legal inside a bare Scheme
 identifier, so a qualified name is always unambiguously re-splittable into `(slug, tool)` by
-its last `/` (see `src/bind.ts`, `src/doors.ts`'s `bareNameOf`). The underscore-joined
+its last `/` (see `src/bind.ts`, and `../mcp-substrate/src/doors.ts`'s `bareNameOf`). The underscore-joined
 alternative was tried and reverted: models already carry strong priors for `namespace/symbol`
 addressing, and `_`-joining collides with tool names that already contain underscores
 (`server_get_user` vs `server/get_user` — only one of these is unambiguously splittable back
@@ -93,7 +82,7 @@ out). Measured: **+6.7pt coverage, +3.4pp pass** for `/` over `_`, sign-test p=0
 cleanest single-factor paired contrast in the whole design (the fixed-effects estimate agrees
 with the paired estimate almost exactly, which is not true of every factor here — see the
 Methodology section's de-aliasing note for factors that don't cleanly separate). Both runs in
-this contrast are post-neutralization (footnote¹), so no era confound rides on it.
+this contrast use the strictly neutral client (footnote¹), so no era confound rides on it.
 
 The wire boundary (MCP/OpenAI tool names, constrained to `^[a-zA-Z0-9_-]+$`, no `/`) still
 needs a de-slashed spelling for a direct ("bypass") call attempt — that translation lives at
@@ -146,9 +135,9 @@ presence — see the Methodology section for why we trust a null this size (CI w
 | **20,000 (default)** | — | — |
 | 40,000 | −1.2pp (noise) | no gain over 20k |
 
-20k vs 8k: **+2.8pp pass [0.0, +5.6]**. Note the budget factor's identification spans the
-2026-07-05 client-neutralization boundary (§Methodology footnote¹); the factor model carries an
-explicit era term to absorb it. Configurable four ways, so a deployment or even a single call
+20k vs 8k: **+2.8pp pass [0.0, +5.6]**. The budget factor's identification spans both
+measurement eras (footnote¹); the factor model carries an explicit era term to absorb it.
+Configurable four ways, so a deployment or even a single call
 can override the default without a code change — deployment-default precedence is
 **CLI flag > env var > config file > 20,000** (`src/bin.ts`):
 
@@ -182,9 +171,7 @@ server-side — in the catalog preamble (`src/catalog.ts`) and in the doors — 
 clients give bare, unadorned "unknown tool" / "invalid params" errors with no scaffolding of
 their own. Every headline number in this doc is measured under a strictly neutral client —
 zero translation, zero coaching — so none of it depends on a specific client's UI or retry
-behavior to hold. This was not free: it required finding and removing a harness-side bypass
-auto-translation that had been quietly flattering all pre-2026-07-05 runs (footnote¹ and the
-Methodology section carry the forensics).
+behavior to hold (footnote¹).
 
 ### 7. Statement-level analysis on the real reader
 
@@ -197,8 +184,8 @@ this package).
 
 ### 8. Package split (binder vs runner) — architecture, not behavior
 
-The doors-steering runner extracted into `@inhuman.tools/mcp-substrate` (`../../foundations/arrival/
-mcp-substrate`); this package (`arrival-manifold`) keeps only the binder-owned surface — tool
+The doors-steering runner extracted into `@inhuman.tools/mcp-substrate` (`../mcp-substrate`);
+this package (`arrival-manifold`) keeps only the binder-owned surface — tool
 naming, prompt fields, the `describe()`/`call()` MCP-facing wrapper (`src/manifold-tool.ts`).
 The split was explicitly measured for behavior cost so the refactor claim ("this changed
 nothing observable") isn't just asserted: **pkg_split factor ≈ null once de-aliased, −0.4pp
@@ -252,30 +239,25 @@ MCP-Atlas variance decomposition (89 tasks × 15 runs, LongCat-2.0 judge):
 (β=+0.098 to +0.119 depending on spec, p≈0.001–0.0014); network-backed servers are exonerated
 as a class (Welch t-test p=0.59; OLS coefficient on server locality not significant).
 
-**Client-neutralization forensics (the footnote¹ story):** all pre-2026-07-05 runs carried a
-harness-side bypass auto-translation — native-style tool calls silently translated into the
-REPL and executed (753 auto-executed calls across 67/89 tasks in the last such run), so those
-runs partially measured native function-calling behind a translating proxy. Per-task forensics
-stratified tasks by bypass usage: the scheme-native stratum (tasks that never leaned on the
-bypass) moved **+1.1pt** across the neutralization boundary — the honest surface never
-regressed; only the borrowed native behavior went away. Pre-boundary run labels
-(`proxy5k-v4`, `compact5k`, `proxy1k`, the `scheme-*` golden-band runs) appear in the factor
-design with an explicit era term absorbing the boundary; every headline claim in this doc is
-grounded in post-neutralization, strictly-neutral-client runs.
+**Client neutrality (footnote¹):** an earlier harness silently auto-translated native-style
+tool calls into the REPL, partially measuring native function-calling behind a translating
+proxy. Every headline claim in this doc is grounded in strictly-neutral-client runs made after
+that translation was removed; where a factor's identification spans both eras, the factor
+model carries an explicit era term to absorb the boundary.
 
 **Why this matters for every number above:** the run-to-run noise floor for a naive
 single-run A/B on this benchmark is on the order of **±11pp pass** — wide enough to make a
 single comparison run indistinguishable from chance for most of the effects in this doc. That
 is why every claim here is backed by within-task fixed-effects regression **and** paired
 per-task contrasts **and** a run-cluster bootstrap, not a single pair of runs. Where a CI still
-crosses zero (most individual factors in the design, see `paired_contrasts.csv`), we say so
+crosses zero (most individual factors in the design), we say so
 plainly rather than rounding a noisy point estimate into a confident-sounding claim — the
 honesty here is itself part of the signal this doc is trying to send: a package whose docs
 hide their noise floor is a package whose numbers you can't trust anywhere else either.
 
 ## See also
 
-- `@inhuman.tools/mcp-substrate` (`../../foundations/arrival/mcp-substrate`) — the doors-steering
+- `@inhuman.tools/mcp-substrate` (`../mcp-substrate`) — the doors-steering
   runner: session-scoped teaching apparatus (competence window, futility tracking, type-hints
   lens, calibration options). This package constructs one `DoorsRunner` per tool instance and
   delegates every statement-eval / door / session-history mechanism to it.

@@ -1,6 +1,5 @@
 # R7RS-small Coverage
 
-> **As of:** 2026-07-13 / commit `17ebb36564` + follow-on (numeric S2, always, this refresh)  
 > **Policy:** Every R7RS-small export is **implemented** or a `symbol.notImplemented` door. Silent absence is a bug. Exceptions stay implemented. Continuations / multi-return / dynamics may be doors.  
 > **Immutable subset:** mutators and multi-return are doors with teaching reasons — we do not aim to make the full mutable R7RS work.  
 > **Aside:** `define-record-type` / record SRFIs are **out of scope** here (separate workstream).  
@@ -8,7 +7,7 @@
 
 ---
 
-## Executive summary (refreshed)
+## Executive summary
 
 | Bucket | Health |
 |---|---|
@@ -82,4 +81,4 @@ Adjacent: `call-with-input-string` in `srfi-stubs` (SRFI-6).
 ## Method notes
 
 - Multi-return **names** and **host minting** are extinguished for the agent-facing surface.  
-- Chibi exclusions for multi-return / ports remain valid as “design omit”; numeric S2 names should no longer be “not implemented” exclusions (cascade rows may still mention `let*-values`).
+- Chibi exclusions for multi-return / ports remain valid as “design omit”; numeric S2 names should no longer be excluded as “not implemented”.

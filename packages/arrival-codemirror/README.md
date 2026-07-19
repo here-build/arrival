@@ -15,9 +15,6 @@ lowers a Scheme program into a typed TS view, `tsc` checks that view, and every 
 back to its `.scm` span. This package is where that pays out in an editor: slurp a form into a
 call *and watch the argument's type error appear* — the same buffer, the same keystroke ladder.
 
-Everything below ships and is exercised by the test suite (`src/__tests__/`, including drift
-guards that pin the real arrival-lsp service against the backend seam).
-
 ## What's in the box
 
 - **`schemeSugarcoat()`** — the language mode. One `StreamLanguage` covers classic Scheme *and*
@@ -60,7 +57,7 @@ guards that pin the real arrival-lsp service against the backend seam).
   `schemeIde(sugarcoatIdeBackend(backend))` mounts hover/lint/completion/goto on the sweet
   syntax — three lenses end-to-end: sugarcoat → classic → TypeScript. It also carries
   surface-face lints of its own (patterns that are *valid* Sugarcoat but near-certainly not what
-  the author meant, found by custdev with LLM authors).
+  the author meant).
 
 - **`/react`** — the batteries-included mount: `<SchemeEditor>` renders one canonical `.scm`
   through either lens (Sugarcoat derives on entry, edits fold back losslessly, canonical Scheme
