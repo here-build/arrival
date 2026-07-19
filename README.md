@@ -4,7 +4,8 @@
 
 [^1]: Lisp was born in 1958 for AI research — the first language built *for* AI. arrival is a
     Lisp dialect finally built for AI *as the user*: the agent writes the programs. ![Elegant weapons,
-    for a more civilized age.](https://imgs.xkcd.com/comics/lisp_cycles.png)
+    for a more civilized age.](./assets/xkcd-297-lisp-cycles.png)
+    ([xkcd 297](https://xkcd.com/297/) by Randall Munroe, [CC BY-NC 2.5](https://creativecommons.org/licenses/by-nc/2.5/).)
 
 Arrival is a symbolic stack built around LLMs' needs.
 It is not the first attempt to create a "special language for AI",
