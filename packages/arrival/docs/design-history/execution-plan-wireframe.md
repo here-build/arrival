@@ -246,7 +246,7 @@ length), not as a separate batch.
 evaluation) was reviewed and killed — zero production reachability, structurally cornered by
 the landed R1/R9 synchronous lazy-proxy egress (an async carrier can't cross a sync proxy
 trap without either erasing the optimization at egress-await or breaking the
-plain-JS-observable law). See `docs/working-proposals/halfbaked-existence-review.md`
+plain-JS-observable law). See [`halfbaked-existence-review.md`](halfbaked-existence-review.md)
 (VERDICT KILL) for the full evidence; the mechanism is gone, but its motivating CAPABILITY —
 early-collapsing a monotone control-flow decision before a promise fan fully settles — is a
 real requirement the struct-fact wires (§4 above) are the principled home for.

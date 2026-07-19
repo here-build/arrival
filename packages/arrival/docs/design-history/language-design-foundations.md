@@ -80,8 +80,8 @@ readable-Lisp family already builds on those characters. So the blessable zone i
 > was the straightjacket. Print-back stays asymmetric (`(dict …)` / `#(…)`) — the literals are an
 > input surface, not the canonical stored form. Sugarcoat is unaffected: its lens reads `{a + b}`
 > as infix in its own surface and lenses `{}` declarations to `(dict …)` on the way in. Full
-> decision record (comma rules, key rules, the `key:` suffix flip):
-> `docs/working-proposals/arrival-curly-vector-literals.md`.
+> decision record (comma rules, key rules, the `key:` suffix flip): the curly-vector-literals
+> proposal (private monorepo docs).
 
 **The original SRFI survey (kept for the reasoning trail):**
 - `{ … }` is **curly-infix** (`{a + b}` → `(+ a b)`) under SRFI-105, and SRFI-110 sweet-expressions

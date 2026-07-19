@@ -16,8 +16,8 @@ Tier-2 speculative evaluation: `filter`/`map` over promise-bearing fans may emit
 carrier whose per-slot cardinality records form a narrowing interval; `length` reads the
 interval as a number-domain view; the five numeric comparisons `decide()` a branch the
 instant the interval is decisive, with slots still pending. Design lineage is real and
-recent (Traub lenient evaluation; docs/package-specific/arrival-scheme/
-speculative-evaluation-promise-functor-2026-06-05.md).
+recent (Traub lenient evaluation; the speculative-evaluation promise-functor
+design, 2026-06-05, private monorepo docs).
 
 ## Q1 — What does it save today? Who calls it?
 
@@ -30,7 +30,7 @@ speculative-evaluation-promise-functor-2026-06-05.md).
 - `speculate: true` appears in exactly **three test files** and nowhere else:
   `speculative-eval.test.ts`, `deferred-value-egress.test.ts`,
   `membrane/crossing.law.test.ts` (the egress block).
-- Zero hits for `speculate`/`HalfBaked` across **second-foundation/** (arrival-run,
+- Zero hits for `speculate`/`HalfBaked` across the private monorepo's downstream packages (arrival-run,
   arrival-chain, arrival-effects, …), **arrival-mcp**, **arrival-scheme**, and the
   inhuman consumers. No benchmark exercises it (`__benchmarks__/` contains only the
   exec-seam benchmark).

@@ -20,7 +20,7 @@
 ## 1. Verified current state (Fable census, 2026-07-14)
 
 - `AExact` = bigint **rational** (`num`/`denom`, AExact.ts:16-19): ~230 lines of gcd/normalize/cross-compare/arith/round-ties-even. `numbers.ts`: `bigintISqrt`, `schemeCompare` bigint arm, `parseNumber` (host-only). The `(+ (/ 1 3) 0)` decay = ops dropping `denom`.
-- **Prod blast radius: contained.** 78 prod `new AExact(` sites / 20 files (numeric.ts 32, parsing.ts 9, scheme-zod 8, …); **~275 test sites are the mechanical bulk**. `.denom` 61 hits/10 files. All AExact importers inside foundations/arrival **except two duck-typed externals**:
+- **Prod blast radius: contained.** 78 prod `new AExact(` sites / 20 files (numeric.ts 32, parsing.ts 9, scheme-zod 8, …); **~275 test sites are the mechanical bulk**. `.denom` 61 hits/10 files. All AExact importers inside the arrival packages **except two duck-typed externals**:
   - `arrival-serializer/serializer.ts:529-538` — `"num" in obj` duck-type → post-rework **silent fall-through**;
   - the BFCL eval scorer (private monorepo) — `v.denom === 1n` → post-rework **silent NaN in the scorer**.
 - **Tape/cache risk is VACUOUS** (v1 risk 2 deleted): `canonicalJson` throws on bigint (run-cache.ts:111-148), `run-program.ts` records via `JSON.stringify` (would have thrown at record time), provenance hashing has a documented non-load-bearing `String()` fallback. **No persisted artifact can contain a bigint payload. W5 = rebuild-and-rerun, no migration, no version bump.**
