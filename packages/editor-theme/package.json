@@ -1,9 +1,21 @@
 {
   "name": "@here.build/editor-theme",
-  "version": "0.1.0",
+  "version": "0.9.0",
   "description": "Redistributable editor theme: self-hosted fonts (JetBrains Mono for WRITING, Monaspace Argon/Krypton for READING) + the H-K-compensated Darcula syntax theme + the overlay chrome for CodeMirror. No CDN, no Google Fonts — the fonts ship in the package (OFL).",
   "license": "FSL-1.1-MIT",
   "author": "here.build",
+  "publishConfig": {
+    "access": "public"
+  },
+  "homepage": "https://github.com/here-build/arrival#readme",
+  "bugs": {
+    "url": "https://github.com/here-build/arrival/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/here-build/arrival.git",
+    "directory": "packages/editor-theme"
+  },
   "type": "module",
   "exports": {
     ".": {
@@ -23,7 +35,14 @@
     "dist/**/*",
     "src/**/*",
     "OFL-JetBrainsMono.txt",
-    "LICENSE-Monaspace.txt"
+    "LICENSE-Monaspace.txt",
+    "!**/__tests__",
+    "!**/__research__",
+    "!**/__benchmarks__",
+    "!**/__custdev__",
+    "!**/__visual__",
+    "!**/*.test.*",
+    "!**/*.stories.*"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",

@@ -43,6 +43,11 @@ whole-program optimization, and errors that teach instead of ban.
   `tsc`, and diagnostics lift back to their `.scm` spans.
 - `arrival-mercury` — the differential-oracle harness: interpreter vs
   compiled output, compared as black-box source-in/value-out outcomes.
+- `arrival-codemirror` — CodeMirror 6 for arrival Scheme (classic +
+  sugarcoat): structural editing, ghost text, param hints, and the full IDE
+  surface (lint/hover/completion/goto).
+- `editor-theme` — the redistributable editor theme: self-hosted fonts
+  (OFL) and the H-K-compensated Darcula syntax theme for CodeMirror. No CDN.
 
 The rest of the wider toolchain — the run engine, the effect membrane, the
 LLM-inference plane — lives in

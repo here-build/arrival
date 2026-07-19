@@ -1,9 +1,21 @@
 {
   "name": "@inhuman.tools/arrival-codemirror",
-  "version": "0.1.0",
+  "version": "0.9.0",
   "description": "CodeMirror 6 for arrival Scheme (classic + sugarcoat). Language, structural editing, ghost, param hints, and full IDE surface (lint/hover/completion/goto) over a SchemeIdeBackend seam.",
   "license": "FSL-1.1-MIT",
   "author": "here.build",
+  "publishConfig": {
+    "access": "public"
+  },
+  "homepage": "https://github.com/here-build/arrival#readme",
+  "bugs": {
+    "url": "https://github.com/here-build/arrival/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/here-build/arrival.git",
+    "directory": "packages/arrival-codemirror"
+  },
   "type": "module",
   "exports": {
     ".": {
@@ -19,7 +31,14 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
-    "src"
+    "src",
+    "!**/__tests__",
+    "!**/__research__",
+    "!**/__benchmarks__",
+    "!**/__custdev__",
+    "!**/__visual__",
+    "!**/*.test.*",
+    "!**/*.stories.*"
   ],
   "scripts": {
     "build": "tsc",
@@ -40,7 +59,6 @@
     "@codemirror/state": "6.6.0",
     "@codemirror/view": "6.43.0",
     "@inhuman.tools/arrival-sugarcoat": "workspace:^",
-    "@inhuman.tools/arrival-sampler": "workspace:^",
     "@inhuman.tools/arrival-type-lens": "workspace:^",
     "@here.build/editor-theme": "workspace:^",
     "@lezer/highlight": "1.2.1",
