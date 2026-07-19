@@ -48,11 +48,22 @@ export class MaterializeImportsDoorError extends Error {
   }
 }
 
-const SOURCE_ORDER: readonly RuntimeSource[] = ["ramda", "stage0"];
+const BUILTIN_SOURCE_ORDER: readonly RuntimeSource[] = ["ramda", "stage0"];
+
+const sortNames = (names: ImportName[]): void => {
+  names.sort((a, b) => {
+    const al = a.local ?? a.imported;
+    const bl = b.local ?? b.imported;
+    return al < bl ? -1 : al > bl ? 1 : 0;
+  });
+};
 
 /**
  * Materialize runtime imports: one Import decl per source module that is used,
  * rewrite every RuntimeRef to a Ref. Pure — empty symbols → same unit reference.
+ *
+ * Sources: ramda + stage0 (built-in), then `"pkg"` rows keyed by `entry.module`
+ * (capability-owned runtimes — handlebars is the reference).
  */
 export function materializeImports(unit: CompilationUnit, opts: MaterializeImportsOptions): CompilationUnit {
   if (opts.symbols.size === 0) return unit;
@@ -68,10 +79,18 @@ export function materializeImports(unit: CompilationUnit, opts: MaterializeImpor
   // Local-name injectivity across the whole unit
   const symbolOfLocal = new Map<string, string>();
   const aliasOf = new Map<string, Binding>();
-  const bySource = new Map<RuntimeSource, ImportName[]>();
+  const byBuiltin = new Map<RuntimeSource, ImportName[]>();
+  /** pkg module specifier → import names */
+  const byPkg = new Map<string, ImportName[]>();
 
   for (const symbol of symbols) {
     const entry = full[symbol]!;
+    if (entry.source === "pkg" && (entry.module === undefined || entry.module === "")) {
+      throw new Error(
+        `materializeImports: \`${symbol}\` has source "pkg" but no module specifier — ` +
+          `RUNTIME_MANIFEST rows for capability packages must set module.`,
+      );
+    }
     const claimant = symbolOfLocal.get(entry.local);
     if (claimant !== undefined) {
       throw new Error(
@@ -85,23 +104,31 @@ export function materializeImports(unit: CompilationUnit, opts: MaterializeImpor
       entry.imported === entry.local
         ? { imported: entry.imported }
         : { imported: entry.imported, local: entry.local };
-    const bucket = bySource.get(entry.source) ?? [];
-    bucket.push(name);
-    bySource.set(entry.source, bucket);
+    if (entry.source === "pkg") {
+      const mod = entry.module!;
+      const bucket = byPkg.get(mod) ?? [];
+      bucket.push(name);
+      byPkg.set(mod, bucket);
+    } else {
+      const bucket = byBuiltin.get(entry.source) ?? [];
+      bucket.push(name);
+      byBuiltin.set(entry.source, bucket);
+    }
   }
 
-  // Deterministic import decl order: ramda then stage0; names sorted within each.
+  // Deterministic import decl order: ramda, stage0, then pkg modules (UTF-16 sort).
   const importDecls: Decl[] = [];
-  for (const source of SOURCE_ORDER) {
-    const names = bySource.get(source);
+  for (const source of BUILTIN_SOURCE_ORDER) {
+    const names = byBuiltin.get(source);
     if (names === undefined || names.length === 0) continue;
-    names.sort((a, b) => {
-      const al = a.local ?? a.imported;
-      const bl = b.local ?? b.imported;
-      return al < bl ? -1 : al > bl ? 1 : 0;
-    });
+    sortNames(names);
     const from = source === "ramda" ? ramdaModule : opts.runtimeModule;
     importDecls.push(Import(names, from));
+  }
+  for (const mod of [...byPkg.keys()].sort()) {
+    const names = byPkg.get(mod)!;
+    sortNames(names);
+    importDecls.push(Import(names, mod));
   }
 
   const rewrite = (n: R): R => {

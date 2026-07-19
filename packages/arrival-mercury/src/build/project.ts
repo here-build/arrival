@@ -19,13 +19,14 @@ import { greenfieldRegistryFor, openOracleSession } from "../oracle/harness.js";
 import { defaultClassifier, type ClassifyFile } from "./classify.js";
 import { compileDataFile, DATA_EXTENSIONS } from "./data-module.js";
 import { foldOverridableExports, type FlowedUpOverridable, type OverridableExport } from "./overridable.js";
+import { compileHbsFile, HBS_EXT } from "./hbs-module.js";
+import { compilePromptFile, PROMPT_EXT } from "./prompt-module.js";
 import { cleanName } from "../walker/names.js";
 import { flattenTopBegins, hasProgramFace, scanRequires } from "./require-scan.js";
 import { aliasFromPath, compileScmModule } from "./scm-module.js";
 import type { BuildFile, BuildResult, BuildWarning, ExportShape, PendingWarning, RequireResolution } from "./types.js";
 
 const SCM_EXT = ".scm";
-const PROMPT_EXT = ".prompt";
 
 function extOf(relPath: string): string {
   return path.posix.extname(relPath);
@@ -327,13 +328,13 @@ export async function buildProject(files: Readonly<Record<string, string>>, opts
     const ext = extOf(relPath);
     if (ext === SCM_EXT) {
       infos.set(relPath, { relPath, ext, ...analyzeScmFile(relPath, content, files) });
-    } else if (DATA_EXTENSIONS.has(ext) || ext === PROMPT_EXT) {
+    } else if (DATA_EXTENSIONS.has(ext) || ext === PROMPT_EXT || ext === HBS_EXT) {
       infos.set(relPath, { relPath, ext, deps: [], hasProgramFace: false, localOverridableNames: [] });
     } else {
       warnings.push({
         path: relPath,
         code: "build/unrecognized-ext",
-        message: `unrecognized file type "${ext || "(none)"}" — v0 handles .scm/.prompt/.json/.yaml/.yml/.txt; skipped`,
+        message: `unrecognized file type "${ext || "(none)"}" — v0 handles .scm/.prompt/.hbs/.json/.yaml/.yml/.txt; skipped`,
       });
       skippedFiles.push(relPath);
     }
@@ -363,23 +364,26 @@ export async function buildProject(files: Readonly<Record<string, string>>, opts
       if (info === undefined) continue; // an unrecognized-extension file, already warned
       const source = files[relPath]!;
 
-      if (info.ext === PROMPT_EXT) {
-        // STOP item (this lane's own directive): the `.prompt` phase-1
-        // (dotprompt → scheme) compiler is not a reusable pure-string-in
-        // library today — see the CLI report's precise account. No shape is
-        // recorded; any require of this file reports "unresolved" below,
-        // which is a real (visible) build warning, never a silent gap. No
-        // span: a `.prompt` file is never parsed as CoreForm at all (that IS
-        // the gap), so there is no node to point at — `build/prompt-phase1-gap`
-        // (on the REQUIRING file's own require site, below) carries the real,
-        // CoreForm-anchored position instead.
-        warnings.push({
-          path: relPath,
-          code: "build/prompt-unsupported",
-          message:
-            ".prompt compilation is not implemented in this build (v0 STOP item — the phase-1 dotprompt→scheme step is embedded in a live EnvCapability's ContentResolver, not a pure function; see the lane report). Requiring this file will door at build/run time.",
-        });
-        skippedFiles.push(relPath);
+      if (info.ext === PROMPT_EXT || info.ext === HBS_EXT) {
+        // Import-executable pretreat: bytes → scheme → compileScmModule.
+        // `.hbs` is the reference capability package; `.prompt` follows the same face.
+        try {
+          const runtimeImportPath = importSpecifierBetween(relPath, `${stage0Basename}.ts`);
+          const compiled =
+            info.ext === HBS_EXT
+              ? compileHbsFile(source, { baseRegistry }, { path: relPath, runtimeImportPath })
+              : compilePromptFile(source, { baseRegistry }, { path: relPath, runtimeImportPath });
+          shapes.set(relPath, compiled.shape);
+          outFiles.push({ path: outPathFor(relPath), content: compiled.content });
+          for (const w of compiled.warnings) warnings.push({ path: relPath, ...w });
+        } catch (e) {
+          warnings.push({
+            path: relPath,
+            code: info.ext === HBS_EXT ? "build/hbs-unsupported" : "build/prompt-unsupported",
+            message: e instanceof Error ? e.message : String(e),
+          });
+          skippedFiles.push(relPath);
+        }
         continue;
       }
 
@@ -426,11 +430,13 @@ export async function buildProject(files: Readonly<Record<string, string>>, opts
         const shape = shapes.get(target);
         if (shape === undefined) {
           // The target IS a project file, just never got a recorded shape —
-          // either it's a known, named gap (`.prompt`, v0's STOP item — give
-          // it its OWN code so a caller can filter on "the prompt gap"
-          // specifically) or some other upstream failure (cycle/data-parse).
+          // parse/compile failure (prompt or data) or a require cycle. Prompt
+          // keeps its own code so callers can still filter "prompt failed".
           const code = extOf(target) === PROMPT_EXT ? "build/prompt-phase1-gap" : "build/unresolved-require";
-          const why = extOf(target) === PROMPT_EXT ? "the .prompt phase-1 gap" : "a require cycle or an upstream data-parse-error";
+          const why =
+            extOf(target) === PROMPT_EXT
+              ? "the .prompt failed to convert/compile (see its own warning)"
+              : "a require cycle or an upstream data-parse-error";
           return { kind: "unresolved", code, reason: `— "${target}" was not compiled (${why}; see its own warning)` };
         }
         return { kind: "resolved", importPath: importSpecifierBetween(relPath, target), shape };

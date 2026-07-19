@@ -13,7 +13,12 @@
  * Local names are reserved at walk allocation time (`RUNTIME_LOCALS`); imported names
  * may differ (e.g. `length` → `length as length_`).
  */
-export type RuntimeSource = "stage0" | "ramda";
+/**
+ * Where a RuntimeRef loads from:
+ *  - `"stage0"` / `"ramda"` — the built-in multi-source census
+ *  - `"pkg"` — an npm package (capability-owned runtime subpath); set `module`
+ */
+export type RuntimeSource = "stage0" | "ramda" | "pkg";
 
 export interface RuntimeEntry {
   /** Local JS binding (reserved in the unit; used at call sites). */
@@ -21,13 +26,24 @@ export interface RuntimeEntry {
   /** Name imported from the module (defaults equal to `local`). */
   readonly imported: string;
   readonly source: RuntimeSource;
+  /** Required when `source === "pkg"` — npm specifier (e.g. `@…/handlebars/runtime`). */
+  readonly module?: string;
 }
 
-const e = (local: string, source: RuntimeSource, imported: string = local): RuntimeEntry => ({
+const e = (
+  local: string,
+  source: RuntimeSource,
+  imported: string = local,
+  module?: string,
+): RuntimeEntry => ({
   local,
   imported,
   source,
+  ...(module === undefined ? {} : { module }),
 });
+
+/** Reference capability package — handlebars owns its dep + /runtime emit surface. */
+const HBS_RUNTIME = "@inhuman.tools/arrival-env-capability-handlebars/runtime";
 
 /**
  * Corpus-driven + cold-stdlib map. Grow by adding a row (and a stage0 export
@@ -75,6 +91,13 @@ export const RUNTIME_MANIFEST: Readonly<Record<string, RuntimeEntry>> = {
 
   // ── cold stdlib → ramda (loose-friendly polymorphism) ─────────────────────
   length: e("length_", "ramda", "length"),
+
+  // ── opt-in capability packages (reference: handlebars) ────────────────────
+  // Convert→scheme (import executable) then these RuntimeRefs materialize as
+  // imports from the package `/runtime` subpath — not stage0 shims.
+  "template/handlebars": e("templateHandlebars", "pkg", "templateHandlebars", HBS_RUNTIME),
+  "handlebars/parse": e("handlebarsParse", "pkg", "handlebarsParse", HBS_RUNTIME),
+  "handlebars/run": e("handlebarsRun", "pkg", "handlebarsRun", HBS_RUNTIME),
 };
 
 /** scheme → local name — WalkOptions.manifest / reservation set. */

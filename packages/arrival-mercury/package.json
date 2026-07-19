@@ -74,6 +74,8 @@
     "@here.build/lexical-namer": "workspace:^",
     "@inhuman.tools/arrival-run": "workspace:^",
     "@inhuman.tools/arrival-lsp": "workspace:^",
+    "@inhuman.tools/llm-plane-arrival-env": "workspace:^",
+    "@inhuman.tools/arrival-env-capability-handlebars": "workspace:^",
     "pluralize": "8.0.0",
     "ramda": "0.31.3",
     "tsx": "4.22.4",

@@ -79,15 +79,13 @@ export type BuildWarningCode =
   /** A project file whose extension v0 doesn't recognize at all (`project.ts`'s
    *  main loop) — never compiled, never even parsed. */
   | "build/unrecognized-ext"
-  /** A `.prompt` file itself, encountered directly (`project.ts`'s main loop) —
-   *  the documented v0 STOP (phase-1 dotprompt→scheme isn't a pure function
-   *  yet). Never carries a span: a `.prompt` file is never parsed as CoreForm,
-   *  so there is no node to point at. */
+  /** A `.prompt` file failed pure convert→scheme or scm compile (`project.ts`).
+   *  Never carries a span: a `.prompt` file is not user CoreForm. */
   | "build/prompt-unsupported"
-  /** A `(require "…")` whose target IS a `.prompt` file — the SAME gap as
-   *  `build/prompt-unsupported`, viewed from the require site, which DOES have
-   *  a real CoreForm `Require` node (and therefore a real span) even though its
-   *  target never compiled. */
+  /** A `.hbs` file failed pure convert→scheme or scm compile. */
+  | "build/hbs-unsupported"
+  /** A `(require "…")` whose `.prompt` target failed convert/compile — same gap
+   *  as `build/prompt-unsupported`, from the require site (has a CoreForm span). */
   | "build/prompt-phase1-gap"
   /** A `(require "…")` that didn't resolve to a compiled sibling for any OTHER
    *  reason — dangling (no such file in the project), or the target itself
