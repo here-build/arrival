@@ -36,6 +36,9 @@ whole-program optimization, and errors that teach instead of ban.
   tiers); `arrival-mcp-do` — the Durable Object session shell;
   `mcp-substrate` — the doors system: error enrichment, session replay,
   futility detection. Rejections teach and route; they do not ban.
+- `mcp-typescript-lsp` — TypeScript code-intelligence MCP tool (hover,
+  definition, references, impact analysis, …) as an arrival-mcp `McpTool`,
+  with s-expression results for agent reasoning.
 - `mercury` — the Mercury compiler: an arrival-chain program projected into
   human-grade TypeScript, designed around the reader's mental model rather
   than mechanically lowered.

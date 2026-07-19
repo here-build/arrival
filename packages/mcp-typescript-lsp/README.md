@@ -1,6 +1,8 @@
-# @here.build/mcp-typescript-lsp
+# @inhuman.tools/mcp-typescript-lsp
 
 MCP (Model Context Protocol) server that wraps TypeScript Language Server, providing semantic code analysis with s-expression output format.
+
+Built as an [arrival-mcp](../arrival-mcp) **value-shaped tool** (`McpTool`: `name` / `describe()` / `call()`), registered via `registerTools` on the official `@modelcontextprotocol/sdk` `McpServer`. Same registration path as `DiscoveryTool` and `ActionTool` — not a hand-rolled MCP server.
 
 ## Features
 
@@ -21,14 +23,14 @@ All results are returned as s-expressions for optimal LLM reasoning.
 ## Installation
 
 ```bash
-npm install -g @here.build/mcp-typescript-lsp
+npm install -g @inhuman.tools/mcp-typescript-lsp
+# or as a library:
+pnpm add @inhuman.tools/mcp-typescript-lsp
 ```
 
 ## Usage
 
-### As MCP Server
-
-Add to your MCP client configuration:
+### As MCP Server (stdio)
 
 ```json
 {
@@ -40,9 +42,20 @@ Add to your MCP client configuration:
 }
 ```
 
+### As a library (compose with other arrival-mcp tools)
+
+```ts
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { registerTools } from "@inhuman.tools/arrival-mcp";
+import { TypeScriptIntelTool } from "@inhuman.tools/mcp-typescript-lsp";
+
+const server = new McpServer({ name: "my-app", version: "0.1.0" }, { capabilities: { tools: {} } });
+registerTools(server, [new TypeScriptIntelTool() /* , discovery, editing, … */]);
+```
+
 ### Single Unified Tool
 
-The server provides a single `typescript-lsp` tool with different actions. The parameters depend on the action type:
+The server provides a single `typescript-intel` tool with different actions. The parameters depend on the action type:
 
 #### Position-based actions (hover, definition, references, completions, call-hierarchy, type-hierarchy)
 ```json
@@ -306,22 +319,25 @@ Output:
 
 ## How It Works
 
-1. **TypeScript Language Service** - Uses the official TS compiler API
-2. **Project Discovery** - Automatically finds tsconfig.json
-3. **Incremental Updates** - Efficient file watching and caching
-4. **S-Expression Output** - Results use Symbol.toSymbolicExpression protocol
+1. **TypeScript Language Service** - Uses the official TS compiler API (`TSLanguageServiceWrapper`)
+2. **arrival-mcp `McpTool`** - `TypeScriptIntelTool` implements `name` / `describe` / `call`; `TypeScriptLSPServer` is a thin stdio shell over `McpServer` + `registerTools`
+3. **Project Discovery** - Automatically finds tsconfig.json
+4. **S-Expression Output** - Results use `Symbol.toSymbolicExpression` via `@inhuman.tools/arrival-serializer`
+
+### Why not `ActionTool` / `DiscoveryTool`?
+
+- **Not a Scheme REPL** — position/selector-based intel doesn't compose as env symbols, so `DiscoveryTool` is the wrong tier.
+- **Not a mutation batch** — `ActionTool` is the write tier (shared context + `["name", props]` bursts with partial-failure reports). This tool is pure read intel with a flat `{action, …}` surface that agents already know; forcing it into ActionTool would add intent/batch ceremony without benefit.
+- **`McpTool` is the contract** — arrival-mcp's public surface is deliberately structural; any value with `describe`/`call` registers identically.
 
 ## Development
 
 ```bash
-# Install dependencies
-npm install
-
-# Build
-npm run build
-
-# Run locally
-npm start
+# From monorepo root
+pnpm install
+pnpm --filter @inhuman.tools/mcp-typescript-lsp build
+pnpm --filter @inhuman.tools/mcp-typescript-lsp test
+pnpm --filter @inhuman.tools/mcp-typescript-lsp start
 ```
 
 ## Use Cases
@@ -335,4 +351,4 @@ npm start
 
 ## License
 
-MIT
+[Functional Source License, Version 1.1, MIT Future License](./LICENSE.md).

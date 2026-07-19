@@ -1,13 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { TypeScriptLSPServer } from "./index";
+import { TypeScriptIntelTool, TypeScriptLSPServer } from "./index.js";
 import { toSExprString } from "@inhuman.tools/arrival-serializer";
 import * as fs from "fs";
 import * as path from "path";
 
 describe("TypeScript LSP MCP Server Integration", () => {
+  let tool: TypeScriptIntelTool;
   let server: TypeScriptLSPServer;
-  let handleToolCall: (name: string, args: any) => Promise<any>;
-  let getTools: () => any[];
 
   const testDir = path.join(__dirname, "../test-fixtures");
   const testFile = path.join(testDir, "test-file.ts");
@@ -53,11 +52,8 @@ service.addUser(testUser);`;
     };
     fs.writeFileSync(path.join(testDir, "tsconfig.json"), JSON.stringify(tsconfig, null, 2));
 
-    // Create server instance
-    server = new TypeScriptLSPServer();
-    // Access the private methods for testing
-    handleToolCall = (server as any).handleToolCall.bind(server);
-    getTools = (server as any).getTools.bind(server);
+    tool = new TypeScriptIntelTool();
+    server = new TypeScriptLSPServer(tool);
   });
 
   afterAll(() => {
@@ -68,20 +64,21 @@ service.addUser(testUser);`;
   });
 
   describe("Tool Registration", () => {
-    it("should list typescript-intel tool", () => {
-      const tools = getTools();
+    it("should describe typescript-intel tool (McpTool contract)", async () => {
+      const listed = await tool.describe();
 
-      expect(tools).toHaveLength(1);
-      expect(tools[0].name).toBe("typescript-intel");
-      expect(tools[0].inputSchema).toBeDefined();
-      expect(tools[0].inputSchema.type).toBe("object");
-      expect(tools[0].inputSchema.properties.action).toBeDefined();
+      expect(listed.name).toBe("typescript-intel");
+      expect(listed.inputSchema).toBeDefined();
+      expect(listed.inputSchema.type).toBe("object");
+      expect((listed.inputSchema as { properties?: { action?: unknown } }).properties?.action).toBeDefined();
+      // Server shell holds the same tool instance
+      expect(server.tool).toBe(tool);
     });
   });
 
   describe("Position-based Actions", () => {
     it("should handle hover with selector", async () => {
-      const result = await handleToolCall("typescript-intel", {
+      const result = await tool.execute({
         action: "hover",
         filePath: testFile,
         selector: "const service### = new"
@@ -93,7 +90,7 @@ service.addUser(testUser);`;
     });
 
     it("should handle definition with occurrence selector", async () => {
-      const result = await handleToolCall("typescript-intel", {
+      const result = await tool.execute({
         action: "definition",
         filePath: testFile,
         selector: "User#2" // Second occurrence in UserService class
@@ -106,7 +103,7 @@ service.addUser(testUser);`;
     });
 
     it("should handle references", async () => {
-      const result = await handleToolCall("typescript-intel", {
+      const result = await tool.execute({
         action: "references",
         filePath: testFile,
         selector: "add###User(user"
@@ -120,7 +117,7 @@ service.addUser(testUser);`;
     });
 
     it("should handle deprecated line/character format", async () => {
-      const result = await handleToolCall("typescript-intel", {
+      const result = await tool.execute({
         action: "hover",
         filePath: testFile,
         line: 18,
@@ -134,7 +131,7 @@ service.addUser(testUser);`;
 
   describe("File-based Actions", () => {
     it("should handle diagnostics", async () => {
-      const result = await handleToolCall("typescript-intel", {
+      const result = await tool.execute({
         action: "diagnostics",
         filePath: testFile
       });
@@ -151,7 +148,7 @@ const x: number = "not a number";
 const y: string = 42;
 `);
 
-      const result = await handleToolCall("typescript-intel", {
+      const result = await tool.execute({
         action: "diagnostics",
         filePath: errorFile,
         severity: "error"
@@ -165,7 +162,7 @@ const y: string = 42;
     });
 
     it("should handle document symbols", async () => {
-      const result = await handleToolCall("typescript-intel", {
+      const result = await tool.execute({
         action: "symbols",
         filePath: testFile
       });
@@ -182,7 +179,7 @@ const y: string = 42;
 
   describe("Search Actions", () => {
     it("should handle symbol search", async () => {
-      const result = await handleToolCall("typescript-intel", {
+      const result = await tool.execute({
         action: "search-symbol",
         projectRoot: testDir,
         query: "User"
@@ -195,7 +192,7 @@ const y: string = 42;
     }, 60000); // Increase timeout for search
 
     it("should handle symbol search with kind filter", async () => {
-      const result = await handleToolCall("typescript-intel", {
+      const result = await tool.execute({
         action: "search-symbol",
         projectRoot: testDir,
         query: "User",
@@ -210,19 +207,19 @@ const y: string = 42;
   });
 
   describe("Error Handling", () => {
-    it("should handle invalid tool name", async () => {
+    it("should handle unknown action", async () => {
       try {
-        await handleToolCall("invalid-tool", {});
+        await tool.execute({ action: "not-a-real-action" });
         expect.fail("Should have thrown an error");
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toContain("Unknown tool");
+        expect((error as Error).message).toContain("Unknown action");
       }
     });
 
     it("should handle missing required parameters", async () => {
       try {
-        await handleToolCall("typescript-intel", {
+        await tool.execute({
           action: "hover"
           // Missing filePath
         });
@@ -235,7 +232,7 @@ const y: string = 42;
 
     it("should handle invalid selector", async () => {
       try {
-        await handleToolCall("typescript-intel", {
+        await tool.execute({
           action: "hover",
           filePath: testFile,
           selector: "nonexistent### code"
@@ -249,7 +246,7 @@ const y: string = 42;
 
     it("should handle file not found", async () => {
       try {
-        await handleToolCall("typescript-intel", {
+        await tool.execute({
           action: "hover",
           filePath: "/nonexistent/file.ts",
           selector: "const x###"
@@ -263,7 +260,7 @@ const y: string = 42;
 
   describe("S-Expression Format", () => {
     it("should format hover info correctly", async () => {
-      const result = await handleToolCall("typescript-intel", {
+      const result = await tool.execute({
         action: "hover",
         filePath: testFile,
         selector: "interface User### {"
@@ -277,7 +274,7 @@ const y: string = 42;
     });
 
     it("should handle nested s-expressions", async () => {
-      const result = await handleToolCall("typescript-intel", {
+      const result = await tool.execute({
         action: "symbols",
         filePath: testFile
       });
@@ -287,6 +284,16 @@ const y: string = 42;
       expect(sexpr).toContain(":parent");
       // Symbols have :parent pointing to their containing symbol
       expect(sexpr).toContain(":parent User");
+    });
+
+    it("call() returns s-expression text for registerTools serialization", async () => {
+      const text = await tool.call({
+        action: "hover",
+        filePath: testFile,
+        selector: "const service### = new"
+      });
+      expect(typeof text).toBe("string");
+      expect(text).toContain("(HoverInfoImpl");
     });
   });
 });

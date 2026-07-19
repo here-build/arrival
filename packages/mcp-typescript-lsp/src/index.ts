@@ -1,14 +1,14 @@
 import { toSExprString, type SExprSerializable } from "@inhuman.tools/arrival-serializer";
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { type McpTool, registerTools } from "@inhuman.tools/arrival-mcp";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
 import { parseSelectorWithOccurrence } from "./selector-parser.js";
 import { TSLanguageServiceWrapper } from "./ts-language-service.js";
 
 /** Typed arguments for the typescript-intel tool call */
-interface TypeScriptIntelArgs {
+export interface TypeScriptIntelArgs {
   action: string;
   filePath?: string;
   selector?: string;
@@ -26,67 +26,7 @@ interface TypeScriptIntelArgs {
   queries?: Array<{ at: string; want: Record<string, unknown> }>;
 }
 
-export class TypeScriptLSPServer {
-  private readonly server: Server;
-  private readonly tsService: TSLanguageServiceWrapper;
-
-  constructor() {
-    this.tsService = new TSLanguageServiceWrapper();
-    this.server = new Server(
-      {
-        name: "typescript-intel",
-        version: "0.1.0",
-      },
-      {
-        capabilities: {
-          tools: {},
-        },
-      },
-    );
-
-    this.setupHandlers();
-  }
-
-  private setupHandlers() {
-    // List available tools
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: this.getTools(),
-    }));
-
-    // Handle tool calls
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const { name, arguments: rawArgs } = request.params;
-      const args = (rawArgs ?? {}) as unknown as TypeScriptIntelArgs;
-
-      try {
-        const result = await this.handleToolCall(name, args);
-        return {
-          content: [
-            {
-              type: "text",
-              text: toSExprString(result),
-            },
-          ],
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-    });
-  }
-
-  private getTools(): Tool[] {
-    return [
-      {
-        name: "typescript-intel",
-        description: `TypeScript/JavaScript code intelligence powered by the TypeScript compiler. Provides semantic understanding that grep/text search cannot: type inference, cross-file references, interface implementations, and more.
+const TOOL_DESCRIPTION = `TypeScript/JavaScript code intelligence powered by the TypeScript compiler. Provides semantic understanding that grep/text search cannot: type inference, cross-file references, interface implementations, and more.
 
 ## WHEN TO USE THIS TOOL (not grep!)
 
@@ -146,27 +86,28 @@ Results use S-expressions for compact, parseable output:
   hover: (HoverInfoImpl :expression hover "const x: number" :full-type "number")
   definition: (list (DefinitionImpl :file "/path.ts" :line 42 :char 8 :kind "class"))
   references: (list (ReferenceImpl :file "/a.ts" :line 10 :char 5) ...)
-  diagnostics: (list (DiagnosticImpl :message "Type error" :line 15 :code 2322 :severity error))`,
-        inputSchema: {
-          type: "object",
-          properties: {
-            action: {
-              type: "string",
-              enum: [
-                "hover",
-                "definition",
-                "references",
-                "completions",
-                "diagnostics",
-                "symbols",
-                "search-symbol",
-                "call-hierarchy",
-                "type-hierarchy",
-                "impact-analysis",
-                "find-implementations",
-                "analyze",
-              ],
-              description: `The semantic operation to perform:
+  diagnostics: (list (DiagnosticImpl :message "Type error" :line 15 :code 2322 :severity error))`;
+
+const INPUT_SCHEMA: Tool["inputSchema"] = {
+  type: "object",
+  properties: {
+    action: {
+      type: "string",
+      enum: [
+        "hover",
+        "definition",
+        "references",
+        "completions",
+        "diagnostics",
+        "symbols",
+        "search-symbol",
+        "call-hierarchy",
+        "type-hierarchy",
+        "impact-analysis",
+        "find-implementations",
+        "analyze",
+      ],
+      description: `The semantic operation to perform:
 • "references" - Find all usages of a symbol (like "Find All References" in IDE)
 • "definition" - Jump to where a symbol is defined (like "Go to Definition")
 • "hover" - Get type info for a symbol (like hovering in IDE)
@@ -179,202 +120,218 @@ Results use S-expressions for compact, parseable output:
 • "completions" - Get autocomplete suggestions
 • "call-hierarchy" - See what calls a function and what it calls
 • "analyze" - Unified query for multiple pieces of info at once`,
-            },
-            filePath: {
-              type: "string",
-              description:
-                "Absolute path to the .ts/.tsx/.js/.jsx file to analyze. Required for all actions except search-symbol.",
-            },
-            selector: {
-              type: "string",
-              description: `RECOMMENDED: Code snippet with ### marking exactly where to look. The ### acts as a cursor position.
+    },
+    filePath: {
+      type: "string",
+      description:
+        "Absolute path to the .ts/.tsx/.js/.jsx file to analyze. Required for all actions except search-symbol.",
+    },
+    selector: {
+      type: "string",
+      description: `RECOMMENDED: Code snippet with ### marking exactly where to look. The ### acts as a cursor position.
 Examples:
   "const user###: User"     → analyze the type annotation
   "user.###name"            → analyze the 'name' property access
   "function ###handleClick" → analyze the function name
   "User#2"                  → second occurrence of "User" in the file (for disambiguation)`,
-            },
-            line: {
-              type: "number",
-              description:
-                "Alternative to selector: 1-based line number. Use with 'character'. Selector is usually easier.",
-            },
-            character: {
-              type: "number",
-              description: "Alternative to selector: 0-based character offset within the line. Use with 'line'.",
-            },
-            severity: {
-              type: "string",
-              enum: ["error", "warning", "info", "hint"],
-              description:
-                "For 'diagnostics' action: filter by minimum severity. 'error' = only errors, 'warning' = errors + warnings, etc.",
-            },
-            projectRoot: {
-              type: "string",
-              description:
-                "For 'search-symbol' action: root directory to search in (usually the project root or a package directory)",
-            },
-            query: {
-              type: "string",
-              description:
-                "For 'search-symbol' action: symbol name pattern to search for. Example: 'User' finds User, UserService, UserModel, etc.",
-            },
-            kind: {
-              type: "string",
-              enum: ["class", "interface", "function", "variable", "type", "namespace"],
-              description:
-                "For 'search-symbol' action: only return symbols of this kind. Example: kind='interface' to find only interfaces.",
-            },
-            scope: {
-              type: "string",
-              enum: ["exports", "top-level", "outline", "all"],
-              default: "top-level",
-              description: `For 'symbols' action: filter symbol scope level.
+    },
+    line: {
+      type: "number",
+      description:
+        "Alternative to selector: 1-based line number. Use with 'character'. Selector is usually easier.",
+    },
+    character: {
+      type: "number",
+      description: "Alternative to selector: 0-based character offset within the line. Use with 'line'.",
+    },
+    severity: {
+      type: "string",
+      enum: ["error", "warning", "info", "hint"],
+      description:
+        "For 'diagnostics' action: filter by minimum severity. 'error' = only errors, 'warning' = errors + warnings, etc.",
+    },
+    projectRoot: {
+      type: "string",
+      description:
+        "For 'search-symbol' action: root directory to search in (usually the project root or a package directory)",
+    },
+    query: {
+      type: "string",
+      description:
+        "For 'search-symbol' action: symbol name pattern to search for. Example: 'User' finds User, UserService, UserModel, etc.",
+    },
+    kind: {
+      type: "string",
+      enum: ["class", "interface", "function", "variable", "type", "namespace"],
+      description:
+        "For 'search-symbol' action: only return symbols of this kind. Example: kind='interface' to find only interfaces.",
+    },
+    scope: {
+      type: "string",
+      enum: ["exports", "top-level", "outline", "all"],
+      default: "top-level",
+      description: `For 'symbols' action: filter symbol scope level.
 • "exports" — Only exported symbols
 • "top-level" (default) — All module-level declarations (exported or not), no function internals
 • "outline" — Module-level declarations + class/interface members (methods, properties, enum values)
 • "all" — Every symbol at every scope level`,
-            },
-            target: {
-              type: "string",
-              description:
-                "For 'impact-analysis' action: the symbol name to analyze. Example: 'UserService' to see what depends on UserService.",
-            },
-            depth: {
-              type: "number",
-              minimum: 1,
-              maximum: 5,
-              default: 2,
-              description: "How many levels deep to trace impact (for impact-analysis)",
-            },
-            includeTests: {
-              type: "boolean",
-              default: true,
-              description: "Include test files in impact analysis",
-            },
-            groupBy: {
-              type: "string",
-              enum: ["file", "component", "flat", "nested"],
-              default: "file",
-              description: "How to group impact analysis results (nested shows dependency chains)",
-            },
-            queries: {
-              type: "array",
-              description: "Symbol queries for unified analyze action",
-              items: {
-                type: "object",
-                properties: {
-                  at: {
-                    type: "string",
-                    description: "Selector with ### marker or line:char position",
-                  },
-                  want: {
+    },
+    target: {
+      type: "string",
+      description:
+        "For 'impact-analysis' action: the symbol name to analyze. Example: 'UserService' to see what depends on UserService.",
+    },
+    depth: {
+      type: "number",
+      minimum: 1,
+      maximum: 5,
+      default: 2,
+      description: "How many levels deep to trace impact (for impact-analysis)",
+    },
+    includeTests: {
+      type: "boolean",
+      default: true,
+      description: "Include test files in impact analysis",
+    },
+    groupBy: {
+      type: "string",
+      enum: ["file", "component", "flat", "nested"],
+      default: "file",
+      description: "How to group impact analysis results (nested shows dependency chains)",
+    },
+    queries: {
+      type: "array",
+      description: "Symbol queries for unified analyze action",
+      items: {
+        type: "object",
+        properties: {
+          at: {
+            type: "string",
+            description: "Selector with ### marker or line:char position",
+          },
+          want: {
+            type: "object",
+            description: "Information bundles to retrieve",
+            properties: {
+              identity: {
+                oneOf: [{ type: "boolean" }, { type: "object", properties: {}, additionalProperties: true }],
+              },
+              location: {
+                oneOf: [{ type: "boolean" }, { type: "object", properties: {}, additionalProperties: true }],
+              },
+              type: {
+                oneOf: [
+                  { type: "boolean" },
+                  {
                     type: "object",
-                    description: "Information bundles to retrieve",
                     properties: {
-                      identity: {
-                        oneOf: [{ type: "boolean" }, { type: "object", properties: {}, additionalProperties: true }],
-                      },
-                      location: {
-                        oneOf: [{ type: "boolean" }, { type: "object", properties: {}, additionalProperties: true }],
-                      },
-                      type: {
-                        oneOf: [
-                          { type: "boolean" },
-                          {
-                            type: "object",
-                            properties: {
-                              expanded: { type: "boolean" },
-                              constraints: { type: "boolean" },
-                            },
-                          },
-                        ],
-                      },
-                      signature: {
-                        oneOf: [{ type: "boolean" }, { type: "object", properties: {}, additionalProperties: true }],
-                      },
-                      hierarchy: {
-                        oneOf: [
-                          { type: "boolean" },
-                          {
-                            type: "object",
-                            properties: {
-                              depth: { type: "number" },
-                              implementations: { type: "boolean" },
-                            },
-                          },
-                        ],
-                      },
-                      members: {
-                        oneOf: [{ type: "boolean" }, { type: "object", properties: {}, additionalProperties: true }],
-                      },
-                      usage: {
-                        oneOf: [
-                          { type: "boolean" },
-                          {
-                            type: "object",
-                            properties: {
-                              limit: { type: "number" },
-                              includeTests: { type: "boolean" },
-                            },
-                          },
-                        ],
-                      },
-                      impact: {
-                        oneOf: [
-                          { type: "boolean" },
-                          {
-                            type: "object",
-                            properties: {
-                              depth: { type: "number" },
-                              includeTests: { type: "boolean" },
-                            },
-                          },
-                        ],
-                      },
-                      diagnostics: {
-                        oneOf: [
-                          { type: "boolean" },
-                          {
-                            type: "object",
-                            properties: {
-                              severity: { enum: ["error", "warning", "info", "hint"] },
-                            },
-                          },
-                        ],
-                      },
-                      flow: {
-                        oneOf: [{ type: "boolean" }, { type: "object", properties: {}, additionalProperties: true }],
-                      },
+                      expanded: { type: "boolean" },
+                      constraints: { type: "boolean" },
                     },
                   },
-                },
-                required: ["at", "want"],
+                ],
+              },
+              signature: {
+                oneOf: [{ type: "boolean" }, { type: "object", properties: {}, additionalProperties: true }],
+              },
+              hierarchy: {
+                oneOf: [
+                  { type: "boolean" },
+                  {
+                    type: "object",
+                    properties: {
+                      depth: { type: "number" },
+                      implementations: { type: "boolean" },
+                    },
+                  },
+                ],
+              },
+              members: {
+                oneOf: [{ type: "boolean" }, { type: "object", properties: {}, additionalProperties: true }],
+              },
+              usage: {
+                oneOf: [
+                  { type: "boolean" },
+                  {
+                    type: "object",
+                    properties: {
+                      limit: { type: "number" },
+                      includeTests: { type: "boolean" },
+                    },
+                  },
+                ],
+              },
+              impact: {
+                oneOf: [
+                  { type: "boolean" },
+                  {
+                    type: "object",
+                    properties: {
+                      depth: { type: "number" },
+                      includeTests: { type: "boolean" },
+                    },
+                  },
+                ],
+              },
+              diagnostics: {
+                oneOf: [
+                  { type: "boolean" },
+                  {
+                    type: "object",
+                    properties: {
+                      severity: { enum: ["error", "warning", "info", "hint"] },
+                    },
+                  },
+                ],
+              },
+              flow: {
+                oneOf: [{ type: "boolean" }, { type: "object", properties: {}, additionalProperties: true }],
               },
             },
           },
-          required: ["action"],
-          additionalProperties: false,
         },
+        required: ["at", "want"],
       },
-    ];
+    },
+  },
+  required: ["action"],
+  additionalProperties: false,
+};
+
+/**
+ * Value-shaped MCP tool for TypeScript code intelligence.
+ *
+ * Implements the arrival-mcp `McpTool` contract (`name` / `describe` / `call`) so it can be
+ * registered with `registerTools` on any official SDK `McpServer` — same path as DiscoveryTool
+ * and ActionTool. Not an ActionTool: the surface is a single multi-action intel query (flat
+ * `{action, …}` args, s-expression results), not a batched mutation burst.
+ */
+export class TypeScriptIntelTool implements McpTool {
+  readonly name = "typescript-intel";
+  private readonly tsService = new TSLanguageServiceWrapper();
+
+  async describe(_clientInfo?: Record<string, unknown>): Promise<Tool> {
+    return {
+      name: this.name,
+      description: TOOL_DESCRIPTION,
+      inputSchema: INPUT_SCHEMA,
+    };
   }
 
-  private async handleToolCall(name: string, args: TypeScriptIntelArgs): Promise<SExprSerializable> {
-    if (name !== "typescript-intel") {
-      throw new Error(`Unknown tool: ${name}`);
+  /**
+   * Library / test entry: returns the raw SExpr-serializable result (not yet lowered to text).
+   * Prefer {@link call} when wiring through arrival-mcp (`registerTools` serializes strings as text).
+   */
+  async execute(args: TypeScriptIntelArgs): Promise<SExprSerializable> {
+    const work: TypeScriptIntelArgs = { ...args };
+    const { action } = work;
+
+    if (work.selector && work.filePath) {
+      const position = parseSelectorWithOccurrence(work.filePath, work.selector);
+      work.line = position.line;
+      work.character = position.character;
     }
 
-    const { action } = args;
-
-    // Convert selector to line/character if provided
-    if (args.selector && args.filePath) {
-      const position = parseSelectorWithOccurrence(args.filePath, args.selector);
-      args.line = position.line;
-      args.character = position.character;
-    }
-
-    // Validate required params based on action
     const positionActions = [
       "hover",
       "definition",
@@ -384,71 +341,105 @@ Examples:
       "type-hierarchy",
       "find-implementations",
     ];
-    if (positionActions.includes(action) && (!args.filePath || args.line == null || args.character == null)) {
+    if (positionActions.includes(action) && (!work.filePath || work.line == null || work.character == null)) {
       throw new Error(`Action '${action}' requires filePath and either selector or line/character`);
     }
 
     switch (action) {
       case "hover":
-        return await this.tsService.getHover(args.filePath!, args.line!, args.character!);
+        return await this.tsService.getHover(work.filePath!, work.line!, work.character!);
 
       case "definition":
-        return await this.tsService.getDefinition(args.filePath!, args.line!, args.character!);
+        return await this.tsService.getDefinition(work.filePath!, work.line!, work.character!);
 
       case "references":
-        return await this.tsService.getReferences(args.filePath!, args.line!, args.character!);
+        return await this.tsService.getReferences(work.filePath!, work.line!, work.character!);
 
       case "completions":
-        return await this.tsService.getCompletions(args.filePath!, args.line!, args.character!);
+        return await this.tsService.getCompletions(work.filePath!, work.line!, work.character!);
 
       case "diagnostics":
-        if (!args.filePath) {
+        if (!work.filePath) {
           throw new Error("Action 'diagnostics' requires filePath");
         }
-        return await this.tsService.getDiagnostics(args.filePath, args.severity);
+        return await this.tsService.getDiagnostics(work.filePath, work.severity);
 
       case "symbols":
-        if (!args.filePath) {
+        if (!work.filePath) {
           throw new Error("Action 'symbols' requires filePath");
         }
-        return await this.tsService.getDocumentSymbols(args.filePath, args.scope);
+        return await this.tsService.getDocumentSymbols(work.filePath, work.scope);
 
       case "search-symbol":
-        if (!args.projectRoot || !args.query) {
+        if (!work.projectRoot || !work.query) {
           throw new Error("Action 'search-symbol' requires projectRoot and query");
         }
-        return await this.tsService.searchSymbols(args.projectRoot, args.query, args.kind);
+        return await this.tsService.searchSymbols(work.projectRoot, work.query, work.kind);
 
       case "call-hierarchy":
-        return await this.tsService.getCallHierarchy(args.filePath!, args.line!, args.character!);
+        return await this.tsService.getCallHierarchy(work.filePath!, work.line!, work.character!);
 
       case "type-hierarchy":
-        return await this.tsService.getTypeHierarchy(args.filePath!, args.line!, args.character!);
+        return await this.tsService.getTypeHierarchy(work.filePath!, work.line!, work.character!);
 
       case "impact-analysis":
-        if (!args.target) {
+        if (!work.target) {
           throw new Error("Action 'impact-analysis' requires target");
         }
         return await this.tsService.analyzeImpact(
-          args.target,
-          args.filePath,
-          args.depth || 2,
-          args.includeTests !== false,
-          args.groupBy || "file",
+          work.target,
+          work.filePath,
+          work.depth || 2,
+          work.includeTests !== false,
+          work.groupBy || "file",
         );
 
       case "find-implementations":
-        return await this.tsService.findImplementations(args.filePath!, args.line!, args.character!);
+        return await this.tsService.findImplementations(work.filePath!, work.line!, work.character!);
 
       case "analyze":
-        if (!args.filePath || !args.queries || !Array.isArray(args.queries)) {
+        if (!work.filePath || !work.queries || !Array.isArray(work.queries)) {
           throw new Error("Action 'analyze' requires filePath and queries array");
         }
-        return await this.tsService.analyze(args.filePath, args.queries);
+        return await this.tsService.analyze(work.filePath, work.queries);
 
       default:
         throw new Error(`Unknown action: ${action}`);
     }
+  }
+
+  /** MCP call surface: s-expression text (registerTools / serializeResult keep strings as text). */
+  async call(args: TypeScriptIntelArgs): Promise<string> {
+    return toSExprString(await this.execute(args));
+  }
+}
+
+/**
+ * Stdio MCP server shell: builds an official `McpServer`, registers the intel tool via
+ * arrival-mcp `registerTools`, and connects a stdio transport. Single-user stdio uses a
+ * constant session id (one shared session for the process lifetime).
+ */
+export class TypeScriptLSPServer {
+  readonly tool: TypeScriptIntelTool;
+  private readonly server: McpServer;
+
+  constructor(tool: TypeScriptIntelTool = new TypeScriptIntelTool()) {
+    this.tool = tool;
+    this.server = new McpServer(
+      {
+        name: "typescript-intel",
+        version: "0.9.0",
+      },
+      {
+        capabilities: {
+          tools: {},
+        },
+      },
+    );
+    // Stdio is single-caller: one constant session is the right collapse.
+    registerTools(this.server, [this.tool], () => ({
+      session: { id: "stdio", state: {} },
+    }));
   }
 
   async start() {
@@ -459,10 +450,11 @@ Examples:
 }
 
 // Export for library usage
-export { TSLanguageServiceWrapper as TSLanguageServiceWrapper } from "./ts-language-service.js";
+export { TSLanguageServiceWrapper } from "./ts-language-service.js";
 export type {
-  HoverInfo as HoverInfo,
-  Definition as Definition,
-  Reference as Reference,
-  Diagnostic as Diagnostic,
+  HoverInfo,
+  Definition,
+  Reference,
+  Diagnostic,
 } from "./types.js";
+export type { McpTool } from "@inhuman.tools/arrival-mcp";
