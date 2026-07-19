@@ -11,7 +11,7 @@
  */
 import { EnvCapability, jsToScheme, parseGenerator as parse, schemeToJsUntyped, symbol, z } from "@inhuman.tools/arrival";
 import { Call, type EmitRule, type R } from "@inhuman.tools/arrival/emit";
-import { type ContentResolver } from "@inhuman.tools/arrival/loader";
+import { arrivalLoaderCapability, type ContentResolver } from "@inhuman.tools/arrival/loader";
 
 import {
   asCompiledTemplate,
@@ -27,6 +27,8 @@ const runtimeEmit = (verb: string): EmitRule<R> => ({
 });
 
 export const arrivalHandlebarsCapability = new EnvCapability("arrival/handlebars", {
+  // Loader first in C3: prelude calls require/register-extension (preludeOnly on loader).
+  deps: [arrivalLoaderCapability],
   symbols: {
     "template/handlebars": symbol.rosetta`template/handlebars: renders a handlebars template source string against the given args`(
       {

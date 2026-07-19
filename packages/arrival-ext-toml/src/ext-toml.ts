@@ -9,6 +9,7 @@ import { EnvCapability } from "@inhuman.tools/arrival/capability";
 import { parse as parseToml } from "smol-toml";
 
 import {
+  arrivalLoaderCapability,
   normalizeToJson,
   valueToTsType,
   type ContentResolver,
@@ -39,6 +40,8 @@ const typeToml: RequireTypeProvider = (source) => {
 export const tomlHandler: ExtensionHandler = { resolve: resolveToml, type: typeToml };
 
 export const arrivalTomlCapability = new EnvCapability("ext/toml", {
+  // Loader first in C3: prelude calls require/register-extension (preludeOnly on loader).
+  deps: [arrivalLoaderCapability],
   symbols: { [RESOLVE]: { value: resolveToml } },
   // Bare symbol — `require/register-extension` is a MACRO (unevaluated resolver name).
   prelude: `(require/register-extension ".toml" ${RESOLVE})`,

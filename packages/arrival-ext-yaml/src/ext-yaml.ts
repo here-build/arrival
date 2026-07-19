@@ -16,6 +16,7 @@
 // `.prompt`/`.hbs` capabilities.
 import { EnvCapability } from "@inhuman.tools/arrival/capability";
 import {
+  arrivalLoaderCapability,
   type ContentResolver,
   type ExtensionHandler,
   normalizeToJson,
@@ -55,6 +56,8 @@ const typeYaml: RequireTypeProvider = (source) => {
 export const yamlHandler: ExtensionHandler = { resolve: resolveYaml, type: typeYaml };
 
 export const arrivalYamlCapability = new EnvCapability("ext/yaml", {
+  // Loader first in C3: prelude calls require/register-extension (preludeOnly on loader).
+  deps: [arrivalLoaderCapability],
   symbols: { "ext/yaml/resolve": { value: resolveYaml } },
   // Bare symbol — `require/register-extension` is a MACRO so the resolver name is
   // unevaluated (no String(fn) registry poison). Strings still work for compat.
