@@ -112,10 +112,11 @@
     "!**/__visual__",
     "!**/*.test.*",
     "!**/*.test-d.*",
-    "!**/*.stories.*"
+    "!**/*.stories.*",
+    "!**/*.map"
   ],
   "scripts": {
-    "build": "node scripts/gen-carriers-text.mjs && tsc -p tsconfig.build.json",
+    "build": "node scripts/gen-carriers-text.mjs && node -e \"fs.rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json",
     "dev": "tsc -p tsconfig.build.json --watch",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
