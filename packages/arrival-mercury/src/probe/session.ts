@@ -36,7 +36,7 @@
  */
 import { execState, LexicalScope, parseGenerator, schemeToJsUntyped } from "@inhuman.tools/arrival";
 import type { AssembledAmbient } from "@inhuman.tools/arrival/env";
-import { buildArrivalSession, BUILTIN_PREAMBLE, type InferFn } from "@inhuman.tools/arrival-run";
+import { buildArrivalSession, type InferFn } from "@inhuman.tools/arrival-run";
 
 /**
  * One crossing's content identity — the `(infer …)` call-site tuple the real
@@ -232,9 +232,9 @@ async function runWithTable(
   router.busy = true;
   router.current = tableBackedInfer(table, calls, target);
   try {
+    // Fresh scope over shared ambient — plane prelude already applied at assembly.
     const scope = LexicalScope.fresh(`probe-${scopeCounter++}`);
     const budgetMs = DEFAULT_PROBE_BUDGET_MS;
-    await execState(BUILTIN_PREAMBLE, { ambient: session.ambient, scope, budgetMs });
     const forms = await parseGenerator(source);
     let last: unknown;
     for (const form of forms) {

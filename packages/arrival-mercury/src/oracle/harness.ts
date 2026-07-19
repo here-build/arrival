@@ -6,11 +6,11 @@
  * world is source-in / JS-face-value-out.
  *
  * Interpreter side: ONE `buildArrivalSession` (the expensive capability-DAG
- * assembly) reused across rows; a FRESH `LexicalScope` per program with
- * `BUILTIN_PREAMBLE` re-executed into it, so program N's defines never leak
- * into program N+1 (spec §4.1, edge §5.6). Mirrors `runProgram`'s own per-form
- * loop (`run-program.ts:461-479`): `execState` per parsed top-level form,
- * thenable-await, `schemeToJs` at the exit.
+ * assembly; roots `arrivalPlaneCapability` whose prelude IS the scheme helpers)
+ * reused across rows; a FRESH `LexicalScope` per program so program N's defines
+ * never leak into program N+1 (spec §4.1, edge §5.6). Mirrors `runProgram`'s
+ * own per-form loop: `execState` per parsed top-level form, thenable-await,
+ * `schemeToJs` at the exit.
  *
  * Compiled side — SUBJECT-ROUTED (constitution §9 "the dual-path rule"): the
  * gate subject is `"greenfield"` (default) — the NEW pipeline end to end,
@@ -61,7 +61,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { execState, LexicalScope, parseGenerator, schemeToJsUntyped } from "@inhuman.tools/arrival";
 import type { AssembledAmbient } from "@inhuman.tools/arrival/env";
 import { srfi1 } from "@inhuman.tools/arrival/srfi";
-import { buildArrivalSession, BUILTIN_PREAMBLE, type InferFn } from "@inhuman.tools/arrival-run";
+import { buildArrivalSession, type InferFn } from "@inhuman.tools/arrival-run";
 import { register } from "tsx/esm/api";
 
 import type { ClassifyResult } from "../coreform/types.js";
@@ -117,8 +117,9 @@ let scopeCounter = 0;
  *  interpreter's membrane JS face (`schemeToJs`, the same exit `runProgram` takes). */
 export async function evalInterpreter(session: OracleSession, source: string): Promise<Outcome> {
   try {
+    // Fresh scope over shared ambient — plane prelude (range/take/field/…) is already
+    // on the ambient from assembly; do not re-exec BUILTIN_PREAMBLE.
     const scope = LexicalScope.fresh(`oracle-${scopeCounter++}`);
-    await execState(BUILTIN_PREAMBLE, { ambient: session.ambient, scope });
     const forms = await parseGenerator(source);
     let last: unknown;
     for (const form of forms) {
