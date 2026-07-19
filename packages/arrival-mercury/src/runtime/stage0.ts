@@ -1,33 +1,15 @@
 /**
- * STAGE-0 RUNTIME MODULE — the hand-written shim set for the slice's conservative
- * paths (constitution §4.4 "Stage 0"; §1(c): the cold tail compiles to *named imports
- * from a runtime module*, which is how humans also write code). This file is the
- * runtime SOURCE an emitted project imports: the oracle harness copies it verbatim
- * into each scratch project, so it must stay **self-contained — zero imports** — and
- * dependency-free strict TS.
+ * STAGE-0 RUNTIME MODULE — Scheme-texture shims the cold tail cannot take from
+ * ramda (Law T, n-ary folds, list-ref arg order, eq?/equal? identity, infer stubs).
+ * Cold HOF/structural symbols live on **ramda** via `runtime-manifest.ts`.
  *
- * Everything here operates on the membrane's JS faces (§2.1 representation law):
- * lists/pairs/vectors are arrays, strings are primitives, `#f` is `false`, all
- * numbers are `number`. The interpreter's *boxed* impls do not transfer (§4.4);
- * these bodies re-state the same semantics over the collapsed representation.
- * One consequence is permanent and documented rather than papered over: boxed-string
- * IDENTITY is unobservable post-collapse, so `(eq? "ab" (string-append "a" "b"))`
- * — interpreter `#f` — is `#t` compiled (the `eq-vs-equal-string-eq` corpus row
- * stays a catalogued divergence; `equal?` agrees on both sides).
+ * The oracle copies this file into the scratch project: **self-contained, zero
+ * imports**, dependency-free strict TS. Emitting projects also import `ramda`
+ * when RuntimeRefs resolve there.
  *
- * Scheme truthiness rules every predicate-shaped consumer here (Law T): only `#f`
- * is false — a result is kept/accepted unless it `=== false`, never by JS coercion.
- * `every`/`any` are the SRFI-1 value-RETURNING forms (last result / first witness),
- * matching the interpreter's honest any?/every? split.
- *
- * The export set is **corpus-driven** — exactly the symbols the walker's rung-3
- * `RuntimeRef` shims reach in the current oracle corpus — not an attempt at the
- * 186-symbol preamble (that is Phase 3's self-hosting, §4.4 Stage 1). Growing it
- * is always the same two-line move: add the export, add its `STAGE0` manifest row.
- *
- * `STAGE0` is the shared symbol→export manifest FRAME consumes (§3.4 frame-as-query):
- * scheme names are not JS identifiers (`eq?`, `>`, `string-append`), so the module
- * exports SAFE names and the manifest is the one place the mapping lives.
+ * Membrane JS faces (§2.1): lists are arrays, `#f` is `false`, numbers are
+ * `number`. Law T: only `#f` is false for every/any/some. Grow stage0 only for
+ * symbols that must stay here — prefer a `RUNTIME_MANIFEST` ramda row first.
  */
 
 // ─── equality walkers (Appendix B: operator-identity cells) ───────────────────────────
@@ -247,19 +229,8 @@ export async function inferChatScalar(..._args: unknown[]): Promise<unknown> {
   );
 }
 
-// ─── car / cdr in VALUE position (§2.1 representation collapse) ──────────────────────
-// Call position NEVER reaches here — the `car`/`cdr` emit rules fold inline to
-// `xs[0]` / `xs.slice(1)` unconditionally (constitution §4.3: "No guard, no shim,
-// no mode"). These shims exist ONLY for first-class use as a bare HOF argument
-// (`(map car xss)`) — `refPolicy: "eta"` degrades to a `RuntimeRef` shim until the
-// instantiated-signature facts feed value position (walker's own module header,
-// "this wave's 'eta'"), so the symbol must resolve to a real export or FRAME doors.
-
-/** `car` in VALUE position (`(map car xss)`). */
-export const car = (xs: readonly unknown[]): unknown => xs[0];
-
-/** `cdr` in VALUE position (`(map cdr xss)`). */
-export const cdr = (xs: readonly unknown[]): unknown[] => xs.slice(1);
+// car/cdr value-position → ramda head/tail (runtime-manifest.ts). Call position
+// still folds inline to xs[0] / xs.slice(1) via emit rules.
 
 // ─── numeric tail (corpus-driven; §7 one-number — plain JS arithmetic) ────────────────
 
@@ -316,22 +287,14 @@ export const le = (a: number, b: number): boolean => a <= b;
 export const ge = (a: number, b: number): boolean => a >= b;
 export const zeroP = (n: number): boolean => n === 0;
 export const evenP = (n: number): boolean => Math.abs(n % 2) === 0;
-export const length_ = (xs: readonly unknown[]): number => xs.length;
+/** `list-ref` — keep stage0: ramda `nth` is index-first; scheme is list-first. */
 export const listRef = (xs: readonly unknown[], k: number): unknown => xs[k];
 export const max_ = (...ns: number[]): number => Math.max(...ns);
 export const append_ = (...xss: readonly unknown[][]): unknown[] => xss.flat(1) as unknown[];
 
 /**
- * `max-by` — argmax by key function (`(max-by total pool)`): the element of `xs`
- * maximizing `f`, ties going to the FIRST (leftmost) element attaining the max.
- * Mirrors the interpreter's own scheme-bodied definition verbatim
- * (`@inhuman.tools/arrival-run`'s `run-program.ts`, `BUILTIN_PREAMBLE`:
- * `(reduce (lambda (x best) (if (> (f x) (f best)) x best)) (car xs) (cdr xs))`
- * — max-by is not a Contract anywhere, just scheme prelude text): a strict `>`
- * fold seeded on the first element never lets a later TIE displace an earlier
- * max. `xs` empty is outside the contract — the interpreter's own `(car xs)`
- * seed is equally undefined on `'()` (§2.1 UB parity; no guard added here that
- * the reference doesn't have either).
+ * `max-by` — list argmax by key (leftmost wins ties). Not ramda.maxBy (binary).
+ * Interpreter: reduce over (cdr xs) seeded on (car xs); empty is UB.
  */
 export function maxBy(f: (x: unknown) => number, xs: readonly unknown[]): unknown {
   let best = xs[0];
@@ -349,9 +312,7 @@ export function maxBy(f: (x: unknown) => number, xs: readonly unknown[]): unknow
 /**
  * `string-ci=?` — R7RS §6.7 case-insensitive string equivalence, n-ary
  * (vacuously `#t` under 2 args). Mirrors the interpreter's own definition
- * verbatim (`foundations/arrival/arrival/src/env/r7rs/strings.ts`:
- * `strs.slice(1).every((s) => stringValue(s).toLowerCase() === stringValue(strs[0]).toLowerCase())`).
- * `inhuman build`'s GEPA example (`metric.scm`) is this shim's corpus driver.
+ * verbatim (`foundations/arrival/arrival/src/env/r7rs/strings.ts`).
  */
 export function stringCiEq(...ss: string[]): boolean {
   if (ss.length < 2) return true;
@@ -359,39 +320,6 @@ export function stringCiEq(...ss: string[]): boolean {
   return ss.slice(1).every((s) => s.toLowerCase() === first);
 }
 
-export const STAGE0: Readonly<Record<string, string>> = {
-  "<": "lt",
-  "<=": "le",
-  ">=": "ge",
-  "zero?": "zeroP",
-  "even?": "evenP",
-  length: "length_",
-  "list-ref": "listRef",
-  max: "max_",
-  append: "append_",
-  "null?": "nullP",
-  "pair?": "pairP",
-  "eq?": "eqP",
-  "eqv?": "eqvP",
-  "equal?": "equalP",
-  member: "member",
-  assoc: "assoc",
-  error: "error",
-  list: "list",
-  cons: "cons",
-  "string-append": "stringAppend",
-  "string-ci=?": "stringCiEq",
-  every: "every",
-  any: "any",
-  some: "some",
-  "max-by": "maxBy",
-  "odd?": "odd",
-  ">": "gt",
-  "+": "plus",
-  map: "map",
-  car: "car",
-  cdr: "cdr",
-  infer: "infer",
-  "infer/scalar": "inferScalar",
-  "infer/chat/scalar": "inferChatScalar",
-};
+// NOTE: do NOT re-export runtime-manifest from this file. The oracle copies
+// stage0.ts verbatim into a scratch dir (self-contained, zero imports).
+// Manifest lives only in ./runtime-manifest.ts.

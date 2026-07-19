@@ -30,7 +30,7 @@ import { openOracleSession, type OracleSession } from "../oracle/harness.js";
 import type { EmitRegistry } from "../registry/harvest.js";
 import { emitRegistryOf } from "../registry/index.js";
 import { phase1Rules, withRules } from "../rules/index.js";
-import { STAGE0 } from "../runtime/stage0.js";
+import { STAGE0 } from "../runtime/runtime-manifest.js";
 import { runtimeRefsOf, walk } from "../walker/index.js";
 
 let session: OracleSession;

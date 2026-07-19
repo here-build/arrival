@@ -1,4 +1,4 @@
-import { lt, inferScalar } from "./stage0.mts";
+import { inferScalar, lt } from "./stage0.mts";
 export default async function OracleMain() {
     const raw = await inferScalar("fast", "read devices");
     const devices = (() => {

@@ -95,7 +95,7 @@ import { propagateTopLevelDefines, propagationDecisionAt } from "../propagate/in
 import type { EmitRegistry } from "../registry/harvest.js";
 import { arrayChunkAst, type ChunkElement } from "../residual/chunk.js";
 import type { Binding, CompilationUnit, Decl, Pattern, R } from "../residual/types.js";
-import { STAGE0 } from "../runtime/stage0.js";
+import { RUNTIME_LOCALS as STAGE0 } from "../runtime/runtime-manifest.js";
 import type { ShakeDecision } from "../shake/index.js";
 import {
   ArrayLit,

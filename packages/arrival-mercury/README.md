@@ -32,9 +32,15 @@ foundation package when LSP consumers land; the **name travels with it**.
 - **`SchemeSemanticModel`** — organ 1; construct explicitly, then materialize from its views.
 - **Oracle** — differential agreement: interpreter ≡ compiled (greenfield path only; legacy string emit is not gate-authoritative).
 
-Also owns: front-end desugar/nodes, CoreForm, type glass (`emitTypes`), stage-0 /
-cold-stdlib resolution, infer/mcp `RuntimeRef` surface (kept until @-symbol
-declaration work), residual algebra + printer.
+Also owns: front-end desugar/nodes, CoreForm, type glass (`emitTypes`),
+**runtime imports** (`RUNTIME_MANIFEST`: stage0 Scheme-texture + **ramda** cold
+stdlib), infer/mcp `RuntimeRef` surface (kept until @-symbol work), residual
+algebra + printer.
+
+Cold stdlib: prefer `ramda` (`length`, `car`/`cdr` as `head`/`tail`, …). Keep
+stage0 for Law T / n-ary / wrong-arity-in-ramda shapes (`max-by` ≠ ramda
+`maxBy`, `list-ref` ≠ `nth` arg order, `eq?`/`equal?`, …). Divergences listed
+in `RAMDA_DIVERGENCES`.
 
 ## Testing
 

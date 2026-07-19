@@ -131,7 +131,15 @@ export {
 
 // ── the stage-0 runtime manifest (constitution §4.4 Stage 0; the module itself is
 //    runtime source the emitted project imports — only the symbol→export map is API) ──
-export { STAGE0 } from "./runtime/stage0.js";
+export {
+  RAMDA_DIVERGENCES,
+  RAMDA_MODULE,
+  RUNTIME_LOCALS,
+  RUNTIME_MANIFEST,
+  STAGE0,
+  type RuntimeEntry,
+  type RuntimeSource,
+} from "./runtime/runtime-manifest.js";
 export { render } from "./residual/render.js";
 export type { CompilationUnit } from "./residual/types.js";
 

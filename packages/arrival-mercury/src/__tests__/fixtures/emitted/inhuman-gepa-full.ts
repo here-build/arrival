@@ -1,4 +1,5 @@
-import { lt, le, gt, ge, cons, equalP, evenP, every, length_, list, listRef, map, max_, maxBy, nullP, some, zeroP } from "./stage0.mts";
+import { length as length_ } from "ramda";
+import { cons, equalP, evenP, every, ge, gt, le, list, listRef, lt, map, maxBy, max_, nullP, some, zeroP } from "./stage0.mts";
 export default function OracleMain() {
     throw new Error("unsupported-form/require: `(require \"metric.scm\")` \u2014 module loading is not compiled in this slice (the loader/FRAME wave owns import planning).");
     const examples = (() => {
