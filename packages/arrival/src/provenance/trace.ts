@@ -11,7 +11,7 @@
  *
  * Provenance taxonomy invariant (mint-only-at-boundaries; pure ops union/forward; branch is an
  * edge-role NOT a node; `(:field …)` FORWARDS the producer's point, dropped key lives in static
- * carrier) → `docs/foundations/arrival-scheme/reference/provenance-model.md`.
+ * carrier) → the provenance-model reference (private monorepo docs).
  * READ before changing `computeProvenance`, authoritative-set forwarding, or `accessorField`.
  */
 import invariant from "tiny-invariant";

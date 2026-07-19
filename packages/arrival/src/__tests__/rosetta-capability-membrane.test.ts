@@ -4,7 +4,7 @@
  * `AmbientRuntime.defineRosetta` authoring form (retired in the 2026-07-09 suite
  * consolidation). Migrated 2026-07-11 off `env.defineRosetta` directly, in favor of
  * `symbol.rosetta` + `new EnvCapability(...).lower({}).apply(env, …)` — the target
- * authoring form every capability under `foundations/arrival/**` now uses (the SAME
+ * authoring form every capability in the arrival packages now uses (the SAME
  * membrane/wrapper spine `common/symbols/rosetta.ts`'s `run()` builds, proven end-to-end
  * in `common/__tests__/capability-rosetta-symbol.test.ts`).
  *

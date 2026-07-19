@@ -433,7 +433,7 @@ captures the ambient scope ONCE at exit construction and `element` re-enters it 
 10. `arrival-mcp/DiscoveryTool.ts:169-177` — fix the now-false "mirrors membrane.toJS"
     comment (hostFace stays bare deliberately: wire wants strings).
 11. New law tests (§5); rewrite R9 prose: `egress-proxy.ts:6-9, 36-37, 116-122`
-    headers, `docs/test-suite-v2/RULINGS.md:72`, and `crossing.law.test.ts:684`'s
+    headers, `docs/RULINGS.md:72`, and `crossing.law.test.ts:684`'s
     stale `two-tier-exec-api.md §5` citation (not in-tree — fix or drop). Then:
     arrival full suite, arrival-mcp suite, inhuman-mcp suite, targeted consumer builds
     (studio/cli), full monorepo build.

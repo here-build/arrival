@@ -4,7 +4,7 @@
 2026-07-09) against the design quartet + P-track plan. Rule applied: attacks landed
 independently by ≥2 models = confirmed design debt; singletons verified against the
 codebase before acceptance. This doc records what changed and why; the P-track revision
-in REWORK-DAG.md implements it.*
+in the 2026-07 rework DAG (private monorepo docs) implements it.*
 
 ## Confirmed (≥2 models) — accepted, design amended
 

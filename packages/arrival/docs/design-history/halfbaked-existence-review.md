@@ -74,7 +74,7 @@ Removal sequence (each step green; ~700 net lines out):
 5. **Tests**: half-baked.test.ts + speculative-eval.test.ts deleted (the equivalence
    floor becomes vacuous — both sides are now the same code path); crossing.law
    "egress of deferred carriers" block deleted; ledger row retires with a
-   REMOVAL-MANIFEST survivor row noting the gap became *unreachable, not fixed*;
+   the suite-consolidation manifest's survivor row (private monorepo docs) noting the gap became *unreachable, not fixed*;
    lists-contract-precision's length row inverts into a precision WIN (`length` output
    narrows `z.value` → `z.schemeNumber` — its comment says z.value exists only because
    of the HalfBaked return).

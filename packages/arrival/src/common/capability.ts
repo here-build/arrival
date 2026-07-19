@@ -86,7 +86,7 @@ type Fn = (...args: any[]) => unknown;
 /** A symbol is one of THREE families:
  *
  *  • the BAKED `AEntity` from the symbol.* API (`{ kind: "native" | "rosetta" | "door" | … }`)
- *    — dispatched by `kind` in apply(). The ONLY form every pack under `foundations/arrival/**`
+ *    — dispatched by `kind` in apply(). The ONLY form every pack in the arrival packages
  *    declares.
  *  • a raw VALUE binding (`{ value }`) — a PERMANENT, deliberate arm, not a migration remnant.
  *    Reserved for the CALLABLE RULE's one true exception: a binding `require`'s loader
@@ -177,7 +177,7 @@ export interface CapabilitySpec<C extends ZodMap, R extends Record<string, Resou
   /** DAG edges = capability grants. */
   deps?: readonly EnvCapability[];
   /** the verbs this capability exposes — baked `symbol.native`/`symbol.rosetta`/… declarations
-   *  (the target form everything under `foundations/arrival` now uses), or (legacy shape,
+   *  (the target form every pack in the arrival packages now uses), or (legacy shape,
    *  still load-bearing for `McpEnvCapability`'s downstream population — see
    *  `SymbolDeclaration`'s doc) a `Record<name, RosettaConfig>` whose `fn` reads `this`
    *  (`this.configuration.*` / `this.resources.*.live`), with `this` typed as `Activation<C,R>`

@@ -162,7 +162,7 @@ The reader and printer round-trip over the **blessed canonical set**, so the pri
 | Surface | Lowers to | Disposition | Notes |
 |---|---|---|---|
 | `[ … ]` | `(vector …)`-shaped literal, elements evaluated | **BLESS** (amended 2026-07-02) | Vector literal, Clojure-congruent; prints back as `#(…)` (asymmetric — input surface, not stored form). (The sugarcoat `[n]`/`[:k]` subscript is a separate authoring-surface accessor, not this form.) |
-| `{ … }` | `(dict :k v …)` | **BLESS** (amended 2026-07-02) | Dict literal by default; SRFI-105 curly-infix only under opt-in `ParserOptions.curlyInfix` (mutually exclusive on the delimiter). Prints back as `(dict …)`. Key rules + comma rules in `docs/working-proposals/arrival-curly-vector-literals.md`. |
+| `{ … }` | `(dict :k v …)` | **BLESS** (amended 2026-07-02) | Dict literal by default; SRFI-105 curly-infix only under opt-in `ParserOptions.curlyInfix` (mutually exclusive on the delimiter). Prints back as `(dict …)`. Key rules + comma rules in the curly-vector-literals proposal (private monorepo docs). |
 | `(dict :k v …)` | dict / object | **canonical** | Arrival's existing dict form — plain `( … )`, blessed-zone, round-trips via the `dict` constructor + `(:key …)` accessor, transpiles to `{ }`/Python `{}`. **The serializer emits this** (replacing `&(…)`). |
 | `#hash( … )` | hash | **BLESS** (optional) | The lone `#`-family dict-literal precedent (Racket); the only *blessable* dict literal. Use only if a true-hash datum is wanted — otherwise `(dict …)` is canonical. |
 | `:kw` | keyword | already | Arrival prints it; EDN/Clojure-idiomatic. |
