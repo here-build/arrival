@@ -33,9 +33,9 @@ import {
 } from "./_bake.js";
 
 /** THE Z.VALUE-CALLABLE DOOR (longcat thesis-2 attack 3 adjudication, Ruling A,
- *  docs/working-proposals/arrival-longcat-design-attack-2026-07-11.md) — a plain teaching
+ *  the 2026-07-11 longcat design review) — a plain teaching
  *  throw, deliberately NOT a class: a parallel pass is extracting the errors-as-doors corpus
- *  into individual classes (docs/working-proposals/arrival-doors-inventory-2026-07-11.md); this
+ *  into individual classes (the 2026-07-11 doors inventory); this
  *  stays a bare `throw new Error` so that pass can absorb it later without a merge collision.
  *
  *  `z.value` is the declared raw escape hatch (scheme-zod.ts's own doc on `value`): its decode

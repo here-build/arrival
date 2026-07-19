@@ -1,5 +1,5 @@
 // env-pack.test.ts — P0: the pure assembly core (closure/cycle/dedup/C3/apply).
-// Design + test matrix: docs/working-proposals/env-pack-capability-dag-2026-06-13.md §11.
+// Design + test matrix: the env-pack capability-DAG design §11 (2026-06-13).
 
 import { afterEach, describe, expect, it } from "vitest";
 

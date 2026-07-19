@@ -1,5 +1,5 @@
 // lists-emit.test.ts — Contract.emit on cons/map/apply (the Phase-2 relocation drill,
-// constitution §9 — docs/working-proposals/arrival-ts-transpiler-design.md): proves
+// the TS-transpiler constitution §9): proves
 // each symbol's own Contract builds the residual-lite shape its `emit` rule owns, by
 // calling `emit.call` directly against a synthetic EmitCtx. No compiler package, no
 // oracle session, no `typescript` import — matching this whole subpath's own

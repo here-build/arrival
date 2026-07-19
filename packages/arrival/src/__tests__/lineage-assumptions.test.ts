@@ -174,7 +174,7 @@ describe("NEXT-STEP assumptions (designed; unblock as the slices land)", () => {
 // The acceptance ledger for retiring eager per-op provenance in favor of the
 // static lineage TREE (lineage.ts: classify → leaf/source/pipe/merge/fan/opaque),
 // behind a `--ir-lineage` flag with eager fallback. Design:
-// docs/working-proposals/confluent-dataflow-graph-ir-2026-06-17.md.
+// the confluent dataflow-graph IR design (2026-06-17).
 //
 // The flag DOES NOT EXIST YET, so today's eager behavior IS the golden oracle:
 // every gate's static-path assertion is "flag-on == eager golden". These are

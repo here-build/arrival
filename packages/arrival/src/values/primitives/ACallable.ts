@@ -315,8 +315,8 @@ export type ACallable = ALambda | ANativeProcedure | ARosettaProcedure | DoorPro
 // `fn` is `unknown` for the same reason: every decoded callback argument funnels here,
 // and a non-callable is doored at runtime (the `not applicable` throw), not silently
 // tolerated by a type-level cast at each of the ~dozen call sites.
-// `runCtx` has no default (Wave 0 of the CONSTANT_CTX rework, docs/working-proposals/
-// arrival-constant-ctx-audit-2026-07-11.md §2.6): the `= CONSTANT_CTX` default used to be
+// `runCtx` has no default (Wave 0 of the CONSTANT_CTX rework §2.6): the `= CONSTANT_CTX`
+// default used to be
 // ACTIVELY leaned on — loader-capability.ts's `require` resolver dispatch omitted the
 // argument entirely (now threads `this.runCtx`, one hop away). Every remaining CONSTANT_CTX
 // at a call site (op-helpers.ts's `deriveSortCompare`, srfi-1/srfi-13's callback seams) is

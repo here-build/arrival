@@ -89,8 +89,8 @@ describe("scheme/lists Contract precision — genuinely REFINED schemas reject w
     expect(def.in.safeParse([exact(0), properList(1, 2, 3)]).success).toBe(true);
     expect(def.in.safeParse([0, properList(1, 2, 3)]).success).toBe(false); // raw JS number, was true before the fix
     expect(def.in.safeParse(["0", properList(1, 2, 3)]).success).toBe(false); // raw JS string, was true before the fix
-    // REBASELINE: the uniform-scheme-zod-vocabulary migration (docs/working-proposals/
-    // uniform-scheme-zod-vocabulary.md) retired z.unknown() from this env layer entirely —
+    // REBASELINE: the uniform-scheme-zod-vocabulary migration
+    // retired z.unknown() from this env layer entirely —
     // scheme-zod.ts's v2 doesn't even re-export it (see srfi-95.ts's own note: "z.value is the
     // typed replacement for z.unknown() at exactly this kind of native scheme-value slot"). So
     // obj is z.value (isSchemeValue: instanceof AValue or a function), NOT genuinely host-blind

@@ -1,5 +1,5 @@
 // F6 — Doors (docs/test-suite-architecture.md F6, P5 errors-as-doors). Registry-driven
-// form of the purity pass (docs/plan-2026-06-11-purity-pass.md): arrival is pure
+// form of the purity pass (the 2026-06-11 purity pass): arrival is pure
 // dataflow — dynamics (call/cc, dynamic-wind, make-parameter, delay/force) and
 // mutators (set!, set-car!, vector-set!, …) are omitted BY DESIGN, each replaced
 // with a teaching `PurityError` naming the reason and (where honest) an

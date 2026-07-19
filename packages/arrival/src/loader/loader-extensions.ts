@@ -4,8 +4,7 @@
 // thing it needs is a function `(contents, filepath) → value`. So registering one is just
 // mutating a table, keyed by file-suffix → the NAME of the resolver verb that handles it.
 //
-// Two deliberate design choices (see docs/working-proposals/require-as-capability-and-
-// prompt-support-2026-06-15.md §7):
+// Two deliberate design choices (the require-as-capability design §7):
 //
 //   • BY-NAME, late-bound per env. The table stores the resolver verb's NAME, not its value.
 //     `require`, on hitting a `.X` file, looks the name up in the CURRENT env and calls it.

@@ -74,7 +74,7 @@ import { Keyword } from "../values/Keyword.js";
 import { AString } from "../values/primitives/AString.js";
 // AJSObject here is ONLY the genuinely-foreign borrowed-JS wrapper face (notCallableError's
 // dict-shaped-borrow check below) — it exited the dict-literal syntax business entirely
-// (docs/working-proposals/dict-literal-true-shape.md). The `{…}` dict-literal NODE face —
+// (the dict-literal true-shape design). The `{…}` dict-literal NODE face —
 // its detection (isDictLiteral) and the DictLiteralNode type — is ADict's own algebra now.
 import { AJSObject } from "../values/primitives/AJSObject.js";
 import { ADict, foldKeyName, isDictShaped, type DictKey } from "../values/primitives/ADict.js";
@@ -229,8 +229,7 @@ export interface EvalContext {
    * `ctx.runCtx` / the operand ctx instead). Propagated structurally like `strict`
    * (the `{ ...ctx }` spreads).
    *
-   * REQUIRED (Wave 0 of the CONSTANT_CTX rework, docs/working-proposals/
-   * arrival-constant-ctx-audit-2026-07-11.md): both real mint sites
+   * REQUIRED (Wave 0 of the CONSTANT_CTX rework): both real mint sites
    * (generator-exec.ts's `exec`/`execExpr`, both via `makeRunContext`) always set this,
    * and every derived `EvalContext` is a `{ ...ctx }` spread — so an absent `runCtx` here
    * could only mean a hand-built literal skipping the real run, never a legitimate state.
@@ -2192,8 +2191,8 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
   return result;
 }
 
-// R9 (addendum to the bracket-bindings requirements — `docs/working-proposals/
-// arrival-bracket-bindings-requirements.md`): the CLAUSE positions of `cond`,
+// R9 (addendum to the bracket-bindings requirements doc): the CLAUSE positions of
+// `cond`,
 // `case`, and `do`'s test-result clause additionally accept an `evalElements`
 // vector, elementwise ≡ the parenthesized clause. `cond`/`case` are evaluator
 // SPECIAL FORMS (this file), not syntax-rules prelude macros — so consumption

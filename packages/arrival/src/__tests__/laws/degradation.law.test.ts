@@ -1,5 +1,5 @@
 /**
- * degradation.law.test.ts — door-set degradation (W2 of docs/working-proposals/
+ * degradation.law.test.ts — door-set degradation (W2 of docs/design-history/
  * symbol-define-static-program-validation.md §3.7). W0 (commit 98641484b3) shipped the
  * introspectable `DoorProcedure` + `DoorCause` shape with `needs: []` stamped everywhere;
  * this law suite pins the W2 MECHANISM that actually mints non-empty `needs` — the

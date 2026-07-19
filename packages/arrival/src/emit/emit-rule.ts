@@ -1,11 +1,11 @@
 // emit/emit-rule — EmitRule/EmitCtx/EmitConfig: the compiler-facing rule surface a
 // Contract may carry (`Contract.emit`, `_bake.ts`).
 //
-// Constitution: docs/working-proposals/arrival-ts-transpiler-design.md §4.1 (the field),
+// Constitution: the TS-transpiler constitution §4.1 (the field),
 // §4.5 (layering — these are pure-data TYPES in arrival core; everything touching
 // `typescript`/`ts.factory` lives in the compiler package, which READS contracts and
-// interprets residuals). Component spec: docs/working-proposals/arrival-mercury/
-// registry-emit.md §Owned interfaces.
+// interprets residuals). Component spec: the arrival-mercury registry-emit design
+// (private monorepo docs) §Owned interfaces.
 //
 // The Residual algebra `R` (proposal §3.4, owned by residual-renderer.md) has not landed
 // in this package yet, so both interfaces are GENERIC over the residual type with an

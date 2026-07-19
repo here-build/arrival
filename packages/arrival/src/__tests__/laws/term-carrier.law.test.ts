@@ -49,7 +49,7 @@
  * TICKETED FINDINGS (this audit's ledger-reconciliation pass gave each its own
  * GAPS row and flipped the cells from plain `it()` to `it.fails` — same
  * assertions, now loud when fixed instead of silently red):
- *   - FIXED (RULINGS.md R8, docs/working-proposals/two-tier-exec-api.md §6):
+ *   - FIXED (docs/RULINGS.md R8, the two-tier exec API design §6):
  *     `equal?`'s result used to always be the shared empty-provenance ABool
  *     flyweight (env/r7rs/equality.ts) — contradicting the term's declared
  *     "element-unioning" discipline for EVERY carrier. `equal?`/`eq?`/`eqv?` now

@@ -220,8 +220,8 @@ function multiListMap(
 // Unifying the two is a deferred behavior-preserving cleanup.
 //
 // `runCtx` is a real, required parameter (not the rest tail) — Wave 0 of the
-// CONSTANT_CTX rework (docs/working-proposals/arrival-constant-ctx-audit-2026-07-11.md
-// §2.1, "fires today"): the sole caller (for-each's impl, below) now threads its own
+// CONSTANT_CTX rework (the audit §2.1, "fires today"): the sole caller (for-each's
+// impl, below) now threads its own
 // `this.runCtx`, closing the bug where every for-each callback ran under CONSTANT_CTX
 // (`call_function(fn, args, {})`) — no abort signal, no heap meter, forced non-strict.
 function mapImpl(

@@ -1,5 +1,5 @@
 /**
- * LAW — `symbol.define` / `symbol.defineSyntax` (docs/working-proposals/symbol-define-
+ * LAW — `symbol.define` / `symbol.defineSyntax` (docs/design-history/symbol-define-
  * static-program-validation.md §1/§2, wave W1). Pins the kind shapes, the bake
  * mechanics (parse/FV/derived-role), the two-phase binding order, and defineSyntax's
  * macro binds+expands — the exact law rows the wave's own spec names:

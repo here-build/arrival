@@ -1,6 +1,5 @@
-// R9 — bracket CLAUSE positions (addendum to the bracket-bindings requirements,
-// `docs/working-proposals/arrival-bracket-bindings-requirements.md`, committed
-// `2cf8e47eac`). The CLAUSE positions of `cond`, `case`, and `do`'s test-result
+// R9 — bracket CLAUSE positions (addendum to the bracket-bindings requirements doc,
+// committed `2cf8e47eac`). The CLAUSE positions of `cond`, `case`, and `do`'s test-result
 // clause additionally accept an evalElements vector, elementwise ≡ the
 // parenthesized clause — `(cond [(> x 1) "a"] [else "b"])`,
 // `(case k [(1 2) "low"] [else "hi"])`, `(do (…) [(= i n) acc] …)`.

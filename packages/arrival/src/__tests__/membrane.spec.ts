@@ -107,7 +107,7 @@ describe("Wrapper Layer", () => {
       expect(fromJS(Symbol.for("test"))).toBeInstanceOf(ASymbol);
     });
 
-    // INVARIANT: bigint is an opaque host value (docs/working-proposals/
+    // INVARIANT: bigint is an opaque host value (docs/design-history/
     // arrival-one-number-rework.md §2.3) — NOT a scheme number — and rides the raw
     // pass-through lane unboxed (never an AExact; arithmetic coercion doors instead,
     // see coerce-numeric.spec.ts).

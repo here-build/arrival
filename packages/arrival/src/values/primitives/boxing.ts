@@ -22,7 +22,7 @@ import { warnMembrane } from "../../membrane-warn.js";
  * boxer table. The one membrane-side arm (`function` → #void warn) uses the leaf
  * `membrane-warn`, so no evaluator is pulled into the value layer.
  *
- * `bigint` is the one tag that does NOT box (docs/working-proposals/
+ * `bigint` is the one tag that does NOT box (docs/design-history/
  * arrival-one-number-rework.md §2.3): an opaque HOST value, not a scheme number — it
  * rides the same raw identity lane a bytevector does at the membrane's public face
  * (membrane.ts's `isBytevectorLike`), never reinterpreted as an `AExact`. That widens

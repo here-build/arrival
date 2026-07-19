@@ -1,6 +1,6 @@
 /**
  * exec-phases — the phase PRODUCTS of `exec` as first-class values
- * (docs/working-proposals/exec-phases-and-dynamic-metadata.md, Part III).
+ * (the exec-phases-and-dynamic-metadata design, Part III).
  *
  * V's six phases, each with a product where one exists:
  *

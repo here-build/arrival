@@ -1,8 +1,8 @@
 /**
  * SHADOW MODE (W3 slices 2–3) — the static lineage `fullCone` reproduces the
  * UNTAPPED eager `result.provenance`, asserted INSIDE `exec` behind the `irLineage`
- * flag. Design: docs/working-proposals/provenance-static-lineage-finalization-v0.1-
- * 2026-06-19.md §8 "W3 wiring design — SHADOW MODE".
+ * flag. Design: the static-lineage finalization design (private monorepo docs)
+ * §8 "W3 wiring design — SHADOW MODE".
  *
  * WHAT THIS LOCKS. The golden-prov-{arithmetic,fan,special-forms}.test.ts froze the
  * eager engine's provenance with inline snapshots (the G2 oracle). Those goldens

@@ -14,7 +14,7 @@ export interface MacroInvokeContext {
    *  `is_macro` dispatch (the only builder of this context) always holds a live
    *  `EvalContext.runCtx`, itself required since the constant-ctx wave-0 cut; an
    *  optional field here would just re-open the `?? CONSTANT_CTX` apology seam the
-   *  wave-3 plumb closes (docs/working-proposals/arrival-constant-ctx-audit-2026-07-11.md §4). */
+   *  wave-3 plumb closes (the CONSTANT_CTX audit §4). */
   runCtx: RunContext;
   /** The use-site resolver (synced to `env`). The expander uses the def-time
    *  Resolver a `Syntax` captures instead. Optional — define-macro fexprs ignore it. */

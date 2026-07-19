@@ -482,7 +482,7 @@ function buildMacro(verb: string, def: DefineSyntaxSymbolDef, closureValue: unkn
     function (this: unknown, code: unknown, evalArgs: MacroInvokeContext): Promise<SchemeValue> {
       const argForms = formsOf(code);
       // `evalArgs.runCtx` is REQUIRED on `MacroInvokeContext` (the Wave-3 macro-engine
-      // plumb, docs/working-proposals/arrival-constant-ctx-audit-2026-07-11.md §4): the
+      // plumb, the CONSTANT_CTX audit §4): the
       // evaluator's is_macro dispatch — the only builder of this context — always threads
       // its live `EvalContext.runCtx`. A define-syntax fexpr body therefore runs with the
       // INVOKING run's real context (its meter, cache, signal), whether that run is a

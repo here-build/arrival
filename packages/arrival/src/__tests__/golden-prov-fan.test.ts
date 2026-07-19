@@ -3,7 +3,7 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
  * GOLDEN CAPTURE (gate G2 oracle) — FAN-OUT provenance: map / filter / length.
  *
  * Wave R / RED-SPEC for the static-lineage migration
- * (docs/working-proposals/confluent-dataflow-graph-ir-2026-06-17.md §5, build-step
+ * (the confluent dataflow-graph IR design (2026-06-17) §5, build-step
  * "wire the classifier into the runtime"). The `--ir-lineage` flag does NOT exist
  * yet, so the CURRENT eager engine IS the golden oracle: we run real programs and
  * snapshot the provenance they produce TODAY. When the static path lands, gate G2

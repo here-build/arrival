@@ -1,7 +1,7 @@
 /**
  * LAW W1 — an SRFI-13 criterion predicate observes the invocation's REAL RunContext,
- * not CONSTANT_CTX (docs/working-proposals/arrival-constant-ctx-audit-2026-07-11.md
- * §2.4, srfi-13.ts:71 — the audit's own "worst in cluster" finding: `criterionFlags`
+ * not CONSTANT_CTX (the CONSTANT_CTX audit §2.4, srfi-13.ts:71 — the audit's own
+ * "worst in cluster" finding: `criterionFlags`
  * passed CONSTANT_CTX as `applyCallback`'s runCtx argument ITSELF, so every
  * user-supplied SRFI-13 predicate (trim/index/count/tokenize) ran unmetered, off
  * cache/effects/abort, regardless of what the invoking run actually configured).

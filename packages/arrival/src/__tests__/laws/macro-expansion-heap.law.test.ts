@@ -1,6 +1,6 @@
 /**
  * LAW — macro expansion charges the run's heap meter (constant-ctx Wave 3;
- * docs/working-proposals/arrival-constant-ctx-audit-2026-07-11.md §2.1/§4).
+ * the CONSTANT_CTX audit §2.1/§4).
  *
  * The syntax-rules engine RUNS LIVE: template instantiation materializes its whole
  * output in synchronous walks with no trampoline TICK — exactly the chokepoint case

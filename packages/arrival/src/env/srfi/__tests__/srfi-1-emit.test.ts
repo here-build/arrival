@@ -1,5 +1,5 @@
 // srfi-1-emit.test.ts — Contract.emit on filter (the Phase-2 relocation drill,
-// constitution §9 — docs/working-proposals/arrival-ts-transpiler-design.md): proves
+// the TS-transpiler constitution §9): proves
 // the rule logic relocated from the compiler-side phase1 table onto filter's own
 // Contract builds the exact residual-lite shape the table rule used to build, by
 // calling `emit.call` directly against a synthetic EmitCtx. No compiler package, no

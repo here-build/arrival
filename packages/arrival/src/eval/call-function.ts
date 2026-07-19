@@ -27,8 +27,8 @@ import { promise_all } from "../utils/promises.js";
 
 type SchemeFunction = (...args: any[]) => any;
 
-// `runCtx` is REQUIRED (Wave 0 of the CONSTANT_CTX rework, docs/working-proposals/
-// arrival-constant-ctx-audit-2026-07-11.md §2.1): the old `{ runCtx }: {...; runCtx?:
+// `runCtx` is REQUIRED (Wave 0 of the CONSTANT_CTX rework §2.1): the old
+// `{ runCtx }: {...; runCtx?:
 // RunContext } = {}` shape let a caller pass nothing at all — and real callers did
 // (env/r7rs/lists.ts's map/member/assoc, before this wave, invoked with `{}`), so every
 // `map`/`member`/`assoc` callback ran with no abort signal, no heap meter, forced

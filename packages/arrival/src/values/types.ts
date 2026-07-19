@@ -291,7 +291,7 @@ export type AList<Car extends SchemeValue = any, Cdr extends Car extends ANil ? 
 /** The egress projection modes. `bare` = serialization (no options, callables
  *  stringify). `mem` = membrane crossing — the ONE non-bare mode; it used to split
  *  `mem:0`/`mem:1` on `forceBigInt` (the one RosettaOptions field that ever changed
- *  element projection), but `forceBigInt` is retired (docs/working-proposals/
+ *  element projection), but `forceBigInt` is retired (docs/design-history/
  *  arrival-one-number-rework.md §2.3 — bigint is an opaque host value, not a scheme
  *  number, so there is no longer a numeric-projection option to key on) and the scout
  *  found no production setter for it anyway — every real crossing already always

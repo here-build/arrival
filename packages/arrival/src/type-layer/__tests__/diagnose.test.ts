@@ -1,7 +1,7 @@
 // diagnose — the type-hint DIAGNOSE primitive. Proves the mechanics against a CONTROLLED
 // typed prelude (real param/return types), separating "the primitive extracts codes +
 // payloads + span-maps correctly" from "the manifold's z.value harvest feeds it types"
-// (the latter is an upstream concern — see docs/working-proposals/manifold-type-hints-s2-spine.md).
+// (the latter is an upstream concern — see the manifold type-hints S2-spine design).
 //
 // Each fixture hand-declares the harvested signature it needs, so the extraction paths
 // (expected/actual, propertyName/candidates, signatureText) are exercised with types the

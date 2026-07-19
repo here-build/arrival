@@ -1,8 +1,8 @@
 // emit/type-facts — the TypeFacts vocabulary: the membrane between tsc and emit rules.
 //
-// Constitution: docs/working-proposals/arrival-ts-transpiler-design.md §3.3 (the closed,
+// Constitution: the TS-transpiler constitution §3.3 (the closed,
 // pure-data fact vocabulary); extraction mechanics + growth discipline are owned by
-// docs/working-proposals/arrival-mercury/typefacts-extraction.md. This module is TYPES
+// the arrival-mercury type-facts extraction design (private monorepo docs). This module is TYPES
 // ONLY — no `typescript` import may ever land here (§4.5 layering: the compiler package
 // extracts facts FROM ts.Type; rules in arrival core consume only this vocabulary).
 

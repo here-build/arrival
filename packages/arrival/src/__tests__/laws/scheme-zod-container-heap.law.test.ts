@@ -1,7 +1,6 @@
 /**
  * LAW — scheme-zod's container codecs charge the run's heap meter (CONSTANT_CTX-audit
- * §2.2, "worst by blast radius" #2 — docs/working-proposals/arrival-constant-ctx-audit-
- * 2026-07-11.md).
+ * §2.2, "worst by blast radius" #2).
  *
  * Before this law's fix, a `list`/`vector`/`dict`-typed rosetta/procedure crossing was a
  * SECOND, completely unmetered path to materialize an arbitrary amount of scheme

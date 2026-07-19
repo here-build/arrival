@@ -194,7 +194,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
     // binds a bare JS fn directly (bypassing EnvCapability), and `expect(result).toBe(30)`
     // asserts raw unboxed pass-through via the evaluator call-head's `Reflect.apply` fallback
     // (ACallable.ts / evaluator.ts:3125-3135, kept deliberately per
-    // docs/working-proposals/reverse-membrane-for-callables.md §5 item 5 — "keep, demoted to
+    // the reverse-membrane-for-callables design §5 item 5 — "keep, demoted to
     // the legacy-defineRosetta compatibility path; delete with step 6"). Does NOT die with the
     // B1-B3 reverse-membrane landing (cxr pilot + capability.ts binder cut + region discipline
     // — all landed 2026-07-09): none of those steps touch bare `env.set`. Real gate: step 6

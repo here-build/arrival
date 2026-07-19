@@ -1,6 +1,6 @@
 /**
- * effect-log — the ORDERED sibling of `RunCache` (docs/working-proposals/
- * arrival-plexus-effect-burst.md §2.3/§2.5). Where `RunCache` is a content-keyed,
+ * effect-log — the ORDERED sibling of `RunCache` (the plexus effect-burst design
+ * §2.3/§2.5). Where `RunCache` is a content-keyed,
  * deduplicating `Map` (two identical penetrations share one slot), `EffectLog` is a
  * plain append-only sequence: two identical sink calls are two entries, always — the
  * mode law's "two effects, always" (run-cache.ts's header) holds for the burst arm

@@ -1,6 +1,6 @@
 /**
- * LAW — the effect log + the burst arm (W1, docs/working-proposals/
- * arrival-plexus-effect-burst.md §2.3/§2.5). Pins the third mode of the run-cache
+ * LAW — the effect log + the burst arm (W1, the plexus effect-burst design
+ * §2.3/§2.5). Pins the third mode of the run-cache
  * interception chokepoint (values/run-cache.ts's `penetrateThroughCache`): a `sink`
  * penetration during a PRIME run gathers onto `EffectLog` instead of firing; a
  * replay (fold) is untouched.

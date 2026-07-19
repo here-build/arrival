@@ -38,8 +38,8 @@ export interface CallCtx {
  *  bind in `capability.ts`, `createRosettaWrapper`'s impl invocation) calls this instead of
  *  hand-building the shape.
  *
- *  `runCtx` has no default (Wave 0 of the CONSTANT_CTX rework, docs/working-proposals/
- *  arrival-constant-ctx-audit-2026-07-11.md §2.6): verified zero production callers leaned on
+ *  `runCtx` has no default (Wave 0 of the CONSTANT_CTX rework §2.6): verified zero
+ *  production callers leaned on
  *  the old `= CONSTANT_CTX` default — every real dispatch site already passed an explicit
  *  `runCtx` — so the default was a latent hazard (the easiest path for the next fallback to
  *  land on), not a load-bearing convenience. `testCallCtx()` remains the sanctioned door for

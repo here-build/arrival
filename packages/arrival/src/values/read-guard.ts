@@ -1,6 +1,6 @@
 /**
- * read-guard — the read log + the read∩write deferral guard (docs/working-proposals/
- * arrival-plexus-effect-burst.md §2.4). Sibling of `EffectLog` (effect-log.ts) on the
+ * read-guard — the read log + the read∩write deferral guard (the plexus effect-burst
+ * design §2.4). Sibling of `EffectLog` (effect-log.ts) on the
  * `RunContext`: where `EffectLog` remembers WHAT was gathered, this file remembers WHAT
  * was READ during the same run, and checks the one guard rule that makes gather-then-burst
  * sound (§2.1's theorem, dynamic half): a program that enqueues a sink and THEN reads

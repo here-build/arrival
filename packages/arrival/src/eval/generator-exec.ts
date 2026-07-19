@@ -356,8 +356,8 @@ export interface ExecOptions {
    */
   cache?: RunCache;
   /**
-   * THE EFFECT LOG (values/effect-log.ts — W1, docs/working-proposals/
-   * arrival-plexus-effect-burst.md §2.3). When set, rides `makeRunContext` onto the
+   * THE EFFECT LOG (values/effect-log.ts — W1, the plexus effect-burst design
+   * §2.3). When set, rides `makeRunContext` onto the
    * run's `RunContext.effects`, and every baked rosetta `sink` penetration — during a
    * PRIME run, i.e. `cache` absent or `cache.mode !== "replay"` — enqueues onto it and
    * returns `undefined` immediately instead of firing. A SIBLING of `cache`, not a
@@ -369,8 +369,8 @@ export interface ExecOptions {
    */
   effects?: EffectLog;
   /**
-   * THE READ GUARD (W2, values/read-guard.ts, docs/working-proposals/
-   * arrival-plexus-effect-burst.md §2.4). When set, rides `makeRunContext` onto the
+   * THE READ GUARD (W2, values/read-guard.ts, the plexus effect-burst design
+   * §2.4). When set, rides `makeRunContext` onto the
    * run's `RunContext.reads`, and the per-form loop below wraps each top-level form's
    * evaluation in `reads.tracker.region(...)` — so the host's tracking substrate (a
    * mobx tracking context over plexus reads, armed by the host; arrival core never
@@ -493,7 +493,7 @@ export interface ExecOptions {
 }
 
 /**
- * COMPLEX tier (docs/working-proposals/two-tier-exec-api.md, RULINGS.md R1) — "run,
+ * COMPLEX tier (docs/RULINGS.md R1) — "run,
  * get reusable state": boxed, provenance-bearing results PLUS the session handles a
  * caller needs to continue or introspect the run. Not a membrane crossing (P4's
  * refinement) — this hands boxed state to JS-side TOOLING (law tests, REPL
@@ -788,7 +788,7 @@ function describeExitSchema(schema: ZodType): string {
 }
 
 /**
- * SIMPLE tier (docs/working-proposals/two-tier-exec-api.md, RULINGS.md R1) — THE
+ * SIMPLE tier (docs/RULINGS.md R1) — THE
  * default exec surface, "run, get JS". Delegates to {@link execState} (COMPLEX
  * tier) and fully unwraps each result through {@link toJS} — a true P4 membrane
  * crossing. Outside this function only plain-JS-observable values exist;

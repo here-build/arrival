@@ -1,6 +1,6 @@
 /**
  * WALKING-DRIVER SPIKE (`__experiments__/` — opt-in via `pnpm experiments`, NEVER a
- * CI gate; see `docs/working-proposals/arrival-walking-driver-design-2026-07-11.md`).
+ * CI gate; see the 2026-07-11 walking-driver design).
  *
  * Proves the emission SEAM the walking driver rides, end-to-end, with zero
  * production edits:

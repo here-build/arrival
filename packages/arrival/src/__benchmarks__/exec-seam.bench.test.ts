@@ -87,7 +87,7 @@ describe("exec seam overhead — one evaluator, three measurement layers", () =>
     report("run(evaluate(ast))", ITERATIONS, performance.now() - start);
   });
 
-  // ── THE CUT PATH (ENV T2, docs/working-proposals/environment-resolution-chain.md §2) ──
+  // ── THE CUT PATH (ENV T2 of the environment-resolution-chain design) ──
   // The layers above run GLASS ({ env }): the resolver wraps the custom env's live
   // `__parent__` walk, which the compiled resolution chain deliberately does not touch.
   // The chain's promised win is the DEFAULT (cut) path — `Capabilities.assembled(user_env)`

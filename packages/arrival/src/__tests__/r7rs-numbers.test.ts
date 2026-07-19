@@ -4,7 +4,7 @@
  * Why this file was inverted
  * ---------------------------
  * This file used to pin the bigint-rational representation (`AExact = (num:
- * bigint, denom: bigint)`, arbitrary precision). `docs/working-proposals/
+ * bigint, denom: bigint)`, arbitrary precision). `docs/design-history/
  * arrival-one-number-rework.md` (v2.1, ruled 2026-07-14) replaced that with
  * **RATIO**: `AExact = (num: number, denom: number)`, both JS `number`s,
  * `Number.isSafeInteger` at all times, gcd-normalized, `denom > 0`. The load
@@ -227,7 +227,7 @@ describe("r7rs numbers — passing invariants (regression guards, unchanged by t
   it(
     "inexact->exact is bound and does NOT throw on a safe-range rational (0.5 → exact 1/2)",
     async () => {
-      // NOTE for the reader/Gate: docs/working-proposals/arrival-one-
+      // NOTE for the reader/Gate: docs/design-history/arrival-one-
       // number-rework.md §2.1 has a line reading "`inexact->exact 0.5` →
       // error" in its resolved-decisions list. Verified against the
       // ACTUALLY LANDED implementation (Sweeps 1-4): `(inexact->exact

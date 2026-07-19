@@ -34,8 +34,8 @@ const EMPTY_CHILDREN: readonly unknown[] = Object.freeze([]);
  * inherit (raw JS input) and the run-neutral CONSTANT_CTX is correct. An honest
  * instanceof narrowing — never a cast — so it stays sound when the input is raw.
  *
- * `fallback` (docs/working-proposals/arrival-constant-ctx-audit-2026-07-11.md §2.6,
- * AValue.ts:34 row): the raw-JS arm's "no run to inherit" claim is true for a value
+ * `fallback` (the CONSTANT_CTX audit §2.6, AValue.ts:34 row): the raw-JS arm's
+ * "no run to inherit" claim is true for a value
  * with genuinely no crossing context, but a membrane-adjacent caller DOES have one —
  * the crossing's own live RunContext — even when the operand itself is a bare
  * scalar. Optional and defaulted to `CONSTANT_CTX` so every existing bare `ctxOf(x)`
@@ -169,8 +169,8 @@ export abstract class AValue {
   /** Element count — the per-primitive divergence (elements' provenance) lives on the term. */
   ["arrival/tagless-final/length"]?(runCtx?: RunContext): AValue | number;
   /** Functor — map a fn over the elements (box-preserving or box-stripping per the term).
-   *  `runCtx` REQUIRED (docs/working-proposals/arrival-constant-ctx-audit-2026-07-11.md
-   *  §4 Wave 1): every real dispatcher (`env/r7rs/lists.ts`'s single-list `map`,
+   *  `runCtx` REQUIRED (the CONSTANT_CTX audit §4 Wave 1): every real dispatcher
+   *  (`env/r7rs/lists.ts`'s single-list `map`,
    *  `common/symbols/sequence.ts`'s wrapper) already threads `this.runCtx` — a live,
    *  defined RunContext — into the call, so an optional param here only ever bought a
    *  dead CONSTANT_CTX fallback at the implementor. Required mirrors `apply`'s own

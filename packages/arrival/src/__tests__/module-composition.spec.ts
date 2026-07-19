@@ -20,7 +20,7 @@
  * survivor exists, so this file stays — parallel to `parser.test.ts`'s honest framing of
  * bypassing `exec()` for a fast internal-module unit floor.
  *
- * ENV T1 (2026-07-09, docs/working-proposals/environment-resolution-chain.md §T1): resolvers
+ * ENV T1 (2026-07-09, the environment-resolution-chain design §T1): resolvers
  * relocated from every `AmbientRuntime` frame onto `ResolvingAmbient` only (the baked-root
  * specialization — see env-roots.ts). The rows below are UNCHANGED — same ordering contract,
  * same assertions — construction just targets `ResolvingAmbient` at the two/three layers

@@ -42,7 +42,7 @@ export class Unterminated extends Error {
   static [CLASS] = "unterminated";
 
   /** The `ConstructorParameters`-typed static invariant (the errors-as-doors idiom —
-   *  see `docs/working-proposals/arrival-doors-inventory-2026-07-11.md` §0(b)/§3.3):
+   *  see the 2026-07-11 doors inventory §0(b)/§3.3 (private monorepo docs)):
    *  `X.invariant(cond, ...factsMatchingX'sCtor)` throws the RECEIVER, never a bare
    *  `Error`. Repeated per-class (not inherited from one root) because `Unterminated`/
    *  `ParseError` do not extend `ArrivalError`. */
@@ -135,7 +135,7 @@ export class ArrivalError extends Error {
   public readonly name: string = "ArrivalError";
 
   /** The `ConstructorParameters`-typed static invariant (errors-as-doors idiom, see
-   *  `docs/working-proposals/arrival-doors-inventory-2026-07-11.md` §0(b)/§3.3):
+   *  the 2026-07-11 doors inventory §0(b)/§3.3 (private monorepo docs)):
    *  `MyError.invariant(cond, ...factsMatchingMyError'sCtor)` throws the RECEIVER
    *  (`new this(...)`), never a bare `Error` — inherited by EVERY `ArrivalError`
    *  subclass through the ctor prototype chain, structured ctors included, so no
@@ -528,7 +528,7 @@ export class DefineForwardReferenceError extends ArrivalError {
 
 // ===========================================================================
 // errors-as-doors extraction, wave 1/2/3 (2026-07-11) — see
-// docs/working-proposals/arrival-doors-inventory-2026-07-11.md. Each class below
+// the 2026-07-11 doors inventory (private monorepo docs). Each class below
 // promotes a previously-unclassed teaching door (a bare `throw new Error(...)`, a
 // tiny-invariant call, or an exported `xDoor()`/`xError()` factory) into a named
 // class carrying its facts as typed readonly fields — the message is built HERE,
@@ -789,7 +789,7 @@ export class ResolvedNonValueError extends ArrivalError {
 // above (`EvalError` + `E-LET-BRACKET-*` codes: form/code carried as facts,
 // message built once); `code` stays optional here since most of these sites
 // predate the spec-corpus code convention — backfilling one per form is a later,
-// V-reviewed prose pass (docs/working-proposals/arrival-doors-inventory-2026-07-11.md W2).
+// V-reviewed prose pass (the 2026-07-11 doors inventory W2).
 // -------------------------------------------------------------------------
 export class SpecialFormShapeError extends ArrivalError {
   static [CLASS] = "special-form-shape-error";

@@ -1,5 +1,5 @@
 // LAW — the `{…}` dict literal's datum face is a real ADict, not a borrowed-JS
-// wrapper wearing a dict costume (docs/working-proposals/dict-literal-true-shape.md).
+// wrapper wearing a dict costume (the dict-literal true-shape design).
 // P0 says the code/datum ambiguity of a literal lives in a VALUE OF ITS OWN KIND
 // (a pair for applications, AVector for `[…]`, ADict for `{…}`) — the same
 // `literalForms` + `arrival/tagless-final/lower` pattern AVector's `evalElements`

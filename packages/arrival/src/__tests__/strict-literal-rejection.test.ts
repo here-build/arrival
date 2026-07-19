@@ -13,7 +13,7 @@ import { ANil } from "../values/primitives/ANil.js";
  * is the divergence signal a user runs strict to find.
  *
  * Mirrors the loose/strict template in projection-nil-tolerance / comparison-divergence.
- * See docs/working-proposals/arrival-graal-membrane-dissolution.md.
+ * Design history: the graal-membrane dissolution proposal (private monorepo docs).
  */
 describe("strict rejects the #void/#null reader literals (portability control)", () => {
   for (const lit of ["#void", "#null"]) {

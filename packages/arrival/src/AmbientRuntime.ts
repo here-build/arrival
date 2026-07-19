@@ -160,8 +160,7 @@ export class AmbientRuntime {
    * means a writer bypassed the membrane (a direct `__env__` poke, a cast-through
    * `mintFrame(parent, name, bindings)` record) — teach and refuse, never silently re-box under the
    * run-neutral ctx (that silent re-box was the audit's #1 provenance drop:
-   * docs/working-proposals/arrival-constant-ctx-audit-2026-07-11.md §2.3, values-repr
-   * box ← AmbientRuntime.get).
+   * the CONSTANT_CTX audit §2.3, values-repr box ← AmbientRuntime.get).
    *
    * The APair arm survives: a stored pair is cycle-marked + quoted on the way out so a
    * host-read (or hygiene's `lookupSettled` copy) hands back DATA the evaluator won't

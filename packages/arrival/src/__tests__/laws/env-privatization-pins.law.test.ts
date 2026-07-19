@@ -1,5 +1,5 @@
 /**
- * LAW (V0→V5) — docs/working-proposals/arrival-environment-privatization.md.
+ * LAW (V0→V5) — the environment-privatization design.
  * Pinned surface, updated at the V5 atomic cut (D5 hard delete executed):
  *
  *   1. Barrel surface pin — `global_env`/`env` are GONE (V1's zero-consumer cut);

@@ -1,6 +1,5 @@
 // numeric-emit.test.ts — Contract.emit on quotient/modulo/= and +/-/*// (the Phase-2
-// relocation drill, constitution §9 —
-// docs/working-proposals/arrival-ts-transpiler-design.md): proves the rule logic
+// relocation drill, the TS-transpiler constitution §9): proves the rule logic
 // relocated from the compiler-side phase1 table onto these Contracts builds the exact
 // residual-lite shapes the table rule used to build, by calling `emit.call` directly
 // against a synthetic EmitCtx. No compiler package, no oracle session, no

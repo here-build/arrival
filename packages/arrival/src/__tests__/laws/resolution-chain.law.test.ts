@@ -1,6 +1,6 @@
 /**
- * resolution-chain.law.test.ts — laws for the SEALED ambient artifact (ENV T2,
- * docs/working-proposals/environment-resolution-chain.md §§1–2).
+ * resolution-chain.law.test.ts — laws for the SEALED ambient artifact (ENV T2 of
+ * the environment-resolution-chain design §§1–2).
  *
  * LAW 1 (precedence preservation): `compile(env).lookup ≡ env._lookupWithResolvers`
  *   over any layer/resolver topology — the module-composition ordering pins re-homed

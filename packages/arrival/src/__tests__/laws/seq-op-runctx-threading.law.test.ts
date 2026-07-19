@@ -1,7 +1,7 @@
 /**
  * LAW W1 — the seq-op terms (`map`/`filter`/`reduce`, both APair and AVector) thread the
  * invocation's REAL RunContext into their callback, not CONSTANT_CTX
- * (docs/working-proposals/arrival-constant-ctx-audit-2026-07-11.md §2.5, the wave-0
+ * (the CONSTANT_CTX audit §2.5, the wave-0
  * confessions: APair.ts ×3 + AVector.ts ×3 carried an explicit `runCtx ?? CONSTANT_CTX`
  * literal pending this wave, §4 Wave 1).
  *

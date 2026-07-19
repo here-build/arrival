@@ -2,8 +2,8 @@
  * LAW F5 — region discipline for re-entrant crossings (P6).
  *
  * Written BEFORE its code: these are the acceptance tests for the
- * reverse-membrane migration (docs/working-proposals/
- * reverse-membrane-for-callables.md §7c). Every row is it.todo gated on that
+ * reverse-membrane migration (the reverse-membrane-for-callables design
+ * §7c). Every row is it.todo gated on that
  * landing; the migration is done when this file's todos become green tests.
  *
  * B3 landed §7c's reverse wrapper (`schemeToJs`'s ACallable branch in

@@ -14,7 +14,7 @@
 // whole-list on `do`) keep dooring — those keep door-assertions, with updated texts.
 //
 // Spec: the bracket-binding section header in src/eval/evaluator.ts (normalizeBindings).
-// Requirements: docs/working-proposals/arrival-bracket-bindings-requirements.md (R1-R8).
+// Requirements: the bracket-bindings requirements doc (R1–R8).
 // Executable spec: spec/corpus/bracket-bindings-{read,eval}.jsonl (via
 // spec-corpus.test.ts) — this file is the narrative/behavioral companion, not a
 // duplicate of the corpus.

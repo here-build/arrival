@@ -1,5 +1,5 @@
 /**
- * LAW (V1) — docs/working-proposals/arrival-environment-privatization.md §II.1/D6:
+ * LAW (V1) — the environment-privatization design §II.1/D6:
  * `LexicalScope.fresh()`, the one new public API this round adds. Closes the "bare
  * `mintFrame(sandboxedEnv)` for isolation" gap — before this, minting an ISOLATED
  * scope required routing through the instance surface being retired (§II.1: "isolation

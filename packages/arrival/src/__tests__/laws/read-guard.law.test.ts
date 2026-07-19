@@ -1,6 +1,6 @@
 /**
- * LAW — the read log + the read∩write deferral guard (W2, docs/working-proposals/
- * arrival-plexus-effect-burst.md §2.4). Pins two things:
+ * LAW — the read log + the read∩write deferral guard (W2, the plexus effect-burst
+ * design §2.4). Pins two things:
  *
  *  1. `checkReadWriteGuard` (values/read-guard.ts) as a PURE function over
  *     (effect entries, read log, writeSetOf) — the fencepost clock convention

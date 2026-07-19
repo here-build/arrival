@@ -1,7 +1,6 @@
 /**
  * LAW W0 — for-each/member/assoc callbacks observe the run's REAL RunContext
- * (docs/working-proposals/arrival-constant-ctx-audit-2026-07-11.md §2.1, the audit's
- * "fires today" bug; §4 Wave 0).
+ * (the CONSTANT_CTX audit §2.1, the audit's "fires today" bug; §4 Wave 0).
  *
  * Before this wave, `env/r7rs/lists.ts`'s `for-each` (via `mapImpl`), `member`, and
  * `assoc` invoked their user-supplied callback through `call_function(fn, args, {})` —

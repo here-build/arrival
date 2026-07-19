@@ -5,7 +5,7 @@
 // `exec` is exported explicitly below from generator-exec — the canonical stack-safe path.
 //
 // `global_env` / `user_env as env` (env-roots.ts) are NO LONGER barrel-exported (wave V1,
-// docs/working-proposals/arrival-environment-privatization.md §II.3): zero external consumers
+// the environment-privatization design §II.3): zero external consumers
 // (census I.1 #1) — the two native/interaction roots stay internal-only. env-roots.ts itself
 // is untouched; only this export retires.
 export { box, patch_value, quote } from "./reader/values-repr.js";
@@ -84,7 +84,7 @@ export {
   type RunCacheEntry,
   type RunCacheClass,
 } from "./values/run-cache.js";
-// The effect log (W1, docs/working-proposals/arrival-plexus-effect-burst.md §2.3) + the read
+// The effect log (W1, the plexus effect-burst design §2.3) + the read
 // guard (W2, §2.4): `exec(src, { effects, reads })` gathers sink penetrations instead of firing
 // them and (with `reads` armed) checks the read-your-deferred-write invariant. A host building a
 // confirm-manifest (arrival-mcp's confirm-manifest.ts, arrival-provenance-confirmation.md) reads

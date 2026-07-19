@@ -74,7 +74,7 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
     expect((result as AInexact).real).toBe(3.14);
   });
 
-  // typeof 1n === "bigint" → opaque host value (docs/working-proposals/
+  // typeof 1n === "bigint" → opaque host value (docs/design-history/
   // arrival-one-number-rework.md §2.3), never boxed — rides the raw pass-through lane.
   // INVARIANT: bigint is not boxed — fromJs returns it unchanged (opaque host value, not a scheme number)
   it("bigint → opaque host passthrough (never boxed; not a scheme number)", () => {
