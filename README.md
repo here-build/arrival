@@ -51,6 +51,11 @@ whole-program optimization, and errors that teach instead of ban.
   surface (lint/hover/completion/goto).
 - `editor-theme` — the redistributable editor theme: self-hosted fonts
   (OFL) and the H-K-compensated Darcula syntax theme for CodeMirror. No CDN.
+- `arrival-manifold` — collapse N MCP servers into one discovery-shaped
+  tool: a scheme `expr` surface over every bound remote tool.
+- `arrival-ext-toml` / `arrival-ext-yaml` — opt-in EnvCapability packs that
+  own the TOML/YAML parser dependencies (the extension mechanism's own
+  examples of "package owns the dep").
 
 The rest of the wider toolchain — the run engine, the effect membrane, the
 LLM-inference plane — lives in

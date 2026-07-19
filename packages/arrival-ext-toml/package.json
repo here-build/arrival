@@ -1,9 +1,8 @@
 {
   "name": "@inhuman.tools/arrival-ext-toml",
   "description": "The .toml require resolver as an opt-in EnvCapability - the package that OWNS the smol-toml parser dependency (dep-isolation per the env-quasi-packages rule).",
-  "version": "0.1.0",
-  "private": true,
-  "license": "UNLICENSED",
+  "version": "0.9.0",
+  "license": "FSL-1.1-MIT",
   "author": "here.build",
   "type": "module",
   "exports": {
@@ -18,7 +17,12 @@
     "dist/**/*",
     "src/**/*",
     "!**/__tests__",
-    "!**/*.test.*"
+    "!**/*.test.*",
+    "!**/__research__",
+    "!**/__benchmarks__",
+    "!**/__custdev__",
+    "!**/__visual__",
+    "!**/*.stories.*"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -38,5 +42,17 @@
     "eslint": "9.39.2",
     "typescript": "6.0.2",
     "vitest": "4.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "homepage": "https://github.com/here-build/arrival#readme",
+  "bugs": {
+    "url": "https://github.com/here-build/arrival/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/here-build/arrival.git",
+    "directory": "packages/arrival-ext-toml"
   }
 }
