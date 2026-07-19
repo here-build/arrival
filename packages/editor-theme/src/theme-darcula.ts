@@ -9,26 +9,26 @@ import { EditorView } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 
 const highlightStyle = HighlightStyle.define([
-  { tag: [tags.definitionKeyword, tags.controlKeyword, tags.keyword, tags.operatorKeyword, tags.moduleKeyword], color: "#c1712c" }, // differentiate aL≈0.62 h57 -> L0.626
-  { tag: [tags.definition(tags.variableName), tags.function(tags.variableName)], color: "#fec56c" }, // anchor aL≈0.85 h77 -> L0.858
-  { tag: [tags.variableName, tags.name], color: "#abb7c3" }, // baseline aL≈0.77 h250 -> L0.774
-  { tag: [tags.string, tags.docString, tags.character], color: "#779465" }, // differentiate aL≈0.62 h134 -> L0.631
-  { tag: [tags.number, tags.integer, tags.float], color: "#6190b3" }, // differentiate aL≈0.62 h242 -> L0.632
-  { tag: [tags.bool, tags.atom, tags.null], color: "#6190b3" }, // differentiate aL≈0.62 h242 -> L0.632
-  { tag: [tags.propertyName, tags.labelName], color: "#9b78ac" }, // differentiate aL≈0.62 h314 -> L0.625
+  { tag: [tags.definitionKeyword, tags.controlKeyword, tags.keyword, tags.operatorKeyword, tags.moduleKeyword], color: "#bb6b25" }, // differentiate aL≈0.62 h57 -> L0.607
+  { tag: [tags.definition(tags.variableName), tags.function(tags.variableName)], color: "#f8bf66" }, // anchor aL≈0.85 h77 -> L0.840
+  { tag: [tags.variableName, tags.name], color: "#a9b5c1" }, // baseline aL≈0.77 h250 -> L0.767
+  { tag: [tags.string, tags.docString, tags.character], color: "#728e60" }, // differentiate aL≈0.62 h134 -> L0.613
+  { tag: [tags.number, tags.integer, tags.float], color: "#5b89ad" }, // differentiate aL≈0.62 h242 -> L0.612
+  { tag: [tags.bool, tags.atom, tags.null], color: "#5b89ad" }, // differentiate aL≈0.62 h242 -> L0.612
+  { tag: [tags.propertyName, tags.labelName], color: "#9673a7" }, // differentiate aL≈0.62 h314 -> L0.609
   { tag: [tags.comment, tags.lineComment, tags.blockComment], color: "#717171" }, // recede aL≈0.55 h140 -> L0.550
-  { tag: tags.docComment, color: "#58824f" }, // recede aL≈0.55 h140 -> L0.562
-  { tag: tags.meta, color: "#9f806a" }, // differentiate aL≈0.62 h57 -> L0.622
+  { tag: tags.docComment, color: "#527c49" }, // recede aL≈0.55 h140 -> L0.542
+  { tag: tags.meta, color: "#9c7e68" }, // differentiate aL≈0.62 h57 -> L0.615
   { tag: [tags.paren, tags.squareBracket], color: "#717171" }, // recede aL≈0.55 h250 -> L0.550
-  { tag: tags.brace, color: "#856d5b", fontStyle: "italic" }, // recede aL≈0.55 h57 -> L0.552
-  { tag: [tags.compareOperator, tags.logicOperator, tags.controlOperator, tags.arithmeticOperator, tags.operator], color: "#b57748", fontStyle: "italic" }, // differentiate aL≈0.62 h57 -> L0.624
-  { tag: tags.processingInstruction, color: "#e9bdff", fontWeight: "600" }, // anchor aL≈0.85 h314 -> L0.858
-  { tag: tags.contentSeparator, color: "#806e61" }, // recede aL≈0.55 h57 -> L0.551
+  { tag: tags.brace, color: "#836b5a", fontStyle: "italic" }, // recede aL≈0.55 h57 -> L0.546
+  { tag: [tags.compareOperator, tags.logicOperator, tags.controlOperator, tags.arithmeticOperator, tags.operator], color: "#b07344", fontStyle: "italic" }, // differentiate aL≈0.62 h57 -> L0.610
+  { tag: tags.processingInstruction, color: "#e4b0ff", fontWeight: "600" }, // anchor aL≈0.85 h314 -> L0.832
+  { tag: tags.contentSeparator, color: "#7f6d60" }, // recede aL≈0.55 h57 -> L0.547
   { tag: tags.bracket, color: "#717171" }, // recede aL≈0.55 h250 -> L0.550
   { tag: tags.content, color: "#b4b4b4" }, // baseline aL≈0.77 h250 -> L0.770
   { tag: [tags.heading, tags.strong], color: "#b4b4b4", fontWeight: "600" }, // baseline aL≈0.77 h250 -> L0.770
   { tag: tags.emphasis, color: "#b4b4b4", fontStyle: "italic" }, // baseline aL≈0.77 h250 -> L0.770
-  { tag: tags.invalid, color: "#bd413f" }, // alarm aL≈0.53 h25 -> L0.549
+  { tag: tags.invalid, color: "#af3434" }, // alarm aL≈0.53 h25 -> L0.511
 ]);
 
 const chrome = EditorView.theme(

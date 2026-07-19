@@ -11,20 +11,25 @@
  * H-K model: here.build/docs/thinking/raw-data/design-science/helmholtz-kohlrausch-models.md
  * Source formula: second-foundation/delta-css/src/foundation.css:238-243
  *
- *   apparent_L = L - 0.14 * C * hue_factor(h)
- *   => to hit a target apparent_L on a tier:  L = target + 0.14 * C * hue_factor(h)
+ *   apparent_L = L + 0.14 * C * hue_factor(h)
+ *   => to hit a target apparent_L on a tier:  L = target - 0.14 * C * hue_factor(h)
  */
 
-// ---- Delta's two-lobe H-K hue factor (verbatim from foundation.css) ----
+// ---- H-K hue factor: 3-harmonic Fourier fit (R²=0.98) of Nayatani-1997's VAC hue term
+// q(θ), verbatim from foundation.css (--🧮hue-factor, foundation.css:262-275). Inherently
+// bounded ~[0.54, 0.92], so no clamp() needed. ----
 function hueFactor(h) {
-  const hn = h / 360;
-  const warm = Math.cos((hn * 3 - 1) * 2 * Math.PI) * 0.45 + 0.75; // warm fundamental
-  const blue = 0.25 * Math.exp(-(((Math.abs(h - 255)) / 35) ** 2)); // blue Gaussian bump
-  return Math.min(1.2, Math.max(0.3, warm + blue));
+  const r = (h * Math.PI) / 180;
+  return (
+    0.77911 +
+    0.08091 * Math.cos(r) - 0.13593 * Math.sin(r) +
+    0.06202 * Math.cos(2 * r) - 0.00365 * Math.sin(2 * r) -
+    0.01415 * Math.cos(3 * r) + 0.03377 * Math.sin(3 * r)
+  );
 }
 const HK_K = 0.14;
 // nominal OKLCH L that lands a (C,h) color on a target apparent-lightness tier
-const solveL = (target, C, h) => target + HK_K * C * hueFactor(h);
+const solveL = (target, C, h) => target - HK_K * C * hueFactor(h);
 
 // ---- OKLCH -> sRGB hex, with in-gamut chroma clamp ----
 const lin2srgb = (c) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);

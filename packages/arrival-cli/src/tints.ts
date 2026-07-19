@@ -114,12 +114,12 @@ export function paint(text: string, tint: TintName, mode: ReturnType<typeof colo
  * (The semantic STATE tints above — the ✓/▸/✗ glyph, the dim gutter — are a separate axis.)
  */
 export const DARCULA = {
-  keyword: "#c1712c", // define/lambda/if/cond/… — one orange for all structural keywords
-  symbol: "#abb7c3", // plain identifiers (variableName/name)
-  string: "#779465", // strings + char literals
-  number: "#6190b3", // numbers
-  constant: "#6190b3", // #t/#f/nil — darcula colors these as numbers (blue)
-  property: "#9b78ac", // :keyword / propertyName
+  keyword: "#bb6b25", // define/lambda/if/cond/… — one orange for all structural keywords
+  symbol: "#a9b5c1", // plain identifiers (variableName/name)
+  string: "#728e60", // strings + char literals
+  number: "#5b89ad", // numbers
+  constant: "#5b89ad", // #t/#f/nil — darcula colors these as numbers (blue)
+  property: "#9673a7", // :keyword / propertyName
   comment: "#717171",
   delimiter: "#717171", // parens/brackets/braces
   heading: "#b4b4b4", // markdown heading/strong (bold)
