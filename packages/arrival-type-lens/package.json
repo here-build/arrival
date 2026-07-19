@@ -81,7 +81,7 @@
   },
   "dependencies": {
     "@inhuman.tools/arrival-sugarcoat": "workspace:^",
-    "@inhuman.tools/mercury": "workspace:^",
+    "@inhuman.tools/arrival-mercury": "workspace:^",
     "typescript": "6.0.2"
   },
   "devDependencies": {

@@ -11,10 +11,9 @@
 
 // The runtime-free reader (spans on every node) — the require scanner's truth.
 import { parseSexprs, type Node } from "@inhuman.tools/arrival-sugarcoat";
-import { emitTypes } from "@inhuman.tools/mercury/types-emit";
-// The deep subpath (not the package index): the index re-exports `formatJs`,
-// whose `eslint` import would drag the whole linter into any browser bundle of
-// this service. `types-emit`'s closure is the pure front-end only.
+// Subpath only — package root pulls model/oracle graph; type-emit is front+Buf only
+// (avoids circular load with arrival-mercury ↔ type-lens at the module level).
+import { emitTypes } from "@inhuman.tools/arrival-mercury/type-emit";
 import ts from "typescript";
 
 import { balancePrefix, stringLiteralType } from "./balance.js";

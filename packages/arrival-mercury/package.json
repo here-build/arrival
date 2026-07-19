@@ -36,6 +36,10 @@
     "./front": {
       "types": "./dist/front/index.d.ts",
       "default": "./dist/front/index.js"
+    },
+    "./type-emit": {
+      "types": "./dist/type-emit/index.d.ts",
+      "default": "./dist/type-emit/index.js"
     }
   },
   "main": "./dist/index.js",
