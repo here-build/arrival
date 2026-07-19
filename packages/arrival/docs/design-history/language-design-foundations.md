@@ -7,7 +7,7 @@ adding a reader macro, a literal, a dialect borrowing, or a serializer form.
 Companions:
 - [`../reference/r7rs-coverage.md`](../reference/r7rs-coverage.md) — the conformance matrix for the base.
 - `sandbox-security-model.md` — the no-IO boundary (private monorepo docs).
-- [`../../arrival-serializer/README.md`](../../arrival-serializer/README.md) — the printer (the other
+- [`../../../arrival-serializer/README.md`](../../../arrival-serializer/README.md) — the printer (the other
   half of the round-trip).
 
 ---
