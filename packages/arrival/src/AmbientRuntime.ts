@@ -9,7 +9,7 @@ import { createRosettaWrapper, type RosettaFunction } from "./membrane/rosetta.j
 import type { Syntax } from "./eval/Syntax.js";
 import invariant from "tiny-invariant";
 import { fromJS, isSchemeValue } from "./membrane/membrane.js";
-import { quote } from "./reader/values-repr.js";
+import { quote } from "./values/values-repr.js";
 import { APair } from "./values/primitives/APair.js";
 import type { RunContext } from "./values/primitives/RunContext.js";
 import { rosettaTypesOf } from "./env-registries.js";

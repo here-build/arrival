@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { exec, execState } from "../eval/generator-exec.js";
-import { theVoid } from "../values/primitives/AVoid.js";
-import { is_nil } from "../eval/guards.js";
-import { ANil } from "../values/primitives/ANil.js";
+import { exec, execState } from "../../eval/generator-exec.js";
+import { theVoid } from "../../values/primitives/AVoid.js";
+import { is_nil } from "../../eval/guards.js";
+import { ANil } from "../../values/primitives/ANil.js";
 
 /**
  * Strict mode is the R7RS portability CONTROL — NOT the default. The `#void`/`#null`

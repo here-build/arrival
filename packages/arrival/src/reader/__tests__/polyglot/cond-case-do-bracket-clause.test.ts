@@ -13,10 +13,10 @@
 // Purely a Racket surface (Clojure's `cond` is flat, no clause grouping) — no
 // dialect conflict, no door needed for the non-intersection claim itself.
 //
-// Executable spec: `src/__tests__/polyglot/macro-special-brackets.spec.ts` —
+// Executable spec: `src/reader/__tests__/polyglot/macro-special-brackets.spec.ts` —
 // this file is the narrative/behavioral companion, not a duplicate.
 import { describe, expect, it } from "vitest";
-import { exec } from "../eval/generator-exec.js";
+import { exec } from "../../../eval/generator-exec.js";
 
 const doorError = async (src: string): Promise<Error & { cause?: unknown }> => {
   try {

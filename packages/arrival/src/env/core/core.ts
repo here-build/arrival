@@ -32,7 +32,7 @@
 import { EnvCapability } from "../../common/capability.js";
 import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
-import { gensym } from "../../reader/values-repr.js";
+import { gensym } from "../../values/values-repr.js";
 
 /** The irreducible scheme core pack: constants, kernel keywords, gensym.
  *  Module-singleton capability; the dep-free precedence floor every base pack deps. */
@@ -41,7 +41,7 @@ export default new EnvCapability("scheme/core", {
   // (assembled first among the base packs) reaches every consumer — including user/test
   // scheme that calls `(gensym …)` for hygiene names, and the inference-plane `cut`/`cute`
   // copy in initBridge, which reads `gensym` off the user_env chain post-assembly. Native:
-  // the impl is the shared `reader/values-repr` gensym, bound raw.
+  // the impl is the shared `values/values-repr` gensym, bound raw.
   symbols: {
     // Kernel KEYWORDS — special forms made first-class (symbol.keyword markers). The
     // evaluator resolves a call head through the env and dispatches SPECIAL_FORMS[name]

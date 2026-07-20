@@ -7,7 +7,7 @@
 // carrier produced (P4-P8, P11) as law, plus the sibling vector `writeForm`
 // downgrade (P5b) the same migration closed in passing and the membrane-exit shape
 // (P6). The semantics probes that were ALREADY right (P1-P3, P9, P10, P12) live in
-// src/__tests__/polyglot/curly-braces.spec.ts — not re-pinned here.
+// src/reader/__tests__/polyglot/curly-braces.spec.ts — not re-pinned here.
 import { describe, expect, it, beforeAll } from "vitest";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 import { execState } from "../../eval/generator-exec.js";

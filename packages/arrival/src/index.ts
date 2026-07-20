@@ -1,6 +1,6 @@
 // These names are re-exported explicitly (not via `export * from "./stdlib.js"`) so every
 // export is visible at the barrel — no opaque star laundering an unknown name set:
-//   • box / patch_value / quote — value-representation leaves (reader/values-repr.ts)
+//   • box / patch_value / quote — value-representation leaves (values/values-repr.ts)
 //   • eof                       — the EOF singleton (values/primitives/EOF.ts)
 // `exec` is exported explicitly below from generator-exec — the canonical stack-safe path.
 //
@@ -8,7 +8,7 @@
 // the environment-privatization design §II.3): zero external consumers
 // (census I.1 #1) — the two native/interaction roots stay internal-only. env-roots.ts itself
 // is untouched; only this export retires.
-export { box, patch_value, quote } from "./reader/values-repr.js";
+export { box, patch_value, quote } from "./values/values-repr.js";
 export { eof } from "./values/primitives/EOF.js";
 // `sandboxedEnv` (the inference-plane base env, env-roots' third root) is NO LONGER
 // barrel-exported — the V5 atomic cut (arrival-environment-privatization.md §II.3, D5:

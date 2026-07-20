@@ -111,7 +111,7 @@ describe("r7rs numbers — component overflow THROWS (plan §0.3, crash-on-overf
 
   it("(+ 9007199254740992 1) throws — 2^53 itself is already outside Number.isSafeInteger", async () => {
     // Number.MAX_SAFE_INTEGER is 2^53 - 1; the literal 9007199254740992
-    // (== 2^53) is rejected at PARSE time (utils/parsing.ts's
+    // (== 2^53) is rejected at PARSE time (reader/parsing.ts's
     // toSafeExactComponent/exactOverflowInLiteral), before the `+` even
     // runs. A ParseError, not an ExactOverflowError — still a thrown,
     // teaching error either way.
@@ -120,7 +120,7 @@ describe("r7rs numbers — component overflow THROWS (plan §0.3, crash-on-overf
 
   it("a source literal beyond safe-integer range is a ParseError, not a silent bigint promotion", async () => {
     // Was: `999999999999999998` parsed as an arbitrary-precision bigint
-    // exact. Now: the parser's safe-int gate (utils/parsing.ts) throws at
+    // exact. Now: the parser's safe-int gate (reader/parsing.ts) throws at
     // read time — the author is told to write it inexact instead.
     await expect(evalScheme("999999999999999998")).rejects.toThrow(/exceeds safe-integer range/i);
   });

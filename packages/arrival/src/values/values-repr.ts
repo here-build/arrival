@@ -8,18 +8,18 @@
 // Promoting it into the value-guards true-leaf is a separate task.
 // ----------------------------------------------------------------------
 import { is_promise } from "../eval/guards.js";
-import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
-import { AString } from "../values/primitives/AString.js";
-import { ASymbol } from "../values/primitives/ASymbol.js";
-import { AExact } from "../values/primitives/AExact.js";
-import { AInexact } from "../values/primitives/AInexact.js";
+import { CONSTANT_CTX, type RunContext } from "./primitives/RunContext.js";
+import { AString } from "./primitives/AString.js";
+import { ASymbol } from "./primitives/ASymbol.js";
+import { AExact } from "./primitives/AExact.js";
+import { AInexact } from "./primitives/AInexact.js";
 import { DATA } from "../well-known-symbols.js";
-import { ACharacter } from "../values/primitives/ACharacter.js";
-import type { SchemeValue } from "../values/types.js";
-import { is_nil, is_pair } from "../values/value-guards.js";
-import { ABool } from "../values/primitives/ABool.js";
-import { ANil } from "../values/primitives/ANil.js";
-import { APair } from "../values/primitives/APair.js";
+import { ACharacter } from "./primitives/ACharacter.js";
+import type { SchemeValue } from "./types.js";
+import { is_nil, is_pair } from "./value-guards.js";
+import { ABool } from "./primitives/ABool.js";
+import { ANil } from "./primitives/ANil.js";
+import { APair } from "./primitives/APair.js";
 
 // The symbol-NAME surface these helpers operate on: the pre-boxing JS layer —
 // exactly what ASymbol's constructor accepts as a name (`SchemeSymbolName`) — NOT

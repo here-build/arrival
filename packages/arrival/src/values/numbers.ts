@@ -120,7 +120,7 @@ function parseSafeIntLiteral(magnitude: bigint, original: string): number {
 }
 
 // A public, host-facing string→number utility (re-exported off `index.ts`) — distinct
-// from `utils/parsing.ts`'s near-namesake `parse_rational`/`parse_integer`/
+// from `reader/parsing.ts`'s near-namesake `parse_rational`/`parse_integer`/
 // `parse_float`, which ARE dual-use (called live by `string->number`). No span/crossing
 // concept applies to a bare host utility, so it mints against `CONSTANT_CTX`; a live
 // rosetta/MCP caller should pass the crossing's own ctx rather than leaning on this

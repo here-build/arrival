@@ -1,21 +1,21 @@
 // Shared runner helpers for hand-written polyglot spec files under
-// src/__tests__/polyglot/ — originally extracted verbatim from the retired
+// src/reader/__tests__/polyglot/ — originally extracted verbatim from the retired
 // spec-corpus.test.ts's AST canonicalization / eval-value-fold / error-class
 // helpers so focused *.spec.ts suites (inline it.each tables) can reuse the
 // exact same conventions the former JSONL-driven corpus runner used.
-import { execState } from "../../eval/generator-exec.js";
-import { parse } from "../../reader/parse.js";
-import { AJSObject } from "../../membrane/AJSObject.js";
-import { AVector } from "../../values/primitives/AVector.js";
-import { ADict } from "../../values/primitives/ADict.js";
-import { APair } from "../../values/primitives/APair.js";
-import { ASymbol } from "../../values/primitives/ASymbol.js";
-import { AString } from "../../values/primitives/AString.js";
-import { ABool } from "../../values/primitives/ABool.js";
-import { AExact } from "../../values/primitives/AExact.js";
-import { AInexact } from "../../values/primitives/AInexact.js";
-import { theVoid } from "../../values/primitives/AVoid.js";
-import { ANil } from "../../values/primitives/ANil.js";
+import { execState } from "../../../eval/generator-exec.js";
+import { parse } from "../../parse.js";
+import { AJSObject } from "../../../membrane/AJSObject.js";
+import { AVector } from "../../../values/primitives/AVector.js";
+import { ADict } from "../../../values/primitives/ADict.js";
+import { APair } from "../../../values/primitives/APair.js";
+import { ASymbol } from "../../../values/primitives/ASymbol.js";
+import { AString } from "../../../values/primitives/AString.js";
+import { ABool } from "../../../values/primitives/ABool.js";
+import { AExact } from "../../../values/primitives/AExact.js";
+import { AInexact } from "../../../values/primitives/AInexact.js";
+import { theVoid } from "../../../values/primitives/AVoid.js";
+import { ANil } from "../../../values/primitives/ANil.js";
 
 /** Canonical AST rendering — the corpus README's convention. Recursive (String(pair)
  *  would render an embedded literal node through its own print protocol, which is the

@@ -19,7 +19,7 @@ export { snapshotTrace, type PlainTrace, type PlainInv } from "./trace-snapshot.
 export { headOf, scopeId, userCallSite, DOTPROMPT_SOURCE_MARKER, type ScopedParented } from "./scope-id.js";
 
 // ── Primitive analysis layer (arrival-provenance's former default entry) ──
-export { extractDefines, type DefineInfo, type SourceLocation } from "./extract-defines.js";
+export { extractDefines, type DefineInfo, type SourceLocation } from "../reader/extract-defines.js";
 export {
   traceToForest,
   type ForestOptions,

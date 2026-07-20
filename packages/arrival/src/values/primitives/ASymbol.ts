@@ -52,7 +52,7 @@ export class ASymbol extends AValue {
   /** Special symbol markers. `literal` is `unique symbol`-typed (the `Symbol.for` registry
    *  value is unchanged) so the gensym literal slot can be a DECLARED computed field below —
    *  a single typed key, not the broad symbol index signature esbuild rejects. Written by
-   *  `gensym`'s `hidden_prop(symbol, "__literal__", name)` (reader/values-repr.ts); `name` is
+   *  `gensym`'s `hidden_prop(symbol, "__literal__", name)` (values/values-repr.ts); `name` is
    *  a string (named gensym) or number (anonymous `#:gN`); a gensym minted via the
    *  no-double-gensym path carries no slot at all — hence `?` + `string | number`. */
   static readonly literal: unique symbol = Symbol.for("__literal__");

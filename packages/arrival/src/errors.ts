@@ -54,7 +54,7 @@ export class Unterminated extends Error {
   }
 
   location?: SourceLocation;
-  /** Stable spec-taxonomy id — the polyglot grammar specs (src/__tests__/polyglot/,
+  /** Stable spec-taxonomy id — the polyglot grammar specs (src/reader/__tests__/polyglot/,
    *  see its README error taxonomy table) match error CLASSES on this, not on prose. */
   readonly code = "E-UNTERMINATED";
 
@@ -80,7 +80,7 @@ export class ParseError extends Error {
 
   location?: SourceLocation;
   /** Stable spec-taxonomy id (e.g. E-DICT-DUP-KEY) — the polyglot grammar specs
-   *  (src/__tests__/polyglot/, see its README error taxonomy table) match error
+   *  (src/reader/__tests__/polyglot/, see its README error taxonomy table) match error
    *  CLASSES on this, not on prose, so messages stay free to teach while the
    *  contract stays machine-checkable. */
   code?: string;

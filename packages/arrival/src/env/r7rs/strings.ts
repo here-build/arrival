@@ -56,8 +56,8 @@ import {
   int_re,
   rational_bare_re,
   rational_re,
-} from "../../values/primitives.js";
-import { parse_complex, parse_float, parse_integer, parse_rational } from "../../utils/parsing.js";
+} from "../../reader/primitives.js";
+import { parse_complex, parse_float, parse_integer, parse_rational } from "../../reader/parsing.js";
 import type { AList, AListAlike, SchemeValue } from "../../values/types.js";
 
 import { to_array } from "../pack-helpers.js";

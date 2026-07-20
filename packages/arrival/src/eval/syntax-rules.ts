@@ -27,7 +27,7 @@ import { eqv } from "../values/structural-equal.js";
 import { AListAlike, type SchemeValue } from "../values/types.js";
 import { ANil, nil } from "../values/primitives/ANil.js";
 import { type } from "../utils/typecheck.js";
-import { gensym, hidden_prop, is_atom, is_gensym, quote } from "../reader/values-repr.js";
+import { gensym, hidden_prop, is_atom, is_gensym, quote } from "../values/values-repr.js";
 
 function same_atom(a, b) {
   if (type(a) !== type(b)) {
@@ -568,7 +568,7 @@ interface TransformOptions {
   /** The live per-run context — every template-instantiation mint (rebuilt pairs,
    *  relit symbols, dotted-access forms) goes through it, so expansion output carries
    *  the run's identity and charges its meter. (The `gensym` mint itself still rides
-   *  reader/values-repr.ts's own ctx — its optional-ctx param is the audit's separate
+   *  values/values-repr.ts's own ctx — its optional-ctx param is the audit's separate
    *  Wave-3 rider; the plumb it needs now exists here.) */
   ctx: RunContext;
 }

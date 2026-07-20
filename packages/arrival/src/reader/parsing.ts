@@ -19,7 +19,7 @@ import {
   parsable_contants,
   pre_num_parse_re,
   rational_re,
-} from "../values/primitives.js";
+} from "./primitives.js";
 import { ACharacter } from "../values/primitives/ACharacter.js";
 import type { SchemeValue } from "../values/types.js";
 

@@ -1629,8 +1629,8 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 //   - E-LET-BRACKET-BINDING: a per-element vector of the wrong length, or a
 //     non-symbol (including a destructuring vector) in the binding-name slot.
 //
-// Executable spec: src/__tests__/polyglot/macro-special-brackets.spec.ts;
-// error taxonomy in src/__tests__/polyglot/README.md.
+// Executable spec: src/reader/__tests__/polyglot/macro-special-brackets.spec.ts;
+// error taxonomy in src/reader/__tests__/polyglot/README.md.
 
 /** `do` doesn't accept the whole-list form (R2a exclusion) — its 3-element
  *  steps make pairwise grouping ambiguous. UNCHANGED from the original door;

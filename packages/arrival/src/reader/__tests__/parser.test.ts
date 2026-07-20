@@ -13,12 +13,12 @@
 // invariant the keystone must preserve, and it's robust to internal value-shape
 // changes.
 import { describe, expect, it } from "vitest";
-import { EOF } from "../values/primitives/EOF.js";
-import { AVector } from "../values/primitives/AVector.js";
-import { APair } from "../values/primitives/APair.js";
-import { ASymbol } from "../values/primitives/ASymbol.js";
-import { Parser } from "../reader/Parser.js";
-import type { SchemeValue } from "../values/types.js";
+import { EOF } from "../../values/primitives/EOF.js";
+import { AVector } from "../../values/primitives/AVector.js";
+import { APair } from "../../values/primitives/APair.js";
+import { ASymbol } from "../../values/primitives/ASymbol.js";
+import { Parser } from "../Parser.js";
+import type { SchemeValue } from "../../values/types.js";
 
 async function readAll(src: string): Promise<SchemeValue[]> {
   const parser = new Parser({});

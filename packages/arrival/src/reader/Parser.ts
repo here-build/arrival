@@ -7,7 +7,7 @@
  * descent so a pathological input throws `ParseError` instead of a host `RangeError`
  * (see `maxNestingDepth`).
  */
-import { DatumReference } from "../values/DatumReference.js";
+import { DatumReference } from "./DatumReference.js";
 // PARSE_CTX family (not CONSTANT_CTX): every node this parser mints carries a
 // parse-origin ctx with its SourceLocation — the ctx channel of the span migration.
 // For APairs the `setLocation` calls below stay as the derived MIRROR (both channels
@@ -35,7 +35,7 @@ import { Lexer } from "./Lexer.js";
 // resolve it, since they're referenced only inside methods, not at module-eval time.
 import { ABytevector } from "../values/primitives/ABytevector.js";
 import { AVector } from "../values/primitives/AVector.js";
-import { parse_argument } from "../utils/parsing.js";
+import { parse_argument } from "./parsing.js";
 import { ctxOf } from "../values/primitives/AValue.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";

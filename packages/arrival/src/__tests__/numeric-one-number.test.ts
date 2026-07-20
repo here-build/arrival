@@ -86,7 +86,7 @@ describe("overflow-throws — exact results whose components leave safe-integer 
 
   it("an over-safe source LITERAL (2^53+1) is a ParseError, not a silently-huge exact", async () => {
     // RED until the atom lands: today's reader has no magnitude ceiling
-    // (utils/parsing.ts's parseBigInt has no isSafeInteger gate), so this parses fine
+    // (reader/parsing.ts's parseBigInt has no isSafeInteger gate), so this parses fine
     // into an unbounded exact bigint and evaluates without complaint.
     await expect(run("9007199254740993")).rejects.toBeInstanceOf(ParseError);
   });
@@ -159,7 +159,7 @@ describe("division — exact zero divisor errors; integer-only ops require denom
 describe("parsing — string->number / reader agree on exactness", () => {
   it.each([
     {
-      // RED until the atom lands: parse_float's exponent arm (utils/parsing.ts:178,
+      // RED until the atom lands: parse_float's exponent arm (reader/parsing.ts:178,
       // `is_int(value) && Number.isSafeInteger(value) && /e\+?\d/i.test(...)`) currently
       // mints AExact whenever the float happens to round-trip to a safe integer —
       // printed bare "100", not "100.0".

@@ -1,6 +1,6 @@
-import { characters } from "./primitives/ACharacter.js";
-import { theVoid } from "./primitives/AVoid.js";
-import { nil } from "./primitives/ANil.js";
+import { characters } from "../values/primitives/ACharacter.js";
+import { theVoid } from "../values/primitives/AVoid.js";
+import { nil } from "../values/primitives/ANil.js";
 
 export const pre_num_parse_re = /((?:#[xodbie]){0,2})(.*)/i; // TODO: float complex
 // functions generate regexes to match number rational, integer, complex, complex+rational
