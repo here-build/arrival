@@ -56,7 +56,7 @@ import {
   int_re,
   rational_bare_re,
   rational_re,
-} from "../../reader/primitives.js";
+} from "../../reader/lexical-grammar.js";
 import { parse_complex, parse_float, parse_integer, parse_rational } from "../../reader/parsing.js";
 import type { AList, AListAlike, SchemeValue } from "../../values/types.js";
 

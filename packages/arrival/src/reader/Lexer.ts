@@ -10,7 +10,7 @@
 import invariant from "tiny-invariant";
 import { eof } from "../values/primitives/EOF.js";
 import { ParseError, Unterminated } from "../errors.js";
-import { directives, hash_literals, parsable_contants } from "./primitives.js";
+import { directives, hash_literals, parsable_contants } from "./lexical-grammar.js";
 import * as specials from "./specials.js";
 
 /**

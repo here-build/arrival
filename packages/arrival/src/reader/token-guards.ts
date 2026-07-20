@@ -4,7 +4,7 @@
 // the Lexer/Parser/Formatter consult them at read time, before the evaluator ever
 // sees a form — so they live in the reader, not in eval/guards.ts (which carries
 // the evaluator's AmbientRuntime/Macro world). Moved out of eval/guards.ts.
-import { directives } from "./primitives.js";
+import { directives } from "./lexical-grammar.js";
 import * as specials from "./specials.js";
 
 // A registered reader-macro prefix (`'`, `` ` ``, `,`, `,@`, `#(`, `#u8(`).
