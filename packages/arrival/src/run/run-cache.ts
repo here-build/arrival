@@ -1,20 +1,16 @@
 /**
- * run-cache — the first-class run cache (see arrival-mcp-rework-over-phases.md §2.2).
- * Sibling of RunContext: a run's durable twin is `(program, cache)`; rehydration is
- * re-execution of the statement log with THIS entity answering the membrane. One
- * mechanism serves durability, replay, and future reflection: a cache can outlive
- * its original program and answer a full re-run of a NEW program over the SAME cache.
+ * run-cache — the first-class run cache. Sibling of RunContext: a run's durable twin is
+ * `(program, cache)`, and rehydration is re-execution of the statement log with THIS entity
+ * answering the membrane. A cache can outlive its original program and answer a full re-run of
+ * a NEW program over the SAME cache.
  *
- * ── Where it intercepts ───────────────────────────────────────────────────────
- * The baked rosetta `run` wrapper (common/symbols/rosetta.ts) — the ONE chokepoint
- * where args are already decoded and the impl hasn't fired. The wrapper reads the
- * run's cache off `this.runCtx.cache` (the per-run hermetic handle, exactly where
- * `signal`/`heapMeter` already live — `exec(src, { cache })` → `makeRunContext`
- * carries it) and gates on the def's EXPLICIT cache class (`view`/`pure`) plus the
- * `sink` lineage role for the tombstone skip. An undeclared, non-sink def never
- * touches the serialized cache.
+ * Intercepts at the baked rosetta `run` wrapper — the ONE chokepoint where args are decoded and
+ * the impl has not fired. The wrapper reads the run's cache off `this.runCtx.cache` and gates on
+ * the def's EXPLICIT cache class (`view`/`pure`) plus the `sink` lineage role for the tombstone
+ * skip. An undeclared, non-sink def never touches the serialized cache.
  *
- * ── The mode law (record vs replay — per class) ───────────────────────────────
+ * THE MODE LAW (record vs replay, per class):
+ *
  *   class      | record mode                          | replay mode
  *   -----------|--------------------------------------|-------------------------------
  *   view       | fire, write/OVERWRITE `{value}`      | hit → serve, never re-fire;
@@ -29,44 +25,31 @@
  *   undeclared | fire                                 | fire — regenerateable, the SAFE
  *              |                                      | default
  *
- * ── Single-flight (promise sharing) ────────────────────────────────────────────
- * Each invocation lives in an immutable world (between invocations it may not), so
- * concurrent identical penetrations WITHIN one run share ONE rosetta call — the
- * in-flight promise is registered at call start, scoped to `view`/`pure` ONLY (never
- * `sink` — two live effects are two effects; never unclassified). Entry lifecycle:
- * pending promise → settled `{value}`; ONLY settled entries serialize. A REJECTED
- * promise is NEVER cached — rejection evicts the pending entry, so retries are
- * allowed and a transient failure never becomes a pinned error. In-flight promises
- * do not survive eviction: the single-flight benefit is residency-scoped, by design.
+ * SINGLE-FLIGHT — concurrent identical penetrations WITHIN one run share ONE rosetta call
+ * (each invocation lives in an immutable world). The in-flight promise is registered at call
+ * start, scoped to `view`/`pure` ONLY (never `sink` — two live effects are two effects). A
+ * REJECTED promise is NEVER cached: rejection evicts the pending entry, so retries are allowed
+ * and a transient failure never becomes a pinned error. Only SETTLED entries serialize;
+ * in-flight promises do not survive eviction (the benefit is residency-scoped).
  *
- * ── What this file is NOT (deliberately absent) ────────────────────────────────
- * No session plumbing: no epoch/roster/configDigest identity, no storage decomposition,
- * no TTL. `RunCache` is the RUN-level entity only; the cache-validity identity
- * `{v, semanticsEpoch, roster, configDigest}` is checked by the session layer BEFORE
- * a cache is handed to a run (mismatch ⇒ drop the cache, keep the log).
+ * DELIBERATELY ABSENT — no session plumbing (epoch/roster/configDigest identity, storage
+ * decomposition, TTL): `RunCache` is RUN-level only. The session layer checks cache-validity
+ * BEFORE handing a cache to a run (mismatch ⇒ drop the cache, keep the log).
  *
- * ── The burst arm (see arrival-plexus-effect-burst.md §2.3) ───────────────────
- * `penetrateThroughCache` also takes an optional `EffectLog` (run/effect-log.ts —
- * an ORDERED, non-deduplicating sibling of this file's content-keyed `Map`). When
- * present, a `sink` penetration during a PRIME run — `cache` absent, or `cache.mode`
- * is `"record"`, never `"replay"` — enqueues `{verbName, decodedArgs}` onto the log
- * and returns `undefined` immediately instead of firing: the third mode of this
- * interception, alongside the plain-fire and record/replay-tombstone arms below.
- * Replay mode is untouched — a fold re-encounters the tombstone-skip path exactly as
- * it does without an effect log, because an effect log has no business existing
- * during a fold (a fold is re-execution over settled history, not a gather).
+ * THE BURST ARM — `penetrateThroughCache` also takes an optional `EffectLog` (effect-log.ts, an
+ * ORDERED non-deduplicating sibling of this content-keyed `Map`). A `sink` penetration during a
+ * PRIME run (`cache` absent, or `cache.mode === "record"`, never `"replay"`) enqueues
+ * `{verbName, decodedArgs}` and returns `undefined` instead of firing — a third interception
+ * mode alongside plain-fire and record/replay-tombstone. Replay is untouched: an effect log has
+ * no business existing during a fold (a fold re-executes settled history, it does not gather).
  */
 
 import type { EffectLog } from "./effect-log.js";
 import type { ReadTracker } from "./read-guard.js";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 1. The entity (§2.2's normative shapes, verbatim)
-// ─────────────────────────────────────────────────────────────────────────────
-
 export type RunCacheEntry =
   | { kind: "value"; value: unknown } // a `view` result — the decoded-face JS value,
-  //   JSON-serializable by the view shape gate (assertCacheClassShape, _bake.ts)
+  //   JSON-serializable by the view shape gate
   | { kind: "effect" }; // tombstone — the effect (sink) fired in a recorded run
 
 export interface RunCache {
@@ -77,11 +60,11 @@ export interface RunCache {
   set(key: string, entry: RunCacheEntry): Promise<void>;
 }
 
-/** The in-memory materialization — a `Map` with the async face (§2.2: "in-memory Map
- *  always while a run executes"). `entries` is deliberately readable: the session layer
- *  (R3) serializes SETTLED entries from it, and a replay cache is constructed OVER a
- *  recorded one's entries. Mode is fixed at construction — a rehydration builds a NEW
- *  replay cache over the same entries, it never flips a live one. */
+/** The in-memory materialization — a `Map` with the async face (in-memory always while a run
+ *  executes). `entries` is deliberately readable: the session layer serializes SETTLED entries
+ *  from it, and a replay cache is constructed OVER a recorded one's entries. Mode is fixed at
+ *  construction — a rehydration builds a NEW replay cache over the same entries, never flips a
+ *  live one. */
 export class MemoryRunCache implements RunCache {
   readonly entries: Map<string, RunCacheEntry>;
 
@@ -102,21 +85,16 @@ export class MemoryRunCache implements RunCache {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 2. canonicalJson + the content key (§2.2's normative algorithm + its law tests)
-// ─────────────────────────────────────────────────────────────────────────────
-
 /**
- * NORMATIVE canonical JSON (§2.2): object keys recursively SORTED; arrays
- * order-preserving; input is DECODED (post-zod) values only, so codec coercion is
- * already normalized before keying; `undefined` cannot occur (zod output) — one
- * arriving anyway throws rather than silently canonicalizing two different shapes to
- * one text; numbers serialize as plain JSON numbers (non-finite numbers are not JSON
- * — throw). Anything JSON cannot represent (function, symbol, bigint, a non-plain
- * object — class instances, Map/Set) THROWS: a value that cannot canonicalize cannot
- * be a cache key, and the caller decides the fallback (a `pure` key failure falls
- * back to an unshared fire; a `view` key is total BY CONSTRUCTION — its shape gate
- * admits data codecs only).
+ * NORMATIVE canonical JSON: object keys recursively SORTED; arrays order-preserving; input
+ * is DECODED (post-zod) values only, so codec coercion is already normalized before keying.
+ * `undefined` cannot occur (zod output) — one arriving anyway throws rather than silently
+ * canonicalizing two different shapes to one text. Numbers serialize as plain JSON numbers
+ * (non-finite throw). Anything JSON cannot represent (function, symbol, bigint, a non-plain
+ * object — class instances, Map/Set) THROWS: a value that cannot canonicalize cannot be a
+ * cache key, and the caller decides the fallback (a `pure` key failure falls back to an
+ * unshared fire; a `view` key is total BY CONSTRUCTION — its shape gate admits data codecs
+ * only).
  */
 export function canonicalJson(value: unknown): string {
   if (value === null) return "null";
@@ -152,11 +130,11 @@ export function canonicalJson(value: unknown): string {
   return `{${parts.join(",")}}`;
 }
 
-/** FNV-1a over a prefixed canonical string — the codebase's ONE content-hash idiom
- *  (crc-v0 precedent: prefix tag + `|`-joined canonical parts, FNV-1a, zero-padded
- *  hex — eval/CompiledResolutionChain.ts `hashSteps`, provenance/wireframe/hash.ts).
- *  A local copy, deliberately NOT imported from either (different domains: those hash
- *  a sealed env chain / a wireframe graph, this one a membrane penetration). */
+/** FNV-1a over a prefixed canonical string — the codebase's content-hash idiom (prefix tag +
+ *  `|`-joined canonical parts, FNV-1a, zero-padded hex). A local copy, deliberately NOT
+ *  imported from the sibling hash sites (`hashSteps`, wireframe hash): different domains (a
+ *  sealed env chain, a wireframe graph, this one a membrane penetration) that must be free to
+ *  drift independently. */
 function fnv1a(prefix: string, canonical: string): string {
   const tagged = `${prefix}|${canonical}`;
   let h = 0x81_1c_9d_c5;
@@ -167,28 +145,23 @@ function fnv1a(prefix: string, canonical: string): string {
   return (h >>> 0).toString(16).padStart(8, "0");
 }
 
-/** The content key: `hash(symbolName ‖ canonicalJson(decodedArgs))` — keyed by
- *  PENETRATION CONTENT, not by position (statement index / penetration ordinal): a NEW
- *  program has no positions in common with the recorded one; only (node, args) survives
- *  program edits. Throws whatever `canonicalJson` throws — the caller owns the fallback
- *  (see `canonicalJson`'s doc). */
+/** The content key: `hash(symbolName ‖ canonicalJson(decodedArgs))` — keyed by PENETRATION
+ *  CONTENT, not by position: a NEW program shares no positions with the recorded one; only
+ *  (node, args) survives program edits. Throws whatever `canonicalJson` throws — the caller
+ *  owns the fallback. */
 export function runCacheKey(symbolName: string, decodedArgs: readonly unknown[]): string {
   return fnv1a("runcache-v0", `${symbolName}|${canonicalJson(decodedArgs)}`);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 3. The interception (the rosetta wrapper's one call) + single-flight
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** The stamped cache class, as this module needs it — structurally identical to
- *  `_bake.ts`'s `CacheClass` but declared locally: values/ is BELOW common/ in the
- *  import DAG (RunContext ← _bake), so this leaf must not reach up for the type. */
+/** The stamped cache class, as this module needs it — structurally identical to `_bake.ts`'s
+ *  `CacheClass` but declared locally: values/ is BELOW common/ in the import DAG, so this leaf
+ *  must not reach up for the type. */
 export type RunCacheClass = "view" | "pure";
 
-/** Per-cache in-flight registry (single-flight, D1). WeakMap keyed by the cache
- *  ENTITY: the pending map's lifetime IS the run cache's residency — no module-level
- *  state outlives it (hermetic), and two concurrent runs sharing one isolate never
- *  see each other's pendings unless they deliberately share one cache. */
+/** Per-cache in-flight registry (single-flight). WeakMap keyed by the cache ENTITY: the pending
+ *  map's lifetime IS the run cache's residency — no module-level state outlives it (hermetic),
+ *  and two concurrent runs sharing one isolate never see each other's pendings unless they
+ *  deliberately share one cache. */
 const inFlight = new WeakMap<RunCache, Map<string, Promise<unknown>>>();
 
 function pendingFor(cache: RunCache): Map<string, Promise<unknown>> {
@@ -200,11 +173,10 @@ function pendingFor(cache: RunCache): Map<string, Promise<unknown>> {
   return map;
 }
 
-/** Single-flight fire for the `view`/`pure` classes: register the in-flight promise
- *  BEFORE awaiting so concurrent identical penetrations share one impl call; settle
- *  removes the pending entry either way (rejection = eviction, retries allowed;
- *  success for a `view` = the settled `{value}` written to the cache — only settled
- *  entries serialize). */
+/** Single-flight fire for the `view`/`pure` classes: register the in-flight promise BEFORE
+ *  awaiting so concurrent identical penetrations share one impl call; settle removes the pending
+ *  entry either way (rejection = eviction, retries allowed; `view` success = the settled
+ *  `{value}` written to the cache). */
 async function sharedFire(
   cache: RunCache,
   key: string,
@@ -226,48 +198,26 @@ async function sharedFire(
 }
 
 /**
- * THE INTERCEPTION — called by the baked rosetta `run` wrapper between arg decode and
- * impl fire, in place of the bare fire. Implements the mode law (file header) for the
- * penetration `(symbolName, decodedArgs)`:
+ * THE INTERCEPTION — called by the baked rosetta `run` wrapper between arg decode and impl
+ * fire, in place of the bare fire. Implements the mode law (file header) for the penetration
+ * `(symbolName, decodedArgs)`; the arm each class takes is snapshotted at the branch below.
  *
- *  - `sink` + `effects` present + NOT replaying (§2.3, the burst arm): enqueue
- *    `{verbName: symbolName, decodedArgs}` onto the log, return `undefined` — the
- *    impl never fires. Checked BEFORE the `cache === undefined` shortcut below, so a
- *    burst run needs no `RunCache` at all to gather effects.
- *  - `cache === undefined` (and no burst arm taken) → plain fire (no run cache on
- *    this run).
- *  - `sink` (lineage role — survives Ruling A): record = fire + tombstone; replay =
- *    tombstone hit skips (returns `undefined` — the void the sink's shape-gated
- *    contract already promised), miss fires + writes. No promise sharing, ever. A
- *    sink's inputs are NOT shape-gated serializable, so a key failure downgrades the
- *    penetration to an honest plain fire (never a throw, never a fabricated key).
- *  - `view`: record = single-flight fire + overwrite; replay = hit serves the stored
- *    decoded-face value (the wrapper's encode/provenance steps then run over it
- *    exactly as over a fresh impl return), miss = single-flight fire + write. The
- *    key is total by the bake-time shape gate.
- *  - `pure`: single-flight fire in BOTH modes (contractual determinism) —
- *    never reads or writes serialized entries. A key failure (a `pure` contract may
- *    carry `z.value`/`z.lambda` — ungated by design) falls back to an unshared fire.
- *  - unclassified non-sink: plain fire — never touches the cache.
+ * `effects`, `reads`, and `penetration.rawArgs` are the sibling inputs the table does not
+ * cover:
  *
- * `effects` is a sibling parameter, not a `cache` field: a burst run may gather
- * effects with no `RunCache` at all, or gather effects alongside a `view`/`pure`
- * cache — the two entities have independent lifecycles (§2.3).
+ * `effects` is a sibling parameter, not a `cache` field: a burst run may gather effects with
+ * no `RunCache` at all, or alongside a `view`/`pure` cache — independent lifecycles.
  *
- * `reads` (run/read-guard.ts) is a THIRD sibling parameter, read-only at this
- * chokepoint: when present, a gathered effect's `enqueuedAtReadClock` is stamped from
- * `reads.log.length` at enqueue time — the read-clock guard's own comparison point
- * (§2.4). Absent ⇒ the entry carries no clock (the guard then treats it as `0`,
- * i.e. every read counts — see read-guard.ts's doc). This function never CHECKS the
- * guard itself (that's `checkReadWriteGuard`, called by the eval loop after each
- * form) — it only stamps the clock at the one point the clock's value is known.
+ * `reads` is read-only here: when present, a gathered effect's `enqueuedAtReadClock` is stamped
+ * from `reads.log.length` at enqueue time — the guard's comparison point. Absent ⇒ no clock
+ * (the guard treats it as `0`, every read counts). This function never CHECKS the guard (that
+ * is `checkReadWriteGuard`, run by the eval loop after each form) — it only stamps the clock at
+ * the one point its value is known.
  *
- * `penetration.rawArgs` (arrival-provenance-confirmation.md §5) carries the boxed,
- * pre-decode args through onto a gathered `EffectEntry` verbatim — read-only here,
- * never inspected: a confirmation-manifest host (arrival-mcp) needs the provenance-
- * carrying originals to compute per-argument lineage and to reconstruct the effect's
- * own minimal re-runnable invocation, neither of which `decodedArgs` (JS-plain,
- * identity-stripped) can serve alone.
+ * `penetration.rawArgs` carries the boxed, pre-decode args onto a gathered `EffectEntry`
+ * verbatim — never inspected here: a confirmation-manifest host needs the provenance-carrying
+ * originals to compute per-argument lineage and reconstruct the effect's minimal re-runnable
+ * invocation, neither of which `decodedArgs` (JS-plain, identity-stripped) can serve alone.
  */
 export async function penetrateThroughCache(
   cache: RunCache | undefined,
@@ -279,12 +229,11 @@ export async function penetrateThroughCache(
 ): Promise<unknown> {
   const { symbolName, cacheClass, sink, rawArgs } = penetration;
 
-  // THE BURST ARM (W1) — a sink during a PRIME run (no cache, or cache.mode ===
-  // "record") gathers instead of firing. `cache?.mode === "replay"` excludes a fold:
-  // a fold re-runs the recorded log and must hit the tombstone-skip path below,
-  // never gather a second time. Sound by the void-family bake gate
-  // (assertProvenanceRoleShape, _bake.ts): the program cannot observe that firing
-  // was deferred because it structurally cannot read what a sink returns.
+  // THE BURST ARM — a sink during a PRIME run (no cache, or cache.mode === "record")
+  // gathers instead of firing. `cache?.mode === "replay"` excludes a fold: a fold re-runs
+  // the recorded log and must hit the tombstone-skip path below, never gather twice. Sound
+  // by the void-family bake gate: the program cannot observe the deferral because it
+  // structurally cannot read what a sink returns.
   if (sink && effects !== undefined && cache?.mode !== "replay") {
     effects.enqueue({
       verbName: symbolName,

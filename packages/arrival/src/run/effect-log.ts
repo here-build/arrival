@@ -1,66 +1,45 @@
 /**
- * effect-log — the ORDERED sibling of `RunCache` (the plexus effect-burst design
- * §2.3/§2.5). Where `RunCache` is a content-keyed,
- * deduplicating `Map` (two identical penetrations share one slot), `EffectLog` is a
- * plain append-only sequence: two identical sink calls are two entries, always — the
- * mode law's "two effects, always" (run-cache.ts's header) holds for the burst arm
- * exactly as it holds for the tombstone arm. This file owns the log entity and the
- * drain (`burst`); it does NOT own the read-clock guard ITSELF (run/read-guard.ts)
- * or the conflict re-execution comparator (§2.6, unbuilt) — this log only remembers
- * WHAT was gathered, in WHAT order, and the read-clock each entry was gathered at,
- * nothing about whether it is safe to replay against a moved world.
+ * effect-log — the ORDERED sibling of `RunCache`. Where `RunCache` is a content-keyed,
+ * deduplicating `Map`, `EffectLog` is a plain append-only sequence: two identical sink
+ * calls are two entries, always — the mode law's "two effects, always" (run-cache.ts)
+ * holds for the burst arm exactly as for the tombstone arm. This file owns the log entity
+ * and the drain (`burst`); it does NOT own the read-clock guard (read-guard.ts) or the
+ * conflict re-execution comparator (unbuilt) — it remembers only WHAT was gathered, in
+ * WHAT order, and the read-clock each entry was gathered at, nothing about whether replay
+ * against a moved world is safe. Entries are gathered at run-cache.ts's
+ * `penetrateThroughCache` chokepoint (the burst arm); see there for the gather condition.
  *
- * ── Where it intercepts ───────────────────────────────────────────────────────
- * Same chokepoint as `RunCache`: `penetrateThroughCache`, between arg decode and
- * impl fire. When the run's ctx carries an `effects` log (`this.runCtx.effects`) and
- * the penetration is `sink`-classed and the run is NOT replaying a cache (§2.3: burst
- * is a PRIME-run-only phenomenon), the sink enqueues `{verbName, decodedArgs}` and
- * returns `undefined` immediately — sound because a sink's contract already proved a
- * void-family output (`assertProvenanceRoleShape`'s bake gate, _bake.ts): a program
- * that cannot read an effect's result cannot observe that firing it was deferred.
- *
- * ── Decoded args, kept faithfully ─────────────────────────────────────────────
  * Entries store the DECODED args (post-zod, the same face `RunCache` keys on), not
- * re-encoded scheme values — later consumers (a confirmation manifest, per-effect
- * arg invariants) read plain JS. This file does not interpret them; it only carries
- * them through in program order.
+ * re-encoded scheme values, so later consumers (a confirmation manifest, per-effect arg
+ * invariants) read plain JS. This file does not interpret them; it carries them through
+ * in program order.
  */
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 1. The entity
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** One gathered sink penetration. `index` is minted by `enqueue` — program order,
- *  never re-derived from a statement position (a burst replays in THIS order, not in
- *  a recomputed one). */
+/** One gathered sink penetration. `index` is minted by `enqueue` — program order, never
+ *  re-derived from a statement position (a burst replays in THIS order, not a recomputed one). */
 export interface EffectEntry {
   readonly index: number;
   readonly verbName: string;
   readonly decodedArgs: readonly unknown[];
-  /** The read-clock at enqueue (run/read-guard.ts, §2.3's normative field) —
-   *  stamped by `penetrateThroughCache` when the run carries a `reads` tracker; absent
-   *  when it doesn't (no tracker ⇒ nothing to stamp, and the guard treats a missing
-   *  clock as `0`, i.e. every read counts — see read-guard.ts). Reads at or below this
-   *  clock are the query that motivated this effect; reads above it are post-enqueue. */
+  /** The read-clock at enqueue (read-guard.ts), stamped by `penetrateThroughCache` when the
+   *  run carries a `reads` tracker; absent when it doesn't (the guard treats a missing clock as
+   *  `0`, i.e. every read counts). Reads at or below this clock are the query that motivated the
+   *  effect; reads above it are post-enqueue. */
   readonly enqueuedAtReadClock?: number;
-  /** The RAW pre-decode args (arrival-provenance-confirmation.md §5) — the interpreter's
-   *  own boxed scheme values (AValue-tagged, provenance intact), exactly as the rosetta
-   *  wrapper held them BEFORE `z.decode` stripped their identity down to plain JS. Kept
-   *  ALONGSIDE `decodedArgs` (never in place of it — `decodedArgs` stays the JS-plain
-   *  face every existing consumer reads) so a confirmation-manifest host can (a) re-derive
-   *  each argument's lineage (a `groundingVerdict`-style walk needs the boxed value, not
-   *  its decoded shadow) and (b) reconstruct THIS effect's own minimal re-runnable
-   *  invocation (`writeForm` over these nodes serializes back to re-parseable Scheme
-   *  source) without touching the interpreter's internals. Absent when the penetration
-   *  carries no `EffectEntry`-shaped raw-args source (never the case for the burst arm
-   *  itself, which always has them in scope — see run-cache.ts's `penetration.rawArgs`). */
+  /** The RAW pre-decode args — the interpreter's own boxed scheme values (AValue-tagged,
+   *  provenance intact), exactly as the rosetta wrapper held them BEFORE `z.decode` stripped
+   *  identity down to plain JS. Kept ALONGSIDE `decodedArgs`, never in place of it, so a
+   *  confirmation-manifest host can re-derive each argument's lineage (a walk needs the boxed
+   *  value, not its decoded shadow) and reconstruct THIS effect's minimal re-runnable invocation
+   *  (`writeForm` over these nodes serializes back to re-parseable Scheme source). Absent when the
+   *  penetration carries no raw-args source. */
   readonly rawArgs?: readonly unknown[];
 }
 
 /** An ordered, append-only manifest of gathered sink penetrations for ONE run. Never
- *  deduplicates (contrast `RunCache`'s content-keyed `Map`) and never drops an entry
- *  (a failed burst leaves the log as-is — the poison rule, §2.3 — the CALLER decides
- *  whether a poisoned log is ever drained again; this entity doesn't self-police). */
+ *  deduplicates (contrast `RunCache`'s content-keyed `Map`) and never drops an entry — a failed
+ *  burst leaves the log as-is (the poison rule); the CALLER decides whether a poisoned log is
+ *  drained again, this entity does not self-police. */
 export interface EffectLog {
   readonly entries: readonly EffectEntry[];
   /** Append one entry; `index` is minted here (`entries.length` at call time) — the
@@ -73,9 +52,8 @@ export interface EffectLog {
   }): void;
 }
 
-/** The in-memory materialization — a plain array, mirroring `MemoryRunCache`'s
- *  "one Map while a run executes" posture. One `MemoryEffectLog` per run; it does not
- *  outlive the run that gathered it (the burst executor drains it and discards it). */
+/** The in-memory materialization — a plain array. One per run; it does not outlive the run
+ *  that gathered it (the burst executor drains it and discards it). */
 export class MemoryEffectLog implements EffectLog {
   private readonly _entries: EffectEntry[] = [];
 
@@ -99,15 +77,12 @@ export class MemoryEffectLog implements EffectLog {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 2. The drain (§2.5's burst, ordering/atomicity language — minus everything the
-//    plexus burst executor owns: no plexus region, no sync bracket, no rollback.
-//    This is the bare sequential-execution primitive that executor wraps.)
-// ─────────────────────────────────────────────────────────────────────────────
+// The drain — the bare sequential-execution primitive a real burst executor wraps: no
+// plexus region, no sync bracket, no rollback of its own.
 
-/** Where a drain stopped — the throwing entry's position plus the entries that never
- *  ran, so a caller can render "form N's effect threw; effects after it never fired"
- *  without re-deriving the cut point from a bare index. */
+/** Where a drain stopped — the throwing entry's position plus the entries that never ran, so a
+ *  caller can render "form N's effect threw; effects after it never fired" without re-deriving
+ *  the cut point from a bare index. */
 export interface BurstFailure {
   readonly entry: EffectEntry;
   readonly error: unknown;
@@ -127,12 +102,10 @@ export class BurstDrainError extends Error {
 
 /**
  * Drain `log` in strict index order, firing each entry through the caller-supplied
- * `executor` (the burst host decides how a `{verbName, decodedArgs}` descriptor maps
- * back onto a real effect — this file has no opinion). One pass, no reordering, no
- * retry: a mid-entry throw stops the drain immediately and rethrows `BurstDrainError`
- * carrying the failing entry's position and the entries that never ran — the caller
- * (a real burst executor) owns rollback; this function performs no side effects
- * of its own beyond calling `executor`.
+ * `executor` (the host decides how a `{verbName, decodedArgs}` descriptor maps onto a real
+ * effect). One pass, no reordering, no retry: a mid-entry throw stops the drain immediately
+ * and rethrows `BurstDrainError` carrying the failing entry's position and the entries that
+ * never ran. The caller owns rollback; this function has no side effects beyond `executor`.
  */
 export async function burst(
   log: EffectLog,

@@ -1,36 +1,30 @@
-// note-sink.ts — the per-run channel for things the MODEL needs told, that are not the answer.
-//
-// A leaf (zero imports): it rides `RunContext.notes`, the same per-run hermetic seam `cache` /
-// `effects` / `reads` ride, so it is scoped to ONE run and cannot leak across concurrent sessions
-// the way a module-level list would.
-//
-// ─── WHY THIS EXISTS ────────────────────────────────────────────────────────────────────────
-//
-// The kwargs tolerance (kwargs-rejection.ts, B5) DROPS a far-unknown argument key and lets the call
-// proceed — which is right: a model that writes `(memory/search_nodes :query "x" :limit 10)` against
-// a tool with no `:limit` should not eat a hard rejection over an argument that changes nothing.
-// Before the tolerance, that was a CRASH.
-//
-// But the fix was only half-landed. The note explaining what was ignored was produced correctly and
-// then *never surfaced* — `drainDroppedKwargNotes` had zero production callers, so the notes sat in
-// a WeakMap forever. The model went from an unexplained CRASH to an unexplained SILENT DROP: it
-// still believed `:limit 10` had been honored, and would reasonably conclude the tool ignores limits
-// or that its own result set was capped. A silent drop is a lie of omission, and this medium's
-// governing diagnosis is that the return channel must never lie.
-//
-// The WeakMap keyed the note on the DECODED ARGUMENT OBJECT — reachable from the decode site and
-// nowhere else. The renderer (mcp-substrate's runner) never sees that object, which is precisely why
-// nothing could drain it. The key was wrong for the job: the note belongs to the RUN, not to a value
-// inside it. Hence this sink.
-//
-// ─── WHAT BELONGS HERE ──────────────────────────────────────────────────────────────────────
-//
-// SESSION BOOKKEEPING the model must know but did not ask for — facts ABOUT the call rather than
-// results OF it. They render into the consolidated `#| ── environment notes ── |#` footer, a reader
-// comment that parses to zero forms, so the model can tell bookkeeping from answer at a glance.
-//
-// NOT for: substantive per-statement teaching (a door explaining a mistake belongs on that
-// statement's own error, where the mistake is), or anything that is part of the answer.
+/**
+ * note-sink — the per-run side channels for what the MODEL must be told but did not
+ * ask for. Two leaf sinks (zero imports), both riding `RunContext` (`notes`/`display`),
+ * scoped to ONE run so nothing leaks across concurrent sessions the way a module-level
+ * list would; both drain once, at end of call.
+ *
+ * LAW — the return channel must never lie. The kwargs tolerance drops a far-unknown
+ * argument key and lets the call proceed (dropping `:limit 10` against a tool with no
+ * `:limit` beats crashing over an argument that changes nothing). A silent drop is a lie
+ * of omission — the model still believes `:limit` was honored — so the dropped key is
+ * surfaced as a note. The note belongs to the RUN, not to any value inside it: a WeakMap
+ * keyed on the decoded argument object is undrainable, because the renderer never sees
+ * that object.
+ *
+ * NoteSink carries SESSION BOOKKEEPING — facts ABOUT the call, not results OF it —
+ * rendered into a `#| ── environment notes ── |#` reader-comment footer that parses to
+ * zero forms, so the model tells bookkeeping from answer at a glance. NOT for
+ * per-statement teaching (a door explaining a mistake belongs on that statement's own
+ * error) or anything that is part of the answer.
+ *
+ * DisplaySink backs `(display …)`, which arrival itself does NOT and will not provide:
+ * ports and IO are omitted by design (a pure inference plane; an ambient write has no
+ * value-construction site for provenance). A model reaches for `(display x)` as the
+ * natural "show me this" idiom, so the MCP runner binds it as a host affordance —
+ * identity plus a side effect into this sink, the value flowing on untouched so
+ * composition is unaffected. Intent honored without the language acquiring an IO surface.
+ */
 
 /** A per-run collector for model-facing bookkeeping. Push at the point the fact becomes true;
  *  the renderer drains once, at the end of the call. */
@@ -44,8 +38,8 @@ export function createNoteSink(): NoteSink {
   const lines: string[] = [];
   return {
     push(line: string): void {
-      // Deduplicate: the same tolerance can fire on several calls to the same tool inside one
-      // program, and the model needs the fact once, not once per call.
+      // Dedup: one tolerance can fire on several calls to the same tool in one program;
+      // the model needs the fact once.
       if (!lines.includes(line)) lines.push(line);
     },
     drain(): readonly string[] {
@@ -55,26 +49,6 @@ export function createNoteSink(): NoteSink {
     },
   };
 }
-
-
-// ─── DISPLAY ─────────────────────────────────────────────────────────────────────────────────
-//
-// `display` does NOT exist in arrival, and must not: ports and IO are omitted by design — this is a
-// pure inference plane, and an ambient write has no value-construction site for provenance. That
-// law is not bending.
-//
-// But a model writes `(display x)` constantly — it is the natural Scheme idiom for "show me this" —
-// and in the 89-task corpus it cost a door and a wasted round on 32% of tasks. The verb is a
-// reflex, not a request for IO. The model wants the VALUE; it reaches for the only spelling it
-// knows.
-//
-// So the MCP RUNNER binds it (mcp-substrate/src/display.ts) — a host affordance, not a language
-// feature. It is identity + a side effect into this sink: the value flows on untouched, so
-// composition is unaffected, and the runner renders what was displayed alongside the answer. The
-// intent is honored without the language acquiring an IO surface.
-//
-// This sink rides `RunContext.display`, the same per-run hermetic seam as `notes`/`cache`/`effects`,
-// so a display in one run can never surface in another.
 
 /** One `(display …)` occurrence: the ORIGINAL source of the call, and the value it saw. */
 export interface DisplayRecord {
