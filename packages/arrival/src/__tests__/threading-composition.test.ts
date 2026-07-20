@@ -33,41 +33,30 @@ const num = (r: unknown): number => {
 const val = async (src: string): Promise<unknown> => (await exec(src, { env }))[0];
 
 describe("threading macros — first vs last insertion", () => {
-  it("-> inserts the value as the FIRST argument", async () => {
-    expect(num(await val(`(-> 10 (- 3))`))).toBe(7); //   (- 10 3)
-    expect(num(await val(`(-> 1 (+ 2) (* 10))`))).toBe(30); // (* (+ 1 2) 10)
-  });
-
-  it("->> inserts the value as the LAST argument", async () => {
-    expect(num(await val(`(->> 10 (- 3))`))).toBe(-7); //  (- 3 10)
-    expect(num(await val(`(->> 1 (- 10) (* 2))`))).toBe(18); // (* 2 (- 10 1))
-  });
-
-  it("~> and ~>> are Racket-style aliases of -> and ->>", async () => {
-    expect(num(await val(`(~> 10 (- 3))`))).toBe(7);
-    expect(num(await val(`(~>> 10 (- 3))`))).toBe(-7);
-  });
-
-  it("a bare symbol threads as a unary call — the shape :key accessors use", async () => {
-    expect(num(await val(`(-> (list 1 2 3) car)`))).toBe(1);
-    expect(num(await val(`(->> (list 1 2 3) reverse car)`))).toBe(3);
+  it.each([
+    { name: "->-inserts-first-single-step", src: `(-> 10 (- 3))`, expected: 7 }, //   (- 10 3)
+    { name: "->-inserts-first-multi-step", src: `(-> 1 (+ 2) (* 10))`, expected: 30 }, // (* (+ 1 2) 10)
+    { name: "->>-inserts-last-single-step", src: `(->> 10 (- 3))`, expected: -7 }, //  (- 3 10)
+    { name: "->>-inserts-last-multi-step", src: `(->> 1 (- 10) (* 2))`, expected: 18 }, // (* 2 (- 10 1))
+    { name: "~>-aliases-->", src: `(~> 10 (- 3))`, expected: 7 },
+    { name: "~>>-aliases-->>", src: `(~>> 10 (- 3))`, expected: -7 },
+    { name: "bare-symbol-threads-as-unary-call-car", src: `(-> (list 1 2 3) car)`, expected: 1 },
+    { name: "bare-symbol-threads-as-unary-call-reverse-car", src: `(->> (list 1 2 3) reverse car)`, expected: 3 },
+  ])("$name", async ({ src, expected }) => {
+    expect(num(await val(src))).toBe(expected);
   });
 });
 
 describe("composition combinators — direction + aliases", () => {
-  it("compose is right-to-left, pipe is left-to-right", async () => {
+  it.each([
     // (+1) then (*2) reading right-to-left for compose, left-to-right for pipe
-    expect(num(await val(`((compose (lambda (x) (* x 2)) (lambda (x) (+ x 1))) 5)`))).toBe(12);
-    expect(num(await val(`((pipe (lambda (x) (* x 2)) (lambda (x) (+ x 1))) 5)`))).toBe(11);
-  });
-
-  it("comp aliases compose, flow aliases pipe", async () => {
-    expect(num(await val(`((comp car cdr) (list 1 2 3))`))).toBe(2); // car(cdr(xs))
-    expect(num(await val(`((flow cdr car) (list 1 2 3))`))).toBe(2); // car(cdr(xs))
-  });
-
-  it("the first function may be n-ary", async () => {
-    expect(num(await val(`((pipe + (lambda (x) (* x 10))) 2 3)`))).toBe(50); // (* (+ 2 3) 10)
-    expect(num(await val(`((compose (lambda (x) (* x 10)) +) 2 3)`))).toBe(50);
+    { name: "compose-is-right-to-left", src: `((compose (lambda (x) (* x 2)) (lambda (x) (+ x 1))) 5)`, expected: 12 },
+    { name: "pipe-is-left-to-right", src: `((pipe (lambda (x) (* x 2)) (lambda (x) (+ x 1))) 5)`, expected: 11 },
+    { name: "comp-aliases-compose", src: `((comp car cdr) (list 1 2 3))`, expected: 2 }, // car(cdr(xs))
+    { name: "flow-aliases-pipe", src: `((flow cdr car) (list 1 2 3))`, expected: 2 }, // car(cdr(xs))
+    { name: "pipe-first-function-may-be-n-ary", src: `((pipe + (lambda (x) (* x 10))) 2 3)`, expected: 50 }, // (* (+ 2 3) 10)
+    { name: "compose-first-function-may-be-n-ary", src: `((compose (lambda (x) (* x 10)) +) 2 3)`, expected: 50 },
+  ])("$name", async ({ src, expected }) => {
+    expect(num(await val(src))).toBe(expected);
   });
 });

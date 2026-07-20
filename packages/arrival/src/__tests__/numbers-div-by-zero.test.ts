@@ -10,20 +10,20 @@ import { AInexact } from "../values/primitives/AInexact.js";
 const inx = (real: number) => new AInexact(CONSTANT_CTX, real);
 
 describe("SchemeInexact real div/mul by zero — R7RS infinities (was 'NaNNaNi')", () => {
-  it("1.0 / 0.0 → +inf.0", () => {
-    expect(inx(1).div(inx(0)).toString()).toBe("+inf.0");
-  });
-  it("-1.0 / 0.0 → -inf.0", () => {
-    expect(inx(-1).div(inx(0)).toString()).toBe("-inf.0");
-  });
-  it("0.0 / 0.0 → +nan.0", () => {
-    expect(inx(0).div(inx(0)).toString()).toBe("+nan.0");
-  });
-  it("+inf.0 * 0.0 → +nan.0 (cross-term inf*0 must not leak into imag)", () => {
-    expect(inx(Infinity).mul(inx(0)).toString()).toBe("+nan.0");
-  });
-  it("real div stays real (2.0 / 4.0 → 0.5)", () => {
-    expect(inx(2).div(inx(4)).toString()).toBe("0.5");
+  it.each([
+    { name: "1.0 / 0.0 → +inf.0", a: 1, b: 0, op: "div" as const, expected: "+inf.0" },
+    { name: "-1.0 / 0.0 → -inf.0", a: -1, b: 0, op: "div" as const, expected: "-inf.0" },
+    { name: "0.0 / 0.0 → +nan.0", a: 0, b: 0, op: "div" as const, expected: "+nan.0" },
+    {
+      name: "+inf.0 * 0.0 → +nan.0 (cross-term inf*0 must not leak into imag)",
+      a: Infinity,
+      b: 0,
+      op: "mul" as const,
+      expected: "+nan.0",
+    },
+    { name: "real div stays real (2.0 / 4.0 → 0.5)", a: 2, b: 4, op: "div" as const, expected: "0.5" },
+  ])("$name", ({ a, b, op, expected }) => {
+    expect(inx(a)[op](inx(b)).toString()).toBe(expected);
   });
 
   // (Complex toString tests removed — arrival is reals-only, no imaginary axis.)

@@ -60,53 +60,50 @@ async function runBoxed(src: string, bindings: Record<string, AString> = {}): Pr
 }
 
 describe("format — SRFI-28 proper (format fmt arg ...)", () => {
-  it("plain string with no directives is returned verbatim", async () => {
-    expect(js(await run('(format "hello world")'))).toBe("hello world");
-  });
-
-  it("~a — display style", async () => {
-    expect(js(await run('(format "~a" "hi")'))).toBe("hi");
-    expect(js(await run('(format "n=~a" 42)'))).toBe("n=42");
-    expect(js(await run('(format "~a and ~a" 1 2)'))).toBe("1 and 2");
-  });
-
-  it("~s — write style", async () => {
-    expect(js(await run('(format "~s" 42)'))).toBe("42");
-  });
-
-  it("~d — decimal number", async () => {
-    expect(js(await run('(format "~d" 42)'))).toBe("42");
-    expect(js(await run('(format "count: ~d" 7)'))).toBe("count: 7");
-  });
-
-  it("~% — newline", async () => {
-    expect(js(await run('(format "a~%b")'))).toBe("a\nb");
-  });
-
-  it("~~ — literal tilde", async () => {
-    expect(js(await run('(format "100~~")'))).toBe("100~");
-  });
-
-  it("mixed directives fill in order", async () => {
-    expect(js(await run('(format "~a = ~d~%" "x" 5)'))).toBe("x = 5\n");
+  it.each([
+    { name: "plain string with no directives is returned verbatim", input: '(format "hello world")', value: "hello world" },
+    { name: "~a — display style, string arg", input: '(format "~a" "hi")', value: "hi" },
+    { name: "~a — display style, number arg", input: '(format "n=~a" 42)', value: "n=42" },
+    { name: "~a — display style, two args", input: '(format "~a and ~a" 1 2)', value: "1 and 2" },
+    { name: "~s — write style", input: '(format "~s" 42)', value: "42" },
+    { name: "~d — decimal number", input: '(format "~d" 42)', value: "42" },
+    { name: "~d — decimal number with label", input: '(format "count: ~d" 7)', value: "count: 7" },
+    { name: "~% — newline", input: '(format "a~%b")', value: "a\nb" },
+    { name: "~~ — literal tilde", input: '(format "100~~")', value: "100~" },
+    { name: "mixed directives fill in order", input: '(format "~a = ~d~%" "x" 5)', value: "x = 5\n" },
+  ])("$name", async ({ input, value }) => {
+    expect(js(await run(input))).toBe(value);
   });
 });
 
 describe("format — ~F / ~w,dF fixed-point (SRFI-48 bounded subset)", () => {
-  it("~,2f — no width, 2 decimals (the #1 CL-style habit this door completes)", async () => {
-    expect(js(await run('(format "~,2f" 3.14159)'))).toBe("3.14");
-  });
-
-  it("~F alone — no width, no decimals, free-format render", async () => {
-    expect(js(await run('(format "~f" 3.5)'))).toBe("3.5");
-  });
-
-  it("~w,dF — width AND decimals, left-padded with spaces", async () => {
-    expect(js(await run('(format "[~8,2f]" 3.14159)'))).toBe("[    3.14]");
-  });
-
-  it("width-only (no comma, no decimals) is also accepted — free-format render, left-padded", async () => {
-    expect(js(await run('(format "[~6f]" 3.5)'))).toBe("[   3.5]");
+  it.each([
+    {
+      name: "~,2f — no width, 2 decimals (the #1 CL-style habit this door completes)",
+      input: '(format "~,2f" 3.14159)',
+      value: "3.14",
+    },
+    {
+      name: "~F alone — no width, no decimals, free-format render",
+      input: '(format "~f" 3.5)',
+      value: "3.5",
+    },
+    {
+      name: "~w,dF — width AND decimals, left-padded with spaces",
+      input: '(format "[~8,2f]" 3.14159)',
+      value: "[    3.14]",
+    },
+    {
+      name: "width-only (no comma, no decimals) — free-format render, left-padded",
+      input: '(format "[~6f]" 3.5)',
+      value: "[   3.5]",
+    },
+    // Rounding follows JS's own `toFixed` semantics (pins implementation, not behavior —
+    // a different rounding library would be an equally valid ~f).
+    { name: "rounds via toFixed semantics — half rounds up", input: '(format "~,0f" 2.5)', value: "3" },
+    { name: "rounds via toFixed semantics — pads decimals", input: '(format "~,2f" 1)', value: "1.00" },
+  ])("$name", async ({ input, value }) => {
+    expect(js(await run(input))).toBe(value);
   });
 
   it("a genuinely unsupported SRFI-48 directive (~r, radix) still errors, listing ~F in the supported set", async () => {
@@ -123,30 +120,36 @@ describe("format — ~F / ~w,dF fixed-point (SRFI-48 bounded subset)", () => {
   it("~,2f with a non-number argument is an error, naming the directive", async () => {
     await expect(run('(format "~,2f" "not-a-number")')).rejects.toThrow(/~,2f directive expects a number/);
   });
-
-  // Rounding follows JS's own `toFixed` semantics (pins implementation, not behavior —
-  // a different rounding library would be an equally valid ~f).
-  it("rounds via toFixed semantics", async () => {
-    expect(js(await run('(format "~,0f" 2.5)'))).toBe("3");
-    expect(js(await run('(format "~,2f" 1)'))).toBe("1.00");
-  });
 });
 
 describe("format — ~s vs ~a on a string (quoted vs bare)", () => {
-  it("~a renders a string bare, ~s renders it quoted", async () => {
-    expect(js(await run('(format "~a" "hi")'))).toBe("hi");
-    expect(js(await run('(format "~s" "hi")'))).toBe('"hi"');
-  });
-
-  it("~s escapes embedded quotes and backslashes (re-readable write form)", async () => {
-    expect(js(await run('(format "~s" "a\\"b")'))).toBe('"a\\"b"');
+  it.each([
+    { name: "~a renders a string bare", input: '(format "~a" "hi")', value: "hi" },
+    { name: "~s renders a string quoted", input: '(format "~s" "hi")', value: '"hi"' },
+    {
+      name: "~s escapes embedded quotes and backslashes (re-readable write form)",
+      input: '(format "~s" "a\\"b")',
+      value: '"a\\"b"',
+    },
+  ])("$name", async ({ input, value }) => {
+    expect(js(await run(input))).toBe(value);
   });
 });
 
 describe("format — SRFI-48/CL #f destination", () => {
-  it("(format #f fmt arg ...) returns the same string as SRFI-28", async () => {
-    expect(js(await run('(format #f "~a-~a" 1 2)'))).toBe("1-2");
-    expect(js(await run('(format #f "plain")'))).toBe("plain");
+  it.each([
+    {
+      name: "(format #f fmt arg ...) returns the same string as SRFI-28 — with args",
+      input: '(format #f "~a-~a" 1 2)',
+      value: "1-2",
+    },
+    {
+      name: "(format #f fmt arg ...) returns the same string as SRFI-28 — no args",
+      input: '(format #f "plain")',
+      value: "plain",
+    },
+  ])("$name", async ({ input, value }) => {
+    expect(js(await run(input))).toBe(value);
   });
 
   it("#f destination with a non-string second arg is an error", async () => {
@@ -172,24 +175,26 @@ describe("format — directive and arity errors are clear", () => {
     await expect(run('(format "~z" 1)')).rejects.toThrow(/~a.*~s.*~d.*~%.*~~/);
   });
 
-  it("dangling ~ at end of string is an error", async () => {
-    await expect(run('(format "abc~")')).rejects.toThrow(/dangling ~/);
-  });
-
-  it("too few arguments for the directives", async () => {
-    await expect(run('(format "~a ~a" 1)')).rejects.toThrow(/too few arguments/);
-  });
-
-  it("too many arguments for the directives", async () => {
-    await expect(run('(format "~a" 1 2)')).rejects.toThrow(/too many arguments/);
-  });
-
-  it("~d with a non-number argument is an error", async () => {
-    await expect(run('(format "~d" "not-a-number")')).rejects.toThrow(/~d directive expects a number/);
-  });
-
-  it("no arguments at all is an error", async () => {
-    await expect(run("(format)")).rejects.toThrow(/expected a format string/);
+  it.each([
+    { name: "dangling ~ at end of string is an error", input: '(format "abc~")', error: /dangling ~/ },
+    {
+      name: "too few arguments for the directives",
+      input: '(format "~a ~a" 1)',
+      error: /too few arguments/,
+    },
+    {
+      name: "too many arguments for the directives",
+      input: '(format "~a" 1 2)',
+      error: /too many arguments/,
+    },
+    {
+      name: "~d with a non-number argument is an error",
+      input: '(format "~d" "not-a-number")',
+      error: /~d directive expects a number/,
+    },
+    { name: "no arguments at all is an error", input: "(format)", error: /expected a format string/ },
+  ])("$name", async ({ input, error }) => {
+    await expect(run(input)).rejects.toThrow(error);
   });
 });
 

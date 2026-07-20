@@ -17,20 +17,16 @@ import { inferenceEnv } from "../inference-env.js";
 const run = (code: string) => execState(code, { env: mintFrame(inferenceEnv, "string-value-nil-coercion") });
 
 describe("B1 — stringValue throws on container/nil kinds instead of silently coercing", () => {
-  it("(string-length '()) throws (never silently returns 2, the `String(nil)` = \"()\" artifact)", async () => {
-    await expect(run("(string-length '())")).rejects.toThrow(/expected a string/i);
-  });
-
-  it("(string-upcase '()) throws", async () => {
-    await expect(run("(string-upcase '())")).rejects.toThrow(/expected a string/i);
-  });
-
-  it('(string-append "x" \'()) throws', async () => {
-    await expect(run('(string-append "x" \'())')).rejects.toThrow(/expected a string/i);
-  });
-
-  it('(string=? \'() "()") throws (never silently #t)', async () => {
-    await expect(run('(string=? \'() "()")')).rejects.toThrow(/expected a string/i);
+  it.each([
+    {
+      name: "(string-length '()) throws (never silently returns 2, the `String(nil)` = \"()\" artifact)",
+      code: "(string-length '())",
+    },
+    { name: "(string-upcase '()) throws", code: "(string-upcase '())" },
+    { name: '(string-append "x" \'()) throws', code: '(string-append "x" \'())' },
+    { name: '(string=? \'() "()") throws (never silently #t)', code: '(string=? \'() "()")' },
+  ])("$name", async ({ code }) => {
+    await expect(run(code)).rejects.toThrow(/expected a string/i);
   });
 
   it("leaf/scalar kinds are unaffected — a character still coerces via String(x)", async () => {

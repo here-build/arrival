@@ -26,6 +26,29 @@ const evalIn =
 // element index k ≡ (car (cdr^k x)) ≡ "ca" + "d"×k + "r"
 const cxrForIndex = (k: number): string => `ca${"d".repeat(k)}r`;
 
+// accessor expr → expected element, folded from four same-shape it/expect blocks (base case,
+// regression, deep-linear, mixed combos) into one table. All expecteds are compared with toEqual
+// (a superset of toBe for the primitives/arrays here, so this preserves the original toBe/toEqual
+// split exactly).
+const CXR_CASES = [
+  // car/cdr — the 1-step base case — resolve via the kernel unfold
+  { name: "car", expr: "(car '(10 20 30))", expected: 10 },
+  { name: "cdr", expr: "(cdr '(10 20 30))", expected: [20, 30] },
+  // standard composites still resolve (regression)
+  { name: "cadr", expr: "(cadr '(10 20 30 40 50 60))", expected: 20 },
+  { name: "caddr", expr: "(caddr '(10 20 30 40 50 60))", expected: 30 },
+  { name: "cadddr", expr: "(cadddr '(10 20 30 40 50 60))", expected: 40 },
+  // deep linear accessors resolve to the right element.
+  // k=4: 5 inner letters; k=5: 6 — both past the old eager loop AND the SAFE_BUILTINS slice.
+  { name: cxrForIndex(4), expr: `(${cxrForIndex(4)} '(10 20 30 40 50 60))`, expected: 50 },
+  { name: cxrForIndex(5), expr: `(${cxrForIndex(5)} '(10 20 30 40 50 60))`, expected: 60 },
+  // mixed combos compose car/cdr correctly
+  { name: "cdar", expr: "(cdar '((1 2 3) 9))", expected: [2, 3] }, // drop-1 of the first element
+  { name: "caadr", expr: "(caadr '(10 (100 200) 30))", expected: 100 }, // first of the second element
+  // third of the first element: car→(1 2 3 4), cdr, cdr, car→3
+  { name: "caddar", expr: "(caddar '((1 2 3 4) 9))", expected: 3 },
+] as const;
+
 // Run the SAME expressions through both roots. The kernel unfold is env-independent (no per-env
 // binding, no resolver), so global_env and inferenceEnv resolve the family identically. The list
 // INPUTS use quote literals (`'(…)`, reader-level) rather than `(list …)` so the data needs no env
@@ -35,30 +58,8 @@ for (const [label, env] of [["global_env", global_env], ["inferenceEnv", inferen
   describe(`c[ad]+r evaluation in ${label}`, () => {
     const run = evalIn(env);
 
-    it("car/cdr — the 1-step base case — resolve via the kernel unfold", async () => {
-      expect(await run("(car '(10 20 30))")).toBe(10);
-      expect(await run("(cdr '(10 20 30))")).toEqual([20, 30]);
-    });
-
-    it("standard composites still resolve (regression)", async () => {
-      expect(await run("(cadr '(10 20 30 40 50 60))")).toBe(20);
-      expect(await run("(caddr '(10 20 30 40 50 60))")).toBe(30);
-      expect(await run("(cadddr '(10 20 30 40 50 60))")).toBe(40);
-    });
-
-    it("deep linear accessors resolve to the right element", async () => {
-      // k=4: 5 inner letters; k=5: 6 — both past the old eager loop AND the SAFE_BUILTINS slice.
-      expect(await run(`(${cxrForIndex(4)} '(10 20 30 40 50 60))`)).toBe(50);
-      expect(await run(`(${cxrForIndex(5)} '(10 20 30 40 50 60))`)).toBe(60);
-    });
-
-    it("mixed combos compose car/cdr correctly", async () => {
-      // cdar = drop-1 of the first element
-      expect(await run("(cdar '((1 2 3) 9))")).toEqual([2, 3]);
-      // caadr = first of the second element
-      expect(await run("(caadr '(10 (100 200) 30))")).toBe(100);
-      // caddar = third of the first element: car→(1 2 3 4), cdr, cdr, car→3
-      expect(await run("(caddar '((1 2 3 4) 9))")).toBe(3);
+    it.each(CXR_CASES)("cxr · $name", async ({ expr, expected }) => {
+      expect(await run(expr)).toEqual(expected);
     });
 
     it("an accessor that walks off the end follows the run's nil-projection — tolerant ⇒ nil, strict ⇒ throw", async () => {

@@ -54,22 +54,24 @@ async function runBoxed(src: string, bindings: Record<string, AString> = {}): Pr
 }
 
 describe("string-null? — emptiness predicate", () => {
-  it("#t on the empty string, #f otherwise", async () => {
-    expect(js(await run('(string-null? "")'))).toBe(true);
-    expect(js(await run('(string-null? "a")'))).toBe(false);
+  it.each([
+    { name: "empty string is null", input: '(string-null? "")', value: true },
+    { name: "non-empty string is not null", input: '(string-null? "a")', value: false },
+  ])("$name", async ({ input, value }) => {
+    expect(js(await run(input))).toBe(value);
   });
 });
 
 describe("string-prefix? / string-suffix? — SRFI-13 affix-first argument order", () => {
   // Prefix/suffix predicates match correctly; an empty prefix/suffix always matches.
-  it("(string-prefix? prefix s)", async () => {
-    expect(js(await run('(string-prefix? "foo" "foobar")'))).toBe(true);
-    expect(js(await run('(string-prefix? "bar" "foobar")'))).toBe(false);
-    expect(js(await run('(string-prefix? "" "foobar")'))).toBe(true);
-  });
-  it("(string-suffix? suffix s)", async () => {
-    expect(js(await run('(string-suffix? "bar" "foobar")'))).toBe(true);
-    expect(js(await run('(string-suffix? "foo" "foobar")'))).toBe(false);
+  it.each([
+    { name: "matching prefix", input: '(string-prefix? "foo" "foobar")', value: true },
+    { name: "non-matching prefix", input: '(string-prefix? "bar" "foobar")', value: false },
+    { name: "empty prefix always matches", input: '(string-prefix? "" "foobar")', value: true },
+    { name: "matching suffix", input: '(string-suffix? "bar" "foobar")', value: true },
+    { name: "non-matching suffix", input: '(string-suffix? "foo" "foobar")', value: false },
+  ])("$name", async ({ input, value }) => {
+    expect(js(await run(input))).toBe(value);
   });
   it("carries the provenance of the searched string", async () => {
     const r = await runBoxed('(string-prefix? "Al" name)', { name: stamped("Alloy.exe", 7) });
@@ -79,48 +81,58 @@ describe("string-prefix? / string-suffix? — SRFI-13 affix-first argument order
 });
 
 describe("string-index — index of first match, or #f (char OR predicate)", () => {
-  it("char criterion", async () => {
-    expect(js(await run('(string-index "abc" #\\b)'))).toBe(1);
-    expect(js(await run('(string-index "abc" #\\z)'))).toBe(false);
-  });
-  it("index 0 is a real (truthy) index — #f is the only false", async () => {
-    expect(js(await run('(if (string-index "abc" #\\a) 1 0)'))).toBe(1);
-    expect(js(await run('(string-index "abc" #\\a)'))).toBe(0);
-  });
-  it("predicate criterion (a scheme callable)", async () => {
-    expect(js(await run('(string-index "hello world" char-whitespace?)'))).toBe(5);
-    expect(js(await run('(string-index "abc123" (lambda (c) (char-numeric? c)))'))).toBe(3);
-  });
-  it("empty string never matches", async () => {
-    expect(js(await run('(string-index "" #\\a)'))).toBe(false);
+  it.each([
+    { name: "char criterion — match", input: '(string-index "abc" #\\b)', value: 1 },
+    { name: "char criterion — no match", input: '(string-index "abc" #\\z)', value: false },
+    { name: "index 0 is truthy in an if", input: '(if (string-index "abc" #\\a) 1 0)', value: 1 },
+    { name: "index 0 is a real (non-#f) index", input: '(string-index "abc" #\\a)', value: 0 },
+    {
+      name: "predicate criterion — named predicate",
+      input: '(string-index "hello world" char-whitespace?)',
+      value: 5,
+    },
+    {
+      name: "predicate criterion — lambda",
+      input: '(string-index "abc123" (lambda (c) (char-numeric? c)))',
+      value: 3,
+    },
+    { name: "empty string never matches", input: '(string-index "" #\\a)', value: false },
+  ])("$name", async ({ input, value }) => {
+    expect(js(await run(input))).toBe(value);
   });
 });
 
 describe("string-count — how many chars match", () => {
-  it("char and predicate criteria", async () => {
-    expect(js(await run('(string-count "banana" #\\a)'))).toBe(3);
-    expect(js(await run('(string-count "a1b2c3" char-numeric?)'))).toBe(3);
-    expect(js(await run('(string-count "" #\\a)'))).toBe(0);
+  it.each([
+    { name: "char criterion", input: '(string-count "banana" #\\a)', value: 3 },
+    { name: "predicate criterion", input: '(string-count "a1b2c3" char-numeric?)', value: 3 },
+    { name: "empty string counts zero", input: '(string-count "" #\\a)', value: 0 },
+  ])("$name", async ({ input, value }) => {
+    expect(js(await run(input))).toBe(value);
   });
 });
 
 describe("string-take / string-drop and the -right twins", () => {
-  it("normal slices", async () => {
-    expect(js(await run('(string-take "hello" 2)'))).toBe("he");
-    expect(js(await run('(string-drop "hello" 2)'))).toBe("llo");
-    expect(js(await run('(string-take-right "hello" 2)'))).toBe("lo");
-    expect(js(await run('(string-drop-right "hello" 2)'))).toBe("hel");
+  it.each([
+    { name: "string-take normal slice", input: '(string-take "hello" 2)', value: "he" },
+    { name: "string-drop normal slice", input: '(string-drop "hello" 2)', value: "llo" },
+    { name: "string-take-right normal slice", input: '(string-take-right "hello" 2)', value: "lo" },
+    { name: "string-drop-right normal slice", input: '(string-drop-right "hello" 2)', value: "hel" },
+    { name: "string-take n=0 boundary", input: '(string-take "hello" 0)', value: "" },
+    { name: "string-take n=length boundary", input: '(string-take "hello" 5)', value: "hello" },
+    { name: "string-drop n=0 boundary", input: '(string-drop "hello" 0)', value: "hello" },
+    { name: "string-drop n=length boundary", input: '(string-drop "hello" 5)', value: "" },
+  ])("$name", async ({ input, value }) => {
+    expect(js(await run(input))).toBe(value);
   });
-  it("n=0 and n=length boundaries", async () => {
-    expect(js(await run('(string-take "hello" 0)'))).toBe("");
-    expect(js(await run('(string-take "hello" 5)'))).toBe("hello");
-    expect(js(await run('(string-drop "hello" 0)'))).toBe("hello");
-    expect(js(await run('(string-drop "hello" 5)'))).toBe("");
+
+  it.each([
+    { name: "string-take overruns the string", input: '(string-take "hi" 3)' },
+    { name: "string-drop-right overruns the string", input: '(string-drop-right "hi" 3)' },
+  ])("n out of range is an error (SRFI-13) · $name", async ({ input }) => {
+    await expect(run(input)).rejects.toThrow(/out of range/);
   });
-  it("n out of range is an error (SRFI-13)", async () => {
-    await expect(run('(string-take "hi" 3)')).rejects.toThrow(/out of range/);
-    await expect(run('(string-drop-right "hi" 3)')).rejects.toThrow(/out of range/);
-  });
+
   it("slices carry the source string's lineage", async () => {
     const r = await runBoxed("(string-take name 2)", { name: stamped("Alloy", 7) });
     expect(r).toBeInstanceOf(AValue);
@@ -129,60 +141,90 @@ describe("string-take / string-drop and the -right twins", () => {
 });
 
 describe("string-trim family — SRFI-13 left/right/both; char/predicate criteria", () => {
-  it("default: whitespace left / both / right", async () => {
-    // Official: string-trim = left only; string-trim-both = both ends.
-    expect(js(await run('(string-trim "  hi  ")'))).toBe("hi  ");
-    expect(js(await run('(string-trim-both "  hi  ")'))).toBe("hi");
-    expect(js(await run('(string-trim-left "  hi  ")'))).toBe("hi  "); // alias of string-trim
-    expect(js(await run('(string-trim-right "  hi  ")'))).toBe("  hi");
-  });
-  it("char criterion", async () => {
-    expect(js(await run('(string-trim "xxhixx" #\\x)'))).toBe("hixx");
-    expect(js(await run('(string-trim-both "xxhixx" #\\x)'))).toBe("hi");
-  });
-  it("predicate criterion", async () => {
-    expect(js(await run('(string-trim "12hi34" char-numeric?)'))).toBe("hi34");
-    expect(js(await run('(string-trim-both "12hi34" char-numeric?)'))).toBe("hi");
-  });
-  it("all-trimmed and empty strings", async () => {
-    expect(js(await run('(string-trim "   ")'))).toBe("");
-    expect(js(await run('(string-trim-both "   ")'))).toBe("");
-    expect(js(await run('(string-trim "")'))).toBe("");
+  // Official: string-trim = left only; string-trim-both = both ends.
+  it.each([
+    { name: "default: string-trim (left only)", input: '(string-trim "  hi  ")', value: "hi  " },
+    { name: "default: string-trim-both", input: '(string-trim-both "  hi  ")', value: "hi" },
+    {
+      name: "default: string-trim-left (alias of string-trim)",
+      input: '(string-trim-left "  hi  ")',
+      value: "hi  ",
+    },
+    { name: "default: string-trim-right", input: '(string-trim-right "  hi  ")', value: "  hi" },
+    { name: "char criterion: string-trim", input: '(string-trim "xxhixx" #\\x)', value: "hixx" },
+    {
+      name: "char criterion: string-trim-both",
+      input: '(string-trim-both "xxhixx" #\\x)',
+      value: "hi",
+    },
+    {
+      name: "predicate criterion: string-trim",
+      input: '(string-trim "12hi34" char-numeric?)',
+      value: "hi34",
+    },
+    {
+      name: "predicate criterion: string-trim-both",
+      input: '(string-trim-both "12hi34" char-numeric?)',
+      value: "hi",
+    },
+    { name: "all-whitespace string-trim", input: '(string-trim "   ")', value: "" },
+    { name: "all-whitespace string-trim-both", input: '(string-trim-both "   ")', value: "" },
+    { name: "empty string-trim", input: '(string-trim "")', value: "" },
+  ])("$name", async ({ input, value }) => {
+    expect(js(await run(input))).toBe(value);
   });
 });
 
 describe("string-pad / string-pad-right — to EXACTLY len (SRFI-13 truncation)", () => {
-  it("pads on the left / right with space by default", async () => {
-    expect(js(await run('(string-pad "7" 3)'))).toBe("  7");
-    expect(js(await run('(string-pad-right "7" 3)'))).toBe("7  ");
-  });
-  it("custom pad char", async () => {
-    expect(js(await run('(string-pad "7" 3 #\\0)'))).toBe("007");
-  });
-  it("TRUNCATES when too long — string-pad keeps the tail, pad-right the head", async () => {
-    expect(js(await run('(string-pad "hello" 3)'))).toBe("llo");
-    expect(js(await run('(string-pad-right "hello" 3)'))).toBe("hel");
-  });
-  it("len equal to length is identity", async () => {
-    expect(js(await run('(string-pad "abc" 3)'))).toBe("abc");
+  it.each([
+    { name: "pads on the left with space by default", input: '(string-pad "7" 3)', value: "  7" },
+    {
+      name: "pads on the right with space by default",
+      input: '(string-pad-right "7" 3)',
+      value: "7  ",
+    },
+    { name: "custom pad char", input: '(string-pad "7" 3 #\\0)', value: "007" },
+    {
+      name: "string-pad TRUNCATES too-long input, keeps the tail",
+      input: '(string-pad "hello" 3)',
+      value: "llo",
+    },
+    {
+      name: "string-pad-right TRUNCATES too-long input, keeps the head",
+      input: '(string-pad-right "hello" 3)',
+      value: "hel",
+    },
+    { name: "len equal to length is identity", input: '(string-pad "abc" 3)', value: "abc" },
+  ])("$name", async ({ input, value }) => {
+    expect(js(await run(input))).toBe(value);
   });
 });
 
 describe("string-reverse", () => {
   // Reverses the string; the empty string stays empty.
-  it("reversed copy", async () => {
-    expect(js(await run('(string-reverse "abc")'))).toBe("cba");
-    expect(js(await run('(string-reverse "")'))).toBe("");
+  it.each([
+    { name: "reverses a string", input: '(string-reverse "abc")', value: "cba" },
+    { name: "empty string stays empty", input: '(string-reverse "")', value: "" },
+  ])("$name", async ({ input, value }) => {
+    expect(js(await run(input))).toBe(value);
   });
 });
 
 describe("string-join — list of strings to one (default delimiter: single space)", () => {
-  it("default and explicit delimiters", async () => {
-    expect(js(await run('(string-join (list "a" "b" "c"))'))).toBe("a b c");
-    expect(js(await run('(string-join (list "a" "b" "c") ", ")'))).toBe("a, b, c");
-  });
-  it("empty list folds to the empty string", async () => {
-    expect(js(await run("(string-join '())"))).toBe("");
+  it.each([
+    {
+      name: "default delimiter (single space)",
+      input: '(string-join (list "a" "b" "c"))',
+      value: "a b c",
+    },
+    {
+      name: "explicit delimiter",
+      input: '(string-join (list "a" "b" "c") ", ")',
+      value: "a, b, c",
+    },
+    { name: "empty list folds to the empty string", input: "(string-join '())", value: "" },
+  ])("$name", async ({ input, value }) => {
+    expect(js(await run(input))).toBe(value);
   });
   it("collapsing op: re-stamps the union of element lineage", async () => {
     const r = await runBoxed('(string-join (list name "x") "-")', { name: stamped("Alloy", 7) });
@@ -192,34 +234,81 @@ describe("string-join — list of strings to one (default delimiter: single spac
 });
 
 describe("string-tokenize — maximal runs of TOKEN chars (inverse of trim's criterion)", () => {
-  it("default: non-whitespace runs", async () => {
-    expect(js(await run('(length (string-tokenize "  foo bar  baz "))'))).toBe(3);
-    expect(js(await run('(car (string-tokenize "  foo bar"))'))).toBe("foo");
-  });
-  it("criterion selects token chars", async () => {
-    expect(js(await run('(car (string-tokenize "12ab34" char-numeric?))'))).toBe("12");
-    expect(js(await run('(length (string-tokenize "12ab34" char-numeric?))'))).toBe(2);
-  });
-  it("no tokens yields '()", async () => {
-    expect(js(await run('(null? (string-tokenize "   "))'))).toBe(true);
+  it.each([
+    {
+      name: "default: non-whitespace runs, count",
+      input: '(length (string-tokenize "  foo bar  baz "))',
+      value: 3,
+    },
+    {
+      name: "default: non-whitespace runs, first token",
+      input: '(car (string-tokenize "  foo bar"))',
+      value: "foo",
+    },
+    {
+      name: "criterion selects token chars, first token",
+      input: '(car (string-tokenize "12ab34" char-numeric?))',
+      value: "12",
+    },
+    {
+      name: "criterion selects token chars, count",
+      input: '(length (string-tokenize "12ab34" char-numeric?))',
+      value: 2,
+    },
+    { name: "no tokens yields '()", input: '(null? (string-tokenize "   "))', value: true },
+  ])("$name", async ({ input, value }) => {
+    expect(js(await run(input))).toBe(value);
   });
 });
 
 describe("string-split — SRFI-152 literal-delimiter split", () => {
-  it("basic split", async () => {
-    expect(js(await run('(length (string-split "a,b,c" ","))'))).toBe(3);
-    expect(js(await run('(cadr (string-split "a,b,c" ","))'))).toBe("b");
+  it.each([
+    { name: "basic split — count", input: '(length (string-split "a,b,c" ","))', value: 3 },
+    { name: "basic split — second field", input: '(cadr (string-split "a,b,c" ","))', value: "b" },
+    {
+      name: "absent delimiter yields one field — count",
+      input: '(length (string-split "abc" ","))',
+      value: 1,
+    },
+    {
+      name: "absent delimiter yields one field — value",
+      input: '(car (string-split "abc" ","))',
+      value: "abc",
+    },
+    {
+      name: "empty subject yields '() (SRFI-152 refinement over JS .split)",
+      input: '(null? (string-split "" ","))',
+      value: true,
+    },
+    {
+      name: "trailing delimiter keeps the empty trailing field (JS .split semantics)",
+      input: '(length (string-split "a," ","))',
+      value: 2,
+    },
+    {
+      name: "character delimiter — count, behaviorally identical to string form",
+      input: '(length (string-split "a,b,c" #\\,))',
+      value: 3,
+    },
+    {
+      name: "character delimiter — second field",
+      input: '(cadr (string-split "a,b,c" #\\,))',
+      value: "b",
+    },
+    {
+      name: "character delimiter — absent delimiter yields one field",
+      input: '(car (string-split "abc" #\\,))',
+      value: "abc",
+    },
+    {
+      name: "character delimiter — empty subject yields '()",
+      input: '(null? (string-split "" #\\,))',
+      value: true,
+    },
+  ])("$name", async ({ input, value }) => {
+    expect(js(await run(input))).toBe(value);
   });
-  it("absent delimiter yields the whole string as one field", async () => {
-    expect(js(await run('(length (string-split "abc" ","))'))).toBe(1);
-    expect(js(await run('(car (string-split "abc" ","))'))).toBe("abc");
-  });
-  it("empty subject yields '() (the SRFI-152 refinement over JS .split)", async () => {
-    expect(js(await run("(null? (string-split \"\" \",\"))"))).toBe(true);
-  });
-  it("trailing delimiter keeps the empty trailing field (JS .split semantics)", async () => {
-    expect(js(await run('(length (string-split "a," ","))'))).toBe(2);
-  });
+
   it("pieces carry the source string's lineage (grounded list elements)", async () => {
     const r = await runBoxed('(car (string-split name ","))', { name: stamped("Alloy,exe", 7) });
     expect(r).toBeInstanceOf(AValue);
@@ -232,12 +321,6 @@ describe("string-split — SRFI-152 literal-delimiter split", () => {
   // class `invariant-type-mismatch:string-split:expected-string-got-character` (9x
   // rate, a cascade seed) is this exact mistake. Grain-completion: accept it, coerce
   // to the single-char string it denotes; string-only behavior is unchanged.
-  it("accepts a character delimiter, behaviorally identical to the string form", async () => {
-    expect(js(await run('(length (string-split "a,b,c" #\\,))'))).toBe(3);
-    expect(js(await run('(cadr (string-split "a,b,c" #\\,))'))).toBe("b");
-    expect(js(await run('(car (string-split "abc" #\\,))'))).toBe("abc");
-    expect(js(await run("(null? (string-split \"\" #\\,))"))).toBe(true);
-  });
 
   it("a character delimiter still taints pieces with the source string's lineage", async () => {
     const r = await runBoxed('(car (string-split name #\\,))', { name: stamped("Alloy,exe", 7) });

@@ -112,37 +112,30 @@ async function expectCone(src: string, binds: Record<string, SchemeValue>, golde
   expect(staticCone).toEqual(golden); // and the static fullCone reproduces it (no divergence)
 }
 
+// Shared it.each row shapes. Explicit (not inferred) because the tables below mix rows
+// whose `binds` bind different variable names — left to inference, TS widens each row to
+// its own literal interface and unions them, which no longer satisfies `Record<string,
+// SchemeValue>`. Naming the type once keeps every `binds: {...}` cell a plain object literal.
+type ConeRow = { name: string; src: string; binds: Record<string, SchemeValue>; golden: number[] };
+type DivergenceRow = { name: string; src: string; binds: Record<string, SchemeValue> };
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ARITHMETIC — literals (mint nothing), pipes (1 source), merges (≥2 sources).
 // Oracle: golden-prov-arithmetic.test.ts §§1–3.
 // ─────────────────────────────────────────────────────────────────────────────
 describe("SHADOW — arithmetic: literals / pipes / merges == eager golden", () => {
-  it("(+ 1 2) — all-literal mints nothing", async () => {
-    await expectCone(`(+ 1 2)`, {}, []);
-  });
-  it("(- 10 (* 2 3)) — nested all-literal tree", async () => {
-    await expectCone(`(- 10 (* 2 3))`, {}, []);
-  });
-  it("(* x x) — one source used twice (pipe)", async () => {
-    await expectCone(`(* x x)`, { x: sNum(7, 200) }, [200]);
-  });
-  it("(+ a 5) — source + literal carries only the source (pipe)", async () => {
-    await expectCone(`(+ a 5)`, nums(), [100]);
-  });
-  it("(< 0 (* x x)) — predicate over a single source (pipe)", async () => {
-    await expectCone(`(< 0 (* x x))`, { x: sNum(7, 200) }, [200]);
-  });
-  it("(+ a b) — two sources fan in (merge)", async () => {
-    await expectCone(`(+ a b)`, nums(), [100, 200]);
-  });
-  it("(max a b) — n-ary numeric merge", async () => {
-    await expectCone(`(max a b)`, nums(), [100, 200]);
-  });
-  it("(* a (+ 1 b)) — merge over a source and a one-source pipe", async () => {
-    await expectCone(`(* a (+ 1 b))`, nums(), [100, 200]);
-  });
-  it("(+ a (* b c)) — three sources fan in across two levels", async () => {
-    await expectCone(`(+ a (* b c))`, nums(), [100, 200, 300]);
+  it.each<ConeRow>([
+    { name: "(+ 1 2) — all-literal mints nothing", src: `(+ 1 2)`, binds: {}, golden: [] },
+    { name: "(- 10 (* 2 3)) — nested all-literal tree", src: `(- 10 (* 2 3))`, binds: {}, golden: [] },
+    { name: "(* x x) — one source used twice (pipe)", src: `(* x x)`, binds: { x: sNum(7, 200) }, golden: [200] },
+    { name: "(+ a 5) — source + literal carries only the source (pipe)", src: `(+ a 5)`, binds: nums(), golden: [100] },
+    { name: "(< 0 (* x x)) — predicate over a single source (pipe)", src: `(< 0 (* x x))`, binds: { x: sNum(7, 200) }, golden: [200] },
+    { name: "(+ a b) — two sources fan in (merge)", src: `(+ a b)`, binds: nums(), golden: [100, 200] },
+    { name: "(max a b) — n-ary numeric merge", src: `(max a b)`, binds: nums(), golden: [100, 200] },
+    { name: "(* a (+ 1 b)) — merge over a source and a one-source pipe", src: `(* a (+ 1 b))`, binds: nums(), golden: [100, 200] },
+    { name: "(+ a (* b c)) — three sources fan in across two levels", src: `(+ a (* b c))`, binds: nums(), golden: [100, 200, 300] },
+  ])("$name", async ({ src, binds, golden }) => {
+    await expectCone(src, binds, golden);
   });
 });
 
@@ -152,26 +145,16 @@ describe("SHADOW — arithmetic: literals / pipes / merges == eager golden", () 
 // design and are covered as eager goldens + boundary below.)
 // ─────────────────────────────────────────────────────────────────────────────
 describe("SHADOW — string-collapse & cons-union == eager golden", () => {
-  it("(string-length a) — cardinality propagates its one source (DR2/B1 resolved: fullCone)", async () => {
-    await expectCone(`(string-length a)`, strs(), [100]);
-  });
-  it("(string-append a b) — two stamped strings union", async () => {
-    await expectCone(`(string-append a b)`, strs(), [100, 200]);
-  });
-  it("(string-append a b c) — three-way collapse", async () => {
-    await expectCone(`(string-append a b c)`, strs(), [100, 200, 300]);
-  });
-  it('(join "," (list a b)) — join over a list of stamped strings', async () => {
-    await expectCone(`(join "," (list a b))`, strs(), [100, 200]);
-  });
-  it('(string-append "x:" (join "," (list a b))) — nested collapse', async () => {
-    await expectCone(`(string-append "x:" (join "," (list a b)))`, strs(), [100, 200]);
-  });
-  it("(cons a b) — the cons cell carries the UNION of both elements", async () => {
-    await expectCone(`(cons a b)`, strs(), [100, 200]);
-  });
-  it("(append (list a) (list b)) — the rebuilt spine's head unions both operands (conservation repair)", async () => {
-    await expectCone(`(append (list a) (list b))`, strs(), [100, 200]);
+  it.each<ConeRow>([
+    { name: "(string-length a) — cardinality propagates its one source (DR2/B1 resolved: fullCone)", src: `(string-length a)`, binds: strs(), golden: [100] },
+    { name: "(string-append a b) — two stamped strings union", src: `(string-append a b)`, binds: strs(), golden: [100, 200] },
+    { name: "(string-append a b c) — three-way collapse", src: `(string-append a b c)`, binds: strs(), golden: [100, 200, 300] },
+    { name: '(join "," (list a b)) — join over a list of stamped strings', src: `(join "," (list a b))`, binds: strs(), golden: [100, 200] },
+    { name: '(string-append "x:" (join "," (list a b))) — nested collapse', src: `(string-append "x:" (join "," (list a b)))`, binds: strs(), golden: [100, 200] },
+    { name: "(cons a b) — the cons cell carries the UNION of both elements", src: `(cons a b)`, binds: strs(), golden: [100, 200] },
+    { name: "(append (list a) (list b)) — the rebuilt spine's head unions both operands (conservation repair)", src: `(append (list a) (list b))`, binds: strs(), golden: [100, 200] },
+  ])("$name", async ({ src, binds, golden }) => {
+    await expectCone(src, binds, golden);
   });
 });
 
@@ -181,38 +164,31 @@ describe("SHADOW — string-collapse & cons-union == eager golden", () => {
 // taken-arm cone. Oracle: golden-prov-special-forms.test.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 describe("SHADOW — `if` mux (selector ∪ arms) == eager golden", () => {
-  it("positive arm: (if (< 0 v) v -1), v>0", async () => {
-    await expectCone(`(if (< 0 v) v -1)`, { v: sNum(10, 5) }, [5]);
-  });
-  it("predicate taints a literal arm: (if (< 0 v) v -1), v<0 → still {5}", async () => {
-    await expectCone(`(if (< 0 v) v -1)`, { v: sNum(-3, 5) }, [5]);
-  });
-  it("predicate-only source, literal arms: (if (< 0 (* x x)) 99 -1) → {7}", async () => {
-    await expectCone(`(if (< 0 (* x x)) 99 -1)`, { x: sNum(3, 7) }, [7]);
-  });
-  it("predicate source UNION arm source: (if (< 0 x) v -1) → {5,7}", async () => {
-    await expectCone(`(if (< 0 x) v -1)`, { x: sNum(3, 7), v: sNum(10, 5) }, [5, 7]);
-  });
-  it("two-armed merge in the taken branch: (if (< 0 x) (* v1 v2) -1) → {7,100,200}", async () => {
-    await expectCone(`(if (< 0 x) (* v1 v2) -1)`, { x: sNum(3, 7), v1: sNum(5, 100), v2: sNum(7, 200) }, [7, 100, 200]);
+  it.each<ConeRow>([
+    { name: "positive arm: (if (< 0 v) v -1), v>0", src: `(if (< 0 v) v -1)`, binds: { v: sNum(10, 5) }, golden: [5] },
+    { name: "predicate taints a literal arm: (if (< 0 v) v -1), v<0 → still {5}", src: `(if (< 0 v) v -1)`, binds: { v: sNum(-3, 5) }, golden: [5] },
+    { name: "predicate-only source, literal arms: (if (< 0 (* x x)) 99 -1) → {7}", src: `(if (< 0 (* x x)) 99 -1)`, binds: { x: sNum(3, 7) }, golden: [7] },
+    { name: "predicate source UNION arm source: (if (< 0 x) v -1) → {5,7}", src: `(if (< 0 x) v -1)`, binds: { x: sNum(3, 7), v: sNum(10, 5) }, golden: [5, 7] },
+    {
+      name: "two-armed merge in the taken branch: (if (< 0 x) (* v1 v2) -1) → {7,100,200}",
+      src: `(if (< 0 x) (* v1 v2) -1)`,
+      binds: { x: sNum(3, 7), v1: sNum(5, 100), v2: sNum(7, 200) },
+      golden: [7, 100, 200],
+    },
+  ])("$name", async ({ src, binds, golden }) => {
+    await expectCone(src, binds, golden);
   });
 });
 
 describe("SHADOW — `let` transparency == eager golden (== inlined)", () => {
-  it("(let ((foo (+ 1 v2))) (* v1 foo)) == inlined cone", async () => {
-    await expectCone(`(let ((foo (+ 1 v2))) (* v1 foo))`, { v1: sNum(5, 100), v2: sNum(7, 200) }, [100, 200]);
-  });
-  it("inlined twin (* v1 (+ 1 v2)) — same cone", async () => {
-    await expectCone(`(* v1 (+ 1 v2))`, { v1: sNum(5, 100), v2: sNum(7, 200) }, [100, 200]);
-  });
-  it("nested let threads both bindings", async () => {
-    await expectCone(`(let ((a v1)) (let ((b v2)) (+ a b)))`, { v1: sNum(5, 100), v2: sNum(7, 200) }, [100, 200]);
-  });
-  it("let* sequential binding is transparent", async () => {
-    await expectCone(`(let* ((a v1) (b (+ a v2))) b)`, { v1: sNum(5, 100), v2: sNum(7, 200) }, [100, 200]);
-  });
-  it("a let body returning a pure literal carries NOTHING", async () => {
-    await expectCone(`(let ((foo v1)) 42)`, { v1: sNum(5, 100) }, []);
+  it.each<ConeRow>([
+    { name: "(let ((foo (+ 1 v2))) (* v1 foo)) == inlined cone", src: `(let ((foo (+ 1 v2))) (* v1 foo))`, binds: { v1: sNum(5, 100), v2: sNum(7, 200) }, golden: [100, 200] },
+    { name: "inlined twin (* v1 (+ 1 v2)) — same cone", src: `(* v1 (+ 1 v2))`, binds: { v1: sNum(5, 100), v2: sNum(7, 200) }, golden: [100, 200] },
+    { name: "nested let threads both bindings", src: `(let ((a v1)) (let ((b v2)) (+ a b)))`, binds: { v1: sNum(5, 100), v2: sNum(7, 200) }, golden: [100, 200] },
+    { name: "let* sequential binding is transparent", src: `(let* ((a v1) (b (+ a v2))) b)`, binds: { v1: sNum(5, 100), v2: sNum(7, 200) }, golden: [100, 200] },
+    { name: "a let body returning a pure literal carries NOTHING", src: `(let ((foo v1)) 42)`, binds: { v1: sNum(5, 100) }, golden: [] },
+  ])("$name", async ({ src, binds, golden }) => {
+    await expectCone(src, binds, golden);
   });
 });
 
@@ -232,11 +208,11 @@ describe("SHADOW — `when` / `unless` mux (one-armed if) == eager golden", () =
   // false), the static selector∪body superset coincides with the eager cone (the
   // predicate's taint ∪ the body), so shadow agrees with NO throw — exercising the
   // live wiring of the guarded-body path, not just classify() in isolation.
-  it("when, test TRUE → body taken: (when (< 0 x) v), x>0 → predicate ∪ body {5,7}", async () => {
-    await expectCone(`(when (< 0 x) v)`, { x: sNum(3, 7), v: sNum(10, 5) }, [5, 7]);
-  });
-  it("unless, test FALSE → body taken: (unless (< 0 x) v), x<0 → predicate ∪ body {5,7}", async () => {
-    await expectCone(`(unless (< 0 x) v)`, { x: sNum(-3, 7), v: sNum(10, 5) }, [5, 7]);
+  it.each<ConeRow>([
+    { name: "when, test TRUE → body taken: (when (< 0 x) v), x>0 → predicate ∪ body {5,7}", src: `(when (< 0 x) v)`, binds: { x: sNum(3, 7), v: sNum(10, 5) }, golden: [5, 7] },
+    { name: "unless, test FALSE → body taken: (unless (< 0 x) v), x<0 → predicate ∪ body {5,7}", src: `(unless (< 0 x) v)`, binds: { x: sNum(-3, 7), v: sNum(10, 5) }, golden: [5, 7] },
+  ])("$name", async ({ src, binds, golden }) => {
+    await expectCone(src, binds, golden);
   });
 });
 
@@ -297,17 +273,25 @@ describe("SHADOW BOUNDARY — by-design divergences throw under the flag (strict
     await exec(src, { env, irLineage: true });
   }
 
-  it("car element-projection: (car (cons a b)) — static unions {100,200}, eager projects {100}", async () => {
-    // §5.3 element-vs-container projection: the static tree has no projection node
-    // (car is treated as a pure op → operand union). Out of v0.1 scope.
-    await expect(runFlagged(`(car (cons a b))`, strs())).rejects.toThrow(/PROVENANCE-SHADOW-DIVERGENCE/);
-  });
-  it("control-flow superset: (cond ((< v 0) a) (else b)), else taken — static {5,11,22} ⊋ eager {22}", async () => {
-    // DR3: the static cond cone is a conservative SUPERSET (it cannot know the
-    // taken branch); byte-identical control-flow why stays eager-sourced (Wave S).
-    await expect(
-      runFlagged(`(cond ((< v 0) a) (else b))`, { v: sNum(9, 5), a: sNum(11, 11), b: sNum(22, 22) }),
-    ).rejects.toThrow(/PROVENANCE-SHADOW-DIVERGENCE/);
+  // Both rows are by-design divergences run through the same `runFlagged` +
+  // `rejects.toThrow` shape:
+  //   - car element-projection: the static tree has no projection node (car is
+  //     treated as a pure op → operand union: {100,200}), while eager projects
+  //     just the car's own source ({100}). §5.3 element-vs-container projection,
+  //     out of v0.1 scope.
+  //   - control-flow superset: the static cond cone is a conservative SUPERSET
+  //     (it cannot know the taken branch: {5,11,22}), while eager reflects only
+  //     the taken arm ({22}). DR3; byte-identical control-flow why stays
+  //     eager-sourced (Wave S).
+  it.each<DivergenceRow>([
+    { name: "car element-projection: (car (cons a b)) — static unions {100,200}, eager projects {100}", src: `(car (cons a b))`, binds: strs() },
+    {
+      name: "control-flow superset: (cond ((< v 0) a) (else b)), else taken — static {5,11,22} ⊋ eager {22}",
+      src: `(cond ((< v 0) a) (else b))`,
+      binds: { v: sNum(9, 5), a: sNum(11, 11), b: sNum(22, 22) },
+    },
+  ])("$name", async ({ src, binds }) => {
+    await expect(runFlagged(src, binds)).rejects.toThrow(/PROVENANCE-SHADOW-DIVERGENCE/);
   });
   // MOVED OUT (2026-07-08, C1/C2/C4 batch): "fan cardinality over-attribution:
   // (length (map id xs))" used to throw here (static {}, eager {100,101,102} — the

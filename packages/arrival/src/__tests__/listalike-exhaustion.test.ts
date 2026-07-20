@@ -49,40 +49,53 @@ const out = async (code: string, bindings: Record<string, unknown> = {}) => {
 const HANG_GUARD = { timeout: 8000 } as const;
 
 describe("listAlike consumers must TERMINATE on an AJSArray receiver — §B3, constraint #1", () => {
-  it("any? — predicate FALSE for every element (the false-green test matched the LAST element)", HANG_GUARD, async () => {
-    expect(await out("(any? even? xs)", { xs: [1, 3, 5] })).toBe(false);
-  });
-
-  it("delete-duplicates — the register's canonical trigger", HANG_GUARD, async () => {
-    expect(await out("(delete-duplicates xs)", { xs: [1, 2, 1] })).toEqual([1, 2]);
-  });
-
-  it("fold-right — a right fold walks the whole spine", HANG_GUARD, async () => {
-    expect(await out("(fold-right + 0 xs)", { xs: [1, 2, 3] })).toBe(6);
+  // Tabular: every row is the same shape — a code string over `xs`, walked to
+  // exhaustion, compared against its expected value. `find-tail` (an OR-shaped
+  // match, not a single expected value) and the two multi-assertion "must stay
+  // green" checks below don't fit this shape and stay as narrative its.
+  it.each([
+    {
+      name: "any? — predicate FALSE for every element (the false-green test matched the LAST element)",
+      code: "(any? even? xs)",
+      xs: [1, 3, 5],
+      expected: false,
+    },
+    {
+      name: "delete-duplicates — the register's canonical trigger",
+      code: "(delete-duplicates xs)",
+      xs: [1, 2, 1],
+      expected: [1, 2],
+    },
+    { name: "fold-right — a right fold walks the whole spine", code: "(fold-right + 0 xs)", xs: [1, 2, 3], expected: 6 },
+    {
+      name: "partition — both arms consume the full spine",
+      code: "(partition even? xs)",
+      xs: [1, 2, 3, 4],
+      expected: [
+        [2, 4],
+        [1, 3],
+      ],
+    },
+    { name: "delete — removes matches, walks the rest", code: "(delete 2 xs)", xs: [1, 2, 3], expected: [1, 3] },
+    {
+      name: "append-reverse — consumes the head list to exhaustion",
+      code: "(append-reverse xs '())",
+      xs: [1, 2, 3],
+      expected: [3, 2, 1],
+    },
+    {
+      name: "every? — predicate TRUE for all (must reach the end to answer)",
+      code: "(every? odd? xs)",
+      xs: [1, 3, 5],
+      expected: true,
+    },
+  ])("$name", HANG_GUARD, async ({ code, xs, expected }) => {
+    expect(await out(code, { xs })).toEqual(expected);
   });
 
   it("find-tail — no match, so it must reach the empty tail to answer", HANG_GUARD, async () => {
     const r = await out("(find-tail even? xs)", { xs: [1, 3, 5] });
     expect(r === false || r === null || (Array.isArray(r) && r.length === 0)).toBe(true);
-  });
-
-  it("partition — both arms consume the full spine", HANG_GUARD, async () => {
-    expect(await out("(partition even? xs)", { xs: [1, 2, 3, 4] })).toEqual([
-      [2, 4],
-      [1, 3],
-    ]);
-  });
-
-  it("delete — removes matches, walks the rest", HANG_GUARD, async () => {
-    expect(await out("(delete 2 xs)", { xs: [1, 2, 3] })).toEqual([1, 3]);
-  });
-
-  it("append-reverse — consumes the head list to exhaustion", HANG_GUARD, async () => {
-    expect(await out("(append-reverse xs '())", { xs: [1, 2, 3] })).toEqual([3, 2, 1]);
-  });
-
-  it("every? — predicate TRUE for all (must reach the end to answer)", HANG_GUARD, async () => {
-    expect(await out("(every? odd? xs)", { xs: [1, 3, 5] })).toBe(true);
   });
 
   it("PRE-EXISTING GREEN must stay green: count / first on an AJSArray", HANG_GUARD, async () => {

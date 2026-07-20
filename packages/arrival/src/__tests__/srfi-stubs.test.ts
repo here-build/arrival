@@ -54,14 +54,12 @@ describe("srfi-stubs — one representative door per family", () => {
     ["string ports → operate on the string directly", '(call-with-input-string "x" (lambda (p) p))', /string ports are omitted/],
   ] as const;
 
-  for (const [label, src, redirect] of cases) {
-    it(`${label} — fires a door whose message routes to the alternative`, async () => {
-      const run = await withStubs(`stub-${label}`);
-      const { door, message } = await fire(run, src);
-      expect(door).toBe(true);
-      expect(message).toMatch(redirect);
-    });
-  }
+  it.each(cases)("%s — fires a door whose message routes to the alternative", async (label, src, redirect) => {
+    const run = await withStubs(`stub-${label}`);
+    const { door, message } = await fire(run, src);
+    expect(door).toBe(true);
+    expect(message).toMatch(redirect);
+  });
 });
 
 describe("srfi-stubs — the pack upgrades a WALL into a DOOR", () => {
@@ -84,9 +82,7 @@ describe("srfi-stubs — the pack upgrades a WALL into a DOOR", () => {
   // (No "wall" counter-case: the pack ships inside allSrfi → BASE_PACKS, so every env
   // that inherits sandboxedEnv doors these symbols — a pack-less configuration no
   // longer exists in production, and pinning an unreachable configuration is noise.)
-  for (const [label, src] of cases) {
-    it(`${label} doors in the DEFAULT env (the pack ships in allSrfi)`, async () => {
-      await expect(exec(src)).rejects.toThrow(/is not available\./);
-    });
-  }
+  it.each(cases)("%s doors in the DEFAULT env (the pack ships in allSrfi)", async (label, src) => {
+    await expect(exec(src)).rejects.toThrow(/is not available\./);
+  });
 });

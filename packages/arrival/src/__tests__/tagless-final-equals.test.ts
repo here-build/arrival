@@ -103,11 +103,9 @@ function representativeValues(): { name: string; value: AValue }[] {
 // atlas's original roster included HalfBaked; HalfBaked is dissolved
 // (90272a0b99) and representativeValues() below no longer carries it.
 describe("G1 totality — every AValue subtype defines arrival/tagless-final/equals", () => {
-  for (const { name, value } of representativeValues()) {
-    it(name + " has a callable arrival/tagless-final/equals", () => {
-      expect(typeof (value as unknown as Record<string, unknown>)[tf("equals")]).toBe("function");
-    });
-  }
+  it.each(representativeValues())("$name has a callable arrival/tagless-final/equals", ({ value }) => {
+    expect(typeof (value as unknown as Record<string, unknown>)[tf("equals")]).toBe("function");
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -353,12 +351,10 @@ describe("G6 equality-suite cleanup", () => {
       { name: "sym==sym(distinct)", x: distinctSym("a"), y: distinctSym("a") },
       { name: "nil==nil", x: nil, y: nil.withProvenance(new Set([1])) },
     ];
-    for (const { name, x, y } of pairs) {
-      it(name + ": eq() routes identically to the Setoid", () => {
-        expect(eq(x, y)).toBe(EQM(x, y));
-        expect(eqv(x, y)).toBe(EQM(x, y));
-      });
-    }
+    it.each(pairs)("$name: eq() routes identically to the Setoid", ({ x, y }) => {
+      expect(eq(x, y)).toBe(EQM(x, y));
+      expect(eqv(x, y)).toBe(EQM(x, y));
+    });
   });
 
   describe("memv/assv consistency with eqv? on distinct-instance symbols/nil", () => {

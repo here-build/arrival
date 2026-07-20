@@ -56,8 +56,9 @@ const run = async (code: string, bindings: Record<string, unknown> = {}): Promis
 const SEARCH_VERBS = ["memq", "memv", "member", "assq", "assv", "assoc"] as const;
 
 describe("LAW 1 — a NON-LIST argument is a door, never a silent #f", () => {
-  for (const verb of SEARCH_VERBS) {
-    it(`${verb} refuses a non-list instead of answering "not found"`, async () => {
+  it.each(SEARCH_VERBS.map((verb) => ({ verb })))(
+    `$verb refuses a non-list instead of answering "not found"`,
+    async ({ verb }) => {
       const r = await run(`(${verb} 1 42)`);
       // The precise failure this pins: the verb must NOT have answered #f.
       expect(r).not.toBe("OK false");
@@ -65,8 +66,8 @@ describe("LAW 1 — a NON-LIST argument is a door, never a silent #f", () => {
       // And the door must name the fault, not merely refuse.
       expect(r).toContain("expected a list");
       expect(r).toContain("42");
-    });
-  }
+    },
+  );
 
   it("the door explains WHY a silent #f would have been a lie", async () => {
     const r = await run("(member 2 42)");

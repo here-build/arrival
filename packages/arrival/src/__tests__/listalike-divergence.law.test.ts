@@ -164,15 +164,17 @@ const CASES: readonly (readonly [string, string, readonly unknown[]])[] = [
 ];
 
 describe("LAW: no list verb may distinguish a tool array from a pair-list", () => {
-  for (const [verb, program, fixture] of CASES) {
-    it(`${verb} — ${program}`, { timeout: DEADLINE_MS * 3 }, async () => {
+  it.each(CASES.map(([verb, program, fixture]) => ({ verb, program, fixture })))(
+    "$verb — $program",
+    { timeout: DEADLINE_MS * 3 },
+    async ({ verb, program, fixture }) => {
       const { viaToolArray, viaPairList } = await bothCharts(program, fixture);
       // The pair-list arm is the ORACLE. Asserting equality (rather than asserting some property
       // of the array arm) is what makes this test unable to go falsely green: there is no
       // "reasonable-looking" wrong answer that can satisfy it.
       expect({ verb, viaToolArray }).toEqual({ verb, viaToolArray: viaPairList });
-    });
-  }
+    },
+  );
 });
 
 // A coercion helper may never answer with a value it had to invent. `charValue` did: it was a blind
@@ -230,11 +232,13 @@ const VECTOR_CASES: readonly (readonly [string, string, readonly unknown[]])[] =
 const asVectorLiteral = (xs: readonly unknown[]): string => `#(${xs.map(String).join(" ")})`;
 
 describe("LAW: no vector verb may distinguish a tool array from a #(…) literal", () => {
-  for (const [verb, program, fixture] of VECTOR_CASES) {
-    it(`${verb} — ${program}`, { timeout: DEADLINE_MS * 3 }, async () => {
+  it.each(VECTOR_CASES.map(([verb, program, fixture]) => ({ verb, program, fixture })))(
+    "$verb — $program",
+    { timeout: DEADLINE_MS * 3 },
+    async ({ verb, program, fixture }) => {
       const viaToolArray = await runOne(program, { xs: fixture });
       const viaLiteral = await runOne(program.replace(/\bxs\b/g, asVectorLiteral(fixture)), {});
       expect({ verb, viaToolArray }).toEqual({ verb, viaToolArray: viaLiteral });
-    });
-  }
+    },
+  );
 });

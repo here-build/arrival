@@ -8,34 +8,49 @@ import { symbol } from "../../common/symbol.js";
 import { printType, signatureOf, sTagToTsType } from "../schema-to-ts.js";
 
 describe("printType — native identity primitives (scheme primitive → plain-TS image)", () => {
-  // REBASELINE (fe2c848ee7, 2026-07-08): `z.pair` is now `cons(value, value)` — a real
-  // codec named "cons", not a bare-instanceof "pair" — so it prints via the named-generic
-  // pre-check as `Pair<unknown, unknown>`, the same as any other `cons(A, B)`.
-  it("prints z.pair as Pair<unknown, unknown> (cons(value, value), not a standalone name)", () => {
-    expect(printType(z.pair)).toBe("Pair<unknown, unknown>");
+  // REBASELINE (fe2c848ee7, 2026-07-08): `z.pair` is now `cons(value, value)` — a real codec
+  // named "cons", not a bare-instanceof "pair" — so it prints via the named-generic pre-check
+  // as `Pair<unknown, unknown>`, same as any other `cons(A, B)`; `z.union([z.pair, z.nil])`
+  // composes structurally member-by-member (no more "pair"→List-style name override).
+  // The numeric tower: exact and inexact both print "number" via the name-keyed image, not
+  // the raw union — z.bigint is retired (exact is a safe-integer ratio of `number`s per
+  // docs/design-history/arrival-one-number-rework.md §2.3). schemeNumber has no name-image of
+  // its own → composed per-member, undeduped ("number | number" — same known gap as z.vector
+  // below, ledger/index.law.test.ts GAPS: "schema-to-ts vector union not deduped").
+  it.each([
+    {
+      name: "z.pair → Pair<unknown, unknown> (cons(value, value), not a standalone name)",
+      schema: z.pair,
+      expected: "Pair<unknown, unknown>",
+    },
+    { name: "z.string → string", schema: z.string, expected: "string" },
+    { name: "z.bigint (exact) → number", schema: z.bigint, expected: "number" },
+    { name: "z.inexact → number", schema: z.inexact, expected: "number" },
+    { name: "z.symbol → string", schema: z.symbol, expected: "string" },
+    { name: "z.bytevector → Uint8Array", schema: z.bytevector, expected: "Uint8Array" },
+    { name: "z.nil → null", schema: z.nil, expected: "null" },
+    { name: "z.boolean → boolean", schema: z.boolean, expected: "boolean" },
+    { name: "z.char → string", schema: z.char, expected: "string" },
+    { name: "z.value (representation-blind) → unknown", schema: z.value, expected: "unknown" },
+    {
+      name: "z.lambda → a callable signature, not degraded to unknown",
+      schema: z.lambda,
+      expected: "(...args: unknown[]) => unknown",
+    },
+    {
+      name: "a union of primitives (z.schemeNumber) → 'number | number' (override fires per-member, undeduped)",
+      schema: z.schemeNumber,
+      expected: "number | number",
+    },
+    {
+      name: "the list union z.pair | z.nil → Pair<unknown, unknown> | null",
+      schema: z.union([z.pair, z.nil]),
+      expected: "Pair<unknown, unknown> | null",
+    },
+  ])("prints $name", ({ schema, expected }) => {
+    expect(printType(schema)).toBe(expected);
   });
-  // INVARIANT: printType(z.string) prints "string".
-  it("prints z.schemeString as string", () => {
-    expect(printType(z.string)).toBe("string");
-  });
-  // INVARIANT: the numeric tower prints exact and inexact both as "number" via the
-  // name-keyed image, not the raw union — z.bigint is retired (exact is a safe-integer
-  // ratio of `number`s per docs/design-history/arrival-one-number-rework.md §2.3).
-  it("prints the numeric tower as exact=number / inexact=number", () => {
-    // v2 makes these codecs/unions; the name-keyed image (bigint/exact/inexact→number) prints
-    // them once, not the raw union OUT schema (which would be `number | number`).
-    expect(printType(z.bigint)).toBe("number");
-    expect(printType(z.inexact)).toBe("number");
-  });
-  // INVARIANT: symbol/bytevector/nil/boolean/char each print their documented plain-TS
-  // image. (vector's image is covered separately below, pending the dedup gap.)
-  it("prints the rest of the scheme-identity primitives as their plain-TS image", () => {
-    expect(printType(z.symbol)).toBe("string");
-    expect(printType(z.bytevector)).toBe("Uint8Array");
-    expect(printType(z.nil)).toBe("null");
-    expect(printType(z.boolean)).toBe("boolean");
-    expect(printType(z.char)).toBe("string");
-  });
+
   // GAP (ledger/index.law.test.ts GAPS: "schema-to-ts vector union not deduped", gate:
   // "printer dedup follow-up"). vector(E) = union[array(E), array(E)] (two same-output codec
   // branches), and `vector` carries no name-image (its element varies), so it prints the
@@ -45,26 +60,6 @@ describe("printType — native identity primitives (scheme primitive → plain-T
   it.fails("prints z.vector(z.value) deduped as 'unknown[]', not the duplicated union branches", () => {
     expect(printType(z.vector(z.value))).toBe("unknown[]");
   });
-  // INVARIANT: z.value (representation-blind) prints as "unknown".
-  it("prints the representation-blind value primitive as unknown", () => {
-    expect(printType(z.value)).toBe("unknown");
-  });
-  // INVARIANT: z.lambda prints as a callable signature `(...args: unknown[]) => unknown`,
-  // not degraded to unknown.
-  it("prints z.lambda as a callable signature, not degraded to unknown", () => {
-    expect(printType(z.lambda)).toBe("(...args: unknown[]) => unknown");
-  });
-  // INVARIANT: a union of primitives prints as "A | B" with the name-override applied per member.
-  it("prints a union of primitives as 'A | B' (override fires per-member)", () => {
-    // schemeNumber has no name-image → composed per-member; exact and inexact both print
-    // "number" now (z.bigint retired) — undeduped, the same known gap as z.vector below.
-    expect(printType(z.schemeNumber)).toBe("number | number");
-  });
-  // REBASELINE (fe2c848ee7): pair no longer carries the "pair"→List-style name; the union
-  // composes structurally, member-by-member, same as any other union of a non-list codec + nil.
-  it("prints the list union z.pair | z.nil as Pair<unknown, unknown> | null", () => {
-    expect(printType(z.union([z.pair, z.nil]))).toBe("Pair<unknown, unknown> | null");
-  });
 });
 
 describe("printType — unregistered custom leaf hardens to unknown, never throws", () => {
@@ -72,68 +67,70 @@ describe("printType — unregistered custom leaf hardens to unknown, never throw
   // hardening fix this deferred to zod-to-ts's unrepresentable:"throw" and blew up.
   const unregisteredLeaf = z.custom<{ notAVocabItem: true }>((v) => typeof v === "object");
 
-  // INVARIANT: a bare unregistered custom leaf degrades to "unknown" rather than throwing.
-  it("degrades a bare unregistered custom leaf to 'unknown'", () => {
-    expect(printType(unregisteredLeaf)).toBe("unknown");
-  });
-
-  // INVARIANT: inside a union, only the unregistered member degrades to unknown — sibling
-  // members print unaffected.
-  it("degrades only the unregistered member inside a union, sibling members unaffected", () => {
-    expect(printType(z.union([z.string, unregisteredLeaf]))).toBe("string | unknown");
+  it.each([
+    {
+      name: "a bare unregistered custom leaf degrades to 'unknown'",
+      schema: unregisteredLeaf,
+      expected: "unknown",
+    },
+    {
+      name: "only the unregistered member inside a union degrades to unknown, sibling members unaffected",
+      schema: z.union([z.string, unregisteredLeaf]),
+      expected: "string | unknown",
+    },
+  ])("$name", ({ schema, expected }) => {
+    expect(printType(schema)).toBe(expected);
   });
 });
 
 describe("printType — rosetta codecs (decoded JS side, io:output)", () => {
-  // INVARIANT: string/boolean/char codecs print their decoded JS type.
-  it("prints the string codec as 'string'", () => {
-    expect(printType(z.string)).toBe("string");
-  });
-  it("prints the boolean / char codecs as their decoded JS type", () => {
-    expect(printType(z.boolean)).toBe("boolean");
-    expect(printType(z.char)).toBe("string");
-  });
-  // INVARIANT: the number-codec family (number/integer/bigint) prints by its declared JS type —
-  // z.bigint's face is "number" too (retired; exact is a safe-integer ratio of `number`s).
-  it("prints the number-codec family by its declared JS type", () => {
-    expect(printType(z.number)).toBe("number");
-    expect(printType(z.integer)).toBe("number");
-    expect(printType(z.bigint)).toBe("number");
-  });
-  // INVARIANT: looseNumber / looseAnyNumber print by decoded JS type (IMAGE_BY_NAME).
-  // Without images their OUT z.custom leaf would harvest as unknown — floor/abs collapse.
-  // looseAnyNumber's face is plain "number" now too (z.bigint retired — no more bigint arm).
-  it("prints the loose number-codec family by its decoded JS type", () => {
-    expect(printType(z.looseNumber)).toBe("number");
-    expect(printType(z.looseAnyNumber)).toBe("number");
+  // One row per codec — its decoded JS type. The number-codec family (number/integer/bigint)
+  // prints by its declared JS type — z.bigint's face is "number" too (retired; exact is a
+  // safe-integer ratio of `number`s). looseNumber / looseAnyNumber print by decoded JS type
+  // (IMAGE_BY_NAME) — without images their OUT z.custom leaf would harvest as unknown
+  // (floor/abs collapse); looseAnyNumber's face is plain "number" now too (z.bigint retired).
+  it.each([
+    { name: "the string codec → 'string'", schema: z.string, expected: "string" },
+    { name: "the boolean codec → its decoded JS type", schema: z.boolean, expected: "boolean" },
+    { name: "the char codec → its decoded JS type", schema: z.char, expected: "string" },
+    { name: "the number codec → its declared JS type", schema: z.number, expected: "number" },
+    { name: "the integer codec → its declared JS type", schema: z.integer, expected: "number" },
+    { name: "the bigint codec → its declared JS type", schema: z.bigint, expected: "number" },
+    { name: "the loose number codec → its decoded JS type", schema: z.looseNumber, expected: "number" },
+    { name: "the loose-any-number codec → its decoded JS type", schema: z.looseAnyNumber, expected: "number" },
+  ])("prints $name", ({ schema, expected }) => {
+    expect(printType(schema)).toBe(expected);
   });
 });
 
 describe("printType — compounds", () => {
-  // INVARIANT: z.object prints as a single-line member list with no dangling semicolon.
-  it("prints z.object as a single-line member list (no dangling semicolon)", () => {
-    expect(printType(z.object({ k: z.string, n: z.number }))).toBe("{ k: string; n: number }");
-  });
-  // INVARIANT: z.array prints as variadic "T[]" with the element decoded.
-  it("prints z.array as variadic 'T[]' (codec element decoded)", () => {
-    expect(printType(z.array(z.number))).toBe("number[]");
-  });
-  // REBASELINE (fe2c848ee7): see the top-of-describe note on z.pair → Pair<unknown, unknown>.
-  // INVARIANT: z.array of an identity primitive prints "T[]" using the primitive's image.
-  it("prints z.array of an identity primitive as 'T[]'", () => {
-    expect(printType(z.array(z.pair))).toBe("Pair<unknown, unknown>[]");
-  });
-  // INVARIANT: a tuple prints as "[A, B]".
-  it("prints a tuple as '[A, B]'", () => {
-    expect(printType(z.tuple([z.string, z.number]))).toBe("[string, number]");
-  });
-  // INVARIANT: a tuple mixing a codec member and an identity-primitive member prints both correctly.
-  it("prints a tuple mixing codec + identity members", () => {
-    expect(printType(z.tuple([z.pair, z.string]))).toBe("[Pair<unknown, unknown>, string]");
-  });
-  // INVARIANT: a union prints as "A | B".
-  it("prints a union as 'A | B'", () => {
-    expect(printType(z.union([z.string, z.number]))).toBe("string | number");
+  // REBASELINE (fe2c848ee7): see the native-identity describe's top note on
+  // z.pair → Pair<unknown, unknown>.
+  it.each([
+    {
+      name: "z.object as a single-line member list (no dangling semicolon)",
+      schema: z.object({ k: z.string, n: z.number }),
+      expected: "{ k: string; n: number }",
+    },
+    {
+      name: "z.array as variadic 'T[]' (codec element decoded)",
+      schema: z.array(z.number),
+      expected: "number[]",
+    },
+    {
+      name: "z.array of an identity primitive as 'T[]'",
+      schema: z.array(z.pair),
+      expected: "Pair<unknown, unknown>[]",
+    },
+    { name: "a tuple as '[A, B]'", schema: z.tuple([z.string, z.number]), expected: "[string, number]" },
+    {
+      name: "a tuple mixing codec + identity members",
+      schema: z.tuple([z.pair, z.string]),
+      expected: "[Pair<unknown, unknown>, string]",
+    },
+    { name: "a union as 'A | B'", schema: z.union([z.string, z.number]), expected: "string | number" },
+  ])("prints $name", ({ schema, expected }) => {
+    expect(printType(schema)).toBe(expected);
   });
 });
 
@@ -142,37 +139,36 @@ describe("sTagToTsType — the s/* schema-DSL tag → TS type-string bridge", ()
   // reconstruction (`z.fromJSONSchema`) renders that as an explicit index
   // signature banning extra keys, so every object in these expectations carries
   // a trailing `[x: string]: never` member (real, correct TS — not noise).
-  // INVARIANT: an object tag's scalar fields print with a trailing `[x: string]: never`
-  // index signature (from additionalProperties:false) — documented above.
-  it("prints an object tag's scalar fields", () => {
-    expect(sTagToTsType(["object", ["title", "string"], ["count", "number"]])).toBe(
-      "{ title: string; count: number; [x: string]: never }",
-    );
+  it.each([
+    {
+      name: "an object tag's scalar fields",
+      tag: ["object", ["title", "string"], ["count", "number"]] as const,
+      expected: "{ title: string; count: number; [x: string]: never }",
+    },
+    {
+      name: "a field description prints as a JSDoc comment (zod-to-ts's own convention)",
+      tag: ["object", ["summary", "string", "a one-line summary"]] as const,
+      expected: "{ /** a one-line summary */ summary: string; [x: string]: never }",
+    },
+    {
+      name: "a nested array field",
+      tag: ["object", ["tags", ["array", "string"]]] as const,
+      expected: "{ tags: string[]; [x: string]: never }",
+    },
+    {
+      name: "a nested object field (itself carrying the never-index signature)",
+      tag: ["object", ["author", ["object", ["name", "string"]]]] as const,
+      expected: "{ author: { name: string; [x: string]: never }; [x: string]: never }",
+    },
+    {
+      name: "an optional field's /optional suffix drops it from `required` — TS marks it `?` (zod's own `?: T | undefined`)",
+      tag: ["object", ["title", "string"], ["nickname", "string/optional"]] as const,
+      expected: "{ title: string; nickname?: string | undefined; [x: string]: never }",
+    },
+  ])("prints $name", ({ tag, expected }) => {
+    expect(sTagToTsType(tag)).toBe(expected);
   });
-  // INVARIANT: a field description prints as a JSDoc comment.
-  it("a field description prints as a JSDoc comment (zod-to-ts's own convention)", () => {
-    expect(sTagToTsType(["object", ["summary", "string", "a one-line summary"]])).toBe(
-      "{ /** a one-line summary */ summary: string; [x: string]: never }",
-    );
-  });
-  // INVARIANT: a nested array field prints correctly.
-  it("prints a nested array field", () => {
-    expect(sTagToTsType(["object", ["tags", ["array", "string"]]])).toBe(
-      "{ tags: string[]; [x: string]: never }",
-    );
-  });
-  // INVARIANT: a nested object field prints correctly, itself carrying the never-index signature.
-  it("prints a nested object field", () => {
-    expect(sTagToTsType(["object", ["author", ["object", ["name", "string"]]]])).toBe(
-      "{ author: { name: string; [x: string]: never }; [x: string]: never }",
-    );
-  });
-  // INVARIANT: an optional field's `/optional` suffix marks it TS-optional (`?:` with `| undefined`).
-  it("an optional field's /optional suffix drops it from `required` — TS marks it `?` (zod's own `?: T | undefined`)", () => {
-    expect(sTagToTsType(["object", ["title", "string"], ["nickname", "string/optional"]])).toBe(
-      "{ title: string; nickname?: string | undefined; [x: string]: never }",
-    );
-  });
+
   // INVARIANT: a malformed/unrepresentable tag degrades to "unknown" rather than throwing.
   it("a malformed/unrepresentable tag degrades to unknown, never throws", () => {
     expect(sTagToTsType(["object", ["bad"]])).toBe("unknown");

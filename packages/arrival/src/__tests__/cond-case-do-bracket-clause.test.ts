@@ -50,27 +50,46 @@ const assertEquivalent = async (bracketSrc: string, parenSrc: string): Promise<u
 };
 
 describe("bracket clauses — cond (R9)", () => {
-  it("bracket test clause consumes, equal to the paren image", async () => {
-    const value = await assertEquivalent('(cond [(> 2 1) "a"] [else "b"])', '(cond ((> 2 1) "a") (else "b"))');
-    expect(value).toBe("a");
-  });
-
-  it("bracket else clause consumes", async () => {
-    const value = await assertEquivalent('(cond [#f "a"] [else "b"])', '(cond (#f "a") (else "b"))');
-    expect(value).toBe("b");
-  });
-
-  it("bracket => clause consumes", async () => {
-    const value = await assertEquivalent(
-      "(cond [(+ 1 2) => (lambda (x) (* x 10))])",
-      "(cond ((+ 1 2) => (lambda (x) (* x 10))))",
-    );
-    expect(value).toBe(30);
-  });
-
-  it("falls through to a later bracket clause when earlier tests are false", async () => {
-    const value = await assertEquivalent("(cond [#f 1] [#f 2] [#t 3])", "(cond (#f 1) (#f 2) (#t 3))");
-    expect(value).toBe(3);
+  it.each([
+    {
+      name: "bracket test clause consumes, equal to the paren image",
+      bracketSrc: '(cond [(> 2 1) "a"] [else "b"])',
+      parenSrc: '(cond ((> 2 1) "a") (else "b"))',
+      expected: "a",
+    },
+    {
+      name: "bracket else clause consumes",
+      bracketSrc: '(cond [#f "a"] [else "b"])',
+      parenSrc: '(cond (#f "a") (else "b"))',
+      expected: "b",
+    },
+    {
+      name: "bracket => clause consumes",
+      bracketSrc: "(cond [(+ 1 2) => (lambda (x) (* x 10))])",
+      parenSrc: "(cond ((+ 1 2) => (lambda (x) (* x 10))))",
+      expected: 30,
+    },
+    {
+      name: "falls through to a later bracket clause when earlier tests are false",
+      bracketSrc: "(cond [#f 1] [#f 2] [#t 3])",
+      parenSrc: "(cond (#f 1) (#f 2) (#t 3))",
+      expected: 3,
+    },
+    {
+      name: "mixing bracket and paren clauses in one cond",
+      bracketSrc: "(cond [#f 1] (#t 2))",
+      parenSrc: "(cond (#f 1) (#t 2))",
+      expected: 2,
+    },
+    {
+      name: "nested: a bracket clause's body containing bracket let bindings (R9 + R2 compose)",
+      bracketSrc: "(cond [#t (let [a 1] a)])",
+      parenSrc: "(cond (#t (let ((a 1)) a)))",
+      expected: 1,
+    },
+  ])("$name", async ({ bracketSrc, parenSrc, expected }) => {
+    const value = await assertEquivalent(bracketSrc, parenSrc);
+    expect(value).toBe(expected);
   });
 
   it("no clause matches — returns void, same as the paren form", async () => {
@@ -78,41 +97,37 @@ describe("bracket clauses — cond (R9)", () => {
     const [parenResult] = await exec("(cond (#f 1))");
     expect(bracketResult).toEqual(parenResult);
   });
-
-  it("mixing bracket and paren clauses in one cond", async () => {
-    const value = await assertEquivalent("(cond [#f 1] (#t 2))", "(cond (#f 1) (#t 2))");
-    expect(value).toBe(2);
-  });
-
-  it("nested: a bracket clause's body containing bracket let bindings (R9 + R2 compose)", async () => {
-    const value = await assertEquivalent("(cond [#t (let [a 1] a)])", "(cond (#t (let ((a 1)) a)))");
-    expect(value).toBe(1);
-  });
 });
 
 describe("bracket clauses — case (R9)", () => {
-  it("bracket clause with a parenthesized datum-list head consumes, equal to the paren image", async () => {
-    const value = await assertEquivalent(
-      '(case 1 [(1 2) "low"] [else "hi"])',
-      '(case 1 ((1 2) "low") (else "hi"))',
-    );
-    expect(value).toBe("low");
-  });
-
-  it("bracket else clause consumes", async () => {
-    const value = await assertEquivalent(
-      '(case 99 [(1 2) "low"] [else "hi"])',
-      '(case 99 ((1 2) "low") (else "hi"))',
-    );
-    expect(value).toBe("hi");
-  });
-
-  it("bracket => clause consumes", async () => {
-    const value = await assertEquivalent(
-      "(case 2 [(1 2) => (lambda (x) (* x 100))] [else 0])",
-      "(case 2 ((1 2) => (lambda (x) (* x 100))) (else 0))",
-    );
-    expect(value).toBe(200);
+  it.each([
+    {
+      name: "bracket clause with a parenthesized datum-list head consumes, equal to the paren image",
+      bracketSrc: '(case 1 [(1 2) "low"] [else "hi"])',
+      parenSrc: '(case 1 ((1 2) "low") (else "hi"))',
+      expected: "low",
+    },
+    {
+      name: "bracket else clause consumes",
+      bracketSrc: '(case 99 [(1 2) "low"] [else "hi"])',
+      parenSrc: '(case 99 ((1 2) "low") (else "hi"))',
+      expected: "hi",
+    },
+    {
+      name: "bracket => clause consumes",
+      bracketSrc: "(case 2 [(1 2) => (lambda (x) (* x 100))] [else 0])",
+      parenSrc: "(case 2 ((1 2) => (lambda (x) (* x 100))) (else 0))",
+      expected: 200,
+    },
+    {
+      name: "the datum-list head stays a LIST — R9's own invariant — and matches correctly",
+      bracketSrc: '(case (quote b) [(a b c) "letter"] [else "other"])',
+      parenSrc: '(case (quote b) ((a b c) "letter") (else "other"))',
+      expected: "letter",
+    },
+  ])("$name", async ({ bracketSrc, parenSrc, expected }) => {
+    const value = await assertEquivalent(bracketSrc, parenSrc);
+    expect(value).toBe(expected);
   });
 
   it("no datum matches, no else — returns void, same as the paren form", async () => {
@@ -120,56 +135,55 @@ describe("bracket clauses — case (R9)", () => {
     const [parenResult] = await exec('(case 99 ((1 2) "low"))');
     expect(bracketResult).toEqual(parenResult);
   });
-
-  it("the datum-list head stays a LIST — R9's own invariant — and matches correctly", async () => {
-    const value = await assertEquivalent(
-      '(case (quote b) [(a b c) "letter"] [else "other"])',
-      '(case (quote b) ((a b c) "letter") (else "other"))',
-    );
-    expect(value).toBe("letter");
-  });
 });
 
 describe("bracket clauses — do's test clause (R9)", () => {
-  it("bracket test clause consumes, equal to the paren image", async () => {
-    const value = await assertEquivalent(
-      "(do ((i 0 (+ i 1))) [(= i 3) i])",
-      "(do ((i 0 (+ i 1))) ((= i 3) i))",
-    );
-    expect(value).toBe(3);
-  });
-
-  it("bracket test clause with multiple result expressions consumes", async () => {
-    const value = await assertEquivalent(
-      "(do ((i 0 (+ i 1)) (acc 0 (+ acc i))) [(= i 3) i acc])",
-      "(do ((i 0 (+ i 1)) (acc 0 (+ acc i))) ((= i 3) i acc))",
-    );
-    expect(value).toBe(3);
-  });
-
-  it("do's binding brackets (R2) and its test-clause bracket (R9) compose", async () => {
-    const value = await assertEquivalent("(do ([i 0 (+ i 1)]) [(= i 3) i])", "(do ((i 0 (+ i 1))) ((= i 3) i))");
-    expect(value).toBe(3);
+  it.each([
+    {
+      name: "bracket test clause consumes, equal to the paren image",
+      bracketSrc: "(do ((i 0 (+ i 1))) [(= i 3) i])",
+      parenSrc: "(do ((i 0 (+ i 1))) ((= i 3) i))",
+      expected: 3,
+    },
+    {
+      name: "bracket test clause with multiple result expressions consumes",
+      bracketSrc: "(do ((i 0 (+ i 1)) (acc 0 (+ acc i))) [(= i 3) i acc])",
+      parenSrc: "(do ((i 0 (+ i 1)) (acc 0 (+ acc i))) ((= i 3) i acc))",
+      expected: 3,
+    },
+    {
+      name: "do's binding brackets (R2) and its test-clause bracket (R9) compose",
+      bracketSrc: "(do ([i 0 (+ i 1)]) [(= i 3) i])",
+      parenSrc: "(do ((i 0 (+ i 1))) ((= i 3) i))",
+      expected: 3,
+    },
+  ])("$name", async ({ bracketSrc, parenSrc, expected }) => {
+    const value = await assertEquivalent(bracketSrc, parenSrc);
+    expect(value).toBe(expected);
   });
 });
 
 describe("bracket clauses — R9 doors: E-COND-BRACKET-CLAUSE (empty clause)", () => {
-  it("cond: empty bracket clause doors", async () => {
-    const message = await doorMessage("(cond [])");
-    expect(message).toMatch(/^cond clause \[\] is empty/);
-    expect(await doorCode("(cond [])")).toBe("E-COND-BRACKET-CLAUSE");
-  });
-
-  it("case: empty bracket clause doors", async () => {
-    const message = await doorMessage("(case 1 [])");
-    expect(message).toMatch(/^case clause \[\] is empty/);
-    expect(await doorCode("(case 1 [])")).toBe("E-COND-BRACKET-CLAUSE");
-  });
-
-  it("do: empty bracket test clause doors", async () => {
-    const message = await doorMessage("(do ((i 0)) [])");
-    expect(message).toMatch(/^do clause \[\] is empty/);
-    expect(await doorCode("(do ((i 0)) [])")).toBe("E-COND-BRACKET-CLAUSE");
+  it.each([
+    {
+      name: "cond: empty bracket clause doors",
+      src: "(cond [])",
+      pattern: /^cond clause \[\] is empty/,
+    },
+    {
+      name: "case: empty bracket clause doors",
+      src: "(case 1 [])",
+      pattern: /^case clause \[\] is empty/,
+    },
+    {
+      name: "do: empty bracket test clause doors",
+      src: "(do ((i 0)) [])",
+      pattern: /^do clause \[\] is empty/,
+    },
+  ])("$name", async ({ src, pattern }) => {
+    const message = await doorMessage(src);
+    expect(message).toMatch(pattern);
+    expect(await doorCode(src)).toBe("E-COND-BRACKET-CLAUSE");
   });
 });
 
@@ -189,13 +203,17 @@ describe("bracket clauses — R9 doors: E-CASE-BRACKET-DATUM-LIST (vector datum 
 });
 
 describe("bracket clauses — R5 negatives (still hold: `[…]` as a VALUE stays a vector)", () => {
-  it("a bracket vector used as a cond TEST EXPRESSION (not a clause wrapper) stays a vector value", async () => {
-    const [result] = await exec("(cond ([1 2 3] => vector-length))");
-    expect(result?.valueOf()).toBe(3);
-  });
-
-  it("a bracket vector in a clause's BODY position is legal data, not consumed as a clause", async () => {
-    const [result] = await exec("(cond [#t (vector-length [1 2 3])])");
+  it.each([
+    {
+      name: "a bracket vector used as a cond TEST EXPRESSION (not a clause wrapper) stays a vector value",
+      src: "(cond ([1 2 3] => vector-length))",
+    },
+    {
+      name: "a bracket vector in a clause's BODY position is legal data, not consumed as a clause",
+      src: "(cond [#t (vector-length [1 2 3])])",
+    },
+  ])("$name", async ({ src }) => {
+    const [result] = await exec(src);
     expect(result?.valueOf()).toBe(3);
   });
 
@@ -211,15 +229,20 @@ describe("bracket clauses — R5 negatives (still hold: `[…]` as a VALUE stays
 });
 
 describe("bracket clauses — passthrough (unrelated malformed clauses, unchanged)", () => {
-  it("a bare symbol clause still hits the generic invariant, not a bracket door", async () => {
-    const message = await doorMessage("(cond (#f 1) else)");
-    expect(message).toMatch(/cond: invalid clause/);
-    expect(message).not.toMatch(/E-COND-BRACKET/);
-  });
-
-  it("case with a bare (non-pair, non-else) clause still hits the generic invariant", async () => {
-    const message = await doorMessage("(case 1 else)");
-    expect(message).toMatch(/case: invalid clause/);
+  it.each([
+    {
+      name: "a bare symbol clause still hits the generic invariant, not a bracket door",
+      src: "(cond (#f 1) else)",
+      pattern: /cond: invalid clause/,
+    },
+    {
+      name: "case with a bare (non-pair, non-else) clause still hits the generic invariant",
+      src: "(case 1 else)",
+      pattern: /case: invalid clause/,
+    },
+  ])("$name", async ({ src, pattern }) => {
+    const message = await doorMessage(src);
+    expect(message).toMatch(pattern);
     expect(message).not.toMatch(/E-COND-BRACKET/);
   });
 });

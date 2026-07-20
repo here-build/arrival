@@ -33,24 +33,14 @@ async function run(src: string): Promise<string> {
 }
 
 describe("ratio construction — AExact is a genuine (num, denom) rational", () => {
-  it("(/ 1 3) constructs an exact rational, printed 1/3 (not coerced to inexact)", async () => {
-    expect(await run("(/ 1 3)")).toBe("1/3");
-  });
-
-  it("(exact? (/ 1 3)) is #t — non-integral exact division stays exact", async () => {
-    expect(await run("(exact? (/ 1 3))")).toBe("#t");
-  });
-
-  it("(+ 1/3 1/3 1/3) sums to exact 1 (cross-multiply add, not float accumulation)", async () => {
-    expect(await run("(+ 1/3 1/3 1/3)")).toBe("1");
-  });
-
-  it("(numerator (/ 6 4)) is 3 (reduced form 3/2)", async () => {
-    expect(await run("(numerator (/ 6 4))")).toBe("3");
-  });
-
-  it("(denominator (/ 6 4)) is 2 (reduced form 3/2)", async () => {
-    expect(await run("(denominator (/ 6 4))")).toBe("2");
+  it.each([
+    { name: "(/ 1 3) constructs an exact rational, printed 1/3 (not coerced to inexact)", input: "(/ 1 3)", expected: "1/3" },
+    { name: "(exact? (/ 1 3)) is #t — non-integral exact division stays exact", input: "(exact? (/ 1 3))", expected: "#t" },
+    { name: "(+ 1/3 1/3 1/3) sums to exact 1 (cross-multiply add, not float accumulation)", input: "(+ 1/3 1/3 1/3)", expected: "1" },
+    { name: "(numerator (/ 6 4)) is 3 (reduced form 3/2)", input: "(numerator (/ 6 4))", expected: "3" },
+    { name: "(denominator (/ 6 4)) is 2 (reduced form 3/2)", input: "(denominator (/ 6 4))", expected: "2" },
+  ])("$name", async ({ input, expected }) => {
+    expect(await run(input)).toBe(expected);
   });
 
   // Egress DIVIDES (§2.0: "toJS(1/3) = 0.333…", the projection∘borrow law — same as
@@ -69,24 +59,29 @@ describe("overflow-throws — exact results whose components leave safe-integer 
   // Number.MAX_SAFE_INTEGER on its own and would conflate this row with the separate
   // "over-safe source LITERAL" row below. Safe operands + unsafe RESULT isolates the
   // arithmetic-overflow guarantee from the parser's literal gate.
-  it("(+ 9007199254740991 1) rejects — exact addition overflowing 2^53 THROWS, never silently widens", async () => {
-    // RED until the atom lands: today AExact is bigint-backed (no magnitude ceiling),
-    // so this computes silently to a correct-but-unbounded exact bigint — no throw.
-    await expect(run("(+ 9007199254740991 1)")).rejects.toThrow(/exact overflow/i);
-  });
-
-  it("(* 94906266 94906266) rejects — exact multiplication overflowing 2^53 THROWS", async () => {
-    // RED until the atom lands (same reason: unbounded bigint today). 94906266 is
-    // safe on its own (~9.5e7); its square (9007199326062756) exceeds
-    // Number.MAX_SAFE_INTEGER (9007199254740991) — confirmed by direct computation.
-    await expect(run("(* 94906266 94906266)")).rejects.toThrow(/exact overflow/i);
-  });
-
-  it("(* 94906266 94906266 94906266) rejects — per-step overflow check in a variadic fold", async () => {
-    // RED until the atom lands. The doc's own example (§3): a 3-arg `*` fold must
-    // catch the overflow at whichever step first leaves safe range, not just at the
-    // final accumulated result.
-    await expect(run("(* 94906266 94906266 94906266)")).rejects.toThrow(/exact overflow/i);
+  it.each([
+    {
+      // RED until the atom lands: today AExact is bigint-backed (no magnitude ceiling),
+      // so this computes silently to a correct-but-unbounded exact bigint — no throw.
+      name: "(+ 9007199254740991 1) rejects — exact addition overflowing 2^53 THROWS, never silently widens",
+      input: "(+ 9007199254740991 1)",
+    },
+    {
+      // RED until the atom lands (same reason: unbounded bigint today). 94906266 is
+      // safe on its own (~9.5e7); its square (9007199326062756) exceeds
+      // Number.MAX_SAFE_INTEGER (9007199254740991) — confirmed by direct computation.
+      name: "(* 94906266 94906266) rejects — exact multiplication overflowing 2^53 THROWS",
+      input: "(* 94906266 94906266)",
+    },
+    {
+      // RED until the atom lands. The doc's own example (§3): a 3-arg `*` fold must
+      // catch the overflow at whichever step first leaves safe range, not just at the
+      // final accumulated result.
+      name: "(* 94906266 94906266 94906266) rejects — per-step overflow check in a variadic fold",
+      input: "(* 94906266 94906266 94906266)",
+    },
+  ])("$name", async ({ input }) => {
+    await expect(run(input)).rejects.toThrow(/exact overflow/i);
   });
 
   it("an over-safe source LITERAL (2^53+1) is a ParseError, not a silently-huge exact", async () => {
@@ -103,88 +98,79 @@ describe("encode-edge exactness law — codec encode must not re-derive exactnes
   // integer-valued RESULT mints AExact regardless of whether either OPERAND was
   // inexact (common/scheme-zod.ts's encode arms). The fix (plan §2.2) threads
   // `wantExact` from the coerced operands' boxes instead of re-deriving it.
-  it("(exact? (floor 2.5)) is #f — floor of an inexact stays inexact", async () => {
-    expect(await run("(exact? (floor 2.5))")).toBe("#f");
-  });
-
-  it("(exact? (quotient 7.0 2)) is #f — quotient with an inexact operand stays inexact", async () => {
-    expect(await run("(exact? (quotient 7.0 2))")).toBe("#f");
-  });
-
-  it("(exact? (gcd 4.0 6)) is #f — gcd with an inexact operand stays inexact", async () => {
-    expect(await run("(exact? (gcd 4.0 6))")).toBe("#f");
-  });
-
-  it("(exact? (abs -0.0)) is #f — abs of an inexact stays inexact", async () => {
-    expect(await run("(exact? (abs -0.0))")).toBe("#f");
+  it.each([
+    { name: "(exact? (floor 2.5)) is #f — floor of an inexact stays inexact", input: "(exact? (floor 2.5))" },
+    { name: "(exact? (quotient 7.0 2)) is #f — quotient with an inexact operand stays inexact", input: "(exact? (quotient 7.0 2))" },
+    { name: "(exact? (gcd 4.0 6)) is #f — gcd with an inexact operand stays inexact", input: "(exact? (gcd 4.0 6))" },
+    { name: "(exact? (abs -0.0)) is #f — abs of an inexact stays inexact", input: "(exact? (abs -0.0))" },
+  ])("$name", async ({ input }) => {
+    expect(await run(input)).toBe("#f");
   });
 });
 
 describe("box identity — exact and inexact are different boxes at equal numeric value", () => {
-  it("(= 1 1.0) is #t — numeric equality crosses the exactness boundary", async () => {
-    expect(await run("(= 1 1.0)")).toBe("#t");
-  });
-
-  it("(eqv? 1 1.0) is #f — eqv? is representation-typed, exact never eqv? inexact", async () => {
-    expect(await run("(eqv? 1 1.0)")).toBe("#f");
-  });
-
-  it("(equal? 1 1.0) is #f — structural equality honors the same exactness boundary", async () => {
-    expect(await run("(equal? 1 1.0)")).toBe("#f");
-  });
-
-  it("(eqv? 0.0 -0.0) is #f — inexact zero keeps its sign under eqv? (Object.is)", async () => {
-    expect(await run("(eqv? 0.0 -0.0)")).toBe("#f");
-  });
-
-  it("(eqv? +nan.0 +nan.0) is #t — NaN is eqv?-reflexive (Object.is, not ===)", async () => {
-    expect(await run("(eqv? +nan.0 +nan.0)")).toBe("#t");
-  });
-
-  it('exact -0 is unconstructible — (* -1 0) prints bare "0", never "-0"', async () => {
-    // A forward-looking regression guard, not a currently-fragile behavior: bigint
-    // has no -0 today, so this is an "accidental" green. Post-rework, AExact's `num`
-    // field is a raw JS `number`, which CAN hold -0 unless the constructor normalizes
-    // it away (plan §0.6: `x === 0 ? 0 : x`) — this row is the one that goes RED if
-    // that normalization is ever forgotten during the port.
-    expect(await run("(* -1 0)")).toBe("0");
+  it.each([
+    { name: "(= 1 1.0) is #t — numeric equality crosses the exactness boundary", input: "(= 1 1.0)", expected: "#t" },
+    { name: "(eqv? 1 1.0) is #f — eqv? is representation-typed, exact never eqv? inexact", input: "(eqv? 1 1.0)", expected: "#f" },
+    { name: "(equal? 1 1.0) is #f — structural equality honors the same exactness boundary", input: "(equal? 1 1.0)", expected: "#f" },
+    { name: "(eqv? 0.0 -0.0) is #f — inexact zero keeps its sign under eqv? (Object.is)", input: "(eqv? 0.0 -0.0)", expected: "#f" },
+    { name: "(eqv? +nan.0 +nan.0) is #t — NaN is eqv?-reflexive (Object.is, not ===)", input: "(eqv? +nan.0 +nan.0)", expected: "#t" },
+    {
+      // A forward-looking regression guard, not a currently-fragile behavior: bigint
+      // has no -0 today, so this is an "accidental" green. Post-rework, AExact's `num`
+      // field is a raw JS `number`, which CAN hold -0 unless the constructor normalizes
+      // it away (plan §0.6: `x === 0 ? 0 : x`) — this row is the one that goes RED if
+      // that normalization is ever forgotten during the port.
+      name: 'exact -0 is unconstructible — (* -1 0) prints bare "0", never "-0"',
+      input: "(* -1 0)",
+      expected: "0",
+    },
+  ])("$name", async ({ input, expected }) => {
+    expect(await run(input)).toBe(expected);
   });
 });
 
 describe("division — exact zero divisor errors; integer-only ops require denom = 1", () => {
-  it("(/ 1 0) rejects — exact division by exact zero errors (R7RS), not ∞", async () => {
-    await expect(run("(/ 1 0)")).rejects.toThrow(/division by zero/i);
+  it.each([
+    {
+      name: "(/ 1 0) rejects — exact division by exact zero errors (R7RS), not ∞",
+      input: "(/ 1 0)",
+      matcher: /division by zero/i,
+    },
+    {
+      // RED until the atom lands: today's message is "quotient: argument 0 type
+      // mismatch" (z.bigint's CodecFidelityError swallowed into a generic mismatch by
+      // numeric.ts's decodeArg) — it never mentions "integer". Target: quotient routes
+      // through the same `toInteger` helper remainder/modulo/floor-quotient already use,
+      // whose door message IS "quotient: not an integer".
+      name: "(quotient (/ 3 2) 1) rejects — quotient doors on a non-integer (denom ≠ 1) operand",
+      input: "(quotient (/ 3 2) 1)",
+      matcher: /integer/i,
+    },
+  ])("$name", async ({ input, matcher }) => {
+    await expect(run(input)).rejects.toThrow(matcher);
   });
 
   it("(/ 4 2) reduces to exact 2", async () => {
     expect(await run("(/ 4 2)")).toBe("2");
   });
-
-  it("(quotient (/ 3 2) 1) rejects — quotient doors on a non-integer (denom ≠ 1) operand", async () => {
-    // RED until the atom lands: today's message is "quotient: argument 0 type
-    // mismatch" (z.bigint's CodecFidelityError swallowed into a generic mismatch by
-    // numeric.ts's decodeArg) — it never mentions "integer". Target: quotient routes
-    // through the same `toInteger` helper remainder/modulo/floor-quotient already use,
-    // whose door message IS "quotient: not an integer".
-    await expect(run("(quotient (/ 3 2) 1)")).rejects.toThrow(/integer/i);
-  });
 });
 
 describe("parsing — string->number / reader agree on exactness", () => {
-  it('(string->number "1e2") is inexact 100.0 — exponent notation never mints exact', async () => {
-    // RED until the atom lands: parse_float's exponent arm (utils/parsing.ts:178,
-    // `is_int(value) && Number.isSafeInteger(value) && /e\+?\d/i.test(...)`) currently
-    // mints AExact whenever the float happens to round-trip to a safe integer —
-    // printed bare "100", not "100.0".
-    expect(await run('(string->number "1e2")')).toBe("100.0");
-  });
-
-  it('(string->number "10/2") reduces to exact 5', async () => {
-    expect(await run('(string->number "10/2")')).toBe("5");
-  });
-
-  it('(string->number "1/3") parses as the exact rational 1/3', async () => {
-    expect(await run('(string->number "1/3")')).toBe("1/3");
+  it.each([
+    {
+      // RED until the atom lands: parse_float's exponent arm (utils/parsing.ts:178,
+      // `is_int(value) && Number.isSafeInteger(value) && /e\+?\d/i.test(...)`) currently
+      // mints AExact whenever the float happens to round-trip to a safe integer —
+      // printed bare "100", not "100.0".
+      name: '(string->number "1e2") is inexact 100.0 — exponent notation never mints exact',
+      input: '(string->number "1e2")',
+      expected: "100.0",
+    },
+    { name: '(string->number "10/2") reduces to exact 5', input: '(string->number "10/2")', expected: "5" },
+    { name: '(string->number "1/3") parses as the exact rational 1/3', input: '(string->number "1/3")', expected: "1/3" },
+  ])("$name", async ({ input, expected }) => {
+    expect(await run(input)).toBe(expected);
   });
 });
 

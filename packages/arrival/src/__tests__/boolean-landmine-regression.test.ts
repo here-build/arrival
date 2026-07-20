@@ -26,15 +26,25 @@ const SB = "(lambda (x) (if (> x 1) #t #f))"; // #t for >1, #f otherwise
 const EVEN_SB = "(lambda (x) (if (even? x) #t #f))";
 
 describe("boolean landmine — find/filter (stdlib, THE documented landmine)", () => {
-  it("filter EXCLUDES elements whose SchemeBool predicate is #f", async () => {
-    expect(await run(`(filter ${SB} '(1 2 3))`)).toBe("(2 3)"); // raw `&&` would keep 1
-  });
-  it("find returns the first match under a SchemeBool predicate", async () => {
-    expect(await run(`(find ${EVEN_SB} '(1 2 3 4))`)).toBe("2");
-  });
-  it("find returns #f when the SchemeBool predicate is #f for all (SRFI-1 not-found = #f)", async () => {
-    // Was '()' — an arrival deviation, fixed 2026-07-13 (V: "definitely fix").
-    expect(await run(`(find (lambda (x) #f) '(1 2 3))`)).toBe("#f");
+  it.each([
+    {
+      name: "filter EXCLUDES elements whose SchemeBool predicate is #f",
+      src: `(filter ${SB} '(1 2 3))`,
+      expected: "(2 3)", // raw `&&` would keep 1
+    },
+    {
+      name: "find returns the first match under a SchemeBool predicate",
+      src: `(find ${EVEN_SB} '(1 2 3 4))`,
+      expected: "2",
+    },
+    {
+      // Was '()' — an arrival deviation, fixed 2026-07-13 (V: "definitely fix").
+      name: "find returns #f when the SchemeBool predicate is #f for all (SRFI-1 not-found = #f)",
+      src: "(find (lambda (x) #f) '(1 2 3))",
+      expected: "#f",
+    },
+  ])("$name", async ({ src, expected }) => {
+    expect(await run(src)).toBe(expected);
   });
 });
 
@@ -44,46 +54,70 @@ describe("nil truthiness — R7RS: only #f is false; '() is a TRUTHY verdict eve
   // truthy — same predicate, opposite verdicts (the private `instanceof ANil` forks,
   // deleted 2026-07-13). These rows keep the HOF family in agreement forever.
   const NIL_PRED = "(lambda (x) '())"; // returns '() for every element — truthy per R7RS
-  it("filter keeps every element under a '()-returning predicate", async () => {
-    expect(await run(`(filter ${NIL_PRED} '(1 2 3))`)).toBe("(1 2 3)");
-  });
-  it("find matches the FIRST element under a '()-returning predicate", async () => {
-    expect(await run(`(find ${NIL_PRED} '(1 2 3))`)).toBe("1");
-  });
-  it("some agrees (was already truthy — the reference behavior)", async () => {
-    expect(await run(`(some ${NIL_PRED} '(1 2 3))`)).toBe("#t");
-  });
-  it("take-while takes everything under a '()-returning predicate", async () => {
-    expect(await run(`(take-while ${NIL_PRED} '(1 2 3))`)).toBe("(1 2 3)");
-  });
-  it("drop-while drops everything under a '()-returning predicate", async () => {
-    expect(await run(`(drop-while ${NIL_PRED} '(1 2 3))`)).toBe("()");
+  it.each([
+    {
+      name: "filter keeps every element under a '()-returning predicate",
+      src: `(filter ${NIL_PRED} '(1 2 3))`,
+      expected: "(1 2 3)",
+    },
+    {
+      name: "find matches the FIRST element under a '()-returning predicate",
+      src: `(find ${NIL_PRED} '(1 2 3))`,
+      expected: "1",
+    },
+    {
+      name: "some agrees (was already truthy — the reference behavior)",
+      src: `(some ${NIL_PRED} '(1 2 3))`,
+      expected: "#t",
+    },
+    {
+      name: "take-while takes everything under a '()-returning predicate",
+      src: `(take-while ${NIL_PRED} '(1 2 3))`,
+      expected: "(1 2 3)",
+    },
+    {
+      name: "drop-while drops everything under a '()-returning predicate",
+      src: `(drop-while ${NIL_PRED} '(1 2 3))`,
+      expected: "()",
+    },
+  ])("$name", async ({ src, expected }) => {
+    expect(await run(src)).toBe(expected);
   });
 });
 
 describe("boolean landmine — complement (bridge): async + boxed-bool", () => {
-  it("complement of a SchemeBool scheme-lambda predicate, through filter", async () => {
-    // exercises BOTH: the scheme-lambda Promise (maybeThen) AND the boxed-bool
-    // negation (is_false, not `!`). Plain `!fn(...)` returned (), this returns (1 3).
-    expect(await run(`(filter (complement ${EVEN_SB}) '(1 2 3 4))`)).toBe("(1 3)");
-  });
-  it("complement still works for a native predicate", async () => {
-    expect(await run("(filter (complement even?) '(1 2 3 4))")).toBe("(1 3)");
-  });
-  it("complement applied directly to a SchemeBool predicate is truthy when the inner is #f", async () => {
-    expect(await run(`(if ((complement ${EVEN_SB}) 1) 'odd 'even)`)).toBe("odd");
+  it.each([
+    {
+      // exercises BOTH: the scheme-lambda Promise (maybeThen) AND the boxed-bool
+      // negation (is_false, not `!`). Plain `!fn(...)` returned (), this returns (1 3).
+      name: "complement of a SchemeBool scheme-lambda predicate, through filter",
+      src: `(filter (complement ${EVEN_SB}) '(1 2 3 4))`,
+      expected: "(1 3)",
+    },
+    {
+      name: "complement still works for a native predicate",
+      src: "(filter (complement even?) '(1 2 3 4))",
+      expected: "(1 3)",
+    },
+    {
+      name: "complement applied directly to a SchemeBool predicate is truthy when the inner is #f",
+      src: `(if ((complement ${EVEN_SB}) 1) 'odd 'even)`,
+      expected: "odd",
+    },
+  ])("$name", async ({ src, expected }) => {
+    expect(await run(src)).toBe(expected);
   });
 });
 
 describe("boolean landmine — not / is_false honor SchemeBool", () => {
-  it("not of a SchemeBool predicate result", async () => {
-    // Predicates BOX now (the Face split): `not` returns the schemeTrue/schemeFalse
-    // flyweights, printing the R7RS forms — exactly the flip this comment foresaw.
-    expect(await run(`(not (${EVEN_SB} 1))`)).toBe("#t"); // (even? 1)→#f, not #f → #t
-    expect(await run(`(not (${EVEN_SB} 2))`)).toBe("#f");
-  });
-  it("if/cond treat a SchemeBool(false) as falsy", async () => {
-    expect(await run(`(if (${EVEN_SB} 1) 'yes 'no)`)).toBe("no");
+  // Predicates BOX now (the Face split): `not` returns the schemeTrue/schemeFalse
+  // flyweights, printing the R7RS forms — exactly the flip this comment foresaw.
+  it.each([
+    { name: "not of a SchemeBool #f result: (even? 1)→#f, not #f → #t", src: `(not (${EVEN_SB} 1))`, expected: "#t" },
+    { name: "not of a SchemeBool #t result", src: `(not (${EVEN_SB} 2))`, expected: "#f" },
+    { name: "if/cond treat a SchemeBool(false) as falsy", src: `(if (${EVEN_SB} 1) 'yes 'no)`, expected: "no" },
+  ])("$name", async ({ src, expected }) => {
+    expect(await run(src)).toBe(expected);
   });
 });
 

@@ -15,75 +15,63 @@ async function run(src: string): Promise<string> {
 }
 
 describe("SRFI-1 — list library", () => {
-  it("take-while / drop-while", async () => {
-    expect(await run("(take-while even? '(2 4 6 1 8))")).toBe("(2 4 6)");
-    expect(await run("(drop-while even? '(2 4 6 1 8))")).toBe("(1 8)");
-  });
-  it("partition returns a two-list product", async () => {
-    expect(await run("(partition even? '(1 2 3 4 5 6))")).toBe("((2 4 6) (1 3 5))");
-  });
-  it("span / break", async () => {
-    expect(await run("(span even? '(2 4 1 3))")).toBe("((2 4) (1 3))");
-    expect(await run("(break odd? '(2 4 1 3))")).toBe("((2 4) (1 3))");
-  });
-  it("last / last-pair / find-tail", async () => {
-    expect(await run("(last '(1 2 3))")).toBe("3");
-    expect(await run("(find-tail even? '(1 3 4 5))")).toBe("(4 5)");
-    expect(await run("(find-tail even? '(1 3 5))")).toBe("#f");
-  });
-  it("fold-right / reduce-right / concatenate / list-tabulate / delete / length+", async () => {
-    expect(await run("(fold-right cons '() '(1 2 3))")).toBe("(1 2 3)");
-    expect(await run("(reduce-right + 0 '(1 2 3 4))")).toBe("10");
-    expect(await run("(concatenate '((1 2) (3) (4 5)))")).toBe("(1 2 3 4 5)");
-    expect(await run("(list-tabulate 4 (lambda (i) (* i i)))")).toBe("(0 1 4 9)");
-    expect(await run("(delete 2 '(1 2 3 2 4))")).toBe("(1 3 4)");
-    expect(await run("(length+ '(1 2 3 4))")).toBe("4");
+  it.each([
+    { name: "take-while", input: "(take-while even? '(2 4 6 1 8))", expected: "(2 4 6)" },
+    { name: "drop-while", input: "(drop-while even? '(2 4 6 1 8))", expected: "(1 8)" },
+    { name: "partition", input: "(partition even? '(1 2 3 4 5 6))", expected: "((2 4 6) (1 3 5))" },
+    { name: "span", input: "(span even? '(2 4 1 3))", expected: "((2 4) (1 3))" },
+    { name: "break", input: "(break odd? '(2 4 1 3))", expected: "((2 4) (1 3))" },
+    { name: "last", input: "(last '(1 2 3))", expected: "3" },
+    { name: "find-tail-hit", input: "(find-tail even? '(1 3 4 5))", expected: "(4 5)" },
+    { name: "find-tail-miss", input: "(find-tail even? '(1 3 5))", expected: "#f" },
+    { name: "fold-right", input: "(fold-right cons '() '(1 2 3))", expected: "(1 2 3)" },
+    { name: "reduce-right", input: "(reduce-right + 0 '(1 2 3 4))", expected: "10" },
+    { name: "concatenate", input: "(concatenate '((1 2) (3) (4 5)))", expected: "(1 2 3 4 5)" },
+    { name: "list-tabulate", input: "(list-tabulate 4 (lambda (i) (* i i)))", expected: "(0 1 4 9)" },
+    { name: "delete", input: "(delete 2 '(1 2 3 2 4))", expected: "(1 3 4)" },
+    { name: "length+", input: "(length+ '(1 2 3 4))", expected: "4" },
+  ])("$name", async ({ input, expected }) => {
+    expect(await run(input)).toBe(expected);
   });
 });
 
 describe("SRFI-43 — vector library (pure)", () => {
-  it("vector-fold / vector-fold-right", async () => {
-    expect(await run("(vector-fold + 0 #(1 2 3 4))")).toBe("10");
-    expect(await run("(vector-fold-right + 0 #(1 2 3 4))")).toBe("10");
-  });
   // R8 mint (RULINGS.md R8, landed): arrival predicate
   // builtins (=, eq?, pair?, null?, …) used to leak a raw JS boolean when no
   // provenance rode the operands (stringifying "true"/"false") — the empty-
   // provenance fast path op-helpers.mintVerdict replaces. Every boolean verdict
   // now boxes uniformly, so these SRFI predicates print "#t"/"#f" like the
   // SRFI-128 chain procs below always did.
-  it("vector-count / vector-index / vector-empty?", async () => {
-    expect(await run("(vector-count even? #(1 2 3 4))")).toBe("2");
-    expect(await run("(vector-index odd? #(2 4 5 6))")).toBe("2");
-    expect(await run("(vector-empty? #())")).toBe("#t");
-  });
-  it("vector-any / vector-every", async () => {
-    expect(await run("(vector-any even? #(1 3 4))")).toBe("#t");
-    expect(await run("(vector-every even? #(2 4 6))")).toBe("#t");
+  it.each([
+    { name: "vector-fold", input: "(vector-fold + 0 #(1 2 3 4))", expected: "10" },
+    { name: "vector-fold-right", input: "(vector-fold-right + 0 #(1 2 3 4))", expected: "10" },
+    { name: "vector-count", input: "(vector-count even? #(1 2 3 4))", expected: "2" },
+    { name: "vector-index", input: "(vector-index odd? #(2 4 5 6))", expected: "2" },
+    { name: "vector-empty?", input: "(vector-empty? #())", expected: "#t" },
+    { name: "vector-any", input: "(vector-any even? #(1 3 4))", expected: "#t" },
+    { name: "vector-every-true", input: "(vector-every even? #(2 4 6))", expected: "#t" },
     // failure path returns the literal #f (success returns the boxed ABool pred result)
-    expect(await run("(vector-every even? #(2 4 5))")).toBe("#f");
+    { name: "vector-every-false", input: "(vector-every even? #(2 4 5))", expected: "#f" },
+  ])("$name", async ({ input, expected }) => {
+    expect(await run(input)).toBe(expected);
   });
 });
 
 describe("SRFI-189 — Maybe & Either", () => {
-  it("Maybe monadic bind short-circuits on Nothing", async () => {
-    expect(await run("(maybe-bind (just 5) (lambda (x) (just (* x x))))")).toBe("(just 25)");
-    expect(await run("(maybe-bind (nothing) (lambda (x) (just x)))")).toBe("(nothing)");
-  });
-  it("maybe-ref/default", async () => {
-    expect(await run("(maybe-ref/default (just 7) 0)")).toBe("7");
-    expect(await run("(maybe-ref/default (nothing) 0)")).toBe("0");
-  });
-  it("Either map/bind short-circuits on Left", async () => {
-    expect(await run("(either-map (lambda (x) (+ x 1)) (right 4))")).toBe("(right 5)");
-    expect(await run("(either-bind (left 'err) (lambda (x) (right x)))")).toBe("(left err)");
-  });
-  it("predicates", async () => {
+  it.each([
+    { name: "maybe-bind-short-circuits-just", input: "(maybe-bind (just 5) (lambda (x) (just (* x x))))", expected: "(just 25)" },
+    { name: "maybe-bind-short-circuits-nothing", input: "(maybe-bind (nothing) (lambda (x) (just x)))", expected: "(nothing)" },
+    { name: "maybe-ref-default-just", input: "(maybe-ref/default (just 7) 0)", expected: "7" },
+    { name: "maybe-ref-default-nothing", input: "(maybe-ref/default (nothing) 0)", expected: "0" },
+    { name: "either-map-right", input: "(either-map (lambda (x) (+ x 1)) (right 4))", expected: "(right 5)" },
+    { name: "either-bind-left-short-circuits", input: "(either-bind (left 'err) (lambda (x) (right x)))", expected: "(left err)" },
     // These SRFI preludes bottom out in the equality pack's predicates, which box now
     // (the Face split: eq?/equal?/not return the schemeTrue/schemeFalse flyweights).
-    expect(await run("(just? (just 1))")).toBe("#t");
-    expect(await run("(maybe? (nothing))")).toBe("#t");
-    expect(await run("(either? (left 1))")).toBe("#t");
+    { name: "just?", input: "(just? (just 1))", expected: "#t" },
+    { name: "maybe?", input: "(maybe? (nothing))", expected: "#t" },
+    { name: "either?", input: "(either? (left 1))", expected: "#t" },
+  ])("$name", async ({ input, expected }) => {
+    expect(await run(input)).toBe(expected);
   });
 });
 
@@ -97,27 +85,27 @@ describe("SRFI-8 receive + SRFI-2 and-let* (expression macros)", () => {
   it("receive is a multi-return purity door", async () => {
     await expect(run("(receive 1 2)")).rejects.toThrow(/multiple-value returns are omitted|continuation arity|not available/);
   });
-  it("and-let* binds + short-circuits", async () => {
-    expect(await run("(and-let* ((x 5) (y (* x 2))) (+ x y))")).toBe("15");
-    expect(await run("(and-let* ((x #f)) x)")).toBe("#f");
-  });
-  it("and-let* guard clause (claw shape discriminated in the macro body)", async () => {
-    expect(await run("(and-let* ((x 3) ((> x 0))) (* x 10))")).toBe("30");
-    expect(await run("(and-let* ((x 3) ((< x 0))) (* x 10))")).toBe("#f");
+
+  it.each([
+    { name: "and-let*-binds-and-sums", input: "(and-let* ((x 5) (y (* x 2))) (+ x y))", expected: "15" },
+    { name: "and-let*-short-circuits-on-#f", input: "(and-let* ((x #f)) x)", expected: "#f" },
+    // guard clause (claw shape discriminated in the macro body)
+    { name: "and-let*-guard-clause-true", input: "(and-let* ((x 3) ((> x 0))) (* x 10))", expected: "30" },
+    { name: "and-let*-guard-clause-false", input: "(and-let* ((x 3) ((< x 0))) (* x 10))", expected: "#f" },
+  ])("$name", async ({ input, expected }) => {
+    expect(await run(input)).toBe(expected);
   });
 });
 
 describe("SRFI-128 — comparators (no hash)", () => {
-  it("default-comparator ordering + chaining", async () => {
-    expect(await run("(<? (default-comparator) 1 2)")).toBe("#t");
-    expect(await run("(>? (default-comparator) 3 2 1)")).toBe("#t");
-    expect(await run("(<=? (default-comparator) 1 1 2)")).toBe("#t");
-    expect(await run("(=? (default-comparator) \"a\" \"a\")")).toBe("#t");
-  });
-  it("cross-type total order (number ranks before string)", async () => {
-    expect(await run("(<? (default-comparator) 1 \"a\")")).toBe("#t");
-  });
-  it("comparator-hashable? is always #f (arrival has no value-hash)", async () => {
-    expect(await run("(comparator-hashable? (default-comparator))")).toBe("#f");
+  it.each([
+    { name: "<?-ordering", input: "(<? (default-comparator) 1 2)", expected: "#t" },
+    { name: ">?-chaining", input: "(>? (default-comparator) 3 2 1)", expected: "#t" },
+    { name: "<=?-chaining", input: "(<=? (default-comparator) 1 1 2)", expected: "#t" },
+    { name: "=?-strings", input: '(=? (default-comparator) "a" "a")', expected: "#t" },
+    { name: "cross-type-total-order-number-before-string", input: '(<? (default-comparator) 1 "a")', expected: "#t" },
+    { name: "comparator-hashable?-always-false", input: "(comparator-hashable? (default-comparator))", expected: "#f" },
+  ])("$name", async ({ input, expected }) => {
+    expect(await run(input)).toBe(expected);
   });
 });

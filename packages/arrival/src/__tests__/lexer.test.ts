@@ -25,70 +25,51 @@ function lex(input: string): string[] {
 }
 
 describe("Lexer — atoms & numbers", () => {
-  it("tokenizes a bare symbol", () => {
-    expect(lex("foo")).toEqual(["foo"]);
-  });
-
-  it("tokenizes integers and decimals", () => {
-    expect(lex("42")).toEqual(["42"]);
-    expect(lex("3.14")).toEqual(["3.14"]);
-    expect(lex("-7")).toEqual(["-7"]);
-  });
-
-  it("splits whitespace-separated atoms", () => {
-    expect(lex("a b c")).toEqual(["a", "b", "c"]);
-  });
-
-  it("tokenizes booleans and chars", () => {
-    expect(lex("#t #f")).toEqual(["#t", "#f"]);
-    expect(lex("#\\a")).toEqual(["#\\a"]);
+  it.each([
+    { name: "bare symbol", input: "foo", tokens: ["foo"] },
+    { name: "integer", input: "42", tokens: ["42"] },
+    { name: "decimal", input: "3.14", tokens: ["3.14"] },
+    { name: "negative integer", input: "-7", tokens: ["-7"] },
+    { name: "whitespace-separated atoms", input: "a b c", tokens: ["a", "b", "c"] },
+    { name: "booleans", input: "#t #f", tokens: ["#t", "#f"] },
+    { name: "char literal", input: "#\\a", tokens: ["#\\a"] },
+  ])("tokenizes $name", ({ input, tokens }) => {
+    expect(lex(input)).toEqual(tokens);
   });
 });
 
 describe("Lexer — structure", () => {
-  it("tokenizes parens as distinct tokens", () => {
-    expect(lex("(+ 1 2)")).toEqual(["(", "+", "1", "2", ")"]);
-  });
-
-  it("tokenizes nested lists", () => {
-    expect(lex("(a (b c) d)")).toEqual(["(", "a", "(", "b", "c", ")", "d", ")"]);
-  });
-
-  it("tokenizes brackets", () => {
-    expect(lex("[a b]")).toEqual(["[", "a", "b", "]"]);
-  });
-
-  it("tokenizes the dotted-pair dot", () => {
-    expect(lex("(a . b)")).toEqual(["(", "a", ".", "b", ")"]);
-  });
-
-  it("tokenizes vector and bytevector openers", () => {
-    expect(lex("#(1 2)")).toEqual(["#(", "1", "2", ")"]);
-    expect(lex("#u8(1 2)")).toEqual(["#u8(", "1", "2", ")"]);
+  it.each([
+    { name: "parens as distinct tokens", input: "(+ 1 2)", tokens: ["(", "+", "1", "2", ")"] },
+    { name: "nested lists", input: "(a (b c) d)", tokens: ["(", "a", "(", "b", "c", ")", "d", ")"] },
+    { name: "brackets", input: "[a b]", tokens: ["[", "a", "b", "]"] },
+    { name: "the dotted-pair dot", input: "(a . b)", tokens: ["(", "a", ".", "b", ")"] },
+    { name: "vector opener", input: "#(1 2)", tokens: ["#(", "1", "2", ")"] },
+    { name: "bytevector opener", input: "#u8(1 2)", tokens: ["#u8(", "1", "2", ")"] },
+  ])("tokenizes $name", ({ input, tokens }) => {
+    expect(lex(input)).toEqual(tokens);
   });
 });
 
 describe("Lexer — strings & quote sugar", () => {
-  it("keeps a string literal as one token", () => {
-    expect(lex('"hello world"')).toEqual(['"hello world"']);
-  });
-
-  it("keeps escapes inside a string as one token", () => {
-    expect(lex('"a\\"b"')).toEqual(['"a\\"b"']);
-  });
-
-  it("tokenizes quote-family prefixes", () => {
-    expect(lex("'x")).toEqual(["'", "x"]);
-    expect(lex("`x")).toEqual(["`", "x"]);
-    expect(lex(",x")).toEqual([",", "x"]);
-    expect(lex(",@x")).toEqual([",@", "x"]);
+  it.each([
+    { name: "string literal as one token", input: '"hello world"', tokens: ['"hello world"'] },
+    { name: "escapes inside a string kept as one token", input: '"a\\"b"', tokens: ['"a\\"b"'] },
+    { name: "quote prefix", input: "'x", tokens: ["'", "x"] },
+    { name: "quasiquote prefix", input: "`x", tokens: ["`", "x"] },
+    { name: "unquote prefix", input: ",x", tokens: [",", "x"] },
+    { name: "unquote-splicing prefix", input: ",@x", tokens: [",@", "x"] },
+  ])("tokenizes $name", ({ input, tokens }) => {
+    expect(lex(input)).toEqual(tokens);
   });
 });
 
 describe("Lexer — edge cases", () => {
-  it("returns nothing for empty / whitespace-only input", () => {
-    expect(lex("")).toEqual([]);
-    expect(lex("   \n\t ")).toEqual([]);
+  it.each([
+    { name: "empty input", input: "", tokens: [] },
+    { name: "whitespace-only input", input: "   \n\t ", tokens: [] },
+  ])("returns nothing for $name", ({ input, tokens }) => {
+    expect(lex(input)).toEqual(tokens);
   });
 
   it("peek without skip is idempotent", () => {

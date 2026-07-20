@@ -102,18 +102,23 @@ describe("getTypeValidCandidates — kebab/operator-named callees narrow", () =>
     return kebabLens.getTypeValidCandidates(scheme, offset, cands);
   };
 
-  // INVARIANT: a kebab-named callee's list slot narrows — drops a provably-void-returning
-  // candidate, keeps a list-returner and an unresolved local.
-  it("a kebab callee's LIST slot narrows: drops the void-returner, keeps the list-returner + local", () => {
-    // (get-route …) → _.get$dash$route(…); arg 0 is List<unknown>. make-route returns a list (kept),
-    // set-timer returns void (PROVABLY ill-typed — dropped), my_local is uncertain (kept).
-    expect(kvalid("(get-route |)", ["make-route", "set-timer", "my_local"])).toEqual(["make-route", "my_local"]);
-  });
-
-  // INVARIANT: a kebab-named callee's string slot narrows — drops a list-returning candidate,
-  // keeps the unresolved local.
-  it("a kebab callee's STRING slot still narrows: drops the list-returner, keeps the local", () => {
-    expect(kvalid("(get-route 1 |)", ["make-route", "my_local"])).toEqual(["my_local"]);
+  // One row per kebab-callee slot: arg 0 (get-route …) → _.get$dash$route(…), a list-typed slot;
+  // arg 1 → a string-typed slot. make-route returns a list, set-timer returns void.
+  it.each([
+    {
+      name: "a kebab callee's LIST slot narrows: drops the void-returner, keeps the list-returner + local",
+      marked: "(get-route |)",
+      cands: ["make-route", "set-timer", "my_local"],
+      expected: ["make-route", "my_local"],
+    },
+    {
+      name: "a kebab callee's STRING slot still narrows: drops the list-returner, keeps the local",
+      marked: "(get-route 1 |)",
+      cands: ["make-route", "my_local"],
+      expected: ["my_local"],
+    },
+  ])("$name", ({ marked, cands, expected }) => {
+    expect(kvalid(marked, cands)).toEqual(expected);
   });
 });
 
@@ -151,61 +156,66 @@ describe("kwargs / object-value slots narrow to the property type", () => {
 });
 
 describe("getTypeValidCandidates — the Σ∩T mask is DROPS-ONLY", () => {
-  // INVARIANT: at a list slot, a provably-non-list candidate is dropped while the list-returner
-  // and unresolved local are kept.
-  it("LIST slot: drops the provably-non-list, KEEPS the list-returner AND the unresolved local", () => {
-    // get_route arg 0 is `List<unknown>`. make_route returns a list (kept), sum_readings returns
-    // a number (PROVABLY ill-typed — dropped), my_local is undeclared (uncertain — kept).
-    expect(valid("(get_route |)", ["make_route", "sum_readings", "my_local"])).toEqual(["make_route", "my_local"]);
-  });
-
-  // INVARIANT: at a list slot, the generic carrier `list` head is kept (its return is itself a list).
-  it("LIST slot: the generic carrier `list` is KEPT (its return is a list)", () => {
-    expect(valid("(get_route |)", ["list", "sum_readings"])).toEqual(["list"]);
-  });
-
-  // INVARIANT: at a string slot, non-string-returning candidates are dropped while the
-  // string-returner and unresolved local are kept.
-  it("STRING slot: keeps the string-returner + the unresolved local; drops the rest", () => {
-    // get_route arg 1 is `string`. get_route itself returns a string (kept); set_timer returns
-    // void and make_route returns a list (both PROVABLY ill-typed — dropped); my_local kept.
-    expect(valid("(get_route 1 |)", ["get_route", "set_timer", "make_route", "my_local"])).toEqual([
-      "get_route",
-      "my_local",
-    ]);
-  });
-
-  // INVARIANT: at a number slot, the string-returning candidate is dropped while the
-  // number-returner and unresolved local are kept.
-  it("NUMBER slot: keeps the number-returner + the unresolved local; drops the string-returner", () => {
-    // set_timer arg 0 is `number`. sum_readings returns a number (kept); get_route returns a
-    // string (dropped); my_local kept.
-    expect(valid("(set_timer |)", ["sum_readings", "get_route", "my_local"])).toEqual(["sum_readings", "my_local"]);
-  });
-
-  // INVARIANT: at top level (no enclosing call), every candidate is kept unconditionally.
-  it("TOP / no enclosing call: every candidate is kept (T never narrows an operator/top slot)", () => {
-    expect(valid("|", ["sum_readings", "set_timer", "anything"])).toEqual([
-      "sum_readings",
-      "set_timer",
-      "anything",
-    ]);
-  });
-
-  // INVARIANT: at the operator slot (cursor at the call head), every candidate is kept
-  // unconditionally.
-  it("OPERATOR slot (cursor at the head): every candidate is kept", () => {
-    expect(valid("(|)", ["sum_readings", "set_timer", "make_route"])).toEqual([
-      "sum_readings",
-      "set_timer",
-      "make_route",
-    ]);
-  });
-
-  // INVARIANT: an unknown callee yields an unresolved slot where every candidate is kept
-  // (conservative default).
-  it("unknown callee → unresolved slot → every candidate kept (conservative)", () => {
-    expect(valid("(no_such_tool |)", ["sum_readings", "set_timer"])).toEqual(["sum_readings", "set_timer"]);
+  // One row per slot — the candidate list in, the surviving candidates out. Only the provably
+  // ill-typed candidate is ever absent; a valid or unresolved candidate always survives.
+  it.each([
+    {
+      name: "LIST slot: drops the provably-non-list, KEEPS the list-returner AND the unresolved local",
+      // get_route arg 0 is `List<unknown>`. make_route returns a list (kept), sum_readings
+      // returns a number (PROVABLY ill-typed — dropped), my_local is undeclared (uncertain — kept).
+      marked: "(get_route |)",
+      cands: ["make_route", "sum_readings", "my_local"],
+      expected: ["make_route", "my_local"],
+    },
+    {
+      name: "LIST slot: the generic carrier `list` is KEPT (its return is a list)",
+      marked: "(get_route |)",
+      cands: ["list", "sum_readings"],
+      expected: ["list"],
+    },
+    {
+      name: "STRING slot: keeps the string-returner + the unresolved local; drops the rest",
+      // get_route arg 1 is `string`. get_route itself returns a string (kept); set_timer
+      // returns void and make_route returns a list (both PROVABLY ill-typed — dropped);
+      // my_local kept.
+      marked: "(get_route 1 |)",
+      cands: ["get_route", "set_timer", "make_route", "my_local"],
+      expected: ["get_route", "my_local"],
+    },
+    {
+      name: "NUMBER slot: keeps the number-returner + the unresolved local; drops the string-returner",
+      // set_timer arg 0 is `number`. sum_readings returns a number (kept); get_route returns a
+      // string (dropped); my_local kept.
+      marked: "(set_timer |)",
+      cands: ["sum_readings", "get_route", "my_local"],
+      expected: ["sum_readings", "my_local"],
+    },
+    {
+      name: "TOP / no enclosing call: every candidate is kept (T never narrows an operator/top slot)",
+      marked: "|",
+      cands: ["sum_readings", "set_timer", "anything"],
+      expected: ["sum_readings", "set_timer", "anything"],
+    },
+    {
+      name: "OPERATOR slot (cursor at the head): every candidate is kept",
+      marked: "(|)",
+      cands: ["sum_readings", "set_timer", "make_route"],
+      expected: ["sum_readings", "set_timer", "make_route"],
+    },
+    {
+      name: "unknown callee → unresolved slot → every candidate kept (conservative)",
+      marked: "(no_such_tool |)",
+      cands: ["sum_readings", "set_timer"],
+      expected: ["sum_readings", "set_timer"],
+    },
+    {
+      name: "empty candidate list returns empty (no compile)",
+      marked: "(get_route |)",
+      cands: [],
+      expected: [],
+    },
+  ])("$name", ({ marked, cands, expected }) => {
+    expect(valid(marked, cands)).toEqual(expected);
   });
 
   // ★THE INVARIANT, asserted directly: across every slot, no VALID or UNCERTAIN candidate is
@@ -224,138 +234,117 @@ describe("getTypeValidCandidates — the Σ∩T mask is DROPS-ONLY", () => {
     expect(valid("(get_route 1 |)", ["get_route"])).toEqual(["get_route"]); // string ← string-returner
     expect(valid("(set_timer |)", ["sum_readings"])).toEqual(["sum_readings"]); // number ← number-returner
   });
-
-  // INVARIANT: an empty candidate list returns empty without invoking tsc.
-  it("empty candidate list returns empty (no compile)", () => {
-    expect(valid("(get_route |)", [])).toEqual([]);
-  });
 });
 
 describe("getSlotArrayKind — the 3-way value verdict", () => {
-  // INVARIANT: a list-typed param resolves to "list".
-  it("a list param → \"list\"", () => {
-    expect(kind("(get_route |)")).toBe("list");
-  });
-
-  // INVARIANT: a vector (number[])-typed param resolves to "vector".
-  it("a vector (number[]) param → \"vector\"", () => {
-    expect(kind("(sum_readings |)")).toBe("vector");
-  });
-
-  // INVARIANT: a scalar number-typed param resolves to "scalar".
-  it("a number param → \"scalar\"", () => {
-    expect(kind("(set_timer |)")).toBe("scalar");
-  });
-
-  // INVARIANT: a string-typed param resolves to "scalar" (string folds into scalar for the
-  // array-kind verdict).
-  it("a string param → \"scalar\" (string folds into scalar for the array verdict)", () => {
-    expect(kind("(get_route 1 |)")).toBe("scalar");
-  });
-
-  // INVARIANT: an unresolved slot (unknown callee) resolves to null.
-  it("an unresolved slot (unknown callee) → null", () => {
-    expect(kind("(no_such_tool |)")).toBeNull();
-  });
-
-  // INVARIANT: a top-level (no-call) cursor resolves to null.
-  it("a top / no-call cursor → null", () => {
-    expect(kind("|")).toBeNull();
+  // One row per slot shape → its array-kind verdict.
+  it.each([
+    { name: "a list param → \"list\"", marked: "(get_route |)", expected: "list" },
+    { name: "a vector (number[]) param → \"vector\"", marked: "(sum_readings |)", expected: "vector" },
+    { name: "a number param → \"scalar\"", marked: "(set_timer |)", expected: "scalar" },
+    {
+      name: "a string param → \"scalar\" (string folds into scalar for the array verdict)",
+      marked: "(get_route 1 |)",
+      expected: "scalar",
+    },
+    { name: "an unresolved slot (unknown callee) → null", marked: "(no_such_tool |)", expected: null },
+    { name: "a top / no-call cursor → null", marked: "|", expected: null },
+  ])("$name", ({ marked, expected }) => {
+    expect(kind(marked)).toBe(expected);
   });
 });
 
 describe("getSlotElementType — the ENUM / closed-domain narrow (the highest-value axis)", () => {
-  // INVARIANT: a direct enum-typed param's element domain is its literal members (isStringy null).
-  it("a DIRECT enum param → its members as enum (isStringy null)", () => {
-    // plan_route arg 0 is `\"fast\" | \"scenic\"`. The domain is the slot itself (ElemOf is never
-    // for a scalar) → a PROVED closed string set → its two members.
-    expect(element("(plan_route |)")).toEqual({ isStringy: null, enum: ["fast", "scenic"] });
-  });
-
-  // INVARIANT: an array-of-enum param's element domain recovers the element's enum members.
-  it("an ARRAY-of-enum param → the ELEMENT's members as enum", () => {
-    // plan_route arg 1 is `(\"fast\" | \"scenic\")[]`. ElemOf recovers the enum element → same members.
-    expect(element("(plan_route 'x |)")).toEqual({ isStringy: null, enum: ["fast", "scenic"] });
-  });
-
-  // INVARIANT: a free-form string param resolves isStringy true with a null enum.
-  it("a free-form string param → isStringy true, enum null", () => {
-    // plan_route arg 2 is `string` (ElemOf never → domain is the slot → free-form string).
-    expect(element("(plan_route 'x (list) |)")).toEqual({ isStringy: true, enum: null });
-    // get_route arg 1 is also `string`.
-    expect(element("(get_route 1 |)")).toEqual({ isStringy: true, enum: null });
-  });
-
-  // INVARIANT: a number-typed param resolves both isStringy and enum to null.
-  it("a number param → both null (a non-string domain narrows nothing)", () => {
-    expect(element("(set_timer |)")).toEqual({ isStringy: null, enum: null });
-  });
-
-  // INVARIANT: a List<unknown>/vector<number> param resolves both isStringy and enum to null
-  // (element isn't a string domain).
-  it("a List<unknown> / vector<number> param → both null (the element isn't a string set)", () => {
-    expect(element("(get_route |)")).toEqual({ isStringy: null, enum: null }); // element is `unknown`
-    expect(element("(sum_readings |)")).toEqual({ isStringy: null, enum: null }); // element is `number`
-  });
-
-  // ★SUPERSET-SAFE: an unresolved slot and a no-call cursor BOTH return both-null, so a consumer
-  // never narrows a domain we could not resolve.
-  it("an unresolved slot (unknown callee) / a top cursor → both null", () => {
-    expect(element("(no_such_tool |)")).toEqual({ isStringy: null, enum: null });
-    expect(element("|")).toEqual({ isStringy: null, enum: null });
-    expect(element("(|)")).toEqual({ isStringy: null, enum: null }); // operator slot
+  // One row per slot shape → its { isStringy, enum } element-domain verdict.
+  it.each([
+    {
+      // plan_route arg 0 is `"fast" | "scenic"`. The domain is the slot itself (ElemOf is never
+      // for a scalar) → a PROVED closed string set → its two members.
+      name: "a DIRECT enum param → its members as enum (isStringy null)",
+      marked: "(plan_route |)",
+      expected: { isStringy: null, enum: ["fast", "scenic"] },
+    },
+    {
+      // plan_route arg 1 is `("fast" | "scenic")[]`. ElemOf recovers the enum element → same members.
+      name: "an ARRAY-of-enum param → the ELEMENT's members as enum",
+      marked: "(plan_route 'x |)",
+      expected: { isStringy: null, enum: ["fast", "scenic"] },
+    },
+    {
+      // plan_route arg 2 is `string` (ElemOf never → domain is the slot → free-form string).
+      name: "a free-form string param → isStringy true, enum null (plan_route trailing string arg)",
+      marked: "(plan_route 'x (list) |)",
+      expected: { isStringy: true, enum: null },
+    },
+    {
+      name: "a free-form string param → isStringy true, enum null (get_route string arg)",
+      marked: "(get_route 1 |)",
+      expected: { isStringy: true, enum: null },
+    },
+    {
+      name: "a number param → both null (a non-string domain narrows nothing)",
+      marked: "(set_timer |)",
+      expected: { isStringy: null, enum: null },
+    },
+    {
+      name: "a List<unknown> param → both null (the element isn't a string set)",
+      marked: "(get_route |)", // element is `unknown`
+      expected: { isStringy: null, enum: null },
+    },
+    {
+      name: "a vector<number> param → both null (the element isn't a string set)",
+      marked: "(sum_readings |)", // element is `number`
+      expected: { isStringy: null, enum: null },
+    },
+    // ★SUPERSET-SAFE: an unresolved slot and a no-call cursor BOTH return both-null, so a
+    // consumer never narrows a domain we could not resolve.
+    { name: "an unresolved slot (unknown callee) → both null", marked: "(no_such_tool |)", expected: { isStringy: null, enum: null } },
+    { name: "a top cursor → both null", marked: "|", expected: { isStringy: null, enum: null } },
+    { name: "an operator slot cursor → both null", marked: "(|)", expected: { isStringy: null, enum: null } },
+  ])("$name", ({ marked, expected }) => {
+    expect(element(marked)).toEqual(expected);
   });
 });
 
 describe("getSlotAcceptsBareWord — a bare word is admissible as a string", () => {
-  // INVARIANT: a free-form string slot accepts a bare word (true).
-  it("a free-form string slot → true", () => {
-    expect(bareWord("(get_route 1 |)")).toBe(true);
-    expect(bareWord("(plan_route 'x (list) |)")).toBe(true);
-  });
-
-  // INVARIANT: a closed-enum slot does not accept an arbitrary bare word (false).
-  it("a closed enum slot → false (a bare word is NOT any string here)", () => {
-    expect(bareWord("(plan_route |)")).toBe(false);
-  });
-
-  // INVARIANT: a list/vector/number slot does not accept a bare word (false).
-  it("a list / vector / number slot → false (not a string slot)", () => {
-    expect(bareWord("(get_route |)")).toBe(false); // List<unknown>
-    expect(bareWord("(sum_readings |)")).toBe(false); // number[]
-    expect(bareWord("(set_timer |)")).toBe(false); // number
-  });
-
-  // ★SUPERSET-SAFE: unresolved → null (the gate no-ops), never a guessed boolean.
-  it("an unresolved slot / a top cursor → null", () => {
-    expect(bareWord("(no_such_tool |)")).toBeNull();
-    expect(bareWord("|")).toBeNull();
-    expect(bareWord("(|)")).toBeNull();
+  // One row per slot shape → whether a bare word is admissible there.
+  it.each([
+    { name: "a free-form string slot → true (get_route string arg)", marked: "(get_route 1 |)", expected: true },
+    {
+      name: "a free-form string slot → true (plan_route trailing string arg)",
+      marked: "(plan_route 'x (list) |)",
+      expected: true,
+    },
+    {
+      name: "a closed enum slot → false (a bare word is NOT any string here)",
+      marked: "(plan_route |)",
+      expected: false,
+    },
+    { name: "a list slot → false (List<unknown>, not a string slot)", marked: "(get_route |)", expected: false },
+    { name: "a vector slot → false (number[], not a string slot)", marked: "(sum_readings |)", expected: false },
+    { name: "a number slot → false (number, not a string slot)", marked: "(set_timer |)", expected: false },
+    // ★SUPERSET-SAFE: unresolved → null (the gate no-ops), never a guessed boolean.
+    { name: "an unresolved slot → null", marked: "(no_such_tool |)", expected: null },
+    { name: "a top cursor → null", marked: "|", expected: null },
+    { name: "an operator slot cursor → null", marked: "(|)", expected: null },
+  ])("$name", ({ marked, expected }) => {
+    expect(bareWord(marked)).toBe(expected);
   });
 });
 
 describe("getSlotIsStringTyped — the slot is a string subtype, not an array", () => {
-  // INVARIANT: a free-form string slot is string-typed (true).
-  it("a free-form string slot → true", () => {
-    expect(stringTyped("(get_route 1 |)")).toBe(true);
-  });
-
-  // INVARIANT: a closed-enum slot is string-typed (true — an enum is a string subtype).
-  it("a closed enum slot → true (an enum IS a string subtype)", () => {
-    expect(stringTyped("(plan_route |)")).toBe(true);
-  });
-
-  // INVARIANT: a number/list/vector slot is not string-typed (false).
-  it("a number / list / vector slot → false (not a string subtype)", () => {
-    expect(stringTyped("(set_timer |)")).toBe(false); // number
-    expect(stringTyped("(get_route |)")).toBe(false); // List<unknown>
-    expect(stringTyped("(sum_readings |)")).toBe(false); // number[]
-  });
-
-  // ★SUPERSET-SAFE: unresolved → null.
-  it("an unresolved slot / a top cursor → null", () => {
-    expect(stringTyped("(no_such_tool |)")).toBeNull();
-    expect(stringTyped("|")).toBeNull();
-    expect(stringTyped("(|)")).toBeNull();
+  // One row per slot shape → whether the slot is a string subtype.
+  it.each([
+    { name: "a free-form string slot → true", marked: "(get_route 1 |)", expected: true },
+    { name: "a closed enum slot → true (an enum IS a string subtype)", marked: "(plan_route |)", expected: true },
+    { name: "a number slot → false (not a string subtype)", marked: "(set_timer |)", expected: false },
+    { name: "a list slot → false (List<unknown>, not a string subtype)", marked: "(get_route |)", expected: false },
+    { name: "a vector slot → false (number[], not a string subtype)", marked: "(sum_readings |)", expected: false },
+    // ★SUPERSET-SAFE: unresolved → null.
+    { name: "an unresolved slot → null", marked: "(no_such_tool |)", expected: null },
+    { name: "a top cursor → null", marked: "|", expected: null },
+    { name: "an operator slot cursor → null", marked: "(|)", expected: null },
+  ])("$name", ({ marked, expected }) => {
+    expect(stringTyped(marked)).toBe(expected);
   });
 });

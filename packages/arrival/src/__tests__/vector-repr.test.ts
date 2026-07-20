@@ -12,25 +12,23 @@ const env = await freshEnv();
 const repr = async (form: string) => String((await exec(form, { env }) as unknown[])[0]);
 
 describe("vector / bytevector external representation (repr)", () => {
-  it("a vector prints #(...) at top level", async () => {
-    expect(await repr(`(repr (vector 1 2 3))`)).toBe("#(1 2 3)");
-  });
-  it("a vector prints #(...) nested in a list (was #<SchemeVector>)", async () => {
-    expect(await repr(`(repr (list (vector 1 2)))`)).toBe("(#(1 2))");
-  });
-  it("a #(...) literal reprs as #(...)", async () => {
-    expect(await repr(`(repr #(1 2 3))`)).toBe("#(1 2 3)");
-  });
-  it("nested vectors recurse", async () => {
-    expect(await repr(`(repr (vector 1 (vector 2 3)))`)).toBe("#(1 #(2 3))");
-  });
-  it("a vector of strings renders elements (repr default = unquoted)", async () => {
-    expect(await repr(`(repr (vector "a" "b"))`)).toBe(`#(a b)`);
-  });
-  it("an empty vector reprs as #()", async () => {
-    expect(await repr(`(repr (vector))`)).toBe("#()");
-  });
-  it("a bytevector prints #u8(...)", async () => {
-    expect(await repr(`(repr (bytevector 1 2 255))`)).toBe("#u8(1 2 255)");
+  it.each([
+    { name: "a vector prints #(...) at top level", form: `(repr (vector 1 2 3))`, expected: "#(1 2 3)" },
+    {
+      name: "a vector prints #(...) nested in a list (was #<SchemeVector>)",
+      form: `(repr (list (vector 1 2)))`,
+      expected: "(#(1 2))",
+    },
+    { name: "a #(...) literal reprs as #(...)", form: `(repr #(1 2 3))`, expected: "#(1 2 3)" },
+    { name: "nested vectors recurse", form: `(repr (vector 1 (vector 2 3)))`, expected: "#(1 #(2 3))" },
+    {
+      name: "a vector of strings renders elements (repr default = unquoted)",
+      form: `(repr (vector "a" "b"))`,
+      expected: `#(a b)`,
+    },
+    { name: "an empty vector reprs as #()", form: `(repr (vector))`, expected: "#()" },
+    { name: "a bytevector prints #u8(...)", form: `(repr (bytevector 1 2 255))`, expected: "#u8(1 2 255)" },
+  ])("$name", async ({ form, expected }) => {
+    expect(await repr(form)).toBe(expected);
   });
 });
