@@ -12,10 +12,10 @@
 // handler). The auxiliary keywords `else`/`=>` survive hygiene because evalCond/evalCase
 // match them by `.literal()` (the un-renamed name), not the renamed symbol description.
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../env/AmbientRuntime.js";
-import { exec, schemeToJs } from "../index.js";
+import { mintFrame } from "../../env/AmbientRuntime.js";
+import { exec, schemeToJs } from "../../index.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
-import { inferenceEnv as sandboxedEnv } from "../env/inference-env.js";
+import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
 
 const val = (rs: unknown[]) => schemeToJs(rs[rs.length - 1] as never, {});
 // `exec` (RULINGS.md R1) now returns the plain-JS unwrap: a symbol's toJS is

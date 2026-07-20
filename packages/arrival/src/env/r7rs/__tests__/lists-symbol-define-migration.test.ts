@@ -51,7 +51,7 @@
 //     line): `lists` sits LAST in the assembled array, after every consumer.
 import { describe, expect, it } from "vitest";
 import listsPack from "../lists.js";
-import { EXPECTED_FAILURES } from "../../../__tests__/chibi/registries.js";
+import { EXPECTED_FAILURES } from "../../../__tests__/scheme-compliance/chibi/registries.js";
 import { PurityError } from "../../../errors.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
 import { DoorProcedure } from "../../../values/primitives/ACallable.js";

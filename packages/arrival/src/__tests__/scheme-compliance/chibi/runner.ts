@@ -16,12 +16,12 @@
 // no per-test isolation, no retry. A setup's failure doesn't abort the run; it's recorded
 // (`lastSetupFailure`) so a later step's OWN unexplained throw can be attributed to it
 // (`setup-failed`) instead of a bare, confusing "unbound variable" message.
-import { freshEnv } from "../_fresh-env.js";
-import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
-import { assembleEnv } from "../../common/kernel.js";
-import type { SchemeEnv } from "../../common/scheme-env.js";
-import { exec } from "../../eval/generator-exec.js";
-import { ArrivalError } from "../../errors.js";
+import { freshEnv } from "../../_fresh-env.js";
+import type { ResolvingAmbient } from "../../../env/AmbientRuntime.js";
+import { assembleEnv } from "../../../common/kernel.js";
+import type { SchemeEnv } from "../../../common/scheme-env.js";
+import { exec } from "../../../eval/generator-exec.js";
+import { ArrivalError } from "../../../errors.js";
 import { createChibiHarnessV2, type OutcomeSink, type StepOutcome } from "./harness-capability.js";
 import type { Manifest, Step, TestStep } from "./manifest.js";
 

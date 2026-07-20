@@ -33,7 +33,7 @@ borrowed fn, AValue from JS) is an `it.each` over the violation table asserting 
 message.
 
 **F4 — Value-layer conformance (P15 coherence with the spec).** The chibi harness runs one
-vitest test per scheme test form (see `src/__tests__/conformance/README.md`);
+vitest test per scheme test form (see `src/__tests__/scheme-compliance/conformance/README.md`);
 r7rs-numbers/unicode/identity fold in as arrival-specific extension tables beside it.
 
 **F5 — Region discipline (P6).** Reverse-lambda scoping laws (call-after-return throws,

@@ -3,10 +3,10 @@
  */
 
 import { beforeEach, describe, expect, it } from "vitest";
-import { theVoid } from "../values/primitives/AVoid.js";
-import { CONSTANT_CTX } from "../run/RunContext.js";
-import { ResolvingAmbient, mintResolvingFrame } from "../env/AmbientRuntime.js";
-import run from "../eval/evaluator.js";
+import { theVoid } from "../../values/primitives/AVoid.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
+import { ResolvingAmbient, mintResolvingFrame } from "../../env/AmbientRuntime.js";
+import run from "../../eval/evaluator.js";
 // `execExpr` is the COMPLEX-tier form-at-a-time entry (SchemeValue in, boxed
 // SchemeValue out, never unwrapped) — the direct replacement for the retired
 // evaluator-internal `exec` wrapper this spec used to import (byte-identical
@@ -16,18 +16,18 @@ import run from "../eval/evaluator.js";
 // only by the tail-call optimization test, which exercises the trampoline's
 // cross-`run()` recursion shape and needs real `if`/`=`/`-` rather than the
 // minimal hand-rolled `env` above.
-import { execExpr, exec as execSource } from "../eval/generator-exec.js";
-import { ASymbol } from "../values/primitives/ASymbol.js";
-import { AExact } from "../values/primitives/AExact.js";
-import { AInexact } from "../values/primitives/AInexact.js";
-import { schemeTrue, schemeFalse } from "../values/primitives/ABool.js";
-import { AString } from "../values/primitives/AString.js";
-import { APair } from "../values/primitives/APair.js";
-import { nil } from "../values/primitives/ANil.js";
-import { ALambda } from "../values/primitives/ACallable.js";
-import { type SchemeValue } from "../values/types.js";
+import { execExpr, exec as execSource } from "../../eval/generator-exec.js";
+import { ASymbol } from "../../values/primitives/ASymbol.js";
+import { AExact } from "../../values/primitives/AExact.js";
+import { AInexact } from "../../values/primitives/AInexact.js";
+import { schemeTrue, schemeFalse } from "../../values/primitives/ABool.js";
+import { AString } from "../../values/primitives/AString.js";
+import { APair } from "../../values/primitives/APair.js";
+import { nil } from "../../values/primitives/ANil.js";
+import { ALambda } from "../../values/primitives/ACallable.js";
+import { type SchemeValue } from "../../values/types.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../env/AmbientRuntime.js";
+import { bindValue } from "../../env/AmbientRuntime.js";
 
 describe("Generator Evaluator with Real LIPS Types", () => {
   // `ResolvingAmbient`, not the plain `AmbientRuntime` its raw evaluator-level content

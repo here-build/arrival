@@ -13,7 +13,7 @@
 // handled generically; nothing SRFI-1-specific reaches manifest.ts).
 import fs from "fs";
 import path from "path";
-import { parse as readerParse } from "../../reader/parse.js";
+import { parse as readerParse } from "../../../reader/parse.js";
 import {
   buildManifestFromForms,
   headSymbolName,
@@ -22,7 +22,7 @@ import {
   type RawForm,
 } from "./manifest.js";
 
-export const SRFI1_TEST_PATH = path.resolve(import.meta.dirname, "../../../vendor/chibi-scheme/lib/srfi/1/test.sld");
+export const SRFI1_TEST_PATH = path.resolve(import.meta.dirname, "../../../../vendor/chibi-scheme/lib/srfi/1/test.sld");
 
 /** Re-split `raw`'s own inner content (stripping its outer bracket pair) into child
  *  `RawForm`s, correcting each child's `line` to be ABSOLUTE (relative to the ORIGINAL

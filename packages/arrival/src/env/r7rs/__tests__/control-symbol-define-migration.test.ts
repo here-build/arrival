@@ -42,7 +42,7 @@
 //     the conformance ledger's 651-EXACT gate.
 import { describe, expect, it } from "vitest";
 import controlPack from "../control.js";
-import { EXCLUDED } from "../../../__tests__/chibi/registries.js";
+import { EXCLUDED } from "../../../__tests__/scheme-compliance/chibi/registries.js";
 import { PurityError } from "../../../errors.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
 import { DoorProcedure } from "../../../values/primitives/ACallable.js";

@@ -9,8 +9,10 @@ import { defineConfig } from "vitest/config";
 // live in named subdirs of src/__tests__; surviving behavior suites are the
 // TOP-LEVEL files of src/__tests__ plus each package-local __tests__ dir.
 // `agreement/` is pre-declared per DESIGN.md §2 — a new law file just lands,
-// no config edit required. src/__tests__/chibi/ holds harness modules (no
-// .test suffix), picked up via conformance/, never globbed directly.
+// no config edit required. src/__tests__/scheme-compliance/ holds the chibi
+// harness + scheme-language-compliance suite; scheme-compliance/chibi/ holds
+// harness modules (no .test suffix), picked up transitively via the
+// scheme-compliance/** glob below, never globbed directly.
 export default defineConfig({
   test: {
     globals: true,
@@ -22,7 +24,7 @@ export default defineConfig({
       "src/__tests__/laws/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}",
       "src/__tests__/provenance/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}",
       "src/__tests__/ledger/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}",
-      "src/__tests__/conformance/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}",
+      "src/__tests__/scheme-compliance/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}",
       "src/__tests__/doors/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}",
       "src/__tests__/agreement/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}",
       "src/values/primitives/__tests__/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}",

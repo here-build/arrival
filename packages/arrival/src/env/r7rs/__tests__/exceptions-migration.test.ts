@@ -2,8 +2,9 @@
 // (docs/design-history/symbol-define-static-program-validation.md §4). Behavioral
 // semantic-equivalence for guard/raise is already covered by
 // `../../../__tests__/generator-exec.spec.ts`'s "guard (R7RS exception handling)" suite
-// and the chibi R7RS conformance corpus (`../../../__tests__/conformance/chibi-r7rs-v2
-// .spec.ts`, section "6.11 Exceptions" — 651/651 EXACT after this migration, including
+// and the chibi R7RS conformance corpus (`../../../__tests__/scheme-compliance/
+// conformance/chibi-r7rs-v2.spec.ts`, section "6.11 Exceptions" — 651/651 EXACT after this
+// migration, including
 // two rows this migration itself had to fix: `error-object-irritants` round-tripping
 // (the R7RSError-vs-z.value contract gap, §1.2) and `raise-continuable`'s handler
 // return-value passthrough (the `RunContext`-identity landed-machinery bug named in

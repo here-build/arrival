@@ -27,15 +27,15 @@
 // derives section nesting structurally at collection time, so these forms become
 // `section-begin`/`section-end` steps the runner never executes — no runtime group-stack is
 // needed (unlike v1's `js-test-begin`/`js-test-end`).
-import * as z from "../../common/scheme-zod.js";
-import { symbol } from "../../common/symbol.js";
-import { EnvCapability } from "../../common/capability.js";
-import { applyCallback } from "../../values/primitives/ACallable.js";
-import { CONSTANT_CTX } from "../../run/RunContext.js";
-import { ABool } from "../../values/primitives/ABool.js";
-import { type AVoid, theVoid } from "../../values/primitives/AVoid.js";
-import { printValue } from "../../values/print.js";
-import type { SchemeValue } from "../../values/types.js";
+import * as z from "../../../common/scheme-zod.js";
+import { symbol } from "../../../common/symbol.js";
+import { EnvCapability } from "../../../common/capability.js";
+import { applyCallback } from "../../../values/primitives/ACallable.js";
+import { CONSTANT_CTX } from "../../../run/RunContext.js";
+import { ABool } from "../../../values/primitives/ABool.js";
+import { type AVoid, theVoid } from "../../../values/primitives/AVoid.js";
+import { printValue } from "../../../values/print.js";
+import type { SchemeValue } from "../../../values/types.js";
 
 export type OutcomePhase = "expected-eval" | "actual-eval" | "compare";
 

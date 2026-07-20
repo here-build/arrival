@@ -35,13 +35,13 @@
 // registries (registries.ts) match on, replacing v1's substring matching over stringified
 // names.
 import fs from "fs";
-import { ANil } from "../../values/primitives/ANil.js";
-import { APair } from "../../values/primitives/APair.js";
-import { ASymbol } from "../../values/primitives/ASymbol.js";
-import { AString } from "../../values/primitives/AString.js";
-import { AVector } from "../../values/primitives/AVector.js";
-import { parse as readerParse } from "../../reader/parse.js";
-import type { SchemeValue } from "../../values/types.js";
+import { ANil } from "../../../values/primitives/ANil.js";
+import { APair } from "../../../values/primitives/APair.js";
+import { ASymbol } from "../../../values/primitives/ASymbol.js";
+import { AString } from "../../../values/primitives/AString.js";
+import { AVector } from "../../../values/primitives/AVector.js";
+import { parse as readerParse } from "../../../reader/parse.js";
+import type { SchemeValue } from "../../../values/types.js";
 
 export type TestFormKind = "test" | "test-assert" | "test-error" | "test-values" | "test-numeric-syntax";
 

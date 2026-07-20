@@ -23,7 +23,7 @@ import { buildManifest, normalizeText, type Manifest, type Step, type TestStep }
 import { registryCoherenceFindings, verdictFor } from "../chibi/registries.js";
 import { CorpusRunner } from "../chibi/runner.js";
 
-const CHIBI_TESTS_PATH = path.resolve(import.meta.dirname, "../../../vendor/chibi-scheme/tests/r7rs-tests.scm");
+const CHIBI_TESTS_PATH = path.resolve(import.meta.dirname, "../../../../vendor/chibi-scheme/tests/r7rs-tests.scm");
 
 if (!fs.existsSync(CHIBI_TESTS_PATH)) {
   describe("Chibi R7RS v2", () => {

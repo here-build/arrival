@@ -13,8 +13,8 @@
 // that hangs the worker (testTimeout can't interrupt a sync loop). That loud hang
 // IS the regression signal.
 import { describe, expect, it } from "vitest";
-import { freshEnv } from "./_fresh-env.js";
-import { execState } from "../eval/generator-exec.js";
+import { freshEnv } from "../_fresh-env.js";
+import { execState } from "../../eval/generator-exec.js";
 
 const env = await freshEnv();
 // COMPLEX tier (execState): stringifies the BOXED result (Scheme print format,

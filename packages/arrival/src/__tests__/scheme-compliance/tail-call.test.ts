@@ -60,12 +60,12 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { execState } from "../eval/generator-exec.js";
-import { freshEnv } from "./_fresh-env.js";
-import { nil } from "../values/primitives/ANil.js";
-import type { ExecOptions } from "../eval/generator-exec.js";
+import { execState } from "../../eval/generator-exec.js";
+import { freshEnv } from "../_fresh-env.js";
+import { nil } from "../../values/primitives/ANil.js";
+import type { ExecOptions } from "../../eval/generator-exec.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../env/AmbientRuntime.js";
+import { bindValue } from "../../env/AmbientRuntime.js";
 
 /**
  * Execute Scheme source through the full default-env trampoline and return the

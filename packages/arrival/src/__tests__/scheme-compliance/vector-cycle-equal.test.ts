@@ -23,8 +23,8 @@
 //     so the cycle branch never fires). Terminates either way — hence we guard on
 //     termination here.
 import { describe, expect, it } from "vitest";
-import { freshEnv } from "./_fresh-env.js";
-import { execState } from "../eval/generator-exec.js";
+import { freshEnv } from "../_fresh-env.js";
+import { execState } from "../../eval/generator-exec.js";
 
 const env = await freshEnv();
 // COMPLEX tier (execState): callers stringify the BOXED verdict (Scheme print

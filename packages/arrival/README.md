@@ -115,7 +115,7 @@ Sequence diagrams, budgets observed live, and the assemble-once/run-N-times idio
 
 Honest, faithful R7RS — a subset by subtraction (no IO, no dynamics, no mutation), not a lookalike.
 The reference suite is chibi-scheme's `r7rs-tests.scm`, run against arrival form-by-form
-(`src/__tests__/conformance/`); a documented gap is an `it.fails` that flips loudly the day it's
+(`src/__tests__/scheme-compliance/conformance/`); a documented gap is an `it.fails` that flips loudly the day it's
 fixed, never a silent skip (today: 651 forms green, 142 documented `it.fails` gaps, 289 exclusions
 each naming the subtracted feature it exercises, of 1082 total).
 
