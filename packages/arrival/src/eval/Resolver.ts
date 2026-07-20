@@ -92,11 +92,11 @@ function cxrUnfold(name: string): ANativeProcedure | undefined {
  * composition (no env binding, no resolver — the family IS car/cdr composition over
  * the unified tagless-final algebra). Else throw Unbound.
  *
- * Dotted-path resolution (`foo.bar.baz` sugar → member-walk) is deliberately not
- * supported: it would be a side-door bypassing BOTH the membrane face and the
- * provenance field-step classification. `@`/`:key` are THE member-access surface.
- * A dotted identifier resolves as an ordinary (unbound) symbol — the normal
- * unbound-variable door.
+ * Dotted-path resolution (`foo.bar.baz` sugar → member-walk) is the NAMED negative
+ * boundary of `docs/GRAMMAR.md §MEMBER-ACCESS` — deliberately unsupported (it would
+ * side-door both the membrane face and the provenance field-step classification).
+ * Local half: a dotted identifier is not special-cased here, so it resolves as an
+ * ordinary (unbound) symbol and hits the normal unbound-variable door below.
  */
 function resolveSynth(
   name: string | symbol,

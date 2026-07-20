@@ -1,26 +1,13 @@
 /**
- * read-guard — the read log + the read∩write deferral guard. Sibling of `EffectLog` on the
- * `RunContext`: where `EffectLog` remembers WHAT was gathered, this file remembers WHAT was
- * READ during the same run, and checks the one rule that makes gather-then-burst sound: a
- * program that enqueues a sink and THEN reads something that sink will write cannot run as a
- * deferred burst — the read would observe pre-write state where sequential execution observes
- * post-write state. That shape is detected and doored; everything else (query-then-mutate,
- * mutate-disjoint-then-read) runs untouched.
+ * read-guard — the read log + the read∩write deferral guard, sibling of `EffectLog` on the
+ * `RunContext`. The rule it enforces (a burst must not read its own deferred write), the
+ * injectable-seam design (the real tracker is a mobx context over plexus reads, host-armed),
+ * and the predict-at-enqueue write-set model are docs/RUN-MODEL.md §READ-GUARD.
  *
- * SEAM, not a mobx integration. Arrival core has ZERO runtime dependency on mobx or plexus
- * (package.json — `zod`/`tslib`/workspace siblings only) and this file adds none: `ReadTracker`
- * is an INJECTABLE interface arrival core only calls through. The real read-tracking mechanism
- * is a mobx tracking context wrapped around accessor evaluation (plexus models are mobx-
- * observable already); that implementation lives with the plexus-facing HOST and is armed onto
- * `RunContext.reads` the same way a host arms `cache`/`effects`. A run with no tracker pays
- * nothing — no hook, no region, no guard.
- *
- * The write-set is PREDICTED at enqueue, not OBSERVED at burst: without a real plexus burst
- * region there is nothing to observe, so the guard works off a HOST-SUPPLIED `writeSetOf`
- * resolver answering "which opaque read-keys will this effect's write touch." A resolver that
- * cannot derive a footprint returns `undefined` (the entry is skipped, no false claim); a host
- * that cannot derive footprints at all does not arm `writeSetOf` (the guard becomes a no-op,
- * never a lie).
+ * Import contract this file holds up: `ReadTracker`/`WriteSetResolver` are INJECTABLE interfaces
+ * arrival core only calls through — this module adds NO mobx/plexus import (package.json is
+ * `zod`/`tslib`/workspace siblings only). A run with no tracker pays nothing — no hook, no
+ * region, no guard.
  *
  * The keys (`ReadEvent.key`, `WriteSetResolver`'s returns) are plain strings, host-
  * canonicalized — arrival core never interprets them, only compares by equality (`Set.has`).

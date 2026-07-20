@@ -1,18 +1,13 @@
 /**
- * effect-log — the ORDERED sibling of `RunCache`. Where `RunCache` is a content-keyed,
- * deduplicating `Map`, `EffectLog` is a plain append-only sequence: two identical sink
- * calls are two entries, always — the mode law's "two effects, always" (run-cache.ts)
- * holds for the burst arm exactly as for the tombstone arm. This file owns the log entity
- * and the drain (`burst`); it does NOT own the read-clock guard (read-guard.ts) or the
- * conflict re-execution comparator (unbuilt) — it remembers only WHAT was gathered, in
- * WHAT order, and the read-clock each entry was gathered at, nothing about whether replay
- * against a moved world is safe. Entries are gathered at run-cache.ts's
- * `penetrateThroughCache` chokepoint (the burst arm); see there for the gather condition.
+ * effect-log — the gathered-effect manifest for one run, the ORDERED sibling of `RunCache`.
+ * The model (why it never deduplicates — "two effects, always" — the poison rule, and where
+ * entries are gathered) is docs/RUN-MODEL.md §BURST. This file owns the log entity and the
+ * drain (`burst`); it does NOT own the read-clock guard (read-guard.ts) or the conflict
+ * re-execution comparator (unbuilt).
  *
- * Entries store the DECODED args (post-zod, the same face `RunCache` keys on), not
- * re-encoded scheme values, so later consumers (a confirmation manifest, per-effect arg
- * invariants) read plain JS. This file does not interpret them; it carries them through
- * in program order.
+ * Entries store the DECODED args (post-zod, the same face `RunCache` keys on), not re-encoded
+ * scheme values, so later consumers (a confirmation manifest, per-effect arg invariants) read
+ * plain JS. This file does not interpret them; it carries them through in program order.
  */
 
 /** One gathered sink penetration. `index` is minted by `enqueue` — program order, never
@@ -37,9 +32,9 @@ export interface EffectEntry {
 }
 
 /** An ordered, append-only manifest of gathered sink penetrations for ONE run. Never
- *  deduplicates (contrast `RunCache`'s content-keyed `Map`) and never drops an entry — a failed
- *  burst leaves the log as-is (the poison rule); the CALLER decides whether a poisoned log is
- *  drained again, this entity does not self-police. */
+ *  deduplicates (contrast `RunCache`'s content-keyed `Map`) and never drops an entry (the poison
+ *  rule, docs/RUN-MODEL.md §BURST — a failed burst leaves the log as-is; the CALLER decides
+ *  whether a poisoned log is drained again, this entity does not self-police). */
 export interface EffectLog {
   readonly entries: readonly EffectEntry[];
   /** Append one entry; `index` is minted here (`entries.length` at call time) — the

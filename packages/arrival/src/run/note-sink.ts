@@ -1,29 +1,13 @@
 /**
- * note-sink — the per-run side channels for what the MODEL must be told but did not
- * ask for. Two leaf sinks (zero imports), both riding `RunContext` (`notes`/`display`),
- * scoped to ONE run so nothing leaks across concurrent sessions the way a module-level
- * list would; both drain once, at end of call.
+ * note-sink — the two per-run model-facing side channels (`notes`/`display` on `RunContext`),
+ * leaf sinks (zero imports) scoped to ONE run so nothing leaks across concurrent sessions, both
+ * drained once at end of call. The model — the return-channel-never-lies law, what each channel
+ * carries, and why arrival binds no `(display …)` verb of its own — is docs/RUN-MODEL.md §SINKS.
  *
- * LAW — the return channel must never lie. The kwargs tolerance drops a far-unknown
- * argument key and lets the call proceed (dropping `:limit 10` against a tool with no
- * `:limit` beats crashing over an argument that changes nothing). A silent drop is a lie
- * of omission — the model still believes `:limit` was honored — so the dropped key is
- * surfaced as a note. The note belongs to the RUN, not to any value inside it: a WeakMap
- * keyed on the decoded argument object is undrainable, because the renderer never sees
- * that object.
- *
- * NoteSink carries SESSION BOOKKEEPING — facts ABOUT the call, not results OF it —
- * rendered into a `#| ── environment notes ── |#` reader-comment footer that parses to
- * zero forms, so the model tells bookkeeping from answer at a glance. NOT for
- * per-statement teaching (a door explaining a mistake belongs on that statement's own
- * error) or anything that is part of the answer.
- *
- * DisplaySink backs `(display …)`, which arrival itself does NOT and will not provide:
- * ports and IO are omitted by design (a pure inference plane; an ambient write has no
- * value-construction site for provenance). A model reaches for `(display x)` as the
- * natural "show me this" idiom, so the MCP runner binds it as a host affordance —
- * identity plus a side effect into this sink, the value flowing on untouched so
- * composition is unaffected. Intent honored without the language acquiring an IO surface.
+ * FOOTER FORMAT (this file's mechanism): `NoteSink` lines render into a
+ * `#| ── environment notes ── |#` reader-comment footer that parses to zero forms, so the model
+ * tells bookkeeping from answer at a glance. NOT for per-statement teaching (a door explaining a
+ * mistake belongs on that statement's own error) or anything that is part of the answer.
  */
 
 /** A per-run collector for model-facing bookkeeping. Push at the point the fact becomes true;

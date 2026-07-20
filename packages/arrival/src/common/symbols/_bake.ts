@@ -215,19 +215,19 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest exten
    *  a duck-read off an ad-hoc property. See `assertProvenanceRoleShape` below for the two
    *  SHAPE-decidable contradictions this field is checked against at bake time. */
   readonly provenance?: ProvenanceRole;
-  /** EXPLICIT cache class (Solidity's vocabulary) — a declaration, never derived:
-   *  - "view":  cacheable ACROSS runs — a boundary snapshot worth persisting. Demands a
-   *             serializable contract (shape gate: `assertCacheClassShape`): a cache entry
-   *             must serialize.
-   *  - "pure":  regenerateable — deterministic from its decoded args; recovery = re-call;
-   *             NEVER persisted cross-run. No shape gate (nothing of it is stored).
-   *  - absent:  regenerateable — the SAFE default; an undeclared verb re-runs on replay.
-   *  Both view and pure remain provenance `source` on the LINEAGE axis ("we cannot not
-   *  do it") — this field is the cache axis, `provenance` stays the lineage axis.
+  /** EXPLICIT cache class (Solidity's vocabulary) — a declaration, never derived; the per-class
+   *  record/replay behavior is docs/RUN-MODEL.md §MODE-LAW:
+   *  - "view":  cacheable ACROSS runs. Demands a SERIALIZABLE contract (shape gate:
+   *             `assertCacheClassShape` — a cache entry must serialize).
+   *  - "pure":  regenerateable — deterministic from decoded args, recovery = re-call, NEVER
+   *             persisted cross-run. No shape gate (nothing of it is stored).
+   *  - absent:  regenerateable — the SAFE default.
+   *  Orthogonal to the lineage axis: view and pure both stay provenance `source` (§MODE-LAW —
+   *  the two axes are orthogonal; this field is the cache axis, `provenance` the lineage axis).
    *  NAMING HAZARD: legacy defineRosetta's `pure: true` meant provenance PIPE
-   *  (`RosettaSpec.pure` / createRosettaWrapper's `mintsPoint = pure !== true` — mints
-   *  nothing); THIS `pure` is a cache class on a source. Different axes, same word; the
-   *  legacy path is dying and never carries this field. */
+   *  (`RosettaSpec.pure` / createRosettaWrapper's `mintsPoint = pure !== true` — mints nothing);
+   *  THIS `pure` is a cache class on a source. Different axes, same word; the legacy path is
+   *  dying and never carries this field. */
   readonly cacheClass?: CacheClass;
   /** Declared CALLBACK roles, one per z.lambda arm IN LAMBDA ORDER — the override channel
    *  for exactly the arms whose role the contract SHAPE underdetermines (`z.lambda` is a
@@ -366,9 +366,9 @@ export interface RosettaSymbolDef<
    *  `"pipe"` = transform (forwards input provenance); `"source"` (default) mints. Non-optional:
    *  `rosetta()` always resolves the default before baking. */
   readonly provenance: ProvenanceRole;
-  /** RESOLVED cache class — see `NativeSymbolDef.cacheClass`. The baked rosetta `run`
-   *  wrapper is the ONE membrane chokepoint the run-cache interception (run/run-cache.ts)
-   *  gates on this. Absent = regenerateable (never touches the serialized cache). */
+  /** RESOLVED cache class — see `NativeSymbolDef.cacheClass`. The run-cache interception gates
+   *  on this at the baked rosetta `run` wrapper (docs/RUN-MODEL.md §CHOKEPOINT). Absent =
+   *  regenerateable (never touches the serialized cache). */
   readonly cacheClass?: CacheClass;
   /** RESOLVED per-lambda-arm callback roles — see `NativeSymbolDef.callbackRoles`. */
   readonly callbackRoles?: CallbackRoles;
@@ -853,10 +853,11 @@ export function assertProvenanceRoleShape(
   if (role === "sink" || role === "transparent") {
     const items = topLevelSchemas(outSchema);
     // VOID-FAMILY reading (the same no-egress reading `extractCallbackRoles`'s `voidEgress`
-    // takes): a zero-item output vector AND an all-`undefinedResult` vector both carry no
-    // real egress — `output: [z.undefinedResult]` is a void verb, not a return value. This
-    // is the sink gate the run-cache tombstone-skip (run/run-cache.ts, THE MODE LAW) stands on: a
-    // sink's replay-skip returns void, sound only because the contract PROVED void here.
+    // takes): a zero-item output vector AND an all-`undefinedResult` vector both carry no real
+    // egress — `output: [z.undefinedResult]` is a void verb, not a return value. This is the
+    // bake-time sink-void proof the runtime tombstone-skip stands on (docs/RUN-MODEL.md
+    // §CHOKEPOINT, §MODE-LAW): a sink's replay-skip returns void, sound only because the
+    // contract PROVED void here.
     const hasEgress = items === undefined ? true : items.some((item) => z.lookupName(item) !== "undefinedResult");
     if (hasEgress) {
       throw new ProvenanceRoleShapeError(
@@ -941,9 +942,9 @@ export function contractMayCarryCallable(inSchema: z.ZodTypeAny): boolean {
 
 /** THE `view` SHAPE GATE (errors-as-doors, beside `assertProvenanceRoleShape` — the same
  *  bake-time pattern): a `view` cache class demands a SERIALIZABLE contract — no `z.lambda`
- *  arms (a callable can't be a boundary snapshot), no `z.value` slots (the declared raw
- *  escape hatch, by definition not serializable) — because a cache entry must serialize
- *  (arrival-mcp-rework-over-phases.md §2.3, Ruling A). A contradiction throws
+ *  arms (a callable can't be a boundary snapshot), no `z.value` slots (the declared raw escape
+ *  hatch, by definition not serializable). This is the bake-time half of view serializability
+ *  (docs/RUN-MODEL.md §CHOKEPOINT — a cache entry must serialize). A contradiction throws
  *  `CacheClassShapeError` at BAKE; the author's way out is declaring `pure` (or nothing).
  *  `pure` has NO shape gate: recovery is re-call, nothing of it is persisted. Called by
  *  `native()`/`rosetta()`/`sequence()` on the schemas each already normalizes.

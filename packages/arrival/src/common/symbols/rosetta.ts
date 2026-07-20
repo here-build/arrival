@@ -284,25 +284,20 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
         //    `this.invocation`); a pure verb is an arrow that ignores `this`, so
         //    `impl.call(this, …)` is byte-identical to `impl(…)`. async is implicit.
         //
-        //    THE RUN-CACHE INTERCEPTION (R2, run/run-cache.ts) sits exactly HERE — the one
-        //    chokepoint where args are decoded and the impl hasn't fired. Gated on the run's
-        //    cache (`this.runCtx.cache` — absent on every non-session run: the fast path below
-        //    is byte-identical to before) and the bake-resolved cache class / sink lineage
-        //    role. A replay-hit serves the DECODED-FACE value in `result`'s place; steps 3–4
-        //    (provenance mint + encode + attestation) then run over it exactly as over a fresh
-        //    impl return — values are never restored around the membrane, only through it.
-        //
-        //    THE BURST ARM (W1, run/effect-log.ts, arrival-plexus-effect-burst.md §2.3)
-        //    rides the SAME chokepoint via `this.runCtx.effects` — a sibling per-run handle,
-        //    not a `cache` field, so a burst run needs no `RunCache` to gather sink effects.
-        //    Its fast-path bypass ALSO checks `runEffects`: a run with an effect log but no
-        //    cache must still reach `penetrateThroughCache` (the burst arm lives inside it).
-        //    THE READ-CLOCK STAMP (W2, run/read-guard.ts, arrival-plexus-effect-burst.md
-        //    §2.4) rides the SAME chokepoint via `this.runCtx.reads` — read-only here (the
-        //    guard CHECK itself runs in the eval loop, after each form): when a burst
-        //    gathers this penetration, `reads.tracker` stamps the entry's
-        //    `enqueuedAtReadClock`. A run with no `reads` seam is unaffected — the fast
-        //    path below only gates on `cache`/`effects`, matching pre-W2 behavior exactly.
+        //    This ONE site carries the whole run model at runtime (docs/RUN-MODEL.md §CHOKEPOINT):
+        //    args are decoded and the impl has NOT fired, so the run-cache interception (R2), the
+        //    burst arm (W1, §BURST), and the read-clock stamp (W2, §READ-GUARD) all attach here,
+        //    each reading its channel off `this.runCtx`:
+        //    - `.cache` (R2) — a replay-hit serves the DECODED-FACE value in `result`'s place;
+        //      steps 3–4 (provenance mint + encode + attestation) then run over it exactly as over
+        //      a fresh impl return — values through the membrane, never restored around it.
+        //    - `.effects` (W1) — a SIBLING per-run handle, not a `cache` field, so a burst run
+        //      gathers sink effects with no `RunCache`. The fast-path bypass below therefore gates
+        //      on BOTH `cache` and `effects` being absent (a run with neither is byte-identical to
+        //      a pre-cache interpreter; the burst arm lives INSIDE `penetrateThroughCache`).
+        //    - `.reads` (W2) — read-only here: when a burst gathers this penetration,
+        //      `reads.tracker` stamps the entry's `enqueuedAtReadClock`. The guard CHECK itself
+        //      runs in the eval loop, after each form.
         const runCache = this.runCtx.cache;
         const runEffects = this.runCtx.effects;
         const runReads = this.runCtx.reads;

@@ -31,21 +31,18 @@
 // already deps on core for `@`/`@?`/`@keys`/`dict`) — same principle
 // `%conj-list`/`%dict-set` follow in polyglot-clojure.ts.
 //
-// MEMBER ACCESS — the polyglot read protocol is part of this family. `@` / `@?` /
-// `@keys` (the explicit read/has/keys surface) and `(:key obj)` (the keyword
-// accessor, Clojure-style) are TWO SYNTAXES over ONE interop read (mirroring
-// Graal's `InteropLibrary.readMember`), dispatching onto the receiver's own
-// `arrival/tagless-final/get|has|keys` terms (AValue.ts). They are origin-agnostic:
-// a dict, a membrane-exposed foreign
-// value, and an array all read the same way (arrival is a polyglot runtime, not a
-// host with a fenced guest). They thread with the idioms in the sibling packs:
-// (->> p :versions last :state). The reads are NOT declarations in the define set
-// because they are native member-access primitives — `@` is a base binding, a
-// `:`-prefixed symbol is self-evaluating and carries its own `apply` (`ASymbol.ts`)
-// — but both bottom out in the same `arrival/tagless-final/get` protocol. This
-// pack is their conceptual home; the definition is lifted onto the capability via
-// `symbol.native` — a raw env.set bind (NOT rosetta-wrapped), so the membrane
-// primitive is not routed through the membrane it implements.
+// MEMBER ACCESS — the polyglot read protocol is part of this family. The model —
+// `@`/`@?`/`@keys` and the `(:key obj)` keyword accessor as TWO SYNTAXES over ONE
+// interop read (mirroring Graal's `InteropLibrary.readMember`), origin-agnostic
+// (dict / membrane-foreign / array read alike), threading with the sibling idioms
+// (`(->> p :versions last :state)`) — is `docs/GRAMMAR.md §MEMBER-ACCESS`; the read
+// MECHANISM is `docs/MEMBRANE.md §MEMBER-READ`. Both bottom out dispatching onto the
+// receiver's own `arrival/tagless-final/get|has|keys` terms (AValue.ts). The reads are
+// NOT declarations in the define set because they are native member-access primitives —
+// `@` is a base binding, a `:`-prefixed symbol is self-evaluating and carries its own
+// `apply` (`ASymbol.ts`). This pack is their conceptual home; the definition is lifted
+// onto the capability via `symbol.native` — a raw env.set bind (NOT rosetta-wrapped), so
+// the membrane primitive is not routed through the membrane it implements.
 //
 // FV LOCALITY (docs/ASSEMBLY.md §PRELUDE, the FV locality law): every cross-
 // capability free name a define body reaches must be a declared `deps` edge, or

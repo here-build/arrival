@@ -1,15 +1,17 @@
 /**
- * run-cache — the first-class run cache. Sibling of RunContext: a run's durable twin is
- * `(program, cache)`, and rehydration is re-execution of the statement log with THIS entity
- * answering the membrane. A cache can outlive its original program and answer a full re-run of
- * a NEW program over the SAME cache.
+ * run-cache — the first-class run cache, the membrane's record/replay interception. Sibling of
+ * RunContext: a run's durable twin is `(program, cache)`, and a cache can outlive its program to
+ * answer a full re-run of a NEW program over the SAME cache (content-keyed). It intercepts at the
+ * baked rosetta `run` wrapper — the ONE chokepoint where args are decoded and the impl has not
+ * fired (docs/RUN-MODEL.md §CHOKEPOINT), gating on the def's EXPLICIT cache class plus the `sink`
+ * lineage role for the tombstone skip.
  *
- * Intercepts at the baked rosetta `run` wrapper — the ONE chokepoint where args are decoded and
- * the impl has not fired. The wrapper reads the run's cache off `this.runCtx.cache` and gates on
- * the def's EXPLICIT cache class (`view`/`pure`) plus the `sink` lineage role for the tombstone
- * skip. An undeclared, non-sink def never touches the serialized cache.
+ * The model in full — single-flight, the run-level / no-session-plumbing rule, the burst arm that
+ * rides the same chokepoint, and the two meanings of "replay" — is docs/RUN-MODEL.md §MODE-LAW,
+ * §BURST, §TWO-REPLAYS.
  *
- * THE MODE LAW (record vs replay, per class):
+ * THE MODE LAW (record vs replay, per class) — mirrored in docs/RUN-MODEL.md §MODE-LAW; keep the
+ * two tables in step:
  *
  *   class      | record mode                          | replay mode
  *   -----------|--------------------------------------|-------------------------------
@@ -24,24 +26,6 @@
  *              |                                      | never stored
  *   undeclared | fire                                 | fire — regenerateable, the SAFE
  *              |                                      | default
- *
- * SINGLE-FLIGHT — concurrent identical penetrations WITHIN one run share ONE rosetta call
- * (each invocation lives in an immutable world). The in-flight promise is registered at call
- * start, scoped to `view`/`pure` ONLY (never `sink` — two live effects are two effects). A
- * REJECTED promise is NEVER cached: rejection evicts the pending entry, so retries are allowed
- * and a transient failure never becomes a pinned error. Only SETTLED entries serialize;
- * in-flight promises do not survive eviction (the benefit is residency-scoped).
- *
- * DELIBERATELY ABSENT — no session plumbing (epoch/roster/configDigest identity, storage
- * decomposition, TTL): `RunCache` is RUN-level only. The session layer checks cache-validity
- * BEFORE handing a cache to a run (mismatch ⇒ drop the cache, keep the log).
- *
- * THE BURST ARM — `penetrateThroughCache` also takes an optional `EffectLog` (effect-log.ts, an
- * ORDERED non-deduplicating sibling of this content-keyed `Map`). A `sink` penetration during a
- * PRIME run (`cache` absent, or `cache.mode === "record"`, never `"replay"`) enqueues
- * `{verbName, decodedArgs}` and returns `undefined` instead of firing — a third interception
- * mode alongside plain-fire and record/replay-tombstone. Replay is untouched: an effect log has
- * no business existing during a fold (a fold re-executes settled history, it does not gather).
  */
 
 import type { EffectLog } from "./effect-log.js";
@@ -232,8 +216,8 @@ export async function penetrateThroughCache(
   // THE BURST ARM — a sink during a PRIME run (no cache, or cache.mode === "record")
   // gathers instead of firing. `cache?.mode === "replay"` excludes a fold: a fold re-runs
   // the recorded log and must hit the tombstone-skip path below, never gather twice. Sound
-  // by the void-family bake gate: the program cannot observe the deferral because it
-  // structurally cannot read what a sink returns.
+  // by the void-family bake gate (docs/RUN-MODEL.md §BURST): the program structurally cannot
+  // read what a sink returns, so the deferral is unobservable.
   if (sink && effects !== undefined && cache?.mode !== "replay") {
     effects.enqueue({
       verbName: symbolName,

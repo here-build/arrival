@@ -1,33 +1,20 @@
-// heap-budget.ts — a per-run ALLOCATION bound, the memory analogue of the wall-clock `budgetMs`.
+// heap-budget.ts — the per-run ALLOCATION bound (the memory analogue of the wall-clock
+// `budgetMs`). Ownership, the mints-not-borrows rule, the TICK blind spot it exists for, and the
+// string/bigint blind spots all live in docs/RUN-MODEL.md §BUDGETS — the single home. Monotonic:
+// it bounds cumulative work, not live heap.
 //
-// WHY: the wall-clock budget is checked at trampoline TICKs (loop-step / tail-call boundaries). A
-// native collection op — `filter`/`map`/`append`/`join` — materializes its whole list in ONE
-// synchronous JS loop that emits no TICK, so a single reduction over a large list runs uninterruptibly
-// (a `(filter pred huge-list)` can burn tens of seconds before the trampoline regains control to check
-// the deadline). Counting REDUCTIONS can't see inside that loop; counting ALLOCATIONS can. The killer
-// pattern is O(K²) churn — re-materializing a list that grows by one each iteration (`(append seen
-// fresh)` in a loop) — and cumulative element-charge catches it fast while a legitimately large LINEAR
-// pass (materialize a 1M list a handful of times) stays well under a generous cap. Monotonic, like the
-// EvalTrace entry cap: we bound cumulative work, not live heap.
+// WHERE this file charges (the local mechanism §BUDGETS names but does not site): two chokepoints,
+// both counting by input element BEFORE the op runs — `to_array` (env/pack-helpers.ts, the eager
+// list->array path used by append/join/reverse/…) and the sequence-op dispatch (filter/map/reduce,
+// which walk the spine/array directly via each term's own tagless-final method). The dispatch-level
+// charge is necessary because value terms must stay EVALUATOR-FREE (no currentRunEnv import; the
+// meter is run-scoped context state, not a value-algebra concern) — `to_array` alone can't see ops
+// that bypass it.
 //
-// WHERE the charge happens: two chokepoints, both counting by input element BEFORE the op runs —
-// `to_array` (env/pack-helpers.ts, the eager list->array path used by append/join/reverse/…) and
-// the sequence-op dispatch (covering filter/map/reduce, which walk the spine/array directly via
-// each term's own arrival/tagless-final method). The dispatch-level charge is necessary because
-// value terms must stay evaluator-free (no currentRunEnv import; the meter is run-scoped context
-// state, not a value-algebra concern) — `to_array` alone can't see ops that bypass it.
-//
-// BLIND SPOTS (by construction — it meters minted list cells, nothing else): string building in
-// a loop and bigint growth allocate no list cells and pass under any cap; a borrowed host container
-// is zero-copy — reading one is not materializing it. Bound the data your capabilities MINT, never
-// the data they BORROW; a deadline that must also cover a slow native call needs `signal`, not this.
-//
-// OWNERSHIP: the meter lives on `RunContext.heapMeter` ONLY, minted once per `exec()` (see
-// `makeRunContext`). Every value built during that run carries the SAME RunContext reference
-// (`AValue.ctx` — see `ctxOf`), so a charge site reads `ctxOf(operand).heapMeter` (or the `runCtx`
-// it's threaded through a CallCtx) directly — no env-node courier, no parent-chain walk. This is
-// run-scoped and safe against async interleaving of concurrent runs by construction: each run's
-// values carry their own run's RunContext, never a shared module-level ambient meter.
+// The charge site reads `ctxOf(operand).heapMeter` (or the `runCtx` threaded through a CallCtx)
+// directly — no env-node courier, no parent-chain walk — because every value built during a run
+// carries the SAME RunContext (docs/RUN-MODEL.md §HERMETIC), which is also what makes the meter
+// safe against async interleaving of concurrent runs.
 
 import type { RunContext, HeapMeter } from "./run/RunContext.js";
 import { ArrivalError } from "./errors.js";

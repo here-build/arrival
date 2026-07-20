@@ -66,10 +66,9 @@ export const rational_bare_re = new RegExp(`^(?:${gen_rational_re("", "[0-9a-f]"
 export const complex_bare_re = new RegExp(`^(?:${gen_complex_re("", "[0-9a-f]")})$`, "i");
 // those constants need to be add as rules to the Lexer to work with vector literals
 export const parsable_contants = {
-  // `#null` → nil (the empty list — JS null's Rosetta translation; no separate JS-null
-  // value leaks into the language). `#void` → the void singleton (the unspecified value).
-  // Both are loose-mode tolerances: strict mode (the R7RS portability control) rejects them
-  // as non-portable, since stock Scheme has no readable void/null literal.
+  // `#null` → nil, `#void` → the void singleton: loose-mode-only readable literals whose
+  // VALUES exist under any mode. Model — the Rosetta translation, why they gate on
+  // portability, what strict mode does — is `docs/GRAMMAR.md §LOOSE-STRICT`.
   "#null": nil,
   "#void": theVoid,
 };

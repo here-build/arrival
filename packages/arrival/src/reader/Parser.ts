@@ -10,11 +10,11 @@
  * from the loc the mirror re-stamps keeps the two in exact agreement — a ctx cannot be
  * overwritten the way the slot can. Body sites tagged `// mirror` are instances of this.
  *
- * LITERAL GRAMMAR: the `[…]` vector / `{…}` dict inline literals, their position-scoped
- * comma/colon separators, the suffix-keyword flip, and the E-DICT-* / E-BRACKET-* /
- * E-LITERAL-* door taxonomy are specified in `__tests__/polyglot/README.md` (canonical).
- * Bodies here point there rather than restate it; the one door NOT in that table —
- * E-DICT-INFIX-BANNED, the SRFI-105 curly-infix ban — is owned by `make_dict_literal`.
+ * LITERAL GRAMMAR: the `[…]` vector / `{…}` dict inline literals (§LITERALS), their
+ * position-scoped comma/colon separators (§COMMA), the suffix-keyword flip (§SUFFIX-FLIP),
+ * the curly-infix ban (§INFIX), and the E-DICT-* / E-BRACKET-* / E-LITERAL-* door taxonomy
+ * (§ERRORS) are the model of `docs/GRAMMAR.md`. Bodies here point there rather than restate
+ * it; E-DICT-INFIX-BANNED (§INFIX) is detected in `make_dict_literal`.
  *
  * NESTING CAP: `_enterNesting` bounds native-stack descent so pathological input throws
  * `ParseError`, not a host `RangeError` (see `maxNestingDepth`). STRICT PAIRING: a close
@@ -340,8 +340,8 @@ export class Parser {
    * Gather the flat datum sequence between `[`…`]` / `{`…`}`, absorbing the position-
    * scoped comma/colon separators (the JSON-gravity tolerance). The full rule — comma-as-
    * separator vs R7RS unquote, the one lone JSON key `:` at an odd boundary, the tolerated
-   * trailing separator, why a GLUED `:1` is one keyword token — is in
-   * `__tests__/polyglot/README.md` (§ The comma rule, § The suffix-keyword flip).
+   * trailing separator — is `docs/GRAMMAR.md §COMMA` (why a GLUED `:1` is one keyword token
+   * is §SUFFIX-FLIP).
    *
    * Local state: `separatorConsumed` / `colonConsumed` enforce the one-per-boundary budget.
    */
@@ -396,7 +396,7 @@ export class Parser {
   /**
    * Validate + mint the `{…}` dict-literal node. Key admissibility (`:keyword` /
    * `"string"` / trailing-colon `key:` / unquote form), even arity, and duplicate-key
-   * rejection follow the E-DICT-* taxonomy in `__tests__/polyglot/README.md`; the
+   * rejection follow the E-DICT-* taxonomy in `docs/GRAMMAR.md §ERRORS`; the
    * suffix-keyword flip is `suffixKeyName` (dict-grammar.ts). Validation lives here, not
    * in dict-grammar, because the errors need ParseError + source location.
    *
@@ -405,18 +405,13 @@ export class Parser {
    * canonical spelling.
    */
   private make_dict_literal(elements: SchemeValue[], loc: SourceLocation | undefined): SchemeValue {
-    // R6 infix-ban door, checked FIRST (before key validation reads its own, less
-    // specific, error into the same shape). SRFI-105 n-expressions always flatten to an
-    // ODD-length element sequence (k operands + k-1 operators = 2k-1) with a bare
-    // SYMBOL sitting in the "operator" slot at index 1 — `{a * b}`, `{a + b + c}`,
-    // `{a op b}` for ANY symbol op. Guard against the genuine-dict false positive
-    // `{:a foo :b}` (a valid key at index 0, `foo` its VALUE, `:b` a dangling key —
-    // odd arity, not infix): only fire when index 0 does NOT look like a key either
-    // (`staticDictKey`/`suffixKeyName`/`isUnquoteForm` all reject it), so the shape is
-    // "operand operator operand", never "key value key". That combination can never be
-    // a legitimate dict (a real one would have a key-shaped element 0), so it's
-    // unambiguously stray infix intent or reader-syntax confusion — both deserve this
-    // teaching door rather than the generic "bad key" message about `elements[0]`.
+    // §INFIX (RULINGS.md R6): the curly-infix ban — a `{a * b}`-shaped datum is doored,
+    // never silently misparsed. Checked FIRST, before key validation reads the same shape
+    // into its less-specific E-DICT-BAD-KEY. The fire condition below (odd length ≥ 3,
+    // symbol at index 1, AND a non-key head — index 0 rejected by staticDictKey /
+    // suffixKeyName / isUnquoteForm) is what guards the genuine-dict false positive
+    // `{:a foo :b}` (odd arity, key-shaped head — not infix); §INFIX has the full
+    // "operand operator operand" vs "key value key" argument.
     const head = elements[0];
     const headLooksLikeKey =
       suffixKeyName(head) !== null || staticDictKey(head) !== null || isUnquoteForm(head);

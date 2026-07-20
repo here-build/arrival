@@ -1,27 +1,18 @@
 /**
  * RunContext — the per-run handle carried by every value built during a run
- * (`AValue.ctx`), minted once per `exec()` by `makeRunContext`.
+ * (`AValue.ctx`), minted once per `exec()` by `makeRunContext`. The run's identity: state
+ * CONSTANT for one run yet DIFFERING between concurrent runs.
  *
- * WHY — `exec()` must be HERMETIC: concurrent runs sharing one isolate (a CF Durable
- * Object) must not bleed run-state through module-level holders. Run-state is therefore
- * DATA-LOCAL — minted once per exec, carried on the values/context, never reached for
- * ambiently.
+ * The model this type realizes — why run-state is DATA-LOCAL (hermetic exec on one shared
+ * isolate), the three ctx species (live-run / CONSTANT_CTX / parse), and the five channels'
+ * arm-subset-wise `X | undefined ⇒ facility off` rule — is docs/RUN-MODEL.md §HERMETIC,
+ * §CTX-SPECIES, §CHANNELS. This file is their enforcement site; the per-field docs below are
+ * the landings those sections name.
  *
- * WHAT LIVES HERE — only state CONSTANT for one exec yet differing between concurrent
- * runs. NOT here: the singletons (nil/#t/#f/eof stay GLOBAL CONSTANTS — car-of-nil's
- * strict is read from the threaded run context, so a constant nil bears no run-state).
- * NOT here: dynamic-extent state (exception-handler stack, call-site) — that varies by
- * call depth, cannot ride a constant-per-run handle, and stays the holder family.
- *
- * The optional channels `cache`/`effects`/`reads`/`notes`/`display` are independent
- * per-run seams a host arms: each `undefined` ⇒ that facility is off (the default), each
- * read off `this.runCtx.<field>` at the one hermetic point, none a field of another — a
- * run may carry any subset. The baked rosetta `run` wrapper is their common reader.
- *
- * Three ctx species exist: live-run (above), CONSTANT_CTX (run-neutral, outlives any
- * run), and the parse family (`origin: "parse"`, carrying source location). The latter
- * two are run-neutral by charter, so a value minted before or outside a run can never
- * carry one run's state into another.
+ * PLACEMENT TEST for a new field: does it vary between concurrent runs (→ here), never
+ * (→ a global singleton — nil/#t/#f/eof carry no run-state, car-of-nil reads strict off the
+ * threaded context), or within one run by call depth (→ a dynamic-extent holder — the
+ * exception-handler stack, the call-site)? Only the first belongs on RunContext.
  */
 
 import type { RunCache } from "./run-cache.js";
@@ -48,16 +39,16 @@ export interface RunContext {
   /** The run's execution-budget signal — the SAME AbortSignal the trampoline reads, so all
    *  consumers observe abort state off one reference that cannot drift. */
   readonly signal: AbortSignal | undefined;
-  /** The run's cache (run-cache.ts); `undefined` ⇒ no interception. Gates record/replay per the
-   *  stamped cache class. */
+  /** The run's cache (run-cache.ts); `undefined` ⇒ no interception. Armed ⇒ gates record/replay
+   *  per the stamped cache class (docs/RUN-MODEL.md §MODE-LAW). */
   readonly cache: RunCache | undefined;
   /** The run's gathered-effect manifest (effect-log.ts); `undefined` ⇒ no burst arm (a sink fires
-   *  immediately). A `sink` penetration during a PRIME run (not a cache replay) enqueues instead of
-   *  firing. */
+   *  immediately). Armed ⇒ a `sink` penetration during a PRIME run gathers instead of firing
+   *  (docs/RUN-MODEL.md §BURST). */
   readonly effects: EffectLog | undefined;
   /** The run's read-tracking + deferral-guard seam (read-guard.ts); `undefined` ⇒ no tracking, no
-   *  guard. When present, the eval loop wraps each top-level form in `reads.tracker.region(...)` and,
-   *  for a PRIME run gathering effects, checks `checkReadWriteGuard` after each form. */
+   *  guard. Armed ⇒ the eval loop wraps each top-level form in a tracking region and runs the
+   *  read∩write guard after each form (docs/RUN-MODEL.md §READ-GUARD). */
   readonly reads: ReadGuard | undefined;
   /** The run's model-facing note channel (note-sink.ts); `undefined` ⇒ notes are dropped. */
   readonly notes: NoteSink | undefined;
@@ -103,13 +94,11 @@ export function makeRunContext(
 }
 
 /**
- * The run-NEUTRAL context. Carried by values that outlive any single run: the
- * singletons, quoted-literal AST nodes (`evalQuote` returns them by reference across
- * runs), and everything constructed at bootstrap before a run exists. Immutable, shared,
- * bears no run-state (`strict=false`, no meter) — so it can never carry one run's
- * mode/meter into another. Its channels are all `undefined`: a note or effect is
- * addressed to ONE run, so a context outliving every run has nowhere to put one, and a
- * value minted here drops them — correct, not a gap: nobody is listening.
+ * The run-NEUTRAL context (docs/RUN-MODEL.md §CTX-SPECIES). Carried by values that outlive
+ * any single run: the singletons, quoted-literal AST nodes (`evalQuote` returns them by
+ * reference across runs), everything constructed at bootstrap before a run exists. Frozen,
+ * `strict=false`, no meter, all five channels `undefined` — nobody is listening, so a value
+ * minted here can never carry one run's state into another.
  */
 export const CONSTANT_CTX: RunContext = Object.freeze({
   strict: false,
@@ -124,15 +113,15 @@ export const CONSTANT_CTX: RunContext = Object.freeze({
 });
 
 /**
- * The parse-origin context family. What it ADDS over CONSTANT_CTX: `origin: "parse"` plus the
- * `SourceLocation` the Parser computes per datum — which, for leaf literals (symbols, strings,
- * numbers, chars, vectors, bytevectors, dicts), is the FIRST source identity they carry (only
+ * The parse-origin context family (docs/RUN-MODEL.md §CTX-SPECIES) — CONSTANT_CTX plus
+ * `origin: "parse"` and the per-datum `SourceLocation`, which for leaf literals (symbols,
+ * strings, numbers, chars, vectors, bytevectors, dicts) is their FIRST source identity (only
  * APair has a location slot; every other node kind's source identity lives on the ctx channel).
  *
- * Per-node ctxs mean parsed symbols no longer share CONSTANT_CTX's flyweight intern table —
- * each occurrence is its own instance (per-occurrence source identity and a shared interned
- * instance are mutually exclusive). Sound because eq?/eqv?/equals compare `__name__`, never
- * reference.
+ * CODE CONSEQUENCE: per-node ctxs mean parsed symbols no longer share CONSTANT_CTX's flyweight
+ * intern table — each occurrence is its own instance (per-occurrence source identity and a
+ * shared interned instance are mutually exclusive). Sound because eq?/eqv?/equals compare
+ * `__name__`, never reference.
  */
 export interface ParseContext extends RunContext {
   readonly origin: "parse";

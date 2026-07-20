@@ -3,22 +3,12 @@
 // mints here; the infix ban door and the evaluator's quasiquote re-instantiation are the
 // other mouths). The NODE ITSELF — its type, its detection, its dual data/code nature —
 // is ADict's own algebra: see `ADict.isDictLiteral` / `DictLiteralNode`
-// (values/primitives/ADict.ts), where the `literalForms` field lives. The datum face of
-// `{…}` is an ADict — the same in-class pattern AVector uses for `[…]`; AJSObject plays
-// no part in the dict-literal syntax.
+// (values/primitives/ADict.ts), where the `literalForms` field lives.
 //
-// The dual nature (why the node is an ADict and not a distinct AST kind):
-//   - CODE position: the evaluator lowers the node ONCE (cached) to the equivalent
-//     `(dict …)` application — `{:k v}` ≡ `(dict :k v)` BY CONSTRUCTION, so evaluation,
-//     membrane marshaling, heap charging and provenance all ride the normal apply path.
-//   - `quote` context: evalQuote returns the node itself — a first-class READABLE dict
-//     whose values are the raw forms (`(@ '{:a (f x)} :a)` reads back the form). A
-//     distinct syntax-node kind would break exactly this: quote must yield a value.
-//   - `quasiquote` context: processQuasiquote walks the forms element-wise (unquote
-//     fires at level 1) and re-mints via `makeDictLiteralNode`.
-//
-// Keys are read-time-static (`:keyword` / `"string"`, both folding to the same string
-// key) or unquote forms (quasiquote-substituted keys, validated post-substitution).
+// The dict literal's dual data/code nature (why the node is an ADict, not a distinct AST
+// kind — its CODE / `quote` / `quasiquote` faces), the read-time-static-or-unquote key
+// shapes, and the AVector-parallel datum face (AJSObject plays no part) are the model of
+// `docs/GRAMMAR.md §LITERALS`.
 import { ADict, type DictKey, type DictLiteralNode } from "../values/primitives/ADict.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AString } from "../values/primitives/AString.js";

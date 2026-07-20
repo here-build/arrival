@@ -1534,80 +1534,30 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 // ============================================================================
 
 // ── let-family bracket-binding consumption ──────────────────────────────────
-// A named, compile-erased superset of the let-family: the bindings slot of
-// `let`, `let*`, `letrec`, `letrec*`, named `let`, and `do` additionally
-// accepts a vector datum — `(let [a 1 b 2] …)`, `(let* ([a 1] [b 2]) …)`.
-// It completes the reader's own grain: `[…]` is already a first-class vector
-// datum in EVERY position (the collection-literal extension), and the
-// let-family was the one place that datum was inertly rejected.
+// Consumption site for the bracket-bindings superset. The model — both surfaces
+// (BG2a whole-list / BG2b per-element / BG2c mixing), the R7RS/Racket/Clojure
+// union table, and the non-intersection argument (each bracket surface has ONE
+// dialect reading, so one input shape → one meaning with no context branch) —
+// is docs/GRAMMAR.md §BINDINGS. This is where it lands: `normalizeBindings` runs
+// the BG3 pure syntactic rewrite ONCE, before the existing per-binding walk,
+// lowering either bracket surface to the SAME cons-list-of-pairs a hand-written
+// paren form produces — so every downstream line evaluates a plain list and the
+// equivalence is structural, not case-by-case. Detection is `evalElements === true`
+// at a binding-position node (BG1 — no reader/lexer change); `#(…)`
+// (`evalElements === false`) falls straight through the generic `is_pair` invariant
+// (BG5, never consumed). Malformed shapes throw the BG4 door codes
+// (E-LET-BRACKET-BINDINGS-LIST / E-LET-BRACKET-BINDING) built by the constructors below.
 //
-// Arrival's reader never erases bracket kind — it survives as the produced
-// node's CLASS: `[…]` mints an `AVector` with `evalElements === true` (the
-// reader-literal marker — Parser.ts, on `[`); `(…)` mints an `APair`; `#(…)`
-// mints an `AVector` with `evalElements === false`. So `evalElements ===
-// true` at a binding-position node IS the R2 detection — no reader/lexer
-// change (R1). The widening lives entirely in the form CONTRACT, never in
-// the grammar: `quote` and macros see a plain vector datum, so a quoted let
-// form's bindings slot is inert data, and a bracket literal in an init value
-// or body position stays data. Supersedes the original bracket-let door for
-// well-formed shapes; the door survives for malformed ones (R4).
-//
-// Consumption is a PURE SYNTACTIC REWRITE (R3): `normalizeBindings` runs once,
-// before the existing per-binding walk, and produces the SAME cons-list-of-
-// pairs shape a hand-written paren form would produce. Once it returns, every
-// downstream line — the per-pair walk, the tail/provenance handling, the
-// error paths for shapes outside this contract — is completely unmodified
-// code evaluating a plain list. Equivalence to the paren image is therefore
-// structural, not case-by-case.
-//
-// Two surfaces:
-//   - R2a whole-list (Clojure): (let [a 1 b 2] …) — `bindings` itself is the
-//     vector. Rewritten to ((a 1) (b 2)) wholesale. NOT accepted for `do`
-//     (R2a exclusion — its 3-element steps make pairwise grouping
-//     ambiguous); `do` keeps the ORIGINAL door here, unchanged.
-//   - R2b per-element (Racket): each ELEMENT of the (paren or already-
-//     rewritten) bindings list may itself be a vector [a 1] / [i 0 (+ i 1)]
-//     (do only) — rewritten to (a 1) / (i 0 (+ i 1)) in place. R2c mixing is
-//     free: a paren-pair element passes through with its own identity
-//     untouched, so a bindings list may freely mix (a 1) and [b 2] elements.
-//
-// R6 — non-intersection (why no context-dependent meaning exists): each
-// bracket surface has exactly ONE legal reading among the parent dialects,
-// and Arrival's meaning equals that unique reading. No shape exists whose
-// Scheme meaning and Clojure/Racket meaning both exist and disagree:
-//
-//   surface           R7RS        Racket   Clojure   Arrival
-//   (let ((s v)) …)   legal       legal    —         untouched
-//   (let ([s v]) …)   malformed   legal    —         = Racket (R2b)
-//   (let [s v …] …)   malformed   —        legal     = Clojure (R2a)
-//
-// Where R7RS would call a shape malformed, Arrival gives it the single
-// well-defined dialect meaning — which is, by R3, byte-identical to a form
-// R7RS DOES accept. The union of the three readings is a FUNCTION: one input
-// shape → one meaning, with no branch on surrounding context.
-//
-// R5 scope bound: ONLY the six forms' bindings slots, plus the R9 clause
-// positions of cond/case/do (`normalizeClause` below). Never lambda formals,
-// `when`/`unless` (no clause structure exists to consume), head position, or
-// any data position. `evalElements === false` (`#(…)`) is NEVER touched —
-// it isn't an AVector this code recognizes as bindings syntax, so it falls
-// straight through to the generic `invariant(is_pair(binding), …)` below,
-// unchanged.
-//
-// R4 malformed shapes keep the TWO original door codes — their meanings
-// narrow to genuine malformations now that well-formed shapes consume
-// instead of dooring:
-//   - E-LET-BRACKET-BINDINGS-LIST: odd element count in a whole-list vector,
-//     OR the whole-list form used on `do` (unchanged from the original door).
-//   - E-LET-BRACKET-BINDING: a per-element vector of the wrong length, or a
-//     non-symbol (including a destructuring vector) in the binding-name slot.
+// BG-numbering: this file's local rules are named BG1–BG6/BG9 per §BINDINGS's
+// BG-numbering note — the doc's rename of the evaluator's original R1–R6/R9 off
+// RULINGS.md's global R-ledger, keeping the two ledgers apart in source too.
 //
 // Executable spec: src/reader/__tests__/polyglot/macro-special-brackets.spec.ts;
-// error taxonomy in src/reader/__tests__/polyglot/README.md.
+// error taxonomy in docs/GRAMMAR.md §ERRORS.
 
-/** `do` doesn't accept the whole-list form (R2a exclusion) — its 3-element
- *  steps make pairwise grouping ambiguous. UNCHANGED from the original door;
- *  the other five forms consume this shape instead. */
+/** `do` doesn't accept the whole-list form (BG2a exclusion) — its 3-element
+ *  steps make pairwise grouping ambiguous; the other five forms consume this
+ *  shape instead. */
 function bracketBindingsListError(bindings: AVector, form: string): Error {
   const els = bindings.__vector__;
   const rendered = els.map(String).join(" ");
@@ -1622,7 +1572,7 @@ function bracketBindingsListError(bindings: AVector, form: string): Error {
   );
 }
 
-/** R2a/R4: a whole-list vector's element count is odd — pairwise grouping leaves
+/** BG2a/BG4: a whole-list vector's element count is odd — pairwise grouping leaves
  *  the last name with no value. Same code as `bracketBindingsListError` above
  *  (both are "the whole bracketed bindings LIST is malformed for this form"). */
 function wholeListOddCountError(bindings: AVector, form: string): Error {
@@ -1636,7 +1586,7 @@ function wholeListOddCountError(bindings: AVector, form: string): Error {
   );
 }
 
-/** R2b/R4: a per-element vector's length is wrong (≠2; ≠2-3 for `do`). Code
+/** BG2b/BG4: a per-element vector's length is wrong (≠2; ≠2-3 for `do`). Code
  *  `E-LET-BRACKET-BINDING` — shared with the non-symbol-name door below; both
  *  are "this bracket binding ELEMENT is malformed" (the per-element sibling
  *  of the whole-list code above). `location` is the enclosing binding-list
@@ -1661,11 +1611,11 @@ function bindingArityError(
   );
 }
 
-/** R2b/R4: a non-symbol in the binding-name slot. SPECIAL-cased text when the
+/** BG2b/BG4: a non-symbol in the binding-name slot. SPECIAL-cased text when the
  *  name is itself a vector (Clojure destructuring: `[[x y] v]`) — that's not
  *  a malformed pair but an unsupported binding FORM. Same code as the arity
- *  door above. Reached from BOTH surfaces (R2a whole-list even-position names
- *  and R2b per-element first-elements) via `buildBindingPair`. */
+ *  door above. Reached from BOTH surfaces (BG2a whole-list even-position names
+ *  and BG2b per-element first-elements) via `buildBindingPair`. */
 function bindingNameError(name: SchemeValue, form: string, location?: SourceLocation): Error {
   if (name instanceof AVector) {
     return new EvalError(
@@ -1681,7 +1631,7 @@ function bindingNameError(name: SchemeValue, form: string, location?: SourceLoca
 }
 
 /** Builds the cons-pair `(name val…)` a rewritten bracket binding lowers to —
- *  shared by both R2a (whole-list) and R2b (per-element) rewriting so the
+ *  shared by both BG2a (whole-list) and BG2b (per-element) rewriting so the
  *  name-slot validation (and its destructuring special-case) is written once.
  *  `parts` is `[name, value]` or `[name, value, step]` (do). */
 function buildBindingPair<Car extends SchemeValue, Cdr extends SchemeValue[]>(
@@ -1705,24 +1655,24 @@ function buildBindingPair<Car extends SchemeValue, Cdr extends SchemeValue[]>(
 }
 
 /**
- * The R2/R3 syntactic rewrite: lowers a let-family `bindings` slot that uses
+ * The BG2/BG3 syntactic rewrite: lowers a let-family `bindings` slot that uses
  * either bracket surface into the plain cons-list-of-pairs shape the existing
- * per-binding walk already understands, throwing door-grade errors (R4) for
+ * per-binding walk already understands, throwing door-grade errors (BG4) for
  * malformed shapes right here — BEFORE any walk begins. Once this returns,
  * every line downstream evaluates a form with no bracket bindings in it at
- * all, which is what makes R3's equivalence structural rather than
+ * all, which is what makes BG3's equivalence structural rather than
  * case-by-case.
  *
  *  - `#(…)` (`evalElements === false`) and anything that isn't an `AVector`
- *    pass straight through unchanged — R5 (never consumed) / the generic
+ *    pass straight through unchanged — BG5 (never consumed) / the generic
  *    invariant downstream is the right door for anything else malformed.
- *  - `bindings` itself an `evalElements` vector (R2a whole-list) is rewritten
- *    wholesale, unless `allowWholeList` is false (`do`'s R2a exclusion — the
+ *  - `bindings` itself an `evalElements` vector (BG2a whole-list) is rewritten
+ *    wholesale, unless `allowWholeList` is false (`do`'s BG2a exclusion — the
  *    caller passes `allowWholeList: false` and gets the ORIGINAL door).
  *  - Each ELEMENT of a (paren, or whole-list-just-rewritten) bindings list
- *    that is itself an `evalElements` vector (R2b per-element) is rewritten
+ *    that is itself an `evalElements` vector (BG2b per-element) is rewritten
  *    in place; a paren-pair element (or anything else — the generic
- *    invariant's job) passes through with its OWN identity, giving R2c
+ *    invariant's job) passes through with its OWN identity, giving BG2c
  *    mixing for free.
  */
 function normalizeBindings(
@@ -1787,7 +1737,7 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // "named let" as the door-form name reads clearer than "let" when the model
   // bracketed `(let loop […]) …)`'s bindings.
   const letForm = name ? "named let" : "let";
-  // R2/R3: consume both bracket surfaces into the plain cons-list-of-pairs
+  // BG2/BG3: consume both bracket surfaces into the plain cons-list-of-pairs
   // shape everything below already understands (see normalizeBindings).
   const normalizedBindings = normalizeBindings(bindings, letForm, true, 2, 2);
 
@@ -1900,7 +1850,7 @@ function* evalLetStar(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   const bindings = rest.car;
   const body = rest.cdr;
 
-  // R2/R3: consume both bracket surfaces (see normalizeBindings).
+  // BG2/BG3: consume both bracket surfaces (see normalizeBindings).
   const normalizedBindings = normalizeBindings(bindings, "let*", true, 2, 2);
 
   const letStarResolver = ctxResolver(ctx).child("let*", "let*");
@@ -1937,7 +1887,7 @@ function* evalLetrec(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   const bindings = rest.car;
   const body = rest.cdr;
 
-  // R2/R3: consume both bracket surfaces (see normalizeBindings). Also covers
+  // BG2/BG3: consume both bracket surfaces (see normalizeBindings). Also covers
   // letrec* — the SPECIAL_FORMS table aliases "letrec*" straight to this
   // function (R7RS: letrec* evaluates left-to-right, same as our letrec).
   const normalizedBindings = normalizeBindings(bindings, "letrec", true, 2, 2);
@@ -2109,34 +2059,21 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
   return result;
 }
 
-// ── R9: bracket CLAUSE consumption (cond / case / do) ───────────────────────────
-// The CLAUSE positions of `cond`, `case`, and `do`'s test-result clause additionally
-// accept an `evalElements` vector, elementwise ≡ the parenthesized clause. `cond`/
-// `case` are evaluator SPECIAL FORMS (this file), not syntax-rules prelude macros —
-// so consumption lands right here, the same file and shape as the R2/R3 let-family
-// consumption above (`normalizeBindings`), applied to CLAUSE positions instead of
-// BINDING positions.
-//
-// `normalizeClause` runs once per clause, before the existing clause walk,
-// and produces the SAME plain-list shape a hand-written paren clause already
-// is — so downstream (the test/datum/body handling below) is completely
-// unmodified code evaluating a plain list, same structural-equivalence
-// argument as R3.
-//
-// Critically, `normalizeClause` converts ONLY the clause's own wrapper — it
-// never looks inside element 0. This is what keeps a `case` clause's
-// datum-list head a LIST, never bracket-converted (R9): `[(1 2) "low"]`'s
-// vector elements are `[(1 2), "low"]`; rewrapping them as a list gives
-// `((1 2) "low")` with the inner `(1 2)` untouched, exactly the paren image.
-//
-// `#(…)` (`evalElements === false`) and non-vector clauses pass straight
-// through (R5 — never consumed); the existing `is_pair(clause)` invariants
-// below are the right door for anything else malformed.
-//
-// Non-intersection (the R6 argument, clause edition): bracket clauses are a
-// purely Racket surface — Clojure's `cond` is flat (no clause grouping), so
-// no dialect conflict exists, and Racket's reading already equals the
-// rewrite.
+// ── bracket CLAUSE consumption (cond / case / do) ───────────────────────────────
+// Consumption site for the bracket-clauses superset. The model — a bracket clause
+// elementwise ≡ the parenthesized clause, the BG9 datum-list-stays-a-LIST rule, and
+// the non-intersection argument (bracket clauses are a purely Racket surface — Clojure's
+// `cond` is flat — so no dialect conflict exists) — is docs/GRAMMAR.md §CLAUSES.
+// `cond`/`case`/`do` are evaluator SPECIAL FORMS (this file), so consumption lands here
+// beside §BINDINGS's `normalizeBindings`: `normalizeClause` runs ONCE per clause, before
+// the existing clause walk, producing the plain-list shape a paren clause already is (same
+// structural-equivalence argument as BG3). It converts ONLY the clause's own wrapper —
+// never element 0 — which is what keeps a `case` clause's datum-list head a LIST (BG9):
+// `[(1 2) "low"]`'s elements `[(1 2), "low"]` rewrap to `((1 2) "low")`, the inner `(1 2)`
+// untouched. `#(…)` and non-vector clauses pass through (BG5, never consumed); the
+// `is_pair(clause)` invariants below are the door for anything else malformed. Malformed
+// bracket shapes throw the BG4-family doors below (E-COND-BRACKET-CLAUSE,
+// E-CASE-BRACKET-DATUM-LIST). BG-numbering: see §BINDINGS's BG-numbering note.
 function normalizeClause(clause: SchemeValue, form: string): SchemeValue {
   if (!(clause instanceof AVector) || !clause.evalElements) return clause;
   const els = clause.__vector__;
@@ -2144,7 +2081,7 @@ function normalizeClause(clause: SchemeValue, form: string): SchemeValue {
   return APair.fromArray(CONSTANT_CTX, els, false);
 }
 
-/** R9/R4-family: an empty bracket clause `[]` — cond/case/do's clause vector
+/** BG9/BG4-family: an empty bracket clause `[]` — cond/case/do's clause vector
  *  must contain at least the test/datum slot. Code `E-COND-BRACKET-CLAUSE`
  *  (shared across cond/case/do — this is "the whole bracketed CLAUSE is
  *  malformed for this form", the clause-position sibling of
@@ -2158,13 +2095,13 @@ function emptyClauseError(form: string): Error {
   );
 }
 
-/** R9: a `case` clause's datum-list HEAD is itself a bracket vector — the
- *  datum list is DATA and is never bracket-converted (R9), even inside a
+/** BG9: a `case` clause's datum-list HEAD is itself a bracket vector — the
+ *  datum list is DATA and is never bracket-converted (BG9), even inside a
  *  bracketed clause. `[[1 2] "low"]` therefore does NOT lower to
  *  `((1 2) "low")`; it stays `([1 2] "low")` and would otherwise fall through
  *  to the generic "case: expected list of datums" invariant with no hint
  *  about why. This door names the vector-ness itself as the confusion (per
- *  R9: "the bracket door only where the vector-ness itself is the
+ *  BG9: "the bracket door only where the vector-ness itself is the
  *  confusion") and points at the fix. */
 function caseDatumListVectorError(datums: AVector): Error {
   const els = datums.__vector__;
@@ -2184,7 +2121,7 @@ function* evalCond(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   const nonTailCtx: EvalContext = ctx.tail ? { ...ctx, tail: false } : ctx;
 
   while (node instanceof APair) {
-    // R9: consume a bracket clause (see normalizeClause above) before the
+    // BG9: consume a bracket clause (see normalizeClause above) before the
     // existing invariant/walk.
     const clause = normalizeClause(node.car, "cond");
     SpecialFormShapeError.invariant(clause instanceof APair, "cond", "invalid clause");
@@ -2252,7 +2189,7 @@ function* evalCase(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   let node: SchemeValue = rest.cdr;
 
   while (node instanceof APair) {
-    // R9: consume a bracket clause (see normalizeClause above) before the
+    // BG9: consume a bracket clause (see normalizeClause above) before the
     // existing invariant/walk.
     const clause = normalizeClause(node.car, "case");
     SpecialFormShapeError.invariant(clause instanceof APair, "case", "invalid clause");
@@ -2274,7 +2211,7 @@ function* evalCase(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       return yield { call: evalBegin(exprs, ctx), tail: ctx.tail === true };
     }
 
-    // R9: the datum-list head is data and is NEVER bracket-converted — a vector here
+    // BG9: the datum-list head is data and is NEVER bracket-converted — a vector here
     // (evalElements) is the confusion itself, not a generic malformation, so it gets
     // its own door (see caseDatumListVectorError).
     if (datums instanceof AVector && datums.evalElements) {
@@ -2389,14 +2326,14 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   SpecialFormShapeError.invariant(rest instanceof APair, "do", "missing bindings");
 
   const bindings = rest.car;
-  // R2/R3: consume the per-element bracket surface only — do does NOT accept
-  // the whole-list form (R2a exclusion; allowWholeList: false keeps the
+  // BG2/BG3: consume the per-element bracket surface only — do does NOT accept
+  // the whole-list form (BG2a exclusion; allowWholeList: false keeps the
   // ORIGINAL door, unchanged). Arity is 2-3 ([name init] / [name init step]).
   const normalizedBindings = normalizeBindings(bindings, "do", false, 2, 3);
   const restCdr = rest.cdr;
   SpecialFormShapeError.invariant(restCdr instanceof APair, "do", "missing test clause");
 
-  // R9: do's test clause may be a bracket vector, elementwise ≡ the
+  // BG9: do's test clause may be a bracket vector, elementwise ≡ the
   // parenthesized clause (see normalizeClause above).
   const testClause = normalizeClause(restCdr.car, "do");
   const body = restCdr.cdr;

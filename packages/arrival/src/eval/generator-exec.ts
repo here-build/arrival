@@ -321,53 +321,37 @@ export interface ExecOptions {
    */
   budgetMs?: number;
   /**
-   * Per-run ALLOCATION budget — the memory analogue of `budgetMs`. Caps the
-   * cumulative number of list cells materialized through the two collection-op
-   * choke points: `to_array` (append/join/reverse/…) and the fl-interop
-   * sequence-op dispatch (filter/map/reduce over Pair/Vector, charged at dispatch
-   * since the term walk bypasses to_array). The wall-clock budget is checked at
-   * trampoline TICKs, which a single native list pass (`filter`/`append` over a
-   * large list) never hits — so an O(K²)-churn loop runs uninterruptibly until
-   * it stack-overflows. This bound IS checked inside that loop. Undefined ⇒
-   * unbounded (default; only sandbox/agent runs opt in). Composable with
-   * `budgetMs`/`signal` — whichever fires first wins.
+   * Per-run ALLOCATION budget — the memory analogue of `budgetMs` (docs/RUN-MODEL.md §BUDGETS
+   * for the TICK-blind-spot rationale and the two choke points it charges at). Caps the
+   * cumulative number of list cells a run materializes, and is checked INSIDE the native
+   * collection loop the wall-clock budget can't interrupt. Undefined ⇒ unbounded (default; only
+   * sandbox/agent runs opt in). Composable with `budgetMs`/`signal` — whichever fires first wins.
    */
   heapBudget?: number;
   /**
    * THE RUN CACHE (run/run-cache.ts). When set, rides `makeRunContext` onto the run's
-   * `RunContext.cache`, and every baked rosetta penetration is intercepted at the decode/fire
-   * chokepoint per the mode law: in `"record"` mode the impl always fires (a `view`
-   * writes/overwrites its slot, a `sink` writes its tombstone); in `"replay"` mode a `view`
-   * hit is served without re-firing, a `sink` tombstone skips, and `pure`/unclassified always
-   * re-fire. Unset ⇒ no interception (inert). The cache is a RUN-level entity: session identity
-   * (epoch/roster/configDigest validity) is the session layer's concern, checked BEFORE a cache
-   * is handed to a run.
+   * `RunContext.cache` and every baked rosetta penetration is intercepted at the decode/fire
+   * chokepoint per the mode law (docs/RUN-MODEL.md §MODE-LAW). Unset ⇒ no interception (inert).
+   * The cache is a RUN-level entity: session identity (epoch/roster/configDigest validity) is the
+   * session layer's concern, checked BEFORE a cache is handed to a run.
    */
   cache?: RunCache;
   /**
    * THE EFFECT LOG (run/effect-log.ts). When set, rides `makeRunContext` onto the run's
-   * `RunContext.effects`, and every baked rosetta `sink` penetration — during a PRIME run, i.e.
-   * `cache` absent or `cache.mode !== "replay"` — enqueues onto it and returns `undefined`
-   * immediately instead of firing. A SIBLING of `cache`, not a field on it: pass `effects`
-   * alone to gather sinks with no `RunCache` at all, or alongside `cache` to gather sinks while
-   * a `view`/`pure` cache still serves reads. Unset ⇒ no burst arm (a sink fires immediately).
-   * Draining the log (the actual burst — plexus region, atomicity, conflict handling) is HOST
-   * territory; this option only wires the gather.
+   * `RunContext.effects`, arming the burst gather (docs/RUN-MODEL.md §BURST): a `sink` penetration
+   * during a PRIME run enqueues and returns `undefined` instead of firing. A SIBLING of `cache`,
+   * not a field on it: pass `effects` alone to gather sinks with no `RunCache` at all, or alongside
+   * `cache` to gather sinks while a `view`/`pure` cache still serves reads. Unset ⇒ no burst arm (a
+   * sink fires immediately). Draining the log (the actual burst — plexus region, atomicity,
+   * conflict handling) is HOST territory; this option only wires the gather.
    */
   effects?: EffectLog;
   /**
    * THE READ GUARD (run/read-guard.ts). When set, rides `makeRunContext` onto the run's
-   * `RunContext.reads`, and the per-form loop below wraps each top-level form's evaluation in
-   * `reads.tracker.region(...)` — so the host's tracking substrate (a mobx tracking context
-   * over plexus reads, armed by the host; arrival core never depends on mobx/plexus directly)
-   * can observe reads for that form's duration. After each form, for a PRIME run gathering
-   * effects (mirroring the burst arm's own `cache?.mode !== "replay"` gate — a fold never
-   * gathers, so it never needs a guard), `checkReadWriteGuard` runs over the effect log's
-   * current entries against the reads observed so far: a read that lands on a target a PRIOR
-   * gathered effect will write throws `ReadYourDeferredWriteError` (the teaching door — see
-   * read-guard.ts). Unset ⇒ no tracking, no guard. A `reads` with no `writeSetOf` armed (host
-   * tracks reads but can't predict write footprints yet) never crashes — the guard degrades to
-   * a no-op, not a false claim.
+   * `RunContext.reads`, arming the read-tracking region + the read∩write deferral guard
+   * (docs/RUN-MODEL.md §READ-GUARD) that the phase-4 loop below drives per top-level form. Unset ⇒
+   * no tracking, no guard. A `reads` with no `writeSetOf` armed (host tracks reads but can't
+   * predict write footprints yet) never crashes — the guard degrades to a no-op, not a false claim.
    */
   reads?: ReadGuard;
   /**
@@ -602,8 +586,8 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
   try {
     // ── PHASE 3 — instantiate: scope OBTAINED (caller-passed for REPL continuity, else the
     // realm-cached ACCUMULATING scratch root — REPL semantics preserved exactly); only `runCtx`
-    // is minted fresh (per-run). The allocation meter lives on `runCtx` ONLY, spans the whole
-    // exec, and every value built during this run carries it.
+    // is minted fresh (per-run). Its allocation meter spans the whole exec and every value built
+    // in the run carries the same `runCtx` (docs/RUN-MODEL.md §BUDGETS, §HERMETIC).
     let runResolver: Resolver;
     let runCtx: RunContext;
     if (env !== undefined) {
@@ -657,10 +641,10 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
       shadowSkeletons = classifyProgram(program, classifierBase);
     }
 
-    // ── PHASE 4 — execute. Evaluate each form in sequence; budget spans the WHOLE exec
-    // call (all top-level forms share one deadline) — a sandbox program that splits a
-    // hang across several forms is still bounded. Defines land in the resolver's lexical
-    // env; the heap meter lives on `runCtx` only (above), never on the frame.
+    // ── PHASE 4 — execute. Evaluate each form in sequence. The budget (deadline + heap meter)
+    // spans the WHOLE exec call — all top-level forms share one bound, so a hang split across
+    // forms is still caught (docs/RUN-MODEL.md §BUDGETS, "meter span differs by entry"). Defines
+    // land in the resolver's lexical env; the meter lives on `runCtx` only, never on the frame.
     const results: SchemeValue[] = [];
     const forms = program.forms;
     const start = budgetMs === undefined ? 0 : performance.now();
@@ -672,10 +656,10 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
       // ArrivalError, masking both the TypeError class and its membrane cause.
       // Surface the original TypeError so the user-visible error shape survives.
       let result: SchemeValue;
-      // THE READ-TRACKING REGION (run/read-guard.ts): one top-level form is the region unit.
-      // `runForm` is the plain (untracked) evaluation; when `runCtx.reads` is armed, the host's
-      // tracker wraps it for the call's duration so its tracking substrate (mobx over plexus,
-      // host-side) observes this form's reads. Absent ⇒ `runForm()` runs directly (untracked).
+      // THE READ-TRACKING REGION (docs/RUN-MODEL.md §READ-GUARD): one top-level form is the region
+      // unit. `runForm` is the plain (untracked) evaluation; when `runCtx.reads` is armed, the
+      // host's tracker wraps it so its substrate observes this form's reads. Absent ⇒ `runForm()`
+      // runs directly (untracked).
       const runForm = () =>
         run(
           evaluate(expr, {
@@ -700,13 +684,11 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
       }
       results.push(result);
 
-      // THE GUARD CHECK: after each form, for a PRIME run gathering effects — mirroring the
-      // burst arm's own `cache?.mode !== "replay"` gate (run-cache.ts) so a fold (which never
-      // gathers) never trips it — check whether any read observed so far lands on a target a
-      // PRIOR gathered effect will write. Throws `ReadYourDeferredWriteError` (the teaching
-      // door) on the first violation; a clean run (or a run missing either `reads` or
-      // `effects`, or `writeSetOf` unarmed) is a no-op. Guard region = EXECUTION only — never
-      // re-checked at the (post-burst) serializer walk, which this loop does not perform.
+      // THE GUARD CHECK: after each form, for a PRIME run gathering effects — the same
+      // `cache?.mode !== "replay"` gate the burst arm uses, so a fold never trips it — run
+      // `checkReadWriteGuard` over the effects gathered so far vs the reads observed so far
+      // (docs/RUN-MODEL.md §READ-GUARD; guard region = EXECUTION only). A clean run, or one
+      // missing `reads`/`effects` or with `writeSetOf` unarmed, is a no-op.
       if (runCtx.reads !== undefined && runCtx.effects !== undefined && runCtx.cache?.mode !== "replay") {
         checkReadWriteGuard(runCtx.effects.entries, runCtx.reads.tracker.log, runCtx.reads.writeSetOf);
       }
