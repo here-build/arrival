@@ -3,12 +3,12 @@
 // law harness. Small char domain forces collisions so symmetry / transitivity
 // / antisymmetry actually bite.
 import fc from "fast-check";
-import { CONSTANT_CTX } from "../run/RunContext.js";
+import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { describe, expect, it } from "vitest";
-import { ANil, nil } from "../values/primitives/ANil.js";
-import { ACharacter } from "../values/primitives/ACharacter.js";
-import { ordLaws, setoidLaws } from "./algebra-laws.js";
-import { tf } from "../values/tagless-final.js";
+import { ANil, nil } from "../ANil.js";
+import { ACharacter } from "../ACharacter.js";
+import { ordLaws, setoidLaws } from "../../../__tests__/algebra-laws.js";
+import { tf } from "../../tagless-final.js";
 
 // Small grapheme domain (incl. punctuation/digits/letters) → collisions exercise
 // the symmetric/transitive/antisymmetric branches; one astral char for unicode.

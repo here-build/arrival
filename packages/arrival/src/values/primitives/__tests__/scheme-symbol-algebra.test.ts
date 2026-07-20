@@ -3,9 +3,9 @@
 // over STRING names (gensym ES6-symbol names are an impl edge handled by
 // `String(...)` fallback, not part of the law domain here).
 import fc from "fast-check";
-import { CONSTANT_CTX } from "../run/RunContext.js";
-import { ASymbol } from "../values/primitives/ASymbol.js";
-import { ordLaws, setoidLaws } from "./algebra-laws.js";
+import { CONSTANT_CTX } from "../../../run/RunContext.js";
+import { ASymbol } from "../ASymbol.js";
+import { ordLaws, setoidLaws } from "../../../__tests__/algebra-laws.js";
 
 // STRING-named symbols over a small domain so symmetry/transitivity bite, plus
 // the hard cases: empty string, unicode, and operator/predicate-style names.

@@ -10,15 +10,15 @@
 // structuralEqual `eq`, and assert Semigroup/Monoid laws directly over
 // structuralEqual.
 import fc from "fast-check";
-import { CONSTANT_CTX } from "../run/RunContext.js";
+import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { describe, expect, it } from "vitest";
-import { APair } from "../values/primitives/APair.js";
-import { ANil, nil } from "../values/primitives/ANil.js";
-import { structuralEqual } from "../values/structural-equal.js";
-import { functorLaws } from "./algebra-laws.js";
-import { AExact } from "../values/primitives/AExact.js";
-import { tf, type TaglessOp } from "../values/tagless-final.js";
-import type { AList, AListAlike, SchemeValue } from "../values/types.js";
+import { APair } from "../APair.js";
+import { ANil, nil } from "../ANil.js";
+import { structuralEqual } from "../../structural-equal.js";
+import { functorLaws } from "../../../__tests__/algebra-laws.js";
+import { AExact } from "../AExact.js";
+import { tf, type TaglessOp } from "../../tagless-final.js";
+import type { AList, AListAlike, SchemeValue } from "../../types.js";
 
 
 type FL = Record<string, any>;

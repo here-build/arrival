@@ -3,9 +3,9 @@
 // collide naturally — exactly the dense-collision regime that exercises the
 // Setoid laws hardest.
 import fc from "fast-check";
-import { CONSTANT_CTX } from "../run/RunContext.js";
-import { ABool } from "../values/primitives/ABool.js";
-import { setoidLaws } from "./algebra-laws.js";
+import { CONSTANT_CTX } from "../../../run/RunContext.js";
+import { ABool } from "../ABool.js";
+import { setoidLaws } from "../../../__tests__/algebra-laws.js";
 
 const arb = fc.boolean().map((b) => new ABool(CONSTANT_CTX, b));
 const equalClone = (b: ABool) => new ABool(CONSTANT_CTX, b.value);

@@ -32,10 +32,10 @@
 // readonly slots" — the tests just quietly weren't using it, and nothing could tell. The getters
 // made the fence real.
 import { describe, expect, it } from "vitest";
-import { CONSTANT_CTX } from "../run/RunContext.js";
-import { __tieKnot, APair } from "../values/primitives/APair.js";
-import { nil } from "../values/primitives/ANil.js";
-import { AExact } from "../values/primitives/AExact.js";
+import { CONSTANT_CTX } from "../../../run/RunContext.js";
+import { __tieKnot, APair } from "../APair.js";
+import { nil } from "../ANil.js";
+import { AExact } from "../AExact.js";
 
 const num = (n: number) => new AExact(CONSTANT_CTX, n);
 const list = (...ns: number[]) => APair.fromArray(CONSTANT_CTX, ns.map(num), false) as APair<any, any>;

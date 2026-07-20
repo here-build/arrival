@@ -20,10 +20,10 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { CONSTANT_CTX } from "../run/RunContext.js";
-import { AExact } from "../values/primitives/AExact.js";
-import { AInexact } from "../values/primitives/AInexact.js";
-import { coerceNumeric } from "../values/op-helpers.js";
+import { CONSTANT_CTX } from "../../../run/RunContext.js";
+import { AExact } from "../AExact.js";
+import { AInexact } from "../AInexact.js";
+import { coerceNumeric } from "../../op-helpers.js";
 
 describe("coerceNumeric", () => {
   describe("primitive types", () => {

@@ -8,25 +8,25 @@
 // readonly slots" — the tests just quietly weren't using it, and nothing could tell. The getters
 // made the fence real.
 import { describe, expect, it } from "vitest";
-import { CONSTANT_CTX } from "../run/RunContext.js";
+import { CONSTANT_CTX } from "../../../run/RunContext.js";
 
-import { AValue } from "../values/primitives/AValue.js";
-import { __tieKnot, APair } from "../values/primitives/APair.js";
-import { AVector } from "../values/primitives/AVector.js";
-import { AString } from "../values/primitives/AString.js";
-import { ABool } from "../values/primitives/ABool.js";
-import { ASymbol } from "../values/primitives/ASymbol.js";
-import { ABytevector } from "../values/primitives/ABytevector.js";
-import { AExact } from "../values/primitives/AExact.js";
-import { AInexact } from "../values/primitives/AInexact.js";
-import { AJSObject } from "../membrane/AJSObject.js";
-import { ANil, nil } from "../values/primitives/ANil.js";
-import { ACharacter } from "../values/primitives/ACharacter.js";
-import { eq, eqv, structuralEqual } from "../values/structural-equal.js";
-import listsCap from "../env/r7rs/lists.js";
-import type { EnvCapability } from "../common/capability.js";
-import type { AList, AListAlike, SchemeValue } from "../values/types.js";
-import { tf } from "../values/tagless-final.js";
+import { AValue } from "../AValue.js";
+import { __tieKnot, APair } from "../APair.js";
+import { AVector } from "../AVector.js";
+import { AString } from "../AString.js";
+import { ABool } from "../ABool.js";
+import { ASymbol } from "../ASymbol.js";
+import { ABytevector } from "../ABytevector.js";
+import { AExact } from "../AExact.js";
+import { AInexact } from "../AInexact.js";
+import { AJSObject } from "../../../membrane/AJSObject.js";
+import { ANil, nil } from "../ANil.js";
+import { ACharacter } from "../ACharacter.js";
+import { eq, eqv, structuralEqual } from "../../structural-equal.js";
+import listsCap from "../../../env/r7rs/lists.js";
+import type { EnvCapability } from "../../../common/capability.js";
+import type { AList, AListAlike, SchemeValue } from "../../types.js";
+import { tf } from "../../tagless-final.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // B2 — arrival/tagless-final/equals as a totalic, cycle-safe, tagless-final Setoid.

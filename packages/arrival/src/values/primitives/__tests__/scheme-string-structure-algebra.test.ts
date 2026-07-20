@@ -6,11 +6,11 @@
 // SchemeString HAS `arrival/tagless-final/equals` (wave-1 Setoid), so the law harness's
 // internal `equals` works directly — no custom eq needed.
 import fc from "fast-check";
-import { CONSTANT_CTX } from "../run/RunContext.js";
+import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { describe, expect, it } from "vitest";
-import { AString } from "../values/primitives/AString.js";
-import { functorLaws, monoidLaws, semigroupLaws } from "./algebra-laws.js";
-import { tf, type TaglessOp } from "../values/tagless-final.js";
+import { AString } from "../AString.js";
+import { functorLaws, monoidLaws, semigroupLaws } from "../../../__tests__/algebra-laws.js";
+import { tf, type TaglessOp } from "../../tagless-final.js";
 
 type FL = Record<string, any>;
 

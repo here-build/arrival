@@ -13,14 +13,14 @@
 // element's AExact Setoid).
 // (Boxing track S5 — docs/plan-2026-06-10-boxing-track.md.)
 import fc from "fast-check";
-import { CONSTANT_CTX } from "../run/RunContext.js";
+import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { describe, expect, it } from "vitest";
-import { AVector } from "../values/primitives/AVector.js";
-import { AExact } from "../values/primitives/AExact.js";
-import { structuralEqual } from "../values/structural-equal.js";
-import type { SchemeValue } from "../values/types.js";
-import { functorLaws, semigroupLaws, setoidLaws } from "./algebra-laws.js";
-import { tf } from "../values/tagless-final.js";
+import { AVector } from "../AVector.js";
+import { AExact } from "../AExact.js";
+import { structuralEqual } from "../../structural-equal.js";
+import type { SchemeValue } from "../../types.js";
+import { functorLaws, semigroupLaws, setoidLaws } from "../../../__tests__/algebra-laws.js";
+import { tf } from "../../tagless-final.js";
 
 
 // A vector element is a boxed exact integer (the interpreter is monadic-boxed:

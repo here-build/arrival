@@ -3,13 +3,13 @@
 // `(equal? 1 1.0) → #t` bug (structuralEqual consults arrival/tagless-final/equals first,
 // so the exact/inexact instances now answer correctly).
 import fc from "fast-check";
-import { CONSTANT_CTX } from "../run/RunContext.js";
+import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { describe, expect, it } from "vitest";
-import { AExact } from "../values/primitives/AExact.js";
-import { AInexact } from "../values/primitives/AInexact.js";
-import { structuralEqual } from "../values/structural-equal.js";
-import { setoidLaws } from "./algebra-laws.js";
-import { tf } from "../values/tagless-final.js";
+import { AExact } from "../AExact.js";
+import { AInexact } from "../AInexact.js";
+import { structuralEqual } from "../../structural-equal.js";
+import { setoidLaws } from "../../../__tests__/algebra-laws.js";
+import { tf } from "../../tagless-final.js";
 
 // Exact rationals over a small domain (collisions exercise symmetry/transitivity).
 // RE-PINNED (one-number rework, RATIO — docs/design-history/arrival-one-number-rework.md
