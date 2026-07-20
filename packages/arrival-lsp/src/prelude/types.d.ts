@@ -2,7 +2,7 @@
    This is an ambient prelude `.d.ts` whose CONTRACT depends on the patterns these
    rules flag:
    • `interface ArrShape {}` MUST be empty here — it is the declaration-merge
-     target the 34 builtin leaves extend; the emptiness is the seam, not an
+     target the 43 builtin leaves extend; the emptiness is the seam, not an
      accident.
    • `SNum`/`SStr`/`SBool`/`Unit` are RETAINED aliases (each ≡ its primitive).
      Leaf signatures now use plain TS (`string`/`number`/`boolean`/`void`) directly
@@ -111,7 +111,7 @@ declare function sexpr<F extends (...a: any[]) => any>(f: F, ...args: Parameters
 declare const __scmTruth: (x: unknown) => boolean;
 
 // ── THE LEAF MERGE CONTRACT ──────────────────────────────────────────────────
-// Every one of the 34 builtin leaves (`prelude/builtins/<slug>.d.ts`) augments
+// Every one of the 43 builtin leaves (`prelude/builtins/<slug>.d.ts`) augments
 // `__arr` by re-declaring this interface with its own ONE member, e.g.
 //
 //     // builtins/car.d.ts

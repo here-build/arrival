@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// L — SRFI-189 Maybe & Either — the CONTAINER family.
+// SRFI-189 Maybe & Either — the CONTAINER family.
 //
 // Scheme semantics (constructors/accessors/combinators over Maybe and Either):
 //   (just x)              → a Just wrapping x

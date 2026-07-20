@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// L — SRFI-128 comparators — comparator objects + the relational ops over them.
+// SRFI-128 comparators — comparator objects + the relational ops over them.
 //
 // Scheme semantics:
 //   (make-comparator type-test equality ordering [hash])  → a comparator object

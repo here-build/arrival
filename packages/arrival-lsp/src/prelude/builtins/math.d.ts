@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// L<math> — `abs` `sqrt` `floor` `round` `min` `max` — numeric math cluster.
+// `abs` `sqrt` `floor` `round` `min` `max` — numeric math cluster.
 //
 // Scheme semantics:
 //   (abs x)          → |x|, same type (number → number)
@@ -9,9 +9,7 @@
 //   (min x ...)      → smallest of one or more numbers
 //   (max x ...)      → largest of one or more numbers
 //
-// Pattern: re-declare `interface ArrShape` with these cohesive members, written
-// purely in terms of PRE's base types (`number`). TS merges this into the shared
-// `__arr` (see ../types.d.ts → THE LEAF MERGE CONTRACT).
+// merge contract: ../types.d.ts THE LEAF MERGE CONTRACT
 // ─────────────────────────────────────────────────────────────────────────────
 interface ArrShape {
   abs(x: number): number;

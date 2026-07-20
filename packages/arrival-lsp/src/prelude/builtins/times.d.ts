@@ -1,10 +1,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// L<*> — `*` — variadic numeric multiplication.
+// `*` — variadic numeric multiplication.
 //
 // Scheme semantics: (* n ...) → the product of all arguments; (* ) → 1.
-// Pattern: re-declare `interface ArrShape` with this ONE member, written purely
-// in terms of PRE's base types (`number`). TS merges this into the shared `__arr`
-// (see ../types.d.ts → THE LEAF MERGE CONTRACT).
+// merge contract: ../types.d.ts THE LEAF MERGE CONTRACT
 // Operator name `*` is not a valid TS identifier → bracketed string key.
 // ─────────────────────────────────────────────────────────────────────────────
 interface ArrShape {

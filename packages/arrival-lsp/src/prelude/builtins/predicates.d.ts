@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// L — `zero?`, `even?`, `odd?`, `null?`, `empty?`, `not`, `equal?`, `eq?`
+// `zero?`, `even?`, `odd?`, `null?`, `empty?`, `not`, `equal?`, `eq?`
 //   — predicate family.
 //
 // Scheme semantics:
@@ -12,10 +12,7 @@
 //   (equal? a b)  → #t iff a and b are structurally equal
 //   (eq? a b)     → #t iff a and b are identical (reference equal)
 //
-// Pattern: re-declare `interface ArrShape` with these EIGHT members (all in one
-//   file, all predicate-named → bracketed string keys where TS-illegal), written
-//   purely in terms of PRE's base types. TS merges this into the shared `__arr`
-//   (see ../types.d.ts → THE LEAF MERGE CONTRACT).
+// merge contract: ../types.d.ts THE LEAF MERGE CONTRACT
 // ─────────────────────────────────────────────────────────────────────────────
 interface ArrShape {
   "zero?"(n: number): boolean;

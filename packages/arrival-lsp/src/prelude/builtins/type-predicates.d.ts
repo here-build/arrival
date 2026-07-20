@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// L<type-predicates> — runtime type-tag predicate family:
+// runtime type-tag predicate family:
 //   `boolean?`, `number?`, `string?`, `symbol?`, `pair?`, `list?`, `object?`,
 //   `function?`, `array?`, `regex?`, `real?`.
 //

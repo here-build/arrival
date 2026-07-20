@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// L — SRFI-43 vectors (pure ops only — arrival vectors are immutable).
+// SRFI-43 vectors (pure ops only — arrival vectors are immutable).
 //
 // Scheme semantics:
 //   (vector x …)                  → a vector of the given elements

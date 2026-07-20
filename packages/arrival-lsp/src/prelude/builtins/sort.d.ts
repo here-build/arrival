@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// L<sort> — `sort` — stable list sort with an optional comparator.
+// `sort` — stable list sort with an optional comparator.
 //
 // Scheme semantics: (sort list [comparator]) → a new list with the same elements
 //   sorted. The comparator, if supplied, is `(a b) → number` (JS-style ordering:
@@ -7,9 +7,9 @@
 //   the default JS `Array.prototype.sort` ordering.
 //   NOTE: runtime arg order is (LIST, comparator?) — list FIRST, comparator
 //   OPTIONAL second — NOT the `(cmp, xs)` shape; grounded below.
-// Pattern: re-declare `interface ArrShape` with this ONE member, written purely
-// in terms of PRE's base types (`List<T>`, `number`). Element type `T` is preserved
-// in → out so a mis-typed comparator or a wrong-typed result bites.
+// merge contract: ../types.d.ts THE LEAF MERGE CONTRACT
+// Element type `T` is preserved in → out so a mis-typed comparator or a
+// wrong-typed result bites.
 // ─────────────────────────────────────────────────────────────────────────────
 interface ArrShape {
   sort<T>(xs: List<T>, cmp?: (a: T, b: T) => number): List<T>;

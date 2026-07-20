@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// L<xx> — `every` — universal quantifier over a list.
+// `every` — universal quantifier over a list.
 //
 // Scheme semantics: (every pred xs) → #t iff `pred` holds for ALL elements of
 // `xs` (predicate FIRST, list SECOND). Lowers to `xs.every(pred)`.

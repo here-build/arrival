@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// L<string-symbol-ops> — symbol↔string + string-indexing / regex string family:
+// symbol↔string + string-indexing / regex string family:
 //   `symbol->string`, `string->symbol`, `string-ref`, `substring`, `split`,
 //   `join`, `replace`, `search`, `match`, `escape-regex`.
 //

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// L<intdiv> — `modulo` / `remainder` / `quotient` — integer division family.
+// `modulo` / `remainder` / `quotient` — integer division family.
 //
 // Scheme semantics:
 //   (modulo   a b) → a mod b (floor-based sign; same as JS % for same-sign)

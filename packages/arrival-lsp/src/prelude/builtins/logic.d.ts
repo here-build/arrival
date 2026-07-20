@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// L — `and`, `or` — variadic logic family.
+// `and`, `or` — variadic logic family.
 //
 // Scheme semantics:
 //   (and a b …) → the first #f-ish value, else the LAST value; (and) → #t

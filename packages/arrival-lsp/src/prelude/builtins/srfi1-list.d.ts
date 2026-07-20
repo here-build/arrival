@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// L?? — the SRFI-1-adjacent list family bound in the inference env: `take`,
+// the SRFI-1-adjacent list family bound in the inference env: `take`,
 // `drop`, `concat`, `flatten`, `fold`, `nth`, `for-each`, `count`, `remove`.
 //
 // NOT typed here, despite SRFI-1-familiar names — unbound in the inference env,

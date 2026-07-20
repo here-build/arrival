@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// L<combinators> — the point-free / control combinators that are ACTUALLY LIVE in
+// the point-free / control combinators that are ACTUALLY LIVE in
 // the inference env: `always`, `clone`, `repr`, `when`, `unless`.
 //
 // Scheme semantics:
@@ -14,8 +14,7 @@
 // runtime. `when` / `unless` are macros; their honest return type is `T | Nil`
 // (the last body value when the gate passes, else nil — NOT `void`).
 //
-// Pattern: re-declare `interface ArrShape` with these members, written in terms of
-// PRE's base types (see ../types.d.ts → THE LEAF MERGE CONTRACT).
+// merge contract: ../types.d.ts THE LEAF MERGE CONTRACT
 // ─────────────────────────────────────────────────────────────────────────────
 interface ArrShape {
   always<T>(x: T): () => T;

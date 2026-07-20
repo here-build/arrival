@@ -3,7 +3,7 @@
    placeholder (you fill the member slot), and the `_TEMPLATE` filename is
    intentional so the stub sorts first and is never mistaken for a builtin. */
 // ─────────────────────────────────────────────────────────────────────────────
-// L<xx> — `<scheme-name>` — COPY THIS STUB to author one leaf.
+// `<scheme-name>` — COPY THIS STUB to author one leaf.
 //
 //   1. Rename this file to `<slug>.d.ts` (e.g. `cdr.d.ts`, `string-append.d.ts`).
 //      The slug is the scheme name; operator names get a readable slug

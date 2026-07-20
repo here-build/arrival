@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// L — `@` / `@?` / `@keys` — the keyword/field accessor family (the sift moat).
+// `@` / `@?` / `@keys` — the keyword/field accessor family (the sift moat).
 //
 // Scheme semantics:
 //   (@ obj key)    → the value at `key`, PRECISE (mis-keying bites — A4 keystone).

@@ -1,10 +1,13 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// L01 — `car` — the REFERENCE leaf the sibling builtins follow.
+// `car` — the REFERENCE leaf the sibling builtins follow.
 //
 // Scheme semantics: (car list) → the head element of a non-empty list.
-// Pattern: re-declare `interface ArrShape` with this ONE member, written purely
-// in terms of PRE's base types (here `List<T>`). TS merges this into the shared
-// `__arr` (see ../types.d.ts → THE LEAF MERGE CONTRACT).
+//
+// Exemplar of the merge pattern (sibling leaves fold this to the one-line pointer
+// below): a leaf re-declares `interface ArrShape` with its ONE member, written
+// purely in PRE's base types (here `List<T>`); TS merges every leaf's member into
+// the shared `__arr`.
+// merge contract: ../types.d.ts THE LEAF MERGE CONTRACT
 // ─────────────────────────────────────────────────────────────────────────────
 interface ArrShape {
   car<T>(xs: List<T>): T;

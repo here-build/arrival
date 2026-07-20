@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// L — `number->string`, `string->number` — R7RS conversion family.
+// `number->string`, `string->number` — R7RS conversion family.
 //
 // Scheme semantics:
 //   (number->string n [radix]) → the decimal (or radix-) string of n
