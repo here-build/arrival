@@ -108,7 +108,7 @@ export default new EnvCapability("scheme/strings", {
     // ── PURITY DOORS — string mutators OMITTED by design (R7RS §6.7) ─────────────
     // A string is a frozen entity; an in-place write would falsify the construction-
     // site provenance it carries. Doored here (errors-as-doors), co-located with the
-    // pack that owns the string type — dissolved from the deleted core.ts manifesto.
+    // pack that owns the string type.
     "string-set!": symbol.notImplemented`string-set!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (string-append / substring / a fresh string)`,
     "string-fill!": symbol.notImplemented`string-fill!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (make-string with the fill)`,
 
@@ -125,8 +125,8 @@ export default new EnvCapability("scheme/strings", {
       },
     ),
 
-    // string</>/<=/>= derive from SchemeString's arrival/tagless-final/lte (wave-1 Ord) via
-    // the shared deriveOrd chain — same adapter as the char family.
+    // string</>/<=/>= derive from SchemeString's arrival/tagless-final/lte via the
+    // shared deriveOrd chain — same adapter as the char family.
     "string<?": symbol.native`string<?: strictly-increasing string order`(
       { input: z.array(z.string), output: [z.boolean] },
       deriveOrd("<"),

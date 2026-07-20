@@ -79,9 +79,7 @@ const is_callable = (o: unknown): o is (...args: SchemeValue[]) => SchemeValue =
 // `unknown`), so this two-arg adapter is the exact contracted shape.
 const defaultCompare = (a: unknown, b: unknown): unknown => structuralEqual(a, b);
 
-// list<->array bridge: the shared env-layer helper (pack-helpers.ts) — was a
-// pack-local copy triplicated across lists/strings/srfi-13; the old comment's
-// "stdlib originals stay in stdlib.ts" referenced a file deleted long ago.
+// list<->array bridge — the shared env-layer helper (pack-helpers.ts).
 const listToArray = to_array("list->array");
 
 function arrayToList(ctx: RunContext, array: SchemeValue[]): SchemeValue {
@@ -859,22 +857,7 @@ export default new EnvCapability("scheme/lists", {
         TypeError.invariant(!(alist instanceof APair && isCircularList(alist)), "assv: circular list");
         requireListArg("assv", alist);
         while (current instanceof APair) {
-          // ENTRY ADOPTION — the alist affordance, at the point of use.
-          //
-          // An alist that came from a tool is a JSON ARRAY OF 2-ELEMENT ARRAYS. Each entry is
-          // therefore an `AJSArray` (the vector chart), NOT an `APair` — so the `instanceof APair`
-          // test below failed on EVERY entry, each one was skipped in silence, and the walk fell off
-          // the end into `#f`. "Not found" about an alist it could not read a single entry of.
-          //
-          // That is the same silent lie `requireListArg` closes one level up, hiding one level down.
-          // `adoptSpine` projects a borrowed array onto its spine chart (O(1), same backing store)
-          // and passes everything else through by identity — so a genuine cons-cell entry is
-          // untouched, and a non-pair entry (a bare number in an alist) is still skipped, which is
-          // R7RS's own leniency, not ours.
-          //
-          // This is V's alist ruling applied where it belongs: teach the system to READ an alist as
-          // a dict — tolerance and affordance at the point of use. It does NOT promote alists, and
-          // it does NOT teach dicts to be lists.
+          // ENTRY ADOPTION — see assq above (read a tool's JSON-array alist entries as pairs).
           const pair = adoptSpine(current.car) as SchemeValue;
           if (pair instanceof APair && eqv(pair.car, obj)) return pair;
           current = current.cdr;
@@ -953,22 +936,7 @@ export default new EnvCapability("scheme/lists", {
         TypeError.invariant(!(alist instanceof APair && isCircularList(alist)), "assoc: circular list");
         requireListArg("assoc", alist);
         while (current instanceof APair) {
-          // ENTRY ADOPTION — the alist affordance, at the point of use.
-          //
-          // An alist that came from a tool is a JSON ARRAY OF 2-ELEMENT ARRAYS. Each entry is
-          // therefore an `AJSArray` (the vector chart), NOT an `APair` — so the `instanceof APair`
-          // test below failed on EVERY entry, each one was skipped in silence, and the walk fell off
-          // the end into `#f`. "Not found" about an alist it could not read a single entry of.
-          //
-          // That is the same silent lie `requireListArg` closes one level up, hiding one level down.
-          // `adoptSpine` projects a borrowed array onto its spine chart (O(1), same backing store)
-          // and passes everything else through by identity — so a genuine cons-cell entry is
-          // untouched, and a non-pair entry (a bare number in an alist) is still skipped, which is
-          // R7RS's own leniency, not ours.
-          //
-          // This is V's alist ruling applied where it belongs: teach the system to READ an alist as
-          // a dict — tolerance and affordance at the point of use. It does NOT promote alists, and
-          // it does NOT teach dicts to be lists.
+          // ENTRY ADOPTION — see assq above (read a tool's JSON-array alist entries as pairs).
           const pair = adoptSpine(current.car) as SchemeValue;
           // Same seam-routing as member above — `compare` is a callable VALUE when
           // user-supplied, invoked via `call_function`, not a raw JS call. Its result may

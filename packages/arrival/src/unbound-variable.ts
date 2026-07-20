@@ -3,28 +3,26 @@
 // `eval/evaluator.ts#resolvedBindingOrThrow`), plus the TYPO-SUGGESTION mechanism that
 // enriches it.
 //
-// The suggestion machinery below stays zero-imports (the throw sites sit at/below the
+// The suggestion machinery below stays zero-imports: the throw sites sit at/below the
 // eval layer, so this module must be importable from anywhere in the graph with no
-// cycle risk — the same constraint the dissolved `env/polyglot-rich-errors/registry.ts`
-// documented). The one exception is `UnboundVariableError` itself, which lives in
+// cycle risk. The one exception is `UnboundVariableError` itself, which lives in
 // `errors.ts` and has zero imports of its own beyond `ArrivalError`, so importing it
 // here carries no cycle risk either.
 //
-// There is deliberately no static curated table of "well-known" names here (the old
-// dissolved registry kept one, matching typos against it). That table was declaration
-// data smuggled into the error path — every row either duplicated a REAL binding
-// (env/polyglot/polyglot.ts, the SRFI/R7RS packs) or duplicated a DECLARED
+// There is deliberately NO static curated table of "well-known" names here. Such a table
+// is declaration data smuggled into the error path: every row duplicates either a REAL
+// binding (env/polyglot/polyglot.ts, the SRFI/R7RS packs) or a DECLARED
 // `symbol.notImplemented` door (env/polyglot/polyglot-stubs.ts, env/srfi/srfi-stubs.ts,
-// env/r7rs/host.ts); the one genuinely-absent row it had (SRFI-1's bare `fold`) is now
-// a declared door in env/srfi/srfi-1.ts. Teaching about well-known-but-absent names is
-// CAPABILITY DATA resolving through the ordinary chain now, not a special error path.
+// env/r7rs/host.ts) — and a genuinely-absent well-known name (e.g. SRFI-1's bare `fold`)
+// belongs as a declared door in its own pack (env/srfi/srfi-1.ts), not a table row.
+// Teaching about well-known-but-absent names is CAPABILITY DATA resolving through the
+// ordinary chain, not a special error path.
 //
 // What remains here is exactly the half that CANNOT be declared: a MISTYPED name has no
 // declaration site. Suggestions derive from the resolution chain's ACTUAL vocabulary
-// (every name bound in the env the miss happened against — passed in by the throw site),
-// which is strictly better than the static table was:
+// (every name bound in the env the miss happened against — passed in by the throw site):
 //   • a typo of a REAL bound symbol suggests that symbol — including prelude-defined
-//     names and per-env tool verbs the table never knew about;
+//     names and per-env tool verbs;
 //   • the declared notImplemented doors ARE bindings, so declaring a stub makes it
 //     typo-suggestible for free through the same mechanism (suggest the door, and
 //     calling the door teaches the reason);

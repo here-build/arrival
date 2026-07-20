@@ -8,7 +8,7 @@
 // name the define bodies below reach — `deps: [equality, numeric, lists, polyglot]`
 // below is the complete set, each a declared edge.
 //
-// The combinator survivors relocated from arrival-extensions:
+// The combinators this pack owns:
 //   • complement  — SRFI-235: the boolean negation of a predicate.
 //   • constantly  — SRFI-235: K combinator (ignore args, return constant).
 //   • always      — SRFI-235: ignore args, return #t (NOT constantly).

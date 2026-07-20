@@ -337,9 +337,8 @@ export default new EnvCapability("scheme/equality", {
         refPolicy: "eta",
       },
       // The empty list is the ANil singleton (and its provenance clones). Raw JS
-      // null/undefined no longer reach here — the membrane boxes JS null→nil and
-      // undefined→theVoid before any value enters the language — so the legacy
-      // global_env's `|| null || undefined` nullish tolerance is dissolved.
+      // null/undefined never reach here — the membrane boxes JS null→nil and
+      // undefined→theVoid before any value enters the language.
       //
       // ── PLUS one TOLERANCE, scoped to the BORROWED array ──────────────────────────────────
       //

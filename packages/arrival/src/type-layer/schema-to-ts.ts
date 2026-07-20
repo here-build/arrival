@@ -1,7 +1,7 @@
 // schema-to-ts — the HARVEST: a scheme-zod schema (and an AEntity's normalized
-// input/output) → a TypeScript type-STRING. This is what will (post-migration)
-// replace the hand-written `type:` field on every symbol; for now it is a
-// STANDALONE printer — nothing wires it into the type-lens yet.
+// input/output) → a TypeScript type-STRING. `signatureOf` feeds the lens's ambient
+// prelude (prelude.ts, one arrow per grant tool); `printType`/`sTagToTsType` are the
+// standalone schema and schema-DSL-tag printers.
 //
 // ─────────────────────────────────────────────────────────────────────────────
 // HOW IT WORKS — three layers, each ~a handful of lines:
@@ -21,7 +21,7 @@
 //                                 NAME (by identity — scheme-zod.ts is the one place that
 //                                 actually knows every vocabulary item, having declared them),
 //                                 and IMAGE_BY_NAME below maps that name to the TS image to
-//                                 emit. This file no longer maintains its own class-name-string
+//                                 emit. This file keeps no class-name-string
 //                                 or schema-identity recognition tables — a new scheme-zod
 //                                 primitive only needs ONE new entry, in scheme-zod.ts's own
 //                                 NAMES map, plus (if it should print as something other than
@@ -85,11 +85,11 @@ const lambdaNode: NodeBuilder = (ts) => {
 };
 
 // Keyed by the canonical NAME `scheme-zod.ts`'s `lookupName()` returns for a vocabulary
-// schema — NOT class-name-string, NOT schema-object-identity. Both of those lived here
-// as TWO SEPARATE tables before this fix, meaning every new scheme-zod primitive needed
-// a second, hand-authored entry in THIS file too (exactly what happened to `z.lambda` —
-// it shipped with no printer entry at all). scheme-zod.ts is the one place that actually
-// knows every vocabulary item's identity; this file now only needs to know how to PRINT
+// schema — NOT class-name-string, NOT schema-object-identity. Keying on either would
+// need a second recognition table here, hand-synced on every new scheme-zod primitive
+// — the drift that lets a primitive (as `z.lambda` once did) ship with no printer entry
+// at all. scheme-zod.ts is the one place that knows every vocabulary item's identity;
+// this file only needs to know how to PRINT
 // a given name, not how to RECOGNIZE one.
 const IMAGE_BY_NAME: ReadonlyMap<string, NodeBuilder> = new Map<string, NodeBuilder>([
   // NOTE: no "pair" entry — `z.pair` is `cons(value, value)`, named "cons", and prints via
@@ -136,7 +136,7 @@ const IMAGE_BY_NAME: ReadonlyMap<string, NodeBuilder> = new Map<string, NodeBuil
  *  v2 made most primitives codecs/pipes, not leaf customs). A registered name WITHOUT an image
  *  (`schemeNumber`/`vector`/`dict`/`list`/`cons`, and the number/exact/bigint UNIONs whose members
  *  carry their own image) returns undefined so zod-to-ts composes it per-member — so `z.schemeNumber`
- *  prints "number | number" (exact/inexact fire per-member, both `number` now that z.bigint is
+ *  prints "number | number" (exact/inexact fire per-member, both `number`; z.bigint is
  *  retired), undeduped — the same known gap as `z.vector` below — never short-circuited. An
  *  UNregistered leaf custom degrades to `unknown` (never throw); an unregistered compound defers. */
 const instanceofOverride: OptionalTypeOverrideFunction = (schema, typescript) => {

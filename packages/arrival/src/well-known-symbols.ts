@@ -10,7 +10,7 @@
 // collide. The one exception is LOCATION — see its note.
 //
 // CLASS is the other exception, in the opposite direction (key taxonomy,
-// PRINCIPLES.md P7 corollary): it is an ALGEBRA INSTRUCTION KEY, not a
+// docs/PRINCIPLES.md P7 corollary): it is an ALGEBRA INSTRUCTION KEY, not a
 // metadata slot, so it is a plain STRING (`"arrival/class"`), not a
 // `Symbol.for` registry entry — every static interpreter (type lens, oracle,
 // lineage classifier, trace, MCP harvest) consumes instruction names as data,
@@ -21,7 +21,7 @@
 // those) only because it long predates the taxonomy split; a forged own data
 // key named `"arrival/class"` on a borrowed JS object is DATA, never
 // protocol — the membrane never reads a wrapped source's own keys as
-// instructions (the forgery-guard law, `membrane/crossing.law.test.ts`).
+// instructions (the forgery-guard law, `membrane/__tests__/crossing.law.test.ts`).
 
 /**
  * STRING tag identifying a value class, read via `constructor[CLASS]`

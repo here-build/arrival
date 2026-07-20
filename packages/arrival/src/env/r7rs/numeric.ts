@@ -265,10 +265,9 @@ const divFn = (first: ANumeric, ...rest: ANumeric[]): ANumeric => {
 };
 
 // ── Integer division family ─────────────────────────────────────────────────────
-// Everything below is plain `number` now (§2.0/§2.1 — RATIO, both AExact fields
-// already safe-int by construction); the old bigint/number dual-branch collapses to
-// one path per helper, `exact`-tagged only to thread contagion (bothExact) into the
-// caller's AExact-vs-AInexact choice.
+// Everything below is plain `number` (§2.0/§2.1 — RATIO, both AExact fields
+// safe-int by construction): one path per helper, `exact`-tagged only to thread
+// contagion (bothExact) into the caller's AExact-vs-AInexact choice.
 
 /** `a - (a % b)` divides `b` EXACTLY (by construction of `%`), so the IEEE division
  *  below is exact whenever the true quotient is itself a safe integer — mirrors
@@ -813,7 +812,7 @@ function looseCompare(sym, core: (this: CallCtx, ...a: unknown[]) => unknown) {
   // `core.call(this, …)` (not a bare `core(...)`) — `core` is `wrapOrd(ltOp/gtOp/…)`,
   // itself `this.runCtx`-dependent (nativeNumericOp's fn reads `this.runCtx`); a bare
   // call would drop `this` down the composition chain and crash on `this.runCtx` of
-  // undefined (the wave-1 sweep's own regression this comment fixes).
+  // undefined.
   const fn = function (this: CallCtx, ...args) {
     if (this.runCtx.strict === true) {
       if (!args.every(isNumberOperand))
@@ -843,10 +842,8 @@ function looseCompare(sym, core: (this: CallCtx, ...a: unknown[]) => unknown) {
 // "every current caller… lives in the env/r7rs cluster… does not yet pass one" —
 // that cluster is this file).
 // (q . r) product — multi-return is doored on binding. `floorQuotientFn`/
-// `floorRemainderFn` already accept EITHER ANumeric kind via `toIntegerPair` — no
-// pre-conversion to AExact needed (the old bigint port's `BigInt(Math.trunc(...))`
-// pre-box was dead weight even before this rework: the callee re-derives via
-// `toInteger` regardless).
+// `floorRemainderFn` accept EITHER ANumeric kind via `toIntegerPair`, so no
+// pre-conversion to AExact is needed — the callee re-derives via `toInteger`.
 const floorSlashFn = function (this: CallCtx, n1: unknown, n2: unknown): unknown {
   const a = coerceNumeric(n1, this.runCtx);
   const b = coerceNumeric(n2, this.runCtx);

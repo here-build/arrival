@@ -4,22 +4,19 @@
 //   • eof                       — the EOF singleton (values/primitives/EOF.ts)
 // `exec` is exported explicitly below from generator-exec — the canonical stack-safe path.
 //
-// `global_env` / `user_env as env` (env-roots.ts) are NO LONGER barrel-exported (wave V1,
-// the environment-privatization design §II.3): zero external consumers
-// (census I.1 #1) — the two native/interaction roots stay internal-only. env-roots.ts itself
-// is untouched; only this export retires.
+// `global_env` / `user_env` (env-roots.ts) are NOT barrel-exported — the two
+// native/interaction roots stay internal-only, no external consumers
+// (arrival-environment-privatization.md §II.3).
 export { box, patch_value, quote } from "./values/values-repr.js";
 export { eof } from "./values/primitives/EOF.js";
-// `sandboxedEnv` (the inference-plane base env, env-roots' third root) is NO LONGER
-// barrel-exported — the V5 atomic cut (arrival-environment-privatization.md §II.3, D5:
-// hard delete, all consumers migrated in the same wave). The instance surface it exposed
+// `sandboxedEnv` (the inference-plane base env, env-roots' third root) is NOT
+// barrel-exported (arrival-environment-privatization.md §II.3); the identity boundary
+// holds internally (inference-env.ts). The instance surface it exposed
 // (`.inherit` / `.set` / `.defineRosetta`) decomposes into the declared doors:
 //   • host vocabulary            → `exec({ capabilities })` / `assembleAmbient` (`/env`)
 //   • a program's declared param → `define/overridable` + `exec({ override })`
 //   • define accumulation        → `exec({ scope })` + `LexicalScope.fresh()`
 //   • session/decomposed reuse   → `assembleAmbient` + `exec({ ambient, scope })`
-// inference-env.ts itself is untouched (the identity boundary holds internally); only
-// the public export retired. The barrel now contains ZERO AmbientRuntime instances.
 // Interop sealing — `@arrival.private` (+ `markInteropBoundary`) marks a class opaque to
 // a Scheme member-read (`(@ x :internal)` → nil). `markSandboxPrivate`/`markAsSandboxBoundary`
 // are deprecated aliases kept for cross-package consumers (arrival-chain).
@@ -33,9 +30,9 @@ export { schemeToJs, schemeToJsUntyped, jsToScheme, createRosettaWrapper, type R
 // Runtime value hierarchy. Provenance algebra: docs/spec/arrival-chain.md.
 export { type AKind, AValue, EMPTY_PROVENANCE, pointProvenance, unionProvenance } from "./values/primitives/AValue.js";
 
-// A* aliases for arrival-chain compatibility — both spellings work until L4
-// deletes the draft AValue there. Re-exports live here (not in AValue.ts) to
-// preserve the no-subtype-imports invariant — see the cycle note in AValue.ts.
+// A* aliases for arrival-chain compatibility — both spellings work while
+// arrival-chain still carries its own draft AValue. Re-exports live here (not in
+// AValue.ts) to preserve the no-subtype-imports invariant — see the cycle note in AValue.ts.
 export {
   ABool,
   schemeFalse as AFalse,
@@ -84,7 +81,7 @@ export {
   type RunCacheEntry,
   type RunCacheClass,
 } from "./run/run-cache.js";
-// The effect log (W1, the plexus effect-burst design §2.3) + the read
+// The effect log (W1, arrival-plexus-effect-burst.md §2.3) + the read
 // guard (W2, §2.4): `exec(src, { effects, reads })` gathers sink penetrations instead of firing
 // them and (with `reads` armed) checks the read-your-deferred-write invariant. A host building a
 // confirm-manifest (arrival-mcp's confirm-manifest.ts, arrival-provenance-confirmation.md) reads
@@ -133,11 +130,9 @@ export { AExact } from "./values/primitives/AExact.js";
 export { AInexact } from "./values/primitives/AInexact.js";
 export { type ANumeric, parseNumber as parseNumber } from "./values/numbers.js";
 
-// Former bridge.ts surface, re-exported from the real homes (bridge.ts — the
-// LIPS-era monolith's last husk — is deleted; see env/r7rs/error-objects.ts's
-// header for the lineage). `initBridge` stays the stable public name for
-// "ensure the runtime base is assembled" (inhuman cli.ts and the smoke suites
-// await it); it aliases the realm-cached `ensureBaseAssembled`.
+// `initBridge` is the stable public name for "ensure the runtime base is assembled"
+// (inhuman cli.ts and the smoke suites await it); it aliases the realm-cached
+// `ensureBaseAssembled`. `coerceNumeric` / `wrappedOps` re-surface from their real homes.
 export { coerceNumeric } from "./values/op-helpers.js";
 export { wrappedOps } from "./env/r7rs/error-objects.js";
 export { ensureBaseAssembled as initBridge } from "./eval/generator-exec.js";

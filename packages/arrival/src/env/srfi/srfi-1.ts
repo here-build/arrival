@@ -182,9 +182,9 @@ const listAlike = z.listAlike;
 // decode `unknown` off `z.pair`'s default `APair<unknown, unknown>` generic (the SAME shared
 // identity primitive lists.ts's list ops use) — every recursive/return site that hands a car/cdr
 // back through this SchemeValue-returning fn casts it. findImpl carries no runtime pair-or-nil
-// check of its own (an earlier revision's `typecheck(...)` guards were removed; `symbol.native`
-// contracts are TYPE-ONLY and never validated at runtime — see string-split's comment in
-// srfi-13.ts), so the cast restates the TS-declared `AListAlike` shape, not a runtime-verified one.
+// check of its own (`symbol.native` contracts are TYPE-ONLY and never validated at
+// runtime — see string-split's comment in srfi-13.ts), so the cast restates the
+// TS-declared `AListAlike` shape, not a runtime-verified one.
 // `runCtx` is a required parameter (not a defaulted CONSTANT_CTX) — a plain recursive
 // call (not a dispatch-bound `this: CallCtx`) can't recover the live ctx any other
 // way, so it's threaded explicitly through every recursive step. The `find` binding
@@ -207,43 +207,36 @@ function findImpl(arg: (...args: unknown[]) => unknown, list: AListAlike, runCtx
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Contract.emit — THE PHASE-2 RELOCATION DRILL (constitution §9, Wave 3): filter's
-// rule grows here, onto its OWN Contract's `emit` field — the same pattern lists.ts's
-// cons/map/apply and numeric.ts's quotient/modulo/=/+/-/*// relocations established.
-// The residual shape is BYTE-FOR-BYTE identical to the compiler-side table rule
-// (`arrival/packages/arrival-mercury/src/rules/phase1.ts`'s `filterRule`), built
-// via `@inhuman.tools/arrival/emit`'s residual-lite constructors.
+// filter.emit — the compiler-facing rule, on filter's own Contract.
 //
-// ⚠ UNLIKE every other Wave-1/2/3 symbol, filter's TABLE ROW DOES NOT GO AWAY —
-// phase1.ts's own relocation note has the full account: `scheme/srfi-1` (this
-// Contract's own capability) is not part of the oracle's harvested ambient, so the
-// compiler-side table row is the ONLY copy reachable through the real pipeline today
-// (`emitRegistryOf(session.ambient)` returns zero rows for ANY srfi-1 symbol,
-// verified directly — not just filter). This `emit` field is therefore genuinely
-// INERT in production until that ambient gap closes — a forward-declared, fully
-// tested (srfi-1-emit.test.ts) twin of the reachable rule, not dead code to prune.
+// DRIFT ALARM: the residual shape is BYTE-FOR-BYTE identical to the compiler-side
+// table rule (`arrival/packages/arrival-mercury/src/rules/phase1.ts`'s `filterRule`),
+// built via `@inhuman.tools/arrival/emit`'s residual-lite constructors. The twin's
+// equivalence is pinned by srfi-1-emit.test.ts — where drift surfaces.
 //
-// Law F + the read register (constitution §1): a fact-directed clean/conservative
-// split, exactly like `not`'s (equality.ts, Wave 2) — fact absence takes the
-// conservative `(x) => pred(x) !== false` form in the run register (Scheme keeps
-// everything except `#f`; JS's own `.filter` truthiness would wrongly drop
-// Scheme-truthy `0`/`""`); the read register short-circuits to the clean, bare
-// `.filter(pred)` form unconditionally (glass is never executed).
+// INERT IN PRODUCTION, NOT dead code to prune: filter's compiler-side TABLE ROW does
+// not go away. `scheme/srfi-1` is not part of the oracle's harvested ambient, so that
+// table row is the ONLY copy reachable through the real pipeline
+// (`emitRegistryOf(session.ambient)` returns zero rows for ANY srfi-1 symbol). This
+// `emit` field stays inert until that ambient gap closes — a forward-declared, tested
+// twin of the reachable rule. (phase1.ts carries the full account.)
 //
-// NOT a callable-returnFacts package deal (flagged, not invented): the clean branch's
-// fact check (`ctx.argFacts[0]?.boolean`) reads a fact about `pred` ITSELF — under
-// today's `TypeFacts` vocabulary (constitution §3.3; typefacts-extraction.md §2) a
-// function value's own type is never `BooleanLike`, so this branch is structurally
-// unreachable in the run register today (only the read-register short-circuit reaches
-// the clean form) — relocated verbatim, not fixed, because fixing it needs a fact
-// about the PREDICATE'S RETURN type when called, which no shipped spec names (see
-// this wave's report for the full reasoning: no `returnFacts`-shaped field exists on
-// `TypeFacts.callable` in the constitution, typefacts-extraction.md, or registry-emit.md,
-// and the extraction code that would populate one lives in arrival-lsp, outside
-// this relocation's boundary).
+// Law F clean/conservative split: fact absence takes the conservative
+// `(x) => pred(x) !== false` form in the run register — Scheme keeps everything except
+// `#f`, and JS's own `.filter` truthiness would wrongly drop Scheme-truthy `0`/`""`;
+// the read register short-circuits to the clean, bare `.filter(pred)` form
+// unconditionally (glass is never executed).
+//
+// The clean branch is structurally unreachable in the run register today: its fact
+// check (`ctx.argFacts[0]?.boolean`) reads a fact about `pred` ITSELF, but under the
+// current `TypeFacts` vocabulary a function value's own type is never `BooleanLike`,
+// so only the read-register short-circuit ever reaches the clean form. Reaching it in
+// the run register would need a fact about the PREDICATE'S RETURN type when called —
+// no shipped spec names a `returnFacts`-shaped field on `TypeFacts.callable`, and the
+// extraction code that would populate one lives in arrival-lsp, outside this package.
 // ════════════════════════════════════════════════════════════════════════════
 
-/** Fixed-arity refusal — verbatim relocation of phase1.ts's own `exactly` helper (see
+/** Fixed-arity refusal — a verbatim copy of phase1.ts's own `exactly` helper (see
  *  numeric.ts's/lists.ts's own copies of this same helper for the full rationale): a
  *  fixed-arity builtin called wrong is a static defect, caught here (a compile
  *  diagnostic via `ctx.door`) rather than left to crash the walker on an `undefined`
@@ -253,7 +246,7 @@ function exactly<T>(ctx: EmitCtx<R>, sym: string, args: readonly T[], n: number)
   return args;
 }
 
-/** The rules-side twin of the walker's `ruleOf` narrowing seam — verbatim relocation
+/** The rules-side twin of the walker's `ruleOf` narrowing seam — a verbatim copy
  *  of phase1.ts's own `freshBinding` helper (see lists.ts's own copy for the full
  *  rationale): `EmitCtx.fresh` is typed `unknown` in arrival core; the walker's real
  *  `ctxFor` supplies the namer's `Binding`. One helper, one cast, documented. */
@@ -322,7 +315,7 @@ export default new EnvCapability("scheme/srfi-1", {
             <T>(p: (x: T) => unknown, xs: readonly T[]): readonly T[];
           }
         `,
-          // Compiler-facing (constitution §4.1) — the Phase-2 relocation drill, Wave 3.
+          // Compiler-facing rule — see filterEmitRule's block above.
           emit: filterEmitRule,
         },
         (args, runCtx) => {
@@ -947,9 +940,6 @@ export default new EnvCapability("scheme/srfi-1", {
     ),
 
     // ============ SRFI-1 (the missing third + parallel-list utilities) ============
-    // Relocated here from the legacy core bootstrap so the whole SRFI-1 surface is
-    // observable in one module. These retire the hand-rolled dedupe/member?/index-map
-    // helpers that were reinvented across the pipeline.
 
     // (iota count [start step]) — start/step genuinely optional ⇒ inputRest. Elements
     // are (+ start (* i step)) — inexact whenever start/step are ⇒ the honest element

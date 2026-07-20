@@ -76,8 +76,7 @@ export default new EnvCapability("scheme/srfi-28", {
   symbols: {
     format:
       symbol.native`format: fills a format string using ~ directives and returns the resulting string (SRFI-28/48); supports (format fmt arg ...) and (format #f fmt ...)`(
-        // REAL contract (W4 — retired the fully-shapeless `z.array(z.value)`): a
-        // FIXED head + an `inputRest` variadic tail (the rosetta idiom —
+        // Contract: a FIXED head + an `inputRest` variadic tail (the rosetta idiom —
         // `_bake.ts`'s `normalizeInputVector`/`DecodedArgsWithRest`; same shape
         // family as `r7rs/strings.ts`'s `string-append`). The head's honest type is
         // `string | boolean` — SRFI-28 proper's fmt-string arg UNIONED with the
@@ -88,11 +87,10 @@ export default new EnvCapability("scheme/srfi-28", {
         // teaching door below (DEST_REASON) — z.union can't express "boolean, but
         // only false", and `symbol.native` never runtime-validates its contract
         // anyway (`_bake.ts`: "zod for TYPES purely" — no z.decode fires here), so
-        // the union costs nothing beyond the .d.ts/static-arity precision it buys
-        // over the old form (which couldn't even statically say format takes ≥1
-        // argument). `inputRest` is `z.value` — the representation-BLIND
-        // scheme-value identity — since a directive-fill arg can be ANY scheme
-        // value (rendered via `displayOf`/`writeOf`).
+        // the union costs nothing beyond the .d.ts/static-arity precision it buys:
+        // it statically pins format at ≥1 argument. `inputRest` is `z.value` — the
+        // representation-BLIND scheme-value identity — since a directive-fill arg
+        // can be ANY scheme value (rendered via `displayOf`/`writeOf`).
         { input: [z.union([z.string, z.boolean])], inputRest: z.value, output: [z.string] },
         function (this: CallCtx, head: AString | ABool | undefined, ...tail: unknown[]): AString {
           // ── Resolve destination vs format string ───────────────────────────────

@@ -43,8 +43,8 @@ export default new EnvCapability("scheme/chars", {
       },
     ),
 
-    // char</>/<=/>= derive from SchemeCharacter's arrival/tagless-final/lte (wave-1 Ord) via
-    // the shared deriveOrd chain — see ORD_REL above.
+    // char</>/<=/>= derive from SchemeCharacter's arrival/tagless-final/lte via the
+    // shared deriveOrd chain.
     "char<?": symbol.native`char<?: strictly-increasing character order`(
       { input: [], inputRest: z.char, output: [z.boolean] },
       deriveOrd("<"),
@@ -114,7 +114,7 @@ export default new EnvCapability("scheme/chars", {
 
     // Character classification
     // R7RS § 6.6: each predicate returns #t iff the character's Unicode general
-    // category falls in the expected set. The previous round-trip-case heuristic
+    // category falls in the expected set. A round-trip-case heuristic
     // (`lower !== upper`) misses every category-Lo script (CJK, Hangul, Hebrew,
     // Arabic, …) because Lo has no case mapping → lower === upper → predicate
     // returns #f. `unicodeProperties.getCategory(codepoint)` is the source of
@@ -142,8 +142,8 @@ export default new EnvCapability("scheme/chars", {
       function (this: CallCtx, char) {
         const cp = charValue(char).codePointAt(0)!;
         // Number categories: Nd (decimal digit), Nl (letter number), No (other).
-        // The previous `isDigit` only matched Nd — CJK numerals (Nl) and Roman
-        // numerals (Nl) were misclassified.
+        // A bare `isDigit` matches only Nd, misclassifying CJK and Roman
+        // numerals (Nl).
         switch (unicodeProperties.getCategory(cp)) {
           case "Nd":
           case "Nl":

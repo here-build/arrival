@@ -16,6 +16,14 @@ import type { StackFrame } from "./eval/evaluator.js";
 import type { SchemeValue } from "./values/types.js";
 
 // -------------------------------------------------------------------------
+// :: SPEC-TAXONOMY CODES — a `code` field on an error is a stable id
+// (E-UNTERMINATED, E-DICT-DUP-KEY, E-LET-BRACKET-*, …). The polyglot grammar
+// specs (src/reader/__tests__/polyglot/, see its README error-taxonomy table)
+// match error CLASSES on `code`, not on prose — messages stay free to teach
+// while the contract stays machine-checkable.
+// -------------------------------------------------------------------------
+
+// -------------------------------------------------------------------------
 // :: Source Location Tracking
 // -------------------------------------------------------------------------
 
@@ -54,8 +62,7 @@ export class Unterminated extends Error {
   }
 
   location?: SourceLocation;
-  /** Stable spec-taxonomy id — the polyglot grammar specs (src/reader/__tests__/polyglot/,
-   *  see its README error taxonomy table) match error CLASSES on this, not on prose. */
+  /** Stable spec-taxonomy id — see SPEC-TAXONOMY CODES in the file header. */
   readonly code = "E-UNTERMINATED";
 
   constructor(message: string, location?: SourceLocation) {
@@ -79,10 +86,8 @@ export class ParseError extends Error {
   }
 
   location?: SourceLocation;
-  /** Stable spec-taxonomy id (e.g. E-DICT-DUP-KEY) — the polyglot grammar specs
-   *  (src/reader/__tests__/polyglot/, see its README error taxonomy table) match error
-   *  CLASSES on this, not on prose, so messages stay free to teach while the
-   *  contract stays machine-checkable. */
+  /** Stable spec-taxonomy id (e.g. E-DICT-DUP-KEY) — see SPEC-TAXONOMY CODES
+   *  in the file header. */
   code?: string;
 
   constructor(message: string, location?: SourceLocation, code?: string) {
@@ -188,7 +193,7 @@ export class ArrivalError extends Error {
 // are engine-authored, arrival never writes them. A host bug is an INTERNAL arrival defect
 // (an impl that bypassed its zod/typecheck contract), so it must keep its scheme stack
 // rather than surface bare. Matching is intentionally conservative — a miss just falls
-// back to today's behavior.
+// back to the default (treat as an ordinary arrival error) behavior.
 const HOST_RUNTIME_BUG_RE =
   /Cannot read propert|reading '|is not a function|is not iterable|is not a constructor|Spread syntax requires|Maximum call stack|is not defined/;
 // Returns `boolean`, not an `e is Error` predicate — a predicate would make a `? :`'s
@@ -501,8 +506,8 @@ export class DefineLocalityError extends ArrivalError {
 // -------------------------------------------------------------------------
 // :: DefineForwardReferenceError — an EAGER (non-lambda) `symbol.define` RHS
 // referencing a LATER sibling define in the same capability. Ordering is
-// decidable statically; the prelude used to enforce it only by crashing at eval
-// time — this makes it a named bake-time door instead.
+// decidable statically, so this is a named bake-time door rather than an
+// eval-time crash.
 // -------------------------------------------------------------------------
 export class DefineForwardReferenceError extends ArrivalError {
   static [CLASS] = "define-forward-reference-error";
@@ -775,16 +780,15 @@ export class ResolvedNonValueError extends ArrivalError {
 //
 // ~50 sites across evaluator.ts (if/quote/quasiquote/unquote(-splicing)/define/
 // lambda/define-macro/let/let*/letrec/cond/case/when/unless/do/while/try/`=>`
-// clauses/improper-list-call) are boundary-reachable (malformed-but-plausible
-// Scheme a model can trivially write) yet were plain tiny-invariant calls — each
-// PREFIXED "Invariant failed: " (tiny-invariant's own wording), which reads like
-// an engine bug rather than a program mistake. ONE class, not 50: the FORM is a
-// fact carried on the instance, not a taxonomy of identities — per-form classes
-// would be taxonomy noise. Converges in SHAPE on the bracket-bindings exemplar
-// above (`EvalError` + `E-LET-BRACKET-*` codes: form/code carried as facts,
-// message built once); `code` stays optional here since most of these sites
-// predate the spec-corpus code convention; backfilling one per form remains
-// future work.
+// clauses/improper-list-call) are boundary-reachable — malformed-but-plausible
+// Scheme a model can trivially write. A plain tiny-invariant guard there prefixes
+// "Invariant failed: " (tiny-invariant's own wording), which reads like an engine
+// bug rather than a program mistake; this door reads as the program mistake it is.
+// ONE class, not 50: the FORM is a fact carried on the instance, not a taxonomy of
+// identities — per-form classes would be taxonomy noise. Same SHAPE as the
+// bracket-bindings exemplar above (`EvalError` + `E-LET-BRACKET-*` codes: form/code
+// carried as facts, message built once); `code` stays optional here (most sites
+// carry no corpus code, and backfilling one per form is deferred).
 // -------------------------------------------------------------------------
 export class SpecialFormShapeError extends ArrivalError {
   static [CLASS] = "special-form-shape-error";
@@ -794,8 +798,7 @@ export class SpecialFormShapeError extends ArrivalError {
     /** The special form whose shape guard failed (`if`, `let`, `=>`, `apply`, …) —
      *  routing/telemetry key. */
     public readonly form: string,
-    /** What's wrong — terse today at most sites; a future pass may enrich per-form
-     *  with full what/why/fix prose (V-reviewed, not this pass). */
+    /** What's wrong — terse at most sites; per-form what/why/fix enrichment is deferred. */
     public readonly problem: string,
     /** Stable spec-taxonomy id, when the corpus already matches one. */
     public readonly code?: string,
@@ -1338,4 +1341,4 @@ export function offendingValueOf(error: unknown): unknown | undefined {
 
 // NOTE: KwargsRejectionError is NOT here — it's colocated in
 // `common/kwargs-rejection.ts` beside the frozen rejection-string grammar it
-// throws (mechanism-local per §3.2's colocation rule), not duplicated in this leaf.
+// throws (mechanism-local colocation), not duplicated in this leaf.

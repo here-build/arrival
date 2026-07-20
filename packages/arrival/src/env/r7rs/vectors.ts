@@ -65,8 +65,8 @@ export default new EnvCapability("scheme/vectors", {
       function (this: CallCtx, k: unknown, fill?: SchemeValue): AVector {
         const len = Number(typeof k === "number" ? k : (k as AExact).valueOf());
         // O(1) cap check BEFORE Array.from materializes \`len\` slots — see
-        // assertAllocatable. \`Array.from({length})\` on an oversized count is the
-        // >10s hang the audit caught.
+        // assertAllocatable. \`Array.from({length})\` on an oversized count hangs
+        // for >10s.
         assertAllocatable(len, "make-vector");
         // Materialize the fill into every slot AT construction. The fill slot takes any
         // scheme value by design (z.value / SchemeValue) — a provided fill has crossed
@@ -112,7 +112,7 @@ export default new EnvCapability("scheme/vectors", {
           }
         `,
       },
-      // v2 vector() decodes the scheme face to AVector | AJSArray (borrowed array), not AVector only.
+      // vector() decodes the scheme face to AVector | AJSArray (borrowed array), not AVector only.
       function (this: CallCtx, ...vectors: (AVector | AJSArray)[]): AVector {
         const arrays = vectors.map((v) => asVector(v, "vector-append"));
         return withInputProvenance(vectors, new AVector(this.runCtx, ([] as SchemeValue[]).concat(...arrays)));
