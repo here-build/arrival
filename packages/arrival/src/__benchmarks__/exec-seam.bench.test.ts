@@ -27,10 +27,10 @@ import { exec, execExpr, parse } from "../eval/generator-exec.js";
 import run, { evaluate } from "../eval/evaluator.js";
 import { Resolver } from "../eval/Resolver.js";
 import { Capabilities } from "../eval/Capabilities.js";
-import { user_env } from "../env-roots.js";
+import { user_env } from "../env/env-roots.js";
 import { makeRunContext } from "../run/RunContext.js";
 import { freshEnv } from "../__tests__/_fresh-env.js";
-import type { AmbientRuntime } from "../AmbientRuntime.js";
+import type { AmbientRuntime } from "../env/AmbientRuntime.js";
 import type { SchemeValue } from "../values/types.js";
 
 const SOURCE = "(+ 1 2 3 4 5)";

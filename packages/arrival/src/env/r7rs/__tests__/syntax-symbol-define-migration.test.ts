@@ -61,7 +61,7 @@
 //     inside a bound form's body is the documented `binder` blind spot — it
 //     surfaces only at runtime, not as a StaticValidationError.
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../../AmbientRuntime.js";
+import { mintFrame } from "../../AmbientRuntime.js";
 import syntaxPack from "../syntax.js";
 import { exec } from "../../../eval/generator-exec.js";
 import { StaticValidationError } from "../../../static-validation/validate-program.js";

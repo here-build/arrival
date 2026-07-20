@@ -9,8 +9,8 @@
  *   const results = await exec("(+ 1 2)", { env: myEnv });
  */
 
-import { AmbientRuntime, mintFrame, mintPlainFrame, isAmbientRuntime } from "../AmbientRuntime.js";
-import { user_env, global_env } from "../env-roots.js";
+import { AmbientRuntime, mintFrame, mintPlainFrame, isAmbientRuntime } from "../env/AmbientRuntime.js";
+import { user_env, global_env } from "../env/env-roots.js";
 import run, { evaluate, expectValue, ArrivalError, type EvalTap } from "./evaluator.js";
 import { AmbientShapeError, isHostRuntimeBug, OutputContractError } from "../errors.js";
 import { Resolver } from "./Resolver.js";

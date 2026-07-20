@@ -21,7 +21,7 @@
 //     call `(tool :a v :b v2)` reaches the impl as one decoded object, end to end.
 
 import { describe, expect, it, beforeAll } from "vitest";
-import type { ResolvingAmbient } from "../../AmbientRuntime.js";
+import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { exec, execState } from "../../eval/generator-exec.js";
 import { freshEnv } from "../../__tests__/_fresh-env.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";

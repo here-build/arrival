@@ -14,7 +14,7 @@
 // the selector. Intra-form minimal slicing (sub-form re-synthesis) is the deferred increment.
 
 import { execState, parse } from "../eval/generator-exec.js";
-import { bindValue } from "../AmbientRuntime.js";
+import { bindValue } from "../env/AmbientRuntime.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { schemeToJs } from "../membrane/rosetta.js";
 import { WireLocalityError } from "../errors.js";

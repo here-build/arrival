@@ -18,9 +18,9 @@
  * swap/or shapes the syntax-rules trio exercises.
  */
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../AmbientRuntime.js";
+import { mintFrame } from "../../env/AmbientRuntime.js";
 import { execState } from "../../eval/generator-exec.js";
-import { inferenceEnv } from "../../inference-env.js";
+import { inferenceEnv } from "../../env/inference-env.js";
 import { EvalTrace } from "../../provenance/trace.js";
 import { APair } from "../../values/primitives/APair.js";
 import { symbol } from "../../common/symbol.js";

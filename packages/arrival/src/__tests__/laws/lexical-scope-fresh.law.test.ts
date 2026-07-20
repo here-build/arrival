@@ -12,7 +12,7 @@
  *      accumulation works exactly like `execState(...).scope` round-tripping already does.
  */
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../AmbientRuntime.js";
+import { mintFrame } from "../../env/AmbientRuntime.js";
 import { exec, execState } from "../../eval/generator-exec.js";
 import { LexicalScope } from "../../eval/LexicalScope.js";
 

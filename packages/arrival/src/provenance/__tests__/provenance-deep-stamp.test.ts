@@ -26,11 +26,11 @@ import { AExact } from "../../values/primitives/AExact.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
 import { APair } from "../../values/primitives/APair.js";
 import { jsToScheme } from "../../membrane/rosetta.js";
-import { inferenceEnv } from "../../inference-env.js";
+import { inferenceEnv } from "../../env/inference-env.js";
 import { exec } from "../../eval/generator-exec.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue, mintFrame } from "../../AmbientRuntime.js";
+import { bindValue, mintFrame } from "../../env/AmbientRuntime.js";
 
 const PROV = new Set<number>([42]);
 

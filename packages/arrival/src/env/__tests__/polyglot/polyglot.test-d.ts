@@ -21,9 +21,9 @@
 // nothing in this repo can distinguish the old and new state for that one symbol.
 
 import { describe, expectTypeOf, test } from "vitest";
-import * as z from "../../common/scheme-zod.js";
-import { symbol, type DecodedReturn } from "../../common/symbol.js";
-import type { SchemeValue } from "../../values/types.js";
+import * as z from "../../../common/scheme-zod.js";
+import { symbol, type DecodedReturn } from "../../../common/symbol.js";
+import type { SchemeValue } from "../../../values/types.js";
 
 describe("scheme/polyglot Contract precision — representative fixes decode precisely", () => {
   // INVARIANT: @ (readMember)'s contract decodes to SchemeValue, not unknown

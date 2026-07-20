@@ -25,14 +25,14 @@ import { describe, expect, it } from "vitest";
 import * as arrival from "../../index.js";
 import { exec, execState } from "../../eval/generator-exec.js";
 import { LexicalScope } from "../../eval/LexicalScope.js";
-import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
+import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
 import { jsToScheme } from "../../membrane/rosetta.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AValue } from "../../values/primitives/AValue.js";
 // In-package test: internal-module access (AmbientRuntime is not barrel-exported).
-import { AmbientRuntime, mintFrame } from "../../AmbientRuntime.js";
+import { AmbientRuntime, mintFrame } from "../../env/AmbientRuntime.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../../AmbientRuntime.js";
+import { bindValue } from "../../env/AmbientRuntime.js";
 
 describe("V0 pin — barrel surface", () => {
   it("global_env / env are no longer barrel-exported (V1 zero-consumer cut)", () => {

@@ -36,19 +36,19 @@
 //      VALIDATE-ONLY — the returned value is still a real scheme list a sibling
 //      `(car …)`/`(cdr …)` can walk, never a decoded JS array leaking through.
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../../AmbientRuntime.js";
+import { mintFrame } from "../../AmbientRuntime.js";
 import * as z from "../../../common/scheme-zod.js";
 import { symbol } from "../../../common/symbol.js";
 import { EnvCapability } from "../../../common/capability.js";
 import { exec, execState } from "../../../eval/generator-exec.js";
-import { global_env } from "../../../env-roots.js";
+import { global_env } from "../../env-roots.js";
 import { initBridge } from "../../../index.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import { assembleEnv } from "../../../common/kernel.js";
 import { DefineLocalityError } from "../../../errors.js";
 import srfi189 from "../srfi-189.js";
 import type { SchemeEnv } from "../../../common/scheme-env.js";
-import type { ResolvingAmbient } from "../../../AmbientRuntime.js";
+import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 
 // Mirrors `_fresh-env.ts`'s own injected evalScheme — `skipBootstrapWait` because
 // these execs run against an env this suite is itself assembling/re-lowering onto,

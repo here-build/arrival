@@ -1,5 +1,5 @@
 import { CLASS } from "../well-known-symbols.js";
-import type { AmbientRuntime } from "../AmbientRuntime.js";
+import type { AmbientRuntime } from "../env/AmbientRuntime.js";
 import type { SchemeValue } from "../values/types.js";
 import type { MacroInvokeContext } from "./Macro.js";
 import type { Resolver } from "./Resolver.js";

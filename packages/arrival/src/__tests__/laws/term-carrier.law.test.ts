@@ -71,12 +71,12 @@
  *     exits by identity (see the toJS case's own comment).
  */
 import { describe, it, expect } from "vitest";
-import { mintFrame } from "../../AmbientRuntime.js";
+import { mintFrame } from "../../env/AmbientRuntime.js";
 import { TERMS } from "./_tables/terms.js";
 import { CARRIERS, type CarrierRow } from "./_tables/carriers.js";
 import { mint3, mint3Pair, elementBoxes, deepIds, containerProv, toPlain } from "./_tables/fixtures.js";
 import { execState } from "../../eval/generator-exec.js";
-import type { ResolvingAmbient } from "../../AmbientRuntime.js";
+import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import type { SchemeValue } from "../../values/types.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { AJSArray } from "../../membrane/AJSArray.js";

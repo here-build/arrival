@@ -23,8 +23,8 @@
 // of silently mis-sorting.
 import { describe, expect, it } from "vitest";
 import { execState } from "../eval/generator-exec.js";
-import { mintFrame } from "../AmbientRuntime.js";
-import { inferenceEnv } from "../inference-env.js";
+import { mintFrame } from "../env/AmbientRuntime.js";
+import { inferenceEnv } from "../env/inference-env.js";
 import { schemeToJs } from "../index.js";
 
 const run = (code: string) => execState(code, { env: mintFrame(inferenceEnv, "sort-lambda-comparator") });

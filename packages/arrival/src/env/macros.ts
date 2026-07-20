@@ -11,7 +11,7 @@
 import { EnvCapability } from "../common/capability.js";
 import { symbol } from "../common/symbol.js";
 import { Syntax } from "../eval/Syntax.js";
-import { bindValue, AmbientRuntime, mintFrame } from "../AmbientRuntime.js";
+import { bindValue, AmbientRuntime, mintFrame } from "./AmbientRuntime.js";
 import { extract_patterns, restore_data_gensyms, transform_syntax } from "../eval/syntax-rules.js";
 import { is_nil } from "../values/value-guards.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";

@@ -11,7 +11,7 @@ import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { initBridge } from "../../index.js";
 import { execState } from "../../eval/generator-exec.js";
 import { parse } from "../../eval/generator-exec.js";
-import { inferenceEnv } from "../../inference-env.js";
+import { inferenceEnv } from "../../env/inference-env.js";
 import { AVector } from "../../values/primitives/AVector.js";
 import { APair } from "../../values/primitives/APair.js";
 import { AValue } from "../../values/primitives/AValue.js";
@@ -21,7 +21,7 @@ import { provOf } from "../../provenance/lineage-shadow.js";
 import { sStr, sNum, run, runRaw } from "../../__tests__/_lineage-test-helpers.js";
 import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue, mintFrame } from "../../AmbientRuntime.js";
+import { bindValue, mintFrame } from "../../env/AmbientRuntime.js";
 
 // Q20b: this file's local `oneShot` helper calls execState directly (not through
 // _lineage-test-helpers.js's runRaw, which saves/restores its own call) — force

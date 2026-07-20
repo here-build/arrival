@@ -28,10 +28,10 @@
  * (payloads round-trip value + stamp ids, §5 D2 — the containment laws are WHY).
  */
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { mintFrame } from "../../AmbientRuntime.js";
+import { mintFrame } from "../../env/AmbientRuntime.js";
 import { initBridge } from "../../index.js";
 import { parse, execState } from "../../eval/generator-exec.js";
-import { inferenceEnv } from "../../inference-env.js";
+import { inferenceEnv } from "../../env/inference-env.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { classify, fieldCone, fullCone, type Bindings, type Classifier, type DeclaredRole, type PathStep } from "../../provenance/lineage.js";
 import { buildWireframe } from "../../provenance/wireframe/builder.js";

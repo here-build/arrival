@@ -14,9 +14,9 @@
 // Decoupled from the dissolving `../stdlib` surface on purpose: it sources
 // global_env from the env-roots leaf, BASE_PACKS from base-packs, and the
 // assembler from common/kernel — the stable homes that survive stdlib's deletion.
-import type { AmbientRuntime, ResolvingAmbient } from "../AmbientRuntime.js";
-import { mintFrame } from "../AmbientRuntime.js";
-import { global_env } from "../env-roots.js";
+import type { AmbientRuntime, ResolvingAmbient } from "../env/AmbientRuntime.js";
+import { mintFrame } from "../env/AmbientRuntime.js";
+import { global_env } from "../env/env-roots.js";
 import { assembleEnv } from "../common/kernel.js";
 import { BASE_PACKS } from "../env/base-packs.js";
 import { initBridge } from "../index.js";

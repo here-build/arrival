@@ -29,11 +29,11 @@ import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { collapseProvenance } from "../../../provenance/provenance-collapse.js";
 import { schemeToJs } from "../../../membrane/rosetta.js";
 import * as z from "../../../common/scheme-zod.js";
-import type { ResolvingAmbient } from "../../../AmbientRuntime.js";
+import type { ResolvingAmbient } from "../../../env/AmbientRuntime.js";
 import type { SchemeValue } from "../../../values/types.js";
 import type { CarrierRow } from "./carriers.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../../../AmbientRuntime.js";
+import { bindValue } from "../../../env/AmbientRuntime.js";
 
 /**
  * Box a raw JS leaf — or (the only path `src` actually takes, see below) an

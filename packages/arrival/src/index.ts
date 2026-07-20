@@ -121,7 +121,7 @@ export { EOF as EOF } from "./values/primitives/EOF.js";
 // Invocation-context metadata registry (the rosetta-type side-table), held off the
 // scope-node, keyed by env. `rosettaTypesOf` is the type-lens harvest seam — studio
 // derives its lens roster from `[...rosettaTypesOf(env)]`.
-export { rosettaTypesOf } from "./env-registries.js";
+export { rosettaTypesOf } from "./env/env-registries.js";
 
 // The structural env contract cross-package packs/consumers type against (never the
 // concrete `AmbientRuntime` class) — re-surfaced from `./common/scheme-env.ts` (also

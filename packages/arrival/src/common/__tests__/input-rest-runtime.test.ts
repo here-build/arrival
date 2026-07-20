@@ -17,7 +17,7 @@
 // existing suite for that byte-identical-when-absent coverage; this file is additive-only.
 
 import { describe, expect, it, beforeAll } from "vitest";
-import type { ResolvingAmbient } from "../../AmbientRuntime.js";
+import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { execState } from "../../eval/generator-exec.js";
 import { freshEnv } from "../../__tests__/_fresh-env.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";

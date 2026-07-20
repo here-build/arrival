@@ -37,19 +37,19 @@
 //      free reference, NO declared deps) throws `DefineLocalityError`, pinning
 //      that the bug this migration fixes was real and is now caught.
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../../AmbientRuntime.js";
+import { mintFrame } from "../../AmbientRuntime.js";
 import * as z from "../../../common/scheme-zod.js";
 import { symbol } from "../../../common/symbol.js";
 import { EnvCapability } from "../../../common/capability.js";
 import { exec, execState } from "../../../eval/generator-exec.js";
-import { global_env } from "../../../env-roots.js";
+import { global_env } from "../../env-roots.js";
 import { initBridge } from "../../../index.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import { assembleEnv } from "../../../common/kernel.js";
 import { DefineLocalityError } from "../../../errors.js";
 import srfi128 from "../srfi-128.js";
 import type { SchemeEnv } from "../../../common/scheme-env.js";
-import type { ResolvingAmbient } from "../../../AmbientRuntime.js";
+import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 
 // Mirrors `_fresh-env.ts`'s own injected evalScheme — `skipBootstrapWait` because
 // these execs run against an env this suite is itself assembling/re-lowering onto,

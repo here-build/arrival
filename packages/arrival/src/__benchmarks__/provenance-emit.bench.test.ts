@@ -27,12 +27,12 @@ import { emitFanInstantiation, emitIngressBinding, emitMint, emitMuxDecision, se
 import { PayloadStoreFake, ProvenanceStoreFake } from "../provenance/store/fakes.js";
 import type { RecordId } from "../provenance/store/ids.js";
 import { execState } from "../eval/generator-exec.js";
-import { inferenceEnv } from "../inference-env.js";
+import { inferenceEnv } from "../env/inference-env.js";
 import { CONSTANT_CTX } from "../run/RunContext.js";
 import { setEagerProvenanceOracleEnabled, withInputProvenance } from "../values/op-helpers.js";
 import { jsToScheme } from "../membrane/rosetta.js";
 // In-package bench: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue, mintFrame } from "../AmbientRuntime.js";
+import { bindValue, mintFrame } from "../env/AmbientRuntime.js";
 
 const REGION = "bench-region";
 const ITERATIONS = 5000;

@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import { EnvCapability } from "../capability.js";
 import { port, type Resource } from "../resources.js";
-import { ResolvingAmbient, mintResolvingFrame } from "../../AmbientRuntime.js";
+import { ResolvingAmbient, mintResolvingFrame } from "../../env/AmbientRuntime.js";
 import { schemeToJsUntyped } from "../../membrane/rosetta.js";
 import { testCallCtx, type CallCtx } from "../../run/CallCtx.js";
 

@@ -17,7 +17,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { exec } from "../../eval/generator-exec.js";
-import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
+import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
 import { schemeToJs } from "../../membrane/rosetta.js";
 import type { SchemeValue } from "../../values/types.js";
 import { EnvCapability } from "../../common/capability.js";
@@ -25,7 +25,7 @@ import { assembleEnv } from "../../common/kernel.js";
 import type { SchemeEnv } from "../../common/scheme-env.js";
 import invariant from "tiny-invariant";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue, AmbientRuntime, mintFrame } from "../../AmbientRuntime.js";
+import { bindValue, AmbientRuntime, mintFrame } from "../../env/AmbientRuntime.js";
 
 import { __resetExtensionRegistryForTest } from "../loader-extensions.js";
 import { arrivalLoaderCapability } from "../loader-capability.js";

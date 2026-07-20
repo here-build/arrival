@@ -1,6 +1,6 @@
 import { CLASS } from "../well-known-symbols.js";
-import { AmbientRuntime, mintFrame, mintResolvingFrame, ResolvingAmbient } from "../AmbientRuntime.js";
-import type { AmbientValue } from "../AmbientRuntime.js";
+import { AmbientRuntime, mintFrame, mintResolvingFrame, ResolvingAmbient } from "../env/AmbientRuntime.js";
+import type { AmbientValue } from "../env/AmbientRuntime.js";
 import type { RunContext } from "../run/RunContext.js";
 
 /**

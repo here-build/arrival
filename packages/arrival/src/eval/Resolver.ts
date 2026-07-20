@@ -24,7 +24,7 @@
 import { AValue } from "../values/primitives/AValue.js";
 import { ANativeProcedure } from "../values/primitives/ACallable.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
-import { type BindingName, AmbientRuntime, type AmbientValue, mintFrame } from "../AmbientRuntime.js";
+import { type BindingName, AmbientRuntime, type AmbientValue, mintFrame } from "../env/AmbientRuntime.js";
 import type { RunContext } from "../run/RunContext.js";
 import type { SchemeValue } from "../values/types.js";
 import { LexicalScope } from "./LexicalScope.js";

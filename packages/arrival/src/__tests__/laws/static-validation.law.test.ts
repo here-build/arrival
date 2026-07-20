@@ -50,7 +50,7 @@ import { nil } from "../../index.js";
 import { StaticValidationError, validateProgram } from "../../static-validation/validate-program.js";
 import { vocabularyFromChain } from "../../static-validation/vocabulary.js";
 import { freshEnv } from "../_fresh-env.js";
-import type { AmbientValue } from "../../AmbientRuntime.js";
+import type { AmbientValue } from "../../env/AmbientRuntime.js";
 import type { DoorSymbolDef } from "../../common/symbols/_bake.js";
 
 // ── Fixture helpers ────────────────────────────────────────────────────────────────

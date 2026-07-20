@@ -16,7 +16,7 @@
 import { describe, expect, it, beforeAll } from "vitest";
 import { initBridge } from "../../index.js";
 import { parse } from "../../eval/generator-exec.js";
-import { inferenceEnv } from "../../inference-env.js";
+import { inferenceEnv } from "../../env/inference-env.js";
 import type { Classifier, DeclaredRole } from "../lineage.js";
 import { buildWireframe } from "../wireframe/builder.js";
 import { collapseProvenance } from "../provenance-collapse.js";

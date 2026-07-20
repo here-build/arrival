@@ -70,7 +70,7 @@
  * samples the identical indices — a verification's result is reproducible by anyone
  * re-running it, never a coin flip.
  */
-import type { AmbientValue } from "../AmbientRuntime.js";
+import type { AmbientValue } from "../env/AmbientRuntime.js";
 import type { EnvCapability } from "../common/capability.js";
 import { boxPayload, FrozenMints, replayGraphEgress, ReplayScopeError } from "./replay.js";
 import { hashGraph } from "./wireframe/hash.js";

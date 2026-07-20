@@ -15,10 +15,10 @@
  * membrane's universal "absent" value), never `undefined`/a thrown error.
  */
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../AmbientRuntime.js";
+import { mintFrame } from "../../env/AmbientRuntime.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { exec, execState } from "../../eval/generator-exec.js";
-import { inferenceEnv } from "../../inference-env.js";
+import { inferenceEnv } from "../../env/inference-env.js";
 import { jsToScheme, schemeToJs } from "../../membrane/rosetta.js";
 
 async function execOne(expr: string, env = inferenceEnv): Promise<any> {

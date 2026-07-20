@@ -23,7 +23,7 @@ import { symbol, type CacheClass } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { CacheClassShapeError, ProvenanceRoleShapeError } from "../../errors.js";
 import { freshEnv } from "../../__tests__/_fresh-env.js";
-import type { ResolvingAmbient } from "../../AmbientRuntime.js";
+import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 
 describe("cache class — declaration + resolution (never derived, absent = regenerateable)", () => {
   it("a declared `view` on a serializable contract resolves onto the baked def", () => {

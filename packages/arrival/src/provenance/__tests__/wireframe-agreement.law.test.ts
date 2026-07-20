@@ -19,11 +19,11 @@
  * assembler); the wire-level half is now asserted directly above it.
  */
 import * as fc from "fast-check";
-import { mintFrame } from "../../AmbientRuntime.js";
+import { mintFrame } from "../../env/AmbientRuntime.js";
 import { describe, it, expect, beforeAll } from "vitest";
 import { initBridge } from "../../index.js";
 import { parse, exec, execState } from "../../eval/generator-exec.js";
-import { inferenceEnv } from "../../inference-env.js";
+import { inferenceEnv } from "../../env/inference-env.js";
 import type { Classifier, DeclaredRole } from "../../provenance/lineage.js";
 import { classifyProgramPrelude, buildPreludeSource } from "../../provenance/prelude.js";
 import { hermeticEnv } from "../../provenance/hermetic-env.js";

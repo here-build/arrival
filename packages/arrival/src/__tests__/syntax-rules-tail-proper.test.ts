@@ -10,10 +10,10 @@
 // literal symbols by restore_data_gensyms ON THE FORM (once per expansion), so quote yields
 // the literal symbol with no post-eval, O(depth)-composing fixup.
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../AmbientRuntime.js";
+import { mintFrame } from "../env/AmbientRuntime.js";
 import { execState, schemeToJs } from "../index.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
-import { inferenceEnv as sandboxedEnv } from "../inference-env.js";
+import { inferenceEnv as sandboxedEnv } from "../env/inference-env.js";
 
 // COMPLEX tier (execState, not exec): `repr` stringifies the BOXED result
 // (Scheme print format, e.g. list "(alpha beta gamma)", bare symbol "pos") —

@@ -15,18 +15,18 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { exec, execState } from "../index.js";
+import { exec, execState } from "../../../index.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
-import { inferenceEnv as sandboxedEnv } from "../inference-env.js";
-import { assembleEnv } from "../common/kernel.js";
-import { type SchemeEnv } from "../common/scheme-env.js";
-import { CONSTANT_CTX } from "../run/RunContext.js";
-import { AString } from "../values/primitives/AString.js";
-import { AValue } from "../values/primitives/AValue.js";
-import srfi28 from "../env/srfi/srfi-28.js";
-import { requireEagerOracle } from "./_require-eager-oracle.js";
+import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
+import { assembleEnv } from "../../../common/kernel.js";
+import { type SchemeEnv } from "../../../common/scheme-env.js";
+import { CONSTANT_CTX } from "../../../run/RunContext.js";
+import { AString } from "../../../values/primitives/AString.js";
+import { AValue } from "../../../values/primitives/AValue.js";
+import srfi28 from "../srfi-28.js";
+import { requireEagerOracle } from "../../../__tests__/_require-eager-oracle.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue, mintFrame } from "../AmbientRuntime.js";
+import { bindValue, mintFrame } from "../../AmbientRuntime.js";
 
 // Q20b: format's provenance assertions run real programs through exec/execState —
 // force the oracle ON for this file's lifetime.

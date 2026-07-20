@@ -5,15 +5,15 @@
 // — see polyglot.ts's header for the full split rationale. This file keeps only
 // what stays in the shared core: @/@?/@keys/dict, nil, compose/pipe/flow,
 // %interleave.
-import { execState, type ExecOptions } from "../../index.js";
+import { execState, type ExecOptions } from "../../../index.js";
 import { mintFrame } from "../../AmbientRuntime.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
-import { assembleEnv } from "../../common/kernel.js";
-import { type SchemeEnv } from "../../common/scheme-env.js";
+import { assembleEnv } from "../../../common/kernel.js";
+import { type SchemeEnv } from "../../../common/scheme-env.js";
 import { describe, expect, it } from "vitest";
 
-import polyglot from "../polyglot.js";
+import polyglot from "../../polyglot.js";
 
 // This whole file stringifies the BOXED result's Scheme print form (list "(1 4 9)")
 // and checks box discipline directly (`.constructor.name === "AVector"`) — a

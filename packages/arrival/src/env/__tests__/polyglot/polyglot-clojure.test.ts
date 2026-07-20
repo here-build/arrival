@@ -1,15 +1,15 @@
 // polyglot-clojure pack — assemble onto a real env, then RUN the threading
 // macros and the Clojure stdlib completion. Split out of polyglot.test.ts (V,
 // 2026-07-10 dialect split — see polyglot.ts's header for the full rationale).
-import { execState, type ExecOptions } from "../../index.js";
+import { execState, type ExecOptions } from "../../../index.js";
 import { mintFrame } from "../../AmbientRuntime.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
-import { assembleEnv } from "../../common/kernel.js";
-import { type SchemeEnv } from "../../common/scheme-env.js";
+import { assembleEnv } from "../../../common/kernel.js";
+import { type SchemeEnv } from "../../../common/scheme-env.js";
 import { describe, expect, it } from "vitest";
 
-import polyglotClojure from "../polyglot-clojure.js";
+import polyglotClojure from "../../polyglot-clojure.js";
 
 async function exec(code: string, options?: ExecOptions) {
   return (await execState(code, options)).values.slice();

@@ -18,15 +18,15 @@
 // — the law that class of bug is caught by, kept independent of the deleted symbol.
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../AmbientRuntime.js";
-import { EnvCapability } from "../../common/capability.js";
-import { symbol } from "../../common/symbol.js";
-import * as z from "../../common/scheme-zod.js";
-import { exec, execState } from "../../eval/generator-exec.js";
+import { EnvCapability } from "../../../common/capability.js";
+import { symbol } from "../../../common/symbol.js";
+import * as z from "../../../common/scheme-zod.js";
+import { exec, execState } from "../../../eval/generator-exec.js";
 import { global_env } from "../../env-roots.js";
-import { initBridge } from "../../index.js";
-import { freshEnv } from "../../__tests__/_fresh-env.js";
-import { DefineLocalityError } from "../../errors.js";
-import core from "../core/core.js";
+import { initBridge } from "../../../index.js";
+import { freshEnv } from "../../../__tests__/_fresh-env.js";
+import { DefineLocalityError } from "../../../errors.js";
+import core from "../../core/core.js";
 
 // Mirrors every other migration suite's injected evalScheme (srfi-235/-43/-189's own
 // `__tests__/*-symbol-define.test.ts`).

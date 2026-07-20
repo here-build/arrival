@@ -33,7 +33,7 @@
  *      over the same inputs — a divergence between the two node switches is a bug
  *      in this file, never an acceptable drift.
  */
-import type { AmbientValue, ResolvingAmbient } from "../AmbientRuntime.js";
+import type { AmbientValue, ResolvingAmbient } from "../env/AmbientRuntime.js";
 import type { SchemeValue } from "../values/types.js";
 import type { EnvCapability } from "../common/capability.js";
 import { withSilentRegion } from "../membrane/region-scope.js";

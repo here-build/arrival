@@ -7,14 +7,14 @@ import { CONSTANT_CTX } from "../run/RunContext.js";
  */
 
 import { describe, expect, it } from "vitest";
-import { inferenceEnv } from "../inference-env.js";
+import { inferenceEnv } from "../env/inference-env.js";
 import { exec } from "../eval/generator-exec.js";
 import { jsToScheme, schemeToJs } from "../membrane/rosetta.js";
 import { symbol } from "../common/symbol.js";
 import { EnvCapability } from "../common/capability.js";
 import * as z from "../common/scheme-zod.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue, mintFrame } from "../AmbientRuntime.js";
+import { bindValue, mintFrame } from "../env/AmbientRuntime.js";
 
 // Helper to execute and get first result
 async function execOne(expr: string, env = inferenceEnv): Promise<any> {

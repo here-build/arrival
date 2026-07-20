@@ -15,13 +15,13 @@ import { describe, it, expect } from "vitest";
 import { CONSTANT_CTX } from "../run/RunContext.js";
 import { initBridge } from "../index.js";
 import { exec, execState } from "../eval/generator-exec.js";
-import { inferenceEnv } from "../inference-env.js";
+import { inferenceEnv } from "../env/inference-env.js";
 import { AString } from "../values/primitives/AString.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { requireEagerOracle } from "./_require-eager-oracle.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue, mintFrame } from "../AmbientRuntime.js";
+import { bindValue, mintFrame } from "../env/AmbientRuntime.js";
 
 // Q20b: string-contains's provenance assertions run real programs — force the
 // oracle ON for this file's lifetime.

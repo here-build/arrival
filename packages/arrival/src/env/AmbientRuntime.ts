@@ -1,20 +1,20 @@
-import { CLASS } from "./well-known-symbols.js";
-import { type ResolverSpec, type SchemeEnv } from "./common/scheme-env.js";
-import type { EOF } from "./values/primitives/EOF.js";
-import { AString } from "./values/primitives/AString.js";
-import { ASymbol } from "./values/primitives/ASymbol.js";
-import type { Macro } from "./eval/Macro.js";
-import type { AProcedure, SchemeValue } from "./values/types.js";
-import { createRosettaWrapper, type RosettaFunction } from "./membrane/rosetta.js";
-import type { Syntax } from "./eval/Syntax.js";
+import { CLASS } from "../well-known-symbols.js";
+import { type ResolverSpec, type SchemeEnv } from "../common/scheme-env.js";
+import type { EOF } from "../values/primitives/EOF.js";
+import { AString } from "../values/primitives/AString.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
+import type { Macro } from "../eval/Macro.js";
+import type { AProcedure, SchemeValue } from "../values/types.js";
+import { createRosettaWrapper, type RosettaFunction } from "../membrane/rosetta.js";
+import type { Syntax } from "../eval/Syntax.js";
 import invariant from "tiny-invariant";
-import { fromJS, isSchemeValue } from "./membrane/membrane.js";
-import { quote } from "./values/values-repr.js";
-import { APair } from "./values/primitives/APair.js";
-import type { RunContext } from "./run/RunContext.js";
+import { fromJS, isSchemeValue } from "../membrane/membrane.js";
+import { quote } from "../values/values-repr.js";
+import { APair } from "../values/primitives/APair.js";
+import type { RunContext } from "../run/RunContext.js";
 import { rosettaTypesOf } from "./env-registries.js";
-import { unboundVariableError } from "./unbound-variable.js";
-import { RawCrossingError } from "./errors.js";
+import { unboundVariableError } from "../unbound-variable.js";
+import { RawCrossingError } from "../errors.js";
 
 // -------------------------------------------------------------------------
 // :: Type definitions for AmbientRuntime bindings

@@ -27,8 +27,8 @@ import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { scan, structuralScanner, makeOracle, makeOracleEnv } from "../oracle/index.js";
-import { AmbientRuntime, mintFrame, mintPlainFrame } from "../AmbientRuntime.js";
-import type { AmbientValue } from "../AmbientRuntime.js";
+import { AmbientRuntime, mintFrame, mintPlainFrame } from "../env/AmbientRuntime.js";
+import type { AmbientValue } from "../env/AmbientRuntime.js";
 
 // ---------------------------------------------------------------------------------------------
 // CANONICAL REFERENCE — verbatim copy of sift/src/sampler/prefix-oracle.ts `analyzePrefix`.

@@ -29,7 +29,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { AmbientRuntime, ResolvingAmbient, mintResolvingFrame } from "../AmbientRuntime.js";
+import { AmbientRuntime, ResolvingAmbient, mintResolvingFrame } from "../env/AmbientRuntime.js";
 import type { ResolverSpec } from "../common/scheme-env.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { CONSTANT_CTX } from "../run/RunContext.js";

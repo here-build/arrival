@@ -13,7 +13,7 @@
 //
 // `signatureOf` is T (O3) — not modelled here yet; returns null (graceful per the contract).
 
-import type { AmbientRuntime } from "../AmbientRuntime.js";
+import type { AmbientRuntime } from "../env/AmbientRuntime.js";
 import type { Macro } from "../eval/Macro.js";
 import type { Syntax } from "../eval/Syntax.js";
 import { is_callable_value } from "../values/value-guards.js";

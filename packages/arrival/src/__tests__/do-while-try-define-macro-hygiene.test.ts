@@ -14,10 +14,10 @@
 // is a macro-introduced identifier (not user-supplied via a pattern variable), so it is
 // exactly the hygiene-renamed path the fix targets.
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../AmbientRuntime.js";
+import { mintFrame } from "../env/AmbientRuntime.js";
 import { exec, schemeToJs } from "../index.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
-import { inferenceEnv as sandboxedEnv } from "../inference-env.js";
+import { inferenceEnv as sandboxedEnv } from "../env/inference-env.js";
 
 const val = (rs: unknown[]) => schemeToJs(rs[rs.length - 1] as never, {});
 

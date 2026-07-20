@@ -25,7 +25,7 @@ import invariant from "tiny-invariant";
 import { theVoid } from "../values/primitives/AVoid.js";
 import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
 import { AValue, unionProvenance } from "../values/primitives/AValue.js";
-import { bindValue, AmbientRuntime, type AmbientValue, isAmbientRuntime } from "../AmbientRuntime.js";
+import { bindValue, AmbientRuntime, type AmbientValue, isAmbientRuntime } from "../env/AmbientRuntime.js";
 import { unboundVariableError } from "../unbound-variable.js";
 import {
   ArrivalError,

@@ -23,7 +23,7 @@ import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX, makeRunContext } from "../../run/RunContext.js";
 import { initBridge } from "../../index.js";
 import { exec, execState } from "../../eval/generator-exec.js";
-import { inferenceEnv } from "../../inference-env.js";
+import { inferenceEnv } from "../../env/inference-env.js";
 import {
   INTEROP_BOUNDARY,
   accessMember,
@@ -37,7 +37,7 @@ import { jsToScheme } from "../rosetta.js";
 import { exec as gexec } from "../../eval/generator-exec.js";
 import { tf } from "../../values/tagless-final.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../../AmbientRuntime.js";
+import { bindValue } from "../../env/AmbientRuntime.js";
 
 // ============================================================================
 // CRITICAL: sandbox escape vectors

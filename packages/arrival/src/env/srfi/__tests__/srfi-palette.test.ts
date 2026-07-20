@@ -1,14 +1,14 @@
 // Unified SRFI palette — assemble each capability onto a real env and run one verb.
-import { exec, execState, schemeToJs } from "../../index.js";
+import { exec, execState, schemeToJs } from "../../../index.js";
 import { mintFrame } from "../../AmbientRuntime.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
-import { assembleEnv } from "../../common/kernel.js";
-import { type SchemeEnv } from "../../common/scheme-env.js";
+import { assembleEnv } from "../../../common/kernel.js";
+import { type SchemeEnv } from "../../../common/scheme-env.js";
 import { describe, expect, it } from "vitest";
-import * as z from "../../common/scheme-zod.js";
+import * as z from "../../../common/scheme-zod.js";
 import { ZodTuple, type ZodOptional, type ZodTypeAny } from "zod";
-import type { SequenceSymbolDef } from "../../common/symbol.js";
+import type { SequenceSymbolDef } from "../../../common/symbol.js";
 
 import {
   allSrfi,
@@ -22,7 +22,7 @@ import {
   srfi2,
   srfi8,
   srfi235,
-} from "../srfi/index.js";
+} from "../index.js";
 
 const evalScheme = (e: SchemeEnv, src: string) => exec(src, { env: e as never });
 

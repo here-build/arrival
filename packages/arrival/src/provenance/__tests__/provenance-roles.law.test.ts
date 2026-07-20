@@ -50,7 +50,7 @@
 import { describe, it, expect } from "vitest";
 import { initBridge } from "../../index.js";
 import { parse } from "../../eval/generator-exec.js";
-import { inferenceEnv } from "../../inference-env.js";
+import { inferenceEnv } from "../../env/inference-env.js";
 import { classify, fullCone, countCone, fieldCone, type Classifier, type DeclaredRole } from "../../provenance/lineage.js";
 import { classifierFromEnv } from "../../provenance/lineage-classifier-from-env.js";
 import { buildWireframe } from "../../provenance/wireframe/builder.js";

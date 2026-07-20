@@ -14,14 +14,14 @@
  * rows flip from door-pins to behavior-pins — deliberately, in that commit.
  */
 
-import { exec } from "../index.js";
-import { mintFrame } from "../AmbientRuntime.js";
+import { exec } from "../../../index.js";
+import { mintFrame } from "../../AmbientRuntime.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
-import { inferenceEnv as sandboxedEnv } from "../inference-env.js";
-import { assembleEnv } from "../common/kernel.js";
-import { type SchemeEnv } from "../common/scheme-env.js";
+import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
+import { assembleEnv } from "../../../common/kernel.js";
+import { type SchemeEnv } from "../../../common/scheme-env.js";
 import { describe, expect, it } from "vitest";
-import srfi151 from "../env/srfi/srfi-151.js";
+import srfi151 from "../srfi-151.js";
 
 const evalScheme = (e: SchemeEnv, src: string) => exec(src, { env: e as never });
 

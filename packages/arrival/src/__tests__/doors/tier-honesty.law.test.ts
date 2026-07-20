@@ -19,7 +19,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { initBridge } from "../../index.js";
 import { parse } from "../../eval/generator-exec.js";
-import { inferenceEnv } from "../../inference-env.js";
+import { inferenceEnv } from "../../env/inference-env.js";
 import type { Classifier, DeclaredRole } from "../../provenance/lineage.js";
 import { buildWireframe } from "../../provenance/wireframe/builder.js";
 import { replayGraphEgress, ReplayScopeError } from "../../provenance/replay.js";

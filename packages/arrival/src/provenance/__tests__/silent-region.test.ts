@@ -24,11 +24,11 @@
  * those, this file stays the Q15 smoke/discipline suite.
  */
 import { afterEach, describe, expect, it } from "vitest";
-import { mintFrame, type ResolvingAmbient } from "../../AmbientRuntime.js";
+import { mintFrame, type ResolvingAmbient } from "../../env/AmbientRuntime.js";
 
 import { execState } from "../../eval/generator-exec.js";
 import { EvalTrace } from "../../provenance/trace.js";
-import { inferenceEnv } from "../../inference-env.js";
+import { inferenceEnv } from "../../env/inference-env.js";
 import { schemeToJs } from "../../membrane/rosetta.js";
 import {
   withRecordCoordinateAsync,

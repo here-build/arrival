@@ -11,11 +11,11 @@
 
 import { describe, expect, it } from "vitest";
 
-import { execState, type ExecOptions } from "../../index.js";
-import { AExact } from "../../values/primitives/AExact.js";
-import { AString } from "../../values/primitives/AString.js";
-import { APair } from "../../values/primitives/APair.js";
-import { overridableCapability } from "../overridable.js";
+import { execState, type ExecOptions } from "../../../index.js";
+import { AExact } from "../../../values/primitives/AExact.js";
+import { AString } from "../../../values/primitives/AString.js";
+import { APair } from "../../../values/primitives/APair.js";
+import { overridableCapability } from "../../overridable.js";
 
 const capabilities = [overridableCapability];
 

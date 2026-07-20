@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../AmbientRuntime.js";
+import { mintFrame } from "../env/AmbientRuntime.js";
 import { exec, execState } from "../eval/generator-exec.js";
-import { inferenceEnv } from "../inference-env.js";
+import { inferenceEnv } from "../env/inference-env.js";
 import { is_nil, is_false } from "../eval/guards.js";
 import { ANil } from "../values/primitives/ANil.js";
 

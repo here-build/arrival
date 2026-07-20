@@ -56,8 +56,8 @@ import { DoorProcedure } from "../../values/primitives/ACallable.js";
 import { PurityError } from "../../errors.js";
 import { nil } from "../../index.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
-import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
-import { ResolvingAmbient, mintFrame, mintResolvingFrame } from "../../AmbientRuntime.js";
+import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
+import { ResolvingAmbient, mintFrame, mintResolvingFrame } from "../../env/AmbientRuntime.js";
 
 /** A REAL recording env — same shape as door-cause.test.ts's, local here so this law
  *  suite has no cross-file coupling to another test's fixture. (Hermetic-AmbientRuntime

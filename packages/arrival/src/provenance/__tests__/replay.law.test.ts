@@ -28,12 +28,12 @@
  * effect rows, where replay is shown to be MORE precise than the abstract cone.
  */
 import * as fc from "fast-check";
-import { mintFrame } from "../../AmbientRuntime.js";
+import { mintFrame } from "../../env/AmbientRuntime.js";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { initBridge } from "../../index.js";
 import { execState, parse } from "../../eval/generator-exec.js";
-import { inferenceEnv } from "../../inference-env.js";
+import { inferenceEnv } from "../../env/inference-env.js";
 import { schemeToJs } from "../../membrane/rosetta.js";
 import type { Classifier } from "../../provenance/lineage.js";
 import { buildWireframe } from "../../provenance/wireframe/builder.js";

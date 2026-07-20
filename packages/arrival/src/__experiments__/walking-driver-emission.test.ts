@@ -30,8 +30,8 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { initBridge } from "../index.js";
 import { execState, parse } from "../eval/generator-exec.js";
-import { inferenceEnv } from "../inference-env.js";
-import { mintFrame, type ResolvingAmbient } from "../AmbientRuntime.js";
+import { inferenceEnv } from "../env/inference-env.js";
+import { mintFrame, type ResolvingAmbient } from "../env/AmbientRuntime.js";
 import { EnvCapability } from "../common/capability.js";
 import { symbol } from "../common/symbol.js";
 import * as z from "../common/scheme-zod.js";

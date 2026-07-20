@@ -16,7 +16,7 @@ import { symbol } from "../symbol.js";
 import * as z from "../scheme-zod.js";
 import type { SchemeEnv } from "../scheme-env.js";
 import type { PreludeBindTarget } from "../kernel.js";
-import { ResolvingAmbient, mintResolvingFrame } from "../../AmbientRuntime.js";
+import { ResolvingAmbient, mintResolvingFrame } from "../../env/AmbientRuntime.js";
 import { AString } from "../../values/primitives/AString.js";
 import { CallCtx } from "../symbols/_bake.js";
 

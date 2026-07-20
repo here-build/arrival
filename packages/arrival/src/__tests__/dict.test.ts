@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeAll } from "vitest";
-import type { ResolvingAmbient } from "../AmbientRuntime.js";
+import type { ResolvingAmbient } from "../env/AmbientRuntime.js";
 import { exec } from "../eval/generator-exec.js";
 import { freshEnv } from "./_fresh-env.js";
 

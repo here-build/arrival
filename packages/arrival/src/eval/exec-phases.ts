@@ -24,7 +24,7 @@
  * Export home: the `/env` subpath (privatization D1 — src/env/index.ts), NOT the barrel.
  */
 
-import { AmbientRuntime, type AmbientValue } from "../AmbientRuntime.js";
+import { AmbientRuntime, type AmbientValue } from "../env/AmbientRuntime.js";
 import { AmbientShapeError } from "../errors.js";
 import { Capabilities } from "./Capabilities.js";
 import { LexicalScope } from "./LexicalScope.js";

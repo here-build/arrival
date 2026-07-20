@@ -15,10 +15,10 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { exec, execState } from "../eval/generator-exec.js";
 import { freshEnv } from "./_fresh-env.js";
-import type { ResolvingAmbient } from "../AmbientRuntime.js";
+import type { ResolvingAmbient } from "../env/AmbientRuntime.js";
 import type { APair } from "../values/primitives/APair.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue, mintFrame } from "../AmbientRuntime.js";
+import { bindValue, mintFrame } from "../env/AmbientRuntime.js";
 
 let userEnv: ResolvingAmbient;
 beforeAll(async () => {

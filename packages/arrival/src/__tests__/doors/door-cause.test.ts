@@ -18,7 +18,7 @@ import { DoorProcedure } from "../../values/primitives/ACallable.js";
 import { is_callable_value, is_door_procedure } from "../../values/value-guards.js";
 import { PurityError } from "../../errors.js";
 import { EnvCapability } from "../../common/capability.js";
-import { ResolvingAmbient, mintResolvingFrame } from "../../AmbientRuntime.js";
+import { ResolvingAmbient, mintResolvingFrame } from "../../env/AmbientRuntime.js";
 
 describe("DoorProcedure — the introspectable door binding (unit, no capability/env)", () => {
   it("exposes `.door` — the baked DoorSymbolDef — for static readers", () => {

@@ -40,8 +40,8 @@
  */
 import invariant from "tiny-invariant";
 
-import { bindValue, AmbientRuntime, type AmbientValue, mintFrame, type ResolvingAmbient, isAmbientRuntime } from "../AmbientRuntime.js";
-import { user_env } from "../env-roots.js";
+import { bindValue, AmbientRuntime, type AmbientValue, mintFrame, type ResolvingAmbient, isAmbientRuntime } from "../env/AmbientRuntime.js";
+import { user_env } from "../env/env-roots.js";
 import { assembleEnv, type EnvPack } from "../common/kernel.js";
 import { schemePacks, type EvalSchemeInto, type SchemeEnv } from "../common/scheme-env.js";
 import type { EnvCapability } from "../common/capability.js";

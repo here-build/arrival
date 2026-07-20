@@ -20,9 +20,9 @@
 // pair, every other pair op is untouched; this is one extra capability the receiver
 // offers when explicitly ASKED for it via `:key`, never general shape-sniffing.
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../AmbientRuntime.js";
+import { mintFrame } from "../env/AmbientRuntime.js";
 import { exec, execState } from "../eval/generator-exec.js";
-import { inferenceEnv } from "../inference-env.js";
+import { inferenceEnv } from "../env/inference-env.js";
 import { CONSTANT_CTX } from "../run/RunContext.js";
 import { jsToScheme } from "../membrane/rosetta.js";
 

@@ -13,7 +13,7 @@
 
 import { describe, expect, it, beforeAll } from "vitest";
 import { initBridge } from "../../index.js";
-import { inferenceEnv } from "../../inference-env.js";
+import { inferenceEnv } from "../../env/inference-env.js";
 
 // The host-language verbs the sweep deleted at the source. The old
 // FORBIDDEN_IN_SANDBOX block list fenced them per-env; now they simply do not

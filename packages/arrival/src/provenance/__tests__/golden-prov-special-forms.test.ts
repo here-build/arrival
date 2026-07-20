@@ -33,7 +33,7 @@
 import { describe, it, expect } from "vitest";
 import { initBridge } from "../../index.js";
 import { parse } from "../../eval/generator-exec.js";
-import { inferenceEnv } from "../../inference-env.js";
+import { inferenceEnv } from "../../env/inference-env.js";
 import { classify, fullCone, type Classifier } from "../../provenance/lineage.js";
 import { sNum, run } from "../../__tests__/_lineage-test-helpers.js";
 

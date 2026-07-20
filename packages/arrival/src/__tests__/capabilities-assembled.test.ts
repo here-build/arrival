@@ -21,7 +21,7 @@
 import { describe, expect, it } from "vitest";
 
 import { exec } from "../eval/generator-exec.js";
-import { user_env, global_env } from "../env-roots.js";
+import { user_env, global_env } from "../env/env-roots.js";
 import { Capabilities } from "../eval/Capabilities.js";
 import { sealResolutionChain } from "../eval/CompiledResolutionChain.js";
 

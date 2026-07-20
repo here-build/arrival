@@ -5,7 +5,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { theVoid } from "../values/primitives/AVoid.js";
 import { CONSTANT_CTX } from "../run/RunContext.js";
-import { ResolvingAmbient, mintResolvingFrame } from "../AmbientRuntime.js";
+import { ResolvingAmbient, mintResolvingFrame } from "../env/AmbientRuntime.js";
 import run from "../eval/evaluator.js";
 // `execExpr` is the COMPLEX-tier form-at-a-time entry (SchemeValue in, boxed
 // SchemeValue out, never unwrapped) — the direct replacement for the retired
@@ -27,7 +27,7 @@ import { nil } from "../values/primitives/ANil.js";
 import { ALambda } from "../values/primitives/ACallable.js";
 import { type SchemeValue } from "../values/types.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../AmbientRuntime.js";
+import { bindValue } from "../env/AmbientRuntime.js";
 
 describe("Generator Evaluator with Real LIPS Types", () => {
   // `ResolvingAmbient`, not the plain `AmbientRuntime` its raw evaluator-level content

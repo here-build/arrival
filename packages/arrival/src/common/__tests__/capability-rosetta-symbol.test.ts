@@ -18,7 +18,7 @@ import { CONSTANT_CTX, makeRunContext, type RunContext } from "../../run/RunCont
 import { EnvCapability } from "../capability.js";
 import { symbol, type RosettaSymbolDef, type CallCtx } from "../symbol.js";
 import * as z from "../scheme-zod.js";
-import { ResolvingAmbient, mintResolvingFrame } from "../../AmbientRuntime.js";
+import { ResolvingAmbient, mintResolvingFrame } from "../../env/AmbientRuntime.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AInexact } from "../../values/primitives/AInexact.js";

@@ -13,14 +13,14 @@
 // in ArrivalError but preserves the message and chains the PurityError as `.cause`.
 
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../AmbientRuntime.js";
-import { exec } from "../index.js";
+import { mintFrame } from "../../AmbientRuntime.js";
+import { exec } from "../../../index.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
-import { inferenceEnv as sandboxedEnv } from "../inference-env.js";
-import { assembleEnv } from "../common/kernel.js";
-import { type SchemeEnv } from "../common/scheme-env.js";
-import { PurityError } from "../errors.js";
-import stubPack from "../env/srfi/srfi-stubs.js";
+import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
+import { assembleEnv } from "../../../common/kernel.js";
+import { type SchemeEnv } from "../../../common/scheme-env.js";
+import { PurityError } from "../../../errors.js";
+import stubPack from "../srfi-stubs.js";
 
 /** Assemble the stub pack onto a fresh sandboxed env; return an exec bound to it. */
 async function withStubs(name: string): Promise<(src: string) => Promise<unknown[]>> {

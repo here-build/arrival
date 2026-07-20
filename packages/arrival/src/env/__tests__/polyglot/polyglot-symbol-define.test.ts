@@ -26,22 +26,22 @@
 //      the pack family's own documented idiom, which a bare `z.lambda` would reject.
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../AmbientRuntime.js";
-import * as z from "../../common/scheme-zod.js";
-import { symbol } from "../../common/symbol.js";
-import { EnvCapability } from "../../common/capability.js";
-import { exec, execState } from "../../eval/generator-exec.js";
+import * as z from "../../../common/scheme-zod.js";
+import { symbol } from "../../../common/symbol.js";
+import { EnvCapability } from "../../../common/capability.js";
+import { exec, execState } from "../../../eval/generator-exec.js";
 import { global_env } from "../../env-roots.js";
-import { initBridge } from "../../index.js";
-import { freshEnv } from "../../__tests__/_fresh-env.js";
-import { assembleEnv } from "../../common/kernel.js";
-import { DefineLocalityError } from "../../errors.js";
-import { StaticValidationError } from "../../static-validation/validate-program.js";
-import { BASE_PACKS } from "../base-packs.js";
-import polyglot from "../polyglot.js";
-import polyglotClojure from "../polyglot-clojure.js";
-import polyglotLisp from "../polyglot-lisp.js";
-import polyglotRacket from "../polyglot-racket.js";
-import type { SchemeEnv } from "../../common/scheme-env.js";
+import { initBridge } from "../../../index.js";
+import { freshEnv } from "../../../__tests__/_fresh-env.js";
+import { assembleEnv } from "../../../common/kernel.js";
+import { DefineLocalityError } from "../../../errors.js";
+import { StaticValidationError } from "../../../static-validation/validate-program.js";
+import { BASE_PACKS } from "../../base-packs.js";
+import polyglot from "../../polyglot.js";
+import polyglotClojure from "../../polyglot-clojure.js";
+import polyglotLisp from "../../polyglot-lisp.js";
+import polyglotRacket from "../../polyglot-racket.js";
+import type { SchemeEnv } from "../../../common/scheme-env.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 
 // Mirrors `_fresh-env.ts`'s own injected evalScheme — `skipBootstrapWait` because

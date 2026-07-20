@@ -14,11 +14,11 @@
 //      the call's RESULT (`(define x (verb …))`), never the verb.
 
 import { describe, expect, it } from "vitest";
-import { mintFrame, type ResolvingAmbient } from "../../AmbientRuntime.js";
+import { mintFrame, type ResolvingAmbient } from "../../env/AmbientRuntime.js";
 
 import { exec } from "../../index.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
-import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
+import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
 import { assembleEnv, type EnvPack } from "../kernel.js";
 import { EnvCapability } from "../capability.js";
 import { symbol } from "../symbol.js";

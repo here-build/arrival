@@ -17,7 +17,7 @@
 // (`lastSetupFailure`) so a later step's OWN unexplained throw can be attributed to it
 // (`setup-failed`) instead of a bare, confusing "unbound variable" message.
 import { freshEnv } from "../_fresh-env.js";
-import type { ResolvingAmbient } from "../../AmbientRuntime.js";
+import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { assembleEnv } from "../../common/kernel.js";
 import type { SchemeEnv } from "../../common/scheme-env.js";
 import { exec } from "../../eval/generator-exec.js";

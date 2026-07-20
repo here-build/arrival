@@ -23,9 +23,9 @@
  *       one law for the other).
  */
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../AmbientRuntime.js";
+import { mintFrame } from "../../env/AmbientRuntime.js";
 import { exec, execState } from "../../eval/generator-exec.js";
-import { inferenceEnv } from "../../inference-env.js";
+import { inferenceEnv } from "../../env/inference-env.js";
 import { APair } from "../../values/primitives/APair.js";
 
 // A macro whose single expansion mints a large quoted skeleton: n top-level cells,

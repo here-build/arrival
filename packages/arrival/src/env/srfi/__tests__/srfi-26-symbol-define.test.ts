@@ -29,17 +29,17 @@
 //      `static-validation.law.test.ts` LAW 4 row, which pins the same fact for
 //      `(cut cons <> 1)` against the DEFAULT assembled base).
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../../AmbientRuntime.js";
+import { mintFrame } from "../../AmbientRuntime.js";
 import * as z from "../../../common/scheme-zod.js";
 import { symbol, type AEntity } from "../../../common/symbol.js";
 import { EnvCapability } from "../../../common/capability.js";
 import { exec } from "../../../eval/generator-exec.js";
-import { global_env } from "../../../env-roots.js";
+import { global_env } from "../../env-roots.js";
 import { initBridge } from "../../../index.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
 import srfi26 from "../srfi-26.js";
-import type { ResolvingAmbient } from "../../../AmbientRuntime.js";
+import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 
 // Mirrors `_fresh-env.ts`'s own injected evalScheme — `skipBootstrapWait` because
 // these execs run against an env this suite is itself assembling/re-lowering onto,

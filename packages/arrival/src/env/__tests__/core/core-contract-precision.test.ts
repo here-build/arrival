@@ -14,9 +14,9 @@
 // (native ops never validate — see _bake.ts's bakeNative doc); this is a pure type-lens
 // surface proof, same posture as the sibling polyglot-contract-precision.test.ts.
 import { describe, expect, it } from "vitest";
-import core from "../core/core.js";
-import { signatureOf } from "../../type-layer/schema-to-ts.js";
-import type { AEntity } from "../../common/symbol.js";
+import core from "../../core/core.js";
+import { signatureOf } from "../../../type-layer/schema-to-ts.js";
+import type { AEntity } from "../../../common/symbol.js";
 
 // `scheme/core`'s `symbols` is a plain object (no config/resources builder), but realize
 // through the same builder-tolerant shape the polyglot precision test uses, so this stays

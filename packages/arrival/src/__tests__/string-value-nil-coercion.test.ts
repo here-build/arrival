@@ -11,8 +11,8 @@
 // vector, object, dict) — leaf/scalar kinds keep `String(x)`.
 import { describe, expect, it } from "vitest";
 import { execState } from "../eval/generator-exec.js";
-import { mintFrame } from "../AmbientRuntime.js";
-import { inferenceEnv } from "../inference-env.js";
+import { mintFrame } from "../env/AmbientRuntime.js";
+import { inferenceEnv } from "../env/inference-env.js";
 
 const run = (code: string) => execState(code, { env: mintFrame(inferenceEnv, "string-value-nil-coercion") });
 

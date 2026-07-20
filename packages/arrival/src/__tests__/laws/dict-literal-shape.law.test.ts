@@ -9,7 +9,7 @@
 // (P6). The semantics probes that were ALREADY right (P1-P3, P9, P10, P12) live in
 // src/reader/__tests__/polyglot/curly-braces.spec.ts — not re-pinned here.
 import { describe, expect, it, beforeAll } from "vitest";
-import type { ResolvingAmbient } from "../../AmbientRuntime.js";
+import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { execState } from "../../eval/generator-exec.js";
 import { schemeToJs } from "../../membrane/rosetta.js";
 import { writeForm } from "../../provenance/slice.js";

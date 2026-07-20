@@ -30,7 +30,7 @@ import { structuralScanner, makeSigmaScanner } from "./scanner.js";
 import { makeOracleEnv } from "./env.js";
 import type { OracleScanner } from "./contract.js";
 import type { OracleEnvΣ } from "./sigma.js";
-import type { AmbientRuntime } from "../AmbientRuntime.js";
+import type { AmbientRuntime } from "../env/AmbientRuntime.js";
 
 /**
  * The assembled oracle. Given an `env` (a live {@link AmbientRuntime} or pre-built {@link OracleEnvΣ})

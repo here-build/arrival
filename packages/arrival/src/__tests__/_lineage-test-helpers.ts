@@ -25,16 +25,16 @@ import * as z from "../common/scheme-zod.js";
 import { initBridge } from "../index.js";
 import { CONSTANT_CTX } from "../run/RunContext.js";
 import { execState } from "../eval/generator-exec.js";
-import { inferenceEnv } from "../inference-env.js";
+import { inferenceEnv } from "../env/inference-env.js";
 import type { AString } from "../values/primitives/AString.js";
 import type { AValue } from "../values/primitives/AValue.js";
 import { jsToScheme } from "../membrane/rosetta.js";
 import { provOf } from "../provenance/lineage-shadow.js";
-import type { AmbientRuntime } from "../AmbientRuntime.js";
+import type { AmbientRuntime } from "../env/AmbientRuntime.js";
 import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../values/op-helpers.js";
 import type { SchemeValue } from "../values/types.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue, mintFrame } from "../AmbientRuntime.js";
+import { bindValue, mintFrame } from "../env/AmbientRuntime.js";
 
 /** Stamp a single source-id onto a string input (the per-element id carrier). Codec
  *  encode + withProvenance, not a direct AString construction. */

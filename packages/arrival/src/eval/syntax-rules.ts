@@ -13,7 +13,7 @@
 // syntax-rules; ellipsis sub-patterns per SRFI-46.
 // ----------------------------------------------------------------------
 import invariant from "tiny-invariant";
-import { bindValue } from "../AmbientRuntime.js";
+import { bindValue } from "../env/AmbientRuntime.js";
 import type { RunContext } from "../run/RunContext.js";
 import { chargeHeap } from "../heap-budget.js";
 import type { Resolver } from "./Resolver.js";

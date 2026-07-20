@@ -46,7 +46,7 @@ import { schemeToJs, type InvocationLike } from "../../membrane/rosetta.js";
 import { EnvCapability } from "../../common/capability.js";
 import { symbol, type RosettaSymbolDef } from "../../common/symbol.js";
 import * as z from "../../common/scheme-zod.js";
-import { ResolvingAmbient, mintResolvingFrame } from "../../AmbientRuntime.js";
+import { ResolvingAmbient, mintResolvingFrame } from "../../env/AmbientRuntime.js";
 import { ARosettaProcedure } from "../../values/primitives/ACallable.js";
 import { withDynamicCallSite } from "../../eval/dynamic-call-site.js";
 import { nil } from "../../values/primitives/ANil.js";

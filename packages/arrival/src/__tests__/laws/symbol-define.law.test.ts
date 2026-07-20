@@ -21,7 +21,7 @@ import * as z from "../../common/scheme-zod.js";
 import { exec, execState } from "../../eval/generator-exec.js";
 import { freshEnv } from "../_fresh-env.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../errors.js";
-import type { ResolvingAmbient } from "../../AmbientRuntime.js";
+import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 
 // The injected evalScheme every direct `.apply()` call in this suite needs — mirrors
 // `_fresh-env.ts`'s own (skipBootstrapWait: these execs run AFTER the shared bootstrap

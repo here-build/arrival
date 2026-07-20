@@ -20,7 +20,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { AmbientRuntime, ResolvingAmbient, mintPlainFrame, mintResolvingFrame } from "../../AmbientRuntime.js";
+import { AmbientRuntime, ResolvingAmbient, mintPlainFrame, mintResolvingFrame } from "../../env/AmbientRuntime.js";
 import {
   CompiledResolver,
   compileResolutionChain,
@@ -28,11 +28,11 @@ import {
 } from "../../eval/CompiledResolutionChain.js";
 import { assembleEnv, type EnvPack } from "../../common/kernel.js";
 import { exec } from "../../eval/generator-exec.js";
-import { user_env, global_env } from "../../env-roots.js";
+import { user_env, global_env } from "../../env/env-roots.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../../AmbientRuntime.js";
+import { bindValue } from "../../env/AmbientRuntime.js";
 
 const boxed = (n: number) => new AExact(CONSTANT_CTX, n);
 

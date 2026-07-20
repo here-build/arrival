@@ -1,14 +1,14 @@
 // srfi-8-symbol-define.test.ts — SRFI-8 is doors-only under multi-return ban.
 // Single export `receive` is sugar over call-with-values; both are purity-doored.
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../../AmbientRuntime.js";
+import { mintFrame } from "../../AmbientRuntime.js";
 import type { AEntity } from "../../../common/symbol.js";
 import { exec } from "../../../eval/generator-exec.js";
-import { global_env } from "../../../env-roots.js";
+import { global_env } from "../../env-roots.js";
 import { initBridge } from "../../../index.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError, PurityError } from "../../../errors.js";
 import srfi8 from "../srfi-8.js";
-import type { ResolvingAmbient } from "../../../AmbientRuntime.js";
+import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 import { DoorProcedure } from "../../../values/primitives/ACallable.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
 

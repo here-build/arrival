@@ -25,7 +25,7 @@ import invariant from "tiny-invariant";
 
 import { exec, execState } from "../eval/generator-exec.js";
 import type { EnvCapability } from "../common/capability.js";
-import { bindValue, mintFrame, type ResolvingAmbient } from "../AmbientRuntime.js";
+import { bindValue, mintFrame, type ResolvingAmbient } from "../env/AmbientRuntime.js";
 import type { SchemeValue } from "../values/types.js";
 import { withSilentRegion } from "../membrane/region-scope.js";
 import { hermeticEnv, type IngressBindings } from "./hermetic-env.js";

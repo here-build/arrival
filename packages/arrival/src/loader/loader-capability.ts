@@ -60,7 +60,7 @@ import { theVoid } from "../values/primitives/AVoid.js";
 import invariant from "tiny-invariant";
 import { RequireCycleError, RequireResolverError } from "../errors.js";
 
-import { bindValue, AmbientRuntime, type AmbientValue, mintFrame, isAmbientRuntime } from "../AmbientRuntime.js";
+import { bindValue, AmbientRuntime, type AmbientValue, mintFrame, isAmbientRuntime } from "../env/AmbientRuntime.js";
 import { lookupExtensionResolver, makeRegisterExtensionMacro } from "./loader-extensions.js";
 import {
   type ContentResolver,

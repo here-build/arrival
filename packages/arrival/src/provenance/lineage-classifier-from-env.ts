@@ -18,7 +18,7 @@
  * `undefined` — classify()'s default arm treats it as a pure/pipe application, the
  * same fallback a shadowing local binding or an unmodeled special-form head gets.
  */
-import { AmbientRuntime } from "../AmbientRuntime.js";
+import { AmbientRuntime } from "../env/AmbientRuntime.js";
 import type { Classifier, DeclaredRole } from "./lineage.js";
 
 export function classifierFromEnv(env: AmbientRuntime): Classifier {

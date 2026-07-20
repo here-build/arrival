@@ -23,7 +23,7 @@ import type { EnvPack } from "./kernel.js";
 // value edge here would cycle; `import type` erases at emit, same posture as guards.ts's
 // false-leaf note): the storage union a resolver may answer with, and the run identity a
 // resolving read threads.
-import type { AmbientValue } from "../AmbientRuntime.js";
+import type { AmbientValue } from "../env/AmbientRuntime.js";
 import type { RunContext } from "../run/RunContext.js";
 
 /** A rosetta (host-fn) contribution, mirroring arrival-scheme's retired `defineRosetta`

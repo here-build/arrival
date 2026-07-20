@@ -14,7 +14,7 @@
  *   • VALIDATION WITHOUT EXECUTION — phases 1+2+2.5, zero side effects fired.
  */
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../AmbientRuntime.js";
+import { mintFrame } from "../../env/AmbientRuntime.js";
 
 import { EnvCapability } from "../../common/capability.js";
 import type { Resource } from "../../common/resources.js";
@@ -23,7 +23,7 @@ import { symbol } from "../../common/symbol.js";
 import { LexicalScope } from "../../eval/LexicalScope.js";
 import { parseProgram, validateAgainstAmbient } from "../../eval/exec-phases.js";
 import { assembleAmbient, exec, execState } from "../../eval/generator-exec.js";
-import { user_env } from "../../env-roots.js";
+import { user_env } from "../../env/env-roots.js";
 
 /** A spy-instrumented port: counts acquisitions + teardowns. */
 function spyResource(): { resource: Resource<{ tag: string }>; counts: { acquired: number; disposed: number } } {

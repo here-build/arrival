@@ -32,13 +32,13 @@
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../AmbientRuntime.js";
 
-import { exec, initBridge } from "../../index.js";
+import { exec, initBridge } from "../../../index.js";
 import { global_env } from "../../env-roots.js";
-import { buildDegradationInfo } from "../../common/degradation.js";
-import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../errors.js";
-import { schemaCapability } from "../schema.js";
-import type { AEntity } from "../../common/symbol.js";
-import type { SymbolDeclaration } from "../../common/capability.js";
+import { buildDegradationInfo } from "../../../common/degradation.js";
+import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
+import { schemaCapability } from "../../schema.js";
+import type { AEntity } from "../../../common/symbol.js";
+import type { SymbolDeclaration } from "../../../common/capability.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 
 const capabilities = [schemaCapability];

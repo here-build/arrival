@@ -7,7 +7,7 @@
 //     another alias (no chains).
 
 import { describe, expect, it, beforeAll } from "vitest";
-import type { ResolvingAmbient } from "../../AmbientRuntime.js";
+import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { execState } from "../../eval/generator-exec.js";
 import { freshEnv } from "../../__tests__/_fresh-env.js";
 import { AString } from "../../values/primitives/AString.js";

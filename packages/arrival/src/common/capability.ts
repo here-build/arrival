@@ -36,7 +36,7 @@ import type { InvocationLike, RosettaFunction } from "../membrane/rosetta.js";
 // The retired public `env.defineRosetta` method's internal replacement — this legacy
 // `SymbolDeclaration` bind arm and `provenance/replay.ts`'s playback frame are its only
 // two producers (env-capability-authoring skill's migration recipes name this the way in).
-import { bindRosetta, bindValue, AmbientRuntime, type AmbientValue, isAmbientRuntime } from "../AmbientRuntime.js";
+import { bindRosetta, bindValue, AmbientRuntime, type AmbientValue, isAmbientRuntime } from "../env/AmbientRuntime.js";
 import { CallCtx, makeCallCtx, type CacheClass, type CallbackRoles, type ProvenanceRole } from "./symbols/_bake.js";
 import { type SchemeValue } from "../values/types.js";
 import { AliasTargetError, AmbientShapeError, PreludeArmingError } from "../errors.js";

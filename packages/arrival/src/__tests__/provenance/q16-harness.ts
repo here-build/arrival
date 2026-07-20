@@ -22,8 +22,8 @@
  */
 import invariant from "tiny-invariant";
 
-import type { ResolvingAmbient } from "../../AmbientRuntime.js";
-import { AmbientRuntime, mintFrame } from "../../AmbientRuntime.js";
+import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
+import { AmbientRuntime, mintFrame } from "../../env/AmbientRuntime.js";
 import { execState } from "../../eval/generator-exec.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { schemeToJs } from "../../membrane/rosetta.js";

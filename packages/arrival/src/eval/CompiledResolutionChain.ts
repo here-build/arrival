@@ -37,7 +37,7 @@
  * (natives are JS-backed) is DEFERRED — cross-deploy chain reuse needs a ruling first;
  * two deploys with the same vocabulary shape currently share a hash.
  */
-import { assertResolvedBinding, type AmbientRuntime, type AmbientValue, ResolvingAmbient } from "../AmbientRuntime.js";
+import { assertResolvedBinding, type AmbientRuntime, type AmbientValue, ResolvingAmbient } from "../env/AmbientRuntime.js";
 import type { RunContext } from "../run/RunContext.js";
 
 /**

@@ -52,7 +52,7 @@
  *      stable FROM. Refusal-with-route, never a wrong value.
  */
 import { execState } from "../eval/generator-exec.js";
-import { bindRosetta, mintFrame, type AmbientValue, type ResolvingAmbient } from "../AmbientRuntime.js";
+import { bindRosetta, mintFrame, type AmbientValue, type ResolvingAmbient } from "../env/AmbientRuntime.js";
 import { collapseProvenance } from "./provenance-collapse.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { jsToScheme, schemeToJs } from "../membrane/rosetta.js";

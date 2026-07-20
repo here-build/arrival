@@ -34,7 +34,7 @@ import { is_pair, is_macro_value } from "../values/value-guards.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { assertNever, CLASSIFIED_SPECIAL_FORMS, fullCone, type Bindings, type LineageNode } from "./lineage.js";
-import type { AmbientRuntime } from "../AmbientRuntime.js";
+import type { AmbientRuntime } from "../env/AmbientRuntime.js";
 import { APair } from "../values/primitives/APair.js";
 import type { AListAlike, SchemeValue } from "../values/types.js";
 import { ProvenanceShadowDivergence } from "../errors.js";

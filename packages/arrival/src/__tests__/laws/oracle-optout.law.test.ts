@@ -47,11 +47,11 @@ import { AValue } from "../../values/primitives/AValue.js";
 import { fromJs } from "../../membrane/boxing.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { execState } from "../../eval/generator-exec.js";
-import { inferenceEnv } from "../../inference-env.js";
+import { inferenceEnv } from "../../env/inference-env.js";
 import { initBridge } from "../../index.js";
 import { jsToScheme } from "../../membrane/rosetta.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue, mintFrame } from "../../AmbientRuntime.js";
+import { bindValue, mintFrame } from "../../env/AmbientRuntime.js";
 
 const stamped = (v: number, id: number): AValue =>
   fromJs(CONSTANT_CTX, v, new Set([id])) as AValue;

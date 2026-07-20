@@ -35,8 +35,8 @@
  * separately asserting the trade IS visible (a proper superset, not vacuously equal)
  * on the pure-mux rows where the arms deliberately diverge.
  */
-import type { ResolvingAmbient } from "../../AmbientRuntime.js";
-import { AmbientRuntime, mintFrame } from "../../AmbientRuntime.js";
+import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
+import { AmbientRuntime, mintFrame } from "../../env/AmbientRuntime.js";
 import { execState } from "../../eval/generator-exec.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { AString } from "../../values/primitives/AString.js";

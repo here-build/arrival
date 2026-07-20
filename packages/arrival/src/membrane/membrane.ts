@@ -25,7 +25,7 @@ import { fromJs } from "./boxing.js";
 import { ABool } from "../values/primitives/ABool.js";
 import { ABytevector } from "../values/primitives/ABytevector.js";
 import { AVector } from "../values/primitives/AVector.js";
-import { AmbientRuntime, isAmbientRuntime } from "../AmbientRuntime.js";
+import { AmbientRuntime, isAmbientRuntime } from "../env/AmbientRuntime.js";
 import { LambdaContext } from "../eval/LambdaContext.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";

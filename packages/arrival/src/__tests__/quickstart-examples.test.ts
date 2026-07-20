@@ -6,12 +6,12 @@ import { CONSTANT_CTX } from "../run/RunContext.js";
 import { describe, expect, it } from "vitest";
 import { exec, execState, jsToScheme, schemeToJs, schemeToJsUntyped } from "../index.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
-import { inferenceEnv as sandboxedEnv } from "../inference-env.js";
+import { inferenceEnv as sandboxedEnv } from "../env/inference-env.js";
 import { symbol } from "../common/symbol.js";
 import { EnvCapability } from "../common/capability.js";
 import * as z from "../common/scheme-zod.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../AmbientRuntime.js";
+import { bindValue } from "../env/AmbientRuntime.js";
 
 describe("Quick Start Examples", () => {
   it("Basic execution example", async () => {
