@@ -34,10 +34,6 @@ import { unboundVariableError } from "../unbound-variable.js";
 import { attachOffendingValue } from "../errors.js";
 import { tf } from "../values/tagless-final.js";
 
-// ============================================================================
-// AmbientRuntime lookup without lips runtime dependency
-// ============================================================================
-//
 // c[ad]+r is car/cdr COMPOSITION — the kernel unfolds it by composing each receiver's OWN
 // tagless-final car/cdr algebra (innermost letter first), threading the run ctx. car/cdr are
 // the 1-step base case; cadr…caddddr are the deeper compositions. No "aside" resolver, no
@@ -54,12 +50,10 @@ function cxrUnfold(name: string): ANativeProcedure | undefined {
   const cached = cxrCache.get(name);
   if (cached !== undefined) return cached;
   const steps = [...name.slice(1, -1)].reverse(); // innermost (rightmost) letter applied first
-  // The synthesized accessor is an ANativeProcedure, never a bare fn returned into
-  // value space. Every
-  // invocation route (evaluator call-head, `call_function`'s callable-value branch, HOFs
-  // via `applyCallback`) dispatches the apply term with an EXPLICIT runCtx — the old
-  // `this?.runCtx ?? CONSTANT_CTX` apology (a HOF calling with `this === undefined`
-  // silently degraded strict mode) is structurally impossible now.
+  // The synthesized accessor is an ANativeProcedure, never a bare fn returned into value
+  // space. Every invocation route (evaluator call-head, `call_function`'s callable-value
+  // branch, HOFs via `applyCallback`) dispatches the apply term with an EXPLICIT runCtx, so
+  // strict mode can never silently degrade to a fallback ctx.
   const proc = new ANativeProcedure({
     name,
     arity: { min: 1, max: 1 },
@@ -195,8 +189,8 @@ export class Resolver {
   /**
    * Full name resolution — the throwing, synth-aware lookup (`:key` accessors,
    * c[ad]+r composition) over the COMPOSED `scope.lookup ?? capabilities.lookup`.
-   * Glass: `scope.env === capabilities.env`, so this is byte-identical to
-   * `env_get(env, sym)`. Cut: the lexical chain wins for program names, the base for
+   * Glass: `scope.env === capabilities.env`, so this collapses to `env_get(env, sym)`.
+   * Cut: the lexical chain wins for program names, the base for
    * builtins; the keyword/cxr synth wraps the SAME composed lookup, so a `:key`
    * accessor resolves against the base even though the lexical root is null-rooted.
    */
@@ -268,8 +262,8 @@ export class Resolver {
    * A fresh nested lexical frame carrying the SAME capability base — `this.capabilities`
    * propagates verbatim (never re-derived from the child env), so the macro/hygiene seam
    * keeps a stable `globalRoot` across expansion frames. The frame mint is the
-   * module-internal `mintFrame` (AmbientRuntime.ts) — `define` left this class in the
-   * monadic-birth ruling; the evaluator's frame-binds go straight through `bindValue`.
+   * module-internal `mintFrame` (AmbientRuntime.ts); this class has no `define` — the
+   * evaluator's frame-binds go straight through `bindValue`.
    */
   child(name?: string | symbol, kind?: ScopeKind): Resolver {
     return new Resolver(mintFrame(this.env, name), this.capabilities, kind);

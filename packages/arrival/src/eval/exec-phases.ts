@@ -1,8 +1,6 @@
 /**
- * exec-phases — the phase PRODUCTS of `exec` as first-class values
- * (the exec-phases-and-dynamic-metadata design, Part III).
- *
- * V's six phases, each with a product where one exists:
+ * The phase PRODUCTS of `exec` as first-class values — the six phases, each with a product
+ * where one exists:
  *
  *   (1) parse            → {@link ParsedProgram}
  *   (2) assemble ambient → {@link AssembledAmbient}   (constructed by generator-exec's
@@ -16,12 +14,12 @@
  *                          drive, not a product)
  *   (5) dispose          → `AssembledAmbient.dispose()` — ownership rule lives in
  *                          generator-exec's `execState` (the pipeline's OWN step)
- *   (6) return           → `ExecState` (the existing two-tier cut, unchanged)
+ *   (6) return           → `ExecState` (the two-tier cut)
  *
- * GLASS (`{ env }`) deliberately gets NO phase products (§3.4): a glass caller holds a live
- * frame, not an Env — exec makes no claims about it, so there is nothing to productize.
+ * GLASS (`{ env }`) gets NO phase products: a glass caller holds a live frame, not an Env —
+ * exec makes no claims about it, so there is nothing to productize.
  *
- * Export home: the `/env` subpath (privatization D1 — src/env/index.ts), NOT the barrel.
+ * Export home: the `/env` subpath (src/env/index.ts), NOT the barrel.
  */
 
 import { AmbientRuntime, type AmbientValue } from "../env/AmbientRuntime.js";
@@ -65,8 +63,8 @@ export interface ParsedProgram {
   /** Stamped by a validate pass (phase 2.5), not by parse — validation needs the ambient's
    *  vocabulary. Optional + append-only: a ParsedProgram is valid without ever validating. */
   readonly diagnostics?: readonly Diagnostic[];
-  /** RESERVED — lands with the provenance track's program-identity work, not this design.
-   *  The slot exists so the field has one home when it lands. */
+  /** RESERVED for the provenance track's program-identity work — a declared home so the
+   *  field lands in one place when that work arrives. */
   readonly programHash?: string;
 }
 
@@ -88,9 +86,9 @@ export async function parseProgram(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** One catalog entry — a baked declaration's def-level facts unified with its resolved
- *  metadata (def-level facts stay def-level: `doc`/`type`/`provenance`/`preludeOnly` are
- *  contract-derived, spec-owned; `metadata` is the extension bag — the READ surface
- *  unifies them without moving them). */
+ *  metadata. Def-level facts stay def-level: `doc`/`type`/`provenance`/`preludeOnly` are
+ *  contract-derived and spec-owned; `metadata` is the extension bag. The READ surface
+ *  unifies them without moving them. */
 export interface SymbolDescription {
   /** The bound name (capability `symbolPrefix` applied). */
   readonly name: string;
@@ -102,7 +100,7 @@ export interface SymbolDescription {
   readonly provenance?: ProvenanceRole;
   readonly preludeOnly?: boolean;
   /** The resolved metadata record — static fields verbatim; dynamic fields resolved
-   *  against the owning capability's activation, per read, no memo (§2.3). */
+   *  against the owning capability's activation, per read, no memo. */
   readonly metadata: Record<string, unknown>;
   /** Which metadata keys resolved DYNAMICALLY on this read — the consumer's
    *  "session-generated" flag source. */
@@ -110,10 +108,10 @@ export interface SymbolDescription {
 }
 
 /** Phase 2 — the assembled ambient as a value: the composition, minus the mutable scope
- *  (the §3.2 cleave: `topScope` is phase 3's, so the ambient is session/realm-scoped and
- *  shared across concurrent runs while scope+meter stay per-run — a lifetime split made
- *  a type fact). Mint via `assembleAmbient` (generator-exec); reuse via
- *  `exec(code, { ambient })` — CALLER-owned there (exec will not dispose it). */
+ *  (`topScope` is phase 3's). The ambient is session/realm-scoped and shared across
+ *  concurrent runs while scope+meter stay per-run — a lifetime split made a type fact. Mint
+ *  via `assembleAmbient` (generator-exec); reuse via `exec(code, { ambient })` — CALLER-owned
+ *  there (exec will not dispose it). */
 export interface AssembledAmbient extends AsyncDisposable {
   /** The ORDER / identity roster — the capabilities this ambient was assembled from. */
   readonly capabilities: readonly EnvCapability[];
@@ -124,11 +122,10 @@ export interface AssembledAmbient extends AsyncDisposable {
   readonly chain: CompiledResolutionChain;
   /** Every capability that lowered degraded (assembly-ordered; empty when none). */
   readonly degraded: readonly DegradedCapability[];
-  /** Pack-name → activation — the §2.4 metadata read channel (Part A's). */
+  /** Pack-name → activation — the metadata read channel. */
   readonly activations: ReadonlyMap<string, Activation<any, any>>;
-  /** Default per-run allocation budget POLICY for runs on this ambient (the sibling
-   *  env-composition doc's reading 2, adopted verbatim) — a DEFAULT, not the meter:
-   *  the meter is per-run, minted at phase 3; `ExecOptions.heapBudget` wins per call. */
+  /** Default per-run allocation budget POLICY for runs on this ambient — a DEFAULT, not the
+   *  meter: the meter is per-run, minted at phase 3; `ExecOptions.heapBudget` wins per call. */
   readonly heapBudget?: number;
   /** Phase 5 — kernel pack disposers (LIFO) + every lowered pack's resource wind-down.
    *  Idempotent (single-flight). The REALM-DEFAULT ambient's dispose is a documented
@@ -139,33 +136,32 @@ export interface AssembledAmbient extends AsyncDisposable {
   /** The ambient's enumerable vocabulary (resolver-synthesized names absent, per the
    *  chain's own contract). */
   names(): ReadonlySet<string | symbol>;
-  /** Describe one baked-declared symbol — def-level facts + metadata resolved against
-   *  the owning capability's activation (§2.4). `undefined` for names the roster's baked
-   *  declarations don't cover (legacy-form symbols, base-stdlib bindings). */
+  /** Describe one baked-declared symbol — def-level facts + metadata resolved against the
+   *  owning capability's activation. `undefined` for names the roster's baked declarations
+   *  don't cover (legacy-form symbols, base-stdlib bindings). */
   describeSymbol(name: string): Promise<SymbolDescription | undefined>;
   /** The full baked-declaration catalog, roster-ordered (deps-first / C3 apply order,
    *  nearer capability winning a name clash — matching assembly's last-write-wins). */
   catalog(): Promise<readonly SymbolDescription[]>;
 }
 
-/** The internals exec needs but the public product deliberately does not expose (the
- *  privatization posture: the ambient surfaces `lookup`/`names`/`describeSymbol`/`catalog`,
- *  never the concrete frame class). Keyed by ambient identity. */
+/** The internals exec needs but the public product does not expose: the ambient surfaces
+ *  `lookup`/`names`/`describeSymbol`/`catalog`, never the concrete frame class. Keyed by
+ *  ambient identity. */
 interface AmbientInternals {
   readonly base: AmbientRuntime;
   readonly lowered: readonly LoweredPack[];
 }
 
-/** The brand lives ON the ambient object under a PROCESS-GLOBAL registered symbol — never in a
+/** The brand lives ON the ambient object under a PROCESS-GLOBAL registered symbol, never in a
  *  module-local side-table. A module-local WeakMap (or even a `globalThis`-pinned one) is
  *  fragile: a bundler can duplicate this module across the `@inhuman.tools/arrival` main entry
  *  (`exec`) and the `/env` subpath (`assembleAmbient`), and Vite dev serves `exec-phases.js?t=…`
  *  as a FRESH module instance on every HMR — each copy gets its own WeakMap, so the brand
  *  `assembleAmbient` set is invisible to the `exec`-side check and every run doors. `Symbol.for`
  *  resolves to the same symbol across every module copy, and the internals ride the object
- *  itself, so any copy can read what any copy wrote — the value carries its own proof (the
- *  MCP_BREAK cross-boundary-identity pattern, applied to the ambient rather than a side map).
- *  Non-enumerable so it stays off `Object.keys`/spread/JSON — the privatization posture holds. */
+ *  itself, so any copy reads what any copy wrote — the value carries its own proof. Non-enumerable
+ *  so it stays off `Object.keys`/spread/JSON — the internals never leak. */
 const ASSEMBLED_INTERNALS = Symbol.for("@inhuman.tools/arrival/assembled-ambient-internals");
 
 /** Stamp the internals onto a freshly-assembled ambient (called by `assembleAmbient`'s builder). */
@@ -273,11 +269,10 @@ export function makeAssembledAmbient(args: {
 //
 // A capability's baked declarations are enumerated from its SPEC (record-form `symbols`,
 // prefix applied); a BUILDER-form `symbols` is computed against the assembly's own
-// activation (`activations` — the §2.4 channel; the builder's type contract is
-// activation-only and pure, so a describe-time re-invocation reads the same record
-// `lower()` computed). Legacy-form entries (bare fn / rosetta-config / `{value}`) carry
-// no `kind` and are skipped — they describe through their own transport channel
-// (arrival-mcp's annotation lift) until the legacy arm retires.
+// activation (`activations`; the builder's type contract is activation-only and pure, so a
+// describe-time re-invocation reads the same record `lower()` computed). Legacy-form entries
+// (bare fn / rosetta-config / `{value}`) carry no `kind` and are skipped — they describe
+// through their own transport channel (arrival-mcp's annotation lift) until the legacy arm retires.
 
 interface RosterEntry {
   readonly capability: string;
@@ -321,9 +316,9 @@ async function describeEntry(
 ): Promise<SymbolDescription> {
   const { def } = entry;
   const activation = activations.get(entry.capability);
-  // With an activation: full per-read resolution (§2.3 — lazily, per read, no memo).
-  // Without one (an ambient assembled before/without this capability's lowering —
-  // shouldn't happen for a roster capability, but stay honest): static subset only.
+  // With an activation: full per-read resolution (lazily, per read, no memo). Without one
+  // (an ambient assembled before/without this capability's lowering — shouldn't happen for a
+  // roster capability, but stay honest): static subset only.
   const { resolved, dynamicKeys } =
     activation !== undefined
       ? await resolveMetadata(def.metadata, activation)
@@ -347,9 +342,8 @@ async function describeEntry(
 
 /** Static validation as a callable phase-boundary op: parsed forms × the ambient's sealed
  *  chain (+ the session scope's names) → the COMPLETE Diagnostic list, ZERO side effects
- *  fired — the validator's own design goal, now reachable without executing (the §3.5
- *  "validation without execution" row). exec's `staticValidation: "on"` path calls
- *  exactly this and throws on error-tier. */
+ *  fired — validation without executing. exec's `staticValidation: "on"` path calls exactly
+ *  this and throws on error-tier. */
 export function validateAgainstAmbient(
   program: ParsedProgram,
   ambient: AssembledAmbient,
@@ -365,17 +359,17 @@ export function validateAgainstAmbient(
 }
 
 /** Shadow classification as a phase-2.5 op: one static lineage skeleton per form, built
- *  against the POST-AUGMENTATION base — which fixes the §1.1 classifier wrinkle by
- *  construction (a `{ capabilities }` run's capability-declared provenance roles are
- *  visible because the only base that exists to hand the classifier is the augmented one). */
+ *  against the POST-AUGMENTATION base. A `{ capabilities }` run's capability-declared
+ *  provenance roles are then visible by construction — the only base that exists to hand the
+ *  classifier is the augmented one. */
 export function classifyProgram(program: ParsedProgram, baseEnv: AmbientRuntime): LineageNode[] {
   const classifier = classifierFromEnv(baseEnv);
   return program.forms.map((form) => classify(form, classifier));
 }
 
-/** The ambient-native classifier door (privatization V4): `classifierFromEnv` over an
- *  ambient's post-augmentation base, without exposing the base frame. External consumers
- *  that classified against a held instance env (`classifierFromEnv(sandboxedEnv, …)`)
+/** The ambient-native classifier door: `classifierFromEnv` over an ambient's
+ *  post-augmentation base, without exposing the base frame. External consumers that
+ *  classified against a held instance env (`classifierFromEnv(sandboxedEnv, …)`)
  *  assemble/hold an ambient and read the classifier here. */
 export function classifierFromAmbient(ambient: AssembledAmbient): ReturnType<typeof classifierFromEnv> {
   return classifierFromEnv(ambientBase(ambient));
@@ -386,8 +380,7 @@ export function classifierFromAmbient(ambient: AssembledAmbient): ReturnType<typ
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Phase 3 — one run's armament. Cheap, per-exec: the ambient is shared; scope is
- *  caller-passed (REPL continuity) or obtained; ONLY `runCtx` is always fresh (per-run
- *  by the T0 ruling). */
+ *  caller-passed (REPL continuity) or obtained; ONLY `runCtx` is always fresh (per-run). */
 export interface ExecInstance {
   readonly ambient: AssembledAmbient;
   readonly scope: LexicalScope;
@@ -422,9 +415,9 @@ export function instantiate(
     cache: opts.cache,
     effects: opts.effects,
     reads: opts.reads,
-    // The AMBIENT path mints its runCtx HERE, not in generator-exec's `env` branch — and this is
-    // the branch every real session takes (the MCP runner passes `ambient`). Missing it is why the
-    // note channel was threaded and still arrived empty.
+    // The AMBIENT path mints its runCtx HERE, not in generator-exec's `env` branch — the branch
+    // every real session takes (the MCP runner passes `ambient`). `notes`/`display` must ride it
+    // or the model-facing channels arrive empty on the ambient path.
     notes: opts.notes,
     display: opts.display,
   });

@@ -1,6 +1,6 @@
 // validate-program — the STATIC VALIDATION PASS: the compiler's front door, not a
 // provenance artifact (provenance/ modules CONSUME forms; this one JUDGES them).
-// Composes the landed machinery — the reference walk (collect-references.ts), the
+// Composes the machinery — the reference walk (collect-references.ts), the
 // graph (reference-graph.ts), the assembled vocabulary (vocabulary.ts), the
 // introspectable doors, the degradation-minted causes, and `suggestFromVocabulary` —
 // into ONE eslint-style pass: the COMPLETE `Diagnostic[]`, never crash-on-first. Only
@@ -155,7 +155,7 @@ export function validateProgram(
   // attached. Suggestions from the SATISFIED subset only: a door is never
   // offered as a typo fix — a suggestion that immediately re-errors on the next
   // round-trip destroys agent trust faster than no suggestion. Composes mechanically:
-  // filter the candidate iterable before the landed `suggestFromVocabulary`.
+  // filter the candidate iterable before `suggestFromVocabulary`.
   const satisfied = ((): string[] => {
     const out: string[] = [];
     for (const key of vocabulary.names) {

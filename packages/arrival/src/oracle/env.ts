@@ -20,20 +20,20 @@ import { is_callable_value } from "../values/value-guards.js";
 import type { OracleEnv } from "./contract.js";
 import type { OracleEnvΣ } from "./sigma.js";
 
-/** The structural shape of "this bound value can be a form head". A JS function covers legacy
- *  bare-fn bindings (`env.defineRosetta`-era); `is_callable_value` (values/value-guards.ts, a value-
- *  kernel leaf) covers the tagless-final callable-as-value classes a capability's baked `symbol.rosetta`
- *  / `symbol.native` declarations bind (`ANativeProcedure`/`ARosettaProcedure`/`ALambda`/`DoorProcedure`
- *  — common/capability.ts's `apply()`); the Macro/Syntax classes cover special-form heads (`if`, `let`,
- *  `quote`, syntax-rules macros). Macro/Syntax are matched by walking the prototype chain's constructor
- *  names so we needn't import the class at RUNTIME (a subclass like Syntax-extends-Macro is caught too)
- *  — those imports are `import type`, erased at compile, so the oracle keeps no runtime edge into the
- *  evaluator proper (`is_callable_value` is a value-kernel leaf, not an evaluator import). */
+/** True iff a bound value can be a form head — the three callable shapes, tested WITHOUT a runtime
+ *  edge into the evaluator:
+ *    1. a JS function (every arrival primitive + bare-fn binding);
+ *    2. a callable-as-value class (`is_callable_value`, a values/value-guards.ts leaf — the tagless-
+ *       final procedures a capability's `symbol.rosetta`/`symbol.native` declarations bind);
+ *    3. a Macro / Syntax special-form head (`if`, `let`, `quote`, syntax-rules macros).
+ *  Macro/Syntax are matched by walking the prototype chain's constructor NAMES, not by importing the
+ *  class (a Syntax-extends-Macro subclass is caught too). The Macro/Syntax imports are `import type`,
+ *  erased at compile; `is_callable_value` is a value-kernel leaf — so the oracle keeps zero runtime
+ *  edge into the evaluator. */
 function isCallableValue(value: unknown): value is Function | Macro | Syntax {
   if (value === undefined || value === null) return false;
   if (typeof value === "function") return true;
   if (is_callable_value(value)) return true;
-  // Walk the constructor-name chain for Macro / Syntax (special-form heads).
   let proto: object | null = Object.getPrototypeOf(value as object);
   while (proto) {
     const name = (proto.constructor as { name?: string } | undefined)?.name;
@@ -92,10 +92,10 @@ export function makeOracleEnv(env: AmbientRuntime): OracleEnvΣ {
  * callable") is never inherited, set, or looked up through — only enumerated and probed for
  * callability — so it needs the Σ INTERFACE, not a runtime scope-node.
  *
- * Byte-identical to the single-frame `AmbientRuntime` it replaces (that env's `__env__` IS the record
- * verbatim, parent `null`): `boundSymbols()` = the record's own string keys; `isCallable(id)` = the
- * same {@link isCallableValue} predicate over `bindings[id]`; `signatureOf` is T (O3), not modelled
- * — null per the contract.
+ * Equivalent, field for field, to the single-frame `AmbientRuntime` path (that env's `__env__` IS the
+ * record, parent `null`): `boundSymbols()` = the record's own string keys; `isCallable(id)` = the same
+ * {@link isCallableValue} predicate over `bindings[id]`; `signatureOf` is T (O3), null per the
+ * contract. The two paths MUST agree.
  *
  * The grant boundary (spec §A2) is enforced for free — an unbound name is ungeneratable — exactly
  * as the AmbientRuntime-backed path enforces it.
@@ -112,13 +112,11 @@ export function oracleEnvFromBindings(bindings: Record<string, unknown>): Oracle
 }
 
 /**
- * Build an {@link OracleEnvΣ} off the DECLARED exec products — an {@link AssembledAmbient}
- * (the sealed capability base a `{ ambient }` / `{ capabilities }` run resolves through) plus
- * an optional {@link LexicalScope} (the run's define-accumulation frame). This is the
- * privatization-era twin of {@link makeOracleEnv}: consumers that used to mint a grant env via
- * `sandboxedEnv.inherit(name)` + `defineRosetta` now assemble a capability ambient and hand it
- * here — Σ enumerates exactly what the run's Resolver would resolve (`scope.lookup ??
- * ambient.lookup`, nearest binding wins), so the grant boundary (spec §A2) holds unchanged.
+ * Build an {@link OracleEnvΣ} off the DECLARED exec products — an {@link AssembledAmbient} (the sealed
+ * capability base a `{ ambient }` / `{ capabilities }` run resolves through) plus an optional
+ * {@link LexicalScope} (the run's define-accumulation frame). Σ enumerates exactly what the run's
+ * Resolver would resolve (`scope.lookup ?? ambient.lookup`, nearest binding wins), so the grant
+ * boundary (spec §A2) holds unchanged.
  *
  * `boundSymbols()` = the ambient's sealed-chain vocabulary (resolver-synthesized names absent,
  * per the chain's own contract) ∪ the scope chain's own string keys, plus the kernel-synthesized

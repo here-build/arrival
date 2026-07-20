@@ -1,16 +1,36 @@
 // ----------------------------------------------------------------------
-// The macro engine — syntax-rules pattern matching + template expansion.
-// Evaluate-free (it rewrites code, it does not run it) and carries no
-// module-level global_env edge — lambda/define resolve from the runtime env,
-// and the global-env identity check is threaded through extract_patterns'
-// `scope` argument by the syntax-rules caller. The 3 exported functions are
-// consumed by the `syntax-rules` builtin in env/macros/macros.ts.
+// The syntax-rules macro engine — pattern matching (extract_patterns), template
+// transcription (transform_syntax), and data-position un-renaming (restore_data_gensyms).
+// The three exports are consumed by the `syntax-rules` builtin (env/macros/macros.ts).
+//
+// EVALUATE-FREE: this rewrites code, it never runs it.
+//
+// NO MODULE-LEVEL ENV: the engine references no global env. Hygiene identity flows in
+// through the injected HygieneScope (useResolver over the use site, the captured defResolver,
+// its capabilities whose `globalRoot` is the unshadowed-base identity) and the per-run ctx —
+// the syntax-rules caller threads them; lambda/define resolve from the runtime env.
+//
+// MINT DOOR: every cell the matcher/expander constructs during a live expansion goes through
+// consCell/listFromArray, which stamp the run's identity (AValue.ctx) AND charge the
+// allocation meter (chargeHeap). The charge lives at the mint, not on a post-hoc walk of the
+// output — a walk cannot tell fresh cells from call-site fragments shared by reference.
+// Expansion is a native op materialized in synchronous walks with no trampoline TICK, and a
+// recursive macro's re-copied accumulation is exactly the O(K²) churn the meter contains. A
+// meter-less ctx makes chargeHeap a no-op — unmetered runs pay nothing.
+//
+// SPAN PROPAGATION: expansion-built pairs carry the TEMPLATE's span (same template node → same
+// span on every instantiation), so drill-in points at the form as WRITTEN in the macro;
+// pattern-variable substitutions are call-site pairs by reference and keep their own spans.
+// carrySpan/carrySpanSpine only stamp span-less pairs, never overwrite.
+//
+// LAST-PAIR INVARIANT: last_pair() on a non-empty pair spine is always a pair (or undefined on
+// a cycle), never ANil. The repeated `invariant(... instanceof APair)` guards make that
+// runtime fact explicit instead of casting the union away.
 //
 // Attribution: derived from LIPS Scheme (Jakub T. Jankiewicz) — see LICENSE.
-//
-// Lineage: hygienic macro expansion (Kohlbecker et al., "Hygienic Macro
-// Expansion", 1986; Clinger & Rees, "Macros That Work", POPL 1991); R7RS §4.3
-// syntax-rules; ellipsis sub-patterns per SRFI-46.
+// Lineage: hygienic macro expansion (Kohlbecker et al., "Hygienic Macro Expansion", 1986;
+// Clinger & Rees, "Macros That Work", POPL 1991); R7RS §4.3 syntax-rules; ellipsis
+// sub-patterns per SRFI-46.
 // ----------------------------------------------------------------------
 import invariant from "tiny-invariant";
 import { bindValue } from "../env/AmbientRuntime.js";
@@ -39,21 +59,19 @@ function same_atom(a, b) {
   if (a instanceof RegExp) {
     return a.source === b.source;
   }
-  // Strings (raw or boxed) compare by value — the "friendly" compat layer.
+  // Strings (raw or boxed) compare by value.
   if (a instanceof AString) {
     return b instanceof AString && a.valueOf() === b.valueOf();
   }
-  // Numbers / chars / booleans / nil: atom-grade (eqv?) equality, which lives
-  // entirely in the value kernel (instanceof + .equals/__char__/.value).
+  // Numbers / chars / booleans / nil: atom-grade (eqv?) equality, from the value kernel.
   return eqv(a, b);
 }
 
-// `concatPair`'s Semigroup contract (list ⋄ list) requires the tail to be list-alike
-// (`AListAlike`). A dotted-tail ellipsis template — e.g. `(a ... . b)` matched against
-// `(m 1 2 . 3)` — legitimately binds `b` to a bare scalar, so the ellipsis-expansion result
-// feeding these tails can be an arbitrary SchemeValue, not a list. Same cons-loop as
-// `concatPair` (values/primitives/APair.ts), typed for that wider arbitrary-tail domain
-// instead of forcing a scalar into AListAlike.
+// `concatPair`'s Semigroup contract (list ⋄ list) requires a list-alike tail. A dotted-tail
+// ellipsis template — `(a ... . b)` matched against `(m 1 2 . 3)` — legitimately binds `b` to
+// a bare scalar, so the tail feeding these can be an arbitrary SchemeValue, not a list. Same
+// cons-loop as `concatPair` (values/primitives/APair.ts), typed for that wider arbitrary-tail
+// domain instead of forcing a scalar into AListAlike.
 function concatPairLoose(ctx: RunContext, a: SchemeValue, b: SchemeValue): SchemeValue {
   const cars: SchemeValue[] = [];
   let node: unknown = a;
@@ -69,16 +87,7 @@ function concatPairLoose(ctx: RunContext, a: SchemeValue, b: SchemeValue): Schem
   return result;
 }
 
-// ----------------------------------------------------------------------
-// The engine's MINT DOOR — every cell the matcher/expander constructs during a live
-// expansion carries the run's identity (`AValue.ctx`) AND charges its allocation meter.
-// Expansion is a native op that materializes output in synchronous walks with no
-// trampoline TICK, and a recursive macro's re-copied accumulation is exactly the
-// O(K²)-churn shape the meter exists to contain (heap-budget.ts's chokepoint rule) —
-// so the charge lives HERE, at the mint, not on a post-hoc walk of the output (which
-// couldn't tell fresh cells from call-site fragments shared by reference). A
-// meter-less ctx makes chargeHeap a no-op, so unmetered runs are byte-identical.
-// ----------------------------------------------------------------------
+// The MINT DOOR (see file preamble): stamps ctx identity + charges one heap cell.
 function consCell<Car extends SchemeValue, Cdr extends SchemeValue>(
   ctx: RunContext,
   car: Car,
@@ -94,14 +103,9 @@ function listFromArray<T extends SchemeValue>(ctx: RunContext, array: readonly T
   return APair.fromArray(ctx, array, deep);
 }
 
-/** Span propagation for macro expansion. Expansion-
- *  constructed Pairs carry the TEMPLATE's span: same template node → same span on
- *  every instantiation — exactly the template/instance keying the wireframe
- *  needs, and drill-in points at the form as WRITTEN (in the macro). Pattern-variable
- *  substitutions are call-site Pairs by reference and keep their own call-site spans
- *  untouched. Upgrade path (deferred): an expansion-chain slot recording the call
- *  site per expansion, when a consumer needs both readings at once. Only stamps
- *  Pairs that would otherwise be span-less — never overwrites. */
+/** Stamp the template's span onto a single fresh, span-less Pair (see file preamble, SPAN
+ *  PROPAGATION). deferred: an expansion-chain slot recording the call site per expansion, for
+ *  a consumer that needs both the template and call-site readings at once. */
 function carrySpan<T extends SchemeValue>(fresh: T, template: SchemeValue): T {
   if (fresh instanceof APair && fresh.getLocation() === undefined && template instanceof APair) {
     const loc = template.getLocation();
@@ -110,10 +114,9 @@ function carrySpan<T extends SchemeValue>(fresh: T, template: SchemeValue): T {
   return fresh;
 }
 
-/** carrySpan for a freshly-built SPINE (fromArray/concat): stamps every unlocated
- *  cdr-chain cell, not just the head — repetition output is a list of cells all
- *  minted in one call. Car sub-structures are either template reconstructions
- *  (already stamped at their own sites) or call-site fragments (own spans). */
+/** carrySpan for a freshly-built SPINE (fromArray/concat): stamps every unlocated cdr-chain
+ *  cell, not just the head — repetition output is a list of cells all minted in one call. Car
+ *  sub-structures already carry their own spans (template reconstructions or call-site fragments). */
 function carrySpanSpine<T extends SchemeValue>(fresh: T, template: SchemeValue): T {
   let node: unknown = fresh;
   while (node instanceof APair) {
@@ -123,36 +126,29 @@ function carrySpanSpine<T extends SchemeValue>(fresh: T, template: SchemeValue):
   return fresh;
 }
 
-// ----------------------------------------------------------------------
-// The hygiene-identity handles injected by the syntax-rules caller (the engine
-// references no module-level env): `useResolver` over the USE site, the captured
-// `defResolver`, and its `capabilities` (whose `globalRoot` is the unshadowed-base
-// identity). Plain JS resolver handles, NOT SchemeValues.
-// ----------------------------------------------------------------------
+// The hygiene-identity handles the syntax-rules caller injects (see file preamble, NO
+// MODULE-LEVEL ENV). Plain JS resolver handles, NOT SchemeValues.
 interface HygieneScope {
   useResolver: Resolver;
   defResolver: Resolver;
   capabilities: Capabilities;
-  /** The live per-run context (`MacroInvokeContext.runCtx`, threaded by the
-   *  syntax-rules caller) — the matcher's accumulation cells mint through it, so a
-   *  metered run's match work observes its own allocation bound. */
+  /** The live per-run context (`MacroInvokeContext.runCtx`, threaded by the syntax-rules
+   *  caller) — the matcher's accumulation cells mint through it, so a metered run's match work
+   *  observes its own allocation bound. */
   ctx: RunContext;
 }
 
-// The pattern-match accumulator. Its leaf cells hold a HETEROGENEOUS mix the matcher
-// reads back through guards — a captured SchemeValue, an ellipsis APair list, a raw JS
-// array (nested ellipsis), `nil`, or `null` (empty-ellipsis sentinel) — so the honest
-// leaf type is `unknown`, narrowed at each read site (`is_pair`/`is_nil`/`Array.isArray`).
-// A binding cell holds MATCHED CODE FRAGMENTS (scheme values); an ELLIPSIS cell additionally
-// holds per-repetition ARRAYS (the (x ...) accumulation) and the `null` sentinel ("matched,
-// zero repetitions") — never arbitrary host data.
+// The pattern-match accumulator. Its leaf cells hold a HETEROGENEOUS mix the matcher reads
+// back through guards — a captured SchemeValue, an ellipsis APair list, a raw JS array (nested
+// ellipsis), `nil`, or `null` (empty-ellipsis sentinel) — narrowed at each read site
+// (`is_pair`/`is_nil`/`Array.isArray`). A plain binding cell holds MATCHED CODE FRAGMENTS; an
+// ellipsis cell additionally holds per-repetition ARRAYS ((x ...) accumulation) and the `null`
+// sentinel ("matched, zero repetitions") — never arbitrary host data.
 type BindingCell = Record<string | symbol, SchemeValue | SchemeValue[] | null | undefined>;
-// The TEMPLATE layer's value domain — plain SchemeValue since the EnvLookup deletion:
-// that wrapper (LIPS's `Value`, renamed at the fork) was a truthiness shield letting the
-// ellipsis loops' `!== undefined` productive-iteration tests distinguish a captured
-// JS-falsy value from "produced nothing". Post bare-value-purge the protected case is
-// uninhabited — every template-domain value is a boxed, always-truthy AValue, so
-// `undefined` alone marks an unproductive iteration.
+// The TEMPLATE layer's value domain. Every template-domain value is a boxed, always-truthy
+// AValue, so the ellipsis loops' `!== undefined` productive-iteration test is exact —
+// `undefined` alone marks an unproductive iteration (no JS-falsy captured value can be mistaken
+// for "produced nothing").
 type TemplateValue = SchemeValue;
 interface MatchBindings {
   "...": { symbols: BindingCell; lists: unknown[] };
@@ -166,8 +162,7 @@ interface MatchState {
   pattern_names?: (string | symbol)[];
 }
 
-// TODO detect cycles
-// ----------------------------------------------------------------------
+// deferred: no cycle detection — a self-referential pattern/code pair can loop the matcher.
 export function extract_patterns(
   pattern: unknown,
   code: unknown,
@@ -183,10 +178,8 @@ export function extract_patterns(
     symbols: {},
   };
   const { useResolver, defResolver, capabilities, ctx } = scope;
-  // pattern_names parameter is used to distinguish
-  // multiple matches of ((x ...) ...) against ((1 2 3) (1 2 3))
-  // in loop we add x to the list so we know that this is not
-  // duplicated ellipsis symbol
+  // `pattern_names` distinguishes multiple matches of `((x ...) ...)` against `((1 2 3) (1 2 3))`:
+  // each `x` added to the list marks it as this repetition's binding, not a duplicated ellipsis symbol.
 
   function traverse(pattern: unknown, code: unknown, state: MatchState = {}) {
     const { ellipsis = false, trailing = false, pattern_names = [] } = state;
@@ -194,7 +187,7 @@ export function extract_patterns(
       return same_atom(pattern, code);
     }
     if (pattern instanceof ASymbol) {
-      const literal = pattern.literal(); // TODO: literal() may be SLOW
+      const literal = pattern.literal();
       if (symbols.includes(literal)) {
         const codeAsName = code instanceof ASymbol || typeof code === "string" || code instanceof RegExp;
         if (!ASymbol.is(code, literal) && !(codeAsName && ASymbol.is(pattern, code as ASymbol | string | RegExp))) {
@@ -209,16 +202,13 @@ export function extract_patterns(
         return !ref || ref === defResolver.scope || ref === capabilities.globalRoot;
       }
     }
-    // KNOWN LIMITATION: vector PATTERNS in syntax-rules reach this array branch, but
-    // a `#(...)` literal parses to a boxed SchemeVector, NOT a raw array — so
-    // `Array.isArray` is false for it and a vector-pattern macro fails to match
-    // (loud "no matching syntax in macro (#<SchemeVector>)", not silent corruption).
-    // Boxing orphans this path. The fix (unwrap SchemeVector → raw array here AND
-    // re-box at the template-output sites, which are deeply interleaved with the
-    // ellipsis machinery) is high-risk in this fragile matcher and the feature is
-    // untested/unused (no chibi/lang vector-pattern test), so it is deferred to a
-    // focused session with vector-pattern tests written first. Lists are Pairs
-    // (unaffected); only vector patterns regress.
+    // deferred: vector PATTERNS. A `#(...)` literal parses to a boxed SchemeVector, so
+    // `Array.isArray` is false and a vector-pattern macro fails to match LOUDLY ("no matching
+    // syntax in macro (#<SchemeVector>)"), never corrupting silently. The fix — unwrap
+    // SchemeVector → raw array here AND re-box at the template-output sites, which interleave
+    // with the ellipsis machinery — is deferred (untested/unused feature, high-risk in this
+    // fragile matcher; write vector-pattern tests first). Lists are Pairs, so only vector
+    // patterns are affected.
     if (Array.isArray(pattern) && Array.isArray(code)) {
       if (pattern.length === 0 && code.length === 0) {
         return true;
@@ -270,12 +260,9 @@ export function extract_patterns(
     if (pattern instanceof APair && pattern.cdr instanceof APair && ASymbol.is(pattern.cdr.car, ellipsis_symbol)) {
       // pattern (... ???) - SRFI-46
       if (!(pattern.cdr.cdr instanceof ANil) && pattern.cdr.cdr instanceof APair) {
-        // if we have (x ... a b) we need to remove two from the end
+        // (x ... a b): trim the fixed-length tail off the end.
         const list_len = pattern.cdr.cdr.length();
-        // `last_pair()` on a non-empty pair spine only returns via its
-        // `!(node.cdr instanceof APair)` arm — reached while `node instanceof APair` still
-        // holds — or `undefined` on a cycle; it never returns ANil. The guard below makes
-        // that runtime invariant explicit instead of casting the union away.
+        // last_pair is a pair here (see preamble, LAST-PAIR INVARIANT).
         const patternLastPair = pattern.last_pair();
         invariant(patternLastPair instanceof APair, "syntax: last_pair of a non-empty pair spine is a pair");
         const improper_list = !(patternLastPair.cdr instanceof ANil);
@@ -292,11 +279,9 @@ export function extract_patterns(
         }
         invariant(list instanceof APair, "syntax: trailing-trim walk stays within the counted pair prefix");
         const rest = list.cdr;
-        // FRESH-PREFIX split (readonly-slot contract): the old `list.cdr = nil` SEVERED the
-        // user's input form in place — and never restored it, so a matched form's spine stayed
-        // corrupted in the source AST after expansion (a latent LIPS-heritage bug the readonly
-        // contract surfaced). Build the head segment as a fresh spine instead: elements SHARED
-        // (provenance preserved), spine fresh, the input form untouched.
+        // FRESH-PREFIX split: build the head segment as a fresh spine — elements SHARED
+        // (provenance preserved), spine fresh — so the user's input form is never mutated in
+        // place. Severing `list.cdr` would corrupt the source AST for every later reader.
         const prefixEls: SchemeValue[] = [];
         let n: SchemeValue = code;
         while (true) {
@@ -344,8 +329,7 @@ export function extract_patterns(
                 return traverse(pattern.cdr.cdr, code.cdr, state);
               }
             }
-            // code as improper list. `last_pair()` on a non-empty pair spine is always a
-            // pair (see the identical guard above) or `undefined` on a cycle — never ANil.
+            // code is an improper list; last_pair is a pair (see preamble, LAST-PAIR INVARIANT).
             const last_pair = code.last_pair();
             invariant(last_pair instanceof APair, "syntax: last_pair of a non-empty pair spine is a pair");
             if (!(last_pair.cdr instanceof ANil)) {
@@ -358,7 +342,7 @@ export function extract_patterns(
                 invariant(copy instanceof APair, "syntax: clone of a non-empty pair spine is a pair");
                 const copyLastPair = copy.last_pair();
                 invariant(copyLastPair instanceof APair, "syntax: last_pair of a non-empty pair spine is a pair");
-                // Ellipsis surgery on a PRIVATE clone — the knot door's third named consumer.
+                // Ellipsis surgery on a PRIVATE clone — a sanctioned __tieKnot call site.
                 __tieKnot(copyLastPair, "cdr", nil);
                 bindings["..."].symbols[name] = copy;
                 return traverse(pattern.cdr.cdr, last_pair.cdr, state);
@@ -444,14 +428,11 @@ export function extract_patterns(
         return true;
       }
       if (
-        code.cdr instanceof ANil && // last item in in call using in recursive calls on
-        // last element of the list
-        // case of pattern (p . rest) and code (0)
+        code.cdr instanceof ANil && // pattern (p . rest) against a one-element code (0)
         patternCar instanceof ASymbol &&
         patternCdr instanceof ASymbol
       ) {
-        // fix for SRFI-26 in recursive call of (b) ==> (<> . x)
-        // where <> is symbol
+        // SRFI-26: recursive call of (b) ⇒ (<> . x) where <> is a symbol.
         if (!traverse(patternCar, code.car, state)) {
           return false;
         }
@@ -490,8 +471,7 @@ export function extract_patterns(
         return true;
       }
     } else if (pattern instanceof ANil && (code instanceof ANil || code === undefined)) {
-      // undefined is case when you don't have body ...
-      // and you do recursive call
+      // undefined: a recursive call with no body form left.
       return true;
     } else {
       // pattern (...)
@@ -508,19 +488,17 @@ export function extract_patterns(
   }
 }
 
-// ----------------------------------------------------------------------
-// Restore hygiene-renamed gensyms to their literal symbols, but ONLY in DATA
-// positions — under quote/quasiquote, EXCLUDING unquote(-splicing) holes (which
-// are code). A template identifier under quote is DATA, not a reference, so hygiene
-// must not rename it (standard expander behaviour). The renamer over-renames every
-// identifier; this single pass un-renames the data positions of the transcribed
-// FORM, so quote yields the literal symbol with no post-eval fixup.
+// Restore hygiene-renamed gensyms to their literal symbols, but ONLY in DATA positions —
+// under quote/quasiquote, EXCLUDING unquote(-splicing) holes (which are code). A template
+// identifier under quote is DATA, not a reference, so hygiene must not rename it (standard
+// expander behaviour). The renamer over-renames every identifier; this single pass un-renames
+// the data positions of the transcribed FORM, so quote yields the literal symbol with no
+// post-eval fixup.
 //
-// Runs on the FORM, not the evaluated result: a result-side fixup would have to
-// ride the trampoline as an onResolve, which composes through a tail chain ->
-// O(depth) for a deep macro tail loop. Restoring the form once per expansion is
-// O(form) and never composes, so a macro in tail position keeps O(1) TCO.
-// ----------------------------------------------------------------------
+// Runs on the FORM, not the evaluated result: a result-side fixup would ride the trampoline as
+// an onResolve, composing through a tail chain → O(depth) for a deep macro tail loop. Restoring
+// the form once per expansion is O(form) and never composes, so a macro in tail position keeps
+// O(1) TCO.
 export function restore_data_gensyms(node, gensyms, ctx: RunContext) {
   if (gensyms.length === 0) return node;
   const restore = (sym) => {
@@ -565,15 +543,13 @@ interface TransformOptions {
   symbols: unknown[];
   names: GensymRecord[];
   ellipsis: string | ASymbol;
-  /** The live per-run context — every template-instantiation mint (rebuilt pairs,
-   *  relit symbols, dotted-access forms) goes through it, so expansion output carries
-   *  the run's identity and charges its meter. (The `gensym` mint itself still rides
-   *  values/values-repr.ts's own ctx — its optional-ctx param is the audit's separate
-   *  Wave-3 rider; the plumb it needs now exists here.) */
+  /** The live per-run context — every template-instantiation mint (rebuilt pairs, relit
+   *  symbols, dotted-access forms) goes through it, so expansion output carries the run's
+   *  identity and charges its meter. The `gensym` mint itself rides values/values-repr.ts's
+   *  own ctx. */
   ctx: RunContext;
 }
 
-// ----------------------------------------------------------------------
 export function transform_syntax({
   bindings,
   expr,
@@ -608,7 +584,7 @@ export function transform_syntax({
               bindings.symbols[first] as SchemeValue, // plain cell — never an array/null (ellipsis-only)
               ...parts.slice(1).map((x) => new AString(ctx, x)),
             ],
-            true, // fromArray's default deep, preserved
+            true, // deep
           );
         }
       }
@@ -621,12 +597,12 @@ export function transform_syntax({
 
   function rename(name: string | symbol, symbol: ASymbol | string | symbol) {
     if (!gensyms[name]) {
-      // Hygiene identity: does `name` resolve to a frame? refFrame-truthiness ≡ the old
-      // scope.ref chain-walk (own bindings, no resolvers/synth, scope-then-capabilities).
-      // refFrame keys by string; a JS-symbol name (gensym from nested syntax-rules) never
-      // owns a frame, so it resolves not-found and falls through to the relit path below.
+      // Hygiene identity: does `name` resolve to a frame? refFrame walks own bindings only (no
+      // resolvers/synth, scope then capabilities) and keys by string; a JS-symbol name (gensym
+      // from nested syntax-rules) never owns a frame, so it resolves not-found and falls through
+      // to the relit path below.
       const found = typeof name === "string" ? defChild.refFrame(name) : undefined;
-      // nested syntax-rules needs original symbol to get renamed again
+      // A nested syntax-rules gensym must be renamed again from its original symbol.
       if (typeof name === "symbol" && !found && symbol instanceof ASymbol) {
         name = symbol.literal();
       }
@@ -634,24 +610,20 @@ export function transform_syntax({
         return gensyms[name];
       }
       const gensym_name = gensym(name);
-      // Copy the bound value (if any) onto the gensym so the expansion resolves it. This unifies
-      // the old ref?get(name):get(name,{throwError:false}) split — the ref-truthy value is never
-      // undefined, so "set iff present" matches both arms. lookupSettled is settled (patch_value),
-      // resolver-aware, NON-synth and non-throwing — exactly the old scope.get(name,{throwError:false}).
+      // Copy the bound value (if any) onto the gensym so the expansion resolves it. lookupSettled
+      // is settled (patch_value), resolver-aware, NON-synth and non-throwing, so a
+      // template-introduced (unbound) identifier yields undefined and nothing is copied.
       const value = defChild.lookupSettled(name);
       if (value !== undefined) {
         bindValue(defChild.env, gensym_name, value);
       }
-      // keep names so they can be restored after evaluation
-      // if there are free symbols as output
-      // kind of hack
+      // Record the rename so restore_data_gensyms can un-rename free output symbols post-eval.
       names.push({
         name,
         gensym: gensym_name,
       });
       gensyms[name] = gensym_name;
-      // we need to check if name is a string, because it can be
-      // gensym from nested syntax-rules
+      // `name` is checked for string because it can be a gensym symbol from nested syntax-rules.
       if (typeof name === "string" && /\./.test(name)) {
         const [first, ...rest] = name.split(".").filter(Boolean);
         // save JavaScript dot notation for Env::get
@@ -715,11 +687,10 @@ export function transform_syntax({
               if (!(item.cdr instanceof ANil)) {
                 next(name, item.cdr);
               }
-              // Dispatch on the runtime shape of `car`, not the template's
-              // shape (`is_array` is about `expr`). A JS-array `car` concats
-              // with Array.prototype.concat; a pair `car` concats with
-              // concatPair. Discriminating on `car` keeps a pair from ever
-              // reaching `.concat` (which APair does not have → throw).
+              // Dispatch on the runtime shape of `car`, not the template's shape. A JS-array
+              // `car` concats with Array.prototype.concat; a pair `car` concats with concatPair.
+              // Discriminating on `car` keeps a pair from ever reaching `.concat` (which APair
+              // lacks → throw).
               if (!(rest_expr instanceof ANil) && item.car instanceof APair) {
                 return carrySpanSpine(concatPairLoose(ctx, item.car, transform_ellipsis_expr(rest_expr, bindings, state, next) as SchemeValue), expr);
               }
@@ -780,40 +751,32 @@ export function transform_syntax({
   function traverse(expr: SchemeValue, { disabled }: { disabled?: boolean } = {}): SchemeValue {
     if (expr instanceof APair) {
       const first = expr.car;
-      // Derive both off ONE narrowed handle — `second`/`rest_second` exist iff the cdr is a
-      // pair, and TS threads that through the optional chain (the old two-let form tripped
-      // use-before-assign at every read).
+      // `second`/`rest_second` exist iff the cdr is a pair — derived off one narrowed handle so
+      // TS threads that through the optional chain.
       const cdrPair = expr.cdr instanceof APair ? expr.cdr : undefined;
       const second = cdrPair?.car;
       const rest_second = cdrPair?.cdr;
-      // escape ellispsis from R7RS e.g. (... ...): the escape form is
-      // `(... <template>)`, so `first.cdr` must itself be a pair carrying
-      // <template> in its car. Guard it before reading `.car` — a bare
-      // `(...)` would leave `first.cdr` as nil, whose `.car` is undefined.
+      // Escape ellipsis (R7RS `(... <template>)`, e.g. `(... ...)`): `first.cdr` must itself be a
+      // pair carrying <template> in its car. Guard before reading `.car` — a bare `(...)` leaves
+      // `first.cdr` as nil, whose `.car` is undefined.
       if (!disabled && first instanceof APair && ASymbol.is(first.car, ellipsis_symbol) && first.cdr instanceof APair) {
         return carrySpan(consCell(ctx, first.cdr.car, expr instanceof APair ? traverse(expr.cdr) : nil), expr);
       }
       if (second && ASymbol.is(second, ellipsis_symbol) && !disabled) {
         const symbols = bindings["..."].symbols;
-        // skip expand list of pattern was (x y ... z)
-        // and code was (x z) so y == null
+        // Skip the expansion when pattern `(x y ... z)` matched code `(x z)`, so `y == null`.
         const values = Object.values(symbols);
         if (values.length > 0 && values.every((x) => x === null)) {
           return traverse(rest_second as SchemeValue, { disabled });
         }
         const keys = get_names(symbols);
-        // case of list as first argument ((x . y) ...) or (x ... ...)
-        // we need to recursively process the list
-        // if we have pattern (_ (x y z ...) ...) and code (foo (1 2) (1 2))
-        // x an y will be arrays of [1 1] and [2 2] and z will be array
-        // of rest, x will also have it's own mapping to 1 and y to 2
-        // in case of usage outside of ellipsis list e.g.: (x y)
+        // List as first argument `((x . y) ...)` or `(x ... ...)` — recurse over the list. For
+        // pattern `(_ (x y z ...) ...)` against code `(foo (1 2) (1 2))`, x/y become arrays
+        // `[1 1]`/`[2 2]` and z the rest, while x/y also keep their own single mappings.
         const is_spread =
           first instanceof ASymbol && rest_second instanceof APair && ASymbol.is(rest_second.car, ellipsis_symbol);
         if (first instanceof APair || is_spread) {
-          // lists is free ellipsis on pairs ((???) ...)
-          // TODO: will this work in every case? Do we need to handle
-          // nesting here?
+          // Free ellipsis on pairs `((???) ...)`. known wart: nested repetition here is unverified.
           if (bindings["..."].lists[0] instanceof ANil) {
             if (!is_spread) {
               return traverse(rest_second as SchemeValue, { disabled });
@@ -902,9 +865,8 @@ export function transform_syntax({
           if (result instanceof APair) {
             result = carrySpanSpine(listFromArray(ctx, result.to_array(false).reverse()), expr);
           }
-          // case if (x ... y ...) second spread is not processed
-          // and (??? . x) last symbol
-          // by ellipsis transformation
+          // Trailing forms after the `(x ...)` spread: a second spread `(x ... y ...)` or a
+          // dotted-tail symbol `(??? . x)`, neither consumed by this ellipsis pass.
           const exprCdr = expr instanceof APair ? expr.cdr : nil;
           if (exprCdr instanceof APair && (exprCdr.cdr instanceof APair || exprCdr.cdr instanceof ASymbol)) {
             const node = traverse(exprCdr.cdr, { disabled });
@@ -955,7 +917,7 @@ export function transform_syntax({
         return expr;
       }
       const symbols = Object.keys(bindings["..."].symbols);
-      const name = expr.literal(); // TODO: slow
+      const name = expr.literal();
       invariant(!symbols.includes(name), `syntax-rules: missing ellipsis symbol next to name \`${name}'`);
       const value = transform(expr);
       if (value !== undefined) {

@@ -1,15 +1,15 @@
-// contract.ts — arrival's local copy of the constraint-kernel oracle boundary.
+// contract.ts — arrival's local, type-identical copy of the constraint-kernel oracle boundary.
 //
-// Canonical contract: `sift/src/sampler/oracle-contract.ts`. NOT imported here — arrival-scheme is
-// a FOUNDATION package that sift depends on, not the reverse; importing sift types (even type-only)
-// would invert the dependency arrow. So the interfaces are re-declared locally, kept type-identical
-// to the canonical source. The O0 conformance corpus is the executable proof the two stay in sync
-// (runs sift's reference S reader and this impl against one shared corpus, asserts agreement).
+// DRIFT ALARM. Canonical source: `sift/src/sampler/oracle-contract.ts`. These interfaces are
+// re-declared here, NOT imported: arrival-scheme is a FOUNDATION package sift depends on, so
+// importing sift types (even type-only) would invert the dependency arrow. The two copies MUST stay
+// type-identical; the O0 conformance corpus is the executable proof they do (runs sift's reference S
+// reader and this impl over one shared corpus, asserts agreement).
 //
 // Track A (this package) IMPLEMENTS these: Layer S (scanner.ts) supplies the structural half; Σ/T
 // degrade gracefully (validSymbols/expectedType → null, produces → true) until later nodes land.
-// Track B (sift) CONSUMES these, compiling per-cursor verdicts into a token mask / validator /
-// repair pass, without knowing how the verdict is computed.
+// Track B (sift) CONSUMES them, compiling per-cursor verdicts into a token mask / validator / repair
+// pass without knowing how the verdict is computed.
 //
 // DESIGN INVARIANT: every method is a pure function of the ACCEPTED PREFIX — no lookahead, no
 // backtracking — so the constraint aligns with autoregressive generation.
@@ -36,9 +36,7 @@ export interface OracleState {
   readonly inComment: boolean;
   /** The cursor is inside an atom being typed (not at a token boundary). */
   readonly midToken: boolean;
-  /** Operator / argument / top — the position of the token at/after the cursor. */
   readonly position: CursorPosition;
-  /** The kind of the enclosing form (application / lambda-list / quote / lazy-arm / top). */
   readonly formKind: FormKind;
   /** True iff the enclosing form is in a STRICT position (a form completed here is inevitable). */
   readonly strict: boolean;

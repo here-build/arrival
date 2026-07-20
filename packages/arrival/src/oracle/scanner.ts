@@ -44,9 +44,9 @@ import { computeValidSymbols, type OracleEnvΣ } from "./sigma.js";
 const OPEN = new Set(["(", "[", "{"]);
 const CLOSE = new Set([")", "]", "}"]);
 
-/** Reader-macro prefixes whose following datum is QUOTED (data, not code → lazy, Σ/T off). These
- *  are a subset of arrival's reader-macro set; we assert that coupling so a future change to the
- *  Lexer's reader macros surfaces here (the plan's "share specials.names()"). */
+/** Reader-macro prefixes whose following datum is QUOTED (data, not code → lazy, Σ/T off). A subset
+ *  of arrival's reader-macro set; the assertion below pins that coupling so a future change to the
+ *  Lexer's reader macros surfaces here rather than drifting silently. */
 const QUOTE_PREFIXES = new Set(["'", "`"]);
 for (const p of QUOTE_PREFIXES) {
   if (!specials.names().includes(p)) {
@@ -259,8 +259,8 @@ function classifyForm(
 /** The structural next-token classes valid after this state — the model-free Layer-S mask. */
 export function validNextClasses(s: ScanResult): Set<TokenClass> {
   if (s.inString || s.inComment) return new Set<TokenClass>(["atom"]); // inside text: keep typing it
-  const out = new Set<TokenClass>(["open", "atom", "string"]); // a new form, a symbol/number, or a string
-  if (s.depth > 0) out.add("close"); // can close the current form
+  const out = new Set<TokenClass>(["open", "atom", "string"]);
+  if (s.depth > 0) out.add("close"); // an open form remains to close
   if (s.closeable) out.add("end"); // EOS gate
   return out;
 }

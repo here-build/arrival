@@ -1,20 +1,23 @@
-// emit — the `@inhuman.tools/arrival/emit` subpath: compiler-facing PURE-DATA types
-// (constitution §4.5's IN-arrival-core layer). The whole transitive closure of this
-// barrel must stay `typescript`-free — the `type-layer/index.ts` co-bundling
-// anti-pattern (one barrel granting all-or-nothing access to LanguageService
-// machinery) is the named counter-example this subpath exists to avoid.
+// emit — the `@inhuman.tools/arrival/emit` subpath: the compiler-facing, PURE-DATA type
+// surface. Import discipline is the feature — the whole transitive closure of this barrel
+// stays `typescript`-free, so a Contract can carry emit rules without dragging the
+// LanguageService into arrival core.
 //
-// Residual (`R`, proposal §3.4) and its constructors are owned by residual-renderer.md
-// and join this barrel when they land; until then `EmitRule`/`EmitCtx` stay generic
-// over an opaque residual type (see emit-rule.ts's header).
+// THE LAYERING RULE (canonical statement; the other emit/ files point here). The
+// dependency runs one way only: the compiler package (arrival-mercury) READS contracts and
+// interprets residuals; arrival core NEVER imports the compiler. Rejected alternative — one
+// barrel co-bundling these types with the LanguageService machinery (the `type-layer`
+// anti-pattern) grants all-or-nothing access and pulls `typescript` into every consumer.
+//
+// The Residual algebra `R` is owned by the compiler package; until it relocates,
+// `EmitRule`/`EmitCtx` stay generic over an opaque residual (see ./emit-rule.ts).
+// `residual-lite` seeds a local, structural mirror of the residual builders
+// (see ./residual-lite.ts).
 
 export type { TypeFacts } from "./type-facts.js";
 export type { EmitConfig, EmitCtx, EmitRule, RefPolicy } from "./emit-rule.js";
 
-// residual-lite — the Phase-2 relocation drill's minimal residual-builder surface
-// (constitution §4.5's "residual types in arrival core" direction, seeded). `Binding`
-// merges a type and a value (the constructor) under one name, mirroring
-// residual/types.ts's own merge; the plain `export { Binding }` below re-exports both
-// facets, so no separate `export type { Binding }` line is needed.
 export type { BinOp, LitValue, NodeId, Param, R, UnOp } from "./residual-lite.js";
+// `Binding` is a merged type + value; this value re-export carries both facets (no
+// separate `export type { Binding }` needed).
 export { ArrayLit, Arrow, Bin, Binding, Call, Index, Lit, Member, Method, Ref, Spread, Un } from "./residual-lite.js";

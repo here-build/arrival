@@ -8,16 +8,14 @@ export interface MacroInvokeContext {
   error?: (e: Error) => void;
   use_dynamic?: boolean;
   dynamic_env?: unknown;
-  /** The per-run context, threaded to the macro engine so every value the expander
-   *  MINTS during a live expansion carries the run's identity and charges its
-   *  allocation meter (eval/syntax-rules.ts's mint door). REQUIRED — the evaluator's
-   *  `is_macro` dispatch (the only builder of this context) always holds a live
-   *  `EvalContext.runCtx`, itself required since the constant-ctx wave-0 cut; an
-   *  optional field here would just re-open the `?? CONSTANT_CTX` apology seam the
-   *  wave-3 plumb closes (the CONSTANT_CTX audit §4). */
+  /** The per-run context, threaded to the macro engine's mint door (eval/syntax-rules.ts)
+   *  so every value the expander mints during a live expansion carries the run's identity
+   *  and charges its allocation meter. REQUIRED, never optional: `is_macro` dispatch (the
+   *  only builder of this context) always holds a live `EvalContext.runCtx`, and an
+   *  optional field would re-open a `?? CONSTANT_CTX` fallback that silently unmeters. */
   runCtx: RunContext;
-  /** The use-site resolver (synced to `env`). The expander uses the def-time
-   *  Resolver a `Syntax` captures instead. Optional — define-macro fexprs ignore it. */
+  /** The use-site resolver (synced to `env`). The expander uses the def-time Resolver a
+   *  `Syntax` captures instead. Optional — define-macro fexprs ignore it. */
   resolver?: Resolver;
   [key: string]: unknown;
 }
@@ -39,7 +37,7 @@ export class Macro {
   __doc__?: string;
   __defmacro__?: boolean;
   /** The ternary static-walk attribute, stamped by `symbol.defineSyntax`'s bind arm
-   *  (common/symbols/define-bake.ts) from the DECLARED `DefineSyntaxSymbolDef.macroAttribute`.
+   *  (common/symbols/define-bake.ts) from the declared `DefineSyntaxSymbolDef.macroAttribute`.
    *  `undefined` (every prelude-era macro, every JS-authored transformer) reads as
    *  `"opaque"` — the safe under-report default the validator's firewall assumes
    *  (static-validation/vocabulary.ts). */
@@ -58,10 +56,9 @@ export class Macro {
     this.__fn__ = fn;
   }
 
-  // A define-macro fexpr is Exp→Exp: it returns a replacement FORM (a
-  // `SchemeValue`), never an expansion record — that is `Syntax.expand`'s job.
-  // The fexpr body runs with `env` as `this`; `macro_expand` is threaded in so a
-  // macro can recursively expand its own output.
+  // A define-macro fexpr is Exp→Exp: it returns a replacement FORM (a `SchemeValue`),
+  // never an expansion record — that is `Syntax.expand`'s job. The fexpr body runs with
+  // `env` as `this`; `macro_expand` lets a macro recursively expand its own output.
   invoke(code: unknown, { env, ...rest }: MacroInvokeContext, macro_expand: boolean = false): SchemeValue {
     return this.__fn__.call(env, code, { ...rest, macro_expand }, this.__name__) as SchemeValue;
   }
