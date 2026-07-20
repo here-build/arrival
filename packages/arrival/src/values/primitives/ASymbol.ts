@@ -20,16 +20,14 @@ import { attachOffendingValue } from "../../errors.js";
  */
 const UNINTERNED = Symbol("UNINTERNED");
 
-// Per-RUN-CONTEXT flyweight intern tables (replaces the former process-global
-// `ASymbol.list`). The ctx a symbol is minted with decides its table — hence both
-// its LIFETIME and its run PARAMETERS:
+// Per-RUN-CONTEXT flyweight intern tables. The ctx a symbol is minted with decides its
+// table — hence both its LIFETIME and its run PARAMETERS:
 //   • CONSTANT_CTX → the permanent bootstrap table (quote/vector/… — a fixed set).
 //   • a run ctx    → a per-run table, collectable once the run ctx is GC'd, so a
-//     `(string->symbol unique)` loop no longer leaks permanent global entries.
-// A `Map` (not the old null-proto Record) is inherently key-pollution-safe —
-// `(string->symbol "__proto__")` sets a Map entry, never reaching Object.prototype.
-// Interning stays pure flyweight (eq? compares `__name__`, not reference — see
-// `equals`/`is`), so per-ctx scoping changes no symbol semantics.
+//     `(string->symbol unique)` loop doesn't leak permanent global entries.
+// A `Map` is inherently key-pollution-safe — `(string->symbol "__proto__")` sets a Map
+// entry, never reaching Object.prototype. Interning stays pure flyweight (eq? compares
+// `__name__`, not reference — see `equals`/`is`), so per-ctx scoping changes no symbol semantics.
 const internTables = new WeakMap<RunContext, Map<string, ASymbol>>();
 function internTableFor(ctx: RunContext): Map<string, ASymbol> {
   let table = internTables.get(ctx);
@@ -213,17 +211,15 @@ export class AKeywordSymbol extends ASymbol {
     const getter = target?.["arrival/tagless-final/get"];
     if (typeof getter === "function") return getter.call(target, this, runCtx) as CallResult;
     // B2 (benchmark-defect-register.md): a receiver with NO `arrival/tagless-final/get`
-    // term used to fall through to `nil` unconditionally, conflating two different
-    // facts. Split them:
+    // term splits into two facts a bare `nil` fall-through would conflate:
     //   • nil (kind "nil", or a raw JS null/undefined reaching here) is a legitimate
     //     ABSENT receiver — `(:key nil)` stays nil (pinned by
     //     projection-nil-tolerance.test.ts and keyword-accessor-leaf-door.test.ts).
     //   • anything else lacking `get` (string/number/boolean/character/symbol/vector —
-    //     no member protocol at all) is a TYPE ERROR wearing absence's clothes: the
-    //     met-museum trajectory called `:title` on an unparsed string 20 times, read
-    //     `nil` every time, and burned 45 rounds guessing why every field came back
-    //     empty. Door instead, naming the kind and routing to the manifold's own
-    //     parser prelude (mirrors unbound-variable.ts's NEEDS_PARSING_HINT phrasing).
+    //     no member protocol at all) is a TYPE ERROR wearing absence's clothes: returning
+    //     nil hides it, so the caller reads empty fields forever with no signal. Door
+    //     instead, naming the kind and routing to the manifold's own parser prelude
+    //     (mirrors unbound-variable.ts's NEEDS_PARSING_HINT phrasing).
     if (target == null || (target as unknown as AValue).kind === "nil") return nil;
     const kind = target instanceof AValue ? target.kind : typeof target;
     // OFFENDING_VALUE (errors.ts): names the receiver a downstream door can read off

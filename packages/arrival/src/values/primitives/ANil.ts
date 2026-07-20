@@ -4,7 +4,7 @@
  * (not APair) and touches APair ONLY inside the `append` method body, so the
  * resulting ANil↔APair cycle is call-only on both sides — no module-eval edge,
  * no TDZ — and ESM live-bindings resolve APair at call-time regardless of which
- * file loads first. (The former `setPairConstructor` late-bound DI is dissolved.)
+ * file loads first, so no late-bound constructor injection is needed.
  */
 import { type SchemeValue } from "../types.js";
 import { CLASS } from "../../well-known-symbols.js";

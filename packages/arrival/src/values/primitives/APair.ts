@@ -24,10 +24,9 @@ import { type SourceLocation } from "../../errors.js";
 import { is_false, is_plain_object } from "../value-guards.js";
 import { is_promise } from "../../eval/guards.js";
 import { promise_all } from "../../utils/promises.js";
-// NO LONGER a cycle: provenance-collapse.ts is now a leaf (it dispatches on the
-// `arrival/provenanceChildren` term instead of importing every value class to instanceof them).
-// That matters structurally — the old cycle made it impossible for any value class to `extends
-// APair`, which AJSArrayList must do.
+// provenance-collapse.ts is a LEAF — it dispatches on the `arrival/provenanceChildren` term
+// rather than importing every value class to instanceof them. Structurally required: an import
+// cycle here would forbid any value class from `extends APair`, which AJSArrayList does.
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { reStampChild } from "./deep-restamp.js";
 import { egressContainerProxy } from "../../membrane/egress-proxy.js";
@@ -630,11 +629,10 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
 
   /** Deep re-stamp (the inbound membrane's AValue claim, moved onto the class — see the
    *  base declaration in AValue.ts). Mints a fresh cell under the CROSSING's ctx whose
-   *  car/cdr re-stamp through the closed child fold — no `unknown` re-entry, no casts
-   *  (the dissolved router arm carried one of the membrane's two sanctioned casts exactly
-   *  because it couldn't see that car/cdr are always SchemeValue). Deliberately does NOT
-   *  copy LOCATION/CYCLES/REF (unlike shallow `withProvenance`) — byte-stable with the
-   *  dissolved jsToSchemeImpl arm, which minted a bare `new APair(ctx, …, p)`. */
+   *  car/cdr re-stamp through the closed child fold — no `unknown` re-entry, no casts, since
+   *  car/cdr are always SchemeValue. Deliberately does NOT copy LOCATION/CYCLES/REF (unlike
+   *  shallow `withProvenance`) — a membrane-crossed cell is a constructed value, not reader-
+   *  minted, so it carries no source location or datum-label marks to preserve. */
   ["arrival/withProvenanceDeep"](
     ctx: RunContext,
     p: ReadonlySet<number>,
@@ -676,8 +674,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // directly, calls `fn` per element concurrently (scheme lambdas return Promises), then rebuilds
   // a fresh spine via Pair.fromArray(_, false) — same shape as the eager `map` builtin. Results
   // are kept RAW so a SchemeString/SchemeExact element keeps its box (coercion-soundness: "map
-  // preserves every element's box"). Honors the empty-pair sentinel and a
-  // Nil-clone tail, same as the old mapPair.
+  // preserves every element's box"). Honors the empty-pair sentinel and a Nil-clone tail.
   ["arrival/tagless-final/map"](
     fn: (x: APairAsListValue<Car, Cdr>) => MaybePromise<SchemeValue>,
     runCtx: RunContext,
@@ -719,8 +716,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // builtin: Scheme-truthy (`!is_false`) AND nil dropped; a RegExp arg adapts via
   // `String(x).match`, a fn passes through. `pred` is awaited per element (concurrent fan —
   // scheme lambdas return Promises); kept elements re-cons shallow via Pair.fromArray(_, false), so
-  // element boxes survive and the container box drops. Supersedes the old stdlib `filter`
-  // builtin dispatch — the term owns the algebra.
+  // element boxes survive and the container box drops. The term owns the algebra.
   ["arrival/tagless-final/filter"](
     arg: ((x: unknown) => unknown | Promise<unknown>) | RegExp,
     runCtx: RunContext,
@@ -1123,10 +1119,10 @@ export class AJSArrayList extends APair<SchemeValue, SchemeValue> {
   /**
    * The view holds its OWNER, not a bare element array — and that is the hygiene, not a detail.
    *
-   * V's law: "each membrane penetration should be tracked and explicit; never accept both a monadic
-   * AValue and a primitive JSValue — that is the only way every flip between a Scheme entity and a
-   * native JS entity is OBSERVED, when the host is both the interpreter runner and a Graal-style
-   * parallel world."
+   * Every membrane penetration is tracked and explicit: a boundary never accepts BOTH a monadic
+   * AValue and a primitive JSValue — the only way every flip between a Scheme entity and a native
+   * JS entity is OBSERVED when the host is both the interpreter runner and a Graal-style parallel
+   * world.
    *
    * A view that took a bare `readonly unknown[]` would be a second, independent boxing policy over
    * somebody else's store — and it could be pointed at ANY array-shaped thing, which is exactly how

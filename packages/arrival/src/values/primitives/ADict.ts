@@ -11,14 +11,12 @@
  * back onto one canonical key object, since `Map`'s own key equality is reference
  * identity.
  *
- * ALSO the `{…}` reader-literal carrier — the datum face of a dict literal IS an
- * ADict, the same in-class
- * pattern AVector uses for `[…]` (`evalElements` + payload-of-forms): a reader-
- * minted node carries `literalForms` (the flat validated form sequence, keys
- * included, unquote-form keys ONLY living here since they have no static entry)
- * and answers the cached `(dict …)` application from `arrival/tagless-final/lower`
- * in code position; under `quote` the node is itself the readable datum — a real
- * ADict whose static-key entries are the raw, unevaluated forms.
+ * ALSO the `{…}` reader-literal carrier — the datum face of a dict literal IS an ADict, the same
+ * in-class pattern AVector uses for `[…]` (`evalElements` + payload-of-forms): a reader-minted node
+ * carries `literalForms` and answers the cached `(dict …)` application from
+ * `arrival/tagless-final/lower` in code position; under `quote` the node is itself the readable
+ * datum — a real ADict whose static-key entries are the raw, unevaluated forms. The grammar that
+ * mints these nodes lives in `reader/dict-grammar.ts` (spec: `reader/__tests__/polyglot/README.md`).
  *
  * AJSObject is untouched and keeps its actual job: boxing objects that are
  * genuinely foreign, with no prior Scheme lineage to lose — it has exited the
@@ -89,19 +87,15 @@ export class ADict extends AValue {
   static [CLASS] = "dict";
   readonly kind = "dict" as const;
 
-  /** `{…}` reader-literal marker: the FLAT, validated form sequence the reader parsed
-   *  (keys then values, alternating — an unquote-form key lives ONLY here, since it
-   *  has no static entry in `byKey`). Present ⇒ this node is a reader-minted dict
-   *  literal: `quote` yields it unchanged as data (the static-key entries below ARE
-   *  the raw, unevaluated forms — `(@ '{a: (f x)} :a)` reads back the form); in CODE
-   *  position the evaluator lowers it once (cached, `arrival/tagless-final/lower`) to
-   *  the equivalent `(dict …)` application. Absent on a `dict`-constructed or
-   *  quasiquote-folded runtime dict. Mirrors AVector's `evalElements` flag idiom
-   *  exactly, sans boolean (a dict's "code needs evaluating" signal doubles as the
-   *  forms payload, since — unlike a vector — the literal's UNQUOTE-KEY forms have no
-   *  home in the static entries at all). Reader-minted only; set post-construction
-   *  (mirrors `evalElements`, never a constructor param — the existing `pairs`-based
-   *  constructor stays the one calling convention every producer already uses). */
+  /** `{…}` reader-literal marker: the FLAT, validated form sequence (keys then values,
+   *  alternating — an unquote-form key lives ONLY here, having no static entry in `byKey`).
+   *  Present ⇒ this node is a reader-minted dict literal (the data/code duality is the preamble's
+   *  concept; the grammar is `reader/dict-grammar.ts`); absent on a `dict`-constructed or
+   *  quasiquote-folded runtime dict. Reader-minted only; set post-construction, never a
+   *  constructor param — the `pairs`-based constructor stays the one calling convention every
+   *  producer uses. Mirrors AVector's `evalElements`, sans boolean: a dict's "code needs
+   *  evaluating" signal doubles as the forms payload, since — unlike a vector — the literal's
+   *  UNQUOTE-KEY forms have no home in the static entries at all. */
   literalForms?: readonly SchemeValue[];
 
   /** The class's own dict-literal detection — the dual data/code nature is ADict's

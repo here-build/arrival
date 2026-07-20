@@ -1,6 +1,6 @@
 // The value → string PRINT protocol. Each AValue answers `["arrival/print"](): string` with its
 // own repr, recursing on children through `printValue` — so there is no central type-switch and no
-// drift (this replaces both printer.ts's get_instances map AND APair.ts's local stringifyValue).
+// drift.
 //
 // This module is a LEAF: it holds only the dispatch plus the NON-AValue residual — raw JS functions
 // (the quarantined `env.defineRosetta` legacy authoring arm's bare-fn output — a real scheme

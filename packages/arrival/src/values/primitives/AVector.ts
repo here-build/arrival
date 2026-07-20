@@ -166,8 +166,8 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
 
   // Setoid — structural element-wise equality, threading the harness's shared `seen`.
   // structuralEqual records (this, other) BEFORE dispatching, so a mutually-cyclic vector pair
-  // re-encounters itself in the harness and short-circuits (fixes a fresh-seen-per-call stack
-  // blow once the harness's inline-Vector special-case was removed). Non-AVector → false.
+  // re-encounters itself in the harness and short-circuits — no fresh-seen-per-call stack blow.
+  // Non-AVector → false.
   ["arrival/tagless-final/equals"](other: unknown, seen?: SeenMap): boolean {
     if (!(other instanceof AVector)) return false;
     const a = this.__vector__;
@@ -185,18 +185,11 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   }
 
   // STRICT divergence: car/cdr are PAIR ops in R7RS — a vector is not a pair. STRICT flags it
-  // non-portable, pointing at vector-ref/slicing. LOOSE mode tolerates it — and what LOOSE MEANS
-  // is now stated exactly: asking a vector for `car`/`cdr` IS asking for its SPINE READING, so
-  // that is what it hands back — an `AJSArrayList` view over the same elements (see that file's
-  // header for the chart law). The vector does not become a list; it PROJECTS one, O(1), sharing
-  // the backing store and the provenance.
-  //
-  // This replaces a stopgap that answered `cdr` with an `AVector` SLICE — which made loose mode a
-  // lie in two directions at once: the slice was not a pair (so `pair?` stayed #f mid-walk and
-  // `z.union([z.pair, z.nil])` output contracts rejected it — `find-tail` on a match threw a raw
-  // ZodError), and the empty slice was not `ANil` (so `null?` — which is `instanceof ANil`, hard —
-  // could never fire, and every `(if (null? xs) base (loop (cdr xs)))` body spun forever). The
-  // view fixes both at the root: it IS an APair, and its exhaustion IS nil, decided at mint.
+  // non-portable, pointing at vector-ref/`vector->list`. LOOSE mode tolerates both: `car` is the
+  // first element (nil when empty, exactly like `(car '())` loose); `cdr` is the rest as a fresh
+  // `AVector` SLICE — a genuine vector stays a genuine vector, deliberately NOT projected to an
+  // `AJSArrayList` spine view (see `cdr` below for why the view belongs on borrowed arrays, and
+  // the AJSArrayList manifold note for the `null?`/`pair?` residual a slice leaves).
   //
   // Vector OPERATIONS (vector-ref/length/slice/map/…) are untouched. This is only the spine chart.
   ["arrival/tagless-final/car"](runCtx?: RunContext): SchemeValue {
@@ -231,9 +224,9 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     // which the term-carrier law caught.)
     //
     // Residual, named rather than papered over: a hand-written `null?`-terminated walk over a
-    // VECTOR LITERAL still will not terminate, because the exhausted slice is `#()` and `null?` is
-    // ANil-only. That predates this work, only bites values a tool cannot produce, and strict mode
-    // doors it. The honest fix, if it ever bites, is `(vector->list v)` — not a chart that lies.
+    // VECTOR LITERAL will not terminate — the exhausted slice is `#()`, and `null?` is ANil-only.
+    // It bites only genuine vector literals (values a tool cannot produce), and strict mode doors
+    // it. The honest fix, if it ever bites, is `(vector->list v)` — not a chart that lies.
     return new AVector(this.ctx, this.__vector__.slice(1), this.provenance);
   }
 

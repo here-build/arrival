@@ -1,6 +1,5 @@
 // AExact — exact number (integers and rationals) over SAFE-INTEGER `number` components.
-// Extracted from numbers.ts (one-class-per-file, like the other value primitives). Per
-// docs/design-history/arrival-one-number-rework.md §2.0/§2.1 ("RATIO with
+// Per docs/design-history/arrival-one-number-rework.md §2.0/§2.1 ("RATIO with
 // crash-on-overflow"): `num`/`denom` are both plain JS `number`s, each always satisfying
 // `Number.isSafeInteger` (the safe-operand invariant, §0.2) — never `bigint`. Given safe
 // operands, IEEE double arithmetic on integers is exact whenever the true result is in
@@ -127,10 +126,10 @@ export class AExact extends AValue {
     return this.num / this.denom;
   }
 
-  /** Egress divides (§2.0's projection∘borrow law, same as nil-as-array): a `bigint`
-   *  result is no longer possible — every `AExact.num` is already a safe-int `number` by
-   *  construction, so the integer arm is a bare return, and the rational arm's float
-   *  division is the intentional face (`toJS(1/3)` = `0.333…`). */
+  /** Egress divides (§2.0's projection∘borrow law, same as nil-as-array): every
+   *  `AExact.num` is a safe-int `number` by construction, so the integer arm is a bare
+   *  return, and the rational arm's float division is the intentional face
+   *  (`toJS(1/3)` = `0.333…`). */
   ["arrival/toJS"](): number {
     if (this.denom === 1) {
       return this.num;
@@ -309,10 +308,8 @@ export class AExact extends AValue {
     const r = this.num % this.denom;
     const q = (this.num - r) / this.denom;
     const absR = r < 0 ? -r : r;
-    // Mirrors the old bigint `this.denom / 2n` truncating division exactly: dividing a
-    // safe-int by 2 is always exact in a double (a pure exponent shift), so
-    // `Math.trunc` here reproduces bigint `/2n` bit-for-bit, odd-denominator quirks
-    // included — no behavior drift from the flat/bigint variant.
+    // Dividing a safe-int by 2 is always exact in a double (a pure exponent shift), so
+    // `Math.trunc(denom / 2)` is the exact floored half — odd-denominator quirks included.
     const halfDenom = Math.trunc(this.denom / 2);
 
     if (absR < halfDenom) {

@@ -59,8 +59,7 @@ export function is_pair(o: unknown): o is APair<any, any> {
  * as false. Lives here (value-kernel leaf) rather than guards.ts so the value
  * primitives (APair/AVector filter, op-helpers' sort comparator) read truthiness
  * without dragging the evaluator world in; guards.ts re-exports it for the
- * evaluator/env call sites. Replaces op-helpers' former private `isSchemeFalse`
- * twin, now collapsed into this single predicate.
+ * evaluator/env call sites.
  */
 export function is_false(o: unknown): o is false | null | ABool {
   return o === false || o === null || (o instanceof ABool && o.value === false);
@@ -76,8 +75,7 @@ export const is_native = (obj: unknown): obj is AString | ACharacter | AExact | 
  * read here off `constructor[CLASS]` exactly as utils/typecheck.ts does.
  * The brand is the value layer's downward-readable identity for the macro
  * classes, so the lineage shadow-cone skip can test "is this a macro?" with no
- * value→eval runtime edge — replacing the former `installMacroGuard` late-bound
- * DI (the last static-graph side effect, dissolved alongside the Pair sibling).
+ * value→eval runtime edge.
  *
  * This is a duck/brand test, not `instanceof`: a forged `{ constructor: { [CLASS]:
  * "macro" } }` would pass. That is acceptable for the shadow-cone skip — the

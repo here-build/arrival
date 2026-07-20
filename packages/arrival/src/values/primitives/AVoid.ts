@@ -5,8 +5,7 @@
  *
  * Distinct from `nil` (`'()` — the empty LIST) and from `#f`: "computed no useful
  * value" is neither "the empty list" nor "false". One identity-compared singleton,
- * mirroring {@link EOF} — it replaces the former inconsistency where unspecified was
- * raw JS `undefined` on some paths and `nil` on others.
+ * mirroring {@link EOF} — never raw JS `undefined` or `nil` standing in for it.
  *
  * Membrane (Rosetta concept-translation): JS `undefined` (no value) ↔ void; JS
  * `null` (explicit null) ↔ nil. The two host bottoms map to the two Scheme

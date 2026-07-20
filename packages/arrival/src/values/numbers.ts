@@ -46,11 +46,10 @@ export type ANumeric = AExact | AInexact;
 
 /**
  * Integer square root of a non-negative safe-integer `number` (`exact-integer-sqrt`'s
- * core, §2.1 — replaces the old `bigintISqrt`; the bigint-Newton reason for existing is
- * gone under the safe-int invariant, since `n` can never exceed
- * `Number.MAX_SAFE_INTEGER` in the first place). `Math.sqrt` gives a float estimate that
- * can be off by one at the boundary due to double rounding; the two correction loops
- * below walk to the true integer sqrt. Every intermediate (`r*r`, `(r+1)*(r+1)`) stays
+ * core, §2.1). Under the safe-int invariant `n` can never exceed
+ * `Number.MAX_SAFE_INTEGER`, so a float estimate plus correction suffices — no bigint.
+ * `Math.sqrt` gives a float estimate that can be off by one at the boundary due to
+ * double rounding; the two correction loops below walk to the true integer sqrt. Every intermediate (`r*r`, `(r+1)*(r+1)`) stays
  * safe by construction: `r ≤ sqrt(n) ≤ sqrt(MAX_SAFE_INTEGER)`, so `r*r ≤ n` always.
  * Returns r with r*r ≤ n < (r+1)*(r+1).
  */
@@ -83,7 +82,7 @@ export function toReal(n: ANumeric): number {
  * Three-way comparison of two reals: -1 / 0 / 1, or NaN if incomparable
  * (either operand is a NaN inexact). The exact/exact case routes through
  * `AExact.cmp` — a safe-int cross-multiply compare, with a float fallback for the
- * (now rare) case where the cross-multiplied intermediate itself would overflow
+ * rare case where the cross-multiplied intermediate itself would overflow
  * (see `AExact.cmp`'s own doc: a comparator only needs ORDER, so a monotonic float
  * approximation is a sound comparator even where the exact integer product can't be
  * formed). Only when at least one side is inexact do we fall back to `toReal`, where

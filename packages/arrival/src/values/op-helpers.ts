@@ -29,17 +29,16 @@ import { ACharacter } from "./primitives/ACharacter.js";
 import { attachOffendingValue, ComparatorRequiredError } from "../errors.js";
 import { tf } from "./tagless-final.js";
 
-// Eager-stamp oracle flag: `withInputProvenance`/`mintVerdict` below are the
-// accumulation path production used to run unconditionally, and that the CI
-// agreement oracle (`wireframe-agreement.law.test.ts`, the replay laws' recorded-
-// ground-truth side, and older tests written against the always-on default) still
-// need on demand. OFF skips stamp accumulation (the filter + union-set allocations)
-// while the boxed-value discipline stays intact — production hot paths no longer
-// accumulate by default: the eager stamp path is a TEST-ONLY oracle, compiled out
-// of production hot paths by default, not an opt-out. Flag is module-GLOBAL — right
-// granularity for a whole process (the sampler's own runner, or a test file's
-// beforeAll/afterAll); the upgrade path if a single process ever needs stamped AND
-// unstamped envs simultaneously is a RunContext-carried flag, not a second global.
+// Eager-stamp oracle flag: `withInputProvenance`/`mintVerdict` below accumulate
+// provenance stamps. This is a TEST-ONLY oracle — OFF by default, so production hot
+// paths skip the accumulation (the filter + union-set allocations) while the
+// boxed-value discipline stays intact. Turned ON on demand by the CI agreement oracle
+// (`wireframe-agreement.law.test.ts`, the replay laws' recorded-ground-truth side, and
+// tests that assume eager accumulation is live). Not an opt-out — a test-only oracle.
+// Flag is module-GLOBAL — right granularity for a whole process (the sampler's own
+// runner, or a test file's beforeAll/afterAll); the upgrade path if a single process
+// ever needs stamped AND unstamped envs simultaneously is a RunContext-carried flag,
+// not a second global.
 let eagerProvenanceOracleEnabled = false;
 
 /** Is the eager-stamp oracle (this file's `withInputProvenance`/`mintVerdict`
@@ -123,7 +122,6 @@ export function assertAllocatable(len: number, fnName: string): void {
 
 // Value-type coercion
 
-/** Unwrap SchemeCharacter → string */
 /**
  * Unwrap an `ACharacter`. Refuses anything else — it does NOT silently mint a wrong value.
  *
@@ -525,10 +523,8 @@ export const schemeBool = (v: boolean): ABool => (v ? schemeTrue : schemeFalse);
  * THE ONE boolean-VERDICT boxing point (RULINGS.md R8):
  * provenance-free operands → eq?-stable flyweight (schemeTrue/schemeFalse — allocation-free
  * hot loops); stamped operands → fresh ABool carrying union. Verdict from lineage carries it;
- * from constants doesn't. This composition lived ad hoc in `deriveOrd` — naming here makes it
- * the law every boolean-verdict site (equal?/eqv?/eq?, numeric comparison wrappers, predicate
- * natives returning boolean through wrap layer) routes through, replacing the raw-boolean
- * fast-path sites used on empty-provenance operands.
+ * from constants doesn't. Every boolean-verdict site — equal?/eqv?/eq?, numeric comparison
+ * wrappers, predicate natives returning boolean through the wrap layer — routes through here.
  */
 export function mintVerdict(operands: readonly unknown[], verdict: boolean): ABool {
   return withInputProvenance(operands, schemeBool(verdict));

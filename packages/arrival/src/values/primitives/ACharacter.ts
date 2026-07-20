@@ -1,6 +1,6 @@
 /**
- * SchemeCharacter — R7RS character type (extracted from values/types.ts).
- * Carries the `characters` named-character table it is backed by.
+ * SchemeCharacter — R7RS character type. Carries the `characters` named-character
+ * table it is backed by.
  */
 import { CLASS } from "../../well-known-symbols.js";
 import { type RunContext } from "../../run/RunContext.js";

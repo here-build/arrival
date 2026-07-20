@@ -15,6 +15,13 @@
 // These are LIVE: the bake/capability binders mint ANativeProcedure/ARosettaProcedure
 // (common/capability.ts, scheme-zod.ts's z.procedure), the evaluator mints ALambda
 // (evalLambda, named-let), and dispatch routes through `applyCallback`/the apply term.
+//
+// FALLBACK toJS: a callable's `arrival/toJS` is fallback display ONLY. The real JS projection
+// is the reverse-membrane region wrapper (membrane.toJS()/schemeToJs), which special-cases
+// is_callable_value BEFORE this protocol method — so exec() can hand back an ALambda/AProcedure
+// as a callable host fn. This method is reached only when a callable is protocol-dispatched
+// OUTSIDE those exits (e.g. a print path). Keeping rosetta OUT of this file's imports avoids a
+// scheme-zod init cycle (see the makeCallCtx note below).
 
 import { AValue } from "./AValue.js";
 import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
@@ -98,13 +105,7 @@ export class ALambda extends AValue {
   }
 
   ["arrival/toJS"](): unknown {
-    // Fallback display only. A callable's real JS projection is the reverse-
-    // membrane region wrapper, produced by membrane.toJS()/schemeToJs, which
-    // special-case is_callable_value BEFORE this protocol method (so exec()
-    // can return an ALambda/AProcedure as a callable host fn). This method is
-    // reached only when a callable is protocol-dispatched OUTSIDE those exits
-    // (e.g. a print path); keeping rosetta OUT of this file's imports avoids a
-    // scheme-zod init cycle (see the makeCallCtx import note above).
+    // see preamble, FALLBACK toJS
     return `#<procedure ${String(this.name)}>`;
   }
   ["arrival/print"](): string {
@@ -147,13 +148,7 @@ export class ANativeProcedure extends AValue {
   }
 
   ["arrival/toJS"](): unknown {
-    // Fallback display only. A callable's real JS projection is the reverse-
-    // membrane region wrapper, produced by membrane.toJS()/schemeToJs, which
-    // special-case is_callable_value BEFORE this protocol method (so exec()
-    // can return an ALambda/AProcedure as a callable host fn). This method is
-    // reached only when a callable is protocol-dispatched OUTSIDE those exits
-    // (e.g. a print path); keeping rosetta OUT of this file's imports avoids a
-    // scheme-zod init cycle (see the makeCallCtx import note above).
+    // see preamble, FALLBACK toJS
     return `#<procedure ${String(this.name)}>`;
   }
   ["arrival/print"](): string {
@@ -206,13 +201,7 @@ export class ARosettaProcedure extends AValue {
   }
 
   ["arrival/toJS"](): unknown {
-    // Fallback display only. A callable's real JS projection is the reverse-
-    // membrane region wrapper, produced by membrane.toJS()/schemeToJs, which
-    // special-case is_callable_value BEFORE this protocol method (so exec()
-    // can return an ALambda/AProcedure as a callable host fn). This method is
-    // reached only when a callable is protocol-dispatched OUTSIDE those exits
-    // (e.g. a print path); keeping rosetta OUT of this file's imports avoids a
-    // scheme-zod init cycle (see the makeCallCtx import note above).
+    // see preamble, FALLBACK toJS
     return `#<procedure ${String(this.name)}>`;
   }
   ["arrival/print"](): string {

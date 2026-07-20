@@ -6,8 +6,8 @@
 
 // SchemeValue is the honest union of every value the interpreter can hold:
 // every concrete AValue subclass, the live non-AValue orphans (EOF, Values),
-// and a JS function used as a Scheme procedure. Excludes QuotedPromise
-// (dissolved) and DatumReference (reader-internal).
+// and a JS function used as a Scheme procedure. Excludes DatumReference
+// (reader-internal).
 import type { AExact } from "./primitives/AExact.js";
 import type { AInexact } from "./primitives/AInexact.js";
 import type { APair } from "./primitives/APair.js";
@@ -187,7 +187,7 @@ export type AWrap<T> = [unknown] extends [T]
         : [T] extends [boolean]
           ? ABool
           : [T] extends [bigint]
-            ? bigint // opaque host value (§2.3, one-number-rework.md) — never boxed, identity (same law as the binary FFI arm below).
+            ? bigint // opaque host value (§2.3, docs/design-history/arrival-one-number-rework.md) — never boxed, identity (same law as the binary FFI arm below).
             : [T] extends [number]
               ? AExact | AInexact
               : [T] extends [string]
@@ -289,17 +289,14 @@ export type AList<Car extends SchemeValue = any, Cdr extends Car extends ANil ? 
 // `arrival/toJS` = serialization projection, `arrival/toJSMembrane` = membrane exit.)
 
 /** The egress projection modes. `bare` = serialization (no options, callables
- *  stringify). `mem` = membrane crossing — the ONE non-bare mode; it used to split
- *  `mem:0`/`mem:1` on `forceBigInt` (the one RosettaOptions field that ever changed
- *  element projection), but `forceBigInt` is retired (docs/design-history/
- *  arrival-one-number-rework.md §2.3 — bigint is an opaque host value, not a scheme
- *  number, so there is no longer a numeric-projection option to key on) and the scout
- *  found no production setter for it anyway — every real crossing already always
- *  resolved to `mem:0`. `returnEither`/`argProvenance` remain wrapper-call concerns
- *  read only inside createRosettaWrapper, never by schemeToJsImpl or inbound
- *  jsToScheme. Adding a FUTURE projection-affecting RosettaOptions field still
- *  REQUIRES a new member here — rosetta.ts's `_modeKeyExhaustive` type guard makes
- *  forgetting it a compile error. */
+ *  stringify). `mem` = membrane crossing — the ONE non-bare mode: no RosettaOptions
+ *  field affects element projection (`forceBigInt`, the only one that ever did, is
+ *  retired per docs/design-history/arrival-one-number-rework.md §2.3 — bigint is an
+ *  opaque host value, not a scheme number, so there is no numeric-projection option to
+ *  key on). `returnEither`/`argProvenance` remain wrapper-call concerns read only
+ *  inside createRosettaWrapper, never by schemeToJsImpl or inbound jsToScheme. Adding a
+ *  FUTURE projection-affecting RosettaOptions field still REQUIRES a new member here —
+ *  rosetta.ts's `_modeKeyExhaustive` type guard makes forgetting it a compile error. */
 export type EgressMode = "bare" | "mem";
 export const BARE_MODE: EgressMode = "bare";
 

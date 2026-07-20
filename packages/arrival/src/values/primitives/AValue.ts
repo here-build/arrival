@@ -69,7 +69,7 @@ export abstract class AValue {
   readonly provenance: ReadonlySet<number>;
   /** Per-run context (RunContext). REQUIRED — a ctx-less value cannot be constructed.
    *  Run-built values carry the run ctx; singletons/quoted-AST/bootstrap carry CONSTANT_CTX.
-   *  UNREAD by ops in N1; readers turn on at N2. Clones (withProvenance) keep this.ctx. */
+   *  Clones (withProvenance) keep this.ctx. Populated ahead of its readers — no op consumes it yet. */
   readonly ctx: RunContext;
 
   protected constructor(ctx: RunContext, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
@@ -101,7 +101,7 @@ export abstract class AValue {
    *  `AValue` return reds every `value.withProvenance(p)` that must flow back into a `SchemeValue`
    *  slot (e.g. a re-stamp of an `instanceof AValue`-narrowed arm result). NOT `this`: a clone
    *  mints `new ConcreteClass(...)`, which TS will not accept as `this` without a cast (`this`
-   *  could be a narrower subtype), and a cast would re-mute the very signal this migration surfaces. */
+   *  could be a narrower subtype), and a cast would re-mute the very signal this return type surfaces. */
   abstract withProvenance(p: ReadonlySet<number>): SchemeValue;
 
   /** DEEP provenance re-stamp — the inbound membrane's re-stamp claim (jsToScheme's AValue
@@ -110,9 +110,8 @@ export abstract class AValue {
    *  implements it by minting a fresh spine whose children re-stamp through
    *  `reStampChild` (deep-restamp.ts); every carrier WITHOUT this term re-stamps shallowly
    *  via `withProvenance` (borrowed wrappers stay lazy — entries pick the stamp up on
-   *  access). `ctx` is the CROSSING's RunContext (the router's argument, not `this.ctx`) and
-   *  `seen` terminates cyclic spines — both exactly the dissolved jsToSchemeImpl arms'
-   *  behavior, byte-stable. */
+   *  access). `ctx` is the CROSSING's RunContext (the caller's argument, not `this.ctx`) and
+   *  `seen` terminates cyclic spines. */
   ["arrival/withProvenanceDeep"]?(ctx: RunContext, p: ReadonlySet<number>, seen?: WeakSet<object>): SchemeValue;
 
   /**
@@ -168,7 +167,7 @@ export abstract class AValue {
   /** Element count — the per-primitive divergence (elements' provenance) lives on the term. */
   ["arrival/tagless-final/length"]?(runCtx?: RunContext): AValue | number;
   /** Functor — map a fn over the elements (box-preserving or box-stripping per the term).
-   *  `runCtx` REQUIRED (the CONSTANT_CTX audit §4 Wave 1): every real dispatcher
+   *  `runCtx` REQUIRED: every real dispatcher
    *  (`env/r7rs/lists.ts`'s single-list `map`,
    *  `common/symbols/sequence.ts`'s wrapper) already threads `this.runCtx` — a live,
    *  defined RunContext — into the call, so an optional param here only ever bought a
@@ -312,12 +311,11 @@ export function unionProvenance(args: readonly AValue[]): ReadonlySet<number> {
  * re-derives, you merely lose minimality. UNDER-approximation is fatal, and silent. So the membrane
  * must be MONOTONE, and union is what makes `origin ⊇ dependencies` hold by construction.
  *
- * Measured before the fix: a value that NEVER CHANGED, passed through an ordinary TWO-input
- * crossing, came back with its elements' ids `{1},{2}` overwritten by the container-level union
- * `{10,20}` — `1` and `2` erased outright. It survived on ONE input only by accident:
- * `unionProvenance` returns the input's own Set OBJECT when there is a single distinct set, and the
- * inbound claim short-circuits on `p === v.provenance` — REFERENCE IDENTITY. An optimization that
- * happened to preserve. Not a law.
+ * The reference-identity fast paths — `unionProvenance` forwarding a single distinct set's own Set
+ * OBJECT, and the inbound re-stamp short-circuiting on `p === v.provenance` — happen to PRESERVE
+ * additivity, but by identity accident, not by law. They are allocation-saving optimizations;
+ * `origin ⊇ dependencies` holds only because UNION constructs it. Do not mistake the fast path for
+ * the guarantee.
  *
  * (Granularity is NOT what this protects — that is reconstructed from the WIRING, not stored on the
  * value: the trace's `carrier-fields` classifies which field sub-expressions consumed which

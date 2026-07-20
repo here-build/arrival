@@ -8,9 +8,8 @@
  * schemeToJsImpl's FFI passthrough as the Promise itself, by design — ADict's
  * settle-then-project egress branch is law, not an oversight the other containers miss.
  *
- * Design (the LIPS-decomposer removal ruling, utils/promises.ts header): structures hold
- * promise-valued members INERT; the interpreter awaits lazily at the seam where the value
- * is actually NEEDED. For container entries that seam is the ENTRY READ (tagless get /
+ * Design (utils/promises.ts header): structures hold promise-valued members INERT; the
+ * interpreter awaits lazily at the seam where the value is actually NEEDED. For container entries that seam is the ENTRY READ (tagless get /
  * `@` / `dict-ref` / `vector-ref` / toJS materialization) — this helper is `maybeThen`'s
  * discipline (sync-stays-sync, ONE promise, never a structure traversal) specialized to
  * that seam, plus the settle-cache hook the containers need:

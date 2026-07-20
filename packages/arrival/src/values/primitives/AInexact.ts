@@ -1,5 +1,6 @@
 // AInexact — floating-point inexact number (reals only; complex axis omitted, see numbers.ts header).
-// Extracted from numbers.ts. AInexact↔AExact (toExact/floatToRational) and AInexact↔numbers.ts
+// Safe-integer exact contract per docs/design-history/arrival-one-number-rework.md (§0.3 gates
+// float→exact conversion below). AInexact↔AExact (toExact/floatToRational) and AInexact↔numbers.ts
 // (complexDoor/schemeCompare) are benign runtime cycles — method-body calls, nothing at module-eval.
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
@@ -31,8 +32,7 @@ export class AInexact extends AValue {
     return Number.isFinite(this.real);
   }
 
-  // Reals-only tower: every inexact value IS real (the imaginary axis is gone).
-  // The old `-2.5+0.0i` deviation dissolves — there is no imaginary part to test.
+  // Reals-only tower: every inexact value IS real — no imaginary part to test.
   get isReal(): boolean {
     return true;
   }
@@ -120,8 +120,8 @@ export class AInexact extends AValue {
   // Comparison. Returns NaN when either operand is a NaN inexact: R7RS § 6.2.6 —
   // every numeric comparison against +nan.0 is #f, so callers using
   // `cmp(b) === 0` / `< 0` / `> 0` all correctly yield #f (NaN compares false
-  // against every relation), instead of the old `return 0` which made
-  // `(= +nan.0 x)` spuriously #t.
+  // against every relation). A `return 0` on the incomparable case would instead
+  // make `(= +nan.0 x)` spuriously #t.
   cmp(other: AInexact): -1 | 0 | 1 | number {
     if (this.real < other.real) return -1;
     if (this.real > other.real) return 1;

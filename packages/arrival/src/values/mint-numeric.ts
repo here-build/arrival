@@ -11,7 +11,7 @@
 // gcd-normalizing constructor ever runs, because a silently-overflowed float product can
 // round to a value that LOOKS like a safe integer after the fact — the invariant (§0.2)
 // is sound only when EVERY operand feeding an intermediate was itself checked. Those
-// three helpers live here so any op file (post-sweep) shares one overflow law instead of
+// three helpers live here so any op file shares one overflow law instead of
 // reinventing it per cluster.
 //
 // Benign runtime cycle with AExact.ts (same shape as the AExact↔AInexact/numbers.ts

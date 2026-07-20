@@ -7,7 +7,7 @@ import type { SchemeValue } from "../types.js";
 // to be a collection.
 export class Values {
   /** Type identity for CLASS-brand readers (`type()` in utils/typecheck): Values sits
-   *  outside the AValue hierarchy, so without a brand it needed a bespoke arm there. */
+   *  outside the AValue hierarchy, so without a brand it needs a bespoke arm there. */
   static [CLASS] = "values";
 
   __values__: SchemeValue[];

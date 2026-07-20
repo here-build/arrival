@@ -11,10 +11,7 @@ import { tf } from "./tagless-final.js";
  * implementation (R7RS-small §6.1). Routed to by every surface (`env/r7rs/equality.ts`'s
  * `equal?`, `env/r7rs/lists.ts`'s `member`/`assoc`, and each term's own Setoid recursion)
  * — a single walker so every caller agrees on cycles, SchemeCharacter, and
- * Scheme numeric/provenance types (it replaced three divergent, partially-broken
- * implementations: a `JSON.stringify` fallback that threw on cyclic input, a
- * separate `deepEqual` with no cycle guard and no character case, and `R.equals`
- * with no Scheme-type awareness).
+ * Scheme numeric/provenance types.
  *
  * Walks the two values in lock-step, tracking visited `(a, b)` reference pairs
  * so cycles terminate co-inductively (a node already being compared against its
@@ -109,7 +106,7 @@ export function structuralEqual(a: any, b: any, seen: SeenMap = new Map()): bool
 // and the atom-grade contract that `(eqv? (string-copy "a") (string-copy "a"))`
 // MUST be #f.
 //
-// Why three functions, not two-plus-an-alias:
+// The three grades:
 //   - `eq?` — pointer-grade. R7RS lets implementations make immediates (numbers,
 //     chars, interned symbols, nil, booleans) answer #t across distinct heap
 //     copies; we lean inclusive because the provenance clone machinery
