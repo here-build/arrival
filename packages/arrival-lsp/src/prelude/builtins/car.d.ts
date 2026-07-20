@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// L01 — `car` — the REFERENCE leaf the other 33 agents replicate.
+// L01 — `car` — the REFERENCE leaf the sibling builtins follow.
 //
 // Scheme semantics: (car list) → the head element of a non-empty list.
 // Pattern: re-declare `interface ArrShape` with this ONE member, written purely

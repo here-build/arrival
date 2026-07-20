@@ -4,11 +4,11 @@
 // range of the emitted virtual TS came from a `[schemeStart, schemeLength)` range
 // of the source `.scm`. CodeMirror integrations need to walk this lens in BOTH
 // directions:
-//   • toScheme — lift a tsc DIAGNOSTIC span OUT to Scheme coordinates (the proven
-//     direction: errors computed in TS, surfaced on the source).
-//   • toTs — map a CURSOR POSITION IN to the emitted TS (the new direction hover /
+//   • toScheme — lift a tsc DIAGNOSTIC span OUT to Scheme coordinates: errors
+//     computed in TS, surfaced on the source.
+//   • toTs — map a CURSOR POSITION IN to the emitted TS, the direction hover /
 //     completion / go-to-definition need: the user points at a Scheme offset, we
-//     query the TS service there).
+//     query the TS service there.
 // Plus line/col ↔ offset helpers for BOTH coordinate systems, since CodeMirror
 // works in either and a consumer may need to convert at the boundary.
 

@@ -20,8 +20,8 @@ import { balancePrefix, stringLiteralType } from "./balance.js";
 import { Mapper } from "./span-map.js";
 import { PROGRAM_FILE } from "./virtual-files.js";
 
-// balancePrefix moved to balance.ts (alternative backends like arrival-lsp-tsgo
-// import it without dragging `typescript` into their chunk); re-exported for consumers.
+// balancePrefix lives in balance.ts (backends like arrival-lsp-tsgo import it without
+// dragging `typescript` into their chunk); re-exported here for consumers.
 export { balancePrefix } from "./balance.js";
 
 const SENTINEL = "qzcursorzq"; // plain letters only (emitTypes cleanName)
@@ -141,7 +141,7 @@ export interface SchemeLanguageServiceOptions {
    * `(specifier: SStr): unknown` so `(require "data.json")` resolves to the
    * precise shape instead of `unknown`. A path with a shape is ALSO skipped as a
    * scheme dependency (it is data, not loadable forms). Absent → every require
-   * stays `unknown` (today's behavior). */
+   * stays `unknown`. */
   resolveRequireType?: (path: string) => string | null;
 }
 
@@ -558,7 +558,7 @@ export function createSchemeLanguageServiceCore(
   /**
    * Emit `scheme` — WITH its require closure when `resolveModule` is present —
    * install the concatenation as the program module, run USAGE-BASED PARAMETER
-   * INFERENCE over it (inferParamInsertions: V's "infer from consumers"), and
+   * INFERENCE over it (inferParamInsertions: "infer from consumers"), and
    * return a Mapper over the PROGRAM's segment. Required files keep their own
    * mappers in `depUnits`. Closure order is dependencies-first (post-order
    * DFS, visited-set cycle-safe), matching scheme's load semantics; a dep's
@@ -694,7 +694,7 @@ export function createSchemeLanguageServiceCore(
     return new Mapper(programMappings, scheme, programText);
   }
 
-  /** V's "infer from consumers": for every UNANNOTATED arrow parameter in the
+  /** "Infer from consumers": for every UNANNOTATED arrow parameter in the
    *  current program module, collect what its use sites EXPECT
    *  (checker.getContextualType — `(string-append str1 …)` expects SStr at
    *  str1's slot) and, when all sites agree on one rendered type, produce a
@@ -882,7 +882,7 @@ export function createSchemeLanguageServiceCore(
                 // as the 2304/2552 message rewrite. BOTH emitter spellings
                 // unwrap: element access (`__arr["string-append"]`) AND dot
                 // access (`__arr.map`, identifier-safe names) — the dot form
-                // used to leak TS currency into the slot card.
+                // otherwise leaks TS currency into the slot card.
                 callee:
                   /^__arr\["(.+)"\]$/.exec(role.calleeText)?.[1] ??
                   /^__arr\.([A-Za-z_$][\w$]*)$/.exec(role.calleeText)?.[1] ??
@@ -1133,7 +1133,7 @@ export function createSchemeLanguageServiceCore(
    *  - `'(…)` lowered to a TS array LITERAL `[…]`: `getContextualType(literal)` = the expected array type
    *    (`T_diet[]` / `readonly unknown[]`); its number-index is the element type.
    *  - `(list …)` lowered to `__arr.list(…)`: `getContextualType(thatCall)` = the same expected array type
-   *    (TS flows the outer slot INTO the call's contextual position — verified: `__arr.list(x)` filling a
+   *    (TS flows the outer slot INTO the call's contextual position: `__arr.list(x)` filling a
    *    `T_diet[]` slot has contextual type `T_diet[]`, NOT the generic `list`'s `unknown`); number-index → element.
    * A regular nested call (`(find-y …)`) is NOT a materializer — its args are typed by ITS OWN signature, so
    * it is deliberately NOT treated as an array producer (only an array literal, or a `__arr.list` call, is).

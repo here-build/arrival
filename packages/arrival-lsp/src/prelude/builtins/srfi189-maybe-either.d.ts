@@ -33,7 +33,7 @@
 // through map/bind/ref precisely. Because PRE forbids a top-level `Maybe<T>` alias
 // (declaration-merge collision), the union is written INLINE in every signature
 // (verbose but honest). A shared `Maybe<T>`/`Either<L,R>` brand in PRE would
-// collapse the verbosity — flagged to the coordinator in the report, NOT added here.
+// collapse the verbosity — deferred, NOT added here (a PRE-level change).
 //
 // Tags are written as the runtime symbol strings ('just'/'nothing'/'left'/'right').
 // `?`/`>`/`/`-bearing names → bracketed string keys.

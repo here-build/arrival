@@ -10,8 +10,7 @@
      nothing but noise. The aliases survive as the COMPAT BRIDGE the lens still
      needs resolvable: rosetta `type:` strings splice them (host-prelude.ts), the
      `(require)` synthesizer emits them (@inhuman.tools/arrival/loader), and the
-     `.cases.ts` bite-guards assert against them. (The deferred numeric tower that
-     once justified `SNum` is retired — V chose plain TS.) */
+     `.cases.ts` bite-guards assert against them. */
 // ─────────────────────────────────────────────────────────────────────────────
 // PRE — the SHARED PRELUDE for the Scheme→TS type lens.
 //
@@ -24,9 +23,6 @@
 //   4. the typed-apply HOF fallback `sexpr<F>`,
 //   5. THE LEAF MERGE CONTRACT — the empty `interface ArrShape {}` + the
 //      `declare const __arr: ArrShape` that every leaf extends.
-//
-// Promoted + restructured from the proven probe (`/tmp/scheme-ts-probe/
-// arrival-stdlib.d.ts`), which already type-checks and bites under tsc.
 //
 // CONSUMABILITY: this is a pure ambient `.d.ts` (no `import`/`export`), so it is
 // consumable both by the leaf `.d.ts` files (sharing the same global scope under
@@ -53,15 +49,14 @@ type Nil = readonly [];
 // Scalar-compat aliases (each ≡ its primitive). Leaves write the primitive
 // directly now (`string`/`number`/`boolean`/`void`); these are retained ONLY so
 // rosetta `type:` strings, the `(require)` synthesizer, and the `.cases.ts`
-// bite-guards keep resolving. `Unit` is Scheme's unspecified value (`void`). The
-// numeric-tower seam that once made `SNum` mandatory is retired — V chose plain TS.
+// bite-guards keep resolving. `Unit` is Scheme's unspecified value (`void`).
 type Unit = void;
 type SNum = number;
 type SStr = string;
 type SBool = boolean;
 
 // ── Dict: homoiconic-dict → precise-object mapped type ───────────────────────
-// PROVEN in the probe. Maps a tuple of [key, value] entry-tuples into a precise
+// Maps a tuple of [key, value] entry-tuples into a precise
 // object type whose keys are the literal key strings and whose value types are
 // the corresponding value types. `(dict :name "a" :age 30)` lowers to
 // `dict([["name","a"],["age",30]] as const)` → `{ name: string; age: number }`.
@@ -95,7 +90,7 @@ type FieldKeys<O extends object> = (keyof O & string)[];
 // variable, or `((car fns) x)`). It threads the callee's parameter & return types
 // so the indirect call still bites.
 //
-// WHEN TO USE WHICH (the probe found direct calls cleaner — keep BOTH):
+// WHEN TO USE WHICH (direct calls are cleaner — keep BOTH):
 //   • DIRECT call — preferred whenever the head resolves to a known builtin or a
 //     statically-typed binding. The emitter lowers `(car xs)` → `__arr.car(xs)`
 //     and `(f x)` (f a typed local) → `f(x)`. TS checks these natively; no helper.
@@ -129,9 +124,8 @@ declare const __scmTruth: (x: unknown) => boolean;
 // cleaning is ever needed. Two leaves in different files cannot collide: they add
 // different members to the same interface, and the compiler unions them.
 //
-// (This interface-merge mechanism — verified empirically — supersedes the
-// `declare const __arr: { … }` object-literal-merge sketch in the DAG doc:
-// object type literals on a `const` do NOT merge across files, interfaces DO.)
+// (Interface merge, not a `declare const __arr: { … }` object literal: object
+// type literals on a `const` do NOT merge across files, interfaces DO.)
 interface ArrShape {}
 
 declare const __arr: ArrShape;

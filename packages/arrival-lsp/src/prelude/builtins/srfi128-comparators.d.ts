@@ -36,7 +36,7 @@
 //     element type T in v1 — make-comparator's three preds are independent values, so
 //     a precise cross-pred T-binding would over-constrain. Honest-coarse: type-test is
 //     `(x: unknown)=>boolean`, equality/ordering `(a: unknown, b: unknown)=>boolean`. A
-//     `Comparator<T>` brand in PRE could thread T — flagged in the report, NOT added.
+//     `Comparator<T>` brand in PRE could thread T — deferred, NOT added (a PRE-level change).
 //   • default-comparator / make-default-comparator are NULLARY FUNCTIONS that RETURN a
 //     comparator — typed `(): <comparator>`, NOT a value.
 //   • =? / <? / … are variadic in the trailing values (chain-relate) → `...rest`.
