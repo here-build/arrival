@@ -1,13 +1,17 @@
-// metadata — the READ-time resolver for a symbol's `metadata` extension bag
-// (exec-phases-and-dynamic-metadata.md §2.3). One small pure helper, the ONE place the
-// per-field static-or-dynamic union (`MetadataField`, ./_bake.ts) is interpreted.
+// metadata — the READ-time resolver for a symbol's `metadata` extension bag. One small
+// pure helper, the ONE place the per-field static-or-dynamic union (`MetadataField`,
+// ./_bake.ts) is interpreted, and the CANONICAL HOME for the describe-time read channel
+// contract every metadata-carrying kind points back to.
 //
-// The three rulings this module implements (§2.3):
-//   1. LAZILY AT READ, against the phase-2 activation — never at bake/lower. A dynamic
-//      field touching `this.resources.x.live` spawns the resource on FIRST READ through
-//      the cell's normal lazy single-flight — that is correct (the welcome screen
-//      genuinely reads the dashboard's ports); resolving at assembly would be the
-//      connection storm the worker-ephemerality ruling forbids.
+// DESCRIBE-TIME READ CHANNEL:
+// A dynamic (fn-valued) metadata field resolves LAZILY at describe/catalog READ time,
+// against the assembly's phase-2 activation — never at bake/lower. The three rulings this
+// resolver implements:
+//   1. LAZILY AT READ, against the phase-2 activation. A dynamic field touching
+//      `this.resources.x.live` spawns the resource on FIRST READ through the cell's normal
+//      lazy single-flight — that is correct (the welcome screen genuinely reads the
+//      dashboard's ports); resolving at assembly would be the connection storm the
+//      worker-ephemerality ruling forbids.
 //   2. PER-READ, NO MEMO — matches the shipped McpAnnotation semantics (the thunk fires
 //      on every catalog fetch) and the ephemerality doctrine (a memo is a cache with no
 //      invalidation story). An expensive field's author memoizes inside the fn and owns
@@ -18,9 +22,9 @@
 //      session-generation). Here: the key is OMITTED from `resolved` and absent from
 //      `dynamicKeys`.
 //
-// Provenance ruling (§2.8): metadata reads are describe-time host-side IO, outside every
-// wire — no provenance node, nothing enters a record stream. Scheme programs never see
-// metadata (no `(symbol-metadata …)` verb — same law as no `(configuration :key)`).
+// PROVENANCE: metadata reads are describe-time host-side IO, outside every wire — no
+// provenance node, nothing enters a record stream. Scheme programs never see metadata (no
+// `(symbol-metadata …)` verb — same law as no `(configuration :key)`).
 
 import type { Activation } from "../capability.js";
 import type { MetadataRecord } from "./_bake.js";
@@ -60,9 +64,9 @@ export async function resolveMetadata(
   return { resolved, dynamicKeys };
 }
 
-/** The STATIC subset of a metadata bag — total at module load, zero assembly needed
- *  (the §2.1 enumerability property, made callable). Fn-valued (dynamic) fields are
- *  simply absent. */
+/** The STATIC subset of a metadata bag — total at module load, zero assembly needed (the
+ *  enumerability property that keeps the static subset readable pre-assembly, made
+ *  callable). Fn-valued (dynamic) fields are simply absent. */
 export function staticMetadata(metadata: MetadataRecord | undefined): Record<string, unknown> {
   return Object.fromEntries(Object.entries(metadata ?? {}).filter(([, v]) => typeof v !== "function"));
 }

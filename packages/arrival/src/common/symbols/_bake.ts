@@ -26,10 +26,10 @@
 //                    createRosettaWrapper schemeToJs → fn → jsToScheme spine. impl receives ONLY
 //                    decoded scheme args POSITIONALLY — ctx never a param. ctx-coupled verbs read run-state
 //                    off `this: CallCtx` (`this.runCtx.signal`, `this.invocation.currentInvocation`).
-//                    PROVENANCE MINTING RESOLVED: evaluator appends ctx; wrapper reads this.invocation
+//                    PROVENANCE MINTING: evaluator appends ctx; wrapper reads this.invocation
 //                    .currentInvocation and mints/deep-stamps exactly as createRosettaWrapper does
 //                    (a `source`-role rosetta AEntity mints; `pipe` forwards — see `ProvenanceRole`
-//                    below). withContext / argProvenance knobs DROPPED here.
+//                    below).
 //
 //   symbol.notImplemented  no contract/impl, just `name: reason`. bake → door:
 //                    { kind: "door", name, reason } (the %purity-door story).
@@ -105,24 +105,22 @@ export type DecodedReturn<O extends VectorSpec, F extends Face = "js"> = O exten
 export type MaybePromise<T> = T | Promise<T>;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1.5 Symbol metadata — the per-FIELD static-or-dynamic vocabulary
-//     (exec-phases-and-dynamic-metadata.md §2.1–§2.3). Every declaration kind
-//     carries an optional `metadata` extension bag; each FIELD is either static
-//     data or a lazily-resolved function of the assembly's activation.
+// 1.5 Symbol metadata — the per-FIELD static-or-dynamic vocabulary. Every declaration
+//     kind carries an optional `metadata` extension bag; each FIELD is either static
+//     data or a lazily-resolved function of the assembly's activation. The describe-time
+//     read channel these dynamic fields resolve through is contracted in `./metadata.js`.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** One metadata field: STATIC data, or a DYNAMIC `(this: Activation) => value` resolved
- *  lazily at READ time (describe/catalog), per read, against the phase-2 activation —
- *  never at bake/lower (a dynamic field touching `this.resources.x.live` at assembly
- *  would spawn the resource eagerly — the connection storm the worker-ephemerality
- *  ruling forbids). The discriminant is `typeof === "function"`: a static field can
- *  therefore never BE a function — that is the rule, not a limitation (a function-valued
- *  "static" datum has no serialization/digest/rehydration story, i.e. it was never
- *  static). Per-FIELD union, deliberately NOT a whole-record builder
- *  (`metadata: (activation) => record` is rejected — it would re-open the builder-form
- *  arm the hermetic-symbols design retires); per-field keeps the static subset
- *  enumerable with zero assembly. Resolution semantics live in `./metadata.js`'s
- *  `resolveMetadata`. */
+/** One metadata field: STATIC data, or a DYNAMIC `(this: Activation) => value`. The
+ *  discriminant is `typeof === "function"`: a static field can therefore never BE a
+ *  function — that is the rule, not a limitation (a function-valued "static" datum has no
+ *  serialization/digest/rehydration story, i.e. it was never static). Per-FIELD union,
+ *  deliberately NOT a whole-record builder (`metadata: (activation) => record` is
+ *  rejected — it would re-open the builder-form arm the hermetic-symbols design retires);
+ *  per-field keeps the static subset enumerable with zero assembly. A dynamic field
+ *  resolves lazily at describe/catalog read time against the phase-2 activation — the
+ *  describe-time read channel, contracted with its resolution semantics in
+ *  `./metadata.js`'s `resolveMetadata`. */
 export type MetadataField<A = Activation<any, any>, V = unknown> =
   | V // STATIC — data, enumerable pre-assembly
   | ((this: A) => MaybePromise<V>); // DYNAMIC — resolved lazily at read, per read
@@ -297,11 +295,11 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest exten
   readonly refPolicy?: RefPolicy;
 }
 
-// CallCtx/makeCallCtx moved to run/CallCtx.ts: ACallable.ts needs makeCallCtx
-// as a real call; importing it from here closed a cycle (ACallable.ts → scheme-zod.ts → this
-// file) that could leave a `z.instanceof(...)` codec's captured class permanently undefined
-// depending on which path entered first. Re-exported here (not just imported) so existing
-// `_bake.js` importers are unaffected.
+// `CallCtx`/`makeCallCtx` live in run/CallCtx.ts, not here: ACallable.ts needs `makeCallCtx`
+// as a real call value, and importing it from this file would close a cycle
+// (ACallable.ts → scheme-zod.ts → _bake.ts) that can leave a `z.instanceof(...)` codec's
+// captured class permanently undefined depending on which path enters first. Re-exported
+// here (not merely imported) so `_bake.js` importers resolve it from this module.
 export type { CallCtx };
 export { makeCallCtx, testCallCtx };
 
@@ -360,7 +358,6 @@ export interface NativeSymbolDef {
   /** See `Contract.refPolicy` — the AUTHORED value; the harvest row resolves the
    *  `"shim"` default. */
   readonly refPolicy?: RefPolicy;
-  /** Extension bag — see `MetadataRecord` (kind-agnostic; every def carries the slot). */
   readonly metadata?: MetadataRecord;
 }
 
@@ -407,11 +404,9 @@ export interface RosettaSymbolDef<
   readonly narrows?: { readonly witness: string };
   /** See `NativeSymbolDef.refPolicy`. */
   readonly refPolicy?: RefPolicy;
-  /** Extra data carried by this symbol (MCP tool annotations, etc.) — the same
-   *  kind-agnostic slot every def carries (see `MetadataRecord`); rosetta keeps its
-   *  generic `M` so a higher layer can type its own bag (`RosettaSymbolDef<M>`).
-   *  Fields obey the `MetadataField` union: fn-valued fields are DYNAMIC, resolved
-   *  at read time against the assembly's activation. */
+  /** Extension bag, kept generic (`M`) so a higher layer can type its own bag
+   *  (`RosettaSymbolDef<M>`) — see `MetadataRecord`/`MetadataField` for the shared
+   *  static-or-dynamic contract. */
   readonly metadata?: M;
 }
 
@@ -449,7 +444,6 @@ export interface TaglessSymbolDef {
   readonly narrows?: { readonly witness: string };
   /** See `NativeSymbolDef.refPolicy` — declaration-site spread, same as `emit`. */
   readonly refPolicy?: RefPolicy;
-  /** Extension bag — see `MetadataRecord` (kind-agnostic; every def carries the slot). */
   readonly metadata?: MetadataRecord;
 }
 
@@ -482,7 +476,6 @@ export interface TaglessGuardSymbolDef {
   readonly narrows?: { readonly witness: string };
   /** See `NativeSymbolDef.refPolicy` — declaration-site spread. */
   readonly refPolicy?: RefPolicy;
-  /** Extension bag — see `MetadataRecord` (kind-agnostic; every def carries the slot). */
   readonly metadata?: MetadataRecord;
 }
 
@@ -512,7 +505,6 @@ export interface SequenceSymbolDef {
   readonly narrows?: { readonly witness: string };
   /** See `NativeSymbolDef.refPolicy`. */
   readonly refPolicy?: RefPolicy;
-  /** Extension bag — see `MetadataRecord` (kind-agnostic; every def carries the slot). */
   readonly metadata?: MetadataRecord;
 }
 
@@ -561,7 +553,6 @@ export interface DoorSymbolDef {
   readonly reason: string;
   readonly cause?: DoorCause;
   readonly preludeOnly?: boolean;
-  /** Extension bag — see `MetadataRecord` (kind-agnostic; every def carries the slot). */
   readonly metadata?: MetadataRecord;
 }
 
@@ -572,7 +563,6 @@ export interface KeywordSymbolDef {
   readonly kind: "keyword";
   readonly name: string;
   readonly doc?: string;
-  /** Extension bag — see `MetadataRecord` (kind-agnostic; every def carries the slot). */
   readonly metadata?: MetadataRecord;
 }
 
@@ -591,7 +581,6 @@ export interface MacroSymbolDef {
    * (a bare symbol, not a string forced by evaluation of a function binding).
    */
   readonly preludeOnly?: boolean;
-  /** Extension bag — see `MetadataRecord` (kind-agnostic; every def carries the slot). */
   readonly metadata?: MetadataRecord;
 }
 
@@ -673,7 +662,6 @@ export interface DefineSymbolDef {
   readonly narrows?: { readonly witness: string };
   /** See `NativeSymbolDef.refPolicy`. */
   readonly refPolicy?: RefPolicy;
-  /** Extension bag — see `MetadataRecord` (kind-agnostic; every def carries the slot). */
   readonly metadata?: MetadataRecord;
 }
 
@@ -696,7 +684,6 @@ export interface DefineSyntaxSymbolDef {
   readonly macroAttribute: "opaque" | "expression" | "binder";
   /** See `Contract.preludeOnly` — kind-agnostic, same routing every other kind honors. */
   readonly preludeOnly?: boolean;
-  /** Extension bag — see `MetadataRecord` (kind-agnostic; every def carries the slot). */
   readonly metadata?: MetadataRecord;
 }
 
@@ -890,7 +877,7 @@ export function assertProvenanceRoleShape(
     // VOID-FAMILY reading (the same no-egress reading `extractCallbackRoles`'s `voidEgress`
     // takes): a zero-item output vector AND an all-`undefinedResult` vector both carry no
     // real egress — `output: [z.undefinedResult]` is a void verb, not a return value. This
-    // is the sink gate the run-cache tombstone-skip (§2.2's replay table) stands on: a
+    // is the sink gate the run-cache tombstone-skip (run/run-cache.ts, THE MODE LAW) stands on: a
     // sink's replay-skip returns void, sound only because the contract PROVED void here.
     const hasEgress = items === undefined ? true : items.some((item) => z.lookupName(item) !== "undefinedResult");
     if (hasEgress) {
@@ -1138,10 +1125,10 @@ export type SequenceImpl<I extends VectorSpec, O extends VectorSpec> = (
 export interface BakeRuntimeOpts {
   /** Run zod validation on decoded args + encoded output. Default true. */
   validate?: boolean;
-  /** Metadata to attach to the symbol (e.g. MCP tool annotations). Stored in `.metadata`
-   *  on the resulting def. Use generic `RosettaSymbolDef<M>` to type it. Fields obey the
-   *  `MetadataField` union — a fn-valued field is DYNAMIC (resolved lazily at read time
-   *  against the assembly's activation, see `./metadata.js`); everything else is static data. */
+  /** Metadata to attach to the symbol (e.g. MCP tool annotations), stored in `.metadata`
+   *  on the resulting def; use generic `RosettaSymbolDef<M>` to type it. Fields obey the
+   *  `MetadataField` union (static data, or a dynamic field resolved through the
+   *  describe-time read channel — see `./metadata.js`). */
   metadata?: MetadataRecord;
 }
 

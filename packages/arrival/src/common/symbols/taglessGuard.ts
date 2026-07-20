@@ -19,15 +19,14 @@ import { mintVerdict } from "../../values/op-helpers.js";
  *  value — P7: the class stays the representation authority, the wrap layer mints). */
 export function taglessGuard(tpl: TemplateStringsArray, ...sub: unknown[]): TaglessGuardSymbolDef {
   const { name, doc } = parseNameDoc(tpl, sub);
-  // `function`, not arrow: the evaluator hands `CallCtx` via `this` for bare-fn dispatch,
-  // which an arrow body can never read.
+  // Same ctx-via-`this` dispatch as `tagless` (function-not-arrow; receiver = last scheme arg;
+  // free `name` cast to TaglessOp at this one boundary) — see ./tagless.ts. Divergence: a
+  // receiver that declares no such method answers #f here, where `tagless` throws.
   const run = async function (this: CallCtx, ...args: unknown[]): Promise<unknown> {
     const runCtx = this.runCtx;
     const schemeArgs = args;
     const receiver = schemeArgs[schemeArgs.length - 1];
     const leading = schemeArgs.slice(0, -1);
-    // `name` is a free author string; cast to the declared `TaglessOp` union at this one
-    // boundary. A typo'd op just resolves no method and falls to the #f below.
     const fn = resolveMethod(receiver, tf(name as TaglessOp));
     if (fn === undefined) return mintVerdict([receiver], false); // graceful #f — receiver can't answer
     const verdict = await fn.call(receiver, ...leading, runCtx);

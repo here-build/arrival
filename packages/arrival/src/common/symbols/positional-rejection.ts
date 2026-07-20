@@ -2,11 +2,12 @@
 // (benchmark-defect-register.md B4).
 //
 // `common/symbols/rosetta.ts`'s decode gate (`z.decode(inSchema, args)`, the ELSE arm
-// of the kwargs/positional split) used to let a raw `ZodError` propagate. zod v4's
+// of the kwargs/positional split) would otherwise let a raw `ZodError` propagate. zod v4's
 // `ZodError.message` IS the pretty-printed JSON of `.issues` — a 25-line nested-union
 // dump that names no verb and no argument. One model in the 89x2 benchmark corpus
 // misread that dump as a `:limit max 500` schema constraint that did not exist, and
-// voluntarily shrank its dataset 388 → 80, losing the task.
+// voluntarily shrank its dataset 388 → 80, losing the task — the failure this humanizer
+// exists to prevent.
 //
 // `kwargs-rejection.ts` (`issueLines`) already solves this for the KWARGS shape, keyed
 // on a param NAME. This file solves the same problem for the POSITIONAL/variadic shape,

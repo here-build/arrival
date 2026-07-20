@@ -126,14 +126,13 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
     const escapeSlots: readonly boolean[] = Array.isArray(contract.output)
       ? (contract.output as readonly unknown[]).map((slot) => z.lookupName(slot) === "value")
       : [];
-    // Resolve the declared role (default "source" — see Contract.provenance): "pipe" is a
-    // TRANSFORM (forwards input provenance); "source" (default) MINTS.
+    // Default "source" — see Contract.provenance. "source" MINTS a fresh point; "pipe" is a
+    // TRANSFORM that forwards input provenance — the load-bearing choice applied at step 3 below.
     const provenance = contract.provenance ?? "source";
     assertProvenanceRoleShape(name, provenance, inSchema, outSchema);
-    // The EXPLICIT cache class (Ruling A) — no kind default: absent = regenerateable, the
-    // safe polarity. `view` demands a serializable contract (the gate); `pure` is ungated.
-    // Lineage ⊥ cache: this never touches `provenance` above — infer is the standing proof
-    // (a provenance SOURCE that declares cacheClass "pure").
+    // Cache class — see Contract.cacheClass (explicit, no kind default; absent = regenerateable;
+    // the view/pure serialization gate; and why Lineage ⊥ cache, with infer — a provenance
+    // SOURCE declaring cacheClass "pure" — as the standing proof).
     const cacheClass = contract.cacheClass;
     assertCacheClassShape(name, cacheClass, inSchema, outSchema);
     // Per-lambda-arm callback roles: shape extraction + the declared override, drift-door
@@ -403,15 +402,15 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       callbackRoles,
       type: contract.type,
       preludeOnly: contract.preludeOnly,
-      // Compiler-facing fields (constitution §4.1) — carried through AUTHORED (the
-      // harvest row resolves refPolicy's "shim" default); inert to the interpreter.
+      // Compiler-facing fields — carried through AUTHORED, inert to the interpreter; the
+      // harvest row resolves refPolicy's "shim" default. See Contract.emit/narrows/refPolicy.
       emit: contract.emit,
       narrows: contract.narrows,
       refPolicy: contract.refPolicy,
-      // The extension bag (BakeRuntimeOpts.metadata → RosettaSymbolDef.metadata). Stamped
-      // as DATA only — dynamic (fn-valued) fields are NEVER invoked here (bake must not
-      // resolve metadata: resolution is read-time, against the assembly's activation —
-      // see `./metadata.js`'s resolveMetadata + exec-phases-and-dynamic-metadata.md §2.3).
+      // The extension bag (BakeRuntimeOpts.metadata → RosettaSymbolDef.metadata). Stamped as
+      // DATA only — dynamic (fn-valued) fields are NEVER invoked here: bake must not resolve
+      // metadata; resolution is read-time, against the assembly's activation (./metadata.js's
+      // resolveMetadata).
       metadata: opts.metadata,
     };
   };

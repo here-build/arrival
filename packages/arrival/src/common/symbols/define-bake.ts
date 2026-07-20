@@ -8,7 +8,7 @@
 // Kept OUT of `../capability.ts` itself: this pulls in the reader, `provenance/lineage.ts`'s
 // classifier, `provenance/prelude.ts`'s fixpoint, and the callable-invocation primitives
 // (`eval/call-function.ts`, `eval/Macro.ts`) — a real amount of machinery capability.ts
-// doesn't otherwise touch. None of these import `common/capability.ts` back (verified),
+// doesn't otherwise touch. None of these import `common/capability.ts` back,
 // so the edge is one-directional; `CapabilityLike`/`ExportableSpec` below are LOCAL
 // structural types (not imported from capability.ts) so this file never has to import
 // the class it's invoked from at all — capability.ts's real `EnvCapability`/`CapabilitySpec`
@@ -335,7 +335,7 @@ async function evaluateBody(
   return scope.get(tempName);
 }
 
-// THE WeakMap<RunContext> BUG, and why sibling defines batch: threading the caller's
+// RUNCTX SHARING — why sibling lambda-form defines batch: threading the caller's
 // real `runCtx` through `call_function` (above) is necessary but not sufficient for a
 // `WeakMap<RunContext, …>`-keyed dynamic-extent slot to survive a `symbol.define`→
 // `symbol.define` call — because `evalLambda`'s runner (evaluator.ts) ALWAYS evaluates a
@@ -421,24 +421,12 @@ function buildDefineProcedure(verb: string, def: DefineSymbolDef, closureValue: 
       // Adoption is a REPRESENTATION choice on the SCHEME plane: AValue in, AValue out, O(1), same
       // backing store. Nothing crosses out.
       const args = def.adoptArgs === undefined ? rawArgs : (def.adoptArgs(rawArgs) as typeof rawArgs);
-      // A REJECTION IS A DOOR, ON EVERY BOUNDARY — not just the tool-call one.
-      //
-      // This decode used to let a raw `ZodError` propagate. Zod v4's `ZodError.message` IS the
-      // pretty-printed JSON of `.issues` — a nested-union dump that names no verb, no argument, and
-      // no value:
-      //
-      //   (count parsed)
-      //   => Error: [ { "code": "custom", "path": [ 0 ], "message": "Invalid input" } ]
-      //
-      // The model cannot act on that. (It reads as a schema constraint, not a mistake: one model in
-      // the 89×2 corpus misread such a dump as an invented `:limit max 500` rule and voluntarily
-      // shrank its own dataset 388→80 records.) The actual fault was ordinary and teachable —
-      // SRFI-1's `count` is `(count pred . lists)`, and `parsed` is a vector, not a predicate.
-      //
-      // `symbol.rosetta` has humanized this since B4 (rosetta.ts's positional arm). `symbol.define`
-      // — which is EVERY R7RS/SRFI builtin (`count`, `some`, `any?`, `last`, `filter`, …) — never
-      // got the same treatment, so the whole stdlib surface still dumped raw zod at the model while
-      // the tool-call surface taught. Same formatter, same grammar, both boundaries now.
+      // A rejection is a DOOR on every boundary. A raw `ZodError` here is unactionable —
+      // Zod v4's `ZodError.message` is the pretty-printed JSON of `.issues`, naming no verb,
+      // argument, or value. `symbol.define` is every R7RS/SRFI builtin (`count`, `some`,
+      // `last`, `filter`, …), so the whole stdlib surface routes rejections through the SAME
+      // positional humanizer the tool-call surface uses — `formatPositionalRejection`, which
+      // owns the grammar and the motivating corpus incident.
       if (def.validate) {
         try {
           z.decode(def.in, args);

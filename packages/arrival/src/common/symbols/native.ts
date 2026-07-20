@@ -22,11 +22,10 @@ import {
 } from "./_bake.js";
 
 /** Native host fn over SCHEME VALUES (no ctx, no validation, no codec crossing). The impl
- *  projects the contract's SCHEME face (`Impl<…, "scheme">` = each schema's `z.input`, the
- *  value-algebra side; a rosetta projects `z.output`, the membrane side) — so a codec-vocabulary
- *  schema (e.g. `z.string` = AString⇄string) types the native impl's arg as the SCHEME value
- *  (AString), never the JS image. `Rest` (from `contract.inputRest`, default `undefined`) is
- *  the fixed-prefix-plus-rest split — see `Contract`/`Impl` in `_bake.ts`. */
+ *  projects the contract's SCHEME face (`Impl<…, "scheme">` — see `Face` in `_bake.ts`), so a
+ *  codec-vocabulary schema (e.g. `z.string` = AString⇄string) types the native impl's arg as the
+ *  SCHEME value (AString), never the JS image. `Rest` (from `contract.inputRest`, default
+ *  `undefined`) is the fixed-prefix-plus-rest split — see `Contract`/`Impl` in `_bake.ts`. */
 export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
   const { name, doc } = parseNameDoc(tpl, sub);
   return <const I extends VectorSpec, const O extends VectorSpec, const Rest extends RestSpec = undefined>(
@@ -36,14 +35,14 @@ export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
   ): NativeSymbolDef => {
     const inSchema = normalizeInputVector(contract.input, contract.inputRest);
     const outSchema = normalizeVector(contract.output);
-    // Resolve the declared role (default "pipe" — see Contract.provenance); capability.ts
-    // stamps this onto the bound ANativeProcedure (`provenanceRole`) so the lineage classifier
-    // reads it off `env.get(op)`, replacing the retired `fanout: true` → `.fanout` duck-read.
+    // Default "pipe" — see Contract.provenance (kind-default table + how capability.ts stamps
+    // the resolved role onto the bound ANativeProcedure for the lineage classifier).
     const provenance = contract.provenance ?? "pipe";
     assertProvenanceRoleShape(name, provenance, inSchema, outSchema);
-    // The EXPLICIT cache class (Ruling A) — no kind default: absent = regenerateable. The
-    // run-cache INTERCEPTION lives on the rosetta membrane only (a native is a contour, not
-    // a penetration); the resolved field still rides the def uniformly for downstream readers.
+    // Cache class — see Contract.cacheClass (explicit, no kind default; absent = regenerateable).
+    // Native-specific: the run-cache interception lives on the rosetta membrane only (a native
+    // is a contour, not a penetration), yet the resolved field still rides the def uniformly for
+    // downstream readers.
     const cacheClass = contract.cacheClass;
     assertCacheClassShape(name, cacheClass, inSchema, outSchema);
     // Per-lambda-arm callback roles: shape extraction + the declared override, drift-door
@@ -81,8 +80,8 @@ export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
       provenance,
       cacheClass,
       callbackRoles,
-      // Compiler-facing fields (constitution §4.1) — carried through AUTHORED (the
-      // harvest row resolves refPolicy's "shim" default); inert to the interpreter.
+      // Compiler-facing fields — carried through AUTHORED, inert to the interpreter; the
+      // harvest row resolves refPolicy's "shim" default. See Contract.emit/narrows/refPolicy.
       emit: contract.emit,
       narrows: contract.narrows,
       refPolicy: contract.refPolicy,
