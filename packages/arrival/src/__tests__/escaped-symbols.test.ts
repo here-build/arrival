@@ -4,6 +4,12 @@ import { CONSTANT_CTX } from "../run/RunContext.js";
  *
  * LIPS supports escaped symbols like |symbol with spaces| or |24|
  * These tests verify proper resolution and interop with JS
+ *
+ * The pure `|...|` bar-quoted SYMBOL-GRAMMAR reader cases (empty ||, escaped
+ * \|, unicode inside bars, special chars, case-sensitivity, :24-vs-|24|
+ * disambiguation) moved to ../reader/__tests__/escaped-symbols.test.ts. This
+ * file keeps define/resolve, `@` property access, MCP UUID resolution
+ * patterns, and evaluator/membrane symbol resolution.
  */
 
 import { describe, expect, it } from "vitest";
@@ -43,16 +49,6 @@ describe("Escaped Symbol Resolution", () => {
       `);
 
       expect(schemeToJs(result, {})).toBe(42);
-    });
-
-    it("should handle symbols with special characters", async () => {
-      const result = await execOne(`
-        (begin
-          (define |foo-bar!@#| "special")
-          |foo-bar!@#|)
-      `);
-
-      expect(schemeToJs(result, {})).toBe("special");
     });
   });
 
@@ -104,22 +100,6 @@ describe("Escaped Symbol Resolution", () => {
   });
 
   describe("Keywords vs escaped symbols", () => {
-    it("should distinguish :24 from |24|", async () => {
-      const testObj = {
-        "24": "numeric key value",
-      };
-
-      bindValue(inferenceEnv, "test-obj", jsToScheme(CONSTANT_CTX, testObj));
-
-      // :24 should be treated as keyword and converted to "24" by @ function
-      const result1 = await execOne(`(@ test-obj :24)`);
-      expect(schemeToJs(result1, {})).toBe("numeric key value");
-
-      // :|24| should also work (keyword with escaped symbol)
-      const result2 = await execOne(`(@ test-obj :|24|)`);
-      expect(schemeToJs(result2, {})).toBe("numeric key value");
-    });
-
     it("should handle keywords with special characters", async () => {
       const testObj = {
         "foo-bar": "hyphenated",
@@ -135,53 +115,6 @@ describe("Escaped Symbol Resolution", () => {
       `);
 
       expect(schemeToJs(result, {})).toEqual(["hyphenated", "underscored"]);
-    });
-  });
-
-  describe("Edge cases and resolution", () => {
-    it("should handle empty escaped symbol", async () => {
-      // R7RS §7.1.1: `||` is the symbol whose name is the empty string — a real
-      // reader gap this used to crash on (`Reduce of empty array with no initial
-      // value`), now fixed in `parse_symbol`.
-      const result = await execOne(`
-        (begin
-          (define || "empty")
-          ||)
-      `);
-      expect(schemeToJs(result, {})).toBe("empty");
-    });
-
-    it("should handle unicode in escaped symbols", async () => {
-      const result = await execOne(`
-        (begin
-          (define |hello-世界| "unicode works")
-          |hello-世界|)
-      `);
-
-      expect(schemeToJs(result, {})).toBe("unicode works");
-    });
-
-    it("should handle pipes inside escaped symbols", async () => {
-      // R7RS §7.1.1: `\|` inside `|...|` is a literal `|` in the symbol's name
-      // (a real reader gap — the old `parse_symbol` split on every bar and lost
-      // the escape, producing a mangled name — now fixed).
-      const result = await execOne(`
-        (begin
-          (define |foo\\|bar| "pipe inside")
-          |foo\\|bar|)
-      `);
-      expect(schemeToJs(result, {})).toBe("pipe inside");
-    });
-
-    it("should preserve case sensitivity in escaped symbols", async () => {
-      const result = await execOne(`
-        (begin
-          (define |MyVariable| "uppercase")
-          (define |myvariable| "lowercase")
-          (list |MyVariable| |myvariable|))
-      `);
-
-      expect(schemeToJs(result, {})).toEqual(["uppercase", "lowercase"]);
     });
   });
 

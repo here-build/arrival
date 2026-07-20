@@ -1,18 +1,16 @@
 /**
- * Fuzz harness for the Scheme evaluator + provenance algebra. Short numRuns
- * + short timeout — sits in the default `pnpm test` budget but exercises a
- * wide-enough surface to catch any regression that drops crash safety or
- * breaks an invariant (round-trip, monotonicity, idempotence) on randomly
- * shaped expression trees.
+ * Fuzz harness for the Scheme evaluator — crash safety on randomly generated
+ * arithmetic/conditional/string expressions. Short numRuns + short timeout —
+ * sits in the default `pnpm test` budget but exercises a wide-enough surface
+ * to catch any regression that drops crash safety on randomly shaped
+ * expression trees. The evaluator is supposed to handle any well-formed
+ * input — divide-by-zero is the only expected exception, normalized out
+ * below.
  *
- * Two halves:
- *   1. Crash safety on randomly generated arithmetic/conditional/string
- *      expressions. The evaluator is supposed to handle any well-formed
- *      input — divide-by-zero is the only expected exception, normalized
- *      out below.
- *   2. Invariant maintenance — for synthetic AValue trees built directly
- *      through the algebra (no parser, no evaluator), the same properties
- *      proved in property.test.ts must hold even at multi-level depth.
+ * The provenance-algebra invariant-maintenance fuzz (synthetic AValue trees,
+ * no parser, no evaluator) was split out to
+ * src/provenance/__tests__/provenance-invariant.fuzz.test.ts — a distinct
+ * concern from evaluator crash safety, with its own scaffolding.
  *
  * Fuzz is exploratory by design — when this finds a real crash, the failing
  * seed reproduces deterministically (vitest prints the fast-check shrunk
@@ -21,12 +19,9 @@
  */
 
 import * as fc from "fast-check";
-import { CONSTANT_CTX } from "../run/RunContext.js";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { AValue, EMPTY_PROVENANCE, unionProvenance } from "../values/primitives/AValue.js";
 import { initBridge } from "../index.js";
-import { ABool } from "../values/primitives/ABool.js";
 import { exec } from "../eval/generator-exec.js";
 
 // wrappedOps don't get installed automatically just by importing exec —
@@ -103,57 +98,6 @@ describe("fuzz — evaluator crash safety", () => {
       // Short budget: keeps `pnpm test` snappy while still covering enough
       // shapes to catch a regression. Bump locally when chasing a bug.
       { numRuns: 30, interruptAfterTimeLimit: 5000 },
-    );
-  });
-});
-
-describe("fuzz — provenance algebra invariants at depth", () => {
-  // Build random N-level union trees by treating `unionProvenance` results
-  // as fresh AValue children for the next level. Any single-level invariant
-  // proved in property.test.ts should hold across the full nested tree —
-  // associativity and idempotence guarantee it, this asserts the guarantee
-  // numerically.
-  it("nested-union round-trip: flattened ids == set union of leaf ids", () => {
-    fc.assert(
-      fc.property(
-        fc.array(
-          fc.uniqueArray(fc.integer({ min: 0, max: 10_000 }), { maxLength: 4 }),
-          { minLength: 1, maxLength: 5 },
-        ),
-        (leafSets) => {
-          // Round-trip 1: union all leaves at once.
-          const flatLeaves = leafSets.map((ids) => new ABool(CONSTANT_CTX, true, new Set(ids)));
-          const flatResult = unionProvenance(flatLeaves);
-
-          // Round-trip 2: pairwise-fold through wrapped AValues.
-          let acc: AValue = new ABool(CONSTANT_CTX, true, EMPTY_PROVENANCE);
-          for (const ids of leafSets) {
-            const leaf = new ABool(CONSTANT_CTX, false, new Set(ids));
-            acc = new ABool(CONSTANT_CTX, false, unionProvenance([acc, leaf]));
-          }
-
-          // Both routes must agree on membership — associativity is what
-          // makes the runtime free to choose either depending on evaluation
-          // order (currying, partial application, generator vs lips).
-          expect(new Set(acc.provenance)).toEqual(new Set(flatResult));
-        },
-      ),
-      { numRuns: 50 },
-    );
-  });
-
-  it("nested-union idempotence: re-unioning a result through itself is a no-op", () => {
-    fc.assert(
-      fc.property(
-        fc.uniqueArray(fc.integer({ min: 0, max: 10_000 }), { maxLength: 6 }),
-        (ids) => {
-          const seed = new ABool(CONSTANT_CTX, true, ids.length === 0 ? EMPTY_PROVENANCE : new Set(ids));
-          const once = unionProvenance([seed]);
-          const twice = unionProvenance([new ABool(CONSTANT_CTX, true, once), new ABool(CONSTANT_CTX, true, once)]);
-          expect(new Set(twice)).toEqual(new Set(once));
-        },
-      ),
-      { numRuns: 50 },
     );
   });
 });
