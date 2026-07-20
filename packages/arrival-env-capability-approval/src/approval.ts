@@ -19,7 +19,7 @@
  * structurally consumes. On rejection it throws, so that branch fails and the
  * action never fires.
  *
- * The membrane/replay principle (ADR-025): every effect is a recorded membrane
+ * The membrane/replay principle: every effect is a recorded membrane
  * penetration, and this approval is one more async penetration — the value only
  * crosses back once a human has signed off.
  *
@@ -167,9 +167,9 @@ export async function runApproval(
     if (req.result === null && onApprovalRequest) {
       await onApprovalRequest(req);
     }
-    // TODO(ADR-025): durable teardown/resume is the next layer. Today we
-    // hold the run in memory until a human resolves `result`. The durable
-    // variant suspends here and resumes by replaying the effect-log.
+    // deferred: durable teardown/resume. Today the run is held in memory until a
+    // human resolves `result`; the durable variant suspends here and resumes by
+    // replaying the effect-log.
     await when(() => req.result !== null);
   }
 

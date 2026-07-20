@@ -5,7 +5,7 @@
 // isolate an external dependency): this capability OWNS the `yaml` parser and registers
 // its resolver by name at bootstrap; `require`'s by-name overlay resolves it. The value
 // projects through the SAME `normalizeToJson` the builtin data resolvers use (one
-// definition, no drift), so `(require "personas.yaml")` yields exactly what the same
+// definition, no drift), so `(require "personas.yaml")` yields exactly the same
 // data as `.json` would.
 import { EnvCapability } from "@inhuman.tools/arrival/capability";
 import {

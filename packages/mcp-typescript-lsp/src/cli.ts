@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+// bin entry (`mcp-typescript-lsp`): boot the stdio MCP server; exit nonzero if startup throws.
 import { TypeScriptLSPServer } from "./index.js";
 
 async function main() {

@@ -1,3 +1,11 @@
+/**
+ * Query-result shapes returned by TSLanguageServiceWrapper's DTO-typed methods (hover,
+ * definition, references, diagnostics, …). These are the plain public interfaces; the
+ * s-expression wire form is produced by the matching `*Impl` classes in ts-language-service.ts,
+ * which implement these interfaces and add `[Symbol.toSExpr]`. Split out so consumers can type
+ * against the result shapes (re-exported from index.ts) without importing the compiler-driven
+ * wrapper.
+ */
 export interface HoverInfo {
   type: string;
   documentation?: string;

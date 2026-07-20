@@ -1,3 +1,18 @@
+/**
+ * Resolve a human-written selector to a file position, so callers point at code by snippet
+ * instead of counting lines.
+ *
+ * Two formats, both returning 1-based line / 0-based character:
+ *   "before###after"  — `###` marks the cursor; the marker is stripped, the surrounding text
+ *                        located, and the cursor placed where `###` sat.
+ *   "text#N"           — the Nth occurrence (1-based) of a bare substring.
+ * A selector with neither marker is treated as the first occurrence of the whole string.
+ *
+ * Matching is first-match and literal (no regex, no whitespace normalization): an ambiguous
+ * `###` snippet resolves to its earliest occurrence, so callers disambiguate by widening the
+ * snippet or switching to `#N`. A failed `###` match throws with up to three near-miss lines
+ * (`findNearMatches`) to make the miss diagnosable.
+ */
 import * as fs from "node:fs";
 
 export interface Position {

@@ -1,3 +1,15 @@
+/**
+ * MCP surface for TypeScript code intelligence: the tool contract (TOOL_DESCRIPTION +
+ * INPUT_SCHEMA), the `TypeScriptIntelTool` that dispatches to TSLanguageServiceWrapper, and a
+ * stdio server shell (`TypeScriptLSPServer`).
+ *
+ * One flat `{action, …}` argument object per call, dispatched by `execute`'s switch. When both
+ * `selector` and `filePath` are present, `execute` resolves them to line/character BEFORE
+ * dispatch (via selector-parser), so downstream methods only ever see numeric positions;
+ * position-requiring actions then assert filePath + position are present. `execute` returns the
+ * raw SExpr value for library/test callers; `call` lowers it to s-expression text for the MCP
+ * wire.
+ */
 import { toSExprString, type SExprSerializable } from "@inhuman.tools/arrival-serializer";
 import { type McpTool, registerTools } from "@inhuman.tools/arrival-mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";

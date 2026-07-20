@@ -1,3 +1,58 @@
+/**
+ * TypeScript semantic queries over a project's source, serialized to s-expressions.
+ *
+ * `TSLanguageServiceWrapper` drives the TypeScript compiler's `LanguageService` — the same
+ * engine an IDE uses — to answer questions text search cannot: inferred types, cross-file
+ * references, interface implementations, inheritance trees, change impact. Every public method
+ * returns either a plain DTO (see types.ts) or a `SExprDefinition`; the DTO shapes serialize
+ * themselves through the `*Impl` classes at the bottom of this file (see SEXPR OUTPUT).
+ *
+ * SERVICE CACHE. One `ts.LanguageService` per project root, keyed in `services`/`hosts` by the
+ * nearest ancestor directory holding a tsconfig.json (`findProjectRoot`; falls back to the
+ * file's own directory when none is found). Services are expensive to build, so they are reused
+ * across calls and rebuilt only on staleness.
+ *
+ * STALENESS. The host detects changed files itself rather than trusting a watcher, because this
+ * tool runs out-of-band against files edited by other processes. `getScriptSnapshot` diffs
+ * content and bumps the file version; `getScriptVersion` additionally stat()s `.d.ts`
+ * dependencies by mtime, because TS re-reads a snapshot only when the version changes and would
+ * otherwise never notice a rebuilt declaration file. A content change to a previously-cached
+ * file sets `host.needsRefresh`, and `getOrCreateService` drops and rebuilds the service on the
+ * next call — the host cannot call back into the wrapper, so it signals through the flag.
+ *
+ * POSITION MODEL. Positions are 1-based line, 0-based character everywhere they cross this
+ * file's surface (matching selector-parser.ts output and the MCP schema). `positionToOffset` /
+ * `offsetToPosition` convert against the file's CURRENT disk content, re-read on every call —
+ * there is no line-index cache. This reads disk, not the language-service snapshot; the two
+ * agree only because callers analyze saved files, never unsaved in-memory edits.
+ *
+ * DIST→SRC. A definition resolving into a `/dist/**.d.ts` is remapped to its `/src/**.ts(x)`
+ * twin when one exists on disk (`tryFindSourceForDist`), and the source is returned FIRST with
+ * the declaration second — so "go to definition" through a built dependency lands in editable
+ * source, not a generated artifact.
+ *
+ * SYMBOL RESOLUTION. `analyzeSymbolAt` resolves a cursor to a `ts.Symbol` through ordered
+ * fallbacks because the `###` selector marks the position immediately AFTER an identifier: it
+ * first probes offset-1 (and up to 3 back at file scope) to land inside the name, then tries
+ * symbol-at-node, identifier-node, parent-node, and finally walks ancestors for a named
+ * declaration. First strategy to yield a symbol wins; none yielding returns an `unknown` symbol
+ * rather than throwing.
+ *
+ * IMPACT TRAVERSAL. `analyzeImpact` walks the reference graph outward to `depth` levels in one
+ * of two shapes chosen by `groupBy`: the flat modes ("file"/"component"/"flat") accumulate into
+ * a shared `visited` set and dedup by symbol name (`processReferencesRecursively` →
+ * `formatImpactAnalysis`); "nested" builds a dependency tree (`buildNestedImpactTree`) that
+ * CLONES `visited` per branch so a symbol reached by two paths appears under both, and emits a
+ * `circular-ref` marker instead of recursing when a path revisits a node. Both skip the
+ * definition site and, when `includeTests` is false, `*.test.ts` references.
+ *
+ * SEXPR OUTPUT. Result DTOs serialize via `[Symbol.toSExpr]` on the `*Impl` classes below;
+ * `SExprDefinition` is `[SEXPR_TAG, tag, ...rest]`. When one query composes another (hierarchy
+ * pulling implementations, impact reusing analyzeImpact), the inner result is re-read
+ * POSITIONALLY — `slice(3)` drops `[SEXPR_TAG, tag, name]`, and the tag is checked at index 1.
+ * That coupling to the envelope layout is deliberate but unguarded: changing the sexpr envelope
+ * shape breaks these splices.
+ */
 import * as fs from "node:fs";
 import * as path from "node:path";
 

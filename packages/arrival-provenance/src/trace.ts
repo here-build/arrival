@@ -1,7 +1,7 @@
 /**
  * Thin facade over `@inhuman.tools/arrival`'s (core) mobx-free tracing spine.
  *
- * `EvalTrace`/`Invocation`/`NodeRecord`/`computeProvenance` moved to
+ * `EvalTrace`/`Invocation`/`NodeRecord`/`computeProvenance` live in
  * `@inhuman.tools/arrival/src/provenance/trace.ts` (core), which must not depend
  * on mobx. This file exists so every sibling analysis file here (and every
  * external consumer importing `@inhuman.tools/arrival-provenance`) keeps
@@ -10,9 +10,9 @@
  * The one thing this shim does NOT just pass through: `EvalTrace`. Studio
  * consumers (`TraceGraph`'s `reaction(() => trace.entries)`) and
  * `arrival-chain`'s tests depend on `EvalTrace` being mobx-reactive — that
- * reactivity used to live in core, and now lives HERE instead, as
- * {@link ObservableEvalTrace}, exported below AS `EvalTrace`. This package
- * keeps the `mobx` dependency; core does not.
+ * reactivity lives HERE, not in core, as {@link ObservableEvalTrace},
+ * exported below AS `EvalTrace`. This package keeps the `mobx` dependency;
+ * core does not.
  */
 import { action, observable } from "mobx";
 
@@ -30,9 +30,8 @@ export { Invocation, NodeRecord, DEFAULT_TRACE_CAP, type InvocationState };
 export { CoreEvalTrace };
 
 /**
- * Mobx-reactive subclass of {@link CoreEvalTrace} restoring the exact
- * pre-split behavior: an `observable.box` entries counter and an
- * action-wrapped `enter`. Overrides the two seams core exposes for this
+ * Mobx-reactive subclass of {@link CoreEvalTrace} with an `observable.box`
+ * entries counter and an action-wrapped `enter`. Overrides the two seams core exposes for this
  * purpose (see the seam design documented in core's `trace.ts`):
  *   - `bumpEntries()` — writes the observable box instead of a plain field.
  *   - `entries` getter — reads the observable box.
@@ -42,8 +41,7 @@ export { CoreEvalTrace };
  *     action" rule (`enforceActions: "observed"`, which the studio enables).
  *
  * Exported below AS `EvalTrace` — every existing `new EvalTrace()` call site
- * (the studio, `arrival-chain`'s tests) gets this reactive subclass, byte-
- * identical to the pre-split behavior.
+ * (the studio, `arrival-chain`'s tests) gets this reactive subclass.
  */
 class ObservableEvalTrace extends CoreEvalTrace {
   readonly #entriesBox = observable.box(0);
@@ -60,8 +58,8 @@ class ObservableEvalTrace extends CoreEvalTrace {
     super(maxEntries);
     // Capture the core's plain `enter` (already an instance-field arrow
     // function bound to `this`), then replace `this.enter` with an
-    // `action`-wrapped call to that same function — mirrors the old
-    // `enter = action((...) => {...})` that used to live in core directly.
+    // `action`-wrapped call to that same function (see the preamble bullet on
+    // `enter` for why the wrap is required under strict mode).
     const coreEnter = this.enter;
     this.enter = action((...args: Parameters<typeof coreEnter>) => coreEnter(...args));
   }
