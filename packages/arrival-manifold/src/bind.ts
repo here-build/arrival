@@ -34,10 +34,10 @@ import { type KwargParam, toolSignature, type ToolJsonSchema, type ToolSignature
  *  `fn(stringsArray, ...substitutions)`; a dynamically built qualified name goes
  *  through the same factory called directly. A plain array with `.raw` stubbed is a
  *  sufficient "template". This is the desugared shape of `` `${name}: ${doc}` `` —
- *  three string parts around two holes — so `parseNameDoc` recovers BOTH halves. (The
- *  previous 2-part `[": ", ""]` shape put the `": "` BEFORE the name hole: every def
- *  parsed as anonymous — `formatKwargsRejection` degraded to the headless
- *  `arguments rejected` variant and run-record `symbolName`s were empty.) */
+ *  three string parts around two holes — so `parseNameDoc` recovers BOTH halves. A 2-part
+ *  `[": ", ""]` shape puts the `": "` BEFORE the name hole, so every def parses as anonymous:
+ *  `formatKwargsRejection` degrades to the headless `arguments rejected` variant and run-record
+ *  `symbolName`s come back empty. */
 const NAME_DOC_TEMPLATE = Object.assign(["", ": ", ""], { raw: ["", ": ", ""] }) as unknown as TemplateStringsArray;
 
 export interface RemoteTool {
@@ -109,7 +109,7 @@ function bypassFormsOf(qualifiedName: string, toolParts: ReadonlyMap<string, Too
  *  vocabulary (`AssembledAmbient.names()`), so the uniqueness verdict is computed
  *  once. Remembers the env-side map (server.ts / python bridge via `_meta`).
  *
- /** Every registered form is indexed by both its raw spelling (an exact-lookup hit) and
+ *  Every registered form is indexed by both its raw spelling (an exact-lookup hit) and
   *  its `normalizeSymbolName` canonicalization (a hyphen/underscore/case-drifted hit).
   *  Consumers look up the raw name first, then normalize — an exact match is never
   *  second-guessed by an unrelated fuzzy tie.

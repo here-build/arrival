@@ -78,8 +78,8 @@
  *   would never emit anything else for a plain object.
  *
  * Indentation: the spec allows a configurable indent unit (default 2, §12). This module
- * hard-codes indentSize=2 (matching every example in the spec and the task's own
- * fixtures) and refuses any line whose indentation is not exactly 0 or 2 spaces — which
+ * hard-codes indentSize=2 (matching every example in the spec) and refuses any line whose
+ * indentation is not exactly 0 or 2 spaces — which
  * doubles as the nesting-depth bound above. Tabs in indentation are always refused (§12).
  */
 

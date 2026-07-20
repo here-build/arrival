@@ -5,8 +5,8 @@
 // MODEL-INVOKED, never automatic — the model suspects a tool's opaque text round-trips as
 // CSV/TOON/Python-literal/JSON and calls the matching function itself, or reaches for
 // `detect-parse` to try all of them in priority order. This module owns none of the
-// recognizer logic (that's json.ts/csv.ts/toon.ts/python-literal.ts/detect.ts, already
-// landed) — it is purely the string→ParseOutcome→(value | throw) lift those recognizers
+// recognizer logic (that's json.ts/csv.ts/toon.ts/python-literal.ts/detect.ts) — it is
+// purely the string→ParseOutcome→(value | throw) lift those recognizers
 // need to become scheme-callable, values-or-conditions functions.
 //
 // Design law carried over unchanged from every module this one wraps: strict-or-refuse.
@@ -20,7 +20,7 @@
 //
 // Binding shape: this module deliberately stops at plain named JS functions plus a
 // descriptor array (`NORMALIZER_PRELUDE_SYMBOLS`) — see the file-level comment on that
-// export for why, and the accompanying report for the evidence. Nothing here imports
+// export for why. Nothing here imports
 // `symbol`/`scheme-zod`/`EnvCapability`; wiring these into the assembled ambient (a
 // `symbol.rosetta` call per descriptor, mirroring bind.ts's `validatorDef`) is the
 // maintainer's integration step, not this module's.
@@ -125,8 +125,8 @@ export interface NormalizerPreludeSymbol {
  * `NAME_DOC_TEMPLATE`, itself an unexported module-local constant. Neither is a general
  * "bind a pure JS function as a scheme symbol" entry point this module could call
  * without reaching into bind.ts's internals or duplicating its tagged-template
- * plumbing — and the task instructions are explicit that bind.ts is maintainer-owned
- * integration territory, not something this module edits or forks. So this pack stops
+ * plumbing, and bind.ts is maintainer-owned integration territory, not something this
+ * module edits or forks. So this pack stops
  * at the boundary every OTHER normalizer module already stops at (json.ts/csv.ts/
  * toon.ts/python-literal.ts/detect.ts export plain functions over `ParseOutcome`, no
  * `SymbolDeclaration` in sight): plain named functions above, plus this descriptor array

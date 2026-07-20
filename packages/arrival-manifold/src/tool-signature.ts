@@ -3,9 +3,9 @@
 // signature. `(server/tool :prop1 value1 :prop2 value2)` — arrival's kwargs runtime
 // (bakeRosetta) folds `:key value` pairs into an object before decode (bind.ts).
 //
-// The JSON-Schema shapes and `orderedFields` reuse mcp-substrate's `tool-schema.ts`
-// (byte-identical to this package's pre-split types). The kwargs-catalog RENDERER
-// stays here, binder-side: a positional consumer would render signatures differently.
+// The JSON-Schema shapes and `orderedFields` reuse mcp-substrate's `tool-schema.ts`.
+// The kwargs-catalog RENDERER stays here, binder-side: a positional consumer would
+// render signatures differently.
 
 import {
   orderedFields,

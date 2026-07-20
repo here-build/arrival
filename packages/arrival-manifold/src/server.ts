@@ -389,7 +389,8 @@ function toBoundServer(
           // annotates every tool teaches nothing, and one that annotates the wrong ones is worse than
           // one that stays quiet.
           //
-          // The payload no longer dies either way — which was the part that made the tool unusable.
+          // Either way — detection built or still deferred — the payload survives; destroying it on
+          // a schema mismatch is exactly what makes such a tool unusable through the manifold.
 
           // `attachments.stub` is the SAME collector manifold-tool.ts drains at the end
           // of the call — so a binary block's stub and its pass-through content block
@@ -490,14 +491,12 @@ async function autoExecuteBypass(
     return { content: [{ type: "text", text: session.render(door, attempted) }], isError: true };
   }
   // The advisory rides the run's CONSOLIDATED NOTE CHANNEL (seedNotes → the runner's note sink →
-  // the `#| ── environment notes ── |#` footer), not a bare block prepended to the answer.
-  //
-  // It used to be prepended. That made it a SECOND, unlabelled notification channel: the model had
-  // to learn twice where bookkeeping lives, and the one place it is guaranteed to read — the answer
-  // — opened with a non-answer. The auto-exec advisory is bookkeeping ABOUT the call ("I rewrote
-  // your bare tool call as X") exactly like the define-introductions and the elision note beside it,
-  // so it belongs where they are. It is also the ONE producer V named as still bypassing the
-  // channel when the channel was built.
+  // the `#| ── environment notes ── |#` footer), never a bare block prepended to the answer.
+  // Prepending it would open a SECOND, unlabelled notification channel: the model learns twice
+  // where bookkeeping lives, and the one place it is guaranteed to read — the answer — opens with a
+  // non-answer. This advisory is bookkeeping ABOUT the call ("I rewrote your bare tool call as X"),
+  // exactly like the define-introductions and the elision note beside it, so it belongs where they
+  // are.
   const note = `auto-executed as ${retryExpr} — call through ${TOOL_NAME} next time.`;
   const result = await tool.call({ [ARG_NAME]: retryExpr }, [note]);
   session.logBypassAutoExec(attempted, qualified);

@@ -298,16 +298,17 @@ export function detectEnvelope(s: string): EnvelopeOutcome {
 }
 
 /**
- * Block-level envelope algebra (docs/response-normalizer.md §A1 fix,
- * benchmark-defect-register.md §A1) — the string-level envelope rule above, lifted one
- * level, over an MCP `CallToolResult`'s TEXT block ARRAY instead of one block's text.
+ * Block-level envelope algebra (docs/response-normalizer.md §3 Stage B;
+ * experimental/arrival/packages/arrival-bench/docs/benchmark-defect-register.md §A1) — the
+ * string-level envelope rule above, lifted one level, over an MCP `CallToolResult`'s TEXT
+ * block ARRAY instead of one block's text.
  *
- * This is an ARITY gate replacement, not a shape gate: `server.ts`'s old rule "exactly 1
- * block ⇒ maybe parse it, 2+ blocks ⇒ always raw passthrough" made `detectParse` provably
- * unreachable for any tool that structurally emits more than one text block —
- * cli-mcp-server's `run_command` (payload block + an invariant `"\nCommand completed with
- * return code: 0"` trailer on EVERY call) and pubmed's JSONL-by-blocks search results
- * (one complete JSON object per block) both die here before this function existed.
+ * This is an ARITY gate, not a shape gate. The simpler rule "exactly 1 block ⇒ maybe parse
+ * it, 2+ blocks ⇒ always raw passthrough" makes `detectParse` provably unreachable for any
+ * tool that structurally emits more than one text block — cli-mcp-server's `run_command`
+ * (payload block + an invariant `"\nCommand completed with return code: 0"` trailer on
+ * EVERY call) and pubmed's JSONL-by-blocks search results (one complete JSON object per
+ * block) both land there, their payloads never parsed.
  *
  * STRICTLY SAFER than the single-string {@link detectEnvelope}: that function's
  * prefix-XOR-suffix ambiguity guard exists only because a single string's prose/structure

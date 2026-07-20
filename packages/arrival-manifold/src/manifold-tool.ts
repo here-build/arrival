@@ -79,10 +79,10 @@ function clampAttachmentQuota(requested: number): number {
   return Math.min(RESPONSE_ATTACHMENTS_MAX, Math.max(RESPONSE_ATTACHMENTS_MIN, Math.trunc(requested)));
 }
 
-/** Per-STATEMENT allocation-bound default (arrival-promises completion plan, gap 1) — the
- *  discovery-run.ts precedent (`ARRIVAL_HEAP_MAX ?? 100_000_000`), now shared by the manifold
- *  eval seam. Read LIVE (not module-load-cached) so a test can flip the env var per case; an
- *  explicit `options.heapBudget`/`options.calibration.heapBudgetPerForm` always wins. */
+/** Per-STATEMENT allocation-bound default — the discovery-run.ts precedent
+ *  (`ARRIVAL_HEAP_MAX ?? 100_000_000`), shared by the manifold eval seam. Read LIVE (not
+ *  module-load-cached) so a test can flip the env var per case; an explicit
+ *  `options.heapBudget`/`options.calibration.heapBudgetPerForm` always wins. */
 function envHeapDefault(): number {
   const raw = Number(process.env.ARRIVAL_HEAP_MAX);
   return Number.isFinite(raw) && raw > 0 ? raw : 100_000_000;

@@ -171,13 +171,14 @@ Supersedes always-on inference for everything below Stage A:
   strings).
 - **Inferred zone — model-invoked, never automatic.** Every other recognizer (CSV/TSV, TOON,
   Python-literal, NDJSON, prose-envelope, C1 unwrap) is exposed two ways:
-  1. **Parsers as first-class prelude functions** — `json`, `csv`, `toon`, `py-literal`,
-     `detect-parse` — pure, inline-usable: `(csv (tool/read-file :path "x.csv"))`.
-  2. **`auto-parse!` sugar** — rebinds a tool through `detect-parse` so subsequent calls
-     return parsed values. A rebind the model performs on itself is not drift — drift is
-     *unchosen* change.
+  1. **Parsers as first-class prelude functions** — `parse-json`, `parse-csv`, `parse-toon`,
+     `parse-py-literal`, `detect-parse`, `detect-envelope` — pure, inline-usable:
+     `(parse-csv (tool/read-file :path "x.csv"))`.
+  2. **`auto-parse!` sugar** (capability-layer wire-up, not yet landed) — rebinds a tool
+     through `detect-parse` so subsequent calls return parsed values. A rebind the model
+     performs on itself is not drift — drift is *unchosen* change.
 - **The Montessori header teaches, never decides:** "tool `x` returns opaque text that
-  round-trip-parses as CSV — `(auto-parse! x)` or `(csv …)` to use it structured."
+  round-trip-parses as CSV — `(parse-csv …)` to use it structured."
 - **Doors fire in the declared zone only.** A `structuredContent` kind-violation is a contract
   breach → door. A kind change in opportunistically-parsed text is information → announce,
   never door (the read_file trap is structurally unreachable).

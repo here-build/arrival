@@ -22,8 +22,8 @@
 // conflict (an object-asserted tool later yielding a scalar, §6.2's non-conformance case —
 // which is a DOOR concern one stage up, not this one) is represented here by widening
 // `kind` to `undefined` plus the `kindsSeen` union staying visible on `ToolShape`. That is
-// the "widened marker" the task brief calls for: `kind` alone would erase which kinds were
-// seen, so `kindsSeen` is the durable record and `kind` is its single-member projection.
+// the "widened marker": `kind` alone would erase which kinds were seen, so `kindsSeen` is
+// the durable record and `kind` is its single-member projection.
 
 export type Rung = "unseen" | "singleton" | "vector" | "nested";
 export type Kind = "scalar" | "object" | "array";
@@ -172,11 +172,11 @@ interface Entry {
 }
 
 /** Per-tool shape state, keyed by tool name, stamped with the shapeHash it was built
- *  under (§10.4). Pure in-memory, no persistence — the §8 cross-session store is a
+ *  under (§6.3). Pure in-memory, no persistence — the §8 cross-session store is a
  *  separate, out-of-scope layer this class knows nothing about. */
 export class ShapeLadder {
   private readonly state = new Map<string, Entry>();
-  // Removed-tool state, keyed by shapeHash (not name) — §10.4: "the hash is the cache
+  // Removed-tool state, keyed by shapeHash (not name) — §6.3: "the hash is the cache
   // key, name may differ" on re-introduction.
   private readonly archive = new Map<string, ToolShape>();
 
@@ -188,7 +188,7 @@ export class ShapeLadder {
     let entry = this.state.get(toolName);
     if (entry?.shapeHash !== shapeHash) {
       // Either genuinely new, or a hash drift observed outside onListChanged. Same rule
-      // either way (§10.4): a different hash means a different declared contract, so the
+      // either way (§6.3): a different hash means a different declared contract, so the
       // prior evidence does not carry over — fresh unseen, re-stamped with the new hash.
       entry = { shape: freshShape(), shapeHash };
       this.state.set(toolName, entry);
@@ -272,7 +272,7 @@ export class ShapeLadder {
     const present = new Set(tools.map((t) => t.name));
 
     // Anything currently tracked but absent from the new list is archived by shapeHash,
-    // not dropped (§10.4: a removed tool's state survives keyed by its hash).
+    // not dropped (§6.3: a removed tool's state survives keyed by its hash).
     for (const [name, entry] of this.state) {
       if (!present.has(name)) {
         this.archive.set(entry.shapeHash, entry.shape);
@@ -284,7 +284,7 @@ export class ShapeLadder {
       const existing = this.state.get(name);
       if (existing) {
         if (existing.shapeHash !== shapeHash) {
-          // Same name, different declared shape: wipe to fresh unseen (§10.4).
+          // Same name, different declared shape: wipe to fresh unseen (§6.3).
           this.state.set(name, { shape: freshShape(), shapeHash });
         }
         // Same hash: state survives untouched.
@@ -292,7 +292,7 @@ export class ShapeLadder {
       }
       // Not currently tracked under this name. If a prior tool (possibly a different
       // name) was archived under this exact hash, re-attach it — the hash is the cache
-      // key, the name is incidental (§10.4). Otherwise leave it untracked; observe()
+      // key, the name is incidental (§6.3). Otherwise leave it untracked; observe()
       // creates a fresh entry lazily on first call.
       const archived = this.archive.get(shapeHash);
       if (archived) {
