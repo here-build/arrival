@@ -43,7 +43,7 @@
  */
 import type { PayloadHash } from "./ids.js";
 import type { Payload, PayloadStore, PayloadTier, EvidenceTier, RetentionClass } from "./interfaces.js";
-import type { TierGate } from "../../values/egress-proxy.js";
+import type { TierGate } from "../../membrane/egress-proxy.js";
 
 /** One ring-resident payload — this module's own bookkeeping, never durable until
  *  `flush`. `stubbed` distinguishes a pre-flush FORCED eviction (applied

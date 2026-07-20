@@ -29,8 +29,8 @@
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { testCallCtx } from "../../common/symbol.js";
-import { isSchemeValue, toJS } from "../../membrane.js";
-import { schemeToJs } from "../../rosetta.js";
+import { isSchemeValue, toJS } from "../../membrane/membrane.js";
+import { schemeToJs } from "../../membrane/rosetta.js";
 import listsCap from "../../env/r7rs/lists.js";
 import type { EnvCapability } from "../../common/capability.js";
 import { APair } from "../../values/primitives/APair.js";

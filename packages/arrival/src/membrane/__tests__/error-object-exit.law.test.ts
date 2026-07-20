@@ -21,14 +21,14 @@
 
 import { describe, expect, it } from "vitest";
 import { exec, execState } from "../../eval/generator-exec.js";
-import { toJS } from "../../membrane.js";
-import { errorToHost, jsToScheme, schemeToJs } from "../../rosetta.js";
+import { toJS } from "../membrane.js";
+import { errorToHost, jsToScheme, schemeToJs } from "../rosetta.js";
 import { R7RSError, R7RSReadError } from "../../errors.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { EMPTY_PROVENANCE } from "../../values/primitives/AValue.js";
 import { nil } from "../../values/primitives/ANil.js";
 import { AString } from "../../values/primitives/AString.js";
-import { AJSObject } from "../../values/primitives/AJSObject.js";
+import { AJSObject } from "../AJSObject.js";
 import { type SchemeValue } from "../../values/types.js";
 import { EnvCapability, symbol, z } from "../../index.js";
 

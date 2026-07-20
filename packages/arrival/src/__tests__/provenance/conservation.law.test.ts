@@ -42,7 +42,7 @@ import { AValue } from "../../values/primitives/AValue.js";
 import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
 import { provOf } from "../../values/lineage-shadow.js";
 import { collapseProvenance } from "../../provenance-collapse.js";
-import { schemeToJs, type InvocationLike } from "../../rosetta.js";
+import { schemeToJs, type InvocationLike } from "../../membrane/rosetta.js";
 import { EnvCapability } from "../../common/capability.js";
 import { symbol, type RosettaSymbolDef } from "../../common/symbol.js";
 import * as z from "../../common/scheme-zod.js";

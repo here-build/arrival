@@ -35,7 +35,7 @@ import { type DecodedArgs, type DecodedArgsWithRest, type DecodedReturn, symbol 
 import type { AVector } from "../../../values/primitives/AVector.js";
 import type { AExact } from "../../../values/primitives/AExact.js";
 import type { AInexact } from "../../../values/primitives/AInexact.js";
-import type { AJSArray } from "../../../values/primitives/AJSArray.js";
+import type { AJSArray } from "../../../membrane/AJSArray.js";
 import type { SchemeValue } from "../../../values/types.js";
 
 // v2 vector is the AVector|AJSArray union codec — SCHEME face = AVector | AJSArray, JS face = SchemeValue[].

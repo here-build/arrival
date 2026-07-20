@@ -34,7 +34,7 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { initBridge } from "../../index.js";
 import { execState, parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../inference-env.js";
-import { schemeToJs } from "../../rosetta.js";
+import { schemeToJs } from "../../membrane/rosetta.js";
 import type { Classifier } from "../../values/lineage.js";
 import { buildWireframe } from "../../provenance/wireframe/builder.js";
 import { freeVars } from "../../provenance/wireframe/free-vars.js";

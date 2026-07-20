@@ -7,22 +7,22 @@
  * capability.ts's legacy arm and replay.ts's playback frame.
  */
 
-import { AValue, EMPTY_PROVENANCE, mergeProvenance, pointProvenance, unionProvenance } from "./values/primitives/AValue.js";
-import { fromJs } from "./values/primitives/boxing.js";
-import { type RunContext } from "./values/primitives/RunContext.js";
-import { deepProvenance } from "./values/deep-provenance.js";
-import { AJSArray } from "./values/primitives/AJSArray.js";
-import { AJSObject } from "./values/primitives/AJSObject.js";
-import { ANil, nil } from "./values/primitives/ANil.js";
-import { theVoid } from "./values/primitives/AVoid.js";
-import { ASymbol } from "./values/primitives/ASymbol.js";
-import { EOF } from "./values/primitives/EOF.js";
-import { Values } from "./values/primitives/Values.js";
-import { R7RSError, UnrecognizedCrossingError, AsyncCrossingError } from "./errors.js";
-import { is_promise } from "./eval/guards.js";
-import { is_callable_value } from "./values/value-guards.js";
-import { applyCallback, type ACallable } from "./values/primitives/ACallable.js";
-import { type AUnwrap, type AWrap, type EgressMode, type SchemeBounceMarker, type SchemeValue } from "./values/types.js";
+import { AValue, EMPTY_PROVENANCE, mergeProvenance, pointProvenance, unionProvenance } from "../values/primitives/AValue.js";
+import { fromJs } from "./boxing.js";
+import { type RunContext } from "../values/primitives/RunContext.js";
+import { deepProvenance } from "../values/deep-provenance.js";
+import { AJSArray } from "./AJSArray.js";
+import { AJSObject } from "./AJSObject.js";
+import { ANil, nil } from "../values/primitives/ANil.js";
+import { theVoid } from "../values/primitives/AVoid.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
+import { EOF } from "../values/primitives/EOF.js";
+import { Values } from "../values/primitives/Values.js";
+import { R7RSError, UnrecognizedCrossingError, AsyncCrossingError } from "../errors.js";
+import { is_promise } from "../eval/guards.js";
+import { is_callable_value } from "../values/value-guards.js";
+import { applyCallback, type ACallable } from "../values/primitives/ACallable.js";
+import { type AUnwrap, type AWrap, type EgressMode, type SchemeBounceMarker, type SchemeValue } from "../values/types.js";
 import invariant from "tiny-invariant";
 import {
   closeRegionScope,
@@ -31,15 +31,15 @@ import {
   openRegionScope,
   withRegionCall,
   withRegionScope,
-} from "./values/primitives/region-scope.js";
+} from "./region-scope.js";
 // Leaf, ZERO own imports — see dynamic-call-site.ts header: ambient holder lives there, not eval/evaluator.ts (would close cycle: evaluator.ts → AmbientRuntime.ts → rosetta.ts).
-import { withDynamicCallSite } from "./eval/dynamic-call-site.js";
+import { withDynamicCallSite } from "../eval/dynamic-call-site.js";
 
 // warnMembrane lives in leaf membrane-warn.ts, shared with boxing.ts `function` boxer — value layer needn't import evaluator-heavy module just to warn.
 // Non-portable JS value (function/undefined/unique symbol) crossing to Scheme: no faithful repr → #void; warnMembrane makes edge visible.
 import { warnMembrane } from "./membrane-warn.js";
-import { makeCallCtx, type CallCtx } from "./values/primitives/CallCtx.js";
-import { tf } from "./values/tagless-final.js";
+import { makeCallCtx, type CallCtx } from "../values/primitives/CallCtx.js";
+import { tf } from "../values/tagless-final.js";
 
 interface RosettaOptions {
   // NOTE: a new field here must be classified in `modeKeyOf` below (projection-

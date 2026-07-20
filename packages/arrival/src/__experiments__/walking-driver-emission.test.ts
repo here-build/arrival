@@ -35,7 +35,7 @@ import { mintFrame, type ResolvingAmbient } from "../AmbientRuntime.js";
 import { EnvCapability } from "../common/capability.js";
 import { symbol } from "../common/symbol.js";
 import * as z from "../common/scheme-zod.js";
-import { schemeToJs } from "../rosetta.js";
+import { schemeToJs } from "../membrane/rosetta.js";
 import type { EvalTap } from "../eval/evaluator.js";
 import type { Classifier, DeclaredRole } from "../values/lineage.js";
 import { buildWireframe } from "../provenance/wireframe/builder.js";

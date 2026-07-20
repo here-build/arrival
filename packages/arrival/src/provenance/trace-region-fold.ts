@@ -16,7 +16,7 @@
  * value/provenance via `valueById` / `liveValueById`. Live reads into the snapshot
  * mirror deferred to Phase-2 (worker boundary); see `trace-snapshot.ts`.
  */
-import { schemeToJs } from "../rosetta.js";
+import { schemeToJs } from "../membrane/rosetta.js";
 import type { APair } from "../values/primitives/APair.js";
 import type { SchemeValue } from "../values/types.js";
 

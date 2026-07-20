@@ -19,7 +19,7 @@ import { mintFrame } from "../../AmbientRuntime.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { exec, execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../inference-env.js";
-import { jsToScheme, schemeToJs } from "../../rosetta.js";
+import { jsToScheme, schemeToJs } from "../../membrane/rosetta.js";
 
 async function execOne(expr: string, env = inferenceEnv): Promise<any> {
   const results = await exec(expr, { env });

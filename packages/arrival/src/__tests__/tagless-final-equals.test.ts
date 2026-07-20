@@ -19,7 +19,7 @@ import { ASymbol } from "../values/primitives/ASymbol.js";
 import { ABytevector } from "../values/primitives/ABytevector.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
-import { AJSObject } from "../values/primitives/AJSObject.js";
+import { AJSObject } from "../membrane/AJSObject.js";
 import { ANil, nil } from "../values/primitives/ANil.js";
 import { ACharacter } from "../values/primitives/ACharacter.js";
 import { eq, eqv, structuralEqual } from "../values/structural-equal.js";

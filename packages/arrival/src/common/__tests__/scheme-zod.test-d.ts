@@ -25,7 +25,7 @@ import type { ACharacter } from "../../values/primitives/ACharacter.js";
 import type { AString } from "../../values/primitives/AString.js";
 import type { ABool } from "../../values/primitives/ABool.js";
 import type { AVector } from "../../values/primitives/AVector.js";
-import type { AJSArray } from "../../values/primitives/AJSArray.js";
+import type { AJSArray } from "../../membrane/AJSArray.js";
 import type { AListAlike, SchemeValue } from "../../values/types.js";
 import { type DecodedArgs, type SpecInfer } from "../symbols/_bake.js";
 

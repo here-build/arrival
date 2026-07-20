@@ -47,7 +47,7 @@ import { checkReadWriteGuard } from "../values/read-guard.js";
 // contract's schema type + its output-face projection (the output-bearing overload).
 import type { output as ZodOutputOf, ZodType } from "../common/scheme-zod.js";
 import type { AListAlike, SchemeValue } from "../values/types.js";
-import { toJS } from "../membrane.js";
+import { toJS } from "../membrane/membrane.js";
 
 // `is_macro_value` (value-guards.ts) reads the macro classes' `[CLASS]` brand
 // directly — downward, eval-import-free. No runtime DI needed here.

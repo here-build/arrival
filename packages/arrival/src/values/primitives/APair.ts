@@ -30,7 +30,7 @@ import { promise_all } from "../../utils/promises.js";
 // APair`, which AJSArrayList must do.
 import { collapseProvenance } from "../../provenance-collapse.js";
 import { reStampChild } from "./deep-restamp.js";
-import { egressContainerProxy } from "../egress-proxy.js";
+import { egressContainerProxy } from "../../membrane/egress-proxy.js";
 import { type AList, AListAlike, AListAlikeValue, APairAsListValue, type MembraneExit, type SchemeValue, } from "../types.js";
 import { AString } from "./AString.js";
 import { ASymbol } from "./ASymbol.js";

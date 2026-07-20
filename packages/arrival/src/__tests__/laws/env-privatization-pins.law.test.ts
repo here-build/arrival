@@ -26,7 +26,7 @@ import * as arrival from "../../index.js";
 import { exec, execState } from "../../eval/generator-exec.js";
 import { LexicalScope } from "../../eval/LexicalScope.js";
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
-import { jsToScheme } from "../../rosetta.js";
+import { jsToScheme } from "../../membrane/rosetta.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { AValue } from "../../values/primitives/AValue.js";
 // In-package test: internal-module access (AmbientRuntime is not barrel-exported).

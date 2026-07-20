@@ -16,7 +16,7 @@
  * Acar, Cheney & Levy, "Functional Programs That Explain Their Work", ICFP 2012).
  */
 
-import { INTEROP_BOUNDARY } from "../../interop-access.js";
+import { INTEROP_BOUNDARY } from "../../membrane/interop-access.js";
 import type { SeenMap } from "../structural-equal.js";
 import type { MembraneExit, SchemeBounceMarker, SchemeValue } from "../types.js";
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";

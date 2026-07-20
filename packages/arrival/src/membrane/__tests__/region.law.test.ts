@@ -29,9 +29,9 @@
  */
 import { describe, expect, it } from "vitest";
 import * as z from "../../common/scheme-zod.js";
-import { schemeToJs } from "../../rosetta.js";
+import { schemeToJs } from "../rosetta.js";
 import { ANativeProcedure } from "../../values/primitives/ACallable.js";
-import { closeRegionScope, openRegionScope, withRegionScope } from "../../values/primitives/region-scope.js";
+import { closeRegionScope, openRegionScope, withRegionScope } from "../region-scope.js";
 import { CONSTANT_CTX, makeRunContext } from "../../values/primitives/RunContext.js";
 import type { CallCtx } from "../../values/primitives/CallCtx.js";
 import type { SchemeValue } from "../../values/types.js";

@@ -12,8 +12,8 @@
  */
 
 import { describe, expect, it, beforeAll } from "vitest";
-import { initBridge } from "../index.js";
-import { inferenceEnv } from "../inference-env.js";
+import { initBridge } from "../../index.js";
+import { inferenceEnv } from "../../inference-env.js";
 
 // The host-language verbs the sweep deleted at the source. The old
 // FORBIDDEN_IN_SANDBOX block list fenced them per-env; now they simply do not
@@ -23,7 +23,7 @@ const HOST_LANGUAGE_VERBS = ["eval", "load", "set-obj!", "set-special!", "new", 
 
 beforeAll(async () => {
   await initBridge();
-  await import("../index.js");
+  await import("../../index.js");
 });
 
 describe("host-language verbs are non-existent", () => {

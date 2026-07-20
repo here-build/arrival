@@ -22,7 +22,7 @@ import { mintFrame, type ResolvingAmbient } from "../../AmbientRuntime.js";
 import { execState } from "../../eval/generator-exec.js";
 import { EvalTrace } from "../../provenance/trace.js";
 import { inferenceEnv } from "../../inference-env.js";
-import { schemeToJs } from "../../rosetta.js";
+import { schemeToJs } from "../../membrane/rosetta.js";
 import { withRecordCoordinateAsync, type EmissionSink, type RecordCoordinate } from "../../eval/provenance-hooks.js";
 import { PayloadStoreFake, ProvenanceStoreFake, setEmissionEnabled } from "../../provenance/store/index.js";
 import { symbol } from "../../common/symbol.js";

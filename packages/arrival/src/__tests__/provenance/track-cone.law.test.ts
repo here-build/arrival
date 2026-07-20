@@ -47,7 +47,7 @@ import {
   withTrackCoordinate,
   type TrackCoordinate,
   type TrackEmissionSink,
-} from "../../values/primitives/region-scope.js";
+} from "../../membrane/region-scope.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import type { EmittedWire, WireframeGraph } from "../../provenance/wireframe/types.js";
 import type { SchemeValue } from "../../values/types.js";

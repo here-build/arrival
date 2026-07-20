@@ -23,7 +23,7 @@ import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
 import { AValue } from "../../values/primitives/AValue.js";
-import type { InvocationLike } from "../../rosetta.js";
+import type { InvocationLike } from "../../membrane/rosetta.js";
 import { ARosettaProcedure } from "../../values/primitives/ACallable.js";
 import { withDynamicCallSite } from "../../eval/dynamic-call-site.js";
 import { tf } from "../../values/tagless-final.js";

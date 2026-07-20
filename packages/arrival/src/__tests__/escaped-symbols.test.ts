@@ -9,7 +9,7 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { describe, expect, it } from "vitest";
 import { inferenceEnv } from "../inference-env.js";
 import { exec } from "../eval/generator-exec.js";
-import { jsToScheme, schemeToJs } from "../rosetta.js";
+import { jsToScheme, schemeToJs } from "../membrane/rosetta.js";
 import { symbol } from "../common/symbol.js";
 import { EnvCapability } from "../common/capability.js";
 import * as z from "../common/scheme-zod.js";

@@ -19,15 +19,15 @@
  */
 import { freshEnv } from "../../_fresh-env.js";
 import { execState } from "../../../eval/generator-exec.js";
-import { fromJS } from "../../../membrane.js";
+import { fromJS } from "../../../membrane/membrane.js";
 import { AValue } from "../../../values/primitives/AValue.js";
 import { APair } from "../../../values/primitives/APair.js";
 import { AVector } from "../../../values/primitives/AVector.js";
-import { AJSArray } from "../../../values/primitives/AJSArray.js";
+import { AJSArray } from "../../../membrane/AJSArray.js";
 import { ADict } from "../../../values/primitives/ADict.js";
 import { CONSTANT_CTX } from "../../../values/primitives/RunContext.js";
 import { collapseProvenance } from "../../../provenance-collapse.js";
-import { schemeToJs } from "../../../rosetta.js";
+import { schemeToJs } from "../../../membrane/rosetta.js";
 import * as z from "../../../common/scheme-zod.js";
 import type { ResolvingAmbient } from "../../../AmbientRuntime.js";
 import type { SchemeValue } from "../../../values/types.js";

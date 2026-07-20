@@ -26,7 +26,7 @@ import { CallCtx } from "../../common/symbols/_bake.js";
 import { ctxOf } from "../../values/primitives/AValue.js";
 import { symbol } from "../../common/symbol.js";
 import { AVector } from "../../values/primitives/AVector.js";
-import { AJSArray } from "../../values/primitives/AJSArray.js";
+import { AJSArray } from "../../membrane/AJSArray.js";
 import { type AVoid, theVoid } from "../../values/primitives/AVoid.js";
 import { AString } from "../../values/primitives/AString.js";
 import { type SchemeValue } from "../../values/types.js";

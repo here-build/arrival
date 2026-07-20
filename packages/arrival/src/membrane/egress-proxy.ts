@@ -54,8 +54,8 @@
  * nested callable can get its real reverse-membrane host-fn projection without this
  * module ever importing `callableToHostFn`.
  */
-import { AValue } from "./primitives/AValue.js";
-import type { EgressMode, MembraneExit } from "./types.js";
+import { AValue } from "../values/primitives/AValue.js";
+import type { EgressMode, MembraneExit } from "../values/types.js";
 import { InteropAccessError } from "../errors.js";
 
 /** BARE-law tracker: same box → same proxy, forever. Deterministic (no options, no

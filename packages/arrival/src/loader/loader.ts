@@ -16,7 +16,7 @@
 import { currentRunResolver } from "../eval/evaluator.js";
 import { execExpr, parse } from "../eval/generator-exec.js";
 import type { Resolver } from "../eval/Resolver.js";
-import { jsToScheme } from "../rosetta.js";
+import { jsToScheme } from "../membrane/rosetta.js";
 import { APair } from "../values/primitives/APair.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { nil } from "../values/primitives/ANil.js";

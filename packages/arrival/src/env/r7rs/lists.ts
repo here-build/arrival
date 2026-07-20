@@ -26,7 +26,7 @@
 // Installs the global \`TypeError.invariant\` assertion helper used by the
 // list-bounds and circular-list guards below (side-effect import).
 import "@here.build/error-invariant";
-import { adoptSpine } from "../../values/adopt-spine.js";
+import { adoptSpine } from "../../membrane/adopt-spine.js";
 import dedent from "dedent";
 import { type RunContext } from "../../values/primitives/RunContext.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";

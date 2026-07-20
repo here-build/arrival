@@ -13,10 +13,10 @@ import { describe, it, expect } from "vitest";
 // Import the package entry first so the membrane↔wrappers↔AmbientRuntime module cycle is fully
 // initialized before we construct AJSArray/AJSObject directly below — the wrappers call jsToScheme/
 // fromJS from that cycle at runtime, and the entry sequences the bridge bootstrap (`void initBridge()`).
-import "../index.js";
-import { AJSObject } from "../values/primitives/AJSObject.js";
-import { AJSArray } from "../values/primitives/AJSArray.js";
-import { CONSTANT_CTX, makeRunContext } from "../values/primitives/RunContext.js";
+import "../../index.js";
+import { AJSObject } from "../AJSObject.js";
+import { AJSArray } from "../AJSArray.js";
+import { CONSTANT_CTX, makeRunContext } from "../../values/primitives/RunContext.js";
 
 describe("borrowed-source freeze (rosetta-return prevention)", () => {
   it("AJSObject freezes its source the first time Scheme reads a member", () => {

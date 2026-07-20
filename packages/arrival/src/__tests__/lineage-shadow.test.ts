@@ -47,7 +47,7 @@ import { inferenceEnv } from "../inference-env.js";
 import { AString } from "../values/primitives/AString.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
-import { fromJs } from "../values/primitives/boxing.js";
+import { fromJs } from "../membrane/boxing.js";
 import { APair } from "../values/primitives/APair.js";
 import { ANil } from "../values/primitives/ANil.js";
 import type { SchemeValue } from "../values/types.js";

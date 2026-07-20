@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 
 import { exec, execState } from "../eval/generator-exec.js";
 import { user_env } from "../env-roots.js";
-import { schemeToJs } from "../rosetta.js";
+import { schemeToJs } from "../membrane/rosetta.js";
 
 describe("default exec — the 3b.3 cut", () => {
   it("default-path defines persist across exec calls (realm-cached lexical root)", async () => {

@@ -26,7 +26,7 @@ import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 import { AmbientRuntime, mintFrame } from "../../AmbientRuntime.js";
 import { execState } from "../../eval/generator-exec.js";
 import { collapseProvenance } from "../../provenance-collapse.js";
-import { schemeToJs } from "../../rosetta.js";
+import { schemeToJs } from "../../membrane/rosetta.js";
 import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";

@@ -27,7 +27,7 @@
 import { CLASS } from "../../well-known-symbols.js";
 import { type RunContext } from "./RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { egressContainerProxy } from "../egress-proxy.js";
+import { egressContainerProxy } from "../../membrane/egress-proxy.js";
 import { APair } from "./APair.js";
 import { ASymbol } from "./ASymbol.js";
 import { ACharacter } from "./ACharacter.js";
@@ -41,7 +41,7 @@ import { isSettleChain, settleEntry } from "./pending-entry.js";
 // Runtime import cycle (benign — the same shape AJSObject/AJSArray document): jsToScheme
 // is a hoisted `export function`, called only inside `get()` at runtime (settling a
 // pending entry), never at module eval.
-import { jsToScheme } from "../../rosetta.js";
+import { jsToScheme } from "../../membrane/rosetta.js";
 
 /** Code-position lowering cache (arrival/tagless-final/lower) for `{…}` dict-literal
  *  nodes — the `(dict …)` application built once per node and re-answered on every

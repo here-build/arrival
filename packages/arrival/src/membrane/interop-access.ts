@@ -37,12 +37,12 @@
 // used throughout this module (side-effect import).
 import "@here.build/error-invariant";
 
-import { InteropAccessError } from "./errors.js";
+import { InteropAccessError } from "../errors.js";
 // The arrival value-family brand (a plain string key, P7 taxonomy) — used by the
 // family rule in `isInteropBoundary`: any class carrying an OWN `[CLASS]` static is
 // an arrival value class, hence a boundary. well-known-symbols.ts is a constants
 // leaf (zero imports), so this stays cycle-free.
-import { CLASS } from "./well-known-symbols.js";
+import { CLASS } from "../well-known-symbols.js";
 
 // ============================================================================
 // Interop Boundary Marker
@@ -74,7 +74,7 @@ export const INTEROP_BOUNDARY = Symbol("scheme:interop-boundary");
 // re-exported here: it is the error these access primitives THROW, so a consumer
 // importing `accessMember` can import the error it catches from the same module
 // (mirrors membrane.ts, the other thrower of this error).
-export { InteropAccessError } from "./errors.js";
+export { InteropAccessError } from "../errors.js";
 
 // ============================================================================
 // Built-in Boundaries

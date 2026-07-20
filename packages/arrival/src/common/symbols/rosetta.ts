@@ -8,9 +8,9 @@ import { decodeKwargsStrict, drainDroppedKwargNotes } from "../kwargs-rejection.
 import { formatPositionalRejection } from "./positional-rejection.js";
 import { attestDeep, freshIfSingleton } from "../../values/attestation.js";
 import { AValue, pointProvenance, unionProvenance } from "../../values/primitives/AValue.js";
-import { jsToScheme } from "../../rosetta.js";
+import { jsToScheme } from "../../membrane/rosetta.js";
 import { penetrateThroughCache } from "../../values/run-cache.js";
-import { closeRegionScope, openRegionScope, withRegionScope } from "../../values/primitives/region-scope.js";
+import { closeRegionScope, openRegionScope, withRegionScope } from "../../membrane/region-scope.js";
 import { is_callable_value } from "../../values/value-guards.js";
 import {
   assertCacheClassShape,

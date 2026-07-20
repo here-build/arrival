@@ -28,7 +28,7 @@ import { execState } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
 import type { AString } from "../values/primitives/AString.js";
 import type { AValue } from "../values/primitives/AValue.js";
-import { jsToScheme } from "../rosetta.js";
+import { jsToScheme } from "../membrane/rosetta.js";
 import { provOf } from "../values/lineage-shadow.js";
 import type { AmbientRuntime } from "../AmbientRuntime.js";
 import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../values/op-helpers.js";

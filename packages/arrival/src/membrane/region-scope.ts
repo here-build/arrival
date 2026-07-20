@@ -27,20 +27,20 @@
  * owns the token shape, the ambient holder, and the two educational doors.
  */
 
-import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
-import type { AValue } from "./AValue.js";
-import type { EgressMode, WrapperKey } from "../types.js";
-import { RegionEscapeError, RegionIncompleteError } from "../../errors.js";
+import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
+import type { AValue } from "../values/primitives/AValue.js";
+import type { EgressMode, WrapperKey } from "../values/types.js";
+import { RegionEscapeError, RegionIncompleteError } from "../errors.js";
 import {
   emitHostSchedule,
   emitTrackClose,
   emitTrackOpen,
   isEmissionEnabled,
-} from "../../provenance/store/emit.js";
-import { appendOrdinal, type OrdinalPath, type RecordId, type RegionEpoch, type RegionId, type TemplateHash } from "../../provenance/store/ids.js";
-import type { ProvenanceStore } from "../../provenance/store/interfaces.js";
-import type { HostScheduleTriple } from "../../provenance/store/records.js";
-import { foldRegionStream, nextTrackOrdinal } from "../../provenance/store/fold.js";
+} from "../provenance/store/emit.js";
+import { appendOrdinal, type OrdinalPath, type RecordId, type RegionEpoch, type RegionId, type TemplateHash } from "../provenance/store/ids.js";
+import type { ProvenanceStore } from "../provenance/store/interfaces.js";
+import type { HostScheduleTriple } from "../provenance/store/records.js";
+import { foldRegionStream, nextTrackOrdinal } from "../provenance/store/fold.js";
 
 /**
  * ── Region events + host-schedule ────────────────────────────────────────────────

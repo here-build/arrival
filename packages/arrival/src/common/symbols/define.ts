@@ -17,7 +17,7 @@
 // define-bake.ts for the full two-phase binding contract).
 
 import { ZodType } from "zod";
-import { buildSlotAdopter } from "../../values/adopt-spine.js";
+import { buildSlotAdopter } from "../../membrane/adopt-spine.js";
 import * as z from "../scheme-zod.js";
 import {
   isSingleOutput,

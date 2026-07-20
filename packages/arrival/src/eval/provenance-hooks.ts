@@ -39,8 +39,8 @@ import { emitMint, isEmissionEnabled } from "../provenance/store/emit.js";
 import type { OrdinalPath, RegionEpoch, RegionId, TemplateHash } from "../provenance/store/ids.js";
 import type { PayloadStore, ProvenanceStore } from "../provenance/store/interfaces.js";
 import { AValue } from "../values/primitives/AValue.js";
-import { isSilentRegion } from "../values/primitives/region-scope.js";
-import { schemeToJs } from "../rosetta.js";
+import { isSilentRegion } from "../membrane/region-scope.js";
+import { schemeToJs } from "../membrane/rosetta.js";
 import type { SchemeValue } from "../values/types.js";
 
 /** One port's static address — everything an emission needs BESIDES which

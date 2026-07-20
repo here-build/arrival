@@ -52,7 +52,7 @@ import { sStr, runRaw, type EnvSetup } from "./_lineage-test-helpers.js";
 import { symbol } from "../common/symbol.js";
 import { EnvCapability } from "../common/capability.js";
 import * as z from "../common/scheme-zod.js";
-import { jsToScheme } from "../rosetta.js";
+import { jsToScheme } from "../membrane/rosetta.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 
 // Fixed mint ids — stand-ins for "whatever the membrane minted at this crossing".

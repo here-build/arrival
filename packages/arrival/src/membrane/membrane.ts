@@ -16,40 +16,40 @@
  * et al. 2013/2017) — see interop-access.ts.
  */
 
-import { CLASS } from "./well-known-symbols.js";
-import { CONSTANT_CTX, type RunContext } from "./values/primitives/RunContext.js";
+import { CLASS } from "../well-known-symbols.js";
+import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
 import { DefaultedWeakMap } from "@here.build/collections";
-import { AValue, EMPTY_PROVENANCE } from "./values/primitives/AValue.js";
-import { Values } from "./values/primitives/Values.js";
-import { fromJs } from "./values/primitives/boxing.js";
-import { ABool } from "./values/primitives/ABool.js";
-import { ABytevector } from "./values/primitives/ABytevector.js";
-import { AVector } from "./values/primitives/AVector.js";
-import { AmbientRuntime, isAmbientRuntime } from "./AmbientRuntime.js";
-import { LambdaContext } from "./eval/LambdaContext.js";
-import { AString } from "./values/primitives/AString.js";
-import { ASymbol } from "./values/primitives/ASymbol.js";
-import { Macro } from "./eval/Macro.js";
-import { AExact } from "./values/primitives/AExact.js";
-import { AInexact } from "./values/primitives/AInexact.js";
-import { APair } from "./values/primitives/APair.js";
+import { AValue, EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
+import { Values } from "../values/primitives/Values.js";
+import { fromJs } from "./boxing.js";
+import { ABool } from "../values/primitives/ABool.js";
+import { ABytevector } from "../values/primitives/ABytevector.js";
+import { AVector } from "../values/primitives/AVector.js";
+import { AmbientRuntime, isAmbientRuntime } from "../AmbientRuntime.js";
+import { LambdaContext } from "../eval/LambdaContext.js";
+import { AString } from "../values/primitives/AString.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
+import { Macro } from "../eval/Macro.js";
+import { AExact } from "../values/primitives/AExact.js";
+import { AInexact } from "../values/primitives/AInexact.js";
+import { APair } from "../values/primitives/APair.js";
 // Intentional runtime cycle with rosetta.ts (which imports SchemeJSObject from
 // here). ESM resolves it: both fns are declared before any call site fires.
 import { jsToScheme, callableToHostFn, egressAValue, errorToHost, schemeToJsUntyped } from "./rosetta.js";
-import { R7RSError, RedundantCrossingError } from "./errors.js";
-import { is_callable_value } from "./values/value-guards.js";
-import { Syntax } from "./eval/Syntax.js";
-import { type SchemeValue } from "./values/types.js";
-import { type ACallable } from "./values/primitives/ACallable.js";
-import { ANil } from "./values/primitives/ANil.js";
-import { Keyword } from "./values/Keyword.js";
+import { R7RSError, RedundantCrossingError } from "../errors.js";
+import { is_callable_value } from "../values/value-guards.js";
+import { Syntax } from "../eval/Syntax.js";
+import { type SchemeValue } from "../values/types.js";
+import { type ACallable } from "../values/primitives/ACallable.js";
+import { ANil } from "../values/primitives/ANil.js";
+import { Keyword } from "../values/Keyword.js";
 // AJSObject/AJSArray live in primitives/ with the rest of the term family; they
 // import fromJS/jsToScheme directly (benign cycle, hoisted fn decls) — see
 // AJSArray.ts / AJSObject.ts.
-import { AJSArray } from "./values/primitives/AJSArray.js";
-import { AJSObject } from "./values/primitives/AJSObject.js";
-import { ADict } from "./values/primitives/ADict.js";
-import { ACharacter } from "./values/primitives/ACharacter.js";
+import { AJSArray } from "./AJSArray.js";
+import { AJSObject } from "./AJSObject.js";
+import { ADict } from "../values/primitives/ADict.js";
+import { ACharacter } from "../values/primitives/ACharacter.js";
 
 // (The interop-access re-export block died with the accessor faces: the read
 // policy's imports live only in the borrowed classes now, and the public

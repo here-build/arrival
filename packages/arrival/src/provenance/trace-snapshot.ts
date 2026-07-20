@@ -71,7 +71,7 @@
  * handled, `node` itself can be dropped from the posted payload. The read-site
  * rewrite co-designs with `trace-to-regions.ts`.
  */
-import { schemeToJs } from "../rosetta.js";
+import { schemeToJs } from "../membrane/rosetta.js";
 import type { APair } from "../values/primitives/APair.js";
 import type { SchemeValue } from "../values/types.js";
 

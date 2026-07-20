@@ -32,22 +32,22 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { CONSTANT_CTX, makeRunContext } from "../values/primitives/RunContext.js";
-import { PortabilityError } from "../errors.js";
-import { initBridge } from "../index.js";
-import { APair } from "../values/primitives/APair.js";
-import { ABool } from "../values/primitives/ABool.js";
-import { AVector } from "../values/primitives/AVector.js";
-import { AString } from "../values/primitives/AString.js";
-import { AJSArray } from "../values/primitives/AJSArray.js";
-import listsCap from "../env/r7rs/lists.js";
-import vectorsCap from "../env/r7rs/vectors.js";
-import { vector, value } from "../common/scheme-zod.js";
-import type { EnvCapability } from "../common/capability.js";
-import { nil } from "../values/primitives/ANil.js";
-import { provOf } from "../values/lineage-shadow.js";
-import { tf } from "../values/tagless-final.js";
-import { requireEagerOracle } from "./_require-eager-oracle.js";
+import { CONSTANT_CTX, makeRunContext } from "../../values/primitives/RunContext.js";
+import { PortabilityError } from "../../errors.js";
+import { initBridge } from "../../index.js";
+import { APair } from "../../values/primitives/APair.js";
+import { ABool } from "../../values/primitives/ABool.js";
+import { AVector } from "../../values/primitives/AVector.js";
+import { AString } from "../../values/primitives/AString.js";
+import { AJSArray } from "../AJSArray.js";
+import listsCap from "../../env/r7rs/lists.js";
+import vectorsCap from "../../env/r7rs/vectors.js";
+import { vector, value } from "../../common/scheme-zod.js";
+import type { EnvCapability } from "../../common/capability.js";
+import { nil } from "../../values/primitives/ANil.js";
+import { provOf } from "../../values/lineage-shadow.js";
+import { tf } from "../../values/tagless-final.js";
+import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
 
 // Q20b: this file calls carrier ops (map/filter/length/sort) directly against
 // pre-stamped fixtures, which route through op-helpers.ts's accumulation — force

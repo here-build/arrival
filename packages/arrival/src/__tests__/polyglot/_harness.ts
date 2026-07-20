@@ -5,7 +5,7 @@
 // exact same conventions the former JSONL-driven corpus runner used.
 import { execState } from "../../eval/generator-exec.js";
 import { parse } from "../../reader/parse.js";
-import { AJSObject } from "../../values/primitives/AJSObject.js";
+import { AJSObject } from "../../membrane/AJSObject.js";
 import { AVector } from "../../values/primitives/AVector.js";
 import { ADict } from "../../values/primitives/ADict.js";
 import { APair } from "../../values/primitives/APair.js";

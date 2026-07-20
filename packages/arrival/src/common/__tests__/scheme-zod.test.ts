@@ -20,7 +20,7 @@ import { ANil, nil } from "../../values/primitives/ANil.js";
 import { ACharacter } from "../../values/primitives/ACharacter.js";
 import { ABool } from "../../values/primitives/ABool.js";
 import { AVector } from "../../values/primitives/AVector.js";
-import { AJSArray } from "../../values/primitives/AJSArray.js";
+import { AJSArray } from "../../membrane/AJSArray.js";
 import { AString } from "../../values/primitives/AString.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { AExact } from "../../values/primitives/AExact.js";
@@ -28,7 +28,7 @@ import { AInexact } from "../../values/primitives/AInexact.js";
 import { AVoid } from "../../values/primitives/AVoid.js";
 import { ABytevector } from "../../values/primitives/ABytevector.js";
 import { ADict } from "../../values/primitives/ADict.js";
-import { AJSObject } from "../../values/primitives/AJSObject.js";
+import { AJSObject } from "../../membrane/AJSObject.js";
 import { R7RSError } from "../../errors.js";
 import { ANativeProcedure, applyCallback } from "../../values/primitives/ACallable.js";
 

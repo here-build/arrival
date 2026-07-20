@@ -44,12 +44,12 @@ import {
   schemeFalse,
 } from "../../values/op-helpers.js";
 import { AValue } from "../../values/primitives/AValue.js";
-import { fromJs } from "../../values/primitives/boxing.js";
+import { fromJs } from "../../membrane/boxing.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../inference-env.js";
 import { initBridge } from "../../index.js";
-import { jsToScheme } from "../../rosetta.js";
+import { jsToScheme } from "../../membrane/rosetta.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
 import { bindValue, mintFrame } from "../../AmbientRuntime.js";
 

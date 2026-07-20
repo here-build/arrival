@@ -16,8 +16,8 @@
  * literal; schemeToJs is the working escape hatch except for symbols.
  */
 import { describe, expect, it } from "vitest";
-import { exec, schemeToJs } from "../index.js";
-import { ABool } from "../values/primitives/ABool.js";
+import { exec, schemeToJs } from "../../index.js";
+import { ABool } from "../../values/primitives/ABool.js";
 
 const one = async (src: string): Promise<any> => (await exec(src))[0];
 

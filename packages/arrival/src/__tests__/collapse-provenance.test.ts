@@ -17,7 +17,7 @@ import { inferenceEnv } from "../inference-env.js";
 import { AString } from "../values/primitives/AString.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { APair } from "../values/primitives/APair.js";
-import { AJSArray } from "../values/primitives/AJSArray.js";
+import { AJSArray } from "../membrane/AJSArray.js";
 import { nil } from "../values/primitives/ANil.js";
 import { requireEagerOracle } from "./_require-eager-oracle.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).

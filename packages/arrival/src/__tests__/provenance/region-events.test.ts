@@ -21,7 +21,7 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 
-import { schemeToJs } from "../../rosetta.js";
+import { schemeToJs } from "../../membrane/rosetta.js";
 import { ANativeProcedure } from "../../values/primitives/ACallable.js";
 import {
   closeRegionScope,
@@ -31,7 +31,7 @@ import {
   withTrackCoordinate,
   type TrackCoordinate,
   type TrackEmissionSink,
-} from "../../values/primitives/region-scope.js";
+} from "../../membrane/region-scope.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { ProvenanceStoreFake, setEmissionEnabled } from "../../provenance/store/index.js";
 

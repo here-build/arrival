@@ -22,7 +22,7 @@
  *    non-scheme escapes the router" over a sweep of exotic shapes).
  */
 import { describe, expect, it, vi } from "vitest";
-import { INBOUND_CLAIMS, jsToScheme } from "../../rosetta.js";
+import { INBOUND_CLAIMS, jsToScheme } from "../rosetta.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { AString } from "../../values/primitives/AString.js";
@@ -30,8 +30,8 @@ import { AExact } from "../../values/primitives/AExact.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { APair } from "../../values/primitives/APair.js";
 import { ADict } from "../../values/primitives/ADict.js";
-import { AJSObject } from "../../values/primitives/AJSObject.js";
-import { AJSArray } from "../../values/primitives/AJSArray.js";
+import { AJSObject } from "../AJSObject.js";
+import { AJSArray } from "../AJSArray.js";
 import { eof } from "../../values/primitives/EOF.js";
 import { tf } from "../../values/tagless-final.js";
 import type { SchemeValue } from "../../values/types.js";

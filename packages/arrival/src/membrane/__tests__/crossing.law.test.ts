@@ -16,11 +16,11 @@
  * still design-pending, unrelated to this ruling.
  */
 import { describe, expect, it, vi } from "vitest";
-import { CROSSINGS, VIOLATIONS } from "../laws/_tables/crossings.js";
-import { fromJS, toJS, isSchemeValue } from "../../membrane.js";
-import { jsToScheme, schemeToJs, modeKeyOf } from "../../rosetta.js";
+import { CROSSINGS, VIOLATIONS } from "../../__tests__/laws/_tables/crossings.js";
+import { fromJS, toJS, isSchemeValue } from "../membrane.js";
+import { jsToScheme, schemeToJs, modeKeyOf } from "../rosetta.js";
 import { exec } from "../../eval/generator-exec.js";
-import { setMembraneWarnings } from "../../membrane-warn.js";
+import { setMembraneWarnings } from "../membrane-warn.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { ABool } from "../../values/primitives/ABool.js";
 import { AExact } from "../../values/primitives/AExact.js";
@@ -33,10 +33,10 @@ import { APair } from "../../values/primitives/APair.js";
 import { AVector } from "../../values/primitives/AVector.js";
 import { ADict } from "../../values/primitives/ADict.js";
 import { ANativeProcedure } from "../../values/primitives/ACallable.js";
-import { closeRegionScope, openRegionScope, withRegionScope } from "../../values/primitives/region-scope.js";
+import { closeRegionScope, openRegionScope, withRegionScope } from "../region-scope.js";
 import { RegionEscapeError } from "../../errors.js";
-import { AJSArray } from "../../values/primitives/AJSArray.js";
-import { AJSObject } from "../../values/primitives/AJSObject.js";
+import { AJSArray } from "../AJSArray.js";
+import { AJSObject } from "../AJSObject.js";
 import type { SchemeValue } from "../../values/types.js";
 import { CLASS } from "../../well-known-symbols.js";
 

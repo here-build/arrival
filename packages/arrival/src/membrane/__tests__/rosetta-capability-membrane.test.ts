@@ -45,18 +45,18 @@
  */
 import invariant from "tiny-invariant";
 import { describe, expect, it } from "vitest";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { AString } from "../values/primitives/AString.js";
-import { inferenceEnv } from "../inference-env.js";
+import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { AString } from "../../values/primitives/AString.js";
+import { inferenceEnv } from "../../inference-env.js";
 import { jsToScheme, schemeToJs, schemeToJsUntyped } from "../rosetta.js";
-import { exec } from "../eval/generator-exec.js";
-import { symbol } from "../common/symbol.js";
-import { EnvCapability } from "../common/capability.js";
-import * as z from "../common/scheme-zod.js";
-import { ARosettaProcedure } from "../values/primitives/ACallable.js";
-import { withDynamicCallSite } from "../eval/dynamic-call-site.js";
-import { tf } from "../values/tagless-final.js";
-import type { SchemeValue } from "../values/types.js";
+import { exec } from "../../eval/generator-exec.js";
+import { symbol } from "../../common/symbol.js";
+import { EnvCapability } from "../../common/capability.js";
+import * as z from "../../common/scheme-zod.js";
+import { ARosettaProcedure } from "../../values/primitives/ACallable.js";
+import { withDynamicCallSite } from "../../eval/dynamic-call-site.js";
+import { tf } from "../../values/tagless-final.js";
+import type { SchemeValue } from "../../values/types.js";
 
 // Helper to unwrap exec results
 async function execOne(expr: string): Promise<any> {

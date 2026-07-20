@@ -79,7 +79,7 @@ import { symbol, type CallCtx } from "../common/symbol.js";
 // verb decodes/encodes manually via `schemeToJs`/`jsToScheme`; no codec crossing at the contract
 // level). NOT `sz.symbol` for the `name` param — see that param's own comment below for why.
 import * as sz from "../common/scheme-zod.js";
-import { jsToScheme, schemeToJs } from "../rosetta.js";
+import { jsToScheme, schemeToJs } from "../membrane/rosetta.js";
 import { stripOptionalSuffix, tagToJsonSchema } from "../common/schema-tag.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";

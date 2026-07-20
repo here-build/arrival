@@ -18,7 +18,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { exec } from "../../eval/generator-exec.js";
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
-import { schemeToJs } from "../../rosetta.js";
+import { schemeToJs } from "../../membrane/rosetta.js";
 import type { SchemeValue } from "../../values/types.js";
 import { EnvCapability } from "../../common/capability.js";
 import { assembleEnv } from "../../common/kernel.js";

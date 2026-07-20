@@ -16,7 +16,7 @@
 import { execState, parse } from "../eval/generator-exec.js";
 import { bindValue } from "../AmbientRuntime.js";
 import { AValue } from "../values/primitives/AValue.js";
-import { schemeToJs } from "../rosetta.js";
+import { schemeToJs } from "../membrane/rosetta.js";
 import { WireLocalityError } from "../errors.js";
 import type { LexicalScope } from "../eval/LexicalScope.js";
 import type { AssembledAmbient } from "../eval/exec-phases.js";

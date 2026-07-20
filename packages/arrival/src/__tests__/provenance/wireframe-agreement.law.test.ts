@@ -32,7 +32,7 @@ import { freeVars } from "../../provenance/wireframe/free-vars.js";
 import type { WireframeGraph } from "../../provenance/wireframe/types.js";
 import { WireLocalityError } from "../../errors.js";
 import { scopeId } from "../../provenance/scope-id.js";
-import { schemeToJs } from "../../rosetta.js";
+import { schemeToJs } from "../../membrane/rosetta.js";
 import { collapseProvenance } from "../../provenance-collapse.js";
 import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../../values/op-helpers.js";
 import { symbol } from "../../common/symbol.js";

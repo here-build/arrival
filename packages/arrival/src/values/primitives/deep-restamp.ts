@@ -29,7 +29,7 @@ import type { SchemeValue } from "../types.js";
 import { AValue, EMPTY_PROVENANCE, mergeProvenance } from "./AValue.js";
 import { theVoid } from "./AVoid.js";
 import { ANil, nil } from "./ANil.js";
-import { warnMembrane } from "../../membrane-warn.js";
+import { warnMembrane } from "../../membrane/membrane-warn.js";
 
 /** Re-stamp ONE spine child. The caller (a carrier's own `arrival/withProvenanceDeep`)
  *  threads its `seen` set so mutual/cyclic spines terminate co-inductively. */

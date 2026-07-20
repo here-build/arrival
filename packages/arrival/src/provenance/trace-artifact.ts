@@ -22,7 +22,7 @@
  * version-gating here; downstream consumers take `{ graph }` and never branch on
  * the wire shape.
  */
-import { schemeToJs } from "../rosetta.js";
+import { schemeToJs } from "../membrane/rosetta.js";
 import { TraceArtifactVersionError } from "../errors.js";
 
 import { traceToRegions, type Region, type RegionGraph } from "./trace-to-regions.js";

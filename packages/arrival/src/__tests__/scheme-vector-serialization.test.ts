@@ -9,7 +9,7 @@ import { AValue } from "../values/primitives/AValue.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { ABytevector } from "../values/primitives/ABytevector.js";
 import { AVector } from "../values/primitives/AVector.js";
-import { jsToScheme, schemeToJs } from "../rosetta.js";
+import { jsToScheme, schemeToJs } from "../membrane/rosetta.js";
 
 // The interpreter is monadic-boxed: a vector's payload is SchemeValue[], so an
 // integer element IS an AExact (the boxer routes a safe-int JS number to

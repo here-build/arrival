@@ -11,7 +11,7 @@
 import { describe, expect, it, beforeAll } from "vitest";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 import { execState } from "../../eval/generator-exec.js";
-import { schemeToJs } from "../../rosetta.js";
+import { schemeToJs } from "../../membrane/rosetta.js";
 import { writeForm } from "../../provenance/slice.js";
 import { printValue } from "../../values/print.js";
 import { ADict } from "../../values/primitives/ADict.js";

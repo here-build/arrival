@@ -29,7 +29,7 @@ import { mintFrame, type ResolvingAmbient } from "../../AmbientRuntime.js";
 import { execState } from "../../eval/generator-exec.js";
 import { EvalTrace } from "../../provenance/trace.js";
 import { inferenceEnv } from "../../inference-env.js";
-import { schemeToJs } from "../../rosetta.js";
+import { schemeToJs } from "../../membrane/rosetta.js";
 import {
   withRecordCoordinateAsync,
   type EmissionSink,
@@ -45,7 +45,7 @@ import {
   withTrackCoordinate,
   type TrackCoordinate,
   type TrackEmissionSink,
-} from "../../values/primitives/region-scope.js";
+} from "../../membrane/region-scope.js";
 import { ANativeProcedure } from "../../values/primitives/ACallable.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { AExact } from "../../values/primitives/AExact.js";

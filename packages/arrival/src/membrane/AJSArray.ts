@@ -15,24 +15,24 @@
  * any class carrying the own `[CLASS]` brand is a boundary; no per-class stamp needed.
  */
 
-import { CLASS } from "../../well-known-symbols.js";
-import { type RunContext } from "./RunContext.js";
-import { attestDeep, freshIfSingleton, isAttested } from "../attestation.js";
-import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { withInputProvenance } from "../op-helpers.js";
-import { AVector } from "./AVector.js";
-import { printValue } from "../print.js";
-import { type JSWorldArray, type SchemeValue } from "../types.js";
+import { CLASS } from "../well-known-symbols.js";
+import { type RunContext } from "../values/primitives/RunContext.js";
+import { attestDeep, freshIfSingleton, isAttested } from "../values/attestation.js";
+import { AValue, EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
+import { withInputProvenance } from "../values/op-helpers.js";
+import { AVector } from "../values/primitives/AVector.js";
+import { printValue } from "../values/print.js";
+import { type JSWorldArray, type SchemeValue } from "../values/types.js";
 // Runtime import cycle (benign — see header): a hoisted `export function` declaration,
 // called only inside wrapper methods at runtime.
-import { jsToScheme } from "../../rosetta.js";
-import { is_promise } from "../../eval/guards.js";
-import { settleEntry } from "./pending-entry.js";
-import { tf } from "../tagless-final.js";
-import { type ANil, nil } from "./ANil.js";
-import { AJSArrayList } from "./APair.js";
-import { accessHas, accessKeys, accessMember, NOT_FOUND } from "../../interop-access.js";
-import { InteropAccessError, strictGate } from "../../errors.js";
+import { jsToScheme } from "./rosetta.js";
+import { is_promise } from "../eval/guards.js";
+import { settleEntry } from "../values/primitives/pending-entry.js";
+import { tf } from "../values/tagless-final.js";
+import { type ANil, nil } from "../values/primitives/ANil.js";
+import { AJSArrayList } from "../values/primitives/APair.js";
+import { accessHas, accessKeys, accessMember, NOT_FOUND } from "./interop-access.js";
+import { InteropAccessError, strictGate } from "../errors.js";
 import { foldMemberName } from "./AJSObject.js";
 
 /** Pending-cell cache for Promise-valued reads off the borrowed source (pending-entry.ts):

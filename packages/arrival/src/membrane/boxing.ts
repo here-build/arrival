@@ -1,15 +1,15 @@
 import invariant from "tiny-invariant";
-import type { RunContext } from "./RunContext.js";
-import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { AString } from "./AString.js";
-import { AExact } from "../primitives/AExact.js";
-import { AInexact } from "../primitives/AInexact.js";
-import { ABool, schemeFalse, schemeTrue } from "./ABool.js";
-import { ANil } from "./ANil.js";
-import { AVoid, theVoid } from "./AVoid.js";
+import type { RunContext } from "../values/primitives/RunContext.js";
+import { AValue, EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
+import { AString } from "../values/primitives/AString.js";
+import { AExact } from "../values/primitives/AExact.js";
+import { AInexact } from "../values/primitives/AInexact.js";
+import { ABool, schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
+import { ANil } from "../values/primitives/ANil.js";
+import { AVoid, theVoid } from "../values/primitives/AVoid.js";
 import { AJSArray } from "./AJSArray.js";
 import { AJSObject } from "./AJSObject.js";
-import { warnMembrane } from "../../membrane-warn.js";
+import { warnMembrane } from "./membrane-warn.js";
 
 /**
  * The JS → Scheme boxing membrane: a single `typeof`-tag `switch` that constructs the

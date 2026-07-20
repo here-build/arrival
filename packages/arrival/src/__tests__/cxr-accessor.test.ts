@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 import { exec, execState } from "../eval/generator-exec.js";
 import { global_env } from "../env-roots.js";
 import { inferenceEnv } from "../inference-env.js";
-import { schemeToJs } from "../rosetta.js";
+import { schemeToJs } from "../membrane/rosetta.js";
 import { ANil } from "../values/primitives/ANil.js";
 
 const evalIn =

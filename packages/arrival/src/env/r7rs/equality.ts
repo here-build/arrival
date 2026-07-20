@@ -22,11 +22,11 @@
  */
 
 import * as z from "../../common/scheme-zod.js";
-import { AJSArray } from "../../values/primitives/AJSArray.js";
+import { AJSArray } from "../../membrane/AJSArray.js";
 import dedent from "dedent";
 import { symbol, type CallCtx } from "../../common/symbol.js";
 import { ABool, schemeFalse, schemeTrue } from "../../values/primitives/ABool.js";
-import { AJSObject } from "../../values/primitives/AJSObject.js";
+import { AJSObject } from "../../membrane/AJSObject.js";
 import { ADict, isDictShaped } from "../../values/primitives/ADict.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { eq, eqv, structuralEqual } from "../../values/structural-equal.js";

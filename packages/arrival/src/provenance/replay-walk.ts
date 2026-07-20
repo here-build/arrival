@@ -36,11 +36,11 @@
 import type { AmbientValue, ResolvingAmbient } from "../AmbientRuntime.js";
 import type { SchemeValue } from "../values/types.js";
 import type { EnvCapability } from "../common/capability.js";
-import { withSilentRegion } from "../values/primitives/region-scope.js";
+import { withSilentRegion } from "../membrane/region-scope.js";
 import { applyWireInEnv } from "./gamma.js";
 import { hermeticEnv, type IngressBindings } from "./hermetic-env.js";
 import { boxPayload, FrozenMints, ReplayScopeError, withUnionedProvenance, type ReplayedValue } from "./replay.js";
-import { schemeToJs } from "../rosetta.js";
+import { schemeToJs } from "../membrane/rosetta.js";
 import type { EmittedWire, Wire, WireframeGraph, WireframeProgram } from "./wireframe/types.js";
 
 /** One γ step: a wire's application, its consumer coordinate (which node/slot it

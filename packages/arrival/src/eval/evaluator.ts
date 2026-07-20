@@ -41,10 +41,10 @@ import { is_callable, is_false, is_function, is_macro, is_promise } from "./guar
 import { is_applyable, is_callable_value, is_lambda } from "../values/value-guards.js";
 import { applyCallback, ALambda, type CallResult } from "../values/primitives/ACallable.js";
 import { makeCallCtx } from "../common/symbols/_bake.js";
-import type { InvocationLike } from "../rosetta.js";
+import type { InvocationLike } from "../membrane/rosetta.js";
 // Runtime edge for the bare-fn boxing seam below — cycle-benign: rosetta.ts never
 // imports the evaluator (its evaluator-adjacent needs ride leaf modules).
-import { jsToScheme } from "../rosetta.js";
+import { jsToScheme } from "../membrane/rosetta.js";
 import { maybeThen } from "../utils/promises.js";
 import {
   currentDynamicCallSite,
@@ -76,7 +76,7 @@ import { AString } from "../values/primitives/AString.js";
 // dict-shaped-borrow check below) — it exited the dict-literal syntax business entirely
 // (the dict-literal true-shape design). The `{…}` dict-literal NODE face —
 // its detection (isDictLiteral) and the DictLiteralNode type — is ADict's own algebra now.
-import { AJSObject } from "../values/primitives/AJSObject.js";
+import { AJSObject } from "../membrane/AJSObject.js";
 import { ADict, foldKeyName, isDictShaped, type DictKey } from "../values/primitives/ADict.js";
 // The reader's dict grammar — quasiquote re-instantiates READER literals, so the
 // evaluator legitimately reaches into the reader layer for the re-mint.

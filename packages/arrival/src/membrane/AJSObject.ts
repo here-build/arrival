@@ -14,18 +14,18 @@
  * code can't read `get`/`toString` to reach `source`.
  */
 
-import { CLASS } from "../../well-known-symbols.js";
-import { type RunContext } from "./RunContext.js";
-import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { nil } from "./ANil.js";
-import { accessHas, accessKeys, accessMember, NOT_FOUND } from "../../interop-access.js";
-import { InteropAccessError } from "../../errors.js";
-import { attestDeep, freshIfSingleton, isAttested } from "../attestation.js";
-import { type SchemeValue } from "../types.js"; // Runtime import cycle (benign — see header): jsToScheme is a hoisted `export function`,
+import { CLASS } from "../well-known-symbols.js";
+import { type RunContext } from "../values/primitives/RunContext.js";
+import { AValue, EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
+import { nil } from "../values/primitives/ANil.js";
+import { accessHas, accessKeys, accessMember, NOT_FOUND } from "./interop-access.js";
+import { InteropAccessError } from "../errors.js";
+import { attestDeep, freshIfSingleton, isAttested } from "../values/attestation.js";
+import { type SchemeValue } from "../values/types.js"; // Runtime import cycle (benign — see header): jsToScheme is a hoisted `export function`,
 // called only inside get() at runtime.
-import { jsToScheme } from "../../rosetta.js";
-import { is_promise } from "../../eval/guards.js";
-import { settleEntry } from "./pending-entry.js";
+import { jsToScheme } from "./rosetta.js";
+import { is_promise } from "../eval/guards.js";
+import { settleEntry } from "../values/primitives/pending-entry.js";
 
 /**
  * Entry cache keyed by wrapper identity. WeakMap, not an instance field: keeps the cache off

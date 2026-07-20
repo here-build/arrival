@@ -14,8 +14,8 @@ import { AInexact } from "../values/primitives/AInexact.js";
 import { AVoid } from "../values/primitives/AVoid.js";
 import { AValue, ctxOf } from "../values/primitives/AValue.js";
 import { ADict, isDictShaped, type DictKey } from "../values/primitives/ADict.js";
-import { AJSObject } from "../values/primitives/AJSObject.js";
-import { AJSArray } from "../values/primitives/AJSArray.js";
+import { AJSObject } from "../membrane/AJSObject.js";
+import { AJSArray } from "../membrane/AJSArray.js";
 import { markSpineAdopting } from "./spine-adoption.js";
 import { Values } from "../values/primitives/Values.js";
 import { ArrivalError, CodecFidelityError, R7RSError } from "../errors.js";
@@ -27,7 +27,7 @@ import {
   DoorProcedure,
   applyCallback,
 } from "../values/primitives/ACallable.js";
-import { currentRegionScope, DETACHED_SCOPE, withRegionCall } from "../values/primitives/region-scope.js";
+import { currentRegionScope, DETACHED_SCOPE, withRegionCall } from "../membrane/region-scope.js";
 // Leaf with ZERO own imports (see header) — safe from scheme-zod.ts's cycles, same rationale as rosetta.ts.
 import { withDynamicCallSite } from "../eval/dynamic-call-site.js";
 import type { AList, AListAlike, SchemeValue } from "../values/types.js";

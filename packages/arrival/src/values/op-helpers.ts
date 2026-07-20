@@ -12,11 +12,11 @@
 import invariant from "tiny-invariant";
 import { CONSTANT_CTX, type RunContext } from "./primitives/RunContext.js";
 import { applyCallback } from "./primitives/ACallable.js";
-import { currentRegionScope, isSilentRegion, recordHostScheduleVerdict } from "./primitives/region-scope.js";
+import { currentRegionScope, isSilentRegion, recordHostScheduleVerdict } from "../membrane/region-scope.js";
 
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./primitives/AValue.js";
 import { type ABool, schemeFalse, schemeTrue } from "./primitives/ABool.js";
-import { fromJs } from "./primitives/boxing.js";
+import { fromJs } from "../membrane/boxing.js";
 import { ABytevector } from "./primitives/ABytevector.js";
 import { AString } from "./primitives/AString.js";
 import { AExact } from "./primitives/AExact.js";

@@ -5,7 +5,7 @@
 // TS infers the contract first, then checks the impl against the DECODED types. A
 // wrong-typed impl is a COMPILE error — that inference is the load-bearing proof.
 
-import { buildSlotAdopter } from "../../values/adopt-spine.js";
+import { buildSlotAdopter } from "../../membrane/adopt-spine.js";
 import {
   assertCacheClassShape,
   assertProvenanceRoleShape,

@@ -79,7 +79,7 @@ import { execState } from "../../eval/generator-exec.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 import type { SchemeValue } from "../../values/types.js";
 import { AValue } from "../../values/primitives/AValue.js";
-import { AJSArray } from "../../values/primitives/AJSArray.js";
+import { AJSArray } from "../../membrane/AJSArray.js";
 import { requireEagerOracle } from "../_require-eager-oracle.js";
 
 // Q20b: the container-box law rows run real programs through execState and assert

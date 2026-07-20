@@ -32,7 +32,7 @@ import type { RunContext } from "../values/primitives/RunContext.js";
 // invocation there at every apply site; the rosetta bind adapter reads it back. No cycle —
 // the leaf imports nothing.
 import { currentDynamicCallSite } from "../eval/dynamic-call-site.js";
-import type { InvocationLike, RosettaFunction } from "../rosetta.js";
+import type { InvocationLike, RosettaFunction } from "../membrane/rosetta.js";
 // The retired public `env.defineRosetta` method's internal replacement — this legacy
 // `SymbolDeclaration` bind arm and `provenance/replay.ts`'s playback frame are its only
 // two producers (env-capability-authoring skill's migration recipes name this the way in).

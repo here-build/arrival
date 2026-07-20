@@ -22,7 +22,7 @@ import { is_promise } from "../../eval/guards.js";
 import { is_false } from "../value-guards.js";
 import { promise_all } from "../../utils/promises.js";
 import { AValue, EMPTY_PROVENANCE, mergeProvenance } from "./AValue.js";
-import { egressContainerProxy } from "../egress-proxy.js";
+import { egressContainerProxy } from "../../membrane/egress-proxy.js";
 import { ANil, nil } from "./ANil.js";
 import { strictGate } from "../../errors.js";
 import { printValue } from "../print.js";

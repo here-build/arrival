@@ -26,8 +26,8 @@
 // real APair subclass can, which is what adopting at the argument boundary does.
 
 import { isSpineAdopting } from "../common/spine-adoption.js";
-import { AJSArray } from "./primitives/AJSArray.js";
-import { AJSArrayList } from "./primitives/APair.js";
+import { AJSArray } from "./AJSArray.js";
+import { AJSArrayList } from "../values/primitives/APair.js";
 
 /**
  * Project one argument onto its spine chart, if it is a vector-chart value. Everything else —

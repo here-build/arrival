@@ -59,7 +59,7 @@ import {
   withTrackCoordinate,
   type TrackCoordinate,
   type TrackEmissionSink,
-} from "../../values/primitives/region-scope.js";
+} from "../../membrane/region-scope.js";
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 
 /** A manually-controlled promise — the "no real timers" idiom `store/fakes.ts` uses

@@ -24,7 +24,7 @@ import { mintFrame } from "../AmbientRuntime.js";
 import { exec, execState } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { jsToScheme } from "../rosetta.js";
+import { jsToScheme } from "../membrane/rosetta.js";
 
 async function execOneBoxed(expr: string, env = inferenceEnv): Promise<any> {
   const { values } = await execState(expr, { env });

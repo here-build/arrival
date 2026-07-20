@@ -23,12 +23,12 @@
 // Each test carries an explicit short timeout: a regression must FAIL the test, never hang CI.
 import { describe, expect, it } from "vitest";
 
-import { mintFrame } from "../AmbientRuntime.js";
-import { execState } from "../eval/generator-exec.js";
-import { inferenceEnv } from "../inference-env.js";
-import { schemeToJs } from "../index.js";
+import { mintFrame } from "../../AmbientRuntime.js";
+import { execState } from "../../eval/generator-exec.js";
+import { inferenceEnv } from "../../inference-env.js";
+import { schemeToJs } from "../../index.js";
 import { jsToScheme } from "../rosetta.js";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 
 /** `xs` is bound through `jsToScheme`, so it arrives as a real `AJSArray` — exactly what an MCP
  *  tool returning a JSON array hands the model. That receiver is the whole point of this file. */

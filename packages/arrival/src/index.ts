@@ -23,12 +23,12 @@ export { eof } from "./values/primitives/EOF.js";
 // Interop sealing — `@arrival.private` (+ `markInteropBoundary`) marks a class opaque to
 // a Scheme member-read (`(@ x :internal)` → nil). `markSandboxPrivate`/`markAsSandboxBoundary`
 // are deprecated aliases kept for cross-package consumers (arrival-chain).
-export { arrival, markInteropPrivate, markInteropBoundary } from "./interop-access.js";
+export { arrival, markInteropPrivate, markInteropBoundary } from "./membrane/interop-access.js";
 export {
   markInteropPrivate as markSandboxPrivate,
   markInteropBoundary as markAsSandboxBoundary,
-} from "./interop-access.js";
-export { schemeToJs, schemeToJsUntyped, jsToScheme, createRosettaWrapper, type RosettaFunction } from "./rosetta.js";
+} from "./membrane/interop-access.js";
+export { schemeToJs, schemeToJsUntyped, jsToScheme, createRosettaWrapper, type RosettaFunction } from "./membrane/rosetta.js";
 
 // Runtime value hierarchy. Provenance algebra: docs/spec/arrival-chain.md.
 export { type AKind, AValue, EMPTY_PROVENANCE, pointProvenance, unionProvenance } from "./values/primitives/AValue.js";
@@ -43,7 +43,7 @@ export {
   schemeTrue as ATrue,
   schemeTrue,
 } from "./values/primitives/ABool.js";
-export { AJSObject as AObject } from "./values/primitives/AJSObject.js";
+export { AJSObject as AObject } from "./membrane/AJSObject.js";
 // `AChar` is the legacy alias kept for cross-package consumers; `ACharacter` is
 // the canonical class name. Both spellings resolve to the same class.
 export { ACharacter, ACharacter as AChar } from "./values/primitives/ACharacter.js";

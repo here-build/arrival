@@ -11,9 +11,9 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { setMembraneWarnings } from "../membrane-warn.js";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { AExact } from "../values/primitives/AExact.js";
-import { AInexact } from "../values/primitives/AInexact.js";
+import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { AExact } from "../../values/primitives/AExact.js";
+import { AInexact } from "../../values/primitives/AInexact.js";
 import {
   // Wrapper layer
   fromJS,
@@ -21,14 +21,14 @@ import {
   isSchemeValue,
   isBytevectorLike,
 } from "../membrane.js";
-import { AJSObject } from "../values/primitives/AJSObject.js";
-import { AJSArray } from "../values/primitives/AJSArray.js";
-import { nil } from "../values/primitives/ANil.js";
-import { theVoid } from "../values/primitives/AVoid.js";
-import { ABool } from "../values/primitives/ABool.js";
-import { AString } from "../values/primitives/AString.js";
-import { ASymbol } from "../values/primitives/ASymbol.js";
-import { APair } from "../values/primitives/APair.js";
+import { AJSObject } from "../AJSObject.js";
+import { AJSArray } from "../AJSArray.js";
+import { nil } from "../../values/primitives/ANil.js";
+import { theVoid } from "../../values/primitives/AVoid.js";
+import { ABool } from "../../values/primitives/ABool.js";
+import { AString } from "../../values/primitives/AString.js";
+import { ASymbol } from "../../values/primitives/ASymbol.js";
+import { APair } from "../../values/primitives/APair.js";
 
 // ============================================================================
 // WRAPPER LAYER TESTS

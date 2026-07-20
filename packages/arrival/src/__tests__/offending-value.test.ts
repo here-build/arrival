@@ -17,7 +17,7 @@ import { describe, expect, it } from "vitest";
 import { execState } from "../eval/generator-exec.js";
 import { attachOffendingValue, offendingValueOf } from "../errors.js";
 import { AString } from "../values/primitives/AString.js";
-import { schemeToJs } from "../rosetta.js";
+import { schemeToJs } from "../membrane/rosetta.js";
 import { freshEnv } from "./_fresh-env.js";
 
 /** Run `src`, catch whatever propagates, and return it — the tests below assert on
