@@ -114,9 +114,10 @@ function isBounceMarker(x: unknown): x is SchemeBounceMarker {
 
 /** Callable's JS projection IS region wrapper (not print string). Called from schemeToJsImpl is_callable_value branch AND exported for membrane.toJS() matching special-case (where plain `toJS`/exec simple-tier exit routes callable) — kept out of ACallable `arrival/toJS` so class need not import rosetta.ts (scheme-zod init cycle).
  * Wrapper identity = (callable, scope, MODE): the wrapper closes over `options`, so two
- * option bags that project differently must not share a slot (first-mint-wins was the
- * pre-split behavior); scheme-zod's typed decode shares the same two-level cache under
- * its own `"typed"` key — see RegionScope.cache's doc. */
+ * option bags that project differently must not share a slot — keyed only by (callable,
+ * scope), the first mint would win and a differently-projecting second bag would get the
+ * wrong wrapper. scheme-zod's typed decode shares the same two-level cache under its own
+ * `"typed"` key — see RegionScope.cache's doc. */
 export function callableToHostFn(value: ACallable, options: RosettaOptions): (...args: unknown[]) => unknown {
   const scope = currentRegionScope() ?? DETACHED_SCOPE;
   const key = modeKeyOf(options);
@@ -131,8 +132,7 @@ export function callableToHostFn(value: ACallable, options: RosettaOptions): (..
     withRegionCall(scope, async () => {
       // Args mint under ENCLOSING invocation's runCtx, never CONSTANT_CTX — `scope.runCtx` is exactly that (or CONSTANT_CTX for detached fallback).
       // A promise-valued arg settles BEFORE boxing (the reverse membrane is already
-      // async) — the last inbound top-level Promise path, closed; a bare Promise
-      // reaching jsToScheme now doors (jsToSchemeAsyncDoor).
+      // async); a bare Promise reaching jsToScheme doors (jsToSchemeAsyncDoor).
       const schemeArgs = await Promise.all(jsArgs.map(async (a) => jsToScheme(scope.runCtx, await a, options)));
       // Re-entry trace nests under the exporting invocation (a "child scope"), via SAME ambient mechanism evaluator HOF-boundary wrappers use — never through callable `this`.
       const raw = await withDynamicCallSite(scope.dynSite, () => applyCallback(value, schemeArgs, scope.runCtx));
@@ -197,7 +197,7 @@ export function errorToHost(value: R7RSError, exitEl: (el: unknown) => unknown):
 
 /**
  * Recursive body behind `schemeToJs`. `unknown`-typed, not `any`: recursion crosses raw JS intermediates no single generic can describe (raw array element, plain object field) — see `schemeToJs` doc for narrowing at public boundary.
- * LAZY: every boxed shape delegates to own `arrival/toJS` (one protocol, class-owned — P7). Containers egress as lazy readonly proxies (egress-proxy.ts); borrowed AJSObject/AJSArray unwrap to `source` IDENTITY (the borrowed-identity law); callables become inverse-rosetta region wrappers. Former ~90-line eager instanceof chain dissolved. HERE: only rosetta-specific surface protocol doesn't know: elementwise crossing of RAW JS containers (elements may be boxed), sequence-op-term preserve, FFI allow-list, P5 door.
+ * LAZY: every boxed shape delegates to own `arrival/toJS` (one protocol, class-owned — P7). Containers egress as lazy readonly proxies (egress-proxy.ts); borrowed AJSObject/AJSArray unwrap to `source` IDENTITY (the borrowed-identity law); callables become inverse-rosetta region wrappers. HERE: only rosetta-specific surface protocol doesn't know: elementwise crossing of RAW JS containers (elements may be boxed), sequence-op-term preserve, FFI allow-list, P5 door.
  */
 function schemeToJsImpl(value: unknown, options: RosettaOptions): unknown {
   // null/undefined echo back unchanged (matches AUnwrap non-SchemeValue arm).
@@ -312,7 +312,7 @@ export function jsToSchemeAsyncDoor(): Error {
  * (invariant, honest — never a cast).
  */
 export interface InboundClaim {
-  /** Stable name — pinned by the inbound-registry law (membrane/inbound-registry.law.test.ts). */
+  /** Stable name — pinned by the inbound-registry law (membrane/__tests__/inbound-registry.law.test.ts). */
   readonly name: string;
   readonly claims: (value: unknown) => boolean;
   readonly box: (ctx: RunContext, value: unknown, provenance: ReadonlySet<number>, seen: WeakSet<object>) => unknown;
@@ -327,23 +327,23 @@ export interface InboundClaim {
  *  2. an already-AValue passes by identity on the same/empty-provenance fast path and
  *     otherwise re-stamps through ITS OWN protocol (`arrival/withProvenanceDeep` on
  *     spine carriers, shallow `withProvenance` on every other class) — the per-class
- *     knowledge the old router leaked is back on the classes;
+ *     knowledge lives on the classes, not in the router;
  *  3. arrays claim BEFORE plain objects (an array is `typeof "object"` too);
  *  4. a plain-prototype object claims BEFORE the promise row, so a plain THENABLE
  *     stays a dict-shaped borrow (the historical behavior);
  *  5. scalars (string/number/boolean) route to the boxer table (boxing.ts — the
  *     primitives' claim table); `bigint` is NOT among them (see row 10 below);
  *  6. non-AValue scheme orphans (EOF / Values / R7RSError) pass by identity — they
- *     ARE scheme values, formerly smuggled through the exotic passthrough;
+ *     ARE scheme values;
  *  7. the binary FFI passthrough is one DECLARED raw identity (named superset,
  *     mirrors the outbound allow-list's own raw-passthrough treatment in schemeToJsImpl);
  *  8. a bare Promise DOORS (see jsToSchemeAsyncDoor — container entries settle
  *     lazily instead);
  *  9. every remaining object (class instance, Map, Date, Error, …) re-presents as a
- *     borrowed AJSObject, LOUDLY — the old silent raw-exotic leak is closed; member
- *     reads keep working through the interop policy, and the wrapper round-trips to
- *     source identity on exit;
- *  10. `bigint` is the OTHER declared raw identity (docs/working-proposals/
+ *     borrowed AJSObject, LOUDLY — never a silent raw pass-through; member reads keep
+ *     working through the interop policy, and the wrapper round-trips to source
+ *     identity on exit;
+ *  10. `bigint` is the OTHER declared raw identity (docs/design-history/
  *      arrival-one-number-rework.md §2.3): an opaque HOST value, not a scheme number
  *      — never boxed into an `AExact`, rides the same raw pass-through lane as the
  *      binary FFI row (7), placed adjacent to it.
@@ -386,8 +386,8 @@ export const INBOUND_CLAIMS: readonly InboundClaim[] = [
       // a JS impl is opaque and we cannot see that it did not mix its inputs. That is an EDGE we are
       // entitled to add. It is NOT a licence to overwrite what the value already knew about itself.
       //
-      // This used to REPLACE, and the failure was silent and structural: a value's origin set could
-      // stop being a SUPERSET of its true dependency set, which is the exact precondition `uneval`'s
+      // REPLACING (overwrite instead of union) fails silently and structurally: a value's origin set
+      // stops being a SUPERSET of its true dependency set, which is the exact precondition `uneval`'s
       // Galois slicing rests on (provenance/uneval.ts: "the effective value's origin set IS its
       // dependency set"). The slice then omits the form that produced the dropped id, and the re-run
       // cannot reproduce the value. Over-approximation is safe (a bigger sound slice still derives);
@@ -395,8 +395,8 @@ export const INBOUND_CLAIMS: readonly InboundClaim[] = [
       //
       // It even covers a SOURCE that hands back an already-provenanced value: the fresh point records
       // "this value was explicitly CHOSEN by the source" and the value's own origin records where it
-      // came from. Both edges are real. (Rare to the point of never — but it is now sound rather than
-      // accidentally sound.)
+      // came from. Both edges are real. (Rare to the point of never — but sound by construction, not
+      // by accident.)
       const merged = mergeProvenance(v.provenance, p);
       if (merged === v.provenance) return v;
       const deep = v["arrival/withProvenanceDeep"];
@@ -464,7 +464,7 @@ export const INBOUND_CLAIMS: readonly InboundClaim[] = [
   },
   {
     // Non-AValue scheme orphans: already scheme values (types.ts's SchemeValue union),
-    // no provenance slot → identity. Formerly rode the silent exotic passthrough.
+    // no provenance slot → identity.
     name: "scheme orphan (EOF/Values/R7RSError) → identity",
     claims: (v) => v instanceof EOF || v instanceof Values || v instanceof R7RSError,
     box: (_ctx, v) => v,
@@ -503,7 +503,7 @@ export const INBOUND_CLAIMS: readonly InboundClaim[] = [
   },
   {
     // Residual exotics (class instances, Map, Date, Error, …): re-presented as a
-    // borrowed AJSObject, LOUDLY — closes the old silent raw leak. Member reads keep
+    // borrowed AJSObject, LOUDLY (never a silent raw pass-through). Member reads keep
     // working through the interop policy; exit round-trips to source identity.
     name: "exotic object → borrowed AJSObject (warn)",
     claims: (v) => typeof v === "object" && v !== null,
@@ -559,8 +559,8 @@ function jsToSchemeImpl(
  * outer wrapper already carries the stamp, so the cycle re-enters that wrapper, not an
  * infinite spine).
  * `options` is accepted for signature stability but the INBOUND crossing reads none of
- * it (RosettaOptions is entirely an outbound/wrapper-call concern; the old impl only
- * threaded it, never read it).
+ * it — RosettaOptions is entirely an outbound/wrapper-call concern, threaded for
+ * signature parity and never read here.
  * Honestly typed via `AWrap<T>` (values/types.ts): the caller's static JS input type
  * determines the exact AValue shape returned. This wrapper is the ONE sanctioned
  * narrowing (P3): the cast target is the exact conditional type the contract promises,

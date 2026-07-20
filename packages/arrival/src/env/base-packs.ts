@@ -35,9 +35,9 @@
 //   srfi1      — depended on by polyglot/clojure/lisp; depends on
 //                exceptions/lists (multi-return binding surface is purity-doored;
 //                span/partition use list products, no binding dep).
-//   binding    — multi-return + set! doors only; no pack depends on it for FV
-//                anymore. Kept in the tail as zero-collateral placement next to
-//                the other repositioned R7RS packs.
+//   binding    — multi-return + set! doors only; no pack depends on it for FV, so it
+//                keeps the tail as zero-collateral placement next to the other
+//                repositioned R7RS packs.
 //   exceptions — depended on by srfi-189, srfi-1, racket; leads lists (srfi-189's
 //                and srfi-1's deps orders both say so).
 //   lists      — depended on by srfi-235, srfi-128, srfi-189, srfi-1, polyglot,

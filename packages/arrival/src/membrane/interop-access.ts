@@ -15,18 +15,17 @@
  *
  * TWO CONCEPTS live here, deliberately co-located because the CHECKER reads both:
  * 1. THE READ POLICY — accessMember/accessHas/accessKeys + the boundary walk +
- *    blocklists. After the tagless member-access rework, its mouths are exactly TWO —
- *    the borrowed-value terms `AJSObject` and `AJSArray` (their own `get/has/keys` over
- *    `source`). The membrane's `readMember` face no longer calls the policy directly
- *    (it dispatches to the value's `arrival/tagless-final/get|has|keys` term), and
- *    member-walk (the dotted-path side-door) was deleted with V's dotted-path ruling.
- *    ENDGAME (noted, not executed): with only two callers, both borrowed-value classes,
- *    the policy could inline INTO those classes entirely — interop-access dissolving the
- *    way bridge.ts did. Held: the blocklist/boundary-walk is genuinely shared logic and
- *    a shared module is the honest home until a third pressure decides the cut.
+ *    blocklists. Its mouths are exactly TWO — the borrowed-value terms `AJSObject`
+ *    and `AJSArray` (their own `get/has/keys` over `source`). The membrane has no
+ *    `readMember` face: the value's own `arrival/tagless-final/get|has|keys` term
+ *    dispatches the read, and there is no dotted-path side-door.
+ *    ENDGAME (noted, not executed): with only two callers, both borrowed-value
+ *    classes, the policy could inline INTO those classes entirely. Held: the
+ *    blocklist + boundary-walk is genuinely shared logic, so a shared module is the
+ *    honest home until a third caller forces the cut.
  * 2. THE PRIVACY BRAND — INTEROP_BOUNDARY + markInteropBoundary/@arrival.private:
  *    the opt-in for HOST classes (arrival-chain re-exports it). Arrival's own value
- *    family no longer stamps per-class: the family rule inside `isInteropBoundary`
+ *    family does not stamp per-class: the family rule inside `isInteropBoundary`
  *    (own `[CLASS]` brand on the constructor = boundary) covers every primitive.
  *
  * Lineage: GraalVM Truffle InteropLibrary (Würthinger et al. 2013/2017);
@@ -217,10 +216,10 @@ export function isInteropBoundary(proto: object | null): boolean {
 
   // ARRIVAL FAMILY RULE: a prototype whose OWN-descriptor constructor carries an
   // OWN `[CLASS]` brand ("arrival/class", the P7 string-key taxonomy) is an arrival
-  // value class — always a boundary. Replaces the per-class
-  // `static [INTEROP_BOUNDARY] = true` stamp every primitive used to carry (each
-  // subclass needed its own stamp because this check is hasOwnProperty-based); one
-  // rule here covers the whole family, and the primitives lose the import entirely.
+  // value class — always a boundary. Because this check is hasOwnProperty-based, a
+  // per-class `static [INTEROP_BOUNDARY] = true` stamp would need repeating on every
+  // subclass; the CLASS brand covers the whole family in one rule instead, and no
+  // primitive carries the boundary import.
   // Forgery direction is harmless: a borrowed class self-stamping `[CLASS]` only
   // SEALS itself — the same privacy `@arrival.private` grants deliberately. (The F1
   // forgery-guard concern — data keys masquerading as protocol on VALUES — doesn't

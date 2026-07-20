@@ -3,10 +3,9 @@
 // Pack isolation forbids a PACK importing another PACK (the intra-set dependency
 // rule) — it does not forbid packs sharing a non-pack env-layer module, exactly as
 // they all share `common/capability.ts` and `values/op-helpers.ts`. This module is
-// that door for helpers that used to be copy-pasted per pack: `to_array` lived as
-// three byte-equivalent copies (r7rs/lists, r7rs/strings, srfi/srfi-13) with the
-// duplication justified by "pack isolation forbids a cross-pack import" — true,
-// but the fix was a shared non-pack home, not triplication.
+// that shared door: a helper several packs need (e.g. `to_array`, used by r7rs/lists,
+// r7rs/strings, srfi/srfi-13) lives here ONCE. Pack isolation forbids the cross-pack
+// import, NOT a shared non-pack home — the fix is this module, not per-pack duplication.
 
 import invariant from "tiny-invariant";
 import { APair, isCircularList } from "../values/primitives/APair.js";

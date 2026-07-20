@@ -27,10 +27,9 @@ export function setMembraneWarnings(enabled: boolean): void {
 const emitted = new Map<string, number>();
 const WARN_LIMIT = 3;
 
-/** `outcome` (optional) overrides the default "materialized to #void" clause — the
+/** `outcome` (optional) overrides the default "materialized to #void" clause: the
  *  inbound exotic claim (rosetta.ts) crosses a class instance to a borrowed wrapper
- *  rather than #void and says so; every existing caller keeps the default text
- *  byte-identical. */
+ *  rather than #void and says so. Callers that omit it get the default clause. */
 export function warnMembrane(what: string, outcome?: string): void {
   if (!membraneWarningsEnabled) return;
 

@@ -1,7 +1,7 @@
 /**
  * AJSObject — thin, read-only view of a borrowed JS object inside the Scheme value space.
- * Own file (split from AJSArray) since each borrowed-value wrapper carries its own
- * tagless-final algebra alongside the rest of the term family (ANil/APair/AVector).
+ * Its own term with its own tagless-final algebra; the array sibling AJSArray carries a
+ * separate vector algebra.
  *
  * IMPORT CYCLE (benign): `jsToScheme` (rosetta.ts) statically imports this class, closing a
  * runtime import cycle — safe because `get()` calls it only at runtime, and a hoisted

@@ -6,10 +6,7 @@
  *   pass through unwrapped.
  * - Member access (`@`/`@?`/`@keys`, the `:key` accessor) lives on the values
  *   themselves (`arrival/tagless-final/get|has|keys`) — env/polyglot/polyglot.ts's verbs
- *   dispatch directly; no membrane face remains.
- *
- * (The former Codec/Operator FFI layer is dissolved; numeric marshalling now lives
- * in the `scheme/numeric` pack via `symbol.native`.)
+ *   dispatch to them directly; the membrane has no member-read face.
  *
  * Lineage: object-capability membranes (Miller 2006; Van Cutsem & Miller 2013).
  * The member-read protocol mirrors GraalVM Truffle's InteropLibrary (Würthinger
@@ -33,8 +30,6 @@ import { Macro } from "../eval/Macro.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
 import { APair } from "../values/primitives/APair.js";
-// Intentional runtime cycle with rosetta.ts (which imports SchemeJSObject from
-// here). ESM resolves it: both fns are declared before any call site fires.
 import { jsToScheme, callableToHostFn, egressAValue, errorToHost, schemeToJsUntyped } from "./rosetta.js";
 import { R7RSError, RedundantCrossingError } from "../errors.js";
 import { is_callable_value } from "../values/value-guards.js";
@@ -43,18 +38,13 @@ import { type SchemeValue } from "../values/types.js";
 import { type ACallable } from "../values/primitives/ACallable.js";
 import { ANil } from "../values/primitives/ANil.js";
 import { Keyword } from "../values/Keyword.js";
-// AJSObject/AJSArray live in primitives/ with the rest of the term family; they
-// import fromJS/jsToScheme directly (benign cycle, hoisted fn decls) — see
-// AJSArray.ts / AJSObject.ts.
+// AJSArray/AJSObject import jsToScheme from rosetta.ts directly — a benign runtime
+// cycle, safe because jsToScheme is a hoisted `export function` (see the AJSArray.ts
+// / AJSObject.ts headers).
 import { AJSArray } from "./AJSArray.js";
 import { AJSObject } from "./AJSObject.js";
 import { ADict } from "../values/primitives/ADict.js";
 import { ACharacter } from "../values/primitives/ACharacter.js";
-
-// (The interop-access re-export block died with the accessor faces: the read
-// policy's imports live only in the borrowed classes now, and the public
-// surface — arrival/markInteropPrivate/markInteropBoundary — ships from the
-// index barrel directly off interop-access.js.)
 
 
 // ============================================================================
@@ -134,7 +124,7 @@ export function isSchemeValue(value: unknown): value is BoxedSchemeValue {
     // Scheme term, including ANil, Keyword, AVoid, and the callable
     // primitives, derives from AValue. This is structural, not enumerative: a new
     // AValue subclass is recognized for free, closing the class of "omitted from
-    // the switch" gaps (AVoid was one) that a hand-maintained case list invites.
+    // the switch" gaps that a hand-maintained case list invites.
     case value instanceof AValue:
 
     // The few non-AValue control forms that legitimately cross as
@@ -170,8 +160,8 @@ export function isBytevectorLike(value: unknown): value is Uint8Array | ArrayBuf
 /**
  * DefaultedWeakMap (@here.build/collections): same JS object always → same wrapper
  * (AJSArray for arrays, AJSObject for plain objects) — a single homogeneous factory
- * dispatching purely on `Array.isArray(key)`, so `fromJS`'s two call sites collapse
- * the old get-check-set dance into one `.get(key)`. Typed to that pair so the cached
+ * dispatching purely on `Array.isArray(key)`, so `fromJS`'s two call sites are a
+ * single `.get(key)`. Typed to that pair so the cached
  * read returns a `FromJSResult` member honestly, no cast.
  */
 const jsToWrapper = new DefaultedWeakMap<object, AJSArray | AJSObject>((key) =>
@@ -179,16 +169,14 @@ const jsToWrapper = new DefaultedWeakMap<object, AJSArray | AJSObject>((key) =>
 );
 
 // ============================================================================
-// SANDBOX BOUNDARIES — SchemeJSObject, SchemeJSFunction
+// WRAPPERS AS INTEROP BOUNDARIES
 // ============================================================================
-// Every JS value crossing into the sandbox becomes one of these wrappers. Their
-// own get/set/has/delete/keys route through accessMember for the WRAPPED value,
-// but the WRAPPER's own prototype is still reachable via symbol-to-field
-// auto-resolution — without a boundary marker, sandbox code could read the
-// wrapper's `apply`/`call`/`toString` to reach the underlying `source` Function
-// or Object (running the source with sandbox-controlled args via `apply` is the
-// escape shape). Marking the wrapper classes stops the prototype walk here —
-// only own sandbox-safe properties on the wrapped value flow through.
+// A JS object/array crossing here becomes an AJSObject/AJSArray whose own
+// get/has/keys route through the interop read policy over the WRAPPED `source`.
+// The wrapper classes are themselves interop boundaries (interop-access.ts family
+// rule), so a sandbox prototype walk stops at the wrapper and cannot reach the
+// borrowed source's `apply`/`call`/`constructor` — only sandbox-safe own members
+// of the source flow through.
 // ============================================================================
 /** Entry point for JS → Scheme boundary crossing. STRICT one-way door: an
  *  already-boxed scheme value reaching this entry means the caller is confused
@@ -268,18 +256,16 @@ export function toJS(value: SchemeValue) {
   if (is_callable_value(value)) return callableToHostFn(value, {});
   // Containers cross via the membrane protocol under default options — egressAValue
   // shares rosetta's default-mode slots, so `toJS(v) === schemeToJs(v)` holds and a
-  // NESTED callable gets the same host-fn face a bare top-level one gets right above
-  // (it used to degrade to its print string). Non-container AValues fall through to
-  // their serialization protocol inside egressAValue; non-AValue scheme orphans keep
-  // the direct protocol call — both byte-identical to the old single dispatch.
+  // NESTED callable gets the same host-fn face a bare top-level one gets right above.
+  // Non-container AValues fall through to their serialization protocol inside
+  // egressAValue; non-AValue scheme orphans keep the direct protocol call.
   if (value instanceof AValue) return egressAValue(value, {});
   return value["arrival/toJS"]();
 }
 
 // Polyglot member access lives ON the values (tagless algebra, AValue.ts):
 // `arrival/tagless-final/get|has|keys` — ADict structurally, AJSObject/AJSArray
-// through the interop read policy (interop-access.ts) over their borrowed
-// source. The former membrane faces (readMember/hasMember/memberKeys) are
-// dissolved: env/polyglot/polyglot.ts's `@`/`@?`/`@keys` verbs — their only production
-// consumer — normalize the key and invoke the terms directly. Absence IS the
-// semantics; nothing membrane-level remains of the read protocol.
+// through the interop read policy (interop-access.ts) over their borrowed source.
+// The membrane has no member-read face: env/polyglot/polyglot.ts's `@`/`@?`/`@keys`
+// verbs — the only production consumer — normalize the key and invoke the value
+// terms directly.

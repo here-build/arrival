@@ -61,8 +61,6 @@ import srfi1 from "../srfi/srfi-1.js";
 const applicable = z.union([z.lambda, z.symbol]);
 
 export default new EnvCapability("scheme/polyglot-clojure", {
-  // deps order matches base-packs.ts's C3 tail-block order (dependents before
-  // dependencies) — see the header's DEPS list and base-packs.ts's own header.
   deps: [polyglot, srfi1, equality, numeric, strings, vectors, lists],
   symbols: {
     // ═══════════════════════════════════════════════════════════════════════════
@@ -348,12 +346,12 @@ export default new EnvCapability("scheme/polyglot-clojure", {
     // array (not a scheme list — filter/map need the term protocol), so
     // `vector->list` (R7RS §6.8 — a raw JS array is representation-blind as a
     // vector here, per z.vector) lifts it first.
-    // k v are placed LAST (not first): `dict`'s own key resolution (stringify, strip a
-    // leading `:`) normalizes a keyword / symbol / string key to the
-    // SAME underlying JS-object key as an already-stored string key — a plain `equal?`
-    // comparison can't see that (a pluck closure is never `equal?` to a string), but
-    // sequential `obj[key] = value` assignment naturally dedupes on the LAST write. So
-    // no explicit exclusion is needed: k v simply overwrite whatever ks/vs already wrote.
+    // k v are placed LAST (not first): `dict` normalizes a keyword / symbol / string
+    // key to the same fold-name as an already-stored string key (stringify, strip a
+    // leading `:`), and resolves duplicate fold-names last-write-wins. So no explicit
+    // exclusion is needed: k v simply overwrite whatever ks/vs already wrote for the
+    // same key — a plain `equal?` scan couldn't catch that (a pluck closure is never
+    // `equal?` to a string), but dict's fold-name dedup does.
     "%dict-set": symbol.define`%dict-set: a NEW dict with key k set to v, everything else preserved; applied to nil it mints a fresh single-key dict (private helper)`(
       // k: keyword/symbol/string (dict's own normalization is the semantics);
       // v: anything. Output IS unconditionally a dict.

@@ -1,6 +1,6 @@
 // Spine ADOPTION — the transition map that gives a borrowed array its list chart.
 //
-// This is the mechanism behind law #2 (`AJSArrayList.ts`'s header): THE CONSUMER'S CONTRACT
+// This is the mechanism behind law #2 (`APair.ts`'s AJSArrayList header): THE CONSUMER'S CONTRACT
 // SELECTS THE CHART. A verb that declares `z.listAlike` is saying "I read my argument as a spine",
 // and adoption is what honors that — it hands the body an `AJSArrayList` view over the SAME backing
 // array, with the SAME provenance. No copy, no codec, O(1).

@@ -149,7 +149,7 @@ export interface RegionScope {
   readonly cache: WeakMap<object, Map<WrapperKey, (...args: unknown[]) => unknown>>;
 
   /** Per-(box, mode, scope) MEMBRANE egress-proxy identity — the container twin of
-   *  `cache` above (values/egress-proxy.ts consumes it via `MembraneExit.cache`;
+   *  `cache` above (egress-proxy.ts consumes it via `MembraneExit.cache`;
    *  rosetta's `egressAValue` hands it over from the pinned scope). Scope-owned for
    *  the same reason wrappers are: a membrane proxy's elements materialize under the
    *  pinned scope, so proxies must not outlive it into a later invocation (closed-

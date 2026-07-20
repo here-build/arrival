@@ -27,20 +27,19 @@ export type BindingName = string | symbol | ASymbol | AString;
 export type AmbientValue = SchemeValue | AProcedure | Macro | Syntax | EOF | AmbientRuntime | RegExp;
 
 // -------------------------------------------------------------------------
-// :: Member access — both pure functions of leaf values, owned directly by
-// :: AmbientRuntime: own-keys enumeration (matching what clone() preserves) for
-// :: list(), and the dot-notation member walk (foo.bar.baz) for get().
+// :: Member enumeration — own string keys + own symbols of a binding record,
+// :: the leaf helper list() (and allBoundNames through it) builds on.
 // -------------------------------------------------------------------------
 
-/** Own string keys + own symbols of a binding record (what `clone()` preserves). */
+/** Own string keys + own symbols of a binding record — what list() enumerates. */
 function ownProps(obj: object): (string | symbol)[] {
   return [...(Object.keys(obj) as (string | symbol)[]), ...Object.getOwnPropertySymbols(obj)];
 }
 
 /**
  * The RAW frame minters — module-internal (deliberately NOT barrel-exported; same
- * discipline as {@link bindValue}), the ONE way a frame is born now that the
- * constructor arm left the public type. Declared as `let` + assigned inside each
+ * discipline as {@link bindValue}), the ONE way a frame is born: the constructor
+ * arm is not on the public type. Declared as `let` + assigned inside each
  * class's static block (the only scope a protected constructor is callable from).
  * Production birth goes through {@link mintFrame} (subtype-preserving child) or a
  * null-parent call here (an isolated root); the storage-law tests reach these raws
@@ -70,18 +69,15 @@ export let mintResolvingFrame!: (
  *     capabilities.lookup` — and is the single object the evaluator threads
  *     (`EvalContext.resolver`). `resolver.env` is the underlying lexical frame.
  *
- * Fallback resolvers used to live on EVERY AmbientRuntime instance, even though only
- * the baked capability roots (`global_env`/`user_env`, env-roots.ts) ever have any
- * registered in production — every let/lambda/letrec frame carried a dead-weight
- * `__resolvers__: []` and paid an empty loop on every lookup miss. Resolvers now
- * live ONLY on {@link ResolvingAmbient} (below); a plain `AmbientRuntime` frame's
- * `_lookupWithResolvers` is own-bindings → parent, no middle leg. Polymorphic
- * dispatch means a plain lexical frame chaining up to a `ResolvingAmbient` root
- * (`__parent__`-linked) still consults that root's resolvers correctly — the walk
- * is unchanged end-to-end, only the per-frame cost of frames that never had
- * resolvers to begin with. GLASS mode (a caller-supplied custom env chain) is
- * unaffected: it keeps the exact walk it always had, resolver-capable at whichever
- * layer was constructed as `ResolvingAmbient`.
+ * Fallback resolvers live ONLY on {@link ResolvingAmbient} (below); a plain
+ * `AmbientRuntime` frame's `_lookupWithResolvers` is own-bindings → parent, no middle
+ * leg. Only the baked capability roots (`global_env`/`user_env`, env-roots.ts) ever
+ * register resolvers in production, so the let/lambda/letrec frames a program introduces
+ * carry no resolver array and pay no empty lookup-miss loop. Polymorphic dispatch still
+ * lets a plain lexical frame chaining up to a `ResolvingAmbient` root (`__parent__`-linked)
+ * consult that root's resolvers — the walk is correct end-to-end. GLASS mode (a
+ * caller-supplied custom env chain) stays resolver-capable at whichever layer was
+ * constructed as `ResolvingAmbient`.
  *
  * INTERNAL-ONLY: not on the public surface (see index.ts). Cross-package consumers
  * type against the structural `SchemeEnv` contract (common/scheme-env.ts), never
@@ -90,9 +86,9 @@ export let mintResolvingFrame!: (
  * (which {@link LexicalScope} owns) or "Frame".
  *
  * MONADIC FROM JS (hermetic-Environment ruling): an env can only
- * be BORN (assembled) and READ — never mutated, never extended, from the JS side. The
- * old public birth surface (`inherit()`/`merge()` methods, the bindings-record/parent
- * constructor arm) is gone from the public type; frame birth is the module-internal
+ * be BORN (assembled) and READ — never mutated, never extended, from the JS side. There
+ * is no public birth surface (no `inherit()`/`merge()` methods, no bindings-record/parent
+ * constructor arm); frame birth is the module-internal
  * {@link mintFrame}/{@link mintPlainFrame}/{@link mintResolvingFrame} (the same
  * not-barrel-exported discipline as {@link bindValue} — the assembly machinery, the
  * evaluator, and the replay ingress reach them; nothing else does).
@@ -136,9 +132,8 @@ export class AmbientRuntime {
 
   /**
    * Resolve a name within one env layer before yielding to its parent. Own bindings win
-   * over the parent (a closer module shadows a deeper dependency) — the resolver leg
-   * that used to sit between them lives only on {@link ResolvingAmbient} now;
-   * a plain frame is own → parent, full stop.
+   * over the parent (a closer module shadows a deeper dependency); the resolver leg
+   * lives only on {@link ResolvingAmbient}, so a plain frame is own → parent, full stop.
    */
   _lookupWithResolvers(name: string | symbol, ctx?: RunContext): AmbientValue | undefined {
     if (Object.hasOwn(this.__env__, name as string)) {
@@ -202,12 +197,11 @@ export class AmbientRuntime {
 }
 
 /**
- * The raw-scalar predicate both storage doors share: exactly the JS leaf types the
- * retired read-path `box()` used to coerce (string/number/bigint) plus the boolean it
- * silently passed through raw. Everything else storable is either a scheme value, a
- * sanctioned carve-out (fn/Error — see {@link bindValue}), or a structural runtime
- * type (Macro/Syntax/AmbientRuntime/RegExp/EOF) — none of which are "raw JS crossed
- * unboxed."
+ * The raw-scalar predicate both storage doors share: the JS leaf types (string/number/
+ * bigint/boolean) that must never surface from inside the membrane. Everything else
+ * storable is either a scheme value, a sanctioned carve-out (fn/Error — see
+ * {@link bindValue}), or a structural runtime type (Macro/Syntax/AmbientRuntime/RegExp/
+ * EOF) — none of which are "raw JS crossed unboxed."
  */
 function isRawJsScalar(value: unknown): value is string | number | bigint | boolean {
   const t = typeof value;
@@ -241,9 +235,9 @@ export function assertResolvedBinding(value: unknown, name: string | symbol, res
 /**
  * The ONE storage write — module-internal, deliberately NOT barrel-exported and NOT a
  * method (the hermetic-Environment ruling: "not designed to be operatable from the JS
- * side at all; from JS, it's fully monadic"). The public `AmbientRuntime.set` method and
- * the `SchemeEnv.set` contract member are hard-deleted (same cut shape as
- * `defineRosetta`, commit 9a1a533779); the writers that legitimately remain are all
+ * side at all; from JS, it's fully monadic"). There is no public storage write — no
+ * `AmbientRuntime.set` method, no `SchemeEnv.set` contract member (the same cut as the
+ * retired `defineRosetta` public method); the writers that legitimately remain are all
  * inside the membrane:
  *
  *   • the EVALUATOR's frame binds — scheme `define`/let/lambda/letrec/catch, called
@@ -261,7 +255,7 @@ export function assertResolvedBinding(value: unknown, name: string | symbol, res
  *     kinds bind first-class ANativeProcedures instead.
  *   • `Error` — the evaluator's catch-frame bind of a raised condition object
  *     (evaluator.ts's catch-frame `bindValue(catchResolver.env, varName, errorValue)`): R7RSError extends
- *     the host `Error`, NOT AValue, so `isSchemeValue` misses it — verified reachable
+ *     the host `Error`, NOT AValue, so `isSchemeValue` misses it — reachable
  *     via any `(guard (e ...) (raise (error ...)))` round-trip.
  *   • the `fromJS` tail — BAKE-TIME boxing for the raw-value authoring arms
  *     (capability.ts's `{ value }` defs, `require`-resolved leaves). Pre-run by
@@ -383,11 +377,11 @@ export class ResolvingAmbient extends AmbientRuntime implements SchemeEnv {
 /**
  * The ONE frame-birth door — module-internal, deliberately NOT barrel-exported and NOT
  * a method (the hermetic-Environment ruling extended to birth: an env can only be BORN
- * — assembled — and READ from JS; the retired public `inherit()`/`merge()` were
- * capability composition in disguise). Subtype-preserving: a `ResolvingAmbient`
- * parent mints a resolver-capable child (the per-assembly `exec-capabilities` base off
- * `user_env` stays a machinery target), a plain parent mints a plain lexical frame —
- * the same dispatch the covariant `inherit` override used to encode, now in one place.
+ * — assembled — and READ from JS; a public `inherit()`/`merge()` would be
+ * capability composition in disguise, so neither exists). Subtype-preserving: a
+ * `ResolvingAmbient` parent mints a resolver-capable child (the per-assembly
+ * `exec-capabilities` base off `user_env` stays a machinery target), a plain parent
+ * mints a plain lexical frame — dispatch on the parent's runtime class, in one place.
  *
  * The live callers, all inside the membrane:
  *   • ROOT LAYERING — `env-roots.ts` (`user_env` off `global_env`) and
@@ -442,7 +436,7 @@ export function bindRosetta(env: AmbientRuntime, name: string, config: RosettaFu
   const wrapper = createRosettaWrapper(config);
   bindValue(env, name, wrapper);
   // `config.pure` is consumed INSIDE createRosettaWrapper (the runtime mint gate,
-  // `mintsPoint = pure !== true`) — no static side-table records it any more; the
+  // `mintsPoint = pure !== true`) — no static side-table records it; the
   // static classifier reads the declared `.provenanceRole` off baked bound values
   // instead (provenance/lineage-classifier-from-env.ts). Legacy-registered names
   // carry no role and fall to the classifier's `undefined` default.
@@ -453,8 +447,8 @@ export function bindRosetta(env: AmbientRuntime, name: string, config: RosettaFu
  * Brand check for a concrete arrival AmbientRuntime — the module-dup-robust replacement for
  * `x instanceof AmbientRuntime`. In the browser (Vite dev serves a module at `?t=<hmr>`,
  * `/@fs`, and `.vite/deps` as DISTINCT module instances) an env built by one copy of the
- * class is NOT `instanceof` another copy's class, so every capability-apply / exec guard
- * spuriously threw `AmbientShapeError`. The static `[CLASS] = "environment"` brand is keyed by
+ * class is NOT `instanceof` another copy's class, so an instanceof guard spuriously
+ * rejects a real frame (`AmbientShapeError`). The static `[CLASS] = "environment"` brand is keyed by
  * the STRING `"arrival/class"` (well-known-symbols.ts) — a string key is universal across
  * module copies, and it's inherited by `ResolvingAmbient`, so reading it off the value's
  * constructor recognizes any real frame regardless of which module instance minted it.

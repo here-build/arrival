@@ -9,11 +9,6 @@
 // reflective/macro-only CL cousins — are doored instead, in the Common Lisp
 // section of env/polyglot-stubs.ts.
 //
-// mapcar — Common Lisp: identical argument order to R7RS map (proc, then one
-// or more lists), so it is a direct alias.
-// remove-if / remove-if-not — Common Lisp: filter, with the sense of the
-// predicate flipped / kept.
-//
 // DEPS: cross-capability free names (the FV-locality rule is stated once in
 // polyglot.ts's header) —
 //   srfi-1   — filter

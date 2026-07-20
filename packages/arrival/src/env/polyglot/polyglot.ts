@@ -25,19 +25,18 @@
 // polyglot-clojure's `zipmap`/`%dict-set`, polyglot-racket's `alist->dict`) —
 // the "private helpers travel with whichever pack keeps their sole consumers"
 // rule doesn't apply once there's more than one consumer family.
-// `%dict-guard` did NOT stay here, on the same rule: its only consumers are
-// polyglot-racket's dict-* family, so it moved there with them (JUDGMENT: kept
-// as shared core would have forced racket to "dep back" on core for a helper it
-// alone uses, for zero benefit — racket already deps on core for `@`/`@?`/`@keys`/
-// `dict`, so moving %dict-guard costs nothing and keeps a single-consumer helper
-// beside its consumers, same principle `%conj-list`/`%dict-set` follow in
-// polyglot-clojure.ts).
+// `%dict-guard` lives in polyglot-racket.ts instead, by that same rule: its sole
+// consumers are racket's dict-* family. Core placement would force racket to
+// declare a dep back on core for a helper it alone uses, for zero benefit (racket
+// already deps on core for `@`/`@?`/`@keys`/`dict`) — same principle
+// `%conj-list`/`%dict-set` follow in polyglot-clojure.ts.
 //
 // MEMBER ACCESS — the polyglot read protocol is part of this family. `@` / `@?` /
 // `@keys` (the explicit read/has/keys surface) and `(:key obj)` (the keyword
-// accessor, Clojure-style) are TWO SYNTAXES over ONE interop read — Graal's
-// `InteropLibrary.readMember` — implemented as `readMember`/`hasMember`/`memberKeys`
-// in membrane.ts. They are origin-agnostic: a dict, a membrane-exposed foreign
+// accessor, Clojure-style) are TWO SYNTAXES over ONE interop read (mirroring
+// Graal's `InteropLibrary.readMember`), dispatching onto the receiver's own
+// `arrival/tagless-final/get|has|keys` terms (AValue.ts). They are origin-agnostic:
+// a dict, a membrane-exposed foreign
 // value, and an array all read the same way (arrival is a polyglot runtime, not a
 // host with a fenced guest). They thread with the idioms in the sibling packs:
 // (->> p :versions last :state). The reads are NOT declarations in the define set
@@ -69,7 +68,7 @@
 // this core) — base-packs.ts positions it after all three dialect packs and
 // before `lists` accordingly.
 //
-// Wiring-only (no resources) → pause-trivial. NOTE: scoped to the self-contained
+// Wiring-only (no resources) → pause-trivial. Scoped to the self-contained
 // idiom family — cut/cute (which need gensym + JS interop) ship as SRFI-26 instead.
 //
 // SINGLE SOURCE: `base-packs.ts` assembles this pack (via initBridge's assembleEnv),
@@ -91,12 +90,11 @@ import { type AValue } from "../../values/primitives/AValue.js";
 import equality from "../r7rs/equality.js";
 import lists from "../r7rs/lists.js";
 
-// The `@`/`@?`/`@keys` verbs ARE the member-access protocol's face now: key
+// The `@`/`@?`/`@keys` verbs ARE the member-access protocol's face: key
 // normalization + direct dispatch onto the receiver's own
 // `arrival/tagless-final/get|has|keys` terms (ADict structurally, AJSObject/
-// AJSArray through the interop read policy over their borrowed source).
-// membrane.ts's readMember/hasMember/memberKeys faces are dissolved — the verbs
-// were their only production consumer, so the indirection carried nothing.
+// AJSArray through the interop read policy over their borrowed source) — no
+// intermediate membrane face.
 // ABSENCE IS THE SEMANTICS: a term-less receiver (scheme leaf, raw FFI value,
 // function) answers nil/false/() — never a value's internal provenance/kind.
 
@@ -179,11 +177,10 @@ export default new EnvCapability("scheme/polyglot", {
       function (this: CallCtx, obj: unknown) {
         const keys = obj == null ? undefined : (obj as Partial<AValue>)["arrival/tagless-final/keys"];
         const names = typeof keys === "function" ? keys.call(obj) : [];
-        // Live invocation ctx — `this: CallCtx` already carries it (dispatch's
-        // `hostImpl.apply(makeCallCtx(runCtx), args)`, common/capability.ts); minting
-        // under CONSTANT_CTX here was the CONSTANT_CTX-audit's dict-key-adjacent
-        // "high blast" finding for this pack (§2.2) — every `(@keys d)` call built
-        // its result strings run-invisible despite `this.runCtx` sitting one read away.
+        // Mint each key string under the live invocation ctx — `this.runCtx`,
+        // carried by `this: CallCtx` (dispatch's `hostImpl.apply(makeCallCtx(runCtx),
+        // args)`, common/capability.ts). Under CONSTANT_CTX the result strings mint
+        // run-invisible: outside the run's heap meter, cache, and effect tracking.
         return names.map((k) => new AString(this.runCtx, k));
       },
     ),
@@ -201,24 +198,21 @@ export default new EnvCapability("scheme/polyglot", {
       // over a flat variadic without a shape that no longer matches the real call
       // form. The OUTPUT is unconditional: this impl always builds (and only ever
       // builds) an ADict.
-      // v2 `dict` is a function (bare `dict()` = the open/homogeneous ADict codec) — was a bare
-      // `z.instanceof(ADict)` constant in v1. This op always builds an open-key ADict, so `dict()`.
+      // The output contract is `dict()` — the open/homogeneous ADict codec — because
+      // this op always builds an open-key ADict.
       { input: z.array(z.value), output: [z.dict()] },
       // Duplicate keys are last-write-wins: a Map re-set on an existing fold-name
-      // updates the value but keeps the FIRST occurrence's iteration position —
-      // the same behavior the old plain-object `obj[key] = value` loop had. ADict's
+      // updates the value but keeps the FIRST occurrence's iteration position. ADict's
       // own constructor requires unique fold-names up front (throws otherwise), so
       // resolving duplicates down to one pair per name is this call site's job.
       //
-      // A real `function(this: CallCtx, …)`, not an arrow — the CONSTANT_CTX-audit's
-      // "high blast" finding for this pack (§2.2): dispatch delivers the live ctx via
-      // `this: CallCtx` (common/capability.ts's `hostImpl.apply(makeCallCtx(runCtx),
-      // args)`), but an arrow-fn impl structurally cannot read `this` — every `(dict
-      // …)` call built its ADict + every key's ASymbol run-invisible despite the ctx
-      // sitting one hop away. Also heap-charges the fresh ADict (CONSTANT_CTX-audit's
-      // #2 worst bug — an unbounded interleaved arg list is the same unmetered-spine
-      // shape `scheme-zod.ts`'s container codecs close): mirrors `to_array`'s rule,
-      // off `this.runCtx`.
+      // A real `function(this: CallCtx, …)`, not an arrow: dispatch delivers the live
+      // ctx via `this: CallCtx` (common/capability.ts's `hostImpl.apply(makeCallCtx(
+      // runCtx), args)`), and an arrow-fn impl structurally cannot read `this` — every
+      // `(dict …)` call would mint its ADict + every key's ASymbol run-invisible,
+      // outside the run's ctx. Heap-charge the fresh ADict off `this.runCtx`: an
+      // unbounded interleaved arg list is the same unmetered-spine shape
+      // `scheme-zod.ts`'s container codecs close (mirrors `to_array`'s rule).
       function (this: CallCtx, ...args: unknown[]): ADict {
         const byName = new Map<string, [DictKey, SchemeValue]>();
         for (let i = 0; i + 1 < args.length; i += 2) {

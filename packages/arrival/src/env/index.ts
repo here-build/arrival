@@ -1,23 +1,22 @@
-// The `/env` subpath — the DECOMPOSED-processing surface (privatization D1: the phase
-// products + `assembleAmbient` land HERE, extending the assembly kernel's existing
-// re-export surface — NOT the barrel, NOT a new `/advanced`).
-//
-// Two strata, one honest home ("environment as an explicit product" is literally what
-// decomposed processing means):
+// The `/env` subpath. Two strata share this one home — "environment as an explicit
+// product" is what the phase-decomposed exec path is about, so the phase products belong
+// on the env subpath alongside the assembly kernel: NOT the root barrel, NOT a new
+// `/advanced` subpath.
 //
 //   • the CAPABILITY-DAG ASSEMBLY KERNEL (common/kernel.ts) — `assembleEnv`, packs,
-//     the runtime assembler, the assembly errors. This is what `/env` has always been.
-//   • the EXEC PHASE PRODUCTS (exec-phases-and-dynamic-metadata.md Part III) —
-//     `parseProgram` → `ParsedProgram` (phase 1), `assembleAmbient` → `AssembledAmbient`
-//     (phase 2, `AsyncDisposable`, with the `describeSymbol`/`catalog` metadata read
-//     surface), `validateAgainstAmbient`/`classifyProgram` (the pure phase-2.5 passes),
-//     and the `ExecInstance` type (phase 3). `exec(code, { ambient, program, scope })`
-//     composes them; the barrel keeps only the simple cases.
+//     the runtime assembler, the assembly errors. The subpath's original face.
+//   • the EXEC PHASE PRODUCTS — `parseProgram` → `ParsedProgram` (phase 1),
+//     `assembleAmbient` → `AssembledAmbient` (phase 2, `AsyncDisposable`, carrying the
+//     `describeSymbol`/`catalog` metadata read surface — the describe-time read channel,
+//     common/symbols/metadata.ts DESCRIBE-TIME READ CHANNEL),
+//     `validateAgainstAmbient`/`classifyProgram` (the pure phase-2.5 passes), and the
+//     `ExecInstance` type (phase 3). `exec(code, { ambient, program, scope })` composes
+//     them; the barrel keeps only the simple cases.
 //
 // Everything is re-exported EXPLICITLY (no star) so the public surface of the subpath is
 // visible at this barrel — same convention as the package root.
 
-// ── the assembly kernel (the subpath's original face — byte-compatible re-export) ──────
+// ── the assembly kernel — the subpath's original face ──
 export {
   assembleEnv,
   createRuntimeAssembler,

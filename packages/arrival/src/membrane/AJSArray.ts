@@ -1,9 +1,8 @@
 /**
  * AJSArray — the AValue term that re-presents a borrowed JS array as a vector inside the
  * Scheme value space. It carries the run ctx + provenance and its own tagless-final (vector)
- * algebra, so it lives here in primitives/ with the rest of the term family. Split from its
- * membrane sibling AJSObject (AJSObject.ts) so each borrowed-value wrapper is its own file.
- * See the class doc below for the implements-not-extends-AVector cycle rationale.
+ * algebra; the object sibling AJSObject is a separate term with its own algebra. See the
+ * class doc below for the implements-not-extends-AVector cycle rationale.
  *
  * IMPORT CYCLE (benign): `jsToScheme` (rosetta.ts) is a hoisted `export function` declaration
  * whose module statically imports this class — so importing it here closes a runtime import
