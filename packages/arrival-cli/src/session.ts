@@ -43,7 +43,7 @@ function heapDefault(): number {
   return Number.isFinite(raw) && raw > 0 ? raw : 100_000_000;
 }
 
-/** Wall-clock budget — the 5-minute program class (V2 ruling), same env var as arrival-run. */
+/** Wall-clock budget — the 5-minute program class, same env var as arrival-run. */
 function wallDefault(): number {
   const raw = Number(process.env.ARRIVAL_RUN_BUDGET_MS);
   return Number.isFinite(raw) && raw > 0 ? raw : 300_000;
@@ -126,9 +126,8 @@ const PRINT_OPTS = { maxItems: 64, maxStringChars: 1024, maxTotalChars: 16_384 }
 /**
  * One top-level form's value → stdout. `undefined` (define / void) prints nothing —
  * REPL norm. `mode` is the display boundary (output-mode.ts): omit it (the REPL's plain
- * path, and any legacy caller) and the output is byte-identical to before — plain
- * uncolored s-expr. Pass a mode (the `run` verb) to opt into `--json` machine output or
- * TTY color.
+ * path) and the output is plain uncolored s-expr. Pass a mode (the `run` verb) to opt
+ * into `--json` machine output or TTY color.
  */
 export function printValue(v: unknown, mode?: OutputMode): void {
   if (v === undefined) return;

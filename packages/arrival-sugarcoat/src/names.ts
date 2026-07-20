@@ -273,10 +273,10 @@ function collectionFor(call: ListNode): string | undefined {
 
 export interface TidyOptions {
   /** Collection → singular noun for the rung-80 fan-out name. Default: `pluralize.singular`
-   *  — the SAME library the forward Python namer (`arrival-chain-view/python.ts`) uses to
-   *  name comprehension variables, so both sites derive an element noun from a collection
-   *  identically. A bad singular is ugly, never incorrect — the resolver still has the
-   *  original at rung 40. Injectable to override. */
+   *  — the SAME library Mercury's legibility element-namer (`arrival-mercury`'s
+   *  `elementNameOf`) uses to singularize a `.map`-style receiver's collection name, so both
+   *  sites derive an element noun from a collection identically. A bad singular is ugly, never
+   *  incorrect — the resolver still has the original at rung 40. Injectable to override. */
   singularize?: (word: string) => string;
   /** Extra names to block everywhere (caller globals not visible in the source text). */
   reserved?: readonly string[];

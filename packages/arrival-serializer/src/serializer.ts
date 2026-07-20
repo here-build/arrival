@@ -3,10 +3,36 @@ import "@here.build/arrival-env";
 const isNil = (element: any) => element?.constructor?.name === "ANil";
 
 /**
- * S-Expression Serializer
+ * S-expression serializer for Arrival — two phases over any JavaScript value.
  *
- * Provides a systematic way to convert JavaScript objects to arrival
- * using Symbol.toSExpr for custom representations
+ * `toSExpr` walks a value into an `SExpr` intermediate tree, dispatching each node through a
+ * `Symbol.toSExpr` custom representation (LIPS pairs/exacts/symbols, AValues, the context marker
+ * objects) and detecting cycles with a DFS path-set. `formatSExpr` renders that tree to text.
+ * Three entry points share the one walk: `toSExprString` (text), `toSExprStringWithElisions`
+ * (+ the collected `ElisionRecord`s), and `serializeWithExtras` (+ extracted binary blobs). The
+ * extra sinks are ADDITIVE — the plain `toSExprString` path stays byte-identical whether or not
+ * a sink is active.
+ *
+ * PARSEABLE REDUCTION (the one law). Every way this serializer drops content — per-collection
+ * tail-truncation, middle-elision, per-string capping, binary-leaf extraction, and the final
+ * pathological hard-cut — leaves output that STILL PARSES and round-trips to the shown sample.
+ * A reduction signals INLINE, never with a top-of-output banner and never silently
+ * (errors-as-doors): a `#| … |#` block comment the reader ignores, or a
+ * `#attachment "att-N (mime, size)"` tagged literal whose blob rides a separate content block.
+ * The inline markers ARE the signal.
+ *
+ * FAIR SHRINK-TO-FIT. Caps are opt-in — a bare indent renders uncapped. When set, per-element
+ * limits apply STREAMING: the tail of a 10k-element array is never serialized, it costs
+ * `maxItems`. If the capped render still exceeds `maxTotalChars`, the limits SHRINK uniformly and
+ * re-render rather than tail-cutting the text — a tail-cut would gut a sibling (sever PSSCAN from
+ * a `(list PSLIST PSSCAN)` diff). Only floor-still-over-budget falls back to a hard content cut,
+ * itself marked inline.
+ *
+ * SYNCHRONOUS MODULE STATE. The per-render context — `activeCaps`, `activeCollector`,
+ * `activeElisionSink`, `activeLineageEnvelopes` — lives at module scope, not threaded through
+ * every recursive `toSExpr`. Safe because serialization is SYNCHRONOUS: no re-entrancy within one
+ * call. Each is saved and restored (not merely reset) so a caller's `format` callback that
+ * re-enters a serializer entry point cannot clobber the outer call's state.
  */
 
 export const SEXPR_TAG = Symbol.for("expression");

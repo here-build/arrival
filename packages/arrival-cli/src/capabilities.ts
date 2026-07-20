@@ -1,7 +1,7 @@
 /**
- * HOST-SIDE CAPABILITY ARMING (V's ruling: capabilities are armed by the HOST only —
- * CLI args + config file; `(require …)` stays the module loader and NEVER arms
- * authority — the doors teach absence).
+ * HOST-SIDE CAPABILITY ARMING: capabilities are armed by the HOST only — CLI args +
+ * config file; `(require …)` stays the module loader and NEVER arms authority — the
+ * doors teach absence.
  *
  * Two channels, one product ({@link ArmedCapabilities}):
  *
