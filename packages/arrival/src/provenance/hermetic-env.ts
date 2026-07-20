@@ -12,12 +12,11 @@
  *   1. a FRESH `mintFrame(user_env)` child — isolation (no cross-replay bleed), while
  *      still inheriting the standard assembled base (`user_env → global_env`) for free;
  *   2. `basePacks` (the program's OWN capabilities — mcp/infer/…, if the original run
- *      used any) lowered and set as the prelude pack's `deps` — `common/scheme-env.ts`'s
- *      own documented idiom: "Because the kernel applies packs in C3 (dependency)
- *      order, a dependency's macros/defs are present before a dependent's bootstrap
- *      runs — the bootstrap sequence falls out of the DAG, not a hand-maintained
- *      order." This is exactly why the prelude pack declares them as deps rather than
- *      relying on array-order incidence;
+ *      used any) lowered and set as the prelude pack's `deps` — so the kernel applies
+ *      them in C3 (dependency) order and a dependency's macros/defs are present before
+ *      the prelude's bootstrap runs (the bootstrap sequence falls out of the DAG, not a
+ *      hand-maintained order; `common/scheme-env.ts`). This is why the prelude pack
+ *      declares them as deps rather than relying on array-order incidence;
  *   3. the PRELUDE pack: `schemePacks`' `bootstrap` field evaluates the joined
  *      pure-define source (`prelude.ts`'s `buildPreludeSource`) — landing every pure
  *      define as an ORDINARY BINDING on the same `base` env every pack applies onto

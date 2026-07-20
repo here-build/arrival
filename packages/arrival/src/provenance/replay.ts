@@ -354,8 +354,6 @@ export async function replayProgramWithPlayback(opts: PlaybackReplayOptions): Pr
     const frame = mintFrame(base, "provenance-playback");
     for (const [op, payloads] of playback) {
       const queue = [...payloads];
-      // `frame.defineRosetta` retired (public method hard-deleted) — `bindRosetta`
-      // (AmbientRuntime.ts) is the same wiring, internalized.
       bindRosetta(frame, op, {
         fn: () => {
           const next = queue.shift();

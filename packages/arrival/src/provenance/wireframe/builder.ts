@@ -76,7 +76,7 @@
  * BARE DECLARED-ROLE REFERENCES: `walkForCuts` designates a node for a
  * declared-role name (source/sink/fan/loop) occurring as a bare VALUE, not just
  * at an application head — closing a HOF hole's SILENT half
- * (`(define (call-source f) (f)) (call-source fetch-item)`: `fetch-item` now
+ * (`(define (call-source f) (f)) (call-source fetch-item)`: `fetch-item`
  * cuts to a `source` node at the argument occurrence, so the prospective cone
  * sees it even though the call that actually fires it, `(f)`, is hidden behind
  * a parameter string-based dispatch can't follow). LIMIT, deliberately
@@ -151,7 +151,7 @@ interface WalkEnv {
   readonly recur?: { readonly name: string };
 }
 
-// ── local surface helpers (lineage.ts keeps its own private copies; same shapes) ──
+// ── local surface helpers (../lineage.js keeps its own private copies; same shapes) ──
 
 function opName(x: unknown): string {
   const v = (x as { valueOf?: () => unknown })?.valueOf?.();
@@ -466,7 +466,7 @@ class GraphBuilder {
           return;
         case "loop": {
           // A declared-`loop` op with no known recursive shape (dead code
-          // today — no live declaration uses this role, provenance/lineage.ts's
+          // today — no live declaration uses this role, ../lineage.js's
           // DeclaredRole doc): designate the node with an EMPTY interior;
           // operands wire as ordinary ingress (buildArgNode's path) — inventing
           // iteration semantics for a combinator with none observed is not this
@@ -602,7 +602,7 @@ class GraphBuilder {
   private buildFan(expr: APair<SchemeValue, SchemeValue>, op: string, env: WalkEnv): number {
     const args = operands(expr);
     const fn = args[0];
-    // Mirrors lineage.ts's fan arm: map/vector-map preserve length; filter does not.
+    // Mirrors ../lineage.js's fan arm: map/vector-map preserve length; filter does not.
     const lengthPreserving = op === "map" || op === "vector-map";
     let template: WireframeGraph | undefined;
     let elementParams: string[] | undefined;

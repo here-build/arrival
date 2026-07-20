@@ -26,7 +26,7 @@
  * expression, structurally, never expanding a call site into its callee). So a caller
  * of a port-reaching helper looks pure to `classify()` alone. This module closes that
  * gap with its OWN fixpoint over the top-level CALL GRAPH, reusing `slice.ts`'s
- * battle-tested `referencedSymbols` (the same coarse, over-approximating reference
+ * `referencedSymbols` (the same coarse, over-approximating reference
  * closure the reverse-chain slicer already uses — ANY reference to a name, called or
  * merely passed as a first-class value, counts as an edge, which is the conservative
  * treatment the first-class-HOF risk calls for): a define referencing a port-reaching

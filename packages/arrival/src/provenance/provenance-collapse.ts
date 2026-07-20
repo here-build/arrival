@@ -27,27 +27,27 @@
 
 // ─── WHY THIS MODULE DISPATCHES ON A TERM, NOT ON `instanceof` (P7) ──────────────────────────
 //
-// It used to `import` APair / AVector / AJSArray and `instanceof`-dispatch over them to find each
-// carrier's children. Two things were wrong with that, one fatal:
+// Dispatch on the `arrival/provenanceChildren` term, never `instanceof APair / AVector / AJSArray`.
+// Two reasons, one fatal:
 //
-//   • ASYMMETRY. The classes ALREADY own this knowledge for the WRITE direction — `withProvenanceDeep`
-//     / `reStampChild` walk exactly these same children to re-stamp them. The READ direction
-//     (collapse) re-derived the same fact from outside, by type-testing. One fact, two mechanisms,
-//     and only one of them was on the class. P7 says the class is the sole authority on its own
-//     representation: `arrival/provenanceChildren` is the read-side twin, and now they cannot drift.
+//   • ASYMMETRY. The classes ALREADY own child-enumeration for the WRITE direction —
+//     `withProvenanceDeep` / `reStampChild` walk exactly these children to re-stamp them. P7: the
+//     class is the sole authority on its own representation, so `arrival/provenanceChildren` is the
+//     read-side twin and the two cannot drift. An outside `instanceof` walk re-derives the same
+//     fact from a second place and drifts.
 //
-//   • A MODULE-INIT CYCLE, which is what forced the issue. `AJSArrayList` (the borrowed array's
-//     spine chart) must `extends APair` — pair-ness is nominal in this tree. That makes APair
-//     required AT ITS CLASS-DEFINITION TIME. But APair imports collapseProvenance, and this module
-//     imported AVector/AJSArray, which construct the view... so evaluating APair first ran
-//     APair → provenance-collapse → AVector → AJSArrayList → `extends APair` (undefined). Boom.
-//     Dispatching on a term makes this module a LEAF (AValue + AString only), and the cycle is gone
-//     structurally — not deferred behind a lazy import that would re-arm the same trap later.
+//   • A MODULE-INIT CYCLE — the fatal one. `AJSArrayList` (the borrowed array's spine chart)
+//     `extends APair` — pair-ness is nominal in this tree — so APair is required AT ITS
+//     CLASS-DEFINITION TIME. APair imports collapseProvenance; an `instanceof` walk here importing
+//     AVector/AJSArray (which construct the view) closes the loop
+//     APair → provenance-collapse → AVector → AJSArrayList → `extends APair` (undefined). Term
+//     dispatch makes this module a LEAF (AValue + AString only), so the cycle is gone
+//     STRUCTURALLY — not deferred behind a lazy import that would re-arm the same trap later.
 //
-// The completeness requirement is UNCHANGED and now lives where it can be checked: a carrier that
-// reaches AValues must answer `arrival/provenanceChildren`, or its members are invisible here and
-// the wiring silently loses an edge. (AJSObject deliberately answers nothing — a dict's own point
-// is collected, but stringifying a dict is not a wiring path; access a member first.)
+// The completeness requirement lives where it can be checked: a carrier that reaches AValues must
+// answer `arrival/provenanceChildren`, or its members are invisible here and the wiring silently
+// loses an edge. (AJSObject deliberately answers nothing — a dict's own point is collected, but
+// stringifying a dict is not a wiring path; access a member first.)
 
 import { AString } from "../values/primitives/AString.js";
 import { AValue } from "../values/primitives/AValue.js";
@@ -76,7 +76,7 @@ export function collapseProvenance(...vals: unknown[]): Set<number> {
 }
 
 /** Re-stamp a collapsed string with provenance. Always the boxed AString (the scheme face —
- *  Face split; the old bare-string no-provenance fast path was the LIPS-legacy raw leak). */
+ *  Face split); never a bare string, which would drop the provenance just unioned. */
 export function taintString(result: string, prov: Set<number>): AString {
   return new AString(CONSTANT_CTX, result, prov);
 }

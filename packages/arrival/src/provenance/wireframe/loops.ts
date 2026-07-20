@@ -2,7 +2,7 @@
  * LOOP WIREFRAMING. Two independent halves live here:
  *
  *  1. Pure, GraphBuilder-free PARSING of `do`'s surface shape — `(do ((var init
- *     step?)…) (test result…) body…)`. Mirrors `provenance/lineage.ts`'s `classifyDo`
+ *     step?)…) (test result…) body…)`. Mirrors `../lineage.js`'s `classifyDo`
  *     (same raw-Pair walk, same R7RS default-step rule) rather than the evaluator's
  *     `normalizeBindings`/`normalizeClause` — this is a STATIC pre-execution read,
  *     same category as that file's own header note ("a bracket-clause surface is a
@@ -16,7 +16,7 @@
  *     `buildNamedLetBinder` reads both directly.
  *
  *  2. `reachableNodes` — a backward reachability walk over ONE `WireframeGraph`,
- *     carrying an explicit visited-set. `provenance/lineage.ts`'s `walk()` earns
+ *     carrying an explicit visited-set. `../lineage.js`'s `walk()` earns
  *     termination FOR FREE from classify()'s finite downward structural recursion
  *     (its own header: "no `LineageNode` object can reach itself through
  *     `.children`/`.child`" — an object-identity argument). A `WireframeGraph`
@@ -40,7 +40,7 @@
  *     the fan, not a length-verb). Every OTHER untagged wire is pruned WHOLESALE the
  *     instant it would be expanded, never contributing a node to the returned set —
  *     a count-demand cone traverses fact wires ONLY, touching ZERO element wires,
- *     made structural: mirrors `provenance/lineage.ts`'s retrospective
+ *     made structural: mirrors `../lineage.js`'s retrospective
  *     `countCone`/`walk`'s `countOnly` knob, whose fan arm calls `walk(n.source, …)`
  *     UNCONDITIONALLY and only prunes the per-element TRANSFORM when
  *     `countOnly && lengthPreserving`. The prospective graph never had a wire for
@@ -123,7 +123,7 @@ export function parseDoClause(clause: unknown): DoClause {
  *  follow a node's INGRESS wires (the wires whose `consumer.node` is the node
  *  being expanded) to whatever OTHER node indices they reference (`paramRefs`
  *  entries of kind `"node"`), recursively — see this file's header for why a
- *  `WireframeGraph` cannot borrow `provenance/lineage.ts`'s free acyclicity
+ *  `WireframeGraph` cannot borrow `../lineage.js`'s free acyclicity
  *  argument: this walk carries its own visited-set and earns termination
  *  directly, over any input shape (including a genuinely cyclic one — an
  *  unguarded version of this exact walk would not return on a graph where two
@@ -144,7 +144,7 @@ export type DemandGrade = "value" | "count";
  * Under `"count"`, a wire is followed iff EITHER:
  *   - it carries the builder's `fact` tag (the length-verb read itself), or
  *   - its consumer is a `fan` node's OWN `source`/`sourceN` slot — the STRUCTURAL
- *     PRODUCER (provenance/lineage.ts's retrospective mirror: `walk()`'s fan arm calls
+ *     PRODUCER (../lineage.js's retrospective mirror: `walk()`'s fan arm calls
  *     `walk(n.source, …)` UNCONDITIONALLY, count or not — the container-fact
  *     discipline says a fan's length is either PROXIED (map/sort: the container's
  *     OWN fact, unchanged) or PROVENANCED (filter/concat: freshly minted as a union

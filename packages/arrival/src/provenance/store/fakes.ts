@@ -255,8 +255,6 @@ export class PayloadStoreFake implements PayloadStore {
       tier: oversize ? "pending" : "do",
       value: payload.value,
       stampIds: payload.stampIds,
-      // "standard" is the default a `put` without an explicit tag settles to
-      // (interfaces.ts's `RetentionClass` doc).
       retention: payload.retention ?? "standard",
       scheduled: undefined,
     });

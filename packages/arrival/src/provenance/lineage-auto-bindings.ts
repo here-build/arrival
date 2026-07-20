@@ -1,5 +1,5 @@
 /**
- * The AUTO-BINDING runtime leaf-stamp. ADDITIVE + flag-gated + fully reversible.
+ * The AUTO-BINDING runtime leaf-stamp. ADDITIVE + flag-gated.
  *
  * PROBLEM: a manually-assembled `{ infer: inferIds }` global name→ids map COLLAPSES
  * the distinct invocations of one source name — `(map infer xs)` over 3 elements
@@ -16,17 +16,14 @@
  * infer id (unreachable from the `reactions` value) — the aliasing dissolves because
  * each capture is scoped to one invocation's symbol resolutions.
  *
- * Generalizes the already-shipped `argProvenance → buildInputsProvenance`
+ * Generalizes the `argProvenance → buildInputsProvenance`
  * `slot→producer-id[]` map (rosetta.ts's `argProvenance` capture +
  * llm-plane-arrival-env/prompt.ts's `buildInputsProvenance`) — same shape, built for the
  * carrier's free leaf slots from `deepProvenance(symbol-value)` instead of `.prompt` kwargs.
  *
- * HOOK + REVERSIBILITY. An `AutoBindings` instance attaches to an `EvalTrace`
- * explicitly (flag-gated); when present, `exit` records the invocation's symbol
- * resolutions into it, and when absent the trace touches nothing. Full revert:
- * delete this file, drop the `AutoBindings` import + the `autoBindings`/
- * `withAutoBindings` field+method + the `recordInvocation` call in trace.ts, and
- * drop `AutoBindings`/`slotsOf` from the arrival barrel (index.ts).
+ * HOOK. An `AutoBindings` instance attaches to an `EvalTrace` explicitly
+ * (flag-gated); when present, `exit` records the invocation's symbol resolutions
+ * into it, and when absent the trace touches nothing.
  */
 import { deepProvenance } from "./deep-provenance.js";
 import type { Bindings, LineageNode } from "./lineage.js";

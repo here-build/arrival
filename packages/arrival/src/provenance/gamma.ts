@@ -93,7 +93,7 @@ export async function hermeticApply(opts: HermeticApplyOptions): Promise<unknown
 // per-wire ingress frames, instead of re-assembling+re-sealing per wire.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** The teaching door `hermeticApply` always had, shared with every boxed γ face. */
+/** The teaching door `hermeticApply` exposes, shared with every boxed γ face. */
 function assertIngressCovers(wire: EmittedWire, ingress: IngressBindings): void {
   for (const name of wire.params) {
     if (!Object.hasOwn(ingress, name)) throw new IngressBindingError(wire.span, name);

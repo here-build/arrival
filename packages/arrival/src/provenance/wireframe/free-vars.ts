@@ -7,7 +7,7 @@
  * inner `(let ((y 1)) y)` must not demand `y` from the hermetic env).
  *
  * Scope-aware over exactly the special forms the evaluator dispatches directly and
- * `provenance/lineage.ts` models (`CLASSIFIED_SPECIAL_FORMS` + `define`/`case`/
+ * `../lineage.js` models (`CLASSIFIED_SPECIAL_FORMS` + `define`/`case`/
  * quasiquote): quote/quasiquote handled as data (unquote re-enters expression
  * space, depth-counted), the binder family (`lambda`, `let`-family incl. named
  * let, `do`, `define`) binds, everything else — including UNMODELED heads — walks
@@ -35,7 +35,7 @@ function nameOf(s: DuckSymbol): string | null {
 }
 
 /** Keyword-shaped names (`:foo`, length > 1) are accessors, not variables — mirrors
- *  `provenance/lineage.ts`'s `memberRead` keyword recognition. */
+ *  `../lineage.js`'s `memberRead` keyword recognition. */
 const isKeywordName = (name: string): boolean => name.length > 1 && name.startsWith(":");
 
 /** The elements of a (possibly improper) pair chain; the dotted tail is appended last. */
@@ -230,9 +230,11 @@ export function freeVars(form: unknown, opts: FreeVarsOptions = {}): Set<string>
             // walker re-derives its own copy of the evaluator's shape rather than
             // sharing one). ONE body form, then clauses. `catch`/`finally` markers are
             // structural literals (`evalTry` recognizes them BY NAME on the raw parsed
-            // form, exactly like `cond`'s `else`/`=>`) — never variables, so unlike the
-            // unmodeled-head default-arm fallthrough this file used to take for `try`,
-            // they must never be added to the free set. The catch VARIABLE binds for
+            // form, exactly like `cond`'s `else`/`=>`) — never variables, never added
+            // to the free set. Modeling `try` explicitly (rather than letting it fall
+            // to the unmodeled-head default arm) is what excludes them: that arm walks
+            // every clause element as expression space and would claim the markers as
+            // free. The catch VARIABLE binds for
             // its own handlers only. Unrecognized clauses are ignored by the evaluator —
             // skipped here too (walking them would claim crash sites the runtime never
             // runs).

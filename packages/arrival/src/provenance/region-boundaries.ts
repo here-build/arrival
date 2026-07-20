@@ -12,9 +12,9 @@
  * region that contains the consumer `C` but not the producer `P`, and an EXIT of
  * every region that contains `P` but not `C`. (The cohort's convergent region
  * model — RVSDG region ports, PROV Activity `used`/`wasGeneratedBy`, Naiad
- * ingress/egress — is exactly "what crosses the scope boundary".) It also replaces
- * elk-layout's "lift each edge to the nearest visible ancestor" heuristic with the
- * real boundary, computed once.
+ * ingress/egress — is exactly "what crosses the scope boundary".) This is the real
+ * boundary, computed once — not elk-layout's "lift each edge to the nearest visible
+ * ancestor" heuristic.
  */
 import { traceToStatechart } from "./statechart.js";
 import { snapshotTrace, type PlainInv } from "./trace-snapshot.js";

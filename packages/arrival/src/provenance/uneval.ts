@@ -65,10 +65,8 @@ export interface UnevalContainer {
  *  the run's EvalTrace (so the selector's step records, and the slice can read the whole lineage).
  *  `source` is the original program text (the v1 program render). */
 export function buildUneval(opts: {
-  // The post-run continuation pair (arrival-environment-privatization V4): the instance-env
-  // option this took pre-cut (`env: SchemeEnv`, a glass frame) is retired with the barrel's
-  // instance surface — a finished run's continuation handles are exactly `ExecState.scope` +
-  // `ExecState.ambient` / `RunHandle.scope` + `RunHandle.ambient`, so the container takes those.
+  // A finished run's continuation handles are exactly `ExecState.scope` + `ExecState.ambient`
+  // (equivalently `RunHandle.scope` + `RunHandle.ambient`): the container takes those two.
   scope: LexicalScope;
   ambient?: AssembledAmbient;
   result: unknown;

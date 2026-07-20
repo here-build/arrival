@@ -38,9 +38,9 @@ import { headOf, scopeId } from "./scope-id.js";
 import { snapshotTrace, type PlainInv } from "./trace-snapshot.js";
 import type { EvalTrace } from "./trace.js";
 
-// scopeId moved to a cycle-neutral leaf (trace-snapshot needs it too; trace-to-forest
-// imports trace-snapshot, so the reverse import would close a loop). Re-exported here
-// so the downstream `from "./trace-to-forest.js"` importers stay unchanged.
+// scopeId lives in a cycle-neutral leaf (scope-id.ts) — trace-snapshot needs it too, and
+// trace-to-forest imports trace-snapshot, so a reverse import would close a loop. Re-exported
+// here so downstream `from "./trace-to-forest.js"` importers keep the same surface.
 
 // CandidateBox/BoxType describe the forest's own vocabulary (the candidate boxes
 // this module produces for the MDL collapse optimizer to decide over) — they live

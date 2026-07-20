@@ -6,7 +6,7 @@
 // the tracing substrate: it captures a finished trace but never drives the
 // evaluator and carries no reactive/mobx dependency (P12).
 //
-// `@inhuman.tools/arrival-provenance` is now a thin re-export shim over this
+// `@inhuman.tools/arrival-provenance` is a thin re-export shim over this
 // subpath (its two-tier public contract — default entry vs `/analysis` —
 // is preserved there, both drawing from this one flat module). Its
 // `EvalTrace` export is `ObservableEvalTrace`, a mobx-reactive subclass of
@@ -18,7 +18,7 @@ export { EvalTrace, Invocation, NodeRecord, DEFAULT_TRACE_CAP, type InvocationSt
 export { snapshotTrace, type PlainTrace, type PlainInv } from "./trace-snapshot.js";
 export { headOf, scopeId, userCallSite, DOTPROMPT_SOURCE_MARKER, type ScopedParented } from "./scope-id.js";
 
-// ── Primitive analysis layer (arrival-provenance's former default entry) ──
+// ── Primitive analysis layer (arrival-provenance's default entry) ──
 export { extractDefines, type DefineInfo, type SourceLocation } from "../reader/extract-defines.js";
 export {
   traceToForest,
@@ -39,7 +39,7 @@ export {
   type TraceArtifact,
 } from "./trace-artifact.js";
 
-// ── Heavier analysis layer (arrival-provenance's former `/analysis` entry) ──
+// ── Heavier analysis layer (arrival-provenance's `/analysis` entry) ──
 export {
   traceToStatechart,
   forwardCone,
@@ -93,10 +93,10 @@ export { hermeticEnv, type IngressBindings } from "./hermetic-env.js";
 export { hermeticApply, type HermeticApplyOptions } from "./gamma.js";
 
 // ── Replay drivers — the "every crossing answered from the recorded payload stream" claim,
-// exported (the README used to cite src/provenance/replay.ts, which is not an API; a src path
-// is never customer surface). `replayProgramWithPlayback` is the whole-program face: re-run
-// under a hermetic env whose only membrane ops are playback sources, silent region, queue
-// underflow = teaching door (never a live re-fetch).
+// exported as real API (a `src/…` path is never customer surface).
+// `replayProgramWithPlayback` is the whole-program face: re-run under a hermetic env whose
+// only membrane ops are playback sources, silent region, queue underflow = teaching door
+// (never a live re-fetch).
 export {
   replayProgramWithPlayback,
   ReplayScopeError,

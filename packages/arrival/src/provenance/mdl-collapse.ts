@@ -8,12 +8,11 @@
  * collapsed box is a NONTERMINAL: its body (definition) is written ONCE, and
  * every occurrence pays only a REFERENCE (a symbol id + the ×n count + its port
  * bindings). An expanded box is inlined: its body is written at every
- * occurrence. This def/ref split is load-bearing — an earlier prototype used a
- * single per-node cost (`n × bodyBits`) which re-charged a shared child's whole
- * body inside every inlined parent copy, producing answers up to 3.5× over
- * optimal whenever a collapsed box nested under an expanded one (the exact
- * binding-residual regime the design leans on). This module is the corrected
- * rebuild, closing the gap with a def/ref split.
+ * occurrence. This def/ref split is load-bearing: a single per-node cost
+ * (`n × bodyBits`) re-charges a shared child's whole body inside every inlined
+ * parent copy, producing answers up to 3.5× over optimal whenever a collapsed box
+ * nests under an expanded one (the exact binding-residual regime the design leans
+ * on) — the def/ref split is what avoids that double-count.
  *
  * ── Why it's optimal AND a cheap two-pass DP ─────────────────────────────────
  * Candidates are GIVEN by the AST (every map/reduce=unfold/fold, cond/case=dnf,
@@ -33,8 +32,8 @@
  * sub-DAG size), `boundaryPorts` (its external bindings), `distinctShapes` (how
  * many distinct sub-DAG SHAPES its instances take — topology, NOT values), and
  * `n` (trace multiplicity). No per-instance VALUE enters the decision, so value
- * noise never jitters the layout (the bug a prior `perInstanceResidualBits`
- * field introduced). Box existence is invariant across all runs; only ×n labels
+ * noise never jitters the layout — a per-instance residual term is excluded for
+ * exactly that reason. Box existence is invariant across all runs; only ×n labels
  * and which boxes are collapsed at a given zoom vary with trace topology —
  * which is correct (a loop that ran once should not read as a stack).
  *

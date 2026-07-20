@@ -65,8 +65,8 @@ export function assertNever(x: never): never {
  *  (`(:foo x)` / `(@ x :foo)` / `(car x)` / `(vector-ref x i)`), so a lineage
  *  chunk's `uneval` targets minimal scheme with no polyglot sugar; re-sugaring is
  *  an optional later display layer, not the carrier's concern. The carrier is the
- *  SOLE home of the dropped key (the retired runtime field-point once recorded
- *  `{origin,key}`; `(:field x)` now forwards the producer's point instead).
+ *  SOLE home of the dropped key — `(:field x)` forwards the producer's point; the
+ *  runtime field-point carries no key.
  *
  *  The keyword/positional CONFLATION into one flat union is intentional: the
  *  distinction that MATTERS (keyword wins a chain, positionals are transparent)

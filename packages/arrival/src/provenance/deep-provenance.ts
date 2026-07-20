@@ -6,8 +6,8 @@
  * only on the elements; a shallow top-level read would return ∅ for any packed list /
  * vector (the container is provenance-transparent). Cycle/visited-guarded.
  *
- * Single source for the two former in-place copies (rosetta.ts's argProvenance builder
- * and lineage-auto-bindings.ts's per-invocation leaf-stamp) — the SAME reachability the
+ * Single source shared by rosetta.ts's argProvenance builder and
+ * lineage-auto-bindings.ts's per-invocation leaf-stamp — the SAME reachability the
  * eager stamp's union walks. Lives in the `values/` leaf layer (imports only value
  * classes + the pair guard), so both rosetta.ts and the carrier modules import it
  * without an import cycle.

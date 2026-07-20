@@ -21,7 +21,7 @@
  * GENESIS: `collectFieldNodes` implements the field-projection absorption rule — a keyword plucked
  * off a fresh constructor (`(:a (list (:b x)))`) does NOT pin the upstream producer (only the inner
  * `:b` that reaches it does), guarded by `hasKeywordField`.
- * KNOWN GAPS (corpus-gated `it.todo`, fast-follow): (1) an INLINE-SOURCE pluck `(:k (car (infer …)))`
+ * KNOWN GAPS (corpus-gated `it.todo`): (1) an INLINE-SOURCE pluck `(:k (car (infer …)))`
  * loses its pin — the operator slot `infer` carries no provenance so it never auto-binds (the
  * symbol-bound `(:k (car x))` form works). (2) an `(@ x :k)` membrane read pins where the
  * keyword-only runtime `accessorField` (trace.ts) recognizes nothing — the carrier is the faithful side.
@@ -160,7 +160,7 @@ const FAN_OPS: ReadonlySet<string> = new Set(["map", "filter", "vector-map"]);
 /**
  * A `Classifier` derived from the TRACE — no env, no caller-supplied source list. The source ops
  * (`roleOf(op) === "source"`) are exactly the head-symbols of the run's provenance-point
- * invocations: post the points-by-default flip a rosetta mints iff it is a point, so the trace's
+ * invocations: under points-by-default, a rosetta mints iff it is a point, so the trace's
  * points ARE the sources that actually fired (http/sql/db included; new sources automatic) — this
  * is a fact READ OFF THE TRACE (what actually crossed the membrane at runtime), not a
  * caller-injected heuristic (`provenance/lineage-classifier-from-env.ts` reads the same
@@ -168,8 +168,8 @@ const FAN_OPS: ReadonlySet<string> = new Set(["map", "filter", "vector-map"]);
  * `pure` predicate, and `opaque` does not change which `field` nodes `collectFieldNodes` finds
  * (a member-read is recognized before the opaque cut, and opaque + pipe/undefined both descend
  * children) — so this classifier never needs to answer either. This is what lets the dag self-serve
- * the carrier — the only `:fields` source now that the mint is retired — with nothing wired in
- * (the env source-registry seam never closed).
+ * the carrier — the SOLE `:fields` source — with nothing wired in
+ * (no env source-registry seam exists).
  */
 export function classifierFromTrace(trace: EvalTrace): Classifier {
   const sources = new Set<string>();
