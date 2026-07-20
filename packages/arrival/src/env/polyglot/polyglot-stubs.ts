@@ -12,7 +12,7 @@
 // Declaring a stub (rather than leaving the name silently absent) makes it
 // typo-suggestible for free: typo suggestions derive from the chain's ACTUAL
 // vocabulary (src/unbound-variable.ts), which includes these doors. The
-// polyglot IMPLEMENTATION packs (env/polyglot.ts's shared core plus
+// polyglot IMPLEMENTATION packs (env/polyglot/polyglot.ts's shared core plus
 // env/polyglot-clojure.ts / -lisp.ts / -racket.ts) hold the actual pure
 // IMPLEMENTATIONS (str/mapcar/get-in/…); this pack holds the cross-dialect
 // omission doors.

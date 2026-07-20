@@ -18,7 +18,7 @@
  *      (§II.1's table: `env.set(name, jsToScheme(ctx, dataValue))` → `override`) is
  *      pinned as an actual equality: both paths must produce identical values AND
  *      identical provenance (both fold through `jsToScheme(CONSTANT_CTX, …)` —
- *      `overridable/resolve`'s own implementation, env/overridable.ts — so a
+ *      `overridable/resolve`'s own implementation, env/overridable/overridable.ts — so a
  *      divergence here would mean the two "run-neutral value" doors disagree).
  */
 import { describe, expect, it } from "vitest";

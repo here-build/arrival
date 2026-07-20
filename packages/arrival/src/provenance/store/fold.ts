@@ -127,7 +127,7 @@ export async function foldRegionState(store: ProvenanceStore, regionId: RegionId
 /** The coordinate shape `nextTrackOrdinal` scopes over — the same three fields as
  *  `region-scope.ts`'s `TrackCoordinate`, duplicated here (not imported) for the same
  *  no-cross-import reason that file's own header documents: `store/` sits BELOW
- *  `values/primitives/region-scope.ts` in the dependency order, so this module must
+ *  `membrane/region-scope.ts` in the dependency order, so this module must
  *  not name a type from it. */
 export interface FoldTrackCoordinate {
   readonly templateHash: TemplateHash;

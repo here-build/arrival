@@ -5,7 +5,7 @@
  * asserted)).
  *
  * Three groups:
- *   A. `withSilentRegion`/`isSilentRegion` (`values/primitives/region-scope.ts`) —
+ *   A. `withSilentRegion`/`isSilentRegion` (`membrane/region-scope.ts`) —
  *      suppression of track-open/track-close/host-schedule AND, via
  *      `eval/provenance-hooks.ts`'s own read of the SAME ambient, mint — the
  *      leak-proof placement (a nested coordinate installed INSIDE a silent region's

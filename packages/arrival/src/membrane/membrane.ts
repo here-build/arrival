@@ -5,7 +5,7 @@
  *   for objects/functions; WeakMap identity cache (Miller/Van Cutsem); primitives
  *   pass through unwrapped.
  * - Member access (`@`/`@?`/`@keys`, the `:key` accessor) lives on the values
- *   themselves (`arrival/tagless-final/get|has|keys`) — env/polyglot.ts's verbs
+ *   themselves (`arrival/tagless-final/get|has|keys`) — env/polyglot/polyglot.ts's verbs
  *   dispatch directly; no membrane face remains.
  *
  * (The former Codec/Operator FFI layer is dissolved; numeric marshalling now lives
@@ -280,6 +280,6 @@ export function toJS(value: SchemeValue) {
 // `arrival/tagless-final/get|has|keys` — ADict structurally, AJSObject/AJSArray
 // through the interop read policy (interop-access.ts) over their borrowed
 // source. The former membrane faces (readMember/hasMember/memberKeys) are
-// dissolved: env/polyglot.ts's `@`/`@?`/`@keys` verbs — their only production
+// dissolved: env/polyglot/polyglot.ts's `@`/`@?`/`@keys` verbs — their only production
 // consumer — normalize the key and invoke the terms directly. Absence IS the
 // semantics; nothing membrane-level remains of the read protocol.

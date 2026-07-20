@@ -224,7 +224,7 @@ export function printType(schema: z.ZodTypeAny): string {
 /**
  * Print an s/* schema-DSL TAG (`tagToJsonSchema`'s own input shape — e.g.
  * `["object", ["summary", "string", "a one-line summary"]]`) as a TS type string —
- * the STATIC projection `env/schema.ts`'s header promises alongside the runtime one
+ * the STATIC projection `env/schema/schema.ts`'s header promises alongside the runtime one
  * (`tagToJsonSchema` → `z.fromJSONSchema`, the validator). Routes through the SAME
  * JSON Schema lowering and the SAME zod reconstruction the runtime validator uses, so
  * this can never disagree with what a tag actually validates as. Never throws — a

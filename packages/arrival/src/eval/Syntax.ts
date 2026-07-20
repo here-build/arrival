@@ -10,7 +10,7 @@ type SyntaxLike = Syntax | Function;
  * The result of expanding a `Syntax`: the transcribed FORM plus the hygiene
  * scope it must evaluate in. A transformer is Exp→Exp — it returns a form, never
  * a value. This shape is determined by the CLASS (always, for `Syntax`), not by
- * any flag: `env/macros.ts` returns it unconditionally (`void macro_expand`).
+ * any flag: `env/macros/macros.ts` returns it unconditionally (`void macro_expand`).
  */
 interface MacroExpansion {
   expr: SchemeValue;
@@ -59,14 +59,14 @@ export class Syntax {
   /**
    * The original macro FORM this transformer was built from (the
    * `(syntax-rules …)` operands), stashed by the syntax-rules constructor in
-   * env/macros.ts for inspection/printing. A Scheme form, not a value the
+   * env/macros/macros.ts for inspection/printing. A Scheme form, not a value the
    * transformer ever returns — held on the transformer object, outside the
    * value channel.
    */
   __code__?: SchemeValue;
   /**
    * The def-time Resolver — wraps `__env__`, the hygiene identity root. Captured
-   * here and closed over by the transformer in env/macros.ts; currently a glass
+   * here and closed over by the transformer in env/macros/macros.ts; currently a glass
    * over the same base-linked def env, so hygiene still reaches base through it.
    */
   __resolver__: Resolver | undefined;
@@ -82,7 +82,7 @@ export class Syntax {
   // A `syntax-rules` transformer is Exp→Exp: it always returns the transcribed
   // form + hygiene scope (`MacroExpansion`), never a value — hence `expand`, not
   // a boolean-switched `invoke`. `macro_expand` is pinned `true`; the transformer
-  // in env/macros.ts ignores it, kept only for fexpr-arg parity with `Macro.invoke`.
+  // in env/macros/macros.ts ignores it, kept only for fexpr-arg parity with `Macro.invoke`.
   expand(code: unknown, { error, env, use_dynamic, runCtx, resolver }: MacroInvokeContext): MacroExpansion {
     const args = {
       error,

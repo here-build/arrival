@@ -396,7 +396,7 @@ export class ResolvingAmbient extends AmbientRuntime implements SchemeEnv {
  *     `provenance/hermetic-env.ts`'s replay base (both inside the designed doors
  *     `assembleAmbient`/`hermeticEnv`; the mint is those doors' internal step);
  *   • the EVALUATOR's frame chain — `Resolver.child` / the merge frame
- *     (`env/macros.ts`, bindings record shared BY REFERENCE — the merge-frame
+ *     (`env/macros/macros.ts`, bindings record shared BY REFERENCE — the merge-frame
  *     contract) / `LexicalScope.child`;
  *   • REPLAY INGRESS — per-wire/per-playback frames above a sealed hermetic base
  *     (`provenance/gamma.ts`, `provenance/replay.ts`, `provenance/hermetic-env.ts`).

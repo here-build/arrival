@@ -9,7 +9,7 @@ import fc from "fast-check";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { describe, expect, it } from "vitest";
 import { AString } from "../AString.js";
-import { functorLaws, monoidLaws, semigroupLaws } from "../../../__tests__/algebra-laws.js";
+import { functorLaws, monoidLaws, semigroupLaws } from "./algebra-laws.js";
 import { tf, type TaglessOp } from "../../tagless-final.js";
 
 type FL = Record<string, any>;

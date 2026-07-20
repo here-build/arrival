@@ -7,7 +7,7 @@ import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { describe, expect, it } from "vitest";
 import { ANil, nil } from "../ANil.js";
 import { ACharacter } from "../ACharacter.js";
-import { ordLaws, setoidLaws } from "../../../__tests__/algebra-laws.js";
+import { ordLaws, setoidLaws } from "./algebra-laws.js";
 import { tf } from "../../tagless-final.js";
 
 // Small grapheme domain (incl. punctuation/digits/letters) → collisions exercise

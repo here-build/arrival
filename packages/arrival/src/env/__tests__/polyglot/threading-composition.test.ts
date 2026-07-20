@@ -1,9 +1,9 @@
 /**
  * Polyglot threading and composition — behavior over the DEFAULT assembled env
  * (freshEnv(), full BASE_PACKS), so it stays true across the dialect split (V,
- * 2026-07-10): `->`/`->>`/`comp` now live in env/polyglot-clojure.ts, `~>`/`~>>`
- * in env/polyglot-racket.ts, `compose`/`pipe`/`flow` in the shared core
- * (env/polyglot.ts) — see polyglot.ts's header for the full sibling-pack map.
+ * 2026-07-10): `->`/`->>`/`comp` now live in env/polyglot/polyglot-clojure.ts, `~>`/`~>>`
+ * in env/polyglot/polyglot-racket.ts, `compose`/`pipe`/`flow` in the shared core
+ * (env/polyglot/polyglot.ts) — see polyglot.ts's header for the full sibling-pack map.
  *
  * arrival-scheme accepts the whole cross-dialect family so writers (LLMs
  * included) can use whatever muscle-memory they have, exactly like :key

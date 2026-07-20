@@ -1,5 +1,5 @@
 // polyglot.test-d.ts — TYPE-LEVEL proofs for the scheme/polyglot Contract precision fix
-// (env/polyglot.ts): `@` / `@?` / `@keys` / `dict` all declared `output: [z.custom<unknown>()]`,
+// (env/polyglot/polyglot.ts): `@` / `@?` / `@keys` / `dict` all declared `output: [z.custom<unknown>()]`,
 // discarding each op's own precise return type (`readMember` returns `SchemeValue`,
 // `hasMember` returns `boolean`, `memberKeys` returns `string[]`, `dict`'s impl always
 // builds a `Record<string, unknown>`). This file proves the FIXED contracts' decoded

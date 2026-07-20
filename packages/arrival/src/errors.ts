@@ -1209,7 +1209,7 @@ export class ProvenanceShadowDivergence extends Error {
 // the binding's declared type — but neither is the other's fact variant of a THIRD
 // thing): a type tag `lowerTag` cannot turn into a real validator at all
 // ("unrecognized-tag"), or a value (an override or the in-form default) failing
-// its own declared type at `overridable/resolve` ("value-mismatch"). `env/overridable.ts`.
+// its own declared type at `overridable/resolve` ("value-mismatch"). `env/overridable/overridable.ts`.
 // -------------------------------------------------------------------------
 export class TypeTagError extends ArrivalError {
   static [CLASS] = "type-tag-error";

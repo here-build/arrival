@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { AExact } from "../AExact.js";
 import { AInexact } from "../AInexact.js";
 import { structuralEqual } from "../../structural-equal.js";
-import { setoidLaws } from "../../../__tests__/algebra-laws.js";
+import { setoidLaws } from "./algebra-laws.js";
 import { tf } from "../../tagless-final.js";
 
 // Exact rationals over a small domain (collisions exercise symmetry/transitivity).

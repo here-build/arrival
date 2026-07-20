@@ -390,7 +390,7 @@ export interface ExecOptions {
    * the schema describes the plain-JS value `exec` actually hands back (a plain zod
    * schema, not a scheme-face codec). A mismatch throws a teaching door naming
    * expected vs got — the outbound twin of `define/overridable`'s validation
-   * (env/overridable.ts): the program declares what it yields, the host declares what
+   * (env/overridable/overridable.ts): the program declares what it yields, the host declares what
    * it expects, and the boundary checks BOTH directions. The parse RESULT replaces the
    * last element (schema transforms/coercions apply), which is what lets the schema
    * drive the static return type: `exec`'s output-bearing overload types the result as
@@ -767,7 +767,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
 }
 
 /** A short, safe rendering of an arrived value for the exit-contract door's "got …"
- *  clause — the same rendering `define/overridable`'s door uses (env/overridable.ts). */
+ *  clause — the same rendering `define/overridable`'s door uses (env/overridable/overridable.ts). */
 function describeExitValue(value: unknown): string {
   try {
     return JSON.stringify(value) ?? String(value);

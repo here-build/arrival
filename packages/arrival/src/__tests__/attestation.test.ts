@@ -33,7 +33,7 @@ import { testCallCtx } from "../common/symbol.js";
  *  `z.custom(isSchemeValue)` predicate — a real "no automatic transform" escape hatch (see its
  *  doc comment: "the impl receives/returns the raw scheme value and does its own
  *  schemeToJs/jsToScheme"). The impl must now box its own return, exactly like the one real
- *  production consumer of this pattern (env/overridable.ts's `overridable/resolve`, which ends
+ *  production consumer of this pattern (env/overridable/overridable.ts's `overridable/resolve`, which ends
  *  `return jsToScheme(CONSTANT_CTX, outcome.data)`). */
 const source = (impl: () => unknown) =>
   symbol.rosetta`t: test source`({ input: [], output: [z.value] }, () => jsToScheme(CONSTANT_CTX, impl()));

@@ -447,7 +447,7 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
         // faithfully forwards whatever provenance the operand's OWN top-level `.provenance`
         // carries — for APair/AVector/AString/ABytevector that already IS the R2
         // grouping-fact union (their constructors stamp it), but `dict`'s
-        // `new ADict(CONSTANT_CTX, ...)` (env/polyglot.ts) constructs with an EMPTY
+        // `new ADict(CONSTANT_CTX, ...)` (env/polyglot/polyglot.ts) constructs with an EMPTY
         // top-level provenance — the R2 ruling's container-grouping-fact is un-implemented
         // for this carrier, independent of R8. Ticketed rather than silently green.
         //

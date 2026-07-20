@@ -80,7 +80,7 @@ import polyglotRacket from "./polyglot/polyglot-racket.js";
 import { allR7rs, binding, exceptions, lists } from "./r7rs/index.js";
 import { allSrfi, srfi1 } from "./srfi/index.js";
 
-// `polyglotStubs` (env/polyglot-stubs.ts) is its OWN entry — NOT folded into
+// `polyglotStubs` (env/polyglot/polyglot-stubs.ts) is its OWN entry — NOT folded into
 // `allSrfi` — because it is not a SRFI: it doors cross-dialect (Common Lisp /
 // Racket / Clojure) symbols with no SRFI/R7RS lineage at all. See its header.
 //

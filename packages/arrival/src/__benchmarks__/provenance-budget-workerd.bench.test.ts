@@ -116,7 +116,7 @@ describe("C2 — MERGE BLOCKER: forced mid-run eviction + fold-reconstruction un
     //    Track-close uses ordinal 1 (open used ordinal 0) — a real track's
     //    open/close pair are TWO DISTINCT designated instances under an
     //    incrementing `trackOrdinal` (`store/fold.ts`'s `nextTrackOrdinal` doc;
-    //    `values/primitives/region-scope.ts`'s `mintTrackId` mints a fresh
+    //    `membrane/region-scope.ts`'s `mintTrackId` mints a fresh
     //    ordinal per event). Reusing ordinal 0 for both would collide on
     //    `recordIdKey` — `RecordId` intentionally excludes `kind` from its
     //    identity triple — so the close would silently idempotent-upsert OVER

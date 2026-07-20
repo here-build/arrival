@@ -15,7 +15,7 @@
  * `emitTrackOpen`/`emitTrackClose`/`emitHostSchedule` — PURE builders, all the
  * same flag-gated shape. The DECIDING-WHEN (which counter mutation triggers a
  * call, which comparator invocation accumulates a triple) is
- * `src/values/primitives/region-scope.ts`'s job, never this file's.
+ * `src/membrane/region-scope.ts`'s job, never this file's.
  *
  * Idempotence: every `emit*` function derives its record's identity ENTIRELY
  * from the caller-supplied `RecordId` (never from `seq`, which a fresh

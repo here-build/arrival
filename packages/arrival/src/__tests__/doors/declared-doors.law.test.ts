@@ -1,7 +1,7 @@
 // F6 — Doors (docs/test-suite-architecture.md F6, P5 errors-as-doors). DECLARATION-DRIVEN:
 // every row below comes from the BASE_PACKS capability declarations themselves — the
 // `symbol.notImplemented` doors each pack authors (env/r7rs/host.ts, env/srfi/srfi-stubs.ts,
-// env/polyglot-stubs.ts, srfi-1's `fold`, …). Nothing here is hand-enumerated, and there is
+// env/polyglot/polyglot-stubs.ts, srfi-1's `fold`, …). Nothing here is hand-enumerated, and there is
 // no side registry to drift from: the DECLARATIONS are the registry (the AmbientRuntime-
 // despecialization ruling that dissolved env/polyglot-rich-errors/registry.ts — teaching
 // about well-known-but-absent names is capability DATA resolving through the ordinary
@@ -78,7 +78,7 @@ const DOORS = declaredDoors();
 // DEAD/NARROWED: the old suite additionally regex-matched each stub's message against "the
 // correct bound alternative" by name; this generic harness only asserts shape (names the
 // symbol + a substantive "Why:" clause) — the alternative-naming content is pinned at the
-// SOURCE (each reason string in env/polyglot-stubs.ts) rather than re-asserted here.
+// SOURCE (each reason string in env/polyglot/polyglot-stubs.ts) rather than re-asserted here.
 // DEAD: "setf/defun fire their door when called with already-bound arguments (limitation:
 // unbound-argument calls surface 'Unbound variable' instead, since these are procedures, not
 // macros)" — this harness deliberately calls every door with ZERO arguments uniformly to

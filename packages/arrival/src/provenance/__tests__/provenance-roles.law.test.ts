@@ -171,7 +171,7 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
     //
     // `fanout?` is fully gone — no live type anywhere carries that field.
     //
-    // `pure?` is NOT gone. `RosettaFunction.pure`/`RosettaSpec.pure` (src/rosetta.ts,
+    // `pure?` is NOT gone. `RosettaFunction.pure`/`RosettaSpec.pure` (src/membrane/rosetta.ts,
     // src/common/scheme-env.ts) are still a LIVE, accepted declaration surface:
     // `createRosettaWrapper` reads `config.pure` as the runtime mint gate
     // (`mintsPoint = pure !== true`). (The static-side `rosettaPureOf` per-env

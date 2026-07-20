@@ -5,7 +5,7 @@
 import fc from "fast-check";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { ABool } from "../ABool.js";
-import { setoidLaws } from "../../../__tests__/algebra-laws.js";
+import { setoidLaws } from "./algebra-laws.js";
 
 const arb = fc.boolean().map((b) => new ABool(CONSTANT_CTX, b));
 const equalClone = (b: ABool) => new ABool(CONSTANT_CTX, b.value);

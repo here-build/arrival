@@ -5,7 +5,7 @@
 import fc from "fast-check";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { ASymbol } from "../ASymbol.js";
-import { ordLaws, setoidLaws } from "../../../__tests__/algebra-laws.js";
+import { ordLaws, setoidLaws } from "./algebra-laws.js";
 
 // STRING-named symbols over a small domain so symmetry/transitivity bite, plus
 // the hard cases: empty string, unicode, and operator/predicate-style names.

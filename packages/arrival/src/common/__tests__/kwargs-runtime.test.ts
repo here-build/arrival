@@ -11,7 +11,7 @@
 //   • so by the time a call's ARGS reach a rosetta `run` wrapper, `(tool :a "x" :b 5)` has
 //     ALREADY evaluated to `[:a, AString("x"), :b, AExact(5)]` (real `ASymbol`s) — the EXACT
 //     interleaved shape the existing `dict` native op already folds into `{a:…, b:…}`
-//     (env/polyglot.ts). A kwargs rosetta reuses that SAME fold, just landing on a
+//     (env/polyglot/polyglot.ts). A kwargs rosetta reuses that SAME fold, just landing on a
 //     validated+decoded object instead of a raw dict.
 //
 // Two planes, mirroring symbol.test.ts / capability-rosetta-symbol.test.ts's convention:

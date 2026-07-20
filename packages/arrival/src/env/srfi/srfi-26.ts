@@ -6,7 +6,7 @@
 // `cut`/`cute` introduce the placeholder tokens `<>` (a positional slot) and
 // `<...>` (a final rest slot) inside their EXPANSION — `<>` even resolves
 // elsewhere in the assembly today, as a `notImplemented` door in
-// `env/polyglot-stubs.ts`, so a naive free-variable walk over the macro's own
+// `env/polyglot/polyglot-stubs.ts`, so a naive free-variable walk over the macro's own
 // body would not even catch it as unbound; a walk over what the macro EXPANDS TO
 // (a use site like `(cut cons <> 1)`) would, wrongly, since `<>` there is a
 // placeholder, not a variable reference.

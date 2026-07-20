@@ -8,7 +8,7 @@
  *
  * B3 landed §7c's reverse wrapper (`schemeToJs`'s ACallable branch in
  * rosetta.ts, `z.procedure().decode` in scheme-zod.ts) — see
- * `src/values/primitives/region-scope.ts` for the scope token + doors this
+ * `src/membrane/region-scope.ts` for the scope token + doors this
  * file exercises. Row 8 stays `it.todo`: its own title tags it
  * `[STAGED: post-migration]` — a NAMED persistent-handler capability granting
  * a detached scope is explicitly future work, not part of the reverse-wrapper

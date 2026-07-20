@@ -12,7 +12,7 @@
 //   const symbol = { native, rosetta, tagless, notImplemented, … }
 //
 // ─────────────────────────────────────────────────────────────────────────────
-// THE RUNTIME MODEL (the implementing sites: src/rosetta.ts createRosettaWrapper,
+// THE RUNTIME MODEL (the implementing sites: src/membrane/rosetta.ts createRosettaWrapper,
 // src/common/capability.ts ANativeProcedure/ARosettaProcedure binder):
 //
 //   symbol.native    schemas SCHEME-IDENTITY; impl over SCHEME VALUES (Pair, SchemeString, …).
@@ -743,7 +743,7 @@ export function parseNameDoc(tpl: TemplateStringsArray, sub: readonly unknown[])
 type VectorSchema = z.ZodType<readonly unknown[], readonly unknown[]>;
 
 /** Read a kwargs KEY off a raw scheme call arg — a `:key` argument is a self-evaluating ASymbol
- *  (keyword-tagless-apply.md), read the same way `dict`'s native impl reads one (env/polyglot.ts):
+ *  (keyword-tagless-apply.md), read the same way `dict`'s native impl reads one (env/polyglot/polyglot.ts):
  *  stringify and strip a leading `:`. One protocol, shared here because a kwargs rosetta's input
  *  lowering folds the identical `:key value` pair sequence `dict` already folds. */
 function kwargsKeyOf(arg: unknown): string {

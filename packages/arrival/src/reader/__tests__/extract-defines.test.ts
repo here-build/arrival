@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { extractDefines } from "../../reader/extract-defines.js";
+import { extractDefines } from "../extract-defines.js";
 
 describe("extractDefines", () => {
   it("returns [] for empty / whitespace source", async () => {

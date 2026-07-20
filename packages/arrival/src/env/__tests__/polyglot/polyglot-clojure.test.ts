@@ -56,7 +56,7 @@ describe("@inhuman.tools/arrival/polyglot-clojure", () => {
 // pure bindings over primitives already bound elsewhere (map/filter/reduce/dict/@/
 // @keys/…). These run against the DEFAULT assembled env (`exec` with no explicit
 // env), since polyglot-clojure ships in BASE_PACKS in production — the same
-// surface a model actually reaches. Sibling to env/polyglot-stubs.ts, which doors
+// surface a model actually reaches. Sibling to env/polyglot/polyglot-stubs.ts, which doors
 // the symbols that genuinely can't be pure (IO/mutation/macro-only — println here).
 describe("@inhuman.tools/arrival/polyglot-clojure — stdlib completion (Bucket A)", () => {
   const str = async (src: string) => String((await exec(src))[0]);

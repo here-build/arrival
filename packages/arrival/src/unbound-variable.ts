@@ -13,8 +13,8 @@
 // There is deliberately no static curated table of "well-known" names here (the old
 // dissolved registry kept one, matching typos against it). That table was declaration
 // data smuggled into the error path — every row either duplicated a REAL binding
-// (env/polyglot.ts, the SRFI/R7RS packs) or duplicated a DECLARED
-// `symbol.notImplemented` door (env/polyglot-stubs.ts, env/srfi/srfi-stubs.ts,
+// (env/polyglot/polyglot.ts, the SRFI/R7RS packs) or duplicated a DECLARED
+// `symbol.notImplemented` door (env/polyglot/polyglot-stubs.ts, env/srfi/srfi-stubs.ts,
 // env/r7rs/host.ts); the one genuinely-absent row it had (SRFI-1's bare `fold`) is now
 // a declared door in env/srfi/srfi-1.ts. Teaching about well-known-but-absent names is
 // CAPABILITY DATA resolving through the ordinary chain now, not a special error path.
@@ -143,7 +143,7 @@ export function suggestFromVocabulary(unboundName: string, vocabulary: Iterable<
 // would never fire on these (edit distance from "require" to any bound name is nowhere
 // near 1), so this table is additive, not a competing heuristic — same family as the
 // `SYNTH_NAMES` seed above (car/cdr), just keyed by exact name/prefix instead of being
-// structurally synthesized. Doctrine: `env/polyglot-racket.ts`'s header — models reach
+// structurally synthesized. Doctrine: `env/polyglot/polyglot-racket.ts`'s header — models reach
 // for the dialect they know; give them the name, guard the shape loudly.
 
 /** No-file-IO explanation, shared by every dead-end file/port primitive: the sandbox has

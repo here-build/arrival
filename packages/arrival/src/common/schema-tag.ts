@@ -1,13 +1,13 @@
 // schema-tag — the schema DSL's ONE canonical lowering: a tagged-list type tag (the shape
-// `s/object`/`s/array`/`s/enum`/`s/optional`/`s/field*` build — see `env/schema.ts`) → JSON
+// `s/object`/`s/array`/`s/enum`/`s/optional`/`s/field*` build — see `env/schema/schema.ts`) → JSON
 // Schema. Lives here (not in arrival-inference) because a CORE capability (`arrival/overridable`,
-// `env/overridable.ts`) needs this exact lowering and cannot depend on `@here.build/llm-plane`
+// `env/overridable/overridable.ts`) needs this exact lowering and cannot depend on `@here.build/llm-plane`
 // without inverting the package DAG (core is upstream of inference, never the reverse) — this is
 // the one place both core and inference can reach it. Three consumers — the OpenAI/Anthropic wire
 // schema, the HTTP validator, and the `define/overridable` runtime validator — share exactly one
 // recursion over the tag, so none can drift from the others.
 //
-// Per `env/schema.ts`'s header, s/* is the language's explicit-type syntax; this file is its
+// Per `env/schema/schema.ts`'s header, s/* is the language's explicit-type syntax; this file is its
 // runtime/operational projection (the static projection is the type-layer/tsc bridge). A schema
 // tag is a PROPOSITION — this is how it discharges as a validator.
 

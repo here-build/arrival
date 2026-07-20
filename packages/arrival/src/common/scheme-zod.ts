@@ -160,7 +160,7 @@ function isSchemeValue(x: unknown): x is SchemeValue {
 }
 // Rosetta escape hatch: `value` in a rosetta slot means "no automatic transform — impl
 // receives/returns raw scheme value, does its own schemeToJs/jsToScheme" (single legitimate
-// rosetta use: env/overridable.ts's dynamic `overridable/resolve`).
+// rosetta use: env/overridable/overridable.ts's dynamic `overridable/resolve`).
 export const value = named("value", z.custom<SchemeValue>(isSchemeValue));
 
 // ---------------------------------------------------------------------------
@@ -184,7 +184,7 @@ export const value = named("value", z.custom<SchemeValue>(isSchemeValue));
 //      for the synchronous window of a nested z.decode/z.encode call is strictly
 //      more honest than letting those nested codecs guess from (2) — this ctx is
 //      the actual invocation's, not whatever happens to be ambient right now.
-//   2. `currentRegionScope()?.runCtx` (values/primitives/region-scope.ts) — the
+//   2. `currentRegionScope()?.runCtx` (membrane/region-scope.ts) — the
 //      SAME ambient `z.procedure`'s reverse-crossing decode reads for its wrapper
 //      identity cache. Populated for exactly the crossings `common/symbols/
 //      rosetta.ts`'s `carriesCallable` gate opens a scope for (a contract whose

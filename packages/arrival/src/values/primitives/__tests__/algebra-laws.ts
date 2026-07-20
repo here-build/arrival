@@ -11,7 +11,7 @@
 // so we use them directly rather than via an indirection.
 import fc from "fast-check";
 import { describe, it } from "vitest";
-import { tf } from "../values/tagless-final.js";
+import { tf } from "../../tagless-final.js";
 
 type FL = Record<string, any>;
 const equals = (a: FL, b: FL): boolean => Boolean(a[tf("equals")](b));

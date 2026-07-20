@@ -8,7 +8,7 @@ import fc from "fast-check";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { describe, expect, it } from "vitest";
 import { ABytevector } from "../ABytevector.js";
-import { ordLaws, semigroupLaws, setoidLaws } from "../../../__tests__/algebra-laws.js";
+import { ordLaws, semigroupLaws, setoidLaws } from "./algebra-laws.js";
 import { tf } from "../../tagless-final.js";
 
 // Small byte arrays + edge cases: empty, prefixes, collisions on a small domain.

@@ -122,7 +122,7 @@ export function notePotentialRosettaExit(inv: Invocation, result: SchemeValue | 
   if (!isEmissionEnabled()) return;
   // A silent region (γ, or a glass whole-program replay) suppresses this mint too —
   // `isSilentRegion` is a SEPARATE ambient from `_coordinate`/`_sink` below (owned by
-  // `values/primitives/region-scope.ts`, imported directly rather than duplicated —
+  // `membrane/region-scope.ts`, imported directly rather than duplicated —
   // see that file's own silent-region-mode section for why the direction is cycle-free
   // and why this is the leak-proof placement: a nested `withRecordCoordinateAsync`
   // install deep inside a silent region's dynamic extent still finds `isSilentRegion()`

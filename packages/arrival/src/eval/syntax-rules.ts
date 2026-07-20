@@ -4,7 +4,7 @@
 // module-level global_env edge — lambda/define resolve from the runtime env,
 // and the global-env identity check is threaded through extract_patterns'
 // `scope` argument by the syntax-rules caller. The 3 exported functions are
-// consumed by the `syntax-rules` builtin in env/macros.ts.
+// consumed by the `syntax-rules` builtin in env/macros/macros.ts.
 //
 // Attribution: derived from LIPS Scheme (Jakub T. Jankiewicz) — see LICENSE.
 //

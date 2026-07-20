@@ -188,7 +188,7 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       // `openRegionScope({ runCtx, dynSite: inv })`.
       const inv = this.invocation.currentInvocation;
 
-      // REGION DISCIPLINE (openRegionScope-gap Ruling A, values/primitives/region-scope.ts) —
+      // REGION DISCIPLINE (openRegionScope-gap Ruling A, membrane/region-scope.ts) —
       // opened ONLY when the bake-time gate (`carriesCallable`, above) found a slot that might
       // hand the impl a live callable; a lambda-free verb never mints one (zero cost). `runCtx:
       // this.runCtx` is the invocation's LIVE context — the SAME handle carrying

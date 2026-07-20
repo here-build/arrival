@@ -15,7 +15,7 @@ import { describe, expect, it } from "vitest";
 import { APair } from "../APair.js";
 import { ANil, nil } from "../ANil.js";
 import { structuralEqual } from "../../structural-equal.js";
-import { functorLaws } from "../../../__tests__/algebra-laws.js";
+import { functorLaws } from "./algebra-laws.js";
 import { AExact } from "../AExact.js";
 import { tf, type TaglessOp } from "../../tagless-final.js";
 import type { AList, AListAlike, SchemeValue } from "../../types.js";

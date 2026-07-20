@@ -1,5 +1,5 @@
 // polyglot-contract-precision.test.ts — RUNTIME proof that the type-precision fixes to
-// scheme/polyglot's native Contracts (env/polyglot.ts) actually tighten `def.out` for the
+// scheme/polyglot's native Contracts (env/polyglot/polyglot.ts) actually tighten `def.out` for the
 // REAL exported symbols (not a synthetic mirror — see the sibling `polyglot.test-d.ts` for
 // the type-level mechanism proofs, which must stay synthetic because `NativeSymbolDef.in`/
 // `.out` erase to plain `z.ZodTypeAny` on any real export — same reasoning as

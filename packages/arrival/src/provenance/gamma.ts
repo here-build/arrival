@@ -5,7 +5,7 @@
  * emission OFF. A NAMED COMPOSITION, not new machinery:
  *
  *   1. `hermeticEnv` — base packs + program prelude + ingress bindings, sealed;
- *   2. `values/primitives/region-scope.ts`'s `withSilentRegion` — wrapping the WHOLE
+ *   2. `membrane/region-scope.ts`'s `withSilentRegion` — wrapping the WHOLE
  *      apply for its entire dynamic extent;
  *   3. the SAME textual-application idiom `wireframe-agreement.law.test.ts` already
  *      proved end-to-end (`` `(${w.source} 41)` `` — apply the wire's lambda source to

@@ -68,7 +68,7 @@ export function setEagerProvenanceOracleEnabled(enabled: boolean): void {
 /**
  * The EFFECTIVE accumulation switch {@link withInputProvenance}/`mintVerdict` actually
  * branch on: the ambient module flag OR "we are inside a silent region right now"
- * ({@link isSilentRegion}, `values/primitives/region-scope.ts`).
+ * ({@link isSilentRegion}, `membrane/region-scope.ts`).
  *
  * WHY the OR is load-bearing, not a convenience: every γ/replay face
  * (`provenance/gamma.ts`'s `hermeticApply`/`applyWireInEnv`, and therefore all three of

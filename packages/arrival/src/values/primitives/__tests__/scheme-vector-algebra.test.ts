@@ -19,7 +19,7 @@ import { AVector } from "../AVector.js";
 import { AExact } from "../AExact.js";
 import { structuralEqual } from "../../structural-equal.js";
 import type { SchemeValue } from "../../types.js";
-import { functorLaws, semigroupLaws, setoidLaws } from "../../../__tests__/algebra-laws.js";
+import { functorLaws, semigroupLaws, setoidLaws } from "./algebra-laws.js";
 import { tf } from "../../tagless-final.js";
 
 

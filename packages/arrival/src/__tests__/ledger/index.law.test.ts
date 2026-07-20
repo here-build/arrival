@@ -84,7 +84,7 @@ const GAPS: readonly LedgerRow[] = [
   // ── added by the RULINGS.md R8 mint sweep ─────────────────────────
   // Surfaced while flipping the equal?-verdict flyweight rows above: mintVerdict
   // faithfully forwards operand provenance, but AJSArray (`borrow-array`'s `fromJS`)
-  // and ADict (`dict`'s `new ADict(CONSTANT_CTX, ...)`, env/polyglot.ts) never stamp
+  // and ADict (`dict`'s `new ADict(CONSTANT_CTX, ...)`, env/polyglot/polyglot.ts) never stamp
   // their OWN top-level provenance with the R2 grouping-fact union at construction —
   // independent of R8, un-implemented (R2 is its own, later design item).
   // NARROWED to ADict (2026-07-14). It never applied to AJSArray: production DOES stamp a borrowed
