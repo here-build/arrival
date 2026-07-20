@@ -79,9 +79,9 @@ export function isUnquoteForm(datum: SchemeValue): boolean {
  *
  * `ctx` discriminates the two mouths: the READER passes a parse ctx (the `{`'s
  * SourceLocation — ADict has no location slot, so this is the literal's only source
- * identity); the evaluator's quasiquote re-instantiation currently defaults to
- * CONSTANT_CTX (its live-`ctx.runCtx` threading is the audit's Wave-2 item, not this
- * wave's — the default keeps that path byte-identical).
+ * identity); the evaluator's quasiquote re-instantiation defaults to CONSTANT_CTX
+ * (deferred: threading its live `ctx.runCtx` — until then the default leaves that path's
+ * source identity unset, exactly as when unthreaded).
  */
 export function makeDictLiteralNode(forms: readonly SchemeValue[], ctx: RunContext = CONSTANT_CTX): DictLiteralNode {
   const pairs: Array<readonly [DictKey, SchemeValue]> = [];

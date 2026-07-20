@@ -36,9 +36,7 @@ const defined_specials = [
 
 export const __builtins__ = Object.freeze(defined_specials.map((arr) => arr[0]));
 
-// Pure, frozen data literal: maps each [seq, symbol, type] to a { seq, symbol, type }
-// entry, built at module-eval (no mutation, no side-effect) before any reader runs.
-// `names()` / `get()` / `type()` read it unchanged.
+// Frozen at module-eval — no runtime mutation; `names()`/`get()`/`type()` only read it.
 const __list__ = Object.freeze(
   Object.fromEntries(defined_specials.map(([seq, symbol, type]) => [seq, { seq, symbol, type }])),
 );

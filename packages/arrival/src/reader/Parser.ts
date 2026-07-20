@@ -2,17 +2,27 @@
  * Lexer token stream → Scheme data — the single text→datum entry point (evaluator,
  * analysis tools, and MCP all read through here).
  *
- * Two gotchas in `_read_object`: reader extensions (the quote family, the `specials`
- * registry) expand at PARSE time, not later; and `_enterNesting` bounds native-stack
- * descent so a pathological input throws `ParseError` instead of a host `RangeError`
- * (see `maxNestingDepth`).
+ * MIRROR CHANNEL: every node this parser mints carries a parse-origin RunContext
+ * (`makeParseCtx`) holding its SourceLocation — the ctx channel of the span migration.
+ * For APairs the `setLocation` calls are the DERIVED MIRROR: both channels get the same
+ * loc, so `[LOCATION]`-slot readers (the evaluator tap gate, scopeId, the cross-package
+ * `Symbol.for` readers) and ctx readers see identical data. Minting the head cell's ctx
+ * from the loc the mirror re-stamps keeps the two in exact agreement — a ctx cannot be
+ * overwritten the way the slot can. Body sites tagged `// mirror` are instances of this.
+ *
+ * LITERAL GRAMMAR: the `[…]` vector / `{…}` dict inline literals, their position-scoped
+ * comma/colon separators, the suffix-keyword flip, and the E-DICT-* / E-BRACKET-* /
+ * E-LITERAL-* door taxonomy are specified in `__tests__/polyglot/README.md` (canonical).
+ * Bodies here point there rather than restate it; the one door NOT in that table —
+ * E-DICT-INFIX-BANNED, the SRFI-105 curly-infix ban — is owned by `make_dict_literal`.
+ *
+ * NESTING CAP: `_enterNesting` bounds native-stack descent so pathological input throws
+ * `ParseError`, not a host `RangeError` (see `maxNestingDepth`). STRICT PAIRING: a close
+ * delimiter must match its opener's expected char (see `_exitNesting`).
+ *
+ * Reader extensions (the quote family, the `specials` registry) expand at PARSE time.
  */
 import { DatumReference } from "./DatumReference.js";
-// PARSE_CTX family (not CONSTANT_CTX): every node this parser mints carries a
-// parse-origin ctx with its SourceLocation — the ctx channel of the span migration.
-// For APairs the `setLocation` calls below stay as the derived MIRROR (both channels
-// written, same loc), so the `[LOCATION]`-slot readers — the evaluator tap gate,
-// scopeId, the cross-package Symbol.for readers — see byte-identical data.
 import { makeParseCtx } from "../run/RunContext.js";
 import { foldcase_string } from "./foldcase.js";
 import * as specials from "./specials.js";
@@ -241,8 +251,8 @@ export class Parser {
    * Leave one nesting level on a close delimiter, enforcing STRICT PAIRING: the
    * close must match the char its opener pushed (`(`→`)`, `{`→`}`). A close with
    * an empty stack is unmatched; a close of the wrong type is mismatched. Both
-   * throw a ParseError rather than silently rebalancing (the old behaviour, which
-   * let `(a]` and a stray `)` through).
+   * throw a ParseError rather than silently rebalancing — the rejected alternative
+   * that would accept `(a]` and a stray `)`.
    */
   private _exitNesting(closeToken: string, loc?: SourceLocation) {
     const expected = this._state.brackets.pop();
@@ -259,11 +269,11 @@ export class Parser {
     --this._state.parentheses;
   }
 
-  // `[` / `]` are NOT interchangeable list delimiters: s-expressions use `(` … `)`
-  // only. `[` … `]` is a VECTOR literal and `{` … `}` a DICT literal — see
-  // _read_object. (SRFI-105 curly-infix n-expressions are BANNED — R6 — the
-  // reader's curly-infix mode was deleted; `{a * b}`-shaped forms door via
-  // make_dict_literal's infix-intent heuristic instead of silently misparsing.)
+  // `[` / `]` are NOT interchangeable list delimiters: s-expressions use `(`…`)` only.
+  // `[`…`]` is a VECTOR literal, `{`…`}` a DICT literal (see _read_object). SRFI-105
+  // curly-infix n-expressions are BANNED (R6): this reader has no curly-infix mode;
+  // `{a * b}`-shaped forms door via make_dict_literal's infix-intent heuristic instead
+  // of silently misparsing.
   is_open(token: string) {
     return token === "(";
   }
@@ -288,10 +298,8 @@ export class Parser {
     // `_resolve_pair` via the knot door before any form leaves the reader; the per-cell cast
     // below is that documented channel.
     //
-    // `openLoc` (the `(` branch passes it) is the HEAD cell's location — the same value the
-    // caller's `setLocation(loc)` re-stamp always produced as the head's FINAL `[LOCATION]`;
-    // minting the head's ctx under it directly keeps the immutable ctx channel in exact
-    // agreement with the mirror (a ctx can't be overwritten the way the slot could).
+    // `openLoc` (the `(` branch passes it) is the HEAD cell's location; minting the head's
+    // ctx from it directly is the MIRROR CHANNEL agreement (see preamble).
     const items: Array<{ node: unknown; loc: ReturnType<Parser["_getLocation"]> }> = [];
     let tail: unknown = nil;
     let dot = false;
@@ -321,7 +329,7 @@ export class Parser {
       const loc = (i === 0 ? (openLoc ?? items[i].loc) : items[i].loc);
       const cell = new APair(makeParseCtx(loc), items[i].node as SchemeValue, chain as SchemeValue);
       if (loc) {
-        cell.setLocation(loc); // derived mirror — same loc the ctx carries
+        cell.setLocation(loc); // mirror (see preamble MIRROR CHANNEL)
       }
       chain = cell;
     }
@@ -329,20 +337,13 @@ export class Parser {
   }
 
   /**
-   * Gather the flat datum sequence between `[`…`]` / `{`…`}`, with POSITION-SCOPED
-   * comma separators (the JSON-gravity tolerance).
+   * Gather the flat datum sequence between `[`…`]` / `{`…`}`, absorbing the position-
+   * scoped comma/colon separators (the JSON-gravity tolerance). The full rule — comma-as-
+   * separator vs R7RS unquote, the one lone JSON key `:` at an odd boundary, the tolerated
+   * trailing separator, why a GLUED `:1` is one keyword token — is in
+   * `__tests__/polyglot/README.md` (§ The comma rule, § The suffix-keyword flip).
    *
-   * A `,` is a SEPARATOR only where a JSON-writer would emit one: after a complete
-   * element (`[1, 2]`), or for maps only after a complete key-value pair (an even
-   * boundary — JSON puts `:` between key and value, never `,`). At most one separator
-   * per boundary; any other comma reads as R7RS unquote (`{:a ,x}` under quasiquote
-   * still works). `,@` is never a separator. One trailing separator before the close
-   * is tolerated (`[1, 2,]`).
-   *
-   * Maps also absorb at most one lone `:` token at an ODD boundary (right after a
-   * complete key) — the verbatim-JSON string-key colon `{"a": 1}`. A GLUED `:1` is one
-   * keyword token and is NOT absorbed (see `suffixKeyName` in dict-grammar.ts, the
-   * suffix-keyword flip).
+   * Local state: `separatorConsumed` / `colonConsumed` enforce the one-per-boundary budget.
    */
   private async read_literal_elements(closeToken: string, isMap: boolean, what: string): Promise<SchemeValue[]> {
     const elements: SchemeValue[] = [];
@@ -393,18 +394,15 @@ export class Parser {
   }
 
   /**
-   * Validate + mint the `{…}` dict-literal node (default `{}` mode). Even arity; keys
-   * are `:keyword` / `"string"` / `key:` (fold to the same string key) or an unquote
-   * form (validated post quasiquote-substitution); duplicate static keys throw
-   * (Clojure-faithful — a model's duplicate is a mistake).
+   * Validate + mint the `{…}` dict-literal node. Key admissibility (`:keyword` /
+   * `"string"` / trailing-colon `key:` / unquote form), even arity, and duplicate-key
+   * rejection follow the E-DICT-* taxonomy in `__tests__/polyglot/README.md`; the
+   * suffix-keyword flip is `suffixKeyName` (dict-grammar.ts). Validation lives here, not
+   * in dict-grammar, because the errors need ParseError + source location.
    *
-   * SUFFIX-KEYWORD FLIP: a symbol key with a single trailing colon is an explicit
-   * declaration and flips to the keyword — `{flight_number: "X"}` ≡ `{:flight_number "X"}`.
-   * The flipped key REPLACES the original in the element sequence so every downstream
-   * face (code-position `(dict …)` lowering, quasiquote, the quoted-data ADict face)
-   * sees one canonical spelling. Bare symbols (`{x 1}`) stay E-DICT-BAD-KEY (could be an
-   * intended reference). Key rule is position-scoped: `foo:` outside `{}` stays a plain
-   * symbol.
+   * The flip REPLACES the original key in the element sequence, so every downstream face
+   * (code-position `(dict …)` lowering, quasiquote, the quoted-data ADict face) sees one
+   * canonical spelling.
    */
   private make_dict_literal(elements: SchemeValue[], loc: SourceLocation | undefined): SchemeValue {
     // R6 infix-ban door, checked FIRST (before key validation reads its own, less
@@ -436,9 +434,8 @@ export class Parser {
       );
     }
     // Key validation runs BEFORE the arity check (covers a trailing unpaired key too):
-    // matches the char-incremental order the sampler's Σ mirror judges in — a key token
-    // is judged the moment it completes, arity comes after — so `{a:1}` doors as the BAD
-    // KEY it is, not as odd arity.
+    // a key token is judged the moment it completes, arity only after — so `{a:1}` doors
+    // as the BAD KEY it is, not as odd arity (the more specific error wins).
     const seen = new Set<string>();
     for (let i = 0; i < elements.length; i += 2) {
       const suffixKey = suffixKeyName(elements[i]);
@@ -632,10 +629,10 @@ export class Parser {
       // channel `_resolve_pair` patches before the form leaves the reader.
       if (is_literal(token)) {
         expr = new APair(makeParseCtx(loc), special.symbol, new APair(makeParseCtx(loc), object as SchemeValue, nil));
-        if (loc) expr.setLocation(loc); // mirror — inner cell rides the ctx channel only (no LOCATION-slot change)
+        if (loc) expr.setLocation(loc); // mirror; inner cell rides ctx only (preamble MIRROR CHANNEL)
       } else {
         expr = new APair(makeParseCtx(loc), special.symbol, object as SchemeValue);
-        if (loc) expr.setLocation(loc); // mirror
+        if (loc) expr.setLocation(loc); // mirror (preamble MIRROR CHANNEL)
       }
       return expr;
     }
@@ -669,10 +666,10 @@ export class Parser {
     } else if (this.is_curly_open(token)) {
       this._enterNesting("}");
       this.skip();
-      // `{…}` DICT literal (the ONLY `{}` grammar — R6: the reader's curly-infix mode
-      // is deleted; there is no flag that reads `{}` any other way): `{:k v …}` ≡
-      // `(dict :k v …)` in code position; data under quote. See read_literal_elements
-      // (comma rule) / make_dict_literal (key doors, including the infix-intent ban).
+      // `{…}` DICT literal — the ONLY `{}` grammar (R6: no curly-infix mode, no flag reads
+      // `{}` any other way): `{:k v …}` ≡ `(dict :k v …)` in code position, data under
+      // quote. See read_literal_elements (comma rule) / make_dict_literal (key doors,
+      // including the infix-intent ban).
       const elements = await this.read_literal_elements("}", true, "dict literal");
       return this.make_dict_literal(elements, loc ?? undefined);
     } else if (this.is_curly_close(token)) {
@@ -689,7 +686,7 @@ export class Parser {
       this.skip();
       const list = await this.read_list(loc);
       if (loc && list instanceof APair) {
-        list.setLocation(loc); // mirror re-stamp — same loc the head cell's ctx already carries
+        list.setLocation(loc); // mirror re-stamp (preamble MIRROR CHANNEL)
       }
       return list;
     } else {

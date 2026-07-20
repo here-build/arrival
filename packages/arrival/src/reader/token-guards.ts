@@ -1,9 +1,9 @@
 // Reader-layer token classification. These predicates answer "what kind of token
 // is this string?" against the reader-macro registry (./specials.ts) and the
-// numeric/character regexes (./primitives.ts). They are read concerns —
+// numeric/character regexes (./lexical-grammar.ts). They are read concerns —
 // the Lexer/Parser/Formatter consult them at read time, before the evaluator ever
 // sees a form — so they live in the reader, not in eval/guards.ts (which carries
-// the evaluator's AmbientRuntime/Macro world). Moved out of eval/guards.ts.
+// the evaluator's AmbientRuntime/Macro world).
 import { directives } from "./lexical-grammar.js";
 import * as specials from "./specials.js";
 

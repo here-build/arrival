@@ -40,10 +40,10 @@ function parseBigInt(str: string, radix: number = 10): bigint {
   return negative ? -result : result;
 }
 
-// Safe-integer gate for exact literals (one-number-rework §0.3/§2.5): a source literal
-// whose exact magnitude would leave `Number.isSafeInteger` range THROWS a teaching
-// ParseError rather than silently truncating or minting an impossible AExact component
-// — the RATIO design has no bignum escape hatch, unlike the old bigint-backed AExact.
+// Safe-integer gate for exact literals (docs/design-history/arrival-one-number-rework.md
+// §0.3/§2.5): a source literal whose exact magnitude would leave `Number.isSafeInteger`
+// range THROWS a teaching ParseError rather than silently truncating or minting an
+// impossible AExact component — the RATIO design has no bignum escape hatch.
 // This is the reader's own twin of `values/numbers.ts`'s private `parseSafeIntLiteral`:
 // same law, duplicated rather than imported, because that helper belongs to
 // `parseNumber` — a deliberately separate, non-dual-use host utility (see that file's
@@ -140,8 +140,8 @@ function num_pre_parse(arg: string): {
 
 // The exported numeric parsers are DUAL-USE (the reader's leaf path AND the live
 // `string->number` in env/r7rs/strings.ts) — hence the optional trailing `ctx`: the
-// reader passes its parse ctx (source identity for the literal), the runtime caller's
-// omission keeps today's CONSTANT_CTX behavior until its own ctx-threading wave lands.
+// reader passes its parse ctx (source identity for the literal); the runtime caller
+// omits it and defaults to CONSTANT_CTX (deferred: threading its own ctx).
 export function parse_rational(arg: string, radix = 10, ctx: RunContext = CONSTANT_CTX): AExact | AInexact {
   const parse = num_pre_parse(arg);
   const parts = parse.number!.split("/");
@@ -152,7 +152,8 @@ export function parse_rational(arg: string, radix = 10, ctx: RunContext = CONSTA
     return new AInexact(ctx, Number(numBig) / Number(denomBig));
   }
   // Components gated BEFORE the mint (never decline-to-parse: a rejected rational token
-  // must throw, not fall through to `parse_symbol` — one-number-rework §1's named hazard).
+  // must throw, not fall through to `parse_symbol` —
+  // docs/design-history/arrival-one-number-rework.md §1's named hazard).
   return mintExact(
     ctx,
     toSafeExactComponent(numBig, arg),
@@ -428,7 +429,7 @@ export function parse_argument(arg: string, strict = false, ctx: RunContext = CO
   // would mint per-occurrence instances — and raw reference identity on interned symbols
   // is load-bearing: memq/assq compare with `===` (env/r7rs/lists.ts), and the specials
   // quote-family table shares instances with parsed source through the CONSTANT_CTX
-  // table. Per-occurrence symbol spans are blocked on those `===` sites delegating to
-  // `eq()` (structural-equal.ts, the codebase's own name-comparing eq?) — a later wave.
+  // table. Deferred: per-occurrence symbol spans are blocked on those `===` sites
+  // delegating to `eq()` (structural-equal.ts, the codebase's own name-comparing eq?).
   return parse_symbol(arg, CONSTANT_CTX);
 }

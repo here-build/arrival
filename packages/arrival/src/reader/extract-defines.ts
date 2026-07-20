@@ -12,17 +12,16 @@
  * Returns `[]` if the source fails to parse; the caller (e.g. an
  * editor) renders the parse error through its own channel.
  *
- * Pair / SchemeSymbol are duck-typed because the concrete classes are
- * not in arrival-scheme's public surface. The `__location__` symbol is a
- * registry symbol (`Symbol.for("__location__")`) so we can read it
- * without importing `arrival-scheme/primitives.js`.
+ * Consumes the parse output as plain structure: Pair / SchemeSymbol are
+ * duck-typed on `car`/`cdr` / `__name__`, and each form's `__location__` is
+ * read via its registry symbol (`Symbol.for("__location__")`) — no dependency
+ * on the concrete primitive classes.
  */
 import { parse as parseGenerator } from "../eval/generator-exec.js";
 
 /**
- * Source location of a parsed form. Mirrors arrival-scheme's internal
- * `SourceLocation` (not re-exported from its index today). Read from
- * `Symbol.for("__location__")` on the Pair.
+ * Source location of a parsed form — mirrors the reader's `SourceLocation`
+ * (errors.ts), read structurally from `Symbol.for("__location__")` on the pair.
  */
 export interface SourceLocation {
   /** 1-indexed line number. */
