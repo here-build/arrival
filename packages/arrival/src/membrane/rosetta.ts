@@ -470,7 +470,7 @@ export const INBOUND_CLAIMS: readonly InboundClaim[] = [
     box: (_ctx, v) => v,
   },
   {
-    // Opaque HOST value — not a scheme number (docs/working-proposals/
+    // Opaque HOST value — not a scheme number (docs/design-history/
     // arrival-one-number-rework.md §2.3): `number?` answers #f on it and arithmetic
     // coercion doors (op-helpers.ts's `coerceNumeric`), so it must never be claimed by
     // the scalar row above and boxed into an `AExact`. Rides the same raw identity
