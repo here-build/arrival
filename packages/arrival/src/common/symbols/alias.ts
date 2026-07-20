@@ -1,5 +1,7 @@
 // symbol.alias — per-tag factory file assembled into `symbol` by ./index.ts; shared types
 // live in ./_bake.js (imported by sibling factories only — this one needs none of them).
+// docs/ASSEMBLY.md §SYMBOL-KINDS — the `alias` row (a fourth arm outside AEntity's discriminant,
+// resolved before per-kind dispatch, binds byte-identically). The bind-time mechanics are local.
 //
 // `symbol.alias`originalName`` declares a DUPLICATE binding of an EXISTING symbol under a
 // new name — dissolution semantics: the record KEY it's placed under (a sibling of

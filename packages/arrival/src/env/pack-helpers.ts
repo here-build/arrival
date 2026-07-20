@@ -1,11 +1,12 @@
 // Shared env-layer helpers for capability packs.
 //
-// Pack isolation forbids a PACK importing another PACK (the intra-set dependency
-// rule) — it does not forbid packs sharing a non-pack env-layer module, exactly as
-// they all share `common/capability.ts` and `values/op-helpers.ts`. This module is
-// that shared door: a helper several packs need (e.g. `to_array`, used by r7rs/lists,
-// r7rs/strings, srfi/srfi-13) lives here ONCE. Pack isolation forbids the cross-pack
-// import, NOT a shared non-pack home — the fix is this module, not per-pack duplication.
+// Pack isolation (docs/ASSEMBLY.md §CAPABILITY: a capability reaches another only
+// through a declared `deps` edge, never sideways into its internals) forbids a PACK
+// importing another PACK — it does NOT forbid packs sharing a non-pack env-layer
+// module, exactly as they all share `common/capability.ts` and
+// `values/op-helpers.ts`. This module is that shared door: a helper several packs
+// need (e.g. `to_array`, used by r7rs/lists, r7rs/strings, srfi/srfi-13) lives here
+// ONCE — the fix for a cross-pack need is this module, not per-pack duplication.
 
 import invariant from "tiny-invariant";
 import { APair, isCircularList } from "../values/primitives/APair.js";

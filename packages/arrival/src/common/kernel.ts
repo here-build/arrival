@@ -1,13 +1,11 @@
-// kernel.ts — capability-DAG assembly for arrival environments. Env-agnostic core: closure +
-// cycle detection, identity dedup, C3 linearization, and the apply loop with LIFO disposal +
-// per-pack apply timeout.
+// kernel.ts — the IMPLEMENTATION of arrival's env-assembly machine. Env-agnostic core: closure +
+// 3-color cycle detection, identity dedup, C3 linearization (the merge), and the apply loop with
+// LIFO disposal + per-pack apply timeout. A pack is a named, dependency-carrying, async capability
+// contribution to an env.
 //
-// A pack is a named, dependency-carrying, async capability contribution to an env. AmbientRuntimes
-// are assembled by C3-linearizing the pack DAG and applying each pack once. The dep edge IS the
-// capability grant; the DAG is the authoring form, the assembled env is the flat runtime form.
-//
-// C3 linearization = Python MRO (Barrett, Cassels, Haahr et al., "A Monotonic Superclass
-// Linearization for Dylan", OOPSLA 1996; cited not invented).
+// The MODEL — what assembly is, why C3 (= Python MRO), the dep-edge-is-grant law, apply-once, and
+// the DAG-authoring-form → flat-runtime-form lowering — is docs/ASSEMBLY.md §ASSEMBLY, the single
+// authoritative statement; this file enforces it.
 
 // Door-set degradation's `DegradedCapability`/`DegradedNeed` types are TYPE-ONLY, from the
 // degradation-domain module (common/degradation.ts) — kernel stays env-agnostic (no runtime
@@ -57,7 +55,7 @@ export interface EnvPack<E = unknown> {
  *  capability.ts's bindTarget only ever writes. In BOOTSTRAP assembly this is the kernel's own
  *  Map-backed shim (see `assembleEnv`); in MID-RUN application it is the caller's adapter over
  *  a real, discarded child frame (loader-capability.ts wraps the module-internal `bindValue` —
- *  `SchemeEnv` itself carries no write member; hermetic-Environment ruling). */
+ *  `SchemeEnv` itself carries no write member; docs/ASSEMBLY.md §HERMETIC). */
 export interface PreludeBindTarget {
   set(name: string, value: unknown): unknown;
 }
@@ -257,31 +255,19 @@ function makeCtx<E>(
 
 // ── The kernel-internal, BAKE-SCOPED prelude overlay (bootstrap assembly) ────────────────────
 //
-// Assembly IS the bake — the one-time phase that evaluates capability preambles against the
-// chain-so-far. The kernel owns `preludeOnly` binding + resolution per-assembly, with no env
-// re-parenting:
-//
-//   • bindings land in a per-assembly `Map` behind `ctx.preludeScope` (a `.set`-only shim —
-//     capability.ts's bindTarget only writes);
-//   • a resolver registered ON THE BASE ENV answers lookups from that Map for the duration of
-//     the C3 loop ONLY. Resolvers are consulted at every layer of a chain walk
+// The `preludeOnly` assembly-time-only contract — bindings in a per-assembly `Map` behind
+// `ctx.preludeScope`, a base-env resolver live only for the C3 loop, the seal that drops it
+// (unregister where the host supports it for zero residue, a sealed-flag silencer where it does
+// not), and why post-seal the name is unbound everywhere including from prelude-defined closures
+// (so a bridge captures the VALUE, not the verb) — is docs/ASSEMBLY.md §PRELUDE. Two facts are
+// local to THIS implementation:
+//   • the base-env resolver is consulted at every chain layer
 //     (`AmbientRuntime._lookupWithResolvers`: own bindings → resolvers → parent), so a prelude
-//     evaluated against R — or any child scope chaining through the base — resolves the symbol
-//     exactly like the old overlay-parent did;
-//   • at the SEAL (the `finally` — success OR failure) the overlay is DROPPED: the resolver is
-//     unregistered wherever the base supports it (`ResolvingAmbient` does), so no spent
-//     machinery survives assembly on any env — no per-assembly resolver ever accumulates. A
-//     structural host offering `registerResolver` but no `unregisterResolver` keeps the
-//     sealed-flag fallback (the resolver stays registered but answers nothing) — same contract,
-//     old residue. Post-seal the name is a plain unbound-variable everywhere — INCLUDING from
-//     prelude-defined closures, which walk the live chain at call time. `preludeOnly` therefore
-//     means ASSEMBLY-TIME-ONLY. This is the contract, not a gap: a prelude that must bridge a
-//     preludeOnly value to runtime captures the VALUE at assembly time
-//     (`(define x (the-prelude-verb …))`), never the verb.
-//
-// Everything is a per-assembly closure (concurrent assemblies never share state); only the id
-// uniquifier below is module-level, so two overlapping assemblies over the SAME base register
-// distinct resolver ids (AmbientRuntime.registerResolver dedups by id).
+//     evaluated against R — or any child chaining through the base — resolves the symbol exactly
+//     like a real binding;
+//   • everything is a per-assembly closure (concurrent assemblies share no state); only the id
+//     uniquifier below is module-level, so two overlapping assemblies over the SAME base register
+//     distinct resolver ids (`AmbientRuntime.registerResolver` dedups by id).
 
 /** The structural face of a resolver-capable base (mirrors scheme-env.ts's `SchemeEnv.
  *  registerResolver`/`ResolverSpec` WITHOUT importing them — the kernel stays env-agnostic;
@@ -299,9 +285,9 @@ let bakeOverlaySeq = 0;
 
 /**
  * Assemble `base` into a capability-scoped env by resolving the pack DAG — the BAKE phase.
- * Async by construction. Applies each pack once in C3 order (least-precedence first ⇒
- * last-write-wins matches C3). On any apply failure, runs disposers collected so far (LIFO)
- * and rejects — no half-built env escapes.
+ * Async by construction. Applies each pack once, least-precedence (deepest dependency) first —
+ * last-write-wins, per docs/ASSEMBLY.md §ASSEMBLY. On any apply failure, runs disposers collected
+ * so far (LIFO) and rejects — no half-built env escapes.
  *
  * `ctx.preludeScope` is ALWAYS provided — the kernel-internal, bake-scoped prelude overlay
  * (see the block comment above), dropped at seal. Mid-run application
@@ -370,12 +356,11 @@ export async function assembleEnv<E>(base: E, roots: readonly EnvPack<E>[]): Pro
   return { env: base, order, degraded, activations, dispose: runDisposers };
 }
 
-/** A live-env assembler for RUNTIME pack application — the `(require/extension :name)` path. Where
- *  `assembleEnv` builds a fresh env once at construction, this applies registered packs onto an
- *  ALREADY-LIVE env mid-run, idempotently and single-flight (a second require of the same pack — or a
- *  concurrent one from a parallel HOF arm — awaits the one in-flight apply, never re-applies). Each
- *  pack's deps are applied first in C3 order, and a pack reached two ways applies once. Disposers are
- *  collected for a single LIFO `dispose()` tied to the env's teardown. */
+/** A live-env assembler for RUNTIME pack application — the `(require/extension :name)` path
+ *  (§LOADER). The mid-run single-flight contract — apply onto an ALREADY-LIVE env, a second or
+ *  concurrent `require` awaiting the one in-flight apply (never re-applying), deps applied first in
+ *  C3 order, a pack reached two ways applied once — is docs/ASSEMBLY.md §ASSEMBLY. Disposers collect
+ *  for a single LIFO `dispose()` tied to the env's teardown. */
 export interface RuntimeAssembler<E = unknown> {
   /** Apply `pack` (and any not-yet-applied deps) to the live env, in C3 order. Idempotent.
    *  `opts.preludeScope`/`opts.preludeEvalScope`, when passed, are threaded onto every applied

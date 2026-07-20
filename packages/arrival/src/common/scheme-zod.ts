@@ -33,6 +33,11 @@ import { withDynamicCallSite } from "../eval/dynamic-call-site.js";
 import type { AList, AListAlike, SchemeValue } from "../values/types.js";
 
 /**
+ * The codec vocabulary — the membrane's per-arg codecs. docs/ASSEMBLY.md §CONTRACT frames the
+ * two faces this table's columns carry (`z.input` = the SCHEME face, `z.output` = the JS face)
+ * and the `z.value` no-transform escape hatch; the codec mechanics below are the membrane model
+ * (its own doc), kept in full here.
+ *
  * Every primitive has a scheme value (always) and maybe a JS codec. That "maybe" is
  * the whole design. Primitive names are deliberately ambiguous — different from both
  * Scheme (`AExact`) and JS (`bigint`) — to highlight they aren't tied to either ontology.

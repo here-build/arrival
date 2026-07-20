@@ -1,27 +1,21 @@
-// BASE_PACKS — the scheme stdlib as a capability set, the pack-assembled base.
+// BASE_PACKS — the scheme stdlib as a capability set assembled onto `user_env`
+// (the `.scm`-defined half; NATIVE_PACKS is the JS-implemented half onto
+// `global_env`). `initBridge`/`assembleEnv` ASSEMBLES them — this IS the scheme-
+// stdlib load path; each pack's prelude + symbols + resolvers become the LIVE
+// source of the env's scheme surface. See docs/ASSEMBLY.md §ASSEMBLY for the two-
+// root bootstrap and the C3 precedence rule this array's ORDER feeds.
 //
-// These are the `scheme/*` capabilities. `initBridge` ASSEMBLES them onto user_env
-// (assembleEnv) — this IS the scheme-stdlib load path. Each pack's prelude +
-// symbols + resolvers become the LIVE source of the env's scheme surface.
-//
-// `scheme/core` is the precedence floor (constants, syntax-binding
-// macros); everything else expands against it. The base preludes are verified
-// mutually order-independent (no pack expands another's macro), so PRELUDE
-// EVALUATION order is immaterial (every cross-capability reference lives inside a
-// `lambda`/`define-macro` body — late-bound at CALL time, never at define time).
-//
-// ARRAY POSITION, however, doubles as a C3 precedence constraint the moment any
-// member declares `deps` (kernel.ts's `c3Linearize` feeds this array's own order
-// in as a merge input — the roots order gives the total order). C3 requires a
-// dependency to be a "good head" ranked BELOW its dependent, so any pack that
-// declares `deps` on names still positioned ahead of it in this array must move
-// — dependents lead, dependencies trail. This is always behaviorally inert
-// (every cross-capability reference is late-bound at CALL time, per the
-// invariant above) but load-bearing for the C3 merge the moment a member
-// declares `deps`.
+// ARRAY POSITION IS C3 PRECEDENCE (§ASSEMBLY): the kernel feeds this array's own
+// order into the C3 merge as the roots list. Every base pack's cross-capability
+// reference is late-bound at CALL time (inside a `lambda`/`define-macro` body), so
+// PRELUDE EVALUATION order is behaviorally immaterial — but the instant a member
+// declares a `deps` edge, the array must place that member AHEAD of its dependency
+// (dependents lead, dependencies trail) or the merge has no "good head" and throws.
+// `scheme/core` is the precedence floor (constants, syntax-binding macros);
+// everything else expands against it.
 //
 // The tail block [racket, clojure, lisp, polyglot, srfi1, binding, exceptions,
-// lists] is the current resolution of that constraint:
+// lists] is that constraint resolved by hand — the local dep census:
 //   racket     — depends on clojure/polyglot/equality/numeric/vectors/lists/
 //                exceptions; depended on by nothing else in this set.
 //   clojure    — depended on by racket; depends on polyglot/srfi1/equality/
@@ -64,10 +58,8 @@
 // trap without it, so the edge is declared anyway), and racket's
 // dict-set/dict-update door messages + %dict-guard call Clojure's `str`. So
 // `scheme/polyglot-racket` depends on `scheme/polyglot-clojure`, which depends
-// on `scheme/polyglot` (core) + `scheme/srfi-1` + assorted R7RS natives — the
-// same "dependents before dependencies WITHIN a deps array too" shape the tail
-// block follows throughout; each dialect pack's own header carries the
-// name-by-name census.
+// on `scheme/polyglot` (core) + `scheme/srfi-1` + assorted R7RS natives — each
+// dialect pack's own header carries the name-by-name census.
 
 import type { EnvCapability } from "../common/capability.js";
 import core from "./core/core.js";

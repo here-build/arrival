@@ -1,17 +1,15 @@
-// NATIVE_PACKS — the complete native foundation: the value-domain primitive clusters
-// plus the error-object predicates, as assembled capability packs.
+// NATIVE_PACKS — the JS-implemented R7RS domains (chars / strings / vectors /
+// bytevectors / equality / numeric / error-objects) as a capability set, the native
+// half of the two-root bootstrap (docs/ASSEMBLY.md §ASSEMBLY). Each member is a live
+// `EnvCapability`, the sole home of its domain's primitives, symbol-only (baked
+// `symbol.native`/`symbol.rosetta`, no prelude/resources/deps). Sibling of
+// `BASE_PACKS` (the `.scm`-defined packs onto `user_env`); together the full
+// pack-assembled surface.
 //
-// These are the JS-implemented R7RS domains (chars / strings / vectors / bytevectors /
-// equality / numeric / error-objects). `ensureBaseAssembled` (eval/generator-exec.ts,
-// public alias `initBridge`) ASSEMBLES them onto `global_env` (the native root) via
-// `assembleEnv` as the first step of the lazy runtime bootstrap — it dynamic-imports
-// this roster, so this file must stay exec-edge-free (near-leaf; no module-eval cycle).
-// Each member is a live `EnvCapability` — the sole home of its domain's primitives,
-// symbol-only (baked `symbol.native`/`symbol.rosetta` bindings, no prelude, no resources,
-// no deps).
-//
-// Sibling of `BASE_PACKS` (the `.scm`-defined packs assembled onto `user_env`).
-// Together they are the full pack-assembled surface.
+// `ensureBaseAssembled` (eval/generator-exec.ts, public alias `initBridge`)
+// ASSEMBLES these onto `global_env` (the native root) via `assembleEnv` as the first
+// bootstrap step — it dynamic-imports this roster, so this file must stay
+// exec-edge-free (near-leaf; no module-eval cycle).
 
 import type { EnvCapability } from "../common/capability.js";
 import bytevectors from "./r7rs/bytevectors.js";

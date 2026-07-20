@@ -1,6 +1,11 @@
 // symbol.rosetta — a host fn in JS-LAND (decoded via the contract codecs). One of the
 // per-tag factory files re-assembled into the `symbol` namespace by `./index.ts`; the
 // shared types + helpers live in `./_bake.js`.
+//
+// docs/ASSEMBLY.md §SYMBOL-KINDS — the `rosetta` row (decode → validate → impl → encode →
+// mint, the one membrane chokepoint); §MEMBRANE-SEAM — the bake-side crossing this `run`
+// wrapper spins (source mints / pipe forwards, the region-scope gate). The crossing mechanics
+// below are the enforcement site the doc points at, kept in full here.
 
 import * as z from "../scheme-zod.js";
 import { ZodError, ZodType } from "zod";

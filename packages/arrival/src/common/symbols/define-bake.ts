@@ -5,6 +5,10 @@
 // at `bindCapabilityDefines`). Invoked from `../capability.ts`'s apply() Pass 2, once phase
 // 1 (every non-define kind) has already bound.
 //
+// docs/ASSEMBLY.md §PRELUDE — Pass-2 binding order, the FV locality law, and derived-role
+// (§AXES) are stated at the model level there; this file is the enforcement site the doc
+// points at, kept in full.
+//
 // Kept OUT of `../capability.ts` itself: this pulls in the reader, `provenance/lineage.ts`'s
 // classifier, `provenance/prelude.ts`'s fixpoint, and the callable-invocation primitives
 // (`eval/call-function.ts`, `eval/Macro.ts`) — a real amount of machinery capability.ts

@@ -85,10 +85,9 @@ export let mintResolvingFrame!: (
  * Resolver/LexicalScope/Capabilities model, deliberately NOT renamed to "Scope"
  * (which {@link LexicalScope} owns) or "Frame".
  *
- * MONADIC FROM JS (hermetic-Environment ruling): an env can only
- * be BORN (assembled) and READ — never mutated, never extended, from the JS side. There
- * is no public birth surface (no `inherit()`/`merge()` methods, no bindings-record/parent
- * constructor arm); frame birth is the module-internal
+ * MONADIC FROM JS — the HERMETIC-ENVIRONMENT ruling (docs/ASSEMBLY.md §HERMETIC).
+ * No public birth surface: no `inherit()`/`merge()` method, no bindings-record/parent
+ * constructor arm; frame birth is the module-internal
  * {@link mintFrame}/{@link mintPlainFrame}/{@link mintResolvingFrame} (the same
  * not-barrel-exported discipline as {@link bindValue} — the assembly machinery, the
  * evaluator, and the replay ingress reach them; nothing else does).
@@ -148,8 +147,8 @@ export class AmbientRuntime {
   }
 
   /**
-   * The read face — an INVARIANT DOOR: storage is inside the membrane (hermetic-Environment
-   * ruling), every writer boxes at its own boundary before {@link bindValue}, so a raw JS
+   * The read face — an INVARIANT DOOR: storage is inside the membrane (§HERMETIC),
+   * every writer boxes at its own boundary before {@link bindValue}, so a raw JS
    * scalar surfacing on a read means a writer bypassed the membrane (a direct `__env__`
    * poke, a cast-through `mintFrame(parent, name, bindings)` record) — teach and refuse,
    * never silently re-box under the run-neutral ctx.
@@ -182,10 +181,10 @@ export class AmbientRuntime {
     }
 
     if (throwError) {
-      // The PLAIN unbound wall + typo suggestions from THIS chain's actual vocabulary —
-      // no curated name tables in the env (teaching about well-known-but-absent names is
-      // declared capability data now: the `symbol.notImplemented` doors in env/*-stubs /
-      // r7rs/host / srfi-1, which this walk resolves like any binding; see unbound-variable.ts).
+      // The PLAIN unbound wall + typo suggestions from THIS chain's actual vocabulary
+      // (§HERMETIC: no curated name tables — teaching about well-known-but-absent names
+      // is declared capability data, the `symbol.notImplemented` doors in env/*-stubs /
+      // r7rs/host / srfi-1, resolved by this walk like any binding; see unbound-variable.ts).
       throw unboundVariableError(name.toString(), this.allBoundNames());
     }
     return undefined;
@@ -211,9 +210,9 @@ function isRawJsScalar(value: unknown): value is string | number | bigint | bool
 /**
  * INVARIANT DOOR (P5-style — teach, don't ban): a raw JS scalar surfacing from
  * environment storage means some writer bypassed the storage membrane. Values enter
- * the interpreter ONLY as capabilities or overrides (hermetic-Environment ruling);
- * inside the membrane every binding is a boxed scheme value. Fires on the READ so the
- * message can name the binding — the fix is always at the WRITER.
+ * the interpreter ONLY as capabilities or overrides (§HERMETIC); inside the membrane
+ * every binding is a boxed scheme value. Fires on the READ so the message can name the
+ * binding — the fix is always at the WRITER.
  */
 function assertNotRawInStorage(value: unknown, name: string | symbol, where: string): void {
   if (isRawJsScalar(value)) throw new RawCrossingError("storage", String(name), typeof value, where);
@@ -234,10 +233,9 @@ export function assertResolvedBinding(value: unknown, name: string | symbol, res
 
 /**
  * The ONE storage write — module-internal, deliberately NOT barrel-exported and NOT a
- * method (the hermetic-Environment ruling: "not designed to be operatable from the JS
- * side at all; from JS, it's fully monadic"). There is no public storage write — no
- * `AmbientRuntime.set` method, no `SchemeEnv.set` contract member (the same cut as the
- * retired `defineRosetta` public method); the writers that legitimately remain are all
+ * method (the HERMETIC-ENVIRONMENT ruling, §HERMETIC: no JS-side write surface — no
+ * `AmbientRuntime.set` method, no `SchemeEnv.set` contract member, the same cut as the
+ * retired `defineRosetta` public method). The writers that legitimately remain are all
  * inside the membrane:
  *
  *   • the EVALUATOR's frame binds — scheme `define`/let/lambda/letrec/catch, called
@@ -287,10 +285,10 @@ export function bindValue(env: AmbientRuntime, name: BindingName, value: Ambient
 
 /**
  * The BAKED-ROOT specialization of {@link AmbientRuntime} — the only place fallback
- * resolvers live. Exactly two production producer classes register here: the
+ * resolvers live. Only two production producer classes register here (§PRELUDE): the
  * kernel's phase-gated prelude-scope resolver (`common/kernel.ts`'s `assembleEnv`,
  * via the `registerResolver` duck-type probe) and pack-declared
- * `EnvCapability.resolvers` (`common/capability.ts:383`). Both apply targets are,
+ * `EnvCapability.resolvers` (`common/capability.ts`). Both apply targets are,
  * and must stay, `ResolvingAmbient` instances: `env-roots.ts`'s
  * `global_env`/`user_env`, and any env minted off one of those via the
  * module-internal {@link mintFrame} (e.g. `generator-exec.ts`'s per-call
@@ -362,9 +360,9 @@ export class ResolvingAmbient extends AmbientRuntime implements SchemeEnv {
     for (const resolver of this.__resolvers__) {
       const result = resolver.resolve(String(name), ctx);
       if (result !== undefined) {
-        // Boxed-at-the-resolver's-boundary contract (hermetic-Environment ruling):
-        // a raw-scalar answer doors here, at the probe, so BOTH read faces (this live
-        // walk and the sealed chain) refuse before raw JS reaches the evaluator.
+        // Boxed-at-the-resolver's-boundary contract (§HERMETIC): a raw-scalar answer
+        // doors here, at the probe, so BOTH read faces (this live walk and the sealed
+        // chain) refuse before raw JS reaches the evaluator.
         assertResolvedBinding(result, name, resolver.id);
         return result as AmbientValue;
       }
@@ -376,9 +374,9 @@ export class ResolvingAmbient extends AmbientRuntime implements SchemeEnv {
 
 /**
  * The ONE frame-birth door — module-internal, deliberately NOT barrel-exported and NOT
- * a method (the hermetic-Environment ruling extended to birth: an env can only be BORN
- * — assembled — and READ from JS; a public `inherit()`/`merge()` would be
- * capability composition in disguise, so neither exists). Subtype-preserving: a
+ * a method (the HERMETIC-ENVIRONMENT ruling extended to birth, §HERMETIC: a public
+ * `inherit()`/`merge()` would be capability composition in disguise, so neither exists).
+ * Subtype-preserving: a
  * `ResolvingAmbient` parent mints a resolver-capable child (the per-assembly
  * `exec-capabilities` base off `user_env` stays a machinery target), a plain parent
  * mints a plain lexical frame — dispatch on the parent's runtime class, in one place.

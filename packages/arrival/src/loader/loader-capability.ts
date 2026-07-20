@@ -1,46 +1,25 @@
-// loader-capability — `arrivalLoaderCapability`: the module system as a DECLARATIVE,
-// configuration-style EnvCapability. `(require …)` / `(require/extension …)` /
-// `(require/register-extension …)` are declared here; ALL of their per-run state lives on the
-// capability's own axes (configuration + resources), so nothing is wired imperatively and nothing
-// is pushed OUT through callbacks.
+// loader-capability — `arrivalLoaderCapability`: the module system as a plain
+// `EnvCapability`, the worked exemplar of docs/ASSEMBLY.md §LOADER. `(require …)` /
+// `(require/extension …)` / `(require/register-extension …)` are declared here; all their
+// per-run state lives on the capability's own axes (configuration + resources), nothing wired
+// imperatively, nothing pushed OUT through callbacks. §LOADER states the model in full: `fs`
+// IS configuration and `require` binds IFF a loader is derivable (bundled-but-inert without
+// `fs`, a program's `(require …)` a plain unbound variable otherwise); run state IS resources
+// (`requireCache` — the single-flight module cache whose `windDown()` clears between runs;
+// `assembler` — the per-live-env `RuntimeAssembler` whose `asyncDispose` tears extensions back
+// out); `require/register-extension` is a `preludeOnly` macro that must apply BEFORE the preludes
+// calling it (last in the root set, lowest precedence ⇒ applied first, or the ext capabilities
+// dep on it).
 //
-//   • fs IS CONFIGURATION. The primary surface is `configuration.fs` — a raw read-capable
-//     filesystem (`{ readFile(path) }`). The capability DERIVES its own `Loader` (resolve + read +
-//     the per-suffix resolver table) from it internally (`makeFsLoader`); a host no longer
-//     pre-builds a `Loader` by hand. A pre-built `configuration.loader` is still accepted (it WINS
-//     over `fs`) for the one thing `fs` can't express: a caller that injects CUSTOM resolvers into
-//     the table (arrival-chain threads its `.yaml`/`.toml` `ExtensionHandler`s that way). `require`
-//     is present IFF a loader is derivable (fs or loader) — capability withholding by absence: a
-//     loader-less env has no `require` symbol at all, so a program's `(require …)` is a plain
-//     unbound variable, not a policed call.
-//
-//   • RUN STATE IS RESOURCES, not stashed callbacks. The two pieces of lifecycle-bearing per-run
-//     state are modeled as capability-owned `Resource`s on the `resources` axis:
-//       – `requireCache` — the single-flight module cache + cycle/loading bookkeeping. Its
-//         `windDown()` drops the session so the next touch re-acquires a FRESH (empty) one — which
-//         IS "clear the cache between runs of a shared env". A lifecycle owner reaches it through
-//         the `LoweredPack.windDown()/resume()` cycle instead of a stashed `clearRequireCache` fn.
-//       – `assembler` — a holder for the per-live-env `RuntimeAssembler` backing
-//         `(require/extension …)`; the resource's `asyncDispose` IS `assembler.dispose()`, so
-//         winding the pack down tears every runtime-applied extension back out.
-//     ⚠ COMPAT (transitional): `configuration.onRequireCache` and `configuration.onExtensionAssembler`
-//     REMAIN as receivers — but only because the kernel genuinely can't hand these hosts the Ref
-//     today. `buildArrivalEnv` (arrival-chain,
-//     run-program.ts) DISCARDS the `LoweredPack`s it lowers (it returns only the assembled `env`),
-//     so its consumers (`run-traced.ts`'s shared kernel; `chain-env.ts`'s `ChainEnvironment`) have
-//     NO handle to `windDown()/resume()`. Until `buildArrivalEnv` threads the pack out, these two
-//     receivers bridge the SAME underlying resource state (a `peek()`-clear for the cache; the live
-//     assembler for dispose-folding). They delete the day the pack is surfaced — the resources are
-//     already the single source of truth.
-//
-//   • `require/register-extension` is a `preludeOnly: true` MACRO: unevaluated resolver NAME so
-//     preludes write `(require/register-extension ".prompt" ext/prompt/resolve)` without string
-//     quotes (a bare symbol would otherwise evaluate to the function, and String(fn) would poison
-//     the registry key). The kernel's phase-gated prelude scope makes it callable from every
-//     LATER-APPLIED capability's prelude and a plain unbound-variable error at runtime. ⚠ ORDERING:
-//     this capability must apply BEFORE the capabilities whose preludes call it — list it LAST in
-//     the assembly's root set (lowest precedence ⇒ applied first), or make the ext capabilities
-//     dep on it.
+// LOCAL to this site — the transitional COMPAT bridge §LOADER does not cover:
+//   ⚠ `configuration.onRequireCache` and `configuration.onExtensionAssembler` REMAIN as receivers
+//     only because the kernel can't hand these hosts the resource Ref today. `buildArrivalEnv`
+//     (arrival-chain, run-program.ts) DISCARDS the `LoweredPack`s it lowers (returns only the
+//     assembled `env`), so its consumers (`run-traced.ts`'s shared kernel; `chain-env.ts`'s
+//     `ChainEnvironment`) have NO handle to `windDown()/resume()`. Until `buildArrivalEnv` threads
+//     the pack out, these two receivers bridge the SAME underlying resource state (a `peek()`-clear
+//     for the cache; the live assembler for dispose-folding). They delete the day the pack is
+//     surfaced — the resources are already the single source of truth.
 //
 // The configuration slice mirrors `BuildArrivalEnvOpts`' loader-facing fields, so the ONE shared
 // config bag (`exec(src, { capabilities, config })` / `buildArrivalEnv(opts)`) feeds this capability
@@ -235,9 +214,9 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
     void requireCache;
     void assembler;
     const defs: Record<string, SymbolDeclaration> = {
-      // Assembly-time-only MACRO (kernel's phase-gated prelude scope): callable from every
-      // later-applied capability's prelude, unbound everywhere at runtime. MACRO so the
-      // resolver name is unevaluated — see makeRegisterExtensionMacro.
+      // Assembly-time-only MACRO (§LOADER / §PRELUDE): callable from every later-applied
+      // capability's prelude, unbound everywhere at runtime. MACRO so the resolver name is
+      // unevaluated — see makeRegisterExtensionMacro.
       "require/register-extension": {
         kind: "macro" as const,
         name: "require/register-extension",
@@ -246,12 +225,11 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
       },
     };
 
-    // Door-set degradation (design doc symbol-define-static-program-validation.md §3.7):
-    // under `degradation: "doors"`, an absent `fs`/`loader` does not WITHHOLD `require`
-    // entirely (the header's "capability withholding by absence" posture) — it binds a
-    // cause-carrying door instead, teaching "provide fs (or loader) to enable it". Under the
-    // default `"forbid"` mode (`degradation.active` false) this branch never fires — the
-    // withhold is byte-identical.
+    // Door-set degradation (§DEGRADATION): under `degradation: "doors"`, an absent
+    // `fs`/`loader` does not WITHHOLD `require` entirely — it binds a cause-carrying door
+    // instead, teaching "provide fs (or loader) to enable it". Under the default `"forbid"`
+    // mode (`degradation.active` false) this branch never fires — the withhold is
+    // byte-identical.
     if (loader === undefined && degradation.active) {
       defs["require"] = degradation.door(
         "require",
@@ -269,11 +247,10 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
 
       defs["require"] = symbol.native`require: loads a module by specifier and returns its value or spills its defines into the environment`(
         { input: [z.value], output: [z.value] },
-        // RAW-BOUND, never rosetta-wrapped — so there is no provenance mint (`(define run-x
-        // (require "x.prompt"))` returns a CALLABLE — the data is born when the proc is
-        // INVOKED, not when required — a mint here would surface `require` as a spurious chain
-        // node) and no return marshal (an `eval` module's scheme lambda survives; a wrapper's
-        // `jsToScheme` would void it).
+        // RAW-BOUND `{ value }`-style native, never rosetta-wrapped — §LOADER (no provenance
+        // mint: `(define run-x (require "x.prompt"))` returns a CALLABLE, the data is born when
+        // the proc is INVOKED; no return marshal: an `eval` module's scheme lambda survives
+        // where a wrapper's `jsToScheme` would void it).
         //
         // STATEMENT-POSITION + eager-sequential within a `.scm`: that file's forms are
         // `execExpr`'d in order, to completion, so a required file's `define-macro` is
@@ -430,25 +407,19 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
 
       defs["require/extension"] = symbol.native`require/extension: applies a host-registered extension pack (by :name) to the current env`(
         { input: [z.value], output: [z.value] },
-        // RAW-BOUND, `__withCtx` — no rosetta wrapper, no marshal (`pure: true` no-mint behavior
-        // is structural here, same as `require` above). Resolves the name, applies the registered
-        // pack (and its deps) to the live env through the per-env `RuntimeAssembler` (held by the
-        // `assembler` resource — created lazily on first call; its resource `asyncDispose` folds
-        // `dispose()` into pack teardown), and returns unspecified: the capability's symbols are now
-        // live on the env. Absent name ⇒ teaching error.
+        // RAW-BOUND, `__withCtx` — no rosetta wrapper, no marshal (same as `require`, §LOADER).
+        // Resolves the name, applies the registered pack (and its deps) to the live env through
+        // the per-env `RuntimeAssembler` (held by the `assembler` resource — created lazily on
+        // first call; its `asyncDispose` folds `dispose()` into pack teardown), and returns
+        // unspecified: the capability's symbols are now live. Absent name ⇒ teaching error.
         //
-        // MID-RUN prelude scope (deliberately NOT bootstrap's machinery):
-        // unlike bootstrap assembly (whose `preludeOnly` symbols ride the kernel's phase-gated
-        // resolver inside `assembleEnv`), the env here is LIVE and concurrently evaluating the
-        // user program, and the bootstrap assembly's prelude phase is long closed. So EACH call
-        // seeds a fresh, DISCARDED child scope `C' = mintFrame(liveEnv, "prelude/<name>")` with
-        // `register-extension` (so an applied pack's prelude may still call it), and passes it
-        // as BOTH `preludeScope` (the bind target for any `preludeOnly` symbols) AND
-        // `preludeEvalScope` (the scope the pack's prelude TEXT is evaluated against — a lookup
-        // miss on `C'` falls through to `liveEnv` naturally). `C'` is never linked INTO
-        // `liveEnv` — it is simply dropped when the call resolves. Consequence (deliberate, not
-        // a bug): a mid-run pack's own prelude `define`s land in `C'` and are lost with it —
-        // only its DECLARED `symbols` reach the live env.
+        // The mid-run child scope `C'` is §LOADER / §PRELUDE (bootstrap's phase-gated prelude
+        // machinery cannot touch a LIVE env, so each call seeds a fresh, DISCARDED
+        // `C' = mintFrame(liveEnv, "prelude/<name>")` seeded with `register-extension` — passed
+        // as both the `preludeScope` bind target and the `preludeEvalScope` eval scope, a lookup
+        // miss on `C'` falling through to `liveEnv`; never linked in, dropped when the call
+        // resolves — so the applied pack's own prelude `define`s are lost with `C'`, only its
+        // DECLARED `symbols` reach the live env).
         async function (this: CallCtx, ...args: unknown[]): Promise<SchemeVal> {
           const env = runEnvOf(this, "require/extension");
           const name = extensionName(args[0]);

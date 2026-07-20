@@ -1,5 +1,6 @@
 // symbol.native — per-tag factory file assembled into `symbol` by ./index.ts; shared
-// types live in ./_bake.js.
+// types live in ./_bake.js. docs/ASSEMBLY.md §SYMBOL-KINDS — the `native` row (a contour;
+// impl over scheme values, no validation); §CONTRACT — the SCHEME face it projects.
 //
 // The tagged template carries `name: human description`; it returns a GENERIC fn so
 // TS infers the contract first, then checks the impl against the DECODED types. A
@@ -39,28 +40,19 @@ export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
     // the resolved role onto the bound ANativeProcedure for the lineage classifier).
     const provenance = contract.provenance ?? "pipe";
     assertProvenanceRoleShape(name, provenance, inSchema, outSchema);
-    // Cache class — see Contract.cacheClass (explicit, no kind default; absent = regenerateable).
-    // Native-specific: the run-cache interception lives on the rosetta membrane only (a native
-    // is a contour, not a penetration), yet the resolved field still rides the def uniformly for
-    // downstream readers.
+    // Cache class — see Contract.cacheClass; docs/ASSEMBLY.md §AXES — a native carries the field
+    // but the run-cache interception is rosetta-membrane-only (a contour, not a penetration); the
+    // resolved field still rides the def uniformly for downstream readers.
     const cacheClass = contract.cacheClass;
     assertCacheClassShape(name, cacheClass, inSchema, outSchema);
     // Per-lambda-arm callback roles: shape extraction + the declared override, drift-door
     // checked — see extractCallbackRoles in _bake.ts.
     const callbackRoles = extractCallbackRoles(name, provenance, inSchema, outSchema, contract.callbackRoles);
-    // Spine adoption (values/adopt-spine.ts): a slot declared `z.listAlike` takes the SPINE reading
-    // of its argument, so a borrowed JS array is projected onto an `AJSArrayList` view (O(1), same
-    // backing store, same provenance) BEFORE the impl sees it — and an empty array becomes `nil`.
-    //
-    // It has to happen HERE, not inside the impls, because a native's contract is type-only (there
-    // is no runtime validation on this path at all — see the note below) and several impls FIELD-READ
-    // their list argument (`findImpl` does `list.car`). A borrowed array has no `.car`, so those
-    // impls silently read `undefined`: `find` threw on void, `member` answered #f about lists that
-    // contained the element, `list->vector` answered []. Handing the impl a real APair subclass is
-    // the only thing that reaches that class of consumer.
-    //
-    // Computed once at bake and `undefined` when no slot adopts, so a verb with no list arguments
-    // pays exactly nothing.
+    // docs/ASSEMBLY.md §CONTRACT (spine adoption) — a `z.listAlike` slot's borrowed JS array is
+    // projected onto its `AJSArrayList` view before the impl runs. It runs HERE (the bind path),
+    // not inside the impls, because a native's contract is type-only with no validation and several
+    // impls field-read `.car` — a borrowed array has none, so they'd silently read `undefined`.
+    // Computed once at bake, `undefined` when no slot adopts — a verb with no list args pays nothing.
     const adoptArgs = buildSlotAdopter(contract.input, contract.inputRest);
     return {
       kind: "native",

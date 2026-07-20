@@ -1,16 +1,10 @@
-// resources — the env's PORTS (Erlang ports / TC39 disposables), as a FACTORY.
+// resources — the env's PORTS. The IMPLEMENTATION of the capability-owned resource lifecycle;
+// model (the Erlang-port factory over TC39 `AsyncDisposable`, `ResourceCell`'s re-acquirable
+// cycle around it, the three `get()` behaviours — lazy spawn, single-flight parallel acquire,
+// reconstruction — and reverse-order wind-down) is docs/ASSEMBLY.md §RESOURCES.
 //
-// A `Resource<H>` is a factory of disposables: each `acquire` mints a fresh handle whose
-// teardown is a TC39 `Symbol.asyncDispose`. `ResourceCell` wraps it with the one thing the
-// TC39 spec omits — the RE-ACQUIRABLE CYCLE. One operation (`get()` — acquire-if-needed,
-// single-flight) yields three behaviours:
-//   • LAZY spawn        — the port opens on first `get()` (first symbol use), not at spin-up.
-//   • PARALLEL acquire  — N concurrent get()s share ONE in-flight acquire (Promise.all warms a group).
-//   • RECONSTRUCTION    — wind-down disposes the handle; the next get() opens a FRESH one
-//                         (resume / on-demand respawn). The Ref identity is stable throughout.
-//
-// Disposal itself is never reinvented — the handle's release IS `[Symbol.asyncDispose]`;
-// this module only adds the cycle around it.
+// Disposal is never reinvented: a handle's release IS its `[Symbol.asyncDispose]`; this module
+// only adds the cycle around it.
 
 /** A typed, cyclable boundary to something external — an Erlang port. `kind` is the
  *  driver class ("socket"); H is the handle CONTRACT consumers depend on. Two

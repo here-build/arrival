@@ -1,5 +1,6 @@
 // symbol.macro — per-tag factory file assembled into `symbol` by ./index.ts; shared
-// types live in ./_bake.js.
+// types live in ./_bake.js. docs/ASSEMBLY.md §SYMBOL-KINDS — the `macro` row (a raw JS
+// Macro/Syntax transformer bound as-is); `preludeOnly` binding is §PRELUDE.
 
 import { Macro } from "../../eval/Macro.js";
 import { type MacroSymbolDef } from "./_bake.js";

@@ -1,16 +1,17 @@
-// capability — EnvCapability: the ONE shape every palette pack uses.
+// capability — EnvCapability: the ONE shape every palette pack uses. The IMPLEMENTATION of the
+// capability contract:
 //
-// `export default new EnvCapability(name, { configuration, resources, prelude, methods, deps })`
-//   • a MODULE SINGLETON (one `new` per package) — no factories, no accidental dupes;
-//   • INHERITANCE-FREE — the contribution surface is a CLOSED taxonomy (the 5 spec
-//     keys), configured by composition, never subclassed;
-//   • IN-DEPTH INFERRABLE — `methods` carries `ThisType<Activation<C,R>>`, so inside
-//     any method `this.configuration.<k>` is `z.infer`'d and `this.resources.<k>` is
-//     the typed `Ref`, with ZERO annotations. Methods are static (defined once on the
-//     spec), bound to the per-env activation at wire time — no per-env closure churn.
+//   `export default new EnvCapability(name, { configuration, resources, prelude, symbols, deps })`
 //
-// Lowers to a kernel `EnvPack`: apply = wire methods (membrane-wrapped) + eval prelude.
-// Resources become ref-counted `ResourceCell`s on the activation (the `this.resources`).
+// The model — the five-key CLOSED taxonomy, the MODULE-SINGLETON rule, the
+// module-singleton → `EnvPack` → assembled-env lowering chain, and "dependencies point down, only
+// down" — is docs/ASSEMBLY.md §CAPABILITY; this file is the enforcement site.
+//
+// Local to this file: the `symbols` record (and the legacy `this`-reading arms) carry
+// `ThisType<Activation<C,R>>`, so `this.configuration.<k>` is `z.infer`'d and `this.resources.<k>`
+// is the typed `Ref` with ZERO annotations — bound to the per-env activation at wire time, no
+// per-env closure churn. Lowering wires each symbol (membrane-wrapped) + evals the prelude;
+// resources become ref-counted `ResourceCell`s on the activation (`this.resources`).
 
 import { z } from "zod";
 
@@ -72,12 +73,11 @@ type RefsOf<R extends Record<string, Resource<unknown>>> = { readonly [K in keyo
 export interface Activation<C extends ZodMap, R extends Record<string, Resource<unknown>>> {
   readonly configuration: InferCfg<C>;
   readonly resources: RefsOf<R>;
-  /** Door-set degradation — see `./degradation.js`'s `DegradationInfo`.
-   *  Present on EVERY activation (informational under `"forbid"`, the default — no capability
-   *  is affected unless it explicitly consults `.door(...)`); a builder-form `symbols` MAY
-   *  destructure it to trade a manual `if (x !== undefined)` withhold for a cause-carrying
-   *  door under `"doors"` mode (see `@inhuman.tools/arrival/loader`'s `require`/`require/extension`
-   *  for the migrated shape). */
+  /** Door-set degradation (`./degradation.js`'s `DegradationInfo`). Present on EVERY activation;
+   *  under `"forbid"` (the default) it is purely informational, and a builder-form `symbols` MAY,
+   *  under `"doors"`, destructure it to trade a manual `if (x !== undefined)` withhold for a
+   *  cause-carrying door — model in docs/ASSEMBLY.md §DEGRADATION; migrated shape in
+   *  `@inhuman.tools/arrival/loader`'s `require`/`require/extension`. */
   readonly degradation: DegradationInfo;
 }
 
@@ -222,11 +222,9 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
    *  exists); `config` is validated against the `configuration` schemas.
    *
    *  `degradation`: `"forbid"` (the default — host/provisioning posture) or `"doors"`
-   *  (program-scoped callers opt in). Threaded to every dep's own `lower()` call, same
-   *  as `evalScheme`/`config` — a
-   *  degraded dep and a degraded root see the SAME mode. Changes nothing by itself: it only
-   *  affects capabilities whose `symbols` builder explicitly consults
-   *  `Activation.degradation` (see `./degradation.js`). */
+   *  (program-scoped callers opt in). Threaded to every dep's own `lower()` call, same as
+   *  `evalScheme`/`config`, so a degraded dep and a degraded root see the SAME mode. The mode
+   *  changes nothing by itself (docs/ASSEMBLY.md §DEGRADATION); see `./degradation.js`. */
   lower(
     opts: { evalScheme?: EvalSchemeInto; config?: Partial<InferCfg<C>>; degradation?: DegradationMode } = {},
   ): LoweredPack {
@@ -241,12 +239,11 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
     const schema = spec.configuration ? z.object(spec.configuration as ZodMap) : z.object({});
     const configuration = schema.parse(opts.config ?? {}) as InferCfg<C>;
 
-    // Door-set degradation: computed from the RAW config bag (pre-`schema.parse`,
-    // which already ran above and would have thrown for a present-but-invalid or a
-    // genuinely-required-and-absent key — this scan only ever looks at declared-OPTIONAL
-    // keys, so it never masks either of those two throw paths). `"forbid"` (unset) makes
-    // `missingKeys` purely informational — `.active` stays false, so no capability's
-    // behavior changes unless it opted in.
+    // Door-set degradation: computed from the RAW config bag (pre-`schema.parse`, which already ran
+    // above and would have thrown for a present-but-invalid or a genuinely-required-and-absent key —
+    // this scan only ever looks at declared-OPTIONAL keys, so it never masks either of those two
+    // throw paths). Under `"forbid"` (unset) `missingKeys` is purely informational (docs/ASSEMBLY.md
+    // §DEGRADATION).
     const degradationMode: DegradationMode = opts.degradation ?? "forbid";
     const missingKeys = missingOptionalKeys(
       spec.configuration as Record<string, z.ZodTypeAny> | undefined,
@@ -309,16 +306,17 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
         await spawned;
       },
       async apply(env: SchemeEnv, ctx?: PackContext<SchemeEnv>) {
-        // HERMETIC NARROW (instanceof DOOR, never a cast): with `SchemeEnv.set` hard-deleted,
-        // binding goes through the module-internal `bindValue` (AmbientRuntime.ts), which writes
-        // real AmbientRuntime storage. Packs are applied onto real envs everywhere in production
-        // (env-roots leaves, `LexicalScope.fresh()` roots, `inherit()` children thereof); a
-        // synthetic structural env cannot RECEIVE bindings — assemble onto a real frame instead.
+        // HERMETIC NARROW (instanceof DOOR, never a cast; docs/ASSEMBLY.md §HERMETIC): with
+        // `SchemeEnv.set` hard-deleted, binding goes through the module-internal `bindValue`
+        // (AmbientRuntime.ts), which writes real AmbientRuntime storage. Packs are applied onto real
+        // envs everywhere in production (env-roots leaves, `LexicalScope.fresh()` roots, `inherit()`
+        // children thereof); a synthetic structural env cannot RECEIVE bindings — assemble onto a
+        // real frame instead.
         if (!isAmbientRuntime(env)) {
           throw new AmbientShapeError(
             `capability "${name}"`,
             `apply target is not an arrival AmbientRuntime — a capability's bindings ` +
-              `land in real environment storage (the JS-side write surface is retired; hermetic-AmbientRuntime ` +
+              `land in real environment storage (the JS-side write surface is retired; HERMETIC-ENVIRONMENT ` +
               `ruling). Assemble onto \`LexicalScope.fresh().env\`, an env-roots base, or a child of one.`,
           );
         }
@@ -327,21 +325,19 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
         // boundary cast per this file's applyCallback convention: every value routed through
         // it below is a constructed AmbientValue (ANativeProcedure/DoorProcedure/Macro/…).
         const envTarget: PreludeBindTarget = { set: (n, v) => bindValue(env, n, v as AmbientValue) };
-        // preludeOnly routing: a baked native/rosetta def marked `preludeOnly: true`
-        // binds onto `ctx.preludeScope` instead of the runtime env — see
-        // `PackContext.preludeScope` in kernel.ts for the full assembly-time-only contract. Same
-        // bind form either way (native → raw impl; rosetta → the gated run wrapper); only the
-        // TARGET scope differs. Absent `ctx.preludeScope` (a bare direct apply outside any
-        // assembly), fall back to `env` so the symbol is never silently dropped.
+        // preludeOnly routing: a baked native/rosetta def marked `preludeOnly: true` binds onto
+        // `ctx.preludeScope` instead of the runtime env — the assembly-time-only contract is
+        // docs/ASSEMBLY.md §PRELUDE. Same bind form either way (native → raw impl; rosetta → the
+        // gated run wrapper); only the TARGET scope differs. Absent `ctx.preludeScope` (a bare direct
+        // apply outside any assembly), fall back to `env` so the symbol is never silently dropped.
         const bindTarget = (def: AEntity): PreludeBindTarget =>
           "preludeOnly" in def && def.preludeOnly ? (ctx?.preludeScope ?? envTarget) : envTarget;
         const prefix = spec.symbolPrefix ?? "";
-        // Two-phase binding: symbol.define/symbol.defineSyntax entries are collected
-        // here (in declaration order — JS object-key insertion order) and evaluated+bound
-        // in Pass 2, AFTER every other kind — never interleaved, so a define's body may
-        // always assume its capability's own native/rosetta/door/… siblings are already
-        // bound. `ownNames` is the letrec* NAME VISIBILITY set — see
-        // `BindCapabilityDefinesArgs.ownNames` (define-bake.ts) for the full contract.
+        // Two-phase binding (docs/ASSEMBLY.md §PRELUDE): symbol.define/symbol.defineSyntax entries
+        // are collected here (in declaration order — JS object-key insertion order) and
+        // evaluated+bound in Pass 2, AFTER every other kind. `ownNames` is the letrec* NAME
+        // VISIBILITY set — see `BindCapabilityDefinesArgs.ownNames` (define-bake.ts) for the full
+        // contract.
         const defineEntries: [string, DefineSymbolDef | DefineSyntaxSymbolDef][] = [];
         const ownNames = new Set<string>();
         for (const [name, rawDef] of Object.entries(symbolsRec)) {
@@ -395,11 +391,10 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
           if (isBakedDef(def)) {
             switch (def.kind) {
               case "native": {
-                // A native is a CONTOUR primitive — bound as a first-class ANativeProcedure
-                // (callable-as-value), invoked through its `arrival/tagless-final/apply` term.
-                // The impl adapts the term surface `(args, runCtx)` to the host impl, which reads
-                // run-state off `this: CallCtx` (`makeCallCtx(runCtx)`) — no `this=undefined` crash
-                // from a HOF-invoked native.
+                // native (§SYMBOL-KINDS): bind a first-class ANativeProcedure, invoked through its
+                // `arrival/tagless-final/apply` term. The impl adapts the term surface
+                // `(args, runCtx)` to the host impl, which reads run-state off `this: CallCtx`
+                // (`makeCallCtx(runCtx)`) — no `this=undefined` crash from a HOF-invoked native.
                 const hostImpl = def.impl as (this: CallCtx, ...a: unknown[]) => unknown;
                 const proc = new ANativeProcedure({
                   name: verb,

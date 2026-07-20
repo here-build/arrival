@@ -1,5 +1,6 @@
 // symbol.keyword — per-tag factory file assembled into `symbol` by ./index.ts; shared
-// types live in ./_bake.js.
+// types live in ./_bake.js. docs/ASSEMBLY.md §SYMBOL-KINDS — the `keyword` row (a special
+// form made first-class: evaluator-dispatched, aliasable, lexically shadowable).
 
 import { parseNameDoc, type KeywordSymbolDef } from "./_bake.js";
 

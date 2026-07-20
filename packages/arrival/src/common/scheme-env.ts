@@ -80,14 +80,12 @@ export interface ResolverSpec {
 /** The minimal surface a scheme-env pack touches. arrival-scheme's `AmbientRuntime`
  *  satisfies this structurally — packs type against THIS, not the concrete class.
  *
- *  There is deliberately NO `set` member (hermetic-Environment ruling)
- *  and NO `inherit`/`merge` member (the same ruling extended to birth: an env can
- *  only be BORN — assembled — and READ from JS; frame birth is the module-internal
- *  `mintFrame`, AmbientRuntime.ts): the env is opaque from the JS side — values enter
- *  the interpreter only as capabilities or overrides. Binding is the assembly
- *  machinery's own act, through the module-internal `bindValue` (AmbientRuntime.ts,
- *  never barrel-exported); a pack contributes bindings DECLARATIVELY
- *  (`symbols`/`resolvers`/`bootstrap`), it does not write. */
+ *  Deliberately NO `set`/`inherit`/`merge` member: the env is hermetic — born (assembled) and
+ *  read only from JS, never mutated or extended (docs/ASSEMBLY.md §HERMETIC). This contract is
+ *  defined HERE, not imported from arrival-scheme, so the dependency only ever points
+ *  arrival-scheme → arrival-scheme-env (no cycle). A pack contributes bindings DECLARATIVELY
+ *  (`symbols`/`resolvers`/`bootstrap`); binding is the assembly machinery's own act, through the
+ *  module-internal `bindValue`/`mintFrame` (AmbientRuntime.ts, never barrel-exported). */
 export interface SchemeEnv {
   get(name: string, options?: { throwError?: boolean }): unknown;
   /** Register a catchall resolver (fires on a name the env did not bind). This is the

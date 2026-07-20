@@ -47,26 +47,20 @@
 // `symbol.native` — a raw env.set bind (NOT rosetta-wrapped), so the membrane
 // primitive is not routed through the membrane it implements.
 //
-// FV-LOCALITY RULE (stated once here — every sibling polyglot-*.ts pack points
-// back to this paragraph instead of repeating it): every cross-capability free
-// name a define body reaches must be a declared `deps` edge; the bake step
-// refuses an undeclared free reference. `car`/`cdr` are the one exception — the
-// kernel-level cxr resolver family — never a declared edge (see
-// define-bake.ts's KEYWORD_SYNTAX_BASELINE/CXR_RE note). A pack's `deps` ARRAY
-// ORDER is itself a C3 merge input alongside base-packs.ts's own root-array
-// order — see base-packs.ts's header for the full C3 precedence rule and the
-// current tail order every dialect pack's `deps` array must agree with.
+// FV LOCALITY (docs/ASSEMBLY.md §PRELUDE, the FV locality law): every cross-
+// capability free name a define body reaches must be a declared `deps` edge, or
+// bake doors — `car`/`cdr` are the one exception, the kernel-level cxr resolver
+// family (see define-bake.ts's KEYWORD_SYNTAX_BASELINE/CXR_RE note). A pack's
+// `deps` array ORDER is itself a C3 merge input (§ASSEMBLY; base-packs.ts's header
+// carries the current tail order every dialect pack's `deps` must agree with).
 //
-// This shrunk core's own DEPS: every cross-capability free name in the define
-// bodies below reduces to two —
+// This shrunk core's own DEPS reduce to two cross-capability free names —
 //   equality — null?
 //   lists    — reverse apply cons
-// Both are BASE_PACKS members with no `deps` of their own (leaves), so no C3
-// ordering constraint holds BETWEEN them. `scheme/polyglot` is itself a deps
-// TARGET (`scheme/srfi-235` depends on it for `compose`) and a dependent of
-// every dialect pack (clojure/lisp/racket all declare `deps` reaching back to
-// this core) — base-packs.ts positions it after all three dialect packs and
-// before `lists` accordingly.
+// Both are BASE_PACKS leaves (no `deps`), so no C3 ordering holds between them.
+// `scheme/polyglot` is itself a deps TARGET (`scheme/srfi-235` needs `compose`)
+// and a dependent of every dialect pack, so base-packs.ts positions it after all
+// three dialect packs and before `lists`.
 //
 // Wiring-only (no resources) → pause-trivial. Scoped to the self-contained
 // idiom family — cut/cute (which need gensym + JS interop) ship as SRFI-26 instead.

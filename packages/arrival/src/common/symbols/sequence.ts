@@ -1,5 +1,6 @@
 // symbol.sequence — per-tag factory file assembled into `symbol` by ./index.ts; shared
-// types live in ./_bake.js.
+// types live in ./_bake.js. docs/ASSEMBLY.md §SYMBOL-KINDS — the `sequence` row (ctx-aware
+// op: impl gets scheme args + the run's RunContext, for kernel-logic-bearing ops).
 
 import {
   assertCacheClassShape,

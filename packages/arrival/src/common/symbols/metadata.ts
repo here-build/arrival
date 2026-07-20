@@ -1,7 +1,9 @@
 // metadata — the READ-time resolver for a symbol's `metadata` extension bag. One small
 // pure helper, the ONE place the per-field static-or-dynamic union (`MetadataField`,
 // ./_bake.ts) is interpreted, and the CANONICAL HOME for the describe-time read channel
-// contract every metadata-carrying kind points back to.
+// contract every metadata-carrying kind points back to. docs/ASSEMBLY.md §DESCRIBE-TIME
+// gives the channel-level view and names this file as that home; the three rulings live
+// here in full.
 //
 // DESCRIBE-TIME READ CHANNEL:
 // A dynamic (fn-valued) metadata field resolves LAZILY at describe/catalog READ time,

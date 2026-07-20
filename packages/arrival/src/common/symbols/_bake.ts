@@ -1,39 +1,17 @@
-// _bake: shared machinery behind arrival.symbol* EnvCapability — contract/decoded-type
-// layer, the baked AEntity union + members, shared types + helpers the per-tag factory files
-// (./native.ts, ./rosetta.ts, …) build their AEntity from directly (no separate bake* ctor).
-// Factories live one-per-file, re-assembled into `symbol` namespace by ./index.ts. Stable entry
-// ../symbol.js re-exports both these types and `export * as symbol from "./index.js"`. Cut is acyclic:
-// factories import from here; nothing imports back up through the namespace.
+// _bake: shared machinery behind the `symbol.*` factories — the contract/decoded-type layer,
+// the baked AEntity union + its members, and the helpers each per-tag factory file
+// (./native.ts, ./rosetta.ts, …) builds its AEntity from directly (no separate bake* ctor).
+// Factories live one-per-file, re-assembled into the `symbol` namespace by ./index.ts; stable
+// entry ../symbol.js re-exports these types alongside `export * as symbol from "./index.js"`.
+// Cut is acyclic: factories import from here; nothing imports back up through the namespace.
 //
-// One zod contract, four readers: runtime validation (z.parse), static impl types (z.infer via
-// generics), harvested .d.ts (printer in type-layer/schema-to-ts.ts), JS↔Scheme membrane (each
-// schema is the per-arg codec). This module builds the AUTHORED-extension layer:
-//
-//   const symbol = { native, rosetta, tagless, notImplemented, … }
-//
-// ─────────────────────────────────────────────────────────────────────────────
-// THE RUNTIME MODEL (the implementing sites: src/membrane/rosetta.ts createRosettaWrapper,
-// src/common/capability.ts ANativeProcedure/ARosettaProcedure binder):
-//
-//   symbol.native    schemas SCHEME-IDENTITY; impl over SCHEME VALUES (Pair, SchemeString, …).
-//                    native() attaches { impl, in, out } with NO runtime validation and NO codec
-//                    ("zod for TYPES purely"). capability.ts binds .impl into ANativeProcedure,
-//                    invoked through `arrival/tagless-final/apply` — never a bare { value } binding.
-//
-//   symbol.rosetta   schemas CODECS; impl in JS-LAND (decoded). rosetta() produces wrapper:
-//                    decode args → VALIDATE (zod, skippable) → impl.call(this, decodedArgs) →
-//                    await (implicit) → encode return → build scheme values-list. Mirrors
-//                    createRosettaWrapper schemeToJs → fn → jsToScheme spine. impl receives ONLY
-//                    decoded scheme args POSITIONALLY — ctx never a param. ctx-coupled verbs read run-state
-//                    off `this: CallCtx` (`this.runCtx.signal`, `this.invocation.currentInvocation`).
-//                    PROVENANCE MINTING: evaluator appends ctx; wrapper reads this.invocation
-//                    .currentInvocation and mints/deep-stamps exactly as createRosettaWrapper does
-//                    (a `source`-role rosetta AEntity mints; `pipe` forwards — see `ProvenanceRole`
-//                    below).
-//
-//   symbol.notImplemented  no contract/impl, just `name: reason`. bake → door:
-//                    { kind: "door", name, reason } (the %purity-door story).
-// ─────────────────────────────────────────────────────────────────────────────
+// docs/ASSEMBLY.md §CONTRACT — the one zod contract with four readers (runtime validation,
+//   static impl types via z.infer, the harvested .d.ts, the JS↔Scheme membrane codec), the two
+//   faces, and the chart-vs-crossing split. This module builds the AUTHORED-extension layer:
+//   `const symbol = { native, rosetta, tagless, notImplemented, … }`.
+// docs/ASSEMBLY.md §SYMBOL-KINDS — the per-kind table (what each authored kind bakes to and the
+//   runtime value capability.ts binds through `arrival/tagless-final/apply`). The kind-def
+//   interfaces below carry the per-field contracts the table cannot.
 
 import * as z from "../scheme-zod.js";
 import { AValue } from "../../values/primitives/AValue.js";

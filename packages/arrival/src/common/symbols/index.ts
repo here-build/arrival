@@ -7,6 +7,9 @@
 // lives in `./_bake.js`; each factory imports what it needs. Acyclic — nothing here imports
 // `../symbol.js`.
 //
+// docs/ASSEMBLY.md §SYMBOL-KINDS — the authoritative per-kind table (what each kind bakes to,
+// the runtime value it binds). The map below is navigation only; each file owns its mechanism.
+//
 // THE MAP — what each tag declares (each file owns its mechanism in full):
 //   native        impl over SCHEME VALUES, no validation (identity schemas for .d.ts harvest)
 //   rosetta       impl in JS-land behind a decode → validate → encode membrane

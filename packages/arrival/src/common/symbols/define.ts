@@ -1,11 +1,10 @@
 // symbol.define / symbol.defineSyntax — the SCHEME-BODIED declaration kinds (per-tag
 // factory file assembled into `symbol` by ./index.ts; shared types live in ./_bake.js).
 //
-// Prelude death by decomposition: a capability's prelude used to be "purely a series of
-// defines"; these two factories let each one be declared individually — a REAL contract
-// for `define` (enforced from day one), a declared `macroAttribute` for `defineSyntax` —
-// instead of living inside an opaque text blob with no per-define identity or
-// static-analysis surface.
+// docs/ASSEMBLY.md §SYMBOL-KINDS — the `define`/`defineSyntax` rows (decompose a prelude blob
+// into individually-declared, contract-bearing, FV-checked defines); §PRELUDE — Pass-2 binding
+// and the FV locality law. These two factories give each define a REAL contract (enforced from
+// day one) or a declared `macroAttribute`, replacing the opaque text blob's zero-identity surface.
 //
 // SCOPE — this file owns the STATIC SHAPE only (name/doc parsing, in/out normalization,
 // the callable/constant split, the eager `bodyHash`). What needs the parsed body or the

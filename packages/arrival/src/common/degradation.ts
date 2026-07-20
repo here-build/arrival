@@ -1,19 +1,20 @@
-// degradation.ts — door-set degradation. Absent OPTIONAL enabling config narrows a
-// capability's affected symbols to a cause-carrying DOOR-SET instead of silent withholding,
-// when the assembling caller opts into `degradation: "doors"`. Two failure classes are
-// DELIBERATELY untouched — present-but-invalid config (schema.parse's own job, unconditional)
-// and pack apply errors (a defect, never a door) STAY throw paths in BOTH modes, unaffected
-// by anything here.
+// degradation.ts — door-set degradation: the IMPLEMENTATION and domain types. Model (absent
+// OPTIONAL enabling config narrows a capability's affected symbols to a cause-carrying DOOR-SET
+// instead of silent withholding, only under `degradation: "doors"`; `forbid`, the default, changes
+// nothing — it only records what is missing) is docs/ASSEMBLY.md §DEGRADATION.
 //
-// "Optional" is a DECLARATION fact, checked STRUCTURALLY (`instanceof z.ZodOptional |
-// z.ZodDefault`) — NOT zod's own `.isOptional()`, which a schema built from `z.custom()`
-// with no predicate answers `true` for regardless of whether `.optional()` was ever called
-// (verified against the installed zod: `z.object({ infer: z.custom<T>() }).parse({})`
-// succeeds — a zod no-op-validator quirk, untouched here). The structural check keeps a
-// genuinely-required-but-permissive key (infer's) OUT of the degradable set — required
-// config always stays fail-closed — its absence is simply invisible to this module, exactly
-// as it is invisible to today's `schema.parse` (a separate defect, not one this module
-// should paper over by misclassifying it as optional).
+// Two failure classes are DELIBERATELY untouched — present-but-invalid config (schema.parse's own
+// job, unconditional) and pack apply errors (a defect, never a door) STAY throw paths in BOTH
+// modes, unaffected by anything here.
+//
+// The degradable-set check is STRUCTURAL (`instanceof z.ZodOptional | z.ZodDefault`) — NOT zod's own
+// `.isOptional()`, which a schema built from `z.custom()` with no predicate answers `true` for
+// regardless of whether `.optional()` was ever called (verified against the installed zod:
+// `z.object({ infer: z.custom<T>() }).parse({})` succeeds — a zod no-op-validator quirk, untouched
+// here). The structural check keeps a genuinely-required-but-permissive key (infer's) OUT of the
+// degradable set — required config always stays fail-closed — its absence invisible to this module,
+// exactly as it is to today's `schema.parse` (a separate defect, not one this module should paper
+// over by misclassifying it as optional).
 //
 // Kernel-facing surface: `DegradedCapability`/`DegradedNeed` are the shape `common/kernel.ts`
 // folds (structurally, uninterpreted) into `AssembledEnv.degraded` — defined HERE (the
@@ -23,11 +24,10 @@
 import { z } from "zod";
 import type { DoorCause, DoorSymbolDef } from "./symbols/_bake.js";
 
-/** Host/provisioning paths default here: a capability's own config-presence handling is
- *  unaffected by this mode — only a capability that explicitly consults
- *  `Activation.degradation` (via `.door(...)`) changes behavior, and only under `"doors"`.
- *  Program-scoped entry points (agent-exec, DiscoveryTool sessions, custdev harnesses) opt
- *  into `"doors"` — narrowing is caller-scoped, never retroactive over unmigrated callers. */
+/** `"forbid"` (the host/provisioning default) vs `"doors"` (program-scoped entry points —
+ *  agent-exec, DiscoveryTool sessions, custdev harnesses — opt in). The mode changes nothing on
+ *  its own (docs/ASSEMBLY.md §DEGRADATION); narrowing is caller-scoped, never retroactive over
+ *  unmigrated callers. */
 export type DegradationMode = "forbid" | "doors";
 
 /** One missing input a degraded door needs to become callable — the `configuration` kind is
