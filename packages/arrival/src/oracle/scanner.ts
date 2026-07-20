@@ -1,4 +1,5 @@
 // scanner.ts — Track O, Layer S: the structural validity oracle.
+// The oracle S reader in the static plane: docs/STATIC-PLANE.md §THE FOUR READERS 4.2.
 //
 // arrival's implementation of the constraint-kernel oracle's STATIC/STRUCTURAL half
 // (sift/src/sampler/oracle-contract.ts). Reports the parse state at the end of an ACCEPTED
@@ -22,8 +23,9 @@
 // genuinely-shared, non-crashing machinery from arrival is `specials.names()` — the reader-macro
 // set ('  ` ,@ , #( …) — which the scanner consults to classify quote/quasiquote prefixes.
 //
-// This scanner AGREES with `prefix-oracle.ts` on every shared structural field for every prefix
-// (the O0 conformance corpus proves it). The contract adds `formKind`/`strict` (the strict-vs-lazy
+// This scanner AGREES with `prefix-oracle.ts` on every shared structural field for every prefix,
+// proven by the O0 conformance corpus (docs/STATIC-PLANE.md §AGREEMENT GATES; the mirror-contract
+// drift alarm is oracle/contract.ts). The contract adds `formKind`/`strict` (the strict-vs-lazy
 // axis the dynamic half needs) and the Σ/T hooks (`validSymbols`/`expectedType`/`produces`) — for
 // Layer S those degrade gracefully per the contract: Σ/T return null/true, and formKind/strict are
 // derived structurally from the enclosing form's head where cheaply knowable, defaulting to

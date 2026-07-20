@@ -1,4 +1,5 @@
 // type-layer — the public seam for the Σ∩T NARROW (the harvested-prelude query lens).
+// Plane framing: docs/STATIC-PLANE.md §THE Σ∩T NARROW, §THE FOUR READERS 4.1.
 //
 // `@inhuman.tools/arrival/type-layer` surfaces the pieces a consumer assembles to narrow a
 // constrained decode by the host tools' TYPES (Scheme is a TS subset except lists and pairs).

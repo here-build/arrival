@@ -20,7 +20,8 @@
 //
 // GRACEFUL DEGRADATION: no env ⇒ boundSymbols() is empty and callable-vs-not is undecidable, so Σ
 // returns null (Layer-S behaviour preserved — "Σ not modelled, do not constrain symbols"). Σ is
-// live only when given an env.
+// live only when given an env. This null-degradation is the Σ voice of the one conservative-
+// narrowing law (NEVER DROP A LEGAL SYMBOL) — docs/STATIC-PLANE.md §CONSERVATIVE NARROWING.
 //
 // DESIGN INVARIANT (inherited from S): the scope stack is a pure function of the prefix — no
 // lookahead, no backtracking.

@@ -1,4 +1,5 @@
-// query — the Σ∩T NARROW: the core query lens over a harvested prelude.
+// query — T, the type half of the Σ∩T NARROW (docs/STATIC-PLANE.md §THE Σ∩T NARROW,
+// §THE FOUR READERS 4.1): the core query lens over a harvested prelude.
 //
 // "Scheme is a TS subset except lists and pairs." The lens lowers a scheme prefix to TS
 // (lower.ts), compiles it against the harvested prelude (prelude.ts), and reads the TYPE
@@ -15,11 +16,12 @@
 //     unresolved).
 //   • getSlotIsStringTyped    — is the slot a string subtype, not an array (null when unresolved).
 //
-// ★THE GOVERNING INVARIANT — CONSERVATIVE, DROPS-ONLY. An axis narrows ONLY when it can PROVE
-// the constraint (a candidate PROVABLY ill-typed at the slot, a slot NOT `any`/`unknown`/
-// `never`/out-of-range). On ANY uncertainty it returns the unresolved value (candidate list
-// unchanged, or null) — a wrongly-dropped valid candidate is a DEFECT, never a tradeoff. Every
-// keep/null path below is annotated with the uncertainty it absorbs.
+// ★THE GOVERNING INVARIANT — CONSERVATIVE, DROPS-ONLY (the type-lens voice of the one
+// conservative-narrowing law: docs/STATIC-PLANE.md §CONSERVATIVE NARROWING). An axis narrows
+// ONLY when it can PROVE the constraint (a candidate PROVABLY ill-typed at the slot, a slot NOT
+// `any`/`unknown`/`never`/out-of-range). On ANY uncertainty it returns the unresolved value
+// (candidate list unchanged, or null) — a wrongly-dropped valid candidate is a DEFECT, never a
+// tradeoff. Every keep/null path below is annotated with the uncertainty it absorbs.
 //
 // Mechanism (ONE compile per query — the slot type is extracted once, then candidates are
 // filtered against it; never a compile-per-candidate):

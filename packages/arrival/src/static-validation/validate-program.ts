@@ -7,7 +7,9 @@
 // the CALLER decides to throw (`exec` aggregates error-tier diagnostics into one
 // `StaticValidationError` at parse phase, before the first form evaluates).
 //
-// THE SOUNDNESS CONTRACT (binding): the `error` tier advertises no spurious
+// THE SOUNDNESS CONTRACT (binding) — the static-validator voice of the one conservative-
+// narrowing law (DEGRADE TO WARNING, NEVER A FALSE POSITIVE: docs/STATIC-PLANE.md
+// §CONSERVATIVE NARROWING): the `error` tier advertises no spurious
 // `unbound-symbol` errors MODULO the EXCLUDED reachability strictness — a dead-branch
 // reference (`(if #f (missing) 42)`) reports BY DESIGN (dead references are drift) and
 // is not a false positive; it is the one deliberate divergence from runtime semantics,
