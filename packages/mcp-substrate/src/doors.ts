@@ -156,11 +156,9 @@ function editDistance(a: string, b: string): number {
  *  naming-convention research thread (or any other symbol-identity comparison across
  *  camelCase/kebab-case/snake_case/namespaced spellings) has one canonical-form rule to
  *  reuse instead of reinventing it. */
-// Pre-existing normalizer regex, a pure relocation from arrival-manifold/src/doors.ts. Inputs are
-// bounded internal symbol/tool names (never adversarial user text), so the super-linear
+// Inputs are bounded internal symbol/tool names (never adversarial user text), so the super-linear
 // backtracking risk sonarjs/slow-regex warns about is not exploitable here — changing the pattern
-// to appease the rule risks a behavioral drift in a load-bearing did-you-mean/tier-1 matcher
-// rather than a pure copy.
+// to appease the rule risks behavioral drift in a load-bearing did-you-mean/tier-1 matcher.
 // eslint-disable-next-line sonarjs/slow-regex
 const CAMEL_ACRONYM_BOUNDARY = /([A-Z]+)([A-Z][a-z])/g;
 
@@ -965,12 +963,12 @@ function typeNameOf(v: unknown): string {
  *  were exactly this — a working tool returning a legitimate empty result, e.g. met-museum's
  *  "No objects found", an empty memory search).
  *
- *  C2/B2 (benchmark-defect-register.md §C + ADDENDUM) — V RULING: report the FACT, frame the
- *  interpretation CONDITIONALLY, prescribe NOTHING. The old text asserted degradation as fact and
- *  scripted "give your best final answer" — an outcome-fine-tuning imperative (load-bearing
- *  constraint #6) that pushed models to abandon a recoverable search and confabulate; one
- *  observed trajectory had the model propose the WINNING query and this door veto it. Never ship
- *  a diagnosis this door cannot actually know. */
+ *  C2/B2 (experimental/arrival/packages/arrival-bench/docs/benchmark-defect-register.md §C +
+ *  ADDENDUM): report the FACT, frame the interpretation CONDITIONALLY, prescribe NOTHING.
+ *  Asserting degradation as fact and scripting "give your best final answer" is the rejected
+ *  alternative — an outcome-fine-tuning imperative that pushes models to abandon a recoverable
+ *  search and confabulate (one observed trajectory: the model proposed the WINNING query and this
+ *  door vetoed it). Never ship a diagnosis this door cannot actually know. */
 export function futileRetryDoor(qualifiedName: string): Door {
   return {
     code: "envelope/futile-retry",

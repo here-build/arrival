@@ -13,11 +13,6 @@
 // handlers get them typed via `needs`) AND the token saver — the shared scope is declared ONCE at the
 // top and validated/resolved ONCE per batch, so N actions don't re-declare projectId/component/element.
 // That is the "all actions in a batch share exactly the same context scope" constraint.
-//
-// (This absorbed the interim `kernel.defineActionTool`: FieldSpec/refs, receiver-dispatch, clusters,
-// prepare/beforeDispatch/shapeResponse, and per-phase timeouts/limits are now first-class here. The
-// only departure from the old kernel is the value shape — `new ActionTool(…)` + `describe()`/`call()`
-// (the `McpTool` contract) instead of `defineActionTool(…)` + `compile()`.)
 
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import dedent from "dedent";

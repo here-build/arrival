@@ -158,26 +158,27 @@ function isLibraryEnriched(raw: string, name: string): boolean {
   return raw.startsWith(bareWall) && raw.length > bareWall.length;
 }
 
-/** The environment-notes channel's preamble label (E3, benchmark-defect-register.md §E) — makes
+/** The environment-notes channel's preamble label (E3,
+ *  experimental/arrival/packages/arrival-bench/docs/benchmark-defect-register.md §E) — makes
  *  the trailing block unmistakably not part of the answer. */
 const NOTES_HEADER = "── environment notes ──";
 
 /** Wrap the accumulated note LINES into ONE trailing content block: a `#| ... |#` reader block
- *  comment (parses to zero forms — pasting it back is a harmless no-op, the same round-trip
- *  invariant the retired `#|introduced ...|#` note relied on) carrying the labelled header plus
- *  one line per contributing producer. */
+ *  comment (parses to zero forms — pasting it back is a harmless no-op) carrying the labelled
+ *  header plus one line per contributing producer. */
 function renderEnvironmentNotes(notes: readonly string[]): string {
   return [`#| ${NOTES_HEADER}`, ...notes, "|#"].join("\n");
 }
 
 /** ONE line for a call that middle-elided one or more arrays/entries (serializer-elision plan
- *  §6), regardless of how many collections/forms contributed — E2/S5 (benchmark-defect-register.md
- *  §E/ADDENDUM). The OLD per-collection enumeration (1805 lines / 171 blocks / 67 files measured
- *  across one benchmark run, one file at 125,571 bytes = 33% of the file) was 100% redundant —
- *  arrival-serializer already emits an inline `#| N similar items were not rendered… |#` marker at
- *  the exact elision site, strictly better placement — and worse, it READ AS DATA LOSS: both
- *  models in the corpus concluded the VALUE itself had been cut and permanently abandoned the REPL
- *  for python. This line's only job is the one fact that actually matters: the value is intact. */
+ *  §6), regardless of how many collections/forms contributed — E2/S5
+ *  (experimental/arrival/packages/arrival-bench/docs/benchmark-defect-register.md §E/ADDENDUM).
+ *  Per-collection enumeration is the rejected alternative: arrival-serializer already emits an
+ *  inline `#| N similar items were not rendered… |#` marker at the exact elision site (strictly
+ *  better placement), and a separate enumeration both bloats the output (measured at 33% of one
+ *  benchmark file) and READS AS DATA LOSS — both models in the corpus concluded the VALUE itself
+ *  had been cut and abandoned the REPL for python. This line's only job is the one fact that
+ *  matters: the value is intact. */
 function renderElisionNote(elisions: readonly ElisionRecord[]): string | undefined {
   if (elisions.length === 0) return undefined;
   return (
@@ -427,24 +428,25 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
       let failures = 0;
       const erroredStatementIndexes: number[] = [];
       // Names this program binds into the persistent session scope. Collected to lead the
-      // response with a persistence note (below) — the void-result affordance fix: a program
+      // response with a persistence note (below) — the void-result trap: a program
       // ending in `(define x (search …))` otherwise renders NOTHING (the void `define` result
       // is filtered at `!== theVoid`), which a model reads as "the search returned empty" and
       // confabulates from that assumption. Announcing the binding both kills that trap and
       // teaches cross-call persistence proactively.
       const introduced: string[] = [];
       // Elisions collected across EVERY rendered observation this call, from every form —
-      // rendered as ONE trailing `;; Note:` block below (never per-array, never per-form).
+      // rendered as ONE line in the trailing environment-notes block below (never per-array,
+      // never per-form).
       const allElisions: ElisionRecord[] = [];
       // The run's MODEL-FACING NOTE CHANNEL (arrival's values/note-sink.ts). Minted PER CALL and
       // handed to every statement's `execState`, so a tolerance that fires deep inside the
       // interpreter (the kwargs drop, today) can reach the consolidated footer — the only reason
       // that note was invisible before is that it had nowhere to go.
       const noteSink = createNoteSink();
-      // The DISPLAY channel (display.ts). A model writes `(display x)` reflexively — it is the
-      // natural Scheme spelling of "show me this" — and it used to eat a hard door and a wasted
-      // round on 32% of benchmark tasks. Arrival still has no IO (the door is intact for a bare
-      // `display` used as a VALUE); the HOST honors the intent instead.
+      // The DISPLAY channel (display.ts). A model writes `(display x)` reflexively — the natural
+      // Scheme spelling of "show me this". Arrival has no IO (the door is intact for a bare
+      // `display` used as a VALUE); the HOST honors the intent instead, so a reflexive display
+      // neither errors nor wastes a round.
       const displaySink = createDisplaySink();
       for (const line of input.seedNotes ?? []) noteSink.push(line);
 
@@ -489,7 +491,7 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
             // (`arrival/tagless-final/equals`: `other instanceof AVoid`) and the documented trap
             // in `values/structural-equal.ts` ("provenance-clone trap... use instance-aware
             // checks"). A void that slips through here renders as the JS-unwrapped literal text
-            // "undefined" — 442 occurrences across a benchmark run before this fix.
+            // "undefined".
             if (r instanceof AVoid) continue;
             const { text, elisions } = render(r, callMaxTotalChars);
             blocks.push({ type: "text", text });
@@ -604,19 +606,19 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
         }
       }
 
-      // E3 (benchmark-defect-register.md §E) — every note-shaped producer (previously pushed as
-      // PEER TEXT BLOCKS interleaved with real data) accumulates here instead, and renders as
-      // exactly ONE trailing block (`renderEnvironmentNotes`, below). Order is declaration order
-      // — introduced-binding first, then elision, then futility/duplicate advisories, then the
-      // attachment sink's note.
+      // E3 (experimental/arrival/packages/arrival-bench/docs/benchmark-defect-register.md §E) —
+      // every note-shaped producer accumulates here instead of interleaving PEER TEXT BLOCKS with
+      // real data, and renders as exactly ONE trailing block (`renderEnvironmentNotes`, below).
+      // Order is declaration order — introduced-binding first, then elision, then
+      // futility/duplicate advisories, then the attachment sink's note.
       const notes: string[] = [];
 
       // The persistence note when this program bound anything into session scope (see
       // `introduced` above) — renders the binding FACT even when every bound form was a void
-      // `define` with no other observation (the void-result-trap fix). Deduped, declared order.
+      // `define` with no other observation (the void-result trap). Deduped, declared order.
       // B3 (ADDENDUM) — when NOTHING else was observed this call (no value, no error — every
-      // statement was a bare binding), say so explicitly: a model previously read the bare
-      // banner as success and lost a round assuming something had executed.
+      // statement was a bare binding), say so explicitly: without it a model reads the bare
+      // banner as success and loses a round assuming something executed.
       if (introduced.length > 0) {
         const names = [...new Set(introduced)].join(", ");
         const nothingElseRan = blocks.length === 0 ? " (nothing was executed — these are bindings only)" : "";
@@ -624,9 +626,8 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
       }
 
       // ONE line for every array/entries collection middle-elided this call (any form, any
-      // observation) — serializer-elision plan §6, reworded per E2/S5. Never emitted when
-      // nothing elided (the `observationElision` calibration knob is off, or every observation
-      // fit).
+      // observation) — serializer-elision plan §6. Never emitted when nothing elided (the
+      // `observationElision` calibration knob is off, or every observation fit).
       const elisionLine = renderElisionNote(allElisions);
       if (elisionLine !== undefined) notes.push(elisionLine);
 

@@ -130,7 +130,7 @@ export interface McpCapabilitySpec<
    *  this capability's own describe-ambient `Activation`, per read, no memo. Resolving
    *  `undefined` falls back to the static `description` above, NOT flagged session-generated —
    *  the same honest-fallback contract every per-verb dynamic field already obeys (see
-   *  `./metadata.js`'s `resolveMetadata`). */
+   *  `@inhuman.tools/arrival/symbol`'s `resolveMetadata`). */
   dynamicDescription?: (this: Activation<C, R>) => MaybePromise<string | undefined>;
 }
 
@@ -313,8 +313,8 @@ export class McpEnvCapability<
 
   /** Resolve THIS capability's own human-channel description — dynamic arm first (against
    *  `activation` when supplied), honest fallback to the static sibling on `undefined`
-   *  resolution (one altitude up from the per-verb read `./metadata.js`'s `resolveMetadata`
-   *  already implements). `activation` omitted ⇒ the dynamic arm runs with `this` = the
+   *  resolution (one altitude up from the per-verb read `@inhuman.tools/arrival/symbol`'s
+   *  `resolveMetadata` already implements). `activation` omitted ⇒ the dynamic arm runs with `this` = the
    *  capability itself — the same receiver-free posture the legacy per-verb closure form takes
    *  when no describe ambient is derivable (a function-form `hostConfig` / an actor-required
    *  config key). */

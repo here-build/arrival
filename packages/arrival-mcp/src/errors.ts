@@ -1,12 +1,12 @@
 /**
  * Typed error kernel for arrival-mcp.
  *
- * Replaces the string-matching error classification in dispatch.ts:58-71. The
- * dispatcher, sanitizers, and tool implementations throw MCPError instances
- * with a discrete `kind`; LLM-facing surfaces inspect `.kind` directly.
+ * The dispatcher, sanitizers, and tool implementations throw MCPError instances
+ * with a discrete `kind`; LLM-facing surfaces inspect `.kind` directly rather than
+ * string-matching messages.
  *
- * Per H7: `kind` becomes part of the public API — adding a kind is additive
- * (safe), renaming/removing is a breaking change.
+ * `kind` is part of the public API: adding a kind is additive (safe); renaming or
+ * removing one is a breaking change.
  */
 
 export type MCPErrorKind =

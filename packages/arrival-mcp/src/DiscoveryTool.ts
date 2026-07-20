@@ -421,7 +421,7 @@ function describeSessionValue(v: unknown): string {
 }
 
 /** The session shape `call` requires, checked AT the boundary (errors-as-doors): a wrong
- *  shape used to surface as `TypeError: Cannot read properties of undefined (reading
+ *  shape otherwise surfaces as `TypeError: Cannot read properties of undefined (reading
  *  '__run__')` deep inside `loadState` — a misleading stack the first-day integrator
  *  debugs as transport/registration. The door states the expected shape and the cure. */
 function assertSessionShape(
