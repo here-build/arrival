@@ -4,32 +4,30 @@ An `EnvCapability` is the one shape every arrival environment is built from: a n
 composable contribution of **symbols** (verbs), **configuration** (per-env, validated),
 **resources** (external ports), **prelude** (scheme bootstrap), and **deps** (grants). The
 R7RS base, every SRFI, every dialect pack, and your domain tools are all this same shape;
-`assembleEnv` C3-linearizes the dependency DAG and applies each capability once. There is no
-second registration mechanism — if the stdlib can be built from capabilities, your tools can
-too.
+`assembleEnv` C3-linearizes the dependency DAG and applies each capability once. What the
+machine *is* — the lowering chain, C3 assembly, the seam a baked verb crosses — is the
+ontology in `environments.md`. **This file is the author's how-to: the recipe you follow,
+with each law it rests on cited to its home in `environments.md`.**
 
-This file is the **cross-module contract** — the laws that span the capability machinery, the
-membrane, provenance, resources, and the MCP layer. The per-API mechanics (the `symbol.*`
-factory roster, tagged-template syntax, exact bake-gate error texts) live in the JSDoc of the
-entry points: `common/symbol.ts`, `common/capability.ts`, `rosetta.ts`, `common/scheme-zod.ts`,
-and `@inhuman.tools/arrival-mcp`'s `McpEnvCapability` / `tool`.
+The per-API mechanics (the `symbol.*` factory roster, tagged-template syntax, exact bake-gate
+error texts) live in the JSDoc of the entry points: `common/symbol.ts`, `common/capability.ts`,
+`rosetta.ts`, `common/scheme-zod.ts`, and `@inhuman.tools/arrival-mcp`'s `McpEnvCapability` /
+`tool`.
 
-**The one law that governs everything below: dependencies point down, only down.** Verbs
-depend on the capability machinery, the machinery lowers to the kernel's `EnvPack`, and the
-kernel interprets nothing above itself. A capability never reaches sideways into another
-capability's internals — it declares a `deps` edge and uses the granted names. A capability is
-a **module singleton** (one `new EnvCapability(name, spec)`, exported as a value): the five
-spec keys are a closed taxonomy, configured by composition, never subclassed.
+The one law under everything below: **dependencies point down, only down** — a capability
+declares a `deps` edge and uses the granted names, never reaching sideways into another
+capability's internals (`environments.md` §CAPABILITY). A capability is a **module singleton**
+(one `new EnvCapability(name, spec)`, exported as a value): the five spec keys are a closed
+taxonomy, configured by composition, never subclassed.
 
-## Contracts are codecs, not annotations
+## Declare the honest codec
 
 A rosetta contract's schemas are the membrane **crossing**, not documentation. `z.list(z.number)`
 *is* the transform: the scheme proper-list decodes to a real JS `number[]` before the impl runs,
 and the return encodes back through the output codec. The impl reads and returns plain JS; nothing
-scheme-shaped leaks in. One contract has **four readers** that must agree — runtime validation, the
-impl's inferred static types, the harvested `.d.ts` the type lens checks, and the crossing itself —
-and declaring the honest codec is the single act that keeps all four in agreement. "Take the raw
-value and sort it out inside" is a debt, not a shortcut.
+scheme-shaped leaks in. One contract has four readers that must agree — the four-reader law is
+`environments.md` §CONTRACT; the authoring rule is: **declare the codec that matches what the impl
+reads and returns.** "Take the raw value and sort it out inside" is a debt, not a shortcut.
 
 `z.value` is the declared no-transform escape hatch, for slots **genuinely untypeable at the
 boundary** (a value that must keep its scheme identity, an opaque handle, arbitrary-shaped data no
@@ -38,36 +36,30 @@ from `cacheClass: "view"` (a raw crossing doesn't serialize — the bake gate re
 codec whenever one exists; `grep schemeToJsUntyped` is the audit list of every place the untyped
 crossing was reached for.
 
-## Two axes that never mix: lineage and cache
+## Two axes: a provenance role, optionally a cache class
 
-Every symbol carries a **provenance role** (the lineage axis — where results come from) and,
-optionally, a **cache class** (a serialization/replay axis). They are orthogonal, and the same word
-`pure` names a value on *each* — the standing trap for migrators.
+Every symbol carries a **provenance role** (where results come from) and, optionally, a **cache
+class** (a serialization/replay axis). They are orthogonal, and the same word `pure` names a value
+on *each* — the standing migrator trap. The axis definitions and the `pure`-naming hazard are
+`environments.md` §AXES; what you declare:
 
-- Lineage: `"source"` mints a fresh origin (external data), `"pipe"` forwards its inputs' lineage
-  (a pure transform mints nothing), `"sink"` has no egress at all (an effect). The declaration is
-  load-bearing, not documentation: a `"pipe"` that minted would fabricate origins — the
-  seal-laundering class of bug — and the provenance seal and reverse slicer read this declaration
-  directly.
-- Cache: `cacheClass: "view"` is a persisted boundary snapshot (demands a serializable contract),
-  `"pure"` is deterministic-from-args (recovery is re-call, nothing persisted), absent is the safe
-  default (re-runs on replay). Both `view` and `pure` stay provenance `source` — a cacheable read
-  still introduces external data (`infer` is the standing proof: a `source` declaring
-  `cacheClass: "pure"`).
-
-**Naming hazard.** Legacy `defineRosetta`'s `pure: true` meant provenance **pipe** (mints nothing).
-Today's `cacheClass: "pure"` is a cache class **on a source**. Different axes, same word: a legacy
-`pure: true` ports to `provenance: "pipe"`, never to `cacheClass: "pure"`.
+- **provenance role** — `"source"` mints a fresh origin (external data), `"pipe"` forwards its
+  inputs' lineage (a pure transform mints nothing), `"sink"` has no egress (an effect). Load-bearing,
+  not documentation: a `"pipe"` that minted would fabricate origins — the seal-laundering bug class.
+- **cache class** — `"view"` (persisted boundary snapshot, demands a serializable contract),
+  `"pure"` (deterministic-from-args, recovery is re-call), or absent (the safe default, re-runs on
+  replay). Both `view` and `pure` stay provenance `source` — a cacheable read still introduces
+  external data (`infer` is the proof: a `source` declaring `cacheClass: "pure"`).
+- **the trap** — legacy `defineRosetta`'s `pure: true` meant provenance **pipe**; today's
+  `cacheClass: "pure"` is a cache class on a **source**. A legacy `pure: true` ports to
+  `provenance: "pipe"`, never to `cacheClass: "pure"`.
 
 ## Effects are sinks, and danger is a property of the verb
 
 An effect declares `provenance: "sink"` and returns **void by law** — the bake gate rejects a sink
-whose contract carries a real return. Void-by-law is what makes **gather-then-burst** sound: a host
-running in deferred mode collects sink penetrations instead of firing them, and because a sink's
-contract *proves* it returns nothing, deferring it cannot change any value the program computes — the
-run proceeds identically and the collected effects fire (or don't) as one reviewed burst. If an
-"effect" must hand a result back into the program, it is not a sink — it is a source with
-consequences, and it must say so.
+whose contract carries a real return, and void-by-law is what makes **gather-then-burst** sound
+(`environments.md` §AXES). If an "effect" must hand a result back into the program, it is not a sink
+— it is a source with consequences, and must say so.
 
 Whether an effect is *dangerous* is a separate static fact — **danger is an attribute of the action,
 not the argument set.** It is declared once at the verb (`tool.effect` for a plain mutation,
@@ -84,23 +76,24 @@ only through the builder form (`symbols: (activation) => ({…})`) precisely bec
 `this` is the per-call invocation context, not the activation — so config cannot ride `this`, and
 per-caller behavior cannot hide there either.
 
-## Resources defer their reads
+## Author resources lazily
 
 A `Resource<H>` is a factory of disposable handles (the Erlang-port model over TC39
 `AsyncDisposable`): lazy spawn on first verb touch, single-flight parallel acquire, reconstruction on
-wind-down with stable `Ref` identity. The absolute law over them: **anything that reads a resource must
-defer the read to the moment it runs with a live activation.** Verb impls qualify — the first touch of
-any of a capability's symbols pre-spawns *all* its resources before the body runs, so `.live` never
-races. Describe-time surfaces qualify only if authored lazily: an `inputSchema` resolving against a
-live handle must be a **getter**, a `dynamicDescription` a **thunk**. Reading `.live` at construction
-time (module top-level, spec literal, constructor) is always a bug — no activation exists yet, and
-eager reads at assembly are the connection storm the lazy model exists to prevent.
+wind-down with stable `Ref` identity. The absolute law over them — **anything that reads a resource
+defers the read to the moment it runs with a live activation** — is `environments.md` §RESOURCES; the
+authoring consequences:
 
-Corollary hazard: **an object spread fires getters.** `{ ...def }` performs `[[Get]]` on every own
-enumerable property, firing a lazily-authored `inputSchema` getter with a receiver that has no
-`resources`. Machinery that reshapes symbol defs moves **property descriptors**
-(`Object.getOwnPropertyDescriptor` / `defineProperty`), never spreads; `McpEnvCapability`'s annotation
-lift is the reference implementation.
+- Verb impls qualify automatically — the first touch of any of a capability's symbols pre-spawns *all*
+  its resources before the body runs, so `.live` never races. Describe-time surfaces qualify only if
+  authored lazily: an `inputSchema` resolving against a live handle must be a **getter**, a
+  `dynamicDescription` a **thunk**. Reading `.live` at construction time (module top-level, spec
+  literal, constructor) is always a bug — no activation exists yet, and eager reads at assembly are the
+  connection storm the lazy model exists to prevent.
+- **An object spread fires getters.** `{ ...def }` performs `[[Get]]` on every own enumerable property,
+  firing a lazily-authored `inputSchema` getter with a receiver that has no `resources`. Machinery that
+  reshapes symbol defs moves **property descriptors** (`Object.getOwnPropertyDescriptor` /
+  `defineProperty`), never spreads; `McpEnvCapability`'s annotation lift is the reference implementation.
 
 ## Scheme code declares its imports too
 
@@ -108,13 +101,8 @@ A `symbol.define` body is FV-checked at bake: every free variable must resolve t
 dep's export, or the keyword baseline, else the failure is a door naming the fix (declare the `deps`
 edge, or bind it locally). This is the point — a capability's scheme code declares its imports the
 same way its JS does, so the DAG stays honest and a capability never works only because something else
-happened to be assembled first.
-
-Assembly is **C3 linearization** (Python's MRO — cited, not invented) over the dep DAG:
-identity-deduped, cycle-detected, each capability applied once, deps before dependents,
-last-write-wins for a doubly-bound name (the nearer capability wins). The shared `config` bag is
-reference-equal across a capability's root and dep appearances, so a diamond-shaped dep graph dedups
-instead of conflicting. Disposal is LIFO.
+happened to be assembled first. The FV locality law and the C3 assembly it keeps honest are
+`environments.md` §PRELUDE and §ASSEMBLY.
 
 ## Doors, not walls
 
@@ -124,7 +112,7 @@ runs through the machinery — the sink shape gate, the view serialization gate,
 the alias-target check all refuse at bake with the fix in the message. Never withhold a symbol by
 silently omitting it from the record; if a verb is absent because an optional config key wasn't
 supplied, lower with `degradation: "doors"` so the absence carries its cause and the assembly's
-`degraded` list enumerates it.
+`degraded` list enumerates it (the `forbid`/`doors` modes are `environments.md` §DEGRADATION).
 
 ## Exposing a capability to agents (MCP)
 
