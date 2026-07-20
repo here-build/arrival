@@ -130,8 +130,9 @@ Proxy identity is per PROJECTION, not one global slot:
 - **gated** (tier-state) — keyed by (gate, box).
 
 The singleton/aliasing law holds WITHIN a slot; cross-slot identity is incoherent by
-construction once the projection depends on options and scope. Full design:
-[design-history/arrival-egress-membrane-exit.md](design-history/arrival-egress-membrane-exit.md).
+construction once the projection depends on options and scope. Mechanism (the living
+home — proxy keying, scope-bound caches, the four enforcement sites): membrane.md
+§EGRESS. Full design: [design-history/arrival-egress-membrane-exit.md](design-history/arrival-egress-membrane-exit.md).
 
 Rejected alternative: eager full materialization at egress — pays the whole copy up
 front, loses aliasing (two references to one list become two arrays), and forecloses

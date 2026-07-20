@@ -120,6 +120,7 @@
     "dev": "tsc -p tsconfig.build.json --watch",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "check:doc-anchors": "node scripts/check-doc-anchors.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test-d": "vitest run --config vitest.typecheck.config.ts",

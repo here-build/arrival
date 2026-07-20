@@ -59,6 +59,7 @@ The ledgers and reference material are not subsystems:
 |---|---|
 | `PRINCIPLES.md` | The constitution — cross-cutting invariants (P-series) every subsystem obeys. |
 | `RULINGS.md` | Numbered, append-only cross-subsystem rulings (R-series) — the shared citation vocabulary. |
+| `GLOSSARY.md` | One-line canonical definition per invented term (box, membrane, egress, wire, …); a reference-canon, mints no ID series. |
 | `reference/` | Exhaustive coverage/mapping tables (r7rs, srfi). Facts only. |
 | `design-history/` | Superseded decisions and rejected-alternative rationale. Living docs link IN; nothing links OUT to a living doc. |
 
@@ -75,9 +76,10 @@ The ledgers and reference material are not subsystems:
 
 Filename case is the normative-vs-explanatory signal, readable in `ls`:
 
-- **`SHOUT.md` = normative / ledger.** Mints its own stable-ID series or is the constitution:
-  `PRINCIPLES.md` (P-series), `RULINGS.md` (R-series), `PROVENANCE.md` (the spec, `§N` +
-  Appendix A). A citation resolves to a heading here.
+- **`SHOUT.md` = normative / ledger / canon.** Mints its own stable-ID series, is the
+  constitution, or is a declared reference-canon: `PRINCIPLES.md` (P-series), `RULINGS.md`
+  (R-series), `PROVENANCE.md` (the spec, `§N` + Appendix A), `GLOSSARY.md` (term canon — mints
+  no ID series). A citation resolves to a heading here.
 - **`kebab-case.md` = explanation / how-to.** *Cites* P/R IDs and `§ANCHOR`s; mints none:
   `grammar.md`, `environments.md`, `membrane.md`, `execution.md`, `static-plane.md`,
   `writing-capabilities.md`, `test-suite-architecture.md`.
