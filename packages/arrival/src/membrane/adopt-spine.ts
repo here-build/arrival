@@ -42,19 +42,16 @@ import { AJSArrayList } from "../values/primitives/APair.js";
 export function adoptSpine(v: unknown): unknown {
   // ONLY the borrowed array adopts. Not `AVector`.
   //
-  // An earlier cut also adopted a genuine scheme `AVector` (projecting a view over its
-  // `__vector__`), which looked like harmless tolerance and was two violations at once:
-  //
-  //   1. HYGIENE (V's law) — `AVector.__vector__` holds ALREADY-BOXED AValues, so feeding it to a
-  //      view whose backing store is raw JS put both worlds through one slot. The crossing became
-  //      unobservable, and `jsToScheme` silently re-stamped every element with the container's
-  //      provenance, destroying per-element lineage. `boxElement`'s invariant (APair.ts) now makes
-  //      that impossible to reintroduce quietly.
+  // An earlier cut also adopted a genuine scheme `AVector` (a view over its `__vector__`), two
+  // violations at once:
+  //   1. HYGIENE (docs/MEMBRANE.md §HYGIENE) — `AVector.__vector__` holds ALREADY-BOXED AValues, so
+  //      a raw-JS-backed view put both worlds through one slot and re-stamped every element's
+  //      lineage; `boxElement`'s invariant (APair.ts) now makes that impossible to reintroduce quietly.
   //   2. FAITHFULNESS — it widened `(delete-duplicates #(1 2 1))` from an honest contract rejection
   //      into a silent success. A vector is not a list (R7RS), no tool can produce one, and nothing
   //      asked for the tolerance. `(vector->list v)` is the explicit, tracked way across.
   //
-  // The two failures share a shape: both came from letting ONE mechanism serve two kinds of value.
+  // Both came from letting ONE mechanism serve two kinds of value.
   if (v instanceof AJSArray) return AJSArrayList.at(v, 0);
   return v;
 }

@@ -42,18 +42,11 @@ import {
  *  staying a bare `throw new Error` here lets that migration absorb it later without a
  *  merge collision.
  *
- *  `z.value` is the declared raw escape hatch (scheme-zod.ts's own doc on `value`): its decode
- *  performs NO transform (`value` is a bare predicate, not a codec), so the impl receives the
- *  raw scheme value untouched and does its OWN schemeToJs/applyCallback marshaling — possibly
- *  AFTER the impl's own first `await`, by which point `withRegionScope`'s synchronous
- *  save/restore (region-scope.ts) has already reverted the ambient scope to whatever it was
- *  before this call (see `run`'s own `fire` below) — so a reverse call minted from that stale
- *  marshal binds `DETACHED_SCOPE`/`CONSTANT_CTX`, not the live run, reopening exactly the
- *  burst-bypass hole the region-scope gate exists to close. `z.procedure`'s wrapper is safe
- *  because ITS decode marshals SYNCHRONOUSLY, at decode time, before any await runs
- *  (`procedure`'s own doc, scheme-zod.ts). So the fix isn't to marshal a `z.value` callable
- *  safely — it's to never let one land there: make the unsafe shape UNAUTHORED, steering the
- *  author to declare the slot `z.procedure` instead. */
+ *  The hazard and why the fix is to make the shape UNAUTHORED (steer to `z.procedure`, whose decode
+ *  marshals synchronously under the live scope) is docs/MEMBRANE.md §REGION (the `z.value`
+ *  burst-bypass hazard): a callable marshaled from a `z.value` slot AFTER the impl's first `await`
+ *  — past `withRegionScope`'s synchronous save/restore — binds `DETACHED_SCOPE`/`CONSTANT_CTX` and
+ *  bypasses the effect burst. So this gate never lets one land there in the first place. */
 function assertNotBareCallableInValueSlot(symbolName: string, value: unknown, position: string): void {
   if (typeof value === "function" || is_callable_value(value)) {
     throw new Error(
@@ -342,8 +335,8 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
         if (scope) closeRegionScope(scope);
       }
 
-      // 3. PROVENANCE — the SAME spine as createRosettaWrapper. A "source"-role rosetta
-      //    (default) MINTS a fresh point off ctx.currentInvocation; a "pipe"-role rosetta is a
+      // 3. PROVENANCE — the SAME spine as createRosettaWrapper (docs/MEMBRANE.md §SPINES). A
+      //    "source"-role rosetta (default) MINTS a fresh point off ctx.currentInvocation; a "pipe"-role rosetta is a
       //    TRANSFORM that FORWARDS the input-provenance union instead (mirrors defineRosetta's
       //    legacy `pure: true`). With no invocation in ctx (direct-JS) a source also falls back
       //    to the input union. ★The forward-vs-mint choice is provenance-load-bearing: a "pipe"

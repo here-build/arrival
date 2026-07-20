@@ -861,9 +861,9 @@ export const box = named(
  * Return-direction ban stays: rosetta result is never a bare JS function (provenance
  * untraceable) — `encode` only legitimate for an argument marshalled inward.
  *
- * `decode` is the TYPED half of reverse-membrane crossing — one discipline shared with the
- * untyped path: it reads the SAME ambient region scope `rosetta.ts`'s `schemeToJs` reads
- * (`currentRegionScope()`), falling back to the shared `DETACHED_SCOPE` when decoded with no
+ * `decode` is the TYPED half of the reverse-membrane crossing — one discipline shared with the
+ * untyped path (docs/MEMBRANE.md §REGION): it reads the same ambient region scope as `rosetta.ts`'s
+ * `schemeToJs` (`currentRegionScope()`), falling back to `DETACHED_SCOPE` when decoded with no
  * crossing live (e.g. a unit test calling `.parse(...)` directly).
  */
 export function procedure<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(input?: I, output?: O) {
@@ -877,11 +877,9 @@ export function procedure<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(input?
         // encode/decode in/out param types are opaque conditionals here (generic boundary).
         decode: (callable) => {
           const scope = currentRegionScope() ?? DETACHED_SCOPE;
-          // `"typed"` = this factory family's slot in the two-level wrapper cache (see
-          // RegionScope.cache's doc): rosetta's untyped `callableToHostFn` keys by
-          // EgressMode; the pre-split single-keyed idiom let whichever family crossed
-          // a callable FIRST serve its wrapper to the other (typed marshalling lost,
-          // or gained where not asked for).
+          // `"typed"` = this factory family's slot in the two-level wrapper cache — docs/MEMBRANE.md
+          // §REGION (and RegionScope.cache's doc): the pre-split single key let whichever family
+          // crossed a callable FIRST serve its wrapper to the other.
           let byKey = scope.cache.get(callable);
           if (byKey === undefined) {
             byKey = new Map();
@@ -889,10 +887,9 @@ export function procedure<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(input?
           }
           const cached = byKey.get("typed");
           if (cached) return cached;
-          // Wrapper CLOSES OVER `scope` (minted here, at decode time) — never re-reads
-          // ambient holder, so a call arriving after the exporting symbol invocation returned
-          // still sees the (by then closed) scope it was minted against. `withRegionCall`
-          // owns escape/pending/abort bookkeeping; this closure owns only marshaling.
+          // Wrapper CLOSES OVER `scope` (minted here at decode time), never re-reads the ambient
+          // holder — docs/MEMBRANE.md §REGION. `withRegionCall` owns escape/pending/abort
+          // bookkeeping; this closure owns only marshaling.
           const wrapper = (...jsArgs: unknown[]) =>
             withRegionCall(scope, async () => {
               // `withMarshalCtx(scope.runCtx, …)` — NOT a bare `marshalCtx()` read: this

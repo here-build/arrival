@@ -130,27 +130,13 @@ export type SchemeValue =
 // ─────────────────────────────────────────────────────────────────────────────
 // JSWorldValue / JSWorldArray — the JS side of the membrane, AT THE TYPE LEVEL.
 //
-// Hygiene law: every membrane penetration is tracked and explicit — no site accepts
-// both a monadic AValue and a primitive JSValue for the same slot. That discipline
-// is what makes every flip between a Scheme entity and a native JS entity OBSERVED —
-// the only way to have hygiene when the host is both the interpreter runner and a
-// Graal-style parallel world.
-//
-// A borrowed store (`AJSArray.source`, and the same rule for AJSObject) holds JS-WORLD
-// VALUES ONLY: primitives, plain objects/arrays, and reverse-membraned egress proxies.
-// The proxy carve-out needs no clause — an egress proxy is a Proxy over a plain target,
-// so it is not an `AValue` and passes on its own merits. It IS a JS-world value; that is
-// what the reverse membrane is for (matryoshka: a scheme value presented to JS, handed
-// back in, still a JS-world citizen).
-//
-// This is stated as a TYPE and not (only) as a runtime invariant on purpose: a throw
-// catches the one path someone happens to execute, while a type catches EVERY violator
-// at once, in tsc, including the ones no test covers. The breakage IS the audit.
-//
-// The limit is honest and worth naming: a caller holding a bare `unknown[]` still passes,
-// because `unknown` genuinely might be a JS value — nothing better is knowable there. What
-// this DOES catch is every caller that statically knows it holds scheme values and buries
-// them in a JS store anyway (`arr as SchemeValue[]` — the real violators).
+// THE HYGIENE LAW (docs/MEMBRANE.md §HYGIENE) enforced as a TYPE: a borrowed store holds
+// JS-world values only. Stated as a type, not (only) a runtime invariant, on purpose — a throw
+// catches the one path someone runs, a type catches EVERY violator at once in tsc, including the
+// ones no test covers (the breakage IS the audit). The limit is honest: a bare `unknown[]` still
+// passes (nothing better is knowable there); what fails to compile is the caller that statically
+// knows it holds scheme values and buries them in a JS store (`arr as SchemeValue[]`). The
+// penetration-point invariant is AJSArray.boxElement.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** `any` detector (the `0 extends (1 & T)` idiom): `any` absorbs every `Extract`, so without

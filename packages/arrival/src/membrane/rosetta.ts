@@ -36,7 +36,7 @@ import {
 import { withDynamicCallSite } from "../eval/dynamic-call-site.js";
 
 // warnMembrane lives in leaf membrane-warn.ts, shared with boxing.ts `function` boxer — value layer needn't import evaluator-heavy module just to warn.
-// Non-portable JS value (function/undefined/unique symbol) crossing to Scheme: no faithful repr → #void; warnMembrane makes edge visible.
+// Non-portable JS value → #void, loudly: docs/MEMBRANE.md §VOID-RULE.
 import { warnMembrane } from "./membrane-warn.js";
 import { makeCallCtx, type CallCtx } from "../run/CallCtx.js";
 import { tf } from "../values/tagless-final.js";
@@ -104,20 +104,22 @@ export interface InvocationLike {
 }
 
 /**
- * Reverse-membrane wrapper: scheme callable crossing scheme→JS becomes region-scoped async JS fn. Reads AMBIENT `RegionScope` (`currentRegionScope()` — see region-scope.ts header) and CLOSES OVER it: wrapper never re-reads, so a call arriving after exporting invocation returns still sees (closed) scope minted against — that makes escape door detectable.
- * Per-(callable, scope) identity: `scope.cache` is scope-owned WeakMap — SAME callable exported twice through SAME scope gets SAME wrapper (eq?-stability); two scopes (two invocations) each mint own.
+ * Reverse-membrane wrapper (scheme callable → region-scoped async JS fn): the discipline is
+ * docs/MEMBRANE.md §REGION — the wrapper closes over the ambient `RegionScope`
+ * (`currentRegionScope()`), never re-reads it (so a late call sees the closed scope, tripping the
+ * escape door), and identity is per (callable, scope, FAMILY) on the scope-owned cache.
  */
 /** `applyCallback`'s `CallResult` admits trampoline bounce token (`SchemeBounceMarker`) alongside `SchemeValue` — types.ts doc names invariant: bounce "never reaches a value slot," call boundary narrows it out first. `callableToHostFn` is that boundary for reverse-membrane re-entry result, asserts invariant explicitly vs widening `schemeToJs` input type to tolerate structurally impossible shape. */
 function isBounceMarker(x: unknown): x is SchemeBounceMarker {
   return typeof x === "object" && x !== null && (x as Partial<SchemeBounceMarker>).__bounce === true;
 }
 
-/** Callable's JS projection IS region wrapper (not print string). Called from schemeToJsImpl is_callable_value branch AND exported for membrane.toJS() matching special-case (where plain `toJS`/exec simple-tier exit routes callable) — kept out of ACallable `arrival/toJS` so class need not import rosetta.ts (scheme-zod init cycle).
- * Wrapper identity = (callable, scope, MODE): the wrapper closes over `options`, so two
- * option bags that project differently must not share a slot — keyed only by (callable,
- * scope), the first mint would win and a differently-projecting second bag would get the
- * wrong wrapper. scheme-zod's typed decode shares the same two-level cache under its own
- * `"typed"` key — see RegionScope.cache's doc. */
+/** Callable's JS projection IS the region wrapper (not print string). Called from schemeToJsImpl's
+ * is_callable_value branch AND exported for membrane.toJS()'s matching special-case — kept out of
+ * ACallable's `arrival/toJS` so the class need not import rosetta.ts (scheme-zod init cycle).
+ * Keyed by `EgressMode` in the scope-owned two-level cache (its projection varies with the
+ * `options` bag); scheme-zod's typed decode shares that cache under `"typed"` — docs/MEMBRANE.md
+ * §REGION, and RegionScope.cache's doc. */
 export function callableToHostFn(value: ACallable, options: RosettaOptions): (...args: unknown[]) => unknown {
   const scope = currentRegionScope() ?? DETACHED_SCOPE;
   const key = modeKeyOf(options);
@@ -151,14 +153,12 @@ export function callableToHostFn(value: ACallable, options: RosettaOptions): (..
  * meet (shared by schemeToJsImpl's AValue branch and membrane.ts#toJS, so the
  * dispatch cannot drift between them).
  *
- * The scope is captured ONCE, here, at exit construction — which on both rosetta
- * crossings happens INSIDE the live `withRegionScope` marshalling window — and every
- * lazy element materialization re-enters it via `withRegionScope(pinned, …)`. Unpinned,
- * a nested callable would mint its wrapper at first proxy READ (usually after the
- * window restored) under DETACHED_SCOPE/CONSTANT_CTX — a region-discipline bypass.
- * Late invocation after the exporting invocation closed hits the SAME escape door a
- * bare exported callable does. Paths with no ambient scope (exec's simple tier,
- * trace/display) pin DETACHED_SCOPE — today's behavior for their top-level callables.
+ * The exporting scope is pinned ONCE here (both rosetta crossings run this inside the live
+ * `withRegionScope` window) and every lazy element materialization re-enters it via
+ * `withRegionScope(pinned, …)` — docs/MEMBRANE.md §EGRESS (scope-bound cache) and §REGION.
+ * Unpinned, a nested callable would mint its wrapper at first proxy read under
+ * DETACHED_SCOPE/CONSTANT_CTX, a discipline bypass. Paths with no ambient scope (exec's simple
+ * tier, trace/display) pin DETACHED_SCOPE.
  */
 export function egressAValue(value: AValue, options: RosettaOptions): unknown {
   const membrane = value["arrival/toJSMembrane"];
@@ -320,33 +320,9 @@ export interface InboundClaim {
 
 /**
  * THE inbound claim registry — jsToScheme's whole value-kind algebra as one DECLARED,
- * ORDERED table (first claiming row wins; the order is semantic law, not import
- * accident, and the registry law test pins it):
- *
- *  1. the two host bottoms come first (null → nil; undefined → #void, loudly);
- *  2. an already-AValue passes by identity on the same/empty-provenance fast path and
- *     otherwise re-stamps through ITS OWN protocol (`arrival/withProvenanceDeep` on
- *     spine carriers, shallow `withProvenance` on every other class) — the per-class
- *     knowledge lives on the classes, not in the router;
- *  3. arrays claim BEFORE plain objects (an array is `typeof "object"` too);
- *  4. a plain-prototype object claims BEFORE the promise row, so a plain THENABLE
- *     stays a dict-shaped borrow (the historical behavior);
- *  5. scalars (string/number/boolean) route to the boxer table (boxing.ts — the
- *     primitives' claim table); `bigint` is NOT among them (see row 10 below);
- *  6. non-AValue scheme orphans (EOF / Values / R7RSError) pass by identity — they
- *     ARE scheme values;
- *  7. the binary FFI passthrough is one DECLARED raw identity (named superset,
- *     mirrors the outbound allow-list's own raw-passthrough treatment in schemeToJsImpl);
- *  8. a bare Promise DOORS (see jsToSchemeAsyncDoor — container entries settle
- *     lazily instead);
- *  9. every remaining object (class instance, Map, Date, Error, …) re-presents as a
- *     borrowed AJSObject, LOUDLY — never a silent raw pass-through; member reads keep
- *     working through the interop policy, and the wrapper round-trips to source
- *     identity on exit;
- *  10. `bigint` is the OTHER declared raw identity (docs/design-history/
- *      arrival-one-number-rework.md §2.3): an opaque HOST value, not a scheme number
- *      — never boxed into an `AExact`, rides the same raw pass-through lane as the
- *      binary FFI row (7), placed adjacent to it.
+ * ORDERED table (first claiming row wins; the order is semantic law, not import accident, and
+ * the registry law test pins it). The row order and each row's rationale are docs/MEMBRANE.md
+ * §INBOUND (the ordered claim registry); each row below carries its own one-line contract.
  *
  * NOTE the registry-vs-switch history in boxing.ts: what that header rejects is
  * SELF-REGISTRATION (order by import accident). This is the opposite construction —
@@ -380,23 +356,9 @@ export const INBOUND_CLAIMS: readonly InboundClaim[] = [
     box: (ctx, v, p, seen) => {
       invariant(v instanceof AValue, "inbound claim 'AValue': box called off its predicate");
       if (p === EMPTY_PROVENANCE || p === v.provenance) return v;
-      // ADDITIVE LAW: a crossing may ADD its origin, never ERASE the value's.
-      //
-      // A rosetta promises HOLISTIC causation — input-as-a-whole causes output-as-a-whole — because
-      // a JS impl is opaque and we cannot see that it did not mix its inputs. That is an EDGE we are
-      // entitled to add. It is NOT a licence to overwrite what the value already knew about itself.
-      //
-      // REPLACING (overwrite instead of union) fails silently and structurally: a value's origin set
-      // stops being a SUPERSET of its true dependency set, which is the exact precondition `uneval`'s
-      // Galois slicing rests on (provenance/uneval.ts: "the effective value's origin set IS its
-      // dependency set"). The slice then omits the form that produced the dropped id, and the re-run
-      // cannot reproduce the value. Over-approximation is safe (a bigger sound slice still derives);
-      // under-approximation is fatal. Union makes `origin ⊇ dependencies` hold by construction.
-      //
-      // It even covers a SOURCE that hands back an already-provenanced value: the fresh point records
-      // "this value was explicitly CHOSEN by the source" and the value's own origin records where it
-      // came from. Both edges are real. (Rare to the point of never — but sound by construction, not
-      // by accident.)
+      // THE ADDITIVE LAW (docs/MEMBRANE.md §INBOUND): merge the crossing's origin onto the value's,
+      // never overwrite — union keeps `origin ⊇ dependencies`, the precondition uneval's Galois
+      // slicing rests on (provenance/uneval.ts); replace would drop the value's own lineage.
       const merged = mergeProvenance(v.provenance, p);
       if (merged === v.provenance) return v;
       const deep = v["arrival/withProvenanceDeep"];
@@ -603,7 +565,8 @@ export function bigintToNumber(value: bigint): number {
 }
 
 export const createRosettaWrapper = ({ fn, options = {}, pure = false }: RosettaFunction) => {
-  // `pure: true` propagates inputs' provenance, mints nothing — sound only if rosetta doesn't mutate inputs. Enforced: borrowed JS inputs (AJSObject/AJSArray) freeze source on first read, so pure rosetta physically cannot mutate. See `freezeSource` / `freezeRosettaReturns`.
+  // `pure: true` forwards inputs' provenance and mints nothing (the `pure?` field doc); a pure
+  // rosetta physically cannot mutate its borrowed inputs — the freeze contract, docs/MEMBRANE.md §BOXING.
   const mintsPoint = pure !== true;
 
   return async function rosettaWrapper(this: CallCtx, ...schemeArgs: SchemeValue[]) {

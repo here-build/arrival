@@ -208,7 +208,7 @@ export function fromJS<T>(value: [T] extends [AValue] ? never : T): FromJSResult
   }
 
   // Leaves go through jsToScheme: primitives box, null→nil, undefined/function/unique-symbol→
-  // #void+warn, Symbol.for→:keyword. A borrowed JS function is #void, not callable — not portable.
+  // #void+warn, Symbol.for→:keyword. A borrowed JS function is #void, not callable — docs/MEMBRANE.md §VOID-RULE.
   // Cast, not a narrowing gap: jsToScheme's honest `AWrap<T>` (values/types.ts) is exactly
   // this leaf case (the array/bytevector/Promise/object arms above already returned), but TS
   // can't thread that proof through the `[T] extends [AValue] ? never : T` conditional

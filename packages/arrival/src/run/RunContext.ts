@@ -42,9 +42,8 @@ export interface RunContext {
   readonly strict: boolean;
   /** Per-run allocation bound; `undefined` ⇒ unbounded (default — only sandbox/agent runs opt in). */
   readonly heapMeter: HeapMeter | undefined;
-  /** Freeze the borrowed JS source inside AJSObject/AJSArray the first time Scheme reads it, so a
-   *  rosetta return (or any borrowed value) cannot be mutated by the host afterward — prevention by
-   *  construction. `false` opts out (host keeps it mutable). */
+  /** The freeze contract (docs/MEMBRANE.md §BOXING): freeze a borrowed AJSObject/AJSArray source on
+   *  first Scheme read. `false` opts out (host keeps it mutable). Default `true`. */
   readonly freezeRosettaReturns: boolean;
   /** The run's execution-budget signal — the SAME AbortSignal the trampoline reads, so all
    *  consumers observe abort state off one reference that cannot drift. */

@@ -79,20 +79,11 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
   private boxedVec?: AVector;
 
   /**
-   * `source` is typed `JSWorldArray<S>` — the hygiene law, AT THE TYPE LEVEL (values/types.ts).
-   *
-   * A borrowed store holds JS-WORLD VALUES ONLY: primitives, plain objects/arrays, and
-   * reverse-membraned egress proxies (a Proxy over a plain target is not an AValue, so the
-   * matryoshka case passes on its own merits — no exception clause needed). A caller that
-   * statically holds scheme values (`SchemeValue[]`, `AValue[]`) collapses to `never` here and
-   * FAILS TO COMPILE, which is the point: a type catches every violator at once, in tsc, including
-   * the ones no test covers, where a runtime throw only catches the path someone happens to run.
-   *
-   * Why it matters, concretely: `jsToScheme` DEEP-RE-STAMPS an AValue with the provenance it is
-   * handed (rosetta.ts's inbound AValue claim) unless that provenance is empty or already identical.
-   * So a scheme value buried in a JS store does not merely sit there — the next time the container
-   * crosses one of its elements, that element's own lineage is silently overwritten with the
-   * container's. It is an unobserved flip that CORRUPTS, not just an untidy one.
+   * `source` is typed `JSWorldArray<S>` — THE HYGIENE LAW at the type level (docs/MEMBRANE.md
+   * §HYGIENE; the why-it-corrupts is stated there). A caller statically holding scheme values
+   * (`SchemeValue[]`, `AValue[]`) collapses to `never` here and FAILS TO COMPILE — a type catches
+   * every violator at once, including the ones no test covers. The egress-proxy carve-out needs no
+   * exception clause: a Proxy over a plain target is not an `AValue`, so it passes on its own merits.
    */
   constructor(
     ctx: RunContext,
@@ -318,16 +309,11 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
    *  inheritance (stamp site 2), `freshIfSingleton` so a raw boolean surfaces as an
    *  attested clone, never the shared flyweight. */
   /**
-   * THE declared membrane penetration for this container's elements — the ONE place an element of
-   * a borrowed JS array crosses into the scheme world, and the only element-crossing any consumer
-   * of this container may use.
-   *
-   * `AJSArrayList` (the spine chart over this same borrowed store) calls THIS rather than owning a
-   * second boxing policy. That is V's hygiene law made structural: one store, one crossing, owned
-   * by the class that owns the store (P7). A view carrying its own boxing could be pointed at any
-   * array-shaped thing — which is how an earlier cut came to project it over an OWNED `AVector`,
-   * whose elements are already boxed, and silently re-stamped every one of them with the
-   * container's provenance.
+   * THE declared membrane penetration for this container's elements (docs/MEMBRANE.md §HYGIENE):
+   * the ONE place an element of a borrowed array crosses into the Scheme world, and the only
+   * element-crossing any consumer may use. `AJSArrayList` (the spine chart over this same store)
+   * calls THIS rather than owning a second boxing policy — one store, one crossing, owned by the
+   * class that owns the store (P7).
    */
   elementAt(i: number): SchemeValue {
     this.freezeSource();
@@ -335,29 +321,11 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
   }
 
   private boxElement(raw: unknown): SchemeValue {
-    // ─── THE HYGIENE LAW, ENFORCED AT THE PENETRATION POINT ──────────────────────────────────
-    //
-    // Each membrane penetration must be tracked and explicit: nothing here may accept both a
-    // monadic AValue and a primitive JSValue at the same slot. That is the hygienic discipline
-    // that makes every flip between a Scheme entity and a native JS entity OBSERVED — the only
-    // way to have hygiene when the host is both the interpreter runner and a Graal-style parallel
-    // world. So `source` holds the UNBOXED world only: JS primitives, plain objects/arrays, and
-    // egress proxies (a reverse-membraned dict proxy, as a special case of the matryoshka-style
-    // processing already done elsewhere). The proxy carve-out needs no clause of its own — an
-    // egress proxy is a Proxy over a plain target, so `instanceof AValue` is already false for it.
-    //
-    // The check lives HERE, at the crossing, and not in the constructor on purpose. A borrowed
-    // array's whole contract is that it is LAZY — `.length` and `schemeToJs` never touch the
-    // elements — so an O(n) scan at construction would pay the very cost the class exists to avoid.
-    // The crossing is O(1) and it is the moment the flip actually happens, which is exactly what the
-    // law asks to be tracked.
-    //
-    // An AValue arriving here means someone pushed a SCHEME value into a JS-world store: the flip
-    // went unobserved, and `jsToScheme` below would then DEEP-RE-STAMP that value with this
-    // container's provenance (rosetta.ts's inbound AValue claim re-stamps unless the provenance is
-    // empty or identical), silently destroying its lineage. That is not hypothetical — a spine view
-    // once projected over an owned vector corrupted per-element provenance exactly this way, caught
-    // only by the term-carrier law. Fail loudly instead.
+    // THE HYGIENE LAW, enforced at the penetration point (docs/MEMBRANE.md §HYGIENE). The check
+    // lives HERE, at the O(1) crossing, not in an O(n) constructor scan the lazy borrow exists to
+    // avoid — the crossing is the moment the flip happens. An AValue here is an unobserved flip that
+    // `jsToScheme` below would deep-re-stamp with this container's provenance, destroying its
+    // lineage; fail loudly instead.
     Error.invariant(
       !(raw instanceof AValue),
       "AJSArray: `source` must hold JS-world values only — an AValue here means a scheme value was " +
@@ -389,9 +357,8 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
     return cell;
   }
 
-  // Freezes the borrowed source on first Scheme read so the host can't mutate it afterward —
-  // prevention by construction, replacing the dev-only purity assert. Idempotent.
-  // `freezeRosettaReturns: false` on the run ctx opts out (host keeps it mutable).
+  // The freeze contract — docs/MEMBRANE.md §BOXING. Idempotent (guarded by `Object.isFrozen`);
+  // `freezeRosettaReturns: false` opts out.
   private freezeSource(): void {
     if (this.ctx.freezeRosettaReturns !== false && !Object.isFrozen(this.source)) {
       Object.freeze(this.source);

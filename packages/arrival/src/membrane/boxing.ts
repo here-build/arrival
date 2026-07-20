@@ -77,8 +77,7 @@ export function fromJs(
       // faithful Rosetta mapping); a plain object wraps as a lazy AJSObject.
       return Array.isArray(v) ? new AJSArray(ctx, v, provenance) : new AJSObject(ctx, v, provenance);
     case "function":
-      // A borrowed JS function is NOT a portable Scheme value → #void + warn, the same as
-      // the inbound crossings (fromJS/jsToScheme). Never mints a callable wrapper.
+      // docs/MEMBRANE.md §VOID-RULE — a borrowed function voids, loudly; never a callable wrapper.
       warnMembrane("a JS function");
       return theVoid;
     default:

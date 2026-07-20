@@ -232,8 +232,8 @@ export class AJSObject extends AValue {
     return this.source;
   }
 
-  // Freezes the borrowed source on first Scheme read — prevention by construction (replaces
-  // a dev-only purity assert). Idempotent. `freezeRosettaReturns: false` on the run ctx opts out.
+  // The freeze contract — docs/MEMBRANE.md §BOXING. Idempotent (guarded by `Object.isFrozen`);
+  // `freezeRosettaReturns: false` opts out.
   private freezeSource(): void {
     if (this.ctx.freezeRosettaReturns !== false && !Object.isFrozen(this.source)) {
       Object.freeze(this.source);
