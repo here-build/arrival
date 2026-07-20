@@ -19,7 +19,7 @@
 // That is the whole shape of this codebase's design — take materialization away from the caller,
 // keep only their intent.
 //
-// ─── THE SEMANTICS (V's ruling) ─────────────────────────────────────────────────────────────
+// ─── THE SEMANTICS ──────────────────────────────────────────────────────────────────────────
 //
 //   TOP-LEVEL  `(display X)`      → PASS-THROUGH. The wrap is stripped from the AST before eval, so
 //                                   the statement simply evaluates X and its value IS the result.

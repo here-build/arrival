@@ -12,9 +12,9 @@ export interface ArgsRejectionMetadata {
 /** True iff an error message is an argument/validation/kwarg/arity failure — as opposed to a
  *  tool that ran and failed on domain grounds. Default (kwargs world): `isToolMisuseError`'s
  *  `TOOL_MISUSE_SHAPES` regex family. A positional-tuple consumer (arrival-mcp) matches
- *  `z.tuple().parse()`'s error text instead — proven not to overlap the kwargs shapes
- *  (Round 2 probe: "Invalid input: expected number, received…" doesn't match
- *  `TOOL_MISUSE_SHAPES`), confirming this pluggability is load-bearing, not speculative. */
+ *  `z.tuple().parse()`'s error text instead, which does not overlap the kwargs shapes
+ *  ("Invalid input: expected number, received…" does not match `TOOL_MISUSE_SHAPES`) —
+ *  this pluggability is load-bearing, not speculative. */
 export type IsMisuseErrorStrategy = (message: string) => boolean;
 
 /** Builds a full working example call string from a tool's JSON Schema. Default (kwargs world):

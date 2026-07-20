@@ -1,7 +1,7 @@
 /**
  * confirm-manifest — the provenance-offloaded confirmation artifact.
  *
- * A finished DiscoveryTool run's gathered `EffectLog` (values/effect-log.ts)
+ * A finished DiscoveryTool run's gathered `EffectLog` (effect-log.ts)
  * becomes ONE manifest: every effect the run WOULD have fired — risky and
  * non-risky alike, "the full burst is visible" — as a row carrying its decoded
  * args, its own minimal re-runnable invocation, and (opt-in default-on) a
@@ -29,7 +29,7 @@ type CoreEvalTrace = EvalTrace;
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** FNV-1a over a prefixed canonical string — the codebase's one content-hash idiom
- *  (session-run-state.ts / values/run-cache.ts carry their own local copies for the
+ *  (session-run-state.ts / run-cache.ts carry their own local copies for the
  *  same reason: different domains, same tiny algorithm, not worth a shared import). */
 function fnv1a(prefix: string, canonical: string): string {
   const tagged = `${prefix}|${canonical}`;

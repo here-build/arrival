@@ -30,7 +30,8 @@ const WHITESPACE = /\s+/g;
  *  differ only in such volatile tokens normalize identically — the point: detect a tool that is
  *  returning the SAME SHAPE of answer regardless of input.
  *
- *  DELIBERATELY does NOT strip digit runs (C1, benchmark-defect-register.md §C — V ruling).
+ *  DELIBERATELY does NOT strip digit runs (C1,
+ *  experimental/arrival/packages/arrival-bench/docs/benchmark-defect-register.md §C).
  *  Digits are frequently the PAYLOAD, not a volatile token: file sizes, counts, ids, prices.
  *  `get_file_info`'s pure labels+digits body (no path echo) normalized three genuinely different
  *  files to the same shape key under the old digit-stripping rule, firing the futility door on
@@ -90,8 +91,9 @@ function resultText(rawResult: unknown): string {
 export interface RingEntry {
   argsHash: string;
   resultHash: string;
-  /** The `beginCall()` generation this entry was recorded under (C1b, benchmark-defect-register.md
-   *  §C/ADDENDUM — trigger surgery). Statements within ONE program are written by the model
+  /** The `beginCall()` generation this entry was recorded under (C1b,
+   *  experimental/arrival/packages/arrival-bench/docs/benchmark-defect-register.md §C/ADDENDUM
+   *  — trigger surgery). Statements within ONE program are written by the model
    *  WITHOUT having seen any of their sibling results yet, so repeated/identical results among
    *  them are not an INFORMED retry — the door's whole premise. Both triggers below require the
    *  entries they fire on to span at least 2 DISTINCT call ids, exactly mirroring the existing

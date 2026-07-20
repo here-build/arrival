@@ -88,7 +88,7 @@ export interface SessionRunState {
   /** ALL top-level statements, order = program order. */
   log: LogStatement[];
   /** THE first-class run cache, serialized — settled entries only (in-flight promises
-   *  never survive eviction, values/run-cache.ts). */
+   *  never survive eviction, run-cache.ts). */
   cache: Record<string, RunCacheEntry>;
   counters: SessionCounters;
   createdAt: number;
@@ -267,7 +267,7 @@ export function sessionConfigDigest(config: Record<string, unknown>): string {
 
 /**
  * A `RunCache` view over the session's shared entry map. Mode is fixed at construction
- * (values/run-cache.ts: "a rehydration builds a NEW replay cache over the same entries,
+ * (run-cache.ts: "a rehydration builds a NEW replay cache over the same entries,
  * it never flips a live one") — the fold builds a `"replay"` view, the new-input run a
  * `"record"` view, both over the SAME map, so fold-recorded misses are visible to the
  * live run and everything serializes from one place. Replay-mode reads tick the session
