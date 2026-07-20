@@ -7,8 +7,8 @@
 // (scheme-zod → adopt → AJSArrayList → APair → AValue → scheme-zod) and nothing would load.
 //
 // So: the MARK is data (leaf), the ADOPTION is behavior (needs the values). Same split, one layer
-// down, as the law this whole rework serves — a chart is chosen by the contract, and the contract
-// is not the thing that performs the crossing.
+// down, as the law it serves: a chart is chosen by the contract, and the contract is not the thing
+// that performs the crossing.
 
 /** Schemas whose argument slots take the spine reading. Identity-keyed: `z.listAlike` is ONE
  *  shared instance (scheme-zod), so a slot adopts iff it is literally that schema. */

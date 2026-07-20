@@ -104,9 +104,9 @@ export interface AssembledEnv<E = unknown> {
   readonly degraded: readonly DegradedCapability[];
   /** Each applied pack's activation (validated config + resource cells + degradation),
    *  keyed by pack name, apply order — folded from `EnvPack.activation`, uninterpreted
-   *  (the additive posture `degraded` set). THE describe-time read channel
-   *  (exec-phases-and-dynamic-metadata.md §2.4): dynamic metadata fields resolve against
-   *  exactly these objects. Packs that carry no activation contribute nothing. */
+   *  (the additive posture `degraded` set). THE describe-time read channel: dynamic
+   *  metadata fields resolve against exactly these objects. Packs that carry no activation
+   *  contribute nothing. */
   readonly activations: ReadonlyMap<string, Activation<any, any>>;
   dispose(): Promise<void>;
 }
@@ -361,7 +361,7 @@ export async function assembleEnv<E>(base: E, roots: readonly EnvPack<E>[]): Pro
   // (highest precedence first, matching `order`) — purely structural, kernel never interprets it.
   const degraded = order.flatMap((name) => byName.get(name)!.degraded ?? []);
   // Fold each applied pack's activation (when present — capability-lowered packs only), same
-  // order, same uninterpreted posture. The phase-2 metadata read channel (§2.4).
+  // order, same uninterpreted posture. The phase-2 metadata read channel.
   const activations = new Map<string, Activation<any, any>>();
   for (const name of order) {
     const activation = byName.get(name)!.activation;
@@ -394,7 +394,6 @@ export function createRuntimeAssembler<E>(env: E): RuntimeAssembler<E> {
   const applied = new Map<string, Promise<void>>();
   const disposers: Array<() => void | Promise<void>> = [];
 
-  // todo replace with DefaultedMap
   const applyOne = (
     name: string,
     pack: EnvPack<E>,

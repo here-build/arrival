@@ -26,11 +26,10 @@ import type { EnvPack } from "./kernel.js";
 import type { AmbientValue } from "../env/AmbientRuntime.js";
 import type { RunContext } from "../run/RunContext.js";
 
-/** A rosetta (host-fn) contribution, mirroring arrival-scheme's retired `defineRosetta`
- *  config structurally (kept here so we don't import the runtime). Still the type the
- *  legacy `SymbolDeclaration` authoring arm (capability.ts) declares against — the
- *  authoring SHAPE survives even though the `defineRosetta` method that once consumed
- *  it does not (see `bindRosetta`, AmbientRuntime.ts, the surviving internal wiring). */
+/** A rosetta (host-fn) contribution config. Defined here, not imported, so this package
+ *  needn't depend on the runtime. The type the legacy `SymbolDeclaration` authoring arm
+ *  (capability.ts) declares against; the wiring that consumes it is `bindRosetta`
+ *  (AmbientRuntime.ts). */
 export interface RosettaSpec {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- variadic host fn, matches RosettaFunction
   fn: (...args: any[]) => unknown;

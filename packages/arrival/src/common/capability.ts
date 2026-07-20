@@ -33,9 +33,9 @@ import type { RunContext } from "../run/RunContext.js";
 // the leaf imports nothing.
 import { currentDynamicCallSite } from "../eval/dynamic-call-site.js";
 import type { InvocationLike, RosettaFunction } from "../membrane/rosetta.js";
-// The retired public `env.defineRosetta` method's internal replacement — this legacy
-// `SymbolDeclaration` bind arm and `provenance/replay.ts`'s playback frame are its only
-// two producers (env-capability-authoring skill's migration recipes name this the way in).
+// `bindRosetta`: the internal rosetta wiring (its retirement ledger lives in AmbientRuntime.ts).
+// Two producers only — this legacy `SymbolDeclaration` bind arm and `provenance/replay.ts`'s
+// playback frame; a third would be suspect.
 import { bindRosetta, bindValue, AmbientRuntime, type AmbientValue, isAmbientRuntime } from "../env/AmbientRuntime.js";
 import { CallCtx, makeCallCtx, type CacheClass, type CallbackRoles, type ProvenanceRole } from "./symbols/_bake.js";
 import { type SchemeValue } from "../values/types.js";
@@ -57,7 +57,7 @@ export type LoweredPack = EnvPack<SchemeEnv> & {
   resume(signal?: AbortSignal): Promise<void>;
   /** The per-env binding context this lower() armed (validated config + resource cells +
    *  degradation) — EXPOSURE, not construction: the binder adapters already close over it.
-   *  The phase-2 read channel (exec-phases-and-dynamic-metadata.md §2.4): `assembleEnv`
+   *  The phase-2 read channel: `assembleEnv`
    *  folds these into `AssembledEnv.activations`, and describe-time metadata resolution
    *  (`resolveMetadata`) reads dynamic fields against exactly this object. */
   readonly activation: Activation<any, any>;
@@ -372,31 +372,43 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
             continue;
           }
 
-          // ── BAKED symbol.* forms — dispatch by kind (the target path). ──────────────
+          // ── BAKED symbol.* forms — dispatch by kind (the target path) ────────────────
+          //
+          // Three rules generate the per-kind bodies below; each case cites them by name.
+          //
+          //   ARITY — `arity: { min: 0, max: null }` everywhere is introspection-only in this
+          //     cut; the kinds self-check. Tighten from `def.in` when the MCP/type-lens surface
+          //     consumes it.
+          //
+          //   PROVENANCE STAMP — every constructed proc is stamped with the RESOLVED provenance
+          //     role (`provenanceRole = def.provenance`) plus, when declared, `callbackRoles` and
+          //     `cacheClass`. The lineage classifier and wireframe builder read all three OFF THE
+          //     BOUND VALUE via `env.get(op)`, never a duck-read. Cache class is Ruling A (the
+          //     CACHE axis, lineage-independent), stamped only when declared (absent =
+          //     regenerateable); tagless/tagless-guard are contract-less, so only `sequence`
+          //     among the run-kinds has a cacheClass channel.
+          //
+          //   BOUNDARY CAST — a kind's `run`/`impl` produces scheme values by construction; TS
+          //     sees only `unknown`. The `as … SchemeValue` / `as InvocationLike | undefined`
+          //     narrows are that one seam — the same one rosetta.ts's `rawImpl` and evaluator.ts's
+          //     `ctx.currentInvocation` sites cross.
           if (isBakedDef(def)) {
             switch (def.kind) {
               case "native": {
-                // A native is a CONTOUR primitive — bind it as a first-class ANativeProcedure
+                // A native is a CONTOUR primitive — bound as a first-class ANativeProcedure
                 // (callable-as-value), invoked through its `arrival/tagless-final/apply` term.
-                // The stored impl adapts the term surface `(args, runCtx)` to the legacy host
-                // impl, which reads run-state off `this: CallCtx` (`makeCallCtx(runCtx)`) — no
-                // `this=undefined` crash from a HOF-invoked native. Provenance-transparent: a
-                // native value-op is a pure transform, never a source.
+                // The impl adapts the term surface `(args, runCtx)` to the host impl, which reads
+                // run-state off `this: CallCtx` (`makeCallCtx(runCtx)`) — no `this=undefined` crash
+                // from a HOF-invoked native.
                 const hostImpl = def.impl as (this: CallCtx, ...a: unknown[]) => unknown;
                 const proc = new ANativeProcedure({
                   name: verb,
-                  // Arity is introspection-only in this cut (natives self-check); tighten from
-                  // `def.in` when the MCP/type-lens surface consumes it.
-                  arity: { min: 0, max: null },
+                  arity: { min: 0, max: null }, // see ARITY above
                   contract: def,
                   impl: (args, runCtx) => hostImpl.apply(makeCallCtx(runCtx), args) as SchemeValue,
                 });
-                // Stamp the RESOLVED provenance role onto the bound value — the lineage
-                // classifier reads it OFF THE BOUND VALUE via `env.get(op)`, never a duck-read.
-                // The resolved per-lambda-arm callback roles (element-transformer/control/
-                // effect/accumulator) ride the same seam, read as data by the classifier and
-                // the wireframe builder. The cache class (Ruling A — the CACHE axis, lineage-
-                // independent) rides it too, stamped only when declared (absent = regenerateable).
+                // PROVENANCE STAMP (see above). A native value-op is provenance-transparent —
+                // a pure transform, never a source.
                 (proc as { provenanceRole?: ProvenanceRole }).provenanceRole = def.provenance;
                 if (def.cacheClass !== undefined) {
                   (proc as { cacheClass?: CacheClass }).cacheClass = def.cacheClass;
@@ -410,20 +422,15 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
               case "sequence":
               case "tagless":
               case "tagless-guard": {
-                // `run` is the complete ctx-aware wrapper. Bind it as a first-class
-                // ANativeProcedure invoked through the `arrival/tagless-final/apply` term —
-                // no bare JS functions in env value space (P1: a value is a term both
-                // interpreters can execute). These three kinds read ONLY `this.runCtx` —
-                // the apply term's threaded runCtx
-                // reconstructs their `this` losslessly (`makeCallCtx(runCtx)`). Resource
-                // pre-spawning gates inside the impl when the capability owns cells.
-                //
-                // The kinds' `.run` share the call SHAPE but not a common `this` type
-                // (tagless/tagless-guard declare none at all) — erase once here, the same
-                // boundary rosetta.ts's own `rawImpl` crosses.
+                // `run` is the complete ctx-aware wrapper, bound as a first-class
+                // ANativeProcedure invoked through the `arrival/tagless-final/apply` term (P1:
+                // no bare JS functions in env value space — a value is a term both interpreters
+                // can execute). These three kinds read ONLY `this.runCtx`, which the apply term
+                // reconstructs losslessly (`makeCallCtx(runCtx)`); their `.run` shares the call
+                // SHAPE but not a common `this` type (tagless/tagless-guard declare none) — hence
+                // the BOUNDARY CAST below. Resource pre-spawning gates inside the impl when the
+                // capability owns cells.
                 const rawRun = def.run as (this: unknown, ...args: unknown[]) => Promise<unknown>;
-                // Boundary cast per applyCallback's convention: the wrapper produces scheme
-                // values by construction; TS sees only `unknown`.
                 const impl: CallableImpl =
                   cellList.length === 0
                     ? (args, runCtx) => rawRun.apply(makeCallCtx(runCtx), args) as Promise<SchemeValue>
@@ -433,19 +440,13 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                       };
                 const proc = new ANativeProcedure({
                   name: verb,
-                  // Arity is introspection-only in this cut; tighten from `def.in` when the
-                  // MCP/type-lens surface consumes it.
-                  arity: { min: 0, max: null },
+                  arity: { min: 0, max: null }, // see ARITY above
                   contract: def,
                   impl,
                 });
-                // Stamp the RESOLVED provenance role (all three kinds carry `.provenance`
-                // on the def itself — sequence()/tagless()/taglessGuard() resolve it at bake
-                // time) onto the bound value, same seam as the native case above — plus the
-                // callback roles (sequence: bake-extracted; tagless: `withCallbackRoles`-
-                // declared, e.g. reduce's acc-chain marker). Cache class: only `sequence`
-                // carries a Contract to declare one on (tagless kinds are contract-less by
-                // construction — no channel, so nothing to stamp).
+                // PROVENANCE STAMP (see above). All three kinds resolve `.provenance` at bake
+                // time; callback roles are bake-extracted for `sequence`, `withCallbackRoles`-
+                // declared for tagless (e.g. reduce's acc-chain marker).
                 (proc as { provenanceRole?: ProvenanceRole }).provenanceRole = def.provenance;
                 if (def.kind === "sequence" && def.cacheClass !== undefined) {
                   (proc as { cacheClass?: CacheClass }).cacheClass = def.cacheClass;
@@ -473,10 +474,8 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 // (this `run` is already the complete ctx-aware wrapper, unlike the legacy
                 // bare-fn arm's raw `sym.fn`, which bindRosetta wraps for the first time).
                 const rawRun = def.run as (this: unknown, ...args: unknown[]) => Promise<unknown>;
-                // Boundary casts per applyCallback's convention: the wrapper produces
-                // scheme values by construction; the ambient site is opaque by design and
-                // narrows at this one seam (the same shape evaluator.ts's own
-                // `ctx.currentInvocation as InvocationLike | undefined` sites use).
+                // BOUNDARY CAST (see above): scheme values by construction; the ambient site
+                // is opaque by design and narrows here.
                 const rosettaCtx = (runCtx: RunContext) =>
                   makeCallCtx(runCtx, currentDynamicCallSite() as InvocationLike | undefined);
                 const impl: CallableImpl =
@@ -488,19 +487,16 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                       };
                 const proc = new ARosettaProcedure({
                   name: verb,
-                  // Arity is introspection-only in this cut, same as the sibling kinds.
-                  arity: { min: 0, max: null },
+                  arity: { min: 0, max: null }, // see ARITY above
                   contract: def,
                   // `strategy` is opaque (`unknown`, "until stage 3") — carries the resolved
                   // role, not a `{ pure: boolean }` shape.
                   strategy: { provenance: def.provenance },
                   impl,
                 });
-                // Same stamp as the native/sequence cases — the classifier reads it off the
-                // bound value uniformly across every callable kind (callback roles included).
-                // The cache class rides here too: `env.get(op).cacheClass` is the declared
-                // read surface for downstream consumers; the run-cache interception itself
-                // reads the bake-closure copy inside the `run` wrapper (same resolved value).
+                // PROVENANCE STAMP (see above). Cache class has two co-equal readers:
+                // `env.get(op).cacheClass` (the declared downstream surface) and the bake-closure
+                // copy inside the `run` wrapper that the run-cache interception reads — same value.
                 (proc as { provenanceRole?: ProvenanceRole }).provenanceRole = def.provenance;
                 if (def.cacheClass !== undefined) {
                   (proc as { cacheClass?: CacheClass }).cacheClass = def.cacheClass;
@@ -568,10 +564,9 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                   await ensureSpawned();
                   return bound(...args);
                 };
-          // `env.defineRosetta` retired (public method hard-deleted) — `bindRosetta`
-          // (AmbientRuntime.ts) is the same wiring, internalized: wrap via
-          // createRosettaWrapper, bind via `env.set`, stamp `rosettaTypesOf` when `.type`
-          // is declared and `env` is genuinely an `AmbientRuntime` (never a test mock).
+          // `bindRosetta` (AmbientRuntime.ts): wrap via createRosettaWrapper, bind, stamp
+          // `rosettaTypesOf` when `.type` is declared and `env` is genuinely an
+          // `AmbientRuntime` (never a test mock).
           bindRosetta(env, verb, { ...sym, fn: gated } as RosettaFunction);
         }
         for (const resolver of spec.resolvers ?? []) {

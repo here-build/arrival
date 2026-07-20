@@ -23,9 +23,9 @@
 //       – `assembler` — a holder for the per-live-env `RuntimeAssembler` backing
 //         `(require/extension …)`; the resource's `asyncDispose` IS `assembler.dispose()`, so
 //         winding the pack down tears every runtime-applied extension back out.
-//     ⚠ COMPAT (transitional, documented per V's Stage-1 instruction): `configuration.onRequireCache`
-//     and `configuration.onExtensionAssembler` REMAIN as receivers — but only because the kernel
-//     genuinely can't hand these hosts the Ref today. `buildArrivalEnv` (arrival-chain,
+//     ⚠ COMPAT (transitional): `configuration.onRequireCache` and `configuration.onExtensionAssembler`
+//     REMAIN as receivers — but only because the kernel genuinely can't hand these hosts the Ref
+//     today. `buildArrivalEnv` (arrival-chain,
 //     run-program.ts) DISCARDS the `LoweredPack`s it lowers (it returns only the assembled `env`),
 //     so its consumers (`run-traced.ts`'s shared kernel; `chain-env.ts`'s `ChainEnvironment`) have
 //     NO handle to `windDown()/resume()`. Until `buildArrivalEnv` threads the pack out, these two
@@ -247,11 +247,11 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
     };
 
     // Door-set degradation (design doc symbol-define-static-program-validation.md §3.7):
-    // under `degradation: "doors"`, an absent `fs`/`loader` no longer WITHHOLDS `require`
+    // under `degradation: "doors"`, an absent `fs`/`loader` does not WITHHOLD `require`
     // entirely (the header's "capability withholding by absence" posture) — it binds a
     // cause-carrying door instead, teaching "provide fs (or loader) to enable it". Under the
-    // default `"forbid"` mode (`degradation.active` false) this branch never fires — byte-
-    // identical withhold, unchanged.
+    // default `"forbid"` mode (`degradation.active` false) this branch never fires — the
+    // withhold is byte-identical.
     if (loader === undefined && degradation.active) {
       defs["require"] = degradation.door(
         "require",
@@ -287,9 +287,9 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
         // (`.json`, `.hbs`, capability-registered types like `.prompt`) are require-graph
         // leaves and cannot cycle.
         async function (this: CallCtx, ...args: unknown[]): Promise<SchemeVal> {
-          // The COMPOSED resolver, not just its env (the cut-path fix — see runResolverOf):
-          // module forms evaluate through it below, and the registered-resolver-verb lookup
-          // walks it too, so builtins/capability verbs resolve identically under cut and glass.
+          // The COMPOSED resolver, not just its env (see runResolverOf, loader.ts): module
+          // forms evaluate through it, and the registered-resolver lookup walks it, so builtins
+          // and capability verbs resolve identically under cut and glass.
           const resolver = runResolverOf(this, "require");
           // The single-flight cache + cycle/loading bookkeeping (the requireCache resource).
           // `.get()` single-flights: concurrent requires (the `map` fan-out) share ONE session.
@@ -307,24 +307,23 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
 
           const load = (async (): Promise<{ value: SchemeVal }> => {
             const contents = await loader.read(path);
-            // Registry overlay (proposal §7): a capability-registered resolver for this
-            // suffix wins over the loader's built-in table. The registry stores the resolver
-            // verb's NAME (process-global), resolved against THIS env (late-bind), so a
-            // resource-armed resolver (e.g. `.prompt` → `prompt/compile`) uses THIS env's
-            // resource. If the suffix is registered but the verb is NOT bound in this env (a
-            // scope that didn't root the owning capability), resolution FALLS THROUGH to the
-            // built-in table — so during migration a bare loader still resolves it; once a
-            // suffix is removed from `defaultResolvers`, that fallthrough naturally errors
-            // (no handler), which IS the scoping guarantee (you must root the capability).
+            // Registry overlay: a capability-registered resolver for this suffix wins over the
+            // loader's built-in table. The registry stores the resolver verb's NAME (process-
+            // global), resolved against THIS env (late-bind), so a resource-armed resolver (e.g.
+            // `.prompt` → `prompt/compile`) uses THIS env's resource. If the suffix is registered
+            // but the verb is NOT bound in this env (a scope that didn't root the owning
+            // capability), resolution FALLS THROUGH to the built-in table; once a suffix is
+            // removed from `defaultResolvers`, that fallthrough errors (no handler), which IS the
+            // scoping guarantee (you must root the capability).
             const resolverName = lookupExtensionResolver(path);
             // The COMPOSED lookup (scope ?? capabilities), non-throwing: a capability-registered
-            // resolver verb lives on the capability base under the cut — an env-chain-only read
-            // (`env.get`) would miss it there, the same failure family as the module-forms bug.
+            // resolver verb lives on the capability base under the cut, where an env-chain-only
+            // read (`env.get`) would miss it.
             const registered = resolverName === undefined ? undefined : resolver.lookup(resolverName);
             let result: ResolverResult;
-            // A bound verb is a callable VALUE now (ANativeProcedure — the callable-as-value
-            // rework), not `typeof === "function"` — dispatch through the ONE invocation seam
-            // (`applyCallback`), which handles both the value's apply term and a legacy bare fn.
+            // A bound verb is a callable VALUE (ANativeProcedure), not `typeof === "function"` —
+            // dispatch through the ONE invocation seam (`applyCallback`), which handles both the
+            // value's apply term and a legacy bare fn.
             if (typeof registered === "function" || is_callable_value(registered)) {
               // applyCallback's CallResult (SchemeValue | SchemeBounceMarker | Promise<SchemeValue>)
               // doesn't structurally overlap ResolverResult — a registered resolver verb is never
@@ -425,8 +424,8 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
 
     if (configuration.extensionRegistry !== undefined) {
       const { extensionRegistry, onExtensionAssembler } = configuration;
-      // Track the last assembler we notified the compat receiver about, so a fresh assembler after a
-      // windDown+resume re-notifies (the old WeakMap-per-env fired only once, ever).
+      // Track the last assembler notified to the compat receiver, so a fresh assembler after a
+      // windDown+resume re-notifies instead of firing only once.
       let notifiedAssembler: RuntimeAssembler<RunEnv> | undefined;
 
       defs["require/extension"] = symbol.native`require/extension: applies a host-registered extension pack (by :name) to the current env`(
@@ -438,7 +437,7 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
         // `dispose()` into pack teardown), and returns unspecified: the capability's symbols are now
         // live on the env. Absent name ⇒ teaching error.
         //
-        // MID-RUN prelude scope (design doc §1.4 — deliberately NOT bootstrap's machinery):
+        // MID-RUN prelude scope (deliberately NOT bootstrap's machinery):
         // unlike bootstrap assembly (whose `preludeOnly` symbols ride the kernel's phase-gated
         // resolver inside `assembleEnv`), the env here is LIVE and concurrently evaluating the
         // user program, and the bootstrap assembly's prelude phase is long closed. So EACH call
@@ -462,16 +461,12 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
             notifiedAssembler = assembler;
             onExtensionAssembler?.(assembler);
           }
-          // A discarded child scope, seeded with register-extension so the applied pack's
-          // prelude may still call it. Never linked into `env` — used only for THIS call.
-          // Inlined bind (no capability `apply()` pass runs over this scope): the SAME native
-          // def bootstrap uses, bound by hand exactly as `apply()` would for a `kind: "native"`
-          // def — through the module-internal `bindValue` (the `SchemeEnv` face carries no
-          // write member; the instanceof narrow is the same door capability.ts's apply uses:
-          // a run env's frames are real AmbientRuntimes by construction).
-          // The structural `SchemeEnv` face carries no birth member (monadic-birth ruling) —
-          // narrow to the concrete frame class first (a run env's frames are real AmbientRuntimes
-          // by construction), then mint the discarded child through the module-internal fn.
+          // A discarded child scope, seeded with register-extension so the applied pack's prelude
+          // may still call it. Never linked into `env` — used only for THIS call. Bound by hand
+          // (no capability `apply()` pass runs here): the structural `SchemeEnv` face carries no
+          // write member, so narrow to the concrete frame class (a run env's frames are real
+          // AmbientRuntimes by construction) and mint through the module-internal `bindValue` /
+          // `mintFrame` — exactly as `apply()` binds a `kind: "native"` def.
           invariant(
             isAmbientRuntime(env),
             "require/extension: the run env is not an arrival AmbientRuntime — a mid-run prelude scope must be minted off a real frame to receive bindings.",
@@ -480,12 +475,11 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
           bindValue(preludeScope, "require/register-extension", makeRegisterExtensionMacro());
           await assembler.require(pack, {
             // The kernel's bind-target face over the same frame (PreludeBindTarget is the
-            // `.set`-only shim shape; the frame itself no longer carries `set`).
+            // `.set`-only shim shape; the frame does not carry `set`).
             preludeScope: { set: (n, v) => bindValue(preludeScope, n, v as AmbientValue) },
-            // The SAME laundered seam `runEnvOf` always carried (loader.ts's explicit
-            // through-`unknown` widen): the assembler is typed over the structural RunEnv,
-            // the minted frame is the concrete class; `RunEnv & AmbientRuntime` restates the
-            // narrow above (`isAmbientRuntime(env)` on a RunEnv) one frame down.
+            // Same through-`unknown` widen as runEnvOf (loader.ts): assembler typed over structural
+            // RunEnv, the minted frame is the concrete class; `RunEnv & AmbientRuntime` restates the
+            // narrow above (`isAmbientRuntime(env)`) one frame down.
             preludeEvalScope: preludeScope as RunEnv & AmbientRuntime,
           });
           return theVoid; // applied for effect; the pack's symbols are now bound on the env

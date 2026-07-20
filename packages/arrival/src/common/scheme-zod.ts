@@ -153,8 +153,8 @@ export function lookupCollectionElement(
 // `value` stays a PREDICATE, never a union: a union makes `z.decode(value, x)` match a
 // branch and TRANSFORM x (collapse AExact → bare bigint) — wrong for a slot whose whole
 // meaning is "hand back this scheme value untouched" (identity on both faces). Predicate
-// covers every concrete `A*` kind via `instanceof AValue` — closing v1's gap where
-// symbol/dict/vector/bytevector couldn't validate — plus a JS fn used as a procedure.
+// covers every concrete `A*` kind via `instanceof AValue`
+// (including symbol/dict/vector/bytevector) — plus a JS fn used as a procedure.
 function isSchemeValue(x: unknown): x is SchemeValue {
   return x instanceof AValue || typeof x === "function";
 }
@@ -168,8 +168,7 @@ export const value = named("value", z.custom<SchemeValue>(isSchemeValue));
 // ---------------------------------------------------------------------------
 //
 // A scalar codec's `encode` receives a bare JS primitive (a `number`, a `string`,
-// a `Uint8Array`, …) — there is no `AValue` operand to `ctxOf()` for the live run
-// (CONSTANT_CTX-audit §2.2's "THREADING GAP" verdict on every scalar codec below).
+// a `Uint8Array`, …) — there is no `AValue` operand to `ctxOf()` for the live run.
 // Minting under CONSTANT_CTX drops the crossing off the run's heap
 // meter/cache/effects/reads/signal silently — everything built FROM that value
 // (`ctxOf`, `internTableFor`, `chargeHeap`) inherits the wrong run.
@@ -340,12 +339,10 @@ export const error = named(
 
 // --- numbers ---
 
-// `exact`'s JS face is now plain `number` (§2.3 — `z.bigint` retired): every AExact
-// field is safe-int `number` by construction (arrival-one-number-rework.md §0.2), so
-// there is no longer a magnitude class that needs `bigint` to carry faithfully. A raw
-// host `bigint` is a SEPARATE opaque pass-through value post-rework (never a scheme
-// number) — this codec's `encode` no longer auto-adopts one; a caller holding a host
-// bigint should convert explicitly (the "host-API break, said loudly" of §2.3).
+// `exact`'s JS face is plain `number`: every AExact is a safe-integer `number` by
+// construction, so no magnitude class needs `bigint` to carry it faithfully. A raw host
+// `bigint` is a SEPARATE opaque pass-through value (never a scheme number) — this codec's
+// `encode` does not auto-adopt one; a caller holding a host bigint converts explicitly.
 export const exact = named(
   "exact",
   z.codec(z.instanceof(AExact), z.number(), {
@@ -365,10 +362,8 @@ export const exact = named(
   }),
 );
 
-// `rational` folded into `inexact`: this codec is the superset (accepted bigint|number on
-// encode pre-rework; now plain `number` — AInexact's `.real` was always a bare `number`,
-// never bigint, so retiring the bigint arm here is a pure simplification, not a behavior
-// change for the AInexact side).
+// `inexact` also serves the former `rational` cast: AInexact ↔ plain `number` (AInexact's
+// `.real` is a bare `number`), no separate export.
 export const inexact = named(
   "inexact",
   z.codec(z.instanceof(AInexact), z.number(), {
@@ -385,9 +380,8 @@ function exactToJsNumberOrDoor(n: AExact): number {
       `exact rational ${n.toString()} cannot be a faithful JS number — use the integer codec, or looseNumber to accept the projected (divided) value`,
     );
   }
-  // No safe-range check needed: every AExact.num is ALREADY safe-int by construction
-  // (§0.2's invariant, enforced at every mint site) — a value that violates it can't
-  // exist as a live AExact to begin with.
+  // No safe-range check needed: every AExact.num is ALREADY a safe integer by
+  // construction — a value that violates that can't exist as a live AExact.
   return n.num;
 }
 
@@ -434,12 +428,10 @@ export const number = named(
   ]),
 );
 
-// `bigint` — legacy numeric cast, superseded by `schemeNumber`/`integer`. Kept,
-// mechanically ported to the new AExact shape (`number`-backed `num`/`denom`), so
-// consumers that still declare it keep a real, compiling export to flip away from
-// at their own pace rather than hitting a missing-export break. New code should
-// reach for `integer` (safe-int `number`, doors on a non-integer/out-of-range
-// operand) instead.
+// `bigint` — legacy numeric cast, superseded by `schemeNumber`/`integer`, kept as a
+// compiling export for consumers that still declare it (so they flip away at their own
+// pace instead of hitting a missing-export break). New code uses `integer` (safe-int
+// `number`, doors on a non-integer / out-of-range operand).
 export const bigint = named(
   "bigint",
   z.union([
@@ -489,8 +481,8 @@ export const bigint = named(
 // These two codecs are the missing PERMISSIVE half of the numeric vocabulary.
 
 /** Any scheme number ↔ JS `number`, LOSSY (non-integer exact rational divides — no
- *  invariant, no door; out-of-safe-range exact integers can no longer exist at all,
- *  §0.2) and permissive of non-finite values (`+nan.0`/`+inf.0`/`-inf.0` pass through
+ *  invariant, no door; an out-of-safe-range exact integer cannot exist by construction)
+ *  and permissive of non-finite values (`+nan.0`/`+inf.0`/`-inf.0` pass through
  *  AInexact's `.real` unchanged). Encode canonicalizes safe-integer JS number to
  *  AExact, else AInexact — same rule `number`'s AExact branch uses, without
  *  `number`'s finite-only guard. */
@@ -506,15 +498,11 @@ export const looseNumber = named(
   ),
 );
 
-/** Any scheme number ↔ JS `number | bigint`. Pre-rework this distinguished an
- *  out-of-safe-range exact integer (→ `bigint`, preserving magnitude) from everything
- *  else (→ `looseNumber`'s lossy float); post-rework NO live AExact can be
- *  out-of-safe-range (§0.2's construction invariant), so the `bigint` decode arm below
- *  is unreachable dead code kept only so this codec's declared JS-face union stays a
- *  strict superset of `looseNumber`'s for callers still keyed on the wider type
- *  (type-layer/schema-to-ts.ts's `IMAGE_BY_NAME` table — outside this sweep's file
- *  scope). No live caller in `env/r7rs/numeric.ts` uses this codec anymore (every op
- *  that used to needed it went box-native instead, per the encode-edge law, §2.2). */
+/** Any scheme number ↔ JS `number | bigint`. The `bigint` decode arm is UNREACHABLE dead
+ *  code — no live AExact is out-of-safe-range by construction, so no value ever takes it —
+ *  kept only so this codec's declared JS-face union stays a strict superset of
+ *  `looseNumber`'s for callers keyed on the wider type (`type-layer/schema-to-ts.ts`'s
+ *  `IMAGE_BY_NAME`). No live caller uses this codec; numeric builtins went box-native. */
 export const looseAnyNumber = named(
   "looseAnyNumber",
   z.codec(
@@ -572,14 +560,12 @@ const listContainer = z.custom<AListAlike>((x) => x instanceof APair || x instan
 // Walk pair spine into raw car array — rejecting cycles and improper (non-ANil-terminated)
 // lists. OUT schema (`z.array`/`z.tuple`) validates elements/arity.
 //
-// HEAP-METERED (CONSTANT_CTX-audit §2.2 "worst by blast radius" #2): this is the SAME
-// unbounded synchronous walk `env/pack-helpers.ts`'s `to_array` charges for — a
-// `list(...)`-typed rosetta/procedure input arg is a second, independent path to
-// materialize an arbitrary-length scheme list into one JS array, and before this charge
-// it was invisible to every sandboxed run's heap budget. Charges off the OPERAND's own
-// ctx (`ctxOf(l)`, never CONSTANT_CTX) — a run-built list carries the run's RunContext;
-// a quoted literal carries CONSTANT_CTX (no meter, parse-bounded anyway), matching
-// `to_array`'s own rule exactly. This walk and a later `list(...)` ENCODE of a fresh
+// HEAP-METERED: the SAME unbounded synchronous walk `env/pack-helpers.ts`'s `to_array`
+// charges for — a `list(...)`-typed rosetta/procedure input arg is a second, independent
+// path to materialize an arbitrary-length scheme list into one JS array. Charges off the
+// OPERAND's own ctx (`ctxOf(l)`, never CONSTANT_CTX): a run-built list carries the run's
+// RunContext; a quoted literal carries CONSTANT_CTX (no meter, parse-bounded anyway),
+// matching `to_array`'s rule exactly. This walk and a later `list(...)` ENCODE of a fresh
 // array are independent allocations on independent objects — charging both is not a
 // double-charge of one value.
 function spineToArray(l: AListAlike): unknown[] {
@@ -628,11 +614,10 @@ export function list(headsOrElement: z.ZodTypeAny | readonly z.ZodTypeAny[] = va
     "list",
     z.codec(listContainer, out as z.ZodArray<z.ZodTypeAny>, {
       decode: (l) => spineToArray(l) as never,
-      // MINT-time charge (CONSTANT_CTX-audit §2.2 #2): the spine `APair.fromArray`
-      // builds is a fresh, independent allocation from the walk `spineToArray` above
-      // charges — charging both is not a double-charge of one value. `firstCtx`
-      // inherits the run off the array's own already-boxed elements (post-element-
-      // codec — see the function's own doc); empty array has nothing to charge.
+      // MINT-time charge: the spine `APair.fromArray` builds is a fresh allocation,
+      // independent of the walk `spineToArray` above charges — charging both is not a
+      // double-charge of one value. `firstCtx` inherits the run off the array's own
+      // already-boxed elements (see its doc); an empty array has nothing to charge.
       encode: (arr) => {
         const ctx = firstCtx(arr as SchemeValue[]);
         chargeHeap(ctx, arr.length);
@@ -682,8 +667,8 @@ export function cons<C extends z.ZodTypeAny, D extends z.ZodTypeAny>(carE: C, cd
 // Spine-adopting, for the same reason `listAlike` is: a slot declared `z.pair` means "a NON-EMPTY
 // spine", and a borrowed JS array read as a spine is one. Adoption runs BEFORE validation
 // (define-bake.ts), so the gate judges the projected view — a non-empty array passes, and an empty
-// one adopts to `nil` and is correctly rejected. Without the mark, `(last (some-tool …))` died on a
-// ZodError against a list it could have walked.
+// one adopts to `nil` and is correctly rejected. Without the mark, `(last (some-tool …))` fails on a
+// ZodError against a spine it could have walked.
 export const pair = markSpineAdopting(cons(value, value));
 
 /**
@@ -703,13 +688,11 @@ export const pair = markSpineAdopting(cons(value, value));
  * keep declaring `z.union([z.pair, z.nil])` — widening an output to `listAlike` would claim the verb
  * might return a borrowed view when it never does.
  *
- * The predecessor of this schema was `z.union([z.pair, z.nil])`, spelled out ~14 times across
- * lists/strings/vectors/srfi. `symbol.native` contracts are type-only (never validated at runtime),
- * so a tool-returned array sailed straight past those unenforced unions into impls that field-read
- * `.car`/`.cdr` — and `member` answered `#f` about lists that contained the element, `list->vector`
- * answered `[]`, `find` threw on void. That the old union's own comment already called it "SHALLOW
- * pair-or-nil (listAlike)" is the tell: the two had been the same idea in prose long before they
- * diverged in the code.
+ * It replaces `z.union([z.pair, z.nil])` — spelled out ~14 times across lists/strings/vectors/srfi —
+ * which, being type-only on the never-validated `symbol.native` path, let a tool-returned array reach
+ * impls that field-read `.car`/`.cdr` (so `member` answered `#f` about a list that held the element,
+ * `list->vector` answered `[]`, `find` threw on void). `listAlike` says the one idea once, with the
+ * runtime admission those unenforced unions lacked.
  */
 /**
  * The type face is deliberately ASYMMETRIC, and it is the adoption guarantee written down:
@@ -743,48 +726,36 @@ export function vector<E extends z.ZodTypeAny = typeof value>(element: E = value
     z.union([
       z.codec(z.instanceof(AVector), z.array(element), {
         decode: (v) => v.__vector__ as z.input<E>[],
-        // MINT-time charge — same rule as `list`'s encode above (§2.2 #2): a
-        // fresh AVector spine is an independent allocation, charged off the
-        // array's own already-boxed elements via `firstCtx`.
+        // MINT-time charge — same rule as `list`'s encode above: a fresh AVector spine
+        // is an independent allocation, charged off the array's already-boxed elements
+        // via `firstCtx`.
         encode: (arr) => {
           const ctx = firstCtx(arr as SchemeValue[]);
           chargeHeap(ctx, arr.length);
           return new AVector(ctx, arr as SchemeValue[]);
         },
       }),
-      // The borrowed arm is DECODE-ONLY, and its `encode` is a door rather than a mint.
+      // The borrowed arm is DECODE-ONLY; its `encode` is a door, not a mint.
       //
-      // A borrowed array is minted by the MEMBRANE, from a real JS array that already lives in the
-      // JS world (rosetta's inbound `array → borrowed AJSArray` claim). Encoding one FROM scheme
-      // values is the crossing backwards: it would push boxed AValues into a store whose contract
-      // (V's hygiene law — see AJSArray's `boxElement`) is JS-world values ONLY, and the flip would
-      // go unobserved. `firstCtx(arr)` in the old body is the tell — it was reading a RunContext off
-      // the very scheme values it was about to bury in a JS store.
-      //
-      // Unreachable in practice (a union encodes through its FIRST matching arm, which is the
-      // AVector codec above — the canonical encode target, as its comment says), so this was a
-      // loaded gun rather than a live bug. It stays a door so it cannot be re-aimed.
+      // A borrowed array is minted by the MEMBRANE from a real JS array already living in the JS
+      // world (rosetta's inbound `array → borrowed AJSArray` claim), carrying the crossing's ctx +
+      // provenance. Encoding one FROM scheme values is that crossing backwards: it would push boxed
+      // AValues into a store whose contract is JS-world values ONLY (AJSArray's `boxElement` hygiene
+      // law), and the flip would go unobserved — a codec's `encode` has neither the ctx nor the
+      // provenance the mint needs. Unreachable anyway (a union encodes through its FIRST matching
+      // arm, the canonical AVector codec above), so the door guards a direction that cannot be
+      // re-aimed.
       z.codec(z.instanceof(AJSArray), z.array(element), {
         // Decodes to the BOXED elements (`__vector__`), NOT the raw `.source` — so both arms of this
-        // union present the SAME scheme face, which is the only way it is actually
-        // representation-blind rather than merely claiming to be.
+        // union present the SAME scheme face, the only thing that makes it genuinely
+        // representation-blind rather than merely claiming to be. The element schema is a SCHEME-face
+        // codec (`z.value` demands an AValue, `z.number` an AExact), so raw JSON elements off
+        // `.source` would fail validation every time (only `symbol.define` validates — a
+        // `symbol.native` never does, which is why vector natives never hit this face).
         //
-        // The raw-`source` form was a live bug, and a loud one: the element schema is a SCHEME-face
-        // codec (`z.value` demands an AValue; `z.number` demands an AExact), so raw JSON elements
-        // failed validation every single time. Every `symbol.define` verb contracted on `z.vector`
-        // — SRFI-43's `vector-fold` / `vector-fold-right` / `vector-count` / `vector-index` /
-        // `vector-any` / `vector-binary-search` — therefore threw a raw ZodError on ANY tool-returned
-        // JSON array, while working fine on a `#(1 2 3)` literal. (`symbol.define` decodes for its
-        // throw side-effect; `symbol.native` never validates, which is why the vector NATIVES —
-        // vector-ref/vector-length/vector-map — kept working and hid the split.)
-        //
-        // It stayed green because the law fixture put boxed AStrings in a borrowed `source` — a value
-        // production cannot construct (V's hygiene law). The illegal fixture was masking the bug: the
-        // ONE arrangement under which this decode succeeds is the one arrangement that cannot exist.
-        //
-        // Cost, named: this materializes the borrowed array (`vec()`, cached) at decode. That is the
-        // declared crossing, and only `symbol.define`'s validation walks it — a native still never
-        // boxes. Any verb that decodes a vector is about to fold over every element anyway.
+        // Cost, named: this materializes the borrowed array (`vec()`, cached) at decode. Only
+        // `symbol.define`'s validation walks it — a native never boxes — and any verb that decodes a
+        // vector is about to fold over every element anyway.
         decode: (v) => v.__vector__ as z.input<E>[],
         encode: () => {
           throw new CodecFidelityError(
@@ -829,26 +800,26 @@ export function dict<S extends Record<string, z.ZodTypeAny>>(shape: S = {} as S)
         // `as never`: record shape is generic, zod can't tie it to out-schema input.
         decode: (d) => {
           const src = d as ADict | AJSObject;
-          // Both arms build shallow BOXED record here (out-schema owns per-field marshaling)
-          // — `arrival/toJS` no longer usable: it egresses an R9 lazy proxy with values
+          // Both arms build a shallow BOXED record here (out-schema owns per-field marshaling)
+          // — `arrival/toJS` is unusable for it: that egresses an R9 lazy proxy with values
           // already unwrapped to plain JS (egress-proxy.ts), the membrane exit shape, not
           // the inside-the-sandbox record this codec feeds its out-schema.
           const names = keys.length ? keys : src.keys();
-          // HEAP-METERED (CONSTANT_CTX-audit §2.2 #2, same rationale as `spineToArray`
-          // above): walking every key of an open-key dict is the same unbounded
-          // synchronous materialization `to_array` charges for lists — charge off the
-          // SOURCE dict's own ctx (never CONSTANT_CTX) before building the record.
+          // HEAP-METERED (same rationale as `spineToArray` above): walking every key of an
+          // open-key dict is the same unbounded synchronous materialization `to_array`
+          // charges for lists — charge off the SOURCE dict's own ctx (never CONSTANT_CTX)
+          // before building the record.
           chargeHeap(ctxOf(src), names.length);
           return Object.fromEntries(names.map((k) => [k, src.get(k)])) as never;
         },
         encode: (rec: Record<string, unknown>) => {
           const entries = Object.entries(rec);
-          // MINT-time charge — same rule as `list`/`vector`'s encode above (§2.2 #2):
+          // MINT-time charge — same rule as `list`/`vector`'s encode above:
           // a fresh ADict is an independent allocation, charged off the record's own
           // already-boxed VALUES via `firstCtx` (a keyed-shape dict's per-field codecs
           // already ran, so a value here is an AValue unless the record is empty).
-          // The ctx also mints every key's ASymbol (the "dict-key ASymbol" gap the
-          // audit calls out by name) — a key must ride the SAME run as its value.
+          // The ctx also mints every key's ASymbol — a key must ride the SAME run as
+          // its value.
           const ctx = firstCtx(entries.map(([, v]) => v as SchemeValue));
           chargeHeap(ctx, entries.length);
           return new ADict(
@@ -861,8 +832,8 @@ export function dict<S extends Record<string, z.ZodTypeAny>>(shape: S = {} as S)
   );
 }
 
-// `box` — whole-object UNWRAP, not decomposition (unlike `dict`). "Behaves like Dict inside
-// Scheme, but rosetta simply unwraps the box instead of decomposing" — preserves class
+// `box` — whole-object UNWRAP, not decomposition (unlike `dict`): behaves like a Dict inside
+// Scheme, but rosetta unwraps the box instead of decomposing it — preserving class
 // identity/methods for genuinely-foreign values.
 export const box = named(
   "box",

@@ -48,10 +48,9 @@ export function stripOptionalSuffix(tag: unknown): unknown {
 }
 
 /**
- * The SINGLE lowering from the schema DSL's tagged-list form to JSON Schema — every consumer
- * (OpenAI/Anthropic structured outputs, arrival-schema-zod's `schemaToZod`, `arrival/overridable`'s
- * runtime validation) routes through this one recursion, so none can drift from the others.
- * Exported so each consumer stays a thin wrapper over this output, never a second recursion.
+ * The SINGLE lowering from the schema DSL's tagged-list form to JSON Schema. Exported so every
+ * consumer stays a thin wrapper over this one recursion (see the file header for the consumers and
+ * the no-drift guarantee) rather than a second recursion that could drift from it.
  */
 export function tagToJsonSchema(tag: unknown): JsonSchema {
   // `/optional` is only meaningful at an object-field position (handled below,

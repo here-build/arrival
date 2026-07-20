@@ -1,16 +1,17 @@
 // symbol — the stable entry for the `arrival.symbol*` EnvCapability symbol-definition API.
 //
 // This module is the package's public seam (`@inhuman.tools/arrival/symbol` subpath + the root
-// re-export). It surfaces TWO things:
+// re-export). Everything below is re-exported HERE, rather than from its defining module, so a
+// consumer imports from this ONE stable specifier; each group's note adds only what is non-obvious
+// about that group, never the stable-path reason again. It surfaces TWO things:
 //
 //   • the `symbol` NAMESPACE — `export * as symbol from "./symbols/index.js"`, one factory
 //     module per tag (`native`/`rosetta`/`tagless`/…), barrel-re-exported so the bundler can
 //     drop the tags a consumer doesn't touch (`sideEffects:false` tree-shaking).
 //
 //   • the contract/`AEntity` TYPES — re-exported from `./symbols/_bake.js` (the shared machinery
-//     the factory files stand on). Kept on THIS path so `capability.ts` (`SymbolDeclaration`), the
-//     type-layer printer (`AEntity`), and the `symbol.test-d.ts` proofs (`DecodedArgs`/`DecodedReturn`)
-//     import them from one stable specifier.
+//     the factory files stand on), imported by `capability.ts` (`SymbolDeclaration`), the
+//     type-layer printer (`AEntity`), and the `symbol.test-d.ts` proofs (`DecodedArgs`/`DecodedReturn`).
 //
 // TYPE-LEVEL PROOFS of the contract inference (a zod contract → the decoded impl arg/return types)
 // live in the vitest TYPE-TEST `src/__tests__/symbol.test-d.ts`, run under `vitest --typecheck`
@@ -30,8 +31,7 @@ export * as symbol from "./symbols/index.js";
 // resolver instead of each hand-rolling the identical `receiver as Record<string,unknown>` cast.
 export { resolveMethod } from "./symbols/_bake.js";
 
-// The contract machinery + the baked `AEntity` union and its members. Surfaced here (not from
-// `./symbols/_bake.js` directly) so the public type path is the stable `common/symbol.js`.
+// The contract machinery + the baked `AEntity` union and its members.
 export type {
   VectorSpec,
   SpecInfer,

@@ -12,9 +12,8 @@
 import { is_promise } from "../eval/guards.js";
 
 /** Promise.all over a result array; non-arrays pass through unchanged. The HOF
- *  result-collection seam (map/filter/for-each families): callbacks may be async,
- *  so collected results are awaited ONCE, at the point the whole collection is
- *  needed — single level, no structure traversal. */
+ *  result-collection seam (map/filter/for-each families): async callbacks' results
+ *  are awaited ONCE, single level, when the whole collection is needed. */
 export function promise_all(arg: unknown[]): Promise<unknown[]> | unknown[] {
   if (Array.isArray(arg)) {
     return Promise.all(arg);
@@ -24,8 +23,8 @@ export function promise_all(arg: unknown[]): Promise<unknown[]> | unknown[] {
 
 /** Sync-fast-path `then`: apply `fn` to a maybe-promise WITHOUT taxing the sync
  *  case with a microtask. A synchronous value stays synchronous (the trampoline's
- *  performance contract); a promise chains. This is the single-promise seam for
- *  "the callback might be async" — it never traverses structures. */
+ *  performance contract); a promise chains. The single-promise seam for "the
+ *  callback might be async". */
 export function maybeThen(
   value: unknown,
   fn: (x: unknown) => unknown,

@@ -25,16 +25,15 @@ import { RunResolverUnreachableError, RequirePathError } from "../errors.js";
 
 export type MaybePromise<T> = T | Promise<T>;
 
-/** The run env the verbs evaluate module forms into — typed `SchemeEnv` (V2,
- *  arrival-environment-privatization.md §II.3/D2: the same type `ExecOptions.env` now takes),
- *  never the package-internal `AmbientRuntime` class. Every real caller's env is a base-linked
- *  live one (the prelude-scope mint in loader-capability.ts, `execExpr(form, { env })` there too, both
- *  need it) — this is the honest name for what was already true, not a widening. */
+/** The run env the verbs evaluate module forms into — typed `SchemeEnv` (the same type
+ *  `ExecOptions.env` takes), never the package-internal `AmbientRuntime` class. Every real
+ *  caller's env is a base-linked live one (the prelude-scope mint in loader-capability.ts,
+ *  `execExpr(form, { env })` there too). */
 export type RunEnv = SchemeEnv;
 
-/** A scheme value, derived from the public `execExpr` (the concrete union itself is not on
- *  arrival's public surface, but the alias is exported so `dataToScheme`/`require`'s own
- *  declaration (loader-capability.ts) can name it — a derived name, not a new private type). */
+/** A scheme value, derived from the public `execExpr` (the concrete union is not on
+ *  arrival's public surface, but the alias is exported so `dataToScheme` / `require`'s
+ *  declaration (loader-capability.ts) can name it — a derived name, not a new type). */
 export type SchemeVal = Awaited<ReturnType<typeof execExpr>>;
 
 /** The run's COMPOSED resolver — scope + capability base — with a teaching error when absent.
@@ -54,9 +53,8 @@ export type SchemeVal = Awaited<ReturnType<typeof execExpr>>;
  *  and builtins resolve exactly as they do for the requiring program.
  *
  *  `ctx` is accepted (and ignored) for the verb declarations' `this: CallCtx` convention: the
- *  flat `CallCtx` (`{ runCtx, invocation }`) carries no resolver, and the pre-rework nested
- *  `.resolver`-bearing `this` shape is dead (confirmed at the rosetta-ctx-single-channel M2
- *  audit: no live caller supplies one), so the back-channel is the one real source. */
+ *  flat `CallCtx` (`{ runCtx, invocation }`) carries no resolver, so the back-channel is the
+ *  one real source. */
 export function runResolverOf(ctx: unknown, verb: string): Resolver {
   void ctx;
   const resolver = currentRunResolver();
@@ -65,14 +63,10 @@ export function runResolverOf(ctx: unknown, verb: string): Resolver {
 }
 
 /** The run env these verbs spill module `define`s into — the composed resolver's lexical
- *  frame. Kept as the env-shaped face of {@link runResolverOf} for callers that only need
- *  the frame (`require/extension`'s assembler binding, the prelude-scope mint).
- *  The widen is the SAME seam the pre-move `currentRunEnv() as RunEnv` read carried: the
- *  frame is a concrete `AmbientRuntime` (a glass root is a `ResolvingAmbient` and genuinely
- *  satisfies `SchemeEnv`; the cut's null-rooted frame lacks `registerResolver`), and every
- *  use this face serves (`get`, the assembler binding, the narrowed prelude-scope mint) is
- *  on the shared surface — hence the explicit through-`unknown` step where the old cross-package cast
- *  was implicit. */
+ *  frame. The env-shaped face of {@link runResolverOf} for callers that need only the frame
+ *  (`require/extension`'s assembler binding, the prelude-scope mint). The through-`unknown`
+ *  widen is safe: the frame is a concrete `AmbientRuntime` satisfying `SchemeEnv`, and every
+ *  use here is on the shared surface. */
 export function runEnvOf(ctx: unknown, verb: string): RunEnv {
   return runResolverOf(ctx, verb).env as unknown as RunEnv;
 }
@@ -178,14 +172,14 @@ export function dirOf(path: string): string {
 
 // ── data parsers ──────────────────────────────────────────────────────────────
 //
-// Only the DEP-FREE formats parse here (`JSON.parse`). The dep-bearing formats — `.yaml`/`.yml`
-// (`yaml`) and `.toml` (`smol-toml`) — left this package entirely: each is now its own opt-in
-// ext capability (arrival-chain `packs/ext-yaml.ts` / `ext-toml.ts`) that OWNS its parser, so the
-// loader sheds those external deps (per .claude/rules/env-quasi-packages.md — split to isolate an
-// external dependency). The capability registers its resolver by NAME at bootstrap; `require`'s
-// global ext→name overlay resolves it. NOTE: that overlay is the RUNTIME face only — the editor
-// type seam (`resolveRequireType`) still reads this static table, so `.yaml`/`.toml` no longer
-// carry a lens type provider (the design snag flagged for V; see `defaultResolvers` below).
+// Only the DEP-FREE formats parse here (`JSON.parse`). Dep-bearing formats — `.yaml`/`.yml`
+// (`yaml`), `.toml` (`smol-toml`) — live in their own opt-in ext capabilities (arrival-chain
+// `packs/ext-yaml.ts` / `ext-toml.ts`), each owning its parser, so the loader carries no external
+// dep (per .claude/rules/env-quasi-packages.md — split to isolate an external dependency). Those
+// capabilities register their resolver by NAME at bootstrap; `require`'s ext→name overlay resolves
+// it. Known wart: that overlay is the RUNTIME face only — the editor type seam (`resolveRequireType`)
+// reads this static table, so `.yaml`/`.toml` carry no lens type provider and hover as `unknown`
+// (see `defaultResolvers`).
 const DATA_PARSERS: Record<string, (text: string) => unknown> = {
   ".json": (text) => JSON.parse(text),
   ".ndjson": (text) =>
@@ -208,16 +202,14 @@ export const normalizeToJson = (v: unknown): unknown => JSON.parse(JSON.stringif
  *  chains) at EVERY depth, plain objects rebuilt with shaped values (then wrapped as
  *  member-readable records by `jsToScheme`), scalars boxed by `jsToScheme`.
  *
- *  This is the loader's OWN data contract, done explicitly — it used to fall out of
- *  `jsToScheme`, but the membrane dissolution (correctly) made a borrowed JS array a
- *  VECTOR at the rosetta boundary, and the loader's value channel silently inherited
- *  that: `(append (require "x.json") …)` started throwing "Expecting nil or pair got
- *  js-array". The loader is not a borrowed-host boundary — it is WHERE a data file is
- *  parsed INTO scheme, and required data is consumed with list idioms (`car`/`append`/
- *  destructuring folds), so arrays list-ify HERE, eagerly (a data file is finite and
- *  read once per run — the single-flight cache holds the shaped value). Exported for
- *  `require`'s own declaration (loader-capability.ts), which shapes a `kind: "value"`
- *  resolver result through this before returning it. */
+ *  The loader's OWN data contract, done explicitly — NOT delegated to `jsToScheme`, whose
+ *  rosetta boundary makes a borrowed JS array a VECTOR (so `(append (require "x.json") …)`
+ *  would throw "Expecting nil or pair got js-array"). The loader is not a borrowed-host
+ *  boundary — it is WHERE a data file is parsed INTO scheme, and required data is consumed
+ *  with list idioms (`car`/`append`/destructuring folds), so arrays list-ify HERE, eagerly
+ *  (a data file is finite and read once per run — the single-flight cache holds the shaped
+ *  value). Exported for `require`'s declaration (loader-capability.ts), which shapes a
+ *  `kind: "value"` result through this. */
 export function dataToScheme(v: unknown): SchemeVal {
   if (Array.isArray(v)) {
     let tail: SchemeVal = nil;
@@ -284,25 +276,21 @@ export function valueToTsType(value: unknown, depth = 0): string {
   return "unknown";
 }
 
-/** The default extension registry — now just the BUILTIN + the DEP-FREE data formats.
+/** The default extension registry: the `.scm` BUILTIN + the DEP-FREE data formats.
  *
  *  `.scm` is the one true builtin (the evaluator + recursive `require` — an intrinsic, never a
- *  registered extension). The dep-free data formats (`.json`/`.ndjson`/`.txt`) stay here too,
- *  for TWO reasons: (1) a bare loader (CLI `--file` mode, an env that roots no ext capability)
- *  still resolves them at runtime; (2) — load-bearing — they carry the LENS TYPE PROVIDER (`type`),
- *  which the editor seam (`resolveRequireType`) reads off THIS static table. The runtime face of
- *  these is also re-registered by the `ext/json` / `ext/ndjson` / `ext/txt` capabilities (V's
- *  "individual loaders"); when one is rooted, `require`'s by-name overlay uses the capability verb
- *  and this entry becomes the fallback — the value is identical (same `normalizeToJson`), so there
- *  is no divergence.
+ *  registered extension). The dep-free data formats (`.json`/`.ndjson`/`.txt`) stay here for TWO
+ *  reasons: (1) a bare loader (CLI `--file` mode, an env rooting no ext capability) still resolves
+ *  them at runtime; (2) — load-bearing — they carry the LENS TYPE PROVIDER (`type`), which the
+ *  editor seam (`resolveRequireType`) reads off THIS static table. Their runtime face is also
+ *  re-registered by the `ext/json` / `ext/ndjson` / `ext/txt` capabilities; when one is rooted,
+ *  `require`'s by-name overlay uses the capability verb and this entry is the fallback — identical
+ *  value (same `normalizeToJson`), no divergence.
  *
- *  The DEP-BEARING formats are GONE from here: `.yaml`/`.yml` and `.toml` moved wholesale to the
- *  `ext/yaml` / `ext/toml` capabilities (which own `yaml` / `smol-toml`), and `.hbs` to `ext/handlebars`,
- *  `.prompt` to `ext/prompt`. That sheds the loader's external deps. ⚠ DESIGN SNAG (flagged for V):
- *  the editor type seam reads only this static table, and a capability registers only a RUNTIME
- *  resolver verb (no `RequireTypeProvider` channel exists in §7's by-name registry). So `.yaml`/`.toml`
- *  `(require)` calls now hover as `unknown` in the lens. `.hbs`/`.prompt` already had no type provider,
- *  so they lose nothing. */
+ *  Dep-bearing formats are NOT builtins: `.yaml`/`.yml` (`ext/yaml`), `.toml` (`ext/toml`), `.hbs`
+ *  (`ext/handlebars`), `.prompt` (`ext/prompt`) each own their dep. That sheds the loader's external
+ *  deps — at the cost that `.yaml`/`.toml` hover as `unknown` in the lens (the by-name registry has
+ *  no type channel; see the data-parsers note above). `.hbs`/`.prompt` never had a type provider. */
 export function defaultResolvers(): Map<string, ExtensionHandler> {
   // Data files share ONE parser per extension across both faces: `resolve`
   // parses + normalizes to the runtime value, `type` parses + synthesizes the
@@ -333,11 +321,9 @@ export function defaultResolvers(): Map<string, ExtensionHandler> {
     ],
     ...dataHandlers,
     [".txt", { resolve: (contents) => ({ kind: "value", value: String(contents) }), type: () => "SStr" }],
-    // `.hbs` (→ `ext/handlebars`), `.yaml`/`.yml` (→ `ext/yaml`), `.toml` (→ `ext/toml`) and
-    // `.prompt` (→ `ext/prompt`) are NOT loader builtins: each is its own opt-in capability that
-    // registers its resolver by name. A bare loader that roots none of them has no fallback here —
-    // requiring such a file is then a clean unbound-resolver / no-resolver error, which IS the
-    // scoping guarantee (you must root the owning capability). See packs/ext-*.ts.
+    // No entry for the dep-bearing formats (`.hbs`/`.yaml`/`.toml`/`.prompt`): a bare loader
+    // rooting none of their capabilities has no fallback here, so requiring one is a clean
+    // no-resolver error — which IS the scoping guarantee (you must root the owning capability).
   ]);
 }
 
