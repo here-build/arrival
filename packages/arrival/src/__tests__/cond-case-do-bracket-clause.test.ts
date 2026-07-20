@@ -13,9 +13,8 @@
 // Purely a Racket surface (Clojure's `cond` is flat, no clause grouping) — no
 // dialect conflict, no door needed for the non-intersection claim itself.
 //
-// Executable spec: `spec/corpus/bracket-clauses-{read,eval}.jsonl` (via
-// `spec-corpus.test.ts`) — this file is the narrative/behavioral companion,
-// not a duplicate of the corpus.
+// Executable spec: `src/__tests__/polyglot/macro-special-brackets.spec.ts` —
+// this file is the narrative/behavioral companion, not a duplicate.
 import { describe, expect, it } from "vitest";
 import { exec } from "../eval/generator-exec.js";
 

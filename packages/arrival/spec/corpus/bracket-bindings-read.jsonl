@@ -1,9 +1,0 @@
-{"name":"y_bracket_pair_reads_as_vector","mode":"read","input":"[a 1]","expect":{"ast":"[a 1]"}}
-{"name":"y_bracket_whole_list_reads_as_vector","mode":"read","input":"(let [a 1 b 2] (+ a b))","expect":{"ast":"(let [a 1 b 2] (+ a b))"}}
-{"name":"y_bracket_per_element_reads_as_list_of_vectors","mode":"read","input":"(let* ([a 1] [b 2]) b)","expect":{"ast":"(let* ([a 1] [b 2]) b)"}}
-{"name":"y_quote_let_bracket_binding_is_plain_vector","mode":"read","input":"(quote (let [a 1] a))","expect":{"ast":"(quote (let [a 1] a))"}}
-{"name":"y_quote_reader_macro_let_bracket","mode":"read","input":"'(let [a 1] a)","expect":{"ast":"(quote (let [a 1] a))"}}
-{"name":"y_named_let_bracket_reads","mode":"read","input":"(let loop [i 0] (loop))","expect":{"ast":"(let loop [i 0] (loop))"}}
-{"name":"y_do_bracket_step_reads","mode":"read","input":"(do ([i 0 (+ i 1)]) (= i 3) i)","expect":{"ast":"(do ([i 0 (+ i 1)]) (= i 3) i)"}}
-{"name":"y_mixed_paren_and_bracket_reads","mode":"read","input":"(let ([a 1] (b 2)) x)","expect":{"ast":"(let ([a 1] (b 2)) x)"}}
-{"name":"y_constant_vector_binding_distinct_from_bracket","mode":"read","input":"(let #(a 1) a)","expect":{"ast":"(let #(a 1) a)"}}

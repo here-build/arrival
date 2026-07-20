@@ -54,8 +54,8 @@ export class Unterminated extends Error {
   }
 
   location?: SourceLocation;
-  /** Stable spec-taxonomy id — the grammar conformance corpus (spec/corpus/) matches
-   *  error CLASSES on this, not on prose. */
+  /** Stable spec-taxonomy id — the polyglot grammar specs (src/__tests__/polyglot/,
+   *  see its README error taxonomy table) match error CLASSES on this, not on prose. */
   readonly code = "E-UNTERMINATED";
 
   constructor(message: string, location?: SourceLocation) {
@@ -79,9 +79,10 @@ export class ParseError extends Error {
   }
 
   location?: SourceLocation;
-  /** Stable spec-taxonomy id (e.g. E-DICT-DUP-KEY) — the grammar conformance corpus
-   *  (spec/corpus/) matches error CLASSES on this, not on prose, so messages stay
-   *  free to teach while the contract stays machine-checkable. */
+  /** Stable spec-taxonomy id (e.g. E-DICT-DUP-KEY) — the polyglot grammar specs
+   *  (src/__tests__/polyglot/, see its README error taxonomy table) match error
+   *  CLASSES on this, not on prose, so messages stay free to teach while the
+   *  contract stays machine-checkable. */
   code?: string;
 
   constructor(message: string, location?: SourceLocation, code?: string) {

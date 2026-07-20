@@ -15,9 +15,8 @@
 //
 // Spec: the bracket-binding section header in src/eval/evaluator.ts (normalizeBindings).
 // Requirements: the bracket-bindings requirements doc (R1–R8).
-// Executable spec: spec/corpus/bracket-bindings-{read,eval}.jsonl (via
-// spec-corpus.test.ts) — this file is the narrative/behavioral companion, not a
-// duplicate of the corpus.
+// Executable spec: src/__tests__/polyglot/macro-special-brackets.spec.ts —
+// this file is the narrative/behavioral companion, not a duplicate.
 import { describe, expect, it } from "vitest";
 import { exec } from "../eval/generator-exec.js";
 
