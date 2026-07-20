@@ -11,7 +11,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { initBridge } from "../../index.js";
 import { parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../inference-env.js";
-import type { Classifier, DeclaredRole } from "../../values/lineage.js";
+import type { Classifier, DeclaredRole } from "../lineage.js";
 import { buildWireframe } from "../wireframe/builder.js";
 import { reachableNodes, reachableNodesForDemand } from "../wireframe/loops.js";
 import type { Wire, WireframeGraph, WireframeProgram } from "../wireframe/types.js";

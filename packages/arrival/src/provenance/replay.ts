@@ -53,7 +53,7 @@
  */
 import { execState } from "../eval/generator-exec.js";
 import { bindRosetta, mintFrame, type AmbientValue, type ResolvingAmbient } from "../AmbientRuntime.js";
-import { collapseProvenance } from "../provenance-collapse.js";
+import { collapseProvenance } from "./provenance-collapse.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { jsToScheme, schemeToJs } from "../membrane/rosetta.js";
 import { CONSTANT_CTX } from "../values/primitives/RunContext.js";

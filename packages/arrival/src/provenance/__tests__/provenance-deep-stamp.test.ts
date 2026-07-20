@@ -16,21 +16,21 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
-import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
-import { AString } from "../values/primitives/AString.js";
-import { AJSObject } from "../membrane/AJSObject.js";
-import { AJSArray } from "../membrane/AJSArray.js";
-import { AExact } from "../values/primitives/AExact.js";
-import { AInexact } from "../values/primitives/AInexact.js";
-import { APair } from "../values/primitives/APair.js";
-import { jsToScheme } from "../membrane/rosetta.js";
-import { inferenceEnv } from "../inference-env.js";
-import { exec } from "../eval/generator-exec.js";
-import { ANil, nil } from "../values/primitives/ANil.js";
+import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { EMPTY_PROVENANCE } from "../../values/primitives/AValue.js";
+import { schemeFalse, schemeTrue } from "../../values/primitives/ABool.js";
+import { AString } from "../../values/primitives/AString.js";
+import { AJSObject } from "../../membrane/AJSObject.js";
+import { AJSArray } from "../../membrane/AJSArray.js";
+import { AExact } from "../../values/primitives/AExact.js";
+import { AInexact } from "../../values/primitives/AInexact.js";
+import { APair } from "../../values/primitives/APair.js";
+import { jsToScheme } from "../../membrane/rosetta.js";
+import { inferenceEnv } from "../../inference-env.js";
+import { exec } from "../../eval/generator-exec.js";
+import { ANil, nil } from "../../values/primitives/ANil.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue, mintFrame } from "../AmbientRuntime.js";
+import { bindValue, mintFrame } from "../../AmbientRuntime.js";
 
 const PROV = new Set<number>([42]);
 

@@ -36,14 +36,14 @@
  * SHAPE per leaf, not the id values.
  */
 import { describe, it, expect } from "vitest";
-import { is_pair, is_nil } from "../values/value-guards.js";
-import { AValue } from "../values/primitives/AValue.js";
-import { sStr, runRaw, type EnvSetup } from "./_lineage-test-helpers.js";
-import { ANil } from "../values/primitives/ANil.js";
-import { APair } from "../values/primitives/APair.js";
-import { symbol } from "../common/symbol.js";
-import { EnvCapability } from "../common/capability.js";
-import * as z from "../common/scheme-zod.js";
+import { is_pair, is_nil } from "../../values/value-guards.js";
+import { AValue } from "../../values/primitives/AValue.js";
+import { sStr, runRaw, type EnvSetup } from "../../__tests__/_lineage-test-helpers.js";
+import { ANil } from "../../values/primitives/ANil.js";
+import { APair } from "../../values/primitives/APair.js";
+import { symbol } from "../../common/symbol.js";
+import { EnvCapability } from "../../common/capability.js";
+import * as z from "../../common/scheme-zod.js";
 
 // Fixed mint ids — stand-ins for "whatever the membrane minted at this crossing".
 const MINT_A = 500;

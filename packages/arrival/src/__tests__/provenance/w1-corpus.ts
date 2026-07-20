@@ -18,7 +18,7 @@
  *    op present only in the wireframe cone, so the row can assert the superset is
  *    non-vacuous (not accidentally equal).
  */
-import type { DeclaredRole } from "../../values/lineage.js";
+import type { DeclaredRole } from "../../provenance/lineage.js";
 import type { SourceShape } from "./w1-harness.js";
 
 export type GeneratorClass =

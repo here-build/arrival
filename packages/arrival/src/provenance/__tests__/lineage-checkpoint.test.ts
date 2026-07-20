@@ -1,4 +1,4 @@
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 /**
  * CHECKPOINT for build-step 1 (design note §10) — the go/no-go for the IR.
  *
@@ -13,17 +13,17 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
  * STOP before building the IR. It doesn't fail.
  */
 import { describe, it, expect } from "vitest";
-import { initBridge } from "../index.js";
-import { parse } from "../eval/generator-exec.js";
-import { execState } from "../eval/generator-exec.js";
-import { inferenceEnv } from "../inference-env.js";
-import { APair } from "../values/primitives/APair.js";
-import { classify, fullCone, type Classifier, type LineageNode } from "../values/lineage.js";
-import { provOf } from "../values/lineage-shadow.js";
-import { sStr } from "./_lineage-test-helpers.js";
-import { requireEagerOracle } from "./_require-eager-oracle.js";
+import { initBridge } from "../../index.js";
+import { parse } from "../../eval/generator-exec.js";
+import { execState } from "../../eval/generator-exec.js";
+import { inferenceEnv } from "../../inference-env.js";
+import { APair } from "../../values/primitives/APair.js";
+import { classify, fullCone, type Classifier, type LineageNode } from "../../provenance/lineage.js";
+import { provOf } from "../../provenance/lineage-shadow.js";
+import { sStr } from "../../__tests__/_lineage-test-helpers.js";
+import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue, mintFrame } from "../AmbientRuntime.js";
+import { bindValue, mintFrame } from "../../AmbientRuntime.js";
 
 // Q20b: this file's local helpers (`eagerProvSize` et al.) call execState
 // directly — force the oracle ON for the file's lifetime.

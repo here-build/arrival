@@ -41,7 +41,7 @@ function internTableFor(ctx: RunContext): Map<string, ASymbol> {
 }
 
 /** A real keyword name: `:`-prefixed, length > 1 (a bare `:` is not one) — matches
- *  `values/lineage.ts`'s `memberRead`/`type-layer/lower.ts`'s `isKeyword`. */
+ *  `provenance/lineage.ts`'s `memberRead`/`type-layer/lower.ts`'s `isKeyword`. */
 function isKeywordName(name: string): name is string {
   return typeof name === "string" && name.length > 1 && name.startsWith(":");
 }

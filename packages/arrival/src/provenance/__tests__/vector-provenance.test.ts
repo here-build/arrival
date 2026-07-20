@@ -4,15 +4,15 @@
 // to carry lineage; its own producers were throwing it away. utf8->string /
 // vector->string even returned RAW JS strings (provenance-blind escapees).
 import { describe, expect, it } from "vitest";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { initBridge } from "../index.js";
-import bytevectorsCap from "../env/r7rs/bytevectors.js";
-import vectorsCap from "../env/r7rs/vectors.js";
-import type { EnvCapability } from "../common/capability.js";
-import { ABytevector } from "../values/primitives/ABytevector.js";
-import { AString } from "../values/primitives/AString.js";
-import { AVector } from "../values/primitives/AVector.js";
-import { requireEagerOracle } from "./_require-eager-oracle.js";
+import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { initBridge } from "../../index.js";
+import bytevectorsCap from "../../env/r7rs/bytevectors.js";
+import vectorsCap from "../../env/r7rs/vectors.js";
+import type { EnvCapability } from "../../common/capability.js";
+import { ABytevector } from "../../values/primitives/ABytevector.js";
+import { AString } from "../../values/primitives/AString.js";
+import { AVector } from "../../values/primitives/AVector.js";
+import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
 
 // Q20b: every assertion below calls a raw native op fn directly — still routes
 // through op-helpers.ts's withInputProvenance internally, so it needs the oracle

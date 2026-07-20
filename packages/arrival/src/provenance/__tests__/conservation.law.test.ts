@@ -7,7 +7,7 @@
  * BODIES FILLED (docs/test-suite-architecture.md F2). Mechanism REUSED from the v1
  * suite, not reinvented: `sStr`/`sNum`/`run`/`runRaw` (`./_lineage-test-helpers.js`,
  * the same helpers golden-prov-arithmetic/golden-prov-infer import), `provOf`
- * (`../values/lineage-shadow.js`, the canonical flat/eager stamp reader), and
+ * (`../lineage-shadow.js`, the canonical flat/eager stamp reader), and
  * `collapseProvenance` (`../provenance-collapse.js`, the DEEP structural walk —
  * see collapse-provenance.test.ts). The rosetta-mint fixtures mirror
  * `capability-rosetta-symbol.test.ts`'s `wireRosetta`/`invoke`/`invocationWithId`
@@ -40,8 +40,8 @@ import { AVector } from "../../values/primitives/AVector.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
-import { provOf } from "../../values/lineage-shadow.js";
-import { collapseProvenance } from "../../provenance-collapse.js";
+import { provOf } from "../../provenance/lineage-shadow.js";
+import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { schemeToJs, type InvocationLike } from "../../membrane/rosetta.js";
 import { EnvCapability } from "../../common/capability.js";
 import { symbol, type RosettaSymbolDef } from "../../common/symbol.js";
@@ -52,8 +52,8 @@ import { withDynamicCallSite } from "../../eval/dynamic-call-site.js";
 import { nil } from "../../values/primitives/ANil.js";
 import { tf } from "../../values/tagless-final.js";
 import type { SchemeValue } from "../../values/types.js";
-import { run, runRaw, sNum, sStr } from "../_lineage-test-helpers.js";
-import { requireEagerOracle } from "../_require-eager-oracle.js";
+import { run, runRaw, sNum, sStr } from "../../__tests__/_lineage-test-helpers.js";
+import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
 
 // Q20b: the container-box rows below call carrier methods (map/sort/filter)
 // directly, not through runRaw/_lineage-test-helpers.js's own save/restore — force

@@ -38,7 +38,7 @@
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 import { AmbientRuntime, mintFrame } from "../../AmbientRuntime.js";
 import { execState } from "../../eval/generator-exec.js";
-import { collapseProvenance } from "../../provenance-collapse.js";
+import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import * as z from "../../common/scheme-zod.js";

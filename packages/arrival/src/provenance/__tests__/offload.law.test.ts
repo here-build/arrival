@@ -27,7 +27,7 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { initBridge } from "../../index.js";
 import { parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../inference-env.js";
-import type { Classifier } from "../../values/lineage.js";
+import type { Classifier } from "../../provenance/lineage.js";
 import { buildWireframe } from "../../provenance/wireframe/builder.js";
 import { hashGraph } from "../../provenance/wireframe/hash.js";
 import { setEmissionEnabled } from "../../provenance/store/emit.js";
@@ -42,8 +42,8 @@ import {
   type OffloadIngress,
   type VerificationCandidate,
 } from "../../provenance/offload.js";
-import { CORPUS_BASE_NAMES, CORPUS_ROLES } from "./w1-corpus.js";
-import { recordRun, type RecordedMint, type RecordedRun } from "./q16-harness.js";
+import { CORPUS_BASE_NAMES, CORPUS_ROLES } from "../../__tests__/provenance/w1-corpus.js";
+import { recordRun, type RecordedMint, type RecordedRun } from "../../__tests__/provenance/q16-harness.js";
 
 const corpusClassifier: Classifier = { roleOf: (op) => CORPUS_ROLES[op] };
 const corpusIsBaseName = (n: string): boolean => CORPUS_BASE_NAMES.has(n);

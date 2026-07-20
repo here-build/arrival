@@ -18,7 +18,7 @@
 // does not track purity. `pure: true` on a `defineRosetta` config is still load-bearing
 // at runtime even so: it gates `mintsPoint` inside `createRosettaWrapper` (rosetta.ts).
 // The static lineage classifier gets purity a different way — the bound value's
-// declared `.provenanceRole` (see `values/lineage-classifier-from-env.ts`), not a
+// declared `.provenanceRole` (see `provenance/lineage-classifier-from-env.ts`), not a
 // side-table lookup here.
 
 import type { AmbientRuntime } from "./AmbientRuntime.js";

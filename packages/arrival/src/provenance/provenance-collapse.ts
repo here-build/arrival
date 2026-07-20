@@ -49,9 +49,9 @@
 // the wiring silently loses an edge. (AJSObject deliberately answers nothing — a dict's own point
 // is collected, but stringifying a dict is not a wiring path; access a member first.)
 
-import { AString } from "./values/primitives/AString.js";
-import { AValue } from "./values/primitives/AValue.js";
-import { CONSTANT_CTX } from "./values/primitives/RunContext.js";
+import { AString } from "../values/primitives/AString.js";
+import { AValue } from "../values/primitives/AValue.js";
+import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
 
 /** Union the provenance point-ids of every AValue reachable in `vals`, deep-walking
  *  the structured carriers (list spines, vectors, arrays) via their own

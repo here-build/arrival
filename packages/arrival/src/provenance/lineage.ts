@@ -45,10 +45,10 @@
  * once per-op ADJOINT rules exist in that algebra: `walk()` is already the backward
  * pass, so the missing piece is the adjoint table, not a mode.
  */
-import { is_pair } from "./value-guards.js";
-import { ASymbol } from "./primitives/ASymbol.js";
-import { APair } from "./primitives/APair.js";
-import type { SchemeValue } from "./types.js";
+import { is_pair } from "../values/value-guards.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
+import { APair } from "../values/primitives/APair.js";
+import type { SchemeValue } from "../values/types.js";
 
 /** Exhaustiveness guard for `LineageNode.kind` switches. The `never` parameter makes
  *  "added a node kind, forgot a walker arm" a COMPILE error (the new kind no longer
@@ -148,7 +148,7 @@ export type DeclaredRole = "pipe" | "fan" | "source" | "sink" | "transparent" | 
  * `isRosettaIn`/`.fanout` stamped on bound functions for duck-reading is explicitly
  * excluded). `roleOf` is the ONE read: a
  * production classifier answers it from the env-bound callable's `.provenanceRole`
- * (`values/lineage-classifier-from-env.ts`) or an equivalent declaration registry —
+ * (`provenance/lineage-classifier-from-env.ts`) or an equivalent declaration registry —
  * `undefined` means "no declared role" (unbound name, a plain user-defined Scheme
  * lambda, or an unmodeled special-form head — see the file header's `case`/`while`/
  * `quasiquote` note), which classify() treats identically to an explicit `"pipe"`.

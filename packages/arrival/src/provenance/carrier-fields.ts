@@ -26,10 +26,10 @@
  * symbol-bound `(:k (car x))` form works). (2) an `(@ x :k)` membrane read pins where the
  * keyword-only runtime `accessorField` (trace.ts) recognizes nothing — the carrier is the faithful side.
  */
-import { classify, fieldResolve } from "../values/lineage.js";
-import type { Bindings, Classifier, LineageNode } from "../values/lineage.js";
-import { slotsOf } from "../values/lineage-auto-bindings.js";
-import type { AutoBindings } from "../values/lineage-auto-bindings.js";
+import { classify, fieldResolve } from "./lineage.js";
+import type { Bindings, Classifier, LineageNode } from "./lineage.js";
+import { slotsOf } from "./lineage-auto-bindings.js";
+import type { AutoBindings } from "./lineage-auto-bindings.js";
 
 import type { EvalTrace, Invocation } from "./trace.js";
 
@@ -163,7 +163,7 @@ const FAN_OPS: ReadonlySet<string> = new Set(["map", "filter", "vector-map"]);
  * invocations: post the points-by-default flip a rosetta mints iff it is a point, so the trace's
  * points ARE the sources that actually fired (http/sql/db included; new sources automatic) — this
  * is a fact READ OFF THE TRACE (what actually crossed the membrane at runtime), not a
- * caller-injected heuristic (`values/lineage-classifier-from-env.ts` reads the same
+ * caller-injected heuristic (`provenance/lineage-classifier-from-env.ts` reads the same
  * declaration-driven spirit off the env instead). `classify` never consults a
  * `pure` predicate, and `opaque` does not change which `field` nodes `collectFieldNodes` finds
  * (a member-read is recognized before the opaque cut, and opaque + pipe/undefined both descend

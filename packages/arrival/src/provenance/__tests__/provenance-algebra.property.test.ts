@@ -24,11 +24,11 @@
  */
 
 import * as fc from "fast-check";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import { describe, expect, it } from "vitest";
 
-import { AValue, EMPTY_PROVENANCE, pointProvenance, unionProvenance } from "../values/primitives/AValue.js";
-import { ABool } from "../values/primitives/ABool.js";
+import { AValue, EMPTY_PROVENANCE, pointProvenance, unionProvenance } from "../../values/primitives/AValue.js";
+import { ABool } from "../../values/primitives/ABool.js";
 
 /**
  * Generator: an AValue with arbitrary provenance. SchemeBool is the cheapest

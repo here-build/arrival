@@ -28,7 +28,7 @@ import { promise_all } from "../../utils/promises.js";
 // `arrival/provenanceChildren` term instead of importing every value class to instanceof them).
 // That matters structurally — the old cycle made it impossible for any value class to `extends
 // APair`, which AJSArrayList must do.
-import { collapseProvenance } from "../../provenance-collapse.js";
+import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { reStampChild } from "./deep-restamp.js";
 import { egressContainerProxy } from "../../membrane/egress-proxy.js";
 import { type AList, AListAlike, AListAlikeValue, APairAsListValue, type MembraneExit, type SchemeValue, } from "../types.js";

@@ -25,8 +25,8 @@ import { overridableCapability } from "../env/overridable.js";
 import type { EvalSchemeInto, SchemeEnv } from "../common/scheme-env.js";
 import invariant from "tiny-invariant";
 import { parse as readerParse } from "../reader/parse.js";
-import { assertShadowCone } from "../values/lineage-shadow.js";
-import { type LineageNode } from "../values/lineage.js";
+import { assertShadowCone } from "../provenance/lineage-shadow.js";
+import { type LineageNode } from "../provenance/lineage.js";
 import {
   ambientBase,
   classifyProgram,
@@ -462,7 +462,7 @@ export interface ExecOptions {
   skipBootstrapWait?: boolean;
   /**
    * SHADOW MODE (provenance-static-lineage-finalization §8). When set, after each
-   * top-level form is evaluated, the static lineage `fullCone` (values/lineage.ts)
+   * top-level form is evaluated, the static lineage `fullCone` (provenance/lineage.ts)
    * is computed and ASSERTED equal to the form's UNTAPPED eager `result.provenance`.
    * A divergence throws `ProvenanceShadowDivergence`. Read-only cross-check of the
    * static classifier against the live engine — does NOT alter evaluation;

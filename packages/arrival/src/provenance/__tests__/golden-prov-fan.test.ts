@@ -1,4 +1,4 @@
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 /**
  * GOLDEN CAPTURE (gate G2 oracle) — FAN-OUT provenance: map / filter / length.
  *
@@ -46,10 +46,10 @@ import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
  * (unwrap-to-JS) and `triple` (Pair fixture) wrappers stay local.
  */
 import { describe, it, expect } from "vitest";
-import { APair } from "../values/primitives/APair.js";
-import { AValue } from "../values/primitives/AValue.js";
-import { provOf } from "../values/lineage-shadow.js";
-import { sStr, runRaw } from "./_lineage-test-helpers.js";
+import { APair } from "../../values/primitives/APair.js";
+import { AValue } from "../../values/primitives/AValue.js";
+import { provOf } from "../../provenance/lineage-shadow.js";
+import { sStr, runRaw } from "../../__tests__/_lineage-test-helpers.js";
 
 // provenance of the result
 async function prov(src: string, binds: Record<string, unknown> = {}): Promise<number[]> {

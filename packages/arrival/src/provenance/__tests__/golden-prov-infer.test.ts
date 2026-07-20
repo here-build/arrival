@@ -46,14 +46,14 @@
  * shared `runRaw` via its setup hook; the `prov`/`value` wrappers stay local.
  */
 import { describe, it, expect } from "vitest";
-import { AValue } from "../values/primitives/AValue.js";
-import { provOf } from "../values/lineage-shadow.js";
-import { sStr, runRaw, type EnvSetup } from "./_lineage-test-helpers.js";
-import { symbol } from "../common/symbol.js";
-import { EnvCapability } from "../common/capability.js";
-import * as z from "../common/scheme-zod.js";
-import { jsToScheme } from "../membrane/rosetta.js";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { AValue } from "../../values/primitives/AValue.js";
+import { provOf } from "../../provenance/lineage-shadow.js";
+import { sStr, runRaw, type EnvSetup } from "../../__tests__/_lineage-test-helpers.js";
+import { symbol } from "../../common/symbol.js";
+import { EnvCapability } from "../../common/capability.js";
+import * as z from "../../common/scheme-zod.js";
+import { jsToScheme } from "../../membrane/rosetta.js";
+import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 
 // Fixed mint ids — stand-ins for "whatever the membrane minted at this crossing".
 // The SHAPE of how they flow (born / propagate / merge / narrow) is the invariant;

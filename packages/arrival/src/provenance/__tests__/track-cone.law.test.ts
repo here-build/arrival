@@ -32,8 +32,8 @@ import { mintFrame } from "../../AmbientRuntime.js";
 import { initBridge } from "../../index.js";
 import { parse, execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../inference-env.js";
-import { collapseProvenance } from "../../provenance-collapse.js";
-import { classify, fieldCone, fullCone, type Bindings, type Classifier, type DeclaredRole, type PathStep } from "../../values/lineage.js";
+import { collapseProvenance } from "../../provenance/provenance-collapse.js";
+import { classify, fieldCone, fullCone, type Bindings, type Classifier, type DeclaredRole, type PathStep } from "../../provenance/lineage.js";
 import { buildWireframe } from "../../provenance/wireframe/builder.js";
 import { reachableNodesForDemand } from "../../provenance/wireframe/loops.js";
 import { FrozenMints, boxPayload, replayBetweenRecords, replayGraphEgress } from "../../provenance/replay.js";
@@ -51,9 +51,9 @@ import {
 import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
 import type { EmittedWire, WireframeGraph } from "../../provenance/wireframe/types.js";
 import type { SchemeValue } from "../../values/types.js";
-import { recordRun, replayedCone, type RecordedRun } from "./q16-harness.js";
-import { SourceRegistry } from "./w1-harness.js";
-import { requireEagerOracle } from "../_require-eager-oracle.js";
+import { recordRun, replayedCone, type RecordedRun } from "../../__tests__/provenance/q16-harness.js";
+import { SourceRegistry } from "../../__tests__/provenance/w1-harness.js";
+import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
 
 // Q20b: the STAMP-arm rows below call execState directly (not through
 // q16-harness.ts's recordRun, which already saves/restores its own call) — force
@@ -395,7 +395,7 @@ describe("R2 demand monotonicity (§6 demand lattice: value / count / field-k)",
   // @ledger: Q17 — FLIPPED. `field-k` has no SEPARATE demand grade at the wireframe
   // layer (no consumer has asked for one there — §6 EXCLUDED: "further grades...
   // until a consumer demands it"). The demand lattice's field-k arm is already
-  // landed at the RETROSPECTIVE layer (`values/lineage.ts`'s `fieldCone`/`fullCone`,
+  // landed at the RETROSPECTIVE layer (`provenance/lineage.ts`'s `fieldCone`/`fullCone`,
   // pre-dating this provenance wave) — this row reuses THAT machinery rather than
   // inventing a second field-demand walk, generalizing lineage-field.test.ts's own
   // per-case assertions into the monotonicity LAW itself.

@@ -87,7 +87,7 @@
 import type { SchemeValue } from "../../values/types.js";
 import { APair } from "../../values/primitives/APair.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
-import { classify, type Classifier, type LineageNode, type Subst } from "../../values/lineage.js";
+import { classify, type Classifier, type LineageNode, type Subst } from "../lineage.js";
 import type { CallbackRoles } from "../../common/symbols/_bake.js";
 import { classifyProgramPrelude, buildPreludeSource, reachesPort } from "../prelude.js";
 import { defineNameOf } from "../slice.js";
@@ -466,7 +466,7 @@ class GraphBuilder {
           return;
         case "loop": {
           // A declared-`loop` op with no known recursive shape (dead code
-          // today — no live declaration uses this role, values/lineage.ts's
+          // today — no live declaration uses this role, provenance/lineage.ts's
           // DeclaredRole doc): designate the node with an EMPTY interior;
           // operands wire as ordinary ingress (buildArgNode's path) — inventing
           // iteration semantics for a combinator with none observed is not this

@@ -114,7 +114,7 @@ export type WireframeNode =
    *  carry only the INITIAL values; every subsequent iteration rebinds `params`
    *  from a `recur` node's ingress inside `interior` — the BACKEDGE. A declared-
    *  `loop`-role op with no known recursive shape (dead code today — no live
-   *  declaration uses the role, `values/lineage.ts`'s `DeclaredRole` doc) gets
+   *  declaration uses the role, `provenance/lineage.ts`'s `DeclaredRole` doc) gets
    *  `params: []` and an empty `interior`: no recursive structure to wireframe,
    *  so its operands wire as ordinary ingress instead (`buildArgNode`'s path). */
   | {

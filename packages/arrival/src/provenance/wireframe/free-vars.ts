@@ -7,7 +7,7 @@
  * inner `(let ((y 1)) y)` must not demand `y` from the hermetic env).
  *
  * Scope-aware over exactly the special forms the evaluator dispatches directly and
- * `values/lineage.ts` models (`CLASSIFIED_SPECIAL_FORMS` + `define`/`case`/
+ * `provenance/lineage.ts` models (`CLASSIFIED_SPECIAL_FORMS` + `define`/`case`/
  * quasiquote): quote/quasiquote handled as data (unquote re-enters expression
  * space, depth-counted), the binder family (`lambda`, `let`-family incl. named
  * let, `do`, `define`) binds, everything else — including UNMODELED heads — walks
@@ -35,7 +35,7 @@ function nameOf(s: DuckSymbol): string | null {
 }
 
 /** Keyword-shaped names (`:foo`, length > 1) are accessors, not variables — mirrors
- *  `values/lineage.ts`'s `memberRead` keyword recognition. */
+ *  `provenance/lineage.ts`'s `memberRead` keyword recognition. */
 const isKeywordName = (name: string): boolean => name.length > 1 && name.startsWith(":");
 
 /** The elements of a (possibly improper) pair chain; the dotted tail is appended last. */

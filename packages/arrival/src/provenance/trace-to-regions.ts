@@ -16,7 +16,7 @@
  * deep-equal test over EXPORTED pure helpers (`leafFor`, `conditionOf`, `regionsAt`, …).
  */
 import { APair } from "../values/primitives/APair.js";
-import { deepProvenance } from "../values/deep-provenance.js";
+import { deepProvenance } from "./deep-provenance.js";
 import { schemeToJs } from "../membrane/rosetta.js";
 import { schemeToSugarcoat } from "@inhuman.tools/arrival-sugarcoat";
 

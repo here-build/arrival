@@ -7,10 +7,10 @@
  *    (minimal demand) — the reconciliation the probe conflict demanded.
  */
 import { describe, it, expect } from "vitest";
-import { initBridge } from "../index.js";
-import { parse } from "../eval/generator-exec.js";
-import { inferenceEnv } from "../inference-env.js";
-import { classify, fullCone, countCone, type Classifier, type LineageNode } from "../values/lineage.js";
+import { initBridge } from "../../index.js";
+import { parse } from "../../eval/generator-exec.js";
+import { inferenceEnv } from "../../inference-env.js";
+import { classify, fullCone, countCone, type Classifier, type LineageNode } from "../../provenance/lineage.js";
 
 const C: Classifier = {
   roleOf: (op) =>

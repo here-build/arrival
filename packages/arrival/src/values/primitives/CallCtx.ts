@@ -2,7 +2,7 @@
 // call inside applyCallback, not just a type), and _bake.ts imports common/scheme-zod.ts —
 // that made ACallable.ts transitively import scheme-zod.ts at module-eval time. scheme-zod.ts
 // also imports ACallable.ts (for ALambda/ANativeProcedure/ARosettaProcedure), so entering the
-// cycle from certain paths (any code touching values/lineage-shadow.ts before scheme-zod.ts
+// cycle from certain paths (any code touching provenance/lineage-shadow.ts before scheme-zod.ts
 // resolves cleanly) left a z.instanceof(...) codec's captured class permanently undefined —
 // z.instanceof captures its argument BY VALUE at call time, not as a live binding, so once
 // broken it stays broken for that schema instance's lifetime. CallCtx/makeCallCtx don't need

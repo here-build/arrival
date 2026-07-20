@@ -35,7 +35,7 @@ import {
   toIndex,
   withInputProvenance,
 } from "../../values/op-helpers.js";
-import { collapseProvenance, taintString } from "../../provenance-collapse.js";
+import { collapseProvenance, taintString } from "../../provenance/provenance-collapse.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { APair, isCircularList } from "../../values/primitives/APair.js";

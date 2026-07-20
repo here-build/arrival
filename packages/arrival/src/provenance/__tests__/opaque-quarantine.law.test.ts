@@ -6,7 +6,7 @@
  * pinned here).
  *
  * This file lands the MACHINERY Q1 owes: a counted walk over a `classify()` corpus,
- * exposed as a testable function (`countOpaqueNodes`, `values/lineage.ts`), plus this
+ * exposed as a testable function (`countOpaqueNodes`, `provenance/lineage.ts`), plus this
  * staged `it.todo` alarm row. It intentionally does NOT pin a baseline number — W0
  * (span propagation through syntax-rules, Q6) changes what the classifier sees as
  * opaque (hygiene-expanded forms it currently cannot model), so any number pinned
@@ -23,7 +23,7 @@ import { describe, expect, it } from "vitest";
 import { initBridge } from "../../index.js";
 import { parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../inference-env.js";
-import { classify, countOpaqueNodes, type Classifier } from "../../values/lineage.js";
+import { classify, countOpaqueNodes, type Classifier } from "../../provenance/lineage.js";
 
 // Mirrors lineage-spike.test.ts's spike classifier — a minimal, deterministic
 // Classifier sufficient to exercise the corpus below (not the real env-backed one).

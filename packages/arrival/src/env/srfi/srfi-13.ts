@@ -43,7 +43,7 @@ import { symbol, type CallCtx } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { assertAllocatable, charValue, schemeBool, stringValue, toIndex, withInputProvenance } from "../../values/op-helpers.js";
 import { type ABool } from "../../values/primitives/ABool.js";
-import { collapseProvenance, taintString } from "../../provenance-collapse.js";
+import { collapseProvenance, taintString } from "../../provenance/provenance-collapse.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { APair } from "../../values/primitives/APair.js";

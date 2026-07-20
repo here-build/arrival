@@ -45,7 +45,7 @@ import vectorsCap from "../../env/r7rs/vectors.js";
 import { vector, value } from "../../common/scheme-zod.js";
 import type { EnvCapability } from "../../common/capability.js";
 import { nil } from "../../values/primitives/ANil.js";
-import { provOf } from "../../values/lineage-shadow.js";
+import { provOf } from "../../provenance/lineage-shadow.js";
 import { tf } from "../../values/tagless-final.js";
 import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
 

@@ -12,10 +12,10 @@
  * classes + the pair guard), so both rosetta.ts and the carrier modules import it
  * without an import cycle.
  */
-import { AValue } from "./primitives/AValue.js";
-import { is_pair } from "./value-guards.js";
-import { AVector } from "./primitives/AVector.js";
-import { APair } from "./primitives/APair.js";
+import { AValue } from "../values/primitives/AValue.js";
+import { is_pair } from "../values/value-guards.js";
+import { AVector } from "../values/primitives/AVector.js";
+import { APair } from "../values/primitives/APair.js";
 
 export function deepProvenance(value: unknown): ReadonlySet<number> {
   const acc = new Set<number>();

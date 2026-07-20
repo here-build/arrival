@@ -26,7 +26,7 @@ import { AVector } from "../../../values/primitives/AVector.js";
 import { AJSArray } from "../../../membrane/AJSArray.js";
 import { ADict } from "../../../values/primitives/ADict.js";
 import { CONSTANT_CTX } from "../../../values/primitives/RunContext.js";
-import { collapseProvenance } from "../../../provenance-collapse.js";
+import { collapseProvenance } from "../../../provenance/provenance-collapse.js";
 import { schemeToJs } from "../../../membrane/rosetta.js";
 import * as z from "../../../common/scheme-zod.js";
 import type { ResolvingAmbient } from "../../../AmbientRuntime.js";

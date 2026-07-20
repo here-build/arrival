@@ -40,23 +40,23 @@
  */
 import { describe, it, expect } from "vitest";
 import invariant from "tiny-invariant";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { initBridge } from "../index.js";
-import { exec, execState, parse } from "../eval/generator-exec.js";
-import { inferenceEnv } from "../inference-env.js";
-import { AString } from "../values/primitives/AString.js";
-import { AExact } from "../values/primitives/AExact.js";
-import { AInexact } from "../values/primitives/AInexact.js";
-import { fromJs } from "../membrane/boxing.js";
-import { APair } from "../values/primitives/APair.js";
-import { ANil } from "../values/primitives/ANil.js";
-import type { SchemeValue } from "../values/types.js";
-import { classify, fullCone } from "../values/lineage.js";
-import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
-import { provOf, bindingsForSkeleton } from "../values/lineage-shadow.js";
-import { requireEagerOracle } from "./_require-eager-oracle.js";
+import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { initBridge } from "../../index.js";
+import { exec, execState, parse } from "../../eval/generator-exec.js";
+import { inferenceEnv } from "../../inference-env.js";
+import { AString } from "../../values/primitives/AString.js";
+import { AExact } from "../../values/primitives/AExact.js";
+import { AInexact } from "../../values/primitives/AInexact.js";
+import { fromJs } from "../../membrane/boxing.js";
+import { APair } from "../../values/primitives/APair.js";
+import { ANil } from "../../values/primitives/ANil.js";
+import type { SchemeValue } from "../../values/types.js";
+import { classify, fullCone } from "../../provenance/lineage.js";
+import { classifierFromEnv } from "../../provenance/lineage-classifier-from-env.js";
+import { provOf, bindingsForSkeleton } from "../../provenance/lineage-shadow.js";
+import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue, mintFrame } from "../AmbientRuntime.js";
+import { bindValue, mintFrame } from "../../AmbientRuntime.js";
 
 // Q20b: shadow mode compares the static classifier against the UNTAPPED EAGER
 // stamp (mechanism 1) — the whole point of this file. Force the oracle ON for its

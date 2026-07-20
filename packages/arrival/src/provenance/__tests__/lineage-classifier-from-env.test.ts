@@ -10,13 +10,13 @@
  * reads the role off it), proving the classifier follows the DECLARATION alone.
  */
 import { describe, it, expect } from "vitest";
-import { initBridge } from "../index.js";
-import { parse } from "../eval/generator-exec.js";
-import { inferenceEnv } from "../inference-env.js";
-import { classify, fullCone, type DeclaredRole, type LineageNode } from "../values/lineage.js";
-import { classifierFromEnv } from "../values/lineage-classifier-from-env.js";
+import { initBridge } from "../../index.js";
+import { parse } from "../../eval/generator-exec.js";
+import { inferenceEnv } from "../../inference-env.js";
+import { classify, fullCone, type DeclaredRole, type LineageNode } from "../../provenance/lineage.js";
+import { classifierFromEnv } from "../../provenance/lineage-classifier-from-env.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue, mintFrame } from "../AmbientRuntime.js";
+import { bindValue, mintFrame } from "../../AmbientRuntime.js";
 
 let seq = 0;
 const env = () => mintFrame(inferenceEnv, `cfe-${seq++}`);

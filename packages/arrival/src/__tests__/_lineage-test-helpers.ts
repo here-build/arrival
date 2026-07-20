@@ -5,7 +5,7 @@
  * authoring; the parent dedupes at integration" — this IS that dedupe.
  *
  * SCOPE BOUNDARY. `provOf` is NOT here — it is exported canonically from the
- * PRODUCTION module `../values/lineage-shadow` (the shadow assert needs it at
+ * PRODUCTION module `../provenance/lineage-shadow` (the shadow assert needs it at
  * runtime), so every test imports it from there to keep ONE definition. This file
  * holds only the test-fixture helpers that have no production home: the stamped-
  * value constructors (`sStr`/`sNum`) and the run-a-program-collect-provenance
@@ -29,7 +29,7 @@ import { inferenceEnv } from "../inference-env.js";
 import type { AString } from "../values/primitives/AString.js";
 import type { AValue } from "../values/primitives/AValue.js";
 import { jsToScheme } from "../membrane/rosetta.js";
-import { provOf } from "../values/lineage-shadow.js";
+import { provOf } from "../provenance/lineage-shadow.js";
 import type { AmbientRuntime } from "../AmbientRuntime.js";
 import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../values/op-helpers.js";
 import type { SchemeValue } from "../values/types.js";

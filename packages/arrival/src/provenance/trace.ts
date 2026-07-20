@@ -19,7 +19,7 @@ import { TraceBudgetError } from "../errors.js";
 
 import { AValue, EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
 import { AString } from "../values/primitives/AString.js";
-import { AutoBindings } from "../values/lineage-auto-bindings.js";
+import { AutoBindings } from "./lineage-auto-bindings.js";
 import type { EvalTap } from "../eval/evaluator.js";
 import { APair } from "../values/primitives/APair.js";
 import type { ASymbol } from "../values/primitives/ASymbol.js";

@@ -11,7 +11,7 @@
  *
  * V3 (opaque quarantine drift alarm) is DELIBERATELY NOT duplicated here — its counted-
  * walk machinery already landed at Q1 and lives in the sibling
- * `laws/opaque-quarantine.law.test.ts` (`countOpaqueNodes`, `src/values/lineage.ts`),
+ * `laws/opaque-quarantine.law.test.ts` (`countOpaqueNodes`, `src/provenance/lineage.ts`),
  * whose own header explicitly reserves the option of Q5 folding it in rather than
  * duplicating it. This file takes the "don't duplicate" branch; V3's staged baseline
  * row (`@ledger: opaque quarantine baseline pinned pre-Q6`) stays exactly where it is.
@@ -51,8 +51,8 @@ import { describe, it, expect } from "vitest";
 import { initBridge } from "../../index.js";
 import { parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../inference-env.js";
-import { classify, fullCone, countCone, fieldCone, type Classifier, type DeclaredRole } from "../../values/lineage.js";
-import { classifierFromEnv } from "../../values/lineage-classifier-from-env.js";
+import { classify, fullCone, countCone, fieldCone, type Classifier, type DeclaredRole } from "../../provenance/lineage.js";
+import { classifierFromEnv } from "../../provenance/lineage-classifier-from-env.js";
 import { buildWireframe } from "../../provenance/wireframe/builder.js";
 import * as z from "../../common/scheme-zod.js";
 import {
@@ -66,7 +66,7 @@ import {
 import { EnvCapability } from "../../common/capability.js";
 import { ProvenanceRoleShapeError, PreludeMembershipError } from "../../errors.js";
 import { classifyProgramPrelude, assertPreludeEligible } from "../../provenance/prelude.js";
-import { freshEnv } from "../_fresh-env.js";
+import { freshEnv } from "../../__tests__/_fresh-env.js";
 import { theVoid } from "../../values/primitives/AVoid.js";
 import srfi1 from "../../env/srfi/srfi-1.js";
 import srfi95 from "../../env/srfi/srfi-95.js";
@@ -182,7 +182,7 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
     // load-bearing OUTSIDE it: McpEnvCapability's whole inline-annotation design …
     // and every downstream capability (here.build's saas/server/{arrival,mcp}",
     // inhuman's saas/mcp, the sift-submission forensics catalog) still authors verbs
-    // this way." `values/lineage-classifier-from-env.ts`'s own header independently
+    // this way." `provenance/lineage-classifier-from-env.ts`'s own header independently
     // confirms: "The legacy dynamic `AmbientRuntime.defineRosetta`/`RosettaFunction.pure`
     // runtime API is a SEPARATE, not-yet-migrated registration path outside Q2/Q3's
     // declared-role vocabulary — ops registered that way carry no `.provenanceRole`."
@@ -379,7 +379,7 @@ describe("V2 — declaration-driven classifier (§2; PROVENANCE-PLAN.md Q3)", ()
       // The retired seam, structurally: `classifierFromEnv` used to accept a
       // caller-supplied `sources: ReadonlySet<string>` second parameter (the
       // heuristic this row retires) — it is now arity-1, reading the bound value's
-      // declared `.provenanceRole` alone (`values/lineage-classifier-from-env.ts`).
+      // declared `.provenanceRole` alone (`provenance/lineage-classifier-from-env.ts`).
       expect(classifierFromEnv.length).toBe(1);
     },
   );

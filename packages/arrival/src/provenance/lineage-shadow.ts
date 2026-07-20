@@ -30,13 +30,13 @@
  * fan-cardinality over-attribution). Shadow asserts strictly: a divergence outside
  * the two skip categories is a THROW, never a silent pass.
  */
-import { is_pair, is_macro_value } from "./value-guards.js";
-import { ASymbol } from "./primitives/ASymbol.js";
-import { AValue } from "./primitives/AValue.js";
+import { is_pair, is_macro_value } from "../values/value-guards.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
+import { AValue } from "../values/primitives/AValue.js";
 import { assertNever, CLASSIFIED_SPECIAL_FORMS, fullCone, type Bindings, type LineageNode } from "./lineage.js";
 import type { AmbientRuntime } from "../AmbientRuntime.js";
-import { APair } from "./primitives/APair.js";
-import type { AListAlike, SchemeValue } from "./types.js";
+import { APair } from "../values/primitives/APair.js";
+import type { AListAlike, SchemeValue } from "../values/types.js";
 import { ProvenanceShadowDivergence } from "../errors.js";
 
 /** Provenance ids on a value, sorted — `[]` for a non-AValue. Mirrors the

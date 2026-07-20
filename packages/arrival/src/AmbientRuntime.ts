@@ -444,7 +444,7 @@ export function bindRosetta(env: AmbientRuntime, name: string, config: RosettaFu
   // `config.pure` is consumed INSIDE createRosettaWrapper (the runtime mint gate,
   // `mintsPoint = pure !== true`) — no static side-table records it any more; the
   // static classifier reads the declared `.provenanceRole` off baked bound values
-  // instead (values/lineage-classifier-from-env.ts). Legacy-registered names
+  // instead (provenance/lineage-classifier-from-env.ts). Legacy-registered names
   // carry no role and fall to the classifier's `undefined` default.
   if (config.type !== undefined) rosettaTypesOf(env).set(name, config.type);
 }

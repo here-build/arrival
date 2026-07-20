@@ -4,7 +4,7 @@
  * port) vs WIREFRAME-MATERIAL (a port-reaching define — its ports are designated
  * wireframe nodes; its call sites reference its template subgraph).
  *
- * THE CHECK (per define): run the declaration-driven classifier (`values/lineage.ts`'s
+ * THE CHECK (per define): run the declaration-driven classifier (`provenance/lineage.ts`'s
  * `classify`) over the define's body directly. classify()'s bare-symbol arm already
  * treats any unbound name as a `leaf` (`subst.get(slot) ?? {kind:"leaf", slot}` over the
  * empty top-level substitution) — so a function's formal params need no special
@@ -33,7 +33,7 @@
  * define is ITSELF port-reaching, to a fixpoint.
  */
 import type { SchemeValue } from "../values/types.js";
-import { assertNever, classify, type Classifier, type LineageNode } from "../values/lineage.js";
+import { assertNever, classify, type Classifier, type LineageNode } from "./lineage.js";
 import { defineNameOf, referencedSymbols, writeForm } from "./slice.js";
 import { PreludeMembershipError } from "../errors.js";
 
@@ -128,7 +128,7 @@ export interface PreludeMembership {
 
 /**
  * Partition a program's top-level defines into PURE vs WIREFRAME-MATERIAL. `classifier`
- * is the declaration-driven `Classifier` (`values/lineage-classifier-from-env.ts`'s
+ * is the declaration-driven `Classifier` (`provenance/lineage-classifier-from-env.ts`'s
  * `classifierFromEnv(env)` in production; a synthetic `Classifier` in tests). Non-define
  * top-level forms are ignored (same scope as `extract-defines.ts` — this module
  * partitions DEFINES, not general forms).

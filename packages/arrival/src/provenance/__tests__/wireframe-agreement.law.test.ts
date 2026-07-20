@@ -24,7 +24,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { initBridge } from "../../index.js";
 import { parse, exec, execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../inference-env.js";
-import type { Classifier, DeclaredRole } from "../../values/lineage.js";
+import type { Classifier, DeclaredRole } from "../../provenance/lineage.js";
 import { classifyProgramPrelude, buildPreludeSource } from "../../provenance/prelude.js";
 import { hermeticEnv } from "../../provenance/hermetic-env.js";
 import { buildWireframe } from "../../provenance/wireframe/builder.js";
@@ -33,13 +33,13 @@ import type { WireframeGraph } from "../../provenance/wireframe/types.js";
 import { WireLocalityError } from "../../errors.js";
 import { scopeId } from "../../provenance/scope-id.js";
 import { schemeToJs } from "../../membrane/rosetta.js";
-import { collapseProvenance } from "../../provenance-collapse.js";
+import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../../values/op-helpers.js";
 import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import * as z from "../../common/scheme-zod.js";
-import { SourceRegistry, runEagerCone, prospectiveSourceCone, type SourceShape } from "./w1-harness.js";
-import { W1_CORPUS, CORPUS_ROLES, CORPUS_BASE_NAMES, genLinearProgram } from "./w1-corpus.js";
+import { SourceRegistry, runEagerCone, prospectiveSourceCone, type SourceShape } from "../../__tests__/provenance/w1-harness.js";
+import { W1_CORPUS, CORPUS_ROLES, CORPUS_BASE_NAMES, genLinearProgram } from "../../__tests__/provenance/w1-corpus.js";
 
 const num: SourceShape = "num";
 

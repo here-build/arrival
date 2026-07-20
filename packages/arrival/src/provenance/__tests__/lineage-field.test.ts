@@ -23,9 +23,9 @@
  * untouched; its retirement is a later phase.
  */
 import { describe, it, expect } from "vitest";
-import { initBridge } from "../index.js";
-import { parse } from "../eval/generator-exec.js";
-import { inferenceEnv } from "../inference-env.js";
+import { initBridge } from "../../index.js";
+import { parse } from "../../eval/generator-exec.js";
+import { inferenceEnv } from "../../inference-env.js";
 import {
   classify,
   fullCone,
@@ -33,7 +33,7 @@ import {
   fieldCone,
   type Classifier,
   type LineageNode,
-} from "../values/lineage.js";
+} from "../../provenance/lineage.js";
 
 const C: Classifier = {
   // `dict` carries no declared role here — falls through to the pure-application

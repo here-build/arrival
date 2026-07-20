@@ -10,7 +10,7 @@
 import { AValue, EMPTY_PROVENANCE, mergeProvenance, pointProvenance, unionProvenance } from "../values/primitives/AValue.js";
 import { fromJs } from "./boxing.js";
 import { type RunContext } from "../values/primitives/RunContext.js";
-import { deepProvenance } from "../values/deep-provenance.js";
+import { deepProvenance } from "../provenance/deep-provenance.js";
 import { AJSArray } from "./AJSArray.js";
 import { AJSObject } from "./AJSObject.js";
 import { ANil, nil } from "../values/primitives/ANil.js";

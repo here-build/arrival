@@ -7,21 +7,21 @@
  * Measured first, then locked — snapshots record observed reality.
  */
 import { describe, it, expect } from "vitest";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { initBridge } from "../index.js";
-import { execState } from "../eval/generator-exec.js";
-import { parse } from "../eval/generator-exec.js";
-import { inferenceEnv } from "../inference-env.js";
-import { AVector } from "../values/primitives/AVector.js";
-import { APair } from "../values/primitives/APair.js";
-import { AValue } from "../values/primitives/AValue.js";
-import type { SchemeValue } from "../values/types.js";
-import { classify, fullCone, type Classifier } from "../values/lineage.js";
-import { provOf } from "../values/lineage-shadow.js";
-import { sStr, sNum, run, runRaw } from "./_lineage-test-helpers.js";
-import { requireEagerOracle } from "./_require-eager-oracle.js";
+import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { initBridge } from "../../index.js";
+import { execState } from "../../eval/generator-exec.js";
+import { parse } from "../../eval/generator-exec.js";
+import { inferenceEnv } from "../../inference-env.js";
+import { AVector } from "../../values/primitives/AVector.js";
+import { APair } from "../../values/primitives/APair.js";
+import { AValue } from "../../values/primitives/AValue.js";
+import type { SchemeValue } from "../../values/types.js";
+import { classify, fullCone, type Classifier } from "../../provenance/lineage.js";
+import { provOf } from "../../provenance/lineage-shadow.js";
+import { sStr, sNum, run, runRaw } from "../../__tests__/_lineage-test-helpers.js";
+import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue, mintFrame } from "../AmbientRuntime.js";
+import { bindValue, mintFrame } from "../../AmbientRuntime.js";
 
 // Q20b: this file's local `oneShot` helper calls execState directly (not through
 // _lineage-test-helpers.js's runRaw, which saves/restores its own call) — force

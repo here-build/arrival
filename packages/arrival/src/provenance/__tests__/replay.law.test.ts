@@ -35,7 +35,7 @@ import { initBridge } from "../../index.js";
 import { execState, parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../inference-env.js";
 import { schemeToJs } from "../../membrane/rosetta.js";
-import type { Classifier } from "../../values/lineage.js";
+import type { Classifier } from "../../provenance/lineage.js";
 import { buildWireframe } from "../../provenance/wireframe/builder.js";
 import { freeVars } from "../../provenance/wireframe/free-vars.js";
 import { hermeticEnv } from "../../provenance/hermetic-env.js";
@@ -54,9 +54,9 @@ import type { EmittedWire, WireframeGraph } from "../../provenance/wireframe/typ
 import { symbol, type RosettaSymbolDef } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import * as z from "../../common/scheme-zod.js";
-import { prospectiveSourceCone } from "./w1-harness.js";
-import { CORPUS_BASE_NAMES, CORPUS_ROLES, W1_CORPUS, genLinearProgram, type CorpusEntry } from "./w1-corpus.js";
-import { freezeMints, recordRun, replayedCone, type RecordedRun, type RecordingShape } from "./q16-harness.js";
+import { prospectiveSourceCone } from "../../__tests__/provenance/w1-harness.js";
+import { CORPUS_BASE_NAMES, CORPUS_ROLES, W1_CORPUS, genLinearProgram, type CorpusEntry } from "../../__tests__/provenance/w1-corpus.js";
+import { freezeMints, recordRun, replayedCone, type RecordedRun, type RecordingShape } from "../../__tests__/provenance/q16-harness.js";
 
 const corpusClassifier: Classifier = { roleOf: (op) => CORPUS_ROLES[op] };
 const corpusIsBaseName = (n: string): boolean => CORPUS_BASE_NAMES.has(n);

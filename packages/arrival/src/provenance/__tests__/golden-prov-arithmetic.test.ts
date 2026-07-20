@@ -7,7 +7,7 @@
  * `ReadonlySet<number>` accumulated per-op via `withInputProvenance`, materialized
  * by `EvalTrace.computeProvenance` — IS the golden oracle. Every snapshot below is
  * captured from that eager path with `-u`. When the static lineage tree
- * (values/lineage.ts: classify → leaf/source/pipe/merge/fan/opaque) is wired
+ * (provenance/lineage.ts: classify → leaf/source/pipe/merge/fan/opaque) is wired
  * behind the flag, gate G2 requires `provenance(static, flag-on) ==
  * provenance(eager, flag-off)` on these same programs — flag-off must stay
  * byte-identical to what is frozen here.
@@ -31,7 +31,7 @@
  * fixtures (strs/nums) stay local.
  */
 import { describe, it, expect } from "vitest";
-import { sStr, sNum, run } from "./_lineage-test-helpers.js";
+import { sStr, sNum, run } from "../../__tests__/_lineage-test-helpers.js";
 
 // Standard stamped fixtures, fresh per call (AValues are immutable, but a fresh
 // object keeps each test independent and the intent readable at the call site).

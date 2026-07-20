@@ -249,17 +249,17 @@ export {
   type Bindings,
   type Classifier,
   type FieldResolution,
-} from "./values/lineage.js";
-export { classifierFromEnv } from "./values/lineage-classifier-from-env.js";
+} from "./provenance/lineage.js";
+export { classifierFromEnv } from "./provenance/lineage-classifier-from-env.js";
 // Per-value auto-binding leaf-stamp (flag-gated, additive). Captures, per consumer
 // invocation, the producer ids each read value carries, so the static carrier's leaf
 // slots auto-bind to the right per-invocation producer without collapsing distinct
 // invocations of one source name. Populated by EvalTrace.exit when attached.
-export { AutoBindings, slotsOf } from "./values/lineage-auto-bindings.js";
+export { AutoBindings, slotsOf } from "./provenance/lineage-auto-bindings.js";
 // Deep provenance of a value — the union of `.provenance` over every reachable AValue
 // (pair spine, vector, JS array elements). Containers are provenance-transparent, so this
 // is THE read for "which points fed this packed value" (a pool of candidates, a list arg).
-export { deepProvenance } from "./values/deep-provenance.js";
+export { deepProvenance } from "./provenance/deep-provenance.js";
 
 // The per-run model-facing note channel — a renderer (mcp-substrate) mints one and drains it.
 export { createNoteSink, createDisplaySink, type NoteSink, type DisplaySink, type DisplayRecord } from "./values/note-sink.js";

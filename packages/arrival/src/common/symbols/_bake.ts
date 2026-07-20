@@ -176,7 +176,7 @@ export type DecodedArgsWithRest<
  *  representation authority; this field is data, never a duck-read) — the ONE field every
  *  symbol declaration carries, replacing a bag of ad-hoc booleans. `pipe`/`fan`/`source` are
  *  LIVE today (declaration defaults, below); `sink`/`transparent`/`loop`/`opaque` are
- *  GRAPH-LAYER targets no declaration marks yet (`src/values/lineage.ts`'s node kinds exist
+ *  GRAPH-LAYER targets no declaration marks yet (`src/provenance/lineage.ts`'s node kinds exist
  *  for them; a future classifier consumes them) — the union names the full vocabulary now so
  *  `Contract.provenance`'s type stays stable as more roles go live, never narrowed to
  *  "whatever's reachable today". */

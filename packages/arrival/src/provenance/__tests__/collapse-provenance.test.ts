@@ -9,19 +9,19 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
-import { collapseProvenance } from "../provenance-collapse.js";
-import { initBridge } from "../index.js";
-import { execState } from "../eval/generator-exec.js";
-import { inferenceEnv } from "../inference-env.js";
-import { AString } from "../values/primitives/AString.js";
-import { AVector } from "../values/primitives/AVector.js";
-import { APair } from "../values/primitives/APair.js";
-import { AJSArray } from "../membrane/AJSArray.js";
-import { nil } from "../values/primitives/ANil.js";
-import { requireEagerOracle } from "./_require-eager-oracle.js";
+import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { collapseProvenance } from "../../provenance/provenance-collapse.js";
+import { initBridge } from "../../index.js";
+import { execState } from "../../eval/generator-exec.js";
+import { inferenceEnv } from "../../inference-env.js";
+import { AString } from "../../values/primitives/AString.js";
+import { AVector } from "../../values/primitives/AVector.js";
+import { APair } from "../../values/primitives/APair.js";
+import { AJSArray } from "../../membrane/AJSArray.js";
+import { nil } from "../../values/primitives/ANil.js";
+import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue, mintFrame } from "../AmbientRuntime.js";
+import { bindValue, mintFrame } from "../../AmbientRuntime.js";
 
 // Q20b: the string-collapse assertions below (join/string-append via real exec) need
 // the eager oracle forced ON for this file's lifetime.

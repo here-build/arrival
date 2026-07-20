@@ -107,7 +107,7 @@ export type ProvenanceRecord =
   | TrackCloseRecord
   | HostScheduleRecord;
 
-/** Exhaustiveness guard, house style (`src/values/lineage.ts`'s `assertNever`):
+/** Exhaustiveness guard, house style (`src/provenance/lineage.ts`'s `assertNever`):
  *  a `switch (record.kind)` default arm calling this makes "added a `RecordKind`,
  *  forgot a switch arm" a compile error. */
 export function assertNeverRecord(x: never): never {

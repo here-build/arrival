@@ -40,7 +40,7 @@ import { symbol, type CallCtx } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import * as z from "../../common/scheme-zod.js";
 import { stringValue, isSchemeNumber } from "../../values/op-helpers.js";
-import { collapseProvenance, taintString } from "../../provenance-collapse.js";
+import { collapseProvenance, taintString } from "../../provenance/provenance-collapse.js";
 import { printValue } from "../../values/print.js";
 import { AString } from "../../values/primitives/AString.js";
 import { ABool } from "../../values/primitives/ABool.js";

@@ -18,7 +18,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { initBridge } from "../index.js";
 import { parse } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
-import type { Classifier } from "../values/lineage.js";
+import type { Classifier } from "../provenance/lineage.js";
 import { buildWireframe } from "../provenance/wireframe/builder.js";
 import { hashGraph } from "../provenance/wireframe/hash.js";
 import { PayloadStoreFake, PayloadTierMachine, setEmissionEnabled } from "../provenance/store/index.js";

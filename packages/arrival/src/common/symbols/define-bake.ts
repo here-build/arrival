@@ -5,7 +5,7 @@
 // at `bindCapabilityDefines`). Invoked from `../capability.ts`'s apply() Pass 2, once phase
 // 1 (every non-define kind) has already bound.
 //
-// Kept OUT of `../capability.ts` itself: this pulls in the reader, `values/lineage.ts`'s
+// Kept OUT of `../capability.ts` itself: this pulls in the reader, `provenance/lineage.ts`'s
 // classifier, `provenance/prelude.ts`'s fixpoint, and the callable-invocation primitives
 // (`eval/call-function.ts`, `eval/Macro.ts`) — a real amount of machinery capability.ts
 // doesn't otherwise touch. None of these import `common/capability.ts` back (verified),
@@ -20,7 +20,7 @@ import * as z from "../scheme-zod.js";
 import { formatPositionalRejection } from "./positional-rejection.js";
 import { parse as readerParse } from "../../reader/parse.js";
 import { freeVars } from "../../provenance/wireframe/free-vars.js";
-import type { Classifier, DeclaredRole } from "../../values/lineage.js";
+import type { Classifier, DeclaredRole } from "../../provenance/lineage.js";
 import { classifyProgramPrelude } from "../../provenance/prelude.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../errors.js";
 import { APair } from "../../values/primitives/APair.js";

@@ -37,7 +37,7 @@ import { symbol } from "../common/symbol.js";
 import * as z from "../common/scheme-zod.js";
 import { schemeToJs } from "../membrane/rosetta.js";
 import type { EvalTap } from "../eval/evaluator.js";
-import type { Classifier, DeclaredRole } from "../values/lineage.js";
+import type { Classifier, DeclaredRole } from "../provenance/lineage.js";
 import { buildWireframe } from "../provenance/wireframe/builder.js";
 import { hashGraph, rootOrdinalPath, siteHash, siteOf } from "../provenance/wireframe/hash.js";
 import { scopeId } from "../provenance/scope-id.js";
