@@ -17,7 +17,7 @@
 // (evalLambda, named-let), and dispatch routes through `applyCallback`/the apply term.
 
 import { AValue } from "./AValue.js";
-import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import type { SchemeBounceMarker, SchemeValue } from "../types.js";
 import { tf } from "../tagless-final.js";
 // makeCallCtx lives in this same directory (not common/symbols/_bake.ts) specifically so this
@@ -25,7 +25,7 @@ import { tf } from "../tagless-final.js";
 // imports ACallable for ALambda/etc.; _bake imports scheme-zod) that could leave a
 // z.instanceof(...) codec's captured class permanently undefined, depending on which path
 // entered it first.
-import { makeCallCtx } from "./CallCtx.js";
+import { makeCallCtx } from "../../run/CallCtx.js";
 import { PurityError } from "../../errors.js";
 // TYPE-ONLY: erased at compile, so this stays a pure compile-time edge even though
 // common/symbols/_bake.ts has its own runtime path back to this file (via scheme-zod.ts,

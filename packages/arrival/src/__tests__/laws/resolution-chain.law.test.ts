@@ -30,7 +30,7 @@ import { assembleEnv, type EnvPack } from "../../common/kernel.js";
 import { exec } from "../../eval/generator-exec.js";
 import { user_env, global_env } from "../../env-roots.js";
 import { AExact } from "../../values/primitives/AExact.js";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
 import { bindValue } from "../../AmbientRuntime.js";
 

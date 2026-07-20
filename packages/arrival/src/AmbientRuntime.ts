@@ -11,7 +11,7 @@ import invariant from "tiny-invariant";
 import { fromJS, isSchemeValue } from "./membrane/membrane.js";
 import { quote } from "./values/values-repr.js";
 import { APair } from "./values/primitives/APair.js";
-import type { RunContext } from "./values/primitives/RunContext.js";
+import type { RunContext } from "./run/RunContext.js";
 import { rosettaTypesOf } from "./env-registries.js";
 import { unboundVariableError } from "./unbound-variable.js";
 import { RawCrossingError } from "./errors.js";

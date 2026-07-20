@@ -4,7 +4,7 @@
 // to carry lineage; its own producers were throwing it away. utf8->string /
 // vector->string even returned RAW JS strings (provenance-blind escapees).
 import { describe, expect, it } from "vitest";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { initBridge } from "../../index.js";
 import bytevectorsCap from "../../env/r7rs/bytevectors.js";
 import vectorsCap from "../../env/r7rs/vectors.js";

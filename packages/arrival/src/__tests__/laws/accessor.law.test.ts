@@ -16,7 +16,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../AmbientRuntime.js";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { exec, execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../inference-env.js";
 import { jsToScheme, schemeToJs } from "../../membrane/rosetta.js";

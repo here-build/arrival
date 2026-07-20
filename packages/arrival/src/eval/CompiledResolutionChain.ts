@@ -38,7 +38,7 @@
  * two deploys with the same vocabulary shape currently share a hash.
  */
 import { assertResolvedBinding, type AmbientRuntime, type AmbientValue, ResolvingAmbient } from "../AmbientRuntime.js";
-import type { RunContext } from "../values/primitives/RunContext.js";
+import type { RunContext } from "../run/RunContext.js";
 
 /**
  * A resolver step in the compiled chain — the genuine runtime middleware contract.

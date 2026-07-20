@@ -23,7 +23,7 @@ import { ADict, type DictKey, type DictLiteralNode } from "../values/primitives/
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AString } from "../values/primitives/AString.js";
 import { APair } from "../values/primitives/APair.js";
-import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
 import type { SchemeValue } from "../values/types.js";
 
 /** The STATIC string key of a key-position datum, or null if it isn't one.

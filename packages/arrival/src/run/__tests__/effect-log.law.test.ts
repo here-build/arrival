@@ -1,7 +1,7 @@
 /**
  * LAW — the effect log + the burst arm (W1, the plexus effect-burst design
  * §2.3/§2.5). Pins the third mode of the run-cache
- * interception chokepoint (values/run-cache.ts's `penetrateThroughCache`): a `sink`
+ * interception chokepoint (run/run-cache.ts's `penetrateThroughCache`): a `sink`
  * penetration during a PRIME run gathers onto `EffectLog` instead of firing; a
  * replay (fold) is untouched.
  *
@@ -19,12 +19,12 @@ import { describe, it, expect } from "vitest";
 import * as z from "../../common/scheme-zod.js";
 import { symbol, testCallCtx } from "../../common/symbol.js";
 import { exec } from "../../eval/generator-exec.js";
-import { makeRunContext } from "../../values/primitives/RunContext.js";
-import { MemoryRunCache } from "../../values/run-cache.js";
-import { MemoryEffectLog, burst, BurstDrainError, type EffectEntry } from "../../values/effect-log.js";
+import { makeRunContext } from "../../run/RunContext.js";
+import { MemoryRunCache } from "../../run/run-cache.js";
+import { MemoryEffectLog, burst, BurstDrainError, type EffectEntry } from "../../run/effect-log.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AVoid } from "../../values/primitives/AVoid.js";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 
 const num = (n: number) => new AExact(CONSTANT_CTX, n);
 

@@ -8,7 +8,7 @@
 // Promoting it into the value-guards true-leaf is a separate task.
 // ----------------------------------------------------------------------
 import { is_promise } from "../eval/guards.js";
-import { CONSTANT_CTX, type RunContext } from "./primitives/RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
 import { AString } from "./primitives/AString.js";
 import { ASymbol } from "./primitives/ASymbol.js";
 import { AExact } from "./primitives/AExact.js";

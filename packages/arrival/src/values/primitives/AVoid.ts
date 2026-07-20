@@ -18,7 +18,7 @@
  * value class itself is mode-agnostic; the divergence lives at the reader.
  */
 import { CLASS } from "../../well-known-symbols.js";
-import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 
 export class AVoid extends AValue {

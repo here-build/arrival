@@ -10,7 +10,7 @@
 //     are enforced by an explicit `tsc` over this file during verification.
 
 import { describe, it, expect, expectTypeOf } from "vitest";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../run/RunContext.js";
 import * as arrival from "../common/symbol.js";
 import { testCallCtx } from "../common/symbol.js";
 import * as z from "../common/scheme-zod.js";

@@ -53,7 +53,7 @@ import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import * as z from "../../common/scheme-zod.js";
 import { jsToScheme } from "../../membrane/rosetta.js";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 
 // Fixed mint ids — stand-ins for "whatever the membrane minted at this crossing".
 // The SHAPE of how they flow (born / propagate / merge / narrow) is the invariant;

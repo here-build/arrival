@@ -3,7 +3,7 @@
 // law harness. Small char domain forces collisions so symmetry / transitivity
 // / antisymmetry actually bite.
 import fc from "fast-check";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../run/RunContext.js";
 import { describe, expect, it } from "vitest";
 import { ANil, nil } from "../values/primitives/ANil.js";
 import { ACharacter } from "../values/primitives/ACharacter.js";

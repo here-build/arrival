@@ -73,7 +73,7 @@ import { execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../inference-env.js";
 import { schemeToJs } from "../../index.js";
 import { jsToScheme } from "../rosetta.js";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 
 /** A hang is a FAILURE, never a CI wall-clock death: the walk is raced against a deadline and the
  *  loser is reported as a value we can assert on. (The original B3 bug was an infinite loop — a

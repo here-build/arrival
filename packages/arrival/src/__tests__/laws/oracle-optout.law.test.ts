@@ -45,7 +45,7 @@ import {
 } from "../../values/op-helpers.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { fromJs } from "../../membrane/boxing.js";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../inference-env.js";
 import { initBridge } from "../../index.js";

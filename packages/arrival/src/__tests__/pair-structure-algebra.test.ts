@@ -10,7 +10,7 @@
 // structuralEqual `eq`, and assert Semigroup/Monoid laws directly over
 // structuralEqual.
 import fc from "fast-check";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../run/RunContext.js";
 import { describe, expect, it } from "vitest";
 import { APair } from "../values/primitives/APair.js";
 import { ANil, nil } from "../values/primitives/ANil.js";

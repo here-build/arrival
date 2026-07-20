@@ -27,7 +27,7 @@ import { nil } from "../values/primitives/ANil.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { ABool } from "../values/primitives/ABool.js";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../run/RunContext.js";
 import { AExact } from "../values/primitives/AExact.js";
 
 /** A pack's `.spec.symbols` map, generically — mirrors numeric-contract-precision.test.ts's

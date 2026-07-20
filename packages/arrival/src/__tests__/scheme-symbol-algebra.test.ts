@@ -3,7 +3,7 @@
 // over STRING names (gensym ES6-symbol names are an impl edge handled by
 // `String(...)` fallback, not part of the law domain here).
 import fc from "fast-check";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../run/RunContext.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { ordLaws, setoidLaws } from "./algebra-laws.js";
 

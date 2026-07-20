@@ -39,7 +39,7 @@ import { APair } from "../../values/primitives/APair.js";
 import { AVector } from "../../values/primitives/AVector.js";
 import { nil } from "../../values/primitives/ANil.js";
 import { AExact } from "../../values/primitives/AExact.js";
-import { makeRunContext, CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
+import { makeRunContext, CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 
 /** A live, real run's ctx — `heapMeter` is DEFINED (`{ used, max }`), unlike CONSTANT_CTX's
  *  permanent `undefined`. Distinguishing the two is the whole law. */

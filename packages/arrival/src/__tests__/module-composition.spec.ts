@@ -32,7 +32,7 @@ import { describe, expect, it } from "vitest";
 import { AmbientRuntime, ResolvingAmbient, mintResolvingFrame } from "../AmbientRuntime.js";
 import type { ResolverSpec } from "../common/scheme-env.js";
 import { AExact } from "../values/primitives/AExact.js";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../run/RunContext.js";
 import { nil } from "../values/primitives/ANil.js";
 
 // The boxed sentinel a resolver answers with (resolvers box at their own boundary now).

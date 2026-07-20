@@ -5,7 +5,7 @@
  * plain append-only sequence: two identical sink calls are two entries, always — the
  * mode law's "two effects, always" (run-cache.ts's header) holds for the burst arm
  * exactly as it holds for the tombstone arm. This file owns the log entity and the
- * drain (`burst`); it does NOT own the read-clock guard ITSELF (values/read-guard.ts)
+ * drain (`burst`); it does NOT own the read-clock guard ITSELF (run/read-guard.ts)
  * or the conflict re-execution comparator (§2.6, unbuilt) — this log only remembers
  * WHAT was gathered, in WHAT order, and the read-clock each entry was gathered at,
  * nothing about whether it is safe to replay against a moved world.
@@ -37,7 +37,7 @@ export interface EffectEntry {
   readonly index: number;
   readonly verbName: string;
   readonly decodedArgs: readonly unknown[];
-  /** The read-clock at enqueue (values/read-guard.ts, §2.3's normative field) —
+  /** The read-clock at enqueue (run/read-guard.ts, §2.3's normative field) —
    *  stamped by `penetrateThroughCache` when the run carries a `reads` tracker; absent
    *  when it doesn't (no tracker ⇒ nothing to stamp, and the guard treats a missing
    *  clock as `0`, i.e. every read counts — see read-guard.ts). Reads at or below this

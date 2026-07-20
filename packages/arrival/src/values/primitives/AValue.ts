@@ -19,7 +19,7 @@
 import { INTEROP_BOUNDARY } from "../../membrane/interop-access.js";
 import type { SeenMap } from "../structural-equal.js";
 import type { MembraneExit, SchemeBounceMarker, SchemeValue } from "../types.js";
-import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 
 export const EMPTY_PROVENANCE: ReadonlySet<number> = new Set<number>();
 

@@ -24,7 +24,7 @@ import type { EnvPack } from "./kernel.js";
 // false-leaf note): the storage union a resolver may answer with, and the run identity a
 // resolving read threads.
 import type { AmbientValue } from "../AmbientRuntime.js";
-import type { RunContext } from "../values/primitives/RunContext.js";
+import type { RunContext } from "../run/RunContext.js";
 
 /** A rosetta (host-fn) contribution, mirroring arrival-scheme's retired `defineRosetta`
  *  config structurally (kept here so we don't import the runtime). Still the type the

@@ -14,7 +14,7 @@ import * as v8 from "node:v8";
 import * as vm from "node:vm";
 
 import * as z from "../scheme-zod.js";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { APair } from "../../values/primitives/APair.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import { ACharacter } from "../../values/primitives/ACharacter.js";

@@ -1,6 +1,6 @@
 import { CLASS } from "../well-known-symbols.js";
 import type { AmbientRuntime, AmbientValue } from "../AmbientRuntime.js";
-import type { RunContext } from "../values/primitives/RunContext.js";
+import type { RunContext } from "../run/RunContext.js";
 import { type CompiledResolutionChain, sealResolutionChain } from "./CompiledResolutionChain.js";
 
 /**

@@ -81,7 +81,7 @@ import { symbol, type CallCtx } from "../common/symbol.js";
 import * as sz from "../common/scheme-zod.js";
 import { jsToScheme, schemeToJs } from "../membrane/rosetta.js";
 import { stripOptionalSuffix, tagToJsonSchema } from "../common/schema-tag.js";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../run/RunContext.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { schemaCapability } from "./schema.js";
 

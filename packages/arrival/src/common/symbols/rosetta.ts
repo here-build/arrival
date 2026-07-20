@@ -9,7 +9,7 @@ import { formatPositionalRejection } from "./positional-rejection.js";
 import { attestDeep, freshIfSingleton } from "../../values/attestation.js";
 import { AValue, pointProvenance, unionProvenance } from "../../values/primitives/AValue.js";
 import { jsToScheme } from "../../membrane/rosetta.js";
-import { penetrateThroughCache } from "../../values/run-cache.js";
+import { penetrateThroughCache } from "../../run/run-cache.js";
 import { closeRegionScope, openRegionScope, withRegionScope } from "../../membrane/region-scope.js";
 import { is_callable_value } from "../../values/value-guards.js";
 import {
@@ -287,7 +287,7 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
         //    `this.invocation`); a pure verb is an arrow that ignores `this`, so
         //    `impl.call(this, …)` is byte-identical to `impl(…)`. async is implicit.
         //
-        //    THE RUN-CACHE INTERCEPTION (R2, values/run-cache.ts) sits exactly HERE — the one
+        //    THE RUN-CACHE INTERCEPTION (R2, run/run-cache.ts) sits exactly HERE — the one
         //    chokepoint where args are decoded and the impl hasn't fired. Gated on the run's
         //    cache (`this.runCtx.cache` — absent on every non-session run: the fast path below
         //    is byte-identical to before) and the bake-resolved cache class / sink lineage
@@ -295,12 +295,12 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
         //    (provenance mint + encode + attestation) then run over it exactly as over a fresh
         //    impl return — values are never restored around the membrane, only through it.
         //
-        //    THE BURST ARM (W1, values/effect-log.ts, arrival-plexus-effect-burst.md §2.3)
+        //    THE BURST ARM (W1, run/effect-log.ts, arrival-plexus-effect-burst.md §2.3)
         //    rides the SAME chokepoint via `this.runCtx.effects` — a sibling per-run handle,
         //    not a `cache` field, so a burst run needs no `RunCache` to gather sink effects.
         //    Its fast-path bypass ALSO checks `runEffects`: a run with an effect log but no
         //    cache must still reach `penetrateThroughCache` (the burst arm lives inside it).
-        //    THE READ-CLOCK STAMP (W2, values/read-guard.ts, arrival-plexus-effect-burst.md
+        //    THE READ-CLOCK STAMP (W2, run/read-guard.ts, arrival-plexus-effect-burst.md
         //    §2.4) rides the SAME chokepoint via `this.runCtx.reads` — read-only here (the
         //    guard CHECK itself runs in the eval loop, after each form): when a burst
         //    gathers this penetration, `reads.tracker` stamps the entry's

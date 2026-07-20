@@ -1,4 +1,4 @@
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 /**
  * GOLDEN CAPTURE (gate G2 oracle) — FAN-OUT provenance: map / filter / length.
  *

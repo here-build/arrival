@@ -11,7 +11,7 @@
 // existing importers.
 
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
-import { type InvocationLike } from "../../membrane/rosetta.js";
+import { type InvocationLike } from "../membrane/rosetta.js";
 
 /**
  * The ONE `this` every callable body sees — the dispatch-level receiver AND the

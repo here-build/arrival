@@ -21,7 +21,7 @@ import { fromJS, toJS, isSchemeValue } from "../membrane.js";
 import { jsToScheme, schemeToJs, modeKeyOf } from "../rosetta.js";
 import { exec } from "../../eval/generator-exec.js";
 import { setMembraneWarnings } from "../membrane-warn.js";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { ABool } from "../../values/primitives/ABool.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AInexact } from "../../values/primitives/AInexact.js";

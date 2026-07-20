@@ -29,7 +29,7 @@
 // run-scoped and safe against async interleaving of concurrent runs by construction: each run's
 // values carry their own run's RunContext, never a shared module-level ambient meter.
 
-import type { RunContext, HeapMeter } from "./values/primitives/RunContext.js";
+import type { RunContext, HeapMeter } from "./run/RunContext.js";
 import { ArrivalError } from "./errors.js";
 
 export type { HeapMeter };

@@ -105,7 +105,7 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
     gate: "plan-2026-06-11-purity-pass (r7rs/binding)",
   },
   // `(car '())` / `(cdr '())` — verified via direct exec (src/values/primitives/ANil.ts:93-99,
-  // src/values/primitives/RunContext.ts:109/127): car/cdr-of-nil throw ONLY when
+  // src/run/RunContext.ts:109/127): car/cdr-of-nil throw ONLY when
   // `runCtx.strict` is true; the chibi harness's `exec()` calls (runner.ts) never pass
   // `strict`, so it defaults to `false` (tolerant nil-projection — RunContext.ts's own
   // documented mode, not a bug introduced by this harness). In tolerant mode car/cdr of '()

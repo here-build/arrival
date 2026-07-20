@@ -26,7 +26,7 @@ import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeEr
 import { APair } from "../../values/primitives/APair.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { nil } from "../../values/primitives/ANil.js";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { ANativeProcedure, type ACallable } from "../../values/primitives/ACallable.js";
 import { call_function } from "../../eval/call-function.js";
 import { Macro, type MacroInvokeContext } from "../../eval/Macro.js";

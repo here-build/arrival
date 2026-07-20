@@ -24,7 +24,7 @@ import { signatureOf } from "../../../type-layer/schema-to-ts.js";
 import type { AEntity } from "../../../common/symbol.js";
 import { AVector } from "../../../values/primitives/AVector.js";
 import { AExact } from "../../../values/primitives/AExact.js";
-import { CONSTANT_CTX } from "../../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../../run/RunContext.js";
 
 const symbols = vectorsPack.spec.symbols as Record<string, AEntity>;
 

@@ -27,7 +27,7 @@
  * owns the token shape, the ambient holder, and the two educational doors.
  */
 
-import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
 import type { AValue } from "../values/primitives/AValue.js";
 import type { EgressMode, WrapperKey } from "../values/types.js";
 import { RegionEscapeError, RegionIncompleteError } from "../errors.js";

@@ -25,7 +25,7 @@
  * dict-literal syntax business entirely.
  */
 import { CLASS } from "../../well-known-symbols.js";
-import { type RunContext } from "./RunContext.js";
+import { type RunContext } from "../../run/RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { egressContainerProxy } from "../../membrane/egress-proxy.js";
 import { APair } from "./APair.js";

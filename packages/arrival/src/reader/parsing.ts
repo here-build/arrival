@@ -2,7 +2,7 @@
 // prefixes), string literals, characters, and symbols. No I/O, no lexer state — given a token string,
 // returns the boxed value. Numeric-grammar helpers originate from the LIPS reader.
 import invariant from "tiny-invariant";
-import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";

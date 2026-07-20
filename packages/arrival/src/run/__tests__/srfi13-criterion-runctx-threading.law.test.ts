@@ -21,7 +21,7 @@
 import { describe, expect, it } from "vitest";
 import srfi13 from "../../env/srfi/srfi-13.js";
 import { testCallCtx } from "../../common/symbol.js";
-import { makeRunContext, CONSTANT_CTX, type RunContext } from "../../values/primitives/RunContext.js";
+import { makeRunContext, CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import { AString } from "../../values/primitives/AString.js";
 import type { EnvCapability } from "../../common/capability.js";
 

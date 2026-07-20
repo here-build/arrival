@@ -46,7 +46,7 @@
  * a cache is handed to a run (mismatch ⇒ drop the cache, keep the log).
  *
  * ── The burst arm (see arrival-plexus-effect-burst.md §2.3) ───────────────────
- * `penetrateThroughCache` also takes an optional `EffectLog` (values/effect-log.ts —
+ * `penetrateThroughCache` also takes an optional `EffectLog` (run/effect-log.ts —
  * an ORDERED, non-deduplicating sibling of this file's content-keyed `Map`). When
  * present, a `sink` penetration during a PRIME run — `cache` absent, or `cache.mode`
  * is `"record"`, never `"replay"` — enqueues `{verbName, decodedArgs}` onto the log
@@ -254,7 +254,7 @@ async function sharedFire(
  * effects with no `RunCache` at all, or gather effects alongside a `view`/`pure`
  * cache — the two entities have independent lifecycles (§2.3).
  *
- * `reads` (values/read-guard.ts) is a THIRD sibling parameter, read-only at this
+ * `reads` (run/read-guard.ts) is a THIRD sibling parameter, read-only at this
  * chokepoint: when present, a gathered effect's `enqueuedAtReadClock` is stamped from
  * `reads.log.length` at enqueue time — the read-clock guard's own comparison point
  * (§2.4). Absent ⇒ the entry carries no clock (the guard then treats it as `0`,

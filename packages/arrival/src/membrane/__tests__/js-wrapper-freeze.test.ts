@@ -16,7 +16,7 @@ import { describe, it, expect } from "vitest";
 import "../../index.js";
 import { AJSObject } from "../AJSObject.js";
 import { AJSArray } from "../AJSArray.js";
-import { CONSTANT_CTX, makeRunContext } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX, makeRunContext } from "../../run/RunContext.js";
 
 describe("borrowed-source freeze (rosetta-return prevention)", () => {
   it("AJSObject freezes its source the first time Scheme reads a member", () => {

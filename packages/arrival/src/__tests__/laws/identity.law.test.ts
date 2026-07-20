@@ -27,7 +27,7 @@
  * acceptance test.
  */
 import { describe, expect, it } from "vitest";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { testCallCtx } from "../../common/symbol.js";
 import { isSchemeValue, toJS } from "../../membrane/membrane.js";
 import { schemeToJs } from "../../membrane/rosetta.js";

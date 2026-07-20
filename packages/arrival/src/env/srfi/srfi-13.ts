@@ -36,7 +36,7 @@
 import invariant from "tiny-invariant";
 import dedent from "dedent";
 import { type } from "../../utils/typecheck.js";
-import { type RunContext } from "../../values/primitives/RunContext.js";
+import { type RunContext } from "../../run/RunContext.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
 import * as z from "../../common/scheme-zod.js";
 import { symbol, type CallCtx } from "../../common/symbol.js";

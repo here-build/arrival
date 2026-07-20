@@ -16,7 +16,7 @@
  */
 
 import { CLASS } from "../well-known-symbols.js";
-import { type RunContext } from "../values/primitives/RunContext.js";
+import { type RunContext } from "../run/RunContext.js";
 import { attestDeep, freshIfSingleton, isAttested } from "../values/attestation.js";
 import { AValue, EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
 import { withInputProvenance } from "../values/op-helpers.js";

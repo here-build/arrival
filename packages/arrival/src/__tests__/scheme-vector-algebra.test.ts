@@ -13,7 +13,7 @@
 // element's AExact Setoid).
 // (Boxing track S5 — docs/plan-2026-06-10-boxing-track.md.)
 import fc from "fast-check";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../run/RunContext.js";
 import { describe, expect, it } from "vitest";
 import { AVector } from "../values/primitives/AVector.js";
 import { AExact } from "../values/primitives/AExact.js";

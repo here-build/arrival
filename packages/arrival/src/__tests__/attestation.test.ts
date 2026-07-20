@@ -22,7 +22,7 @@ import { theVoid } from "../values/primitives/AVoid.js";
 import { tf } from "../values/tagless-final.js";
 import { AListAlike } from "../values/types.js";
 import { jsToScheme } from "../membrane/rosetta.js";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../run/RunContext.js";
 import { testCallCtx } from "../common/symbol.js";
 
 /** A SOURCE rosetta (default — not pure) returning a fixed JS value; its `run`

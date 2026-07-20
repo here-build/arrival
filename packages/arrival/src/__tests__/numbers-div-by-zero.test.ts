@@ -4,7 +4,7 @@
 // (numbers.ts:407-413) is NaN/Infinity-blind → prints garbage "NaNNaNi" instead
 // of the R7RS +inf.0 / -inf.0 / +nan.0.
 import { describe, expect, it } from "vitest";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../run/RunContext.js";
 import { AInexact } from "../values/primitives/AInexact.js";
 
 const inx = (real: number) => new AInexact(CONSTANT_CTX, real);

@@ -91,8 +91,8 @@ export interface ReadTracker {
 
 /**
  * A minimal, host-swappable reference implementation — mirrors `MemoryRunCache`/
- * `MemoryEffectLog`'s "one instance per run" posture (values/run-cache.ts,
- * values/effect-log.ts). `region` is a pure pass-through (no hook installed — a host
+ * `MemoryEffectLog`'s "one instance per run" posture (run/run-cache.ts,
+ * run/effect-log.ts). `region` is a pure pass-through (no hook installed — a host
  * with a real reactive substrate to fan out, e.g. plexus's `trackingHook`, installs its
  * OWN `ReadTracker` instead); `record` is the one extra surface this reference impl
  * exposes for a caller that already knows its own read keys without a reactive

@@ -14,7 +14,7 @@
  * cycle detection is Floyd's tortoise-and-hare.
  */
 import { CLASS, CYCLES, DATA, LOCATION, REF } from "../../well-known-symbols.js";
-import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import { applyCallback } from "./ACallable.js";
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE, mergeProvenance } from "./AValue.js";

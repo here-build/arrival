@@ -22,8 +22,8 @@ import * as z from "../../common/scheme-zod.js";
 import { symbol, testCallCtx } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { exec } from "../../eval/generator-exec.js";
-import { makeRunContext, CONSTANT_CTX } from "../../values/primitives/RunContext.js";
-import { MemoryRunCache, canonicalJson, runCacheKey } from "../../values/run-cache.js";
+import { makeRunContext, CONSTANT_CTX } from "../../run/RunContext.js";
+import { MemoryRunCache, canonicalJson, runCacheKey } from "../../run/run-cache.js";
 import { AExact } from "../../values/primitives/AExact.js";
 
 const num = (n: number) => new AExact(CONSTANT_CTX, n);

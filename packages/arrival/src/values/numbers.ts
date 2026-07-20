@@ -17,7 +17,7 @@
  * the predicate stays total; only the imaginary axis is gone).
  */
 import { CLASS } from "../well-known-symbols.js";
-import { CONSTANT_CTX, type RunContext } from "./primitives/RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./primitives/AValue.js";
 import { AExact } from "./primitives/AExact.js";

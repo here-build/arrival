@@ -25,7 +25,7 @@ import { CLASS } from "../well-known-symbols.js";
 import { AExact } from "./primitives/AExact.js";
 import { AInexact } from "./primitives/AInexact.js";
 import { EMPTY_PROVENANCE } from "./primitives/AValue.js";
-import { type RunContext } from "./primitives/RunContext.js";
+import { type RunContext } from "../run/RunContext.js";
 import type { ANumeric } from "./numbers.js";
 
 // ============================================================================

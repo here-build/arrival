@@ -27,7 +27,7 @@ import {
   DoorProcedure,
   type CallableImpl,
 } from "../values/primitives/ACallable.js";
-import type { RunContext } from "../values/primitives/RunContext.js";
+import type { RunContext } from "../run/RunContext.js";
 // The dependency-free ambient leaf (see its header): the evaluator installs the current
 // invocation there at every apply site; the rosetta bind adapter reads it back. No cycle —
 // the leaf imports nothing.

@@ -15,7 +15,7 @@
  */
 
 import { CLASS } from "../well-known-symbols.js";
-import { type RunContext } from "../values/primitives/RunContext.js";
+import { type RunContext } from "../run/RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
 import { nil } from "../values/primitives/ANil.js";
 import { accessHas, accessKeys, accessMember, NOT_FOUND } from "./interop-access.js";

@@ -17,7 +17,7 @@
  */
 
 import { CLASS } from "../well-known-symbols.js";
-import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
 import { DefaultedWeakMap } from "@here.build/collections";
 import { AValue, EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
 import { Values } from "../values/primitives/Values.js";

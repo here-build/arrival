@@ -45,7 +45,7 @@
  */
 import invariant from "tiny-invariant";
 import { describe, expect, it } from "vitest";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AString } from "../../values/primitives/AString.js";
 import { inferenceEnv } from "../../inference-env.js";
 import { jsToScheme, schemeToJs, schemeToJsUntyped } from "../rosetta.js";

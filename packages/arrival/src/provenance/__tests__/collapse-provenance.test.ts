@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { initBridge } from "../../index.js";
 import { execState } from "../../eval/generator-exec.js";

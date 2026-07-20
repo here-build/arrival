@@ -28,7 +28,7 @@ import { PayloadStoreFake, ProvenanceStoreFake } from "../provenance/store/fakes
 import type { RecordId } from "../provenance/store/ids.js";
 import { execState } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../run/RunContext.js";
 import { setEagerProvenanceOracleEnabled, withInputProvenance } from "../values/op-helpers.js";
 import { jsToScheme } from "../membrane/rosetta.js";
 // In-package bench: the module-internal storage write (hermetic-Environment ruling — no public set).

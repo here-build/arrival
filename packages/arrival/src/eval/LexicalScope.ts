@@ -1,7 +1,7 @@
 import { CLASS } from "../well-known-symbols.js";
 import { AmbientRuntime, mintFrame, mintResolvingFrame, ResolvingAmbient } from "../AmbientRuntime.js";
 import type { AmbientValue } from "../AmbientRuntime.js";
-import type { RunContext } from "../values/primitives/RunContext.js";
+import type { RunContext } from "../run/RunContext.js";
 
 /**
  * The LEXICAL binding chain — let/lambda/letrec/do/catch frames, the names a

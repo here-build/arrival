@@ -23,7 +23,7 @@
 
 import invariant from "tiny-invariant";
 import { theVoid } from "../values/primitives/AVoid.js";
-import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
 import { AValue, unionProvenance } from "../values/primitives/AValue.js";
 import { bindValue, AmbientRuntime, type AmbientValue, isAmbientRuntime } from "../AmbientRuntime.js";
 import { unboundVariableError } from "../unbound-variable.js";
@@ -222,7 +222,7 @@ export interface EvalContext {
    */
   strict?: boolean;
   /**
-   * The per-run context (minted by `exec()`; see `values/primitives/RunContext`).
+   * The per-run context (minted by `exec()`; see `run/RunContext`).
    * Carries hermetic run-state — strict mode, the heap meter — as DATA
    * threaded through evaluation; this is the sole live channel for that state (the
    * old `_currentStrict` module holder is retired, readers consult

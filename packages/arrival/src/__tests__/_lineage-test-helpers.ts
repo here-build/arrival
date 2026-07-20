@@ -23,7 +23,7 @@
  */
 import * as z from "../common/scheme-zod.js";
 import { initBridge } from "../index.js";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../run/RunContext.js";
 import { execState } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
 import type { AString } from "../values/primitives/AString.js";

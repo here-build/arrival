@@ -14,7 +14,7 @@
 // ----------------------------------------------------------------------
 import invariant from "tiny-invariant";
 import { bindValue } from "../AmbientRuntime.js";
-import type { RunContext } from "../values/primitives/RunContext.js";
+import type { RunContext } from "../run/RunContext.js";
 import { chargeHeap } from "../heap-budget.js";
 import type { Resolver } from "./Resolver.js";
 import type { Capabilities } from "./Capabilities.js";

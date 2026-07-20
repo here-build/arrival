@@ -22,7 +22,7 @@ import * as z from "../../common/scheme-zod.js";
 import { symbol, type CacheClass } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { CacheClassShapeError, ProvenanceRoleShapeError } from "../../errors.js";
-import { freshEnv } from "../_fresh-env.js";
+import { freshEnv } from "../../__tests__/_fresh-env.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 
 describe("cache class — declaration + resolution (never derived, absent = regenerateable)", () => {

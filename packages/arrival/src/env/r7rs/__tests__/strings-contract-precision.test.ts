@@ -44,7 +44,7 @@ import { AString } from "../../../values/primitives/AString.js";
 import { ACharacter } from "../../../values/primitives/ACharacter.js";
 import { APair } from "../../../values/primitives/APair.js";
 import { nil } from "../../../values/primitives/ANil.js";
-import { CONSTANT_CTX } from "../../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../../run/RunContext.js";
 
 const symbols = stringsPack.spec.symbols as Record<string, AEntity>;
 

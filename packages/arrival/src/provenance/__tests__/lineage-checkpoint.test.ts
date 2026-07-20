@@ -1,4 +1,4 @@
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 /**
  * CHECKPOINT for build-step 1 (design note §10) — the go/no-go for the IR.
  *

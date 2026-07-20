@@ -24,7 +24,7 @@ import { exec, execState } from "../../eval/generator-exec.js";
 import { toJS } from "../membrane.js";
 import { errorToHost, jsToScheme, schemeToJs } from "../rosetta.js";
 import { R7RSError, R7RSReadError } from "../../errors.js";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { EMPTY_PROVENANCE } from "../../values/primitives/AValue.js";
 import { nil } from "../../values/primitives/ANil.js";
 import { AString } from "../../values/primitives/AString.js";

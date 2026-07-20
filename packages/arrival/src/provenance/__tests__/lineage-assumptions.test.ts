@@ -7,7 +7,7 @@
  * Measured first, then locked — snapshots record observed reality.
  */
 import { describe, it, expect } from "vitest";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { initBridge } from "../../index.js";
 import { execState } from "../../eval/generator-exec.js";
 import { parse } from "../../eval/generator-exec.js";

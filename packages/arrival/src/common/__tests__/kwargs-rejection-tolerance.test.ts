@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 import * as z from "../scheme-zod.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { decodeKwargsStrict, drainDroppedKwargNotes, KwargsRejectionError } from "../kwargs-rejection.js";
 
 const str = (s: string) => new AString(CONSTANT_CTX, s);

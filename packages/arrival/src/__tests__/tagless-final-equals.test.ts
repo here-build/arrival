@@ -8,7 +8,7 @@
 // readonly slots" — the tests just quietly weren't using it, and nothing could tell. The getters
 // made the fence real.
 import { describe, expect, it } from "vitest";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../run/RunContext.js";
 
 import { AValue } from "../values/primitives/AValue.js";
 import { __tieKnot, APair } from "../values/primitives/APair.js";

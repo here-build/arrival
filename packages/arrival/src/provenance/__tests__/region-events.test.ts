@@ -32,7 +32,7 @@ import {
   type TrackCoordinate,
   type TrackEmissionSink,
 } from "../../membrane/region-scope.js";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { ProvenanceStoreFake, setEmissionEnabled } from "../../provenance/store/index.js";
 
 const COORD: TrackCoordinate = { templateHash: "th-track", ordinalPath: [0], regionEpoch: "e0" };

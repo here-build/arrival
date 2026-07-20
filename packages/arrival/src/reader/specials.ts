@@ -5,7 +5,7 @@
  * table is FIXED — no runtime add/remove reader-macro verb exists.
  */
 import { ASymbol } from "../values/primitives/ASymbol.js";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../run/RunContext.js";
 
 /** Prefix expands to a single quoted/wrapped datum (`'x` → `(quote x)`). */
 export const LITERAL = Symbol.for("literal");

@@ -13,7 +13,7 @@ import { DatumReference } from "./DatumReference.js";
 // For APairs the `setLocation` calls below stay as the derived MIRROR (both channels
 // written, same loc), so the `[LOCATION]`-slot readers — the evaluator tap gate,
 // scopeId, the cross-package Symbol.for readers — see byte-identical data.
-import { makeParseCtx } from "../values/primitives/RunContext.js";
+import { makeParseCtx } from "../run/RunContext.js";
 import { foldcase_string } from "./foldcase.js";
 import * as specials from "./specials.js";
 import { is_nil } from "../eval/guards.js";

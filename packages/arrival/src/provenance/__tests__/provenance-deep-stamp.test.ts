@@ -16,7 +16,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { EMPTY_PROVENANCE } from "../../values/primitives/AValue.js";
 import { schemeFalse, schemeTrue } from "../../values/primitives/ABool.js";
 import { AString } from "../../values/primitives/AString.js";

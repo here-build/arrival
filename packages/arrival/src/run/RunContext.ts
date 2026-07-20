@@ -23,11 +23,11 @@
  *    family, dissolved separately through the trampoline.
  */
 
-import type { RunCache } from "../run-cache.js";
-import type { DisplaySink, NoteSink } from "../note-sink.js";
-import type { EffectLog } from "../effect-log.js";
-import type { ReadGuard } from "../read-guard.js";
-import type { SourceLocation } from "../../errors.js";
+import type { RunCache } from "./run-cache.js";
+import type { DisplaySink, NoteSink } from "./note-sink.js";
+import type { EffectLog } from "./effect-log.js";
+import type { ReadGuard } from "./read-guard.js";
+import type { SourceLocation } from "../errors.js";
 
 /** Per-run allocation meter — the memory analogue of the wall-clock budget. The
  *  reference is fixed for the run; `used` is incremented in place as cells materialize. */
@@ -57,13 +57,13 @@ export interface RunContext {
    *  body's `CallCtx.runCtx.signal`, not just the trampoline) can observe abort state — never
    *  independently re-derived, so the two can't drift out of sync. */
   readonly signal: AbortSignal | undefined;
-  /** The run's cache (values/run-cache.ts — R2, arrival-mcp-rework-over-phases.md §2.2), if
+  /** The run's cache (run/run-cache.ts — R2, arrival-mcp-rework-over-phases.md §2.2), if
    *  any; `undefined` ⇒ no interception (the default — only session/replay runs opt in). The
    *  baked rosetta `run` wrapper reads it HERE (`this.runCtx.cache`) — the same per-run
    *  hermetic seam `signal`/`heapMeter` ride — and gates record/replay per the stamped cache
    *  class. Constant for the run, like everything on this handle. */
   readonly cache: RunCache | undefined;
-  /** The run's gathered-effect manifest (values/effect-log.ts — W1, arrival-plexus-
+  /** The run's gathered-effect manifest (run/effect-log.ts — W1, arrival-plexus-
    *  effect-burst.md §2.3), if any; `undefined` ⇒ no burst arm (the default — a sink
    *  fires immediately, today's behavior). The baked rosetta `run` wrapper reads it
    *  HERE (`this.runCtx.effects`) — the same per-run hermetic seam `cache`/`signal`
@@ -72,7 +72,7 @@ export interface RunContext {
    *  carry both (an `effects` log alongside a `view`/`pure` cache) or `effects` alone
    *  (no cache at all). Constant for the run, like everything on this handle. */
   readonly effects: EffectLog | undefined;
-  /** The run's read-tracking + deferral-guard seam (values/read-guard.ts — W2, arrival-
+  /** The run's read-tracking + deferral-guard seam (run/read-guard.ts — W2, arrival-
    *  plexus-effect-burst.md §2.4), if any; `undefined` ⇒ no tracking, no guard — byte-
    *  identical to today. When present, the eval loop wraps each top-level form's
    *  evaluation in `reads.tracker.region(...)` and, for a PRIME run gathering effects
@@ -81,13 +81,13 @@ export interface RunContext {
    *  either: a run may track reads with no effect log at all (inert), gather effects
    *  with no tracker (no guard, no crash — an opt-out, not a lie), or carry both. */
   readonly reads: ReadGuard | undefined;
-  /** The run's MODEL-FACING NOTE CHANNEL (values/note-sink.ts), if any; `undefined` ⇒ notes are
+  /** The run's MODEL-FACING NOTE CHANNEL (run/note-sink.ts), if any; `undefined` ⇒ notes are
    *  dropped (the default — only a session run that RENDERS an observation opts in). Sibling of
    *  `cache`/`effects`/`reads`, riding the same per-run hermetic seam: a note belongs to the RUN,
    *  which is why the kwargs tolerance's old WeakMap (keyed on the decoded argument object) could
    *  never be drained by the renderer — the renderer never sees that object. */
   readonly notes: NoteSink | undefined;
-  /** The run's DISPLAY channel (values/note-sink.ts) — where the MCP runner's `display` affordance
+  /** The run's DISPLAY channel (run/note-sink.ts) — where the MCP runner's `display` affordance
    *  records what a model asked to see. `undefined` ⇒ no display verb is bound (arrival itself has
    *  none, and never will: ports/IO are omitted by design). Sibling of `notes`, same per-run seam. */
   readonly display: DisplaySink | undefined;

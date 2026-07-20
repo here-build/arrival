@@ -3,7 +3,7 @@
 // collide naturally — exactly the dense-collision regime that exercises the
 // Setoid laws hardest.
 import fc from "fast-check";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../run/RunContext.js";
 import { ABool } from "../values/primitives/ABool.js";
 import { setoidLaws } from "./algebra-laws.js";
 

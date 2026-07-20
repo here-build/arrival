@@ -34,7 +34,7 @@ import { execState } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../inference-env.js";
 import { schemeToJs } from "../index.js";
 import { jsToScheme } from "../membrane/rosetta.js";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../run/RunContext.js";
 
 /** Bindings cross through `jsToScheme`, so `xs` arrives as a borrowed array — exactly what an MCP
  *  tool returning JSON hands the model. That receiver is the whole point. */

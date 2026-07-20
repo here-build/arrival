@@ -1,4 +1,4 @@
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../run/RunContext.js";
 /**
  * Test escaped symbols and edge cases in LIPS
  *

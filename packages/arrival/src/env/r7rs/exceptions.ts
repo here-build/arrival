@@ -45,7 +45,7 @@ import { AString } from "../../values/primitives/AString.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import { APair } from "../../values/primitives/APair.js";
 import { applyCallback, type CallResult } from "../../values/primitives/ACallable.js";
-import type { RunContext } from "../../values/primitives/RunContext.js";
+import type { RunContext } from "../../run/RunContext.js";
 import type { SchemeValue } from "../../values/types.js";
 import { schemeBool as bool } from "../../values/op-helpers.js";
 import { to_array } from "../pack-helpers.js";

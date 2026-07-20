@@ -5,7 +5,7 @@
 // fresh distinct-but-equal payload, exercising value equality a bare `===`
 // would miss. (Boxing track S1 — docs/plan-2026-06-10-boxing-track.md.)
 import fc from "fast-check";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../run/RunContext.js";
 import { describe, expect, it } from "vitest";
 import { ABytevector } from "../values/primitives/ABytevector.js";
 import { ordLaws, semigroupLaws, setoidLaws } from "./algebra-laws.js";

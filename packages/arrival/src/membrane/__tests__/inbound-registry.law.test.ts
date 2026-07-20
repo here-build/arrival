@@ -23,7 +23,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import { INBOUND_CLAIMS, jsToScheme } from "../rosetta.js";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";

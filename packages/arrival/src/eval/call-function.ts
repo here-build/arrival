@@ -16,7 +16,7 @@
 // so a stdlib pack can import the applier without pulling in the evaluator.
 // ----------------------------------------------------------------------
 import { is_promise } from "./guards.js";
-import { CONSTANT_CTX, type RunContext } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
 import { is_callable_value } from "../values/value-guards.js";
 import { applyCallback, type ACallable } from "../values/primitives/ACallable.js";
 import { LambdaContext } from "./LambdaContext.js";

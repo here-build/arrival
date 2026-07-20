@@ -20,7 +20,7 @@ import { exec, execState } from "../index.js";
 import { inferenceEnv as sandboxedEnv } from "../inference-env.js";
 import { assembleEnv } from "../common/kernel.js";
 import { type SchemeEnv } from "../common/scheme-env.js";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../run/RunContext.js";
 import { AString } from "../values/primitives/AString.js";
 import { AValue } from "../values/primitives/AValue.js";
 import srfi28 from "../env/srfi/srfi-28.js";

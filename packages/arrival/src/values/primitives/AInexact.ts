@@ -3,7 +3,7 @@
 // (complexDoor/schemeCompare) are benign runtime cycles — method-body calls, nothing at module-eval.
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { type RunContext } from "./RunContext.js";
+import { type RunContext } from "../../run/RunContext.js";
 import { CLASS } from "../../well-known-symbols.js";
 import { complexDoor, schemeCompare } from "../numbers.js";
 import { AExact } from "./AExact.js";

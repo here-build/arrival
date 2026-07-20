@@ -4,7 +4,7 @@
 // (the whole point of boxing — goal (b)). Locks the rosetta schemeToJs/jsToScheme +
 // deepProvenance vector handling. (docs/plan-2026-06-10-boxing-track.md.)
 import { describe, expect, it } from "vitest";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../run/RunContext.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { ABytevector } from "../values/primitives/ABytevector.js";

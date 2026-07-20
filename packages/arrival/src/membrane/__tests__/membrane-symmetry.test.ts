@@ -24,7 +24,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { fromJs } from "../boxing.js";
 import { is_nil } from "../../eval/guards.js";

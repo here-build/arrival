@@ -10,7 +10,7 @@
  */
 
 import invariant from "tiny-invariant";
-import { CONSTANT_CTX, type RunContext } from "./primitives/RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
 import { applyCallback } from "./primitives/ACallable.js";
 import { currentRegionScope, isSilentRegion, recordHostScheduleVerdict } from "../membrane/region-scope.js";
 

@@ -24,7 +24,7 @@
  * flag — never the router (rosetta.ts), so APair/AVector can import it without widening
  * their existing benign cycles.
  */
-import type { RunContext } from "./RunContext.js";
+import type { RunContext } from "../../run/RunContext.js";
 import type { SchemeValue } from "../types.js";
 import { AValue, EMPTY_PROVENANCE, mergeProvenance } from "./AValue.js";
 import { theVoid } from "./AVoid.js";

@@ -22,7 +22,7 @@
  */
 import { describe, expect, it } from "vitest";
 import * as z from "../../common/scheme-zod.js";
-import { CONSTANT_CTX, makeRunContext } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX, makeRunContext } from "../../run/RunContext.js";
 import { APair } from "../../values/primitives/APair.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { ADict } from "../../values/primitives/ADict.js";

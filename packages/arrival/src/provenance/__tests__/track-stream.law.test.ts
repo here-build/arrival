@@ -60,7 +60,7 @@ import {
   type TrackCoordinate,
   type TrackEmissionSink,
 } from "../../membrane/region-scope.js";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 
 /** A manually-controlled promise — the "no real timers" idiom `store/fakes.ts` uses
  *  for `PayloadStoreFake`'s virtual clock, applied here to control PROMISE

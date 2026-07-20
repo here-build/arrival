@@ -16,7 +16,7 @@
 // function bodies, this file calls mint-numeric's helpers only inside method bodies.
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { type RunContext } from "./RunContext.js";
+import { type RunContext } from "../../run/RunContext.js";
 import { CLASS } from "../../well-known-symbols.js";
 import { schemeCompare } from "../numbers.js";
 import { AInexact } from "./AInexact.js";

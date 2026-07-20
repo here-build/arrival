@@ -40,11 +40,11 @@ import { validateProgram, type Diagnostic } from "../static-validation/validate-
 import { vocabularyFromChain } from "../static-validation/vocabulary.js";
 import { classifierFromEnv } from "../provenance/lineage-classifier-from-env.js";
 import { classify, type LineageNode } from "../provenance/lineage.js";
-import { makeRunContext, type RunContext } from "../values/primitives/RunContext.js";
-import type { DisplaySink, NoteSink } from "../values/note-sink.js";
-import type { RunCache } from "../values/run-cache.js";
-import type { EffectLog } from "../values/effect-log.js";
-import type { ReadGuard } from "../values/read-guard.js";
+import { makeRunContext, type RunContext } from "../run/RunContext.js";
+import type { DisplaySink, NoteSink } from "../run/note-sink.js";
+import type { RunCache } from "../run/run-cache.js";
+import type { EffectLog } from "../run/effect-log.js";
+import type { ReadGuard } from "../run/read-guard.js";
 import type { SchemeValue } from "../values/types.js";
 import { parse as readerParse } from "../reader/parse.js";
 

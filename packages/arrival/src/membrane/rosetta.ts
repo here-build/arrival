@@ -9,7 +9,7 @@
 
 import { AValue, EMPTY_PROVENANCE, mergeProvenance, pointProvenance, unionProvenance } from "../values/primitives/AValue.js";
 import { fromJs } from "./boxing.js";
-import { type RunContext } from "../values/primitives/RunContext.js";
+import { type RunContext } from "../run/RunContext.js";
 import { deepProvenance } from "../provenance/deep-provenance.js";
 import { AJSArray } from "./AJSArray.js";
 import { AJSObject } from "./AJSObject.js";
@@ -38,7 +38,7 @@ import { withDynamicCallSite } from "../eval/dynamic-call-site.js";
 // warnMembrane lives in leaf membrane-warn.ts, shared with boxing.ts `function` boxer — value layer needn't import evaluator-heavy module just to warn.
 // Non-portable JS value (function/undefined/unique symbol) crossing to Scheme: no faithful repr → #void; warnMembrane makes edge visible.
 import { warnMembrane } from "./membrane-warn.js";
-import { makeCallCtx, type CallCtx } from "../values/primitives/CallCtx.js";
+import { makeCallCtx, type CallCtx } from "../run/CallCtx.js";
 import { tf } from "../values/tagless-final.js";
 
 interface RosettaOptions {

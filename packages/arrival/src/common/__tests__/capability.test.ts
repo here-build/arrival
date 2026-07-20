@@ -6,7 +6,7 @@ import { EnvCapability } from "../capability.js";
 import { port, type Resource } from "../resources.js";
 import { ResolvingAmbient, mintResolvingFrame } from "../../AmbientRuntime.js";
 import { schemeToJsUntyped } from "../../membrane/rosetta.js";
-import { testCallCtx, type CallCtx } from "../../values/primitives/CallCtx.js";
+import { testCallCtx, type CallCtx } from "../../run/CallCtx.js";
 
 interface Echo {
   echo(s: string): string;

@@ -37,8 +37,8 @@
 
 import * as z from "../scheme-zod.js";
 import { AValue } from "../../values/primitives/AValue.js";
-import { type RunContext } from "../../values/primitives/RunContext.js";
-import { type CallCtx, makeCallCtx, testCallCtx } from "../../values/primitives/CallCtx.js";
+import { type RunContext } from "../../run/RunContext.js";
+import { type CallCtx, makeCallCtx, testCallCtx } from "../../run/CallCtx.js";
 import { Macro } from "../../eval/Macro.js";
 import { ZodType, ZodUnion } from "zod";
 import { CacheClassShapeError, KeywordPairingError, ProvenanceRoleShapeError } from "../../errors.js";
@@ -297,7 +297,7 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest exten
   readonly refPolicy?: RefPolicy;
 }
 
-// CallCtx/makeCallCtx moved to values/primitives/CallCtx.ts: ACallable.ts needs makeCallCtx
+// CallCtx/makeCallCtx moved to run/CallCtx.ts: ACallable.ts needs makeCallCtx
 // as a real call; importing it from here closed a cycle (ACallable.ts → scheme-zod.ts → this
 // file) that could leave a `z.instanceof(...)` codec's captured class permanently undefined
 // depending on which path entered first. Re-exported here (not just imported) so existing
@@ -392,7 +392,7 @@ export interface RosettaSymbolDef<
    *  `rosetta()` always resolves the default before baking. */
   readonly provenance: ProvenanceRole;
   /** RESOLVED cache class — see `NativeSymbolDef.cacheClass`. The baked rosetta `run`
-   *  wrapper is the ONE membrane chokepoint the run-cache interception (values/run-cache.ts)
+   *  wrapper is the ONE membrane chokepoint the run-cache interception (run/run-cache.ts)
    *  gates on this. Absent = regenerateable (never touches the serialized cache). */
   readonly cacheClass?: CacheClass;
   /** RESOLVED per-lambda-arm callback roles — see `NativeSymbolDef.callbackRoles`. */

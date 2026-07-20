@@ -19,7 +19,7 @@ import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { exec } from "../../eval/generator-exec.js";
-import type { CallCtx } from "../../values/primitives/CallCtx.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 
 describe("the z.value-callable door", () => {
   it("a bare z.value slot receiving a lambda throws the teaching door, steering to z.procedure", async () => {

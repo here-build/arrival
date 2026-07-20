@@ -1,5 +1,5 @@
 import { CLASS } from "../../well-known-symbols.js";
-import { type RunContext } from "./RunContext.js";
+import { type RunContext } from "../../run/RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { chargeHeap } from "../../heap-budget.js";
 import type { SchemeStringLike, SchemeValue } from "../types.js";

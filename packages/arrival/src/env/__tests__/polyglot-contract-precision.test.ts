@@ -30,7 +30,7 @@ import polyglot from "../polyglot.js";
 import type { AEntity } from "../../common/symbol.js";
 import { signatureOf } from "../../type-layer/schema-to-ts.js";
 import { ADict } from "../../values/primitives/ADict.js";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim();
 

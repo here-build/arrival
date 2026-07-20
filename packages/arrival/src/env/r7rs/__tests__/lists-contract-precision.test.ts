@@ -33,7 +33,7 @@ import { APair } from "../../../values/primitives/APair.js";
 import { ANil, nil } from "../../../values/primitives/ANil.js";
 import { AExact } from "../../../values/primitives/AExact.js";
 import { AString } from "../../../values/primitives/AString.js";
-import { CONSTANT_CTX } from "../../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { schemeFalse } from "../../../values/primitives/ABool.js";
 import type { SchemeValue } from "../../../values/types.js";
 

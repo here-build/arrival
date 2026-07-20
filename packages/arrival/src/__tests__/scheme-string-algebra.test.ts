@@ -4,7 +4,7 @@
 // fresh distinct-but-equal instance, exercising the value-equality (string-copy)
 // contract a bare `===` would miss.
 import fc from "fast-check";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../run/RunContext.js";
 import { describe, expect, it } from "vitest";
 import { AString } from "../values/primitives/AString.js";
 import { ordLaws, setoidLaws } from "./algebra-laws.js";

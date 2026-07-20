@@ -16,7 +16,7 @@
 // no evaluator round trip needed to reach the decode chokepoint.
 
 import { describe, expect, it } from "vitest";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../run/RunContext.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { symbol, testCallCtx } from "../common/symbol.js";

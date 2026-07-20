@@ -48,7 +48,7 @@ import {
   type TrackCoordinate,
   type TrackEmissionSink,
 } from "../../membrane/region-scope.js";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 import type { EmittedWire, WireframeGraph } from "../../provenance/wireframe/types.js";
 import type { SchemeValue } from "../../values/types.js";
 import { recordRun, replayedCone, type RecordedRun } from "../../__tests__/provenance/q16-harness.js";

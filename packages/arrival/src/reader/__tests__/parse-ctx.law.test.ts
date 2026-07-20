@@ -32,7 +32,7 @@ import {
   isParseCtx,
   makeParseCtx,
   makeRunContext,
-} from "../../values/primitives/RunContext.js";
+} from "../../run/RunContext.js";
 import { ctxOf } from "../../values/primitives/AValue.js";
 import { chargeHeap } from "../../heap-budget.js";
 import { eq } from "../../values/structural-equal.js";

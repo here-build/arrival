@@ -31,7 +31,7 @@ import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { ABool } from "../../values/primitives/ABool.js";
 import { type AVoid, theVoid } from "../../values/primitives/AVoid.js";
 import { printValue } from "../../values/print.js";

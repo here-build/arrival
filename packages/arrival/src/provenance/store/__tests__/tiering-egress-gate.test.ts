@@ -17,7 +17,7 @@ import { describe, expect, it } from "vitest";
 
 import { egressContainerProxy, type EgressReader } from "../../../membrane/egress-proxy.js";
 import { AVector } from "../../../values/primitives/AVector.js";
-import { CONSTANT_CTX } from "../../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { PayloadStoreFake } from "../fakes.js";
 import { PayloadTierMachine, tierGateFromSnapshot } from "../tiering.js";
 

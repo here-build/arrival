@@ -32,14 +32,14 @@ import * as z from "../../common/scheme-zod.js";
 import { schemeToJs } from "../rosetta.js";
 import { ANativeProcedure } from "../../values/primitives/ACallable.js";
 import { closeRegionScope, openRegionScope, withRegionScope } from "../region-scope.js";
-import { CONSTANT_CTX, makeRunContext } from "../../values/primitives/RunContext.js";
-import type { CallCtx } from "../../values/primitives/CallCtx.js";
+import { CONSTANT_CTX, makeRunContext } from "../../run/RunContext.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 import type { SchemeValue } from "../../values/types.js";
 import { exec, execState } from "../../eval/generator-exec.js";
 import { EvalTrace, type Invocation } from "../../provenance/trace.js";
 import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
-import { MemoryEffectLog } from "../../values/effect-log.js";
+import { MemoryEffectLog } from "../../run/effect-log.js";
 
 /** A trivial one-arg echo callable — enough surface for the door/identity/
  *  abort rows, which don't care what the callable actually computes. */
@@ -225,7 +225,7 @@ describe("a reverse lambda is region-bound to its invocation", () => {
     // lambda handed to a capability verb, when it called a `sink`-role verb, re-entered under
     // `CONSTANT_CTX` and hit the run-cache/effects fast path (`runCache === undefined &&
     // runEffects === undefined`), firing the sink IMMEDIATELY instead of enqueueing it onto
-    // the run's `effects` log — the burst arm's whole discipline (values/run-cache.ts's
+    // the run's `effects` log — the burst arm's whole discipline (run/run-cache.ts's
     // `penetrateThroughCache`, arrival-plexus-effect-burst.md §2.3) silently bypassed for any
     // sink reached through a reverse-lambda re-entry. Sound after the fix because the scope
     // opened around "call-with-lambda"'s own invocation carries `runCtx: this.runCtx` — the

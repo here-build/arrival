@@ -37,12 +37,12 @@ import {
   type AssembledAmbient,
   type ParsedProgram,
 } from "./exec-phases.js";
-import { makeRunContext, type RunContext } from "../values/primitives/RunContext.js";
-import type { DisplaySink, NoteSink } from "../values/note-sink.js";
-import type { RunCache } from "../values/run-cache.js";
-import type { EffectLog } from "../values/effect-log.js";
-import type { ReadGuard } from "../values/read-guard.js";
-import { checkReadWriteGuard } from "../values/read-guard.js";
+import { makeRunContext, type RunContext } from "../run/RunContext.js";
+import type { DisplaySink, NoteSink } from "../run/note-sink.js";
+import type { RunCache } from "../run/run-cache.js";
+import type { EffectLog } from "../run/effect-log.js";
+import type { ReadGuard } from "../run/read-guard.js";
+import { checkReadWriteGuard } from "../run/read-guard.js";
 // TYPE-ONLY (erased — no runtime scheme-zod edge from this module): the `exec` exit
 // contract's schema type + its output-face projection (the output-bearing overload).
 import type { output as ZodOutputOf, ZodType } from "../common/scheme-zod.js";
@@ -206,7 +206,7 @@ function defaultAmbient(): AssembledAmbient {
 }
 
 export interface ExecOptions {
-  /** The run's MODEL-FACING NOTE CHANNEL (values/note-sink.ts). Rides onto `RunContext.notes`, the
+  /** The run's MODEL-FACING NOTE CHANNEL (run/note-sink.ts). Rides onto `RunContext.notes`, the
    *  same per-run seam `cache`/`effects`/`reads` use. A caller that RENDERS an observation (the MCP
    *  runner) mints one and drains it after the call; everyone else omits it and notes are dropped. */
   notes?: NoteSink;
@@ -342,7 +342,7 @@ export interface ExecOptions {
    */
   heapBudget?: number;
   /**
-   * THE RUN CACHE (values/run-cache.ts — R2, arrival-mcp-rework-over-phases.md §2.2).
+   * THE RUN CACHE (run/run-cache.ts — R2, arrival-mcp-rework-over-phases.md §2.2).
    * When set, rides `makeRunContext` onto the run's `RunContext.cache`, and every baked
    * rosetta penetration is intercepted at the decode/fire chokepoint per the mode law:
    * in `"record"` mode the impl always fires (a `view` writes/overwrites its slot, a
@@ -354,7 +354,7 @@ export interface ExecOptions {
    */
   cache?: RunCache;
   /**
-   * THE EFFECT LOG (values/effect-log.ts — W1, the plexus effect-burst design
+   * THE EFFECT LOG (run/effect-log.ts — W1, the plexus effect-burst design
    * §2.3). When set, rides `makeRunContext` onto the
    * run's `RunContext.effects`, and every baked rosetta `sink` penetration — during a
    * PRIME run, i.e. `cache` absent or `cache.mode !== "replay"` — enqueues onto it and
@@ -367,7 +367,7 @@ export interface ExecOptions {
    */
   effects?: EffectLog;
   /**
-   * THE READ GUARD (W2, values/read-guard.ts, the plexus effect-burst design
+   * THE READ GUARD (W2, run/read-guard.ts, the plexus effect-burst design
    * §2.4). When set, rides `makeRunContext` onto the
    * run's `RunContext.reads`, and the per-form loop below wraps each top-level form's
    * evaluation in `reads.tracker.region(...)` — so the host's tracking substrate (a
@@ -702,7 +702,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
       // ArrivalError, masking both the TypeError class and its membrane cause.
       // Surface the original TypeError so the user-visible error shape survives.
       let result: SchemeValue;
-      // THE READ-TRACKING REGION (W2, values/read-guard.ts, §2.4): one top-level form is
+      // THE READ-TRACKING REGION (W2, run/read-guard.ts, §2.4): one top-level form is
       // the region unit. `runForm` is the plain (untracked) evaluation; when `runCtx.reads`
       // is armed, the host's tracker wraps it for the call's duration so its tracking
       // substrate (mobx over plexus, host-side) observes this form's reads. Absent ⇒

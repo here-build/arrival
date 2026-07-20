@@ -56,7 +56,7 @@ import { bindRosetta, mintFrame, type AmbientValue, type ResolvingAmbient } from
 import { collapseProvenance } from "./provenance-collapse.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { jsToScheme, schemeToJs } from "../membrane/rosetta.js";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../run/RunContext.js";
 import { withSilentRegion } from "../membrane/region-scope.js";
 import type { SchemeValue } from "../values/types.js";
 import type { EnvCapability } from "../common/capability.js";

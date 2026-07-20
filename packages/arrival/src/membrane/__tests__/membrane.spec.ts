@@ -11,7 +11,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { setMembraneWarnings } from "../membrane-warn.js";
-import { CONSTANT_CTX } from "../../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
 import {

@@ -2,7 +2,7 @@
  * LAW — the read log + the read∩write deferral guard (W2, the plexus effect-burst
  * design §2.4). Pins two things:
  *
- *  1. `checkReadWriteGuard` (values/read-guard.ts) as a PURE function over
+ *  1. `checkReadWriteGuard` (run/read-guard.ts) as a PURE function over
  *     (effect entries, read log, writeSetOf) — the fencepost clock convention
  *     (`ReadEvent.clock` 1-based, `EffectEntry.enqueuedAtReadClock` 0-based) that makes
  *     "enqueue then read" and "read then enqueue" distinguishable with no tie.
@@ -27,14 +27,14 @@ import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { exec } from "../../eval/generator-exec.js";
-import { MemoryRunCache } from "../../values/run-cache.js";
-import { MemoryEffectLog, type EffectEntry } from "../../values/effect-log.js";
+import { MemoryRunCache } from "../../run/run-cache.js";
+import { MemoryEffectLog, type EffectEntry } from "../../run/effect-log.js";
 import {
   MemoryReadTracker,
   checkReadWriteGuard,
   ReadYourDeferredWriteError,
   type WriteSetResolver,
-} from "../../values/read-guard.js";
+} from "../../run/read-guard.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. checkReadWriteGuard — the pure function, direct

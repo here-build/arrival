@@ -71,7 +71,7 @@ export { ADict, type DictLiteralNode } from "./values/primitives/ADict.js";
 // `is_callable_value` is its guard.
 export { applyCallback, type ACallable } from "./values/primitives/ACallable.js";
 export { is_callable_value } from "./values/value-guards.js";
-export { CONSTANT_CTX, makeRunContext, type RunContext, type HeapMeter } from "./values/primitives/RunContext.js";
+export { CONSTANT_CTX, makeRunContext, type RunContext, type HeapMeter } from "./run/RunContext.js";
 // The first-class run cache (R2, arrival-mcp-rework-over-phases.md §2.2): a run's durable
 // twin is (program, cache); `exec(src, { cache })` threads it onto the run's RunContext and
 // the baked rosetta membrane records/replays through it. `canonicalJson`/`runCacheKey` are
@@ -83,13 +83,13 @@ export {
   type RunCache,
   type RunCacheEntry,
   type RunCacheClass,
-} from "./values/run-cache.js";
+} from "./run/run-cache.js";
 // The effect log (W1, the plexus effect-burst design §2.3) + the read
 // guard (W2, §2.4): `exec(src, { effects, reads })` gathers sink penetrations instead of firing
 // them and (with `reads` armed) checks the read-your-deferred-write invariant. A host building a
 // confirm-manifest (arrival-mcp's confirm-manifest.ts, arrival-provenance-confirmation.md) reads
 // `EffectEntry`/`MemoryEffectLog` off this public surface rather than a deep relative import.
-export { MemoryEffectLog, burst, BurstDrainError, type EffectEntry, type EffectLog, type BurstFailure } from "./values/effect-log.js";
+export { MemoryEffectLog, burst, BurstDrainError, type EffectEntry, type EffectLog, type BurstFailure } from "./run/effect-log.js";
 export {
   MemoryReadTracker,
   checkReadWriteGuard,
@@ -98,7 +98,7 @@ export {
   type ReadTracker,
   type ReadGuard,
   type WriteSetResolver,
-} from "./values/read-guard.js";
+} from "./run/read-guard.js";
 // `SchemeValue` — the honest union of every value the interpreter can hold; a cross-package
 // AST-walking consumer (mcp-substrate's statement-facts.ts) names this type in its own
 // signatures when walking a real parsed form, not a plain-object `Node` shape.
@@ -262,4 +262,4 @@ export { AutoBindings, slotsOf } from "./provenance/lineage-auto-bindings.js";
 export { deepProvenance } from "./provenance/deep-provenance.js";
 
 // The per-run model-facing note channel — a renderer (mcp-substrate) mints one and drains it.
-export { createNoteSink, createDisplaySink, type NoteSink, type DisplaySink, type DisplayRecord } from "./values/note-sink.js";
+export { createNoteSink, createDisplaySink, type NoteSink, type DisplaySink, type DisplayRecord } from "./run/note-sink.js";

@@ -21,7 +21,7 @@
  */
 
 import * as fc from "fast-check";
-import { CONSTANT_CTX } from "../values/primitives/RunContext.js";
+import { CONSTANT_CTX } from "../run/RunContext.js";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "../values/primitives/AValue.js";

@@ -69,7 +69,7 @@ import { ANil } from "../../values/primitives/ANil.js";
 import { schemeFalse } from "../../values/primitives/ABool.js";
 import { maybeThen } from "../../utils/promises.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
-import { type RunContext } from "../../values/primitives/RunContext.js";
+import { type RunContext } from "../../run/RunContext.js";
 import { AJSArray } from "../../membrane/AJSArray.js";
 import * as z from "../../common/scheme-zod.js";
 import { tf } from "../../values/tagless-final.js";

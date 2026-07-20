@@ -3,7 +3,7 @@
  * Carries the `characters` named-character table it is backed by.
  */
 import { CLASS } from "../../well-known-symbols.js";
-import { type RunContext } from "./RunContext.js";
+import { type RunContext } from "../../run/RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { isSchemeString, type SchemeStringLike } from "../types.js";
 import invariant from "tiny-invariant";
