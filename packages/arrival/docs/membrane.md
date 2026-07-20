@@ -11,7 +11,7 @@
 > its origin but never erases) *fall out of* the crossing's shape rather than being
 > bolted onto it.
 
-Section anchors are CAPS so code comments can cite `docs/MEMBRANE.md §<ANCHOR>`. Each
+Section anchors are CAPS so code comments can cite `docs/membrane.md §<ANCHOR>`. Each
 section closes with its enforcement sites (files, no line numbers — those rot). Every
 claim here is grounded in those files; when code and this document disagree, one is a
 bug — decide which before writing a line.
@@ -24,7 +24,7 @@ promised), **P11** (mint at the edge). This document is the *map of the machine 
 implements those laws*; it links each and elaborates the mechanism, never restating
 the law text. Also `RULINGS.md` **R1** (uniform plain-JS exit, two-tier API) and
 **R9** (lazy egress proxies); `PROVENANCE.md` (the provenance-role vocabulary a
-crossing stamps with); and `ASSEMBLY.md §MEMBRANE-SEAM`, whose pointer-level summary
+crossing stamps with); and `environments.md §MEMBRANE-SEAM`, whose pointer-level summary
 of the bake-side seam this document is the destination for — the bake contract
 (§CONTRACT) and the provenance/cache axes (§AXES) stay there; the membrane internals
 they defer to (proxies, region discipline, egress projection) are here.
@@ -50,7 +50,7 @@ crossing it `encode`s into an `ANativeProcedure` — a genuine Scheme callable t
 marshals per-argument and re-enters under region discipline (§REGION). Declared
 callable in → wrapped; undeclared callable in → voided. The reverse ban is
 independent and absolute: a callable is never *returned* from a rosetta as a bare JS
-function (provenance untraceable) — see §DOORS and `ASSEMBLY.md §MEMBRANE-SEAM`.
+function (provenance untraceable) — see §DOORS and `environments.md §MEMBRANE-SEAM`.
 
 This asymmetry is the whole membrane in miniature: **a value crosses faithfully only
 where a contract or a class knows how to carry both its readings.** Everything below
@@ -427,7 +427,7 @@ is to never let one land there: a bake-time door
 author to declare `z.procedure` (whose decode marshals synchronously, at decode time,
 under the live scope). The gate is computed once at bake off the same normalized input
 vector every other bake gate reads; a lambda-free verb — the overwhelming majority —
-mints no scope, touches no wrapper cache, pays zero cost. (`ASSEMBLY.md §MEMBRANE-SEAM`
+mints no scope, touches no wrapper cache, pays zero cost. (`environments.md §MEMBRANE-SEAM`
 carries the bake-side framing; the runtime discipline is here.)
 
 **Enforcement sites:** `membrane/region-scope.ts`, `membrane/rosetta.ts`,
@@ -447,7 +447,7 @@ doors, by crossing:
 | Unrecognized (P5 terminal) | `schemeToJs` reaches a boxed shape with no `arrival/toJS` branch — a silent return would leak internal representation | `UnrecognizedCrossingError` |
 | Async | a *bare* `Promise` reaches `jsToScheme` directly (every sanctioned path settles first; a Promise inside a structure settles lazily) | `AsyncCrossingError` |
 | Region escape / incomplete | a reverse lambda outlives its invocation, or an invocation returns with calls in flight (§REGION) | `RegionEscapeError` / `RegionIncompleteError` |
-| Raw crossing | a raw JS scalar surfaces on an env read — a writer bypassed the storage membrane (`ASSEMBLY.md §HERMETIC`) | `RawCrossingError` |
+| Raw crossing | a raw JS scalar surfaces on an env read — a writer bypassed the storage membrane (`environments.md §HERMETIC`) | `RawCrossingError` |
 | `z.value` callable | a callable crosses a `z.value` slot (§REGION) | teaching throw |
 
 The `fromJS`/`toJS` strictness is also a *type-level* door: `fromJS`'s parameter
@@ -495,7 +495,7 @@ boxes a frozen payload with the SAME `jsToScheme`, so a value materialized at re
 built by the identical membrane, not a divergent one. One idiom, not a second.
 
 **Source mints, pipe forwards — at the crossing** (P11, elaborated in
-`ASSEMBLY.md §MEMBRANE-SEAM` for the bake side): a `source`-role rosetta mints a fresh
+`environments.md §MEMBRANE-SEAM` for the bake side): a `source`-role rosetta mints a fresh
 provenance point off the invocation; a `pipe`-role rosetta forwards the input-provenance
 union and mints nothing. With no invocation in ctx (a direct-JS call, no evaluator
 frame) a source falls back to the input union. The forward-vs-mint choice is the

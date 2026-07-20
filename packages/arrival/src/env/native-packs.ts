@@ -1,6 +1,6 @@
 // NATIVE_PACKS — the JS-implemented R7RS domains (chars / strings / vectors /
 // bytevectors / equality / numeric / error-objects) as a capability set, the native
-// half of the two-root bootstrap (docs/ASSEMBLY.md §ASSEMBLY). Each member is a live
+// half of the two-root bootstrap (docs/environments.md §ASSEMBLY). Each member is a live
 // `EnvCapability`, the sole home of its domain's primitives, symbol-only (baked
 // `symbol.native`/`symbol.rosetta`, no prelude/resources/deps). Sibling of
 // `BASE_PACKS` (the `.scm`-defined packs onto `user_env`); together the full

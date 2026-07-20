@@ -93,7 +93,7 @@ function cxrUnfold(name: string): ANativeProcedure | undefined {
  * the unified tagless-final algebra). Else throw Unbound.
  *
  * Dotted-path resolution (`foo.bar.baz` sugar → member-walk) is the NAMED negative
- * boundary of `docs/GRAMMAR.md §MEMBER-ACCESS` — deliberately unsupported (it would
+ * boundary of `docs/grammar.md §MEMBER-ACCESS` — deliberately unsupported (it would
  * side-door both the membrane face and the provenance field-step classification).
  * Local half: a dotted identifier is not special-cased here, so it resolves as an
  * ordinary (unbound) symbol and hits the normal unbound-variable door below.

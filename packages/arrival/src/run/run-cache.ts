@@ -3,14 +3,14 @@
  * RunContext: a run's durable twin is `(program, cache)`, and a cache can outlive its program to
  * answer a full re-run of a NEW program over the SAME cache (content-keyed). It intercepts at the
  * baked rosetta `run` wrapper — the ONE chokepoint where args are decoded and the impl has not
- * fired (docs/RUN-MODEL.md §CHOKEPOINT), gating on the def's EXPLICIT cache class plus the `sink`
+ * fired (docs/execution.md §CHOKEPOINT), gating on the def's EXPLICIT cache class plus the `sink`
  * lineage role for the tombstone skip.
  *
  * The model in full — single-flight, the run-level / no-session-plumbing rule, the burst arm that
- * rides the same chokepoint, and the two meanings of "replay" — is docs/RUN-MODEL.md §MODE-LAW,
+ * rides the same chokepoint, and the two meanings of "replay" — is docs/execution.md §MODE-LAW,
  * §BURST, §TWO-REPLAYS.
  *
- * THE MODE LAW (record vs replay, per class) — mirrored in docs/RUN-MODEL.md §MODE-LAW; keep the
+ * THE MODE LAW (record vs replay, per class) — mirrored in docs/execution.md §MODE-LAW; keep the
  * two tables in step:
  *
  *   class      | record mode                          | replay mode
@@ -216,7 +216,7 @@ export async function penetrateThroughCache(
   // THE BURST ARM — a sink during a PRIME run (no cache, or cache.mode === "record")
   // gathers instead of firing. `cache?.mode === "replay"` excludes a fold: a fold re-runs
   // the recorded log and must hit the tombstone-skip path below, never gather twice. Sound
-  // by the void-family bake gate (docs/RUN-MODEL.md §BURST): the program structurally cannot
+  // by the void-family bake gate (docs/execution.md §BURST): the program structurally cannot
   // read what a sink returns, so the deferral is unobservable.
   if (sink && effects !== undefined && cache?.mode !== "replay") {
     effects.enqueue({

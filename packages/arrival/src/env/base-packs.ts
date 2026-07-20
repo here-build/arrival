@@ -2,7 +2,7 @@
 // (the `.scm`-defined half; NATIVE_PACKS is the JS-implemented half onto
 // `global_env`). `initBridge`/`assembleEnv` ASSEMBLES them — this IS the scheme-
 // stdlib load path; each pack's prelude + symbols + resolvers become the LIVE
-// source of the env's scheme surface. See docs/ASSEMBLY.md §ASSEMBLY for the two-
+// source of the env's scheme surface. See docs/environments.md §ASSEMBLY for the two-
 // root bootstrap and the C3 precedence rule this array's ORDER feeds.
 //
 // ARRAY POSITION IS C3 PRECEDENCE (§ASSEMBLY): the kernel feeds this array's own

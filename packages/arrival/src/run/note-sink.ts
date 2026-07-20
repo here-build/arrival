@@ -2,7 +2,7 @@
  * note-sink — the two per-run model-facing side channels (`notes`/`display` on `RunContext`),
  * leaf sinks (zero imports) scoped to ONE run so nothing leaks across concurrent sessions, both
  * drained once at end of call. The model — the return-channel-never-lies law, what each channel
- * carries, and why arrival binds no `(display …)` verb of its own — is docs/RUN-MODEL.md §SINKS.
+ * carries, and why arrival binds no `(display …)` verb of its own — is docs/execution.md §SINKS.
  *
  * FOOTER FORMAT (this file's mechanism): `NoteSink` lines render into a
  * `#| ── environment notes ── |#` reader-comment footer that parses to zero forms, so the model

@@ -44,7 +44,7 @@ export function adoptSpine(v: unknown): unknown {
   //
   // An earlier cut also adopted a genuine scheme `AVector` (a view over its `__vector__`), two
   // violations at once:
-  //   1. HYGIENE (docs/MEMBRANE.md §HYGIENE) — `AVector.__vector__` holds ALREADY-BOXED AValues, so
+  //   1. HYGIENE (docs/membrane.md §HYGIENE) — `AVector.__vector__` holds ALREADY-BOXED AValues, so
   //      a raw-JS-backed view put both worlds through one slot and re-stamped every element's
   //      lineage; `boxElement`'s invariant (APair.ts) now makes that impossible to reintroduce quietly.
   //   2. FAITHFULNESS — it widened `(delete-duplicates #(1 2 1))` from an honest contract rejection

@@ -5,18 +5,18 @@
 > builds, never reached for ambiently. This document says what that state IS, where it
 > lives (data-local, not global), and how the five optional per-run seams — cache, effects,
 > reads, notes, display — arm the interception facilities that turn a bare interpreter into
-> a cacheable, burstable, read-guarded one. `docs/execution-sequences.md` is the CONSUMER
-> view (sessions, scopes, budgets as a host wires them); this is the ontology under it —
+> a cacheable, burstable, read-guarded one. §12 SESSIONS is the CONSUMER view (sessions,
+> scopes, budgets as a host wires them); the sections before it are the ontology under it —
 > what the machine IS, so the wiring is the only shape it could take.
 
-Section anchors are CAPS so code comments can cite `docs/RUN-MODEL.md §<ANCHOR>`. Each
+Section anchors are CAPS so code comments can cite `docs/execution.md §<ANCHOR>`. Each
 section closes with its enforcement sites (files, no line numbers — those rot). Every claim
 here is grounded in those files; when code and this document disagree, one is a bug — decide
 which before writing a line.
 
 Constitutional ground: PRINCIPLES.md (P0 two-layer coherence, P11 mint-at-the-edge),
-ASSEMBLY.md (§HERMETIC the runtime/storage split, §MEMBRANE-SEAM the bake-side crossing this
-model's chokepoint spins, §AXES provenance-role ⊥ cache-class), MEMBRANE.md (§REGION the
+environments.md (§HERMETIC the runtime/storage split, §MEMBRANE-SEAM the bake-side crossing this
+model's chokepoint spins, §AXES provenance-role ⊥ cache-class), membrane.md (§REGION the
 reverse-crossing discipline that closes the burst-bypass hole), PROVENANCE.md (§4, which owns
 the SECOND meaning of "replay" — γ over frozen ingress).
 
@@ -41,7 +41,7 @@ Three homes, by lifetime:
   from the THREADED context, not from the constant `nil`, so a constant carries nothing
   run-specific.
 - **Dynamic-extent holders** — state varying by CALL DEPTH within one run: the
-  exception-handler stack, the current call-site, the current region scope (MEMBRANE.md
+  exception-handler stack, the current call-site, the current region scope (membrane.md
   §REGION). These cannot ride a constant-per-run handle and stay the holder family (the
   `dynamic-call-site.ts` module-holder idiom, save/restore around the owning call, safe under
   single-threaded JS).
@@ -142,8 +142,8 @@ the bug this door's existence localizes.
 
 Three independent bounds cap a run; all three compose, and whichever fires first ends the
 **call** (never the session — the scope and its definitions survive, so a REPL loop catches and
-continues). The CONSUMER statement of how a host arms them, and their edges, lives in
-`docs/execution-sequences.md §Budgets`; this section states the mechanism they share.
+continues). The CONSUMER view — how a host arms them per call — is §12 SESSIONS; this section
+states the mechanism they share.
 
 - **`heapBudget` → `HeapMeter`** (allocation). The meter lives on `RunContext.heapMeter` ONLY,
   minted once per run. It **mints, it does not borrow**: it charges cells a capability
@@ -159,7 +159,8 @@ continues). The CONSUMER statement of how a host arms them, and their edges, liv
   a bound must also cover a slow native call.
 - **`budgetMs`** (wall-clock). An INTERNAL bound — the trampoline itself throws once the deadline
   elapses, no external controller needed. Checked at the same TICK boundary, so it bounds
-  interpretation time and cannot interrupt a run parked inside one native call.
+  interpretation time and cannot interrupt a run parked inside one native call (a 50ms budget
+  over a native 200ms sleep returns at 200ms).
 - **`signal`** (`AbortSignal`). The one bound that reaches into native calls, and the SAME
   reference the trampoline reads — so every consumer observes abort state off one handle that
   cannot drift.
@@ -171,7 +172,7 @@ that splits a hang across several forms is still bounded. In `execExpr` the mete
 `RunContext` no `execExpr` caller can inject yet.
 
 *Enforcement sites: `heap-budget.ts`, `run/RunContext.ts` (`HeapMeter`), `eval/generator-exec.ts`
-(the per-form loop, `execExpr`). Consumer statement: `docs/execution-sequences.md §Budgets`.*
+(the per-form loop, `execExpr`). Consumer view: §12 SESSIONS.*
 
 ## 6. MODE-LAW — record × replay × class
 
@@ -187,7 +188,7 @@ storage: `mode: "record"` is a live run (the impl fires, its result is written);
 | undeclared | fire | fire — regenerateable, the SAFE default |
 
 The cache class is an EXPLICIT declaration on the contract, never derived from the lineage role
-(ASSEMBLY.md §AXES: the two axes are orthogonal — `infer` is a provenance SOURCE declaring
+(environments.md §AXES: the two axes are orthogonal — `infer` is a provenance SOURCE declaring
 `cacheClass "pure"`, the standing proof). An undeclared, non-`sink` def never touches the
 serialized cache.
 
@@ -252,11 +253,11 @@ escapes gathering. This is closed by REGION SCOPE: the callable's arguments box 
 `scope.runCtx` (the invocation's LIVE context carrying `effects`), so a lambda calling a sink
 re-enters through `this.runCtx.effects` and gathers. The hazard shape and the bake-side gate
 that steers `z.value` slots to `z.procedure` (so no callable marshals under a stale scope after
-an `await`) live in MEMBRANE.md §REGION — cross-linked, not duplicated.
+an `await`) live in membrane.md §REGION — cross-linked, not duplicated.
 
 *Enforcement sites: `run/effect-log.ts` (the log, `burst`, `BurstDrainError`), `run/run-cache.ts`
 (`penetrateThroughCache` — the gather condition), `common/symbols/rosetta.ts` (the chokepoint +
-the region-scope re-entry). Cross-link: `docs/MEMBRANE.md §REGION`.*
+the region-scope re-entry). Cross-link: `docs/membrane.md §REGION`.*
 
 ## 8. READ-GUARD — a burst must not read its own deferred write
 
@@ -383,3 +384,45 @@ never stored, only recomputed.
 
 *Enforcement sites: `run/run-cache.ts` (run-model replay). γ-replay: `provenance/replay.ts`,
 specified in `docs/PROVENANCE.md §4` — cited, not absorbed.*
+
+---
+
+## 12. SESSIONS — the consumer surface: sessions, scopes, budgets, the CLI
+
+*(The consumer view of §1–§11: how a host wires sessions, scopes, and budgets over the run
+model. The ontology is above; this is the surface a host holds.)*
+
+**`exec` is one-shot; `execState` is session-shaped.** `exec` runs a program and returns plain
+JS values. Everything session-shaped — a REPL, a long agent conversation, a multi-step pipeline
+— is `execState`, which returns `{ values, scope, runCtx }`: the run's `scope` (where `define`s
+landed) and its `runCtx` (the per-run hermetic knobs, §1).
+
+**Definitions accumulate through the scope; the returned `scope` IS the object you passed in.**
+Thread `s1.scope` into the next call and the session continues — nothing is resent, and identity
+holds (`s1.scope === s2.scope`). To name a session up front, mint one with `LexicalScope.fresh(name)`
+and pass it to every call.
+
+```typescript
+const session = LexicalScope.fresh("agent-session");
+await execState(`(define greeting "hello")`, { scope: session });
+await execState(`(string-append greeting " world")`, { scope: session }); // "hello world"
+```
+
+`LexicalScope.fresh()` is an isolated lexical root — a second `fresh()` scope does not see the
+first's names. Isolation is exactly *lexical*, never a crippled stdlib: builtins are not part of the
+scope, they resolve through the run's capability base.
+
+**Vocabulary and memory are orthogonal: `capabilities` are per call, `scope` carries.** A session
+can gain or lose tools mid-way without losing its state — `capabilities` decide what verbs *this
+call* may use, `scope` decides what definitions persist.
+
+**Budgets are per call and compose, first to fire wins.** A budget error ends the *call*, not the
+session — the scope and its definitions survive, so a REPL loop catches, reports, and continues. The
+three bounds (`heapBudget`, `budgetMs`, `signal`) and their edges are §5 BUDGETS.
+
+**The CLI over this surface.** `@inhuman.tools/arrival-cli` is a REPL over exactly this
+scope/capability surface — one `LexicalScope` per session, budgets per form, capabilities armed per
+call. It is this library API's first consumer, not a different model.
+
+*Enforcement sites: `eval/generator-exec.ts` (`exec`, `execState`), `eval/LexicalScope.ts`
+(`LexicalScope`).*

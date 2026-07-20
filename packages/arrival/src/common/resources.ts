@@ -1,7 +1,7 @@
 // resources — the env's PORTS. The IMPLEMENTATION of the capability-owned resource lifecycle;
 // model (the Erlang-port factory over TC39 `AsyncDisposable`, `ResourceCell`'s re-acquirable
 // cycle around it, the three `get()` behaviours — lazy spawn, single-flight parallel acquire,
-// reconstruction — and reverse-order wind-down) is docs/ASSEMBLY.md §RESOURCES.
+// reconstruction — and reverse-order wind-down) is docs/environments.md §RESOURCES.
 //
 // Disposal is never reinvented: a handle's release IS its `[Symbol.asyncDispose]`; this module
 // only adds the cycle around it.

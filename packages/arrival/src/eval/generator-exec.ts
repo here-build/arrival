@@ -321,7 +321,7 @@ export interface ExecOptions {
    */
   budgetMs?: number;
   /**
-   * Per-run ALLOCATION budget — the memory analogue of `budgetMs` (docs/RUN-MODEL.md §BUDGETS
+   * Per-run ALLOCATION budget — the memory analogue of `budgetMs` (docs/execution.md §BUDGETS
    * for the TICK-blind-spot rationale and the two choke points it charges at). Caps the
    * cumulative number of list cells a run materializes, and is checked INSIDE the native
    * collection loop the wall-clock budget can't interrupt. Undefined ⇒ unbounded (default; only
@@ -331,14 +331,14 @@ export interface ExecOptions {
   /**
    * THE RUN CACHE (run/run-cache.ts). When set, rides `makeRunContext` onto the run's
    * `RunContext.cache` and every baked rosetta penetration is intercepted at the decode/fire
-   * chokepoint per the mode law (docs/RUN-MODEL.md §MODE-LAW). Unset ⇒ no interception (inert).
+   * chokepoint per the mode law (docs/execution.md §MODE-LAW). Unset ⇒ no interception (inert).
    * The cache is a RUN-level entity: session identity (epoch/roster/configDigest validity) is the
    * session layer's concern, checked BEFORE a cache is handed to a run.
    */
   cache?: RunCache;
   /**
    * THE EFFECT LOG (run/effect-log.ts). When set, rides `makeRunContext` onto the run's
-   * `RunContext.effects`, arming the burst gather (docs/RUN-MODEL.md §BURST): a `sink` penetration
+   * `RunContext.effects`, arming the burst gather (docs/execution.md §BURST): a `sink` penetration
    * during a PRIME run enqueues and returns `undefined` instead of firing. A SIBLING of `cache`,
    * not a field on it: pass `effects` alone to gather sinks with no `RunCache` at all, or alongside
    * `cache` to gather sinks while a `view`/`pure` cache still serves reads. Unset ⇒ no burst arm (a
@@ -349,7 +349,7 @@ export interface ExecOptions {
   /**
    * THE READ GUARD (run/read-guard.ts). When set, rides `makeRunContext` onto the run's
    * `RunContext.reads`, arming the read-tracking region + the read∩write deferral guard
-   * (docs/RUN-MODEL.md §READ-GUARD) that the phase-4 loop below drives per top-level form. Unset ⇒
+   * (docs/execution.md §READ-GUARD) that the phase-4 loop below drives per top-level form. Unset ⇒
    * no tracking, no guard. A `reads` with no `writeSetOf` armed (host tracks reads but can't
    * predict write footprints yet) never crashes — the guard degrades to a no-op, not a false claim.
    */
@@ -587,7 +587,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     // ── PHASE 3 — instantiate: scope OBTAINED (caller-passed for REPL continuity, else the
     // realm-cached ACCUMULATING scratch root — REPL semantics preserved exactly); only `runCtx`
     // is minted fresh (per-run). Its allocation meter spans the whole exec and every value built
-    // in the run carries the same `runCtx` (docs/RUN-MODEL.md §BUDGETS, §HERMETIC).
+    // in the run carries the same `runCtx` (docs/execution.md §BUDGETS, §HERMETIC).
     let runResolver: Resolver;
     let runCtx: RunContext;
     if (env !== undefined) {
@@ -643,7 +643,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
 
     // ── PHASE 4 — execute. Evaluate each form in sequence. The budget (deadline + heap meter)
     // spans the WHOLE exec call — all top-level forms share one bound, so a hang split across
-    // forms is still caught (docs/RUN-MODEL.md §BUDGETS, "meter span differs by entry"). Defines
+    // forms is still caught (docs/execution.md §BUDGETS, "meter span differs by entry"). Defines
     // land in the resolver's lexical env; the meter lives on `runCtx` only, never on the frame.
     const results: SchemeValue[] = [];
     const forms = program.forms;
@@ -656,7 +656,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
       // ArrivalError, masking both the TypeError class and its membrane cause.
       // Surface the original TypeError so the user-visible error shape survives.
       let result: SchemeValue;
-      // THE READ-TRACKING REGION (docs/RUN-MODEL.md §READ-GUARD): one top-level form is the region
+      // THE READ-TRACKING REGION (docs/execution.md §READ-GUARD): one top-level form is the region
       // unit. `runForm` is the plain (untracked) evaluation; when `runCtx.reads` is armed, the
       // host's tracker wraps it so its substrate observes this form's reads. Absent ⇒ `runForm()`
       // runs directly (untracked).
@@ -687,7 +687,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
       // THE GUARD CHECK: after each form, for a PRIME run gathering effects — the same
       // `cache?.mode !== "replay"` gate the burst arm uses, so a fold never trips it — run
       // `checkReadWriteGuard` over the effects gathered so far vs the reads observed so far
-      // (docs/RUN-MODEL.md §READ-GUARD; guard region = EXECUTION only). A clean run, or one
+      // (docs/execution.md §READ-GUARD; guard region = EXECUTION only). A clean run, or one
       // missing `reads`/`effects` or with `writeSetOf` unarmed, is a no-op.
       if (runCtx.reads !== undefined && runCtx.effects !== undefined && runCtx.cache?.mode !== "replay") {
         checkReadWriteGuard(runCtx.effects.entries, runCtx.reads.tracker.log, runCtx.reads.writeSetOf);

@@ -9,7 +9,7 @@
 > obey"; this is the ontology under it — "here is what the machine IS, so the law is the
 > only shape it could take."
 
-Section anchors are CAPS so code comments can cite `docs/ASSEMBLY.md §<ANCHOR>`. Each
+Section anchors are CAPS so code comments can cite `docs/environments.md §<ANCHOR>`. Each
 section closes with its enforcement sites (files, no line numbers — those rot). Every claim
 here is grounded in those files; when code and this document disagree, one is a bug — decide
 which before writing a line.

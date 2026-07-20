@@ -4,7 +4,7 @@
 // contribution to an env.
 //
 // The MODEL — what assembly is, why C3 (= Python MRO), the dep-edge-is-grant law, apply-once, and
-// the DAG-authoring-form → flat-runtime-form lowering — is docs/ASSEMBLY.md §ASSEMBLY, the single
+// the DAG-authoring-form → flat-runtime-form lowering — is docs/environments.md §ASSEMBLY, the single
 // authoritative statement; this file enforces it.
 
 // Door-set degradation's `DegradedCapability`/`DegradedNeed` types are TYPE-ONLY, from the
@@ -55,7 +55,7 @@ export interface EnvPack<E = unknown> {
  *  capability.ts's bindTarget only ever writes. In BOOTSTRAP assembly this is the kernel's own
  *  Map-backed shim (see `assembleEnv`); in MID-RUN application it is the caller's adapter over
  *  a real, discarded child frame (loader-capability.ts wraps the module-internal `bindValue` —
- *  `SchemeEnv` itself carries no write member; docs/ASSEMBLY.md §HERMETIC). */
+ *  `SchemeEnv` itself carries no write member; docs/environments.md §HERMETIC). */
 export interface PreludeBindTarget {
   set(name: string, value: unknown): unknown;
 }
@@ -259,7 +259,7 @@ function makeCtx<E>(
 // `ctx.preludeScope`, a base-env resolver live only for the C3 loop, the seal that drops it
 // (unregister where the host supports it for zero residue, a sealed-flag silencer where it does
 // not), and why post-seal the name is unbound everywhere including from prelude-defined closures
-// (so a bridge captures the VALUE, not the verb) — is docs/ASSEMBLY.md §PRELUDE. Two facts are
+// (so a bridge captures the VALUE, not the verb) — is docs/environments.md §PRELUDE. Two facts are
 // local to THIS implementation:
 //   • the base-env resolver is consulted at every chain layer
 //     (`AmbientRuntime._lookupWithResolvers`: own bindings → resolvers → parent), so a prelude
@@ -286,7 +286,7 @@ let bakeOverlaySeq = 0;
 /**
  * Assemble `base` into a capability-scoped env by resolving the pack DAG — the BAKE phase.
  * Async by construction. Applies each pack once, least-precedence (deepest dependency) first —
- * last-write-wins, per docs/ASSEMBLY.md §ASSEMBLY. On any apply failure, runs disposers collected
+ * last-write-wins, per docs/environments.md §ASSEMBLY. On any apply failure, runs disposers collected
  * so far (LIFO) and rejects — no half-built env escapes.
  *
  * `ctx.preludeScope` is ALWAYS provided — the kernel-internal, bake-scoped prelude overlay
@@ -359,7 +359,7 @@ export async function assembleEnv<E>(base: E, roots: readonly EnvPack<E>[]): Pro
 /** A live-env assembler for RUNTIME pack application — the `(require/extension :name)` path
  *  (§LOADER). The mid-run single-flight contract — apply onto an ALREADY-LIVE env, a second or
  *  concurrent `require` awaiting the one in-flight apply (never re-applying), deps applied first in
- *  C3 order, a pack reached two ways applied once — is docs/ASSEMBLY.md §ASSEMBLY. Disposers collect
+ *  C3 order, a pack reached two ways applied once — is docs/environments.md §ASSEMBLY. Disposers collect
  *  for a single LIFO `dispose()` tied to the env's teardown. */
 export interface RuntimeAssembler<E = unknown> {
   /** Apply `pack` (and any not-yet-applied deps) to the live env, in C3 order. Idempotent.

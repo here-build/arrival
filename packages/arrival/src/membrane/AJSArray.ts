@@ -79,7 +79,7 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
   private boxedVec?: AVector;
 
   /**
-   * `source` is typed `JSWorldArray<S>` — THE HYGIENE LAW at the type level (docs/MEMBRANE.md
+   * `source` is typed `JSWorldArray<S>` — THE HYGIENE LAW at the type level (docs/membrane.md
    * §HYGIENE; the why-it-corrupts is stated there). A caller statically holding scheme values
    * (`SchemeValue[]`, `AValue[]`) collapses to `never` here and FAILS TO COMPILE — a type catches
    * every violator at once, including the ones no test covers. The egress-proxy carve-out needs no
@@ -309,7 +309,7 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
    *  inheritance (stamp site 2), `freshIfSingleton` so a raw boolean surfaces as an
    *  attested clone, never the shared flyweight. */
   /**
-   * THE declared membrane penetration for this container's elements (docs/MEMBRANE.md §HYGIENE):
+   * THE declared membrane penetration for this container's elements (docs/membrane.md §HYGIENE):
    * the ONE place an element of a borrowed array crosses into the Scheme world, and the only
    * element-crossing any consumer may use. `AJSArrayList` (the spine chart over this same store)
    * calls THIS rather than owning a second boxing policy — one store, one crossing, owned by the
@@ -321,7 +321,7 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
   }
 
   private boxElement(raw: unknown): SchemeValue {
-    // THE HYGIENE LAW, enforced at the penetration point (docs/MEMBRANE.md §HYGIENE). The check
+    // THE HYGIENE LAW, enforced at the penetration point (docs/membrane.md §HYGIENE). The check
     // lives HERE, at the O(1) crossing, not in an O(n) constructor scan the lazy borrow exists to
     // avoid — the crossing is the moment the flip happens. An AValue here is an unobserved flip that
     // `jsToScheme` below would deep-re-stamp with this container's provenance, destroying its
@@ -357,7 +357,7 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
     return cell;
   }
 
-  // The freeze contract — docs/MEMBRANE.md §BOXING. Idempotent (guarded by `Object.isFrozen`);
+  // The freeze contract — docs/membrane.md §BOXING. Idempotent (guarded by `Object.isFrozen`);
   // `freezeRosettaReturns: false` opts out.
   private freezeSource(): void {
     if (this.ctx.freezeRosettaReturns !== false && !Object.isFrozen(this.source)) {

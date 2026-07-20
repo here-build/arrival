@@ -1,5 +1,5 @@
 // symbol.native — per-tag factory file assembled into `symbol` by ./index.ts; shared
-// types live in ./_bake.js. docs/ASSEMBLY.md §SYMBOL-KINDS — the `native` row (a contour;
+// types live in ./_bake.js. docs/environments.md §SYMBOL-KINDS — the `native` row (a contour;
 // impl over scheme values, no validation); §CONTRACT — the SCHEME face it projects.
 //
 // The tagged template carries `name: human description`; it returns a GENERIC fn so
@@ -40,7 +40,7 @@ export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
     // the resolved role onto the bound ANativeProcedure for the lineage classifier).
     const provenance = contract.provenance ?? "pipe";
     assertProvenanceRoleShape(name, provenance, inSchema, outSchema);
-    // Cache class — see Contract.cacheClass; docs/ASSEMBLY.md §AXES — a native carries the field
+    // Cache class — see Contract.cacheClass; docs/environments.md §AXES — a native carries the field
     // but the run-cache interception is rosetta-membrane-only (a contour, not a penetration); the
     // resolved field still rides the def uniformly for downstream readers.
     const cacheClass = contract.cacheClass;
@@ -48,7 +48,7 @@ export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
     // Per-lambda-arm callback roles: shape extraction + the declared override, drift-door
     // checked — see extractCallbackRoles in _bake.ts.
     const callbackRoles = extractCallbackRoles(name, provenance, inSchema, outSchema, contract.callbackRoles);
-    // docs/ASSEMBLY.md §CONTRACT (spine adoption) — a `z.listAlike` slot's borrowed JS array is
+    // docs/environments.md §CONTRACT (spine adoption) — a `z.listAlike` slot's borrowed JS array is
     // projected onto its `AJSArrayList` view before the impl runs. It runs HERE (the bind path),
     // not inside the impls, because a native's contract is type-only with no validation and several
     // impls field-read `.car` — a borrowed array has none, so they'd silently read `undefined`.

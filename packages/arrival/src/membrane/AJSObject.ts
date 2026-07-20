@@ -232,7 +232,7 @@ export class AJSObject extends AValue {
     return this.source;
   }
 
-  // The freeze contract — docs/MEMBRANE.md §BOXING. Idempotent (guarded by `Object.isFrozen`);
+  // The freeze contract — docs/membrane.md §BOXING. Idempotent (guarded by `Object.isFrozen`);
   // `freezeRosettaReturns: false` opts out.
   private freezeSource(): void {
     if (this.ctx.freezeRosettaReturns !== false && !Object.isFrozen(this.source)) {

@@ -5,11 +5,11 @@
 // entry ../symbol.js re-exports these types alongside `export * as symbol from "./index.js"`.
 // Cut is acyclic: factories import from here; nothing imports back up through the namespace.
 //
-// docs/ASSEMBLY.md §CONTRACT — the one zod contract with four readers (runtime validation,
+// docs/environments.md §CONTRACT — the one zod contract with four readers (runtime validation,
 //   static impl types via z.infer, the harvested .d.ts, the JS↔Scheme membrane codec), the two
 //   faces, and the chart-vs-crossing split. This module builds the AUTHORED-extension layer:
 //   `const symbol = { native, rosetta, tagless, notImplemented, … }`.
-// docs/ASSEMBLY.md §SYMBOL-KINDS — the per-kind table (what each authored kind bakes to and the
+// docs/environments.md §SYMBOL-KINDS — the per-kind table (what each authored kind bakes to and the
 //   runtime value capability.ts binds through `arrival/tagless-final/apply`). The kind-def
 //   interfaces below carry the per-field contracts the table cannot.
 
@@ -216,7 +216,7 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest exten
    *  SHAPE-decidable contradictions this field is checked against at bake time. */
   readonly provenance?: ProvenanceRole;
   /** EXPLICIT cache class (Solidity's vocabulary) — a declaration, never derived; the per-class
-   *  record/replay behavior is docs/RUN-MODEL.md §MODE-LAW:
+   *  record/replay behavior is docs/execution.md §MODE-LAW:
    *  - "view":  cacheable ACROSS runs. Demands a SERIALIZABLE contract (shape gate:
    *             `assertCacheClassShape` — a cache entry must serialize).
    *  - "pure":  regenerateable — deterministic from decoded args, recovery = re-call, NEVER
@@ -367,7 +367,7 @@ export interface RosettaSymbolDef<
    *  `rosetta()` always resolves the default before baking. */
   readonly provenance: ProvenanceRole;
   /** RESOLVED cache class — see `NativeSymbolDef.cacheClass`. The run-cache interception gates
-   *  on this at the baked rosetta `run` wrapper (docs/RUN-MODEL.md §CHOKEPOINT). Absent =
+   *  on this at the baked rosetta `run` wrapper (docs/execution.md §CHOKEPOINT). Absent =
    *  regenerateable (never touches the serialized cache). */
   readonly cacheClass?: CacheClass;
   /** RESOLVED per-lambda-arm callback roles — see `NativeSymbolDef.callbackRoles`. */
@@ -855,7 +855,7 @@ export function assertProvenanceRoleShape(
     // VOID-FAMILY reading (the same no-egress reading `extractCallbackRoles`'s `voidEgress`
     // takes): a zero-item output vector AND an all-`undefinedResult` vector both carry no real
     // egress — `output: [z.undefinedResult]` is a void verb, not a return value. This is the
-    // bake-time sink-void proof the runtime tombstone-skip stands on (docs/RUN-MODEL.md
+    // bake-time sink-void proof the runtime tombstone-skip stands on (docs/execution.md
     // §CHOKEPOINT, §MODE-LAW): a sink's replay-skip returns void, sound only because the
     // contract PROVED void here.
     const hasEgress = items === undefined ? true : items.some((item) => z.lookupName(item) !== "undefinedResult");
@@ -944,7 +944,7 @@ export function contractMayCarryCallable(inSchema: z.ZodTypeAny): boolean {
  *  bake-time pattern): a `view` cache class demands a SERIALIZABLE contract — no `z.lambda`
  *  arms (a callable can't be a boundary snapshot), no `z.value` slots (the declared raw escape
  *  hatch, by definition not serializable). This is the bake-time half of view serializability
- *  (docs/RUN-MODEL.md §CHOKEPOINT — a cache entry must serialize). A contradiction throws
+ *  (docs/execution.md §CHOKEPOINT — a cache entry must serialize). A contradiction throws
  *  `CacheClassShapeError` at BAKE; the author's way out is declaring `pure` (or nothing).
  *  `pure` has NO shape gate: recovery is re-call, nothing of it is persisted. Called by
  *  `native()`/`rosetta()`/`sequence()` on the schemas each already normalizes.

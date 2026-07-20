@@ -13,7 +13,7 @@
  * LITERAL GRAMMAR: the `[…]` vector / `{…}` dict inline literals (§LITERALS), their
  * position-scoped comma/colon separators (§COMMA), the suffix-keyword flip (§SUFFIX-FLIP),
  * the curly-infix ban (§INFIX), and the E-DICT-* / E-BRACKET-* / E-LITERAL-* door taxonomy
- * (§ERRORS) are the model of `docs/GRAMMAR.md`. Bodies here point there rather than restate
+ * (§ERRORS) are the model of `docs/grammar.md`. Bodies here point there rather than restate
  * it; E-DICT-INFIX-BANNED (§INFIX) is detected in `make_dict_literal`.
  *
  * NESTING CAP: `_enterNesting` bounds native-stack descent so pathological input throws
@@ -340,7 +340,7 @@ export class Parser {
    * Gather the flat datum sequence between `[`…`]` / `{`…`}`, absorbing the position-
    * scoped comma/colon separators (the JSON-gravity tolerance). The full rule — comma-as-
    * separator vs R7RS unquote, the one lone JSON key `:` at an odd boundary, the tolerated
-   * trailing separator — is `docs/GRAMMAR.md §COMMA` (why a GLUED `:1` is one keyword token
+   * trailing separator — is `docs/grammar.md §COMMA` (why a GLUED `:1` is one keyword token
    * is §SUFFIX-FLIP).
    *
    * Local state: `separatorConsumed` / `colonConsumed` enforce the one-per-boundary budget.
@@ -396,7 +396,7 @@ export class Parser {
   /**
    * Validate + mint the `{…}` dict-literal node. Key admissibility (`:keyword` /
    * `"string"` / trailing-colon `key:` / unquote form), even arity, and duplicate-key
-   * rejection follow the E-DICT-* taxonomy in `docs/GRAMMAR.md §ERRORS`; the
+   * rejection follow the E-DICT-* taxonomy in `docs/grammar.md §ERRORS`; the
    * suffix-keyword flip is `suffixKeyName` (dict-grammar.ts). Validation lives here, not
    * in dict-grammar, because the errors need ParseError + source location.
    *

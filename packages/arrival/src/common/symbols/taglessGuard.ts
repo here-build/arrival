@@ -1,5 +1,5 @@
 // symbol.taglessGuard — per-tag factory file assembled into `symbol` by ./index.ts;
-// shared types live in ./_bake.js. docs/ASSEMBLY.md §SYMBOL-KINDS — the `tagless-guard` row
+// shared types live in ./_bake.js. docs/environments.md §SYMBOL-KINDS — the `tagless-guard` row
 // (graceful #f when the receiver has no method; mints its verdict here, R8).
 
 import * as z from "../scheme-zod.js";

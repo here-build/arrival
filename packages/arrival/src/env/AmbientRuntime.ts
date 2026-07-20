@@ -85,7 +85,7 @@ export let mintResolvingFrame!: (
  * Resolver/LexicalScope/Capabilities model, deliberately NOT renamed to "Scope"
  * (which {@link LexicalScope} owns) or "Frame".
  *
- * MONADIC FROM JS — the HERMETIC-ENVIRONMENT ruling (docs/ASSEMBLY.md §HERMETIC).
+ * MONADIC FROM JS — the HERMETIC-ENVIRONMENT ruling (docs/environments.md §HERMETIC).
  * No public birth surface: no `inherit()`/`merge()` method, no bindings-record/parent
  * constructor arm; frame birth is the module-internal
  * {@link mintFrame}/{@link mintPlainFrame}/{@link mintResolvingFrame} (the same

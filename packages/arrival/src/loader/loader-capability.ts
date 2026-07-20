@@ -1,5 +1,5 @@
 // loader-capability — `arrivalLoaderCapability`: the module system as a plain
-// `EnvCapability`, the worked exemplar of docs/ASSEMBLY.md §LOADER. `(require …)` /
+// `EnvCapability`, the worked exemplar of docs/environments.md §LOADER. `(require …)` /
 // `(require/extension …)` / `(require/register-extension …)` are declared here; all their
 // per-run state lives on the capability's own axes (configuration + resources), nothing wired
 // imperatively, nothing pushed OUT through callbacks. §LOADER states the model in full: `fs`

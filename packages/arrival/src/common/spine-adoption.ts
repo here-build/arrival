@@ -6,7 +6,7 @@
 // itself imports. Fusing the two would close the cycle
 // (scheme-zod → adopt → AJSArrayList → APair → AValue → scheme-zod) and nothing would load.
 //
-// docs/ASSEMBLY.md §CONTRACT — the MARK-is-data / ADOPTION-is-behavior split here is the governing
+// docs/environments.md §CONTRACT — the MARK-is-data / ADOPTION-is-behavior split here is the governing
 // chart-vs-crossing law one layer down: the contract picks the chart, and is not the thing that
 // performs the crossing.
 

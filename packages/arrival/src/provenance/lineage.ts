@@ -1,6 +1,6 @@
 /**
  * CARRIER CORE — the lineage data model + STATIC chunk classifier.
- * The pre-execution lens face in the static plane: docs/STATIC-PLANE.md §THE FOUR READERS 4.4
+ * The pre-execution lens face in the static plane: docs/static-plane.md §THE FOUR READERS 4.4
  * (PROVENANCE.md owns the runtime stamp/trace/replay — cross-link, don't duplicate).
  *
  * Provenance is a static lineage TREE (pipe / merge / fan / mux), minted only at
@@ -36,7 +36,7 @@
  * The `mux` cone is FORWARD-COMPAT ONLY: it is the conservative selector ∪
  * arms (the taken arm is unknowable statically) — the classifier voice of the one
  * conservative-narrowing law (OVER-ATTRIBUTE THE CONE, every widening keeps the
- * reported origin a SUPERSET of the true one: docs/STATIC-PLANE.md §CONSERVATIVE
+ * reported origin a SUPERSET of the true one: docs/static-plane.md §CONSERVATIVE
  * NARROWING); the byte-identical control-flow
  * "why" (predicate-taint, failed-clause non-leak) stays eager-sourced via the
  * evaluator's control-flow wrappers — we owe the *shape*, not a runtime taken-arm

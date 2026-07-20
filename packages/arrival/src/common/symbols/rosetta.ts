@@ -2,7 +2,7 @@
 // per-tag factory files re-assembled into the `symbol` namespace by `./index.ts`; the
 // shared types + helpers live in `./_bake.js`.
 //
-// docs/ASSEMBLY.md §SYMBOL-KINDS — the `rosetta` row (decode → validate → impl → encode →
+// docs/environments.md §SYMBOL-KINDS — the `rosetta` row (decode → validate → impl → encode →
 // mint, the one membrane chokepoint); §MEMBRANE-SEAM — the bake-side crossing this `run`
 // wrapper spins (source mints / pipe forwards, the region-scope gate). The crossing mechanics
 // below are the enforcement site the doc points at, kept in full here.
@@ -43,7 +43,7 @@ import {
  *  merge collision.
  *
  *  The hazard and why the fix is to make the shape UNAUTHORED (steer to `z.procedure`, whose decode
- *  marshals synchronously under the live scope) is docs/MEMBRANE.md §REGION (the `z.value`
+ *  marshals synchronously under the live scope) is docs/membrane.md §REGION (the `z.value`
  *  burst-bypass hazard): a callable marshaled from a `z.value` slot AFTER the impl's first `await`
  *  — past `withRegionScope`'s synchronous save/restore — binds `DETACHED_SCOPE`/`CONSTANT_CTX` and
  *  bypasses the effect burst. So this gate never lets one land there in the first place. */
@@ -284,7 +284,7 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
         //    `this.invocation`); a pure verb is an arrow that ignores `this`, so
         //    `impl.call(this, …)` is byte-identical to `impl(…)`. async is implicit.
         //
-        //    This ONE site carries the whole run model at runtime (docs/RUN-MODEL.md §CHOKEPOINT):
+        //    This ONE site carries the whole run model at runtime (docs/execution.md §CHOKEPOINT):
         //    args are decoded and the impl has NOT fired, so the run-cache interception (R2), the
         //    burst arm (W1, §BURST), and the read-clock stamp (W2, §READ-GUARD) all attach here,
         //    each reading its channel off `this.runCtx`:
@@ -330,7 +330,7 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
         if (scope) closeRegionScope(scope);
       }
 
-      // 3. PROVENANCE — the SAME spine as createRosettaWrapper (docs/MEMBRANE.md §SPINES). A
+      // 3. PROVENANCE — the SAME spine as createRosettaWrapper (docs/membrane.md §SPINES). A
       //    "source"-role rosetta (default) MINTS a fresh point off ctx.currentInvocation; a "pipe"-role rosetta is a
       //    TRANSFORM that FORWARDS the input-provenance union instead (mirrors defineRosetta's
       //    legacy `pure: true`). With no invocation in ctx (direct-JS) a source also falls back

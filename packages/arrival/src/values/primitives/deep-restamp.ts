@@ -49,7 +49,7 @@ export function reStampChild(
     return theVoid;
   }
   if (child === null) return p === EMPTY_PROVENANCE ? nil : new ANil(ctx, p);
-  // Legacy bare-fn procedure arm — docs/MEMBRANE.md §VOID-RULE.
+  // Legacy bare-fn procedure arm — docs/membrane.md §VOID-RULE.
   if (typeof child === "function") {
     warnMembrane("a JS function");
     return theVoid;
@@ -61,7 +61,7 @@ export function reStampChild(
   if (!(child instanceof AValue)) return child;
   // Same-provenance fast path preserves identity.
   if (p === EMPTY_PROVENANCE || p === child.provenance) return child;
-  // THE ADDITIVE LAW (docs/MEMBRANE.md §INBOUND): union the crossing's ids onto the child's own
+  // THE ADDITIVE LAW (docs/membrane.md §INBOUND): union the crossing's ids onto the child's own
   // origin, never substitute — erasing breaks `origin ⊇ dependencies` and uneval's slice soundness.
   const merged = mergeProvenance(child.provenance, p);
   if (merged === child.provenance) return child;

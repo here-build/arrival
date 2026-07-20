@@ -1538,7 +1538,7 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 // (BG2a whole-list / BG2b per-element / BG2c mixing), the R7RS/Racket/Clojure
 // union table, and the non-intersection argument (each bracket surface has ONE
 // dialect reading, so one input shape → one meaning with no context branch) —
-// is docs/GRAMMAR.md §BINDINGS. This is where it lands: `normalizeBindings` runs
+// is docs/grammar.md §BINDINGS. This is where it lands: `normalizeBindings` runs
 // the BG3 pure syntactic rewrite ONCE, before the existing per-binding walk,
 // lowering either bracket surface to the SAME cons-list-of-pairs a hand-written
 // paren form produces — so every downstream line evaluates a plain list and the
@@ -1553,7 +1553,7 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 // RULINGS.md's global R-ledger, keeping the two ledgers apart in source too.
 //
 // Executable spec: src/reader/__tests__/polyglot/macro-special-brackets.spec.ts;
-// error taxonomy in docs/GRAMMAR.md §ERRORS.
+// error taxonomy in docs/grammar.md §ERRORS.
 
 /** `do` doesn't accept the whole-list form (BG2a exclusion) — its 3-element
  *  steps make pairwise grouping ambiguous; the other five forms consume this
@@ -2063,7 +2063,7 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
 // Consumption site for the bracket-clauses superset. The model — a bracket clause
 // elementwise ≡ the parenthesized clause, the BG9 datum-list-stays-a-LIST rule, and
 // the non-intersection argument (bracket clauses are a purely Racket surface — Clojure's
-// `cond` is flat — so no dialect conflict exists) — is docs/GRAMMAR.md §CLAUSES.
+// `cond` is flat — so no dialect conflict exists) — is docs/grammar.md §CLAUSES.
 // `cond`/`case`/`do` are evaluator SPECIAL FORMS (this file), so consumption lands here
 // beside §BINDINGS's `normalizeBindings`: `normalizeClause` runs ONCE per clause, before
 // the existing clause walk, producing the plain-list shape a paren clause already is (same

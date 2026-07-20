@@ -5,7 +5,7 @@
 // at `bindCapabilityDefines`). Invoked from `../capability.ts`'s apply() Pass 2, once phase
 // 1 (every non-define kind) has already bound.
 //
-// docs/ASSEMBLY.md §PRELUDE — Pass-2 binding order, the FV locality law, and derived-role
+// docs/environments.md §PRELUDE — Pass-2 binding order, the FV locality law, and derived-role
 // (§AXES) are stated at the model level there; this file is the enforcement site the doc
 // points at, kept in full.
 //

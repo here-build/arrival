@@ -81,7 +81,7 @@ export interface ResolverSpec {
  *  satisfies this structurally — packs type against THIS, not the concrete class.
  *
  *  Deliberately NO `set`/`inherit`/`merge` member: the env is hermetic — born (assembled) and
- *  read only from JS, never mutated or extended (docs/ASSEMBLY.md §HERMETIC). This contract is
+ *  read only from JS, never mutated or extended (docs/environments.md §HERMETIC). This contract is
  *  defined HERE, not imported from arrival-scheme, so the dependency only ever points
  *  arrival-scheme → arrival-scheme-env (no cycle). A pack contributes bindings DECLARATIVELY
  *  (`symbols`/`resolvers`/`bootstrap`); binding is the assembly machinery's own act, through the

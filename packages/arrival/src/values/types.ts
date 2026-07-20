@@ -130,7 +130,7 @@ export type SchemeValue =
 // ─────────────────────────────────────────────────────────────────────────────
 // JSWorldValue / JSWorldArray — the JS side of the membrane, AT THE TYPE LEVEL.
 //
-// THE HYGIENE LAW (docs/MEMBRANE.md §HYGIENE) enforced as a TYPE: a borrowed store holds
+// THE HYGIENE LAW (docs/membrane.md §HYGIENE) enforced as a TYPE: a borrowed store holds
 // JS-world values only. Stated as a type, not (only) a runtime invariant, on purpose — a throw
 // catches the one path someone runs, a type catches EVERY violator at once in tsc, including the
 // ones no test covers (the breakage IS the audit). The limit is honest: a bare `unknown[]` still

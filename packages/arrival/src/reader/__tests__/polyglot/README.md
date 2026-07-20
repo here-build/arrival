@@ -1,12 +1,12 @@
 # Polyglot grammar specs — executable index
 
 These `*.spec.ts` / `*.test.ts` files pin arrival's non-standard reader/eval grammar. **The
-model — what each superset IS and why — lives in `docs/GRAMMAR.md`.** This file is the index:
+model — what each superset IS and why — lives in `docs/grammar.md`.** This file is the index:
 which spec pins which section, plus the runner conventions the tables follow.
 
 ## Which spec pins which section
 
-| spec file | GRAMMAR.md section |
+| spec file | grammar.md section |
 |---|---|
 | `curly-braces.spec.ts` | §LITERALS (`{…}` dicts), §COMMA, §SUFFIX-FLIP, §INFIX |
 | `vector-bracket.spec.ts` | §LITERALS (`[…]` vectors), §COMMA |
@@ -18,8 +18,8 @@ which spec pins which section, plus the runner conventions the tables follow.
 | `reader-baseline.spec.ts` | §COMMA (position-scoping — specials outside `[…]`/`{…}` retain base meaning) |
 
 Error codes asserted in these tables (`E-DICT-INFIX-BANNED`, `E-LET-BRACKET-*`, …) are the
-door taxonomy of `docs/GRAMMAR.md §ERRORS`; each spec hard-codes the code it expects, so the
-canonical meaning of every code is the GRAMMAR.md table.
+door taxonomy of `docs/grammar.md §ERRORS`; each spec hard-codes the code it expects, so the
+canonical meaning of every code is the grammar.md table.
 
 ## Runner conventions (`_harness.ts`)
 

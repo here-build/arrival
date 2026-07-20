@@ -5,7 +5,7 @@
 //
 // The model — the five-key CLOSED taxonomy, the MODULE-SINGLETON rule, the
 // module-singleton → `EnvPack` → assembled-env lowering chain, and "dependencies point down, only
-// down" — is docs/ASSEMBLY.md §CAPABILITY; this file is the enforcement site.
+// down" — is docs/environments.md §CAPABILITY; this file is the enforcement site.
 //
 // Local to this file: the `symbols` record (and the legacy `this`-reading arms) carry
 // `ThisType<Activation<C,R>>`, so `this.configuration.<k>` is `z.infer`'d and `this.resources.<k>`
@@ -76,7 +76,7 @@ export interface Activation<C extends ZodMap, R extends Record<string, Resource<
   /** Door-set degradation (`./degradation.js`'s `DegradationInfo`). Present on EVERY activation;
    *  under `"forbid"` (the default) it is purely informational, and a builder-form `symbols` MAY,
    *  under `"doors"`, destructure it to trade a manual `if (x !== undefined)` withhold for a
-   *  cause-carrying door — model in docs/ASSEMBLY.md §DEGRADATION; migrated shape in
+   *  cause-carrying door — model in docs/environments.md §DEGRADATION; migrated shape in
    *  `@inhuman.tools/arrival/loader`'s `require`/`require/extension`. */
   readonly degradation: DegradationInfo;
 }
@@ -224,7 +224,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
    *  `degradation`: `"forbid"` (the default — host/provisioning posture) or `"doors"`
    *  (program-scoped callers opt in). Threaded to every dep's own `lower()` call, same as
    *  `evalScheme`/`config`, so a degraded dep and a degraded root see the SAME mode. The mode
-   *  changes nothing by itself (docs/ASSEMBLY.md §DEGRADATION); see `./degradation.js`. */
+   *  changes nothing by itself (docs/environments.md §DEGRADATION); see `./degradation.js`. */
   lower(
     opts: { evalScheme?: EvalSchemeInto; config?: Partial<InferCfg<C>>; degradation?: DegradationMode } = {},
   ): LoweredPack {
@@ -242,7 +242,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
     // Door-set degradation: computed from the RAW config bag (pre-`schema.parse`, which already ran
     // above and would have thrown for a present-but-invalid or a genuinely-required-and-absent key —
     // this scan only ever looks at declared-OPTIONAL keys, so it never masks either of those two
-    // throw paths). Under `"forbid"` (unset) `missingKeys` is purely informational (docs/ASSEMBLY.md
+    // throw paths). Under `"forbid"` (unset) `missingKeys` is purely informational (docs/environments.md
     // §DEGRADATION).
     const degradationMode: DegradationMode = opts.degradation ?? "forbid";
     const missingKeys = missingOptionalKeys(
@@ -306,7 +306,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
         await spawned;
       },
       async apply(env: SchemeEnv, ctx?: PackContext<SchemeEnv>) {
-        // HERMETIC NARROW (instanceof DOOR, never a cast; docs/ASSEMBLY.md §HERMETIC): with
+        // HERMETIC NARROW (instanceof DOOR, never a cast; docs/environments.md §HERMETIC): with
         // `SchemeEnv.set` hard-deleted, binding goes through the module-internal `bindValue`
         // (AmbientRuntime.ts), which writes real AmbientRuntime storage. Packs are applied onto real
         // envs everywhere in production (env-roots leaves, `LexicalScope.fresh()` roots, `inherit()`
@@ -327,13 +327,13 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
         const envTarget: PreludeBindTarget = { set: (n, v) => bindValue(env, n, v as AmbientValue) };
         // preludeOnly routing: a baked native/rosetta def marked `preludeOnly: true` binds onto
         // `ctx.preludeScope` instead of the runtime env — the assembly-time-only contract is
-        // docs/ASSEMBLY.md §PRELUDE. Same bind form either way (native → raw impl; rosetta → the
+        // docs/environments.md §PRELUDE. Same bind form either way (native → raw impl; rosetta → the
         // gated run wrapper); only the TARGET scope differs. Absent `ctx.preludeScope` (a bare direct
         // apply outside any assembly), fall back to `env` so the symbol is never silently dropped.
         const bindTarget = (def: AEntity): PreludeBindTarget =>
           "preludeOnly" in def && def.preludeOnly ? (ctx?.preludeScope ?? envTarget) : envTarget;
         const prefix = spec.symbolPrefix ?? "";
-        // Two-phase binding (docs/ASSEMBLY.md §PRELUDE): symbol.define/symbol.defineSyntax entries
+        // Two-phase binding (docs/environments.md §PRELUDE): symbol.define/symbol.defineSyntax entries
         // are collected here (in declaration order — JS object-key insertion order) and
         // evaluated+bound in Pass 2, AFTER every other kind. `ownNames` is the letrec* NAME
         // VISIBILITY set — see `BindCapabilityDefinesArgs.ownNames` (define-bake.ts) for the full

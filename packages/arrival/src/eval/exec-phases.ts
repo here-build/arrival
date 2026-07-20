@@ -109,7 +109,7 @@ export interface SymbolDescription {
 
 /** Phase 2 — the assembled ambient as a value: the composition, minus the mutable scope
  *  (`topScope` is phase 3's). The ambient is session/realm-scoped and shared across concurrent
- *  runs while scope+meter stay per-run — the lifetime split of docs/RUN-MODEL.md §HERMETIC, made
+ *  runs while scope+meter stay per-run — the lifetime split of docs/execution.md §HERMETIC, made
  *  a type fact. Mint via `assembleAmbient` (generator-exec); reuse via `exec(code, { ambient })`
  *  — CALLER-owned there (exec will not dispose it). */
 export interface AssembledAmbient extends AsyncDisposable {
@@ -381,7 +381,7 @@ export function classifierFromAmbient(ambient: AssembledAmbient): ReturnType<typ
 
 /** Phase 3 — one run's armament. Cheap, per-exec: the ambient is shared; scope is
  *  caller-passed (REPL continuity) or obtained; ONLY `runCtx` is always fresh (per-run) — the
- *  per-run home of docs/RUN-MODEL.md §HERMETIC. */
+ *  per-run home of docs/execution.md §HERMETIC. */
 export interface ExecInstance {
   readonly ambient: AssembledAmbient;
   readonly scope: LexicalScope;

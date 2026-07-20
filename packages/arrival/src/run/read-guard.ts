@@ -2,7 +2,7 @@
  * read-guard — the read log + the read∩write deferral guard, sibling of `EffectLog` on the
  * `RunContext`. The rule it enforces (a burst must not read its own deferred write), the
  * injectable-seam design (the real tracker is a mobx context over plexus reads, host-armed),
- * and the predict-at-enqueue write-set model are docs/RUN-MODEL.md §READ-GUARD.
+ * and the predict-at-enqueue write-set model are docs/execution.md §READ-GUARD.
  *
  * Import contract this file holds up: `ReadTracker`/`WriteSetResolver` are INJECTABLE interfaces
  * arrival core only calls through — this module adds NO mobx/plexus import (package.json is

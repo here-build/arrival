@@ -1,5 +1,5 @@
 // symbol.tagless — per-tag factory file assembled into `symbol` by ./index.ts; shared
-// types live in ./_bake.js. docs/ASSEMBLY.md §SYMBOL-KINDS — the `tagless` row (no impl;
+// types live in ./_bake.js. docs/environments.md §SYMBOL-KINDS — the `tagless` row (no impl;
 // dispatch to the operand's own term, receiver = last scheme arg, a missing method THROWS).
 
 import * as z from "../scheme-zod.js";

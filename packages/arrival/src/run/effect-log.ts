@@ -1,7 +1,7 @@
 /**
  * effect-log — the gathered-effect manifest for one run, the ORDERED sibling of `RunCache`.
  * The model (why it never deduplicates — "two effects, always" — the poison rule, and where
- * entries are gathered) is docs/RUN-MODEL.md §BURST. This file owns the log entity and the
+ * entries are gathered) is docs/execution.md §BURST. This file owns the log entity and the
  * drain (`burst`); it does NOT own the read-clock guard (read-guard.ts) or the conflict
  * re-execution comparator (unbuilt).
  *
@@ -33,7 +33,7 @@ export interface EffectEntry {
 
 /** An ordered, append-only manifest of gathered sink penetrations for ONE run. Never
  *  deduplicates (contrast `RunCache`'s content-keyed `Map`) and never drops an entry (the poison
- *  rule, docs/RUN-MODEL.md §BURST — a failed burst leaves the log as-is; the CALLER decides
+ *  rule, docs/execution.md §BURST — a failed burst leaves the log as-is; the CALLER decides
  *  whether a poisoned log is drained again, this entity does not self-police). */
 export interface EffectLog {
   readonly entries: readonly EffectEntry[];

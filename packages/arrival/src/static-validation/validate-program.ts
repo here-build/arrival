@@ -8,7 +8,7 @@
 // `StaticValidationError` at parse phase, before the first form evaluates).
 //
 // THE SOUNDNESS CONTRACT (binding) — the static-validator voice of the one conservative-
-// narrowing law (DEGRADE TO WARNING, NEVER A FALSE POSITIVE: docs/STATIC-PLANE.md
+// narrowing law (DEGRADE TO WARNING, NEVER A FALSE POSITIVE: docs/static-plane.md
 // §CONSERVATIVE NARROWING): the `error` tier advertises no spurious
 // `unbound-symbol` errors MODULO the EXCLUDED reachability strictness — a dead-branch
 // reference (`(if #f (missing) 42)`) reports BY DESIGN (dead references are drift) and

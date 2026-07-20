@@ -33,7 +33,7 @@ import { withDynamicCallSite } from "../eval/dynamic-call-site.js";
 import type { AList, AListAlike, SchemeValue } from "../values/types.js";
 
 /**
- * The codec vocabulary — the membrane's per-arg codecs. docs/ASSEMBLY.md §CONTRACT frames the
+ * The codec vocabulary — the membrane's per-arg codecs. docs/environments.md §CONTRACT frames the
  * two faces this table's columns carry (`z.input` = the SCHEME face, `z.output` = the JS face)
  * and the `z.value` no-transform escape hatch; the codec mechanics below are the membrane model
  * (its own doc), kept in full here.
@@ -862,7 +862,7 @@ export const box = named(
  * untraceable) — `encode` only legitimate for an argument marshalled inward.
  *
  * `decode` is the TYPED half of the reverse-membrane crossing — one discipline shared with the
- * untyped path (docs/MEMBRANE.md §REGION): it reads the same ambient region scope as `rosetta.ts`'s
+ * untyped path (docs/membrane.md §REGION): it reads the same ambient region scope as `rosetta.ts`'s
  * `schemeToJs` (`currentRegionScope()`), falling back to `DETACHED_SCOPE` when decoded with no
  * crossing live (e.g. a unit test calling `.parse(...)` directly).
  */
@@ -877,7 +877,7 @@ export function procedure<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(input?
         // encode/decode in/out param types are opaque conditionals here (generic boundary).
         decode: (callable) => {
           const scope = currentRegionScope() ?? DETACHED_SCOPE;
-          // `"typed"` = this factory family's slot in the two-level wrapper cache — docs/MEMBRANE.md
+          // `"typed"` = this factory family's slot in the two-level wrapper cache — docs/membrane.md
           // §REGION (and RegionScope.cache's doc): the pre-split single key let whichever family
           // crossed a callable FIRST serve its wrapper to the other.
           let byKey = scope.cache.get(callable);
@@ -888,7 +888,7 @@ export function procedure<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(input?
           const cached = byKey.get("typed");
           if (cached) return cached;
           // Wrapper CLOSES OVER `scope` (minted here at decode time), never re-reads the ambient
-          // holder — docs/MEMBRANE.md §REGION. `withRegionCall` owns escape/pending/abort
+          // holder — docs/membrane.md §REGION. `withRegionCall` owns escape/pending/abort
           // bookkeeping; this closure owns only marshaling.
           const wrapper = (...jsArgs: unknown[]) =>
             withRegionCall(scope, async () => {

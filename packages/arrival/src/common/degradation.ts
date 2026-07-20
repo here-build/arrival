@@ -1,7 +1,7 @@
 // degradation.ts — door-set degradation: the IMPLEMENTATION and domain types. Model (absent
 // OPTIONAL enabling config narrows a capability's affected symbols to a cause-carrying DOOR-SET
 // instead of silent withholding, only under `degradation: "doors"`; `forbid`, the default, changes
-// nothing — it only records what is missing) is docs/ASSEMBLY.md §DEGRADATION.
+// nothing — it only records what is missing) is docs/environments.md §DEGRADATION.
 //
 // Two failure classes are DELIBERATELY untouched — present-but-invalid config (schema.parse's own
 // job, unconditional) and pack apply errors (a defect, never a door) STAY throw paths in BOTH
@@ -26,7 +26,7 @@ import type { DoorCause, DoorSymbolDef } from "./symbols/_bake.js";
 
 /** `"forbid"` (the host/provisioning default) vs `"doors"` (program-scoped entry points —
  *  agent-exec, DiscoveryTool sessions, custdev harnesses — opt in). The mode changes nothing on
- *  its own (docs/ASSEMBLY.md §DEGRADATION); narrowing is caller-scoped, never retroactive over
+ *  its own (docs/environments.md §DEGRADATION); narrowing is caller-scoped, never retroactive over
  *  unmigrated callers. */
 export type DegradationMode = "forbid" | "doors";
 

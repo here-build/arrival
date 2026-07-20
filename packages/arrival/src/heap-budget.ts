@@ -1,6 +1,6 @@
 // heap-budget.ts — the per-run ALLOCATION bound (the memory analogue of the wall-clock
 // `budgetMs`). Ownership, the mints-not-borrows rule, the TICK blind spot it exists for, and the
-// string/bigint blind spots all live in docs/RUN-MODEL.md §BUDGETS — the single home. Monotonic:
+// string/bigint blind spots all live in docs/execution.md §BUDGETS — the single home. Monotonic:
 // it bounds cumulative work, not live heap.
 //
 // WHERE this file charges (the local mechanism §BUDGETS names but does not site): two chokepoints,
@@ -13,7 +13,7 @@
 //
 // The charge site reads `ctxOf(operand).heapMeter` (or the `runCtx` threaded through a CallCtx)
 // directly — no env-node courier, no parent-chain walk — because every value built during a run
-// carries the SAME RunContext (docs/RUN-MODEL.md §HERMETIC), which is also what makes the meter
+// carries the SAME RunContext (docs/execution.md §HERMETIC), which is also what makes the meter
 // safe against async interleaving of concurrent runs.
 
 import type { RunContext, HeapMeter } from "./run/RunContext.js";

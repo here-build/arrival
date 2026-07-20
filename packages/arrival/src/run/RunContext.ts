@@ -5,7 +5,7 @@
  *
  * The model this type realizes — why run-state is DATA-LOCAL (hermetic exec on one shared
  * isolate), the three ctx species (live-run / CONSTANT_CTX / parse), and the five channels'
- * arm-subset-wise `X | undefined ⇒ facility off` rule — is docs/RUN-MODEL.md §HERMETIC,
+ * arm-subset-wise `X | undefined ⇒ facility off` rule — is docs/execution.md §HERMETIC,
  * §CTX-SPECIES, §CHANNELS. This file is their enforcement site; the per-field docs below are
  * the landings those sections name.
  *
@@ -33,22 +33,22 @@ export interface RunContext {
   readonly strict: boolean;
   /** Per-run allocation bound; `undefined` ⇒ unbounded (default — only sandbox/agent runs opt in). */
   readonly heapMeter: HeapMeter | undefined;
-  /** The freeze contract (docs/MEMBRANE.md §BOXING): freeze a borrowed AJSObject/AJSArray source on
+  /** The freeze contract (docs/membrane.md §BOXING): freeze a borrowed AJSObject/AJSArray source on
    *  first Scheme read. `false` opts out (host keeps it mutable). Default `true`. */
   readonly freezeRosettaReturns: boolean;
   /** The run's execution-budget signal — the SAME AbortSignal the trampoline reads, so all
    *  consumers observe abort state off one reference that cannot drift. */
   readonly signal: AbortSignal | undefined;
   /** The run's cache (run-cache.ts); `undefined` ⇒ no interception. Armed ⇒ gates record/replay
-   *  per the stamped cache class (docs/RUN-MODEL.md §MODE-LAW). */
+   *  per the stamped cache class (docs/execution.md §MODE-LAW). */
   readonly cache: RunCache | undefined;
   /** The run's gathered-effect manifest (effect-log.ts); `undefined` ⇒ no burst arm (a sink fires
    *  immediately). Armed ⇒ a `sink` penetration during a PRIME run gathers instead of firing
-   *  (docs/RUN-MODEL.md §BURST). */
+   *  (docs/execution.md §BURST). */
   readonly effects: EffectLog | undefined;
   /** The run's read-tracking + deferral-guard seam (read-guard.ts); `undefined` ⇒ no tracking, no
    *  guard. Armed ⇒ the eval loop wraps each top-level form in a tracking region and runs the
-   *  read∩write guard after each form (docs/RUN-MODEL.md §READ-GUARD). */
+   *  read∩write guard after each form (docs/execution.md §READ-GUARD). */
   readonly reads: ReadGuard | undefined;
   /** The run's model-facing note channel (note-sink.ts); `undefined` ⇒ notes are dropped. */
   readonly notes: NoteSink | undefined;
@@ -94,7 +94,7 @@ export function makeRunContext(
 }
 
 /**
- * The run-NEUTRAL context (docs/RUN-MODEL.md §CTX-SPECIES). Carried by values that outlive
+ * The run-NEUTRAL context (docs/execution.md §CTX-SPECIES). Carried by values that outlive
  * any single run: the singletons, quoted-literal AST nodes (`evalQuote` returns them by
  * reference across runs), everything constructed at bootstrap before a run exists. Frozen,
  * `strict=false`, no meter, all five channels `undefined` — nobody is listening, so a value
@@ -113,7 +113,7 @@ export const CONSTANT_CTX: RunContext = Object.freeze({
 });
 
 /**
- * The parse-origin context family (docs/RUN-MODEL.md §CTX-SPECIES) — CONSTANT_CTX plus
+ * The parse-origin context family (docs/execution.md §CTX-SPECIES) — CONSTANT_CTX plus
  * `origin: "parse"` and the per-datum `SourceLocation`, which for leaf literals (symbols,
  * strings, numbers, chars, vectors, bytevectors, dicts) is their FIRST source identity (only
  * APair has a location slot; every other node kind's source identity lives on the ctx channel).

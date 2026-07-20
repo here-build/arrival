@@ -8,7 +8,7 @@
 // The dict literal's dual data/code nature (why the node is an ADict, not a distinct AST
 // kind — its CODE / `quote` / `quasiquote` faces), the read-time-static-or-unquote key
 // shapes, and the AVector-parallel datum face (AJSObject plays no part) are the model of
-// `docs/GRAMMAR.md §LITERALS`.
+// `docs/grammar.md §LITERALS`.
 import { ADict, type DictKey, type DictLiteralNode } from "../values/primitives/ADict.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AString } from "../values/primitives/AString.js";

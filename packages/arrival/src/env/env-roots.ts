@@ -4,7 +4,7 @@
 // (eval/generator-exec.ts), lazily on first exec, realm-cached: no module-load
 // side effects, so the package keeps `sideEffects: false`.
 //
-// The two-root bootstrap is docs/ASSEMBLY.md §ASSEMBLY (why `global_env`'s
+// The two-root bootstrap is docs/environments.md §ASSEMBLY (why `global_env`'s
 // NATIVE_PACKS must be live before `user_env`'s BASE_PACKS preludes evaluate — one
 // root cannot host both) and §HERMETIC (each root seals into a frozen
 // `CompiledResolutionChain`; the phase-1/phase-2 write windows). What is local to

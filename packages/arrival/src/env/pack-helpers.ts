@@ -1,6 +1,6 @@
 // Shared env-layer helpers for capability packs.
 //
-// Pack isolation (docs/ASSEMBLY.md §CAPABILITY: a capability reaches another only
+// Pack isolation (docs/environments.md §CAPABILITY: a capability reaches another only
 // through a declared `deps` edge, never sideways into its internals) forbids a PACK
 // importing another PACK — it does NOT forbid packs sharing a non-pack env-layer
 // module, exactly as they all share `common/capability.ts` and

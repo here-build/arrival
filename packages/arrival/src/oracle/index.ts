@@ -1,7 +1,7 @@
 // oracle/index.ts — Track O assembly point (the local module export).
 //
 // Public face of the constraint-kernel oracle (Track A of sift/docs/CONSTRAINT-KERNEL-SPEC.md;
-// its place in the static plane: docs/STATIC-PLANE.md §THE FOUR READERS 4.2).
+// its place in the static plane: docs/static-plane.md §THE FOUR READERS 4.2).
 // Assembles the Layer-S structural reader (scanner.ts) behind the contract interfaces
 // (contract.ts). The package-level public export is the deferred `Ocontract`/`A3` node, added
 // through src/index.ts's explicit allowlist — this file is the module-local boundary that node

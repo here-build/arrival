@@ -36,7 +36,7 @@ import {
 import { withDynamicCallSite } from "../eval/dynamic-call-site.js";
 
 // warnMembrane lives in leaf membrane-warn.ts, shared with boxing.ts `function` boxer — value layer needn't import evaluator-heavy module just to warn.
-// Non-portable JS value → #void, loudly: docs/MEMBRANE.md §VOID-RULE.
+// Non-portable JS value → #void, loudly: docs/membrane.md §VOID-RULE.
 import { warnMembrane } from "./membrane-warn.js";
 import { makeCallCtx, type CallCtx } from "../run/CallCtx.js";
 import { tf } from "../values/tagless-final.js";
@@ -105,7 +105,7 @@ export interface InvocationLike {
 
 /**
  * Reverse-membrane wrapper (scheme callable → region-scoped async JS fn): the discipline is
- * docs/MEMBRANE.md §REGION — the wrapper closes over the ambient `RegionScope`
+ * docs/membrane.md §REGION — the wrapper closes over the ambient `RegionScope`
  * (`currentRegionScope()`), never re-reads it (so a late call sees the closed scope, tripping the
  * escape door), and identity is per (callable, scope, FAMILY) on the scope-owned cache.
  */
@@ -118,7 +118,7 @@ function isBounceMarker(x: unknown): x is SchemeBounceMarker {
  * is_callable_value branch AND exported for membrane.toJS()'s matching special-case — kept out of
  * ACallable's `arrival/toJS` so the class need not import rosetta.ts (scheme-zod init cycle).
  * Keyed by `EgressMode` in the scope-owned two-level cache (its projection varies with the
- * `options` bag); scheme-zod's typed decode shares that cache under `"typed"` — docs/MEMBRANE.md
+ * `options` bag); scheme-zod's typed decode shares that cache under `"typed"` — docs/membrane.md
  * §REGION, and RegionScope.cache's doc. */
 export function callableToHostFn(value: ACallable, options: RosettaOptions): (...args: unknown[]) => unknown {
   const scope = currentRegionScope() ?? DETACHED_SCOPE;
@@ -155,7 +155,7 @@ export function callableToHostFn(value: ACallable, options: RosettaOptions): (..
  *
  * The exporting scope is pinned ONCE here (both rosetta crossings run this inside the live
  * `withRegionScope` window) and every lazy element materialization re-enters it via
- * `withRegionScope(pinned, …)` — docs/MEMBRANE.md §EGRESS (scope-bound cache) and §REGION.
+ * `withRegionScope(pinned, …)` — docs/membrane.md §EGRESS (scope-bound cache) and §REGION.
  * Unpinned, a nested callable would mint its wrapper at first proxy read under
  * DETACHED_SCOPE/CONSTANT_CTX, a discipline bypass. Paths with no ambient scope (exec's simple
  * tier, trace/display) pin DETACHED_SCOPE.
@@ -321,7 +321,7 @@ export interface InboundClaim {
 /**
  * THE inbound claim registry — jsToScheme's whole value-kind algebra as one DECLARED,
  * ORDERED table (first claiming row wins; the order is semantic law, not import accident, and
- * the registry law test pins it). The row order and each row's rationale are docs/MEMBRANE.md
+ * the registry law test pins it). The row order and each row's rationale are docs/membrane.md
  * §INBOUND (the ordered claim registry); each row below carries its own one-line contract.
  *
  * NOTE the registry-vs-switch history in boxing.ts: what that header rejects is
@@ -356,7 +356,7 @@ export const INBOUND_CLAIMS: readonly InboundClaim[] = [
     box: (ctx, v, p, seen) => {
       invariant(v instanceof AValue, "inbound claim 'AValue': box called off its predicate");
       if (p === EMPTY_PROVENANCE || p === v.provenance) return v;
-      // THE ADDITIVE LAW (docs/MEMBRANE.md §INBOUND): merge the crossing's origin onto the value's,
+      // THE ADDITIVE LAW (docs/membrane.md §INBOUND): merge the crossing's origin onto the value's,
       // never overwrite — union keeps `origin ⊇ dependencies`, the precondition uneval's Galois
       // slicing rests on (provenance/uneval.ts); replace would drop the value's own lineage.
       const merged = mergeProvenance(v.provenance, p);
@@ -566,7 +566,7 @@ export function bigintToNumber(value: bigint): number {
 
 export const createRosettaWrapper = ({ fn, options = {}, pure = false }: RosettaFunction) => {
   // `pure: true` forwards inputs' provenance and mints nothing (the `pure?` field doc); a pure
-  // rosetta physically cannot mutate its borrowed inputs — the freeze contract, docs/MEMBRANE.md §BOXING.
+  // rosetta physically cannot mutate its borrowed inputs — the freeze contract, docs/membrane.md §BOXING.
   const mintsPoint = pure !== true;
 
   return async function rosettaWrapper(this: CallCtx, ...schemeArgs: SchemeValue[]) {

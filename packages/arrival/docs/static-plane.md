@@ -10,7 +10,7 @@
 > answers, the single law they all obey, and why each must AGREE with a runtime layer
 > rather than merely coexist with it.
 
-Section anchors are CAPS so code comments can cite `docs/STATIC-PLANE.md §<ANCHOR>`. Each
+Section anchors are CAPS so code comments can cite `docs/static-plane.md §<ANCHOR>`. Each
 section closes with its enforcement sites (files, no line numbers — those rot). Every
 claim here is grounded in those files; when code and this document disagree, one is a
 bug — decide which before writing a line.
@@ -22,10 +22,10 @@ the truth — the type lens's charter), **P14** (staging done right: the lineage
 is a whole future interpreter, present in the tree, gated), **P15** (the agreement law —
 the strongest suites are interpretation-agreement laws). `PROVENANCE.md` OWNS runtime
 lineage (§2 the declaration-role vocabulary the classifier reads, §7 the laws); this
-document owns only the pre-execution lens FACE of it. `ASSEMBLY.md §CONTRACT` (the type
+document owns only the pre-execution lens FACE of it. `environments.md §CONTRACT` (the type
 lens is the harvested-`.d.ts` reader — one of the contract's four codec-readers that must
 agree) and `§AXES` (the provenance role the classifier reads off each bound value, P7).
-`GRAMMAR.md` (the reader surface the oracle scans). The constraint-kernel contract the
+`grammar.md` (the reader surface the oracle scans). The constraint-kernel contract the
 oracle implements is CROSS-PACKAGE — `sift/docs/CONSTRAINT-KERNEL-SPEC.md`, its interfaces
 `sift/src/sampler/oracle-contract.ts`, its reference reader `sift/src/sampler/prefix-oracle.ts`;
 this document points at that spec, it does not fork the model.
@@ -70,7 +70,7 @@ verdict is a DEFECT, never a tradeoff.** This is the single home for a law the c
 currently states in four voices; here it is stated once, and the four instantiations are
 named. The law is P15's agreement discipline made operational: a static interpreter that
 must AGREE with runtime may be LESS restrictive than the runtime, never MORE — the exact
-`origin ⊇ dependencies` shape the membrane's additive law rests on (`MEMBRANE.md §INBOUND`:
+`origin ⊇ dependencies` shape the membrane's additive law rests on (`membrane.md §INBOUND`:
 over-approximation is safe, under-approximation is fatal), transposed to four planes. Which
 answer is "the safe side" is fixed by what the reader would break if it tightened wrongly:
 

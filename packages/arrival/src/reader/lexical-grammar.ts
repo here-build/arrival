@@ -68,7 +68,7 @@ export const complex_bare_re = new RegExp(`^(?:${gen_complex_re("", "[0-9a-f]")}
 export const parsable_contants = {
   // `#null` → nil, `#void` → the void singleton: loose-mode-only readable literals whose
   // VALUES exist under any mode. Model — the Rosetta translation, why they gate on
-  // portability, what strict mode does — is `docs/GRAMMAR.md §LOOSE-STRICT`.
+  // portability, what strict mode does — is `docs/grammar.md §LOOSE-STRICT`.
   "#null": nil,
   "#void": theVoid,
 };

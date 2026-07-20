@@ -5,7 +5,7 @@
 // `EnvCapability` each (mirroring env/srfi/). Importable from ONE subpath:
 //   import { binding, exceptions, allR7rs } from "./r7rs/index.js";
 //
-// Assembly is order-independent (docs/ASSEMBLY.md §ASSEMBLY: every form is a
+// Assembly is order-independent (docs/environments.md §ASSEMBLY: every form is a
 // `define-macro`, expanded at CALL time against the fully-assembled userEnv, so
 // cross-part references like guard→cond/raise resolve regardless of pack order).
 // cond/case/when/unless are NOT here — they are evaluator SPECIAL FORMS

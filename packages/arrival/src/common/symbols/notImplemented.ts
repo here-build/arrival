@@ -1,5 +1,5 @@
 // symbol.notImplemented — per-tag factory file assembled into `symbol` by ./index.ts;
-// shared types live in ./_bake.js. docs/ASSEMBLY.md §SYMBOL-KINDS — the door row
+// shared types live in ./_bake.js. docs/environments.md §SYMBOL-KINDS — the door row
 // (errors-as-doors); §DEGRADATION — a notImplemented door is a permanent omission (empty `needs`).
 
 import { parseNameDoc, type DoorSymbolDef } from "./_bake.js";

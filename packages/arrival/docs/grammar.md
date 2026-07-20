@@ -11,7 +11,7 @@
 > shape. It is the model; the `*.spec.ts` files under
 > `src/reader/__tests__/polyglot/` are its executable pins.
 
-Section anchors are CAPS so code comments can cite `docs/GRAMMAR.md §<ANCHOR>`. Each
+Section anchors are CAPS so code comments can cite `docs/grammar.md §<ANCHOR>`. Each
 section closes with its enforcement sites (files, no line numbers — those rot). Every
 claim here is grounded in those files; when code and this document disagree, one is a
 bug — decide which before writing a line.
@@ -284,7 +284,7 @@ Racket's reading already equals the rewrite.
 
 *(This section owns the SYNTAX face of member access. The read MECHANISM — the interop
 policy, the prototype-walk boundary, the module-local capability brand — lives in
-`docs/MEMBRANE.md §MEMBER-READ`, its canonical home. Cross-link, don't restate.)*
+`docs/membrane.md §MEMBER-READ`, its canonical home. Cross-link, don't restate.)*
 
 **Two surface syntaxes read a member, and both bottom out in ONE interop read.** `@` /
 `@?` / `@keys` (the explicit read/has/keys surface) and `(:key obj)` (the keyword
@@ -321,7 +321,7 @@ there is exactly one way in.
 `normalizeMemberKey`), `values/primitives/ADict.ts`, `values/primitives/ASymbol.ts`
 (the self-evaluating keyword accessor), `eval/Resolver.ts` (`resolveSynth`, the
 dotted-path negative boundary), `membrane/interop-access.ts` (mechanism — see
-`docs/MEMBRANE.md §MEMBER-READ`).
+`docs/membrane.md §MEMBER-READ`).
 
 ---
 
@@ -384,5 +384,5 @@ The dialect packs' VOCABULARY — Clojure/Racket threading macros (`->`/`->>`/`~
 stdlib completion (`str`, `get-in`, `mapv`, `frequencies`, …), Common Lisp's `mapcar`,
 the composition family — is env-capability content, not grammar. It lives in the
 `scheme/polyglot-{clojure,racket,lisp}` packs and is documented as capability material
-(`docs/ASSEMBLY.md`, the `env-capability-authoring` skill), not here. This document
+(`docs/environments.md`, the `env-capability-authoring` skill), not here. This document
 covers only the reader/evaluator grammar the packs thread through.
