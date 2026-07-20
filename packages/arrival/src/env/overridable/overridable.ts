@@ -72,18 +72,18 @@
 
 import { z } from "zod";
 
-import { TypeTagError } from "../errors.js";
-import { EnvCapability } from "../common/capability.js";
-import { symbol, type CallCtx } from "../common/symbol.js";
+import { TypeTagError } from "../../errors.js";
+import { EnvCapability } from "../../common/capability.js";
+import { symbol, type CallCtx } from "../../common/symbol.js";
 // The scheme-aware zod vocabulary — only the identity carrier `sz.value` is needed here (the
 // verb decodes/encodes manually via `schemeToJs`/`jsToScheme`; no codec crossing at the contract
 // level). NOT `sz.symbol` for the `name` param — see that param's own comment below for why.
-import * as sz from "../common/scheme-zod.js";
-import { jsToScheme, schemeToJs } from "../membrane/rosetta.js";
-import { stripOptionalSuffix, tagToJsonSchema } from "../common/schema-tag.js";
-import { CONSTANT_CTX } from "../run/RunContext.js";
-import { ASymbol } from "../values/primitives/ASymbol.js";
-import { schemaCapability } from "./schema.js";
+import * as sz from "../../common/scheme-zod.js";
+import { jsToScheme, schemeToJs } from "../../membrane/rosetta.js";
+import { stripOptionalSuffix, tagToJsonSchema } from "../../common/schema-tag.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
+import { ASymbol } from "../../values/primitives/ASymbol.js";
+import { schemaCapability } from "../schema/schema.js";
 
 /** Lower a `define/overridable` type tag — an EVALUATED scheme value, already `schemeToJs`'d
  *  into the canonical JS tagged-list form (a bare string, or an array the s/* constructors

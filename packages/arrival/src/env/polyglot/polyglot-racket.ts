@@ -49,16 +49,16 @@
 // deps order matches base-packs.ts's C3 tail-block order (dependents before
 // dependencies) — see base-packs.ts's own header.
 
-import { EnvCapability } from "../common/capability.js";
-import { symbol } from "../common/symbol.js";
-import * as z from "../common/scheme-zod.js";
+import { EnvCapability } from "../../common/capability.js";
+import { symbol } from "../../common/symbol.js";
+import * as z from "../../common/scheme-zod.js";
 import polyglotClojure from "./polyglot-clojure.js";
 import polyglot from "./polyglot.js";
-import equality from "./r7rs/equality.js";
-import numeric from "./r7rs/numeric.js";
-import vectors from "./r7rs/vectors.js";
-import lists from "./r7rs/lists.js";
-import exceptions from "./r7rs/exceptions.js";
+import equality from "../r7rs/equality.js";
+import numeric from "../r7rs/numeric.js";
+import vectors from "../r7rs/vectors.js";
+import lists from "../r7rs/lists.js";
+import exceptions from "../r7rs/exceptions.js";
 
 export default new EnvCapability("scheme/polyglot-racket", {
   deps: [polyglotClojure, polyglot, equality, numeric, exceptions, vectors, lists],

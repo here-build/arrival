@@ -75,21 +75,21 @@
 // SINGLE SOURCE: `base-packs.ts` assembles this pack (via initBridge's assembleEnv),
 // so this module is the sole definition site.
 
-import { EnvCapability } from "../common/capability.js";
-import { symbol, type CallCtx } from "../common/symbol.js";
-import * as z from "../common/scheme-zod.js";
+import { EnvCapability } from "../../common/capability.js";
+import { symbol, type CallCtx } from "../../common/symbol.js";
+import * as z from "../../common/scheme-zod.js";
 import dedent from "dedent";
-import { schemeBool } from "../values/op-helpers.js";
-import { AString } from "../values/primitives/AString.js";
-import { ASymbol } from "../values/primitives/ASymbol.js";
-import { ACharacter } from "../values/primitives/ACharacter.js";
-import { ADict, foldKeyName, type DictKey } from "../values/primitives/ADict.js";
-import { ANil, nil } from "../values/primitives/ANil.js";
-import { chargeHeap } from "../heap-budget.js";
-import { type SchemeValue } from "../values/types.js";
-import { type AValue } from "../values/primitives/AValue.js";
-import equality from "./r7rs/equality.js";
-import lists from "./r7rs/lists.js";
+import { schemeBool } from "../../values/op-helpers.js";
+import { AString } from "../../values/primitives/AString.js";
+import { ASymbol } from "../../values/primitives/ASymbol.js";
+import { ACharacter } from "../../values/primitives/ACharacter.js";
+import { ADict, foldKeyName, type DictKey } from "../../values/primitives/ADict.js";
+import { ANil, nil } from "../../values/primitives/ANil.js";
+import { chargeHeap } from "../../heap-budget.js";
+import { type SchemeValue } from "../../values/types.js";
+import { type AValue } from "../../values/primitives/AValue.js";
+import equality from "../r7rs/equality.js";
+import lists from "../r7rs/lists.js";
 
 // The `@`/`@?`/`@keys` verbs ARE the member-access protocol's face now: key
 // normalization + direct dispatch onto the receiver's own

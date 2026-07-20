@@ -43,17 +43,17 @@
 // dict-set/dict-update, and the runtime binding `~>`/`~>>` expand into); see
 // polyglot-racket.ts's own header.
 
-import { EnvCapability } from "../common/capability.js";
-import { symbol } from "../common/symbol.js";
-import * as z from "../common/scheme-zod.js";
+import { EnvCapability } from "../../common/capability.js";
+import { symbol } from "../../common/symbol.js";
+import * as z from "../../common/scheme-zod.js";
 import dedent from "dedent";
 import polyglot from "./polyglot.js";
-import equality from "./r7rs/equality.js";
-import numeric from "./r7rs/numeric.js";
-import strings from "./r7rs/strings.js";
-import vectors from "./r7rs/vectors.js";
-import lists from "./r7rs/lists.js";
-import srfi1 from "./srfi/srfi-1.js";
+import equality from "../r7rs/equality.js";
+import numeric from "../r7rs/numeric.js";
+import strings from "../r7rs/strings.js";
+import vectors from "../r7rs/vectors.js";
+import lists from "../r7rs/lists.js";
+import srfi1 from "../srfi/srfi-1.js";
 
 // See polyglot.ts's own note: a one-line local const is cheaper than a cross-pack
 // named export for a pure contract-vocabulary helper. Same definition, same

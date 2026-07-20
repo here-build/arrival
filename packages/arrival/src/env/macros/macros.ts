@@ -8,18 +8,18 @@
 // the generic `is_macro`/`is_syntax` eval hook is untouched. `define-syntax`/`let-syntax`
 // (scheme/core) keep resolving `syntax-rules` from the assembled env.
 
-import { EnvCapability } from "../common/capability.js";
-import { symbol } from "../common/symbol.js";
-import { Syntax } from "../eval/Syntax.js";
-import { bindValue, AmbientRuntime, mintFrame } from "./AmbientRuntime.js";
-import { extract_patterns, restore_data_gensyms, transform_syntax } from "../eval/syntax-rules.js";
-import { is_nil } from "../values/value-guards.js";
-import { ASymbol } from "../values/primitives/ASymbol.js";
-import { APair } from "../values/primitives/APair.js";
-import { Resolver } from "../eval/Resolver.js";
-import type { MacroInvokeContext } from "../eval/Macro.js";
-import type { SchemeValue } from "../values/types.js";
-import { ANil } from "../values/primitives/ANil.js";
+import { EnvCapability } from "../../common/capability.js";
+import { symbol } from "../../common/symbol.js";
+import { Syntax } from "../../eval/Syntax.js";
+import { bindValue, AmbientRuntime, mintFrame } from "../AmbientRuntime.js";
+import { extract_patterns, restore_data_gensyms, transform_syntax } from "../../eval/syntax-rules.js";
+import { is_nil } from "../../values/value-guards.js";
+import { ASymbol } from "../../values/primitives/ASymbol.js";
+import { APair } from "../../values/primitives/APair.js";
+import { Resolver } from "../../eval/Resolver.js";
+import type { MacroInvokeContext } from "../../eval/Macro.js";
+import type { SchemeValue } from "../../values/types.js";
+import { ANil } from "../../values/primitives/ANil.js";
 
 // The syntax-rules transformer-constructor. Invoked as `(syntax-rules (literals) (pattern
 // template)…)` → returns a Syntax that rewrites a matching form via the engine. `this` is the

@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import dedent from "dedent";
-import polyglotClojure from "../../polyglot-clojure.js";
+import polyglotClojure from "../../polyglot/polyglot-clojure.js";
 import type { AEntity } from "../../../common/symbol.js";
 import { signatureOf } from "../../../type-layer/schema-to-ts.js";
 

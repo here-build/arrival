@@ -91,14 +91,14 @@
 //     `(car desc)`) — a fixed-arity contract would make that call throw where the body never
 //     did. Real type (every trailing element genuinely is a description string), unchanged
 //     permissiveness.
-import { EnvCapability } from "../common/capability.js";
-import { symbol } from "../common/symbol.js";
-import * as z from "../common/scheme-zod.js";
-import lists from "./r7rs/lists.js";
-import equality from "./r7rs/equality.js";
-import strings from "./r7rs/strings.js";
-import numeric from "./r7rs/numeric.js";
-import exceptions from "./r7rs/exceptions.js";
+import { EnvCapability } from "../../common/capability.js";
+import { symbol } from "../../common/symbol.js";
+import * as z from "../../common/scheme-zod.js";
+import lists from "../r7rs/lists.js";
+import equality from "../r7rs/equality.js";
+import strings from "../r7rs/strings.js";
+import numeric from "../r7rs/numeric.js";
+import exceptions from "../r7rs/exceptions.js";
 
 // A schema-DSL type tag — see the contract-choices note above. Shared by `s/optional`'s
 // `tag` param/return and `s/array`'s `element` param (both are genuine tag positions;

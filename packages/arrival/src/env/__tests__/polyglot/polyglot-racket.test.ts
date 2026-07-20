@@ -9,7 +9,7 @@ import { assembleEnv } from "../../../common/kernel.js";
 import { type SchemeEnv } from "../../../common/scheme-env.js";
 import { describe, expect, it } from "vitest";
 
-import polyglotRacket from "../../polyglot-racket.js";
+import polyglotRacket from "../../polyglot/polyglot-racket.js";
 
 async function exec(code: string, options?: ExecOptions) {
   return (await execState(code, options)).values.slice();

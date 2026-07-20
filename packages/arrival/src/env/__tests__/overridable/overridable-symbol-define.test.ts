@@ -35,7 +35,7 @@ import { AString } from "../../../values/primitives/AString.js";
 import { global_env } from "../../env-roots.js";
 import { buildDegradationInfo } from "../../../common/degradation.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
-import { overridableCapability } from "../../overridable.js";
+import { overridableCapability } from "../../overridable/overridable.js";
 import type { AEntity, DefineSyntaxSymbolDef } from "../../../common/symbol.js";
 import type { SymbolDeclaration } from "../../../common/capability.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";

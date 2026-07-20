@@ -25,12 +25,12 @@
 // here reaches `@`/`@?`/`@keys`/`dict`/`compose` — the cleanest of the three
 // dialect packs to assemble standalone.
 
-import { EnvCapability } from "../common/capability.js";
-import { symbol } from "../common/symbol.js";
-import * as z from "../common/scheme-zod.js";
-import equality from "./r7rs/equality.js";
-import lists from "./r7rs/lists.js";
-import srfi1 from "./srfi/srfi-1.js";
+import { EnvCapability } from "../../common/capability.js";
+import { symbol } from "../../common/symbol.js";
+import * as z from "../../common/scheme-zod.js";
+import equality from "../r7rs/equality.js";
+import lists from "../r7rs/lists.js";
+import srfi1 from "../srfi/srfi-1.js";
 
 // See polyglot.ts's own note: a one-line local const is cheaper than a cross-pack
 // named export for a pure contract-vocabulary helper.

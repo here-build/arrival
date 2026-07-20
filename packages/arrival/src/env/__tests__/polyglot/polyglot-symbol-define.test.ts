@@ -37,10 +37,10 @@ import { assembleEnv } from "../../../common/kernel.js";
 import { DefineLocalityError } from "../../../errors.js";
 import { StaticValidationError } from "../../../static-validation/validate-program.js";
 import { BASE_PACKS } from "../../base-packs.js";
-import polyglot from "../../polyglot.js";
-import polyglotClojure from "../../polyglot-clojure.js";
-import polyglotLisp from "../../polyglot-lisp.js";
-import polyglotRacket from "../../polyglot-racket.js";
+import polyglot from "../../polyglot/polyglot.js";
+import polyglotClojure from "../../polyglot/polyglot-clojure.js";
+import polyglotLisp from "../../polyglot/polyglot-lisp.js";
+import polyglotRacket from "../../polyglot/polyglot-racket.js";
 import type { SchemeEnv } from "../../../common/scheme-env.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 

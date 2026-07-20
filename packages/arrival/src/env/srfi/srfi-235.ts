@@ -20,7 +20,7 @@ import { symbol, type CallCtx } from "../../common/symbol.js";
 import * as z from "../../common/scheme-zod.js";
 import { is_callable_value } from "../../values/value-guards.js";
 import { AExact } from "../../values/primitives/AExact.js";
-import polyglot from "../polyglot.js";
+import polyglot from "../polyglot/polyglot.js";
 import equality from "../r7rs/equality.js";
 import lists from "../r7rs/lists.js";
 import numeric from "../r7rs/numeric.js";

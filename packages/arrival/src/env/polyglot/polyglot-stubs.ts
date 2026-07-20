@@ -47,8 +47,8 @@
 // allSrfi — it isn't a SRFI), so every env that inherits sandboxedEnv doors these
 // symbols, same as srfi-stubs.ts.
 
-import { EnvCapability } from "../common/capability.js";
-import { symbol } from "../common/symbol.js";
+import { EnvCapability } from "../../common/capability.js";
+import { symbol } from "../../common/symbol.js";
 
 // Mirrors srfi-stubs.ts's HASH_TABLE_REASON verbatim (same design omission —
 // dicts are native & immutable — reached via a different dialect's name for the

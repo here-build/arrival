@@ -71,12 +71,12 @@
 
 import type { EnvCapability } from "../common/capability.js";
 import core from "./core/core.js";
-import polyglotStubs from "./polyglot-stubs.js";
-import macros from "./macros.js";
-import polyglot from "./polyglot.js";
-import polyglotClojure from "./polyglot-clojure.js";
-import polyglotLisp from "./polyglot-lisp.js";
-import polyglotRacket from "./polyglot-racket.js";
+import polyglotStubs from "./polyglot/polyglot-stubs.js";
+import macros from "./macros/macros.js";
+import polyglot from "./polyglot/polyglot.js";
+import polyglotClojure from "./polyglot/polyglot-clojure.js";
+import polyglotLisp from "./polyglot/polyglot-lisp.js";
+import polyglotRacket from "./polyglot/polyglot-racket.js";
 import { allR7rs, binding, exceptions, lists } from "./r7rs/index.js";
 import { allSrfi, srfi1 } from "./srfi/index.js";
 

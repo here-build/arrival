@@ -21,7 +21,7 @@ import { sealResolutionChain } from "./CompiledResolutionChain.js";
 import { StaticValidationError } from "../static-validation/validate-program.js";
 import type { DegradationMode } from "../common/degradation.js";
 import type { EnvCapability } from "../common/capability.js";
-import { overridableCapability } from "../env/overridable.js";
+import { overridableCapability } from "../env/overridable/overridable.js";
 import type { EvalSchemeInto, SchemeEnv } from "../common/scheme-env.js";
 import invariant from "tiny-invariant";
 import { parse as readerParse } from "../reader/parse.js";

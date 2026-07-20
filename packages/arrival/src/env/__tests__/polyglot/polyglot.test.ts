@@ -13,7 +13,7 @@ import { assembleEnv } from "../../../common/kernel.js";
 import { type SchemeEnv } from "../../../common/scheme-env.js";
 import { describe, expect, it } from "vitest";
 
-import polyglot from "../../polyglot.js";
+import polyglot from "../../polyglot/polyglot.js";
 
 // This whole file stringifies the BOXED result's Scheme print form (list "(1 4 9)")
 // and checks box discipline directly (`.constructor.name === "AVector"`) — a

@@ -91,12 +91,12 @@
       "default": "./dist/env/srfi/index.js"
     },
     "./overridable": {
-      "types": "./dist/env/overridable.d.ts",
-      "default": "./dist/env/overridable.js"
+      "types": "./dist/env/overridable/overridable.d.ts",
+      "default": "./dist/env/overridable/overridable.js"
     },
     "./schema": {
-      "types": "./dist/env/schema.d.ts",
-      "default": "./dist/env/schema.js"
+      "types": "./dist/env/schema/schema.d.ts",
+      "default": "./dist/env/schema/schema.js"
     }
   },
   "main": "./dist/index.js",
