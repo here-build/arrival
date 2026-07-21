@@ -158,6 +158,15 @@ export function preloadSchemeIde(): void {
   idle(() => void loadIde());
 }
 
+/** The shared IDE backend as a PROMISE — the non-hook seam for imperative
+ *  consumers (a ProseMirror node view, a plain CodeMirror host) that can't call
+ *  `useSchemeIde`. Same memoized singleton `useSchemeIde`/`preloadSchemeIde` wrap
+ *  (`configureSchemeIdeHost`'s roster + `setSchemeIdeFiles`/`RequireTypes` apply the
+ *  same way); resolves `null` when the backend is unavailable. */
+export function loadSchemeIde(): Promise<SchemeIdeBackend | null> {
+  return loadIde();
+}
+
 /** The shared scheme IDE backend, or `null` while loading / when unavailable /
  *  when `enabled` is false. Flips state at most once per mount. */
 export function useSchemeIde(enabled: boolean): SchemeIdeBackend | null {
