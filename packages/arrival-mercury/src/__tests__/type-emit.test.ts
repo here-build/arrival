@@ -8,7 +8,7 @@
  * `__scmTruth` DECLARATION ownership (documented expectation): the emitter only
  * ever REFERENCES `__scmTruth(…)`; the ambient declaration
  * `declare function __scmTruth(x: unknown): boolean` is the LENS PRELUDE's —
- * arrival/packages/arrival-lsp/src/prelude/types.d.ts carries it since
+ * arrival/packages/arrival-internals-types-prelude/src/prelude/types.d.ts carries it since
  * Phase 0 — so the emitted module must contain no `declare` of its own (asserted
  * below), exactly like `__arr`/`sexpr`/`Dict`.
  */

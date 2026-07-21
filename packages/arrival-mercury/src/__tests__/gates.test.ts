@@ -79,4 +79,26 @@ describe("W9 gates — migration lock", () => {
     expect(text).toMatch(/from ["']@inhuman\.tools\/arrival-mercury\/type-emit["']/);
     expect(text).not.toMatch(/from ["']@inhuman\.tools\/mercury/);
   });
+
+  it("mercury takes no arrival-lsp dep — the lsp <-> mercury cycle stays broken", () => {
+    // arrival-lsp depends on arrival-mercury/type-emit (the emitter, correct
+    // direction). The reverse edge — mercury/typefacts needing the prelude — was
+    // cut by extracting the shared type vocabulary into
+    // @inhuman.tools/arrival-internals-types-prelude, a leaf both sides depend
+    // DOWN on. If mercury ever takes an arrival-lsp dep again the package graph
+    // re-cycles; lock both the manifest and the one import site here.
+    const pkg = readFileSync(path.join(packageRoot, "package.json"), "utf8");
+    expect(pkg).not.toMatch(/"@inhuman\.tools\/arrival-lsp"/);
+
+    const lensProgram = path.join(packageRoot, "src/typefacts/lens-program.ts");
+    expect(existsSync(lensProgram), `gate subject missing: ${lensProgram}`).toBe(true);
+    const text = readFileSync(lensProgram, "utf8");
+    // The `/browser` subpath is the bundled, node-fs-free entry — mercury's
+    // typefacts sources the prelude as inlined static data so importing the
+    // semantic model never executes `node:fs` (keeps the model/`/product` graph
+    // browser-safe). Root `.` (the node-disk loader) is equally valid for the
+    // cycle-break; accept either.
+    expect(text).toMatch(/from ["']@inhuman\.tools\/arrival-internals-types-prelude(\/browser)?["']/);
+    expect(text).not.toMatch(/from ["']@inhuman\.tools\/arrival-lsp["']/);
+  });
 });

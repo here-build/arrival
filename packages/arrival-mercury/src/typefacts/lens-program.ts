@@ -1,19 +1,25 @@
 /**
  * typefacts/lens-program — one checked virtual-TS program per extract call.
  *
- * The in-memory file map is the LENS PRELUDE ASSEMBLY (`getPreludeFiles()` from
- * `@inhuman.tools/arrival-lsp` — PRE under `__pre.d.ts` + every
- * `__leaf_*.d.ts` builtin) plus the emitted program under `__program.ts`. The
- * host shape (in-memory first, disk fallback so `lib.es2022.d.ts` resolves)
- * mirrors mercury's proven types-emit bite host — the loading approach is
- * copied, the prelude itself stays owned by the lens package (never vendored).
+ * The in-memory file map is the LENS PRELUDE ASSEMBLY (`getBundledPreludeFiles()`
+ * from `@inhuman.tools/arrival-internals-types-prelude/browser` — PRE under
+ * `__pre.d.ts` + every `__leaf_*.d.ts` builtin) plus the emitted program under
+ * `__program.ts`. We source the prelude from the BUNDLED `/browser` entry, not the
+ * node-disk `.` entry, so importing this module (hence `SchemeSemanticModel`) never
+ * executes `node:fs` — the prelude is compiler-internal STATIC DATA (frozen `.d.ts`
+ * strings inlined at the prelude package's own build), not fs. That keeps the whole
+ * model/`/product` graph browser-safe; only `createFactsProgram`'s tsc host below is
+ * node-bound (`ts.sys` lib fallback / `process.cwd`), and it runs solely when facts
+ * are QUERIED — never on a browser compile path. The prelude itself stays owned by
+ * that shared type-vocabulary package (never vendored here), which both this
+ * extractor and the LSP depend down on.
  *
  * One LanguageService per call is the sanctioned v1 cost: one
  * `loadSource`-equivalent + a few thousand cached checker queries ≪ 1s.
  * Batching several compiles over one DocumentRegistry is the later
  * optimization, noted, not built.
  */
-import { getPreludeFiles, PRELUDE_FILE, PROGRAM_FILE } from "@inhuman.tools/arrival-lsp";
+import { getBundledPreludeFiles, PRELUDE_FILE, PROGRAM_FILE } from "@inhuman.tools/arrival-internals-types-prelude/browser";
 import ts from "typescript";
 
 export { PRELUDE_FILE, PROGRAM_FILE };
@@ -33,7 +39,7 @@ const OPTIONS: ts.CompilerOptions = {
 };
 
 export function createFactsProgram(virtualTs: string): FactsProgram {
-  const files = getPreludeFiles();
+  const files = getBundledPreludeFiles();
   files.set(PROGRAM_FILE, virtualTs);
   const host: ts.LanguageServiceHost = {
     getScriptFileNames: () => [...files.keys()],
