@@ -81,7 +81,7 @@ export function makeDictLiteralNode(forms: readonly SchemeValue[], ctx: RunConte
       pairs.push([keyDatum, forms[i + 1]]);
     }
   }
-  const node = new ADict(ctx, pairs) as DictLiteralNode;
+  const node = new ADict(pairs) as DictLiteralNode;
   node.literalForms = forms;
   return node;
 }

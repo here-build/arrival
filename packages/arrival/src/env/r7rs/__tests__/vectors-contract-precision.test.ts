@@ -36,8 +36,8 @@ function nativeDef(name: string) {
 }
 
 const fn = () => {};
-const realVector = new AVector(CONSTANT_CTX, []);
-const idx = new AExact(CONSTANT_CTX, 0);
+const realVector = new AVector([]);
+const idx = new AExact(0);
 
 describe("scheme/vectors Contract precision — the real exported ops reject wrongly-typed args (z.svector-backed fixes)", () => {
   // INVARIANT: vector-append's elements must be vector-protocol objects, rejecting a

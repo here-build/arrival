@@ -44,8 +44,8 @@ function nativeDef(name: string) {
   return def;
 }
 
-const exact = (n: number): AExact => new AExact(CONSTANT_CTX, n);
-const inexact = (n: number): AInexact => new AInexact(CONSTANT_CTX, n);
+const exact = (n: number): AExact => new AExact(n);
+const inexact = (n: number): AInexact => new AInexact(n);
 
 describe("numeric Contract precision — the real exported ops reject wrongly-typed args (were z.unknown(), now precise)", () => {
   // INVARIANT: + accepts scheme numbers and rejects a non-number rest element, both in and out
@@ -105,7 +105,7 @@ describe("numeric Contract precision — the real exported ops reject wrongly-ty
   // INVARIANT: floor/ returns a single pair product (q . r), not multi-return Values
   it("floor/ (pair product): output is a pair of scheme numbers", () => {
     const def = nativeDef("floor/");
-    const product = new APair(CONSTANT_CTX, exact(1), exact(2));
+    const product = new APair(exact(1), exact(2));
     expect(def.out.safeParse([product]).success).toBe(true);
     expect(def.out.safeParse([exact(1)]).success).toBe(false);
     expect(def.out.safeParse(["x"]).success).toBe(false);
@@ -113,7 +113,7 @@ describe("numeric Contract precision — the real exported ops reject wrongly-ty
 
   it("truncate/ (pair product): same pair shape as floor/", () => {
     const def = nativeDef("truncate/");
-    const product = new APair(CONSTANT_CTX, exact(3), exact(1));
+    const product = new APair(exact(3), exact(1));
     expect(def.out.safeParse([product]).success).toBe(true);
     expect(def.out.safeParse([exact(1)]).success).toBe(false);
   });

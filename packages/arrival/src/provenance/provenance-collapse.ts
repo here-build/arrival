@@ -78,5 +78,5 @@ export function collapseProvenance(...vals: unknown[]): Set<number> {
 /** Re-stamp a collapsed string with provenance. Always the boxed AString (the scheme face —
  *  Face split); never a bare string, which would drop the provenance just unioned. */
 export function taintString(result: string, prov: Set<number>): AString {
-  return new AString(CONSTANT_CTX, result, prov);
+  return new AString(result, prov);
 }

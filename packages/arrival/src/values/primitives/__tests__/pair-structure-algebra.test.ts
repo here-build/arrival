@@ -28,13 +28,13 @@ type FL = Record<string, any>;
 // list (nil) and length up to 4 so associativity has something to bite on.
 const intList = fc
   .array(fc.integer({ min: -5, max: 5 }), { maxLength: 4 })
-  .map((arr) => APair.fromArray(CONSTANT_CTX, arr.map((n) => new AExact(CONSTANT_CTX, n)), false) as AListAlike);
+  .map((arr) => APair.fromArray(CONSTANT_CTX, arr.map((n) => new AExact(n)), false) as AListAlike);
 
 // Non-empty variant for tests that need a Pair head (Functor laws map over a
 // Pair; nil has its own trivial behavior covered separately).
 const nonEmptyIntList = fc
   .array(fc.integer({ min: -5, max: 5 }), { minLength: 1, maxLength: 4 })
-  .map((arr) => APair.fromArray(CONSTANT_CTX, arr.map((n) => new AExact(CONSTANT_CTX, n)), false) as APair<any, any>);
+  .map((arr) => APair.fromArray(CONSTANT_CTX, arr.map((n) => new AExact(n)), false) as APair<any, any>);
 
 const eq = (a: unknown, b: unknown) => structuralEqual(a, b);
 
@@ -65,8 +65,8 @@ describe("Pair — Semigroup (list-append)", () => {
     );
   });
   it("concat preserves element order and is pure (operands untouched)", () => {
-    const a = APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2)], false) as APair<any, any>;
-    const b = APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 3), new AExact(CONSTANT_CTX, 4)], false) as APair<any, any>;
+    const a = APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2)], false) as APair<any, any>;
+    const b = APair.fromArray(CONSTANT_CTX, [new AExact(3), new AExact(4)], false) as APair<any, any>;
     const r = (a)[tf("concat")](b);
     expect((r as APair<any, any>).to_array().map((v) => (v as AExact).valueOf())).toEqual([1, 2, 3, 4]);
     // purity: a and b unchanged
@@ -102,13 +102,13 @@ describe("Pair — Monoid (nil identity)", () => {
 // ----------------------------------------------------------------------
 describe("Pair — Foldable (reduce)", () => {
   it("reduce sums elements left-to-right", async () => {
-    const list = APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2), new AExact(CONSTANT_CTX, 3), new AExact(CONSTANT_CTX, 4)], false) as APair<any, any>;
+    const list = APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2), new AExact(3), new AExact(4)], false) as APair<any, any>;
     // arrival/tagless-final/reduce is element-FIRST: fn(element, acc).
     const sum = await (list)[tf("reduce")]((x: unknown, acc: number) => acc + (x as AExact).valueOf(), 0);
     expect(sum).toBe(10);
   });
   it("reduce collects in order", async () => {
-    const list = APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2), new AExact(CONSTANT_CTX, 3)], false) as APair<any, any>;
+    const list = APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2), new AExact(3)], false) as APair<any, any>;
     // element-FIRST fn(element, acc): append the element onto the accumulator, in order.
     const collected = await (list)[tf("reduce")]((x: unknown, acc: number[]) => [...acc, (x as AExact).valueOf()], [] as number[]);
     expect(collected).toEqual([1, 2, 3]);
@@ -118,7 +118,7 @@ describe("Pair — Foldable (reduce)", () => {
     let calls = 0;
     // element-FIRST fn(element, acc); the sentinel never calls fn, so the seed is returned.
     // @ts-expect-error empty-pair sentinel: car is undefined (not a SchemeValue) by design
-    const r = await (new APair(CONSTANT_CTX, undefined, nil))[tf("reduce")]((_element: unknown, acc: string) => {
+    const r = await (new APair(undefined, nil))[tf("reduce")]((_element: unknown, acc: string) => {
       calls++;
       return acc;
     }, "SEED");
@@ -132,12 +132,12 @@ describe("Pair — Foldable (reduce)", () => {
 // ----------------------------------------------------------------------
 describe("Pair — Filterable (filter)", () => {
   it("filter keeps evens", async () => {
-    const list = APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2), new AExact(CONSTANT_CTX, 3), new AExact(CONSTANT_CTX, 4), new AExact(CONSTANT_CTX, 5), new AExact(CONSTANT_CTX, 6)], false) as APair<any, any>;
+    const list = APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2), new AExact(3), new AExact(4), new AExact(5), new AExact(6)], false) as APair<any, any>;
     const evens = (await (list)[tf("filter")]((x: unknown) => (x as AExact).valueOf() % 2 === 0)) as APair<any, any>;
     expect(evens.to_array().map((v) => (v as AExact).valueOf())).toEqual([2, 4, 6]);
   });
   it("filter all-false yields nil", async () => {
-    const list = APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 3), new AExact(CONSTANT_CTX, 5)], false) as APair<any, any>;
+    const list = APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(3), new AExact(5)], false) as APair<any, any>;
     const r = await list[tf("filter")](() => false);
     expect(r).toBe(nil);
   });
@@ -145,7 +145,7 @@ describe("Pair — Filterable (filter)", () => {
   it("filter on empty-pair sentinel does not call the predicate", async () => {
     let calls = 0;
     // @ts-expect-error empty-pair sentinel: car is undefined (not a SchemeValue) by design
-    await (new APair(CONSTANT_CTX, undefined, nil))[tf("filter")](() => {
+    await (new APair(undefined, nil))[tf("filter")](() => {
       calls++;
       return true;
     });
@@ -167,7 +167,7 @@ describe("Pair — Traversable (traverse)", () => {
       ofCalls.push(v);
       return v;
     };
-    const list = APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2)], false) as APair<any, any>;
+    const list = APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2)], false) as APair<any, any>;
     (list)[tf("traverse")](of, (x: unknown) => x);
     // base case of(nil) + one of(new Pair(...)) per element (leaf path) = 1 + 2.
     expect(ofCalls.length).toBe(3);
@@ -183,10 +183,10 @@ describe("Pair — Traversable (traverse)", () => {
         // this holds a function-or-value; for traverse, `this` wraps the head
         // and `other` wraps the rest — combine into a Pair.
         // @ts-expect-error `this` is untyped in this mock applicative
-        return Id(new APair(CONSTANT_CTX, this.value, other.value));
+        return Id(new APair(this.value, other.value));
       },
     });
-    const list = APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2), new AExact(CONSTANT_CTX, 3)], false);
+    const list = APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2), new AExact(3)], false);
     // @ts-expect-error traverse result is the mock applicative, not a SchemeValue
     const result = (list)[tf("traverse")]((v: unknown) => Id(v), (x: unknown) => Id(x)) as unknown as { value: unknown };
     expect((result.value as APair<any, any>).to_array().map((v) => (v as AExact).valueOf())).toEqual([1, 2, 3]);
@@ -201,7 +201,7 @@ describe("Pair — Applicative (static of)", () => {
   it("of(x) is a one-element list (x)", () => {
     // "of" is declared on Pair/Vector/String but NOT in the canonical TaglessOp union today —
     // the `as TaglessOp` cast reaches the algebra method.
-    const p = (APair)[tf("of" as TaglessOp)](new AExact(CONSTANT_CTX, 42)) as APair<any, any>;
+    const p = (APair)[tf("of" as TaglessOp)](new AExact(42)) as APair<any, any>;
     expect(p).toBeInstanceOf(APair);
     expect((p.car as AExact).valueOf()).toBe(42);
     expect(p.cdr).toBe(nil);
@@ -220,8 +220,8 @@ describe("Pair — recursors terminate on Nil clones (provenance)", () => {
     // fn receives the pair's actual boxed element (map never auto-unboxes) — the identity
     // fn hands back the SAME AExact instance, so the result pair's car is that instance.
     const calls: unknown[] = [];
-    const one = new AExact(CONSTANT_CTX, 1);
-    const r = (await new APair(CONSTANT_CTX, one, cloneNil())[tf("map")]((x: unknown): SchemeValue => {
+    const one = new AExact(1);
+    const r = (await new APair(one, cloneNil())[tf("map")]((x: unknown): SchemeValue => {
       calls.push(x);
       // @ts-expect-error returning `unknown` where `SchemeValue` is required; this test pins
       // the runtime behavior (fn gets the boxed AExact, returns it unchanged) — not the type.
@@ -234,7 +234,7 @@ describe("Pair — recursors terminate on Nil clones (provenance)", () => {
   it("reduce(Pair(1, nil-clone)) folds one element", async () => {
     // `x` is the boxed AExact — unwrap via valueOf() (a JS number) before folding, never mix
     // it directly with a bigint accumulator (AExact.valueOf() returns number, not bigint).
-    const r = await new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), cloneNil())[tf("reduce")](
+    const r = await new APair(new AExact(1), cloneNil())[tf("reduce")](
       (x: unknown, acc: number) => acc + (x as AExact).valueOf(),
       0,
     );

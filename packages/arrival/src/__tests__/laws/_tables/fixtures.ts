@@ -114,9 +114,7 @@ export async function withLawEnv(): Promise<LawEnv> {
     env,
     "borrow-array",
     (...args: SchemeValue[]) =>
-      new AJSArray(
-        CONSTANT_CTX,
-        args.map((a) => schemeToJs(a, {})),
+      new AJSArray(args.map((a) => schemeToJs(a, {})),
         collapseProvenance(...args),
       ),
   );

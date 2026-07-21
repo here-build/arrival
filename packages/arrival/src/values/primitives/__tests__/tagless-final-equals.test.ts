@@ -72,7 +72,7 @@ const LIST_OPS = opsOf(listsCap);
 // Build a proper list of Pairs terminated by nil.
 function list(...xs: SchemeValue[]): AListAlike {
   let acc: AListAlike = nil;
-  for (let i = xs.length - 1; i >= 0; i--) acc = new APair(CONSTANT_CTX, xs[i], acc) as AListAlike;
+  for (let i = xs.length - 1; i >= 0; i--) acc = new APair(xs[i], acc) as AListAlike;
   return acc;
 }
 
@@ -81,16 +81,16 @@ function list(...xs: SchemeValue[]): AListAlike {
 function representativeValues(): { name: string; value: AValue }[] {
   const reps: { name: string; value: AValue }[] = [
     { name: "Nil", value: nil },
-    { name: "Pair", value: new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), nil) },
-    { name: "SchemeString", value: new AString(CONSTANT_CTX, "x") },
-    { name: "SchemeExact", value: new AExact(CONSTANT_CTX, 1) },
-    { name: "SchemeInexact", value: new AInexact(CONSTANT_CTX, 1.5) },
-    { name: "SchemeBool", value: new ABool(CONSTANT_CTX, true) },
-    { name: "SchemeCharacter", value: new ACharacter(CONSTANT_CTX, "a") },
-    { name: "SchemeSymbol", value: new ASymbol(CONSTANT_CTX, "sym") },
-    { name: "SchemeVector", value: new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1)]) },
-    { name: "SchemeBytevector", value: new ABytevector(CONSTANT_CTX, [1, 2, 3]) },
-    { name: "SchemeJSObject", value: new AJSObject(CONSTANT_CTX, { a: 1 }) },
+    { name: "Pair", value: new APair(new AExact(1), nil) },
+    { name: "SchemeString", value: new AString("x") },
+    { name: "SchemeExact", value: new AExact(1) },
+    { name: "SchemeInexact", value: new AInexact(1.5) },
+    { name: "SchemeBool", value: new ABool(true) },
+    { name: "SchemeCharacter", value: new ACharacter("a") },
+    { name: "SchemeSymbol", value: new ASymbol("sym") },
+    { name: "SchemeVector", value: new AVector([new AExact(1)]) },
+    { name: "SchemeBytevector", value: new ABytevector([1, 2, 3]) },
+    { name: "SchemeJSObject", value: new AJSObject({ a: 1 }) },
   ];
   return reps;
 }
@@ -118,27 +118,27 @@ describe("G2 Pair Setoid", () => {
     p[tf("equals")](other, seen);
 
   it("equal proper lists compare equal through the Pair Setoid", () => {
-    const a = list(new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2), new AExact(CONSTANT_CTX, 3)) as APair<any, any>;
-    const b = list(new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2), new AExact(CONSTANT_CTX, 3)) as APair<any, any>;
+    const a = list(new AExact(1), new AExact(2), new AExact(3)) as APair<any, any>;
+    const b = list(new AExact(1), new AExact(2), new AExact(3)) as APair<any, any>;
     expect(pairEq(a, b)).toBe(true);
   });
 
   it("unequal lists compare unequal", () => {
-    const a = list(new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2)) as APair<any, any>;
-    const b = list(new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 9)) as APair<any, any>;
+    const a = list(new AExact(1), new AExact(2)) as APair<any, any>;
+    const b = list(new AExact(1), new AExact(9)) as APair<any, any>;
     expect(pairEq(a, b)).toBe(false);
   });
 
   it("pair vs non-pair is false", () => {
-    const a = list(new AExact(CONSTANT_CTX, 1)) as APair<any, any>;
-    expect(pairEq(a, new AExact(CONSTANT_CTX, 1))).toBe(false);
+    const a = list(new AExact(1)) as APair<any, any>;
+    expect(pairEq(a, new AExact(1))).toBe(false);
     expect(pairEq(a, nil)).toBe(false);
   });
 
   it("nested lists compare structurally", () => {
-    const a = list(list(new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2)), new AString(CONSTANT_CTX, "k")) as APair<any, any>;
-    const b = list(list(new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2)), new AString(CONSTANT_CTX, "k")) as APair<any, any>;
-    const c = list(list(new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 7)), new AString(CONSTANT_CTX, "k")) as APair<any, any>;
+    const a = list(list(new AExact(1), new AExact(2)), new AString("k")) as APair<any, any>;
+    const b = list(list(new AExact(1), new AExact(2)), new AString("k")) as APair<any, any>;
+    const c = list(list(new AExact(1), new AExact(7)), new AString("k")) as APair<any, any>;
     expect(pairEq(a, b)).toBe(true);
     expect(pairEq(a, c)).toBe(false);
   });
@@ -146,27 +146,21 @@ describe("G2 Pair Setoid", () => {
   it("self-cyclic pairs (a.cdr=a, b.cdr=b) compare equal AND terminate", () => {
     // A `set-cdr!` cycle: the cdr slot holds any SchemeValue at runtime (here the pair
     // itself), so the locals carry the real slot type rather than the nil-narrowed infer.
-    const a: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), nil);
-    // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
+    const a: APair<AExact, SchemeValue> = new APair(new AExact(1), nil);
     __tieKnot(a, "cdr", a);
-    const b: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), nil);
-    // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
+    const b: APair<AExact, SchemeValue> = new APair(new AExact(1), nil);
     __tieKnot(b, "cdr", b);
     expect(pairEq(a, b)).toBe(true);
   });
 
   it("mutually-cyclic pairs (a↔b vs c↔d) compare equal AND terminate", () => {
-    const a: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), nil);
-    const b: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 2), nil);
-    // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
+    const a: APair<AExact, SchemeValue> = new APair(new AExact(1), nil);
+    const b: APair<AExact, SchemeValue> = new APair(new AExact(2), nil);
     __tieKnot(a, "cdr", b);
-    // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
     __tieKnot(b, "cdr", a);
-    const c: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), nil);
-    const d: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 2), nil);
-    // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
+    const c: APair<AExact, SchemeValue> = new APair(new AExact(1), nil);
+    const d: APair<AExact, SchemeValue> = new APair(new AExact(2), nil);
     __tieKnot(c, "cdr", d);
-    // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
     __tieKnot(d, "cdr", c);
     expect(pairEq(a, c)).toBe(true);
   });
@@ -174,8 +168,8 @@ describe("G2 Pair Setoid", () => {
   // INVARIANT: an explicit `seen` map argument is honored by the Setoid call
   // (pins implementation, not behavior).
   it("an explicit seen Map argument is honored", () => {
-    const a = list(new AExact(CONSTANT_CTX, 1)) as APair<any, any>;
-    const b = list(new AExact(CONSTANT_CTX, 1)) as APair<any, any>;
+    const a = list(new AExact(1)) as APair<any, any>;
+    const b = list(new AExact(1)) as APair<any, any>;
     expect(pairEq(a, b, new Map())).toBe(true);
   });
 });
@@ -200,14 +194,14 @@ describe("G3 Vector Setoid — cyclic vectors terminate", () => {
     v[tf("equals")](other, seen);
 
   it("mutually-cyclic vectors a↔b vs c↔d compare equal AND terminate", () => {
-    const a = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1)]);
-    const b = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 2)]);
+    const a = new AVector([new AExact(1)]);
+    const b = new AVector([new AExact(2)]);
     // @ts-expect-error __vector__ is private + readonly; mutating for cycle test
     (a.__vector__ as unknown as AExact[]).push(b);
     // @ts-expect-error __vector__ is private + readonly; mutating for cycle test
     (b.__vector__ as unknown as AExact[]).push(a);
-    const c = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1)]);
-    const d = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 2)]);
+    const c = new AVector([new AExact(1)]);
+    const d = new AVector([new AExact(2)]);
     // @ts-expect-error __vector__ is private + readonly; mutating for cycle test
     c.__vector__.push(d);
     // @ts-expect-error __vector__ is private + readonly; mutating for cycle test
@@ -216,9 +210,9 @@ describe("G3 Vector Setoid — cyclic vectors terminate", () => {
   });
 
   it("equal acyclic vectors compare equal; unequal differ", () => {
-    const a = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2)]);
-    const b = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2)]);
-    const c = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 3)]);
+    const a = new AVector([new AExact(1), new AExact(2)]);
+    const b = new AVector([new AExact(1), new AExact(2)]);
+    const c = new AVector([new AExact(1), new AExact(3)]);
     expect(vecEq(a, b)).toBe(true);
     expect(vecEq(a, c)).toBe(false);
   });
@@ -229,19 +223,17 @@ describe("G3 Vector Setoid — cyclic vectors terminate", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe("G4 equal? regression — structuralEqual", () => {
   it("deep nested structures: true and false", () => {
-    const a = list(list(new AExact(CONSTANT_CTX, 1)), new AString(CONSTANT_CTX, "k"), new AVector(CONSTANT_CTX, [new ABool(CONSTANT_CTX, true)]));
-    const b = list(list(new AExact(CONSTANT_CTX, 1)), new AString(CONSTANT_CTX, "k"), new AVector(CONSTANT_CTX, [new ABool(CONSTANT_CTX, true)]));
-    const c = list(list(new AExact(CONSTANT_CTX, 1)), new AString(CONSTANT_CTX, "k"), new AVector(CONSTANT_CTX, [new ABool(CONSTANT_CTX, false)]));
+    const a = list(list(new AExact(1)), new AString("k"), new AVector([new ABool(true)]));
+    const b = list(list(new AExact(1)), new AString("k"), new AVector([new ABool(true)]));
+    const c = list(list(new AExact(1)), new AString("k"), new AVector([new ABool(false)]));
     expect(structuralEqual(a, b)).toBe(true);
     expect(structuralEqual(a, c)).toBe(false);
   });
 
   it("cyclic list via structuralEqual terminates", () => {
-    const a: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), nil);
-    // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
+    const a: APair<AExact, SchemeValue> = new APair(new AExact(1), nil);
     __tieKnot(a, "cdr", a);
-    const b: APair<AExact, SchemeValue> = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), nil);
-    // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
+    const b: APair<AExact, SchemeValue> = new APair(new AExact(1), nil);
     __tieKnot(b, "cdr", b);
     expect(structuralEqual(a, b)).toBe(true);
     // self-equality on a cyclic list must also terminate (the bridge.ts war story)
@@ -249,10 +241,10 @@ describe("G4 equal? regression — structuralEqual", () => {
   });
 
   it("cyclic vector via structuralEqual terminates", () => {
-    const a = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1)]);
+    const a = new AVector([new AExact(1)]);
     // @ts-expect-error __vector__ is private + readonly; mutating for cycle test
     (a.__vector__ as unknown as AExact[]).push(a);
-    const b = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1)]);
+    const b = new AVector([new AExact(1)]);
     // @ts-expect-error __vector__ is private + readonly; mutating for cycle test
     (b.__vector__ as unknown as AExact[]).push(b);
     expect(structuralEqual(a, b)).toBe(true);
@@ -262,8 +254,8 @@ describe("G4 equal? regression — structuralEqual", () => {
   // method (pins implementation, not behavior).
   it("Pair & Vector now route through their own Setoid (sanity)", () => {
     // tagless-final/equals is declared directly on AValue subtypes — no cast needed.
-    expect(typeof (new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), nil))[tf("equals")]).toBe("function");
-    expect(typeof (new AVector(CONSTANT_CTX, []))[tf("equals")]).toBe("function");
+    expect(typeof (new APair(new AExact(1), nil))[tf("equals")]).toBe("function");
+    expect(typeof (new AVector([]))[tf("equals")]).toBe("function");
   });
 });
 
@@ -272,14 +264,14 @@ describe("G4 equal? regression — structuralEqual", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe("G5 eq?/eqv? landmine — must stay identity/scalar", () => {
   it("eq?/eqv? on distinct equal lists is #f; equal? is #t", () => {
-    expect(eq(list(new AExact(CONSTANT_CTX, 1)), list(new AExact(CONSTANT_CTX, 1)))).toBe(false);
-    expect(eqv(list(new AExact(CONSTANT_CTX, 1)), list(new AExact(CONSTANT_CTX, 1)))).toBe(false);
-    expect(structuralEqual(list(new AExact(CONSTANT_CTX, 1)), list(new AExact(CONSTANT_CTX, 1)))).toBe(true);
+    expect(eq(list(new AExact(1)), list(new AExact(1)))).toBe(false);
+    expect(eqv(list(new AExact(1)), list(new AExact(1)))).toBe(false);
+    expect(structuralEqual(list(new AExact(1)), list(new AExact(1)))).toBe(true);
   });
 
   it("eqv? exact vs inexact #f; exact vs exact #t", () => {
-    expect(eqv(new AExact(CONSTANT_CTX, 1), new AInexact(CONSTANT_CTX, 1))).toBe(false);
-    expect(eqv(new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 1))).toBe(true);
+    expect(eqv(new AExact(1), new AInexact(1))).toBe(false);
+    expect(eqv(new AExact(1), new AExact(1))).toBe(true);
   });
 });
 
@@ -303,24 +295,24 @@ describe("G5 eq?/eqv? landmine — must stay identity/scalar", () => {
 describe("G6 equality-suite cleanup", () => {
   // A distinct-instance symbol of the same name (uninterned provenance clone).
   const distinctSym = (name: string): ASymbol =>
-    new ASymbol(CONSTANT_CTX, name).withProvenance(new Set([1]));
+    new ASymbol(name).withProvenance(new Set([1]));
 
   // INVARIANT: eqv? over scalars matches exactness/char/bool identity, and
   // treats distinct-instance same-name symbols and nil clones as eqv.
   describe("eqv? over scalars (canonical structural-equal)", () => {
     it("exact ≡ exact (same value) → true", () => {
-      expect(eqv(new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 1))).toBe(true);
+      expect(eqv(new AExact(1), new AExact(1))).toBe(true);
     });
     it("exact vs inexact → false (exactness distinguishes)", () => {
-      expect(eqv(new AExact(CONSTANT_CTX, 1), new AInexact(CONSTANT_CTX, 1))).toBe(false);
+      expect(eqv(new AExact(1), new AInexact(1))).toBe(false);
     });
     it("char same/diff", () => {
-      expect(eqv(new ACharacter(CONSTANT_CTX, "a"), new ACharacter(CONSTANT_CTX, "a"))).toBe(true);
-      expect(eqv(new ACharacter(CONSTANT_CTX, "a"), new ACharacter(CONSTANT_CTX, "b"))).toBe(false);
+      expect(eqv(new ACharacter("a"), new ACharacter("a"))).toBe(true);
+      expect(eqv(new ACharacter("a"), new ACharacter("b"))).toBe(false);
     });
     it("bool same/diff", () => {
-      expect(eqv(new ABool(CONSTANT_CTX, true), new ABool(CONSTANT_CTX, true))).toBe(true);
-      expect(eqv(new ABool(CONSTANT_CTX, true), new ABool(CONSTANT_CTX, false))).toBe(false);
+      expect(eqv(new ABool(true), new ABool(true))).toBe(true);
+      expect(eqv(new ABool(true), new ABool(false))).toBe(false);
     });
     it("two DISTINCT-instance symbols of the same name → true", () => {
       const a = distinctSym("a");
@@ -341,13 +333,13 @@ describe("G6 equality-suite cleanup", () => {
     const EQM = (x: AValue, y: unknown): boolean =>
       x[tf("equals")](y);
     const pairs: { name: string; x: AValue; y: AValue }[] = [
-      { name: "exact==exact", x: new AExact(CONSTANT_CTX, 1), y: new AExact(CONSTANT_CTX, 1) },
-      { name: "exact!=exact", x: new AExact(CONSTANT_CTX, 1), y: new AExact(CONSTANT_CTX, 2) },
-      { name: "inexact==inexact", x: new AInexact(CONSTANT_CTX, 1.5), y: new AInexact(CONSTANT_CTX, 1.5) },
-      { name: "char==char", x: new ACharacter(CONSTANT_CTX, "a"), y: new ACharacter(CONSTANT_CTX, "a") },
-      { name: "char!=char", x: new ACharacter(CONSTANT_CTX, "a"), y: new ACharacter(CONSTANT_CTX, "b") },
-      { name: "bool==bool", x: new ABool(CONSTANT_CTX, true), y: new ABool(CONSTANT_CTX, true) },
-      { name: "bool!=bool", x: new ABool(CONSTANT_CTX, true), y: new ABool(CONSTANT_CTX, false) },
+      { name: "exact==exact", x: new AExact(1), y: new AExact(1) },
+      { name: "exact!=exact", x: new AExact(1), y: new AExact(2) },
+      { name: "inexact==inexact", x: new AInexact(1.5), y: new AInexact(1.5) },
+      { name: "char==char", x: new ACharacter("a"), y: new ACharacter("a") },
+      { name: "char!=char", x: new ACharacter("a"), y: new ACharacter("b") },
+      { name: "bool==bool", x: new ABool(true), y: new ABool(true) },
+      { name: "bool!=bool", x: new ABool(true), y: new ABool(false) },
       { name: "sym==sym(distinct)", x: distinctSym("a"), y: distinctSym("a") },
       { name: "nil==nil", x: nil, y: nil.withProvenance(new Set([1])) },
     ];
@@ -362,7 +354,7 @@ describe("G6 equality-suite cleanup", () => {
     // is RED for a distinct-instance 'a (no SchemeSymbol case → #f).
     it("memv finds a distinct-instance symbol of the same name", () => {
       const needle = distinctSym("a");
-      const lst = list(new ASymbol(CONSTANT_CTX, "b"), new ASymbol(CONSTANT_CTX, "a"), new ASymbol(CONSTANT_CTX, "c"));
+      const lst = list(new ASymbol("b"), new ASymbol("a"), new ASymbol("c"));
       const found = LIST_OPS.memv(needle, lst);
       expect(found).not.toBe(false);
       expect((found as APair<any, any>).car).toBeInstanceOf(ASymbol);
@@ -371,7 +363,7 @@ describe("G6 equality-suite cleanup", () => {
 
     it("memv finds a distinct-instance nil", () => {
       const needle = nil.withProvenance(new Set([1]));
-      const lst = list(new ASymbol(CONSTANT_CTX, "x"), nil);
+      const lst = list(new ASymbol("x"), nil);
       const found = LIST_OPS.memv(needle, lst);
       expect(found).not.toBe(false);
       expect((found as APair<any, any>).car).toBeInstanceOf(ANil);
@@ -380,8 +372,8 @@ describe("G6 equality-suite cleanup", () => {
     it("assv finds a distinct-instance symbol key of the same name", () => {
       const needle = distinctSym("k");
       const alist = list(
-        new APair(CONSTANT_CTX, new ASymbol(CONSTANT_CTX, "j"), new AExact(CONSTANT_CTX, 1)),
-        new APair(CONSTANT_CTX, new ASymbol(CONSTANT_CTX, "k"), new AExact(CONSTANT_CTX, 2)),
+        new APair(new ASymbol("j"), new AExact(1)),
+        new APair(new ASymbol("k"), new AExact(2)),
       );
       const found = LIST_OPS.assv(needle, alist);
       expect(found).not.toBe(false);
@@ -391,8 +383,8 @@ describe("G6 equality-suite cleanup", () => {
 
     // Numeric eqv? path (interned-symbol-independent): assv still matches numbers.
     it("memv matches distinct-instance exact numbers (eqv? numeric path)", () => {
-      const needle = new AExact(CONSTANT_CTX, 2);
-      const lst = list(new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2), new AExact(CONSTANT_CTX, 3));
+      const needle = new AExact(2);
+      const lst = list(new AExact(1), new AExact(2), new AExact(3));
       const found = LIST_OPS.memv(needle, lst);
       expect(found).not.toBe(false);
       expect(((found as APair<any, any>).car as AExact).valueOf()).toBe(2);
@@ -401,8 +393,8 @@ describe("G6 equality-suite cleanup", () => {
 
   describe("G5 reaffirm — eq/eqv stay pointer-grade on Pairs (NOT deep)", () => {
     it("distinct equal Pairs: eq/eqv #f, equal? #t", () => {
-      const a = list(new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2)) as APair<any, any>;
-      const b = list(new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2)) as APair<any, any>;
+      const a = list(new AExact(1), new AExact(2)) as APair<any, any>;
+      const b = list(new AExact(1), new AExact(2)) as APair<any, any>;
       expect(eq(a, b)).toBe(false);
       expect(eqv(a, b)).toBe(false);
       expect(structuralEqual(a, b)).toBe(true);
@@ -419,8 +411,8 @@ describe("G6 equality-suite cleanup", () => {
     it("eq?/eqv? of a boxed SchemeBool vs a raw JS boolean is #f", () => {
       // eq/eqv take `unknown` (identity-grade), so raw boolean IS accepted — no cast.
       // The point of this test is the SEMANTIC boundary (representation-blind Setoid vs identity).
-      expect(eq(new ABool(CONSTANT_CTX, true), true)).toBe(false);
-      expect(eqv(new ABool(CONSTANT_CTX, true), true)).toBe(false);
+      expect(eq(new ABool(true), true)).toBe(false);
+      expect(eqv(new ABool(true), true)).toBe(false);
       // but the Setoid itself IS representation-blind (documents the divergence):
       // The return type of [tf("equals")] is `boolean`; the inner `true` is the `other`
       // arg (also `unknown`). No cast needed — the method is typed on ABool directly.
@@ -435,7 +427,7 @@ describe("G6 equality-suite cleanup", () => {
       // convenience, not a transitional accommodation. A throw here would contradict those
       // verified-durable siblings — the aspirational door the purge explicitly warns against.
       expect(
-        (new ABool(CONSTANT_CTX, true))[tf("equals")](true),
+        (new ABool(true))[tf("equals")](true),
       ).toBe(true);
     });
   });

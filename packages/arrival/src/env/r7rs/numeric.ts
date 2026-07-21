@@ -27,7 +27,7 @@ import { symbol, type Contract, type RestSpec, type VectorSpec } from "../../com
 import { EnvCapability } from "../../common/capability.js";
 import type { EmitCtx, EmitRule } from "../../emit/emit-rule.js";
 import { Bin, Binding, Call, Lit, Method, Ref, Un, type BinOp, type R } from "../../emit/residual-lite.js";
-import { type RunContext } from "../../run/RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import { CallCtx } from "../../common/symbols/_bake.js";
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "../../values/primitives/AValue.js";
 import type { ABool } from "../../values/primitives/ABool.js";
@@ -207,7 +207,7 @@ function schemeAdd(a: ANumeric, b: ANumeric): ANumeric {
   if (a instanceof AInexact || b instanceof AInexact) {
     const aVal = a instanceof AExact ? a.valueOf() : a.real;
     const bVal = b instanceof AExact ? b.valueOf() : b.real;
-    return new AInexact(a.ctx, aVal + bVal);
+    return new AInexact(aVal + bVal);
   }
   return (a as AExact).add(b as AExact);
 }
@@ -216,14 +216,14 @@ function schemeSub(a: ANumeric, b: ANumeric): ANumeric {
   if (a instanceof AInexact || b instanceof AInexact) {
     const aVal = a instanceof AExact ? a.valueOf() : a.real;
     const bVal = b instanceof AExact ? b.valueOf() : b.real;
-    return new AInexact(a.ctx, aVal - bVal);
+    return new AInexact(aVal - bVal);
   }
   return (a as AExact).sub(b as AExact);
 }
 
 function schemeNegate(a: ANumeric): ANumeric {
   if (a instanceof AInexact) {
-    return new AInexact(a.ctx, -a.real);
+    return new AInexact(-a.real);
   }
   return a.neg();
 }
@@ -232,7 +232,7 @@ function schemeMul(a: ANumeric, b: ANumeric): ANumeric {
   if (a instanceof AInexact || b instanceof AInexact) {
     const aVal = a instanceof AExact ? a.valueOf() : a.real;
     const bVal = b instanceof AExact ? b.valueOf() : b.real;
-    return new AInexact(a.ctx, aVal * bVal);
+    return new AInexact(aVal * bVal);
   }
   return (a as AExact).mul(b as AExact);
 }
@@ -241,7 +241,7 @@ function schemeDiv(a: ANumeric, b: ANumeric): ANumeric {
   if (a instanceof AInexact || b instanceof AInexact) {
     const aVal = a instanceof AExact ? a.valueOf() : a.real;
     const bVal = b instanceof AExact ? b.valueOf() : b.real;
-    return new AInexact(a.ctx, aVal / bVal);
+    return new AInexact(aVal / bVal);
   }
   return (a as AExact).div(b as AExact);
 }
@@ -259,7 +259,7 @@ const mulFn = (...args: ANumeric[]): ANumeric => args.reduce(schemeMul);
 
 const divFn = (first: ANumeric, ...rest: ANumeric[]): ANumeric => {
   if (rest.length === 0) {
-    return schemeDiv(new AExact(first.ctx, 1), first);
+    return schemeDiv(new AExact(1), first);
   }
   return rest.reduce(schemeDiv, first);
 };
@@ -299,50 +299,50 @@ function toIntegerPair(a: ANumeric, b: ANumeric, opName: string): { bothExact: b
   return { bothExact: ai.exact && bi.exact, av: ai.value, bv: bi.value };
 }
 
-function boxInteger(ctx: RunContext, exact: boolean, value: number): ANumeric {
-  return exact ? new AExact(ctx, value) : new AInexact(ctx, value);
+function boxInteger(exact: boolean, value: number): ANumeric {
+  return exact ? new AExact(value) : new AInexact(value);
 }
 
 const quotientFn = (a: ANumeric, b: ANumeric): ANumeric => {
   const p = toIntegerPair(a, b, "quotient");
   invariant(p.bv !== 0, "quotient: division by zero");
-  return boxInteger(a.ctx, p.bothExact, truncDiv(p.av, p.bv));
+  return boxInteger(p.bothExact, truncDiv(p.av, p.bv));
 };
 
 const remainderFn = (a: ANumeric, b: ANumeric): ANumeric => {
   const p = toIntegerPair(a, b, "remainder");
   invariant(p.bv !== 0, "remainder: division by zero");
-  return boxInteger(a.ctx, p.bothExact, p.av % p.bv);
+  return boxInteger(p.bothExact, p.av % p.bv);
 };
 
 const moduloFn = (a: ANumeric, b: ANumeric): ANumeric => {
   const p = toIntegerPair(a, b, "modulo");
   invariant(p.bv !== 0, "modulo: division by zero");
-  return boxInteger(a.ctx, p.bothExact, ((p.av % p.bv) + p.bv) % p.bv);
+  return boxInteger(p.bothExact, ((p.av % p.bv) + p.bv) % p.bv);
 };
 
 const floorQuotientFn = (a: ANumeric, b: ANumeric): ANumeric => {
   const p = toIntegerPair(a, b, "floor-quotient");
   invariant(p.bv !== 0, "floor-quotient: division by zero");
-  return boxInteger(a.ctx, p.bothExact, floorDiv(p.av, p.bv));
+  return boxInteger(p.bothExact, floorDiv(p.av, p.bv));
 };
 
 const floorRemainderFn = (a: ANumeric, b: ANumeric): ANumeric => {
   const p = toIntegerPair(a, b, "floor-remainder");
   invariant(p.bv !== 0, "floor-remainder: division by zero");
-  return boxInteger(a.ctx, p.bothExact, ((p.av % p.bv) + p.bv) % p.bv);
+  return boxInteger(p.bothExact, ((p.av % p.bv) + p.bv) % p.bv);
 };
 
 const truncateQuotientFn = (a: ANumeric, b: ANumeric): ANumeric => {
   const p = toIntegerPair(a, b, "truncate-quotient");
   invariant(p.bv !== 0, "truncate-quotient: division by zero");
-  return boxInteger(a.ctx, p.bothExact, truncDiv(p.av, p.bv));
+  return boxInteger(p.bothExact, truncDiv(p.av, p.bv));
 };
 
 const truncateRemainderFn = (a: ANumeric, b: ANumeric): ANumeric => {
   const p = toIntegerPair(a, b, "truncate-remainder");
   invariant(p.bv !== 0, "truncate-remainder: division by zero");
-  return boxInteger(a.ctx, p.bothExact, p.av % p.bv);
+  return boxInteger(p.bothExact, p.av % p.bv);
 };
 
 // abs/zero?/positive?/negative? — box-native (§2.2 encode-edge law): operate on the
@@ -351,7 +351,7 @@ const truncateRemainderFn = (a: ANumeric, b: ANumeric): ANumeric => {
 // op has no memory of which box it came from — `Number.isSafeInteger` cannot recover
 // "was the operand exact" once the value is unboxed).
 function schemeAbs(x: ANumeric): ANumeric {
-  return x instanceof AExact ? x.abs() : new AInexact(x.ctx, Math.abs(x.real));
+  return x instanceof AExact ? x.abs() : new AInexact(Math.abs(x.real));
 }
 
 // ── gcd / lcm ───────────────────────────────────────────────────────────────────
@@ -381,7 +381,7 @@ const gcdFn = (...args: ANumeric[]): ANumeric => {
     if (!exact) hasInexact = true;
     acc = gcd2(acc, value);
   }
-  return boxInteger(args[0].ctx, !hasInexact, acc);
+  return boxInteger(!hasInexact, acc);
 };
 
 /** `lcm(a,b) = (a/g)*b` where `g = gcd(a,b)` — the DIVIDE-then-multiply order (never
@@ -398,7 +398,7 @@ const lcmFn = (...args: ANumeric[]): ANumeric => {
     const g = gcd2(acc, av);
     acc = g === 0 ? 0 : checkedMul(acc / g, av, "lcm");
   }
-  return boxInteger(args[0].ctx, !hasInexact, acc);
+  return boxInteger(!hasInexact, acc);
 };
 
 // ── expt ─────────────────────────────────────────────────────────────────────────
@@ -424,13 +424,13 @@ function schemeExpt(base: ANumeric, power: ANumeric): ANumeric {
   if (base instanceof AExact && power instanceof AExact && power.denom === 1) {
     const n = power.num;
     if (n >= 0) {
-      return mintExact(base.ctx, checkedPow(base.num, n, "expt"), checkedPow(base.denom, n, "expt"), undefined, "expt");
+      return mintExact(CONSTANT_CTX, checkedPow(base.num, n, "expt"), checkedPow(base.denom, n, "expt"), undefined, "expt");
     }
     invariant(base.num !== 0, "expt: division by zero (0 raised to a negative power)");
     const m = -n;
-    return mintExact(base.ctx, checkedPow(base.denom, m, "expt"), checkedPow(base.num, m, "expt"), undefined, "expt");
+    return mintExact(CONSTANT_CTX, checkedPow(base.denom, m, "expt"), checkedPow(base.num, m, "expt"), undefined, "expt");
   }
-  return new AInexact(base.ctx, Math.pow(toReal(base), toReal(power)));
+  return new AInexact(Math.pow(toReal(base), toReal(power)));
 }
 
 // ── Comparison cores ─────────────────────────────────────────────────────────────
@@ -534,16 +534,16 @@ const roundFn = (x: number): number => {
 // in/out spec — means an inexact operand can never come back exact just because its
 // rounded VALUE happens to be a safe integer (`(exact? (floor 2.5))` must be `#f`).
 function schemeFloor(x: ANumeric): ANumeric {
-  return x instanceof AExact ? x.floor() : new AInexact(x.ctx, Math.floor(x.real));
+  return x instanceof AExact ? x.floor() : new AInexact(Math.floor(x.real));
 }
 function schemeCeiling(x: ANumeric): ANumeric {
-  return x instanceof AExact ? x.ceiling() : new AInexact(x.ctx, Math.ceil(x.real));
+  return x instanceof AExact ? x.ceiling() : new AInexact(Math.ceil(x.real));
 }
 function schemeTruncate(x: ANumeric): ANumeric {
-  return x instanceof AExact ? x.truncate() : new AInexact(x.ctx, Math.trunc(x.real));
+  return x instanceof AExact ? x.truncate() : new AInexact(Math.trunc(x.real));
 }
 function schemeRound(x: ANumeric): ANumeric {
-  return x instanceof AExact ? x.round() : new AInexact(x.ctx, roundFn(x.real));
+  return x instanceof AExact ? x.round() : new AInexact(roundFn(x.real));
 }
 
 // ── Rational accessors ──────────────────────────────────────────────────────────────
@@ -588,20 +588,20 @@ function floatToRational(x: number): { num: number; denom: number } {
 
 const numeratorFn = (x: ANumeric): ANumeric => {
   if (x instanceof AExact) {
-    return new AExact(x.ctx, x.num);
+    return new AExact(x.num);
   }
   invariant(x instanceof AInexact, "numerator requires a rational number");
   const { num } = floatToRational(x.real);
-  return new AInexact(x.ctx, num);
+  return new AInexact(num);
 };
 
 const denominatorFn = (x: ANumeric): ANumeric => {
   if (x instanceof AExact) {
-    return new AExact(x.ctx, x.denom);
+    return new AExact(x.denom);
   }
   invariant(x instanceof AInexact, "denominator requires a rational number");
   const { denom } = floatToRational(x.real);
-  return new AInexact(x.ctx, denom);
+  return new AInexact(denom);
 };
 
 // ── R7RS S2 gaps: square / exact-integer-sqrt / rationalize ─────────────────────────
@@ -617,7 +617,7 @@ const exactIntegerSqrtFn = function (this: CallCtx, n: unknown): APair<AExact, A
   invariant(a.num >= 0, "exact-integer-sqrt: non-negative integer required");
   const s = exactISqrt(a.num);
   const r = a.num - s * s;
-  return new APair(this.runCtx, new AExact(this.runCtx, s), new AExact(this.runCtx, r));
+  return new APair(new AExact(s), new AExact(r));
 };
 
 /** Simplest rational in [x, y] (x ≤ y). R7RS-style recursive invert of fractional parts. */
@@ -648,9 +648,9 @@ const rationalizeFn = function (this: CallCtx, x: unknown, e: unknown): ANumeric
   invariant(Number.isFinite(xr) && Number.isFinite(er), "rationalize: finite reals required");
   const { num, denom } = simplestInRange(xr - er, xr + er);
   if (xv instanceof AExact && ev instanceof AExact) {
-    return new AExact(this.runCtx, num, denom);
+    return new AExact(num, denom);
   }
-  return new AInexact(this.runCtx, num / denom);
+  return new AInexact(num / denom);
 };
 
 // ── Transcendentals ─────────────────────────────────────────────────────────────────
@@ -663,10 +663,10 @@ const sqrtFn = (x: ANumeric): ANumeric => {
   if (x instanceof AExact && x.denom === 1 && x.num >= 0) {
     const r = exactISqrt(x.num);
     if (r * r === x.num) {
-      return new AExact(x.ctx, r);
+      return new AExact(r);
     }
   }
-  return new AInexact(x.ctx, Math.sqrt(val));
+  return new AInexact(Math.sqrt(val));
 };
 
 const logFn = (z: number, base?: number): number => (base === undefined ? Math.log(z) : Math.log(z) / Math.log(base));
@@ -849,7 +849,7 @@ const floorSlashFn = function (this: CallCtx, n1: unknown, n2: unknown): unknown
   const b = coerceNumeric(n2, this.runCtx);
   const q = floorQuotientFn(a, b);
   const r = floorRemainderFn(a, b);
-  return new APair(this.runCtx, q as SchemeValue, r as SchemeValue);
+  return new APair(q as SchemeValue, r as SchemeValue);
 };
 
 const truncateSlashFn = function (this: CallCtx, n1: unknown, n2: unknown): unknown {
@@ -857,25 +857,25 @@ const truncateSlashFn = function (this: CallCtx, n1: unknown, n2: unknown): unkn
   const b = coerceNumeric(n2, this.runCtx);
   const q = truncateQuotientFn(a, b);
   const r = truncateRemainderFn(a, b);
-  return new APair(this.runCtx, q as SchemeValue, r as SchemeValue);
+  return new APair(q as SchemeValue, r as SchemeValue);
 };
 
 const onePlusFn = function (this: CallCtx, n: unknown): ANumeric {
   const converted = coerceNumeric(n, this.runCtx);
-  const one = new AExact(converted.ctx, 1);
+  const one = new AExact(1);
   return addFn(converted, one);
 };
 
 const oneMinusFn = function (this: CallCtx, n: unknown): ANumeric {
   const converted = coerceNumeric(n, this.runCtx);
-  const one = new AExact(converted.ctx, 1);
+  const one = new AExact(1);
   return subFn(converted, one);
 };
 
 const inexactFn = function (this: CallCtx, z: unknown): AInexact {
   const n = coerceNumeric(z, this.runCtx);
   if (n instanceof AInexact) return n;
-  return new AInexact(n.ctx, n.num / n.denom);
+  return new AInexact(n.num / n.denom);
 };
 
 const exactFn = function (this: CallCtx, z: unknown): AExact {
@@ -883,9 +883,9 @@ const exactFn = function (this: CallCtx, z: unknown): AExact {
   if (n instanceof AExact) return n;
   const real = n.real;
   TypeError.invariant(Number.isFinite(real), "Cannot convert infinity or NaN to exact");
-  if (Number.isInteger(real)) return mintExact(n.ctx, real, 1, undefined, "inexact->exact");
+  if (Number.isInteger(real)) return mintExact(CONSTANT_CTX, real, 1, undefined, "inexact->exact");
   const { num, denom } = floatToRational(real);
-  return mintExact(n.ctx, num, denom, undefined, "inexact->exact");
+  return mintExact(CONSTANT_CTX, num, denom, undefined, "inexact->exact");
 };
 
 // Boxed (RULINGS.md R1) — see NUMBER_TO_STRING_CONTRACT's doc for why a raw return
@@ -906,7 +906,7 @@ const numberToStringFn = function (this: CallCtx, z: unknown, radix?: unknown): 
   const provenance = isEagerAccumulationActive()
     ? unionProvenance(radixArg === undefined ? [n] : [n, radixArg])
     : EMPTY_PROVENANCE;
-  return new AString(n.ctx, s, provenance);
+  return new AString(s, provenance);
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -948,7 +948,7 @@ const addSpec: NumSpec = {
   inRest: z.schemeNumber,
   out: z.schemeNumber,
   fn: addFn,
-  zeroArgIdentity: (ctx) => new AExact(ctx, 0),
+  zeroArgIdentity: (ctx) => new AExact(0),
 };
 const subSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: subFn };
 const mulSpec: NumSpec = {
@@ -956,7 +956,7 @@ const mulSpec: NumSpec = {
   inRest: z.schemeNumber,
   out: z.schemeNumber,
   fn: mulFn,
-  zeroArgIdentity: (ctx) => new AExact(ctx, 1),
+  zeroArgIdentity: (ctx) => new AExact(1),
 };
 const divSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: divFn };
 // `quotient` uses `z.schemeNumber` in/out, NOT `z.bigint`: it shares the same
@@ -991,7 +991,7 @@ const gcdSpec: NumSpec = {
   inRest: z.schemeNumber,
   out: z.schemeNumber,
   fn: gcdFn,
-  zeroArgIdentity: (ctx) => new AExact(ctx, 0),
+  zeroArgIdentity: (ctx) => new AExact(0),
 };
 const maxSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: maxFn };
 const minSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: minFn };
@@ -1029,7 +1029,7 @@ const lcmSpec: NumSpec = {
   inRest: z.schemeNumber,
   out: z.schemeNumber,
   fn: lcmFn,
-  zeroArgIdentity: (ctx) => new AExact(ctx, 1),
+  zeroArgIdentity: (ctx) => new AExact(1),
 };
 
 // ── Bespoke contracts — ops whose impl does NOT come from `nativeNumericOp`/`NumSpec`

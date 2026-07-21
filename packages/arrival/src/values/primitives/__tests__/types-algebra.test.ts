@@ -14,47 +14,47 @@ import { tf } from "../../tagless-final.js";
 // the symmetric/transitive/antisymmetric branches; one astral char for unicode.
 const charArb = fc
   .constantFrom(...["a", "b", "X", "Y", "Z", "0", "1", "2", "!", "@", "\u{1F600}"])
-  .map((c) => new ACharacter(CONSTANT_CTX, c));
+  .map((c) => new ACharacter(c));
 
 setoidLaws("SchemeCharacter", {
   arb: charArb,
-  equalClone: (c) => new ACharacter(CONSTANT_CTX, c.__char__),
+  equalClone: (c) => new ACharacter(c.__char__),
 });
 ordLaws("SchemeCharacter", charArb);
 
 // Nil: bare singleton + provenance clones — all observably equal.
-const nilArb = fc.constantFrom(nil, new ANil(CONSTANT_CTX, ), new ANil(CONSTANT_CTX, new Set([1, 2])));
-setoidLaws("Nil", { arb: nilArb, equalClone: () => new ANil(CONSTANT_CTX, ) });
+const nilArb = fc.constantFrom(nil, new ANil(), new ANil(new Set([1, 2])));
+setoidLaws("Nil", { arb: nilArb, equalClone: () => new ANil() });
 
 describe("SchemeCharacter Setoid/Ord — value semantics", () => {
   it("equal iff same grapheme", () => {
-    expect(new ACharacter(CONSTANT_CTX, "a")[tf("equals")](new ACharacter(CONSTANT_CTX, "a"))).toBe(true);
-    expect(new ACharacter(CONSTANT_CTX, "a")[tf("equals")](new ACharacter(CONSTANT_CTX, "b"))).toBe(false);
+    expect(new ACharacter("a")[tf("equals")](new ACharacter("a"))).toBe(true);
+    expect(new ACharacter("a")[tf("equals")](new ACharacter("b"))).toBe(false);
   });
 
   it("totality across the codepoint ordering", () => {
-    const lo = new ACharacter(CONSTANT_CTX, "a");
-    const hi = new ACharacter(CONSTANT_CTX, "b");
+    const lo = new ACharacter("a");
+    const hi = new ACharacter("b");
     expect(lo[tf("lte")](hi)).toBe(true);
     expect(hi[tf("lte")](lo)).toBe(false);
   });
 
   it("FL methods are total — non-char input returns false", () => {
-    expect(new ACharacter(CONSTANT_CTX, "a")[tf("equals")](42)).toBe(false);
-    expect(new ACharacter(CONSTANT_CTX, "a")[tf("equals")](nil)).toBe(false);
-    expect(new ACharacter(CONSTANT_CTX, "a")[tf("lte")]("a")).toBe(false);
+    expect(new ACharacter("a")[tf("equals")](42)).toBe(false);
+    expect(new ACharacter("a")[tf("equals")](nil)).toBe(false);
+    expect(new ACharacter("a")[tf("lte")]("a")).toBe(false);
   });
 });
 
 describe("Nil Setoid — every Nil is equal", () => {
   it("singleton, fresh, and provenance-clone Nils all compare equal", () => {
-    expect(nil[tf("equals")](new ANil(CONSTANT_CTX))).toBe(true);
-    expect(new ANil(CONSTANT_CTX)[tf("equals")](nil)).toBe(true);
-    expect(new ANil(CONSTANT_CTX, new Set([7]))[tf("equals")](new ANil(CONSTANT_CTX))).toBe(true);
+    expect(nil[tf("equals")](new ANil())).toBe(true);
+    expect(new ANil()[tf("equals")](nil)).toBe(true);
+    expect(new ANil(new Set([7]))[tf("equals")](new ANil())).toBe(true);
   });
 
   it("FL method is total — non-Nil input returns false", () => {
-    expect(nil[tf("equals")](new ACharacter(CONSTANT_CTX, "a"))).toBe(false);
+    expect(nil[tf("equals")](new ACharacter("a"))).toBe(false);
     expect(nil[tf("equals")](null)).toBe(false);
   });
 });

@@ -23,7 +23,7 @@
  * dict-literal syntax business entirely.
  */
 import { CLASS } from "../../well-known-symbols.js";
-import { type RunContext } from "../../run/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { egressContainerProxy } from "../../membrane/egress-proxy.js";
 import { APair } from "./APair.js";
@@ -121,11 +121,10 @@ export class ADict extends AValue {
    *  producer's own policy, decided before this constructor runs, exactly as it
    *  trusts `Record`/array shape today. */
   constructor(
-    ctx: RunContext,
     pairs: ReadonlyArray<readonly [DictKey, SchemeValue | Promise<SchemeValue>]>,
     provenance = EMPTY_PROVENANCE,
   ) {
-    super(ctx, provenance);
+    super(provenance);
     const byKey = new Map<DictKey, SchemeValue | Promise<SchemeValue>>();
     const indexByName: Record<string, DictKey> = Object.create(null);
     for (const [key, value] of pairs) {
@@ -168,7 +167,7 @@ export class ADict extends AValue {
       if (isSettleChain(entry)) return entry;
       const cell = settleEntry(
         entry,
-        (settled) => pluck(jsToScheme(this.ctx, settled, {}, this.provenance)),
+        (settled) => pluck(jsToScheme(CONSTANT_CTX, settled, {}, this.provenance)),
         (boxed) => this.byKey.set(key, boxed),
       );
       this.byKey.set(key, cell);
@@ -195,7 +194,7 @@ export class ADict extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): ADict {
-    const d = new ADict(this.ctx, [...this.byKey.entries()], p);
+    const d = new ADict([...this.byKey.entries()], p);
     // Same-identity re-stamp: a `{…}` literal node stays a `{…}` literal node
     // (mirrors AVector.withProvenance re-stamping `evalElements`).
     d.literalForms = this.literalForms;
@@ -217,7 +216,7 @@ export class ADict extends AValue {
     if (lowered === undefined) {
       // Same non-empty-spine guarantee as AVector's twin (a `dict` head is always
       // prepended) — narrowed here to match what's actually built.
-      lowered = APair.fromArray(this.ctx, [new ASymbol(this.ctx, "dict"), ...this.literalForms], false) as APair<
+      lowered = APair.fromArray(CONSTANT_CTX, [new ASymbol("dict"), ...this.literalForms], false) as APair<
         SchemeValue,
         SchemeValue
       >;

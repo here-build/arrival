@@ -17,15 +17,14 @@
  * value class itself is mode-agnostic; the divergence lives at the reader.
  */
 import { CLASS } from "../../well-known-symbols.js";
-import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 
 export class AVoid extends AValue {
   static [CLASS] = "void";
   readonly kind = "void" as const;
 
-  constructor(ctx: RunContext, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
-    super(ctx, provenance);
+  constructor(provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
+    super(provenance);
   }
 
   /** Non-readable external representation, mirroring `#<eof>`. The readable `#void`
@@ -45,7 +44,7 @@ export class AVoid extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): AVoid {
-    return new AVoid(this.ctx, p);
+    return new AVoid(p);
   }
 
   // Setoid (Fantasy Land) — every void is equal (identity singleton; provenance
@@ -56,5 +55,5 @@ export class AVoid extends AValue {
 }
 
 /** The one unspecified value — identity-compared; returned for every "no useful
- *  value" site. Carries CONSTANT_CTX, exactly as `nil`/`eof` do. */
-export const theVoid = new AVoid(CONSTANT_CTX);
+ *  value" site. */
+export const theVoid = new AVoid();

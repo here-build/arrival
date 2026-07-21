@@ -35,14 +35,14 @@ describe("fuzz — provenance algebra invariants at depth", () => {
         ),
         (leafSets) => {
           // Round-trip 1: union all leaves at once.
-          const flatLeaves = leafSets.map((ids) => new ABool(CONSTANT_CTX, true, new Set(ids)));
+          const flatLeaves = leafSets.map((ids) => new ABool(true, new Set(ids)));
           const flatResult = unionProvenance(flatLeaves);
 
           // Round-trip 2: pairwise-fold through wrapped AValues.
-          let acc: AValue = new ABool(CONSTANT_CTX, true, EMPTY_PROVENANCE);
+          let acc: AValue = new ABool(true, EMPTY_PROVENANCE);
           for (const ids of leafSets) {
-            const leaf = new ABool(CONSTANT_CTX, false, new Set(ids));
-            acc = new ABool(CONSTANT_CTX, false, unionProvenance([acc, leaf]));
+            const leaf = new ABool(false, new Set(ids));
+            acc = new ABool(false, unionProvenance([acc, leaf]));
           }
 
           // Both routes must agree on membership — associativity is what
@@ -60,9 +60,9 @@ describe("fuzz — provenance algebra invariants at depth", () => {
       fc.property(
         fc.uniqueArray(fc.integer({ min: 0, max: 10_000 }), { maxLength: 6 }),
         (ids) => {
-          const seed = new ABool(CONSTANT_CTX, true, ids.length === 0 ? EMPTY_PROVENANCE : new Set(ids));
+          const seed = new ABool(true, ids.length === 0 ? EMPTY_PROVENANCE : new Set(ids));
           const once = unionProvenance([seed]);
-          const twice = unionProvenance([new ABool(CONSTANT_CTX, true, once), new ABool(CONSTANT_CTX, true, once)]);
+          const twice = unionProvenance([new ABool(true, once), new ABool(true, once)]);
           expect(new Set(twice)).toEqual(new Set(once));
         },
       ),

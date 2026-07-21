@@ -19,13 +19,12 @@
 // boxed to AJSObject (losing the Keyword identity, and with it the dispatch). A
 // constant syntactic marker — CONSTANT_CTX, provenance-free, identity equality.
 import { AValue } from "./primitives/AValue.js";
-import { CONSTANT_CTX } from "../run/RunContext.js";
 
 export class Keyword extends AValue {
   readonly kind = "keyword" as const;
 
   constructor(readonly name: string) {
-    super(CONSTANT_CTX);
+    super();
   }
 
   ["arrival/toJS"](): unknown {

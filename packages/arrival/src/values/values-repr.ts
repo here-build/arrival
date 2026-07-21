@@ -63,7 +63,7 @@ export const gensym = (function () {
     // special-cases `typeof unwrapped === "string"` for interning — anything else (a gensym's
     // raw ES6 symbol) is stored verbatim as `__name__` (ASymbol.ts's `isSymbol`/`is_gensym`
     // helpers read it back as a symbol). Honest cast to the existing, already-handled contract.
-    const symbol = new ASymbol(CONSTANT_CTX, sym);
+    const symbol = new ASymbol(sym);
     hidden_prop(symbol, "__literal__", name);
     return symbol;
   }
@@ -78,7 +78,7 @@ export const gensym = (function () {
     if (is_gensym(name)) {
       // avoid double-gensym in nested syntax-rules
       // Same ASymbol contract as `with_props` above: a gensym's raw ES6 symbol is stored as-is.
-      return new ASymbol(CONSTANT_CTX, name as unknown as string);
+      return new ASymbol(name as unknown as string);
     }
     // ES6 symbol guarantees uniqueness as the backing name.
     if (name !== null) {
@@ -138,13 +138,13 @@ function isPendingDatum(value: SchemeValue | PromiseLike<SchemeValue>): value is
 export function box(object: unknown, ctx: RunContext = CONSTANT_CTX): SchemeValue {
   switch (typeof object) {
     case "string":
-      return new AString(ctx, object);
+      return new AString(object);
     case "number":
-      if (Number.isNaN(object)) return new AInexact(ctx, Number.NaN);
+      if (Number.isNaN(object)) return new AInexact(Number.NaN);
       if (Number.isSafeInteger(object)) {
-        return new AExact(ctx, object);
+        return new AExact(object);
       }
-      return new AInexact(ctx, object);
+      return new AInexact(object);
   }
   return object as SchemeValue;
 }

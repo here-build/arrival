@@ -78,7 +78,7 @@ export default new EnvCapability("scheme/vectors", {
         const arr = Array.from({ length: len }, () => slot);
         // Boxed into SchemeVector so the container carries provenance and hosts
         // algebra instances. Elements (if AValues) still carry their own provenance.
-        return withInputProvenance([fill], new AVector(this.runCtx, arr));
+        return withInputProvenance([fill], new AVector(arr));
       },
     ),
 
@@ -95,7 +95,7 @@ export default new EnvCapability("scheme/vectors", {
         `,
       },
       function (this: CallCtx, ...objs: SchemeValue[]): AVector {
-        return withInputProvenance(objs, new AVector(this.runCtx, [...objs]));
+        return withInputProvenance(objs, new AVector([...objs]));
       },
     ),
 
@@ -115,7 +115,7 @@ export default new EnvCapability("scheme/vectors", {
       // vector() decodes the scheme face to AVector | AJSArray (borrowed array), not AVector only.
       function (this: CallCtx, ...vectors: (AVector | AJSArray)[]): AVector {
         const arrays = vectors.map((v) => asVector(v, "vector-append"));
-        return withInputProvenance(vectors, new AVector(this.runCtx, ([] as SchemeValue[]).concat(...arrays)));
+        return withInputProvenance(vectors, new AVector(([] as SchemeValue[]).concat(...arrays)));
       },
     ),
 
@@ -146,7 +146,7 @@ export default new EnvCapability("scheme/vectors", {
         `,
       },
       function (this: CallCtx, vec: unknown): AExact {
-        return new AExact(this.runCtx, asVector(vec, "vector-length").length);
+        return new AExact(asVector(vec, "vector-length").length);
       },
     ),
 
@@ -205,10 +205,10 @@ export default new EnvCapability("scheme/vectors", {
         const arr = asVector(vec, "vector->list");
         const s = start === undefined ? 0 : toIndex(start);
         const e = end === undefined ? arr.length : toIndex(end);
-        // `vec` stays `unknown` (asVector also tolerates a transitional raw array — not an
-        // AValue) — ctxOf's own body (`x instanceof AValue ? x.ctx : CONSTANT_CTX`) already
-        // guards non-AValue input and falls back to CONSTANT_CTX, so this cast changes nothing
-        // at runtime; it only states the domain ctxOf already handles.
+        // TODO(ctx-elimination): `vec` stays `unknown` (asVector also tolerates a transitional
+        // raw array — not an AValue) — ctxOf now always answers its CONSTANT_CTX fallback
+        // unconditionally (AValue no longer carries a per-value ctx to narrow on — see
+        // AValue.ts's ctx-removal note), so this cast changes nothing at runtime either way.
         return APair.fromArray(ctxOf(vec as SchemeValue), arr.slice(s, e));
       },
     ),
@@ -230,7 +230,7 @@ export default new EnvCapability("scheme/vectors", {
           result.push(current.car);
           current = current.cdr;
         }
-        return withInputProvenance([list], new AVector(this.runCtx, result));
+        return withInputProvenance([list], new AVector(result));
       },
     ),
 
@@ -254,7 +254,7 @@ export default new EnvCapability("scheme/vectors", {
           const ch = arr[i];
           result += ch instanceof ACharacter ? charValue(ch) : String(ch);
         }
-        return withInputProvenance([vec], new AString(this.runCtx, result));
+        return withInputProvenance([vec], new AString(result));
       },
     ),
 
@@ -274,9 +274,9 @@ export default new EnvCapability("scheme/vectors", {
         const e = end === undefined ? s_str.length : toIndex(end);
         const result: SchemeValue[] = [];
         for (let i = s; i < e; i++) {
-          result.push(new ACharacter(this.runCtx, s_str[i]));
+          result.push(new ACharacter(s_str[i]));
         }
-        return withInputProvenance([str], new AVector(this.runCtx, result));
+        return withInputProvenance([str], new AVector(result));
       },
     ),
 
@@ -294,7 +294,7 @@ export default new EnvCapability("scheme/vectors", {
         const arr = asVector(vec, "vector-copy");
         const s = start === undefined ? 0 : toIndex(start);
         const e = end === undefined ? arr.length : toIndex(end);
-        return withInputProvenance([vec], new AVector(this.runCtx, arr.slice(s, e)));
+        return withInputProvenance([vec], new AVector(arr.slice(s, e)));
       },
     ),
 
@@ -335,10 +335,10 @@ export default new EnvCapability("scheme/vectors", {
         // is preserved. (errors-as-doors note: silent leak defeats boxing goal-b.)
         if (result.some(is_promise)) {
           return (promise_all(result) as Promise<SchemeValue[]>).then((resolved) =>
-            withInputProvenance(vectors, new AVector(runCtx, resolved)),
+            withInputProvenance(vectors, new AVector(resolved)),
           );
         }
-        return withInputProvenance(vectors, new AVector(runCtx, result));
+        return withInputProvenance(vectors, new AVector(result));
       },
     ),
 

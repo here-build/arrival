@@ -177,13 +177,13 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
   // AValue input is returned as-is on the empty-provenance fast path.
   // INVARIANT: AValue input with empty provenance is returned by identity (fast path)
   it("AValue input (empty provenance) is returned by identity", () => {
-    const orig = new AString(CONSTANT_CTX, "x");
+    const orig = new AString("x");
     expect(fromJs(CONSTANT_CTX, orig)).toBe(orig);
   });
 
   // INVARIANT: AValue input with non-empty provenance is cloned via withProvenance, carrying the new provenance (pins implementation, not behavior)
   it("AValue input (with non-empty provenance) is cloned via withProvenance", () => {
-    const orig = new AString(CONSTANT_CTX, "x");
+    const orig = new AString("x");
     const prov = new Set<number>([7]);
     const result = fromJs(CONSTANT_CTX, orig, prov);
     expect(result).not.toBe(orig);
@@ -278,23 +278,23 @@ describe("isSchemeValue completeness — every native AValue subtype is recognis
 
   // INVARIANT: every native AValue subtype (String/Symbol/Character/Exact/Inexact/Bool/Pair/nil/JSObject) is recognized as a scheme value
   it("SchemeString → true", () => {
-    expect(isSchemeValue(new AString(CONSTANT_CTX, "x"))).toBe(true);
+    expect(isSchemeValue(new AString("x"))).toBe(true);
   });
 
   it("SchemeSymbol → true", () => {
-    expect(isSchemeValue(new ASymbol(CONSTANT_CTX, "foo"))).toBe(true);
+    expect(isSchemeValue(new ASymbol("foo"))).toBe(true);
   });
 
   it("SchemeCharacter → true", () => {
-    expect(isSchemeValue(new ACharacter(CONSTANT_CTX, "a"))).toBe(true);
+    expect(isSchemeValue(new ACharacter("a"))).toBe(true);
   });
 
   it("SchemeExact → true", () => {
-    expect(isSchemeValue(new AExact(CONSTANT_CTX, 42))).toBe(true);
+    expect(isSchemeValue(new AExact(42))).toBe(true);
   });
 
   it("SchemeInexact → true", () => {
-    expect(isSchemeValue(new AInexact(CONSTANT_CTX, 3.14))).toBe(true);
+    expect(isSchemeValue(new AInexact(3.14))).toBe(true);
   });
 
   it("SchemeBool (singletons) → true", () => {
@@ -303,7 +303,7 @@ describe("isSchemeValue completeness — every native AValue subtype is recognis
   });
 
   it("Pair → true", () => {
-    expect(isSchemeValue(new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), nil))).toBe(true);
+    expect(isSchemeValue(new APair(new AExact(1), nil))).toBe(true);
   });
 
   it("nil singleton → true (via the `=== nil` short-circuit)", () => {
@@ -311,7 +311,7 @@ describe("isSchemeValue completeness — every native AValue subtype is recognis
   });
 
   it("SchemeJSObject → true", () => {
-    expect(isSchemeValue(new AJSObject(CONSTANT_CTX, {}))).toBe(true);
+    expect(isSchemeValue(new AJSObject({}))).toBe(true);
   });
 
   // Nil clones — should be recognized but aren't. See clone-identity.test.ts

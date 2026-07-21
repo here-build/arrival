@@ -34,7 +34,7 @@ requireEagerOracle();
 
 const evalScheme = (e: SchemeEnv, src: string) => exec(src, { env: e as never });
 
-const stamped = (s: string, ...points: number[]) => new AString(CONSTANT_CTX, s, new Set(points));
+const stamped = (s: string, ...points: number[]) => new AString(s, new Set(points));
 const sorted = (set: Set<number>) => [...set].sort((a, b) => a - b);
 // A literal-only result comes back as a raw JS string; a provenanced input boxes it to
 // an AString. Unwrap either shape to the plain JS value.

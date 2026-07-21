@@ -193,20 +193,20 @@ export default new EnvCapability("scheme/chars", {
         // The scheme face of the numeric arm: exact for integers (digits), inexact for the
         // rare fractional numeric values (vulgar-fraction No characters).
         return Number.isInteger(numericValue)
-          ? new AExact(this.runCtx, numericValue)
-          : new AInexact(this.runCtx, numericValue);
+          ? new AExact(numericValue)
+          : new AInexact(numericValue);
       },
     ),
 
     // Case conversion
     "char-upcase": symbol.native`char-upcase: uppercase form of the character`(
       { input: [z.char], output: [z.char] },
-      function (this: CallCtx, char) { return new ACharacter(this.runCtx, charValue(char).toUpperCase()); },
+      function (this: CallCtx, char) { return new ACharacter(charValue(char).toUpperCase()); },
     ),
 
     "char-downcase": symbol.native`char-downcase: lowercase form of the character`(
       { input: [z.char], output: [z.char] },
-      function (this: CallCtx, char) { return new ACharacter(this.runCtx, charValue(char).toLowerCase()); },
+      function (this: CallCtx, char) { return new ACharacter(charValue(char).toLowerCase()); },
     ),
 
     "char-foldcase": symbol.native`char-foldcase: case-folded form of the character`(
@@ -219,7 +219,7 @@ export default new EnvCapability("scheme/chars", {
         // sigma, etc.), there is no single-char result, so the operation MUST
         // return the input unchanged. Truncating to `folded[0]` produces a
         // different character (ß → s) which violates the round-trip identity.
-        return [...folded].length === 1 ? new ACharacter(this.runCtx, folded) : char;
+        return [...folded].length === 1 ? new ACharacter(folded) : char;
       },
     ),
 
@@ -231,7 +231,7 @@ export default new EnvCapability("scheme/chars", {
     "char->integer": symbol.native`char->integer: Unicode scalar value of the character`(
       { input: [z.char], output: [z.exact] },
       function (this: CallCtx, char) {
-        return new AExact(this.runCtx, charValue(char).codePointAt(0)!);
+        return new AExact(charValue(char).codePointAt(0)!);
       },
     ),
 
@@ -253,7 +253,7 @@ export default new EnvCapability("scheme/chars", {
           code < 0xd8_00 || code > 0xdf_ff,
           `integer->char: surrogate code point ${code.toString(16)} is not a Unicode scalar`,
         );
-        return new ACharacter(this.runCtx, String.fromCodePoint(code));
+        return new ACharacter(String.fromCodePoint(code));
       },
     ),
   },

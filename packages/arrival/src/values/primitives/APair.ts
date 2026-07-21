@@ -243,8 +243,8 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     return this._cdr;
   }
 
-  constructor(ctx: RunContext, car: Car, cdr: Cdr, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
-    super(ctx, provenance);
+  constructor(car: Car, cdr: Cdr, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
+    super(provenance);
     this._car = car;
     this._cdr = cdr;
   }
@@ -302,7 +302,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     if (deep === false) {
       let list: AListAlike = nil;
       for (let i = arr.length; i--; ) {
-        list = new APair(ctx, arr[i], list);
+        list = new APair(arr[i], list);
       }
       // Same deferred-conditional cast as above: `list` is nil | a freshly-built spine over
       // `arr`'s own elements — the base case + recursive shape AListAlike<T> always admits,
@@ -316,15 +316,15 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
       if (Array.isArray(car)) {
         car = APair.fromArray(ctx, car, deep, quote);
       } else if (typeof car === "string") {
-        car = new AString(ctx, car);
+        car = new AString(car);
       } else if (typeof car === "number" && !Number.isNaN(car)) {
-        car = Number.isSafeInteger(car) ? new AExact(ctx, car) : new AInexact(ctx, car);
+        car = Number.isSafeInteger(car) ? new AExact(car) : new AInexact(car);
       }
       // A raw JS `bigint` element is left untouched: per the numeric-rework law
       // (docs/design-history/arrival-one-number-rework.md §0/§2.3), bigint is an
       // opaque host value, not a scheme number — it rides the same pass-through lane
       // the membrane's `fromJS(bigint)` uses, rather than auto-boxing into an AExact.
-      result = new APair(ctx, car as SchemeValue, result);
+      result = new APair(car as SchemeValue, result);
     }
     // Same deferred-conditional cast as the two arms above.
     return result as AListAlike<T>;
@@ -333,7 +333,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   static fromPairs(ctx: RunContext, array: [string, SchemeValue][]): AListAlike {
     return this.fromArray(
       ctx,
-      array.map(([left, right]) => new APair(ctx, new ASymbol(ctx, left), right)),
+      array.map(([left, right]) => new APair(new ASymbol(left), right)),
     );
   }
 
@@ -354,7 +354,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // Applicative dispatcher ever lands, this needs a designed answer (a caller-supplied
   // ctx param), not a threaded param invented here.
   static ["arrival/tagless-final/of"](value: SchemeValue): AListAlike {
-    return new APair(CONSTANT_CTX, value, nil);
+    return new APair(value, nil);
   }
 
   /** Returns this for chaining. */
@@ -369,7 +369,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
 
   // Instance methods
   flatten(): AListAlike | unknown[] {
-    return APair.fromArray(this.ctx, this.to_array().flat(Infinity));
+    return APair.fromArray(CONSTANT_CTX, this.to_array().flat(Infinity));
   }
 
   length(): number {
@@ -391,7 +391,6 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
 
   clone(deep = true): AListAlike {
     const visited = new Map<AListAlike, AListAlike>();
-    const selfCtx = this.ctx;
 
     function cloneNode<T extends SchemeValue>(node: T): T {
       if (node instanceof APair) {
@@ -401,7 +400,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
         // Register BEFORE descending (a cycle resolves to this very clone), built with the
         // ORIGINAL slots as placeholders so the readonly contract holds at construction; the
         // knot door then overwrites with the cloned sub-spines.
-        const pair = new APair(selfCtx, node.car, node.cdr);
+        const pair = new APair(node.car, node.cdr);
         visited.set(node, pair);
         __tieKnot(pair, "car", (deep ? cloneNode(node.car) : node.car) as SchemeValue);
         __tieKnot(pair, "cdr", cloneNode(node.cdr) as SchemeValue);
@@ -611,7 +610,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
    * must survive — losing it breaks stack traces and reader-cycle reconstruction.
    */
   withProvenance(p: ReadonlySet<number>): APair<Car, Cdr> {
-    const copy = new APair<Car, Cdr>(this.ctx, this.car, this.cdr, p);
+    const copy = new APair<Car, Cdr>(this.car, this.cdr, p);
 
     if (this[LOCATION] !== undefined) copy[LOCATION] = this[LOCATION];
     if (this[CYCLES] !== undefined) copy[CYCLES] = this[CYCLES];
@@ -632,7 +631,6 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   ): APair<SchemeValue, SchemeValue> {
     seen.add(this);
     return new APair(
-      ctx,
       reStampChild(this.car, ctx, p, seen),
       reStampChild(this.cdr, ctx, p, seen),
       // UNION, not replace — the crossing ADDS its origin to what this cell already knew.
@@ -696,12 +694,12 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
       // `canBounce: false` (see the invocation-seam comment above) rules out a bounce marker
       // reaching a HOF-applied callback's result.
       return (promise_all(results) as Promise<unknown[]>).then((resolved) =>
-        withInputProvenance([this], APair.fromArray(this.ctx, resolved as SchemeValue[], false)),
+        withInputProvenance([this], APair.fromArray(CONSTANT_CTX, resolved as SchemeValue[], false)),
       );
     }
     // Same CallResult→SchemeValue narrowing as above: `results` holds no promise (checked) and
     // no bounce marker (canBounce: false at the seam), so every element is a settled SchemeValue.
-    return withInputProvenance([this], APair.fromArray(this.ctx, results as SchemeValue[], false));
+    return withInputProvenance([this], APair.fromArray(CONSTANT_CTX, results as SchemeValue[], false));
   }
 
   // Filterable — preserves every kept element's box. Keep-rule matches the eager `filter`
@@ -737,11 +735,11 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     if (verdicts.some(is_promise)) {
       return (promise_all(verdicts) as Promise<unknown[]>).then((results) => {
         const survivors = elements.filter((_, i) => kept(results[i]));
-        return withInputProvenance([this, ...survivors], APair.fromArray(this.ctx, survivors, false));
+        return withInputProvenance([this, ...survivors], APair.fromArray(CONSTANT_CTX, survivors, false));
       });
     }
     const survivors = elements.filter((_, i) => kept(verdicts[i]));
-    return withInputProvenance([this, ...survivors], APair.fromArray(this.ctx, survivors, false));
+    return withInputProvenance([this, ...survivors], APair.fromArray(CONSTANT_CTX, survivors, false));
   }
 
   // Canonical async-aware reduce, SRFI fold convention `fn(element, acc)` (acc last), left fold.
@@ -796,7 +794,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     // NOT done here — that's order-attribution provenance tracking, a distinct concern from
     // ctx-honesty.
     out.sort(deriveSortCompare(comparator, runCtx));
-    return withInputProvenance([this], APair.fromArray(this.ctx, out, false));
+    return withInputProvenance([this], APair.fromArray(CONSTANT_CTX, out, false));
   }
 
   // Prefix — the first n elements as a FRESH list (SRFI-1 take), dotted-tail tolerant: the
@@ -815,7 +813,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
       k--;
     }
     chargeHeap(runCtx, out.length);
-    return withInputProvenance([this, ...out], APair.fromArray(this.ctx, out, false));
+    return withInputProvenance([this, ...out], APair.fromArray(CONSTANT_CTX, out, false));
   }
 
   // Suffix — the n-th cdr ITSELF (SRFI-1 drop): shared structure, not a rebuild, so this is a
@@ -854,7 +852,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
       node = node.cdr;
     }
     chargeHeap(runCtx, out.length);
-    return withInputProvenance([this, ...out], APair.fromArray(this.ctx, out, false));
+    return withInputProvenance([this, ...out], APair.fromArray(CONSTANT_CTX, out, false));
   }
 
   // The take-while remainder (SRFI-1 drop-while) — SHARED tail, same pure-projection register
@@ -930,18 +928,17 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
 
   // Traversable — effectful traversal; `of` lifts into the applicative.
   ["arrival/tagless-final/traverse"](of: (x: unknown) => unknown, f: (x: unknown) => unknown): unknown {
-    return traversePair(this.ctx, of as (x: unknown) => SchemeValue, f, this);
+    return traversePair(of as (x: unknown) => SchemeValue, f, this);
   }
 
   // Semigroup — list append. `this ⋄ other` = this list's elements followed by other's. Pure:
   // builds a fresh spine, never mutates either operand.
   ["arrival/tagless-final/concat"]<T extends AListAlike>(other: T): AConcatPair<APair<Car, Cdr>, T> {
-    return concatPair<APair<Car, Cdr>, T>(this.ctx, this, other);
+    return concatPair<APair<Car, Cdr>, T>(CONSTANT_CTX, this, other);
   }
 }
 
 function traversePair(
-  ctx: RunContext,
   // `of` lifts ANY SchemeValue into the applicative — it's called with both `nil` (the fold
   // seed) and a freshly-built `APair` (the leaf-wrap below), never just an APair.
   of: (x: SchemeValue) => SchemeValue,
@@ -968,7 +965,7 @@ function traversePair(
     // `ap`'s declared return is `unknown` (AValue's dynamic-dispatch key, no implementer yet) —
     // the Applicative contract it stands in for always answers with a SchemeValue, same as
     // every other tagless term.
-    acc = apFn ? (apFn.call(mappedCar, acc) as SchemeValue) : of(new APair(ctx, mappedCar as SchemeValue, acc));
+    acc = apFn ? (apFn.call(mappedCar, acc) as SchemeValue) : of(new APair(mappedCar as SchemeValue, acc));
   }
   return acc;
 }
@@ -985,10 +982,14 @@ type AConcatPair<Car extends SchemeValue, Cdr extends AListAlike> =
 // them onto `b` (shared by reference — purity: a's spine is fresh, b untouched). An improper
 // `a` still contributes its phantom `undefined` car before the non-Pair tail ends the walk.
 export function concatPair<Car extends SchemeValue, Cdr extends AListAlike>(
+  // TODO(ctx-elimination): kept so the existing caller (env/r7rs/lists.ts's `ctxOf(item)`)
+  // doesn't change — no longer threaded into the rebuilt spine below (AValue no longer stores
+  // a per-value ctx — see AValue.ts's ctx-removal note).
   ctx: RunContext,
   a: Car,
   b: Cdr,
 ): AConcatPair<Car, Cdr> {
+  void ctx;
   const cars: SchemeValue[] = [];
   let node: unknown = a;
   while (node instanceof APair) {
@@ -997,7 +998,7 @@ export function concatPair<Car extends SchemeValue, Cdr extends AListAlike>(
   }
   let result: AListAlike = b ?? nil;
   for (let i = cars.length; i--; ) {
-    result = new APair(ctx, cars[i], result);
+    result = new APair(cars[i], result);
   }
   // The rebuilt spine's fresh head cell carries NO stamp of its own by construction (same
   // rebuild-drop shape cdr's fix above addresses) — stamp it with the union of BOTH operands'
@@ -1086,7 +1087,6 @@ function countPairElements(head: APair<any, any> | ANil): number {
  *  name, purely to keep this module free of an import edge back to AJSArray.ts (which imports
  *  APair). `AJSArray` is its only implementor. */
 export interface BorrowedArray {
-  readonly ctx: RunContext;
   readonly provenance: ReadonlySet<number>;
   readonly source: readonly unknown[];
   /** THE declared membrane penetration for this container's elements — the ONE place a raw JS
@@ -1134,7 +1134,7 @@ export class AJSArrayList extends APair<SchemeValue, SchemeValue> {
     // The `nil, nil` placeholders are never read: both accessors are overridden below, and
     // `__tieKnot` — the one path that could write the underlying slots — refuses a view by
     // invariant. They exist only to satisfy APair's constructor.
-    super(owner.ctx, nil, nil, owner.provenance);
+    super(nil, nil, owner.provenance);
   }
 
   /**

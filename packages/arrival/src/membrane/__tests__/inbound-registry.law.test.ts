@@ -95,9 +95,9 @@ describe("inbound registry — the declared, ordered claim table IS the law", ()
   });
 
   it("deep re-stamp went CLASS-SIDE: a fresh stamp on a pair spine mints a fresh spine via arrival/withProvenanceDeep, children inherit the stamp; identity fast paths hold", () => {
-    const car = new AString(CONSTANT_CTX, "a");
-    const cdr = new AExact(CONSTANT_CTX, 1);
-    const pair = new APair(CONSTANT_CTX, car, cdr);
+    const car = new AString("a");
+    const cdr = new AExact(1);
+    const pair = new APair(car, cdr);
 
     // Empty stamp → identity fast path (no clone).
     expect(jsToScheme(CONSTANT_CTX, pair)).toBe(pair);
@@ -123,9 +123,7 @@ describe("inbound registry — the declared, ordered claim table IS the law", ()
 
 describe("pending cells — a Promise inside a structure settles lazily on first access (maybeThen discipline)", () => {
   it("promise-in-DICT: first read returns the settle chain; it resolves to the boxed value CARRYING the dict's provenance; the read is SYNC after settlement", async () => {
-    const dict = new ADict(
-      CONSTANT_CTX,
-      [[new ASymbol(CONSTANT_CTX, ":answer"), Promise.resolve(42)]],
+    const dict = new ADict([[new ASymbol(":answer"), Promise.resolve(42)]],
       PROV,
     );
 
@@ -148,8 +146,8 @@ describe("pending cells — a Promise inside a structure settles lazily on first
   });
 
   it("promise-in-DICT: an already-AValue settlement passes through jsToScheme's fast path (same stamp → identity)", async () => {
-    const boxed = new AString(CONSTANT_CTX, "ready", PROV);
-    const dict = new ADict(CONSTANT_CTX, [[new ASymbol(CONSTANT_CTX, ":v"), Promise.resolve(boxed)]], PROV);
+    const boxed = new AString("ready", PROV);
+    const dict = new ADict([[new ASymbol(":v"), Promise.resolve(boxed)]], PROV);
     const settled = await Promise.resolve(dict.get("v"));
     expect(settled).toBe(boxed);
     expect(dict.get("v")).toBe(boxed); // sync + identity thereafter
@@ -157,7 +155,7 @@ describe("pending cells — a Promise inside a structure settles lazily on first
 
   it("promise-in-AJSObject entry: settles on first .get, caches the box, sync after settlement", async () => {
     const source = { eager: "now", lazy: Promise.resolve("later") };
-    const wrapper = new AJSObject(CONSTANT_CTX, source, PROV);
+    const wrapper = new AJSObject(source, PROV);
 
     // The sync entry stays sync — pendency of a SIBLING never taxes it.
     const eager = wrapper.get("eager");
@@ -177,7 +175,7 @@ describe("pending cells — a Promise inside a structure settles lazily on first
   });
 
   it("promise-in-AJSArray element: vector-ref settles on first access, sync after settlement, container provenance carried", async () => {
-    const arr = new AJSArray(CONSTANT_CTX, [1, Promise.resolve(2)], PROV);
+    const arr = new AJSArray([1, Promise.resolve(2)], PROV);
 
     // Sync element: unchanged, no pendency tax.
     const sync = arr[tf("vector-ref")](0);
@@ -197,7 +195,7 @@ describe("pending cells — a Promise inside a structure settles lazily on first
   });
 
   it("egress of a pending DICT entry: the proxy read hands JS a Promise of the UNWRAPPED value, never a boxed AValue", async () => {
-    const dict = new ADict(CONSTANT_CTX, [[new ASymbol(CONSTANT_CTX, ":n"), Promise.resolve(7)]]);
+    const dict = new ADict([[new ASymbol(":n"), Promise.resolve(7)]]);
     const out = dict["arrival/toJS"]();
     const pending = out.n;
     expect(pending).toBeInstanceOf(Promise);

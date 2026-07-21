@@ -36,7 +36,7 @@ import { CONSTANT_CTX } from "../run/RunContext.js";
 import { nil } from "../values/primitives/ANil.js";
 
 // The boxed sentinel a resolver answers with (resolvers box at their own boundary now).
-const FOUND = new AExact(CONSTANT_CTX, 42);
+const FOUND = new AExact(42);
 
 // Helper to lookup without patch_value dependency
 const lookup = (env: AmbientRuntime, name: string) => env._lookupWithResolvers(name);
@@ -99,28 +99,28 @@ describe("AmbientRuntime Module Composition", () => {
       // Bindings AND resolver answers are boxed SchemeValues — the hermetic ruling's
       // resolver contract: a resolver boxes at its own boundary, so the walk hands the
       // evaluator boxed values on every path.
-      const Y = new AExact(CONSTANT_CTX, 2);
-      const W = new AExact(CONSTANT_CTX, 4);
-      const env = mintResolvingFrame("parent", { x: new AExact(CONSTANT_CTX, 1) }, null);
+      const Y = new AExact(2);
+      const W = new AExact(4);
+      const env = mintResolvingFrame("parent", { x: new AExact(1) }, null);
       env.registerResolver({
         id: "parent-resolver",
         resolve: (name) => (name === "y" ? Y : undefined),
       });
 
-      const child = mintResolvingFrame("child", { z: new AExact(CONSTANT_CTX, 3) }, env);
+      const child = mintResolvingFrame("child", { z: new AExact(3) }, env);
       child.registerResolver({
         id: "child-resolver",
         resolve: (name) => (name === "w" ? W : undefined),
       });
 
       // Direct binding in child
-      expect(child._lookupWithResolvers("z")).toEqual(new AExact(CONSTANT_CTX, 3));
+      expect(child._lookupWithResolvers("z")).toEqual(new AExact(3));
 
       // Resolver in child
       expect(child._lookupWithResolvers("w")).toBe(W);
 
       // Direct binding in parent (after child resolver yields)
-      expect(child._lookupWithResolvers("x")).toEqual(new AExact(CONSTANT_CTX, 1));
+      expect(child._lookupWithResolvers("x")).toEqual(new AExact(1));
 
       // Resolver in parent (after child resolver yields)
       expect(child._lookupWithResolvers("y")).toBe(Y);

@@ -164,7 +164,7 @@ export function isBytevectorLike(value: unknown): value is Uint8Array | ArrayBuf
  * read returns a `FromJSResult` member honestly, no cast.
  */
 const jsToWrapper = new DefaultedWeakMap<object, AJSArray | AJSObject>((key) =>
-  Array.isArray(key) ? new AJSArray(CONSTANT_CTX, key) : new AJSObject(CONSTANT_CTX, key),
+  Array.isArray(key) ? new AJSArray(key) : new AJSObject(key),
 );
 
 // ============================================================================

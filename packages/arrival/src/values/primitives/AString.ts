@@ -6,7 +6,6 @@
 // Lineage: R7RS-small §6.7 strings; the representation-blind Setoid + Functor/
 // Semigroup/Monoid/Applicative are Fantasy Land (fantasyland/fantasy-land).
 import { CLASS } from "../../well-known-symbols.js";
-import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import type { ANumeric } from "../numbers.js";
 import { ACharacter } from "./ACharacter.js";
@@ -21,8 +20,8 @@ export class AString extends AValue {
 
   __string__: string;
 
-  constructor(ctx: RunContext, string: ACharacter[] | StringLike, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
-    super(ctx, provenance);
+  constructor(string: ACharacter[] | StringLike, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
+    super(provenance);
     this.__string__ = Array.isArray(string) ? string.map((x) => x.toString()).join("") : string.valueOf();
   }
 
@@ -40,7 +39,7 @@ export class AString extends AValue {
   // caller of `tagless-final/empty` exists today. A no-arg static has no crossing to
   // derive a live ctx from.
   static ["arrival/tagless-final/empty"](): AString {
-    return new AString(CONSTANT_CTX, "");
+    return new AString("");
   }
 
   // Applicative (Fantasy Land) — lift a value into a SchemeString. No dispatcher/caller
@@ -48,13 +47,13 @@ export class AString extends AValue {
   // as `empty` above — if a Monoid/Applicative dispatcher ever lands, this needs a designed
   // answer, not an invented ctx source.
   static ["arrival/tagless-final/of"](value: unknown): AString {
-    return new AString(CONSTANT_CTX, String(value));
+    return new AString(String(value));
   }
 
   *[Symbol.iterator]() {
     const chars = [...this.__string__];
     for (const char of chars) {
-      yield new ACharacter(this.ctx, char);
+      yield new ACharacter(char);
     }
   }
 
@@ -120,7 +119,7 @@ export class AString extends AValue {
   // overlay never routes a string through its async sequence dispatch — this is the
   // borrowed-protocol rename only.
   ["arrival/tagless-final/map"](f: (char: string) => string): AString {
-    return new AString(this.ctx, [...this.__string__].map(f).join(""));
+    return new AString([...this.__string__].map(f).join(""));
   }
 
   // Element-count — generalized `length` over a string (code-point count). A string's
@@ -139,19 +138,19 @@ export class AString extends AValue {
   // Semigroup — string append. `this ⋄ other` concatenates the two underlying strings.
   // Associative; equality via the Setoid above.
   ["arrival/tagless-final/concat"](other: AString): AString {
-    return new AString(this.ctx, this.__string__ + other.valueOf());
+    return new AString(this.__string__ + other.valueOf());
   }
 
   lower(): AString {
-    return new AString(this.ctx, this.__string__.toLowerCase());
+    return new AString(this.__string__.toLowerCase());
   }
 
   upper(): AString {
-    return new AString(this.ctx, this.__string__.toUpperCase());
+    return new AString(this.__string__.toUpperCase());
   }
 
   clone(): AString {
-    return new AString(this.ctx, this.valueOf());
+    return new AString(this.valueOf());
   }
 
   valueOf(): string {
@@ -172,7 +171,7 @@ export class AString extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): AString {
-    return new AString(this.ctx, this.__string__, p);
+    return new AString(this.__string__, p);
   }
 }
 // Dynamically wrap all String.prototype methods

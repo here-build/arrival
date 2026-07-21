@@ -152,7 +152,7 @@ function nonListAppendOperandError(item: SchemeValue): CarrierMismatchError {
 
 const lengthImpl = function (this: CallCtx, obj: unknown): AExact | AInexact {
   // R7RS length is an exact integer — box to AExact, matching string-length.
-  if (obj == null) return new AExact(this.runCtx, 0);
+  if (obj == null) return new AExact(0);
   // Dispatch to the operand's OWN arrival/tagless-final/length — the per-primitive count
   // carries the ELEMENTS' unioned provenance and levies the circular-list check. TOTALIC:
   // a receiver with no length algebra is a type error, never a silent 0. A non-term
@@ -175,7 +175,7 @@ const lengthImpl = function (this: CallCtx, obj: unknown): AExact | AInexact {
   }
   if (typeof obj === "object" && "length" in obj) {
     const len = obj.length;
-    if (typeof len === "number") return withInputProvenance([obj], new AExact(this.runCtx, len));
+    if (typeof len === "number") return withInputProvenance([obj], new AExact(len));
   }
   throw attachOffendingValue(
     new TypeError(`length: the ${typeof obj} operand does not support length (no arrival/tagless-final/length).`),
@@ -537,7 +537,7 @@ export default new EnvCapability("scheme/lists", {
       },
       // A constructor: unions both inputs' provenance over the produced cell
       // (parallel to make-list / list, which stamp only the produced Pair).
-      function (this: CallCtx, car, cdr) { return withInputProvenance([car, cdr], new APair(this.runCtx, car as SchemeValue, cdr as SchemeValue)); },
+      function (this: CallCtx, car, cdr) { return withInputProvenance([car, cdr], new APair(car as SchemeValue, cdr as SchemeValue)); },
     ),
 
     // R7RS 6.4 — `list` builds a proper list of its arguments. A constructor, so —
@@ -554,7 +554,7 @@ export default new EnvCapability("scheme/lists", {
         `,
       },
       function (this: CallCtx, ...args: SchemeValue[]): SchemeValue {
-        const result = args.reduceRight((list, item) => new APair(this.runCtx, item, list), nil);
+        const result = args.reduceRight((list, item) => new APair(item, list), nil);
         return withInputProvenance(args, result);
       },
     ),
@@ -641,7 +641,7 @@ export default new EnvCapability("scheme/lists", {
         const value: SchemeValue = fill === undefined ? schemeFalse : (fill as SchemeValue);
         let result: AListAlike = nil;
         for (let i = 0; i < count; i++) {
-          result = new APair(this.runCtx, value, result);
+          result = new APair(value, result);
         }
         // Stamp the head Pair only — internal cons cells share the same lineage
         // by definition; downstream traversal reads provenance off whichever pair
@@ -731,7 +731,7 @@ export default new EnvCapability("scheme/lists", {
           // Same clone-aware check at the recursion base — see the top-level guard above.
           if (lst instanceof ANil) return nil;
           if (!(lst instanceof APair)) return lst; // improper list tail
-          return new APair(this.runCtx, lst.car, copy(lst.cdr));
+          return new APair(lst.car, copy(lst.cdr));
         };
         // Copy is a fresh allocation but semantically the same lineage as `list`.
         return withInputProvenance([list], copy(list));

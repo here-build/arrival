@@ -35,7 +35,7 @@ import { EnvCapability } from "../capability.js";
 /** Build a keyword `ASymbol` exactly as evaluating `:key` now does (self-evaluating —
  *  keyword-tagless-apply.md), for the UNIT plane (no evaluator round trip). */
 function pluck(key: string): unknown {
-  return new ASymbol(CONSTANT_CTX, `:${key}`);
+  return new ASymbol(`:${key}`);
 }
 
 describe("z.kwargs runtime — UNIT (direct def.run, manually-built pluck pairs)", () => {
@@ -48,9 +48,9 @@ describe("z.kwargs runtime — UNIT (direct def.run, manually-built pluck pairs)
     const out = await def.run.call(
       testCallCtx(),
       pluck("a"),
-      new AString(CONSTANT_CTX, "Ada"),
+      new AString("Ada"),
       pluck("b"),
-      new AExact(CONSTANT_CTX, 5),
+      new AExact(5),
     );
     expect((out as AString)["arrival/toJS"]()).toBe("Ada:5");
   });
@@ -65,9 +65,9 @@ describe("z.kwargs runtime — UNIT (direct def.run, manually-built pluck pairs)
     const out = await def.run.call(
       testCallCtx(),
       pluck("b"),
-      new AExact(CONSTANT_CTX, 5),
+      new AExact(5),
       pluck("a"),
-      new AString(CONSTANT_CTX, "Ada"),
+      new AString("Ada"),
     );
     // NOTE: pairs must stay `:key value` (key first) — this call shows the TWO PAIRS in
     // swapped ORDER (the `:b` pair before the `:a` pair), not a swapped key/value.

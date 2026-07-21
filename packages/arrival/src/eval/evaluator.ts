@@ -335,8 +335,9 @@ interface RunOptions {
  * (`currentRunResolver()`), which needs the WHOLE composed resolver — under the
  * cut, builtins live on the capability base, not the lexical frame's `__parent__`
  * chain. `runCtx` cannot supply either — it carries run-CONSTANT data, not an
- * env/resolver. The heap-meter rides the operand's ctx (`operand.ctx.heapMeter`), not
- * this holder.
+ * env/resolver. TODO(ctx-elimination): the heap-meter used to ride the operand's ctx
+ * (`operand.ctx.heapMeter`) — AValue no longer carries one at all (see AValue.ts's
+ * ctx-removal note); this holder is not that either.
  *
  * Why module-level: readers are variadic / HOF builtins (`filter`/`join`/`reverse`/
  * `apply`, and `to_array` reached through them) whose arity a trailing `ctx` would
@@ -406,7 +407,6 @@ function wrapLambdaValue(lambda: ALambda, dynSite: Invocation | undefined): ALam
     name: lambda.name,
     arity: lambda.arity,
     scope: lambda.scope,
-    ctx: lambda.ctx,
     runner: (values, runCtx, canBounce) =>
       withDynamicCallSite(dynSite, () => lambda[tf("apply")](values, runCtx, canBounce)),
   });
@@ -1228,10 +1228,10 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
       // E-DICT-BAD-KEY above) — a bare string form is wrapped so the stored key is
       // always a real DictKey object, keeping whatever provenance it already has.
       const key: DictKey =
-        keyForm instanceof ASymbol || keyForm instanceof AString ? keyForm : new AString(CONSTANT_CTX, name);
+        keyForm instanceof ASymbol || keyForm instanceof AString ? keyForm : new AString(name);
       pairs.push([key, processed[i + 1]]);
     }
-    return new ADict(CONSTANT_CTX, pairs);
+    return new ADict(pairs);
   }
 
   // Vector template: a boxed SchemeVector (a `#(...) literal) or, defensively, a
@@ -1264,7 +1264,7 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
       }
       out.push(yield { call: processQuasiquote(item, ctx, level) });
     }
-    return new AVector(CONSTANT_CTX, out);
+    return new AVector(out);
   }
 
   if (!(expr instanceof APair)) {
@@ -1282,7 +1282,7 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
       // quoted data until its own depth is reached).
       SpecialFormShapeError.invariant(expr.cdr instanceof APair, "unquote", "missing argument");
       const processed = yield { call: processQuasiquote(expr.cdr.car, ctx, level - 1) };
-      return new APair(CONSTANT_CTX, new ASymbol(CONSTANT_CTX, "unquote"), new APair(CONSTANT_CTX, processed, nil));
+      return new APair(new ASymbol("unquote"), new APair(processed, nil));
     }
   }
 
@@ -1291,17 +1291,15 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
     SpecialFormShapeError.invariant(level > 1, "unquote-splicing", "invalid context");
     SpecialFormShapeError.invariant(expr.cdr instanceof APair, "unquote-splicing", "missing argument");
     const processed = yield { call: processQuasiquote(expr.cdr.car, ctx, level - 1) };
-    return new APair(
-      CONSTANT_CTX,
-      new ASymbol(CONSTANT_CTX, "unquote-splicing"),
-      new APair(CONSTANT_CTX, processed, nil),
+    return new APair(new ASymbol("unquote-splicing"),
+      new APair(processed, nil),
     );
   }
 
   if (first instanceof ASymbol && symbol_name(first) === "quasiquote") {
     SpecialFormShapeError.invariant(expr.cdr instanceof APair, "quasiquote", "missing argument");
     const processed = yield { call: processQuasiquote(expr.cdr.car, ctx, level + 1) };
-    return new APair(CONSTANT_CTX, new ASymbol(CONSTANT_CTX, "quasiquote"), new APair(CONSTANT_CTX, processed, nil));
+    return new APair(new ASymbol("quasiquote"), new APair(processed, nil));
   }
 
   const results: SchemeValue[] = [];
@@ -1375,7 +1373,7 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
   // Pair.fromArray always nil-terminates, so fold manually onto `tail`.
   let result: SchemeValue = tail;
   for (let i = results.length; i--; ) {
-    result = new APair(CONSTANT_CTX, results[i], result);
+    result = new APair(results[i], result);
   }
   return result;
 }
@@ -1394,7 +1392,7 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
     SpecialFormShapeError.invariant(name instanceof ASymbol, "define", "expected symbol for function name");
 
-    const value = yield { call: evalLambda(new APair(CONSTANT_CTX, args, valueRest), ctx) };
+    const value = yield { call: evalLambda(new APair(args, valueRest), ctx) };
 
     if (is_lambda_function(value)) {
       value.__name__ = symbol_name(name);
@@ -1485,7 +1483,6 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     arity: { min: params.length, max: hasRest ? null : params.length },
     scope: closureResolver,
     runner,
-    ctx: ctx.runCtx,
   });
   lambda.__params__ = params;
   return lambda;
@@ -1672,13 +1669,13 @@ function buildBindingPair<Car extends SchemeValue, Cdr extends SchemeValue[]>(
   }
   let cdr: APair<any, any> | ANil = nil;
   for (let i = parts.length - 1; i >= 1; i--) {
-    cdr = new APair(CONSTANT_CTX, parts[i], cdr);
+    cdr = new APair(parts[i], cdr);
   }
   // Built element-by-element from `parts[1..]` in reverse (the loop above) — exactly the
   // tuple-shaped spine `AListAlike<Cdr>` describes. TS's structural checker can't see that
   // the loop's generic `APair<any,any> | ANil` accumulator matches the specific `Cdr` tuple
   // shape it was just built from, so this narrows what the construction already proves.
-  return new APair<Car, AListAlike<Cdr>>(CONSTANT_CTX, name, cdr as AListAlike<Cdr>);
+  return new APair<Car, AListAlike<Cdr>>(name, cdr as AListAlike<Cdr>);
 }
 
 /**
@@ -1825,7 +1822,6 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       arity: { min: params.length, max: params.length },
       scope: letResolver,
       runner,
-      ctx: ctx.runCtx,
     });
     loopLambda.__name__ = symbol_name(name);
     loopLambda.__params__ = params.map((p) => symbol_name(p));

@@ -36,7 +36,6 @@ import { ANil } from "../../values/primitives/ANil.js";
 import { AString } from "../../values/primitives/AString.js";
 import { APair, isCircularList } from "../../values/primitives/APair.js";
 import { schemeBool as bool, mintVerdict, stringValue, withInputProvenance } from "../../values/op-helpers.js";
-import { ctxOf } from "../../values/primitives/AValue.js";
 import { printValue } from "../../values/print.js";
 import { SchemeValue } from "../../values/types.js";
 // TYPE-ONLY, one-directional (`common/symbols` → `emit`; emit-rule.ts imports nothing
@@ -176,9 +175,7 @@ export default new EnvCapability("scheme/equality", {
         };
         const first = unwrap(bools[0]);
         if (first === undefined) return schemeFalse;
-        return new ABool(
-          this.runCtx,
-          bools.every((b) => unwrap(b) === first),
+        return new ABool(bools.every((b) => unwrap(b) === first),
         );
       },
     ),
@@ -197,9 +194,7 @@ export default new EnvCapability("scheme/equality", {
         const first = syms[0];
         if (!(first instanceof ASymbol)) return schemeFalse;
         const firstName = first.__name__;
-        return new ABool(
-          this.runCtx,
-          syms.every((s) => s instanceof ASymbol && s.__name__ === firstName),
+        return new ABool(syms.every((s) => s instanceof ASymbol && s.__name__ === firstName),
         );
       },
     ),
@@ -212,18 +207,20 @@ export default new EnvCapability("scheme/equality", {
       function (s) {
         const name = s.__name__;
         const str = typeof name === "string" ? name : (name as symbol).toString();
-        // Mirror string->symbol below: mint with the INPUT's ctx (ctxOf(s)), not
-        // CONSTANT_CTX — the sibling conversion already gets this right.
-        return withInputProvenance([s], new AString(ctxOf(s), str));
+        return withInputProvenance([s], new AString(str));
       },
     ),
     "string->symbol": symbol.native`string->symbol: a symbol whose name is the string's characters`(
       { input: [z.string], output: [z.symbol] },
       function (s) {
-        // Mint with the INPUT's ctx (value-carries-ctx), not CONSTANT_CTX: a runtime
-        // symbol then interns in its run's per-run table (heap-charged, GC'd at run end)
-        // rather than the permanent global one — closing the `(string->symbol unique)` DoS.
-        return withInputProvenance([s], new ASymbol(ctxOf(s), stringValue(s)));
+        // TODO(ctx-elimination): this used to mint with the INPUT's ctx (value-carries-ctx),
+        // interning in that run's own per-run table (heap-charged, GC'd at run end) rather than
+        // the permanent global one — closing the `(string->symbol unique)` DoS. AValue no
+        // longer stores a per-value ctx (see AValue.ts's ctx-removal note), so ASymbol's
+        // constructor always interns into the one permanent CONSTANT_CTX table now — a
+        // `(string->symbol unique)` mint-loop grows it unbounded until an ambient run-context
+        // restores per-run scoping.
+        return withInputProvenance([s], new ASymbol(stringValue(s)));
       },
     ),
 
@@ -237,7 +234,7 @@ export default new EnvCapability("scheme/equality", {
         ` },
       // A procedure is any callable EXCEPT a macro — this includes a membrane SchemeJSFunction
       // (typeof "object"), which the old `typeof obj === "function"` test wrongly excluded.
-      function (this: CallCtx, obj) { return new ABool(ctxOf(obj), is_callable(obj) && !is_macro(obj)); },
+      function (this: CallCtx, obj) { return new ABool(is_callable(obj) && !is_macro(obj)); },
     ),
 
     // `repr` — the scheme surface of the value→string PRINT protocol (values/print.ts:
@@ -248,7 +245,7 @@ export default new EnvCapability("scheme/equality", {
     // `printValue` has no write-mode flag. Matches the current 1-arg behavior.)
     repr: symbol.native`repr: render a value to its external representation string`(
       { input: [z.value], output: [z.string] },
-      function (this: CallCtx, obj) { return new AString(ctxOf(obj), printValue(obj)); },
+      function (this: CallCtx, obj) { return new AString(printValue(obj)); },
     ),
 
     // R8 mint (RULINGS.md R8): a verdict derived from lineage carries it — stamped
@@ -407,10 +404,7 @@ export default new EnvCapability("scheme/equality", {
             <T>(x: T): x is Extract<T, Record<string, unknown>>;
           }
         ` },
-        // `obj` is the honest `SchemeValue` union, which includes non-AValue arms (EOF, Values,
-        // a bare fn) with no `.ctx` — `ctxOf` (already imported) is the narrowing read: an AValue
-        // yields its own ctx, anything else falls back to CONSTANT_CTX.
-        function (this: CallCtx, obj): ABool { return new ABool(ctxOf(obj), obj instanceof AJSObject || obj instanceof ADict); },
+        function (this: CallCtx, obj): ABool { return new ABool(obj instanceof AJSObject || obj instanceof ADict); },
       ),
 
     "list?": symbol.native`list?: proper-list test (cycle-safe)`(

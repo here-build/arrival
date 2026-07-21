@@ -149,7 +149,7 @@ export function parse_rational(arg: string, radix = 10, ctx: RunContext = CONSTA
   const numBig = parseBigInt(parts[0], r);
   const denomBig = parseBigInt(parts[1], r);
   if (parse.inexact) {
-    return new AInexact(ctx, Number(numBig) / Number(denomBig));
+    return new AInexact(Number(numBig) / Number(denomBig));
   }
   // Components gated BEFORE the mint (never decline-to-parse: a rejected rational token
   // must throw, not fall through to `parse_symbol` —
@@ -167,7 +167,7 @@ export function parse_integer(arg: string, radix = 10, ctx: RunContext = CONSTAN
   const parse = num_pre_parse(arg);
   const r = parse.radix || radix;
   if (parse.inexact) {
-    return new AInexact(ctx, Number.parseInt(parse.number!, r));
+    return new AInexact(Number.parseInt(parse.number!, r));
   }
   return mintExact(ctx, toSafeExactComponent(parseBigInt(parse.number!, r), arg), 1, undefined, "parse integer");
 }
@@ -185,7 +185,7 @@ function parse_character(arg: string, ctx: RunContext): ACharacter {
     }
   }
   invariant(char !== undefined, `Parse: invalid character in ${arg}`);
-  return new ACharacter(ctx, char);
+  return new ACharacter(char);
 }
 
 function string_to_float(str: string): number {
@@ -231,7 +231,7 @@ export function parse_float(arg: string, ctx: RunContext = CONSTANT_CTX): AExact
     }
     return mintExact(ctx, assertSafeExactComponent(Math.round(floatVal), arg), 1, undefined, "parse float");
   }
-  return new AInexact(ctx, value);
+  return new AInexact(value);
 }
 
 export function parse_complex(_arg: string, _radix = 10): AExact | AInexact {
@@ -265,7 +265,7 @@ function parse_string(string: string, ctx: RunContext): AString {
     throw new ParseError(`Invalid string literal, unclosed: ${m[2]}`, undefined, "E-STRING-UNCLOSED");
   }
   try {
-    const str = new AString(ctx, JSON.parse(string));
+    const str = new AString(JSON.parse(string));
     str.freeze();
     return str;
   } catch (error) {
@@ -352,12 +352,12 @@ function splitBarSegments(token: string): { text: string; quoted: boolean }[] {
 
 function parse_symbol(arg: string, ctx: RunContext): ASymbol {
   if (!arg.includes("|")) {
-    return new ASymbol(ctx, arg);
+    return new ASymbol(arg);
   }
   const name = splitBarSegments(arg)
     .map((segment) => (segment.quoted ? decodeBarSymbolEscapes(segment.text) : segment.text))
     .join("");
-  return new ASymbol(ctx, name);
+  return new ASymbol(name);
 }
 
 // ── Self-evaluating literal constants ──
@@ -365,9 +365,9 @@ function parse_symbol(arg: string, ctx: RunContext): ASymbol {
 // These MUST stay boxed SchemeInexact, not raw JS numbers: a bare primitive leaks an un-AValue past
 // the parser and breaks every downstream consumer that assumes numerics are SchemeExact/SchemeInexact
 // (`is_inexact`, the numeric operator wrapping in env/r7rs/numeric.ts, the L2+ provenance algebra).
-const nan = new AInexact(CONSTANT_CTX, Number.NaN);
-const posInf = new AInexact(CONSTANT_CTX, Number.POSITIVE_INFINITY);
-const negInf = new AInexact(CONSTANT_CTX, Number.NEGATIVE_INFINITY);
+const nan = new AInexact(Number.NaN);
+const posInf = new AInexact(Number.POSITIVE_INFINITY);
+const negInf = new AInexact(Number.NEGATIVE_INFINITY);
 
 const constants: Record<string, SchemeValue> = {
   "#t": schemeTrue,

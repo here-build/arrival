@@ -55,7 +55,7 @@ function makeProbe(): { fn: (this: { runCtx: RunContext }, ...args: unknown[]) =
 describe("W1 srfi-13 criterion ctx threading — a user predicate observes the invocation's real ctx, not CONSTANT_CTX", () => {
   it("string-index: the criterion predicate observes liveCtx for every character probed", async () => {
     const stringIndex = SRFI13_OPS["string-index"];
-    const str = new AString(liveCtx, "abc");
+    const str = new AString("abc");
     const probe = makeProbe();
     await stringIndex.call(testCallCtx({ runCtx: liveCtx }), str, probe.fn);
     expect(probe.observed).toHaveLength(3);
@@ -68,7 +68,7 @@ describe("W1 srfi-13 criterion ctx threading — a user predicate observes the i
 
   it("string-count: the criterion predicate observes liveCtx for every character probed", async () => {
     const stringCount = SRFI13_OPS["string-count"];
-    const str = new AString(liveCtx, "ab");
+    const str = new AString("ab");
     const probe = makeProbe();
     await stringCount.call(testCallCtx({ runCtx: liveCtx }), str, probe.fn);
     expect(probe.observed).toHaveLength(2);
@@ -80,7 +80,7 @@ describe("W1 srfi-13 criterion ctx threading — a user predicate observes the i
 
   it("string-trim: the criterion predicate observes liveCtx (not the default-whitespace path)", async () => {
     const stringTrim = SRFI13_OPS["string-trim"];
-    const str = new AString(liveCtx, "a");
+    const str = new AString("a");
     const probe = makeProbe();
     await stringTrim.call(testCallCtx({ runCtx: liveCtx }), str, probe.fn);
     expect(probe.observed.length).toBeGreaterThan(0);

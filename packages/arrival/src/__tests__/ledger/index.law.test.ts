@@ -84,12 +84,12 @@ const GAPS: readonly LedgerRow[] = [
   // ── added by the RULINGS.md R8 mint sweep ─────────────────────────
   // Surfaced while flipping the equal?-verdict flyweight rows above: mintVerdict
   // faithfully forwards operand provenance, but AJSArray (`borrow-array`'s `fromJS`)
-  // and ADict (`dict`'s `new ADict(CONSTANT_CTX, ...)`, env/polyglot/polyglot.ts) never stamp
+  // and ADict (`dict`'s `new ADict(...)`, env/polyglot/polyglot.ts) never stamp
   // their OWN top-level provenance with the R2 grouping-fact union at construction —
   // independent of R8, un-implemented (R2 is its own, later design item).
   // NARROWED to ADict (2026-07-14). It never applied to AJSArray: production DOES stamp a borrowed
   // container with the crossing's provenance (rosetta's inbound `array → borrowed AJSArray` claim,
-  // `new AJSArray(ctx, v, p)`). The apparent gap was a FIXTURE artifact — `borrow-array` minted
+  // `new AJSArray(v, p)`). The apparent gap was a FIXTURE artifact — `borrow-array` minted
   // through `fromJS`, which deliberately drops provenance (CONSTANT_CTX / EMPTY_PROVENANCE), so the
   // test was building a container production never builds and then ticketing the absence as a code
   // gap. With the fixture crossing its args honestly (V's hygiene law), AJSArray's cells pass on

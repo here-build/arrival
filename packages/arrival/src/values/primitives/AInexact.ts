@@ -4,7 +4,7 @@
 // (complexDoor/schemeCompare) are benign runtime cycles — method-body calls, nothing at module-eval.
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { type RunContext } from "../../run/RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import { CLASS } from "../../well-known-symbols.js";
 import { complexDoor, schemeCompare } from "../numbers.js";
 import { AExact } from "./AExact.js";
@@ -16,8 +16,8 @@ export class AInexact extends AValue {
 
   readonly real: number;
 
-  constructor(ctx: RunContext, real: number, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
-    super(ctx, provenance);
+  constructor(real: number, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
+    super(provenance);
     this.real = real;
   }
 
@@ -98,7 +98,7 @@ export class AInexact extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): AInexact {
-    return new AInexact(this.ctx, this.real, p);
+    return new AInexact(this.real, p);
   }
 
   // String representation. Reals-only — emit the Scheme inexact form with a
@@ -149,90 +149,90 @@ export class AInexact extends AValue {
 
   // Same-type arithmetic (reals-only)
   add(other: AInexact): AInexact {
-    return new AInexact(this.ctx, this.real + other.real);
+    return new AInexact(this.real + other.real);
   }
 
   sub(other: AInexact): AInexact {
-    return new AInexact(this.ctx, this.real - other.real);
+    return new AInexact(this.real - other.real);
   }
 
   mul(other: AInexact): AInexact {
-    return new AInexact(this.ctx, this.real * other.real);
+    return new AInexact(this.real * other.real);
   }
 
   div(other: AInexact): AInexact {
     // IEEE division directly: 1.0/0.0 = +inf.0, -1.0/0.0 = -inf.0, 0.0/0.0 = +nan.0.
-    return new AInexact(this.ctx, this.real / other.real);
+    return new AInexact(this.real / other.real);
   }
 
   neg(): AInexact {
-    return new AInexact(this.ctx, -this.real);
+    return new AInexact(-this.real);
   }
 
   abs(): AInexact {
-    return new AInexact(this.ctx, Math.abs(this.real));
+    return new AInexact(Math.abs(this.real));
   }
 
   // Floor, ceiling, truncate, round
   floor(): AInexact {
-    return new AInexact(this.ctx, Math.floor(this.real));
+    return new AInexact(Math.floor(this.real));
   }
 
   ceiling(): AInexact {
-    return new AInexact(this.ctx, Math.ceil(this.real));
+    return new AInexact(Math.ceil(this.real));
   }
 
   truncate(): AInexact {
-    return new AInexact(this.ctx, Math.trunc(this.real));
+    return new AInexact(Math.trunc(this.real));
   }
 
   round(): AInexact {
     // Scheme rounds to even on ties
     const floored = Math.floor(this.real);
     const diff = this.real - floored;
-    if (diff < 0.5) return new AInexact(this.ctx, floored);
-    if (diff > 0.5) return new AInexact(this.ctx, floored + 1);
+    if (diff < 0.5) return new AInexact(floored);
+    if (diff > 0.5) return new AInexact(floored + 1);
     // Tie: round to even
-    if (floored % 2 === 0) return new AInexact(this.ctx, floored);
-    return new AInexact(this.ctx, floored + 1);
+    if (floored % 2 === 0) return new AInexact(floored);
+    return new AInexact(floored + 1);
   }
 
   // Transcendental functions (reals-only). sqrt of a negative DOORS — complex
   // results are not representable (see header / complexDoor).
   sqrt(): AInexact {
     if (this.real < 0) complexDoor();
-    return new AInexact(this.ctx, Math.sqrt(this.real));
+    return new AInexact(Math.sqrt(this.real));
   }
 
   exp(): AInexact {
-    return new AInexact(this.ctx, Math.exp(this.real));
+    return new AInexact(Math.exp(this.real));
   }
 
   log(): AInexact {
-    return new AInexact(this.ctx, Math.log(this.real));
+    return new AInexact(Math.log(this.real));
   }
 
   sin(): AInexact {
-    return new AInexact(this.ctx, Math.sin(this.real));
+    return new AInexact(Math.sin(this.real));
   }
 
   cos(): AInexact {
-    return new AInexact(this.ctx, Math.cos(this.real));
+    return new AInexact(Math.cos(this.real));
   }
 
   tan(): AInexact {
-    return new AInexact(this.ctx, Math.tan(this.real));
+    return new AInexact(Math.tan(this.real));
   }
 
   pow(exponent: AInexact): AInexact {
     if (this.isZero) {
       // R7RS § 6.2.6: 0^0 = 1; 0^positive = 0; 0^negative is undefined
       // (division by zero).
-      if (exponent.isZero) return new AInexact(this.ctx, 1);
+      if (exponent.isZero) return new AInexact(1);
       invariant(exponent.real > 0, "expt: 0 raised to a negative power (division by zero)");
-      return new AInexact(this.ctx, 0);
+      return new AInexact(0);
     }
-    return new AInexact(this.ctx, Math.pow(this.real, exponent.real));
+    return new AInexact(Math.pow(this.real, exponent.real));
   }
 
   // Convert to exact (if possible)
@@ -240,6 +240,6 @@ export class AInexact extends AValue {
     invariant(Number.isFinite(this.real), "Infinite number cannot be converted to exact");
     invariant(!Number.isNaN(this.real), "NaN cannot be converted to exact");
     // Convert float to rational
-    return AInexact.floatToRational(this.ctx, this.real);
+    return AInexact.floatToRational(CONSTANT_CTX, this.real);
   }
 }

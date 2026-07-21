@@ -151,7 +151,7 @@ export default new EnvCapability("scheme/r7rs/exceptions", {
     "%push-handler": symbol.native`%push-handler: prepend handler onto the exception-handler stack (machinery)`(
       { input: [z.value, z.value], output: [z.value] },
       function (handler, stack) {
-        return new APair(this.runCtx, handler as SchemeValue, stack as SchemeValue);
+        return new APair(handler as SchemeValue, stack as SchemeValue);
       },
     ),
     // The finally-discipline, kept out of scheme-level `try`/`finally` (see the

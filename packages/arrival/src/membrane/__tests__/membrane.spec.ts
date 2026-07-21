@@ -43,16 +43,16 @@ describe("Wrapper Layer", () => {
 
     // INVARIANT: native AValue subtypes (AExact, AInexact, AString, ASymbol, APair) are recognized as scheme values
     it("recognizes native Scheme types", () => {
-      expect(isSchemeValue(new AExact(CONSTANT_CTX, 42))).toBe(true);
-      expect(isSchemeValue(new AInexact(CONSTANT_CTX, 3.14))).toBe(true);
-      expect(isSchemeValue(new AString(CONSTANT_CTX, "hello"))).toBe(true);
-      expect(isSchemeValue(new ASymbol(CONSTANT_CTX, "foo"))).toBe(true);
-      expect(isSchemeValue(new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2)))).toBe(true);
+      expect(isSchemeValue(new AExact(42))).toBe(true);
+      expect(isSchemeValue(new AInexact(3.14))).toBe(true);
+      expect(isSchemeValue(new AString("hello"))).toBe(true);
+      expect(isSchemeValue(new ASymbol("foo"))).toBe(true);
+      expect(isSchemeValue(new APair(new AExact(1), new AExact(2)))).toBe(true);
     });
 
     // INVARIANT: wrapper types (AJSObject) are recognized as scheme values
     it("recognizes wrappers as Scheme values", () => {
-      expect(isSchemeValue(new AJSObject(CONSTANT_CTX, {}))).toBe(true);
+      expect(isSchemeValue(new AJSObject({}))).toBe(true);
     });
 
     // INVARIANT: JS primitives/objects/null/undefined are rejected as scheme values
@@ -120,11 +120,11 @@ describe("Wrapper Layer", () => {
     it("refuses an already-boxed scheme value (strict one-way door)", () => {
       // fromJS is the JS→Scheme entry; an interpreter-minted value never crosses
       // it. The old pass-through masked which-side-am-I-on confusion in callers.
-      const exact = new AExact(CONSTANT_CTX, 42);
+      const exact = new AExact(42);
       // @ts-expect-error type-level: an AValue argument resolves to never
       expect(() => fromJS(exact)).toThrow(/already-boxed/);
 
-      const pair = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2));
+      const pair = new APair(new AExact(1), new AExact(2));
       // @ts-expect-error type-level: an AValue argument resolves to never
       expect(() => fromJS(pair)).toThrow(/already-boxed/);
     });
@@ -215,31 +215,31 @@ describe("Wrapper Layer", () => {
     // INVARIANT: AJSObject unwraps to its exact source object
     it("unwraps SchemeJSObject", () => {
       const obj = { a: 1 };
-      const wrapped = new AJSObject(CONSTANT_CTX, obj);
+      const wrapped = new AJSObject(obj);
       expect(toJS(wrapped)).toBe(obj);
     });
 
     // INVARIANT: AString converts to a JS string
     it("converts SchemeString to string", () => {
-      expect(toJS(new AString(CONSTANT_CTX, "hello"))).toBe("hello");
+      expect(toJS(new AString("hello"))).toBe("hello");
     });
 
     // INVARIANT: AExact (safe integer) converts to a JS number
     it("converts SchemeExact to number (safe integers)", () => {
       // SchemeExact.valueOf() returns number for safe integers
-      expect(toJS(new AExact(CONSTANT_CTX, 42))).toBe(42);
+      expect(toJS(new AExact(42))).toBe(42);
     });
 
     // INVARIANT: AInexact converts to a JS number
     it("converts SchemeInexact to number", () => {
-      expect(toJS(new AInexact(CONSTANT_CTX, 3.14))).toBe(3.14);
+      expect(toJS(new AInexact(3.14))).toBe(3.14);
     });
 
     // INVARIANT: primitives (AExact/AString/ABool) pass through toJS with unchanged value
     it("passes through primitives", () => {
-      expect(toJS(new AExact(CONSTANT_CTX, 42))).toBe(42);
-      expect(toJS(new AString(CONSTANT_CTX, "hello"))).toBe("hello");
-      expect(toJS(new ABool(CONSTANT_CTX, true))).toBe(true);
+      expect(toJS(new AExact(42))).toBe(42);
+      expect(toJS(new AString("hello"))).toBe("hello");
+      expect(toJS(new ABool(true))).toBe(true);
     });
 
     // Was a green pin of the apostrophe-prefixed-string exit shape with a stale
@@ -253,7 +253,7 @@ describe("Wrapper Layer", () => {
 
     // INVARIANT: APair converts to a JS array
     it("keeps Pair as-is", () => {
-      const pair = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2));
+      const pair = new APair(new AExact(1), new AExact(2));
       expect(toJS(pair)).toEqual([1, 2]);
     });
   });
@@ -261,7 +261,7 @@ describe("Wrapper Layer", () => {
   describe("SchemeJSObject", () => {
     // INVARIANT: AJSObject exposes the "arrival/toJS" protocol key (pins implementation, not behavior)
     it("has the arrival/toJS protocol key", () => {
-      const obj = new AJSObject(CONSTANT_CTX, {});
+      const obj = new AJSObject({});
       expect("arrival/toJS" in obj).toBe(true);
       expect(obj["arrival/toJS"]()).toEqual({});
     });
@@ -269,7 +269,7 @@ describe("Wrapper Layer", () => {
     // INVARIANT: .get(key) lazily boxes property values into AValue subtypes, inheriting the wrapper's provenance
     it("gets properties with lazy wrapping", () => {
       const inner = { b: 2 };
-      const obj = new AJSObject(CONSTANT_CTX, { a: 1, inner });
+      const obj = new AJSObject({ a: 1, inner });
 
       // Option C (2026-05-28): `.get(key)` now boxes entries through
       // jsToScheme so they inherit the wrapper's provenance — a primitive
@@ -287,8 +287,8 @@ describe("Wrapper Layer", () => {
     // "mutations are banned"; nothing crosses the boundary (pins implementation, not behavior)
     it("rejects writes — the membrane is read-only (pure-dataflow sandbox)", () => {
       const source: any = { a: 1 };
-      const obj = new AJSObject(CONSTANT_CTX, source);
-      expect(() => obj.set("a", new AExact(CONSTANT_CTX, 42))).toThrow(/writes are banned/);
+      const obj = new AJSObject(source);
+      expect(() => obj.set("a", new AExact(42))).toThrow(/writes are banned/);
       expect(source.a).toBe(1); // nothing crossed the boundary
       expect(() => obj.delete("a")).toThrow(/mutations are banned/);
       expect(source.a).toBe(1);
@@ -305,7 +305,7 @@ describe("Wrapper Layer", () => {
           return "danger";
         },
       };
-      const obj = new AJSObject(CONSTANT_CTX, source);
+      const obj = new AJSObject(source);
       expect((obj.get("data") as { valueOf(): unknown }).valueOf()).toBe(7); // data read (boxed)
       expect((obj.get("computed") as { valueOf(): unknown }).valueOf()).toBe(99); // getter invoked → value
       expect(obj.get("method")).toBe(theVoid); // method → #void + warn (was invisible nil; now visible, still uncallable)
@@ -313,14 +313,14 @@ describe("Wrapper Layer", () => {
 
     // INVARIANT: .has() reflects own-property existence only
     it("checks property existence (own properties only)", () => {
-      const obj = new AJSObject(CONSTANT_CTX, { a: 1 });
+      const obj = new AJSObject({ a: 1 });
       expect(obj.has("a")).toBe(true);
       expect(obj.has("b")).toBe(false);
     });
 
     // INVARIANT: .has() blocks Object.prototype-inherited properties (toString/hasOwnProperty/constructor)
     it("blocks inherited properties from Object.prototype", () => {
-      const obj = new AJSObject(CONSTANT_CTX, { a: 1 });
+      const obj = new AJSObject({ a: 1 });
       // These are inherited from Object.prototype - blocked by sandbox
       expect(obj.has("toString")).toBe(false);
       expect(obj.has("hasOwnProperty")).toBe(false);
@@ -329,13 +329,13 @@ describe("Wrapper Layer", () => {
 
     // INVARIANT: .keys() returns own enumerable keys
     it("gets keys", () => {
-      const obj = new AJSObject(CONSTANT_CTX, { a: 1, b: 2 });
+      const obj = new AJSObject({ a: 1, b: 2 });
       expect(obj.keys()).toEqual(["a", "b"]);
     });
 
     // INVARIANT: .toString() returns the fixed placeholder "#<js-object>" (pins implementation, not behavior)
     it("has toString", () => {
-      const obj = new AJSObject(CONSTANT_CTX, {});
+      const obj = new AJSObject({});
       expect(obj.toString()).toBe("#<js-object>");
     });
   });

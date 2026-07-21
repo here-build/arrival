@@ -57,7 +57,7 @@ export default new EnvCapability("scheme/bytevectors", {
         if (byte !== undefined) {
           arr.fill(toIndex(byte));
         }
-        return withInputProvenance([byte], new ABytevector(this.runCtx, arr));
+        return withInputProvenance([byte], new ABytevector(arr));
       },
     ),
 
@@ -68,17 +68,17 @@ export default new EnvCapability("scheme/bytevectors", {
       // toIndex(b) below, exactly like make-bytevector's byte/k args — z.schemeNumber
       // is that same op's own precedent for "this slot is a scheme number".
       { input: [], inputRest: z.schemeNumber, output: [z.bytevector] },
-      function (this: CallCtx, ...bytes) { return withInputProvenance(bytes, new ABytevector(this.runCtx, new Uint8Array(bytes.map(toIndex)))); },
+      function (this: CallCtx, ...bytes) { return withInputProvenance(bytes, new ABytevector(new Uint8Array(bytes.map(toIndex)))); },
     ),
 
     "bytevector-length": symbol.native`bytevector-length: number of bytes in the bytevector`(
       { input: [z.bytevector], output: [z.number] },
-      function (this: CallCtx, bv) { return new AExact(this.runCtx, asBytevector(bv, "bytevector-length").byteLength); },
+      function (this: CallCtx, bv) { return new AExact(asBytevector(bv, "bytevector-length").byteLength); },
     ),
 
     "bytevector-u8-ref": symbol.native`bytevector-u8-ref: the byte at index k`(
       { input: [z.bytevector, z.schemeNumber], output: [z.number] },
-      function (this: CallCtx, bv, k) { return new AExact(this.runCtx, asBytevector(bv, "bytevector-u8-ref")[toIndex(k)]!); },
+      function (this: CallCtx, bv, k) { return new AExact(asBytevector(bv, "bytevector-u8-ref")[toIndex(k)]!); },
     ),
 
     // ── PURITY DOORS — bytevector mutators OMITTED by design (R7RS §6.9) ─────────
@@ -94,9 +94,7 @@ export default new EnvCapability("scheme/bytevectors", {
         const view = asBytevector(bv, "bytevector-copy");
         return withInputProvenance(
           [bv],
-          new ABytevector(
-            this.runCtx,
-            view.slice(start === undefined ? 0 : toIndex(start), end === undefined ? view.byteLength : toIndex(end)),
+          new ABytevector(view.slice(start === undefined ? 0 : toIndex(start), end === undefined ? view.byteLength : toIndex(end)),
           ),
         );
       },
@@ -117,7 +115,7 @@ export default new EnvCapability("scheme/bytevectors", {
           result.set(view, offset);
           offset += view.byteLength;
         }
-        return withInputProvenance(bvs, new ABytevector(this.runCtx, result));
+        return withInputProvenance(bvs, new ABytevector(result));
       },
     ),
 
@@ -127,9 +125,7 @@ export default new EnvCapability("scheme/bytevectors", {
         const view = asBytevector(bv, "utf8->string");
         return withInputProvenance(
           [bv],
-          new AString(
-            this.runCtx,
-            new TextDecoder("utf-8").decode(
+          new AString(new TextDecoder("utf-8").decode(
               view.subarray(
                 start === undefined ? 0 : toIndex(start),
                 end === undefined ? view.byteLength : toIndex(end),
@@ -145,9 +141,7 @@ export default new EnvCapability("scheme/bytevectors", {
         const s_str = stringValue(str);
         return withInputProvenance(
           [str],
-          new ABytevector(
-            this.runCtx,
-            new TextEncoder().encode(
+          new ABytevector(new TextEncoder().encode(
               s_str.slice(start === undefined ? 0 : toIndex(start), end === undefined ? s_str.length : toIndex(end)),
             ),
           ),

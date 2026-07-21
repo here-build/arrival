@@ -27,7 +27,7 @@ import { bindValue, mintFrame } from "../../env/AmbientRuntime.js";
 // the eager oracle forced ON for this file's lifetime.
 requireEagerOracle();
 
-const stamped = (s: string, ...points: number[]) => new AString(CONSTANT_CTX, s, new Set(points));
+const stamped = (s: string, ...points: number[]) => new AString(s, new Set(points));
 const sorted = (set: Set<number>) => [...set].sort((a, b) => a - b);
 
 describe("collapseProvenance — sound over every structured carrier", () => {
@@ -36,12 +36,12 @@ describe("collapseProvenance — sound over every structured carrier", () => {
   });
 
   it("deep-walks a Pair list spine", () => {
-    const list = new APair(CONSTANT_CTX, stamped("a", 1), new APair(CONSTANT_CTX, stamped("b", 2), nil));
+    const list = new APair(stamped("a", 1), new APair(stamped("b", 2), nil));
     expect(sorted(collapseProvenance(list))).toEqual([1, 2]);
   });
 
   it("deep-walks a SchemeVector's elements (the gap a flat union missed)", () => {
-    const vec = new AVector(CONSTANT_CTX, [stamped("a", 1), stamped("b", 2)]);
+    const vec = new AVector([stamped("a", 1), stamped("b", 2)]);
     expect(sorted(collapseProvenance(vec))).toEqual([1, 2]);
   });
 
@@ -52,7 +52,7 @@ describe("collapseProvenance — sound over every structured carrier", () => {
   // cannot construct that value, and reading such an element would have had `jsToScheme` re-stamp it
   // with the container's provenance anyway — so the ids it pinned were a fiction.)
   it("a borrowed array grounds in its CONTAINER's provenance — raw JS elements have none of their own", () => {
-    const arr = new AJSArray(CONSTANT_CTX, ["a", "b"], new Set([1, 2]));
+    const arr = new AJSArray(["a", "b"], new Set([1, 2]));
     expect(sorted(collapseProvenance(arr))).toEqual([1, 2]);
   });
 
@@ -61,7 +61,7 @@ describe("collapseProvenance — sound over every structured carrier", () => {
   });
 
   it("unions across multiple args and nested structures", () => {
-    const nested = new APair(CONSTANT_CTX, stamped("a", 1), new APair(CONSTANT_CTX, new AVector(CONSTANT_CTX, [stamped("b", 2)]), nil));
+    const nested = new APair(stamped("a", 1), new APair(new AVector([stamped("b", 2)]), nil));
     expect(sorted(collapseProvenance(stamped("sep", 9), nested))).toEqual([1, 2, 9]);
   });
 

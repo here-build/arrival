@@ -185,15 +185,19 @@ export function debugCrossCheckRational(
  * own "Division by zero" invariant (unrelated to overflow — not this function's door).
  */
 export function mintExact(
+  // TODO(ctx-elimination): kept so the many existing callers don't change (AValue no longer
+  // stores a per-value ctx — see AValue.ts's ctx-removal note) — no longer threaded into the
+  // mint below.
   ctx: RunContext,
   num: number,
   denom: number,
   provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
   op?: string,
 ): AExact {
+  void ctx;
   if (!Number.isSafeInteger(num)) overflow(op, num);
   if (!Number.isSafeInteger(denom)) overflow(op, denom);
-  return new AExact(ctx, num, denom, provenance);
+  return new AExact(num, denom, provenance);
 }
 
 /**
@@ -207,15 +211,17 @@ export function mintExact(
  * `x` plus ±Infinity/NaN).
  */
 export function mintNumeric(
+  // TODO(ctx-elimination): kept so the many existing callers don't change — see mintExact's note.
   ctx: RunContext,
   x: number,
   wantExact: boolean,
   provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
   op?: string,
 ): ANumeric {
+  void ctx;
   if (wantExact) {
     if (!Number.isSafeInteger(x)) overflow(op, x);
-    return new AExact(ctx, x, 1, provenance);
+    return new AExact(x, 1, provenance);
   }
-  return new AInexact(ctx, x, provenance);
+  return new AInexact(x, provenance);
 }

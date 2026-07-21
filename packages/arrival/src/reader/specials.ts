@@ -26,12 +26,12 @@ export function get(name) {
 }
 
 const defined_specials = [
-  ["'", new ASymbol(CONSTANT_CTX, "quote"), LITERAL],
-  ["`", new ASymbol(CONSTANT_CTX, "quasiquote"), LITERAL],
-  [",@", new ASymbol(CONSTANT_CTX, "unquote-splicing"), LITERAL],
-  [",", new ASymbol(CONSTANT_CTX, "unquote"), LITERAL],
-  ["#(", new ASymbol(CONSTANT_CTX, "vector"), LITERAL],
-  ["#u8(", new ASymbol(CONSTANT_CTX, "bytevector"), LITERAL],
+  ["'", new ASymbol("quote"), LITERAL],
+  ["`", new ASymbol("quasiquote"), LITERAL],
+  [",@", new ASymbol("unquote-splicing"), LITERAL],
+  [",", new ASymbol("unquote"), LITERAL],
+  ["#(", new ASymbol("vector"), LITERAL],
+  ["#u8(", new ASymbol("bytevector"), LITERAL],
 ];
 
 export const __builtins__ = Object.freeze(defined_specials.map((arr) => arr[0]));

@@ -33,19 +33,19 @@ import { R7RSError } from "../../errors.js";
 import { ANativeProcedure, applyCallback } from "../../values/primitives/ACallable.js";
 
 function makeChar(c: string) {
-  return new ACharacter(CONSTANT_CTX, c);
+  return new ACharacter(c);
 }
 function makeBool(b: boolean) {
-  return new ABool(CONSTANT_CTX, b);
+  return new ABool(b);
 }
 function makeString(s: string) {
-  return new AString(CONSTANT_CTX, s);
+  return new AString(s);
 }
 function makeExact(num: number, denom = 1) {
-  return new AExact(CONSTANT_CTX, num, denom);
+  return new AExact(num, denom);
 }
 function makeInexact(real: number) {
-  return new AInexact(CONSTANT_CTX, real);
+  return new AInexact(real);
 }
 
 // Forces a REAL major GC cycle without needing the process launched with `--expose-gc`
@@ -67,8 +67,8 @@ describe("scheme-zod collection functions (Zod style)", () => {
     expect(charList).toBeTruthy();
 
     // Build a real scheme list (pair spine ending in nil)
-    const p2 = new APair(CONSTANT_CTX, makeChar("b"), nil);
-    const p1 = new APair(CONSTANT_CTX, makeChar("a"), p2);
+    const p2 = new APair(makeChar("b"), nil);
+    const p1 = new APair(makeChar("a"), p2);
 
     // Decode: scheme list → JS array (chars become their JS strings via the element codec)
     const decoded = charList.parse(p1); // parse runs the codec direction
@@ -87,8 +87,8 @@ describe("scheme-zod collection functions (Zod style)", () => {
   it("z.cons(car, cdrSchema) — dotted pair — e.g. z.cons(z.char, z.union([z.nil, z.boolean]))", () => {
     const consShape = z.cons(z.char, z.union([z.nil, z.boolean]));
 
-    const good1 = new APair(CONSTANT_CTX, makeChar("a"), nil);
-    const good2 = new APair(CONSTANT_CTX, makeChar("a"), makeBool(true));
+    const good1 = new APair(makeChar("a"), nil);
+    const good2 = new APair(makeChar("a"), makeBool(true));
 
     // These should decode without throwing (the tuple target validates the parts)
     expect(() => consShape.parse(good1)).not.toThrow();
@@ -99,7 +99,7 @@ describe("scheme-zod collection functions (Zod style)", () => {
 
     // Bad cdr should fail (cdr is a char instead of nil|bool)
     const badCdr = makeChar("x");
-    const bad = new APair(CONSTANT_CTX, makeChar("a"), badCdr);
+    const bad = new APair(makeChar("a"), badCdr);
     expect(() => consShape.parse(bad)).toThrow();
   });
 
@@ -110,11 +110,11 @@ describe("scheme-zod collection functions (Zod style)", () => {
     // boundary cons's doc comment describes.
     const oneCharThenNil = z.cons(z.char, z.nil);
 
-    const single = new APair(CONSTANT_CTX, makeChar("a"), nil);
+    const single = new APair(makeChar("a"), nil);
     expect(oneCharThenNil.parse(single)).toEqual(["a", null]);
 
     // A real 2-char proper list: (a b) = (a . (b . ())) — cdr is a Pair, not nil.
-    const twoChars = new APair(CONSTANT_CTX, makeChar("a"), new APair(CONSTANT_CTX, makeChar("b"), nil));
+    const twoChars = new APair(makeChar("a"), new APair(makeChar("b"), nil));
     expect(() => oneCharThenNil.parse(twoChars)).toThrow();
   });
 
@@ -123,10 +123,10 @@ describe("scheme-zod collection functions (Zod style)", () => {
   it("z.vector(element) works for both AVector and AJSArray", () => {
     const strVec = z.vector(z.string);
 
-    const nativeVec = new AVector(CONSTANT_CTX, [makeString("x"), makeString("y")] as any);
+    const nativeVec = new AVector([makeString("x"), makeString("y")] as any);
     expect(strVec.parse(nativeVec)).toEqual(["x", "y"]);
 
-    const jsArr = new AJSArray(CONSTANT_CTX, [makeString("p")] as any);
+    const jsArr = new AJSArray([makeString("p")] as any);
     expect(strVec.parse(jsArr)).toEqual(["p"]);
 
     // encode canonically produces AVector (the first union branch), per vector()'s own comment.
@@ -163,7 +163,7 @@ describe("scheme-zod collection functions (Zod style)", () => {
   it("rejects improper lists for homogeneous z.list", () => {
     const anyList = z.list();
     // cdr is a char (not nil and not a pair) → improper termination
-    const improper = new APair(CONSTANT_CTX, makeChar("a"), makeChar("a"));
+    const improper = new APair(makeChar("a"), makeChar("a"));
     expect(() => anyList.parse(improper)).toThrow();
   });
 
@@ -225,7 +225,7 @@ describe("scheme-zod z.symbol codec", () => {
   // INVARIANT: decode then encode round-trips to the SAME ASymbol instance, not merely an
   // equal one (opaque brand, no data loss).
   it("decode then encode round-trips to the SAME ASymbol instance (opaque brand, no data loss)", () => {
-    const sym = new ASymbol(CONSTANT_CTX, "my-symbol");
+    const sym = new ASymbol("my-symbol");
     const jsSymbol = z.symbol.parse(sym);
     expect(typeof jsSymbol).toBe("symbol");
 
@@ -236,8 +236,8 @@ describe("scheme-zod z.symbol codec", () => {
   // INVARIANT: two distinct ASymbol instances decode to two distinct JS symbols (no
   // collision).
   it("two distinct ASymbol instances decode to two distinct JS symbols (no collision)", () => {
-    const a = new ASymbol(CONSTANT_CTX, "a");
-    const b = new ASymbol(CONSTANT_CTX, "b");
+    const a = new ASymbol("a");
+    const b = new ASymbol("b");
     expect(z.symbol.parse(a)).not.toBe(z.symbol.parse(b));
   });
 
@@ -258,7 +258,7 @@ describe("scheme-zod z.symbol codec", () => {
     let jsSymbol!: symbol;
     let weakRef!: WeakRef<ASymbol>;
     (() => {
-      const sym = new ASymbol(CONSTANT_CTX, "gc-pressure-symbol");
+      const sym = new ASymbol("gc-pressure-symbol");
       jsSymbol = z.symbol.parse(sym);
       weakRef = new WeakRef(sym);
       // `sym` goes out of scope here — only the codec's own cache (keyed off `jsSymbol`,
@@ -279,9 +279,9 @@ describe("scheme-zod z.dict(shape)/z.dict() — keyed to ADict.get()'s own proto
   // object and back.
   it("keyed round-trip against a real ADict", () => {
     const shaped = z.dict({ name: z.string, age: z.integer });
-    const nativeDict = new ADict(CONSTANT_CTX, [
-      [new ASymbol(CONSTANT_CTX, "name"), makeString("Ada")],
-      [new ASymbol(CONSTANT_CTX, "age"), makeExact(36)],
+    const nativeDict = new ADict([
+      [new ASymbol("name"), makeString("Ada")],
+      [new ASymbol("age"), makeExact(36)],
     ]);
 
     expect(shaped.parse(nativeDict)).toEqual({ name: "Ada", age: 36 });
@@ -297,7 +297,7 @@ describe("scheme-zod z.dict(shape)/z.dict() — keyed to ADict.get()'s own proto
   // structural check, not just instanceof ADict).
   it("a dict-shaped AJSObject is accepted on decode too (isDictShaped, not just instanceof ADict)", () => {
     const shaped = z.dict({ name: z.string });
-    const toolResult = new AJSObject(CONSTANT_CTX, { name: "from a tool" });
+    const toolResult = new AJSObject({ name: "from a tool" });
     expect(shaped.parse(toolResult)).toEqual({ name: "from a tool" });
   });
 
@@ -309,9 +309,9 @@ describe("scheme-zod z.dict(shape)/z.dict() — keyed to ADict.get()'s own proto
     // membrane exit.
     const a = makeExact(1);
     const b = makeString("x");
-    const nativeDict = new ADict(CONSTANT_CTX, [
-      [new ASymbol(CONSTANT_CTX, "a"), a],
-      [new ASymbol(CONSTANT_CTX, "b"), b],
+    const nativeDict = new ADict([
+      [new ASymbol("a"), a],
+      [new ASymbol("b"), b],
     ]);
     expect(z.dict().parse(nativeDict)).toEqual({ a, b });
   });
@@ -347,7 +347,7 @@ describe("scheme-zod z.procedure — contract-aware marshaling", () => {
       name: "double",
       arity: { min: 1, max: 1 },
       contract: undefined,
-      impl: (args) => new AExact(CONSTANT_CTX, (args[0] as AExact).num * 2),
+      impl: (args) => new AExact((args[0] as AExact).num * 2),
     });
     const decoded = z.procedure(z.integer, z.integer).parse(doubleProc);
     await expect(decoded(21)).resolves.toBe(42);
@@ -400,15 +400,15 @@ describe("scheme-zod z.value — exhaustive predicate, passthrough on both faces
       makeString("s"),
       makeExact(1),
       makeInexact(1.5),
-      new ASymbol(CONSTANT_CTX, "sym"),
-      new ANil(CONSTANT_CTX),
-      new AVoid(CONSTANT_CTX),
-      new ABytevector(CONSTANT_CTX, new Uint8Array([1, 2, 3])),
-      new AVector(CONSTANT_CTX, []),
-      new AJSArray(CONSTANT_CTX, []),
-      new ADict(CONSTANT_CTX, []),
-      new AJSObject(CONSTANT_CTX, {}),
-      new APair(CONSTANT_CTX, makeExact(1), nil),
+      new ASymbol("sym"),
+      new ANil(),
+      new AVoid(),
+      new ABytevector(new Uint8Array([1, 2, 3])),
+      new AVector([]),
+      new AJSArray([]),
+      new ADict([]),
+      new AJSObject({}),
+      new APair(makeExact(1), nil),
     ];
     for (const v of instances) {
       expect(() => z.value.parse(v)).not.toThrow();
@@ -431,7 +431,7 @@ describe("scheme-zod z.value — exhaustive predicate, passthrough on both faces
 describe("scheme-zod z.nil", () => {
   // INVARIANT: z.nil round-trips ANil ↔ JS null.
   it("null round-trip", () => {
-    const n = new ANil(CONSTANT_CTX);
+    const n = new ANil();
     expect(z.nil.parse(n)).toBe(null);
     expect(z.nil.encode(null)).toBeInstanceOf(ANil);
   });
@@ -439,7 +439,7 @@ describe("scheme-zod z.nil", () => {
   // INVARIANT: the empty-list role is absorbed by z.list's own decode (ANil parses to
   // []) with no separate schema needed.
   it("the empty-list role is absorbed by z.list's own decode — no separate schema needed", () => {
-    const empty = new ANil(CONSTANT_CTX);
+    const empty = new ANil();
     expect(z.list(z.char).parse(empty)).toEqual([]);
   });
 });
@@ -447,7 +447,7 @@ describe("scheme-zod z.nil", () => {
 describe("scheme-zod z.undefinedResult / z.error — real codecs", () => {
   // INVARIANT: z.undefinedResult round-trips undefined ↔ AVoid.
   it("z.undefinedResult round-trips undefined ↔ AVoid", () => {
-    const v = new AVoid(CONSTANT_CTX);
+    const v = new AVoid();
     expect(z.undefinedResult.parse(v)).toBeUndefined();
     expect(z.undefinedResult.encode(undefined)).toBeInstanceOf(AVoid);
   });

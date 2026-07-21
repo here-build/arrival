@@ -26,7 +26,7 @@ import { makeRunContext, CONSTANT_CTX } from "../../run/RunContext.js";
 import { MemoryRunCache, canonicalJson, runCacheKey } from "../../run/run-cache.js";
 import { AExact } from "../../values/primitives/AExact.js";
 
-const num = (n: number) => new AExact(CONSTANT_CTX, n);
+const num = (n: number) => new AExact(n);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe("canonicalJson — the normative algorithm (§2.2)", () => {

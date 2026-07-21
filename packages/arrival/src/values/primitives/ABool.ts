@@ -1,5 +1,4 @@
 import { CLASS } from "../../well-known-symbols.js";
-import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 
 /**
@@ -13,11 +12,10 @@ export class ABool extends AValue {
   readonly kind = "bool" as const;
 
   constructor(
-    ctx: RunContext,
     public readonly value: boolean,
     provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
   ) {
-    super(ctx, provenance);
+    super(provenance);
   }
 
   toString(): string {
@@ -34,7 +32,7 @@ export class ABool extends AValue {
     return this.value;
   }
   withProvenance(p: ReadonlySet<number>): ABool {
-    return new ABool(this.ctx, this.value, p);
+    return new ABool(this.value, p);
   }
 
   // Fantasy Land Setoid: REPRESENTATION-BLIND — a boxed SchemeBool equals another SchemeBool of the
@@ -46,8 +44,8 @@ export class ABool extends AValue {
   }
 }
 
-export const schemeTrue = new ABool(CONSTANT_CTX, true);
-export const schemeFalse = new ABool(CONSTANT_CTX, false);
+export const schemeTrue = new ABool(true);
+export const schemeFalse = new ABool(false);
 
 // ============================================================================
 // INTEROP BOUNDARY: ABool's prototype is narrow today, but `schemeTrue`/`schemeFalse` are

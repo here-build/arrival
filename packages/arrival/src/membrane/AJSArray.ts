@@ -15,7 +15,7 @@
  */
 
 import { CLASS } from "../well-known-symbols.js";
-import { type RunContext } from "../run/RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
 import { attestDeep, freshIfSingleton, isAttested } from "../values/attestation.js";
 import { AValue, EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
 import { withInputProvenance } from "../values/op-helpers.js";
@@ -86,11 +86,10 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
    * exception clause: a Proxy over a plain target is not an `AValue`, so it passes on its own merits.
    */
   constructor(
-    ctx: RunContext,
     readonly source: JSWorldArray<S>,
     provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
   ) {
-    super(ctx, provenance);
+    super(provenance);
   }
 
   // Cheap read stays lazy — `.length` (and `(vector-length it)`) never boxes the array.
@@ -120,7 +119,7 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
   // store was already vetted at construction — so the widened source is honest here, not a laundered
   // cast. Every consumer of a borrowed array types it bare (`AJSArray`), which is this default.
   withProvenance(p: ReadonlySet<number>): AJSArray {
-    return new AJSArray(this.ctx, this.source as readonly unknown[], p);
+    return new AJSArray(this.source as readonly unknown[], p);
   }
 
   // ── Vector algebra — DELEGATED to the materialized vector (no duplicated logic) ──
@@ -266,12 +265,12 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
       throw e;
     }
     if (raw === NOT_FOUND) return nil;
-    if (Array.isArray(raw)) return new AJSArray(this.ctx, raw);
+    if (Array.isArray(raw)) return new AJSArray(raw);
     // A Promise-valued member is a lazy pending cell — settled box carries the member
     // path's historical EMPTY provenance, same as the sync read below.
     if (is_promise(raw))
-      return this.pendingCell(name, raw, (settled) => jsToScheme(this.ctx, settled, {}, EMPTY_PROVENANCE));
-    const boxed: SchemeValue = jsToScheme(this.ctx, raw, {}, EMPTY_PROVENANCE);
+      return this.pendingCell(name, raw, (settled) => jsToScheme(CONSTANT_CTX, settled, {}, EMPTY_PROVENANCE));
+    const boxed: SchemeValue = jsToScheme(CONSTANT_CTX, raw, {}, EMPTY_PROVENANCE);
     return boxed;
   }
 
@@ -332,7 +331,7 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
         "pushed into a borrowed JS store without crossing the membrane (an unobserved flip). Cross it " +
         "with `schemeToJs` first, or hold it in an AVector.",
     );
-    const boxed: SchemeValue = jsToScheme(this.ctx, raw, {}, this.provenance);
+    const boxed: SchemeValue = jsToScheme(CONSTANT_CTX, raw, {}, this.provenance);
     return isAttested(this) ? attestDeep(freshIfSingleton(boxed)) : boxed;
   }
 
@@ -357,10 +356,13 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
     return cell;
   }
 
-  // The freeze contract — docs/membrane.md §BOXING. Idempotent (guarded by `Object.isFrozen`);
-  // `freezeRosettaReturns: false` opts out.
+  // The freeze contract — docs/membrane.md §BOXING. Idempotent (guarded by `Object.isFrozen`).
+  // TODO(ctx-elimination): this used to read `this.ctx.freezeRosettaReturns !== false` (default
+  // true, opt-out via a per-run ctx flag) — AValue no longer carries a per-value ctx (see
+  // AValue.ts's ctx-removal note), so the opt-out is unreachable and this always freezes now.
+  // Re-source from an active run-context once one is restored.
   private freezeSource(): void {
-    if (this.ctx.freezeRosettaReturns !== false && !Object.isFrozen(this.source)) {
+    if (!Object.isFrozen(this.source)) {
       Object.freeze(this.source);
     }
   }
@@ -381,9 +383,8 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
       // on the empty-provenance path, and the singletons never attest — the clone does.
       const inherit = isAttested(this);
       this.boxedVec = new AVector(
-        this.ctx,
         this.source.map((v) => {
-          const boxed: SchemeValue = jsToScheme(this.ctx, v, {}, this.provenance);
+          const boxed: SchemeValue = jsToScheme(CONSTANT_CTX, v, {}, this.provenance);
           return inherit ? attestDeep(freshIfSingleton(boxed)) : boxed;
         }),
         this.provenance,

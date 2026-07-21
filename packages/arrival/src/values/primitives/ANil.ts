@@ -8,7 +8,7 @@
  */
 import { type SchemeValue } from "../types.js";
 import { CLASS } from "../../well-known-symbols.js";
-import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
+import { type RunContext } from "../../run/RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { APair } from "./APair.js";
 import { AExact } from "./AExact.js";
@@ -17,8 +17,8 @@ export class ANil extends AValue {
   static [CLASS] = "nil";
   readonly kind = "nil" as const;
 
-  constructor(ctx: RunContext, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
-    super(ctx, provenance);
+  constructor(provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
+    super(provenance);
   }
 
   // Monoid empty — the identity is Nil itself (the canonical singleton).
@@ -46,10 +46,9 @@ export class ANil extends AValue {
     return {};
   }
 
-  // No caller today — scheme `append`/`cons` route through `concatPair`/`APair`'s own ctor,
-  // both of which thread ctx correctly. If this is ever wired, thread a live ctx the same way.
+  // No caller today — scheme `append`/`cons` route through `concatPair`/`APair`'s own ctor.
   append<T extends SchemeValue>(x: T): APair<T, ANil> {
-    return new APair<T, ANil>(CONSTANT_CTX, x, nil);
+    return new APair<T, ANil>(x, nil);
   }
 
   to_array(): never[] {
@@ -67,7 +66,7 @@ export class ANil extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): ANil {
-    return new ANil(this.ctx, p);
+    return new ANil(p);
   }
 
   // Setoid — every Nil (including provenance clones) is equal, matching eq?'s instanceof
@@ -84,10 +83,10 @@ export class ANil extends AValue {
   }
 
   // Head/tail projection of the EMPTY list — the nil-tolerance algebra. nil is a global
-  // constant bearing no run-state, so the run's mode rides the THREADED runCtx
-  // (RunContext.ts's corrected plan: car-of-nil's strict is read from the active run, never
-  // nil.ctx): strict ⇒ the R7RS "() is not a pair" throw; tolerant ⇒ nil, so a multi-leaf
-  // proof grounds its OTHER leaves rather than crashing on one absent read.
+  // constant bearing no run-state, so the run's mode rides the THREADED runCtx (AValue no
+  // longer carries a per-value ctx at all — see AValue.ts's ctx-removal note): strict ⇒
+  // the R7RS "() is not a pair" throw; tolerant ⇒ nil, so a multi-leaf proof grounds its
+  // OTHER leaves rather than crashing on one absent read.
   ["arrival/tagless-final/car"](runCtx: RunContext): ANil {
     if (runCtx.strict) throw new TypeError("car: () is not a pair");
     return nil;
@@ -143,15 +142,14 @@ export class ANil extends AValue {
   // violation (every arithmetic result must be a boxed AValue) — so this mints a fresh
   // empty-provenance `AExact`.
   //
-  // `_runCtx` is intentionally unread: `nil` itself is always CONSTANT_CTX (the shared
-  // singleton — see below), and the sole caller (`env/r7rs/lists.ts`'s `length` builtin)
-  // dispatches via `m.call(obj)` with no runCtx argument at all — so threading this
-  // parameter alone would not change what gets minted. Fixing that requires the caller to
-  // thread its own live runCtx (`m.call(obj, runCtx)`) first; that change is owned by the
-  // env/r7rs cluster, not this term.
+  // `_runCtx` is intentionally unread: `nil` itself is the shared singleton (see below), and
+  // the sole caller (`env/r7rs/lists.ts`'s `length` builtin) dispatches via `m.call(obj)` with
+  // no runCtx argument at all — so threading this parameter alone would not change what gets
+  // minted. Fixing that requires the caller to thread its own live runCtx (`m.call(obj,
+  // runCtx)`) first; that change is owned by the env/r7rs cluster, not this term.
   ["arrival/tagless-final/length"](_runCtx?: unknown): AExact {
-    return new AExact(CONSTANT_CTX, 0);
+    return new AExact(0);
   }
 }
 
-export const nil = new ANil(CONSTANT_CTX);
+export const nil = new ANil();

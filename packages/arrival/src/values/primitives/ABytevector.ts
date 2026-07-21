@@ -13,7 +13,6 @@
  * Fantasy Land (fantasyland/fantasy-land).
  */
 import { CLASS } from "../../well-known-symbols.js";
-import { type RunContext } from "../../run/RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { withInputProvenance } from "../op-helpers.js";
 
@@ -54,8 +53,8 @@ export class ABytevector extends AValue {
 
   readonly __bytevector__: Uint8Array;
 
-  constructor(ctx: RunContext, source: BytevectorSource, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
-    super(ctx, provenance);
+  constructor(source: BytevectorSource, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
+    super(provenance);
     this.__bytevector__ = toUint8(source);
   }
 
@@ -72,7 +71,7 @@ export class ABytevector extends AValue {
   }
 
   copy(start = 0, end = this.__bytevector__.byteLength): ABytevector {
-    return new ABytevector(this.ctx, this.__bytevector__.slice(start, end));
+    return new ABytevector(this.__bytevector__.slice(start, end));
   }
 
   // Membrane unwrap (membrane.ts toJS, TO_JS protocol): a boxed bytevector
@@ -86,7 +85,7 @@ export class ABytevector extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): ABytevector {
-    return new ABytevector(this.ctx, this.__bytevector__, p);
+    return new ABytevector(this.__bytevector__, p);
   }
 
   // Print protocol — R7RS external repr `#u8(byte …)` (bytes are raw numbers, no
@@ -136,7 +135,7 @@ export class ABytevector extends AValue {
     const result = new Uint8Array(a.length + b.length);
     result.set(a, 0);
     result.set(b, a.length);
-    return new ABytevector(this.ctx, result);
+    return new ABytevector(result);
   }
 
   // Element-count over a bytevector (byte length). Like AString (and UNLIKE the Pair/Vector

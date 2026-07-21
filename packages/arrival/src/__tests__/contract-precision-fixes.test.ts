@@ -49,8 +49,8 @@ function contractDef(pack: { spec: { symbols?: unknown } }, name: string) {
 }
 
 const fn = () => {};
-const properList = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), nil);
-const realString = new AString(CONSTANT_CTX, "abc");
+const properList = new APair(new AExact(1), nil);
+const realString = new AString("abc");
 
 describe("2026-07-05 audit — runtime Contract precision on the REAL exported ops", () => {
   // INVARIANT: for-each's rest-argument schema requires a proper list (Pair|Nil); a non-list is rejected
@@ -110,8 +110,8 @@ describe("2026-07-05 audit — scheme/equality: symbol=? input precision (boolea
   // symbol/non-symbol or two non-symbols is rejected
   it("symbol=?: input is now z.array(z.symbol) — a non-symbol used to slip through the old z.array(z.unknown())", () => {
     const def = contractDef(equalityPack, "symbol=?");
-    const a = new ASymbol(CONSTANT_CTX, "a");
-    const b = new ASymbol(CONSTANT_CTX, "b");
+    const a = new ASymbol("a");
+    const b = new ASymbol("b");
     expect(def.in.safeParse([a, b]).success).toBe(true);
     expect(def.in.safeParse([a, "not-a-symbol"]).success).toBe(false); // mixed: one real symbol, one raw string
     expect(def.in.safeParse(["not-a-symbol", 42]).success).toBe(false); // no symbols at all — was true before the fix
@@ -134,7 +134,7 @@ describe("2026-07-05 audit — scheme/equality: symbol=? input precision (boolea
   it("boolean=?: input is z.value — a raw JS boolean is genuinely rejected by the schema (though the impl's own unwrap() still accepts both representations at runtime)", () => {
     const def = contractDef(equalityPack, "boolean=?");
     expect(def.in.safeParse([true, false]).success).toBe(false);
-    expect(def.in.safeParse([new ABool(CONSTANT_CTX, true), new ABool(CONSTANT_CTX, false)]).success).toBe(true);
-    expect(def.in.safeParse([true, new ABool(CONSTANT_CTX, true)]).success).toBe(false);
+    expect(def.in.safeParse([new ABool(true), new ABool(false)]).success).toBe(true);
+    expect(def.in.safeParse([true, new ABool(true)]).success).toBe(false);
   });
 });

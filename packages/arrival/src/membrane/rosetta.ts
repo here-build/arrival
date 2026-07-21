@@ -336,7 +336,7 @@ export const INBOUND_CLAIMS: readonly InboundClaim[] = [
     // null → nil: the list-end bottom, provenance-stamped when supplied.
     name: "null → nil",
     claims: (v) => v === null,
-    box: (ctx, _v, p) => (p === EMPTY_PROVENANCE ? nil : new ANil(ctx, p)),
+    box: (ctx, _v, p) => (p === EMPTY_PROVENANCE ? nil : new ANil(p)),
   },
   {
     // undefined has no portable Scheme value (host-agnostic interpreter) → #void, loudly.
@@ -373,7 +373,7 @@ export const INBOUND_CLAIMS: readonly InboundClaim[] = [
     claims: (v) => Array.isArray(v),
     box: (ctx, v, p) => {
       invariant(Array.isArray(v), "inbound claim 'array': box called off its predicate");
-      return new AJSArray(ctx, v, p);
+      return new AJSArray(v, p);
     },
   },
   {
@@ -386,7 +386,7 @@ export const INBOUND_CLAIMS: readonly InboundClaim[] = [
       (Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null),
     box: (ctx, v, p) => {
       invariant(typeof v === "object" && v !== null, "inbound claim 'plain object': box called off its predicate");
-      return new AJSObject(ctx, v, p);
+      return new AJSObject(v, p);
     },
   },
   {
@@ -410,7 +410,7 @@ export const INBOUND_CLAIMS: readonly InboundClaim[] = [
     box: (ctx, v, p) => {
       invariant(typeof v === "symbol", "inbound claim 'symbol': box called off its predicate");
       const key = Symbol.keyFor(v);
-      if (key !== undefined) return new ASymbol(ctx, `:${key}`, p);
+      if (key !== undefined) return new ASymbol(`:${key}`, p);
       warnMembrane("a unique JS symbol");
       return theVoid;
     },
@@ -476,7 +476,7 @@ export const INBOUND_CLAIMS: readonly InboundClaim[] = [
         `a JS ${v.constructor?.name ?? "<null-proto>"} instance`,
         "was re-presented as a borrowed js-object wrapper — its members read through the interop policy, and it exits back to JS as the same instance",
       );
-      return new AJSObject(ctx, v, p);
+      return new AJSObject(v, p);
     },
   },
 ] as const;

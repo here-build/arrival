@@ -83,7 +83,7 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
     const verb = await wireRosetta(def);
     // No ctx (a direct/test call) — proves the codec membrane in isolation.
-    const out = await invoke(verb, undefined, new AString(CONSTANT_CTX, "hello"));
+    const out = await invoke(verb, undefined, new AString("hello"));
     expect(out).toBeInstanceOf(AInexact); // z.number encode → inexact
     expect((out as AInexact).real).toBe(5);
   });
@@ -93,7 +93,7 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
     const verb = await wireRosetta(def);
     // A SchemeExact is not a SchemeString → the z.string codec's instanceof guard doors.
-    await expect(invoke(verb, undefined, new AExact(CONSTANT_CTX, 3))).rejects.toThrow();
+    await expect(invoke(verb, undefined, new AExact(3))).rejects.toThrow();
   });
 
   // INVARIANT: a bound rosetta verb mints provenance off ctx.currentInvocation, marking the point and
@@ -103,7 +103,7 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     const verb = await wireRosetta(def);
 
     const { invocation, marked } = invocationWithId(42);
-    const out = (await invoke(verb, { currentInvocation: invocation }, new AString(CONSTANT_CTX, "hello"))) as AInexact;
+    const out = (await invoke(verb, { currentInvocation: invocation }, new AString("hello"))) as AInexact;
 
     expect(out).toBeInstanceOf(AInexact);
     expect(out.real).toBe(5);
@@ -125,7 +125,7 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     const verb = await wireRosetta(def);
 
     const { invocation } = invocationWithId(7);
-    const out = (await invoke(verb, { currentInvocation: invocation }, new AString(CONSTANT_CTX, "ab"))) as AValue;
+    const out = (await invoke(verb, { currentInvocation: invocation }, new AString("ab"))) as AValue;
     // Walk the spine: every reachable AValue must carry {7}.
     const seen: number[][] = [];
     const walk = (v: unknown): void => {
@@ -150,7 +150,7 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     const verb = await wireRosetta(def);
 
     // An input string carrying a known origin; no ctx → resultProvenance falls back to the input union.
-    const tagged = new AString(CONSTANT_CTX, "x", new Set([99]));
+    const tagged = new AString("x", new Set([99]));
     const out = (await invoke(verb, undefined, tagged)) as AString;
     expect(out["arrival/toJS"]()).toBe("x");
     expect([...out.provenance]).toEqual([99]); // forwarded, not minted
@@ -174,12 +174,12 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     // runCtx carrying a (not-yet-aborted) AbortSignal — the shape a real exec() mints.
     const ac = new AbortController();
     const runCtx = makeRunContext({ signal: ac.signal });
-    const out = (await invoke(verb, { runCtx }, new AString(CONSTANT_CTX, "x"))) as AString;
+    const out = (await invoke(verb, { runCtx }, new AString("x"))) as AString;
     expect(out["arrival/toJS"]()).toBe("x:live"); // signal present, not aborted
 
     // After abort, the SAME signal reference reads as aborted (read on access).
     ac.abort();
-    const out2 = (await invoke(verb, { runCtx }, new AString(CONSTANT_CTX, "y"))) as AString;
+    const out2 = (await invoke(verb, { runCtx }, new AString("y"))) as AString;
     expect(out2["arrival/toJS"]()).toBe("y:aborted");
   });
 
@@ -192,7 +192,7 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     const verb = await wireRosetta(def);
 
     // direct-JS (no ctx → CallCtx defaults to CONSTANT_CTX; the arrow never looks)
-    const direct = (await invoke(verb, undefined, new AString(CONSTANT_CTX, "hello"))) as AInexact;
+    const direct = (await invoke(verb, undefined, new AString("hello"))) as AInexact;
     expect(direct.real).toBe(5);
 
     // with a runCtx carrying an aborted signal — a pure arrow STILL ignores it (no early-out, same value)
@@ -201,7 +201,7 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     const withCtx = (await invoke(
       verb,
       { runCtx: makeRunContext({ signal: ac.signal }) },
-      new AString(CONSTANT_CTX, "world"),
+      new AString("world"),
     )) as AInexact;
     expect(withCtx.real).toBe(5);
   });
@@ -220,7 +220,7 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     const verb = await wireRosetta(def);
 
     const { invocation, marked } = invocationWithId(42);
-    const tagged = new AString(CONSTANT_CTX, "x", new Set([99]));
+    const tagged = new AString("x", new Set([99]));
     const out = (await invoke(verb, { currentInvocation: invocation }, tagged)) as AString;
     expect(out["arrival/toJS"]()).toBe("x");
     expect([...out.provenance]).toEqual([99]); // FORWARDED (pure), not minted(42)

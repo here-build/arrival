@@ -245,7 +245,7 @@ export const boolean = named(
   "boolean",
   z.codec(z.instanceof(ABool), z.boolean(), {
     decode: (b) => b.value,
-    encode: (b) => new ABool(marshalCtx(), b),
+    encode: (b) => new ABool(b),
   }),
 );
 
@@ -256,7 +256,7 @@ export const char = named(
   "char",
   z.codec(z.instanceof(ACharacter), z.string().length(1), {
     decode: (c) => c.valueOf(),
-    encode: (c) => new ACharacter(marshalCtx(), c),
+    encode: (c) => new ACharacter(c),
   }),
 );
 
@@ -264,7 +264,7 @@ export const string = named(
   "string",
   z.codec(z.instanceof(AString), z.string(), {
     decode: (s) => s.valueOf(),
-    encode: (s) => new AString(marshalCtx(), s),
+    encode: (s) => new AString(s),
   }),
 );
 
@@ -308,7 +308,7 @@ export const nil = named(
   "nil",
   z.codec(z.instanceof(ANil), z.null(), {
     decode: () => null,
-    encode: () => new ANil(marshalCtx()),
+    encode: () => new ANil(),
   }),
 );
 
@@ -317,7 +317,7 @@ export const undefinedResult = named(
   "undefinedResult",
   z.codec(z.instanceof(AVoid), z.undefined(), {
     decode: () => undefined,
-    encode: () => new AVoid(marshalCtx()),
+    encode: () => new AVoid(),
   }),
 );
 
@@ -362,7 +362,7 @@ export const exact = named(
     },
     encode: (n) => {
       TypeError.invariant(Number.isSafeInteger(n), `exact codec: ${n} is not a safe integer`);
-      return new AExact(marshalCtx(), n);
+      return new AExact(n);
     },
   }),
 );
@@ -373,7 +373,7 @@ export const inexact = named(
   "inexact",
   z.codec(z.instanceof(AInexact), z.number(), {
     decode: (n) => n.real,
-    encode: (n) => new AInexact(marshalCtx(), n),
+    encode: (n) => new AInexact(n),
   }),
 );
 
@@ -407,7 +407,7 @@ export const integer = named(
     },
     encode: (n) => {
       TypeError.invariant(Number.isSafeInteger(n), `integer codec: ${n} is not a safe integer`);
-      return new AExact(marshalCtx(), n);
+      return new AExact(n);
     },
   }),
 );
@@ -421,13 +421,13 @@ export const number = named(
   z.union([
     z.codec(z.instanceof(AInexact), z.number(), {
       decode: (n) => n.real,
-      encode: (n) => new AInexact(marshalCtx(), n),
+      encode: (n) => new AInexact(n),
     }),
     z.codec(z.instanceof(AExact), z.number(), {
       decode: (n) => exactToJsNumberOrDoor(n),
       encode: (n) => {
         TypeError.invariant(Number.isSafeInteger(n), `number codec: ${n} is not a safe integer`);
-        return new AExact(marshalCtx(), n);
+        return new AExact(n);
       },
     }),
   ]),
@@ -454,7 +454,7 @@ export const bigint = named(
           Number.isSafeInteger(num),
           `bigint codec: ${n} exceeds safe-integer range — exact numbers are safe-integer-only post-rework`,
         );
-        return new AExact(marshalCtx(), num);
+        return new AExact(num);
       },
     }),
     z.codec(z.instanceof(AInexact), z.bigint(), {
@@ -465,7 +465,7 @@ export const bigint = named(
         }
         return BigInt(n.real);
       },
-      encode: (n) => new AInexact(marshalCtx(), Number(n)),
+      encode: (n) => new AInexact(Number(n)),
     }),
   ]),
 );
@@ -498,7 +498,7 @@ export const looseNumber = named(
     z.custom<number>((v) => typeof v === "number"),
     {
       decode: (n) => (n instanceof AExact ? n.num / n.denom : n.real),
-      encode: (n) => (Number.isSafeInteger(n) ? new AExact(marshalCtx(), n) : new AInexact(marshalCtx(), n)),
+      encode: (n) => (Number.isSafeInteger(n) ? new AExact(n) : new AInexact(n)),
     },
   ),
 );
@@ -519,9 +519,9 @@ export const looseAnyNumber = named(
         if (typeof v === "bigint") {
           const num = Number(v);
           TypeError.invariant(Number.isSafeInteger(num), `looseAnyNumber: ${v} exceeds safe-integer range`);
-          return new AExact(marshalCtx(), num);
+          return new AExact(num);
         }
-        return Number.isSafeInteger(v) ? new AExact(marshalCtx(), v) : new AInexact(marshalCtx(), v);
+        return Number.isSafeInteger(v) ? new AExact(v) : new AInexact(v);
       },
     },
   ),
@@ -531,7 +531,7 @@ export const bytevector = named(
   "bytevector",
   z.codec(z.instanceof(ABytevector), z.instanceof(Uint8Array), {
     decode: (b) => b.__bytevector__ as Uint8Array<ArrayBuffer>,
-    encode: (b) => new ABytevector(marshalCtx(), b),
+    encode: (b) => new ABytevector(b),
   }),
 );
 
@@ -654,7 +654,7 @@ export function cons<C extends z.ZodTypeAny, D extends z.ZodTypeAny>(carE: C, cd
       encode: ([c, d]) => {
         const carValue = c as SchemeValue;
         const cdrValue = d as SchemeValue;
-        return new APair(firstCtx([carValue, cdrValue]), carValue, cdrValue);
+        return new APair(carValue, cdrValue);
       },
     }),
   );
@@ -737,7 +737,7 @@ export function vector<E extends z.ZodTypeAny = typeof value>(element: E = value
         encode: (arr) => {
           const ctx = firstCtx(arr as SchemeValue[]);
           chargeHeap(ctx, arr.length);
-          return new AVector(ctx, arr as SchemeValue[]);
+          return new AVector(arr as SchemeValue[]);
         },
       }),
       // The borrowed arm is DECODE-ONLY; its `encode` is a door, not a mint.
@@ -827,9 +827,7 @@ export function dict<S extends Record<string, z.ZodTypeAny>>(shape: S = {} as S)
           // its value.
           const ctx = firstCtx(entries.map(([, v]) => v as SchemeValue));
           chargeHeap(ctx, entries.length);
-          return new ADict(
-            ctx,
-            entries.map(([k, v]) => [new ASymbol(ctx, k), v as SchemeValue] as [DictKey, SchemeValue]),
+          return new ADict(entries.map(([k, v]) => [new ASymbol(k), v as SchemeValue] as [DictKey, SchemeValue]),
           );
         },
       },
@@ -844,7 +842,7 @@ export const box = named(
   "box",
   z.codec(z.instanceof(AJSObject), z.custom<object>(), {
     decode: (o) => o.source,
-    encode: (o) => new AJSObject(marshalCtx(), o),
+    encode: (o) => new AJSObject(o),
   }),
 );
 

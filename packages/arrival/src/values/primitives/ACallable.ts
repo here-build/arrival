@@ -24,7 +24,7 @@
 // scheme-zod init cycle (see the makeCallCtx note below).
 
 import { AValue } from "./AValue.js";
-import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
+import { type RunContext } from "../../run/RunContext.js";
 import type { SchemeBounceMarker, SchemeValue } from "../types.js";
 import { tf } from "../tagless-final.js";
 // makeCallCtx lives in this same directory (not common/symbols/_bake.ts) specifically so this
@@ -90,14 +90,11 @@ export class ALambda extends AValue {
     arity: Arity;
     scope: unknown;
     runner: (args: SchemeValue[], runCtx: RunContext, canBounce: boolean) => CallResult;
-    ctx?: RunContext;
   }) {
     // A lambda's IDENTITY is minted at bake/define time (evalLambda, named-let), not per
     // invocation — live work threads `runCtx` per-call through `impl(args, runCtx)`
-    // instead. (evaluator.ts's `ctx.runCtx ?? CONSTANT_CTX` upstream fallback at the two
-    // call sites that construct a LONG-LIVED user lambda is a separate concern — not
-    // this ctor.)
-    super(opts.ctx ?? CONSTANT_CTX);
+    // instead.
+    super();
     this.name = opts.name;
     this.arity = opts.arity;
     this.scope = opts.scope;
@@ -136,11 +133,11 @@ export class ANativeProcedure extends AValue {
   readonly contract: unknown;
   readonly #impl: CallableImpl;
 
-  constructor(opts: { name: string | symbol; arity: Arity; contract: unknown; impl: CallableImpl; ctx?: RunContext }) {
+  constructor(opts: { name: string | symbol; arity: Arity; contract: unknown; impl: CallableImpl }) {
     // Same reasoning as ALambda's ctor above: a native procedure's IDENTITY is bound
     // once at capability-assembly time (common/capability.ts), never per invocation;
     // `impl(args, runCtx)` carries the live per-call ctx instead.
-    super(opts.ctx ?? CONSTANT_CTX);
+    super();
     this.name = opts.name;
     this.arity = opts.arity;
     this.contract = opts.contract;
@@ -188,11 +185,10 @@ export class ARosettaProcedure extends AValue {
     contract: unknown;
     strategy: unknown;
     impl: CallableImpl;
-    ctx?: RunContext;
   }) {
     // Same reasoning as ALambda/ANativeProcedure's ctors above: bound once at
     // capability-assembly time (scheme-zod.ts's `z.procedure`), never per invocation.
-    super(opts.ctx ?? CONSTANT_CTX);
+    super();
     this.name = opts.name;
     this.arity = opts.arity;
     this.contract = opts.contract;
@@ -243,14 +239,11 @@ export class DoorProcedure extends AValue {
    *  value, matching the same `.length === 0` the old bare closure answered). */
   readonly arity: Arity = { min: 0, max: null };
 
-  constructor(
-    readonly door: DoorSymbolDef,
-    ctx?: RunContext,
-  ) {
+  constructor(readonly door: DoorSymbolDef) {
     // Same reasoning as the sibling ctors above: a door is bound once at
     // capability-assembly time; it never mints run-tagged output (its `apply` term
     // unconditionally throws before touching any value).
-    super(ctx ?? CONSTANT_CTX);
+    super();
   }
 
   ["arrival/toJS"](): unknown {

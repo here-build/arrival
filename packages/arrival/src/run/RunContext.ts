@@ -1,7 +1,11 @@
 /**
- * RunContext — the per-run handle carried by every value built during a run
- * (`AValue.ctx`), minted once per `exec()` by `makeRunContext`. The run's identity: state
- * CONSTANT for one run yet DIFFERING between concurrent runs.
+ * RunContext — the per-run handle, minted once per `exec()` by `makeRunContext` and
+ * threaded explicitly through ops as `runCtx`. The run's identity: state CONSTANT for one
+ * run yet DIFFERING between concurrent runs.
+ *
+ * TODO(ctx-elimination): this used to also be carried by every VALUE built during a run
+ * (`AValue.ctx`) — that per-value field is gone (see AValue.ts's ctx-removal note); the
+ * type itself is unchanged and stays the currency of every `runCtx` op parameter below.
  *
  * The model this type realizes — why run-state is DATA-LOCAL (hermetic exec on one shared
  * isolate), the three ctx species (live-run / CONSTANT_CTX / parse), and the five channels'

@@ -26,7 +26,7 @@ import { AExact } from "../../values/primitives/AExact.js";
 import { AVoid } from "../../values/primitives/AVoid.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 
-const num = (n: number) => new AExact(CONSTANT_CTX, n);
+const num = (n: number) => new AExact(n);
 
 /** A sink def around a spy impl — mirrors run-cache.law.test.ts's `viewDef` shape. */
 function sinkDef(name: string) {

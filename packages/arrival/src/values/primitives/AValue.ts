@@ -28,21 +28,20 @@ export const EMPTY_PROVENANCE: ReadonlySet<number> = new Set<number>();
 const EMPTY_CHILDREN: readonly unknown[] = Object.freeze([]);
 
 /**
- * The run-context of a maybe-boxed operand. At the membrane an operand often
- * arrives typed `unknown` (scheme-zod decode); when it IS an AValue its ctx is
- * the run-correct source for any value derived from it, else there is no run to
- * inherit (raw JS input) and the run-neutral CONSTANT_CTX is correct. An honest
- * instanceof narrowing — never a cast — so it stays sound when the input is raw.
+ * The run-context of a maybe-boxed operand.
  *
- * `fallback`: the raw-JS arm's "no run to inherit" claim is true for a value with
- * genuinely no crossing context, but a membrane-adjacent caller DOES have one — the
- * crossing's own live RunContext — even when the operand itself is a bare scalar.
- * Optional and defaulted to `CONSTANT_CTX` so every existing bare `ctxOf(x)` call
- * keeps today's exact meaning; a caller that HAS a crossing ctx passes it explicitly
- * instead of silently losing it to the raw-JS arm.
+ * TODO(ctx-elimination): this used to narrow `x instanceof AValue ? x.ctx : fallback` — the
+ * run-correct source for any value derived from an operand that WAS an AValue, falling back to
+ * the run-neutral CONSTANT_CTX for raw JS input. `AValue` no longer carries a per-value `ctx`
+ * field at all (see the removal note on the class below), so there is nothing left to narrow:
+ * every call now answers `fallback` unconditionally, which collapses `chargeHeap(ctxOf(x), n)`
+ * call sites to a no-op (CONSTANT_CTX is always the unmetered/bootstrap context). `x` stays a
+ * parameter (unused) so every existing call site keeps compiling unchanged — a later phase
+ * restores this via an ambient/active run-context rather than a per-value field.
  */
 export function ctxOf(x: SchemeValue, fallback: RunContext = CONSTANT_CTX): RunContext {
-  return x instanceof AValue ? x.ctx : fallback;
+  void x;
+  return fallback;
 }
 
 export type AKind =
@@ -67,13 +66,20 @@ export abstract class AValue {
   static [INTEROP_BOUNDARY] = true;
   abstract readonly kind: AKind;
   readonly provenance: ReadonlySet<number>;
-  /** Per-run context (RunContext). REQUIRED — a ctx-less value cannot be constructed.
-   *  Run-built values carry the run ctx; singletons/quoted-AST/bootstrap carry CONSTANT_CTX.
-   *  Clones (withProvenance) keep this.ctx. Populated ahead of its readers — no op consumes it yet. */
-  readonly ctx: RunContext;
+  /** REMOVED (ctx-elimination): this class used to carry a per-value `readonly ctx: RunContext`
+   *  field — every AValue was minted with a RunContext, run-built values carrying the live run
+   *  ctx and singletons/quoted-AST/bootstrap carrying CONSTANT_CTX. It never grew a real reader
+   *  (the doc comment already said "no op consumes it yet") beyond `ctxOf`'s fallback narrowing
+   *  and `AJSObject`/`AJSArray`'s `freezeRosettaReturns` read — the primary heap-metering path
+   *  threads `runCtx` as an explicit op parameter instead, and does not need this field.
+   *
+   *  Removed outright rather than kept as dead weight. Accepted, deliberate breakage from this
+   *  removal: `chargeHeap(ctxOf(x), n)` call sites are now no-ops (ctxOf always answers its
+   *  CONSTANT_CTX fallback — see below), and `AJSObject`/`AJSArray`'s freeze-on-read now always
+   *  freezes (the `freezeRosettaReturns: false` opt-out is unreachable). A later phase restores
+   *  both via an ambient/active run-context rather than reintroducing a per-value field. */
 
-  protected constructor(ctx: RunContext, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
-    this.ctx = ctx;
+  protected constructor(provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
     this.provenance = provenance;
   }
 

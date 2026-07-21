@@ -99,7 +99,7 @@ describe("jsToScheme deep-stamps every constructed AValue", () => {
   });
 
   it("with already-AValue same provenance returns input unchanged (identity fast path)", () => {
-    const orig = new AString(CONSTANT_CTX, "x", PROV);
+    const orig = new AString("x", PROV);
     expect(jsToScheme(CONSTANT_CTX, orig, {}, PROV)).toBe(orig);
     // Empty-provenance argument also short-circuits — input is preserved.
     expect(jsToScheme(CONSTANT_CTX, orig, {}, EMPTY_PROVENANCE)).toBe(orig);
@@ -127,7 +127,7 @@ describe("jsToScheme WeakSet cycle protection", () => {
 
 describe("SchemeJSObject.get — cached boundary-validated boxing", () => {
   it("(eq? (@ obj :x) (@ obj :x)) returns #t — cached AValue reused", () => {
-    const obj = new AJSObject(CONSTANT_CTX, { x: 42 }, PROV);
+    const obj = new AJSObject({ x: 42 }, PROV);
     const a = obj.get("x");
     const b = obj.get("x");
     // Identity: the cache returns the same AValue instance on repeat reads.
@@ -135,14 +135,14 @@ describe("SchemeJSObject.get — cached boundary-validated boxing", () => {
   });
 
   it("entry carries the wrapper's provenance", () => {
-    const obj = new AJSObject(CONSTANT_CTX, { greeting: "hi" }, PROV);
+    const obj = new AJSObject({ greeting: "hi" }, PROV);
     const greeting = obj.get("greeting") as AString;
     expect(greeting).toBeInstanceOf(AString);
     expect([...greeting.provenance]).toEqual([42]);
   });
 
   it("missing key returns nil", () => {
-    const obj = new AJSObject(CONSTANT_CTX, { x: 1 }, PROV);
+    const obj = new AJSObject({ x: 1 }, PROV);
     expect(obj.get("nope")).toBe(nil);
   });
 
@@ -150,18 +150,18 @@ describe("SchemeJSObject.get — cached boundary-validated boxing", () => {
   // "writes don't work" — a rewrite that dropped the cache stability would regress silently.
   it("rejects writes — set is banned (pure-dataflow sandbox), source unchanged", () => {
     const source: { x: unknown } = { x: 1 };
-    const obj = new AJSObject(CONSTANT_CTX, source, PROV);
+    const obj = new AJSObject(source, PROV);
     const first = obj.get("x") as AExact;
     expect(first.valueOf()).toBe(1);
     // Writing the foreign peer is not dataflow — the membrane is read-only.
-    expect(() => obj.set("x", new AExact(CONSTANT_CTX, 99))).toThrow(/writes are banned/);
+    expect(() => obj.set("x", new AExact(99))).toThrow(/writes are banned/);
     expect(source.x).toBe(1); // nothing was written
     // The cached read remains the same stable AValue.
     expect(obj.get("x")).toBe(first);
   });
 
   it("withProvenance returns a wrapper with empty cache", () => {
-    const obj = new AJSObject(CONSTANT_CTX, { x: 1 }, PROV);
+    const obj = new AJSObject({ x: 1 }, PROV);
     obj.get("x"); // populate cache
     const clone = obj.withProvenance(new Set<number>([99]));
     // Clone holds the same source but boxes entries fresh with the new
@@ -173,7 +173,7 @@ describe("SchemeJSObject.get — cached boundary-validated boxing", () => {
   it("blocked key (sandboxedAccess NOT_FOUND) returns nil", () => {
     // Object.prototype methods are filtered by the sandbox boundary —
     // `.get("toString")` resolves to NOT_FOUND for plain-object sources.
-    const obj = new AJSObject(CONSTANT_CTX, { x: 1 }, PROV);
+    const obj = new AJSObject({ x: 1 }, PROV);
     expect(obj.get("toString")).toBe(nil);
   });
 });
@@ -184,7 +184,7 @@ describe("dict-ref / @ / :key all route through SchemeJSObject.get", () => {
     // targets — the wrapper's cache makes the two surfaces return the same
     // AValue instance, so `(eq? (@ obj :x) (:x obj))` holds.
     const env = mintFrame(inferenceEnv, "test");
-    const wrapper = new AJSObject(CONSTANT_CTX, { x: "hello" });
+    const wrapper = new AJSObject({ x: "hello" });
     bindValue(env, "obj", wrapper);
     const [viaAt] = await exec("(@ obj :x)", { env });
     const [viaColon] = await exec("(:x obj)", { env });

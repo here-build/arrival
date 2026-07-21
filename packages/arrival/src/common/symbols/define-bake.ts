@@ -195,7 +195,7 @@ function formsOf(code: unknown): SchemeValue[] {
  *  discarded after classification. It never enters a run, so there is no meter to
  *  charge and no identity to carry. */
 function synthesizeDefine(name: string, body: SchemeValue): SchemeValue {
-  const nameSym = new ASymbol(CONSTANT_CTX, name);
+  const nameSym = new ASymbol(name);
   if (
     body instanceof APair &&
     body.car instanceof ASymbol &&
@@ -204,16 +204,12 @@ function synthesizeDefine(name: string, body: SchemeValue): SchemeValue {
   ) {
     const formals = body.cdr.car;
     const bodyForms = body.cdr.cdr;
-    return new APair(
-      CONSTANT_CTX,
-      new ASymbol(CONSTANT_CTX, "define"),
-      new APair(CONSTANT_CTX, new APair(CONSTANT_CTX, nameSym, formals), bodyForms),
+    return new APair(new ASymbol("define"),
+      new APair(new APair(nameSym, formals), bodyForms),
     );
   }
-  return new APair(
-    CONSTANT_CTX,
-    new ASymbol(CONSTANT_CTX, "define"),
-    new APair(CONSTANT_CTX, nameSym, new APair(CONSTANT_CTX, body, nil)),
+  return new APair(new ASymbol("define"),
+    new APair(nameSym, new APair(body, nil)),
   );
 }
 

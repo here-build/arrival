@@ -34,7 +34,7 @@ import { CONSTANT_CTX } from "../../run/RunContext.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
 import { bindValue } from "../../env/AmbientRuntime.js";
 
-const boxed = (n: number) => new AExact(CONSTANT_CTX, n);
+const boxed = (n: number) => new AExact(n);
 
 describe("CompiledResolutionChain — LAW 1: precedence preservation", () => {
   it("re-homes the module-composition rows: own bindings → own resolvers → parent, per layer", () => {

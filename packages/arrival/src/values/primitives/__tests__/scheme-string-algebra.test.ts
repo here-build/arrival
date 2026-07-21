@@ -16,9 +16,9 @@ const arb = fc
     fc.constantFrom("", "a", "b", "ab", "🦄", "🦄a", "naïve", "Z"),
     fc.string({ maxLength: 4 }),
   )
-  .map((s) => new AString(CONSTANT_CTX, s));
+  .map((s) => new AString(s));
 
-const equalClone = (s: AString) => new AString(CONSTANT_CTX, s.valueOf());
+const equalClone = (s: AString) => new AString(s.valueOf());
 
 // INVARIANT: reflexivity/symmetry/transitivity of string equality, incl. distinct-heap clones.
 setoidLaws("SchemeString", { arb, equalClone });
@@ -27,13 +27,13 @@ ordLaws("SchemeString", arb);
 
 describe("SchemeString Setoid/Ord — totality boundaries", () => {
   it("value equality over distinct heap instances", () => {
-    const a = new AString(CONSTANT_CTX, "🦄");
-    const b = new AString(CONSTANT_CTX, "🦄");
+    const a = new AString("🦄");
+    const b = new AString("🦄");
     expect(a[tf("equals")](b)).toBe(true);
   });
 
   it("equals is representation-blind (plain string matches by content); lte stays type-strict", () => {
-    const a = new AString(CONSTANT_CTX, "a");
+    const a = new AString("a");
     // equals: a boxed string equals the SAME value UNBOXED (a plain JS string) — the representation-
     // blindness that fixes dedup over chain-boxed strings (sift/closure.scm). Content still discriminates.
     expect(a[tf("equals")]("a")).toBe(true); // plain string, equal content → equal (was false)
@@ -46,8 +46,8 @@ describe("SchemeString Setoid/Ord — totality boundaries", () => {
   });
 
   it("lexicographic lte agrees with JS string order", () => {
-    const a = new AString(CONSTANT_CTX, "ab");
-    const b = new AString(CONSTANT_CTX, "b");
+    const a = new AString("ab");
+    const b = new AString("b");
     expect(a[tf("lte")](b)).toBe(true);
     expect(b[tf("lte")](a)).toBe(false);
   });

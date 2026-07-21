@@ -46,12 +46,12 @@ describe("coerceNumeric", () => {
 
   describe("passthrough", () => {
     it("passes through ExactNumber", () => {
-      const exact = new AExact(CONSTANT_CTX, 42);
+      const exact = new AExact(42);
       expect(coerceNumeric(exact)).toBe(exact);
     });
 
     it("passes through InexactNumber", () => {
-      const inexact = new AInexact(CONSTANT_CTX, 3.14);
+      const inexact = new AInexact(3.14);
       expect(coerceNumeric(inexact)).toBe(inexact);
     });
   });

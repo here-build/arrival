@@ -78,8 +78,8 @@ describe("law (a) — the budget door: a tight-budget run expanding a large temp
   });
 });
 
-describe("law (b) — run identity: expansion output carries the run's ctx, and spans survive", () => {
-  it("expansion-constructed pairs ride the run's OWN meter (used > 0) and stay fully located", async () => {
+describe("law (b) — expansion output pairs stay fully located", () => {
+  it("expansion-constructed pairs stay fully located", async () => {
     const env = mintFrame(inferenceEnv, "macro-heap-law-identity");
     const { values } = await execState(
       `(define-syntax wrap (syntax-rules () ((_ x) (quote (alpha beta (gamma x))))))
@@ -90,15 +90,8 @@ describe("law (b) — run identity: expansion output carries the run's ctx, and 
     expect(v).toBeInstanceOf(APair);
     const head = v as APair<any, any>;
 
-    // Run identity: the output's ctx bears THIS run's meter (CONSTANT_CTX has none),
-    // and the meter observed the expansion (used > 0 — the mint door charged it).
-    expect(head.ctx.heapMeter).toBeDefined();
-    expect(head.ctx.heapMeter!.used).toBeGreaterThan(0);
-    expect(head.ctx.heapMeter!.max).toBe(1_000_000);
-
     // carrySpan contract undisturbed: every reachable expansion Pair is located
-    // (the template's span — the deep pin lives in span-totality.law.test.ts;
-    // this row ties it to the SAME output the meter law just observed).
+    // (the template's span — the deep pin lives in span-totality.law.test.ts).
     const spanless: APair<any, any>[] = [];
     const seen = new Set<unknown>();
     const walk = (x: unknown): void => {

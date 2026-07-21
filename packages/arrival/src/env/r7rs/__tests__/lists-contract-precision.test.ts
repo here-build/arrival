@@ -53,8 +53,8 @@ function sequenceDef(name: string) {
   return def;
 }
 
-const exact = (n: number): AExact => new AExact(CONSTANT_CTX, n);
-const str = (s: string): AString => new AString(CONSTANT_CTX, s);
+const exact = (n: number): AExact => new AExact(n);
+const str = (s: string): AString => new AString(s);
 // Adversarial fixture: `properList` deliberately builds pair-chains over non-SchemeValue
 // elements too (raw JS numbers/functions — see call sites below) to probe zod schema
 // REJECTION under this file's own precision fixes. `fromArray`'s `T extends SchemeValue`
@@ -146,7 +146,7 @@ describe("scheme/lists Contract precision — STATIC-only fixes (documented, not
     const def = nativeDef("cons");
     expect(def.in.safeParse([exact(1), exact(2)]).success).toBe(true);
     expect(def.in.safeParse(["raw-js-string", 123]).success).toBe(false); // genuinely rejected — z.value refines
-    expect(def.out.safeParse([new APair(CONSTANT_CTX, exact(1), nil)]).success).toBe(true);
+    expect(def.out.safeParse([new APair(exact(1), nil)]).success).toBe(true);
   });
 
   // INVARIANT: map's head gained a real callable (z.lambda) refinement creating a genuine

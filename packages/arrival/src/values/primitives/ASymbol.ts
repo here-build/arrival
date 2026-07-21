@@ -1,5 +1,5 @@
 import { CLASS } from "../../well-known-symbols.js";
-import { type RunContext } from "../../run/RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { chargeHeap } from "../../heap-budget.js";
 import type { SchemeStringLike, SchemeValue } from "../types.js";
@@ -20,14 +20,16 @@ import { attachOffendingValue } from "../../errors.js";
  */
 const UNINTERNED = Symbol("UNINTERNED");
 
-// Per-RUN-CONTEXT flyweight intern tables. The ctx a symbol is minted with decides its
-// table — hence both its LIFETIME and its run PARAMETERS:
-//   • CONSTANT_CTX → the permanent bootstrap table (quote/vector/… — a fixed set).
-//   • a run ctx    → a per-run table, collectable once the run ctx is GC'd, so a
-//     `(string->symbol unique)` loop doesn't leak permanent global entries.
-// A `Map` is inherently key-pollution-safe — `(string->symbol "__proto__")` sets a Map
-// entry, never reaching Object.prototype. Interning stays pure flyweight (eq? compares
-// `__name__`, not reference — see `equals`/`is`), so per-ctx scoping changes no symbol semantics.
+// Per-RUN-CONTEXT flyweight intern tables. TODO(ctx-elimination): this used to be keyed by
+// the minting call's OWN ctx (a per-run table, collectable once the run ctx is GC'd, so a
+// `(string->symbol unique)` loop didn't leak permanent global entries). Since AValue no
+// longer carries a per-value ctx, every mint now keys off CONSTANT_CTX — i.e. ONE permanent
+// table for every run. Accepted breakage (see AValue.ts's ctx-removal note): a per-run
+// scope needs an ambient/active run-context to restore. A `Map` is inherently
+// key-pollution-safe — `(string->symbol "__proto__")` sets a Map entry, never reaching
+// Object.prototype. Interning stays pure flyweight (eq? compares `__name__`, not reference —
+// see `equals`/`is`), so the collapsed scoping changes no symbol EQUALITY semantics, only
+// lifetime.
 const internTables = new WeakMap<RunContext, Map<string, ASymbol>>();
 function internTableFor(ctx: RunContext): Map<string, ASymbol> {
   let table = internTables.get(ctx);
@@ -63,12 +65,11 @@ export class ASymbol extends AValue {
   declare [ASymbol.literal]?: string | number;
 
   constructor(
-    ctx: RunContext,
     name: string | symbol | SchemeStringLike,
     provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
     intern: symbol | true = true,
   ) {
-    super(ctx, provenance);
+    super(provenance);
     // Unwrap SchemeStringLike to plain string; a raw ES6 symbol (gensym carrier) passes through.
     const unwrapped: string | symbol = isSchemeString(name) ? name.valueOf() : name;
 
@@ -79,11 +80,12 @@ export class ASymbol extends AValue {
     // interning so the CACHED instance (whichever branch mints or hits it) is always the
     // correctly-typed one.
     if (new.target === ASymbol && typeof unwrapped === "string" && isKeywordName(unwrapped)) {
-      return new AKeywordSymbol(ctx, unwrapped, provenance, intern);
+      return new AKeywordSymbol(unwrapped, provenance, intern);
     }
 
     if (intern !== UNINTERNED && typeof unwrapped === "string") {
-      const table = internTableFor(ctx);
+      // TODO(ctx-elimination): always the CONSTANT_CTX table now — see internTables above.
+      const table = internTableFor(CONSTANT_CTX);
       const hit = table.get(unwrapped);
       // Flyweight HIT: return the canonical shared instance — no allocation.
       if (hit !== undefined) {
@@ -91,8 +93,10 @@ export class ASymbol extends AValue {
       }
       // MISS: a fresh symbol is an allocation — charge the run's heap meter so a
       // `(string->symbol unique)` mint-loop hits the budget instead of growing
-      // unbounded. An unmetered run (incl. CONSTANT_CTX bootstrap) → chargeHeap no-ops.
-      chargeHeap(ctx, 1);
+      // unbounded. TODO(ctx-elimination): CONSTANT_CTX always no-ops chargeHeap now (see
+      // AValue.ts's ctx-removal note) — this call is a stub until an ambient run-context
+      // is restored.
+      chargeHeap(CONSTANT_CTX, 1);
       this.__name__ = unwrapped;
       table.set(unwrapped, this);
       return;
@@ -188,7 +192,7 @@ export class ASymbol extends AValue {
 
   /** See UNINTERNED sentinel doc. */
   withProvenance(p: ReadonlySet<number>): ASymbol {
-    return new ASymbol(this.ctx, this.__name__, p, UNINTERNED);
+    return new ASymbol(this.__name__, p, UNINTERNED);
   }
 }
 

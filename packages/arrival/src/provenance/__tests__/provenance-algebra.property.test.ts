@@ -42,7 +42,7 @@ const arbProvenanceSet: fc.Arbitrary<ReadonlySet<number>> = fc
 
 const arbAValue: fc.Arbitrary<AValue> = fc
   .tuple(arbProvenanceSet, fc.boolean())
-  .map(([prov, bool]) => new ABool(CONSTANT_CTX, bool, prov));
+  .map(([prov, bool]) => new ABool(bool, prov));
 
 /** Permute an array deterministically — used to assert order-independence. */
 function permute<T>(arr: readonly T[], rng: fc.Arbitrary<number[]>): fc.Arbitrary<T[]> {
@@ -75,9 +75,9 @@ describe("unionProvenance — algebraic properties", () => {
       fc.property(arbAValue, arbAValue, arbAValue, (a, b, c) => {
         const flat = unionProvenance([a, b, c]);
         // Wrap the partial unions in fresh AValues so they can re-enter the algebra.
-        const left = new ABool(CONSTANT_CTX, true, unionProvenance([a, b]));
+        const left = new ABool(true, unionProvenance([a, b]));
         const leftAssoc = unionProvenance([left, c]);
-        const right = new ABool(CONSTANT_CTX, true, unionProvenance([b, c]));
+        const right = new ABool(true, unionProvenance([b, c]));
         const rightAssoc = unionProvenance([a, right]);
         expect(new Set(leftAssoc)).toEqual(new Set(flat));
         expect(new Set(rightAssoc)).toEqual(new Set(flat));
@@ -107,7 +107,7 @@ describe("unionProvenance — algebraic properties", () => {
   it("empty identity: union(x, empty) has same membership as x.provenance", () => {
     fc.assert(
       fc.property(arbAValue, (x) => {
-        const empty = new ABool(CONSTANT_CTX, false, EMPTY_PROVENANCE);
+        const empty = new ABool(false, EMPTY_PROVENANCE);
         const result = unionProvenance([x, empty]);
         expect(new Set(result)).toEqual(new Set(x.provenance));
       }),
@@ -125,7 +125,7 @@ describe("unionProvenance — reference fast paths", () => {
   it("empty fast-path: all-empty inputs return EMPTY_PROVENANCE BY REFERENCE", () => {
     fc.assert(
       fc.property(fc.array(fc.boolean(), { minLength: 0, maxLength: 5 }), (bools) => {
-        const args = bools.map((b) => new ABool(CONSTANT_CTX, b, EMPTY_PROVENANCE));
+        const args = bools.map((b) => new ABool(b, EMPTY_PROVENANCE));
         const result = unionProvenance(args);
         expect(result).toBe(EMPTY_PROVENANCE);
       }),
@@ -141,7 +141,7 @@ describe("unionProvenance — reference fast paths", () => {
         (sharedSet, copies) => {
           // All AValues carry the SAME provenance reference — algebra must
           // return that exact ref, not a copy.
-          const args = Array.from({ length: copies }, () => new ABool(CONSTANT_CTX, true, sharedSet));
+          const args = Array.from({ length: copies }, () => new ABool(true, sharedSet));
           const result = unionProvenance(args);
           expect(result).toBe(sharedSet);
         },
@@ -158,8 +158,8 @@ describe("unionProvenance — reference fast paths", () => {
         (members) => {
           // Two AValues sharing one ref → result IS that ref (singleton path).
           const sharedRef = members;
-          const a1 = new ABool(CONSTANT_CTX, true, sharedRef);
-          const a2 = new ABool(CONSTANT_CTX, false, sharedRef);
+          const a1 = new ABool(true, sharedRef);
+          const a2 = new ABool(false, sharedRef);
           expect(unionProvenance([a1, a2])).toBe(sharedRef);
 
           // Two AValues with same MEMBERS but DIFFERENT refs → distinct.size
@@ -167,8 +167,8 @@ describe("unionProvenance — reference fast paths", () => {
           // a fresh Set. Membership identical, identity is NOT preserved.
           const refA = new Set(sharedRef);
           const refB = new Set(sharedRef);
-          const b1 = new ABool(CONSTANT_CTX, true, refA);
-          const b2 = new ABool(CONSTANT_CTX, false, refB);
+          const b1 = new ABool(true, refA);
+          const b2 = new ABool(false, refB);
           const merged = unionProvenance([b1, b2]);
           expect(new Set(merged)).toEqual(new Set(sharedRef));
           // The merged set is fresh — not refA, not refB, not EMPTY.
@@ -207,7 +207,7 @@ describe("pointProvenance", () => {
   it("pointProvenance(id) into unionProvenance contributes that id", () => {
     fc.assert(
       fc.property(fc.integer({ min: 0, max: 1_000_000 }), arbAValue, (id, other) => {
-        const point = new ABool(CONSTANT_CTX, true, pointProvenance(id));
+        const point = new ABool(true, pointProvenance(id));
         const result = unionProvenance([point, other]);
         expect(result.has(id)).toBe(true);
       }),

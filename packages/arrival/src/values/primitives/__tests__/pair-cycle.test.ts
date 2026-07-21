@@ -37,7 +37,7 @@ import { __tieKnot, APair } from "../APair.js";
 import { nil } from "../ANil.js";
 import { AExact } from "../AExact.js";
 
-const num = (n: number) => new AExact(CONSTANT_CTX, n);
+const num = (n: number) => new AExact(n);
 const list = (...ns: number[]) => APair.fromArray(CONSTANT_CTX, ns.map(num), false) as APair<any, any>;
 
 describe("APair[Symbol.iterator]", () => {
@@ -52,7 +52,7 @@ describe("APair[Symbol.iterator]", () => {
 
   it("a nil FIRST element is a legitimate element, not the sentinel", () => {
     // (() 1) — car is nil, cdr is a real spine. Must iterate both elements.
-    const p = new APair(CONSTANT_CTX, nil, list(1));
+    const p = new APair(nil, list(1));
     const items = [...p];
     expect(items).toHaveLength(2);
     expect(items[0]).toBe(nil);
@@ -62,19 +62,18 @@ describe("APair[Symbol.iterator]", () => {
   // [impl-pinning] pins the sentinel's exact internal shape (car undefined, cdr nil),
   // not merely its externally observable emptiness.
   it("the empty-pair sentinel (undefined car, nil cdr) iterates empty", () => {
-    const p = new APair(CONSTANT_CTX, undefined as never, nil);
+    const p = new APair(undefined as never, nil);
     expect([...p]).toEqual([]);
   });
 
   it("an improper tail is yielded as the last element", () => {
     // (1 . 2)
-    const p = new APair(CONSTANT_CTX, num(1), num(2));
+    const p = new APair(num(1), num(2));
     expect([...p].map((v) => (v as AExact).valueOf())).toEqual([1, 2]);
   });
 
   it("throws on a cyclic spine", () => {
-    const p = new APair(CONSTANT_CTX, num(1), nil);
-    // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
+    const p = new APair(num(1), nil);
     __tieKnot(p, "cdr", p);
     expect(() => [...p]).toThrow(/cycle/i);
   });
@@ -82,18 +81,15 @@ describe("APair[Symbol.iterator]", () => {
 
 describe("Pair.toJS — one-way array conversion", () => {
   it("throws on a self-cycle (cdr points at the head)", () => {
-    const p = new APair(CONSTANT_CTX, num(1), nil);
-    // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
+    const p = new APair(num(1), nil);
     __tieKnot(p, "cdr", p);
     expect(() => p["arrival/toJS"]()).toThrow(/cycle/i);
   });
 
   it("throws on a mutual cycle (two cells pointing at each other)", () => {
-    const a = new APair(CONSTANT_CTX, num(1), nil);
-    const b = new APair(CONSTANT_CTX, num(2), nil);
-    // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
+    const a = new APair(num(1), nil);
+    const b = new APair(num(2), nil);
     __tieKnot(a, "cdr", b);
-    // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
     __tieKnot(b, "cdr", a);
     expect(() => a["arrival/toJS"]()).toThrow(/cycle/i);
   });
@@ -101,7 +97,7 @@ describe("Pair.toJS — one-way array conversion", () => {
   // [impl-pinning] pins that mark_cycles/have_cycles metadata does not exempt toJS
   // from the cycle throw — the metadata machinery is toString's alone.
   it("throws on a mark_cycles-annotated cycle too (metadata does not exempt)", () => {
-    const p = new APair(CONSTANT_CTX, num(1), nil);
+    const p = new APair(num(1), nil);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     __tieKnot(p, "cdr", p);
     p.mark_cycles();
@@ -115,7 +111,7 @@ describe("Pair.toJS — one-way array conversion", () => {
 
   it("folds a dotted (improper) tail into the array — no {__dotted__} shape", () => {
     // (1 . 2) → [1, 2]. One-way conversion: (1 2) and (1 . 2) convert equal.
-    const p = new APair(CONSTANT_CTX, num(1), num(2));
+    const p = new APair(num(1), num(2));
     expect(p["arrival/toJS"]()).toEqual([1, 2]);
   });
 
@@ -126,7 +122,7 @@ describe("Pair.toJS — one-way array conversion", () => {
   });
 
   it("single-element list converts", () => {
-    const p = new APair(CONSTANT_CTX, num(1), nil);
+    const p = new APair(num(1), nil);
     expect(p["arrival/toJS"]()).toEqual([1]);
   });
 });
@@ -134,8 +130,7 @@ describe("Pair.toJS — one-way array conversion", () => {
 describe("Pair.toString cycle handling (uses ref-marker notation — fundamentally different)", () => {
   // [impl-pinning] pins the #0=/#0# ref-marker notation itself, not just "doesn't throw".
   it("does NOT throw on a self-cycle (renders via #0= / #0# markers)", () => {
-    const p = new APair(CONSTANT_CTX, num(1), nil);
-    // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
+    const p = new APair(num(1), nil);
     __tieKnot(p, "cdr", p);
     p.mark_cycles();
     expect(() => p.toString()).not.toThrow();
@@ -144,11 +139,9 @@ describe("Pair.toString cycle handling (uses ref-marker notation — fundamental
   });
 
   it("does NOT throw on a mutual cycle", () => {
-    const a = new APair(CONSTANT_CTX, num(1), nil);
-    const b = new APair(CONSTANT_CTX, num(2), nil);
-    // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
+    const a = new APair(num(1), nil);
+    const b = new APair(num(2), nil);
     __tieKnot(a, "cdr", b);
-    // @ts-expect-error mutating readonly cdr to create a cycle (test-only)
     __tieKnot(b, "cdr", a);
     a.mark_cycles();
     expect(() => a.toString()).not.toThrow();

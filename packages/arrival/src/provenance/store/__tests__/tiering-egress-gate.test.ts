@@ -26,7 +26,7 @@ import { PayloadTierMachine, tierGateFromSnapshot } from "../tiering.js";
  *  itself; the caller-supplied `reader` is the sole source of element data in every
  *  test below. `CONSTANT_CTX` is the documented "no real run" ctx (AValue.ts). */
 function testBox(): AVector {
-  return new AVector(CONSTANT_CTX, []);
+  return new AVector([]);
 }
 
 /** A minimal `EgressReader` over a plain array of raw (non-`AValue`) elements,

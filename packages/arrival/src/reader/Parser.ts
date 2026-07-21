@@ -2,13 +2,15 @@
  * Lexer token stream → Scheme data — the single text→datum entry point (evaluator,
  * analysis tools, and MCP all read through here).
  *
- * MIRROR CHANNEL: every node this parser mints carries a parse-origin RunContext
- * (`makeParseCtx`) holding its SourceLocation — the ctx channel of the span migration.
- * For APairs the `setLocation` calls are the DERIVED MIRROR: both channels get the same
- * loc, so `[LOCATION]`-slot readers (the evaluator tap gate, scopeId, the cross-package
- * `Symbol.for` readers) and ctx readers see identical data. Minting the head cell's ctx
- * from the loc the mirror re-stamps keeps the two in exact agreement — a ctx cannot be
- * overwritten the way the slot can. Body sites tagged `// mirror` are instances of this.
+ * MIRROR CHANNEL (REMOVED, ctx-elimination): every node this parser minted used to also
+ * carry a parse-origin RunContext (`makeParseCtx`) holding its SourceLocation on the value
+ * itself — the ctx channel of the span migration, with `setLocation`'s `[LOCATION]` slot
+ * as the DERIVED MIRROR of the same data. `AValue` no longer stores a per-value ctx at all
+ * (see AValue.ts's ctx-removal note), so that channel is gone; `[LOCATION]` (`setLocation`/
+ * `getLocation`) is now the ONLY location channel a minted node carries. Body sites still
+ * tagged `// mirror` are the surviving `setLocation` half of what used to be a two-channel
+ * stamp — a few (noted inline) relied on the now-removed channel alone and currently carry
+ * no location at all.
  *
  * LITERAL GRAMMAR: the `[…]` vector / `{…}` dict inline literals (§LITERALS), their
  * position-scoped comma/colon separators (§COMMA), the suffix-keyword flip (§SUFFIX-FLIP),
@@ -46,7 +48,6 @@ import { Lexer } from "./Lexer.js";
 import { ABytevector } from "../values/primitives/ABytevector.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { parse_argument } from "./parsing.js";
-import { ctxOf } from "../values/primitives/AValue.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { APair, __tieKnot } from "../values/primitives/APair.js";
@@ -327,7 +328,7 @@ export class Parser {
     let chain: unknown = tail;
     for (let i = items.length - 1; i >= 0; i--) {
       const loc = (i === 0 ? (openLoc ?? items[i].loc) : items[i].loc);
-      const cell = new APair(makeParseCtx(loc), items[i].node as SchemeValue, chain as SchemeValue);
+      const cell = new APair(items[i].node as SchemeValue, chain as SchemeValue);
       if (loc) {
         cell.setLocation(loc); // mirror (see preamble MIRROR CHANNEL)
       }
@@ -437,7 +438,7 @@ export class Parser {
       if (suffixKey !== null) {
         // The flip — canonicalize to the keyword twin, keeping the ORIGINAL key token's
         // parse ctx (its exact leaf location), not the dict's `{` location.
-        elements[i] = new ASymbol(ctxOf(elements[i]), `:${suffixKey}`);
+        elements[i] = new ASymbol(`:${suffixKey}`);
       }
       const keyDatum = elements[i];
       const key = staticDictKey(keyDatum);
@@ -579,7 +580,7 @@ export class Parser {
         for (let node: unknown = list; node instanceof APair; node = node.cdr) {
           items.push(node.car);
         }
-        return new AVector(makeParseCtx(loc), items);
+        return new AVector(items);
       }
       if (is_bytevector_literal(token)) {
         this.skip();
@@ -587,13 +588,10 @@ export class Parser {
         const list = await this.read_list();
         // Immutable, same rationale as the vector literal case above.
         if (list instanceof ANil) {
-          return new ABytevector(makeParseCtx(loc), new Uint8Array(0));
+          return new ABytevector(new Uint8Array(0));
         }
         const arr = list.to_array(false) as number[];
-        return new ABytevector(
-          makeParseCtx(loc),
-          new Uint8Array(arr.map((v) => (typeof v === "number" ? v : Number(v)))),
-        );
+        return new ABytevector(new Uint8Array(arr.map((v) => (typeof v === "number" ? v : Number(v)))));
       }
       // A parser extension is a symbol that expands at read time, in one of two
       // ways: a FUNCTION extension is applied FEXPR-style (result returned as-is);
@@ -623,10 +621,14 @@ export class Parser {
       // `object` may still be a DatumReference placeholder here — the reader-internal
       // channel `_resolve_pair` patches before the form leaves the reader.
       if (is_literal(token)) {
-        expr = new APair(makeParseCtx(loc), special.symbol, new APair(makeParseCtx(loc), object as SchemeValue, nil));
-        if (loc) expr.setLocation(loc); // mirror; inner cell rides ctx only (preamble MIRROR CHANNEL)
+        expr = new APair(special.symbol, new APair(object as SchemeValue, nil));
+        // TODO(ctx-elimination): the inner cell used to carry its location via the now-
+        // removed ctx-mirror channel alone (preamble MIRROR CHANNEL) — AValue no longer
+        // stores a per-value ctx at all, so that channel is gone and the inner cell carries
+        // no location until a future `setLocation` call is added here too.
+        if (loc) expr.setLocation(loc); // mirror
       } else {
-        expr = new APair(makeParseCtx(loc), special.symbol, object as SchemeValue);
+        expr = new APair(special.symbol, object as SchemeValue);
         if (loc) expr.setLocation(loc); // mirror (preamble MIRROR CHANNEL)
       }
       return expr;
@@ -651,7 +653,7 @@ export class Parser {
       this._enterNesting("]");
       this.skip();
       const elements = await this.read_literal_elements("]", false, "vector literal");
-      const vec = new AVector(makeParseCtx(loc), elements);
+      const vec = new AVector(elements);
       vec.evalElements = true;
       return vec;
     } else if (token === "]") {

@@ -209,8 +209,8 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
       const result = await invoke(
         verb,
         lipsNodes,
-        new AString(CONSTANT_CTX, "overflow"),
-        new AString(CONSTANT_CTX, "hidden"),
+        new AString("overflow"),
+        new AString("hidden"),
       );
 
       console.log("CSS filtering result:", result);

@@ -168,27 +168,6 @@ describe("a reverse lambda is region-bound to its invocation", () => {
     expect(nestsUnderCapture).toBe(true);
   });
 
-  it("re-entry args mint under the enclosing invocation's runCtx, never CONSTANT_CTX", async () => {
-    let capturedArgs: SchemeValue[] = [];
-    const capture = new ANativeProcedure({
-      name: "capture-args",
-      arity: { min: 1, max: 1 },
-      contract: undefined,
-      impl: (args) => {
-        capturedArgs = args;
-        return args[0];
-      },
-    });
-    const runCtx = makeRunContext({ strict: true }); // distinguishable from CONSTANT_CTX (strict: false)
-    const scope = openRegionScope({ runCtx, dynSite: undefined });
-    const wrapper = withRegionScope(scope, () => schemeToJs(capture) as (...a: unknown[]) => Promise<unknown>);
-
-    await wrapper(42);
-    expect(capturedArgs).toHaveLength(1);
-    expect((capturedArgs[0] as { ctx: unknown }).ctx).toBe(runCtx);
-    expect((capturedArgs[0] as { ctx: unknown }).ctx).not.toBe(CONSTANT_CTX);
-  });
-
   it("z.procedure decode adopts the same scope token — one discipline, typed and untyped paths", async () => {
     const echo = makeEcho();
     const scope = openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined });

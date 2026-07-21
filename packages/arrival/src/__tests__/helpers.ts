@@ -20,7 +20,7 @@ export function list<T extends SchemeValue>(...items: T[]): AListAlike<T> {
  * Create a Scheme symbol
  */
 export function sym(name: string): ASymbol {
-  return new ASymbol(CONSTANT_CTX, name);
+  return new ASymbol(name);
 }
 
 /**
@@ -32,19 +32,19 @@ export function sym(name: string): ASymbol {
  * number a test helper should silently adopt as one).
  */
 export function num(n: number): AExact | AInexact {
-  return Number.isInteger(n) ? new AExact(CONSTANT_CTX, n) : new AInexact(CONSTANT_CTX, n);
+  return Number.isInteger(n) ? new AExact(n) : new AInexact(n);
 }
 
 /**
  * Create an exact number (rational)
  */
 export function exact(num: number, denom: number = 1): AExact {
-  return new AExact(CONSTANT_CTX, num, denom);
+  return new AExact(num, denom);
 }
 
 /**
  * Create an inexact number (floating point real — arrival is reals-only)
  */
 export function inexact(real: number): AInexact {
-  return new AInexact(CONSTANT_CTX, real);
+  return new AInexact(real);
 }

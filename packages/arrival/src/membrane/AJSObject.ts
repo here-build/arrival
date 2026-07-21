@@ -15,7 +15,7 @@
  */
 
 import { CLASS } from "../well-known-symbols.js";
-import { type RunContext } from "../run/RunContext.js";
+import { CONSTANT_CTX } from "../run/RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
 import { nil } from "../values/primitives/ANil.js";
 import { accessHas, accessKeys, accessMember, NOT_FOUND } from "./interop-access.js";
@@ -58,11 +58,10 @@ export class AJSObject extends AValue {
   readonly kind = "object" as const;
 
   constructor(
-    ctx: RunContext,
     readonly source: object,
     provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
   ) {
-    super(ctx, provenance);
+    super(provenance);
   }
 
   /** Unwrap to original JS object (TO_JS protocol). */
@@ -74,7 +73,7 @@ export class AJSObject extends AValue {
     // New wrapper = new identity = empty cache. Provenance-variant entries
     // would otherwise leak between wrappers; cleaner to let each lineage
     // build its own cache the first time it's queried.
-    return new AJSObject(this.ctx, this.source, p);
+    return new AJSObject(this.source, p);
   }
 
   /**
@@ -135,7 +134,7 @@ export class AJSObject extends AValue {
     // flyweight on the empty-provenance path, and singletons never attest — the clone
     // does, and the per-(wrapper, key) cache keeps it stable.
     const boxEntry = (settled: unknown): SchemeValue => {
-      const b: SchemeValue = jsToScheme(this.ctx, settled, {}, this.provenance);
+      const b: SchemeValue = jsToScheme(CONSTANT_CTX, settled, {}, this.provenance);
       return isAttested(this) ? attestDeep(freshIfSingleton(b)) : b;
     };
 
@@ -232,10 +231,13 @@ export class AJSObject extends AValue {
     return this.source;
   }
 
-  // The freeze contract — docs/membrane.md §BOXING. Idempotent (guarded by `Object.isFrozen`);
-  // `freezeRosettaReturns: false` opts out.
+  // The freeze contract — docs/membrane.md §BOXING. Idempotent (guarded by `Object.isFrozen`).
+  // TODO(ctx-elimination): this used to read `this.ctx.freezeRosettaReturns !== false` (default
+  // true, opt-out via a per-run ctx flag) — AValue no longer carries a per-value ctx (see
+  // AValue.ts's ctx-removal note), so the opt-out is unreachable and this always freezes now.
+  // Re-source from an active run-context once one is restored.
   private freezeSource(): void {
-    if (this.ctx.freezeRosettaReturns !== false && !Object.isFrozen(this.source)) {
+    if (!Object.isFrozen(this.source)) {
       Object.freeze(this.source);
     }
   }

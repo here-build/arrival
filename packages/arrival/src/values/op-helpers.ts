@@ -401,7 +401,7 @@ export function coerceNumeric(value: unknown, ctx: RunContext = CONSTANT_CTX): A
       );
     // Safe ints exact (likely Scheme int literals); non-safe + floats inexact
     case typeof value === "number":
-      return Number.isSafeInteger(value) ? new AExact(ctx, value) : new AInexact(ctx, value);
+      return Number.isSafeInteger(value) ? new AExact(value) : new AInexact(value);
     case value && typeof value === "object" && "valueOf" in value && typeof value.valueOf === "function": {
       const val = value.valueOf();
       switch (true) {
@@ -410,7 +410,7 @@ export function coerceNumeric(value: unknown, ctx: RunContext = CONSTANT_CTX): A
             "host bigint is not a scheme number — use bigint->number (safe-range checked) to convert explicitly",
           );
         case typeof val === "number":
-          return Number.isSafeInteger(val) ? new AExact(ctx, val) : new AInexact(ctx, val);
+          return Number.isSafeInteger(val) ? new AExact(val) : new AInexact(val);
         default:
           throw new TypeError(`Cannot convert to SchemeNumeric: ${val}`);
       }
@@ -480,17 +480,11 @@ export function withInputProvenance<T>(args: readonly unknown[], result: T): T {
     if (result instanceof AValue) return result;
     const t = typeof result;
     if (t === "string" || t === "number" || t === "bigint" || t === "boolean") {
-      // Scans `args` for the first boxed operand and inherits ITS ctx — CONSTANT_CTX
-      // only when literally no boxed operand exists among `args` (a genuinely ctx-less
-      // call), the correct `ctxOf`-style idiom already inlined here.
-      let ctx = CONSTANT_CTX;
-      for (const a of args) {
-        if (a instanceof AValue) {
-          ctx = a.ctx;
-          break;
-        }
-      }
-      return fromJs(ctx, result, EMPTY_PROVENANCE) as T;
+      // TODO(ctx-elimination): this used to scan `args` for the first boxed operand and
+      // inherit ITS ctx (CONSTANT_CTX only when no boxed operand existed among `args`) — AValue
+      // no longer stores a per-value ctx at all (see AValue.ts's ctx-removal note), so there is
+      // nothing left to scan for; every mint here is CONSTANT_CTX now.
+      return fromJs(CONSTANT_CTX, result, EMPTY_PROVENANCE) as T;
     }
     return result;
   }
@@ -502,11 +496,10 @@ export function withInputProvenance<T>(args: readonly unknown[], result: T): T {
   }
   const t = typeof result;
   if (t === "string" || t === "number" || t === "bigint" || t === "boolean") {
-    // Same idiom as the inactive-oracle branch above: CONSTANT_CTX only when `inputs`
-    // is empty (no boxed operand to inherit from).
-    const ctx = inputs.length > 0 ? inputs[0].ctx : CONSTANT_CTX;
+    // TODO(ctx-elimination): same collapse as the inactive-oracle branch above — always
+    // CONSTANT_CTX now, never inherited from `inputs[0]`.
     const prov = inputs.length > 0 ? unionProvenance(inputs) : EMPTY_PROVENANCE;
-    return fromJs(ctx, result, prov) as T;
+    return fromJs(CONSTANT_CTX, result, prov) as T;
   }
   return result;
 }

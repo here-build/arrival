@@ -13,25 +13,25 @@ import { jsToScheme, schemeToJs } from "../membrane/rosetta.js";
 
 // The interpreter is monadic-boxed: a vector's payload is SchemeValue[], so an
 // integer element IS an AExact (the boxer routes a safe-int JS number to
-// `new AExact(ctx, n, 1)` — boxing.ts, RATIO-rework §0.2: num/denom are safe-int
+// `new AExact(n, 1)` — boxing.ts, RATIO-rework §0.2: num/denom are safe-int
 // `number`s, not `bigint`). schemeToJs unwraps each AExact back to its JS number,
 // so the `.toEqual([1, 2, 3])` round-trip is unchanged.
-const ex = (n: number) => new AExact(CONSTANT_CTX, n);
+const ex = (n: number) => new AExact(n);
 
 describe("boxed vector/bytevector — Scheme→JS serialization (schemeToJs)", () => {
   it("a boxed vector unwraps to a raw JS array (no object leak)", () => {
-    const v = new AVector(CONSTANT_CTX, [ex(1), ex(2), ex(3)]);
+    const v = new AVector([ex(1), ex(2), ex(3)]);
     expect(schemeToJs(v)).toEqual([1, 2, 3]);
     expect(Array.isArray(schemeToJs(v))).toBe(true);
   });
 
   it("a nested boxed vector unwraps recursively", () => {
-    const v = new AVector(CONSTANT_CTX, [new AVector(CONSTANT_CTX, [ex(1), ex(2)]), ex(3)]);
+    const v = new AVector([new AVector([ex(1), ex(2)]), ex(3)]);
     expect(schemeToJs(v)).toEqual([[1, 2], 3]);
   });
 
   it("a boxed bytevector unwraps to its Uint8Array", () => {
-    const bv = new ABytevector(CONSTANT_CTX, Uint8Array.from([4, 5, 6]));
+    const bv = new ABytevector(Uint8Array.from([4, 5, 6]));
     const out = schemeToJs(bv);
     expect(out).toBeInstanceOf(Uint8Array);
     // Cast: `AUnwrap<T>` (values/types.ts) has no `ABytevector` arm — falls through to
@@ -46,7 +46,7 @@ describe("boxed vector — provenance propagation (jsToScheme)", () => {
   // INVARIANT: jsToScheme deep-stamps provenance onto both the container and each
   // element (pins implementation, not behavior).
   it("deep-stamps element provenance, keeps it a vector", () => {
-    const v = new AVector(CONSTANT_CTX, [ex(1), ex(2), ex(3)]);
+    const v = new AVector([ex(1), ex(2), ex(3)]);
     const prov = new Set<number>([42]);
     const stamped = jsToScheme(CONSTANT_CTX, v, {}, prov) as AVector;
     expect(stamped).toBeInstanceOf(AVector);

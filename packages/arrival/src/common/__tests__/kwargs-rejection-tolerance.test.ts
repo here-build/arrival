@@ -17,8 +17,8 @@ import { AExact } from "../../values/primitives/AExact.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { decodeKwargsStrict, drainDroppedKwargNotes, KwargsRejectionError } from "../kwargs-rejection.js";
 
-const str = (s: string) => new AString(CONSTANT_CTX, s);
-const num = (n: number) => new AExact(CONSTANT_CTX, n);
+const str = (s: string) => new AString(s);
+const num = (n: number) => new AExact(n);
 
 describe("decodeKwargsStrict — far-unknown-key tolerance (B5)", () => {
   it("a FAR unknown key (:limit, no near declared param) is dropped — the call SUCCEEDS", () => {

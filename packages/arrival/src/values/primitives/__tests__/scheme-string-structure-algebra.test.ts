@@ -17,7 +17,7 @@ type FL = Record<string, any>;
 // Small domain + edge cases: "" (empty), astral unicode, ASCII.
 const arb = fc
   .oneof(fc.constantFrom("", "a", "b", "ab", "🦄", "naïve", "Z"), fc.string({ maxLength: 4 }))
-  .map((s) => new AString(CONSTANT_CTX, s));
+  .map((s) => new AString(s));
 
 // ----------------------------------------------------------------------
 // Semigroup (string-append) — associativity. Functor — identity + composition
@@ -39,11 +39,11 @@ functorLaws<AString, string>("SchemeString", {
 // Monoid — "" is the identity for append.
 // INVARIANT: left identity: ""⋄a ≡ a. right identity: a⋄"" ≡ a.
 // ----------------------------------------------------------------------
-monoidLaws("SchemeString", arb, () => new AString(CONSTANT_CTX, ""));
+monoidLaws("SchemeString", arb, () => new AString(""));
 
 describe("SchemeString — structure-algebra behavior", () => {
   it("concat appends underlying strings", () => {
-    const r = (new AString(CONSTANT_CTX, "foo") as FL)[tf("concat")](new AString(CONSTANT_CTX, "bar"));
+    const r = (new AString("foo") as FL)[tf("concat")](new AString("bar"));
     expect((r as AString).valueOf()).toBe("foobar");
   });
   // INVARIANT: empty() produces the empty string (pins implementation, not behavior —
@@ -60,20 +60,20 @@ describe("SchemeString — structure-algebra behavior", () => {
     expect(s.valueOf()).toBe("42");
   });
   it("map transforms each character", () => {
-    const r = (new AString(CONSTANT_CTX, "abc") as FL)[tf("map")]((c: string) => c.toUpperCase());
+    const r = (new AString("abc") as FL)[tf("map")]((c: string) => c.toUpperCase());
     expect((r as AString).valueOf()).toBe("ABC");
   });
   it("map iterates by code point (astral chars map as single graphemes)", () => {
     const seen: string[] = [];
-    (new AString(CONSTANT_CTX, "a🦄b") as FL)[tf("map")]((c: string) => {
+    (new AString("a🦄b") as FL)[tf("map")]((c: string) => {
       seen.push(c);
       return c;
     });
     expect(seen).toEqual(["a", "🦄", "b"]);
   });
   it("concat is pure (operands untouched)", () => {
-    const a = new AString(CONSTANT_CTX, "x");
-    const b = new AString(CONSTANT_CTX, "y");
+    const a = new AString("x");
+    const b = new AString("y");
     (a as FL)[tf("concat")](b);
     expect(a.valueOf()).toBe("x");
     expect(b.valueOf()).toBe("y");

@@ -25,7 +25,7 @@ import * as z from "../common/scheme-zod.js";
 /** Build a keyword `ASymbol` exactly as evaluating `:key` now does (self-evaluating —
  *  keyword-tagless-apply.md) — the SAME helper kwargs-runtime.test.ts's UNIT plane uses. */
 function pluck(key: string): unknown {
-  return new ASymbol(CONSTANT_CTX, `:${key}`);
+  return new ASymbol(`:${key}`);
 }
 
 describe("kwargs decode rejection — humanized frozen shape (docs/args-error-reporting-v2.md §2.5)", () => {
@@ -43,7 +43,7 @@ describe("kwargs decode rejection — humanized frozen shape (docs/args-error-re
       );
       let caught: unknown;
       try {
-        await def.run.call(testCallCtx(), pluck("query"), new AString(CONSTANT_CTX, "King Saud University"));
+        await def.run.call(testCallCtx(), pluck("query"), new AString("King Saud University"));
       } catch (e) {
         caught = e;
       }
@@ -72,10 +72,10 @@ describe("kwargs decode rejection — humanized frozen shape (docs/args-error-re
         def.run.call(
           testCallCtx(),
           pluck("query"),
-          new AString(CONSTANT_CTX, "King Saud University"),
+          new AString("King Saud University"),
           // Typo: "pagesize" (lowercase s) — the declared field is "pageSize".
           pluck("pagesize"),
-          new AString(CONSTANT_CTX, "50"),
+          new AString("50"),
         ),
       ).rejects.toThrow();
     },

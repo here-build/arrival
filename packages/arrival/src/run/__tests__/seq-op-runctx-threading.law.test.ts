@@ -58,12 +58,12 @@ function makeProbe(): { fn: (this: { runCtx: RunContext }, ...args: unknown[]) =
   };
 }
 
-const one = new AExact(liveCtx, 1);
-const two = new AExact(liveCtx, 2);
+const one = new AExact(1);
+const two = new AExact(2);
 
 describe("W1 seq-op ctx threading — APair map/filter/reduce thread the invocation's real ctx into their callback", () => {
   it("map: callback observes the passed liveCtx, not CONSTANT_CTX", async () => {
-    const list = new APair(liveCtx, one, new APair(liveCtx, two, nil));
+    const list = new APair(one, new APair(two, nil));
     const probe = makeProbe();
     await list["arrival/tagless-final/map"](probe.fn, liveCtx);
     expect(probe.observed).toHaveLength(2);
@@ -75,7 +75,7 @@ describe("W1 seq-op ctx threading — APair map/filter/reduce thread the invocat
   });
 
   it("filter: callback observes the passed liveCtx, not CONSTANT_CTX", async () => {
-    const list = new APair(liveCtx, one, new APair(liveCtx, two, nil));
+    const list = new APair(one, new APair(two, nil));
     const probe = makeProbe();
     await list["arrival/tagless-final/filter"](probe.fn, liveCtx);
     expect(probe.observed).toHaveLength(2);
@@ -86,7 +86,7 @@ describe("W1 seq-op ctx threading — APair map/filter/reduce thread the invocat
   });
 
   it("reduce: callback observes the passed liveCtx, not CONSTANT_CTX", async () => {
-    const list = new APair(liveCtx, one, new APair(liveCtx, two, nil));
+    const list = new APair(one, new APair(two, nil));
     const probe = makeProbe();
     await list["arrival/tagless-final/reduce"](probe.fn, 0, liveCtx);
     expect(probe.observed).toHaveLength(2);
@@ -103,7 +103,7 @@ describe("W1 seq-op ctx threading — AVector map/filter/reduce thread the invoc
   // confession this test regresses against is only reachable in loose mode. `liveCtx` above
   // is already loose (`makeRunContext`'s `strict` defaults to `false`).
   it("map: callback observes the passed liveCtx, not CONSTANT_CTX", async () => {
-    const vec = new AVector(liveCtx, [one, two]);
+    const vec = new AVector([one, two]);
     const probe = makeProbe();
     await vec["arrival/tagless-final/map"](probe.fn, liveCtx);
     expect(probe.observed).toHaveLength(2);
@@ -114,7 +114,7 @@ describe("W1 seq-op ctx threading — AVector map/filter/reduce thread the invoc
   });
 
   it("filter: callback observes the passed liveCtx, not CONSTANT_CTX", async () => {
-    const vec = new AVector(liveCtx, [one, two]);
+    const vec = new AVector([one, two]);
     const probe = makeProbe();
     await vec["arrival/tagless-final/filter"](probe.fn, liveCtx);
     expect(probe.observed).toHaveLength(2);
@@ -125,7 +125,7 @@ describe("W1 seq-op ctx threading — AVector map/filter/reduce thread the invoc
   });
 
   it("reduce: callback observes the passed liveCtx, not CONSTANT_CTX", async () => {
-    const vec = new AVector(liveCtx, [one, two]);
+    const vec = new AVector([one, two]);
     const probe = makeProbe();
     await vec["arrival/tagless-final/reduce"](probe.fn, 0, liveCtx);
     expect(probe.observed).toHaveLength(2);

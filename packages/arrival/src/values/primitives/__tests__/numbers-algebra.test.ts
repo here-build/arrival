@@ -17,20 +17,20 @@ import { tf } from "../../tagless-final.js";
 // `fc.bigInt` (fast-check's bigint arbitrary can't feed a number-only constructor at all).
 const exactArb = fc
   .tuple(fc.integer({ min: -50, max: 50 }), fc.integer({ min: 1, max: 50 }))
-  .map(([num, denom]) => new AExact(CONSTANT_CTX, num, denom));
+  .map(([num, denom]) => new AExact(num, denom));
 
 // Inexact reals incl. NaN / ±0 / ±Infinity — the cases that bite reflexivity.
 const inexactArb = fc
   .double({ noDefaultInfinity: false, noNaN: false })
-  .map((real) => new AInexact(CONSTANT_CTX, real));
+  .map((real) => new AInexact(real));
 
-setoidLaws("SchemeExact", { arb: exactArb, equalClone: (a) => new AExact(CONSTANT_CTX, a.num, a.denom) });
-setoidLaws("SchemeInexact", { arb: inexactArb, equalClone: (a) => new AInexact(CONSTANT_CTX, a.real) });
+setoidLaws("SchemeExact", { arb: exactArb, equalClone: (a) => new AExact(a.num, a.denom) });
+setoidLaws("SchemeInexact", { arb: inexactArb, equalClone: (a) => new AInexact(a.real) });
 
 describe("number Setoid — exactness boundary (the (equal? 1 1.0) fix)", () => {
   it("exact 1 is NOT arrival/tagless-final/equals inexact 1.0 (both directions)", () => {
-    const one = new AExact(CONSTANT_CTX, 1);
-    const oneFloat = new AInexact(CONSTANT_CTX, 1);
+    const one = new AExact(1);
+    const oneFloat = new AInexact(1);
     expect(one[tf("equals")](oneFloat)).toBe(false);
     expect(oneFloat[tf("equals")](one)).toBe(false);
   });
@@ -38,13 +38,13 @@ describe("number Setoid — exactness boundary (the (equal? 1 1.0) fix)", () => 
   it("structuralEqual honors the exactness boundary (the bug)", () => {
     // Before: structuralEqual collapsed via valueOf → #t. Now its FL/equals
     // consult-hook catches the number instances first → correct #f.
-    expect(structuralEqual(new AExact(CONSTANT_CTX, 1), new AInexact(CONSTANT_CTX, 1))).toBe(false);
-    expect(structuralEqual(new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 1))).toBe(true);
-    expect(structuralEqual(new AInexact(CONSTANT_CTX, 1), new AInexact(CONSTANT_CTX, 1))).toBe(true);
+    expect(structuralEqual(new AExact(1), new AInexact(1))).toBe(false);
+    expect(structuralEqual(new AExact(1), new AExact(1))).toBe(true);
+    expect(structuralEqual(new AInexact(1), new AInexact(1))).toBe(true);
   });
 
   it("NaN reflexivity holds (Object.is, not ===)", () => {
-    const nan = new AInexact(CONSTANT_CTX, NaN);
-    expect(nan[tf("equals")](new AInexact(CONSTANT_CTX, NaN))).toBe(true);
+    const nan = new AInexact(NaN);
+    expect(nan[tf("equals")](new AInexact(NaN))).toBe(true);
   });
 });

@@ -51,31 +51,31 @@ export function fromJs(
   if (v === null) {
     // JS `null` → nil (empty list); JS `undefined` → void: the two host bottoms map to
     // the two distinct Scheme absences rather than collapsing to one.
-    return new ANil(ctx, provenance);
+    return new ANil(provenance);
   }
   switch (typeof v) {
     case "string":
-      return new AString(ctx, v, provenance);
+      return new AString(v, provenance);
     case "number":
       // Safe-integer JS numbers route to exact (both AExact components are plain
       // `number`s, §2.1); anything beyond MAX_SAFE_INTEGER is inexact — never a silent
       // out-of-range exact (values/mint-numeric.ts's crash-on-overflow law is for
       // ARITHMETIC results; ingress from a bare host number stays this status-quo
       // silent law per the plan's §0.3).
-      return Number.isSafeInteger(v) ? new AExact(ctx, v, 1, provenance) : new AInexact(ctx, v, provenance);
+      return Number.isSafeInteger(v) ? new AExact(v, 1, provenance) : new AInexact(v, provenance);
     case "bigint":
       // Opaque host value — not a scheme number (see this function's header doc):
       // never boxed, rides straight through by identity.
       return v;
     case "boolean":
       // Reuse singletons on the empty-provenance fast path; allocate only when stamped.
-      return provenance === EMPTY_PROVENANCE ? (v ? schemeTrue : schemeFalse) : new ABool(ctx, v, provenance);
+      return provenance === EMPTY_PROVENANCE ? (v ? schemeTrue : schemeFalse) : new ABool(v, provenance);
     case "undefined":
-      return new AVoid(ctx, provenance);
+      return new AVoid(provenance);
     case "object":
       // `typeof [] === "object"`: a JS array IS an R7RS vector → a borrowed AJSArray (the
       // faithful Rosetta mapping); a plain object wraps as a lazy AJSObject.
-      return Array.isArray(v) ? new AJSArray(ctx, v, provenance) : new AJSObject(ctx, v, provenance);
+      return Array.isArray(v) ? new AJSArray(v, provenance) : new AJSObject(v, provenance);
     case "function":
       // docs/membrane.md §VOID-RULE — a borrowed function voids, loudly; never a callable wrapper.
       warnMembrane("a JS function");

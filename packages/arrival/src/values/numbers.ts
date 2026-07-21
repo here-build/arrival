@@ -156,9 +156,9 @@ export function parseNumber(str: string): ANumeric {
   }
 
   // Handle special values
-  if (str === "+inf.0") return new AInexact(CONSTANT_CTX, Infinity);
-  if (str === "-inf.0") return new AInexact(CONSTANT_CTX, -Infinity);
-  if (str === "+nan.0" || str === "-nan.0") return new AInexact(CONSTANT_CTX, Number.NaN);
+  if (str === "+inf.0") return new AInexact(Infinity);
+  if (str === "-inf.0") return new AInexact(-Infinity);
+  if (str === "+nan.0" || str === "-nan.0") return new AInexact(Number.NaN);
 
   // Complex literals (a+bi / a-bi) are DOORED — recognize the shape, reject with
   // the teaching message (complex not supported), never silently misparse.
@@ -169,7 +169,7 @@ export function parseNumber(str: string): ANumeric {
     // imaginary axis is unrepresentable.
     if (imag === 0) {
       const real = complexMatch[1] ? Number.parseFloat(complexMatch[1]) : 0;
-      return new AInexact(CONSTANT_CTX, real);
+      return new AInexact(real);
     }
     return complexDoor();
   }
@@ -179,7 +179,7 @@ export function parseNumber(str: string): ANumeric {
   if (rationalMatch) {
     const num = parseSafeIntLiteral(BigInt(rationalMatch[1]), str);
     const denom = parseSafeIntLiteral(BigInt(rationalMatch[2]), str);
-    const result = new AExact(CONSTANT_CTX, num, denom);
+    const result = new AExact(num, denom);
     if (forceInexact) {
       return result.toInexact();
     }
@@ -190,9 +190,9 @@ export function parseNumber(str: string): ANumeric {
   if (str.includes(".") || str.includes("e") || str.includes("E")) {
     const value = Number.parseFloat(str);
     if (forceExact) {
-      return new AInexact(CONSTANT_CTX, value).toExact();
+      return new AInexact(value).toExact();
     }
-    return new AInexact(CONSTANT_CTX, value);
+    return new AInexact(value);
   }
 
   // Handle integer. Parse the magnitude via BigInt so digits beyond 2^53 are read
@@ -205,7 +205,7 @@ export function parseNumber(str: string): ANumeric {
   const prefix = radix === 16 ? "0x" : radix === 8 ? "0o" : radix === 2 ? "0b" : "";
   const magnitudeBig = BigInt(prefix + digits);
   const exactNum = parseSafeIntLiteral(neg ? -magnitudeBig : magnitudeBig, str);
-  const exact = new AExact(CONSTANT_CTX, exactNum);
+  const exact = new AExact(exactNum);
   if (forceInexact) {
     return exact.toInexact();
   }

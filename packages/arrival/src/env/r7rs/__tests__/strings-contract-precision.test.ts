@@ -65,9 +65,9 @@ function rosettaDef(name: string) {
   return def;
 }
 
-const ch = (c: string): ACharacter => new ACharacter(CONSTANT_CTX, c);
-const str = (s: string): AString => new AString(CONSTANT_CTX, s);
-const properList = (): APair<any, any> => new APair(CONSTANT_CTX, ch("a"), nil);
+const ch = (c: string): ACharacter => new ACharacter(c);
+const str = (s: string): AString => new AString(s);
+const properList = (): APair<any, any> => new APair(ch("a"), nil);
 
 const COMPARISON_OPS = [
   "string=?",

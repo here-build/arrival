@@ -174,7 +174,7 @@ function criterionFlags(
     return chars.map((c) => c === ch);
   }
   // Seam-routed: the criterion predicate is a callable VALUE (membrane-boxed), not a bare fn.
-  const results = chars.map((c) => applyCallback(criterion, [new ACharacter(runCtx, c)], runCtx));
+  const results = chars.map((c) => applyCallback(criterion, [new ACharacter(c)], runCtx));
   const collapse = (rs: unknown[]) => rs.map((v) => !is_false(v)); // R7RS: only #f is false
   // pred may be an async membrane callback → await before deciding (see string-map).
   if (results.some(is_promise)) {
@@ -209,7 +209,7 @@ function trimImpl(name: string, side: "both" | "left" | "right") {
       // the slice, but a char criterion is still a value input; include it).
       return withInputProvenance(
         criterion === undefined ? [str] : [str, criterion],
-        new AString(runCtx, chars.slice(start, end).join("")),
+        new AString(chars.slice(start, end).join("")),
       );
     });
   };
@@ -227,7 +227,7 @@ function sliceImpl(name: string, pick: (chars: string[], k: number) => string[])
       `${name}: index ${k} out of range for a string of length ${chars.length}`,
     );
     // A slice — same lineage rule as string-copy (n shapes the slice, no meaning of its own).
-    return withInputProvenance([str], new AString(this.runCtx, pick(chars, k).join("")));
+    return withInputProvenance([str], new AString(pick(chars, k).join("")));
   };
 }
 
@@ -270,7 +270,7 @@ export default new EnvCapability("scheme/srfi-13", {
             const i = f.indexOf(true);
             return withInputProvenance(
               [str, criterion],
-              i === -1 ? schemeBool(false) : new AExact(runCtx, i),
+              i === -1 ? schemeBool(false) : new AExact(i),
             );
           });
         },
@@ -288,7 +288,7 @@ export default new EnvCapability("scheme/srfi-13", {
           const runCtx = this.runCtx;
           return afterFlags(criterionFlags(criterion, chars, runCtx), (f) => {
             const n = f.reduce((acc, hit) => acc + (hit ? 1 : 0), 0);
-            return withInputProvenance([str, criterion], new AExact(runCtx, n));
+            return withInputProvenance([str, criterion], new AExact(n));
           });
         },
       ),
@@ -370,7 +370,7 @@ export default new EnvCapability("scheme/srfi-13", {
           const text =
             chars.length >= k ? chars.slice(chars.length - k).join("") : fill.repeat(k - chars.length) + chars.join("");
           // Like make-string: a present fill char contributes lineage; the length shapes only.
-          return withInputProvenance(char === undefined ? [str] : [str, char], new AString(this.runCtx, text));
+          return withInputProvenance(char === undefined ? [str] : [str, char], new AString(text));
         },
       ),
 
@@ -383,14 +383,14 @@ export default new EnvCapability("scheme/srfi-13", {
           assertAllocatable(k, "string-pad-right");
           const fill = char === undefined ? " " : charValue(char);
           const text = chars.length >= k ? chars.slice(0, k).join("") : chars.join("") + fill.repeat(k - chars.length);
-          return withInputProvenance(char === undefined ? [str] : [str, char], new AString(this.runCtx, text));
+          return withInputProvenance(char === undefined ? [str] : [str, char], new AString(text));
         },
       ),
 
     "string-reverse": symbol.native`string-reverse: a reversed copy of the string (SRFI-13)`(
       { input: [z.string], output: [z.string] },
       function (this: CallCtx, str: unknown): AString {
-        return withInputProvenance([str], new AString(this.runCtx, [...stringValue(str)].reverse().join("")));
+        return withInputProvenance([str], new AString([...stringValue(str)].reverse().join("")));
       },
     ),
 

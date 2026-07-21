@@ -227,7 +227,7 @@ describe("v0.1 FINALIZATION GATES (G1–G7)", () => {
   // drops on count/convert), not a behavioral guarantee — the static path may reshape this.
   it("G6-eager-golden(SchemeVector): a length-preserving vector-map PRESERVES the collection-level grouping fact; vector-length/vector->list drop to the bare scalar/Pair exactly as eager does (this map IS the G2 oracle)", async () => {
     await initBridge();
-    const mkVec = () => new AVector(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101)], new Set([7]));
+    const mkVec = () => new AVector([sStr("a", 100), sStr("b", 101)], new Set([7]));
     const summary = (r: unknown) => ({ ctor: (r as { constructor?: { name?: string } })?.constructor?.name ?? typeof r, prov: provOf(r) });
     const oneShot = async (src: string): Promise<unknown> => {
       const env = mintFrame(inferenceEnv, `la-${seq++}`);

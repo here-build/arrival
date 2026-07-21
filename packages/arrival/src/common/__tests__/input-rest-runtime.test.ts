@@ -35,7 +35,7 @@ describe("Contract.inputRest runtime — UNIT (direct def.run): a fixed head + v
       { input: [z.string], inputRest: z.number, output: [z.string] },
       (head: string, ...rest: number[]) => `${head}:${rest.length}:${rest.join(",")}`,
     );
-    const out = await def.run.call(testCallCtx(), new AString(CONSTANT_CTX, "h"));
+    const out = await def.run.call(testCallCtx(), new AString("h"));
     expect((out as AString)["arrival/toJS"]()).toBe("h:0:");
   });
 
@@ -48,9 +48,9 @@ describe("Contract.inputRest runtime — UNIT (direct def.run): a fixed head + v
     );
     const out = await def.run.call(
       testCallCtx(),
-      new AString(CONSTANT_CTX, "h"),
-      new AInexact(CONSTANT_CTX, 1),
-      new AInexact(CONSTANT_CTX, 2),
+      new AString("h"),
+      new AInexact(1),
+      new AInexact(2),
     );
     expect((out as AString)["arrival/toJS"]()).toBe("h:2:1,2");
   });
@@ -63,10 +63,10 @@ describe("Contract.inputRest runtime — UNIT (direct def.run): a fixed head + v
     );
     const out = await def.run.call(
       testCallCtx(),
-      new AString(CONSTANT_CTX, "h"),
-      new AInexact(CONSTANT_CTX, 1),
-      new AInexact(CONSTANT_CTX, 2),
-      new AInexact(CONSTANT_CTX, 3),
+      new AString("h"),
+      new AInexact(1),
+      new AInexact(2),
+      new AInexact(3),
     );
     expect((out as AString)["arrival/toJS"]()).toBe("h:3:1,2,3");
   });

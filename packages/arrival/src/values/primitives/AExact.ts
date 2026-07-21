@@ -15,7 +15,7 @@
 // function bodies, this file calls mint-numeric's helpers only inside method bodies.
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { type RunContext } from "../../run/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { CLASS } from "../../well-known-symbols.js";
 import { schemeCompare } from "../numbers.js";
 import { AInexact } from "./AInexact.js";
@@ -35,8 +35,8 @@ export class AExact extends AValue {
   readonly num: number;
   readonly denom: number;
 
-  constructor(ctx: RunContext, num: number, denom: number = 1, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
-    super(ctx, provenance);
+  constructor(num: number, denom: number = 1, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
+    super(provenance);
     invariant(denom !== 0, "Division by zero");
     // Internal invariant, NOT the overflow door: a caller minting exact arithmetic must
     // have pre-checked every intermediate via checkedMul/checkedAdd/checkedSub (or gone
@@ -138,7 +138,7 @@ export class AExact extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): AExact {
-    return new AExact(this.ctx, this.num, this.denom, p);
+    return new AExact(this.num, this.denom, p);
   }
 
   // String representation
@@ -211,7 +211,7 @@ export class AExact extends AValue {
       "exact +",
     );
     const denom = checkedMul(this.denom, other.denom, "exact +");
-    const result = mintExact(this.ctx, num, denom, undefined, "exact +");
+    const result = mintExact(CONSTANT_CTX, num, denom, undefined, "exact +");
     if (isNumericDebugEnabled()) {
       debugCrossCheckRational("add", this.num, this.denom, other.num, other.denom, result.num, result.denom);
     }
@@ -225,7 +225,7 @@ export class AExact extends AValue {
       "exact -",
     );
     const denom = checkedMul(this.denom, other.denom, "exact -");
-    const result = mintExact(this.ctx, num, denom, undefined, "exact -");
+    const result = mintExact(CONSTANT_CTX, num, denom, undefined, "exact -");
     if (isNumericDebugEnabled()) {
       debugCrossCheckRational("sub", this.num, this.denom, other.num, other.denom, result.num, result.denom);
     }
@@ -235,7 +235,7 @@ export class AExact extends AValue {
   mul(other: AExact): AExact {
     const num = checkedMul(this.num, other.num, "exact *");
     const denom = checkedMul(this.denom, other.denom, "exact *");
-    const result = mintExact(this.ctx, num, denom, undefined, "exact *");
+    const result = mintExact(CONSTANT_CTX, num, denom, undefined, "exact *");
     if (isNumericDebugEnabled()) {
       debugCrossCheckRational("mul", this.num, this.denom, other.num, other.denom, result.num, result.denom);
     }
@@ -248,7 +248,7 @@ export class AExact extends AValue {
     // Zero-denominator (i.e. dividing by exact zero) still throws — via the AExact
     // constructor's own "Division by zero" invariant inside mintExact, unrelated to the
     // overflow door. R7RS: exact `(/ x 0)` errors; only `0.0` division is IEEE `inf`/`nan`.
-    const result = mintExact(this.ctx, num, denom, undefined, "exact /");
+    const result = mintExact(CONSTANT_CTX, num, denom, undefined, "exact /");
     if (isNumericDebugEnabled()) {
       debugCrossCheckRational("div", this.num, this.denom, other.num, other.denom, result.num, result.denom);
     }
@@ -256,15 +256,15 @@ export class AExact extends AValue {
   }
 
   neg(): AExact {
-    return mintExact(this.ctx, -this.num, this.denom, undefined, "exact negate");
+    return mintExact(CONSTANT_CTX, -this.num, this.denom, undefined, "exact negate");
   }
 
   abs(): AExact {
-    return mintExact(this.ctx, this.num < 0 ? -this.num : this.num, this.denom, undefined, "exact abs");
+    return mintExact(CONSTANT_CTX, this.num < 0 ? -this.num : this.num, this.denom, undefined, "exact abs");
   }
 
   inverse(): AExact {
-    return mintExact(this.ctx, this.denom, this.num, undefined, "exact inverse");
+    return mintExact(CONSTANT_CTX, this.denom, this.num, undefined, "exact inverse");
   }
 
   // Floor, ceiling, truncate, round - return exact integers. `r`/`q` below are computed
@@ -278,9 +278,9 @@ export class AExact extends AValue {
     const q = (this.num - r) / this.denom;
     // Floor: round toward negative infinity
     if (this.num < 0 && r !== 0) {
-      return mintExact(this.ctx, q - 1, 1, undefined, "exact floor");
+      return mintExact(CONSTANT_CTX, q - 1, 1, undefined, "exact floor");
     }
-    return mintExact(this.ctx, q, 1, undefined, "exact floor");
+    return mintExact(CONSTANT_CTX, q, 1, undefined, "exact floor");
   }
 
   ceiling(): AExact {
@@ -289,9 +289,9 @@ export class AExact extends AValue {
     const q = (this.num - r) / this.denom;
     // Ceiling: round toward positive infinity
     if (this.num > 0 && r !== 0) {
-      return mintExact(this.ctx, q + 1, 1, undefined, "exact ceiling");
+      return mintExact(CONSTANT_CTX, q + 1, 1, undefined, "exact ceiling");
     }
-    return mintExact(this.ctx, q, 1, undefined, "exact ceiling");
+    return mintExact(CONSTANT_CTX, q, 1, undefined, "exact ceiling");
   }
 
   truncate(): AExact {
@@ -299,7 +299,7 @@ export class AExact extends AValue {
     // Truncate: round toward zero
     const r = this.num % this.denom;
     const q = (this.num - r) / this.denom;
-    return mintExact(this.ctx, q, 1, undefined, "exact truncate");
+    return mintExact(CONSTANT_CTX, q, 1, undefined, "exact truncate");
   }
 
   round(): AExact {
@@ -313,38 +313,38 @@ export class AExact extends AValue {
     const halfDenom = Math.trunc(this.denom / 2);
 
     if (absR < halfDenom) {
-      return mintExact(this.ctx, q, 1, undefined, "exact round");
+      return mintExact(CONSTANT_CTX, q, 1, undefined, "exact round");
     } else if (absR > halfDenom) {
-      return mintExact(this.ctx, this.num < 0 ? q - 1 : q + 1, 1, undefined, "exact round");
+      return mintExact(CONSTANT_CTX, this.num < 0 ? q - 1 : q + 1, 1, undefined, "exact round");
     } else {
       // Tie: round to even
       if (q % 2 === 0) {
-        return mintExact(this.ctx, q, 1, undefined, "exact round");
+        return mintExact(CONSTANT_CTX, q, 1, undefined, "exact round");
       }
-      return mintExact(this.ctx, this.num < 0 ? q - 1 : q + 1, 1, undefined, "exact round");
+      return mintExact(CONSTANT_CTX, this.num < 0 ? q - 1 : q + 1, 1, undefined, "exact round");
     }
   }
 
   // Integer operations (only valid when isInteger)
   mod(other: AExact): AExact {
     invariant(this.isInteger && other.isInteger, "mod requires integers");
-    return mintExact(this.ctx, this.num % other.num, 1, undefined, "exact modulo");
+    return mintExact(CONSTANT_CTX, this.num % other.num, 1, undefined, "exact modulo");
   }
 
   quotient(other: AExact): AExact {
     invariant(this.isInteger && other.isInteger, "quotient requires integers");
     const r = this.num % other.num;
     const q = (this.num - r) / other.num;
-    return mintExact(this.ctx, q, 1, undefined, "quotient");
+    return mintExact(CONSTANT_CTX, q, 1, undefined, "quotient");
   }
 
   gcd(other: AExact): AExact {
     invariant(this.isInteger && other.isInteger, "gcd requires integers");
-    return mintExact(this.ctx, AExact.gcd(this.num, other.num), 1, undefined, "gcd");
+    return mintExact(CONSTANT_CTX, AExact.gcd(this.num, other.num), 1, undefined, "gcd");
   }
 
   // Convert to inexact
   toInexact(): AInexact {
-    return new AInexact(this.ctx, this.valueOf());
+    return new AInexact(this.valueOf());
   }
 }

@@ -26,8 +26,8 @@ import { tf } from "../../tagless-final.js";
 // A vector element is a boxed exact integer (the interpreter is monadic-boxed:
 // `(vector 1 2 3)` mints AExact slots). The reader domain is small ints, so an
 // exact box is the faithful element.
-const box = (n: number): AExact => new AExact(CONSTANT_CTX, n);
-const vec = (ns: number[]): AVector => new AVector(CONSTANT_CTX, ns.map(box));
+const box = (n: number): AExact => new AExact(n);
+const vec = (ns: number[]): AVector => new AVector(ns.map(box));
 
 // Numeric value of one element — AExact coerces via valueOf. A mapped structure
 // re-boxes its raw `.source` to AExact on access, so a materialized element is an
@@ -49,7 +49,7 @@ const arb = fc
   )
   .map(vec);
 
-const equalClone = (v: AVector) => new AVector(CONSTANT_CTX, v.__vector__.slice());
+const equalClone = (v: AVector) => new AVector(v.__vector__.slice());
 
 // INVARIANT: reflexivity, reflexivity-across-clone, symmetry, transitivity of vector equality.
 setoidLaws("SchemeVector", { arb, equalClone });
@@ -74,10 +74,10 @@ describe("SchemeVector Setoid/Semigroup/Functor — boundaries", () => {
   });
 
   it("nested-vector equality recurses through structuralEqual", () => {
-    const a = new AVector(CONSTANT_CTX, [vec([1, 2]), box(3)]);
-    const b = new AVector(CONSTANT_CTX, [vec([1, 2]), box(3)]);
+    const a = new AVector([vec([1, 2]), box(3)]);
+    const b = new AVector([vec([1, 2]), box(3)]);
     expect(a[tf("equals")](b)).toBe(true);
-    const c = new AVector(CONSTANT_CTX, [vec([1, 9]), box(3)]);
+    const c = new AVector([vec([1, 9]), box(3)]);
     expect(a[tf("equals")](c)).toBe(false);
   });
 

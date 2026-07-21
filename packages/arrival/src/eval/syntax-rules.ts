@@ -11,9 +11,12 @@
 // the syntax-rules caller threads them; lambda/define resolve from the runtime env.
 //
 // MINT DOOR: every cell the matcher/expander constructs during a live expansion goes through
-// consCell/listFromArray, which stamp the run's identity (AValue.ctx) AND charge the
-// allocation meter (chargeHeap). The charge lives at the mint, not on a post-hoc walk of the
-// output — a walk cannot tell fresh cells from call-site fragments shared by reference.
+// consCell/listFromArray, which charge the allocation meter (chargeHeap) via the explicitly
+// threaded `ctx` PARAMETER — not a per-value stamp (AValue no longer carries one at all; see
+// AValue.ts's ctx-removal note — this subsystem's metering survives that removal unbroken
+// precisely because it was already ctx-as-op-parameter, not ctx-on-the-value). The charge
+// lives at the mint, not on a post-hoc walk of the output — a walk cannot tell fresh cells
+// from call-site fragments shared by reference.
 // Expansion is a native op materialized in synchronous walks with no trampoline TICK, and a
 // recursive macro's re-copied accumulation is exactly the O(K²) churn the meter contains. A
 // meter-less ctx makes chargeHeap a no-op — unmetered runs pay nothing.
@@ -82,7 +85,7 @@ function concatPairLoose(ctx: RunContext, a: SchemeValue, b: SchemeValue): Schem
   chargeHeap(ctx, cars.length);
   let result: SchemeValue = b;
   for (let i = cars.length; i--; ) {
-    result = new APair(ctx, cars[i], result);
+    result = new APair(cars[i], result);
   }
   return result;
 }
@@ -94,7 +97,7 @@ function consCell<Car extends SchemeValue, Cdr extends SchemeValue>(
   cdr: Cdr,
 ): APair<Car, Cdr> {
   chargeHeap(ctx, 1);
-  return new APair(ctx, car, cdr);
+  return new APair(car, cdr);
 }
 
 /** `APair.fromArray` through the mint door — n elements ⇒ n fresh spine cells. */
@@ -505,7 +508,7 @@ export function restore_data_gensyms(node, gensyms, ctx: RunContext) {
     const r = gensyms.find((g) => g.gensym === sym);
     // Interned mint: an already-known literal name is a flyweight HIT (no allocation,
     // no charge); a genuinely fresh name charges 1 inside ASymbol's own ctor.
-    return r ? new ASymbol(ctx, r.name) : sym;
+    return r ? new ASymbol(r.name) : sym;
   };
   function walk(n, data) {
     if (n instanceof ASymbol) {
@@ -580,9 +583,9 @@ export function transform_syntax({
           return listFromArray(
             ctx,
             [
-              new ASymbol(ctx, "."),
+              new ASymbol("."),
               bindings.symbols[first] as SchemeValue, // plain cell — never an array/null (ellipsis-only)
-              ...parts.slice(1).map((x) => new AString(ctx, x)),
+              ...parts.slice(1).map((x) => new AString(x)),
             ],
             true, // deep
           );

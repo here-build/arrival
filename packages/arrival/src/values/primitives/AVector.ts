@@ -15,7 +15,7 @@
  * Foldable instances are Fantasy Land (fantasyland/fantasy-land).
  */
 import { CLASS } from "../../well-known-symbols.js";
-import { type RunContext } from "../../run/RunContext.js";
+import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import { applyCallback } from "./ACallable.js";
 import { chargeHeap } from "../../heap-budget.js";
 import { is_promise } from "../../eval/guards.js";
@@ -56,14 +56,13 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   evalElements = false;
 
   constructor(
-    ctx: RunContext,
     /** Element payload — public but dunder-named to hint internals: read-only
      *  (`readonly T[]`, and elements are themselves immutable AValues, so the
      *  readonly is deep). Mutation goes nowhere — construct a fresh vector. */
     public readonly __vector__: readonly T[],
     provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
   ) {
-    super(ctx, provenance);
+    super(provenance);
   }
 
   get length(): number {
@@ -79,7 +78,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   }
 
   copy(start = 0, end = this.__vector__.length): AVector {
-    return new AVector(this.ctx, this.__vector__.slice(start, end));
+    return new AVector(this.__vector__.slice(start, end));
   }
 
   // Crossing to JS (TO_JS protocol) — the ONE method, keyed on `exit`. A boxed vector
@@ -107,7 +106,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): AVector {
-    const v = new AVector(this.ctx, this.__vector__, p);
+    const v = new AVector(this.__vector__, p);
     // Same-identity re-stamp: a `[…]` literal node stays a `[…]` literal node.
     v.evalElements = this.evalElements;
     return v;
@@ -126,7 +125,6 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   ): AVector {
     seen.add(this);
     return new AVector(
-      ctx,
       this.__vector__.map((el) => reStampChild(el, ctx, p, seen)),
       // UNION, not replace — the crossing ADDS its origin to what this container already knew.
       mergeProvenance(this.provenance, p),
@@ -147,7 +145,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
       // spine is provably non-empty — genuinely `APair<SchemeValue, SchemeValue>`, never
       // `ANil`; `fromArray`'s return stays wide (`AListAlike<T> | unknown[]`) for the general
       // case, narrowed here to match what's actually built.
-      lowered = APair.fromArray(this.ctx, [new ASymbol(this.ctx, "vector"), ...this.__vector__], false) as APair<
+      lowered = APair.fromArray(CONSTANT_CTX, [new ASymbol("vector"), ...this.__vector__], false) as APair<
         SchemeValue,
         SchemeValue
       >;
@@ -173,7 +171,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
 
   // Semigroup — element concatenation. Associative; equality via the Setoid above.
   ["arrival/tagless-final/concat"](other: AVector): AVector {
-    return new AVector(this.ctx, [...this.__vector__, ...other.__vector__]);
+    return new AVector([...this.__vector__, ...other.__vector__]);
   }
 
   // STRICT divergence: car/cdr are PAIR ops in R7RS — a vector is not a pair. STRICT flags it
@@ -219,7 +217,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     // VECTOR LITERAL will not terminate — the exhausted slice is `#()`, and `null?` is ANil-only.
     // It bites only genuine vector literals (values a tool cannot produce), and strict mode doors
     // it. The honest fix, if it ever bites, is `(vector->list v)` — not a chart that lies.
-    return new AVector(this.ctx, this.__vector__.slice(1), this.provenance);
+    return new AVector(this.__vector__.slice(1), this.provenance);
   }
 
   // Print protocol — R7RS external repr `#(elem …)`, each element via `printValue`.
@@ -256,10 +254,10 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     // every carrier" — the two carriers must agree, not just their element boxes).
     if (results.some(is_promise)) {
       return (promise_all(results) as Promise<SchemeValue[]>).then(
-        (resolved): AVector => withInputProvenance([this], new AVector(this.ctx, resolved)),
+        (resolved): AVector => withInputProvenance([this], new AVector(resolved)),
       );
     }
-    return withInputProvenance([this], new AVector(this.ctx, results as SchemeValue[]));
+    return withInputProvenance([this], new AVector(results as SchemeValue[]));
   }
 
   // Filterable — keeps elements satisfying the predicate into a fresh vector, PRESERVING every
@@ -288,7 +286,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     // stamp and (b) the decision lineage that changed the length — here, the SURVIVING
     // elements' own top-level provenance (mirrors APair's filter — naive-but-explicit,
     // not a deep walk).
-    return withInputProvenance([this, ...out], new AVector(this.ctx, out));
+    return withInputProvenance([this, ...out], new AVector(out));
   }
 
   // Canonical async-aware reduce, SRFI fold convention `fn(element, acc)` (acc last), left
@@ -327,7 +325,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     chargeHeap(runCtx, this.__vector__.length);
     const out = [...this.__vector__];
     out.sort(deriveSortCompare(comparator as ((a: unknown, b: unknown) => unknown) | undefined, runCtx));
-    return withInputProvenance([this], new AVector(this.ctx, out));
+    return withInputProvenance([this], new AVector(out));
   }
 
   // Prefix — SAME-KIND: vector in, fresh vector out (mirrors sort's container-preserving
@@ -346,7 +344,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     const k = Math.max(0, Math.min(n, this.__vector__.length));
     chargeHeap(runCtx, k);
     const out = this.__vector__.slice(0, k);
-    return withInputProvenance([this, ...out], new AVector(this.ctx, out));
+    return withInputProvenance([this, ...out], new AVector(out));
   }
 
   // Suffix — SAME-KIND, same clamp/provenance discipline as take above.
@@ -360,7 +358,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     const k = Math.max(0, Math.min(n, this.__vector__.length));
     const out = this.__vector__.slice(k);
     chargeHeap(runCtx, out.length);
-    return withInputProvenance([this, ...out], new AVector(this.ctx, out));
+    return withInputProvenance([this, ...out], new AVector(out));
   }
 
   // Longest satisfying prefix — SEQUENTIAL walk (NOT filter's concurrent fan): the stop at the
@@ -384,7 +382,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
       out.push(v);
     }
     chargeHeap(runCtx, out.length);
-    return withInputProvenance([this, ...out], new AVector(this.ctx, out));
+    return withInputProvenance([this, ...out], new AVector(out));
   }
 
   // The take-while remainder — same sequential-pred discipline (the stop index IS the
@@ -406,7 +404,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     }
     const out = this.__vector__.slice(i);
     chargeHeap(runCtx, out.length);
-    return withInputProvenance([this, ...out], new AVector(this.ctx, out));
+    return withInputProvenance([this, ...out], new AVector(out));
   }
 
   // Element-count. Interim fix (RULINGS.md R2): `length` reads the CONTAINER's

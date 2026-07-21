@@ -37,14 +37,14 @@ export const wrappedOps = {
     // R7RS § 6.11: only defined over error objects (values from the `error` procedure) —
     // fail loudly rather than accept any thrown value that happens to expose a message.
     TypeError.invariant(err instanceof R7RSError, "error-object-message: argument is not an error object");
-    return new AString(this.runCtx, err.message);
+    return new AString(err.message);
   },
 
   "error-object-irritants"(this: CallCtx, err: unknown): SchemeValue {
     if (err instanceof R7RSError) {
       let result: SchemeValue = nil;
       for (let i = err.irritants.length - 1; i >= 0; i--) {
-        result = new APair(this.runCtx, err.irritants[i] as SchemeValue, result);
+        result = new APair(err.irritants[i] as SchemeValue, result);
       }
       return result;
     }

@@ -33,7 +33,7 @@ function nativeDef(name: string) {
   return def;
 }
 
-const ch = (c: string): ACharacter => new ACharacter(CONSTANT_CTX, c);
+const ch = (c: string): ACharacter => new ACharacter(c);
 
 const COMPARISON_OPS = [
   "char=?",

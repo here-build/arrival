@@ -28,8 +28,8 @@ function nativeDef(name: string) {
   return def;
 }
 
-const exact = (n: number): AExact => new AExact(CONSTANT_CTX, n);
-const bv = (bytes: number[]): ABytevector => new ABytevector(CONSTANT_CTX, Uint8Array.from(bytes));
+const exact = (n: number): AExact => new AExact(n);
+const bv = (bytes: number[]): ABytevector => new ABytevector(Uint8Array.from(bytes));
 
 describe("scheme/bytevectors Contract precision — the real exported ops reject wrongly-typed args (were z.array(z.unknown()), now precise)", () => {
   // INVARIANT: bytevector requires every argument to be a scheme number, rejecting
@@ -99,7 +99,7 @@ describe("scheme/bytevectors Contract precision — the real exported ops reject
     expect(toStr.in.safeParse(["not-a-bytevector"]).success).toBe(false);
 
     const toUtf8 = nativeDef("string->utf8");
-    expect(toUtf8.in.safeParse([new AString(CONSTANT_CTX, "hi")]).success).toBe(true);
+    expect(toUtf8.in.safeParse([new AString("hi")]).success).toBe(true);
     expect(toUtf8.in.safeParse(["raw-js-string"]).success).toBe(false);
   });
 

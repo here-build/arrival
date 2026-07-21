@@ -78,9 +78,7 @@ function resolve_promises(arg: SchemeValue): SchemeValue {
   }
 
   async function promise(node) {
-    const pair = new APair(
-      CONSTANT_CTX,
-      node.have_cycles("car") ? node.car : await resolve(node.car),
+    const pair = new APair(node.have_cycles("car") ? node.car : await resolve(node.car),
       node.have_cycles("cdr") ? node.cdr : await resolve(node.cdr),
     );
     if (node[DATA]) {

@@ -48,7 +48,7 @@ export function reStampChild(
     warnMembrane("a JS `undefined`");
     return theVoid;
   }
-  if (child === null) return p === EMPTY_PROVENANCE ? nil : new ANil(ctx, p);
+  if (child === null) return p === EMPTY_PROVENANCE ? nil : new ANil(p);
   // Legacy bare-fn procedure arm — docs/membrane.md §VOID-RULE.
   if (typeof child === "function") {
     warnMembrane("a JS function");

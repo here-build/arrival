@@ -435,8 +435,8 @@ describe("conservation — every input id survives to the output or the trace", 
   describe("container-box rows — PROXIED (map/sort) / PROVENANCED (filter), Pair and Vector agree (P8)", () => {
     const STAMP = new Set([7]);
     const mkStampedPair = () =>
-      new APair(CONSTANT_CTX, sStr("a", 100), new APair(CONSTANT_CTX, sStr("b", 101), nil)).withProvenance(STAMP);
-    const mkStampedVector = () => new AVector(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101)], STAMP);
+      new APair(sStr("a", 100), new APair(sStr("b", 101), nil)).withProvenance(STAMP);
+    const mkStampedVector = () => new AVector([sStr("a", 100), sStr("b", 101)], STAMP);
     const idFn = (x: SchemeValue): SchemeValue => x;
     const keepAll = () => true;
     const dropB = (x: unknown) => (x as AString).valueOf() !== "b";
@@ -509,7 +509,7 @@ describe("mint-at-edge — ids appear only at declared crossings", () => {
     );
     const verb = await wireRosetta(def);
     const { invocation, marked } = invocationWithId(42);
-    const tagged = new AString(CONSTANT_CTX, "x", new Set([99]));
+    const tagged = new AString("x", new Set([99]));
     const out = (await invoke(verb, { currentInvocation: invocation }, tagged)) as AString;
     expect([...out.provenance]).toEqual([99]); // FORWARDED (pure), not minted(42)
     expect(marked()).toBe(false); // a pure rosetta never marks the invocation a point
@@ -524,8 +524,8 @@ describe("mint-at-edge — ids appear only at declared crossings", () => {
     const call1 = invocationWithId(101);
     const call2 = invocationWithId(202);
     // SAME argument both times — only the invocation's own id should differ.
-    const out1 = (await invoke(verb, { currentInvocation: call1.invocation }, new AString(CONSTANT_CTX, "hello"))) as AValue;
-    const out2 = (await invoke(verb, { currentInvocation: call2.invocation }, new AString(CONSTANT_CTX, "hello"))) as AValue;
+    const out1 = (await invoke(verb, { currentInvocation: call1.invocation }, new AString("hello"))) as AValue;
+    const out2 = (await invoke(verb, { currentInvocation: call2.invocation }, new AString("hello"))) as AValue;
     expect([...out1.provenance]).toEqual([101]);
     expect([...out2.provenance]).toEqual([202]);
   });

@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { AInexact } from "../AInexact.js";
 
-const inx = (real: number) => new AInexact(CONSTANT_CTX, real);
+const inx = (real: number) => new AInexact(real);
 
 describe("SchemeInexact real div/mul by zero — R7RS infinities (was 'NaNNaNi')", () => {
   it.each([

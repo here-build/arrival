@@ -67,7 +67,7 @@ requireEagerOracle();
 let seq = 0;
 
 /** A provenance-stamped string / number source (mirrors golden-prov-* fixtures). */
-const sStr = (s: string, p: number): AString => new AString(CONSTANT_CTX, s, new Set([p]));
+const sStr = (s: string, p: number): AString => new AString(s, new Set([p]));
 /** Box a JS number into its concrete numeric leaf — `fromJs` is typed to the abstract
  *  `AValue` base, but boxing a `number` always mints an `AExact`/`AInexact` at runtime;
  *  narrow honestly with a guard (the boxing.ts:38 idiom) so the binding maps stay
@@ -333,7 +333,7 @@ describe("SHADOW SKIP — macro-head / keyword-projection forms abstain (no thro
     // guaranteed to stay silent (legitimate absence). This test's own point is the
     // SHADOW mechanism's abstention for a `:`-prefixed head, not keyword-accessor
     // type-safety, so any non-throwing receiver preserves its intent.
-    bindValue(env, "a", new ANil(CONSTANT_CTX, new Set([100])));
+    bindValue(env, "a", new ANil(new Set([100])));
     // `(:length a)` resolves via the keyword-accessor membrane pluck; whatever its
     // value/cone, shadow abstains because the head starts with ':'.
     await expect(exec(`(:length a)`, { env, irLineage: true })).resolves.toBeDefined();

@@ -74,19 +74,19 @@ export default new EnvCapability("scheme/strings", {
         // Both the length and (when present) the filling char contribute lineage —
         // `(make-string n user-char)` should remember user-char as a source even
         // though the length is what dictates the result's size.
-        return withInputProvenance(char === undefined ? [k] : [k, char], new AString(this.runCtx, c.repeat(len)));
+        return withInputProvenance(char === undefined ? [k] : [k, char], new AString(c.repeat(len)));
       },
     ),
 
     string: symbol.native`string: a string built from the character arguments`(
       { input: [], inputRest: z.char, output: [z.string] },
       // Union of every character argument — same shape as `vector` below.
-      function (this: CallCtx, ...chars) { return withInputProvenance(chars, new AString(this.runCtx, chars.map(charValue).join(""))); },
+      function (this: CallCtx, ...chars) { return withInputProvenance(chars, new AString(chars.map(charValue).join(""))); },
     ),
 
     "string-length": symbol.native`string-length: number of characters in the string`(
       { input: [z.string], output: [z.exact] },
-      function (this: CallCtx, str) { return withInputProvenance([str], new AExact(this.runCtx, [...stringValue(str)].length)); },
+      function (this: CallCtx, str) { return withInputProvenance([str], new AExact([...stringValue(str)].length)); },
     ),
 
     "string-ref": symbol.native`string-ref: the character at index k`(
@@ -101,7 +101,7 @@ export default new EnvCapability("scheme/strings", {
         if (!Number.isInteger(idx) || idx < 0 || idx >= chars.length) {
           throw new RangeError(`string-ref: index ${idx} out of range for a string of length ${chars.length}`);
         }
-        return withInputProvenance([str, k], new ACharacter(this.runCtx, chars[idx]));
+        return withInputProvenance([str, k], new ACharacter(chars[idx]));
       },
     ),
 
@@ -223,7 +223,7 @@ export default new EnvCapability("scheme/strings", {
       { input: [z.string, z.string], output: [z.union([z.exact, z.boolean])] },
       function (this: CallCtx, str, sub) {
         const i = stringValue(str).indexOf(stringValue(sub));
-        return withInputProvenance([str, sub], i === -1 ? bool(false) : new AExact(this.runCtx, i));
+        return withInputProvenance([str, sub], i === -1 ? bool(false) : new AExact(i));
       },
     ),
 
@@ -252,7 +252,7 @@ export default new EnvCapability("scheme/strings", {
         const endIdx = end === undefined ? chars.length : toIndex(end);
         let result: AListAlike = nil;
         for (let i = endIdx - 1; i >= startIdx; i--)
-          result = new APair(this.runCtx, new ACharacter(this.runCtx, chars[i]), result);
+          result = new APair(new ACharacter(chars[i]), result);
         return result;
       },
     ),
@@ -266,7 +266,7 @@ export default new EnvCapability("scheme/strings", {
           chars.push(charValue(current.car));
           current = current.cdr;
         }
-        return new AString(this.runCtx, chars.join(""));
+        return new AString(chars.join(""));
       },
     ),
 
@@ -278,7 +278,7 @@ export default new EnvCapability("scheme/strings", {
         const endIdx = end === undefined ? chars.length : toIndex(end);
         // The copy is a fresh allocation but semantically the same lineage as `str`
         // (start/end indices don't carry meaning here, they shape the slice).
-        return withInputProvenance([str], new AString(this.runCtx, chars.slice(startIdx, endIdx).join("")));
+        return withInputProvenance([str], new AString(chars.slice(startIdx, endIdx).join("")));
       },
     ),
 
@@ -291,17 +291,17 @@ export default new EnvCapability("scheme/strings", {
     // result still traces to the original infer/query call.
     "string-upcase": symbol.native`string-upcase: uppercase form of the string`(
       { input: [z.string], output: [z.string] },
-      function (this: CallCtx, str) { return withInputProvenance([str], new AString(this.runCtx, stringValue(str).toUpperCase())); },
+      function (this: CallCtx, str) { return withInputProvenance([str], new AString(stringValue(str).toUpperCase())); },
     ),
 
     "string-downcase": symbol.native`string-downcase: lowercase form of the string`(
       { input: [z.string], output: [z.string] },
-      function (this: CallCtx, str) { return withInputProvenance([str], new AString(this.runCtx, stringValue(str).toLowerCase())); },
+      function (this: CallCtx, str) { return withInputProvenance([str], new AString(stringValue(str).toLowerCase())); },
     ),
 
     "string-foldcase": symbol.native`string-foldcase: case-folded form of the string`(
       { input: [z.string], output: [z.string] },
-      function (this: CallCtx, str) { return withInputProvenance([str], new AString(this.runCtx, foldCase(stringValue(str)))); },
+      function (this: CallCtx, str) { return withInputProvenance([str], new AString(foldCase(stringValue(str)))); },
     ),
 
     // proc is the fixed HEAD; the spread strings are the variadic TAIL (inputRest) — mirrors
@@ -338,12 +338,10 @@ export default new EnvCapability("scheme/strings", {
         const results: unknown[] = [];
         for (let i = 0; i < minLen; i++) {
           // Seam-routed: `proc` is a callable VALUE (membrane-boxed), not a bare fn.
-          results.push(applyCallback(proc, strs.map((s) => new ACharacter(runCtx, s[i])), runCtx));
+          results.push(applyCallback(proc, strs.map((s) => new ACharacter(s[i])), runCtx));
         }
         const join = (chars: unknown[]) =>
-          new AString(
-            runCtx,
-            chars.map((c) => (c instanceof ACharacter ? charValue(c) : typeof c === "string" ? c : String(c))).join(""),
+          new AString(chars.map((c) => (c instanceof ACharacter ? charValue(c) : typeof c === "string" ? c : String(c))).join(""),
           );
         // proc may be an async membrane callback → await before joining, so the result
         // is a real string, not "[object Promise][object Promise]…" (see vector-map).
@@ -377,7 +375,7 @@ export default new EnvCapability("scheme/strings", {
         const minLen = Math.min(...strs.map((s) => s.length));
         const pending: unknown[] = [];
         for (let i = 0; i < minLen; i++) {
-          const ret = applyCallback(proc, strs.map((s) => new ACharacter(runCtx, s[i])), runCtx);
+          const ret = applyCallback(proc, strs.map((s) => new ACharacter(s[i])), runCtx);
           if (is_promise(ret)) pending.push(ret);
         }
         // R7RS "unspecified" is theVoid on the scheme face.
@@ -398,9 +396,7 @@ export default new EnvCapability("scheme/strings", {
         // `string` is an AString (grafted String.prototype), the indices AExact/AInexact —
         // unwrap to the JS string + numeric indices the slice operates on. `substring(s,
         // undefined)` means "to the end", so a missing `end` stays undefined.
-        return new AString(
-          this.runCtx,
-          stringValue(string).substring(
+        return new AString(stringValue(string).substring(
             Number(coerceNumeric(start).valueOf()),
             end === undefined ? undefined : Number(coerceNumeric(end).valueOf()),
           ),

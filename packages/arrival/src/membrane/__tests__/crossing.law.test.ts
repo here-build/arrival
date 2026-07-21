@@ -544,9 +544,9 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
       it.todo(entryTitle); // scheme→JS only — no JS value produces this entry form
       it(exitTitle, () => {
         const list = APair.fromArray(CONSTANT_CTX, [
-          new AExact(CONSTANT_CTX, 1),
-          new AExact(CONSTANT_CTX, 2),
-          new AExact(CONSTANT_CTX, 3),
+          new AExact(1),
+          new AExact(2),
+          new AExact(3),
         ]);
         const out = toJS(list);
         // R9: the proxy is observationally a plain array — deep-equal to the eager
@@ -564,7 +564,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         expect(JSON.stringify(out)).toBe("[1,2,3]");
       });
       it(roundTripTitle, () => {
-        const list = APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2)]);
+        const list = APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2)]);
         const out = toJS(list);
         expect(Array.isArray(out)).toBe(true);
         expect(Object.keys(out as object).some((k) => k.startsWith("__"))).toBe(false);
@@ -572,7 +572,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
       it(provenanceTitle, () => {
         // scheme→JS only — no entry side to check; exit must leave the array (and its
         // elements) with no stray `provenance` property.
-        const list = APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1)]);
+        const list = APair.fromArray(CONSTANT_CTX, [new AExact(1)]);
         const out = toJS(list) as unknown[];
         expectNoProvenanceProperty(out);
         expectNoProvenanceProperty(out[0]);
@@ -592,7 +592,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
     case "dotted pair (scheme→JS only)": {
       it.todo(entryTitle); // scheme→JS only
       it(exitTitle, () => {
-        const dotted = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2));
+        const dotted = new APair(new AExact(1), new AExact(2));
         expect(toJS(dotted)).toEqual([1, 2]);
       });
       it(`${exitTitle} — via REAL exec output`, async () => {
@@ -601,13 +601,13 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         expect(out).toEqual([1, 2]);
       });
       it(`${roundTripTitle} — no {__dotted__} escape shape`, () => {
-        const dotted = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2));
+        const dotted = new APair(new AExact(1), new AExact(2));
         const out = toJS(dotted);
         expect(Array.isArray(out)).toBe(true);
         expect(Object.keys(out as object).some((k) => k.startsWith("__"))).toBe(false);
       });
       it(provenanceTitle, () => {
-        const dotted = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2));
+        const dotted = new APair(new AExact(1), new AExact(2));
         const out = toJS(dotted) as unknown[];
         expectNoProvenanceProperty(out);
         expectNoProvenanceProperty(out[0]);
@@ -619,10 +619,10 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
     case "native vector (scheme→JS only)": {
       it.todo(entryTitle); // scheme→JS only — fromJS(array) mints a BORROWED AJSArray, never an AVector
       it(exitTitle, () => {
-        const vec = new AVector(CONSTANT_CTX, [
-          new AExact(CONSTANT_CTX, 1),
-          new AString(CONSTANT_CTX, "two"),
-          new AExact(CONSTANT_CTX, 3),
+        const vec = new AVector([
+          new AExact(1),
+          new AString("two"),
+          new AExact(3),
         ]);
         const out = toJS(vec);
         expect(Array.isArray(out)).toBe(true);
@@ -637,12 +637,12 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         expect(JSON.stringify(out)).toBe('[1,"two",3]');
       });
       it(roundTripTitle, () => {
-        const vec = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1)]);
+        const vec = new AVector([new AExact(1)]);
         const out = toJS(vec) as object;
         expect(Object.keys(out).some((k) => k.startsWith("__"))).toBe(false);
       });
       it(provenanceTitle, () => {
-        const stamped = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1, 1, PROV)], PROV);
+        const stamped = new AVector([new AExact(1, 1, PROV)], PROV);
         const out = toJS(stamped) as unknown[];
         expectNoProvenanceProperty(out);
         expectNoProvenanceProperty(out[0]);
@@ -654,9 +654,9 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
     case "native dict (scheme→JS only)": {
       it.todo(entryTitle); // scheme→JS only — fromJS(object) mints a BORROWED AJSObject, never an ADict
       it(exitTitle, () => {
-        const dict = new ADict(CONSTANT_CTX, [
-          [new ASymbol(CONSTANT_CTX, "a"), new AExact(CONSTANT_CTX, 1)],
-          [new ASymbol(CONSTANT_CTX, "b"), new AString(CONSTANT_CTX, "two")],
+        const dict = new ADict([
+          [new ASymbol("a"), new AExact(1)],
+          [new ASymbol("b"), new AString("two")],
         ]);
         const out = toJS(dict);
         expect(Array.isArray(out)).toBe(false);
@@ -672,12 +672,12 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         expect(JSON.stringify(out)).toBe('{"a":1,"b":"two"}');
       });
       it(roundTripTitle, () => {
-        const dict = new ADict(CONSTANT_CTX, [[new ASymbol(CONSTANT_CTX, "a"), new AExact(CONSTANT_CTX, 1)]]);
+        const dict = new ADict([[new ASymbol("a"), new AExact(1)]]);
         const out = toJS(dict) as object;
         expect(Object.keys(out).some((k) => k.startsWith("__"))).toBe(false);
       });
       it(provenanceTitle, () => {
-        const dict = new ADict(CONSTANT_CTX, [[new ASymbol(CONSTANT_CTX, "a"), new AExact(CONSTANT_CTX, 1, 1, PROV)]], PROV);
+        const dict = new ADict([[new ASymbol("a"), new AExact(1, 1, PROV)]], PROV);
         const out = toJS(dict) as Record<string, unknown>;
         expectNoProvenanceProperty(out);
         expectNoProvenanceProperty(out.a);
@@ -697,18 +697,18 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
 
 describe("R9 lazy egress laws — containers exit as ref-tracking proxies (RULINGS.md R9)", () => {
   it("identity: the same box always egresses as the SAME proxy", () => {
-    const vec = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1)]);
+    const vec = new AVector([new AExact(1)]);
     expect(toJS(vec)).toBe(toJS(vec));
-    const list = APair.fromArray(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1)]);
+    const list = APair.fromArray(CONSTANT_CTX, [new AExact(1)]);
     expect(toJS(list)).toBe(toJS(list));
-    const dict = new ADict(CONSTANT_CTX, [[new ASymbol(CONSTANT_CTX, "a"), new AExact(CONSTANT_CTX, 1)]]);
+    const dict = new ADict([[new ASymbol("a"), new AExact(1)]]);
     expect(toJS(dict)).toBe(toJS(dict));
   });
 
   it("aliasing: a child container shared by two parents egresses as ONE object (reference equality observable from JS)", () => {
-    const child = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 42)]);
-    const parentA = new AVector(CONSTANT_CTX, [child]);
-    const parentB = new ADict(CONSTANT_CTX, [[new ASymbol(CONSTANT_CTX, "kid"), child]]);
+    const child = new AVector([new AExact(42)]);
+    const parentA = new AVector([child]);
+    const parentB = new ADict([[new ASymbol("kid"), child]]);
     const outA = toJS(parentA) as unknown[];
     const outB = toJS(parentB) as Record<string, unknown>;
     expect(outA[0]).toBe(outB.kid);
@@ -720,7 +720,7 @@ describe("R9 lazy egress laws — containers exit as ref-tracking proxies (RULIN
     // JS side, exactly how a host embedding could — the payload array is captured by
     // reference, so pushing after construction closes the cycle.
     const payload: SchemeValue[] = [];
-    const vec = new AVector(CONSTANT_CTX, payload);
+    const vec = new AVector(payload);
     payload.push(vec);
     const out = toJS(vec) as unknown[];
     expect(out[0]).toBe(out); // the reach-back resolves to the SAME proxy, structurally
@@ -730,8 +730,8 @@ describe("R9 lazy egress laws — containers exit as ref-tracking proxies (RULIN
   });
 
   it("laziness: an element's unwrap runs on first read, not at egress (second read is a cache hit — same materialized object)", () => {
-    const inner = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 7)]);
-    const outer = new AVector(CONSTANT_CTX, [inner]);
+    const inner = new AVector([new AExact(7)]);
+    const outer = new AVector([inner]);
     const out = toJS(outer) as unknown[];
     const first = out[0];
     expect(first).toBe(out[0]); // target-as-cache: one materialization, stable identity
@@ -739,7 +739,7 @@ describe("R9 lazy egress laws — containers exit as ref-tracking proxies (RULIN
   });
 
   it("write family throws the taught membrane door (P5 — the egressed value is a projection, not a mailbox)", () => {
-    const vec = new AVector(CONSTANT_CTX, [new AExact(CONSTANT_CTX, 1)]);
+    const vec = new AVector([new AExact(1)]);
     const arr = toJS(vec) as unknown[];
     expect(() => {
       arr[0] = 99;
@@ -749,7 +749,7 @@ describe("R9 lazy egress laws — containers exit as ref-tracking proxies (RULIN
     }).toThrow(/mutations are banned/);
     expect(() => Object.defineProperty(arr, "0", { value: 99 })).toThrow(/mutations are banned/);
     expect(() => Object.setPrototypeOf(arr, null)).toThrow(/mutations are banned/);
-    const dict = new ADict(CONSTANT_CTX, [[new ASymbol(CONSTANT_CTX, "a"), new AExact(CONSTANT_CTX, 1)]]);
+    const dict = new ADict([[new ASymbol("a"), new AExact(1)]]);
     const obj = toJS(dict) as Record<string, unknown>;
     expect(() => {
       obj.a = 99;
@@ -785,11 +785,11 @@ describe.each(VIOLATIONS.map((v) => [v.name, v] as const))("forbidden crossing: 
 
     case "boxed value into fromJS": {
       it(title, () => {
-        const exact = new AExact(CONSTANT_CTX, 42);
+        const exact = new AExact(42);
         // @ts-expect-error type-level: an AValue argument resolves to never — the point of
         // this row is the RUNTIME door, deliberately called past the type-level one.
         expect(() => fromJS(exact)).toThrow(v.door);
-        const pair = new APair(CONSTANT_CTX, new AExact(CONSTANT_CTX, 1), new AExact(CONSTANT_CTX, 2));
+        const pair = new APair(new AExact(1), new AExact(2));
         // @ts-expect-error see above
         expect(() => fromJS(pair)).toThrow(v.door);
       });
@@ -824,8 +824,8 @@ describe.each(VIOLATIONS.map((v) => [v.name, v] as const))("forbidden crossing: 
     case "membrane write": {
       it(title, () => {
         const source: { a: number } = { a: 1 };
-        const obj = new AJSObject(CONSTANT_CTX, source);
-        expect(() => obj.set("a", new AExact(CONSTANT_CTX, 42))).toThrow(v.door);
+        const obj = new AJSObject(source);
+        expect(() => obj.set("a", new AExact(42))).toThrow(v.door);
         expect(source.a).toBe(1); // nothing crossed the boundary
       });
       break;
@@ -834,7 +834,7 @@ describe.each(VIOLATIONS.map((v) => [v.name, v] as const))("forbidden crossing: 
     case "membrane delete": {
       it(title, () => {
         const source: { a: number } = { a: 1 };
-        const obj = new AJSObject(CONSTANT_CTX, source);
+        const obj = new AJSObject(source);
         expect(() => obj.delete("a")).toThrow(v.door);
         expect(source.a).toBe(1);
       });
@@ -904,12 +904,10 @@ describe("egress membrane exit — the two modes and their identity laws", () =>
       name: `test-${tag}`,
       arity: { min: 0, max: null },
       contract: undefined,
-      impl: (_args, runCtx) => new AExact(runCtx, 7),
+      impl: (_args, runCtx) => new AExact(7),
     });
   const dictOf = (entries: ReadonlyArray<readonly [string, SchemeValue | Promise<SchemeValue>]>): ADict =>
-    new ADict(
-      CONSTANT_CTX,
-      entries.map(([k, v]) => [new ASymbol(CONSTANT_CTX, k), v] as const),
+    new ADict(entries.map(([k, v]) => [new ASymbol(k), v] as const),
     );
 
   it("nested callable crosses as a host FUNCTION via schemeToJs AND membrane.toJS (the flip, pinned)", async () => {
@@ -927,7 +925,7 @@ describe("egress membrane exit — the two modes and their identity laws", () =>
   it("depth ≥ 2: the innermost callable crosses as fn under membrane, as string under bare", () => {
     const inner = dictOf([["f", native("deep")]]);
     const outerDict = dictOf([["inner", inner]]);
-    const outerVec = new AVector(CONSTANT_CTX, [inner]);
+    const outerVec = new AVector([inner]);
     const viaDict = schemeToJs(outerDict) as { inner: { f: unknown } };
     expect(typeof viaDict.inner.f).toBe("function");
     const viaVec = schemeToJs(outerVec) as ReadonlyArray<{ f: unknown }>;
@@ -946,7 +944,7 @@ describe("egress membrane exit — the two modes and their identity laws", () =>
   // there is nothing left for this regression test to guard.
 
   it("mode isolation: bare vs mem are distinct, stable slots (the forceBigInt mem:0/mem:1 split retired — one membrane mode now)", () => {
-    const d = dictOf([["n", new AExact(CONSTANT_CTX, 1)]]);
+    const d = dictOf([["n", new AExact(1)]]);
     const bare1 = d["arrival/toJS"]();
     const bare2 = d["arrival/toJS"]();
     expect(bare1).toBe(bare2);

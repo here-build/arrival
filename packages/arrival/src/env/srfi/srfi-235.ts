@@ -121,7 +121,7 @@ export default new EnvCapability("scheme/srfi-235", {
         ` },
         function (this: CallCtx, fn: unknown): AExact {
           const min = is_callable_value(fn) ? fn.arity.min : (fn as (...args: unknown[]) => unknown).length;
-          return new AExact(this.runCtx, min);
+          return new AExact(min);
         },
       ),
   },

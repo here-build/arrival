@@ -48,11 +48,11 @@ describe("equality contract — boxed ≡ unboxed (representation-blind)", () =>
   // this scenario; AString's Setoid keeps the tolerance as harmless, general JS-API-level
   // equality convenience for direct (non-scheme) callers of `equal?`/`structuralEqual`.
   it("string: boxed ≡ unboxed, symmetric, content-discriminating", () => {
-    expect(eq(new AString(CONSTANT_CTX, "f|b"), "f|b")).toBe(true); // boxed vs plain  ← the bug
-    expect(eq("f|b", new AString(CONSTANT_CTX, "f|b"))).toBe(true); // plain vs boxed (symmetry)
-    expect(eq(new AString(CONSTANT_CTX, "f|b"), new AString(CONSTANT_CTX, "f|b"))).toBe(true); // boxed vs boxed
-    expect(eq(new AString(CONSTANT_CTX, "f|b"), "f|c")).toBe(false); // different content
-    expect(eq(new AString(CONSTANT_CTX, "f|b"), 5)).toBe(false); // string vs non-string
+    expect(eq(new AString("f|b"), "f|b")).toBe(true); // boxed vs plain  ← the bug
+    expect(eq("f|b", new AString("f|b"))).toBe(true); // plain vs boxed (symmetry)
+    expect(eq(new AString("f|b"), new AString("f|b"))).toBe(true); // boxed vs boxed
+    expect(eq(new AString("f|b"), "f|c")).toBe(false); // different content
+    expect(eq(new AString("f|b"), 5)).toBe(false); // string vs non-string
   });
 
   // BOOLEANS — same class (plain JS booleans appear via rosetta unwrapping).
@@ -64,9 +64,9 @@ describe("equality contract — boxed ≡ unboxed (representation-blind)", () =>
   // tolerance durable, not scheduled to die. No Setoid-level throw added (see the string
   // row's full reasoning) — retagged from a scheduled inversion to a settled design.
   it("boolean: boxed ≡ unboxed, content-discriminating", () => {
-    expect(eq(new ABool(CONSTANT_CTX, true), true)).toBe(true);
-    expect(eq(true, new ABool(CONSTANT_CTX, true))).toBe(true);
-    expect(eq(new ABool(CONSTANT_CTX, true), false)).toBe(false);
+    expect(eq(new ABool(true), true)).toBe(true);
+    expect(eq(true, new ABool(true))).toBe(true);
+    expect(eq(new ABool(true), false)).toBe(false);
   });
 
   // NUMBERS — boxed ≡ boxed, and the exact/inexact GRADE must survive (R7RS: (equal? 1 1.0) ⇒ #f).
@@ -75,17 +75,17 @@ describe("equality contract — boxed ≡ unboxed (representation-blind)", () =>
   // SchemeExact(1) ≡ plain-1 ≡ SchemeInexact(1.0) by transitivity, collapsing the grade. That's a
   // deferred design question (V). Strings/booleans have no grade, so they ARE representation-blind.
   it("number: boxed ≡ boxed, exact ≠ inexact (grade survives)", () => {
-    expect(eq(new AExact(CONSTANT_CTX, 1, 1), new AExact(CONSTANT_CTX, 1, 1))).toBe(true);
-    expect(eq(new AExact(CONSTANT_CTX, 1, 1), new AExact(CONSTANT_CTX, 2, 1))).toBe(false);
-    expect(eq(new AExact(CONSTANT_CTX, 1, 1), new AInexact(CONSTANT_CTX, 1))).toBe(false); // 1 ≠ 1.0 (grade-strict)
+    expect(eq(new AExact(1, 1), new AExact(1, 1))).toBe(true);
+    expect(eq(new AExact(1, 1), new AExact(2, 1))).toBe(false);
+    expect(eq(new AExact(1, 1), new AInexact(1))).toBe(false); // 1 ≠ 1.0 (grade-strict)
   });
 
   // CHARACTERS & SYMBOLS — always boxed in practice (no plain-JS counterpart), so boxed-vs-boxed
   // is the live case; assert it stays correct (regression guard for the Setoid change).
   it("character & symbol: boxed ≡ boxed, content-discriminating", () => {
-    expect(eq(new ACharacter(CONSTANT_CTX, "a"), new ACharacter(CONSTANT_CTX, "a"))).toBe(true);
-    expect(eq(new ACharacter(CONSTANT_CTX, "a"), new ACharacter(CONSTANT_CTX, "b"))).toBe(false);
-    expect(eq(new ASymbol(CONSTANT_CTX, "x"), new ASymbol(CONSTANT_CTX, "x"))).toBe(true);
-    expect(eq(new ASymbol(CONSTANT_CTX, "x"), new ASymbol(CONSTANT_CTX, "y"))).toBe(false);
+    expect(eq(new ACharacter("a"), new ACharacter("a"))).toBe(true);
+    expect(eq(new ACharacter("a"), new ACharacter("b"))).toBe(false);
+    expect(eq(new ASymbol("x"), new ASymbol("x"))).toBe(true);
+    expect(eq(new ASymbol("x"), new ASymbol("y"))).toBe(false);
   });
 });

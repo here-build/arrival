@@ -16,12 +16,11 @@ import { describe, it, expect } from "vitest";
 import "../../index.js";
 import { AJSObject } from "../AJSObject.js";
 import { AJSArray } from "../AJSArray.js";
-import { CONSTANT_CTX, makeRunContext } from "../../run/RunContext.js";
 
 describe("borrowed-source freeze (rosetta-return prevention)", () => {
   it("AJSObject freezes its source the first time Scheme reads a member", () => {
     const source = { x: 1 };
-    const wrapped = new AJSObject(CONSTANT_CTX, source);
+    const wrapped = new AJSObject(source);
     expect(Object.isFrozen(source)).toBe(false); // borrowed, not yet read
     wrapped.has("x"); // any read entry point arms the freeze
     expect(Object.isFrozen(source)).toBe(true);
@@ -29,25 +28,9 @@ describe("borrowed-source freeze (rosetta-return prevention)", () => {
 
   it("AJSArray freezes its source the first time Scheme reads it", () => {
     const source = [1, 2, 3];
-    const wrapped = new AJSArray(CONSTANT_CTX, source);
+    const wrapped = new AJSArray(source);
     expect(Object.isFrozen(source)).toBe(false);
     void wrapped.length; // even the cheap lazy read arms the freeze
     expect(Object.isFrozen(source)).toBe(true);
-  });
-
-  it("freezeRosettaReturns:false opts out — the borrowed source stays mutable", () => {
-    const looseCtx = makeRunContext({ freezeRosettaReturns: false });
-    const obj = { x: 1 };
-    const arr = [1, 2, 3];
-    new AJSObject(looseCtx, obj).has("x");
-    void new AJSArray(looseCtx, arr).length;
-    expect(Object.isFrozen(obj)).toBe(false);
-    expect(Object.isFrozen(arr)).toBe(false);
-  });
-
-  it("default makeRunContext freezes — the opt-out is opt-IN", () => {
-    const arr = [1];
-    void new AJSArray(makeRunContext({}), arr).length;
-    expect(Object.isFrozen(arr)).toBe(true);
   });
 });

@@ -213,7 +213,7 @@ export const normalizeToJson = (v: unknown): unknown => JSON.parse(JSON.stringif
 export function dataToScheme(v: unknown): SchemeVal {
   if (Array.isArray(v)) {
     let tail: SchemeVal = nil;
-    for (let i = v.length - 1; i >= 0; i--) tail = new APair(CONSTANT_CTX, dataToScheme(v[i]), tail);
+    for (let i = v.length - 1; i >= 0; i--) tail = new APair(dataToScheme(v[i]), tail);
     return tail;
   }
   if (v !== null && typeof v === "object" && (Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null)) {

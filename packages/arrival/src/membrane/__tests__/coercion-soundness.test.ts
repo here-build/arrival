@@ -74,7 +74,7 @@ const listOps = opsOf(listsCap); // r7rs scheme/lists — assoc lives here now
 // ── DR5 helpers (provOf is the canonical one; never `equal?`) ─────────────────
 /** A provenance-bearing scalar element. SchemeString so `unwrapLipsValue` (the
  *  asyncFLMap box-strip) treats it as a real boxed value, not an inert host num. */
-const el = (s: string, p: number) => new AString(CONSTANT_CTX, s, new Set([p]));
+const el = (s: string, p: number) => new AString(s, new Set([p]));
 /** Element-level provenance of a returned collection, in order — the soundness
  *  signal the seal reads (per-element grounding survives the transform). */
 const elemProvs = (r: unknown): number[][] => {
@@ -101,19 +101,19 @@ const idSync = <T>(x: T): T => x;
 const keepAll = () => true;
 const cmp = (a: unknown, b: unknown) => String((a as AString).valueOf()).localeCompare(String((b as AString).valueOf()));
 
-const mkPair = () => new APair(CONSTANT_CTX, el("a", 100), new APair(CONSTANT_CTX, el("b", 101), nil)).withProvenance(new Set([7]));
-const mkVec = () => new AVector(CONSTANT_CTX, [el("a", 100), el("b", 101)], new Set([7]));
+const mkPair = () => new APair(el("a", 100), new APair(el("b", 101), nil)).withProvenance(new Set([7]));
+const mkVec = () => new AVector([el("a", 100), el("b", 101)], new Set([7]));
 // A BORROWED array holds JS-world values only (V's hygiene law, 2026-07-14 — `JSWorldArray` in
 // values/types.ts), so its elements are RAW and carry no lineage of their own. It therefore has
 // exactly ONE origin — the crossing that made it — and every element inherits THAT on the way back
 // in (AJSArray's Option-C discipline). Per-element ids on a borrowed array were always a fiction:
 // a tool returns one JSON payload from one call, and there is no second source to attribute to.
 //
-// The old fixture minted `new AJSArray(ctx, [el("a",100), el("b",101)])` — boxed AValues buried in a
+// The old fixture minted `new AJSArray([el("a",100), el("b",101)])` — boxed AValues buried in a
 // JS store — which production cannot construct and which `jsToScheme` would silently re-stamp anyway.
 // Container id 7 matches mkPair/mkVec above; unlike those OWNED carriers, the elements share it.
 const ARR_ORIGIN = 7;
-const mkArr = () => new AJSArray(CONSTANT_CTX, ["a", "b"], new Set([ARR_ORIGIN]));
+const mkArr = () => new AJSArray(["a", "b"], new Set([ARR_ORIGIN]));
 
 // ════════════════════════════════════════════════════════════════════════════
 // STRATUM 1 — SOUND: per-element provenance survives the structure-preserving
@@ -167,7 +167,7 @@ describe("G6 sound — collectElements over a SchemeVector (repaired)", () => {
   it("length(AJSArray) reads the CONTAINER's own stamp — mkArr's borrowed container carries {7} (the crossing's provenance), so C4's flat read surfaces it", async () => {
     const r = await force(listOps.length(mkArr()));
     expect(Number((r as { valueOf(): unknown }).valueOf())).toBe(2);
-    // Hygiene law (V, 2026-07-14): mkArr() is minted `new AJSArray(ctx, ["a","b"], new
+    // Hygiene law (V, 2026-07-14): mkArr() is minted `new AJSArray(["a","b"], new
     // Set([ARR_ORIGIN]))` — the CONTAINER's own top-level provenance is no longer empty (unlike
     // the old, now-illegal fixture that stamped nothing at the container level and buried boxed
     // AValues in the raw store instead). C4 reads that flat stamp directly — not a deep union of
@@ -254,7 +254,7 @@ describe("G6 sound — sort over a SchemeVector (DR4 fix: container-preserving, 
     expect(provOf(r)).toEqual([7]); // R2/C2: container's own grouping-fact stamp PROXIES through
   });
   it("sort(vector) actually REORDERS (not a passthrough): reversed input comes back sorted", async () => {
-    const reversed = new AVector(CONSTANT_CTX, [el("b", 101), el("a", 100)], new Set([7]));
+    const reversed = new AVector([el("b", 101), el("a", 100)], new Set([7]));
     const r = (await force(reversed[tf("sort")](cmp))) as AVector;
     expect(r.__vector__.map((e) => String((e as AString).valueOf()))).toEqual(["a", "b"]);
     expect(elemProvs(r)).toEqual([[100], [101]]); // boxes ride along through the reorder
@@ -303,7 +303,7 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
     expect(() => mkArr()[tf("cdr")](makeRunContext({ strict: true }))).toThrow(PortabilityError);
   });
   it("assoc(key, alist): the matched pair's key + value boxes both survive", async () => {
-    const alist = new APair(CONSTANT_CTX, new APair(CONSTANT_CTX, el("k", 100), el("v", 101)), nil);
+    const alist = new APair(new APair(el("k", 100), el("v", 101)), nil);
     const found = (await force(listOps.assoc(el("k", 200), alist))) as APair<any, any>;
     expect(provOf(found.car)).toEqual([100]); // key box
     expect(provOf(found.cdr)).toEqual([101]); // value box

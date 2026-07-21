@@ -81,7 +81,7 @@ describe("scheme/polyglot Contract precision — the real exported ops reject wr
     // v2 `dict()` is the open-record codec whose SCHEME face is `ADict | dict-shaped-AJSObject`.
     // A raw ADict decodes (its `arrival/toJS` record); a plain JS object / array / scalar is
     // neither an ADict nor an AJSObject, so `.safeParse` rejects it — the precision this asserts.
-    expect(def.out.safeParse([new ADict(CONSTANT_CTX, [])]).success).toBe(true);
+    expect(def.out.safeParse([new ADict([])]).success).toBe(true);
     expect(def.out.safeParse([{ a: 1, b: "two" }]).success).toBe(false);
     expect(def.out.safeParse([{}]).success).toBe(false);
     expect(def.out.safeParse([["not", "a", "dict"]]).success).toBe(false);

@@ -172,7 +172,7 @@ export default new EnvCapability("scheme/polyglot", {
         // carried by `this: CallCtx` (dispatch's `hostImpl.apply(makeCallCtx(runCtx),
         // args)`, common/capability.ts). Under CONSTANT_CTX the result strings mint
         // run-invisible: outside the run's heap meter, cache, and effect tracking.
-        return names.map((k) => new AString(this.runCtx, k));
+        return names.map((k) => new AString(k));
       },
     ),
     // `dict` — the Scheme-side companion to the `:key` accessor and the `@` read:
@@ -211,11 +211,11 @@ export default new EnvCapability("scheme/polyglot", {
           const key: DictKey =
             raw instanceof ASymbol || raw instanceof AString || raw instanceof ACharacter
               ? raw
-              : new AString(this.runCtx, String(raw).replace(/^:/, ""));
+              : new AString(String(raw).replace(/^:/, ""));
           byName.set(foldKeyName(key), [key, args[i + 1] as SchemeValue]);
         }
         chargeHeap(this.runCtx, byName.size);
-        return new ADict(this.runCtx, [...byName.values()]);
+        return new ADict([...byName.values()]);
       } as unknown as (...args: SchemeValue[]) => ADict,
     ),
 

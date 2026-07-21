@@ -28,7 +28,7 @@ import { bindValue, mintFrame } from "../../AmbientRuntime.js";
 // for this file's lifetime.
 requireEagerOracle();
 
-const stamped = (s: string, ...points: number[]) => new AString(CONSTANT_CTX, s, new Set(points));
+const stamped = (s: string, ...points: number[]) => new AString(s, new Set(points));
 const sorted = (set: Set<number>) => [...set].sort((a, b) => a - b);
 // Literal-string args carry no provenance, so results come back raw (JS boolean/string
 // or a bare SchemeExact); a provenanced input boxes it. Unwrap either shape.
