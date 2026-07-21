@@ -1568,7 +1568,7 @@ function bracketBindingsListError(bindings: AVector, form: string): Error {
   return new EvalError(
     `${form} bindings must be a parenthesized list of pairs — [${rendered}] here is a […] vector literal, not ` +
       `binding syntax. Wrap each binding in parens and the list in parens: (${pairs.join(" ")}).`,
-    { code: "E-LET-BRACKET-BINDINGS-LIST" },
+    { code: "E-LET-BRACKET-BINDINGS-LIST", hint: `(${pairs.join(" ")})` },
   );
 }
 
@@ -1578,11 +1578,19 @@ function bracketBindingsListError(bindings: AVector, form: string): Error {
 function wholeListOddCountError(bindings: AVector, form: string): Error {
   const els = bindings.__vector__;
   const rendered = els.map(String).join(" ");
+  // Two clear readings, neither guessable to a concrete value (the missing value is a
+  // hole): keep the even whole-list, filling it — or reparenthesize into pairs. Both
+  // shapes carry `<value>` where the dropped value belongs. This is the sole bracket
+  // door whose `hint` is a list (see EvalError.hint): the ambiguity is real but bounded.
+  const parenPairs: string[] = [];
+  for (let i = 0; i < els.length; i += 2) {
+    parenPairs.push(i + 1 < els.length ? `(${String(els[i])} ${String(els[i + 1])})` : `(${String(els[i])} <value>)`);
+  }
   return new EvalError(
     `${form} bindings [${rendered}] has an odd number of elements (${els.length}) — a whole-list binding vector ` +
       `is name/value pairs (\`[s1 v1 s2 v2 …]\`), so the count must be even. Add the missing value, or write the ` +
       `bindings as a parenthesized list of pairs.`,
-    { code: "E-LET-BRACKET-BINDINGS-LIST" },
+    { code: "E-LET-BRACKET-BINDINGS-LIST", hint: [`[${rendered} <value>]`, parenPairs.join(" ")] },
   );
 }
 
@@ -1607,7 +1615,7 @@ function bindingArityError(
     `${form} binding [${rendered}] has ${els.length} element${els.length === 1 ? "" : "s"} — a bracketed ${form} ` +
       `binding is ${shape} (${arity}), not ${els.length}. Fix the count, or write the binding with parens: ` +
       `(${rendered}).`,
-    { location, code: "E-LET-BRACKET-BINDING" },
+    { location, code: "E-LET-BRACKET-BINDING", hint: `(${rendered})` },
   );
 }
 
@@ -2087,11 +2095,14 @@ function normalizeClause(clause: SchemeValue, form: string): SchemeValue {
  *  malformed for this form", the clause-position sibling of
  *  `E-LET-BRACKET-BINDINGS-LIST`). */
 function emptyClauseError(form: string): Error {
+  // `case` genuinely has two clause shapes (datum-list clause vs `else` clause), so its
+  // hint is a list; cond/do have the single `[test expr…]` shape.
+  const hint = form === "case" ? ["[(datum…) expr…]", "[else expr…]"] : "[test expr…]";
   return new EvalError(
     `${form} clause [] is empty — a bracketed clause needs at least a test/datum slot ` +
       `(\`[test expr…]\` for cond/do, \`[(datum…) expr…]\` or \`[else expr…]\` for case). ` +
       `Add the missing slot, or remove the empty clause.`,
-    { code: "E-COND-BRACKET-CLAUSE" },
+    { code: "E-COND-BRACKET-CLAUSE", hint },
   );
 }
 
@@ -2109,7 +2120,7 @@ function caseDatumListVectorError(datums: AVector): Error {
   return new EvalError(
     `case clause datum list [${rendered}] is a vector — the datum-list head is data and is never ` +
       `bracket-converted, even inside a bracketed clause. Write it as a parenthesized list: (${rendered}).`,
-    { code: "E-CASE-BRACKET-DATUM-LIST" },
+    { code: "E-CASE-BRACKET-DATUM-LIST", hint: `(${rendered})` },
   );
 }
 
@@ -3016,5 +3027,3 @@ function* evaluateArgs(rest: SchemeValue, ctx: EvalContext): Generator<unknown, 
 
   return args;
 }
-
-export { ArrivalError } from "../errors.js";

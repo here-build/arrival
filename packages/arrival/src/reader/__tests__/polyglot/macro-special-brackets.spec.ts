@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readAst, evalJson, errorClass } from "./_harness.js";
+import { readAst, evalJson, evalError, errorClass, errorHint } from "./_harness.js";
 
 describe("macro-special-brackets / […] as special-form syntax", () => {
   describe("let / let* / named-let / letrec", () => {
@@ -80,32 +80,33 @@ describe("macro-special-brackets / […] as special-form syntax", () => {
       expect(await evalJson(input)).toEqual(value);
     });
 
-    // DOORS — one it.each per error code
-    it.each([
-      { name: "n_let_whole_list_odd_arity", input: "(let [a 1 b] a)", mode: "eval" as const },
-    ])("door E-LET-BRACKET-BINDINGS-LIST · $name", async ({ input, mode }) => {
-      let err: unknown;
-      try {
-        mode === "read" ? await readAst(input) : await evalJson(input);
-      } catch (e) {
-        err = e;
-      }
-      expect(err, "expected E-LET-BRACKET-BINDINGS-LIST, but succeeded").toBeDefined();
+    // DOORS — individual it() per door: these are distinct teaching contracts, not a
+    // homogeneous corpus. Bracket doors are eval-time (the reader accepts every balanced
+    // bracket as data — it lacks the special-form frame to guess intent), so each asserts
+    // BOTH faces: `code` (which door / routing) and `hint` (the corrected form it teaches —
+    // a string when unambiguous, a list when ≥2 clear readings, absent when there's no
+    // single shape to suggest).
+    it("door E-LET-BRACKET-BINDINGS-LIST · odd whole-list arity teaches both fixes", async () => {
+      const err = await evalError("(let [a 1 b] a)");
+      expect(err, "expected E-LET-BRACKET-BINDINGS-LIST, but eval succeeded").toBeDefined();
       expect(errorClass(err)).toBe("E-LET-BRACKET-BINDINGS-LIST");
+      expect(errorHint(err)).toEqual(["[a 1 b <value>]", "(a 1) (b <value>)"]);
     });
 
-    it.each([
-      { name: "n_let_per_element_wrong_length", input: "(let ([a 1 2]) a)", mode: "eval" as const },
-      { name: "n_let_destructuring_name_slot", input: "(let ([[a b] 1]) a)", mode: "eval" as const },
-    ])("door E-LET-BRACKET-BINDING · $name", async ({ input, mode }) => {
-      let err: unknown;
-      try {
-        mode === "read" ? await readAst(input) : await evalJson(input);
-      } catch (e) {
-        err = e;
-      }
-      expect(err, "expected E-LET-BRACKET-BINDING, but succeeded").toBeDefined();
+    it("door E-LET-BRACKET-BINDING · per-element wrong length teaches the paren pair", async () => {
+      const err = await evalError("(let ([a 1 2]) a)");
+      expect(err, "expected E-LET-BRACKET-BINDING, but eval succeeded").toBeDefined();
       expect(errorClass(err)).toBe("E-LET-BRACKET-BINDING");
+      expect(errorHint(err)).toEqual("(a 1 2)");
+    });
+
+    // Destructuring is an unsupported FORM, not a typo — the door routes (code) with no hint,
+    // since there's no single corrected shape to teach.
+    it("door E-LET-BRACKET-BINDING · destructuring name slot routes without a hint", async () => {
+      const err = await evalError("(let ([[a b] 1]) a)");
+      expect(err, "expected E-LET-BRACKET-BINDING, but eval succeeded").toBeDefined();
+      expect(errorClass(err)).toBe("E-LET-BRACKET-BINDING");
+      expect(errorHint(err)).toBeUndefined();
     });
   });
 
@@ -132,18 +133,13 @@ describe("macro-special-brackets / […] as special-form syntax", () => {
       expect(await evalJson(input)).toEqual(value);
     });
 
-    // DOORS — one it.each per error code
-    it.each([
-      { name: "n_do_whole_list_excluded", input: "(do [i 0 (+ i 1)] (= i 3) i)", mode: "eval" as const },
-    ])("door E-LET-BRACKET-BINDINGS-LIST · $name", async ({ input, mode }) => {
-      let err: unknown;
-      try {
-        mode === "read" ? await readAst(input) : await evalJson(input);
-      } catch (e) {
-        err = e;
-      }
-      expect(err, "expected E-LET-BRACKET-BINDINGS-LIST, but succeeded").toBeDefined();
+    // DOORS — `do` excludes the whole-list form (BG2a): its 3-element steps make pairwise
+    // grouping ambiguous, so the door teaches the paren-pairs form instead.
+    it("door E-LET-BRACKET-BINDINGS-LIST · do rejects whole-list, teaches paren pairs", async () => {
+      const err = await evalError("(do [i 0 (+ i 1)] (= i 3) i)");
+      expect(err, "expected E-LET-BRACKET-BINDINGS-LIST, but eval succeeded").toBeDefined();
       expect(errorClass(err)).toBe("E-LET-BRACKET-BINDINGS-LIST");
+      expect(errorHint(err)).toEqual("((i 0) (+ i 1))");
     });
   });
 
@@ -230,33 +226,35 @@ describe("macro-special-brackets / […] as special-form syntax", () => {
       expect(await evalJson(input)).toEqual(value);
     });
 
-    // DOORS — one it.each per error code
-    it.each([
-      { name: "n_cond_empty_bracket_clause", input: "(cond [])", mode: "eval" as const },
-      { name: "n_case_empty_bracket_clause", input: "(case 1 [])", mode: "eval" as const },
-      { name: "n_do_empty_bracket_test_clause", input: "(do ((i 0)) [])", mode: "eval" as const },
-    ])("door E-COND-BRACKET-CLAUSE · $name", async ({ input, mode }) => {
-      let err: unknown;
-      try {
-        mode === "read" ? await readAst(input) : await evalJson(input);
-      } catch (e) {
-        err = e;
-      }
-      expect(err, "expected E-COND-BRACKET-CLAUSE, but succeeded").toBeDefined();
+    // DOORS — the empty bracket clause `[]` shares code E-COND-BRACKET-CLAUSE across
+    // cond/case/do. `case` genuinely has two clause shapes (datum-list clause vs `else`), so
+    // its hint is a list; cond/do have the single `[test expr…]` shape.
+    it("door E-COND-BRACKET-CLAUSE · cond empty clause teaches [test expr…]", async () => {
+      const err = await evalError("(cond [])");
+      expect(err, "expected E-COND-BRACKET-CLAUSE, but eval succeeded").toBeDefined();
       expect(errorClass(err)).toBe("E-COND-BRACKET-CLAUSE");
+      expect(errorHint(err)).toEqual("[test expr…]");
     });
 
-    it.each([
-      { name: "n_case_bracket_datum_list_vector_head", input: "(case 1 [[1 2] \"low\"])", mode: "eval" as const },
-    ])("door E-CASE-BRACKET-DATUM-LIST · $name", async ({ input, mode }) => {
-      let err: unknown;
-      try {
-        mode === "read" ? await readAst(input) : await evalJson(input);
-      } catch (e) {
-        err = e;
-      }
-      expect(err, "expected E-CASE-BRACKET-DATUM-LIST, but succeeded").toBeDefined();
+    it("door E-COND-BRACKET-CLAUSE · case empty clause teaches both clause shapes", async () => {
+      const err = await evalError("(case 1 [])");
+      expect(err, "expected E-COND-BRACKET-CLAUSE, but eval succeeded").toBeDefined();
+      expect(errorClass(err)).toBe("E-COND-BRACKET-CLAUSE");
+      expect(errorHint(err)).toEqual(["[(datum…) expr…]", "[else expr…]"]);
+    });
+
+    it("door E-COND-BRACKET-CLAUSE · do empty test clause teaches [test expr…]", async () => {
+      const err = await evalError("(do ((i 0)) [])");
+      expect(err, "expected E-COND-BRACKET-CLAUSE, but eval succeeded").toBeDefined();
+      expect(errorClass(err)).toBe("E-COND-BRACKET-CLAUSE");
+      expect(errorHint(err)).toEqual("[test expr…]");
+    });
+
+    it("door E-CASE-BRACKET-DATUM-LIST · vector datum-list head teaches the paren list", async () => {
+      const err = await evalError("(case 1 [[1 2] \"low\"])");
+      expect(err, "expected E-CASE-BRACKET-DATUM-LIST, but eval succeeded").toBeDefined();
       expect(errorClass(err)).toBe("E-CASE-BRACKET-DATUM-LIST");
+      expect(errorHint(err)).toEqual("(1 2)");
     });
   });
 });

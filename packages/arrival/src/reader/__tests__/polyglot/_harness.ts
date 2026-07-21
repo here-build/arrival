@@ -74,6 +74,17 @@ function errorClass(e: unknown): string | undefined {
   return undefined;
 }
 
+/** The corrected-form hint an errors-as-doors error carries (`EvalError.hint`) — same
+ *  cause-chain walk as `errorClass`, since eval wraps the door in ArrivalError layers.
+ *  `code` routes, `hint` teaches; a door test asserts both faces. */
+function errorHint(e: unknown): string | string[] | undefined {
+  for (let cur = e; cur instanceof Error; cur = cur.cause as Error | undefined) {
+    const hint = (cur as { hint?: unknown }).hint;
+    if (typeof hint === "string" || Array.isArray(hint)) return hint as string | string[];
+  }
+  return undefined;
+}
+
 /** Parse input, return canonical AST string of the last datum. */
 export async function readAst(input: string): Promise<string> {
   const datums = await parse(input);
@@ -86,4 +97,16 @@ export async function evalJson(input: string): Promise<unknown> {
   return toJson(values.at(-1));
 }
 
-export { errorClass };
+/** Run a door: eval input and return the thrown error, or `undefined` if it wrongly
+ *  succeeded. Bracket-semantic doors are eval-time — the reader accepts every balanced
+ *  bracket as data, so only the special form has the frame to reject (and to guess intent). */
+export async function evalError(input: string): Promise<unknown> {
+  try {
+    await evalJson(input);
+    return undefined;
+  } catch (e) {
+    return e;
+  }
+}
+
+export { errorClass, errorHint };

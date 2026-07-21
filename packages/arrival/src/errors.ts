@@ -104,13 +104,24 @@ export class EvalError extends Error {
 
   location?: SourceLocation;
   code?: unknown;
+  /** The corrected-form the door teaches (errors-as-doors): the concrete shape the
+   *  malformed input should have had. A single string when the fix is unambiguous;
+   *  an array when there are ≥2 clear readings the caller must choose between (e.g.
+   *  an odd whole-list binding vector — fill the missing value, OR reparenthesize).
+   *  Structural sibling of `code`: `code` routes, `hint` teaches. The message renders
+   *  both for humans; consumers (tests, agent surfaces) read the field. */
+  hint?: string | string[];
 
-  constructor(message: string, options?: { location?: SourceLocation; code?: unknown }) {
+  constructor(
+    message: string,
+    options?: { location?: SourceLocation; code?: unknown; hint?: string | string[] },
+  ) {
     const loc = options?.location;
     super(loc ? `${message} at ${formatLocation(loc)}` : message);
     this.name = "EvalError";
     this.location = options?.location;
     this.code = options?.code;
+    this.hint = options?.hint;
   }
 }
 
