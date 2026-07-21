@@ -9,8 +9,8 @@
  * Does not open a second pipeline — greenfield Residual → ts.factory only.
  */
 import type { EmitRegistry } from "../registry/index.js";
+import { greenfieldRegistryFor, openOracleSession } from "../registry/greenfield-session.js";
 import { SchemeSemanticModel } from "../model/model.js";
-import { greenfieldRegistryFor, openOracleSession } from "../oracle/harness.js";
 import { compileScmModule } from "../build/scm-module.js";
 import type { RequireResolution } from "../build/types.js";
 
@@ -54,6 +54,11 @@ export async function compileSource(source: string, opts: CompileSourceOptions =
     return compileWithRegistry(source, opts.registry, runtimeImportPath);
   }
 
+  // No injected registry: assemble a greenfield session and harvest its registry.
+  // `greenfield-session` is tsx-free (unlike the oracle harness), so this stays a
+  // static import and the module remains browser-safe. `openOracleSession` still
+  // needs a node runtime (it builds an arrival session); a browser caller injects a
+  // `registry` via the branch above instead.
   const session = await openOracleSession();
   try {
     return compileWithRegistry(source, greenfieldRegistryFor(session), runtimeImportPath);

@@ -30,7 +30,7 @@
  * execution at all); the two are deliberately separate (P5: "two questions,
  * two planes") and this module does not import from `../wire/`.
  */
-import { oracleEqual, show } from "../oracle/harness.js";
+import { oracleEqual, show } from "../verdict/value-equal.js";
 import type { Witness } from "./witness.js";
 
 /** A leaf's address inside a (possibly nested) output value: an array index

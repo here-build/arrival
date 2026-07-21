@@ -15,7 +15,7 @@ import type { Span } from "../coreform/types.js";
 import { classify } from "../coreform/classify.js";
 import { desugar } from "../front/desugar.js";
 import { parseSexprs } from "../front/parse.js";
-import { greenfieldRegistryFor, openOracleSession } from "../oracle/harness.js";
+import { greenfieldRegistryFor, openOracleSession } from "../registry/greenfield-session.js";
 import { defaultClassifier, type ClassifyFile } from "./classify.js";
 import { compileDataFile, DATA_EXTENSIONS } from "./data-module.js";
 import { foldOverridableExports, type FlowedUpOverridable, type OverridableExport } from "./overridable.js";
