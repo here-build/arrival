@@ -11,8 +11,8 @@
 
 import { AmbientRuntime, mintFrame, mintPlainFrame, isAmbientRuntime } from "../env/AmbientRuntime.js";
 import { user_env, global_env } from "../env/env-roots.js";
-import run, { evaluate, expectValue, ArrivalError, type EvalTap } from "./evaluator.js";
-import { AmbientShapeError, isHostRuntimeBug, OutputContractError } from "../errors.js";
+import run, { evaluate, expectValue, type EvalTap } from "./evaluator.js";
+import { ArrivalError, AmbientShapeError, isHostRuntimeBug, OutputContractError } from "../errors.js";
 import { Resolver } from "./Resolver.js";
 import { Capabilities } from "./Capabilities.js";
 import { LexicalScope } from "./LexicalScope.js";

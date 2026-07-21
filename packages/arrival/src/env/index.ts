@@ -17,22 +17,27 @@
 // visible at this barrel — same convention as the package root.
 
 // ── the assembly kernel — the subpath's original face ──
+// The barrel imports each symbol from its REAL home, not through a passthrough: the
+// assembly machinery from the kernel, the errors from the single error home (errors.ts),
+// the degradation types from the degradation domain (common/degradation.ts). This is the
+// one place the surface is re-collected; the intermediate modules stay leaf.
 export {
   assembleEnv,
   createRuntimeAssembler,
-  AssembleConfigConflictError,
-  AssembleCycleError,
-  AssemblePackError,
-  AssembleLinearizationError,
-  AssemblePackTimeoutError,
   type EnvPack,
   type PackContext,
   type PreludeBindTarget,
   type AssembledEnv,
   type RuntimeAssembler,
-  type DegradedNeed,
-  type DegradedCapability,
 } from "../common/kernel.js";
+export {
+  AssembleConfigConflictError,
+  AssembleCycleError,
+  AssemblePackError,
+  AssembleLinearizationError,
+  AssemblePackTimeoutError,
+} from "../errors.js";
+export { type DegradedNeed, type DegradedCapability } from "../common/degradation.js";
 
 // ── the exec phase products ─────────────────────────────────────────────────────────────
 export {

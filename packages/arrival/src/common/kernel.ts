@@ -17,8 +17,9 @@ import type { DegradedCapability } from "./degradation.js";
 // that carries no activation — every plain kernel pack — simply contributes nothing to the fold).
 import type { Activation } from "./capability.js";
 
-// Errors (teaching, errors-as-doors) live in errors.ts (the single error home); re-exported here
-// so the /env subpath still surfaces the assembly errors to consumers (arrival-chain).
+// Errors (teaching, errors-as-doors) live in errors.ts (the single error home). Imported here for
+// the throw sites below; the /env barrel surfaces them to consumers by importing errors.ts DIRECTLY
+// (no passthrough through this module).
 import {
   AssembleConfigConflictError,
   AssembleCycleError,
@@ -426,12 +427,3 @@ export function createRuntimeAssembler<E>(env: E): RuntimeAssembler<E> {
     },
   };
 }
-
-export {
-  AssembleConfigConflictError,
-  AssembleCycleError,
-  AssemblePackError,
-  AssembleLinearizationError,
-  AssemblePackTimeoutError,
-} from "../errors.js";
-export { type DegradedNeed, type DegradedCapability } from "./degradation.js";

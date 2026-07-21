@@ -40,9 +40,8 @@ import {
   setEagerProvenanceOracleEnabled,
   withInputProvenance,
   mintVerdict,
-  schemeTrue,
-  schemeFalse,
 } from "../../values/op-helpers.js";
+import { schemeTrue, schemeFalse } from "../../values/primitives/ABool.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { fromJs } from "../../membrane/boxing.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";

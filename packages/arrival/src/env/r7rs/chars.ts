@@ -15,7 +15,8 @@ import invariant from "tiny-invariant";
 
 import * as z from "../../common/scheme-zod.js";
 import { symbol, type CallCtx } from "../../common/symbol.js";
-import { charValue, coerceNumeric, deriveOrd, schemeBool as bool, schemeFalse, schemeTrue } from "../../values/op-helpers.js";
+import { charValue, coerceNumeric, deriveOrd, schemeBool as bool } from "../../values/op-helpers.js";
+import { schemeFalse, schemeTrue } from "../../values/primitives/ABool.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { ACharacter } from "../../values/primitives/ACharacter.js";

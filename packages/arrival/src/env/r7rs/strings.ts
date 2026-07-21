@@ -45,7 +45,7 @@ import { is_promise } from "../../eval/guards.js";
 import { promise_all } from "../../utils/promises.js";
 import { EnvCapability } from "../../common/capability.js";
 import { heapBudgetMessage } from "../../heap-budget.js";
-import { ArrivalError } from "../../eval/evaluator.js";
+import { ArrivalError } from "../../errors.js";
 import { ctxOf } from "../../values/primitives/AValue.js";
 import { type AVoid, theVoid } from "../../values/primitives/AVoid.js";
 import {

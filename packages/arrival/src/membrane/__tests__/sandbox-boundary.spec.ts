@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   INTEROP_BOUNDARY,
-  InteropAccessError,
   accessMember,
   accessHas,
   accessKeys,
@@ -9,6 +8,7 @@ import {
   markInteropBoundary,
   isInteropBoundary,
 } from "../interop-access.js";
+import { InteropAccessError } from "../../errors.js";
 
 describe("Sandbox Boundary", () => {
   describe("sandboxedAccess", () => {

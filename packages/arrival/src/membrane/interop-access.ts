@@ -69,11 +69,9 @@ export const INTEROP_BOUNDARY = Symbol("scheme:interop-boundary");
 // Interop Access Error
 // ============================================================================
 
-// InteropAccessError is defined in errors.ts (the single error home) and
-// re-exported here: it is the error these access primitives THROW, so a consumer
-// importing `accessMember` can import the error it catches from the same module
-// (mirrors membrane.ts, the other thrower of this error).
-export { InteropAccessError } from "../errors.js";
+// InteropAccessError (the error these access primitives THROW) is imported from
+// errors.ts — the single error home — at every consumer directly, not laundered
+// through this module.
 
 // ============================================================================
 // Built-in Boundaries

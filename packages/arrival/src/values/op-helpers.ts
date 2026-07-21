@@ -511,9 +511,6 @@ export function withInputProvenance<T>(args: readonly unknown[], result: T): T {
   return result;
 }
 
-// Re-export singletons cluster ops need for direct boolean boxing — single import source.
-export { schemeTrue, schemeFalse } from "./primitives/ABool.js";
-
 /** Scheme face of predicate verdict — shared flyweights (eq?-stable, empty provenance).
  *  Every env pack's boolean-returning native boxes here under the Face split (`z.boolean`
  *  output demands ABool, never raw JS boolean). */
