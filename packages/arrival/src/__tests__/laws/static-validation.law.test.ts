@@ -32,9 +32,12 @@
  *
  *  LAW 7 (error-tier soundness statement, §3.5 — pinned): the error tier is SOUND
  *    modulo the EXCLUDED reachability strictness — a dead-branch reference REPORTS by
- *    design (documented divergence, opt-out on the knob); an impure resolver anywhere
- *    degrades unbound-symbol to `warning` (never a false ERROR); glass (`{env}`) runs
- *    are never validated (no seal ⇒ no claims).
+ *    design (documented divergence, opt-out on the knob); glass (`{env}`) runs are
+ *    never validated (no seal ⇒ no claims). The impure-resolver → `warning` degrade
+ *    this law used to also pin is RETIRED (Stage-0 dead-code removal): the
+ *    capability-facing `ResolverSpec`/`EnvCapability.resolvers` contract had zero live
+ *    users, `CompiledResolutionChain` is now unconditionally the flat-map form, and
+ *    `hasImpureResolver` is permanently `false` — unbound-symbol is ERROR, full stop.
  */
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
@@ -42,7 +45,7 @@ import * as sz from "../../common/scheme-zod.js";
 import { EnvCapability, type SymbolDeclaration } from "../../common/capability.js";
 import { symbol } from "../../common/symbol.js";
 import { exec, parse } from "../../eval/generator-exec.js";
-import { CompiledResolutionChain, CompiledResolver } from "../../eval/CompiledResolutionChain.js";
+import { CompiledResolutionChain } from "../../eval/CompiledResolutionChain.js";
 import { DoorProcedure } from "../../values/primitives/ACallable.js";
 import { Keyword } from "../../values/Keyword.js";
 import { Macro } from "../../eval/Macro.js";
@@ -55,10 +58,10 @@ import type { DoorSymbolDef } from "../../common/symbols/_bake.js";
 
 // ── Fixture helpers ────────────────────────────────────────────────────────────────
 
-/** A one-flat-map sealed chain — the CompiledResolutionChain's own degenerate form,
+/** A one-flat-map sealed chain — the CompiledResolutionChain's own (now only) form,
  *  hand-built so a law row controls the vocabulary EXACTLY. */
-const chainOf = (entries: Record<string, AmbientValue>, extraSteps: CompiledResolver[] = []) =>
-  new CompiledResolutionChain([new Map<string | symbol, AmbientValue>(Object.entries(entries)), ...extraSteps]);
+const chainOf = (entries: Record<string, AmbientValue>) =>
+  new CompiledResolutionChain(new Map<string | symbol, AmbientValue>(Object.entries(entries)));
 
 const door = (name: string, reason: string, cause?: DoorSymbolDef["cause"]): DoorProcedure =>
   new DoorProcedure({ kind: "door", name, reason, ...(cause !== undefined ? { cause } : {}) });
@@ -305,16 +308,11 @@ describe("LAW 7 — error-tier soundness: strict on dead branches (by design), w
     expect(result).toBe(42);
   });
 
-  it("unbound-symbol is ERROR under a pure chain, WARNING when any resolver step is impure", async () => {
+  it("unbound-symbol is ERROR under the (now unconditionally flat) sealed chain", async () => {
     const pure = vocabularyFromChain(chainOf({}));
+    expect(pure.hasImpureResolver).toBe(false); // retired mechanism — always false now
     const forms = await parse("(totally-unknown)");
     expect(validateProgram(forms, pure)[0].severity).toBe("error");
-
-    const impure = vocabularyFromChain(chainOf({}, [new CompiledResolver("test/dynamic", () => undefined, false)]));
-    expect(impure.hasImpureResolver).toBe(true);
-    const [d] = validateProgram(await parse("(totally-unknown)"), impure);
-    expect(d.severity).toBe("warning");
-    expect(d.message).toContain("may still answer it at runtime");
   });
 
   it("GLASS ({env}) runs are never validated — no seal, no claims (§3.5)", async () => {

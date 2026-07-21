@@ -17,7 +17,7 @@ import { z } from "zod";
 
 import type { EnvPack, PackContext, PreludeBindTarget } from "./kernel.js";
 import { type Ref, type Resource, ResourceCell, spinUpAll, windDownAll } from "./resources.js";
-import type { EvalSchemeInto, ResolverSpec, RosettaSpec, SchemeEnv } from "./scheme-env.js";
+import type { EvalSchemeInto, RosettaSpec, SchemeEnv } from "./scheme-env.js";
 import type { AEntity, DefineSymbolDef, DefineSyntaxSymbolDef, DoorSymbolDef } from "./symbol.js";
 import { bindCapabilityDefines, computeCapabilityExports } from "./symbols/define-bake.js";
 import type { AliasSymbolDef } from "./symbols/alias.js";
@@ -169,11 +169,6 @@ export interface CapabilitySpec<C extends ZodMap, R extends Record<string, Resou
    *  legible in the binding name — it does not touch the prelude (which addresses its own
    *  defines). Does NOT apply to deps (each declares its own). */
   symbolPrefix?: string;
-  /** catchall fallback resolvers this capability contributes — registered on the env
-   *  at apply (e.g. the `:key` keyword accessor, the unbounded `c[ad]+r` family). A
-   *  resolver maps a name the env did NOT bind to a value; it may return a membrane
-   *  primitive (the `:key` pluck) — NOT rosetta-wrapped, it IS the membrane. */
-  resolvers?: readonly ResolverSpec[];
   /** DAG edges = capability grants. */
   deps?: readonly EnvCapability[];
   /** the verbs this capability exposes — baked `symbol.native`/`symbol.rosetta`/… declarations
@@ -604,9 +599,6 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
           // `AmbientRuntime` (never a test mock).
           bindRosetta(env, verb, { ...sym, fn: gated } as RosettaFunction);
         }
-        for (const resolver of spec.resolvers ?? []) {
-          env.registerResolver(resolver);
-        }
         if (spec.prelude !== undefined) {
           if (opts.evalScheme === undefined) throw new PreludeArmingError(name);
           // BOOTSTRAP: evaluate against `env` (= R, already re-parented onto the prelude
@@ -626,7 +618,6 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
             ownNames,
             entries: defineEntries,
             deps: spec.deps ?? [],
-            ownResolvers: spec.resolvers ?? [],
             env,
             scope: ctx?.preludeEvalScope ?? env,
             bindTarget,

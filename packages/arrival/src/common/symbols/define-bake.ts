@@ -35,7 +35,7 @@ import { ANativeProcedure, type ACallable } from "../../values/primitives/ACalla
 import { call_function } from "../../eval/call-function.js";
 import { Macro, type MacroInvokeContext } from "../../eval/Macro.js";
 import type { SchemeValue } from "../../values/types.js";
-import type { EvalSchemeInto, ResolverSpec, SchemeEnv } from "../scheme-env.js";
+import type { EvalSchemeInto, SchemeEnv } from "../scheme-env.js";
 import type { PreludeBindTarget } from "../kernel.js";
 import type { AEntity, DefineSymbolDef, DefineSyntaxSymbolDef, ProvenanceRole } from "./_bake.js";
 
@@ -46,12 +46,11 @@ import type { AEntity, DefineSymbolDef, DefineSyntaxSymbolDef, ProvenanceRole } 
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** The slice of `EnvCapability` the allowlist/exports walk needs: identity, its DAG
- *  edges, its declared resolvers, and its memoized `exports()`. */
+ *  edges, and its memoized `exports()`. */
 export interface CapabilityLike {
   readonly name: string;
   readonly spec: {
     readonly deps?: readonly CapabilityLike[];
-    readonly resolvers?: readonly ResolverSpec[];
   };
   exports(): Promise<ReadonlySet<string>>;
 }
@@ -83,9 +82,7 @@ export interface ExportableSpec {
 // capability-declared export anywhere (`env/r7rs/lists.ts`'s own header: "served by
 // a resolver, not this pack") — they're synthesized by a KERNEL-level fallback
 // (`eval/Resolver.ts`'s `cxrUnfold`), consulted only AFTER an ordinary env-lookup
-// miss, ABOVE any capability's own resolvers. No `ResolverSpec` anywhere registers
-// this family, so `resolverAnswers`'s pure-resolver probe (below) can never see it —
-// it must be recognized DIRECTLY, the same way `static-validation/vocabulary.ts`
+// miss. It must be recognized DIRECTLY, the same way `static-validation/vocabulary.ts`
 // (`CXR_RE`) and `eval/Resolver.ts` (`CXR_RE`) already do. Local copy of the SAME
 // regex, per the local-copy convention both of those files document (re-derived,
 // not imported — see vocabulary.ts's own comment on why).
@@ -227,31 +224,6 @@ function transitiveDeps(roots: readonly CapabilityLike[]): CapabilityLike[] {
   };
   for (const r of roots) visit(r);
   return out;
-}
-
-/** The resolver-synth family probe: does some PURE resolver in `deps` (+ the
- *  capability's OWN `ownResolvers`) answer `name`? A resolver's `resolve` may throw
- *  on a name it doesn't recognize (the `c[ad]+r` family's own teaching door) — that
- *  is "did not answer" for this probe's purpose, not a bake-time failure. Only `pure`
- *  resolvers license the allowlist — a `pure: true` declaration promises NAME-STABLE
- *  results, the SAME license `ResolverSpec.pure`'s own doc grants for chain memoization
- *  (scheme-env.ts): an impure resolver might answer differently tomorrow, so it cannot
- *  retroactively justify a bake-time pass. */
-function resolverAnswers(
-  name: string,
-  deps: readonly CapabilityLike[],
-  ownResolvers: readonly ResolverSpec[],
-): boolean {
-  const resolvers = [...ownResolvers, ...transitiveDeps(deps).flatMap((d) => d.spec.resolvers ?? [])];
-  for (const r of resolvers) {
-    if (r.pure !== true) continue;
-    try {
-      if (r.resolve(name) !== undefined) return true;
-    } catch {
-      // did not answer — see doc above.
-    }
-  }
-  return false;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -503,7 +475,6 @@ export interface BindCapabilityDefinesArgs {
    *  DECLARATION order (JS object-key insertion order). */
   readonly entries: readonly (readonly [string, DefineSymbolDef | DefineSyntaxSymbolDef])[];
   readonly deps: readonly CapabilityLike[];
-  readonly ownResolvers: readonly ResolverSpec[];
   /** Where names OUTSIDE this capability's own define set resolve from — the
    *  classifier reads `.provenanceRole` off whatever is ALREADY bound here (phase 1
    *  + deps, thanks to two-phase order). */
@@ -516,7 +487,7 @@ export interface BindCapabilityDefinesArgs {
 }
 
 export async function bindCapabilityDefines(args: BindCapabilityDefinesArgs): Promise<void> {
-  const { capabilityName, ownNames, entries, deps, ownResolvers, env, scope, bindTarget } = args;
+  const { capabilityName, ownNames, entries, deps, env, scope, bindTarget } = args;
   if (entries.length === 0) return;
   invariant(
     args.evalScheme !== undefined,
@@ -545,7 +516,6 @@ export async function bindCapabilityDefines(args: BindCapabilityDefinesArgs): Pr
     for (const name of free) {
       if (allowlist.has(name)) continue;
       if (CXR_RE.test(name)) continue; // resolver-synth family — see CXR_RE's comment above
-      if (resolverAnswers(name, deps, ownResolvers)) continue;
       throw new DefineLocalityError(name, def.name, capabilityName);
     }
     if (!isLambdaForm(body)) {

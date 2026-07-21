@@ -16,13 +16,15 @@
 //   • RESOLVER-SYNTH family — `c[ad]+r` names are synthesized structurally by the
 //     Resolver ABOVE the chain (eval/Resolver.ts cxrUnfold), absent from every
 //     enumerable vocabulary by construction; recognized by the same regex.
-//   • PURE-only resolver probes — a chain resolver step is consulted for a candidate
-//     name iff it declared `pure: true` (name-stable results — the same license the
-//     chain's own memo rides). An IMPURE step anywhere flips `hasImpureResolver`,
-//     degrading every unbound-symbol diagnostic error → warning ("may be answered
-//     dynamically") — honesty over strictness, per-chain, visible.
+//   • `hasImpureResolver` is always `false` in this cut: the sealed chain no longer
+//     carries a resolver-interleaving representation (the capability-facing
+//     `ResolverSpec`/`EnvCapability.resolvers` contract was retired — it had zero live
+//     users; `CompiledResolutionChain` is now unconditionally the flat-map form). The
+//     field stays on `ProgramVocabulary` for the diagnostic-severity contract
+//     (`validate-program.ts`'s error→warning downgrade) in case a future resolver-shaped
+//     producer of this interface (e.g. a glass/roster constructor) needs it.
 
-import { CompiledResolver, type CompiledResolutionChain } from "../eval/CompiledResolutionChain.js";
+import type { CompiledResolutionChain } from "../eval/CompiledResolutionChain.js";
 import { DoorProcedure } from "../values/primitives/ACallable.js";
 import { Keyword } from "../values/Keyword.js";
 import { Macro } from "../eval/Macro.js";
@@ -94,28 +96,9 @@ export function vocabularyFromChain(
   for (const n of scopeNames) names.add(n);
   for (const k of KEYWORD_SYNTAX_BASELINE) names.add(k);
 
-  const hasImpureResolver = chain.steps.some((s) => s instanceof CompiledResolver && !s.pure);
-
-  /** The pure-only chain walk: frozen maps always; resolver steps iff `pure`.
-   *  A pure resolver throwing on an unrecognized name is "did not answer" (the
-   *  `c[ad]+r` family's own teaching door), never a validation failure. */
-  const pureLookup = (name: string): unknown => {
-    for (const step of chain.steps) {
-      if (step instanceof CompiledResolver) {
-        if (!step.pure) continue;
-        try {
-          const hit = step.probe(name);
-          if (hit !== undefined) return hit;
-        } catch {
-          // did not answer — see doc above.
-        }
-      } else {
-        const hit = step.get(name);
-        if (hit !== undefined) return hit;
-      }
-    }
-    return undefined;
-  };
+  // See the module header: the sealed chain carries no resolver-interleaving
+  // representation anymore, so this is unconditionally sound (never a false "pure").
+  const hasImpureResolver = false;
 
   const memo = new Map<string, VocabularyEntry | undefined>();
   const lookupStatic = (name: string): VocabularyEntry | undefined => {
@@ -125,7 +108,7 @@ export function vocabularyFromChain(
       const scoped = opts.scopeLookup?.(name);
       entry = scoped === undefined ? { kind: "value" } : classifyBoundValue(scoped);
     } else {
-      const hit = pureLookup(name);
+      const hit = chain.lookup(name);
       if (hit !== undefined) entry = classifyBoundValue(hit);
       else if (KEYWORD_SYNTAX_BASELINE.has(name)) entry = { kind: "keyword" };
       else if (CXR_RE.test(name)) entry = { kind: "value" };
