@@ -22,7 +22,8 @@ import type { SchemeValue } from "../values/types.js";
 
 import { carrierFieldEdges, scopedBindings, subtreeIds } from "./carrier-fields.js";
 import type { PlainInv } from "./trace-snapshot.js";
-import { scopeId, staticLoopBodyScopes, staticRecursiveHeads, STRUCTURAL_FORMS } from "./trace-to-forest.js";
+import { staticLoopBodyScopes, staticRecursiveHeads, STRUCTURAL_FORMS } from "./trace-to-forest.js";
+import { scopeId } from "./scope-id.js";
 import {
   addPointToHasse,
   appendDecisionEdges,

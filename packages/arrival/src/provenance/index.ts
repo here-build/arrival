@@ -58,16 +58,15 @@ export {
   type LineageWire,
 } from "./trace-to-lineage.js";
 export { collapseMDL, type CollapseParams, type CollapseResult } from "./mdl-collapse.js";
+export { traceToFlowGraph, type FlowGraphOptions } from "./trace-to-flow-graph.js";
 export {
-  traceToFlowGraph,
   flowForwardCone,
   flowBackwardCone,
   type FlowGraph,
   type FlowGraphNode,
   type FlowGraphEdge,
   type FlowNodeKind,
-  type FlowGraphOptions,
-} from "./trace-to-flow-graph.js";
+} from "./flow-graph.js";
 export { traceToFlowGraphNaive } from "./trace-to-flow-graph-naive.js";
 export { traceToChain, type ProvenanceChain, type ChainNode, type ChainEdge } from "./trace-to-chain.js";
 export { regionBoundaries, type RegionBoundary } from "./region-boundaries.js";

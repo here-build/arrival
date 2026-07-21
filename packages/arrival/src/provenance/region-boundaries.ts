@@ -18,7 +18,8 @@
  */
 import { traceToStatechart } from "./statechart.js";
 import { snapshotTrace, type PlainInv } from "./trace-snapshot.js";
-import { scopeId, traceToForest, type CandidateBox } from "./trace-to-forest.js";
+import { traceToForest, type CandidateBox } from "./trace-to-forest.js";
+import { scopeId } from "./scope-id.js";
 import type { EvalTrace } from "./trace.js";
 
 export interface RegionBoundary {

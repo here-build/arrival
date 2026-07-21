@@ -331,5 +331,3 @@ export function traceToForest(trace: EvalTrace, opts: ForestOptions = {}): Candi
   }
   return roots;
 }
-
-export { scopeId } from "./scope-id.js";

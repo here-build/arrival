@@ -14,7 +14,7 @@
 import { describe, expect, it } from "vitest";
 
 import { parse } from "../../eval/generator-exec.js";
-import { scopeId } from "../trace-to-forest.js";
+import { scopeId } from "../scope-id.js";
 
 describe("scopeId", () => {
   it("sourceless located form → head@line:col (unchanged)", async () => {

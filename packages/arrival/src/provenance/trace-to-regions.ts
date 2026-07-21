@@ -23,7 +23,8 @@ import { schemeToSugarcoat } from "@inhuman.tools/arrival-sugarcoat";
 import { carrierFieldEdges, scopedBindings, subtreeIds } from "./carrier-fields.js";
 import { userCallSite } from "./scope-id.js";
 import { snapshotTrace, type PlainInv, type PlainTrace } from "./trace-snapshot.js";
-import { scopeId, staticLoopBodyScopes, staticRecursiveHeads, STRUCTURAL_FORMS } from "./trace-to-forest.js";
+import { staticLoopBodyScopes, staticRecursiveHeads, STRUCTURAL_FORMS } from "./trace-to-forest.js";
+import { scopeId } from "./scope-id.js";
 import type { EvalTrace, Invocation } from "./trace.js";
 import type { SchemeValue } from "../values/types.js";
 

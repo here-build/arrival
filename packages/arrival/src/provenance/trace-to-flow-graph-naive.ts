@@ -28,7 +28,8 @@
 import type { FlowGraph, FlowGraphEdge, FlowGraphNode } from "./flow-graph.js";
 import { regionBoundariesFromEdges } from "./region-boundaries.js";
 import { traceToStatechart } from "./statechart.js";
-import { scopeId, traceToForest, type BoxType, type CandidateBox, type ForestOptions } from "./trace-to-forest.js";
+import { traceToForest, type BoxType, type CandidateBox, type ForestOptions } from "./trace-to-forest.js";
+import { scopeId } from "./scope-id.js";
 import type { EvalTrace, Invocation } from "./trace.js";
 
 /** Box types that are containers (can hold nested work), vs a terminal `leaf`. */
