@@ -9,19 +9,17 @@
 //
 // Per `.claude/rules/tests.md` this is a `__tests__/` verdict (boolean pass/fail).
 
+import { getPreludeFiles, PROGRAM_FILE } from "@inhuman.tools/arrival-internals-types-prelude";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
-import { createBrowserSchemeLanguageService, getBundledPreludeFiles, TS_LIB_FILES } from "../browser.js";
-import { getPreludeFiles, PROGRAM_FILE } from "../prelude.js";
+import { createBrowserSchemeLanguageService, TS_LIB_FILES } from "../browser.js";
 import { stripGlobalValues } from "../ts-lib-strip.js";
 import { TS_DEFAULT_LIB, TS_LIB_FILE_NAMES } from "../ts-libs.generated.js";
 
-describe("prelude bundle — drift guard", () => {
-  it("matches the on-disk prelude byte-for-byte (fix: pnpm generate:bundles)", () => {
-    expect(Object.fromEntries(getBundledPreludeFiles())).toEqual(Object.fromEntries(getPreludeFiles()));
-  });
-});
+// The prelude-loader drift guard (glob map == disk map) now lives in the
+// type-prelude package (both loaders are its own); here we only prove the browser
+// SERVICE answers with no fs.
 
 describe("stripped-lib world — internal coherence guard", () => {
   // The value-strip must leave the lib chain SELF-CONSISTENT: dropping a value

@@ -46,10 +46,6 @@
       "types": "./dist/balance.d.ts",
       "import": "./dist/balance.js"
     },
-    "./virtual-files": {
-      "types": "./dist/virtual-files.d.ts",
-      "import": "./dist/virtual-files.js"
-    },
     "./span-map": {
       "types": "./dist/span-map.d.ts",
       "import": "./dist/span-map.js"
@@ -80,6 +76,7 @@
     "research": "vitest run --config vitest.research.config.ts"
   },
   "dependencies": {
+    "@inhuman.tools/arrival-internals-types-prelude": "workspace:^",
     "@inhuman.tools/arrival-sugarcoat": "workspace:^",
     "@inhuman.tools/arrival-mercury": "workspace:^",
     "typescript": "6.0.2"

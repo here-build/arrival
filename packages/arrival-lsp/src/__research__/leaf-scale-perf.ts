@@ -8,8 +8,9 @@
 //   srfi189-maybe-either,srfi128-comparators,srfi43-vector,conversions-ext,
 //   string-symbol-ops,type-predicates,combinators}.d.ts out, re-run, diff.
 
+import { getPreludeFiles } from "@inhuman.tools/arrival-internals-types-prelude";
+
 import { createSchemeLanguageService } from "../language-service.js";
-import { getPreludeFiles } from "../prelude.js";
 
 const leafCount = [...getPreludeFiles().keys()].filter((k) => k.startsWith("__leaf")).length;
 

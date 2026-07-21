@@ -5,7 +5,8 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 
-import { getPreludeFiles } from "./prelude.js";
+import { getPreludeFiles } from "@inhuman.tools/arrival-internals-types-prelude";
+
 import {
   createSchemeLanguageServiceCore,
   type SchemeLanguageService,

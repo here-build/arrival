@@ -23,7 +23,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 
-import { getPreludeFiles } from "../src/prelude.js";
+import { getPreludeFiles } from "@inhuman.tools/arrival-internals-types-prelude";
+
 import { assembleHostPrelude } from "../src/host-prelude.js";
 import { createSchemeLanguageService } from "../src/language-service.js";
 import { balancePrefix } from "../src/balance.js";

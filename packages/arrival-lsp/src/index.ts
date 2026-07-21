@@ -1,14 +1,3 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-// Resolve under shipped `src/` (tsc does not copy .d.ts into dist/).
-const here = path.dirname(fileURLToPath(import.meta.url));
-const isDist = here.endsWith("dist") || here.includes(`${path.sep}dist${path.sep}`);
-const srcRoot = isDist ? path.join(here, "..", "src") : here;
-
-export const preludeDir = path.join(srcRoot, "prelude");
-export const preludeTypesPath = path.join(preludeDir, "types.d.ts");
-export const builtinsDir = path.join(preludeDir, "builtins");
 export {
   createSchemeLanguageService,
   createSchemeLanguageServiceCore,
@@ -24,7 +13,9 @@ export {
   type SchemeDefinition,
 } from "./language-service.js";
 
-export { getPreludeFiles, PRELUDE_FILE, PROGRAM_FILE } from "./prelude.js";
+// The prelude vocabulary (`getPreludeFiles`, `PRELUDE_FILE`, `PROGRAM_FILE`) and
+// the `.d.ts` builtin surface now live in
+// `@inhuman.tools/arrival-internals-types-prelude` — import them from there.
 export { Mapper, type Mapping, type Span, type LineCol } from "./span-map.js";
 export { narrowByType, type Scanner, type ScannerState, type TypeLens } from "./typed-scanner.js";
 export { assembleHostPrelude, type HostPrelude, type AssembleHostPreludeOptions } from "./host-prelude.js";
