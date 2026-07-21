@@ -210,6 +210,46 @@ export function collectPrelude(caps: readonly EnvCapability[], seen: Set<EnvCapa
   return parts.join("\n");
 }
 
+/** Serialize a capability DAG's scheme-bodied `symbol.define`s as `(define <verb> <body>)`
+ *  source — the type-lens compile-path counterpart to {@link collectPrelude}'s `prelude:`
+ *  strings. A `symbol.define`'s `body` is its RHS EXPRESSION (`(lambda () "string")` for
+ *  `s/string`), bound at runtime under `symbolPrefix + key` (see `apply()`'s Pass-2 loop).
+ *  Emitting the SAME `(define verb body)` lets a type-lens infer each symbol's type FROM ITS
+ *  OWN BODY, so the runtime binding and the editor type derive from one source — no
+ *  hand-authored `.d.ts`, no editorial subset (the drift trap {@link collectPrelude} warns of,
+ *  same reasoning). Deps FIRST (a dependent body may reference a base define — `s/field/string`
+ *  calls `s/field`), deduped by the shared `seen` set exactly like `collectPrelude`.
+ *
+ *  Builder-function `symbols` (need a live `Activation` to enumerate) are skipped — a
+ *  statically-enumerable record is the norm for define-bearing packs, and a type-lens needs no
+ *  activation-specific symbols. Only `kind: "define"` entries emit; every other kind
+ *  (rosetta/native/door/…) is either a JS impl with no scheme body or a keyword/macro the lens
+ *  models elsewhere.
+ *
+ *  NOT for runtime prelude eval: `apply()` already binds these via `bindCapabilityDefines`;
+ *  re-running them as a prelude would double-bind. This output feeds a type-lens `schemePrelude`
+ *  (the editor's compiled scheme vocabulary), never the runtime env. */
+export function collectSymbolDefines(caps: readonly EnvCapability[], seen: Set<EnvCapability> = new Set()): string {
+  const parts: string[] = [];
+  for (const cap of caps) {
+    if (seen.has(cap)) continue;
+    seen.add(cap);
+    if (cap.spec.deps !== undefined) {
+      const depDefines = collectSymbolDefines(cap.spec.deps, seen);
+      if (depDefines !== "") parts.push(depDefines);
+    }
+    const symbols = cap.spec.symbols;
+    if (symbols === undefined || typeof symbols === "function") continue; // builder-fn: needs an Activation — skip
+    const prefix = cap.spec.symbolPrefix ?? "";
+    for (const [key, def] of Object.entries(symbols)) {
+      if (def !== null && typeof def === "object" && "kind" in def && def.kind === "define") {
+        parts.push(`(define ${prefix + key} ${(def as DefineSymbolDef).body})`);
+      }
+    }
+  }
+  return parts.join("\n");
+}
+
 /** A configured, lowerable env capability. The default export of every palette pack. */
 
 export class EnvCapability<C extends ZodMap = any, R extends Record<string, Resource<unknown>> = any> {
