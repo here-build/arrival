@@ -542,28 +542,20 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     return [this.car, this.cdr];
   }
 
-  // R9 lazy egress: the spine snapshots ONCE at proxy creation (an O(n) pointer copy —
-  // a linked spine can't be lazily indexed without O(n²)); the ELEMENTS stay lazy,
-  // unwrapping through their own `arrival/toJS` on first read. Improper tail folds in
-  // as the last element, per the one-way list→array projection. A cyclic SPINE
-  // still throws the iterator's taught invariant — an infinite list has no finite
-  // array projection; cycles THROUGH elements terminate via the proxy tracker.
+  // R9 lazy egress (TO_JS protocol) — the ONE method, keyed on `exit`. The spine snapshots
+  // ONCE at proxy creation (an O(n) pointer copy — a linked spine can't be lazily indexed
+  // without O(n²)); the ELEMENTS stay lazy. Improper tail folds in as the last element, per
+  // the one-way list→array projection. A cyclic SPINE still throws the iterator's taught
+  // invariant — an infinite list has no finite array projection; cycles THROUGH elements
+  // terminate via the proxy tracker. Bare (no `exit`): elements unwrap through their own
+  // `arrival/toJS`, identity per-box. Membrane (`exit` from egressAValue): elements materialize
+  // through the full recursive crossing, proxy caches per (box, mode, SCOPE) — see
+  // egress-proxy.ts's identity laws.
   // `readonly`: a pair's egress array is a SNAPSHOT, never a handle to mutate the spine through.
   // It is also what lets `AJSArrayList` return its BORROWED source BY IDENTITY — a mutable return
   // type would have forced a cast there, laundering the borrow away and breaking the round-trip
   // law (`schemeToJs(adopt(arr)) === arr`).
-  ["arrival/toJS"](): readonly unknown[] {
-    const spine: SchemeValue[] = [...this];
-    return egressContainerProxy(this, "array", {
-      keys: () => spine.map((_, i) => String(i)),
-      read: (key) => spine[Number(key)],
-    }) as unknown[];
-  }
-
-  // Membrane exit (rosetta's egressAValue is the only builder of `exit`): identical
-  // spine projection, but elements materialize through the full recursive crossing and
-  // the proxy caches per (box, mode, SCOPE) — see egress-proxy.ts's identity laws.
-  ["arrival/toJSMembrane"](exit: MembraneExit): unknown[] {
+  ["arrival/toJS"](exit?: MembraneExit): readonly unknown[] {
     const spine: SchemeValue[] = [...this];
     return egressContainerProxy(
       this,
@@ -572,7 +564,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
         keys: () => spine.map((_, i) => String(i)),
         read: (key) => spine[Number(key)],
       },
-      { membrane: exit },
+      exit ? { membrane: exit } : undefined,
     ) as unknown[];
   }
 
@@ -1213,16 +1205,23 @@ export class AJSArrayList extends APair<SchemeValue, SchemeValue> {
   }
 
   /**
-   * Crossing OUT. At offset 0 the view returns the RAW BORROWED SOURCE — so borrowed-identity
+   * Crossing OUT — keyed on `exit` like every `arrival/toJS`, but the BARE arm is special.
+   * At offset 0 the view returns the RAW BORROWED SOURCE by identity — so borrowed-identity
    * survives a round trip through the spine reading (`schemeToJs(adopt(arr)) === arr`), the
-   * round-tripping-bifunctor law the membrane rests on.
+   * round-tripping-bifunctor law the membrane rests on. Past offset 0, the tail of a borrowed
+   * array has no JS identity to borrow — no object in the host IS that suffix — so the exit is
+   * an honest raw `slice` (copies the suffix's references, does NOT cross them — already better
+   * than APair's exit, whose iterator snapshot boxes every element).
    *
-   * Past offset 0, the tail of a borrowed array has no JS identity to borrow — no object in the
-   * host IS that suffix — so the exit is an honest raw `slice`. Named as a cost, not hidden: it
-   * copies the suffix's references (it does NOT cross them, which is already better than APair's
-   * exit, whose iterator snapshot boxes every element).
+   * The MEMBRANE arm (`exit` present) has no borrowed identity to preserve — a full recursive
+   * crossing is owed (nested callables/containers in the spine view must honor options+scope),
+   * so it ASKS its owner class via `super` (the view reimplements no crossing — see the class
+   * preamble). Overriding ONLY the bare arm (the earlier `arrival/toJSMembrane` split) would
+   * have let this method SHADOW the whole protocol and silently drop the membrane crossing —
+   * the collapse's one real trap.
    */
-  override ["arrival/toJS"](): readonly unknown[] {
+  override ["arrival/toJS"](exit?: MembraneExit): readonly unknown[] {
+    if (exit) return super["arrival/toJS"](exit);
     return this.offset === 0 ? this.owner.source : this.owner.source.slice(this.offset);
   }
 

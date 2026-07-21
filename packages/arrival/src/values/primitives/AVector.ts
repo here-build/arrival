@@ -82,22 +82,14 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     return new AVector(this.ctx, this.__vector__.slice(start, end));
   }
 
-  // Membrane unwrap (TO_JS protocol): a boxed vector crosses to JS as an R9 lazy
-  // egress proxy — observationally a plain array (Array.isArray true, JSON/spread/
-  // iteration work), elements unwrap through their own `arrival/toJS` on first read,
-  // same box → same proxy (egress-proxy.ts owns the tracker and the write doors).
-  ["arrival/toJS"](): readonly unknown[] {
-    const elements = this.__vector__;
-    return egressContainerProxy(this, "array", {
-      keys: () => elements.map((_, i) => String(i)),
-      read: (key) => elements[Number(key)],
-    }) as readonly unknown[];
-  }
-
-  // Membrane exit (rosetta's egressAValue is the only builder of `exit`): identical
-  // read model, but elements materialize through the full recursive crossing and the
-  // proxy caches per (box, mode, SCOPE) — see egress-proxy.ts's identity laws.
-  ["arrival/toJSMembrane"](exit: MembraneExit): readonly unknown[] {
+  // Crossing to JS (TO_JS protocol) — the ONE method, keyed on `exit`. A boxed vector
+  // egresses as an R9 lazy proxy — observationally a plain array (Array.isArray true,
+  // JSON/spread/iteration work), same box → same proxy (egress-proxy.ts owns the tracker
+  // and the write doors). Bare (no `exit`): elements unwrap through their own `arrival/toJS`,
+  // identity per-box. Membrane (`exit` from egressAValue): elements materialize through the
+  // full recursive crossing and the proxy caches per (box, mode, SCOPE) — see egress-proxy.ts's
+  // identity laws.
+  ["arrival/toJS"](exit?: MembraneExit): readonly unknown[] {
     const elements = this.__vector__;
     return egressContainerProxy(
       this,
@@ -106,7 +98,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
         keys: () => elements.map((_, i) => String(i)),
         read: (key) => elements[Number(key)],
       },
-      { membrane: exit },
+      exit ? { membrane: exit } : undefined,
     ) as readonly unknown[];
   }
 

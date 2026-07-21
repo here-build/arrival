@@ -271,8 +271,8 @@ export type AList<Car extends SchemeValue = any, Cdr extends Car extends ANil ? 
   | ANil;
 
 // ── Egress projection modes + the membrane element exit ───────────────────────────
-// (docs/design-history/arrival-egress-membrane-exit.md — the two-protocol split:
-// `arrival/toJS` = serialization projection, `arrival/toJSMembrane` = membrane exit.)
+// (docs/design-history/arrival-egress-membrane-exit.md — ONE crossing protocol
+// `arrival/toJS(exit?)`: no exit = serialization projection, exit present = membrane exit.)
 
 /** The egress projection modes. `bare` = serialization (no options, callables
  *  stringify). `mem` = membrane crossing — the ONE non-bare mode: no RosettaOptions
@@ -293,16 +293,16 @@ export const BARE_MODE: EgressMode = "bare";
 export type WrapperKey = EgressMode | "typed";
 
 /**
- * The membrane's element exit, handed to a container's `arrival/toJSMembrane`
- * (implemented ONLY by the native containers ADict/APair/AVector — see AValue.ts).
- * Built exclusively by rosetta.ts's `egressAValue`; egress-proxy consumes it.
+ * The membrane's element exit, handed to a container's `arrival/toJS(exit)` (only the
+ * native containers ADict/APair/AVector read it — see AValue.ts). Built exclusively by
+ * rosetta.ts's `egressAValue`; egress-proxy consumes it.
  */
 export interface MembraneExit {
   /** Full recursive membrane crossing for one element, running under the PINNED
    *  exporting region scope — closes over `withRegionScope(pinned, () =>
    *  schemeToJsImpl(el, options))`. Handles nested callables (schemeToJsImpl's own
    *  is_callable_value fast path → callableToHostFn, minting under the pinned scope),
-   *  nested containers (the recursion re-enters toJSMembrane with the same options, so
+   *  nested containers (the recursion re-enters `arrival/toJS(exit)` with the same options, so
    *  the same modeKey falls out). */
   element(el: unknown): unknown;
   /** Branded cache-mode discriminator — derived from options CONTENT by rosetta's

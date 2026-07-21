@@ -11,7 +11,7 @@
  *     One module-level WeakMap, exactly the original R9 behavior. Elements
  *     materialize through their own `arrival/toJS` (a nested callable stringifies —
  *     that IS the serialization contract).
- *   • MEMBRANE (`arrival/toJSMembrane(exit)` — rosetta/exec crossings): identity =
+ *   • MEMBRANE (`arrival/toJS(exit)` — rosetta/exec crossings): identity =
  *     (box, mode, SCOPE). The cache lives on the exporting RegionScope
  *     (`RegionScope.egressProxies`), handed in via `MembraneExit.cache`, so a later
  *     invocation re-egressing the same box mints proxies bound to ITS scope instead
@@ -175,8 +175,8 @@ function gatedSlot(gate: TierGate, box: AValue): ProxySlot {
  * `opts.membrane.cache`; gated ⇒ (gate, box); bare ⇒ (box) forever.
  *
  * Identity is guaranteed HERE, at the single chokepoint every container's
- * `arrival/toJS` / `arrival/toJSMembrane` calls — membrane.toJS needs no separate
- * pre-check because protocol dispatch lands in the right slot either way.
+ * `arrival/toJS(exit?)` calls — membrane.toJS needs no separate pre-check because
+ * protocol dispatch lands in the right slot either way.
  */
 export function egressContainerProxy(
   box: AValue,

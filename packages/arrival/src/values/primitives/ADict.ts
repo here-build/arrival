@@ -226,31 +226,22 @@ export class ADict extends AValue {
     return lowered;
   }
 
-  /** R9 lazy egress: folded plain string keys, values unwrapping through their own
-   *  `arrival/toJS` on first read — observationally a plain read-only object; same
-   *  dict → same proxy (egress-proxy.ts owns the tracker and the write doors). A
-   *  pending entry egresses as a Promise OF the unwrapped JS value (the settle chain
-   *  continued through the box's own `arrival/toJS`) — the JS consumer awaits it. */
-  ["arrival/toJS"](): Record<string, unknown> {
-    return egressContainerProxy(this, "object", {
-      keys: () => this.keys(),
-      read: (name) => {
-        const entry = this.get(name);
-        return is_promise(entry)
-          ? entry.then((boxed) => (boxed instanceof AValue ? boxed["arrival/toJS"]() : boxed))
-          : entry;
-      },
-    }) as Record<string, unknown>;
-  }
-
-  // Membrane exit (rosetta's egressAValue is the only builder of `exit`): same folded-key
-  // read model, but a settled entry continues through `exit.element` — the full recursive
-  // crossing under the pinned scope (exit.element's withRegionScope is sync save/restore
-  // inside the microtask continuation, correctly reinstalled at settle time). BENIGN
-  // double-dispatch, by design (do not "fix"): the proxy's materializeElement also passes
-  // the pending PROMISE itself through membrane.element, where schemeToJsImpl's Promise
-  // FFI passthrough returns it unchanged — the real projection is this .then continuation.
-  ["arrival/toJSMembrane"](exit: MembraneExit): Record<string, unknown> {
+  /** R9 lazy egress — the ONE crossing protocol, keyed on `exit`. Folded plain string
+   *  keys; values unwrap lazily on first read; same dict → same proxy (egress-proxy.ts
+   *  owns the tracker and the write doors). A pending entry egresses as a Promise OF the
+   *  unwrapped value — the JS consumer awaits it.
+   *
+   *  Bare (no `exit`, serialization): the settled box continues through its OWN
+   *  `arrival/toJS()`; identity is per-box, forever.
+   *
+   *  Membrane (`exit` from rosetta's egressAValue — its sole builder): the settled box
+   *  continues through `exit.element` — the full recursive crossing under the pinned scope
+   *  (exit.element's withRegionScope is sync save/restore inside the microtask continuation,
+   *  correctly reinstalled at settle time); identity is per (box, mode, scope). BENIGN
+   *  double-dispatch, by design (do not "fix"): the proxy's materializeElement also passes
+   *  the pending PROMISE itself through exit.element, where schemeToJsImpl's Promise FFI
+   *  passthrough returns it unchanged — the real projection is this .then continuation. */
+  ["arrival/toJS"](exit?: MembraneExit): Record<string, unknown> {
     return egressContainerProxy(
       this,
       "object",
@@ -258,10 +249,13 @@ export class ADict extends AValue {
         keys: () => this.keys(),
         read: (name) => {
           const entry = this.get(name);
-          return is_promise(entry) ? entry.then((boxed) => exit.element(boxed)) : entry;
+          if (!is_promise(entry)) return entry;
+          return exit
+            ? entry.then((boxed) => exit.element(boxed))
+            : entry.then((boxed) => (boxed instanceof AValue ? boxed["arrival/toJS"]() : boxed));
         },
       },
-      { membrane: exit },
+      exit ? { membrane: exit } : undefined,
     ) as Record<string, unknown>;
   }
 

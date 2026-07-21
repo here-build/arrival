@@ -77,21 +77,24 @@ export abstract class AValue {
     this.provenance = provenance;
   }
 
-  /** Plain-JS representation for SERIALIZATION (cache / log / HTTP / print-preview) —
-   *  a callable stringifies here, by contract. A global protocol key (like
-   *  `arrival/tagless-final/*`/`arrival/print`), written as a literal at each use
-   *  site rather than declared as a named constant. The MEMBRANE crossing (rosetta /
-   *  exec exits, where a nested callable must become its reverse-membrane host fn
-   *  and options must reach every element) is the SIBLING protocol below — never
-   *  this one. */
-  abstract ["arrival/toJS"](): unknown;
-
-  /** OPTIONAL membrane-crossing protocol — implemented ONLY by the native containers
-   *  (ADict/APair/AVector); a non-container subclass must never declare it (its
-   *  presence IS the dispatch discriminator in rosetta's `egressAValue`, the sole
-   *  builder of the `MembraneExit` handed in). Serialization callers never touch
-   *  this. See values/types.ts#MembraneExit and egress-proxy.ts's identity laws. */
-  ["arrival/toJSMembrane"]?(exit: MembraneExit): unknown;
+  /** Plain-JS projection — the ONE Scheme→JS crossing protocol. Called two ways:
+   *
+   *   • SERIALIZATION (no `exit`): cache / log / HTTP / print-preview. A callable
+   *     stringifies here by contract; a container egresses a lazy proxy whose elements
+   *     unwrap through their OWN `arrival/toJS()` (bare, per-box identity).
+   *   • MEMBRANE crossing (`exit` supplied): rosetta / exec exits, where a nested
+   *     callable must become its reverse-membrane host fn and RosettaOptions must reach
+   *     every element. Only the native containers (ADict/APair/AVector) read `exit` —
+   *     they thread `exit.element` through each element's full recursive crossing under
+   *     the pinned region scope; every scalar ignores it (its JS face is mode-independent).
+   *     `exit` is built exclusively by rosetta's `egressAValue`.
+   *
+   *  A global protocol key (like `arrival/tagless-final/*`/`arrival/print`), written as a
+   *  literal at each use site rather than declared as a named constant. (Formerly split
+   *  into a sibling `arrival/toJSMembrane`; collapsed — `arrival/toJS()` ≡
+   *  `arrival/toJS(bareExit)`, one method keyed on `exit` presence. See
+   *  values/types.ts#MembraneExit and egress-proxy.ts's identity laws.) */
+  abstract ["arrival/toJS"](exit?: MembraneExit): unknown;
 
   /** AValues are immutable — provenance updates mint a new instance. Returns the
    *  `SchemeValue` union (each concrete subclass overrides with its OWN narrower type, which

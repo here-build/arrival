@@ -147,11 +147,13 @@ export function callableToHostFn(value: ACallable, options: RosettaOptions): (..
 }
 
 /**
- * Boxed-AValue egress: containers cross via `arrival/toJSMembrane` (full recursive
- * projection under the caller's options + the PINNED exporting region scope),
- * everything else via its serialization protocol — THE one place the two protocols
- * meet (shared by schemeToJsImpl's AValue branch and membrane.ts#toJS, so the
- * dispatch cannot drift between them).
+ * Boxed-AValue egress: hands every AValue its `MembraneExit` through the ONE crossing
+ * protocol `arrival/toJS(exit)`. A native container (ADict/APair/AVector) reads `exit`
+ * and threads `exit.element` through each element's full recursive projection under the
+ * PINNED exporting region scope; every other AValue ignores `exit` and returns its
+ * serialization face (scalars unwrap; a callable — intercepted before this in
+ * schemeToJsImpl/membrane.toJS — never reaches here). Shared by schemeToJsImpl's AValue
+ * branch and membrane.ts#toJS, so the crossing cannot drift between them.
  *
  * The exporting scope is pinned ONCE here (both rosetta crossings run this inside the live
  * `withRegionScope` window) and every lazy element materialization re-enters it via
@@ -161,10 +163,8 @@ export function callableToHostFn(value: ACallable, options: RosettaOptions): (..
  * tier, trace/display) pin DETACHED_SCOPE.
  */
 export function egressAValue(value: AValue, options: RosettaOptions): unknown {
-  const membrane = value["arrival/toJSMembrane"];
-  if (membrane === undefined) return value["arrival/toJS"]();
   const pinned = currentRegionScope() ?? DETACHED_SCOPE;
-  return membrane.call(value, {
+  return value["arrival/toJS"]({
     element: (el: unknown) => withRegionScope(pinned, () => schemeToJsImpl(el, options)),
     modeKey: modeKeyOf(options),
     cache: pinned.egressProxies,
@@ -208,13 +208,14 @@ function schemeToJsImpl(value: unknown, options: RosettaOptions): unknown {
     return callableToHostFn(value, options);
   }
 
-  // Other boxed shapes: containers via `arrival/toJSMembrane` (full recursive
-  // projection — nested callables/containers all honor `options`), the
-  // rest via `arrival/toJS` — one dispatch, `egressAValue` (shared with membrane.toJS
-  // so the two exits can't drift). Scalars unwrap, containers egress as lazy readonly
-  // proxies (egress-proxy.ts — identity per (box, mode, scope) for membrane, per box
-  // for bare), borrowed wrappers return source identity, ABytevector → raw Uint8Array.
-  // (Callables handled above; Macro/Syntax never a value, can't reach schemeToJs.)
+  // Other boxed shapes: one dispatch through `egressAValue` (shared with membrane.toJS
+  // so the two exits can't drift) — it hands each AValue its `MembraneExit` via the single
+  // `arrival/toJS(exit)` protocol; containers thread it for full recursive projection
+  // (nested callables/containers all honor `options`), scalars ignore it and unwrap.
+  // Containers egress as lazy readonly proxies (egress-proxy.ts — identity per (box, mode,
+  // scope) for membrane, per box for bare), borrowed wrappers return source identity,
+  // ABytevector → raw Uint8Array. (Callables handled above; Macro/Syntax never a value,
+  // can't reach schemeToJs.)
   if (value instanceof AValue) {
     return egressAValue(value, options);
   }

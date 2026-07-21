@@ -894,10 +894,11 @@ describe("forgery guard: a borrowed object's own arrival/*-named key is DATA, ne
 // there is nothing left for force-on-egress to force. See docs/RULINGS.md R4 (VERDICT KILL).
 
 // ── Egress membrane exit laws (docs/design-history/arrival-egress-membrane-exit.md) ──
-// The two-protocol split: `arrival/toJS` = SERIALIZATION (callables stringify — a law,
-// not an accident), `arrival/toJSMembrane` = MEMBRANE crossing (options + reverse-membrane
-// wrappers reach every depth). Identity: bare=(box); membrane=(box, mode, SCOPE).
-describe("egress membrane exit — the two protocols and their identity laws", () => {
+// ONE crossing protocol `arrival/toJS(exit?)`, keyed on `exit`: no exit = SERIALIZATION
+// (callables stringify — a law, not an accident), exit present = MEMBRANE crossing
+// (options + reverse-membrane wrappers reach every depth). Identity: bare=(box);
+// membrane=(box, mode, SCOPE).
+describe("egress membrane exit — the two modes and their identity laws", () => {
   const native = (tag: string): ANativeProcedure =>
     new ANativeProcedure({
       name: `test-${tag}`,
