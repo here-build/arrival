@@ -16,6 +16,7 @@
  */
 import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
+import { makeCallCtx } from "../../run/CallCtx.js";
 import { applyCallback } from "./ACallable.js";
 import { chargeHeap } from "../../heap-budget.js";
 import { is_promise } from "../../eval/guards.js";
@@ -250,7 +251,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
       alternative: "use `vector-map` for vectors",
     });
     chargeHeap(runCtx, this.__vector__.length);
-    const results = this.__vector__.map((v) => applyCallback(fn, [v], runCtx));
+    const results = this.__vector__.map((v) => applyCallback(fn, [v], makeCallCtx(runCtx)));
     // RULINGS.md R2: map is LENGTH-PRESERVING — PROXY the container's own
     // grouping/length-fact stamp through unchanged (mirrors APair's map — "one algebra,
     // every carrier" — the two carriers must agree, not just their element boxes).
@@ -280,7 +281,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     const pred = arg instanceof RegExp ? (x: SchemeValue) => String(x).match(arg) : arg;
     const out: SchemeValue[] = [];
     for (const v of this.__vector__) {
-      const verdict = await applyCallback(pred, [v], runCtx);
+      const verdict = await applyCallback(pred, [v], makeCallCtx(runCtx));
       if (!is_false(verdict)) out.push(v); // R7RS: only #f is false — nil verdicts keep
     }
     // filter is LENGTH-CHANGING — the container's own grouping/length-fact stamp is
@@ -308,7 +309,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     });
     chargeHeap(runCtx, this.__vector__.length);
     let acc = initial;
-    for (const v of this.__vector__) acc = (await applyCallback(fn, [v, acc], runCtx)) as Acc;
+    for (const v of this.__vector__) acc = (await applyCallback(fn, [v, acc], makeCallCtx(runCtx))) as Acc;
     return acc;
   }
 
@@ -379,7 +380,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     });
     const out: SchemeValue[] = [];
     for (const v of this.__vector__) {
-      const verdict = await applyCallback(pred, [v], runCtx);
+      const verdict = await applyCallback(pred, [v], makeCallCtx(runCtx));
       if (is_false(verdict)) break; // R7RS: only #f is false
       out.push(v);
     }
@@ -401,7 +402,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     });
     let i = 0;
     for (; i < this.__vector__.length; i++) {
-      const verdict = await applyCallback(pred, [this.__vector__[i]], runCtx);
+      const verdict = await applyCallback(pred, [this.__vector__[i]], makeCallCtx(runCtx));
       if (is_false(verdict)) break; // R7RS: only #f is false
     }
     const out = this.__vector__.slice(i);

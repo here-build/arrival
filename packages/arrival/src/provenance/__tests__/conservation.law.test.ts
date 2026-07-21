@@ -44,7 +44,7 @@ import { provOf } from "../../provenance/lineage-shadow.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { schemeToJs, type InvocationLike } from "../../membrane/rosetta.js";
 import { EnvCapability } from "../../common/capability.js";
-import { symbol, type RosettaSymbolDef } from "../../common/symbol.js";
+import { symbol, makeCallCtx, type RosettaSymbolDef } from "../../common/symbol.js";
 import * as z from "../../common/scheme-zod.js";
 import { ResolvingAmbient, mintResolvingFrame } from "../../env/AmbientRuntime.js";
 import { ARosettaProcedure } from "../../values/primitives/ACallable.js";
@@ -324,11 +324,12 @@ function invoke(
   opts: { runCtx?: RunContext; currentInvocation?: InvocationLike } | undefined,
   ...args: unknown[]
 ): unknown {
-  // The evaluator's apply-site shape: publish the invocation on the ambient leaf, then
-  // dispatch the apply term with runCtx only — the binder adapter reads the ambient back
-  // into the wrapper's CallCtx (§9 option (c)).
+  // The evaluator's apply-site shape: build the whole CallCtx (runCtx + invocation) ONCE and
+  // thread it through the apply term — the binder adapter no longer reconstructs it from
+  // ambient state (Stage 1a). Still publishes the invocation on the ambient leaf too,
+  // matching what a real dispatch does for nested lambda re-entry.
   return withDynamicCallSite(opts?.currentInvocation, () =>
-    verb[tf("apply")](args as SchemeValue[], opts?.runCtx ?? CONSTANT_CTX),
+    verb[tf("apply")](args as SchemeValue[], makeCallCtx(opts?.runCtx ?? CONSTANT_CTX, opts?.currentInvocation)),
   );
 }
 

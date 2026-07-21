@@ -1,5 +1,10 @@
 import * as z from "zod";
 import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
+import { makeCallCtx } from "../run/CallCtx.js";
+// TYPE-ONLY: erased at compile — see ACallable.ts's own header for why a REAL (value) import of
+// rosetta.ts would risk the scheme-zod ↔ ACallable ↔ rosetta init cycle; a type-only edge here
+// carries no such risk.
+import type { InvocationLike } from "../membrane/rosetta.js";
 
 import { APair } from "../values/primitives/APair.js";
 import { ANil } from "../values/primitives/ANil.js";
@@ -183,7 +188,7 @@ export const value = named("value", z.custom<SchemeValue>(isSchemeValue));
 //   1. `_marshalRunCtx` — an ambient THIS FILE installs and reads (below). Its one
 //      caller today is `procedure()`'s own encode/decode arms, which — unlike every
 //      OTHER codec here — genuinely hold a live RunContext directly (the `impl`'s
-//      own `runCtx` parameter, ACallable.ts's `CallableImpl` contract; or the
+//      own `callCtx.runCtx`, ACallable.ts's `CallableImpl` contract; or the
 //      closed-over `scope.runCtx`), not a re-read of ambient state. Installing it
 //      for the synchronous window of a nested z.decode/z.encode call is strictly
 //      more honest than letting those nested codecs guess from (2) — this ctx is
@@ -900,10 +905,13 @@ export function procedure<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(input?
               const schemeArgs = input
                 ? withMarshalCtx(scope.runCtx, () => jsArgs.map((a) => z.encode(input, a as never)))
                 : jsArgs;
-              // Re-entry nests under exporting invocation via SAME ambient mechanism the
-              // untyped path uses — never through callable's `this`.
+              // Re-entry nests under exporting invocation — threaded WHOLE through the apply
+              // term (`scope.dynSite` IS that invocation) rather than reconstructed downstream;
+              // `withDynamicCallSite` stays for nested lambda re-entry, which still reads it
+              // ambiently at ITS own dispatch (same untyped-path mechanism).
+              const callCtx = makeCallCtx(scope.runCtx, scope.dynSite as InvocationLike | undefined);
               const r = await withDynamicCallSite(scope.dynSite, () =>
-                applyCallback(callable, schemeArgs as SchemeValue[], scope.runCtx),
+                applyCallback(callable, schemeArgs as SchemeValue[], callCtx),
               );
               return output ? withMarshalCtx(scope.runCtx, () => z.decode(output, r as never)) : r;
             });
@@ -915,18 +923,18 @@ export function procedure<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(input?
             name: "<host-procedure>",
             arity: { min: input ? 1 : 0, max: null },
             contract: undefined,
-            // `runCtx` is THIS invocation's live context — `ACallable.ts`'s `CallableImpl`
-            // contract hands it as `impl`'s own second parameter (`this.#impl(args,
-            // runCtx)`), the most direct channel anywhere in this file: no ambient guess
-            // needed. Installed as the marshal ctx for the synchronous decode/encode
-            // calls below, so every per-arg/per-result scalar+container codec
-            // (`marshalCtx()`) mints under THIS run.
-            impl: async (schemeArgs, runCtx) => {
-              const jsArgs = withMarshalCtx(runCtx, () =>
+            // `callCtx.runCtx` is THIS invocation's live run state — `ACallable.ts`'s
+            // `CallableImpl` contract hands the whole `callCtx` as `impl`'s own second
+            // parameter (`this.#impl(args, callCtx)`), the most direct channel anywhere in
+            // this file: no ambient guess needed. `.runCtx` is installed as the marshal ctx
+            // for the synchronous decode/encode calls below, so every per-arg/per-result
+            // scalar+container codec (`marshalCtx()`) mints under THIS run.
+            impl: async (schemeArgs, callCtx) => {
+              const jsArgs = withMarshalCtx(callCtx.runCtx, () =>
                 input ? schemeArgs.map((a) => z.decode(input, a as never)) : schemeArgs,
               );
               const r = await jsFn(...jsArgs);
-              return withMarshalCtx(runCtx, () => (output ? z.encode(output, r as never) : r)) as SchemeValue;
+              return withMarshalCtx(callCtx.runCtx, () => (output ? z.encode(output, r as never) : r)) as SchemeValue;
             },
           }),
       },

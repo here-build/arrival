@@ -320,14 +320,14 @@ export default new EnvCapability("scheme/vectors", {
       },
       function (this: CallCtx, proc: unknown, ...vectors: (AVector | AJSArray)[]) {
         invariant(vectors.length > 0, "vector-map: expected at least one vector argument");
-        const runCtx = this.runCtx;
         const arrays = vectors.map((v) => asVector(v, "vector-map"));
         const minLen = Math.min(...arrays.map((a) => a.length));
         const result: SchemeValue[] = [];
         for (let i = 0; i < minLen; i++) {
           const elements = arrays.map((a) => a[i]);
-          // Seam-routed: `proc` is a callable VALUE now, not a bare fn.
-          result.push(applyCallback(proc, elements, runCtx) as SchemeValue);
+          // Seam-routed: `proc` is a callable VALUE now, not a bare fn. `this` IS the whole
+          // CallCtx dispatch built — thread it, not just `this.runCtx`.
+          result.push(applyCallback(proc, elements, this) as SchemeValue);
         }
         // proc may be an async membrane callback → its results are JS Promises. Mirror
         // the list \`map\` (r7rs/lists.ts): if any slot is a promise, await them all so the
@@ -358,13 +358,13 @@ export default new EnvCapability("scheme/vectors", {
       },
       function (this: CallCtx, proc: unknown, ...vectors: (AVector | AJSArray)[]): AVoid | Promise<AVoid> {
         invariant(vectors.length > 0, "vector-for-each: expected at least one vector argument");
-        const runCtx = this.runCtx;
         const arrays = vectors.map((v) => asVector(v, "vector-for-each"));
         const minLen = Math.min(...arrays.map((a) => a.length));
         const pending: unknown[] = [];
         for (let i = 0; i < minLen; i++) {
           const elements = arrays.map((a) => a[i]);
-          const ret = applyCallback(proc, elements, runCtx);
+          // `this` IS the whole CallCtx dispatch built — thread it, not just `this.runCtx`.
+          const ret = applyCallback(proc, elements, this);
           if (is_promise(ret)) pending.push(ret);
         }
         // Await any async side effects before returning, so for-each does not complete

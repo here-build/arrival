@@ -20,6 +20,7 @@ import { INTEROP_BOUNDARY } from "../../membrane/interop-access.js";
 import type { SeenMap } from "../structural-equal.js";
 import type { MembraneExit, SchemeBounceMarker, SchemeValue } from "../types.js";
 import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 import { LOCATION } from "../../well-known-symbols.js";
 import type { SourceLocation } from "../../errors.js";
 
@@ -283,13 +284,15 @@ export abstract class AValue {
   ): SchemeValue | Promise<SchemeValue>;
   /** Applicable — INVOKE this value as a procedure. Callability IS declaring this term: the
    *  evaluator call-head, the R7RS `apply` builtin, and every HOF dispatch through it uniformly,
-   *  the same `resolveMethod` path `map`/`car` use. `args` are the scheme-value operands, `runCtx`
-   *  is threaded (never via `this` — `this` is the callable value itself, per the receiver
-   *  convention), and `canBounce` opts a lambda into the TCO bounce protocol (native/rosetta
+   *  the same `resolveMethod` path `map`/`car` use. `args` are the scheme-value operands, `callCtx`
+   *  is threaded WHOLE (never via `this` — `this` is the callable value itself, per the receiver
+   *  convention) so the per-call invocation (provenance minting) arrives explicitly instead of
+   *  being reconstructed downstream from ambient state; an impl that needs only the bare run state
+   *  reads `callCtx.runCtx`. `canBounce` opts a lambda into the TCO bounce protocol (native/rosetta
    *  ignore it, only a scheme lambda reads it). */
   ["arrival/tagless-final/apply"]?(
     args: SchemeValue[],
-    runCtx: RunContext,
+    callCtx: CallCtx,
     canBounce?: boolean,
   ): SchemeValue | SchemeBounceMarker | Promise<SchemeValue>;
   /** Keyed member read — a member-carrying term (`AJSObject`, `ADict`, `AJSArray`) answers

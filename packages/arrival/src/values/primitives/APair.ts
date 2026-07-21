@@ -18,6 +18,7 @@
  */
 import { CLASS, CYCLES, DATA, REF } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
+import { makeCallCtx } from "../../run/CallCtx.js";
 import { applyCallback } from "./ACallable.js";
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE, mergeProvenance } from "./AValue.js";
@@ -690,7 +691,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     // term when it's a callable VALUE and otherwise invokes a host fn with an explicit
     // `this = makeCallCtx(runCtx)` (flat `CallCtx`) — fixes the `this=undefined` crash a bare
     // `fn(x)` caused when the callback (e.g. `cadr`, a rosetta) reads `this.runCtx`.
-    const results = elements.map((x) => applyCallback(fn, [x], runCtx));
+    const results = elements.map((x) => applyCallback(fn, [x], makeCallCtx(runCtx)));
     // RULINGS.md R2 (naive-but-explicit strategy): map is
     // LENGTH-PRESERVING — the container's own grouping/length-fact stamp is PROXIED through
     // unchanged onto the rebuilt spine (`withInputProvenance([this], …)` unions `this`'s own
@@ -728,7 +729,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     }
     // Seam-routed (see map above): `pred` is the user callable OR the RegExp-matcher closure —
     // both invoked with a defined `this`, no bare `pred(x)` crash on a `this.runCtx`-reading callee.
-    const verdicts = elements.map((x) => applyCallback(pred, [x], runCtx));
+    const verdicts = elements.map((x) => applyCallback(pred, [x], makeCallCtx(runCtx)));
     // R7RS truthiness: ONLY #f is false — a '()-returning predicate KEEPS the element
     // (nil-as-false here was a private truthiness fork; some/every/if never had it).
     const kept = (verdict: unknown): boolean => !is_false(verdict);
@@ -766,7 +767,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
       if (p.car === undefined && p.cdr instanceof ANil) break; // empty-pair sentinel
       // Seam-routed. The dispatch erases the generic `Acc` return to `CallResult`, so cast back
       // at this boundary — the reducer's result IS an `Acc` (a scheme value).
-      acc = (await applyCallback(fn, [p.car, acc], runCtx)) as Acc;
+      acc = (await applyCallback(fn, [p.car, acc], makeCallCtx(runCtx))) as Acc;
       node = p.cdr;
     }
     return acc;
@@ -852,7 +853,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     let node: unknown = this;
     while (node instanceof APair) {
       if (node.car === undefined && node.cdr instanceof ANil) break; // empty-pair sentinel
-      const verdict = await applyCallback(pred, [node.car], runCtx);
+      const verdict = await applyCallback(pred, [node.car], makeCallCtx(runCtx));
       if (is_false(verdict)) break; // R7RS: only #f is false — nil verdicts continue
       out.push(node.car);
       node = node.cdr;
@@ -871,7 +872,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     let node: SchemeValue = this;
     while (node instanceof APair) {
       if (node.car === undefined && node.cdr instanceof ANil) return node.cdr; // empty-pair sentinel
-      const verdict = await applyCallback(pred, [node.car], runCtx);
+      const verdict = await applyCallback(pred, [node.car], makeCallCtx(runCtx));
       if (is_false(verdict)) return node; // R7RS: only #f is false
       node = node.cdr as SchemeValue;
     }

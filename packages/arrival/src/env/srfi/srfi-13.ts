@@ -39,7 +39,7 @@ import { type } from "../../utils/typecheck.js";
 import { type RunContext } from "../../run/RunContext.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
 import * as z from "../../common/scheme-zod.js";
-import { symbol, type CallCtx } from "../../common/symbol.js";
+import { symbol, type CallCtx, makeCallCtx } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { assertAllocatable, charValue, schemeBool, stringValue, toIndex, withInputProvenance } from "../../values/op-helpers.js";
 import { type ABool } from "../../values/primitives/ABool.js";
@@ -174,7 +174,9 @@ function criterionFlags(
     return chars.map((c) => c === ch);
   }
   // Seam-routed: the criterion predicate is a callable VALUE (membrane-boxed), not a bare fn.
-  const results = chars.map((c) => applyCallback(criterion, [new ACharacter(c)], runCtx));
+  // No live invocation reaches this leaf (only a bare `runCtx` one hop away) — a real CallCtx
+  // with invocation undefined, degraded exactly as the pre-CallCtx-threading path.
+  const results = chars.map((c) => applyCallback(criterion, [new ACharacter(c)], makeCallCtx(runCtx)));
   const collapse = (rs: unknown[]) => rs.map((v) => !is_false(v)); // R7RS: only #f is false
   // pred may be an async membrane callback → await before deciding (see string-map).
   if (results.some(is_promise)) {

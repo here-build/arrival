@@ -11,6 +11,7 @@
 
 import invariant from "tiny-invariant";
 import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
+import { makeCallCtx } from "../run/CallCtx.js";
 import { applyCallback } from "./primitives/ACallable.js";
 import { currentRegionScope, isSilentRegion, recordHostScheduleVerdict } from "../membrane/region-scope.js";
 
@@ -311,7 +312,9 @@ export function deriveSortCompare(
     // gap (no `RegionScope` opens around this comparator loop, so host-schedule/
     // order-attribution provenance isn't recorded here); that needs `withRegionCall`
     // wiring, a distinct design task this fix does not invent.
-    const call = (a: unknown, b: unknown): unknown => applyCallback(comparator, [a, b], runCtx);
+    // No live invocation reaches this leaf (only a bare `runCtx` one hop away) — a real
+    // CallCtx with invocation undefined, degraded exactly as the pre-CallCtx-threading path.
+    const call = (a: unknown, b: unknown): unknown => applyCallback(comparator, [a, b], makeCallCtx(runCtx));
     // Host-schedule wiring: `sort`'s comparator is the canonical order-dependent
     // selector host — its verdict SEQUENCE (not any single verdict) is the record
     // ("the sequence IS the record"). `recordHostScheduleVerdict` already no-ops

@@ -364,17 +364,18 @@ function buildDefineProcedure(verb: string, def: DefineSymbolDef, closureValue: 
     // here too) — tighten from `def.in` when the MCP/type-lens surface consumes it.
     arity: { min: 0, max: null },
     contract: def,
-    // `ANativeProcedure["arrival/tagless-final/apply"]` invokes `impl(args, runCtx)` —
-    // the CALLER's real per-call `RunContext`, never `CONSTANT_CTX`. `impl`'s second
-    // parameter must reach `call_function`'s `{ runCtx }` option below, or the call
-    // silently re-defaults to `CONSTANT_CTX`. Threading `runCtx` through honestly here
-    // is necessary but NOT sufficient on its own: `evalLambda`'s runner (evaluator.ts)
-    // evaluates a lambda's BODY against its DEFINITION-TIME `ctx.runCtx`, not the
-    // call-time one handed to its apply term (call-time runCtx threading is a separate,
-    // later concern) — so this only matters once the closure's OWN definition-time
-    // `ctx.runCtx` is itself consistent across sibling `symbol.define` bodies. See
-    // `evaluateBodies`'s comment (this file, above) for that half of the fix.
-    impl: (rawArgs, runCtx) => {
+    // `ANativeProcedure["arrival/tagless-final/apply"]` invokes `impl(args, callCtx)` —
+    // the whole CallCtx wrapping the CALLER's real per-call `RunContext`, never
+    // `CONSTANT_CTX`. `callCtx.runCtx` must reach `call_function`'s `{ runCtx }` option
+    // below, or the call silently re-defaults to `CONSTANT_CTX`. Threading it through
+    // honestly here is necessary but NOT sufficient on its own: `evalLambda`'s runner
+    // (evaluator.ts) evaluates a lambda's BODY against its DEFINITION-TIME `ctx.runCtx`,
+    // not the call-time one handed to its apply term (call-time runCtx threading is a
+    // separate, later concern) — so this only matters once the closure's OWN
+    // definition-time `ctx.runCtx` is itself consistent across sibling `symbol.define`
+    // bodies. See `evaluateBodies`'s comment (this file, above) for that half of the fix.
+    impl: (rawArgs, callCtx) => {
+      const runCtx = callCtx.runCtx;
       // SPINE ADOPTION runs BEFORE validation — the chart is chosen, THEN the gate judges it.
       //
       // The order is load-bearing, not incidental. A slot declared `z.pair` means "a non-empty

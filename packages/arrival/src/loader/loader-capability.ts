@@ -308,11 +308,9 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
               // registry's own contract IS that its resolver returns a ResolverResult shape (an
               // authoring convention, not something the type system can see through applyCallback's
               // generic seam) — bridge through `unknown` at this one boundary.
-              result = (await applyCallback(
-                registered,
-                [contents, { path }],
-                this.runCtx,
-              )) as unknown as ResolverResult;
+              // `this` IS the whole CallCtx `require` was dispatched with — thread it, not
+              // just `this.runCtx`.
+              result = (await applyCallback(registered, [contents, { path }], this)) as unknown as ResolverResult;
             } else {
               const handler = pickHandler(path, loader.resolvers);
               RequireResolverError.invariant(handler !== undefined, "no-resolver", path);

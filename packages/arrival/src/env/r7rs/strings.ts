@@ -332,13 +332,13 @@ export default new EnvCapability("scheme/strings", {
       },
       function (this: CallCtx, proc: unknown, ...strings: AString[]) {
         invariant(strings.length > 0, "string-map: expected at least one string");
-        const runCtx = this.runCtx;
         const strs = strings.map(stringValue);
         const minLen = Math.min(...strs.map((s) => s.length));
         const results: unknown[] = [];
         for (let i = 0; i < minLen; i++) {
-          // Seam-routed: `proc` is a callable VALUE (membrane-boxed), not a bare fn.
-          results.push(applyCallback(proc, strs.map((s) => new ACharacter(s[i])), runCtx));
+          // Seam-routed: `proc` is a callable VALUE (membrane-boxed), not a bare fn. `this` IS
+          // the whole CallCtx dispatch built — thread it, not just `this.runCtx`.
+          results.push(applyCallback(proc, strs.map((s) => new ACharacter(s[i])), this));
         }
         const join = (chars: unknown[]) =>
           new AString(chars.map((c) => (c instanceof ACharacter ? charValue(c) : typeof c === "string" ? c : String(c))).join(""),
@@ -370,12 +370,12 @@ export default new EnvCapability("scheme/strings", {
       },
       function (this: CallCtx, proc: unknown, ...strings: AString[]): AVoid | Promise<AVoid> {
         invariant(strings.length > 0, "string-for-each: expected at least one string");
-        const runCtx = this.runCtx;
         const strs = strings.map(stringValue);
         const minLen = Math.min(...strs.map((s) => s.length));
         const pending: unknown[] = [];
         for (let i = 0; i < minLen; i++) {
-          const ret = applyCallback(proc, strs.map((s) => new ACharacter(s[i])), runCtx);
+          // `this` IS the whole CallCtx dispatch built — thread it, not just `this.runCtx`.
+          const ret = applyCallback(proc, strs.map((s) => new ACharacter(s[i])), this);
           if (is_promise(ret)) pending.push(ret);
         }
         // R7RS "unspecified" is theVoid on the scheme face.

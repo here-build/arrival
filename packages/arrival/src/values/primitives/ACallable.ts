@@ -1,9 +1,10 @@
-// Every arrival callable is an AValue with an EXPLICIT `run(args, runCtx)` surface,
+// Every arrival callable is an AValue with an EXPLICIT `run(args, callCtx)` surface,
 // replacing the `this = { ctx }` smuggling convention that crashed at every non-evaluator
-// call site (`APair.map` doing `fn(x)`, the membrane, direct JS). `runCtx` is the ONLY
-// threaded context (strict / heapMeter) — it is run-level and cannot be
-// recovered from operands (a quoted literal carries CONSTANT_CTX). Provenance is NOT
-// threaded: it rides the values and is minted only at the rosetta membrane, as `union(args)`.
+// call site (`APair.map` doing `fn(x)`, the membrane, direct JS). `callCtx` is the ONLY
+// threaded context — it wraps the run-level state (strict / heapMeter, via `callCtx.runCtx`)
+// with the per-call invocation (provenance minting), built ONCE at dispatch and threaded
+// whole rather than reconstructed downstream from ambient state. Provenance is NOT threaded
+// separately: it rides the values and is minted only at the rosetta membrane, as `union(args)`.
 //
 // Three concrete callables, sibling classes each extending AValue directly — NO abstract
 // parent. The exported `ACallable` is a UNION of the three concretes, which narrows and
@@ -21,22 +22,21 @@
 // is_callable_value BEFORE this protocol method — so exec() can hand back an ALambda/AProcedure
 // as a callable host fn. This method is reached only when a callable is protocol-dispatched
 // OUTSIDE those exits (e.g. a print path). Keeping rosetta OUT of this file's imports avoids a
-// scheme-zod init cycle (see the makeCallCtx note below).
+// scheme-zod init cycle (see the CallCtx note below).
 
 import { AValue } from "./AValue.js";
-import { type RunContext } from "../../run/RunContext.js";
 import type { SchemeBounceMarker, SchemeValue } from "../types.js";
 import { tf } from "../tagless-final.js";
-// makeCallCtx lives in this same directory (not common/symbols/_bake.ts) specifically so this
-// file never transitively imports common/scheme-zod.ts — that used to close a cycle (scheme-zod
+// CallCtx lives in this same directory (not common/symbols/_bake.ts) specifically so this file
+// never transitively imports common/scheme-zod.ts — that used to close a cycle (scheme-zod
 // imports ACallable for ALambda/etc.; _bake imports scheme-zod) that could leave a
 // z.instanceof(...) codec's captured class permanently undefined, depending on which path
 // entered it first.
-import { makeCallCtx } from "../../run/CallCtx.js";
+import { type CallCtx } from "../../run/CallCtx.js";
 import { PurityError } from "../../errors.js";
 // TYPE-ONLY: erased at compile, so this stays a pure compile-time edge even though
 // common/symbols/_bake.ts has its own runtime path back to this file (via scheme-zod.ts,
-// see the makeCallCtx note above) — a REAL (value) import here would close that cycle.
+// see the CallCtx note above) — a REAL (value) import here would close that cycle.
 import type { DoorSymbolDef } from "../../common/symbols/_bake.js";
 
 /** A callable's return: a settled value, a trampoline bounce (tail-position lambda), or a
@@ -51,9 +51,11 @@ export interface Arity {
 }
 
 /** The impl shape every host-JS callable body targets AFTER the migration: scheme-value args
- *  in, a CallResult out, the run's `runCtx` threaded explicitly (never via `this`). Typed here
- *  as the destination; stage 1 adapts `_bake.ts` to emit it. */
-export type CallableImpl = (args: SchemeValue[], runCtx: RunContext) => CallResult;
+ *  in, a CallResult out, the call's whole `CallCtx` threaded explicitly (never via `this`) —
+ *  the per-call invocation (provenance minting) arrives with it instead of being reconstructed
+ *  downstream from ambient state. An impl that needs only the bare run state reads
+ *  `callCtx.runCtx`. Typed here as the destination; stage 1 adapts `_bake.ts` to emit it. */
+export type CallableImpl = (args: SchemeValue[], callCtx: CallCtx) => CallResult;
 
 // Shared leaf behavior, as free functions the concrete classes delegate to (no abstract
 // parent). A procedure's identity is load-bearing (`(eq? car car)`), so provenance stamping
@@ -83,16 +85,16 @@ export class ALambda extends AValue {
   __name__?: string | symbol;
   /** Positional parameter names, for tracer↔param-slot correlation. */
   __params__?: string[];
-  readonly #runner: (args: SchemeValue[], runCtx: RunContext, canBounce: boolean) => CallResult;
+  readonly #runner: (args: SchemeValue[], callCtx: CallCtx, canBounce: boolean) => CallResult;
 
   constructor(opts: {
     name: string | symbol;
     arity: Arity;
     scope: unknown;
-    runner: (args: SchemeValue[], runCtx: RunContext, canBounce: boolean) => CallResult;
+    runner: (args: SchemeValue[], callCtx: CallCtx, canBounce: boolean) => CallResult;
   }) {
     // A lambda's IDENTITY is minted at bake/define time (evalLambda, named-let), not per
-    // invocation — live work threads `runCtx` per-call through `impl(args, runCtx)`
+    // invocation — live work threads the whole `callCtx` per-call through `impl(args, callCtx)`
     // instead.
     super();
     this.name = opts.name;
@@ -112,8 +114,8 @@ export class ALambda extends AValue {
     return this;
   }
 
-  ["arrival/tagless-final/apply"](args: SchemeValue[], runCtx: RunContext, canBounce = false): CallResult {
-    return this.#runner(args, runCtx, canBounce);
+  ["arrival/tagless-final/apply"](args: SchemeValue[], callCtx: CallCtx, canBounce = false): CallResult {
+    return this.#runner(args, callCtx, canBounce);
   }
 
   ["arrival/tagless-final/equals"](other: unknown): boolean {
@@ -136,7 +138,7 @@ export class ANativeProcedure extends AValue {
   constructor(opts: { name: string | symbol; arity: Arity; contract: unknown; impl: CallableImpl }) {
     // Same reasoning as ALambda's ctor above: a native procedure's IDENTITY is bound
     // once at capability-assembly time (common/capability.ts), never per invocation;
-    // `impl(args, runCtx)` carries the live per-call ctx instead.
+    // `impl(args, callCtx)` carries the live per-call ctx instead.
     super();
     this.name = opts.name;
     this.arity = opts.arity;
@@ -156,8 +158,8 @@ export class ANativeProcedure extends AValue {
     return this;
   }
 
-  ["arrival/tagless-final/apply"](args: SchemeValue[], runCtx: RunContext): CallResult {
-    return this.#impl(args, runCtx);
+  ["arrival/tagless-final/apply"](args: SchemeValue[], callCtx: CallCtx): CallResult {
+    return this.#impl(args, callCtx);
   }
 
   ["arrival/tagless-final/equals"](other: unknown): boolean {
@@ -207,8 +209,8 @@ export class ARosettaProcedure extends AValue {
     return this;
   }
 
-  ["arrival/tagless-final/apply"](args: SchemeValue[], runCtx: RunContext): CallResult {
-    return this.#impl(args, runCtx);
+  ["arrival/tagless-final/apply"](args: SchemeValue[], callCtx: CallCtx): CallResult {
+    return this.#impl(args, callCtx);
   }
   ["arrival/tagless-final/equals"](other: unknown): boolean {
     return callableEquals(this, other);
@@ -280,13 +282,12 @@ export type ACallable = ALambda | ANativeProcedure | ARosettaProcedure | DoorPro
  * The single invocation seam every callback site routes through — the evaluator call-head, the
  * R7RS `apply`, and every HOF that applies an element callback (`APair.map`, `AVector.map`, …).
  * Dispatches the `arrival/tagless-final/apply` term when the callee is a callable VALUE, and
- * falls back to a bare host fn with an EXPLICIT, DEFINED `this = makeCallCtx(runCtx)` (flat
- * `CallCtx`) — the fix for the whole `this=undefined` crash class (`APair.map` used to do a
- * bare `fn(x)`, handing `undefined` to an impl that reads `this.runCtx`). `canBounce` stays
- * false: a HOF-applied callback is never in tail position, so a lambda fully runs rather than
- * returning a bounce the HOF can't trampoline. This seam is what makes the
- * native→ANativeProcedure flip (stage 1) non-breaking — both callee shapes are invoked
- * identically here.
+ * falls back to a bare host fn with an EXPLICIT, DEFINED `this = callCtx` — the fix for the whole
+ * `this=undefined` crash class (`APair.map` used to do a bare `fn(x)`, handing `undefined` to an
+ * impl that reads `this.runCtx`). `canBounce` stays false: a HOF-applied callback is never in
+ * tail position, so a lambda fully runs rather than returning a bounce the HOF can't trampoline.
+ * This seam is what makes the native→ANativeProcedure flip (stage 1) non-breaking — both callee
+ * shapes are invoked identically here.
  */
 // `args` is `readonly unknown[]`, not `SchemeValue[]`: the value algebra surfaces list/vector
 // elements as `unknown` (the spine-walk convention — narrowed at consumption, never asserted at
@@ -295,23 +296,24 @@ export type ACallable = ALambda | ANativeProcedure | ARosettaProcedure | DoorPro
 // `fn` is `unknown` for the same reason: every decoded callback argument funnels here,
 // and a non-callable is doored at runtime (the `not applicable` throw), not silently
 // tolerated by a type-level cast at each of the ~dozen call sites.
-// `runCtx` has no default: a `= CONSTANT_CTX` default would let a caller omit the
-// argument silently (loader-capability.ts's `require` resolver dispatch used to do
-// exactly that; it now threads `this.runCtx`, one hop away). Every remaining
-// CONSTANT_CTX at a call site (op-helpers.ts's `deriveSortCompare`, srfi-1/srfi-13's
-// callback seams) is a literal, grep-able confession rather than a silent fallback.
-export function applyCallback(fn: unknown, args: readonly unknown[], runCtx: RunContext): CallResult {
+// `callCtx` has no default: a defaulted `testCallCtx()` would let a caller omit the argument
+// silently (loader-capability.ts's `require` resolver dispatch used to do exactly that with a
+// bare runCtx; it now threads `this` — the CallCtx it was dispatched with — one hop away).
+// Every remaining `makeCallCtx(runCtx)` at a call site (op-helpers.ts's `deriveSortCompare`,
+// srfi-1/srfi-13's callback seams) is a literal, grep-able confession — a real CallCtx with no
+// invocation — rather than a silent fallback.
+export function applyCallback(fn: unknown, args: readonly unknown[], callCtx: CallCtx): CallResult {
   const term = (fn as Partial<ALambda> | null | undefined)?.[tf("apply")];
   if (typeof term === "function") {
-    return (term as (args: SchemeValue[], runCtx: RunContext, canBounce?: boolean) => CallResult).call(
+    return (term as (args: SchemeValue[], callCtx: CallCtx, canBounce?: boolean) => CallResult).call(
       fn,
       args as SchemeValue[],
-      runCtx,
+      callCtx,
       false,
     );
   }
   if (typeof fn === "function") {
-    return Reflect.apply(fn, makeCallCtx(runCtx), args as unknown[]) as CallResult;
+    return Reflect.apply(fn, callCtx, args as unknown[]) as CallResult;
   }
   throw new TypeError(
     `not applicable: ${fn === null ? "null" : typeof fn === "object" ? "a non-callable value" : typeof fn}`,

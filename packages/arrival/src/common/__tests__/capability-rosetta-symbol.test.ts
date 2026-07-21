@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX, makeRunContext, type RunContext } from "../../run/RunContext.js";
 
 import { EnvCapability } from "../capability.js";
-import { symbol, type RosettaSymbolDef, type CallCtx } from "../symbol.js";
+import { symbol, makeCallCtx, type RosettaSymbolDef, type CallCtx } from "../symbol.js";
 import * as z from "../scheme-zod.js";
 import { ResolvingAmbient, mintResolvingFrame } from "../../env/AmbientRuntime.js";
 import { AString } from "../../values/primitives/AString.js";
@@ -62,17 +62,19 @@ async function wireRosetta(def: RosettaSymbolDef): Promise<ARosettaProcedure> {
   return verbs.verb;
 }
 
-/** Invoke a bound verb the way the REAL evaluator does post-binder-cut: publish the
- *  invocation on the evaluator-owned ambient dynamic call site, then dispatch the
- *  apply term with runCtx only — the binder adapter reads the ambient back into the
- *  wrapper's CallCtx (reverse-membrane-for-callables.md §9, option (c)). */
+/** Invoke a bound verb the way the REAL evaluator does post-binder-cut: build the whole
+ *  `CallCtx` (runCtx + invocation) ONCE and thread it through the apply term — the binder
+ *  adapter no longer reconstructs it from ambient state (reverse-membrane-for-callables.md
+ *  §9, option (c) is retired; Stage 1a threads the invocation explicitly instead). Still
+ *  publishes the invocation on the evaluator-owned ambient dynamic call site too, matching
+ *  what a real dispatch does for nested lambda re-entry. */
 function invoke(
   verb: ARosettaProcedure,
   opts: { runCtx?: RunContext; currentInvocation?: InvocationLike } | undefined,
   ...args: unknown[]
 ): unknown {
   return withDynamicCallSite(opts?.currentInvocation, () =>
-    verb[tf("apply")](args as SchemeValue[], opts?.runCtx ?? CONSTANT_CTX),
+    verb[tf("apply")](args as SchemeValue[], makeCallCtx(opts?.runCtx ?? CONSTANT_CTX, opts?.currentInvocation)),
   );
 }
 

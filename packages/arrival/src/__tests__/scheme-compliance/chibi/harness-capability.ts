@@ -28,10 +28,9 @@
 // `section-begin`/`section-end` steps the runner never executes — no runtime group-stack is
 // needed (unlike v1's `js-test-begin`/`js-test-end`).
 import * as z from "../../../common/scheme-zod.js";
-import { symbol } from "../../../common/symbol.js";
+import { symbol, testCallCtx } from "../../../common/symbol.js";
 import { EnvCapability } from "../../../common/capability.js";
 import { applyCallback } from "../../../values/primitives/ACallable.js";
-import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { ABool } from "../../../values/primitives/ABool.js";
 import { type AVoid, theVoid } from "../../../values/primitives/AVoid.js";
 import { printValue } from "../../../values/print.js";
@@ -80,14 +79,14 @@ export function createChibiHarnessV2(): { capability: EnvCapability; sink: Outco
         async (_name, expectedThunk, actualThunk): Promise<AVoid> => {
           let expected: SchemeValue;
           try {
-            expected = (await applyCallback(expectedThunk, [], CONSTANT_CTX)) as SchemeValue;
+            expected = (await applyCallback(expectedThunk, [], testCallCtx())) as SchemeValue;
           } catch (e) {
             queue.push({ kind: "error", phase: "expected-eval", message: describeError(e) });
             return theVoid;
           }
           let actual: SchemeValue;
           try {
-            actual = (await applyCallback(actualThunk, [], CONSTANT_CTX)) as SchemeValue;
+            actual = (await applyCallback(actualThunk, [], testCallCtx())) as SchemeValue;
           } catch (e) {
             queue.push({ kind: "error", phase: "actual-eval", message: describeError(e) });
             return theVoid;
@@ -96,7 +95,7 @@ export function createChibiHarnessV2(): { capability: EnvCapability; sink: Outco
             if (comparator === undefined) {
               throw new Error("chibi harness v2: comparator not registered (prelude did not run js-register-comparator)");
             }
-            const verdict = await applyCallback(comparator, [expected, actual], CONSTANT_CTX);
+            const verdict = await applyCallback(comparator, [expected, actual], testCallCtx());
             const pass = verdict instanceof ABool ? verdict.value : Boolean(verdict);
             if (pass) queue.push({ kind: "pass" });
             else queue.push({ kind: "fail", expectedRepr: printValue(expected), actualRepr: printValue(actual) });

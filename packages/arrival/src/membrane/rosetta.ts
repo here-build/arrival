@@ -136,8 +136,12 @@ export function callableToHostFn(value: ACallable, options: RosettaOptions): (..
       // A promise-valued arg settles BEFORE boxing (the reverse membrane is already
       // async); a bare Promise reaching jsToScheme doors (jsToSchemeAsyncDoor).
       const schemeArgs = await Promise.all(jsArgs.map(async (a) => jsToScheme(scope.runCtx, await a, options)));
-      // Re-entry trace nests under the exporting invocation (a "child scope"), via SAME ambient mechanism evaluator HOF-boundary wrappers use — never through callable `this`.
-      const raw = await withDynamicCallSite(scope.dynSite, () => applyCallback(value, schemeArgs, scope.runCtx));
+      // Re-entry trace nests under the exporting invocation, threaded WHOLE through the apply
+      // term now (`scope.dynSite` is that same exporting invocation) rather than reconstructed
+      // downstream from ambient state; `withDynamicCallSite` stays too — nested lambda re-entry
+      // still reads it ambiently at ITS own dispatch (evaluator HOF-boundary wrappers).
+      const callCtx = makeCallCtx(scope.runCtx, scope.dynSite as InvocationLike | undefined);
+      const raw = await withDynamicCallSite(scope.dynSite, () => applyCallback(value, schemeArgs, callCtx));
       invariant(!isBounceMarker(raw), "callableToHostFn: a reverse-membrane call resolved to a bounce token");
       // Nested callable in result crosses under SAME scope — one discipline for whole re-entry, not just top-level return.
       return withRegionScope(scope, () => schemeToJs(raw, options));

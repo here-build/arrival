@@ -58,7 +58,14 @@
 // recursion never re-crosses the boundary (one cold decode per outer call). %list-nth /
 // %any-null? / %some / %any / %every / %every-value / zip use that idiom. take/drop are
 // tagless dispatchers. validate:false unused — evidence-gated only.
-import { type CallCtx, type MaybePromise, resolveMethod, symbol, withCallbackRoles } from "../../common/symbol.js";
+import {
+  type CallCtx,
+  type MaybePromise,
+  makeCallCtx,
+  resolveMethod,
+  symbol,
+  withCallbackRoles,
+} from "../../common/symbol.js";
 import dedent from "dedent";
 import { EnvCapability } from "../../common/capability.js";
 import type { EmitCtx, EmitRule } from "../../emit/emit-rule.js";
@@ -195,8 +202,11 @@ function findImpl(arg: (...args: unknown[]) => unknown, list: AListAlike, runCtx
     // as the miss sentinel the way it would in a nil-as-false dialect.
     return schemeFalse;
   }
-  // Seam-routed: `arg` is a callable VALUE (an ANativeProcedure), not a bare fn.
-  return maybeThen(applyCallback(arg, [list.car], runCtx), function (value) {
+  // Seam-routed: `arg` is a callable VALUE (an ANativeProcedure), not a bare fn. No live
+  // invocation reaches this plain recursive call (only a bare `runCtx`, per the header note
+  // above) — a real CallCtx with invocation undefined, degraded exactly as the pre-CallCtx-
+  // threading path.
+  return maybeThen(applyCallback(arg, [list.car], makeCallCtx(runCtx)), function (value) {
     // R7RS truthiness: only #f is false — a '()-returning predicate IS a match
     // (matches some/every/if; nil is never treated as false here).
     if (!is_false(value)) {

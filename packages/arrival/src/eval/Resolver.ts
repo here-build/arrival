@@ -52,13 +52,19 @@ function cxrUnfold(name: string): ANativeProcedure | undefined {
   const steps = [...name.slice(1, -1)].reverse(); // innermost (rightmost) letter applied first
   // The synthesized accessor is an ANativeProcedure, never a bare fn returned into value
   // space. Every invocation route (evaluator call-head, `call_function`'s callable-value
-  // branch, HOFs via `applyCallback`) dispatches the apply term with an EXPLICIT runCtx, so
+  // branch, HOFs via `applyCallback`) dispatches the apply term with an EXPLICIT CallCtx, so
   // strict mode can never silently degrade to a fallback ctx.
   const proc = new ANativeProcedure({
     name,
     arity: { min: 1, max: 1 },
     contract: undefined,
-    impl: ([arg], runCtx) => {
+    impl: ([arg], callCtx) => {
+      // The receivers' own `arrival/tagless-final/car`/`cdr` are a SEPARATE tagless op
+      // (unaffected by this stage) that still takes the bare `runCtx` — read it off the
+      // whole `callCtx` this impl now receives, so `runCtx.strict` still resolves (a raw
+      // `callCtx` has no `.strict` of its own — passing it straight through silently
+      // dropped strict-mode gating).
+      const runCtx = callCtx.runCtx;
       let v: unknown = arg;
       for (const t of steps) {
         const m = (v as Partial<Record<symbol, unknown>> | null | undefined)?.[tf(t === "a" ? "car" : "cdr")];

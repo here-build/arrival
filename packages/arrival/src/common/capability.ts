@@ -28,17 +28,12 @@ import {
   DoorProcedure,
   type CallableImpl,
 } from "../values/primitives/ACallable.js";
-import type { RunContext } from "../run/RunContext.js";
-// The dependency-free ambient leaf (see its header): the evaluator installs the current
-// invocation there at every apply site; the rosetta bind adapter reads it back. No cycle —
-// the leaf imports nothing.
-import { currentDynamicCallSite } from "../eval/dynamic-call-site.js";
-import type { InvocationLike, RosettaFunction } from "../membrane/rosetta.js";
+import type { RosettaFunction } from "../membrane/rosetta.js";
 // `bindRosetta`: the internal rosetta wiring (its retirement ledger lives in AmbientRuntime.ts).
 // Two producers only — this legacy `SymbolDeclaration` bind arm and `provenance/replay.ts`'s
 // playback frame; a third would be suspect.
 import { bindRosetta, bindValue, AmbientRuntime, type AmbientValue, isAmbientRuntime } from "../env/AmbientRuntime.js";
-import { CallCtx, makeCallCtx, type CacheClass, type CallbackRoles, type ProvenanceRole } from "./symbols/_bake.js";
+import { CallCtx, type CacheClass, type CallbackRoles, type ProvenanceRole } from "./symbols/_bake.js";
 import { type SchemeValue } from "../values/types.js";
 import { AliasTargetError, AmbientShapeError, PreludeArmingError } from "../errors.js";
 import {
@@ -420,22 +415,24 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
           //     among the run-kinds has a cacheClass channel.
           //
           //   BOUNDARY CAST — a kind's `run`/`impl` produces scheme values by construction; TS
-          //     sees only `unknown`. The `as … SchemeValue` / `as InvocationLike | undefined`
-          //     narrows are that one seam — the same one rosetta.ts's `rawImpl` and evaluator.ts's
-          //     `ctx.currentInvocation` sites cross.
+          //     sees only `unknown`. The `as … SchemeValue` narrows are that one seam — the same
+          //     one rosetta.ts's `rawImpl` crosses (evaluator.ts's `ctx.currentInvocation as
+          //     InvocationLike | undefined` is the sibling cast at the dispatch sites that BUILD
+          //     the `callCtx` this file now only consumes).
           if (isBakedDef(def)) {
             switch (def.kind) {
               case "native": {
                 // native (§SYMBOL-KINDS): bind a first-class ANativeProcedure, invoked through its
                 // `arrival/tagless-final/apply` term. The impl adapts the term surface
-                // `(args, runCtx)` to the host impl, which reads run-state off `this: CallCtx`
-                // (`makeCallCtx(runCtx)`) — no `this=undefined` crash from a HOF-invoked native.
+                // `(args, callCtx)` to the host impl, which reads run-state off `this: CallCtx` —
+                // the apply term now hands the impl the SAME whole `callCtx` dispatch built (no
+                // reconstruction here), so no `this=undefined` crash from a HOF-invoked native.
                 const hostImpl = def.impl as (this: CallCtx, ...a: unknown[]) => unknown;
                 const proc = new ANativeProcedure({
                   name: verb,
                   arity: { min: 0, max: null }, // see ARITY above
                   contract: def,
-                  impl: (args, runCtx) => hostImpl.apply(makeCallCtx(runCtx), args) as SchemeValue,
+                  impl: (args, callCtx) => hostImpl.apply(callCtx, args) as SchemeValue,
                 });
                 // PROVENANCE STAMP (see above). A native value-op is provenance-transparent —
                 // a pure transform, never a source.
@@ -455,18 +452,18 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 // `run` is the complete ctx-aware wrapper, bound as a first-class
                 // ANativeProcedure invoked through the `arrival/tagless-final/apply` term (P1:
                 // no bare JS functions in env value space — a value is a term both interpreters
-                // can execute). These three kinds read ONLY `this.runCtx`, which the apply term
-                // reconstructs losslessly (`makeCallCtx(runCtx)`); their `.run` shares the call
-                // SHAPE but not a common `this` type (tagless/tagless-guard declare none) — hence
-                // the BOUNDARY CAST below. Resource pre-spawning gates inside the impl when the
-                // capability owns cells.
+                // can execute). These three kinds read ONLY `this.runCtx`, and the apply term now
+                // hands the impl the SAME whole `callCtx` dispatch built — no reconstruction here;
+                // their `.run` shares the call SHAPE but not a common `this` type (tagless/
+                // tagless-guard declare none) — hence the BOUNDARY CAST below. Resource
+                // pre-spawning gates inside the impl when the capability owns cells.
                 const rawRun = def.run as (this: unknown, ...args: unknown[]) => Promise<unknown>;
                 const impl: CallableImpl =
                   cellList.length === 0
-                    ? (args, runCtx) => rawRun.apply(makeCallCtx(runCtx), args) as Promise<SchemeValue>
-                    : async (args, runCtx) => {
+                    ? (args, callCtx) => rawRun.apply(callCtx, args) as Promise<SchemeValue>
+                    : async (args, callCtx) => {
                         await ensureSpawned();
-                        return (await rawRun.apply(makeCallCtx(runCtx), args)) as SchemeValue;
+                        return (await rawRun.apply(callCtx, args)) as SchemeValue;
                       };
                 const proc = new ANativeProcedure({
                   name: verb,
@@ -488,32 +485,28 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 break;
               }
               case "rosetta": {
-                // The per-call INVOCATION reaches the wrapper from the evaluator's ambient
-                // dynamic call site — evaluator-owned state, installed at every apply site
-                // (`setDynamicCallSite(ctx.currentInvocation)` around evalPair /
-                // applyArrowProc / wrapLambda dispatch) — never smuggled by this binder. The
-                // adapter reconstructs the wrapper's `CallCtx` from (runCtx, ambient), so a
-                // SOURCE rosetta's fresh-point mint (`pointProvenance` off the invocation)
-                // works through the apply term exactly as it does through the legacy bare-fn
-                // path (which receives `makeCallCtx(ctx.runCtx, ctx.currentInvocation)` as
-                // `this`). A direct-JS call with no evaluator frame sees no ambient → the
-                // input-union fallback, matching the legacy path's own fallback.
-                // conservation.law's seal-laundering rows gate this equivalence.
+                // The per-call INVOCATION now reaches the wrapper directly through the whole
+                // `callCtx` the apply term dispatches with — built ONCE at the real call site
+                // (the evaluator's dispatch, rosetta.ts's `callableToHostFn`, …) and threaded
+                // WHOLE through apply → here, never reconstructed from ambient state. A
+                // SOURCE rosetta's fresh-point mint (`pointProvenance` off the invocation) works
+                // through the apply term exactly as it does through the legacy bare-fn path
+                // (which received `makeCallCtx(ctx.runCtx, ctx.currentInvocation)` as `this`). A
+                // caller with no live invocation (a direct-JS call, or a dispatcher that only
+                // holds a bare `runCtx`) hands down `makeCallCtx(runCtx)` — invocation undefined
+                // — matching the legacy path's own fallback. conservation.law's seal-laundering
+                // rows gate this equivalence.
                 //
                 // Bind via `set`, NOT bindRosetta — that would double-wrap the membrane
                 // (this `run` is already the complete ctx-aware wrapper, unlike the legacy
                 // bare-fn arm's raw `sym.fn`, which bindRosetta wraps for the first time).
                 const rawRun = def.run as (this: unknown, ...args: unknown[]) => Promise<unknown>;
-                // BOUNDARY CAST (see above): scheme values by construction; the ambient site
-                // is opaque by design and narrows here.
-                const rosettaCtx = (runCtx: RunContext) =>
-                  makeCallCtx(runCtx, currentDynamicCallSite() as InvocationLike | undefined);
                 const impl: CallableImpl =
                   cellList.length === 0
-                    ? (args, runCtx) => rawRun.apply(rosettaCtx(runCtx), args) as Promise<SchemeValue>
-                    : async (args, runCtx) => {
+                    ? (args, callCtx) => rawRun.apply(callCtx, args) as Promise<SchemeValue>
+                    : async (args, callCtx) => {
                         await ensureSpawned();
-                        return (await rawRun.apply(rosettaCtx(runCtx), args)) as SchemeValue;
+                        return (await rawRun.apply(callCtx, args)) as SchemeValue;
                       };
                 const proc = new ARosettaProcedure({
                   name: verb,

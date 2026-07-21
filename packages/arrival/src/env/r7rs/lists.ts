@@ -614,8 +614,10 @@ export default new EnvCapability("scheme/lists", {
         const spread = listToArray(rest[rest.length - 1] as AListAlike);
         // Seam-routed: `fn` is a callable VALUE (ANativeProcedure/lambda) now, not a bare fn.
         // applyCallback pins canBounce=false, so a Bounce never reaches here — the CallResult
-        // narrows to value-or-promise.
-        return applyCallback(fn, [...rest.slice(0, -1), ...spread], this.runCtx) as SchemeValue | Promise<SchemeValue>;
+        // narrows to value-or-promise. `this` IS the whole CallCtx `apply` was dispatched
+        // with — thread it, not just `this.runCtx`, so the invocation (provenance minting)
+        // propagates to `fn` instead of arriving invocation-less.
+        return applyCallback(fn, [...rest.slice(0, -1), ...spread], this) as SchemeValue | Promise<SchemeValue>;
       },
     ),
 

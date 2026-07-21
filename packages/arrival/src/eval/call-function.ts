@@ -17,6 +17,7 @@
 // ----------------------------------------------------------------------
 import { is_promise } from "./guards.js";
 import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
+import { makeCallCtx } from "../run/CallCtx.js";
 import { is_callable_value } from "../values/value-guards.js";
 import { applyCallback, type ACallable } from "../values/primitives/ACallable.js";
 import { LambdaContext } from "./LambdaContext.js";
@@ -40,10 +41,12 @@ export function call_function(
   { use_dynamic, runCtx }: { use_dynamic?: boolean; runCtx: RunContext },
 ) {
   // A callable VALUE (ANativeProcedure/ALambda/ARosettaProcedure) is invoked through the
-  // seam — its apply term, `runCtx` threaded — not as a bare fn (`fn.apply` would throw
+  // seam — its apply term, a CallCtx threaded — not as a bare fn (`fn.apply` would throw
   // "apply called on an object, not a function"). Bare fns keep the LambdaContext path below.
+  // No live invocation reaches this chokepoint (only a bare `runCtx` parameter) — a real
+  // CallCtx with invocation undefined, degraded exactly as the pre-CallCtx-threading path.
   if (is_callable_value(fn)) {
-    return resolve_promises(applyCallback(fn, args, runCtx) as SchemeValue);
+    return resolve_promises(applyCallback(fn, args, makeCallCtx(runCtx)) as SchemeValue);
   }
   // No call frame is built: a generator-lambda carries its own closure env, a
   // native reads none, so no frame is needed here. Only `use_dynamic` rides the

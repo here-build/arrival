@@ -1,5 +1,6 @@
 import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { chargeHeap } from "../../heap-budget.js";
 import type { SchemeStringLike, SchemeValue } from "../types.js";
@@ -209,11 +210,13 @@ export class ASymbol extends AValue {
  * string) so the target decides how to fold/match it — no centralized accessor call here.
  */
 export class AKeywordSymbol extends ASymbol {
-  ["arrival/tagless-final/apply"](args: SchemeValue[], runCtx: RunContext, _canBounce = false): CallResult {
+  ["arrival/tagless-final/apply"](args: SchemeValue[], callCtx: CallCtx, _canBounce = false): CallResult {
     if (args.length === 0) return this;
     const target = args[0] as unknown as Record<string, unknown> | null | undefined;
     const getter = target?.["arrival/tagless-final/get"];
-    if (typeof getter === "function") return getter.call(target, this, runCtx) as CallResult;
+    // `get` is a SEPARATE tagless op (unaffected by this stage) that still takes the bare
+    // `runCtx` — read it off the whole `callCtx` this apply term now receives.
+    if (typeof getter === "function") return getter.call(target, this, callCtx.runCtx) as CallResult;
     // B2 (benchmark-defect-register.md): a receiver with NO `arrival/tagless-final/get`
     // term splits into two facts a bare `nil` fall-through would conflate:
     //   • nil (kind "nil", or a raw JS null/undefined reaching here) is a legitimate

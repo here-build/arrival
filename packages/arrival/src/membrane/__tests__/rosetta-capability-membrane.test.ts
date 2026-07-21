@@ -50,7 +50,7 @@ import { AString } from "../../values/primitives/AString.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { jsToScheme, schemeToJs, schemeToJsUntyped } from "../rosetta.js";
 import { exec } from "../../eval/generator-exec.js";
-import { symbol } from "../../common/symbol.js";
+import { symbol, testCallCtx } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import * as z from "../../common/scheme-zod.js";
 import { ARosettaProcedure } from "../../values/primitives/ACallable.js";
@@ -77,7 +77,7 @@ function isRosettaVerb(value: unknown): value is ARosettaProcedure {
  *  dynamic call site (empty here — a direct/test call, no evaluator invocation) — same
  *  pattern `capability-rosetta-symbol.test.ts`'s own `invoke` helper uses. */
 function invoke(verb: ARosettaProcedure, ...args: unknown[]): unknown {
-  return withDynamicCallSite(undefined, () => verb[tf("apply")](args as SchemeValue[], CONSTANT_CTX));
+  return withDynamicCallSite(undefined, () => verb[tf("apply")](args as SchemeValue[], testCallCtx()));
 }
 
 describe("Rosetta AmbientRuntime (capability-authored)", () => {

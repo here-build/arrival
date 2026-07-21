@@ -31,6 +31,7 @@ import { ADict } from "../../values/primitives/ADict.js";
 import { AJSObject } from "../../membrane/AJSObject.js";
 import { R7RSError } from "../../errors.js";
 import { ANativeProcedure, applyCallback } from "../../values/primitives/ACallable.js";
+import { testCallCtx } from "../../run/CallCtx.js";
 
 function makeChar(c: string) {
   return new ACharacter(c);
@@ -360,7 +361,7 @@ describe("scheme-zod z.procedure — contract-aware marshaling", () => {
     const encoded = proc.encode((...args: unknown[]) => (args[0] as number) + 1);
     expect(encoded).toBeInstanceOf(ANativeProcedure);
 
-    const out = await applyCallback(encoded, [makeExact(41)]);
+    const out = await applyCallback(encoded, [makeExact(41)], testCallCtx());
     expect(out).toBeInstanceOf(AExact);
     expect((out as AExact).num).toBe(42);
   });
@@ -385,7 +386,7 @@ describe("scheme-zod z.procedure — contract-aware marshaling", () => {
   it("untyped fallback: encode round-trips raw scheme values unchanged", async () => {
     const rawEncoded = z.procedure().encode((...args: unknown[]) => args[0]);
     const raw = makeExact(9);
-    const out = await applyCallback(rawEncoded, [raw]);
+    const out = await applyCallback(rawEncoded, [raw], testCallCtx());
     expect(out).toBe(raw); // no `output` codec supplied → passed straight back unchanged
   });
 });

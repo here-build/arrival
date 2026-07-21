@@ -161,11 +161,12 @@ export default new EnvCapability("scheme/r7rs/exceptions", {
     "%with-restore": symbol.native`%with-restore: call thunk, always calling restore afterward — even if thunk throws (machinery)`(
       { input: [z.lambda, z.lambda], output: [z.value] },
       function (thunk, restore) {
-        const runCtx = this.runCtx;
-        const doRestore = (): CallResult => applyCallback(restore, [], runCtx);
+        // `this` IS the whole CallCtx `%with-restore` was dispatched with — thread it, not
+        // just `this.runCtx`.
+        const doRestore = (): CallResult => applyCallback(restore, [], this);
         let result: unknown;
         try {
-          result = applyCallback(thunk, [], runCtx);
+          result = applyCallback(thunk, [], this);
         } catch (e) {
           doRestore();
           throw e;
