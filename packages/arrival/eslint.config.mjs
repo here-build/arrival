@@ -6,6 +6,23 @@ import path from "path";
 // eslint-disable-next-line unicorn/no-negated-condition,unicorn/prefer-module
 const dirname = typeof __dirname !== "undefined" ? __dirname : path.dirname(fileURLToPath(import.meta.url));
 
+// The arrow-fn trap (see the block comment on the main rules block for the full rationale):
+// a symbol.native/symbol.rosetta impl must be `function (this: CallCtx, …)`, never an arrow.
+const arrowFnTrap = {
+  selector:
+    "CallExpression[callee.type='TaggedTemplateExpression'][callee.tag.type='MemberExpression'][callee.tag.object.name='symbol'][callee.tag.property.name=/^(native|rosetta)$/] > ArrowFunctionExpression:nth-child(2)",
+  message:
+    "arrow-fn trap: a symbol.native/symbol.rosetta impl must be `function (this: CallCtx, …)`, not an arrow — dispatch delivers the live RunContext via `this`, and an arrow structurally cannot read it (silently minting CONSTANT_CTX-shaped values instead). See docs/working-proposals/arrival-constant-ctx-audit-2026-07-11.md §4.",
+};
+
+// Re-export ban: `export … from` belongs ONLY in an index.ts barrel. Anywhere else a passthrough
+// hides the consumed symbol's real home; non-barrel modules import from that home directly.
+const reexportBan = {
+  selector: "ExportAllDeclaration, ExportNamedDeclaration[source]",
+  message:
+    "Re-export (`export … from`) only in an index.ts barrel. Elsewhere import from the symbol's real home — a passthrough hides the real export.",
+};
+
 export default [
   ...nodejs,
   {
@@ -91,16 +108,14 @@ export default [
       // INSIDE a properly-typed `function (this: CallCtx, …)` impl is untouched).
       // Scope note: arrival-core-only for now (this config); a shared/monorepo-wide
       // extension of this rule is a separate follow-up, not bundled here.
-      "no-restricted-syntax": [
-        "error",
-        {
-          selector:
-            "CallExpression[callee.type='TaggedTemplateExpression'][callee.tag.type='MemberExpression'][callee.tag.object.name='symbol'][callee.tag.property.name=/^(native|rosetta)$/] > ArrowFunctionExpression:nth-child(2)",
-          message:
-            "arrow-fn trap: a symbol.native/symbol.rosetta impl must be `function (this: CallCtx, …)`, not an arrow — dispatch delivers the live RunContext via `this`, and an arrow structurally cannot read it (silently minting CONSTANT_CTX-shaped values instead). See docs/working-proposals/arrival-constant-ctx-audit-2026-07-11.md §4.",
-        },
-      ],
+      "no-restricted-syntax": ["error", arrowFnTrap, reexportBan],
     },
+  },
+  {
+    // index.ts barrels re-export by design — re-allow it there (arrow-fn trap stays on). Must
+    // come after the main block to win for these files (no-restricted-syntax is last-match-wins).
+    files: ["**/index.ts"],
+    rules: { "no-restricted-syntax": ["error", arrowFnTrap] },
   },
   {
     ignores: ["node_modules/*", "dist/*", "**/*.config.*", "debug-*.ts", "lib/**", "vendor/**", "src/__benchmarks__/**", "src/__tests__/**", "**/*.test.ts", "**/*.spec.ts"],
