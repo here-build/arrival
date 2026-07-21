@@ -81,8 +81,6 @@ Everything else comes on top of the language, in a variety of shapes:
 - `arrival-env-capability-sql` / `arrival-env-capability-http` — opt-in
   `(sql/query)` / `(http/get|post)` effect packs (host-bound resolvers;
   inert by default).
-- `arrival-env-capability-approval` — human-in-the-loop `approval/await`
-  gate (owns mobx for the observable request channel).
 
 ## Status
 
