@@ -2,12 +2,13 @@
 // prefixes), string literals, characters, and symbols. No I/O, no lexer state — given a token string,
 // returns the boxed value. Numeric-grammar helpers originate from the LIPS reader.
 import invariant from "tiny-invariant";
-import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
+import { CONSTANT_CTX, isParseCtx, type RunContext } from "../run/RunContext.js";
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
+import { EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
 import { complexDoor } from "../values/numbers.js";
 import { mintExact } from "../values/mint-numeric.js";
 import { ParseError, strictGate } from "../errors.js";
@@ -148,8 +149,9 @@ export function parse_rational(arg: string, radix = 10, ctx: RunContext = CONSTA
   const r = parse.radix || radix;
   const numBig = parseBigInt(parts[0], r);
   const denomBig = parseBigInt(parts[1], r);
+  const loc = isParseCtx(ctx) ? ctx.location : undefined;
   if (parse.inexact) {
-    return new AInexact(Number(numBig) / Number(denomBig));
+    return new AInexact(Number(numBig) / Number(denomBig), EMPTY_PROVENANCE, loc);
   }
   // Components gated BEFORE the mint (never decline-to-parse: a rejected rational token
   // must throw, not fall through to `parse_symbol` —
@@ -160,16 +162,18 @@ export function parse_rational(arg: string, radix = 10, ctx: RunContext = CONSTA
     toSafeExactComponent(denomBig, arg),
     undefined,
     "parse rational",
+    loc,
   );
 }
 
 export function parse_integer(arg: string, radix = 10, ctx: RunContext = CONSTANT_CTX): AExact | AInexact {
   const parse = num_pre_parse(arg);
   const r = parse.radix || radix;
+  const loc = isParseCtx(ctx) ? ctx.location : undefined;
   if (parse.inexact) {
-    return new AInexact(Number.parseInt(parse.number!, r));
+    return new AInexact(Number.parseInt(parse.number!, r), EMPTY_PROVENANCE, loc);
   }
-  return mintExact(ctx, toSafeExactComponent(parseBigInt(parse.number!, r), arg), 1, undefined, "parse integer");
+  return mintExact(ctx, toSafeExactComponent(parseBigInt(parse.number!, r), arg), 1, undefined, "parse integer", loc);
 }
 
 function parse_character(arg: string, ctx: RunContext): ACharacter {
@@ -185,7 +189,7 @@ function parse_character(arg: string, ctx: RunContext): ACharacter {
     }
   }
   invariant(char !== undefined, `Parse: invalid character in ${arg}`);
-  return new ACharacter(char);
+  return new ACharacter(char, EMPTY_PROVENANCE, isParseCtx(ctx) ? ctx.location : undefined);
 }
 
 function string_to_float(str: string): number {
@@ -196,9 +200,10 @@ export function parse_float(arg: string, ctx: RunContext = CONSTANT_CTX): AExact
   const parse = num_pre_parse(arg);
   const value = string_to_float(parse.number!);
   const simple_number = (parse.number!.match(/\.0$/) || !/\./.test(parse.number!)) && !/e/i.test(parse.number!);
+  const loc = isParseCtx(ctx) ? ctx.location : undefined;
   if (!parse.inexact) {
     if (parse.exact && simple_number) {
-      return mintExact(ctx, assertSafeExactComponent(Math.round(value), arg), 1, undefined, "parse float");
+      return mintExact(ctx, assertSafeExactComponent(Math.round(value), arg), 1, undefined, "parse float", loc);
     }
     // An EXPONENT numeral (e.g. "1e2") defaults to INEXACT regardless of magnitude
     // (R7RS §7.1.1: only a decimal-point-free, exponent-free numeral defaults exact) —
@@ -212,7 +217,7 @@ export function parse_float(arg: string, ctx: RunContext = CONSTANT_CTX): AExact
   if (parse.exact) {
     const floatVal = value;
     if (Number.isInteger(floatVal)) {
-      return mintExact(ctx, assertSafeExactComponent(Math.round(floatVal), arg), 1, undefined, "parse float");
+      return mintExact(ctx, assertSafeExactComponent(Math.round(floatVal), arg), 1, undefined, "parse float", loc);
     }
     const str = floatVal.toString();
     const decimalIndex = str.indexOf(".");
@@ -227,11 +232,12 @@ export function parse_float(arg: string, ctx: RunContext = CONSTANT_CTX): AExact
         assertSafeExactComponent(denom, arg),
         undefined,
         "parse float",
+        loc,
       );
     }
-    return mintExact(ctx, assertSafeExactComponent(Math.round(floatVal), arg), 1, undefined, "parse float");
+    return mintExact(ctx, assertSafeExactComponent(Math.round(floatVal), arg), 1, undefined, "parse float", loc);
   }
-  return new AInexact(value);
+  return new AInexact(value, EMPTY_PROVENANCE, loc);
 }
 
 export function parse_complex(_arg: string, _radix = 10): AExact | AInexact {
@@ -265,7 +271,7 @@ function parse_string(string: string, ctx: RunContext): AString {
     throw new ParseError(`Invalid string literal, unclosed: ${m[2]}`, undefined, "E-STRING-UNCLOSED");
   }
   try {
-    const str = new AString(JSON.parse(string));
+    const str = new AString(JSON.parse(string), EMPTY_PROVENANCE, isParseCtx(ctx) ? ctx.location : undefined);
     str.freeze();
     return str;
   } catch (error) {

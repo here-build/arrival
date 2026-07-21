@@ -13,7 +13,8 @@ import { ADict, type DictKey, type DictLiteralNode } from "../values/primitives/
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AString } from "../values/primitives/AString.js";
 import { APair } from "../values/primitives/APair.js";
-import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
+import { EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
+import { CONSTANT_CTX, isParseCtx, type RunContext } from "../run/RunContext.js";
 import type { SchemeValue } from "../values/types.js";
 
 /** The STATIC string key of a key-position datum, or null if it isn't one.
@@ -68,8 +69,8 @@ export function isUnquoteForm(datum: SchemeValue): boolean {
  * constructor invariant (no duplicate fold-name) is trivially satisfied.
  *
  * `ctx` discriminates the two mouths: the READER passes a parse ctx (the `{`'s
- * SourceLocation — ADict has no location slot, so this is the literal's only source
- * identity); the evaluator's quasiquote re-instantiation defaults to CONSTANT_CTX
+ * SourceLocation, threaded straight onto the minted ADict's own `.location` — see
+ * AValue.ts); the evaluator's quasiquote re-instantiation defaults to CONSTANT_CTX
  * (deferred: threading its live `ctx.runCtx` — until then the default leaves that path's
  * source identity unset, exactly as when unthreaded).
  */
@@ -81,7 +82,7 @@ export function makeDictLiteralNode(forms: readonly SchemeValue[], ctx: RunConte
       pairs.push([keyDatum, forms[i + 1]]);
     }
   }
-  const node = new ADict(pairs) as DictLiteralNode;
+  const node = new ADict(pairs, EMPTY_PROVENANCE, isParseCtx(ctx) ? ctx.location : undefined) as DictLiteralNode;
   node.literalForms = forms;
   return node;
 }

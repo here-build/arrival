@@ -6,6 +6,7 @@ import { CLASS } from "../../well-known-symbols.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { isSchemeString, type SchemeStringLike } from "../types.js";
 import invariant from "tiny-invariant";
+import type { SourceLocation } from "../../errors.js";
 
 const characters: Record<string, string> = {
   alarm: "\u0007",
@@ -78,8 +79,12 @@ export class ACharacter extends AValue {
   readonly __char__: string;
   readonly __name__?: string;
 
-  constructor(char: string | SchemeStringLike, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
-    super(provenance);
+  constructor(
+    char: string | SchemeStringLike,
+    provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
+    location?: SourceLocation,
+  ) {
+    super(provenance, location);
     let charValue = isSchemeString(char) ? char.valueOf() : char;
     let name: string | undefined;
 
@@ -131,7 +136,7 @@ export class ACharacter extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): ACharacter {
-    return new ACharacter(this.__char__, p);
+    return new ACharacter(this.__char__, p, this.location);
   }
 
   // Setoid — char ≡ char iff same grapheme. Matches __char__'s value semantics;

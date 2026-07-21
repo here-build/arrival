@@ -6,12 +6,14 @@
 // class barrel as VALUES, so an `errors.ts → value-guards` edge would eagerly
 // initialize AString/AExact/AInexact/ACharacter/APair/… at module-load, before
 // those classes exist (they reach errors.ts on their own init path), leaving
-// AValue `undefined` when a subclass `extends` it. A located Pair is detected via
-// its LOCATION symbol-brand instead — same result, zero class imports.
+// AValue `undefined` when a subclass `extends` it. A located value's span is read
+// via `.location` — a plain property read through the TYPE-only `SchemeValue` import
+// (every member is an AValue, which declares `location` — see AValue.ts), so this
+// stays a zero-runtime-class-import read, same as the old symbol-brand check.
 // StackFrame / SchemeValue are TYPE-only (erased), so a value term can throw any of
 // these without dragging the evaluator world in.
 // -------------------------------------------------------------------------
-import { CLASS, LOCATION } from "./well-known-symbols.js";
+import { CLASS } from "./well-known-symbols.js";
 import type { StackFrame } from "./eval/evaluator.js";
 import type { SchemeValue } from "./values/types.js";
 
@@ -163,18 +165,16 @@ export type ErrorClass =
 // in the evaluator — stays cycle-free.
 // -------------------------------------------------------------------------
 
-/** A SchemeValue's source location off its LOCATION metadata, if any (leaf-local — the
+/** A SchemeValue's source location off its `.location` accessor, if any (leaf-local — the
  *  evaluator's richer `formatCode` renderer isn't reachable from a leaf, so a stack
- *  frame's code prints via its own `String()` repr). The parser stamps LOCATION on
- *  located Pairs (well-known-symbols.ts:58), so only an APair can carry it — read the
- *  brand directly so errors.ts imports no value class (see file header). */
+ *  frame's code prints via its own `String()` repr). Most, but NOT all, SchemeValue members
+ *  are AValue subclasses that declare `location` (see AValue.ts) — the four that aren't
+ *  (EOF, Values, R7RSError, the bare-function AProcedure) never appear as `code` in
+ *  practice, but the union is honest, so `"location" in code` narrows to the AValue-typed
+ *  constituents (the ones actually declaring the property) exactly the way `LOCATION in
+ *  code` used to narrow to APair alone, before every value kind carried a location. */
 function readLocation(code: SchemeValue): SourceLocation | undefined {
-  // APair is the only SchemeValue member declaring `[LOCATION]?: SourceLocation`, so
-  // this narrows `code` to APair and types `code[LOCATION]` with no cast.
-  if (LOCATION in code) {
-    return code[LOCATION];
-  }
-  return undefined;
+  return "location" in code ? code.location : undefined;
 }
 
 export abstract class ArrivalError extends Error {

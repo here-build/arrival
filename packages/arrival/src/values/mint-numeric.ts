@@ -20,7 +20,7 @@
 // helpers only inside its own method bodies — nothing touches the other at
 // module-eval/class-definition time, so the cycle never observes a not-yet-initialized
 // binding.
-import { ArrivalError, type ErrorClass } from "../errors.js";
+import { ArrivalError, type ErrorClass, type SourceLocation } from "../errors.js";
 import { CLASS } from "../well-known-symbols.js";
 import { AExact } from "./primitives/AExact.js";
 import { AInexact } from "./primitives/AInexact.js";
@@ -193,11 +193,15 @@ export function mintExact(
   denom: number,
   provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
   op?: string,
+  /** Source span for a reader-minted literal — the parser's leaf-literal parsers
+   *  (parsing.ts) are the only callers that pass one; every arithmetic-result mint
+   *  omits it (a computed value has no source span of its own). */
+  location?: SourceLocation,
 ): AExact {
   void ctx;
   if (!Number.isSafeInteger(num)) overflow(op, num);
   if (!Number.isSafeInteger(denom)) overflow(op, denom);
-  return new AExact(num, denom, provenance);
+  return new AExact(num, denom, provenance, location);
 }
 
 /**
@@ -217,11 +221,13 @@ export function mintNumeric(
   wantExact: boolean,
   provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
   op?: string,
+  /** Source span for a reader-minted literal — see `mintExact`'s twin param. */
+  location?: SourceLocation,
 ): ANumeric {
   void ctx;
   if (wantExact) {
     if (!Number.isSafeInteger(x)) overflow(op, x);
-    return new AExact(x, 1, provenance);
+    return new AExact(x, 1, provenance, location);
   }
-  return new AInexact(x, provenance);
+  return new AInexact(x, provenance, location);
 }

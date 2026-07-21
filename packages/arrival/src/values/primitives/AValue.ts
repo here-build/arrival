@@ -20,6 +20,8 @@ import { INTEROP_BOUNDARY } from "../../membrane/interop-access.js";
 import type { SeenMap } from "../structural-equal.js";
 import type { MembraneExit, SchemeBounceMarker, SchemeValue } from "../types.js";
 import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
+import { LOCATION } from "../../well-known-symbols.js";
+import type { SourceLocation } from "../../errors.js";
 
 export const EMPTY_PROVENANCE: ReadonlySet<number> = new Set<number>();
 
@@ -66,6 +68,24 @@ export abstract class AValue {
   static [INTEROP_BOUNDARY] = true;
   abstract readonly kind: AKind;
   readonly provenance: ReadonlySet<number>;
+  /** Source span, IMMUTABLE — set only at construction (the `location` constructor param
+   *  below), never mutated in place. Was formerly APair-only (`[LOCATION]` + a mutating
+   *  `setLocation()`); lives on the base now so every value kind (leaf literal, container
+   *  literal) can carry a span, not just cons cells. A post-construction change mints a
+   *  NEW instance via `withLocation` — exactly like `withProvenance` — never a write
+   *  through this slot. SYMBOLS are the deliberate exception: `ASymbol` never receives a
+   *  location (interning identity is load-bearing there — see parse_symbol).
+   *
+   *  `declare`d (no auto-emitted class-field initializer) and, when set, defined via
+   *  `Object.defineProperty` as non-enumerable (see the constructor below) — the same
+   *  hidden-metadata idiom `hidden_prop` (values-repr.ts) uses elsewhere. This is NOT
+   *  cosmetic: a self-evaluating literal now routinely returns the SAME parsed instance
+   *  as a computation's result (e.g. `(or #f #f 0)`), so an ENUMERABLE `[LOCATION]` would
+   *  make every `expect(result).toEqual(new AExact(0))`-style test (there are hundreds)
+   *  see a spurious mismatch against a freshly-built comparison value with no span. The
+   *  span is real, on-value data — just never part of the value's STRUCTURAL identity. */
+  declare [LOCATION]?: SourceLocation;
+
   /** REMOVED (ctx-elimination): this class used to carry a per-value `readonly ctx: RunContext`
    *  field — every AValue was minted with a RunContext, run-built values carrying the live run
    *  ctx and singletons/quoted-AST/bootstrap carrying CONSTANT_CTX. It never grew a real reader
@@ -79,8 +99,41 @@ export abstract class AValue {
    *  freezes (the `freezeRosettaReturns: false` opt-out is unreachable). A later phase restores
    *  both via an ambient/active run-context rather than reintroducing a per-value field. */
 
-  protected constructor(provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
+  protected constructor(provenance: ReadonlySet<number> = EMPTY_PROVENANCE, location?: SourceLocation) {
     this.provenance = provenance;
+    if (location !== undefined) {
+      // Non-enumerable + non-writable + non-configurable: hidden from structural/
+      // enumeration comparisons (see the field doc above) AND truly immutable — no
+      // `this[LOCATION] = …` anywhere ever writes through this a second time.
+      Object.defineProperty(this, LOCATION, { value: location, enumerable: false });
+    }
+  }
+
+  /** Public reader for the immutable source span — the normal-case accessor a caller
+   *  should reach for. */
+  get location(): SourceLocation | undefined {
+    return this[LOCATION];
+  }
+
+  /** Compat shim for cross-package callers (`arrival-chain`, `arrival-provenance`) that
+   *  read a Pair's span as a method rather than the `.location` getter — kept so those
+   *  packages' existing call sites keep compiling unchanged. */
+  getLocation(): SourceLocation | undefined {
+    return this.location;
+  }
+
+  /** RE-STAMP twin of `withProvenance`, for location: a value's source span is fixed at
+   *  birth, so carrying a DIFFERENT span means minting a new instance, never writing
+   *  through the `[LOCATION]` slot (the removed `setLocation` mutator). Default: most
+   *  value kinds are located ONCE, at construction, and nothing downstream ever needs to
+   *  re-stamp them — so the base answers `this` unchanged. The two real re-stamp callers
+   *  today (the Parser's open-paren list-head re-stamp, syntax-rules' `carrySpan`) both
+   *  target APair, which overrides this to mint a genuine clone. A future re-stamp path
+   *  reaching a different concrete class should override here too, rather than reaching
+   *  around this method. */
+  withLocation(loc: SourceLocation): SchemeValue {
+    void loc;
+    return this as unknown as SchemeValue;
   }
 
   /** Plain-JS projection — the ONE Scheme→JS crossing protocol. Called two ways:

@@ -1,11 +1,14 @@
 /**
- * The cons cell. Beyond car/cdr, a Pair carries its own metadata — source
- * location, datum-label/cycle marks, provenance — on the instance (symbol-keyed),
- * not in a sidecar map, so a value and its origin travel together and survive
- * structure sharing. Cyclic spines (reader datum labels, the `__tieKnot` door —
- * `set-cdr!` is a notImplemented stub, values are frozen by design) are detected
- * actively by `isCircularList` (Floyd's), which keeps spine-walking builtins from
- * spinning. The class is an interop boundary (see the note on `[CLASS]` below).
+ * The cons cell. Beyond car/cdr, a Pair carries its own metadata — datum-label/cycle
+ * marks, provenance — on the instance (symbol-keyed), not in a sidecar map, so a value
+ * and its origin travel together and survive structure sharing. Source location is now a
+ * base-class (`AValue`) channel, immutable and constructor-only (`.location` /
+ * `withLocation` — see AValue.ts), not a Pair-only slot; Pair remains the one class whose
+ * span gets RE-STAMPED post-construction (the Parser's list-head re-stamp, syntax-rules'
+ * `carrySpan`), hence the `withLocation` override below. Cyclic spines (reader datum
+ * labels, the `__tieKnot` door — `set-cdr!` is a notImplemented stub, values are frozen by
+ * design) are detected actively by `isCircularList` (Floyd's), which keeps spine-walking
+ * builtins from spinning. The class is an interop boundary (see the note on `[CLASS]` below).
  *
  * Lineage: a cons-list is the free monoid over its elements; the Fantasy Land
  * instances below (Functor/Foldable/Traversable/Chain/Monoid/Semigroup —
@@ -13,7 +16,7 @@
  * is trampolined style (Ganz, Friedman & Wand, "Trampolined Style", ICFP 1999);
  * cycle detection is Floyd's tortoise-and-hare.
  */
-import { CLASS, CYCLES, DATA, LOCATION, REF } from "../../well-known-symbols.js";
+import { CLASS, CYCLES, DATA, REF } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import { applyCallback } from "./ACallable.js";
 import invariant from "tiny-invariant";
@@ -217,7 +220,6 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   static [CLASS] = "pair";
   readonly kind = "pair" as const;
   [DATA]?: boolean;
-  [LOCATION]?: SourceLocation;
   [CYCLES]?: { car?: string | AListAlike; cdr?: string | AListAlike };
   [REF]?: string;
 
@@ -243,8 +245,8 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     return this._cdr;
   }
 
-  constructor(car: Car, cdr: Cdr, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
-    super(provenance);
+  constructor(car: Car, cdr: Cdr, provenance: ReadonlySet<number> = EMPTY_PROVENANCE, location?: SourceLocation) {
+    super(provenance, location);
     this._car = car;
     this._cdr = cdr;
   }
@@ -355,16 +357,6 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // ctx param), not a threaded param invented here.
   static ["arrival/tagless-final/of"](value: SchemeValue): AListAlike {
     return new APair(value, nil);
-  }
-
-  /** Returns this for chaining. */
-  setLocation(loc: SourceLocation): this {
-    this[LOCATION] = loc;
-    return this;
-  }
-
-  getLocation(): SourceLocation | undefined {
-    return this[LOCATION];
   }
 
   // Instance methods
@@ -607,12 +599,26 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
 
   /**
    * Parser/macro-attached metadata (`LOCATION`, `CYCLES`, `REF` — well-known-symbols.ts)
-   * must survive — losing it breaks stack traces and reader-cycle reconstruction.
+   * must survive — losing it breaks stack traces and reader-cycle reconstruction. LOCATION
+   * is immutable (constructor-only), so it is threaded through the fresh cell's OWN
+   * constructor call rather than written through the slot afterward.
    */
   withProvenance(p: ReadonlySet<number>): APair<Car, Cdr> {
-    const copy = new APair<Car, Cdr>(this.car, this.cdr, p);
+    const copy = new APair<Car, Cdr>(this.car, this.cdr, p, this.location);
 
-    if (this[LOCATION] !== undefined) copy[LOCATION] = this[LOCATION];
+    if (this[CYCLES] !== undefined) copy[CYCLES] = this[CYCLES];
+    if (this[REF] !== undefined) copy[REF] = this[REF];
+    return copy;
+  }
+
+  /** RE-STAMP twin of `withProvenance`, for location (see the base declaration in
+   *  AValue.ts) — mints a fresh cell sharing car/cdr/provenance/CYCLES/REF but carrying
+   *  `loc`. The Parser's list-head re-stamp and syntax-rules' `carrySpan` are the two
+   *  callers; both replace their reference with this method's return rather than
+   *  mutating in place (the removed `setLocation`). */
+  override withLocation(loc: SourceLocation): APair<Car, Cdr> {
+    const copy = new APair<Car, Cdr>(this.car, this.cdr, this.provenance, loc);
+
     if (this[CYCLES] !== undefined) copy[CYCLES] = this[CYCLES];
     if (this[REF] !== undefined) copy[REF] = this[REF];
     return copy;

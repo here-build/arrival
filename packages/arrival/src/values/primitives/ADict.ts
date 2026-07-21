@@ -40,6 +40,7 @@ import { isSettleChain, settleEntry } from "./pending-entry.js";
 // is a hoisted `export function`, called only inside `get()` at runtime (settling a
 // pending entry), never at module eval.
 import { jsToScheme } from "../../membrane/rosetta.js";
+import type { SourceLocation } from "../../errors.js";
 
 /** Code-position lowering cache (arrival/tagless-final/lower) for `{…}` dict-literal
  *  nodes — the `(dict …)` application built once per node and re-answered on every
@@ -123,8 +124,9 @@ export class ADict extends AValue {
   constructor(
     pairs: ReadonlyArray<readonly [DictKey, SchemeValue | Promise<SchemeValue>]>,
     provenance = EMPTY_PROVENANCE,
+    location?: SourceLocation,
   ) {
-    super(provenance);
+    super(provenance, location);
     const byKey = new Map<DictKey, SchemeValue | Promise<SchemeValue>>();
     const indexByName: Record<string, DictKey> = Object.create(null);
     for (const [key, value] of pairs) {
@@ -194,7 +196,7 @@ export class ADict extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): ADict {
-    const d = new ADict([...this.byKey.entries()], p);
+    const d = new ADict([...this.byKey.entries()], p, this.location);
     // Same-identity re-stamp: a `{…}` literal node stays a `{…}` literal node
     // (mirrors AVector.withProvenance re-stamping `evalElements`).
     d.literalForms = this.literalForms;

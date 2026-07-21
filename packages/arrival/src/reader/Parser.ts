@@ -2,15 +2,19 @@
  * Lexer token stream → Scheme data — the single text→datum entry point (evaluator,
  * analysis tools, and MCP all read through here).
  *
- * MIRROR CHANNEL (REMOVED, ctx-elimination): every node this parser minted used to also
- * carry a parse-origin RunContext (`makeParseCtx`) holding its SourceLocation on the value
- * itself — the ctx channel of the span migration, with `setLocation`'s `[LOCATION]` slot
- * as the DERIVED MIRROR of the same data. `AValue` no longer stores a per-value ctx at all
- * (see AValue.ts's ctx-removal note), so that channel is gone; `[LOCATION]` (`setLocation`/
- * `getLocation`) is now the ONLY location channel a minted node carries. Body sites still
- * tagged `// mirror` are the surviving `setLocation` half of what used to be a two-channel
- * stamp — a few (noted inline) relied on the now-removed channel alone and currently carry
- * no location at all.
+ * LOCATION CHANNEL: every node this parser mints gets its `SourceLocation` threaded at
+ * CONSTRUCTION time (the `location` constructor param every value class now carries — see
+ * AValue.ts) — never via a downstream mutation. The old two-channel design (a parse-origin
+ * RunContext MIRRORING a mutating `setLocation()`/`[LOCATION]` write) is gone on both
+ * halves: `AValue` no longer carries a per-value ctx (see AValue.ts's ctx-removal note),
+ * and `setLocation` no longer exists — a location is either passed to the constructor of a
+ * freshly-minted node, or (the one re-stamp case: an already-built cell needing a
+ * DIFFERENT span) obtained via `.withLocation(loc)`, which mints a new instance rather than
+ * writing through the slot. Body sites tagged `// mirror` are the surviving re-stamp calls
+ * from that history; every leaf/container literal (string/number/char/vector/bytevector/
+ * dict) is now located too — not just APair spines, which is all the old channel covered.
+ * SYMBOLS stay deliberately excluded (interning identity is load-bearing — see
+ * parsing.ts's `parse_symbol`).
  *
  * LITERAL GRAMMAR: the `[…]` vector / `{…}` dict inline literals (§LITERALS), their
  * position-scoped comma/colon separators (§COMMA), the suffix-keyword flip (§SUFFIX-FLIP),
@@ -51,6 +55,7 @@ import { parse_argument } from "./parsing.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { APair, __tieKnot } from "../values/primitives/APair.js";
+import { EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
 import { isUnquoteForm, makeDictLiteralNode, staticDictKey, suffixKeyName } from "./dict-grammar.js";
 import type { AList, AListAlike, SchemeValue } from "../values/types.js";
 import { ANil } from "../values/primitives/ANil.js";
@@ -328,10 +333,7 @@ export class Parser {
     let chain: unknown = tail;
     for (let i = items.length - 1; i >= 0; i--) {
       const loc = (i === 0 ? (openLoc ?? items[i].loc) : items[i].loc);
-      const cell = new APair(items[i].node as SchemeValue, chain as SchemeValue);
-      if (loc) {
-        cell.setLocation(loc); // mirror (see preamble MIRROR CHANNEL)
-      }
+      const cell = new APair(items[i].node as SchemeValue, chain as SchemeValue, EMPTY_PROVENANCE, loc);
       chain = cell;
     }
     return chain as AListAlike;
@@ -580,7 +582,7 @@ export class Parser {
         for (let node: unknown = list; node instanceof APair; node = node.cdr) {
           items.push(node.car);
         }
-        return new AVector(items);
+        return new AVector(items, EMPTY_PROVENANCE, loc);
       }
       if (is_bytevector_literal(token)) {
         this.skip();
@@ -588,10 +590,14 @@ export class Parser {
         const list = await this.read_list();
         // Immutable, same rationale as the vector literal case above.
         if (list instanceof ANil) {
-          return new ABytevector(new Uint8Array(0));
+          return new ABytevector(new Uint8Array(0), EMPTY_PROVENANCE, loc);
         }
         const arr = list.to_array(false) as number[];
-        return new ABytevector(new Uint8Array(arr.map((v) => (typeof v === "number" ? v : Number(v)))));
+        return new ABytevector(
+          new Uint8Array(arr.map((v) => (typeof v === "number" ? v : Number(v)))),
+          EMPTY_PROVENANCE,
+          loc,
+        );
       }
       // A parser extension is a symbol that expands at read time, in one of two
       // ways: a FUNCTION extension is applied FEXPR-style (result returned as-is);
@@ -621,15 +627,14 @@ export class Parser {
       // `object` may still be a DatumReference placeholder here — the reader-internal
       // channel `_resolve_pair` patches before the form leaves the reader.
       if (is_literal(token)) {
-        expr = new APair(special.symbol, new APair(object as SchemeValue, nil));
-        // TODO(ctx-elimination): the inner cell used to carry its location via the now-
-        // removed ctx-mirror channel alone (preamble MIRROR CHANNEL) — AValue no longer
-        // stores a per-value ctx at all, so that channel is gone and the inner cell carries
-        // no location until a future `setLocation` call is added here too.
-        if (loc) expr.setLocation(loc); // mirror
+        // The INNER cell (`(object . ())`, the quoted argument's own spine) now carries
+        // `loc` too — the quote-family prefix's location, threaded at construction on
+        // BOTH cells, closing the "inner cell left span-less" gap the old ctx-mirror
+        // channel never covered (see AValue.ts's location channel note).
+        const inner = new APair(object as SchemeValue, nil, EMPTY_PROVENANCE, loc);
+        expr = new APair(special.symbol, inner, EMPTY_PROVENANCE, loc);
       } else {
-        expr = new APair(special.symbol, object as SchemeValue);
-        if (loc) expr.setLocation(loc); // mirror (preamble MIRROR CHANNEL)
+        expr = new APair(special.symbol, object as SchemeValue, EMPTY_PROVENANCE, loc);
       }
       return expr;
     }
@@ -653,7 +658,7 @@ export class Parser {
       this._enterNesting("]");
       this.skip();
       const elements = await this.read_literal_elements("]", false, "vector literal");
-      const vec = new AVector(elements);
+      const vec = new AVector(elements, EMPTY_PROVENANCE, loc);
       vec.evalElements = true;
       return vec;
     } else if (token === "]") {
@@ -681,9 +686,9 @@ export class Parser {
     } else if (this.is_open(token)) {
       this._enterNesting(")");
       this.skip();
-      const list = await this.read_list(loc);
+      let list = await this.read_list(loc);
       if (loc && list instanceof APair) {
-        list.setLocation(loc); // mirror re-stamp (preamble MIRROR CHANNEL)
+        list = list.withLocation(loc); // mirror re-stamp (preamble MIRROR CHANNEL)
       }
       return list;
     } else {

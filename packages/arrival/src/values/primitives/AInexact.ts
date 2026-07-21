@@ -9,6 +9,7 @@ import { CLASS } from "../../well-known-symbols.js";
 import { complexDoor, schemeCompare } from "../numbers.js";
 import { AExact } from "./AExact.js";
 import { mintExact } from "../mint-numeric.js";
+import type { SourceLocation } from "../../errors.js";
 
 export class AInexact extends AValue {
   static [CLASS] = "number";
@@ -16,8 +17,8 @@ export class AInexact extends AValue {
 
   readonly real: number;
 
-  constructor(real: number, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
-    super(provenance);
+  constructor(real: number, provenance: ReadonlySet<number> = EMPTY_PROVENANCE, location?: SourceLocation) {
+    super(provenance, location);
     this.real = real;
   }
 
@@ -98,7 +99,7 @@ export class AInexact extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): AInexact {
-    return new AInexact(this.real, p);
+    return new AInexact(this.real, p, this.location);
   }
 
   // String representation. Reals-only — emit the Scheme inexact form with a

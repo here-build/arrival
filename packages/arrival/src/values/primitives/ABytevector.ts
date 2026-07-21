@@ -15,6 +15,7 @@
 import { CLASS } from "../../well-known-symbols.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { withInputProvenance } from "../op-helpers.js";
+import type { SourceLocation } from "../../errors.js";
 
 
 /**
@@ -53,8 +54,12 @@ export class ABytevector extends AValue {
 
   readonly __bytevector__: Uint8Array;
 
-  constructor(source: BytevectorSource, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
-    super(provenance);
+  constructor(
+    source: BytevectorSource,
+    provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
+    location?: SourceLocation,
+  ) {
+    super(provenance, location);
     this.__bytevector__ = toUint8(source);
   }
 
@@ -85,7 +90,7 @@ export class ABytevector extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): ABytevector {
-    return new ABytevector(this.__bytevector__, p);
+    return new ABytevector(this.__bytevector__, p, this.location);
   }
 
   // Print protocol — R7RS external repr `#u8(byte …)` (bytes are raw numbers, no

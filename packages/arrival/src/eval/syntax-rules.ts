@@ -107,26 +107,52 @@ function listFromArray<T extends SchemeValue>(ctx: RunContext, array: readonly T
 }
 
 /** Stamp the template's span onto a single fresh, span-less Pair (see file preamble, SPAN
- *  PROPAGATION). deferred: an expansion-chain slot recording the call site per expansion, for
- *  a consumer that needs both the template and call-site readings at once. */
+ *  PROPAGATION). Location is IMMUTABLE (AValue.ts) — there is no mutating `setLocation`
+ *  anymore, so a stamp mints a genuine clone via `withLocation` rather than writing through
+ *  the slot; every direct caller already treats this function's return as the value of
+ *  record (it is always applied to a cell that was JUST minted inline, e.g. `carrySpan
+ *  (consCell(ctx, ...), expr)`, so there is no OTHER reference to the pre-stamp instance to
+ *  keep in sync). deferred: an expansion-chain slot recording the call site per expansion,
+ *  for a consumer that needs both the template and call-site readings at once. */
 function carrySpan<T extends SchemeValue>(fresh: T, template: SchemeValue): T {
-  if (fresh instanceof APair && fresh.getLocation() === undefined && template instanceof APair) {
-    const loc = template.getLocation();
-    if (loc !== undefined) fresh.setLocation(loc);
+  if (fresh instanceof APair && fresh.location === undefined && template instanceof APair) {
+    const loc = template.location;
+    // `withLocation` on a narrowed-`T` intersection loses the precise APair<Car,Cdr>
+    // parametrization TS can't reconstruct through `instanceof` on a generic — the cast
+    // is honest: `withLocation` returns the same concrete class, only the location differs.
+    if (loc !== undefined) return fresh.withLocation(loc) as T;
   }
   return fresh;
 }
 
 /** carrySpan for a freshly-built SPINE (fromArray/concat): stamps every unlocated cdr-chain
  *  cell, not just the head — repetition output is a list of cells all minted in one call. Car
- *  sub-structures already carry their own spans (template reconstructions or call-site fragments). */
+ *  sub-structures already carry their own spans (template reconstructions or call-site fragments).
+ *
+ *  UNLIKE the single-cell `carrySpan` call sites, a spine's interior cells are already LINKED
+ *  by reference (parent's cdr → child) before this walk starts — so when `carrySpan` mints a
+ *  clone instead of mutating, the parent's cdr must be re-pointed at the clone, or the stamp is
+ *  silently lost past the head. The spine is PRIVATE at this point (just minted by fromArray/
+ *  concatPairLoose, not yet handed to any other holder), so patching through `__tieKnot` here is
+ *  a sanctioned knot-tying use — the same license syntax-rules' ellipsis surgery already has
+ *  (APair.ts's `__tieKnot` doc: "syntax-rules' ellipsis surgery on its private copies"). */
 function carrySpanSpine<T extends SchemeValue>(fresh: T, template: SchemeValue): T {
+  let head: unknown = fresh;
+  let prev: APair<SchemeValue, SchemeValue> | undefined;
   let node: unknown = fresh;
   while (node instanceof APair) {
-    carrySpan(node, template);
-    node = node.cdr;
+    const stamped = carrySpan(node, template);
+    if (stamped !== node) {
+      if (prev === undefined) {
+        head = stamped;
+      } else {
+        __tieKnot(prev, "cdr", stamped);
+      }
+    }
+    prev = stamped;
+    node = stamped.cdr;
   }
-  return fresh;
+  return head as T;
 }
 
 // The hygiene-identity handles the syntax-rules caller injects (see file preamble, NO

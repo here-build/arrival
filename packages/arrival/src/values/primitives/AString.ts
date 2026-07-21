@@ -10,6 +10,7 @@ import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import type { ANumeric } from "../numbers.js";
 import { ACharacter } from "./ACharacter.js";
 import { withInputProvenance } from "../op-helpers.js";
+import type { SourceLocation } from "../../errors.js";
 
 type StringLike = string | AString | { valueOf(): string };
 type NumberLike = number | ANumeric | { valueOf(): number };
@@ -20,8 +21,12 @@ export class AString extends AValue {
 
   __string__: string;
 
-  constructor(string: ACharacter[] | StringLike, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
-    super(provenance);
+  constructor(
+    string: ACharacter[] | StringLike,
+    provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
+    location?: SourceLocation,
+  ) {
+    super(provenance, location);
     this.__string__ = Array.isArray(string) ? string.map((x) => x.toString()).join("") : string.valueOf();
   }
 
@@ -171,7 +176,7 @@ export class AString extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): AString {
-    return new AString(this.__string__, p);
+    return new AString(this.__string__, p, this.location);
   }
 }
 // Dynamically wrap all String.prototype methods

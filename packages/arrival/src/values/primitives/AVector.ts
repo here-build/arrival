@@ -34,6 +34,7 @@ import { deriveSortCompare, withInputProvenance } from "../op-helpers.js";
 import { reStampChild } from "./deep-restamp.js";
 import { APair } from "./APair.js";
 import { ASymbol } from "./ASymbol.js";
+import type { SourceLocation } from "../../errors.js";
 
 /** Code-position lowering cache (arrival/tagless-final/lower) for `[…]` literal nodes — the
  *  `(vector …)` application built once per node and re-answered on every subsequent eval of
@@ -61,8 +62,9 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
      *  readonly is deep). Mutation goes nowhere — construct a fresh vector. */
     public readonly __vector__: readonly T[],
     provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
+    location?: SourceLocation,
   ) {
-    super(provenance);
+    super(provenance, location);
   }
 
   get length(): number {
@@ -106,7 +108,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): AVector {
-    const v = new AVector(this.__vector__, p);
+    const v = new AVector(this.__vector__, p, this.location);
     // Same-identity re-stamp: a `[…]` literal node stays a `[…]` literal node.
     v.evalElements = this.evalElements;
     return v;

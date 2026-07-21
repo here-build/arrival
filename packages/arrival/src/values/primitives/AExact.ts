@@ -19,6 +19,7 @@ import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { CLASS } from "../../well-known-symbols.js";
 import { schemeCompare } from "../numbers.js";
 import { AInexact } from "./AInexact.js";
+import type { SourceLocation } from "../../errors.js";
 import {
   checkedAdd,
   checkedMul,
@@ -35,8 +36,13 @@ export class AExact extends AValue {
   readonly num: number;
   readonly denom: number;
 
-  constructor(num: number, denom: number = 1, provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {
-    super(provenance);
+  constructor(
+    num: number,
+    denom: number = 1,
+    provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
+    location?: SourceLocation,
+  ) {
+    super(provenance, location);
     invariant(denom !== 0, "Division by zero");
     // Internal invariant, NOT the overflow door: a caller minting exact arithmetic must
     // have pre-checked every intermediate via checkedMul/checkedAdd/checkedSub (or gone
@@ -138,7 +144,7 @@ export class AExact extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): AExact {
-    return new AExact(this.num, this.denom, p);
+    return new AExact(this.num, this.denom, p, this.location);
   }
 
   // String representation

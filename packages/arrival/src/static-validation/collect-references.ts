@@ -173,7 +173,7 @@ export function collectReferences(form: SchemeValue, opts: CollectReferencesOpti
     if (!(n instanceof APair)) return; // literals / vectors / strings — datum
     if (seen.has(n)) return;
     seen.add(n);
-    const loc = n.getLocation() ?? span;
+    const loc = n.location ?? span;
 
     const head = n.car;
     if (head instanceof ASymbol) {
@@ -399,7 +399,7 @@ export function collectReferences(form: SchemeValue, opts: CollectReferencesOpti
     if (!(n instanceof APair)) return;
     if (seen.has(n)) return;
     seen.add(n);
-    const loc = n.getLocation() ?? span;
+    const loc = n.location ?? span;
     const head = n.car;
     if (head instanceof ASymbol) {
       const hn = nameOf(head);
@@ -418,6 +418,6 @@ export function collectReferences(form: SchemeValue, opts: CollectReferencesOpti
     for (const el of chainOf(n)) walkQuasi(el, depth, bound, loc);
   };
 
-  walk(form, new Set<string>(), form instanceof APair ? form.getLocation() : undefined);
+  walk(form, new Set<string>(), form instanceof APair ? form.location : undefined);
   return out;
 }

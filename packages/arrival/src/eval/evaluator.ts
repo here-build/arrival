@@ -132,7 +132,7 @@ import { AVector } from "../values/primitives/AVector.js";
 import { Macro } from "./Macro.js";
 import { Syntax } from "./Syntax.js";
 import { APair } from "../values/primitives/APair.js";
-import { CLASS, DATA, LOCATION } from "../well-known-symbols.js";
+import { CLASS, DATA } from "../well-known-symbols.js";
 import { AListAlike, type SchemeBounceMarker, type SchemeValue } from "../values/types.js";
 import { ANil, nil } from "../values/primitives/ANil.js";
 import { Keyword } from "../values/Keyword.js";
@@ -1726,10 +1726,10 @@ function normalizeBindings(
     if (binding instanceof AVector && binding.evalElements) {
       const els = binding.__vector__;
       if (els.length < minLen || els.length > maxLen) {
-        throw bindingArityError(binding, form, minLen, maxLen, node[LOCATION]);
+        throw bindingArityError(binding, form, minLen, maxLen, node.location);
       }
       // Nonempty by the arity guard just above (every caller passes minLen ≥ 2).
-      items.push(buildBindingPair(form, els as readonly [SchemeValue, ...SchemeValue[]], node[LOCATION]));
+      items.push(buildBindingPair(form, els as readonly [SchemeValue, ...SchemeValue[]], node.location));
     } else {
       items.push(binding);
     }
@@ -2716,10 +2716,10 @@ export function* evaluate(
     return code; // atoms self-evaluate
   }
 
-  // Tap: fire enter/exit for parsed Pairs (those carrying __location__); atoms and
+  // Tap: fire enter/exit for parsed Pairs (those carrying a `.location`); atoms and
   // macro-expansion-constructed Pairs (no location) are skipped.
   const tap = ctx.tap;
-  if (tap && LOCATION in code && (!ctx.nodeFilter || ctx.nodeFilter(code))) {
+  if (tap && code.location !== undefined && (!ctx.nodeFilter || ctx.nodeFilter(code))) {
     const inv = tap.enter(code, ctx.currentInvocation ?? null, ctx.tail === true);
     const childCtx: EvalContext = { ...ctx, currentInvocation: inv };
     return yield {
