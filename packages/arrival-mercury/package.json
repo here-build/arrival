@@ -37,6 +37,10 @@
       "types": "./dist/front/index.d.ts",
       "default": "./dist/front/index.js"
     },
+    "./product": {
+      "types": "./dist/product/index.d.ts",
+      "default": "./dist/product/index.js"
+    },
     "./type-emit": {
       "types": "./dist/type-emit/index.d.ts",
       "default": "./dist/type-emit/index.js"
@@ -78,7 +82,6 @@
     "@inhuman.tools/arrival-env-capability-handlebars": "workspace:^",
     "pluralize": "8.0.0",
     "ramda": "0.31.3",
-    "tsx": "4.22.4",
     "typescript": "6.0.2",
     "yaml": "2.9.0",
     "zod": "4.3.6"

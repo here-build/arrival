@@ -61,23 +61,30 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { execState, LexicalScope, parseGenerator, schemeToJsUntyped } from "@inhuman.tools/arrival";
 import { register } from "tsx/esm/api";
 
-import type { ClassifyResult } from "../coreform/types.js";
-import { SchemeSemanticModel } from "../model/model.js";
-import { materializeAsyncness, materializeImports, materializeSharedBindings } from "../naming/index.js";
-import { render } from "../residual/render.js";
-import type { CompilationUnit } from "../residual/types.js";
-import { inferAsyncSeeds } from "../rules/index.js";
-import { walk } from "../walker/index.js";
+import {
+  type ClassifyResult,
+  type CompilationUnit,
+  greenfieldRegistryFor,
+  inferAsyncSeeds,
+  materializeAsyncness,
+  materializeImports,
+  materializeSharedBindings,
+  openOracleSession,
+  type OracleSession,
+  oracleEqual,
+  render,
+  SchemeSemanticModel,
+  show,
+  walk,
+} from "@inhuman.tools/arrival-mercury";
 import { classifyCompiledError, classifyInterpreterError, type ErrorClass } from "./error-classifier.js";
-import { greenfieldRegistryFor, openOracleSession, type OracleSession } from "../registry/greenfield-session.js";
-import { oracleEqual, show } from "../verdict/value-equal.js";
 
 // The session-assembly seam (`openOracleSession`/`greenfieldRegistryFor`) and the
-// pure value utilities (`oracleEqual`/`show`) were lifted OUT of this harness into
-// the compiler (registry/greenfield-session, verdict/value-equal) — they are
-// tsx-free and have compiler-side callers that must not pull `tsx/esm/api`. The
-// harness still uses them internally (below) and re-exports them so its own test
-// consumers keep a single import surface.
+// pure value utilities (`oracleEqual`/`show`) live in the COMPILER
+// (`arrival-mercury`: registry/greenfield-session, verdict/value-equal) — they are
+// tsx-free and have compiler-side callers that must not pull `tsx/esm/api`. This
+// harness (the tsx-bound differential runner) imports them back DOWN and re-exports
+// them so its own corpus/test consumers keep a single import surface.
 export { greenfieldRegistryFor, openOracleSession, oracleEqual, show, type OracleSession };
 
 export type Outcome =

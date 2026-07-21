@@ -1,29 +1,16 @@
 /**
- * @inhuman.tools/arrival-mercury — the mercury differential-oracle harness.
- * Public surface per oracle-harness.md §2 (frozen interfaces), plus the
- * corpus-row runner the tier-1 bug-cell test consumes (§4.3's three-way check).
+ * @inhuman.tools/arrival-mercury — the scheme→TS compiler: front (parse/desugar) ·
+ * classify · `SchemeSemanticModel` · registry · residual · ts.factory emit ·
+ * typefacts. Browser + node; free of `tsx` and `node:fs`.
+ *
+ * The tsx-bound differential-oracle harness (interpreter ≡ compiled, corpus runner,
+ * error classifier) now lives in `@inhuman.tools/arrival-mercury-oracle`. The
+ * session-assembly seam (`openOracleSession`/`greenfieldRegistryFor`) and the pure
+ * value utilities (`oracleEqual`/`show`) are compiler-owned (tsx-free, with
+ * compiler-side callers) and re-exported here from their homes.
  */
-export { classifyCompiledError, classifyInterpreterError, type ErrorClass } from "./oracle/error-classifier.js";
-export {
-  agreementOf,
-  assertProgramFace,
-  cleanupOracleScratch,
-  compileGreenfield,
-  evalCompiled,
-  type EvalCompiledOptions,
-  evalInterpreter,
-  greenfieldRegistryFor,
-  openOracleSession,
-  oracleEqual,
-  OracleImportHangError,
-  type OracleSession,
-  type OracleSubject,
-  type OracleVerdict,
-  type Outcome,
-  runOracle,
-  show,
-} from "./oracle/harness.js";
-export { type CorpusVerdict, type ExpectedOutcome, outcomeMatches, runCorpusCase } from "./oracle/expected.js";
+export { greenfieldRegistryFor, openOracleSession, type OracleSession } from "./registry/greenfield-session.js";
+export { oracleEqual, show } from "./verdict/value-equal.js";
 
 // ── front (canonical desugar/nodes/parse) + CoreForm IR ──
 export { desugar } from "./front/desugar.js";
