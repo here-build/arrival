@@ -9,6 +9,9 @@
 // (disk in Node, glob in browser). The prelude map is built once; only the
 // program snapshot changes per call.
 
+// The dep-free virtual-file name constants (no node:fs — service-core runs in the
+// browser too).
+import { PROGRAM_FILE } from "@inhuman.tools/arrival-internals-types-prelude/virtual-files";
 // The runtime-free reader (spans on every node) — the require scanner's truth.
 import { parseSexprs, type Node } from "@inhuman.tools/arrival-sugarcoat";
 // Subpath only — package root pulls model/oracle graph; type-emit is front+Buf only
@@ -18,10 +21,9 @@ import ts from "typescript";
 
 import { balancePrefix, stringLiteralType } from "./balance.js";
 import { Mapper } from "./span-map.js";
-import { PROGRAM_FILE } from "./virtual-files.js";
 
-// balancePrefix lives in balance.ts (backends like arrival-lsp-tsgo import it without
-// dragging `typescript` into their chunk); re-exported here for consumers.
+// balancePrefix lives in balance.ts (alternate backends import it without dragging
+// `typescript` into their chunk); re-exported here for consumers.
 export { balancePrefix } from "./balance.js";
 
 const SENTINEL = "qzcursorzq"; // plain letters only (emitTypes cleanName)
