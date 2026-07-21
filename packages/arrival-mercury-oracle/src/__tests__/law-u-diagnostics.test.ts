@@ -42,8 +42,8 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { cleanupOracleScratch, compileGreenfield, evalCompiled, evalInterpreter, openOracleSession } from "../index.js";
-import type { OracleSession } from "../index.js";
+import { cleanupOracleScratch, compileGreenfield, evalCompiled, evalInterpreter, openOracleSession } from "@inhuman.tools/arrival-mercury-oracle";
+import type { OracleSession } from "@inhuman.tools/arrival-mercury-oracle";
 
 interface Subject {
   readonly name: string;

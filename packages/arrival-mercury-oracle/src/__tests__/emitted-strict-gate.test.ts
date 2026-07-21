@@ -54,8 +54,8 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { compileGreenfield, openOracleSession } from "../index.js";
-import type { OracleSession } from "../index.js";
+import { compileGreenfield, openOracleSession } from "@inhuman.tools/arrival-mercury-oracle";
+import type { OracleSession } from "@inhuman.tools/arrival-mercury-oracle";
 
 const corpusDir = fileURLToPath(new URL("corpus/", import.meta.url));
 const read = (name: string): string => readFileSync(`${corpusDir}${name}.scm`, "utf8");
@@ -63,7 +63,7 @@ const read = (name: string): string => readFileSync(`${corpusDir}${name}.scm`, "
 /** The REAL runtime module source, mapped at the emitted import's resolution
  *  target — the gate must typecheck emitted call sites against the shims they
  *  actually call (a `declare` stand-in would let signature drift through). */
-const stage0Source = readFileSync(fileURLToPath(new URL("../runtime/stage0.ts", import.meta.url)), "utf8");
+const stage0Source = readFileSync(fileURLToPath(new URL("../../../arrival-mercury/src/runtime/stage0.ts", import.meta.url)), "utf8");
 
 /** Virtual files live at REAL-directory paths: bundler-mode resolution consults
  *  `host.directoryExists`, which `createCompilerHost` answers from the actual

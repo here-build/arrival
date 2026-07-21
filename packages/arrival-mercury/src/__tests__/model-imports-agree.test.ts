@@ -26,7 +26,7 @@ import type { ClassifyResult } from "../coreform/types.js";
 import { SchemeSemanticModel } from "../model/model.js";
 import { MULTI_SLOT, TWO_CROSSINGS } from "../model/__fixtures__.js";
 import { materializeImports } from "../naming/index.js";
-import { openOracleSession, type OracleSession } from "../oracle/harness.js";
+import { openOracleSession, type OracleSession } from "../registry/greenfield-session.js";
 import type { EmitRegistry } from "../registry/harvest.js";
 import { emitRegistryOf } from "../registry/index.js";
 import { phase1Rules, withRules } from "../rules/index.js";
@@ -232,7 +232,7 @@ describe("S5 — the dependency-rule lint (engine plan §1 S5; extended at E1's 
    */
   it("compileGreenfield's pipeline chain ends at render() — zero post-passes after materialize/format", async () => {
     const fs = await import("node:fs/promises");
-    const src = await fs.readFile(new URL("../oracle/harness.ts", import.meta.url), "utf8");
+    const src = await fs.readFile(new URL("../../../arrival-mercury-oracle/src/harness.ts", import.meta.url), "utf8");
     const fnStart = src.indexOf("export function compileGreenfield(");
     expect(fnStart, "sanity: compileGreenfield must exist in harness.ts").toBeGreaterThan(-1);
     const rest = src.slice(fnStart);

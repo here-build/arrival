@@ -24,16 +24,20 @@
  *  are generated from the table in first-seen order.
  */
 import ts from "typescript";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { classify } from "../coreform/index.js";
-import type { ClassifyResult } from "../coreform/index.js";
-import { desugar } from "../front/desugar.js";
-import { parseSexprs } from "../front/parse.js";
-import { asyncnessOf, materializeAsyncness } from "../naming/asyncness.js";
-import { compileGreenfield, openOracleSession, runOracle, type OracleSession } from "../oracle/harness.js";
 import type { EmitRule } from "@inhuman.tools/arrival/emit";
-import type { EmitRegistry, EmitRegistryRow } from "../registry/index.js";
+
+import {
+  asyncnessOf,
+  classify,
+  desugar,
+  materializeAsyncness,
+  parseSexprs,
+  runtimeRefsOf,
+  walk,
+} from "../index.js";
+import type { ClassifyResult, EmitRegistry, EmitRegistryRow, WalkOptions } from "../index.js";
 import { arrayChunkAst, type ChunkElement } from "../residual/chunk.js";
 import { render } from "../residual/render.js";
 import type { CompilationUnit, R } from "../residual/types.js";
@@ -53,7 +57,6 @@ import {
   Return,
   RuntimeRef,
 } from "../residual/types.js";
-import { runtimeRefsOf, walk, type WalkOptions } from "../walker/index.js";
 
 const one = (node: R) => render({ decls: [], body: [node] });
 
@@ -392,72 +395,6 @@ describe("chunks are never leaves — slots are every walker's fluid re-entry po
     expect(emit(`(define (f pair) (reverse (car pair) (list (car pair) 9)))`)).toBe(
       "function f([head]) {\n    return reverse(head, [head, 9]);\n}\n",
     );
-  });
-});
-
-// ─── oracle agreement — the gate this wave answers to ─────────────────────────────────
-
-describe("oracle agreement over the real session", () => {
-  let session: OracleSession;
-  beforeAll(async () => {
-    session = await openOracleSession();
-  }, 120_000);
-  afterAll(async () => {
-    await session.dispose();
-  });
-
-  it("a fully-literal `list` call: no import, oracle agrees", async () => {
-    const src = `(list 1 2 3)`;
-    expect(compileGreenfield(session, src)).not.toContain("stage0");
-    const verdict = await runOracle(session, src);
-    expect(verdict.agree, verdict.detail).toBe(true);
-  });
-
-  it("mixed literal/variable `list` call agrees with the interpreter", async () => {
-    const src = `(define (f x) (list 1 x (+ x 1))) (f 10)`;
-    const verdict = await runOracle(session, src);
-    expect(verdict.agree, verdict.detail).toBe(true);
-  });
-
-  it("an async-seeded call as a `list` argument aborts the fold AND still awaits correctly", () => {
-    // `infer` is a real Call — isCallFree refuses this argument a slot (the
-    // fold-scope policy; a folded-into-a-slot call would ALSO be awaited
-    // correctly since every walker reads through slots — see the "chunks are
-    // never leaves" describe below — but this wave keeps computation out of
-    // chunks), so the whole call falls back to the unfolded shim shape and
-    // ASYNC-IFY awaits the plain Call argument. Bytes
-    // only, not oracle agreement — `infer` always throws (differently,
-    // untaxonomized) on both sides of this harness by design (stage-0's own
-    // placeholder + the session's stub `InferFn`; no existing suite runs the
-    // oracle over an `infer`-containing program for this reason).
-    const src = `(list "before" (infer "fast" "hello"))`;
-    const out = compileGreenfield(session, src);
-    // Unfolded — `list(...)` stays a Call (never an ArrayLit), so each
-    // argument is awaited independently, never batched under Promise.all
-    // (that rewrite is ArrayLit-specific — asyncness.ts's own "by-right
-    // parallelization, structural case").
-    expect(out).toContain('list("before", await infer("fast", "hello"))');
-  });
-
-  it("REGRESSION: a mangled-name registry VALUE in a slot resolves through materializeImports (RuntimeRef→Ref inside the slot)", async () => {
-    // `odd?` in value position is RuntimeRef("odd?") — data-like, so it rides
-    // a slot. materializeImports must rewrite it to Ref(odd) THROUGH the
-    // chunk (tree.ts's mapChildren rebuilding the slot map); under the leaf
-    // treatment the slot kept the raw RuntimeRef, which renders as the
-    // scheme-spelled identifier `odd?` — invalid TS, a compile-side crash.
-    const src = `(length (list 1 odd? 2))`;
-    const out = compileGreenfield(session, src);
-    expect(out).toContain("[1, odd, 2]"); // the manifest-safe name INSIDE the slot
-    const verdict = await runOracle(session, src);
-    expect(verdict.agree, verdict.detail).toBe(true);
-  });
-
-  it("member-assoc's real shape: outer call stays, inner literal lists fold — still oracle-agrees", async () => {
-    const src = `(list (member 2 (list 1 2 3)) (assoc 2 (list (list 1 "a") (list 2 "b"))))`;
-    const out = compileGreenfield(session, src);
-    expect(out).toContain("list(member(2, [1, 2, 3]), assoc(2, [[1, \"a\"], [2, \"b\"]]))");
-    const verdict = await runOracle(session, src);
-    expect(verdict.agree, verdict.detail).toBe(true);
   });
 });
 

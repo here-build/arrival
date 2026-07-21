@@ -12,7 +12,7 @@ import type { EmitRule } from "@inhuman.tools/arrival/emit";
 import * as z from "@inhuman.tools/arrival/scheme-zod";
 import { symbol } from "@inhuman.tools/arrival/symbol";
 
-import { openOracleSession, type OracleSession } from "../oracle/harness.js";
+import { openOracleSession, type OracleSession } from "../registry/greenfield-session.js";
 import { emitRegistryOf } from "../registry/index.js";
 
 describe("emitRegistryOf over the real oracle ambient", () => {

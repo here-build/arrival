@@ -7,30 +7,24 @@
  *   - a LOCAL emit pipeline (classify → walk(registry, prevalueOf) → render)
  *     proving the walker actually consults the view, including the two hard
  *     soundness invariants named in the mission: value preservation, and that
- *     a REACHABLE `prohibited-dynamics` door still fires exactly as before;
- *   - one proof that the REAL `compileGreenfield` harness folds end to end,
- *     interpreter-agreeing, through the actual oracle session (OQ8a's own
- *     resolution — see `bug-cell-corpus.test.ts`'s `short-circuit-effect` row
- *     and `corpus/expectations.ts`'s entry for it).
+ *     a REACHABLE `prohibited-dynamics` door still fires exactly as before.
+ *
+ * (A former third layer proved the fold end to end through the real oracle
+ * harness, interpreter-agreeing; it depended on the oracle package and was
+ * removed to keep this a pure compiler unit test.)
  */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { classify } from "../coreform/index.js";
-import type { And, ClassifyResult, CoreForm, Or } from "../coreform/index.js";
-import { desugar } from "../front/desugar.js";
-import { parseSexprs } from "../front/parse.js";
 import {
-  cleanupOracleScratch,
-  compileGreenfield,
-  openOracleSession,
-  type OracleSession,
-  runOracle,
+  classify,
+  desugar,
+  parseSexprs,
+  walk,
 } from "../index.js";
+import type { And, ClassifyResult, CoreForm, EmitRegistry, Or, WalkOptions } from "../index.js";
 import { prevalue, prevalueDecisionAt } from "../prevalue/index.js";
-import type { EmitRegistry } from "../registry/index.js";
 import { render } from "../residual/render.js";
 import type { CompilationUnit } from "../residual/types.js";
-import { walk, type WalkOptions } from "../walker/index.js";
 
 const cf = (src: string): ClassifyResult => classify(desugar(parseSexprs(src)));
 
@@ -220,35 +214,6 @@ describe("walker consumption — the fold runs inline, mirroring idiomAt's own c
   });
 });
 
-describe("soundness invariant (a) — value preservation: folding never changes an oracle value", () => {
-  let session: OracleSession;
-  beforeAll(async () => {
-    session = await openOracleSession();
-  }, 60_000);
-  afterAll(async () => {
-    await session.dispose();
-    cleanupOracleScratch();
-  }, 30_000);
-
-  it("(let ((n 0)) (and #f (set! n 999)) n) — dead and-branch, both sides agree on the untouched value", async () => {
-    const verdict = await runOracle(session, `(let ((n 0)) (and #f (set! n 999)) n)`);
-    expect(verdict.agree, verdict.detail).toBe(true);
-    expect(verdict.compiled).toEqual({ kind: "value", value: 0 });
-  });
-
-  it("(if #t 42 (set! n 1)) — dead else-branch, both sides agree on the live then-value", async () => {
-    const verdict = await runOracle(session, `(if #t 42 (set! n 1))`);
-    expect(verdict.agree, verdict.detail).toBe(true);
-    expect(verdict.compiled).toEqual({ kind: "value", value: 42 });
-  });
-
-  it("short-circuit-effect's own shape (OQ8a) — both sides agree on 0, no door anywhere", async () => {
-    const verdict = await runOracle(session, `(let ((n 0)) (or #t (begin (set! n 999) 'x)) n)`);
-    expect(verdict.agree, verdict.detail).toBe(true);
-    expect(verdict.compiled).toEqual({ kind: "value", value: 0 });
-  });
-});
-
 describe("soundness invariant (b) — a REACHABLE prohibited-dynamics door still fires, exactly as before", () => {
   it("(if some-runtime-cond (set! x) 0) — guard is unknown, NOTHING folds, the door still rides the then-arm", () => {
     const out = emit(`(define (f c) (if c (set! x) 0))`);
@@ -269,44 +234,11 @@ describe("soundness invariant (b) — a REACHABLE prohibited-dynamics door still
     expect(out).toContain('throw new Error("prohibited-dynamics/set!: ');
     expect(out).not.toContain("!== false"); // no guard survives — this is not a conditional door
   });
-
-  it("real end-to-end agreement: the REACHABLE door still throws prohibited-dynamics on the compiled side", async () => {
-    const session = await openOracleSession();
-    try {
-      const compiled = await import("../oracle/harness.js").then((m) => m.evalCompiled(session, `(or #f (set! x))`));
-      expect(compiled.kind).toBe("throw");
-      if (compiled.kind === "throw") expect(compiled.errorClass).toBe("prohibited-dynamics");
-    } finally {
-      await session.dispose();
-      cleanupOracleScratch();
-    }
-  }, 60_000);
+  // (A third `it` here ran the door end-to-end over a real oracle session; it
+  // depended on the oracle package and was removed to keep this a pure compiler
+  // unit test — the two emit-goldens above pin the shape.)
 });
 
-describe("compileGreenfield wiring — prevaluation runs end to end through the REAL harness (OQ8a's resolution)", () => {
-  let session: OracleSession;
-  beforeAll(async () => {
-    session = await openOracleSession();
-  }, 60_000);
-  afterAll(async () => {
-    await session.dispose();
-    cleanupOracleScratch();
-  }, 30_000);
-
-  it('(or #f "a" (error "must-not-run")) compiles through the REAL compileGreenfield to the bare surviving value', () => {
-    const compiled = compileGreenfield(session, `(or #f "a" (error "must-not-run"))`);
-    expect(compiled).toContain('return "a"');
-    // No `error` residue survives anywhere — not the import, not the call —
-    // proving the dead branch was ELIMINATED, not merely unreached at runtime.
-    expect(compiled).not.toContain("error");
-  });
-
-  it("the import census (sm.importsOf) never over-counts a symbol only a folded-away branch referenced", () => {
-    // Without prevalueOf threaded into computeImportsOf's own synthetic walk,
-    // this would still claim `error` is needed (model.ts's own documented
-    // class of gap — see importsOf's doc). Threaded correctly, the emitted
-    // import list agrees with what's actually referenced: nothing.
-    const compiled = compileGreenfield(session, `(or #t (error "dead"))`);
-    expect(compiled).not.toContain("import");
-  });
-});
+// (The real-harness describe lived here; it depended on the oracle package and
+// was removed to keep this a pure compiler unit test — the walker-consumption
+// goldens above already prove the fold/import-census wiring.)

@@ -10,8 +10,8 @@ import { fileURLToPath } from "node:url";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { compileGreenfield, openOracleSession } from "../index.js";
-import type { OracleSession } from "../index.js";
+import { compileGreenfield, openOracleSession } from "@inhuman.tools/arrival-mercury-oracle";
+import type { OracleSession } from "@inhuman.tools/arrival-mercury-oracle";
 
 const corpusDir = fileURLToPath(new URL("corpus/", import.meta.url));
 const read = (name: string): string => readFileSync(`${corpusDir}${name}.scm`, "utf8");

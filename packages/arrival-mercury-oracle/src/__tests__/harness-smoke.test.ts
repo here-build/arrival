@@ -14,7 +14,7 @@ import {
   runCorpusCase,
   runOracle,
   type OracleSession,
-} from "../index.js";
+} from "@inhuman.tools/arrival-mercury-oracle";
 
 describe("oracle harness smoke", () => {
   let session: OracleSession;

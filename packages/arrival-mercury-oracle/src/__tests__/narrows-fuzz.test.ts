@@ -53,23 +53,16 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as fc from "fast-check";
 
-import {
-  cleanupOracleScratch,
-  emitRegistryOf,
-  narrowsMembersOf,
-  openOracleSession,
-  phase1Rules,
-  runOracle,
-  withRules,
-} from "../index.js";
-import type { OracleSession } from "../index.js";
+import { emitRegistryOf, narrowsMembersOf, phase1Rules, withRules } from "@inhuman.tools/arrival-mercury";
+import { cleanupOracleScratch, openOracleSession, runOracle } from "@inhuman.tools/arrival-mercury-oracle";
+import type { OracleSession } from "@inhuman.tools/arrival-mercury-oracle";
 import {
   arbitrarySchemeValue,
   PREDICATE_CONSUMERS,
   synthesizeSingleWitnessProgram,
   witnessesMissingConsumers,
-} from "../fuzz/index.js";
-import type { SchemeSample } from "../fuzz/index.js";
+} from "@inhuman.tools/arrival-mercury";
+import type { SchemeSample } from "@inhuman.tools/arrival-mercury";
 
 /** CI-friendly default (mission-specified — the spec's own suggestion is up to
  *  200; each run compiles + executes a real program through tsx, so 50 keeps

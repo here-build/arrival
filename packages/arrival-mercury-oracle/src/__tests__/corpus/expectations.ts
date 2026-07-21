@@ -19,7 +19,7 @@
  * The `.scm` files stay files: determinism, cross-pass, and emitted-fixtures
  * share them verbatim (constitution's "one corpus, two owners").
  */
-import type { ExpectedOutcome } from "../../index.js";
+import type { ExpectedOutcome } from "@inhuman.tools/arrival-mercury-oracle";
 
 export interface CorpusExpectation {
   /** The sibling `corpus/<name>.scm` this row expects on. */

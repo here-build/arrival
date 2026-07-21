@@ -20,24 +20,10 @@ import { fileURLToPath } from "node:url";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import {
-  cleanupOracleScratch,
-  extractFacts,
-  greenfieldRegistryFor,
-  narrowsMembersOf,
-  openOracleSession,
-  render,
-  walk,
-} from "../index.js";
-import type {
-  ClassifyResult,
-  CoreForm,
-  FactsExtraction,
-  HoleReason,
-  NodeId,
-  OracleSession,
-  TypeFacts,
-} from "../index.js";
+import { extractFacts, narrowsMembersOf, render, walk } from "@inhuman.tools/arrival-mercury";
+import { cleanupOracleScratch, greenfieldRegistryFor, openOracleSession } from "@inhuman.tools/arrival-mercury-oracle";
+import type { ClassifyResult, CoreForm, FactsExtraction, HoleReason, NodeId, TypeFacts } from "@inhuman.tools/arrival-mercury";
+import type { OracleSession } from "@inhuman.tools/arrival-mercury-oracle";
 
 const corpusDir = fileURLToPath(new URL("corpus/", import.meta.url));
 const fixturesDir = fileURLToPath(new URL("fixtures/cross-pass/", import.meta.url));

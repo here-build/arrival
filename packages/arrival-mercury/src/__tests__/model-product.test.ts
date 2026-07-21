@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { compileSource } from "../product/compile-source.js";
 import { SchemeSemanticModel } from "../model/model.js";
-import { greenfieldRegistryFor, openOracleSession, type OracleSession } from "../oracle/harness.js";
+import { greenfieldRegistryFor, openOracleSession, type OracleSession } from "../registry/greenfield-session.js";
 
 describe("W8 — product surface names SchemeSemanticModel", () => {
   let session: OracleSession;

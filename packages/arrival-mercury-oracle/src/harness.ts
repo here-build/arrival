@@ -55,6 +55,7 @@
  */
 import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, rmdirSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -494,7 +495,19 @@ let stage0Staged = false;
 
 function stageRuntimeModule(): void {
   if (stage0Staged) return;
-  const candidates = [new URL("../runtime/stage0.ts", import.meta.url), new URL("../runtime/stage0.js", import.meta.url)];
+  // The stage-0 runtime source lives in the compiler package (@inhuman.tools/
+  // arrival-mercury); this oracle package carries none of its own. Resolve it
+  // through the compiler package (built `dist/runtime/stage0.js` preferred, the
+  // `.ts` source as the from-checkout fallback) rather than relative to this
+  // file — after the mercury/oracle split the harness no longer sits beside a
+  // sibling `../runtime/`.
+  const mercuryEntry = createRequire(import.meta.url).resolve("@inhuman.tools/arrival-mercury");
+  const mercuryDist = path.dirname(mercuryEntry);
+  const mercuryPkg = path.dirname(mercuryDist);
+  const candidates = [
+    pathToFileURL(path.join(mercuryDist, "runtime", "stage0.js")),
+    pathToFileURL(path.join(mercuryPkg, "src", "runtime", "stage0.ts")),
+  ];
   let source: string | undefined;
   for (const url of candidates) {
     try {
@@ -505,7 +518,9 @@ function stageRuntimeModule(): void {
     }
   }
   if (source === undefined) {
-    throw new Error(`oracle evalCompiled: stage-0 runtime module not found beside ${import.meta.url}`);
+    throw new Error(
+      `oracle evalCompiled: stage-0 runtime module not found in @inhuman.tools/arrival-mercury (looked for ${candidates.map(String).join(", ")})`,
+    );
   }
   mkdirSync(SCRATCH_DIR, { recursive: true });
   writeFileSync(path.join(SCRATCH_DIR, STAGE0_BASENAME), source, "utf8");

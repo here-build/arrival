@@ -12,25 +12,37 @@
  * `pureRegionCse`/`legibility()`; every golden below is UNCHANGED bytes,
  * only the call shape moved (`materializeSharedBindings(sharedBindingsOf(u,
  * registry))` replaces `pureRegionCse(u, registry)` / `legibility(u,
- * {registry})`). The final `describe` runs the REAL wiring
- * (`compileGreenfield`, one shared `OracleSession` per the oracle-harness's
- * §4.1 reuse contract) to verify end-to-end behavior against the actual
- * harvested `infer` capability, oracle-agreement included.
+ * {registry})`). A former final `describe` ran the REAL wiring against the
+ * actual harvested `infer` capability; it depended on the oracle package and
+ * was removed to keep this a pure compiler unit test.
  */
-import { describe, expect, it, afterAll, beforeAll } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import type { EmitRule } from "@inhuman.tools/arrival/emit";
 
-import type { EmitRegistry, EmitRegistryRow } from "../registry/index.js";
-import { materializeSharedBindings, sharedBindingsOf } from "../naming/shared-bindings.js";
+import {
+  classify,
+  desugar,
+  materializeSharedBindings,
+  parseSexprs,
+  phase1Rules,
+  sharedBindingsOf,
+  walk,
+} from "../index.js";
+import type { EmitRegistry, EmitRegistryRow } from "../index.js";
 import { render } from "../residual/render.js";
-import { Arrow, Bin, Call, Index, Lit, Method, Ref, type Binding, type CompilationUnit, type R } from "../residual/types.js";
-import { phase1Rules } from "../rules/index.js";
-import { walk } from "../walker/index.js";
-import { classify } from "../coreform/index.js";
-import { desugar } from "../front/desugar.js";
-import { parseSexprs } from "../front/parse.js";
-import { compileGreenfield, openOracleSession, runOracle, type OracleSession } from "../oracle/harness.js";
+import {
+  Arrow,
+  Bin,
+  Call,
+  Index,
+  Lit,
+  Method,
+  Ref,
+  type Binding,
+  type CompilationUnit,
+  type R,
+} from "../residual/types.js";
 
 /** `pureRegionCse`'s replacement call shape (module header): the decision,
  *  then its mechanical commit — over the SAME registry the dissolved pass
@@ -55,7 +67,7 @@ const registryOf = (...rows: EmitRegistryRow[]): EmitRegistry => {
 // `+`'s real Contract now lives on foundations/arrival/arrival/src/env/r7rs/
 // numeric.ts (Phase-2 relocation, Wave 2) — this package cannot deep-import arrival
 // core's internal env/r7rs files (only its declared public subpaths), and spinning up
-// a real harvest session (openOracleSession) just for this fast, hand-rolled registry
+// a real harvest session just for this fast, hand-rolled registry
 // would defeat the whole convention this file documents. A byte-verified LOCAL mirror
 // of numeric.ts's own `plusEmitRule` (see that file, and its own
 // numeric-emit.test.ts proof) — 2-ary only, which is all this suite ever constructs.
@@ -239,62 +251,6 @@ describe("legibility — the composed pass (walk()'s destructure/singularize + s
   });
 });
 
-// ── the real wiring: compileGreenfield (constitution §9's dual-path rule) ─────────
-
-describe("legibility wired into compileGreenfield — the real pipeline, oracle session", () => {
-  let session: OracleSession;
-  beforeAll(async () => {
-    session = await openOracleSession();
-  }, 120_000);
-  afterAll(async () => {
-    await session.dispose();
-  });
-
-  it("an infer pair dedupes THROUGH the real ASYNC-IFY plane: one await, two sync Ref reads", () => {
-    // The load-bearing golden for the pipeline-ordering decision
-    // (naming/shared-bindings.ts's header): CSE runs pre-ASYNC-IFY, hoisting the duplicate infer call into an
-    // ordinary sync-shaped Const BEFORE asyncness exists — ASYNC-IFY then awaits
-    // that ONE Const's init exactly like any other seeded call, and both reads
-    // are plain (unconditionally-sync) Refs. If this ever regresses to two
-    // separate `await infer(...)` calls, the ordering decision broke.
-    //
-    // R-G3 (gate3-human-grade-rulings.md) churn, unrelated to the CSE claim
-    // this golden pins: `f` itself keeps `async` (the genuine, non-tail
-    // `__infer` Const-init await inside it), but `OracleMain`'s OWN body is
-    // now a bare tail return of `f("hi")`'s promise — neither `async` nor
-    // `await` survives there, since nothing else in OracleMain observes the
-    // resolved value. `f` still returns a promise to OracleMain regardless
-    // (facts.arrowAsync unaffected), so `await f("hi")` → `f("hi")` changes
-    // no value, just drops the now-pointless keyword.
-    const out = compileGreenfield(session, `(define (f x) (+ (infer "sys" x) (infer "sys" x))) (f "hi")`);
-    expect(out).toBe(
-      `import { infer } from "./stage0.mts";\n` +
-        `export default function OracleMain() {\n` +
-        `    const f = async (x) => {\n` +
-        `        const __infer = await infer("sys", x);\n` +
-        `        return __infer + __infer;\n` +
-        `    };\n` +
-        `    return f("hi");\n` +
-        `}\n`,
-    );
-  });
-
-  it("a destructured tuple access agrees with the interpreter (oracle-verified, not just pretty)", async () => {
-    const src = `((lambda (pair) (+ (car pair) (car (cdr pair)))) (list 10 20))`;
-    expect(compileGreenfield(session, src)).toContain("([first, second]) => first + second");
-    const verdict = await runOracle(session, src);
-    expect(verdict.agree, verdict.detail).toBe(true);
-  });
-
-  it("an unrelated program is untouched — no false singularize/CSE noise", () => {
-    const out = compileGreenfield(session, `(map (lambda (x) (* x x)) (list 1 2 3))`);
-    // `list(1, 2, 3)` folds to a literal array chunk (E2 ingestion fold,
-    // engine plan §2 E2) — no `list` import survives; unrelated to the
-    // single-list-map "forward the callback verbatim" claim this test pins.
-    expect(out).toBe(
-      `export default function OracleMain() {\n` +
-        `    return [1, 2, 3].map(x => x * x);\n` +
-        `}\n`,
-    );
-  });
-});
+// (The real-wiring / oracle-session describe lived here; it depended on the
+// oracle package and was removed to keep this a pure compiler unit test — the
+// destructure/singularize/CSE claims above cover the behavior.)

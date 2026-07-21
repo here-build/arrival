@@ -24,8 +24,8 @@ import { fileURLToPath } from "node:url";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { cleanupOracleScratch, compileGreenfield, openOracleSession } from "../index.js";
-import type { OracleSession } from "../index.js";
+import { cleanupOracleScratch, compileGreenfield, openOracleSession } from "@inhuman.tools/arrival-mercury-oracle";
+import type { OracleSession } from "@inhuman.tools/arrival-mercury-oracle";
 
 const dirOf = (rel: string): string => fileURLToPath(new URL(rel, import.meta.url));
 const casesFrom = (rel: string): { name: string; source: string }[] =>
@@ -37,7 +37,7 @@ const casesFrom = (rel: string): { name: string; source: string }[] =>
       source: readFileSync(dirOf(rel) + f, "utf8"),
     }));
 
-const CASES = [...casesFrom("corpus/"), ...casesFrom("fixtures/gate1-corpus/")];
+const CASES = [...casesFrom("corpus/"), ...casesFrom("../../../arrival-mercury/src/__tests__/fixtures/gate1-corpus/")];
 if (CASES.length === 0) throw new Error("emitted-fixtures: no .scm cases found — corpus/ and gate1-corpus/ are empty?");
 
 let session: OracleSession;

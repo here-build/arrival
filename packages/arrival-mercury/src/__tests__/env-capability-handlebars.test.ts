@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import { arrivalHandlebarsCapability, hbsContentsToSchemeSource } from "@inhuman.tools/arrival-env-capability-handlebars";
 
 import { compileHbsFile } from "../build/hbs-module.js";
-import { greenfieldRegistryFor, openOracleSession } from "../oracle/harness.js";
+import { greenfieldRegistryFor, openOracleSession } from "../registry/greenfield-session.js";
 import { emitRegistryOf } from "../registry/harvest.js";
 import type { EmitRegistry } from "../registry/harvest.js";
 import { withRules } from "../rules/overlay.js";

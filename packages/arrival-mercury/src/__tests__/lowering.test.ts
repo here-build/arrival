@@ -7,30 +7,26 @@
  *     position) and both guard forms;
  *   - a LOCAL emit pipeline (classify → walk(registry, loweringDecisionAt,
  *     guardFormOf) → render) proving the walker actually consults both views
- *     and is BYTE-IDENTICAL to the pre-E3 inline ladder/guard;
- *   - one proof that the REAL `compileGreenfield` harness runs through the
- *     views end to end, oracle-agreeing throughout.
+ *     and is BYTE-IDENTICAL to the pre-E3 inline ladder/guard.
+ *
+ * (A former third layer proved the views end to end through the real oracle
+ * harness; it depended on the oracle package and was removed to keep this a
+ * pure compiler unit test.)
  */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { classify } from "../coreform/index.js";
-import type { ClassifyResult } from "../coreform/index.js";
-import { desugar } from "../front/desugar.js";
-import { parseSexprs } from "../front/parse.js";
 import {
-  cleanupOracleScratch,
-  compileGreenfield,
-  openOracleSession,
-  type OracleSession,
+  classify,
+  desugar,
+  parseSexprs,
   phase1Rules,
-  runOracle,
+  walk,
   withRules,
 } from "../index.js";
+import type { ClassifyResult, EmitRegistry, WalkOptions } from "../index.js";
 import { guardFormOf, loweringDecisionAt } from "../lowering/index.js";
-import type { EmitRegistry } from "../registry/index.js";
 import { render } from "../residual/render.js";
 import type { CompilationUnit } from "../residual/types.js";
-import { walk, type WalkOptions } from "../walker/index.js";
 
 const cf = (src: string): ClassifyResult => classify(desugar(parseSexprs(src)));
 
@@ -196,30 +192,6 @@ describe("walker consumption — the ladder and guard form both fire INSIDE walk
   });
 });
 
-describe("compileGreenfield wiring — the ladder and guard form run end to end through the REAL harness", () => {
-  let session: OracleSession;
-  beforeAll(async () => {
-    session = await openOracleSession();
-  }, 60_000);
-  afterAll(async () => {
-    await session.dispose();
-    cleanupOracleScratch();
-  }, 30_000);
-
-  it("car compiles through the REAL compileGreenfield to the idiomatic index residual", () => {
-    const compiled = compileGreenfield(session, `(car (list 1 2 3))`);
-    expect(compiled).toContain("[0]");
-  });
-
-  it("value preservation over the real oracle: the relocated ladder agrees with the interpreter", async () => {
-    const verdict = await runOracle(session, `(car (list 1 2 3))`);
-    expect(verdict.agree, verdict.detail).toBe(true);
-    expect(verdict.compiled).toEqual({ kind: "value", value: 1 });
-  });
-
-  it("value preservation for the guard form: (if 0 \"truthy\" \"falsy\") — the JS-falsy trap Law T must not fall into", async () => {
-    const verdict = await runOracle(session, `(if 0 "truthy" "falsy")`);
-    expect(verdict.agree, verdict.detail).toBe(true);
-    expect(verdict.compiled).toEqual({ kind: "value", value: "truthy" });
-  });
-});
+// (The real-harness describe lived here; it depended on the oracle package and
+// was removed to keep this a pure compiler unit test — the walker-consumption
+// goldens above already prove the ladder/guard wiring.)

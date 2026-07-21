@@ -50,7 +50,7 @@ describe("W9 gates — migration lock", () => {
   }, 30_000);
 
   it("OracleSubject is greenfield-only (no legacy dual path)", () => {
-    const harness = readFileSync(path.join(packageRoot, "src/oracle/harness.ts"), "utf8");
+    const harness = readFileSync(path.resolve(here, "../../../arrival-mercury-oracle/src/harness.ts"), "utf8");
     expect(harness).not.toMatch(/subject\s*===\s*["']legacy["']/);
     expect(harness).not.toMatch(/projectToJsRaw/);
     expect(harness).toMatch(/export type OracleSubject = "greenfield"/);

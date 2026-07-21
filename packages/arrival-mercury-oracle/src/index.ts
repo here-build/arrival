@@ -30,3 +30,4 @@ export {
   show,
 } from "./harness.js";
 export { type CorpusVerdict, type ExpectedOutcome, outcomeMatches, runCorpusCase } from "./expected.js";
+export { assertFixtureNamesOnly, type NamesDiff, namesOnlyDiff } from "./names-diff.js";

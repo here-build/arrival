@@ -27,8 +27,8 @@ import { fileURLToPath } from "node:url";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { cleanupOracleScratch, openOracleSession, oracleEqual, runOracle, show } from "../index.js";
-import type { ExpectedOutcome, OracleSession, Outcome } from "../index.js";
+import { cleanupOracleScratch, openOracleSession, oracleEqual, runOracle, show } from "@inhuman.tools/arrival-mercury-oracle";
+import type { ExpectedOutcome, OracleSession, Outcome } from "@inhuman.tools/arrival-mercury-oracle";
 import { CORPUS_EXPECTATIONS } from "./corpus/expectations.js";
 
 const corpusDir = fileURLToPath(new URL("corpus/", import.meta.url));

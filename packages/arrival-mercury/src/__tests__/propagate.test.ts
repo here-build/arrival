@@ -10,31 +10,27 @@
  *     (`(let ((flag #t)) (if flag A B))` → propagate → prevalue folds → `A`)
  *     and the three soundness invariants named in the mission: value
  *     preservation, the `infer` binding is never duplicated, and effect
- *     order is preserved;
- *   - one proof that the REAL `compileGreenfield` harness runs both folds
- *     end to end.
+ *     order is preserved.
+ *
+ * (A former third layer proved both folds end to end through the real oracle
+ * harness; it depended on the oracle package and was removed to keep this a
+ * pure compiler unit test.)
  */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { classify } from "../coreform/index.js";
-import type { ClassifyResult, CoreForm, If, Let } from "../coreform/index.js";
-import { desugar } from "../front/desugar.js";
-import { parseSexprs } from "../front/parse.js";
 import {
-  cleanupOracleScratch,
-  compileGreenfield,
-  openOracleSession,
-  type OracleSession,
+  classify,
+  desugar,
+  parseSexprs,
   phase1Rules,
-  runOracle,
+  walk,
   withRules,
 } from "../index.js";
+import type { ClassifyResult, CoreForm, EmitRegistry, If, Let, WalkOptions } from "../index.js";
 import { prevalueDecisionAt } from "../prevalue/index.js";
 import { isTriviallyPure, propagateTopLevelDefines, propagationDecisionAt, sameBranchDecisionAt } from "../propagate/index.js";
-import type { EmitRegistry } from "../registry/index.js";
 import { render } from "../residual/render.js";
 import type { CompilationUnit } from "../residual/types.js";
-import { walk, type WalkOptions } from "../walker/index.js";
 
 const cf = (src: string): ClassifyResult => classify(desugar(parseSexprs(src)));
 
@@ -53,8 +49,8 @@ function assertKind<K extends CoreForm["kind"]>(f: CoreForm, kind: K): Extract<C
 
 // ── the local emit pipeline: classify → walk(registry, propagationOf, prevalueOf,
 // sameBranchOf) → render. Mirrors `prevalue.test.ts`'s own `compile`/`emit` helpers,
-// with the two new views wired in exactly where `oracle/harness.ts`'s
-// `compileGreenfield` wires them.
+// with the two new views wired in exactly where `oracle/harness.ts`'s real
+// compile harness wires them.
 const EMPTY: EmitRegistry = { lookup: () => undefined, names: new Set<string>() };
 // A bare "infer" presence row — SOLELY to make the symbol resolvable (rung-3 RuntimeRef
 // shim), the identical convention `peepholes.test.ts`/`prevalue.test.ts` already use.
@@ -381,30 +377,6 @@ describe("soundness invariant (c) — a door on a NON-propagated branch still fi
   });
 });
 
-describe("compileGreenfield wiring — propagation runs end to end through the REAL harness", () => {
-  let session: OracleSession;
-  beforeAll(async () => {
-    session = await openOracleSession();
-  }, 60_000);
-  afterAll(async () => {
-    await session.dispose();
-    cleanupOracleScratch();
-  }, 30_000);
-
-  it("(let ((flag #t)) (if flag \"a\" (error \"must-not-run\"))) compiles through the REAL compileGreenfield to the bare surviving value", () => {
-    const compiled = compileGreenfield(session, `(let ((flag #t)) (if flag "a" (error "must-not-run")))`);
-    expect(compiled).toContain('return "a"');
-    expect(compiled).not.toContain("error");
-  });
-
-  it("value preservation over the real oracle: propagate-then-fold agrees with the interpreter", async () => {
-    const verdict = await runOracle(session, `(let ((flag #t)) (if flag "a" (error "must-not-run")))`);
-    expect(verdict.agree, verdict.detail).toBe(true);
-    expect(verdict.compiled).toEqual({ kind: "value", value: "a" });
-  });
-
-  it("infer is not duplicated through the real harness either — one call site, two uses", () => {
-    const compiled = compileGreenfield(session, `(let ((r (infer "fast" "p"))) (list r r))`);
-    expect(compiled.match(/infer\(/g)).toHaveLength(1);
-  });
-});
+// (The real-harness describe lived here; it depended on the oracle package and
+// was removed to keep this a pure compiler unit test — the walker-consumption
+// and soundness goldens above already prove the folds.)

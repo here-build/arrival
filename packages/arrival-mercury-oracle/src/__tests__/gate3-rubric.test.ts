@@ -6,8 +6,8 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { compileGreenfield, openOracleSession } from "../index.js";
-import type { OracleSession } from "../index.js";
+import { compileGreenfield, openOracleSession } from "@inhuman.tools/arrival-mercury-oracle";
+import type { OracleSession } from "@inhuman.tools/arrival-mercury-oracle";
 
 let session: OracleSession;
 beforeAll(async () => {

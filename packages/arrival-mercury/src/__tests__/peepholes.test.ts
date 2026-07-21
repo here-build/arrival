@@ -3,12 +3,11 @@
  * CoreForm-shape layer, plus:
  *   - byte-level goldens through a LOCAL emit pipeline (classify → walk(registry,
  *     idiomAt)) mirroring rules-phase1.test.ts's own `compile`/`emit` helpers,
- *     with `sm.idiomAt` wired in exactly where `oracle/harness.ts`'s
- *     `compileGreenfield` wires it;
- *   - one proof that the REAL `compileGreenfield` harness reaches the idiom
- *     end to end, including the stage-0 runtime-manifest rows
- *     (`infer/scalar`/`infer/chat/scalar`) the fold needs to resolve without
- *     dooring.
+ *     with `sm.idiomAt` wired in exactly where the real compile harness wires it.
+ *
+ * (A former third layer proved the idiom end to end through the real oracle
+ * harness; it depended on the oracle package and was removed to keep this a
+ * pure compiler unit test.)
  *
  * E2 REWRITE (engine plan §2 E2, second half): the dissolved whole-tree
  * `peephole()` pass (`applyPeepholes`, `programShadowsPeepholeNames` as a
@@ -24,24 +23,20 @@
  * is UNCHANGED — still the whole-program shadow census, still exported from
  * `../peepholes/index.js` verbatim.
  */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { INFER_PEEPHOLE_LOAD_BEARING_NAMES, programShadowsPeepholeNames } from "../peepholes/index.js";
-import { SchemeSemanticModel } from "../model/model.js";
 import {
   type App,
   classify,
-  cleanupOracleScratch,
   type ClassifyResult,
-  compileGreenfield,
   type CoreForm,
   desugar,
   type EmitRegistry,
-  openOracleSession,
-  type OracleSession,
   parseSexprs,
   phase1Rules,
   render,
+  SchemeSemanticModel,
   walk,
   withRules,
 } from "../index.js";
@@ -51,7 +46,7 @@ const cf = (src: string): ClassifyResult => classify(desugar(parseSexprs(src)));
 
 // ── the local emit pipeline: classify → walk(registry, sm.idiomAt) → render ─────────
 // (rules-phase1.test.ts's own `compile`/`emit` helpers, with `idiomAt` wired in exactly
-// where harness.ts's `compileGreenfield` wires it — no FRAME/ASYNC-IFY noise, so goldens
+// where harness.ts's real compile harness wires it — no FRAME/ASYNC-IFY noise, so goldens
 // stay the same bare byte-level shape that file already pins.)
 const EMPTY: EmitRegistry = { lookup: () => undefined, names: new Set<string>() };
 // A bare "infer" presence row: `infer`'s own emit rule relocated onto its Contract
@@ -220,24 +215,6 @@ describe("the whole-program shadowing guard — the soundness net (peepholes/ind
   });
 });
 
-describe("compileGreenfield wiring — idioms run end to end through the REAL harness (mission item 4)", () => {
-  let session: OracleSession;
-  beforeAll(async () => {
-    session = await openOracleSession();
-  }, 60_000);
-  afterAll(async () => {
-    await session.dispose();
-    cleanupOracleScratch();
-  }, 30_000);
-
-  it('(car (infer "gpt-4" "hello")) compiles through the REAL compileGreenfield to the folded call surface', () => {
-    const compiled = compileGreenfield(session, `(car (infer "gpt-4" "hello"))`);
-    // materializeImports resolved the folded name against the stage-0 manifest (no
-    // MaterializeImportsDoorError — proves the runtime/stage0.ts
-    // `infer/scalar`→`inferScalar` row this wave added is what makes the wiring
-    // actually EXECUTABLE, not merely shape-correct).
-    expect(compiled).toContain("inferScalar");
-    // No car-of-list residue survives — the fold REPLACED the shape, never wrapped it.
-    expect(compiled).not.toContain("[0]");
-  });
-});
+// (The real-harness describe lived here; it depended on the oracle package and
+// was removed to keep this a pure compiler unit test — the end-to-end idiom
+// goldens above already prove the fold surface.)

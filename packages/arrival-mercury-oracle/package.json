@@ -48,6 +48,7 @@
     "@here.build/tsconfig": "workspace:^",
     "@types/node": "24.0.0",
     "eslint": "9.39.2",
+    "fast-check": "4.8.0",
     "vitest": "4.1.0"
   }
 }

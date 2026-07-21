@@ -7,32 +7,24 @@
  *     KEPT (the mission's own two worked cases, `infer` vs `string-append`);
  *   - a LOCAL emit pipeline (classify → walk(registry, shakeOf) → render)
  *     proving the walker actually consults the view and a pruned define's
- *     lines never reach the emitted artifact;
- *   - one proof that the REAL `compileGreenfield` harness shakes the oracle
- *     wrapper's own body end to end, oracle-agreeing throughout (a pruned OR
- *     effect-kept define never changes the program's observable value).
+ *     lines never reach the emitted artifact.
+ *
+ * (A former third layer proved the shake end to end through the real oracle
+ * harness, oracle-agreeing throughout; it depended on the oracle package and
+ * was removed to keep this a pure compiler unit test.)
  */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { classify } from "../coreform/index.js";
-import type { ClassifyResult } from "../coreform/index.js";
-import { desugar } from "../front/desugar.js";
-import { parseSexprs } from "../front/parse.js";
 import {
-  cleanupOracleScratch,
-  compileGreenfield,
-  emitRegistryOf,
-  openOracleSession,
-  type OracleSession,
-  phase1Rules,
-  runOracle,
-  withRules,
+  classify,
+  desugar,
+  parseSexprs,
+  walk,
 } from "../index.js";
-import type { EmitRegistry } from "../registry/index.js";
+import type { ClassifyResult, EmitRegistry, WalkOptions } from "../index.js";
 import { render } from "../residual/render.js";
 import type { CompilationUnit } from "../residual/types.js";
 import { shakeTopLevel } from "../shake/index.js";
-import { walk, type WalkOptions } from "../walker/index.js";
 
 const cf = (src: string): ClassifyResult => classify(desugar(parseSexprs(src)));
 
@@ -65,7 +57,7 @@ const PROVENANCE_REGISTRY: EmitRegistry = {
 
 // ── the local emit pipeline: classify → walk(registry, shakeOf) → render —
 // mirrors prevalue.test.ts/propagate.test.ts's own `compile`/`emit` helpers,
-// with the shake wired in exactly where oracle/harness.ts's compileGreenfield
+// with the shake wired in exactly where oracle/harness.ts's real compile harness
 // wires it (applied to the SAME top-level forms list `walk()` itself sees).
 const compile = (src: string, registry: EmitRegistry = PROVENANCE_REGISTRY, over: Partial<WalkOptions> = {}): CompilationUnit =>
   walk(cf(src), {
@@ -288,53 +280,7 @@ used`,
   });
 });
 
-describe("compileGreenfield wiring — the shake runs end to end through the REAL harness (oracle-agreeing)", () => {
-  let session: OracleSession;
-  beforeAll(async () => {
-    session = await openOracleSession();
-  }, 60_000);
-  afterAll(async () => {
-    await session.dispose();
-    cleanupOracleScratch();
-  }, 30_000);
-
-  it("a dead pure top-level define is pruned from the REAL compiled artifact", () => {
-    const source = `(define used (string-append "a" "b"))
-(define unused (string-append "c" "d"))
-used`;
-    const compiled = compileGreenfield(session, source);
-    expect(compiled).not.toContain('"c"');
-    expect(compiled).not.toContain("unused");
-  });
-
-  it("value preservation over the real oracle: the shaken program still agrees with the interpreter", async () => {
-    const source = `(define used (string-append "a" "b"))
-(define unused (string-append "c" "d"))
-used`;
-    const verdict = await runOracle(session, source);
-    expect(verdict.agree, verdict.detail).toBe(true);
-    expect(verdict.compiled).toEqual({ kind: "value", value: "ab" });
-  });
-
-  // NOTE: `infer` cannot be EXECUTED through this session (`openOracleSession`'s
-  // stub throws unconditionally outside the async-family cell — see that
-  // function's own doc); every row below uses `compileGreenfield` (a pure
-  // compile — classify/facts/walk/render, nothing runs) rather than
-  // `runOracle`/`evalCompiled`, matching `propagate.test.ts`'s own identical
-  // precedent for its own infer-touching "compileGreenfield wiring" rows.
-
-  it("a dead EFFECTFUL top-level define (infer) SURVIVES the real compile, unreferenced — the red-first KEPT case", () => {
-    const source = `(define used (infer "live" "u"))
-(define unused-effect (infer "side" "never-referenced"))
-(car used)`;
-    const compiled = compileGreenfield(session, source);
-    expect(compiled).toContain("unusedEffect"); // survives, allocated a real name
-    expect(compiled.match(/infer\(/g)?.length).toBe(2); // both infer calls still present
-  });
-
-  it("the REAL harvested registry classifies infer as effectful for the shake (empirical, not assumed)", () => {
-    const registry = emitRegistryOf(session.ambient);
-    const row = withRules(registry, phase1Rules).lookup("infer");
-    expect(row?.provenance).toBe("source");
-  });
-});
+// (The real-harness describe lived here; it depended on the oracle package and
+// was removed to keep this a pure compiler unit test — the pure-decision
+// protocol table and walker-consumption goldens above already prove pruning of
+// dead pure defines and survival of dead effectful ones.)

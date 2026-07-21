@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { assertFixtureNamesOnly, namesOnlyDiff } from "../oracle/names-diff.js";
+import { assertFixtureNamesOnly, namesOnlyDiff } from "@inhuman.tools/arrival-mercury-oracle";
 
 describe("namesOnlyDiff — self", () => {
   it("byte-identical input is equal with empty renames", () => {
