@@ -126,6 +126,37 @@ export class EvalError extends Error {
 }
 
 // -------------------------------------------------------------------------
+// :: ErrorClass — the closed error taxonomy both worlds classify into
+// (oracle-harness.md §2/§4.2's "same error class, message may drift" half of the
+// agreement law, `@inhuman.tools/arrival-mercury-oracle`). `runOracle` compares the
+// CLASS, never the message.
+//
+// Interpreter side: every `ArrivalError` subclass below declares its own literal
+// `"arrival/error-category"` (the abstract field on the base) — classification is a
+// compile-time-checked fact ON the type, not a name/message pattern-match maintained
+// in a separate classifier function. A generic wrap (`BudgetExceededError` below,
+// evaluator.ts's `ForeignThrowError`) computes/forwards its category at construction
+// instead of hand-picking one per throw site.
+//
+// Compiled side has no such hierarchy to hang a field on — a compiled artifact throws
+// whatever V8/tsx surfaces (`ReferenceError`, `TypeError`, the harness's own `error()`
+// shim), so the oracle package's own `classifyCompiledError` still duck-types by name/
+// message shape. The two shapes are structurally unrelated by design; this union is
+// the one shared vocabulary between them.
+// -------------------------------------------------------------------------
+export type ErrorClass =
+  | "empty-list-access"
+  | "unbound-variable"
+  | "type-mismatch"
+  | "division-by-zero"
+  | "arity-mismatch"
+  | "unsupported-form"
+  | "exact-overflow" // the RATIO ruling's crash-on-overflow guarantee — see ExactOverflowError
+  | "prohibited-dynamics" // arrival's immutability/no-dynamics-by-design law — see PurityError
+  | "user-error" // an R7RS (error …) raise
+  | "other";
+
+// -------------------------------------------------------------------------
 // :: ArrivalError — the single concrete arrival / Scheme-level error (the base).
 //
 // StackFrame is a TYPE-only import, so value terms throw/extend it without pulling
@@ -146,9 +177,16 @@ function readLocation(code: SchemeValue): SourceLocation | undefined {
   return undefined;
 }
 
-export class ArrivalError extends Error {
+export abstract class ArrivalError extends Error {
   static [CLASS] = "arrival-error";
   public readonly name: string = "ArrivalError";
+
+  /** Every concrete `ArrivalError` subclass names its own {@link ErrorClass} — a
+   *  compile-time-checked fact on the type (never a name/message pattern-match
+   *  maintained separately). A generic wrap (`BudgetExceededError` below,
+   *  evaluator.ts's `ForeignThrowError`) computes/forwards one at construction
+   *  instead of hand-picking per throw site. */
+  abstract readonly "arrival/error-category": ErrorClass;
 
   /** The `ConstructorParameters`-typed static invariant (errors-as-doors idiom):
    *  `MyError.invariant(cond, ...factsMatchingMyError'sCtor)` throws the RECEIVER
@@ -218,6 +256,23 @@ export function isHostRuntimeBug(e: unknown): boolean {
 }
 
 // -------------------------------------------------------------------------
+// :: BudgetExceededError — a run's own containment policy tripped (wall-clock or
+// heap), never a genuine fault. Shared by the flat trampoline's execution-budget
+// check (eval/evaluator.ts's `run()`) and the heap-budget meter (heap-budget.ts,
+// charged from env/pack-helpers.ts and common/scheme-zod.ts's list-materializing
+// chokepoints) — one class, since both are "this run was contained," not two
+// distinct concerns. Every call site already builds its own full message
+// (`heapBudgetMessage`, or an inline `execution budget exceeded (${budgetMs}ms)`
+// template), so this class needs no fields of its own beyond what ArrivalError
+// already carries — no constructor override.
+// -------------------------------------------------------------------------
+export class BudgetExceededError extends ArrivalError {
+  static [CLASS] = "budget-exceeded-error";
+  public readonly name = "BudgetExceededError";
+  readonly "arrival/error-category": ErrorClass = "other";
+}
+
+// -------------------------------------------------------------------------
 // :: PurityError — the typed error a deliberately-omitted feature carries.
 //
 // arrival is PURE DATAFLOW: mutation (set-car!/vector-set!/…) and dynamics
@@ -229,6 +284,7 @@ export class PurityError extends ArrivalError {
   static [CLASS] = "purity-error";
   public readonly owner: string;
   public readonly name = "PurityError";
+  readonly "arrival/error-category": ErrorClass = "prohibited-dynamics";
 
   constructor(
     message: string,
@@ -254,6 +310,7 @@ export class PurityError extends ArrivalError {
 export class PortabilityError extends ArrivalError {
   static [CLASS] = "portability-error";
   public readonly name = "PortabilityError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
     /** The diverging op, e.g. "map" — the routing/telemetry key. */
@@ -291,6 +348,7 @@ export function strictGate(
 export class ProvenanceRoleShapeError extends ArrivalError {
   static [CLASS] = "provenance-role-shape-error";
   public readonly name = "ProvenanceRoleShapeError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
     /** The declaring symbol's name — routing/telemetry key. */
@@ -319,6 +377,7 @@ export class ProvenanceRoleShapeError extends ArrivalError {
 export class CacheClassShapeError extends ArrivalError {
   static [CLASS] = "cache-class-shape-error";
   public readonly name = "CacheClassShapeError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
     /** The declaring symbol's name — routing/telemetry key. */
@@ -357,6 +416,13 @@ export class R7RSError extends Error {
 
   readonly irritants: unknown[];
   readonly name: string = "R7RSError";
+  /** Not an `ArrivalError` (R7RS errors are user-raised, not internal doors), but
+   *  still names its own category directly — the ONE non-`ArrivalError` class that
+   *  does: `failAndWrap` (eval/evaluator.ts) normally wraps an `(error …)` raise
+   *  under a generic wrapper whose category forwards from this field, but a bare,
+   *  unwrapped `R7RSError` reaching a classifier (the rare defensive case) still
+   *  self-reports correctly without that forwarding. */
+  readonly "arrival/error-category": ErrorClass = "user-error";
 
   constructor(message: string, ...irritants: unknown[]) {
     super(message);
@@ -449,6 +515,7 @@ export class ResourceNotLiveError extends Error {
 export class PreludeMembershipError extends ArrivalError {
   static [CLASS] = "prelude-membership-error";
   public readonly name = "PreludeMembershipError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
     /** The define's name — routing/telemetry key. */
@@ -473,6 +540,7 @@ export class PreludeMembershipError extends ArrivalError {
 export class WireLocalityError extends ArrivalError {
   static [CLASS] = "wire-locality-error";
   public readonly name = "WireLocalityError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
     /** The offending free variable name. */
@@ -498,6 +566,7 @@ export class WireLocalityError extends ArrivalError {
 export class DefineLocalityError extends ArrivalError {
   static [CLASS] = "define-locality-error";
   public readonly name = "DefineLocalityError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
     /** The offending free variable name. */
@@ -523,6 +592,7 @@ export class DefineLocalityError extends ArrivalError {
 export class DefineForwardReferenceError extends ArrivalError {
   static [CLASS] = "define-forward-reference-error";
   public readonly name = "DefineForwardReferenceError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
     /** The declaring (eager) define's own name. */
@@ -565,6 +635,7 @@ export class DefineForwardReferenceError extends ArrivalError {
 export class RawCrossingError extends ArrivalError {
   static [CLASS] = "raw-crossing-error";
   public readonly name = "RawCrossingError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
     /** Which door caught it — storage read vs a fallback resolver's answer. */
@@ -596,6 +667,7 @@ export class RawCrossingError extends ArrivalError {
 export class UnrecognizedCrossingError extends ArrivalError {
   static [CLASS] = "unrecognized-crossing-error";
   public readonly name = "UnrecognizedCrossingError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
     /** `value.constructor.name`, or the anonymous-object fallback. */
@@ -617,6 +689,7 @@ export class UnrecognizedCrossingError extends ArrivalError {
 export class AsyncCrossingError extends ArrivalError {
   static [CLASS] = "async-crossing-error";
   public readonly name = "AsyncCrossingError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor() {
     super(
@@ -637,6 +710,7 @@ export class AsyncCrossingError extends ArrivalError {
 export class RedundantCrossingError extends ArrivalError {
   static [CLASS] = "redundant-crossing-error";
   public readonly name = "RedundantCrossingError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
     /** Which membrane face refused the redundant crossing. */
@@ -659,6 +733,7 @@ export class RedundantCrossingError extends ArrivalError {
 export class RegionEscapeError extends ArrivalError {
   static [CLASS] = "region-escape-error";
   public readonly name = "RegionEscapeError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor() {
     super(
@@ -676,6 +751,7 @@ export class RegionEscapeError extends ArrivalError {
 export class RegionIncompleteError extends ArrivalError {
   static [CLASS] = "region-incomplete-error";
   public readonly name = "RegionIncompleteError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
     /** How many reverse-lambda calls were still in flight at close. */
@@ -711,6 +787,7 @@ export class RegionIncompleteError extends ArrivalError {
 export class UnboundVariableError extends ArrivalError {
   static [CLASS] = "unbound-variable-error";
   public readonly name = "UnboundVariableError";
+  readonly "arrival/error-category": ErrorClass = "unbound-variable";
   /** Agent/MCP-facing wording (same hint, different frame — see unbound-variable.ts). */
   public readonly publicMessage: string;
   /** True iff a did-you-mean suffix was appended (a near name existed in vocabulary). */
@@ -748,6 +825,7 @@ export class UnboundVariableError extends ArrivalError {
 export class NotCallableError extends ArrivalError {
   static [CLASS] = "not-callable-error";
   public readonly name = "NotCallableError";
+  readonly "arrival/error-category": ErrorClass = "type-mismatch";
 
   constructor(
     public readonly kind: "type" | "quoted-string",
@@ -773,6 +851,7 @@ export class NotCallableError extends ArrivalError {
 export class ResolvedNonValueError extends ArrivalError {
   static [CLASS] = "resolved-non-value-error";
   public readonly name = "ResolvedNonValueError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
     public readonly variable: string,
@@ -804,6 +883,7 @@ export class ResolvedNonValueError extends ArrivalError {
 export class SpecialFormShapeError extends ArrivalError {
   static [CLASS] = "special-form-shape-error";
   public readonly name = "SpecialFormShapeError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
     /** The special form whose shape guard failed (`if`, `let`, `=>`, `apply`, …) —
@@ -829,6 +909,7 @@ export class SpecialFormShapeError extends ArrivalError {
 export class OutputContractError extends ArrivalError {
   static [CLASS] = "output-contract-error";
   public readonly name = "OutputContractError";
+  readonly "arrival/error-category": ErrorClass = "type-mismatch";
 
   constructor(
     /** `describeExitSchema(contract)` — what the contract declared. */
@@ -856,6 +937,7 @@ export class OutputContractError extends ArrivalError {
 export class KeywordPairingError extends ArrivalError {
   static [CLASS] = "keyword-pairing-error";
   public readonly name = "KeywordPairingError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
     public readonly kind: "dangling-keyword" | "input-rest-needs-tuple",
@@ -877,6 +959,7 @@ export class KeywordPairingError extends ArrivalError {
 export class SchemaFieldShapeError extends ArrivalError {
   static [CLASS] = "schema-field-shape-error";
   public readonly name = "SchemaFieldShapeError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor() {
     super("schema/object: field must be (name type) or (name type description)");
@@ -893,6 +976,7 @@ export class SchemaFieldShapeError extends ArrivalError {
 export class CodecFidelityError extends ArrivalError {
   static [CLASS] = "codec-fidelity-error";
   public readonly name = "CodecFidelityError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
     /** Which named codec refused (`exact`/`number`/`integer`/`bigint`/`list`/…). */
@@ -916,6 +1000,7 @@ export class CodecFidelityError extends ArrivalError {
 export class AliasTargetError extends ArrivalError {
   static [CLASS] = "alias-target-error";
   public readonly name = "AliasTargetError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
     public readonly capabilityName: string,
@@ -944,6 +1029,7 @@ export class AliasTargetError extends ArrivalError {
 export class PreludeArmingError extends ArrivalError {
   static [CLASS] = "prelude-arming-error";
   public readonly name = "PreludeArmingError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(public readonly capabilityName: string) {
     super(`capability "${capabilityName}" has a prelude but no evalScheme was provided to lower()`);
@@ -960,6 +1046,7 @@ export class PreludeArmingError extends ArrivalError {
 export class AmbientShapeError extends ArrivalError {
   static [CLASS] = "ambient-shape-error";
   public readonly name = "AmbientShapeError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
     /** The call site's own name (`"exec"`, `"execExpr"`, `"prelude evalScheme"`,
@@ -983,6 +1070,7 @@ export class AmbientShapeError extends ArrivalError {
 export class RunResolverUnreachableError extends ArrivalError {
   static [CLASS] = "run-resolver-unreachable-error";
   public readonly name = "RunResolverUnreachableError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(public readonly verb: string) {
     super(
@@ -998,6 +1086,7 @@ export class RunResolverUnreachableError extends ArrivalError {
 export class RequirePathError extends ArrivalError {
   static [CLASS] = "require-path-error";
   public readonly name = "RequirePathError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
     public readonly kind: "nul-byte" | "escapes-root",
@@ -1018,6 +1107,7 @@ export class RequirePathError extends ArrivalError {
 export class RequireCycleError extends ArrivalError {
   static [CLASS] = "require-cycle-error";
   public readonly name = "RequireCycleError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(public readonly chain: readonly string[]) {
     super(`require: cyclic dependency: ${chain.join(" → ")}`);
@@ -1030,6 +1120,7 @@ export class RequireCycleError extends ArrivalError {
 export class RequireResolverError extends ArrivalError {
   static [CLASS] = "require-resolver-error";
   public readonly name = "RequireResolverError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
     public readonly kind: "no-resolver" | "no-extension",
@@ -1057,6 +1148,7 @@ export class RequireResolverError extends ArrivalError {
 export class ExtensionSuffixConflictError extends ArrivalError {
   static [CLASS] = "extension-suffix-conflict-error";
   public readonly name = "ExtensionSuffixConflictError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
     public readonly suffix: string,
@@ -1083,6 +1175,7 @@ export class ExtensionSuffixConflictError extends ArrivalError {
 export class IngressBindingError extends ArrivalError {
   static [CLASS] = "ingress-binding-error";
   public readonly name = "IngressBindingError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
     public readonly span: string,
@@ -1103,6 +1196,7 @@ export class IngressBindingError extends ArrivalError {
 export class TraceArtifactVersionError extends ArrivalError {
   static [CLASS] = "trace-artifact-version-error";
   public readonly name = "TraceArtifactVersionError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
     public readonly version: number,
@@ -1122,6 +1216,7 @@ export class TraceArtifactVersionError extends ArrivalError {
 export class TraceBudgetError extends ArrivalError {
   static [CLASS] = "trace-budget-error";
   public readonly name = "TraceBudgetError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(public readonly maxEntries: number) {
     // A DOOR, not a dead end: never offer a remedy the reader cannot perform. An
@@ -1154,6 +1249,7 @@ export class TraceBudgetError extends ArrivalError {
 export class ComparatorRequiredError extends ArrivalError {
   static [CLASS] = "comparator-required-error";
   public readonly name = "ComparatorRequiredError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(public readonly elementDescription: string) {
     super(
@@ -1169,6 +1265,7 @@ export class ComparatorRequiredError extends ArrivalError {
 export class ComplexNumberError extends ArrivalError {
   static [CLASS] = "complex-number-error";
   public readonly name = "ComplexNumberError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor() {
     super("complex numbers are not supported in arrival — inexact reals only; pass real/imag as separate values");
@@ -1183,6 +1280,7 @@ export class ComplexNumberError extends ArrivalError {
 export class TaglessProtocolError extends ArrivalError {
   static [CLASS] = "tagless-protocol-error";
   public readonly name = "TaglessProtocolError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
     public readonly op: string,
@@ -1228,6 +1326,7 @@ export class ProvenanceShadowDivergence extends Error {
 export class TypeTagError extends ArrivalError {
   static [CLASS] = "type-tag-error";
   public readonly name = "TypeTagError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
     /** The `define/overridable` binding name — routing/telemetry key. */
@@ -1268,6 +1367,7 @@ export class TypeTagError extends ArrivalError {
 export class CarrierMismatchError extends ArrivalError {
   static [CLASS] = "carrier-mismatch-error";
   public readonly name = "CarrierMismatchError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
     /** The spine-walking verb that refused (currently always "append"). */

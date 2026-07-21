@@ -44,7 +44,8 @@ import { collapseProvenance, taintString } from "../../provenance/provenance-col
 import { printValue } from "../../values/print.js";
 import { AString } from "../../values/primitives/AString.js";
 import { ABool } from "../../values/primitives/ABool.js";
-import { ArrivalError } from "../../eval/evaluator.js";
+import { ArrivalError, type ErrorClass } from "../../errors.js";
+import { CLASS } from "../../well-known-symbols.js";
 
 /** A scheme string value (boxed AString, or a raw JS string on the odd pre-box path). */
 const isStringLike = (v: unknown): v is AString | string => v instanceof AString || typeof v === "string";
@@ -71,6 +72,17 @@ const writeOf = (arg: unknown): string => {
   }
   return printValue(arg);
 };
+
+/** `format`'s own misuse doors — a bad destination, a dangling/unknown directive, an
+ *  argument-count mismatch against the fmt string. Colocated here (not `errors.ts`),
+ *  same discipline as `common/kwargs-rejection.ts`'s `KwargsRejectionError`: this
+ *  file owns the format-string grammar these messages describe, so the class lives
+ *  beside it rather than duplicating that context in the shared leaf. */
+class FormatError extends ArrivalError {
+  static [CLASS] = "format-error";
+  public readonly name = "FormatError";
+  readonly "arrival/error-category": ErrorClass = "other";
+}
 
 export default new EnvCapability("scheme/srfi-28", {
   symbols: {
@@ -110,7 +122,7 @@ export default new EnvCapability("scheme/srfi-28", {
             provInputs = [head, ...tail];
           } else if (isHashF(head)) {
             if (tail.length === 0 || !isStringLike(tail[0])) {
-              throw new ArrivalError(
+              throw new FormatError(
                 "format: (format #f fmt arg ...) needs a format string as its second argument",
                 [],
               );
@@ -119,10 +131,10 @@ export default new EnvCapability("scheme/srfi-28", {
             rest = tail.slice(1);
             provInputs = tail;
           } else if (head === undefined) {
-            throw new ArrivalError("format: expected a format string (SRFI-28: (format fmt arg ...))", []);
+            throw new FormatError("format: expected a format string (SRFI-28: (format fmt arg ...))", []);
           } else {
             // #t, a port, or any other non-string, non-#f first argument.
-            throw new ArrivalError(`format: ${DEST_REASON}`, []);
+            throw new FormatError(`format: ${DEST_REASON}`, []);
           }
 
           const fmt = stringValue(fmtValue);
@@ -132,7 +144,7 @@ export default new EnvCapability("scheme/srfi-28", {
           let argi = 0;
           const nextArg = (directive: string): unknown => {
             if (argi >= rest.length) {
-              throw new ArrivalError(
+              throw new FormatError(
                 `format: too few arguments for "${fmt}" — the ${directive} directive has no argument to consume`,
                 [],
               );
@@ -147,7 +159,7 @@ export default new EnvCapability("scheme/srfi-28", {
               continue;
             }
             if (i + 1 >= fmt.length) {
-              throw new ArrivalError(
+              throw new FormatError(
                 `format: dangling ~ at the end of "${fmt}" — a ~ must be followed by a directive (${SUPPORTED})`,
                 [],
               );
@@ -167,7 +179,7 @@ export default new EnvCapability("scheme/srfi-28", {
               const decimals = decimalsStr ? Number.parseInt(decimalsStr, 10) : undefined;
               const n = nextArg(`~${directiveText}`);
               if (!isSchemeNumber(n)) {
-                throw new ArrivalError(
+                throw new FormatError(
                   `format: the ~${directiveText} directive expects a number, got ${displayOf(n)}`,
                   [],
                 );
@@ -196,7 +208,7 @@ export default new EnvCapability("scheme/srfi-28", {
               case "D": {
                 const n = nextArg("~d");
                 if (!isSchemeNumber(n)) {
-                  throw new ArrivalError(`format: the ~d directive expects a number, got ${displayOf(n)}`, []);
+                  throw new FormatError(`format: the ~d directive expects a number, got ${displayOf(n)}`, []);
                 }
                 out += displayOf(n);
                 break;
@@ -208,7 +220,7 @@ export default new EnvCapability("scheme/srfi-28", {
                 out += "~";
                 break;
               default:
-                throw new ArrivalError(
+                throw new FormatError(
                   `format: unknown directive ~${d} in "${fmt}" — supported directives are ${SUPPORTED}` +
                     ` — nearest form: numbers use ~d (integer) or ~F / ~w,dF (fixed-point); text uses ~a (display) or ~s (write)`,
                   [],
@@ -217,7 +229,7 @@ export default new EnvCapability("scheme/srfi-28", {
           }
 
           if (argi < rest.length) {
-            throw new ArrivalError(
+            throw new FormatError(
               `format: too many arguments for "${fmt}" — ${rest.length} given, ${argi} consumed by directives`,
               [],
             );

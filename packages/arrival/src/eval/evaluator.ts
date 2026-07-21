@@ -92,6 +92,8 @@ import { bindValue, AmbientRuntime, type AmbientValue, isAmbientRuntime } from "
 import { unboundVariableError } from "../unbound-variable.js";
 import {
   ArrivalError,
+  BudgetExceededError,
+  type ErrorClass,
   EvalError,
   isHostRuntimeBug,
   NotCallableError,
@@ -130,7 +132,7 @@ import { AVector } from "../values/primitives/AVector.js";
 import { Macro } from "./Macro.js";
 import { Syntax } from "./Syntax.js";
 import { APair } from "../values/primitives/APair.js";
-import { DATA, LOCATION } from "../well-known-symbols.js";
+import { CLASS, DATA, LOCATION } from "../well-known-symbols.js";
 import { AListAlike, type SchemeBounceMarker, type SchemeValue } from "../values/types.js";
 import { ANil, nil } from "../values/primitives/ANil.js";
 import { Keyword } from "../values/Keyword.js";
@@ -741,6 +743,23 @@ export function raceAbort<T>(value: PromiseLike<T>, signal: AbortSignal): Promis
 // wrapper's raised value doesn't outlive it.
 const rawRaisedValues = new WeakMap<ArrivalError, SchemeValue>();
 
+/** The generic wrap `failAndWrap` mints for any throw that wasn't already an
+ *  `ArrivalError` — a raw non-Error raised value (R7RS `raise` accepts ANY object),
+ *  a foreign host Error, or a tiny-invariant throw. `"arrival/error-category"`
+ *  forwards from `cause` when it's already self-classifying (an R7RS `(error …)`
+ *  raise: `cause instanceof R7RSError` ⇒ `"user-error"`), else `"other"` — the
+ *  same cause-forwarding shape as `ArrivalError`'s own `get stack()` above. */
+class ForeignThrowError extends ArrivalError {
+  static [CLASS] = "foreign-throw-error";
+  public readonly name = "ForeignThrowError";
+  readonly "arrival/error-category": ErrorClass;
+
+  constructor(message: string, schemeStack: StackFrame[] = [], cause?: Error) {
+    super(message, schemeStack, cause);
+    this["arrival/error-category"] = cause instanceof R7RSError ? "user-error" : "other";
+  }
+}
+
 // ============================================================================
 // Flat Trampoline Runner
 // ============================================================================
@@ -766,7 +785,7 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
   // budget analogue of the pre-aborted-signal fast path above.
   const deadline = budgetMs === undefined ? undefined : performance.now() + budgetMs;
   if (deadline !== undefined && budgetMs! <= 0) {
-    throw new ArrivalError(`execution budget exceeded (${budgetMs}ms)`, []);
+    throw new BudgetExceededError(`execution budget exceeded (${budgetMs}ms)`, []);
   }
 
   // Stack of generators - this is the key to flat trampolining
@@ -802,7 +821,7 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
       // stash it in the side channel below, keyed by the wrapper instance, so a `guard`/
       // `catch` upstream (evalTry) can recover the ORIGINAL raised value instead of this
       // stringified re-presentation (see rawRaisedValues' own doc comment).
-      const wrapped = new ArrivalError(String(error), frames, undefined);
+      const wrapped = new ForeignThrowError(String(error), frames, undefined);
       rawRaisedValues.set(wrapped, error as SchemeValue);
       throw wrapped;
     }
@@ -813,7 +832,7 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
     const message = isHostRuntimeBug(error)
       ? `internal error in \`${frames.at(-1)?.procedure ?? "?"}\`: ${error.message}`
       : error.message;
-    throw new ArrivalError(message, frames, error);
+    throw new ForeignThrowError(message, frames, error);
   };
 
   try {
@@ -983,7 +1002,7 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
           // `exec(code, { budgetMs })` callers (and the sandbox-escape suite) match on.
           const now = performance.now();
           if (deadline !== undefined && now > deadline) {
-            throw new ArrivalError(
+            throw new BudgetExceededError(
               `execution budget exceeded (${budgetMs}ms)`,
               frameStack.filter((f): f is StackFrame => f !== undefined),
             );
@@ -1009,8 +1028,8 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
     }
     const frames = frameStack.filter((f): f is StackFrame => f !== undefined);
     throw error instanceof Error
-      ? new ArrivalError(error.message, frames, error)
-      : new ArrivalError(String(error), frames, undefined);
+      ? new ForeignThrowError(error.message, frames, error)
+      : new ForeignThrowError(String(error), frames, undefined);
   }
 }
 

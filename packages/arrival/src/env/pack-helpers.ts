@@ -12,7 +12,7 @@ import invariant from "tiny-invariant";
 import { APair, isCircularList } from "../values/primitives/APair.js";
 import { ANil } from "../values/primitives/ANil.js";
 import { ctxOf } from "../values/primitives/AValue.js";
-import { ArrivalError } from "../eval/evaluator.js";
+import { BudgetExceededError } from "../errors.js";
 import { heapBudgetMessage } from "../heap-budget.js";
 import type { SchemeValue } from "../values/types.js";
 
@@ -40,7 +40,7 @@ export function to_array(name: string): (list: SchemeValue) => SchemeValue[] {
         }
         result.push(node.car);
         if (meter !== undefined && ++meter.used > meter.max) {
-          throw new ArrivalError(heapBudgetMessage(meter.max), []);
+          throw new BudgetExceededError(heapBudgetMessage(meter.max), []);
         }
         node = node.cdr;
       } else {

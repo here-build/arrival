@@ -1,67 +1,21 @@
 /**
- * The closed error taxonomy both worlds classify into, independently — the
- * "same error class, message may drift" half of the oracle's agreement law
- * (oracle-harness.md §2/§4.2). `runOracle` compares the CLASS, never the
- * message: the interpreter throws rich `ArrivalError` subclasses with a
- * `schemeStack`; the compiled artifact throws whatever V8/tsx surfaces
- * (`ReferenceError`, `TypeError`, the harness's own `error()` shim). The two
- * shapes are structurally unrelated by design, so equivalence lives in this
- * one shared vocabulary.
- *
- * Duck-typed throughout (`.name` / `.cause.name` / message shapes), NOT
- * `instanceof`: only `ArrivalError` is exported from the `@inhuman.tools/arrival`
- * barrel — `R7RSError`, `ExactOverflowError`, `PurityError`,
- * `UnboundVariableError` are internal, and a classifier must not force a
- * barrel-export change to read a name it can already see.
+ * The closed error taxonomy both worlds classify into (oracle-harness.md §2/§4.2's
+ * "same error class, message may drift" half of the agreement law). `runOracle`
+ * compares the CLASS, never the message: the interpreter throws rich `ArrivalError`
+ * subclasses, each declaring its own `"arrival/error-category"` field directly (see
+ * `@inhuman.tools/arrival`'s errors.ts — `evalInterpreter` in `./harness.js` reads it
+ * off the caught error, no classifier function needed on that side any more); the
+ * compiled artifact throws whatever V8/tsx surfaces (`ReferenceError`, `TypeError`,
+ * the harness's own `error()` shim), which has no such hierarchy to hang a field on,
+ * so `classifyCompiledError` below still duck-types by name/message shape. The two
+ * shapes are structurally unrelated by design; this union is the one shared
+ * vocabulary between them.
  */
-
-export type ErrorClass =
-  | "empty-list-access"
-  | "unbound-variable"
-  | "type-mismatch"
-  | "division-by-zero"
-  | "arity-mismatch"
-  | "unsupported-form"
-  | "exact-overflow" // the RATIO ruling's crash-on-overflow guarantee (constitution §7)
-  | "prohibited-dynamics" // immutability/no-dynamics law (constitution §2.2): set!/call-cc/dynamic-wind family
-  | "user-error" // an R7RS (error …) raise — the immutability-legal short-circuit probe
-  | "other";
+import type { ErrorClass } from "@inhuman.tools/arrival";
+export type { ErrorClass };
 
 const nameOf = (e: unknown): string => (e instanceof Error ? e.name : "");
 const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e));
-const causeNameOf = (e: unknown): string => {
-  const cause = e instanceof Error ? (e as { cause?: unknown }).cause : undefined;
-  return cause instanceof Error ? cause.name : "";
-};
-
-/**
- * Interpreter-side classification. The trampoline (`failAndWrap`) rethrows
- * `ArrivalError` subclasses VERBATIM (class identity + `.name` preserved:
- * `UnboundVariableError`, `ExactOverflowError`, `PurityError`, …) and wraps
- * everything else into a plain `ArrivalError` with the original as `.cause` —
- * which is how an R7RS `(error …)` raise arrives: `ArrivalError` whose
- * `.cause.name === "R7RSError"`. tiny-invariant throws (`"Invariant failed:
- * Division by zero"`, `AExact.ts:41`) arrive the same wrapped way, so those
- * classify by message shape.
- */
-export function classifyInterpreterError(e: unknown): ErrorClass {
-  const name = nameOf(e);
-  if (name === "ExactOverflowError") return "exact-overflow";
-  if (name === "PurityError") return "prohibited-dynamics";
-  if (name === "UnboundVariableError") return "unbound-variable";
-  // A number/string in call-head position, a value failing a builtin's zod
-  // contract — the interpreter's "wrong kind of value" family.
-  if (name === "NotCallableError" || name === "OutputContractError") return "type-mismatch";
-  // (error "msg" irritants…): R7RSError (or a subclass, R7RSReadError/R7RSFileError)
-  // escapes execState wrapped as ArrivalError{cause: R7RSError} — but classify the
-  // bare shape too, in case a raise ever reaches us unwrapped.
-  if (/^R7RS/.test(name) || /^R7RS/.test(causeNameOf(e))) return "user-error";
-  const message = messageOf(e);
-  if (/division by zero/i.test(message)) return "division-by-zero";
-  if (/\barity\b|wrong number of arguments/i.test(message)) return "arity-mismatch";
-  if (/(car|cdr)[^]*empty list|empty list[^]*(car|cdr)/i.test(message)) return "empty-list-access";
-  return "other";
-}
 
 /**
  * Compiled-side classification — two error populations flow through here

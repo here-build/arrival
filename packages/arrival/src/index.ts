@@ -25,7 +25,13 @@ export {
   markInteropPrivate as markSandboxPrivate,
   markInteropBoundary as markAsSandboxBoundary,
 } from "./membrane/interop-access.js";
-export { schemeToJs, schemeToJsUntyped, jsToScheme, createRosettaWrapper, type RosettaFunction } from "./membrane/rosetta.js";
+export {
+  schemeToJs,
+  schemeToJsUntyped,
+  jsToScheme,
+  createRosettaWrapper,
+  type RosettaFunction,
+} from "./membrane/rosetta.js";
 
 // Runtime value hierarchy. Provenance algebra: docs/spec/arrival-chain.md.
 export { type AKind, AValue, EMPTY_PROVENANCE, pointProvenance, unionProvenance } from "./values/primitives/AValue.js";
@@ -142,12 +148,17 @@ export { ensureBaseAssembled as initBridge } from "./eval/generator-exec.js";
 // collection at all. `offendingValueOf` is the one supported read path (bounded `.cause`
 // walk); root-surfaced so a downstream teaching door (e.g. arrival-manifold's
 // stringly-collection hint) can read it without a private subpath into errors.ts.
-export { attachOffendingValue, offendingValueOf, OFFENDING_VALUE } from "./errors.js";
+export {
+  ArrivalError,
+  attachOffendingValue,
+  offendingValueOf,
+  OFFENDING_VALUE,
+  type ErrorClass,
+} from "./errors.js";
 
 // Generator-based evaluator: flat trampoline for stack safety and performance.
 export {
   evaluate as evaluateGenerator,
-  ArrivalError,
   currentRunEnv,
   type EvalContext,
   type EvalGenerator,

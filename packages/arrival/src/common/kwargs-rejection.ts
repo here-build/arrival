@@ -22,7 +22,7 @@
 import { ZodError, ZodType, type ZodRawShape } from "zod";
 import * as z from "./scheme-zod.js";
 import { AValue } from "../values/primitives/AValue.js";
-import { ArrivalError } from "../errors.js";
+import { ArrivalError, type ErrorClass } from "../errors.js";
 import { CLASS } from "../well-known-symbols.js";
 import { suggestFromVocabulary } from "../unbound-variable.js";
 
@@ -136,6 +136,7 @@ export function formatKwargsRejection(qualifiedName: string, problems: readonly 
 export class KwargsRejectionError extends ArrivalError {
   static [CLASS] = "kwargs-rejection-error";
   public readonly name = "KwargsRejectionError";
+  readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
     public readonly qualifiedName: string,

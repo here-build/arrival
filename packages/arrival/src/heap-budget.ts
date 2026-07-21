@@ -17,13 +17,14 @@
 // safe against async interleaving of concurrent runs.
 
 import type { RunContext, HeapMeter } from "./run/RunContext.js";
-import { ArrivalError } from "./errors.js";
+import { BudgetExceededError } from "./errors.js";
 
 export type { HeapMeter };
 
 /** The containment message. Carries "budget exceeded" so the same classifier that catches the
  *  wall-clock deadline (`/budget exceeded|abort|maximum call stack/i`) treats this as a contained
- *  outcome, not a genuine fault. Thrown as an `ArrivalError` by the caller (which already imports it). */
+ *  outcome, not a genuine fault. Thrown as a `BudgetExceededError` by the caller (which already
+ *  imports it). */
 export function heapBudgetMessage(max: number): string {
   return (
     `heap budget exceeded (${max} cells) — a run materialized more list cells than its allocation ` +
@@ -39,5 +40,5 @@ export function chargeHeap(runCtx: RunContext | undefined, count: number): void 
   const meter = runCtx?.heapMeter;
   if (meter === undefined) return;
   meter.used += count;
-  if (meter.used > meter.max) throw new ArrivalError(heapBudgetMessage(meter.max), []);
+  if (meter.used > meter.max) throw new BudgetExceededError(heapBudgetMessage(meter.max), []);
 }

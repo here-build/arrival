@@ -20,7 +20,7 @@
 // helpers only inside its own method bodies — nothing touches the other at
 // module-eval/class-definition time, so the cycle never observes a not-yet-initialized
 // binding.
-import { ArrivalError } from "../errors.js";
+import { ArrivalError, type ErrorClass } from "../errors.js";
 import { CLASS } from "../well-known-symbols.js";
 import { AExact } from "./primitives/AExact.js";
 import { AInexact } from "./primitives/AInexact.js";
@@ -42,6 +42,7 @@ import type { ANumeric } from "./numbers.js";
 export class ExactOverflowError extends ArrivalError {
   static [CLASS] = "exact-overflow-error";
   public readonly name = "ExactOverflowError";
+  readonly "arrival/error-category": ErrorClass = "exact-overflow";
 
   constructor(
     /** The operation that overflowed, e.g. "exact +", "quotient" — omitted when the

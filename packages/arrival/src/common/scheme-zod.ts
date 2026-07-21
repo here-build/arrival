@@ -18,7 +18,7 @@ import { AJSObject } from "../membrane/AJSObject.js";
 import { AJSArray } from "../membrane/AJSArray.js";
 import { markSpineAdopting } from "./spine-adoption.js";
 import { Values } from "../values/primitives/Values.js";
-import { ArrivalError, CodecFidelityError, R7RSError } from "../errors.js";
+import { BudgetExceededError, CodecFidelityError, R7RSError } from "../errors.js";
 import { chargeHeap, heapBudgetMessage } from "../heap-budget.js";
 import {
   ALambda,
@@ -581,7 +581,7 @@ function spineToArray(l: AListAlike): unknown[] {
     if (node.have_cycles("cdr")) throw new CodecFidelityError("list", "cannot decode a circular list");
     out.push(node.car);
     if (meter !== undefined && ++meter.used > meter.max) {
-      throw new ArrivalError(heapBudgetMessage(meter.max), []);
+      throw new BudgetExceededError(heapBudgetMessage(meter.max), []);
     }
     node = node.cdr;
   }

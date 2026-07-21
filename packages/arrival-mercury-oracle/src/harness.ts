@@ -78,7 +78,7 @@ import {
   show,
   walk,
 } from "@inhuman.tools/arrival-mercury";
-import { classifyCompiledError, classifyInterpreterError, type ErrorClass } from "./error-classifier.js";
+import { classifyCompiledError, type ErrorClass } from "./error-classifier.js";
 
 // The session-assembly seam (`openOracleSession`/`greenfieldRegistryFor`) and the
 // pure value utilities (`oracleEqual`/`show`) live in the COMPILER
@@ -115,7 +115,8 @@ export async function evalInterpreter(session: OracleSession, source: string): P
     }
     return { kind: "value", value: schemeToJsUntyped(last, {}) };
   } catch (e) {
-    return { kind: "throw", errorClass: classifyInterpreterError(e), message: messageOf(e), raw: e };
+    const errorClass = (e as { "arrival/error-category"?: ErrorClass })["arrival/error-category"] ?? "other";
+    return { kind: "throw", errorClass, message: messageOf(e), raw: e };
   }
 }
 

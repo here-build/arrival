@@ -9,7 +9,7 @@
  * assembly seam and value utilities it shares live DOWN in the compiler and are
  * re-exported here for a single oracle-side import surface.
  */
-export { classifyCompiledError, classifyInterpreterError, type ErrorClass } from "./error-classifier.js";
+export { classifyCompiledError, type ErrorClass } from "./error-classifier.js";
 export {
   agreementOf,
   assertProgramFace,
