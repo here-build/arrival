@@ -4,7 +4,7 @@
 // helpers, and this directory's README for the AST canonicalization + error
 // taxonomy conventions these tables follow.
 import { describe, expect, it } from "vitest";
-import { readAst, evalJson, errorClass } from "./_harness.js";
+import { errorClass, evalJson, readAst } from "./_harness.js";
 
 describe("curly-braces / {…} dict literals", () => {
   // POSITIVE — read: input parses to canonical AST
@@ -62,7 +62,7 @@ describe("curly-braces / {…} dict literals", () => {
       value: "2024-05-20",
     },
     { name: "y_dict_string_key_json_colon_evals", input: "(:a {\"a\": 1})", value: 1 },
-  ])("eval · $name", async ({ input, value }) => {
+  ])("eval · $input", async ({ input, value }) => {
     expect(await evalJson(input)).toEqual(value);
   });
 
@@ -71,8 +71,8 @@ describe("curly-braces / {…} dict literals", () => {
   // since some codes have members of both.
 
   it.each([
-    { name: "n_dict_odd_arity", input: "{:a}", mode: "read" as const },
-    { name: "n_dict_odd_arity_missing_value", input: "{:a 1 :b}", mode: "read" as const },
+    { name: "n_dict_odd_arity", input: "{:a}", mode: "read" },
+    { name: "n_dict_odd_arity_missing_value", input: "{:a 1 :b}", mode: "read" },
   ])("door E-DICT-ODD-ARITY · $name", async ({ input, mode }) => {
     let err: unknown;
     try {
@@ -85,11 +85,11 @@ describe("curly-braces / {…} dict literals", () => {
   });
 
   it.each([
-    { name: "n_dict_bad_key_number", input: "{1 2}", mode: "read" as const },
-    { name: "n_dict_bad_key_bare_symbol", input: "{a 1}", mode: "read" as const },
-    { name: "n_dict_suffix_double_colon_bad_key", input: "{a:: 1}", mode: "read" as const },
-    { name: "i_dict_glued_colon_key_teaching_door", input: "{a:1}", mode: "read" as const },
-    { name: "n_quasiquote_bad_key_post_substitution", input: "`{,(list 1 2) 3}", mode: "eval" as const },
+    { name: "n_dict_bad_key_number", input: "{1 2}", mode: "read" },
+    { name: "n_dict_bad_key_bare_symbol", input: "{a 1}", mode: "read" },
+    { name: "n_dict_suffix_double_colon_bad_key", input: "{a:: 1}", mode: "read" },
+    { name: "i_dict_glued_colon_key_teaching_door", input: "{a:1}", mode: "read" },
+    { name: "n_quasiquote_bad_key_post_substitution", input: "`{,(list 1 2) 3}", mode: "eval" },
   ])("door E-DICT-BAD-KEY · $name", async ({ input, mode }) => {
     let err: unknown;
     try {
@@ -102,13 +102,13 @@ describe("curly-braces / {…} dict literals", () => {
   });
 
   it.each([
-    { name: "n_dict_dup_key", input: "{:a 1 :a 2}", mode: "read" as const },
-    { name: "n_dict_dup_key_mixed_styles", input: "{:a 1 \"a\" 2}", mode: "read" as const },
-    { name: "n_dict_dup_key_prefix_and_suffix", input: "{:a 1 a: 2}", mode: "read" as const },
+    { name: "n_dict_dup_key", input: "{:a 1 :a 2}", mode: "read" },
+    { name: "n_dict_dup_key_mixed_styles", input: "{:a 1 \"a\" 2}", mode: "read" },
+    { name: "n_dict_dup_key_prefix_and_suffix", input: "{:a 1 a: 2}", mode: "read" },
     {
       name: "n_quasiquote_dup_key_post_substitution",
       input: "`{:a 1, ,\"a\" 2}",
-      mode: "eval" as const,
+      mode: "eval",
     },
   ])("door E-DICT-DUP-KEY · $name", async ({ input, mode }) => {
     let err: unknown;
@@ -122,7 +122,7 @@ describe("curly-braces / {…} dict literals", () => {
   });
 
   it.each([
-    { name: "n_dict_trailing_unquote_missing_datum", input: "{:a ,}", mode: "read" as const },
+    { name: "n_dict_trailing_unquote_missing_datum", input: "{:a ,}", mode: "read" },
   ])("door E-EXPECTING-DATUM · $name", async ({ input, mode }) => {
     let err: unknown;
     try {
@@ -135,7 +135,7 @@ describe("curly-braces / {…} dict literals", () => {
   });
 
   it.each([
-    { name: "n_dict_dot", input: "{:a . 1}", mode: "read" as const },
+    { name: "n_dict_dot", input: "{:a . 1}", mode: "read" },
   ])("door E-LITERAL-DOT · $name", async ({ input, mode }) => {
     let err: unknown;
     try {
@@ -148,7 +148,7 @@ describe("curly-braces / {…} dict literals", () => {
   });
 
   it.each([
-    { name: "n_dict_unterminated", input: "{:a 1", mode: "read" as const },
+    { name: "n_dict_unterminated", input: "{:a 1", mode: "read" },
   ])("door E-UNTERMINATED · $name", async ({ input, mode }) => {
     let err: unknown;
     try {
@@ -161,7 +161,7 @@ describe("curly-braces / {…} dict literals", () => {
   });
 
   it.each([
-    { name: "n_stray_curly_close", input: "}", mode: "read" as const },
+    { name: "n_stray_curly_close", input: "}", mode: "read" },
   ])("door E-BRACKET-UNEXPECTED · $name", async ({ input, mode }) => {
     let err: unknown;
     try {
@@ -174,7 +174,7 @@ describe("curly-braces / {…} dict literals", () => {
   });
 
   it.each([
-    { name: "i_unquote_key_outside_quasiquote_errors", input: "{:a 1, ,k 2}", mode: "eval" as const },
+    { name: "i_unquote_key_outside_quasiquote_errors", input: "{:a 1, ,k 2}", mode: "eval" },
   ])("door any-error · $name", async ({ input, mode }) => {
     let err: unknown;
     try {
