@@ -59,48 +59,26 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { execState, LexicalScope, parseGenerator, schemeToJsUntyped } from "@inhuman.tools/arrival";
-import type { AssembledAmbient } from "@inhuman.tools/arrival/env";
-import { srfi1 } from "@inhuman.tools/arrival/srfi";
-import { buildArrivalSession, type InferFn } from "@inhuman.tools/arrival-run";
 import { register } from "tsx/esm/api";
 
 import type { ClassifyResult } from "../coreform/types.js";
 import { SchemeSemanticModel } from "../model/model.js";
 import { materializeAsyncness, materializeImports, materializeSharedBindings } from "../naming/index.js";
-import { emitRegistryOf, type EmitRegistry } from "../registry/index.js";
 import { render } from "../residual/render.js";
 import type { CompilationUnit } from "../residual/types.js";
-import { inferAsyncSeeds, phase1Rules, withRules, type OverlayEmitRegistry } from "../rules/index.js";
+import { inferAsyncSeeds } from "../rules/index.js";
 import { walk } from "../walker/index.js";
 import { classifyCompiledError, classifyInterpreterError, type ErrorClass } from "./error-classifier.js";
+import { greenfieldRegistryFor, openOracleSession, type OracleSession } from "../registry/greenfield-session.js";
+import { oracleEqual, show } from "../verdict/value-equal.js";
 
-/** The expensive, reusable half of a differential run — one capability-DAG
- *  assembly, held across many corpus/fuzz iterations (spec §4.1). */
-export interface OracleSession extends AsyncDisposable {
-  readonly ambient: AssembledAmbient;
-  dispose(): Promise<void>;
-}
-
-/**
- * Build the one shared interpreter session. No `loader` is passed — every
- * corpus/fuzz program is a self-contained snippet, so `(require …)` stays an
- * unbound symbol by capability withholding. `infer` is the required non-thunk
- * `InferFn` callback (`BuildArrivalEnvOpts.infer`); the stub keeps `(infer …)`
- * a BOUND symbol that fails loudly, never an "unbound variable" red herring.
- *
- * srfi-1 is deliberately NOT added to `capabilities` here — see
- * `greenfieldRegistryFor`'s own note for the ambient-gap fix and why it lives at the
- * HARVEST layer instead of here (a real `AssembleLinearizationError`, not just a style
- * choice).
- */
-export async function openOracleSession(): Promise<OracleSession> {
-  const infer: InferFn = () => {
-    throw new Error("oracle: (infer …) not supported outside the async-family cell");
-  };
-  const session = await buildArrivalSession({ name: "arrival-mercury-oracle", infer, params: {} });
-  const dispose = (): Promise<void> => session.dispose();
-  return { ambient: session.ambient, dispose, [Symbol.asyncDispose]: dispose };
-}
+// The session-assembly seam (`openOracleSession`/`greenfieldRegistryFor`) and the
+// pure value utilities (`oracleEqual`/`show`) were lifted OUT of this harness into
+// the compiler (registry/greenfield-session, verdict/value-equal) — they are
+// tsx-free and have compiler-side callers that must not pull `tsx/esm/api`. The
+// harness still uses them internally (below) and re-exports them so its own test
+// consumers keep a single import surface.
+export { greenfieldRegistryFor, openOracleSession, oracleEqual, show, type OracleSession };
 
 export type Outcome =
   | { kind: "value"; value: unknown } // membrane JS face, both sides
@@ -236,82 +214,11 @@ export function cleanupOracleScratch(): void {
 
 // ─── the greenfield subject (constitution §9 subject-routing) ─────────────────────────
 
-/** The per-session compiled-side registry: harvest + Phase-1 overlay + the Law-N
- *  witness sweep, once per ambient (§4.1's reuse contract applied to the compiler
- *  side). Keyed by the AMBIENT (not the session wrapper) so two OracleSession
- *  handles over one assembly share the work. (`narrowsMembers` used to be cached
- *  alongside the registry here; E0's rewiring moved that derivation onto
- *  `SchemeSemanticModel.narrowsMembers` — a cheap, per-model O(names) pass over
- *  the SAME registry, so caching it a second time here would only be a
- *  redundant memo of the same cheap computation, model.ts's own header.) */
-const registryCache = new WeakMap<AssembledAmbient, OverlayEmitRegistry>();
-
-/**
- * THE AMBIENT-GAP FIX (rules/phase1.ts's own relocation note; R1's flagged
- * follow-up): `scheme/srfi-1` cannot simply be ADDED to `openOracleSession`'s live
- * `capabilities` — verified directly, not assumed. `srfi1`'s own `deps`
- * (foundations/arrival/arrival/src/env/srfi/srfi-1.ts: `[equality, numeric,
- * exceptions, vectors, lists]`, `lists` LAST) and `arrival/schema`'s own `deps`
- * (.../env/schema.ts: `[lists, equality, strings, numeric, exceptions]`, `lists`
- * FIRST) disagree about the relative order of `lists` vs `equality` — and
- * `arrival/schema` is unconditionally rooted in `arrivalCapabilities()`, hence always
- * present in `session.ambient.capabilities`. Assembling both roots in one
- * `assembleEnv` call throws `AssembleLinearizationError` (confirmed empirically:
- * `openOracleSession` with `capabilities: [srfi1]` fails at session build, every
- * time). Reordering srfi-1.ts's `deps` to match schema.ts's would only trade one
- * conflict for another — its own comment documents `vectors` must precede `lists`
- * to satisfy `polyglot-clojure.ts`'s independent precedence, a constraint that's
- * ACTUALLY exercised (BASE_PACKS assembles both today).
- *
- * So srfi-1 is harvested STATICALLY instead — off the bare `EnvCapability`, never
- * assembled live — via `emitRegistryOf`'s OTHER documented input mode (harvest.ts:
- * "or from a bare capability tree"), which walks the capability/deps GRAPH directly
- * (a plain deps-first DFS, harvest.ts's own `visit`) with no C3 linearization and
- * therefore no ordering conflict to trip over. Every capability in srfi-1's own dep
- * closure (equality/numeric/exceptions/vectors/lists) declares its `symbols` as a
- * plain object, never a builder function (verified: none of the five branches on
- * `configuration`/`resources`), so the phantom/dry activation this bare-list path
- * falls back to is BYTE-IDENTICAL to any "real" assembled activation's answer for
- * all of them — there is no activation-dependent branch anywhere in this closure to
- * diverge on. Computed once, module scope: `emitRegistryOf` takes no session/ambient
- * input here, so there is nothing to key a per-session cache on.
- *
- * Behaviorally inert for everything this package already relied on: `scheme/lists`
- * &c. still resolve through the REAL ambient (below, ambient-first precedence), byte
- * -identical to before. This purely ADDS the names the ambient gap left dark —
- * filter/take/drop/iota/zip/every/any/… — which is exactly (and only) what closes
- * filter's ambient gap (rules/phase1.ts's now-deleted table row).
- */
-const srfi1Registry = emitRegistryOf([srfi1]);
-
-/** Exported so tests can probe the REAL compiled-side registry directly instead of
- *  re-deriving the ambient+srfi-1 merge inline — a prior inline re-derivation
- *  (cross-pass-fixtures.test.ts) silently fell out of step the moment this function
- *  grew the srfi-1 merge below; see that test's own note. Current external callers:
- *  rule-lint.test.ts's EmitCtx-surface sweep over the fully-relocated Contract rules
- *  (filter included, now that its ambient gap is closed) and
- *  cross-pass-fixtures.test.ts's per-row compile. `compileGreenfield` below is the
- *  internal caller — same registry, same cache, no divergence possible between what
- *  a test inspects and what the pipeline actually compiles against. */
-export function greenfieldRegistryFor(session: OracleSession): OverlayEmitRegistry {
-  let hit = registryCache.get(session.ambient);
-  if (hit === undefined) {
-    const ambientRegistry = emitRegistryOf(session.ambient);
-    // Ambient rows win on any name they carry (the real, C3-consistent assembly);
-    // srfi-1's static harvest only fills in names the ambient never reaches. In
-    // practice these sets are disjoint on everything but srfi-1's OWN deps
-    // (lists/equality/numeric/exceptions/vectors), which the ambient already
-    // resolves via arrival/schema — so this fallback fires only for genuinely
-    // srfi-1-only symbols.
-    const withSrfi1: EmitRegistry = {
-      lookup: (name) => ambientRegistry.lookup(name) ?? srfi1Registry.lookup(name),
-      names: new Set([...ambientRegistry.names, ...srfi1Registry.names]),
-    };
-    hit = withRules(withSrfi1, phase1Rules);
-    registryCache.set(session.ambient, hit);
-  }
-  return hit;
-}
+// `openOracleSession` (session assembly) and `greenfieldRegistryFor` (the harvest +
+// Phase-1 overlay + srfi-1 ambient-gap fix) were lifted into
+// `registry/greenfield-session.ts` — both are tsx-free and needed by the compiler
+// path (product/compile-source, build/project), so they cannot live in this
+// tsx-importing module. Imported + re-exported at the top of this file.
 
 const ORACLE_MAIN = "__oracle-main";
 
@@ -661,63 +568,10 @@ export async function evalCompiled(
   }
 }
 
-const bigintEqualsNumber = (big: bigint, num: unknown): boolean =>
-  typeof num === "number" && Number.isInteger(num) && BigInt(num) === big;
-
-function isPlainObjectLike(v: unknown): v is Record<string, unknown> {
-  if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
-  // Dict faces are plain objects (or null-proto). A Date/RegExp/class instance
-  // must NOT compare as an (often empty) key-set — that greened `new Date(0)`
-  // vs `new Date(1)`. Non-plain objects fall through to identity (Object.is).
-  const proto: unknown = Object.getPrototypeOf(v);
-  return proto === Object.prototype || proto === null;
-}
-
-function sameKeysDeep(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
-  const ka = Object.keys(a);
-  const kb = Object.keys(b);
-  if (ka.length !== kb.length) return false;
-  return ka.every((k) => Object.hasOwn(b, k) && oracleEqual(a[k], b[k]));
-}
-
-/**
- * Object.is-based equality, recursive over arrays/dicts, proxy-transparent
- * (`Array.isArray` unwraps a Proxy to its target per spec, so egress-proxy
- * results compare structurally). `Object.is` as the scalar default — not `===`
- * — is what makes the `-0`/`NaN` eqv?-sentinel rows and the general numeric
- * path share one function (spec §4.2). The bigint branch is host-only: scheme
- * numeric values never egress as bigint post one-number-rework; it exists
- * solely for an opaque HOST bigint pass-through reaching the comparator.
- */
-export function oracleEqual(a: unknown, b: unknown): boolean {
-  if (typeof a === "bigint" && typeof b === "bigint") return a === b;
-  if (typeof a === "bigint") return bigintEqualsNumber(a, b);
-  if (typeof b === "bigint") return bigintEqualsNumber(b, a);
-  if (typeof a === "number" && typeof b === "number") return Object.is(a, b); // NaN≡NaN, +0≢−0
-  if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((x, i) => oracleEqual(x, b[i]));
-  if (isPlainObjectLike(a) && isPlainObjectLike(b)) return sameKeysDeep(a, b);
-  return Object.is(a, b);
-}
-
-/** Render a value for a verdict/failure message — never throws; bigint-safe and
- *  sentinel-faithful (`JSON.stringify` would silently print NaN as `null` and
- *  −0 as `0` — exactly the values the eqv?-sentinel rows exist to distinguish). */
-export function show(v: unknown): string {
-  if (typeof v === "number" && Number.isNaN(v)) return "NaN";
-  if (typeof v === "number" && Object.is(v, -0)) return "-0";
-  try {
-    return (
-      JSON.stringify(v, (_k, x: unknown) =>
-        typeof x === "bigint" ? `${x}n`
-        : typeof x === "number" && Number.isNaN(x) ? "NaN"
-        : typeof x === "number" && Object.is(x, -0) ? "-0"
-        : x,
-      ) ?? String(v)
-    );
-  } catch {
-    return String(v);
-  }
-}
+// `oracleEqual` (Object.is-based structural equality) and `show` (sentinel-faithful
+// renderer) were lifted into `verdict/value-equal.ts` — pure utilities a compiler-
+// side consumer (probe/verdict → seal → mcp-worker) reaches without tsx. Imported +
+// re-exported at the top of this file.
 
 export interface OracleVerdict {
   agree: boolean;
