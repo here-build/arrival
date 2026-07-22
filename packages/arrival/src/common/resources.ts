@@ -41,6 +41,8 @@ export interface Ref<H> {
 }
 
 import { ResourceNotLiveError } from "../errors.js";
+import type { RunContext } from "../run/RunContext.js";
+import { onRunContextDispose } from "../run/run-lifecycle.js";
 
 /** Wrap a plain `value + close()` into a disposable handle — so a driver author
  *  needn't implement the symbol by hand. `(s) => s.close()` is the usual closer. */
@@ -137,4 +139,44 @@ export async function windDownAll(cells: readonly ResourceCell<unknown>[]): Prom
   for (let i = cells.length - 1; i >= 0; i--) {
     await cells[i]!.windDown().catch(() => {});
   }
+}
+
+/** A value lazily spawned and scoped to ONE `RunContext` (docs/execution.md §HERMETIC's
+ *  per-run identity): first `get()` under a given RunContext spawns it (single-flight — a
+ *  plain sync check-then-set, safe because `get()` never yields before storing the pending
+ *  promise); every later `get()` under the SAME RunContext — including a REPL's later pass,
+ *  which reuses its RunContext across passes by design — reuses that one spawn. A DIFFERENT
+ *  RunContext gets its OWN fresh spawn, never the first's. Disposal rides `run/run-lifecycle.ts`
+ *  — registered on first spawn, fired once at that RunContext's teardown (explicit or the GC
+ *  backstop), never per `get()` and never per exec pass. */
+export interface RunScoped<T> {
+  get(runCtx: RunContext): Promise<T>;
+}
+
+/** Build a {@link RunScoped}. `spawn` mints a fresh `T` (async — a real acquire, or a
+ *  synchronous factory lifted into a promise, either composes); `disposeOne` tears exactly one
+ *  spawned `T` down (called once, at the owning RunContext's teardown). Used by
+ *  `common/capability.ts` for BOTH resource paths (the constructor form's `Resource<H>` cells
+ *  and `EnvCapability.define`'s free-form factory) — see that file's header for why the two
+ *  authoring shapes share this one mechanism despite exposing different `this.resources` shapes
+ *  to a capability's own impls. */
+export function runScoped<T>(spawn: () => Promise<T>, disposeOne: (value: T) => Promise<void>): RunScoped<T> {
+  const perRun = new WeakMap<RunContext, Promise<T>>();
+  return {
+    get(runCtx: RunContext): Promise<T> {
+      let pending = perRun.get(runCtx);
+      if (pending === undefined) {
+        pending = spawn();
+        perRun.set(runCtx, pending);
+        onRunContextDispose(runCtx, async () => {
+          // A spawn that never settled (failed acquire) has nothing to dispose — the
+          // `.catch` here is bookkeeping only, never a rethrow (dispose must never throw
+          // for a resource that never lived).
+          const value = await pending!.catch(() => undefined);
+          if (value !== undefined) await disposeOne(value);
+        });
+      }
+      return pending;
+    },
+  };
 }

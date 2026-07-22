@@ -391,8 +391,12 @@ export interface ExecInstance {
 
 /** Phase 3, callable: "instantiate" = OBTAIN, not necessarily mint — the caller supplies
  *  the scope (exec's default path passes its realm-cached accumulating root; a REPL
- *  session passes its own); only the run context is minted fresh. `heapBudget` resolves
- *  per-run option → ambient policy → unbounded. */
+ *  session passes its own); the run context is minted fresh UNLESS the caller supplies
+ *  `runCtx` (a REPL session reusing the ONE RunContext it spawned for its whole session,
+ *  the Stage-2 capability-resource lifetime rides — docs/execution.md §HERMETIC). `heapBudget`
+ *  resolves per-run option → ambient policy → unbounded, and is IGNORED when `runCtx` is
+ *  reused (a reused RunContext already carries its own meter — re-deriving one here would
+ *  silently fork the budget mid-session). */
 export function instantiate(
   ambient: AssembledAmbient,
   opts: {
@@ -406,22 +410,27 @@ export function instantiate(
     reads?: ReadGuard;
     notes?: NoteSink;
     display?: DisplaySink;
+    /** Reuse an existing RunContext (REPL continuity) instead of minting a fresh one — see
+     *  `ExecOptions.runCtx` (generator-exec.ts) for the full contract and ownership rule. */
+    runCtx?: RunContext;
   },
 ): ExecInstance {
-  const runCtx = makeRunContext({
-    strict: opts.strict ?? false,
-    heapBudget: opts.heapBudget ?? ambient.heapBudget,
-    freezeRosettaReturns: opts.freezeRosettaReturns,
-    signal: opts.signal,
-    cache: opts.cache,
-    effects: opts.effects,
-    reads: opts.reads,
-    // The AMBIENT path mints its runCtx HERE, not in generator-exec's `env` branch — the branch
-    // every real session takes (the MCP runner passes `ambient`). `notes`/`display` must ride it
-    // or the model-facing channels arrive empty on the ambient path.
-    notes: opts.notes,
-    display: opts.display,
-  });
+  const runCtx =
+    opts.runCtx ??
+    makeRunContext({
+      strict: opts.strict ?? false,
+      heapBudget: opts.heapBudget ?? ambient.heapBudget,
+      freezeRosettaReturns: opts.freezeRosettaReturns,
+      signal: opts.signal,
+      cache: opts.cache,
+      effects: opts.effects,
+      reads: opts.reads,
+      // The AMBIENT path mints its runCtx HERE, not in generator-exec's `env` branch — the branch
+      // every real session takes (the MCP runner passes `ambient`). `notes`/`display` must ride it
+      // or the model-facing channels arrive empty on the ambient path.
+      notes: opts.notes,
+      display: opts.display,
+    });
   const resolver = new Resolver(opts.scope.env, Capabilities.assembled(ambientBase(ambient)));
   return { ambient, scope: resolver.scope, runCtx, resolver };
 }

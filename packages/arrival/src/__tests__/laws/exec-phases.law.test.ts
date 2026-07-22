@@ -7,8 +7,11 @@
  *     paths (the fixed dispose-drop site #4 — the pinned behavior change, leak →
  *     teardown); caller-owned `{ ambient }` never disposed by exec; the realm default
  *     never disposed at all; glass carries no product.
- *   • AMBIENT REUSE — assemble once, run many: resources spawn once and stay warm
- *     across runs; scope ⊥ ambient (defines ride the scope, not the ambient).
+ *   • AMBIENT REUSE — assemble once, run many: scope ⊥ ambient (defines ride the scope, not
+ *     the ambient). STAGE 2 (docs/execution.md §HERMETIC): a baked verb's resources no longer
+ *     warm across runs just because the AMBIENT was reused — they're keyed by RunContext, so
+ *     warmth follows a REPL's RunContext continuity (`ExecOptions.runCtx`) instead; two runs
+ *     on one reused ambient with no shared runCtx spawn independently (per-run isolation).
  *   • PARSE-ONCE-RUN-MANY — one `ParsedProgram`, N runs, same results; the reader
  *     mode is a stamped program identity fact.
  *   • VALIDATION WITHOUT EXECUTION — phases 1+2+2.5, zero side effects fired.
@@ -24,6 +27,8 @@ import { LexicalScope } from "../../eval/LexicalScope.js";
 import { parseProgram, validateAgainstAmbient } from "../../eval/exec-phases.js";
 import { assembleAmbient, exec, execState } from "../../eval/generator-exec.js";
 import { user_env } from "../../env/env-roots.js";
+import { makeRunContext } from "../../run/RunContext.js";
+import { disposeRunContext } from "../../run/run-lifecycle.js";
 
 /** A spy-instrumented port: counts acquisitions + teardowns. */
 function spyResource(): { resource: Resource<{ tag: string }>; counts: { acquired: number; disposed: number } } {
@@ -78,17 +83,40 @@ describe("ownership table (§3.3) — phase 5 disposes exactly what the call ass
   it("caller-owned { ambient }: exec never disposes; ambient.dispose() is the caller's, idempotent", async () => {
     const { capability, counts } = spyCapability();
     const ambient = await assembleAmbient({ capabilities: [capability] });
-    const [a] = await exec(`(spy/touch)`, { ambient });
-    const [b] = await exec(`(spy/touch)`, { ambient });
+    // STAGE 2 (docs/execution.md §HERMETIC): a capability's resources are now keyed by
+    // RunContext, not by ambient — warm reuse across passes follows RunContext continuity
+    // (a REPL's ONE session), not merely "the ambient was reused." Threading the SAME runCtx
+    // through both calls is the designed REPL idiom (`ExecOptions.runCtx`).
+    const runCtx = makeRunContext({});
+    const [a] = await exec(`(spy/touch)`, { ambient, runCtx });
+    const [b] = await exec(`(spy/touch)`, { ambient, runCtx });
     expect([a, b]).toEqual(["touched", "touched"]);
-    expect(counts.acquired).toBe(1); // warm reuse — spawned once, shared across runs
-    expect(counts.disposed).toBe(0); // exec did NOT dispose a caller-owned ambient
+    expect(counts.acquired).toBe(1); // warm reuse — spawned once, shared across passes of ONE RunContext
+    expect(counts.disposed).toBe(0); // exec did NOT dispose a caller-owned ambient NOR a caller-supplied runCtx
     await ambient.dispose();
-    expect(counts.disposed).toBe(1); // the caller's deliberate session end
+    expect(counts.disposed).toBe(0); // STAGE 2: resource lifetime rides the RunContext, not the ambient —
+    // disposing the ambient alone no longer tears a baked verb's resources down.
     await ambient.dispose();
+    expect(counts.disposed).toBe(0); // still untouched — idempotent no-op for THIS resource
+    await disposeRunContext(runCtx); // the caller's own deliberate session end
+    expect(counts.disposed).toBe(1);
+    await disposeRunContext(runCtx);
     expect(counts.disposed).toBe(1); // single-flight — idempotent
-    // `await using` support: the product is an AsyncDisposable by construction.
+    // `await using` support: both the ambient AND a `makeRunContext()`-minted RunContext are
+    // AsyncDisposable by construction.
     expect(typeof ambient[Symbol.asyncDispose]).toBe("function");
+    expect(typeof runCtx[Symbol.asyncDispose]).toBe("function");
+  });
+
+  it("two SEPARATE exec() calls on a reused ambient, with NO runCtx continuity, spawn TWICE — Stage 2's per-run isolation", async () => {
+    const { capability, counts } = spyCapability();
+    const ambient = await assembleAmbient({ capabilities: [capability] });
+    const [a] = await exec(`(spy/touch)`, { ambient }); // mints + disposes its OWN runCtx
+    const [b] = await exec(`(spy/touch)`, { ambient }); // a SECOND, unrelated runCtx
+    expect([a, b]).toEqual(["touched", "touched"]);
+    expect(counts.acquired).toBe(2); // no shared RunContext ⇒ no shared resource
+    expect(counts.disposed).toBe(2); // each call's self-minted runCtx tore its own spawn down
+    await ambient.dispose();
   });
 
   it("the realm default: ExecState.ambient present; dispose() is a documented no-op", async () => {

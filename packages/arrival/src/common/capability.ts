@@ -16,7 +16,15 @@
 import { z } from "zod";
 
 import type { EnvPack, PackContext, PreludeBindTarget } from "./kernel.js";
-import { type Ref, type Resource, ResourceCell, spinUpAll, windDownAll } from "./resources.js";
+import {
+  type Ref,
+  type Resource,
+  ResourceCell,
+  spinUpAll,
+  windDownAll,
+  runScoped,
+  type RunScoped,
+} from "./resources.js";
 import type { EvalSchemeInto, RosettaSpec, SchemeEnv } from "./scheme-env.js";
 import type {
   AEntity,
@@ -468,12 +476,26 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
     );
     const degradation = buildDegradationInfo(capabilityName, degradationMode, missingKeys);
 
-    // Resources → ref-counted cells. A provider entry reads the parsed config.
-    const cells = {} as Record<string, ResourceCell<unknown>>;
+    // Resource DESCRIPTORS — stateless (config-derived, no acquired handle yet), computed
+    // ONCE regardless of how many RunContexts ever touch this lower()'d pack.
+    const resourceDescriptors = {} as Record<string, Resource<unknown>>;
     for (const [key, def] of Object.entries(spec.resources ?? {})) {
-      const resource = (
+      resourceDescriptors[key] = (
         typeof def === "function" ? (def as (c: InferCfg<C>) => Resource<unknown>)(configuration) : def
       ) as Resource<unknown>;
+    }
+
+    // LEGACY per-ambient cells (Activation.resources — the `this`-bound bare-fn arm, a
+    // BUILDER-form `symbols`' own closure capture — e.g. `arrival/loader`'s `requireCache`/
+    // `assembler` — and dynamic-metadata resolution, `symbols/metadata.ts`'s `resolveMetadata`,
+    // which reads `Activation.resources` OUTSIDE any RunContext at all). These three consumers
+    // have no RunContext to key against (a `.bind(activation)`-fixed `this`, a closure captured
+    // once at `lower()` time, or a describe-time read with no run in flight), so they keep the
+    // PRE-STAGE-2 ambient-scoped lifetime unchanged — `LoweredPack.windDown()`/`.resume()`
+    // still pause/resume exactly this set. NOT part of Stage 2's per-RunContext migration; see
+    // the file header's "two resource paths" for what DID move.
+    const cells = {} as Record<string, ResourceCell<unknown>>;
+    for (const [key, resource] of Object.entries(resourceDescriptors)) {
       cells[key] = new ResourceCell(resource);
     }
     const activation = { configuration, resources: cells, degradation } as unknown as Activation<C, R>;
@@ -493,10 +515,47 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
     // (single-flight), BEFORE the method body runs — so methods read `this.resources
     // .x.live` synchronously, never an `await .get()`. The capability dictates the
     // entity set; the env accessor (this wrapper) makes presence a precondition.
+    // `cellList`/`ensureSpawned` remain the LEGACY (ambient-scoped) gate for the bare-fn arm
+    // below (`gated`) — untouched by Stage 2.
     const cellList = Object.values(cells);
     let spawned: Promise<void> | undefined;
     const ensureSpawned = (): Promise<void> =>
       (spawned ??= Promise.all(cellList.map((c) => c.get())).then(() => undefined));
+
+    // STAGE 2 — per-RunContext resources for the BAKED kinds (native/sequence/tagless/
+    // tagless-guard/rosetta below): a REAL dispatch's `CallCtx` carries the live `RunContext`,
+    // so these gates key a FRESH cell set per RunContext (spawned lazily, single-flight, on
+    // first touch under it) instead of sharing `cells` above across every run on this ambient.
+    // `undefined` when the capability declares no resources at all — the conditional gate a
+    // resource-less capability's verbs must pay nothing for.
+    const hasResources = Object.keys(resourceDescriptors).length > 0;
+    const runResources: RunScoped<Record<string, ResourceCell<unknown>>> | undefined = hasResources
+      ? runScoped(
+          async () => {
+            const perRunCells = {} as Record<string, ResourceCell<unknown>>;
+            for (const [key, resource] of Object.entries(resourceDescriptors)) {
+              perRunCells[key] = new ResourceCell(resource);
+            }
+            await Promise.all(Object.values(perRunCells).map((c) => c.get()));
+            return perRunCells;
+          },
+          (perRunCells) => windDownAll(Object.values(perRunCells)),
+        )
+      : undefined;
+    /** Gate a baked kind's `run`/`hostImpl` behind this capability's PER-RUNCONTEXT resources:
+     *  no-op (byte-identical passthrough) when resource-less; else await the calling
+     *  `CallCtx.runCtx`'s own cell set (spawning it on THIS RunContext's first touch) and
+     *  rebuild `this.resources` from it before the real impl runs — so `this.resources.x.live`
+     *  stays a synchronous, pre-spawned read inside the impl, exactly as before, just scoped to
+     *  the calling run instead of the whole ambient. */
+    const gateResources = (rawRun: (this: CallCtx, ...args: unknown[]) => Promise<unknown>): CallableImpl =>
+      hasResources
+        ? async (args, callCtx) => {
+            const resources = await runResources!.get(callCtx.runCtx);
+            const enriched: CallCtx = { ...callCtx, resources };
+            return (await rawRun.apply(enriched, args)) as SchemeValue;
+          }
+        : (args, callCtx) => rawRun.apply(callCtx, args) as Promise<SchemeValue>;
 
     return {
       name,
@@ -619,6 +678,16 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                   name: verb,
                   arity: { min: 0, max: null }, // see ARITY above
                   contract: def,
+                  // NOT routed through `gateResources` (unlike sequence/tagless/rosetta below):
+                  // `native` never gated on resources pre-Stage-2 either, and `arrival/loader`
+                  // (the one production capability combining `spec.resources` with a `native`
+                  // def) reads its resources through its BUILDER-form closure directly, never
+                  // `this.resources` — gating here would pre-spawn (and, worse, DOUBLE-spawn
+                  // alongside the closure's own direct `.get()`) resources a native impl never
+                  // asked for. A native def that genuinely wants pre-spawned `this.resources` is
+                  // a real gap (`sequence`/`tagless-guard`/`rosetta` below don't have it) — but
+                  // it is pre-existing and out of Stage 2's two named paths; fixing it needs its
+                  // own audit of every `spec.resources`-bearing native def, not a blind flip here.
                   impl: (args, callCtx) => hostImpl.apply(callCtx, args) as SchemeValue,
                 });
                 // PROVENANCE STAMP (see above). A native value-op is provenance-transparent —
@@ -632,8 +701,11 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 }
                 // ACTIVATION ASSOCIATION (Stage 1b, docs/execution.md §CALLCTX): key THIS bound
                 // value to its own capability's activation, so a real dispatch (evaluator.ts) can
-                // enrich the `CallCtx` it builds with `configuration`/`resources` — a PARALLEL
-                // channel to the legacy outer-closure/builder-form read, not a replacement.
+                // enrich the `CallCtx` it builds with `configuration` — a PARALLEL channel to the
+                // legacy outer-closure/builder-form read, not a replacement. `resources` here is
+                // the LEGACY ambient-scoped bag (empty unless a builder-form closure reads it
+                // directly); a baked impl's OWN `this.resources` comes from `gateResources`
+                // above instead (Stage 2), which always wins by running closer to the call.
                 associateActivation(proc, activation.configuration, activation.resources);
                 bindTarget(def).set(verb, proc);
                 break;
@@ -647,16 +719,13 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 // can execute). These three kinds read ONLY `this.runCtx`, and the apply term now
                 // hands the impl the SAME whole `callCtx` dispatch built — no reconstruction here;
                 // their `.run` shares the call SHAPE but not a common `this` type (tagless/
-                // tagless-guard declare none) — hence the BOUNDARY CAST below. Resource
-                // pre-spawning gates inside the impl when the capability owns cells.
+                // tagless-guard declare none) — hence the BOUNDARY CAST below. STAGE 2: resource
+                // pre-spawning gates on THIS RunContext's own cell set (`gateResources`), not a
+                // shared ambient-wide one.
                 const rawRun = def.run as (this: unknown, ...args: unknown[]) => Promise<unknown>;
-                const impl: CallableImpl =
-                  cellList.length === 0
-                    ? (args, callCtx) => rawRun.apply(callCtx, args) as Promise<SchemeValue>
-                    : async (args, callCtx) => {
-                        await ensureSpawned();
-                        return (await rawRun.apply(callCtx, args)) as SchemeValue;
-                      };
+                const impl: CallableImpl = gateResources(
+                  rawRun as (this: CallCtx, ...args: unknown[]) => Promise<unknown>,
+                );
                 const proc = new ANativeProcedure({
                   name: verb,
                   arity: { min: 0, max: null }, // see ARITY above
@@ -695,13 +764,9 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 // (this `run` is already the complete ctx-aware wrapper, unlike the legacy
                 // bare-fn arm's raw `sym.fn`, which bindRosetta wraps for the first time).
                 const rawRun = def.run as (this: unknown, ...args: unknown[]) => Promise<unknown>;
-                const impl: CallableImpl =
-                  cellList.length === 0
-                    ? (args, callCtx) => rawRun.apply(callCtx, args) as Promise<SchemeValue>
-                    : async (args, callCtx) => {
-                        await ensureSpawned();
-                        return (await rawRun.apply(callCtx, args)) as SchemeValue;
-                      };
+                const impl: CallableImpl = gateResources(
+                  rawRun as (this: CallCtx, ...args: unknown[]) => Promise<unknown>,
+                );
                 const proc = new ARosettaProcedure({
                   name: verb,
                   arity: { min: 0, max: null }, // see ARITY above
@@ -841,12 +906,13 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
  *  the class, and `define()`'s own doc, for the full model. A THIN subclass that never touches
  *  `lower()`'s own body: `super.lower(opts)` runs completely unmodified (same `cells`/
  *  `ResourceCell` production, same degradation, same def→value binding as `new
- *  EnvCapability(...)`), and only THEN — because this capability declared no old-style
- *  `spec.resources`, so `super.lower()`'s cells are empty for it — re-stamps
- *  `associateActivation` (Stage 1b, `./symbols/_bake.js`) on the already-bound procs with the
- *  REAL `Resources` bag its own `resources(config)` factory produced, read back BY NAME
- *  through the `SchemeEnv` accessor (`env.get`, the same read-face every other consumer
- *  uses — never a `lower()`/`apply()` edit). Internal: never exported; constructed only by
+ *  EnvCapability(...)`) — because this capability declared no old-style `spec.resources`,
+ *  `super.lower()`'s cells are empty for it, so `LoweredPack.windDown()`/`.resume()` are
+ *  inert here (nothing to pause/resume). STAGE 2: instead of re-stamping `associateActivation`
+ *  with one eagerly-computed, ambient-scoped `Resources` bag, this REWIRES each already-bound
+ *  proc (read back BY NAME through the `SchemeEnv` accessor, `env.get` — the same read-face
+ *  every other consumer uses) behind a PER-RUNCONTEXT lazy bag (`gateDefinedResources`, below)
+ *  — see that function's doc. Internal: never exported; constructed only by
  *  `EnvCapability.define`. */
 class DefinedEnvCapability<Shape extends ZodMap, Resources> extends EnvCapability<Shape, Record<string, never>> {
   constructor(
@@ -864,19 +930,87 @@ class DefinedEnvCapability<Shape extends ZodMap, Resources> extends EnvCapabilit
   ): LoweredPack {
     const pack = super.lower(opts);
     const { resourcesFactory } = this;
-    if (resourcesFactory === undefined) return pack; // no `resources` factory declared — nothing to re-stamp
+    if (resourcesFactory === undefined) return pack; // no `resources` factory declared — nothing to gate
     const config = pack.activation.configuration as InferCfg<Shape>;
-    const resources = resourcesFactory(config);
     const { symbolKeys, prefix } = this;
+
+    // STAGE 2 (docs/execution.md §CALLCTX): `resourcesFactory` is SYNCHRONOUS
+    // (`DefineCapabilitySpec.resources`'s own contract — `(config) => Resources`, never a
+    // Promise), so "spawn" never genuinely awaits; `runScoped` still buys the two things that
+    // matter — per-RunContext MEMOIZATION (one bag per RunContext, reused across REPL passes
+    // sharing it) and teardown registration (an optional `[Symbol.asyncDispose]` on the
+    // produced bag runs once, at that RunContext's end).
+    const runResources = runScoped<Resources>(
+      async () => resourcesFactory(config),
+      async (bag) => {
+        const disposable = bag as { [Symbol.asyncDispose]?: () => PromiseLike<void> | void };
+        await disposable[Symbol.asyncDispose]?.();
+      },
+    );
+
     return {
       ...pack,
       apply: async (env: SchemeEnv, ctx?: PackContext<SchemeEnv>): Promise<void> => {
         await pack.apply(env, ctx as PackContext<SchemeEnv>);
+        // `env` is validated as a concrete `AmbientRuntime` by `pack.apply()` above (it throws
+        // `AmbientShapeError` otherwise) — re-assert the runtime fact here (not a cast) so
+        // `bindValue` below, which needs the concrete frame class, type-checks.
+        if (!isAmbientRuntime(env)) {
+          throw new AmbientShapeError(
+            `capability "${this.name}"`,
+            "define()-authored resource gating needs a concrete AmbientRuntime to rebind onto",
+          );
+        }
         for (const key of symbolKeys) {
-          const bound: unknown = env.get(prefix + key, { throwError: false });
-          if (typeof bound === "object" && bound !== null) associateActivation(bound, config, resources);
+          const verb = prefix + key;
+          const bound: unknown = env.get(verb, { throwError: false });
+          if (typeof bound !== "object" || bound === null) continue;
+          // `configuration` keeps riding the associateActivation/CallCtx channel exactly as
+          // before (per-assembly, never per-run — Stage 2 leaves it alone). `resources` no
+          // longer does: a define()-authored capability's only resource-bearing symbols are
+          // BAKED (native/rosetta, the injected `symbol.*` factory's whole point), so the loop
+          // below rewires those directly instead of pre-computing one shared, ambient-scoped bag.
+          associateActivation(bound, config, undefined);
+          if (!(bound instanceof ANativeProcedure) && !(bound instanceof ARosettaProcedure)) continue;
+          bindValue(env, verb, gateDefinedResources(bound, config, runResources) as AmbientValue);
         }
       },
     };
   }
+}
+
+/** Rewire a define()-authored capability's already-bound proc behind its PER-RUNCONTEXT
+ *  `Resources` bag (Stage 2) — the define-path counterpart to `EnvCapability.lower`'s own
+ *  `gateResources` above, adapted to `EnvCapability.define`'s single arbitrary bag instead of N
+ *  independently-acquired `Resource<H>` cells. A fresh proc of the SAME class, wrapping the
+ *  ORIGINAL's `arrival/tagless-final/apply`: awaits `runResources.get(callCtx.runCtx)` (spawning
+ *  it on THIS RunContext's first touch, reusing it on every later one — including a REPL's later
+ *  pass), rebuilds `this.configuration`/`this.resources` from it, then delegates. Stamped extras
+ *  (`provenanceRole`/`cacheClass`/`callbackRoles`) are copied across so the rewrap is invisible to
+ *  the lineage classifier / MCP introspection that reads them off the bound value. */
+function gateDefinedResources<Resources>(
+  proc: ANativeProcedure | ARosettaProcedure,
+  configuration: unknown,
+  runResources: RunScoped<Resources>,
+): ANativeProcedure | ARosettaProcedure {
+  const gatedImpl: CallableImpl = async (args, callCtx) => {
+    const resources = await runResources.get(callCtx.runCtx);
+    const enriched: CallCtx = { ...callCtx, configuration, resources };
+    return (await proc["arrival/tagless-final/apply"](args, enriched)) as SchemeValue;
+  };
+  const wrapped =
+    proc instanceof ARosettaProcedure
+      ? new ARosettaProcedure({
+          name: proc.name,
+          arity: proc.arity,
+          contract: proc.contract,
+          strategy: proc.strategy,
+          impl: gatedImpl,
+        })
+      : new ANativeProcedure({ name: proc.name, arity: proc.arity, contract: proc.contract, impl: gatedImpl });
+  for (const key of ["provenanceRole", "cacheClass", "callbackRoles"] as const) {
+    const value = (proc as unknown as Record<string, unknown>)[key];
+    if (value !== undefined) (wrapped as unknown as Record<string, unknown>)[key] = value;
+  }
+  return wrapped;
 }

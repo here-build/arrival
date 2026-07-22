@@ -75,6 +75,13 @@ export { ADict, type DictLiteralNode } from "./values/primitives/ADict.js";
 export { applyCallback, type ACallable } from "./values/primitives/ACallable.js";
 export { is_callable_value } from "./values/value-guards.js";
 export { CONSTANT_CTX, makeRunContext, type RunContext, type HeapMeter } from "./run/RunContext.js";
+// STAGE 2 — the explicit RunContext teardown path (docs/execution.md §HERMETIC): a REPL host
+// that reused a RunContext across passes (`exec(code, { runCtx })`) calls this at session end
+// to tear down whatever capability resources (`common/resources.ts`'s `runScoped`) accrued
+// against it. `await using`ing a `makeRunContext()`-minted RunContext calls the SAME function
+// via its `[Symbol.asyncDispose]`; a self-minted (non-reused) RunContext is disposed
+// automatically by `exec()`'s own `finally` — this export is for the REUSE case only.
+export { disposeRunContext } from "./run/run-lifecycle.js";
 // The first-class run cache (R2, arrival-mcp-rework-over-phases.md §2.2): a run's durable
 // twin is (program, cache); `exec(src, { cache })` threads it onto the run's RunContext and
 // the baked rosetta membrane records/replays through it. `canonicalJson`/`runCacheKey` are

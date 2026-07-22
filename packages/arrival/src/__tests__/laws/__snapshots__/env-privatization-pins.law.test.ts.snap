@@ -52,6 +52,7 @@ exports[`V0 pin — barrel surface > the full exported-name set is otherwise unc
   "createRosettaWrapper",
   "currentRunEnv",
   "deepProvenance",
+  "disposeRunContext",
   "eof",
   "evaluateGenerator",
   "exec",

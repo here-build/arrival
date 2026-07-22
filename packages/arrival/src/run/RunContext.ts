@@ -24,6 +24,7 @@ import type { DisplaySink, NoteSink } from "./note-sink.js";
 import type { EffectLog } from "./effect-log.js";
 import type { ReadGuard } from "./read-guard.js";
 import type { SourceLocation } from "../errors.js";
+import { disposeRunContext } from "./run-lifecycle.js";
 
 /** Per-run allocation meter. The reference is fixed for the run; `used` is incremented
  *  in place as cells materialize. */
@@ -68,6 +69,14 @@ export interface RunContext {
    *  Leaf literals (no location slot) get source identity through here alone; `APair.setLocation`
    *  is a derived MIRROR the Parser also writes, so `[LOCATION]`-slot readers stay untouched. */
   readonly location?: SourceLocation;
+  /** STAGE 2 (run-lifecycle.ts): tears down whatever ended up scoped to THIS RunContext (a
+   *  capability's per-run resources — `common/resources.ts`'s `runScoped`), so `await using
+   *  runCtx = makeRunContext(...)` disposes it at scope exit. Delegates to
+   *  {@link disposeRunContext} — the SAME idempotent function a REPL host or `exec()`'s owned-
+   *  runCtx `finally` calls explicitly, so all three teardown paths share one guard. Present
+   *  only on RunContexts minted by `makeRunContext` — `CONSTANT_CTX`/`PARSE_CTX` are shared,
+   *  run-neutral singletons nothing ever disposes. */
+  readonly [Symbol.asyncDispose]?: () => Promise<void>;
 }
 
 /** Mint a fresh per-run context for one `exec()`. The single place a RunContext is born. */
@@ -84,7 +93,7 @@ export function makeRunContext(
     display?: DisplaySink;
   } = {},
 ): RunContext {
-  return {
+  const ctx: RunContext = {
     strict: opts.strict ?? false,
     heapMeter: opts.heapBudget === undefined ? undefined : { used: 0, max: opts.heapBudget },
     freezeRosettaReturns: opts.freezeRosettaReturns ?? true,
@@ -94,7 +103,9 @@ export function makeRunContext(
     reads: opts.reads,
     notes: opts.notes,
     display: opts.display,
+    [Symbol.asyncDispose]: () => disposeRunContext(ctx),
   };
+  return ctx;
 }
 
 /**

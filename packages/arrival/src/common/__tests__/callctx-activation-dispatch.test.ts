@@ -21,6 +21,7 @@ import { port, type Resource } from "../resources.js";
 import { exec } from "../../eval/generator-exec.js";
 import { freshEnv } from "../../__tests__/_fresh-env.js";
 import type { CallCtx } from "../../run/CallCtx.js";
+import { makeRunContext } from "../../run/RunContext.js";
 
 interface Shout {
   up(s: string): string;
@@ -67,19 +68,38 @@ describe("CallCtx activation dispatch (Stage 1b)", () => {
     expect(out).toBe("hi:YO");
   });
 
-  // INVARIANT: `this.resources.<key>.live` is populated the SAME way — sourced from the
-  // capability's existing per-ambient resource cells (ensureSpawned gates it before this
-  // impl ever runs), not a second resource lifetime.
-  it("threads a capability's `resources` onto `this` — same cell, same spawn-once lifecycle", async () => {
+  // INVARIANT (STAGE 2, docs/execution.md §HERMETIC): `this.resources.<key>.live` is populated
+  // from a cell keyed by RunContext, not by ambient/env — reused (single-flight, no re-spawn)
+  // across passes that SHARE a RunContext (a REPL's one session, `ExecOptions.runCtx`), fresh
+  // for a DIFFERENT one. Two bare `exec()` calls with no runCtx passthrough each mint (and
+  // dispose) their OWN RunContext, so they get their OWN spawn — see the sibling `it` below for
+  // that per-run-isolation half.
+  it("threads a capability's `resources` onto `this` — same cell, same spawn-once lifecycle ACROSS PASSES SHARING ONE RunContext", async () => {
     shoutSpawns = 0;
     const env = await freshEnv();
     await greeter.lower({ config: { tag: "ok" } }).apply(env, undefined as never);
 
-    const [first] = await exec('(greet "a")', { env });
-    const [second] = await exec('(greet "b")', { env });
+    const runCtx = makeRunContext({});
+    const [first] = await exec('(greet "a")', { env, runCtx });
+    const [second] = await exec('(greet "b")', { env, runCtx });
     expect(first).toBe("ok:A");
     expect(second).toBe("ok:B");
     expect(shoutSpawns).toBe(1); // single-flight — dispatch reads the SAME cell, no re-spawn
+  });
+
+  // INVARIANT (STAGE 2): the per-run isolation half — no shared RunContext means no shared
+  // resource. Each bare `exec()` call here mints (and disposes) its own RunContext, so the
+  // capability's `shout` resource spawns independently for each.
+  it("gives a FRESH resource per RunContext when passes don't share one", async () => {
+    shoutSpawns = 0;
+    const env = await freshEnv();
+    await greeter.lower({ config: { tag: "solo" } }).apply(env, undefined as never);
+
+    const [first] = await exec('(greet "a")', { env });
+    const [second] = await exec('(greet "b")', { env });
+    expect(first).toBe("solo:A");
+    expect(second).toBe("solo:B");
+    expect(shoutSpawns).toBe(2); // two independent RunContexts ⇒ two independent spawns
   });
 
   // INVARIANT: additive — a callable with NO associated activation (e.g. a base-pack native

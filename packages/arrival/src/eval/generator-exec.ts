@@ -38,6 +38,7 @@ import {
   type ParsedProgram,
 } from "./exec-phases.js";
 import { makeRunContext, type RunContext } from "../run/RunContext.js";
+import { disposeRunContext } from "../run/run-lifecycle.js";
 import type { DisplaySink, NoteSink } from "../run/note-sink.js";
 import type { RunCache } from "../run/run-cache.js";
 import type { EffectLog } from "../run/effect-log.js";
@@ -264,6 +265,23 @@ export interface ExecOptions {
    * `scope.lookup ?? capabilities.lookup`). Ignored when `env` (glass) is set.
    */
   scope?: LexicalScope;
+  /**
+   * REUSE an existing RunContext (REPL continuity) instead of minting a fresh one for this
+   * call — the Stage-2 counterpart to `scope`/`ambient` above: a REPL spawns ONE RunContext
+   * (capture it off a prior call's `ExecState.runCtx`) and threads it through every later pass,
+   * so pass-scoped capability resources (`common/resources.ts`'s `runScoped` — a database
+   * handle, a require cache, …) survive between passes instead of respawning each call, exactly
+   * like `scope`'s accumulating defines already do.
+   *
+   * CALLER-owned, same posture as `ambient`: exec will NOT dispose it. Passing this OPTS OUT
+   * of the per-call disposal a bare `exec(code)` performs (see the module's `execState`
+   * `finally` — a self-minted RunContext is disposed at THIS call's end; a reused one is
+   * disposed only when the caller ends the session, via `disposeRunContext(runCtx)` or
+   * `await using` a `makeRunContext()`-minted one). Honored on BOTH the cut and GLASS (`env`)
+   * paths — unlike `capabilities`/`scope`/`ambient`, glass has its own live env but still needs
+   * a RunContext, so glass callers get the same continuity option.
+   */
+  runCtx?: RunContext;
   /**
    * PHASE-2 OVERRIDE: a pre-assembled ambient — skip assembly entirely. CALLER-owned: exec
    * will NOT dispose it (the DO-rehydration / MCP-session warm-reuse idiom — assemble once via
@@ -498,6 +516,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     config,
     override,
     scope,
+    runCtx: passedRunCtx,
     ambient: passedAmbient,
     program: passedProgram,
     dynamic_env,
@@ -554,6 +573,18 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
   // handle at all.
   let ambient: AssembledAmbient | undefined;
   let owned = false;
+  // STAGE 2 (docs/execution.md §HERMETIC): mirrors `ambient`/`owned` above — `runCtxOwned` =
+  // THIS call minted its own RunContext (`passedRunCtx` unset), so its capability resources
+  // (`common/resources.ts`'s `runScoped`) are torn down in the `finally` below, at THIS call's
+  // end. A caller-supplied `runCtx` (REPL continuity) is never disposed here — the caller's own
+  // session-end teardown (`disposeRunContext`/`await using`) owns it. A SEPARATE outer binding
+  // from the try-block-local `runCtx` below (not just `let runCtx` hoisted out here): a
+  // TypeScript closure (`runForm`, further down) captures an outer `let` at its WIDENED
+  // declared type, not the type narrowed at the closure's definition site — keeping the
+  // try-block's own `runCtx: RunContext` un-widened avoids re-annotating every one of its
+  // reads with a redundant non-null assertion.
+  let mintedRunCtx: RunContext | undefined;
+  const runCtxOwned = passedRunCtx === undefined;
   const validating = env === undefined && staticValidation === "on";
   if (env === undefined) {
     // `override` sugar (ExecOptions.override): append the overridable capability
@@ -595,17 +626,20 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
       // base-linked chain. The validation pass is not offered here (no seal ⇒ no claims); the
       // runtime doors (unbound-variable throw + suggestions, PurityError) remain the backstop.
       runResolver = new Resolver(actualEnv);
-      runCtx = makeRunContext({
-        strict: strict ?? false,
-        heapBudget,
-        freezeRosettaReturns,
-        signal,
-        cache,
-        effects,
-        reads,
-        notes,
-        display,
-      });
+      runCtx =
+        passedRunCtx ??
+        makeRunContext({
+          strict: strict ?? false,
+          heapBudget,
+          freezeRosettaReturns,
+          signal,
+          cache,
+          effects,
+          reads,
+          notes,
+          display,
+        });
+      mintedRunCtx = runCtx;
     } else {
       const lexicalScope = scope ?? LexicalScope.for(defaultLexicalRoot());
       // ── PHASE 2.5 — static validation: validate AFTER parse, BEFORE the first form
@@ -625,9 +659,11 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
         reads,
         notes,
         display,
+        runCtx: passedRunCtx,
       });
       runResolver = instance.resolver;
       runCtx = instance.runCtx;
+      mintedRunCtx = runCtx;
     }
 
     // ── PHASE 2.5 — SHADOW MODE, classify@load: one static lineage skeleton per form, BEFORE
@@ -707,9 +743,14 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     // absent on glass runs, which have no product by design).
     return { values: results, scope: runResolver.scope, runCtx, ambient };
   } finally {
-    // ── PHASE 5 — the pipeline's OWN step: dispose exactly what THIS call assembled. Fires on
-    // success AND throw paths (validation errors included).
+    // ── PHASE 5 — the pipeline's OWN step: dispose exactly what THIS call assembled/minted.
+    // Fires on success AND throw paths (validation errors included). `runCtxOwned` mirrors
+    // `owned`: a self-minted RunContext's per-run capability resources (`common/resources.ts`'s
+    // `runScoped`) are torn down at THIS call's end, same as today's per-call resource lifetime;
+    // a caller-supplied (REPL-continued) `runCtx` is left alone for the caller's own session-end
+    // teardown. `mintedRunCtx` may be unset if a throw happened before phase 3 ever ran.
     if (owned) await ambient!.dispose();
+    if (runCtxOwned && mintedRunCtx !== undefined) await disposeRunContext(mintedRunCtx);
   }
 }
 
@@ -882,5 +923,11 @@ export async function execExpr(
   } catch (e) {
     if (e instanceof ArrivalError && e.cause instanceof TypeError) throw e.cause;
     throw e;
+  } finally {
+    // This `runCtx` is ALWAYS private to this one call (no `ExecOptions.runCtx` passthrough
+    // here — `execExpr` is sub-program plumbing, never a REPL's top-level entry), so nothing
+    // else will ever dispose it; tear its per-run capability resources down now rather than
+    // leaving them to the GC backstop (`run/run-lifecycle.ts`).
+    await disposeRunContext(runCtx);
   }
 }
