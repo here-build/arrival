@@ -56,7 +56,8 @@ import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { APair, __tieKnot } from "../values/primitives/APair.js";
 import { EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
-import { isUnquoteForm, makeDictLiteralNode, staticDictKey, suffixKeyName } from "./dict-grammar.js";
+import { isUnquoteForm, suffixKeyName } from "./dict-grammar.js";
+import { ADict, staticDictKey } from "../values/primitives/ADict.js";
 import type { AList, AListAlike, SchemeValue } from "../values/types.js";
 import { ANil } from "../values/primitives/ANil.js";
 import { nil } from "../values/primitives/ANil.js";
@@ -476,7 +477,7 @@ export class Parser {
         "E-DICT-ODD-ARITY",
       );
     }
-    return makeDictLiteralNode(elements, makeParseCtx(loc));
+    return ADict.fromLiteralForms(elements, makeParseCtx(loc));
   }
 
   async read_value(loc?: SourceLocation) {

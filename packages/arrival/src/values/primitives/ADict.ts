@@ -15,15 +15,16 @@
  * in-class pattern AVector uses for `[…]` (`evalElements` + payload-of-forms): a reader-minted node
  * carries `literalForms` and answers the cached `(dict …)` application from
  * `arrival/tagless-final/lower` in code position; under `quote` the node is itself the readable
- * datum — a real ADict whose static-key entries are the raw, unevaluated forms. The grammar that
- * mints these nodes lives in `reader/dict-grammar.ts` (spec: `reader/__tests__/polyglot/README.md`).
+ * datum — a real ADict whose static-key entries are the raw, unevaluated forms. The mint itself is
+ * `ADict.fromLiteralForms`, right here; `reader/dict-grammar.ts` keeps only the key-shape predicates
+ * (spec: `reader/__tests__/polyglot/README.md`).
  *
  * AJSObject is untouched and keeps its actual job: boxing objects that are
  * genuinely foreign, with no prior Scheme lineage to lose — it has exited the
  * dict-literal syntax business entirely.
  */
 import { CLASS } from "../../well-known-symbols.js";
-import { CONSTANT_CTX } from "../../run/RunContext.js";
+import { CONSTANT_CTX, isParseCtx, type RunContext } from "../../run/RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { egressContainerProxy } from "../../membrane/egress-proxy.js";
 import { APair } from "./APair.js";
@@ -62,7 +63,7 @@ export type DictLiteralNode = ADict & { literalForms: readonly SchemeValue[] };
 
 /** A key's fold-name — the string identity `:a` and `"a"` share. Not a validating
  *  parse: `pairs` must already carry a `DictKey`; this only strips a keyword's `:`.
- *  Exported so the few other key-name folds in the codebase (reader/dict-grammar.ts's
+ *  Exported so the few other key-name folds in the codebase (this file's own
  *  `staticDictKey`, evaluator.ts's `foldSubstitutedDictKey`) can call this instead of
  *  reimplementing the same strip, where their own shape already narrowed to a DictKey. */
 export function foldKeyName(key: DictKey): string {
@@ -71,6 +72,21 @@ export function foldKeyName(key: DictKey): string {
     return name.startsWith(":") ? name.slice(1) : name;
   }
   return key.valueOf();
+}
+
+/** The STATIC string key of a key-position datum, or null if it isn't one.
+ *  `:keyword` symbols fold to their bare name (the same `:`-strip `dict` performs);
+ *  strings fold to their value. Everything else — including the legitimate
+ *  unquote-form keys — has no static key. */
+export function staticDictKey(datum: SchemeValue): string | null {
+  if (datum instanceof ASymbol) {
+    const name = typeof datum.__name__ === "string" ? datum.__name__ : String(datum.valueOf());
+    return name.length > 1 && name.startsWith(":") ? name.slice(1) : null;
+  }
+  if (datum instanceof AString) {
+    return datum.toString();
+  }
+  return null;
 }
 
 /** True iff a plain object is dict-SHAPED — the same disambiguation `readMember`
@@ -91,13 +107,14 @@ export class ADict extends AValue {
   /** `{…}` reader-literal marker: the FLAT, validated form sequence (keys then values,
    *  alternating — an unquote-form key lives ONLY here, having no static entry in `byKey`).
    *  Present ⇒ this node is a reader-minted dict literal (the data/code duality is the preamble's
-   *  concept; the grammar is `reader/dict-grammar.ts`); absent on a `dict`-constructed or
-   *  quasiquote-folded runtime dict. Reader-minted only; set post-construction, never a
-   *  constructor param — the `pairs`-based constructor stays the one calling convention every
-   *  producer uses. Mirrors AVector's `evalElements`, sans boolean: a dict's "code needs
-   *  evaluating" signal doubles as the forms payload, since — unlike a vector — the literal's
-   *  UNQUOTE-KEY forms have no home in the static entries at all. */
-  literalForms?: readonly SchemeValue[];
+   *  concept; the grammar predicates live in `reader/dict-grammar.ts`, the mint itself is
+   *  `ADict.fromLiteralForms`); absent on a `dict`-constructed or quasiquote-folded runtime dict.
+   *  Reader-minted only; readonly and constructor-threaded — an optional trailing param
+   *  `fromLiteralForms` and `withProvenance` pass through, never assigned post-construction.
+   *  Mirrors AVector's `evalElements`, sans boolean: a dict's "code needs evaluating" signal
+   *  doubles as the forms payload, since — unlike a vector — the literal's UNQUOTE-KEY forms
+   *  have no home in the static entries at all. */
+  readonly literalForms?: readonly SchemeValue[];
 
   /** The class's own dict-literal detection — the dual data/code nature is ADict's
    *  self-knowledge (mirrors `AVector.isVector`'s flag-idiom, not a free function's).
@@ -120,11 +137,14 @@ export class ADict extends AValue {
 
   /** `pairs` must already carry unique fold-names — duplicate resolution is each
    *  producer's own policy, decided before this constructor runs, exactly as it
-   *  trusts `Record`/array shape today. */
+   *  trusts `Record`/array shape today. `literalForms` is the reader-literal stamp
+   *  (see the field's own doc) — threaded through by `fromLiteralForms` and by
+   *  `withProvenance`'s same-identity re-stamp, never assigned afterward. */
   constructor(
     pairs: ReadonlyArray<readonly [DictKey, SchemeValue | Promise<SchemeValue>]>,
     provenance = EMPTY_PROVENANCE,
     location?: SourceLocation,
+    literalForms?: readonly SchemeValue[],
   ) {
     super(provenance, location);
     const byKey = new Map<DictKey, SchemeValue | Promise<SchemeValue>>();
@@ -140,6 +160,41 @@ export class ADict extends AValue {
     }
     this.byKey = byKey;
     this.indexByName = Object.freeze(indexByName);
+    this.literalForms = literalForms;
+  }
+
+  /**
+   * Mint the dict-literal node from an already-VALIDATED flat form sequence (the reader
+   * owns validation — arity, key admissibility, static-duplicate — because the errors
+   * need ParseError + source location). The ADict face maps each STATIC key — kept as
+   * the real key DATUM object (`:a`'s ASymbol, `"a"`'s AString — real provenance, not a
+   * folded string), a strictly better key face than a null-proto record — to its raw
+   * VALUE form (unevaluated); unquote-form keys have no static entry — they exist only
+   * in `literalForms` until quasiquote substitutes them. `pairs`' fold-names are unique
+   * by construction here: the Parser's `make_dict_literal` already threw
+   * E-DICT-DUP-KEY on any static-key collision before this ever runs, so ADict's own
+   * constructor invariant (no duplicate fold-name) is trivially satisfied.
+   *
+   * `ctx` discriminates the two mouths: the READER passes a parse ctx (the `{`'s
+   * SourceLocation, threaded straight onto the minted ADict's own `.location` — see
+   * AValue.ts); the evaluator's quasiquote re-instantiation defaults to CONSTANT_CTX
+   * (deferred: threading its live `ctx.runCtx` — until then the default leaves that path's
+   * source identity unset, exactly as when unthreaded).
+   */
+  static fromLiteralForms(forms: readonly SchemeValue[], ctx: RunContext = CONSTANT_CTX): DictLiteralNode {
+    const pairs: Array<readonly [DictKey, SchemeValue]> = [];
+    for (let i = 0; i + 1 < forms.length; i += 2) {
+      const keyDatum = forms[i];
+      if ((keyDatum instanceof ASymbol || keyDatum instanceof AString) && staticDictKey(keyDatum) !== null) {
+        pairs.push([keyDatum, forms[i + 1]]);
+      }
+    }
+    return new ADict(
+      pairs,
+      EMPTY_PROVENANCE,
+      isParseCtx(ctx) ? ctx.location : undefined,
+      forms,
+    ) as DictLiteralNode;
   }
 
   /** The only accessor reachable from `@`/`dict-ref` today — those primitives only
@@ -196,11 +251,10 @@ export class ADict extends AValue {
   }
 
   withProvenance(p: ReadonlySet<number>): ADict {
-    const d = new ADict([...this.byKey.entries()], p, this.location);
     // Same-identity re-stamp: a `{…}` literal node stays a `{…}` literal node
-    // (mirrors AVector.withProvenance re-stamping `evalElements`).
-    d.literalForms = this.literalForms;
-    return d;
+    // (mirrors AVector.withProvenance re-stamping `evalElements`) — threaded through
+    // the constructor now that `literalForms` is readonly.
+    return new ADict([...this.byKey.entries()], p, this.location, this.literalForms);
   }
 
   // Code-position lowering (eval/evaluator.ts "code-position lowering"): a `{…}`

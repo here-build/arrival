@@ -76,7 +76,7 @@ so it behaves correctly in all three contexts:
   unevaluated form `(f x)`. A distinct syntax-node kind would break this — `quote` must
   yield a value.
 - **`quasiquote` context** — the forms are walked element-wise (unquote fires at
-  level 1) and the node is re-minted via `makeDictLiteralNode` / the vector re-mint.
+  level 1) and the node is re-minted via `ADict.fromLiteralForms` / the vector re-mint.
 
 The `{…}` datum face is an `ADict` — the same in-class pattern `AVector` uses for `[…]`;
 `AJSObject` (the borrowed-host-object carrier) plays no part in the dict-literal syntax.

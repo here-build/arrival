@@ -144,7 +144,6 @@ import { AJSObject } from "../membrane/AJSObject.js";
 import { ADict, foldKeyName, isDictShaped, type DictKey } from "../values/primitives/ADict.js";
 // The reader's dict grammar — quasiquote re-instantiates READER literals, so the
 // evaluator legitimately reaches into the reader layer for the re-mint.
-import { makeDictLiteralNode } from "../reader/dict-grammar.js";
 import { tf, TF_EXPAND } from "../values/tagless-final.js";
 
 // ============================================================================
@@ -1211,7 +1210,7 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
       processed.push(p);
     }
     if (level > 1) {
-      return makeDictLiteralNode(processed);
+      return ADict.fromLiteralForms(processed);
     }
     const seen = new Set<string>();
     const pairs: [DictKey, SchemeValue][] = [];
