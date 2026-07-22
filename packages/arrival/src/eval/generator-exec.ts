@@ -36,6 +36,7 @@ import {
   makeAssembledAmbient,
   parseProgram,
   validateAgainstAmbient,
+  validateAgainstResolution,
   type AssembledAmbient,
   type ParsedProgram,
 } from "./exec-phases.js";
@@ -455,15 +456,12 @@ export interface ExecOptions {
    */
   skipBootstrapWait?: boolean;
   /**
-   * INTERNAL / Stage-B1 EXPERIMENTAL (docs/plans/stage-b-runcontext-absorbs-assembly.md) —
-   * NOT a supported public option. When `true` (and `capabilities` is set, `env`/`ambient`
-   * are NOT), routes this run through `env/vocabulary.ts`'s `buildVocabulary` +
-   * `env/assemble-run.ts`'s `assembleRun` instead of `lower()`/`assembleEnv`/`instantiate`'s
-   * ambient — see `execStateViaVocabulary` below for the exact narrowed subset this covers
-   * (no `ambient`/`program`/`runCtx` reuse, no static validation, no shadow mode — B1 proves
-   * the resolution + config/door plumbing works end-to-end; B3 migrates the full surface).
-   * Every OTHER caller of `exec`/`execState` is completely unaffected — this flag defaults
-   * `undefined`/`false` and the ordinary ambient path is untouched.
+   * DEPRECATED / no-op (docs/plans/stage-b-runcontext-absorbs-assembly.md, Stage B3). Used to
+   * opt a `{ capabilities }` run INTO the vocabulary path (B1/B2); as of B3 the router
+   * (`execState`'s own doc) routes every vocabulary-eligible run there BY DEFAULT, so this
+   * flag no longer changes anything — setting it `true`/`false`/omitting it all resolve
+   * identically. Kept only so B1/B2-era call sites that set it explicitly keep compiling;
+   * new code should not set it.
    */
   vocabularyPath?: boolean;
   /**
@@ -527,18 +525,65 @@ export interface ExecState {
 
 /**
  * Parse and execute Scheme code using the generator-based evaluator — the COMPLEX
- * tier (see {@link ExecState}). This IS the exec body; `exec` (SIMPLE tier) is a
- * thin delegate over this that unwraps `state.values`.
+ * tier (see {@link ExecState}). THE ROUTER (Stage B3): a `{ capabilities }` run — the branch
+ * every real session takes — resolves through {@link execStateViaVocabulary} (the memoized
+ * `Vocabulary` + `assembleRun`, `env/vocabulary.ts`/`env/assemble-run.ts`) BY DEFAULT; every
+ * other shape (glass `env`, no `capabilities` at all, or one of the KEEP-LEGACY consumers
+ * below) resolves through {@link execStateViaAmbient} — the original three-phase
+ * `lower()`/`assembleEnv`/`instantiate` path, UNCHANGED.
+ *
+ * KEEP-LEGACY set — a `{ capabilities }` run still rides the ambient path when it ALSO
+ * requests one of these (each gated on the option's own presence, not a blanket flag):
+ *
+ *   • `env` (glass) — never vocabulary-eligible; a live embedder frame has no bake to skip.
+ *   • `ambient` — a CALLER-HELD `AssembledAmbient` (the MCP runner's warm-reuse idiom,
+ *     `arrival-mcp`'s `DiscoveryTool`). An ambient may carry legacy `{ fn }` capabilities
+ *     (`McpEnvCapability`) the vocabulary builder refuses outright, and its shape (chain +
+ *     activations + disposable pack closure) has no vocabulary-path equivalent to convert
+ *     into — Stage C (or a dedicated MCP-runner follow-up) migrates this call site itself,
+ *     at which point it stops passing `ambient` and starts relying on the tuple memo
+ *     (`buildVocabulary`/`assembleRun`, exported off `/env`) directly — see this module's own
+ *     `execStateViaVocabulary` doc and the Stage-B plan's "ambient-reuse pattern" section.
+ *   • `override` (`define/overridable` sugar) — NOT migrated this stage (deliberately, per
+ *     the plan): stays on the ambient path, whose `effectiveCapabilities`/`effectiveConfig`
+ *     computation below already handles it. A later stage may fold the sugar into the
+ *     vocabulary branch directly (it is pure capability/config wrangling, not an
+ *     ambient-shaped dependency) — deferred rather than risked here.
+ *   • `irLineage` (shadow mode) — `classifyProgram`/`assertShadowCone`'s wiring is pinned
+ *     against the AMBIENT's post-augmentation base (`ambientBase(ambient)`); dies in Stage C
+ *     with the rest of the ambient/glass legacy surface rather than being re-verified here.
+ *
+ * `staticValidation`/`runCtx` reuse/`program` (precompiled) ARE served on the vocabulary
+ * branch (see `execStateViaVocabulary`'s own doc) — they are not in the KEEP-LEGACY set.
+ *
+ * A bare `exec(code)` (no `capabilities`, no `env`) stays on the ambient path too — it
+ * resolves through the realm-scoped, never-disposed `defaultAmbient()` singleton already,
+ * the cheapest row on the ownership table; rerouting it would add vocabulary-tuple-memo
+ * machinery (even a trivially-cached empty build) for a case the goal statement doesn't
+ * name ("the branch every real session takes" is the `{ capabilities }` branch).
+ *
+ * `ExecOptions.vocabularyPath` is now a DEPRECATED no-op: every capability-bearing run this
+ * router would route to `execStateViaVocabulary` on its own already does so, flag or not; the
+ * flag survives only so a caller that explicitly opted in during B1/B2 keeps compiling.
+ */
+export async function execState(code: string | SchemeValue, options: ExecOptions = {}): Promise<ExecState> {
+  const legacyOnlyConsumer = options.ambient !== undefined || options.override !== undefined || options.irLineage !== undefined;
+  if (options.env === undefined && options.capabilities !== undefined && !legacyOnlyConsumer) {
+    return execStateViaVocabulary(code, options);
+  }
+  return execStateViaAmbient(code, options);
+}
+
+/**
+ * THE AMBIENT PATH — `lower()`/`assembleEnv`/`instantiate`'s three-phase ambient, unchanged
+ * since before Stage B. `execState` (the router, above) delegates here for glass runs, bare
+ * (no-`capabilities`) runs, and the KEEP-LEGACY set documented on the router.
  *
  * @param code - String of Scheme code or pre-parsed SchemeValue
  * @param options - Optional environment and dynamic binding options
  * @returns Promise<ExecState> - boxed results + the run's scope/runCtx handles
  */
-export async function execState(code: string | SchemeValue, options: ExecOptions = {}): Promise<ExecState> {
-  // Stage-B1 EXPERIMENTAL routing (see `ExecOptions.vocabularyPath`'s own doc) — a completely
-  // SEPARATE branch so the ordinary ambient path below (every other caller) is untouched.
-  if (options.vocabularyPath === true) return execStateViaVocabulary(code, options);
-
+async function execStateViaAmbient(code: string | SchemeValue, options: ExecOptions = {}): Promise<ExecState> {
   const {
     env,
     capabilities,
@@ -784,34 +829,42 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
 }
 
 /**
- * Stage-B1/B2 EXPERIMENTAL — `execState`'s `ExecOptions.vocabularyPath` branch. A NARROWED
- * subset of `execState`'s ordinary `{ capabilities }` path, resolving through `env/vocabulary
- * .ts`'s memoized `Vocabulary` instead of `lower()`/`assembleEnv`/`instantiate`'s three-phase
- * ambient:
+ * Stage B3's DEFAULT for `{ capabilities }` execs (`execState`'s router, above, delegates here
+ * unless one of the KEEP-LEGACY consumers is present). Resolves through `env/vocabulary.ts`'s
+ * memoized `Vocabulary` instead of `lower()`/`assembleEnv`/`instantiate`'s three-phase ambient:
  *
  *   1. `buildVocabulary` — C3 walk, doors, config validation, define-bake (ONCE per tuple).
  *   2. A scratch chain frame seeded from `Vocabulary.map` ONLY (never `preludeOnly`, never a
  *      prelude `define` — both are per-run/discarded, Stage B2) — sealed straight away. This IS
  *      the user-facing resolution surface program code runs against.
- *   3. `assembleRun` — mints the `RunContext` AND runs the PER-RUN PRELUDE PASS against it (see
- *      `env/assemble-run.ts`'s own header for the full model): every capability in this tuple's
+ *   2.5. STATIC VALIDATION (`staticValidation: "on"`, Stage B3) — `validateAgainstResolution`
+ *      over THIS chain + `vocabulary.degraded` (the vocabulary-path counterpart of
+ *      `validateAgainstAmbient`; see exec-phases.ts). Runs BEFORE `assembleRun` (below), so an
+ *      error-tier diagnostic throws `StaticValidationError` with ZERO prelude effects fired
+ *      either — strictly stronger than the ambient path's own "zero side effects" claim, whose
+ *      prelude already ran during assembly, before its own validation check.
+ *   3. `assembleRun` — mints the `RunContext` (or REUSES `ExecOptions.runCtx`, Stage B3 — see
+ *      `env/assemble-run.ts`'s own header for the tuple-identity invariant) AND runs the
+ *      PER-RUN PRELUDE PASS against it (fresh mint only): every capability in this tuple's
  *      closure that declares a `.spec.prelude` runs it, exactly once, THIS run, before program
  *      code evaluates. (`assembleRun` re-fetches the SAME memoized `Vocabulary` this function
  *      already built — never rebuilds.)
  *   4. `CompiledResolutionChain` → `Capabilities` → `Resolver`, then the SAME per-form evaluation
- *      loop `execState`'s ambient path runs.
+ *      loop the ambient path (`execStateViaAmbient`) runs.
  *
- * NOT covered (deliberately — see `ExecOptions.vocabularyPath`'s own doc): `ambient`/`program`/
- * `runCtx` reuse, `override`, static validation (`staticValidation`), shadow mode (`irLineage`).
- * A capability whose record contains a legacy `{ fn }` entry throws `VocabularyLegacyCapabilityError`
- * (`buildVocabulary`'s own refusal) — this experimental branch does not fall back silently; a
- * caller opting in is asserting its capability set is vocabulary-eligible.
+ * KEEP-LEGACY (never reaches this function — see `execState`'s router doc for the full list +
+ * rationale): `env` (glass), `ambient` (caller-held `AssembledAmbient`), `override`, `irLineage`
+ * (shadow mode). A capability whose record contains a legacy `{ fn }` entry throws
+ * `VocabularyLegacyCapabilityError` (`buildVocabulary`'s own refusal) — this branch does not fall
+ * back silently; a `{ capabilities }` caller not in the KEEP-LEGACY set is asserting its
+ * capability set is vocabulary-eligible.
  */
 async function execStateViaVocabulary(code: string | SchemeValue, options: ExecOptions): Promise<ExecState> {
   const {
     capabilities,
     config,
     scope,
+    runCtx: passedRunCtx,
     program: passedProgram,
     dynamic_env,
     use_dynamic,
@@ -827,8 +880,9 @@ async function execStateViaVocabulary(code: string | SchemeValue, options: ExecO
     display,
     strict,
     freezeRosettaReturns,
+    staticValidation,
   } = options;
-  invariant(capabilities !== undefined, "ExecOptions.vocabularyPath requires ExecOptions.capabilities");
+  invariant(capabilities !== undefined, "execStateViaVocabulary requires ExecOptions.capabilities");
 
   await ensureBaseAssembled();
   const program = passedProgram ?? (await parseProgram(code, { strict }));
@@ -843,15 +897,28 @@ async function execStateViaVocabulary(code: string | SchemeValue, options: ExecO
   const chain = sealResolutionChain(chainFrame);
 
   const lexicalScope = scope ?? LexicalScope.for(defaultLexicalRoot());
+
+  // ── STATIC VALIDATION (Stage B3) — AFTER the chain seals, BEFORE `assembleRun`'s prelude
+  // pass runs: see this function's own doc for why validating here (rather than after,
+  // mirroring the ambient path's ordering) is the STRONGER "zero side effects" reading.
+  if (staticValidation === "on") {
+    const diagnostics = validateAgainstResolution(program, chain, vocabulary.degraded, lexicalScope);
+    if (diagnostics.some((d) => d.severity === "error")) throw new StaticValidationError(diagnostics);
+  }
+
   const runResolver = new Resolver(lexicalScope.env, new Capabilities(chainFrame, chain));
   // `assembleRun` is THE ONE place preludes run on the vocabulary path (Stage B2) — it mints the
   // RunContext THEN runs the per-run prelude pass against it, so a prelude's resource-touching
-  // verb spawns/reads THIS run's bag.
+  // verb spawns/reads THIS run's bag. Stage B3: `runCtx: passedRunCtx` — REUSE (REPL
+  // continuity) when supplied; `assembleRun` enforces the tuple-identity invariant and skips
+  // re-preluding on a match (see its own header).
+  const runCtxOwned = passedRunCtx === undefined;
   const runCtx = await assembleRun({
     capabilities,
     config,
     evalScheme: capabilityEvalScheme,
     evalPrelude: preludeEvalScheme,
+    runCtx: passedRunCtx,
     strict,
     heapBudget,
     freezeRosettaReturns,
@@ -899,7 +966,10 @@ async function execStateViaVocabulary(code: string | SchemeValue, options: ExecO
     }
     return { values: results, scope: runResolver.scope, runCtx };
   } finally {
-    await disposeRunContext(runCtx);
+    // Stage B3: only THIS call's own (freshly-minted) RunContext is disposed here — a reused
+    // `passedRunCtx` (REPL continuity) is the caller's own session-end teardown, same ownership
+    // rule the ambient path's `runCtxOwned` already enforces.
+    if (runCtxOwned) await disposeRunContext(runCtx);
   }
 }
 

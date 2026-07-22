@@ -368,6 +368,27 @@ async function describeEntry(
 // Phase 2.5 — the pure passes over (program, ambient)
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Static validation's actual work, over the two things it genuinely needs — a sealed
+ *  {@link CompiledResolutionChain} + a degraded list — rather than a full {@link
+ *  AssembledAmbient}. `validateAgainstAmbient` (the ambient-flavored caller) and
+ *  `generator-exec.ts`'s vocabulary-path branch (Stage B3 — its `chain` is sealed straight
+ *  from `Vocabulary.map`, no ambient object involved) both delegate here: ONE classification
+ *  body, two producers of its two inputs. */
+export function validateAgainstResolution(
+  program: ParsedProgram,
+  chain: CompiledResolutionChain,
+  degraded: readonly DegradedCapability[],
+  scope?: LexicalScope,
+): readonly Diagnostic[] {
+  const scopeEnv = scope?.env;
+  const vocabulary = vocabularyFromChain(chain, {
+    scopeNames: scopeEnv?.allBoundNames(),
+    scopeLookup: scopeEnv === undefined ? undefined : (name) => scopeEnv.get(name, { throwError: false }),
+    degraded,
+  });
+  return validateProgram(program.forms, vocabulary);
+}
+
 /** Static validation as a callable phase-boundary op: parsed forms × the ambient's sealed
  *  chain (+ the session scope's names) → the COMPLETE Diagnostic list, ZERO side effects
  *  fired — validation without executing. exec's `staticValidation: "on"` path calls exactly
@@ -377,13 +398,7 @@ export function validateAgainstAmbient(
   ambient: AssembledAmbient,
   scope?: LexicalScope,
 ): readonly Diagnostic[] {
-  const scopeEnv = scope?.env;
-  const vocabulary = vocabularyFromChain(ambient.chain, {
-    scopeNames: scopeEnv?.allBoundNames(),
-    scopeLookup: scopeEnv === undefined ? undefined : (name) => scopeEnv.get(name, { throwError: false }),
-    degraded: ambient.degraded,
-  });
-  return validateProgram(program.forms, vocabulary);
+  return validateAgainstResolution(program, ambient.chain, ambient.degraded, scope);
 }
 
 /** Shadow classification as a phase-2.5 op: one static lineage skeleton per form, built

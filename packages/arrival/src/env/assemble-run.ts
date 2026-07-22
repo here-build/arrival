@@ -36,6 +36,19 @@
 // callback this stage adds — required whenever the tuple's closure contributes at least one
 // `.spec.prelude` (a tuple with none never calls it, so a caller with no prelude-bearing
 // capabilities in its set may omit it, same relaxed posture untyped fixtures already rely on).
+//
+// STAGE B3 — RUNCTX REUSE (docs/plans/stage-b-runcontext-absorbs-assembly.md §Sub-stages, B3):
+// `opts.runCtx`, when supplied, is REUSED verbatim instead of minting + re-preluding — the
+// vocabulary-path counterpart of `ExecOptions.runCtx` (REPL continuity, generator-exec.ts). The
+// ONE invariant this function enforces: a reused run's vocabulary must be THIS tuple's — checked
+// by IDENTITY against the memoized `Vocabulary.map` (the tuple memo is itself identity-keyed, so
+// two calls sharing the same capabilities/config objects always resolve the SAME `Vocabulary`,
+// and therefore the SAME `.map` reference). A mismatch — a runCtx minted against a different
+// tuple, or a legacy runCtx with no `.vocabulary` at all (the ambient/glass/`execExpr` mint
+// sites) — teaches rather than silently misresolving: `RunContextVocabularyMismatchError`. On a
+// match, the prelude pass is SKIPPED (it already ran once, at the reused runCtx's ORIGINAL
+// `assembleRun` mint) — re-running it would double-fire prelude effects, exactly what the
+// diamond-DAG single-execution law (this module's own header, above) guards against.
 
 import type { EnvCapability } from "../common/capability.js";
 import type { EvalPreludeInto, EvalSchemeInto } from "../common/scheme-env.js";
@@ -47,6 +60,7 @@ import { RunContext } from "../run/RunContext.js";
 import { buildVocabulary } from "./vocabulary.js";
 import { bindValue, mintFrame } from "./AmbientRuntime.js";
 import { user_env } from "./env-roots.js";
+import { RunContextVocabularyMismatchError } from "../errors.js";
 import invariant from "tiny-invariant";
 
 export interface AssembleRunOptions {
@@ -74,6 +88,10 @@ export interface AssembleRunOptions {
   readonly reads?: ReadGuard;
   readonly notes?: NoteSink;
   readonly display?: DisplaySink;
+  /** Stage B3 — REUSE an existing RunContext (REPL continuity) instead of minting a fresh one;
+   *  see this module's own header ("STAGE B3 — RUNCTX REUSE") for the tuple-identity invariant
+   *  and the mismatch teaching error. */
+  readonly runCtx?: RunContext;
 }
 
 /** Obtain (or build) this tuple's {@link Vocabulary} and mint a fresh `RunContext` armed with
@@ -82,9 +100,17 @@ export interface AssembleRunOptions {
  *  path), plus the opaque `vocabulary`/`degraded` handles. The RunContext's own
  *  `capabilityResources` store starts empty regardless (unchanged — resources spawn lazily on
  *  first dispatch, per `CallCtx.ts`'s `makeCallCtx`, orthogonal to which resolution surface a
- *  value was bound through). */
+ *  value was bound through).
+ *
+ *  `opts.runCtx` supplied ⇒ REUSE it verbatim (tuple-identity checked, prelude NOT re-run — see
+ *  the module header's B3 section) instead of minting + preluding afresh. */
 export async function assembleRun(opts: AssembleRunOptions): Promise<RunContext> {
   const vocabulary = await buildVocabulary(opts.capabilities, opts.config, opts.evalScheme);
+
+  if (opts.runCtx !== undefined) {
+    if (opts.runCtx.vocabulary !== vocabulary.map) throw new RunContextVocabularyMismatchError();
+    return opts.runCtx;
+  }
 
   // Step 2 — mint the RunContext FIRST: the prelude pass (step 3, below) dispatches through
   // THIS run's own `runCtx`, so a resource-touching prelude verb spawns/reads THIS run's bag,

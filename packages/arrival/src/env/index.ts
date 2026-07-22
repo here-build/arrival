@@ -43,6 +43,7 @@ export { type DegradedNeed, type DegradedCapability } from "../common/degradatio
 export {
   parseProgram,
   validateAgainstAmbient,
+  validateAgainstResolution,
   classifyProgram,
   classifierFromAmbient,
   type ParsedProgram,
@@ -51,6 +52,19 @@ export {
   type SymbolDescription,
 } from "../eval/exec-phases.js";
 export { assembleAmbient, type AssembleAmbientOptions } from "../eval/generator-exec.js";
+
+// ── Stage B — the Vocabulary artifact + assembleRun (docs/plans/stage-b-runcontext-absorbs-
+// assembly.md) — `exec(code, { capabilities, config })`'s DEFAULT resolution path (Stage B3).
+// Exported here so a caller wanting the `assembleAmbient`-style "assemble once, reuse across N
+// calls" idiom on this path can rely on the tuple memo directly instead of holding an
+// `AssembledAmbient` handle: `buildVocabulary` is memoized by (capability-set identity, config
+// identity), so calling it (or `exec`/`assembleRun`) repeatedly with the SAME capabilities/config
+// objects is a cache hit, not a rebuild — the "warm reuse" a caller like arrival-mcp's
+// `DiscoveryTool` gets from `assembleAmbient` today, without a disposable handle to manage (the
+// artifact is immutable; nothing to dispose). See generator-exec.ts's `execStateViaVocabulary`
+// for the production consumer.
+export { buildVocabulary, type Vocabulary } from "./vocabulary.js";
+export { assembleRun, type AssembleRunOptions } from "./assemble-run.js";
 
 // The read-time metadata resolver rides the same surface (its declaration-side types live
 // on `/symbol`) — an ambient consumer resolving a def's bag by hand reaches it here too.

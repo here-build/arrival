@@ -520,6 +520,18 @@ export class VocabularyLegacyCapabilityError extends Error {
     this.name = "VocabularyLegacyCapabilityError";
   }
 }
+export class RunContextVocabularyMismatchError extends Error {
+  constructor() {
+    super(
+      "assembleRun: a reused RunContext (REPL continuity / ExecOptions.runCtx) was minted against a " +
+        "DIFFERENT (capabilities, config) tuple than this call's — its `.vocabulary` does not match this " +
+        "tuple's memoized Vocabulary. Reuse a RunContext only across calls that share the SAME " +
+        "capabilities/config (by reference — the tuple memo is identity-keyed), or omit `runCtx` to mint " +
+        "a fresh one for a different tuple.",
+    );
+    this.name = "RunContextVocabularyMismatchError";
+  }
+}
 
 // -------------------------------------------------------------------------
 // :: ResourceNotLiveError — a resource touched before the env accessor spawned it.
