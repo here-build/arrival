@@ -112,6 +112,17 @@ export interface SchemeEnv {
  *  is the canonical implementation; injected so this package is evaluator-agnostic. */
 export type EvalSchemeInto<E = SchemeEnv> = (env: E, source: string) => unknown | Promise<unknown>;
 
+/** Evaluate PER-RUN PRELUDE `source` into `env`, THREADED WITH THIS RUN'S `runCtx`
+ *  (docs/plans/stage-b-runcontext-absorbs-assembly.md, Stage B2's per-run prelude pass —
+ *  `env/assemble-run.ts`'s `assembleRun`). Distinct from {@link EvalSchemeInto} — which stays
+ *  runCtx-less because it also serves `symbol.define`'s Pass-2 bake, a BUILD-time (per-tuple,
+ *  shared-across-runs) eval with no run to carry — this callback exists because a prelude's
+ *  resource-touching verb (the loader's extension registry, a preludeOnly registration verb)
+ *  must spawn/read THIS run's `capabilityResources` bag, not a bystander run's. arrival-scheme's
+ *  `exec(source, { env, runCtx, skipBootstrapWait: true })` satisfies it (see
+ *  `generator-exec.ts`'s `preludeEvalScheme`). */
+export type EvalPreludeInto<E = SchemeEnv> = (env: E, source: string, runCtx: RunContext) => unknown | Promise<unknown>;
+
 /** A scheme-aware capability: scheme `bootstrap` (macros + defs) and/or JS `wire`,
  *  composed as ONE pack. `deps`/`config`/`name` carry through to the kernel pack. */
 export interface SchemePackSpec<E = SchemeEnv> {

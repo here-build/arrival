@@ -417,6 +417,78 @@ carries no resolver leg.
 **Enforcement sites:** `common/kernel.ts`, `common/capability.ts`, `common/symbols/define-bake.ts`,
 `common/scheme-env.ts`, `env/AmbientRuntime.ts`.
 
+### 7a. PRELUDE — the VOCABULARY PATH contract (Stage B2)
+
+Everything above this subsection describes the LEGACY `lower()`/`assembleEnv` path (bootstrap's
+`ctx.preludeScope` overlay, mid-run `require`'s discarded child scope `C'`). The routed
+vocabulary path (`ExecOptions.vocabularyPath`, `env/vocabulary.ts` + `env/assemble-run.ts`)
+realizes the SAME contract — prelude is assembly-time-only, a closure survives by lexical
+capture not by a leaked binding — through a DIFFERENT mechanism, worth stating on its own terms
+rather than as a diff against the legacy prose.
+
+**Prelude is PER-RUN SYSTEM CODE, not a definition mechanism.** `env/vocabulary.ts`'s
+`buildVocabulary` COLLECTS every `.spec.prelude` in the tuple's C3 closure into
+`Vocabulary.preludes` — deps-first, deduped by capability IDENTITY — but never executes it: the
+Vocabulary is a shared, memoized, run-agnostic artifact, and a prelude's whole purpose (this
+stage's ruling) is programmatic inter-capability wiring THROUGH RESOURCES, which only exist
+per-run. Execution is `env/assemble-run.ts`'s `assembleRun` job: mint the RunContext (vocabulary
+attached, resource store empty), THEN walk `Vocabulary.preludes` — C3 order, already
+identity-deduped — evaluating each capability's prelude text against a fresh, DISCARDED prelude
+scope, THIS run's `runCtx` threaded through every form (`AssembleRunOptions.evalPrelude`, an
+`EvalPreludeInto` callback distinct from the build-time, runCtx-less `evalScheme` that feeds
+`symbol.define`'s Pass-2 bake). A prelude touching a resource-reading verb spawns that resource
+into THIS run's bag — the loader's extension registry, for instance, comes alive on the first
+run that actually registers something, never at vocabulary-build time.
+
+**Single execution per run is a hard law, and it falls out of the collection-side dedup, not a
+separate mechanism.** A capability reachable through two DAG edges (a diamond) contributes
+exactly ONE entry to `Vocabulary.preludes` (B1's identity dedup); `assembleRun`'s single pass
+over that array is what makes execution single-per-run. Two SEPARATE `assembleRun` calls over
+the same tuple each run their own single pass — the Vocabulary is shared, but prelude EFFECTS
+are not: each run gets a fresh resource bag, so a prelude-incremented counter reads 1 in every
+run, never accumulating. A registration-conflict door (`"cannot register X twice"`-shaped) is
+the built-in regression DETECTOR for this law: manually re-running a capability's prelude text
+against an ALREADY-assembled run's `runCtx` must hit the door, because the run's registry
+already holds that entry.
+
+**The prelude scope composes exactly like the legacy bootstrap's own base.** A fresh
+`mintFrame(user_env, …)` child (never reused, never returned — discarded once the pass
+completes) seeded with the preludeOnly overlay (`Vocabulary.preludeOnly`) THEN the main map
+(`Vocabulary.map`) — the two are disjoint by construction (a name lands in exactly one), so this
+is completing the prelude's visibility, not an override. Basing on `user_env` (not a bare empty
+frame) is what lets a prelude call a base-pack primitive (`+`, `string-length`, …) — the SAME
+composition the vocabulary path's user-facing chain frame uses for program code, built
+separately, from `Vocabulary.map` alone (never `preludeOnly`, never a prelude `define` — see
+next).
+
+**Prelude `(define …)` is DISCARDED with the scope, uniformly — no bootstrap/mid-run asymmetry.**
+The legacy path's split (bootstrap's defines land in the runtime env; mid-run's are lost with
+`C'`) collapses on the vocabulary path: EVERY prelude's defines land in the per-run scope and
+vanish when the pass returns, full stop. A name a prelude defines is a plain unbound variable
+from user code — the SAME `UnboundVariableError` any other absent name throws. This is
+confirmed-fine (not a gap): the require-extension flows that need to carry a preludeOnly value
+into runtime do it through the SAME sanctioned channel PRELUDE always used for that — a resource
+(never a leaked binding).
+
+**A closure a prelude mints keeps its lexical captures — pure scope math, not a temporal gate.**
+`(lambda () (some-prelude-only-symbol))`, minted while the prelude scope is live, keeps
+resolving `some-prelude-only-symbol` when CALLED later from user code, because a closure's
+captured scope is a reference, not a re-resolved lookup — the prelude scope being discarded
+afterward doesn't touch a reference already held. The bridge from prelude to user code stays a
+resource, same as ever: a preludeOnly registration verb stashes the prelude-minted closure into
+this run's resource bag; a public verb retrieves and applies it. Applying a STORED closure later
+must go through `applyCallback` with the CURRENT dispatch's own `CallCtx` (the same seam every
+HOF — `map`/`filter`/`fold` — uses for a callback it was handed), never through a
+`symbol.define`-baked body: a baked define's body evaluates against its DEFINITION-TIME
+`ctx.runCtx` (captured once, at vocabulary-build time, shared across every run of the tuple),
+not the call-time one — a pre-existing, documented, orthogonal limitation
+(`common/symbols/define-bake.ts`) that makes `symbol.define` the wrong tool for a body that must
+read PER-RUN resource state.
+
+**Enforcement sites:** `env/vocabulary.ts`, `env/assemble-run.ts`, `eval/generator-exec.ts`
+(`execStateViaVocabulary`, the `preludeEvalScheme` callback), `common/scheme-env.ts`
+(`EvalPreludeInto`), `env/__tests__/assemble-run.test.ts` (the law suite).
+
 ---
 
 ## 8. HERMETIC — the runtime and its storage

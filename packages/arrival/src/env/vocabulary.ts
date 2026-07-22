@@ -90,15 +90,18 @@ export interface Vocabulary {
   /** The runtime vocabulary — every non-preludeOnly bound name, C3 last-write-wins. */
   readonly map: ReadonlyMap<string, AmbientValue>;
   /** Assembly-time-only names (docs/environments.md §PRELUDE) — resolvable from a capability's
-   *  OWN prelude text (B2), never from the runtime map. B1 populates this; nothing reads it
-   *  yet (prelude execution is B2's). */
+   *  OWN prelude text, never from the runtime map. Populated here (B1); read by `env/assemble-run
+   *  .ts`'s per-run prelude pass (B2), which overlays this map onto the prelude scope ALONGSIDE
+   *  the main map — never onto the user-facing resolution chain. */
   readonly preludeOnly: ReadonlyMap<string, AmbientValue>;
   /** Every capability that lowered degraded, C3 order (root-first) — same fold order as
    *  `AssembledEnv.degraded` (kernel.ts). */
   readonly degraded: readonly DegradedCapability[];
   /** Every `.spec.prelude` in this tuple's closure, DEPS-FIRST (matches `collectPrelude`'s own
    *  order), deduped by capability IDENTITY (a diamond DAG contributes its prelude once) —
-   *  COLLECTED only; B1 does not execute these (see `assembleRun`'s own doc). */
+   *  COLLECTED here (B1); EXECUTED per-run by `env/assemble-run.ts`'s `assembleRun` (B2), whose
+   *  single pass over this already-deduped array IS the single-execution-per-run law — see that
+   *  module's own doc. */
   readonly preludes: readonly { readonly capability: EnvCapability; readonly text: string }[];
   /** This tuple's validated per-capability configuration — capability OBJECT → its
    *  `configuration` bag (the SAME shape `capabilityConfigurationTable`, eval/exec-phases.ts,

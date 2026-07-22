@@ -24,7 +24,7 @@ import { StaticValidationError } from "../static-validation/validate-program.js"
 import type { DegradationMode } from "../common/degradation.js";
 import type { EnvCapability } from "../common/capability.js";
 import { overridableCapability } from "../env/overridable/overridable.js";
-import type { EvalSchemeInto, SchemeEnv } from "../common/scheme-env.js";
+import type { EvalPreludeInto, EvalSchemeInto, SchemeEnv } from "../common/scheme-env.js";
 import invariant from "tiny-invariant";
 import { parse as readerParse } from "../reader/parse.js";
 import { assertShadowCone } from "../provenance/lineage-shadow.js";
@@ -137,6 +137,16 @@ const preludeExec = (env: SchemeEnv, src: string): Promise<unknown[]> => {
   return exec(src, { env, skipBootstrapWait: true });
 };
 const capabilityEvalScheme: EvalSchemeInto = preludeExec;
+
+// Stage B2's PER-RUN prelude evalScheme (env/assemble-run.ts's `AssembleRunOptions.evalPrelude`)
+// — the SAME `skipBootstrapWait`/`isAmbientRuntime` posture as `preludeExec` above, PLUS the
+// run's own `runCtx` threaded through (`exec`'s glass path: `runCtx` set ⇒ `runCtxOwned` is
+// false ⇒ exec's own `finally` never disposes it — the SAME RunContext `assembleRun` mints and
+// returns to its caller keeps flowing straight through every prelude form's dispatch).
+const preludeEvalScheme: EvalPreludeInto = (env, src, runCtx) => {
+  if (!isAmbientRuntime(env)) throw new AmbientShapeError("prelude evalScheme", "expected a concrete AmbientRuntime");
+  return exec(src, { env, runCtx, skipBootstrapWait: true });
+};
 
 /** Phase-2 assembly options — see {@link assembleAmbient}. */
 export interface AssembleAmbientOptions {
@@ -774,19 +784,22 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
 }
 
 /**
- * Stage-B1 EXPERIMENTAL — `execState`'s `ExecOptions.vocabularyPath` branch. A NARROWED subset
- * of `execState`'s ordinary `{ capabilities }` path, resolving through `env/vocabulary.ts`'s
- * memoized `Vocabulary` instead of `lower()`/`assembleEnv`/`instantiate`'s three-phase ambient:
+ * Stage-B1/B2 EXPERIMENTAL — `execState`'s `ExecOptions.vocabularyPath` branch. A NARROWED
+ * subset of `execState`'s ordinary `{ capabilities }` path, resolving through `env/vocabulary
+ * .ts`'s memoized `Vocabulary` instead of `lower()`/`assembleEnv`/`instantiate`'s three-phase
+ * ambient:
  *
  *   1. `buildVocabulary` — C3 walk, doors, config validation, define-bake (ONCE per tuple).
- *   2. A scratch chain frame seeded from `Vocabulary.map`, then this tuple's `Vocabulary
- *      .preludes` evaluated OLD-STYLE (deps-first, straight into the SAME frame) — the B1
- *      equivalence step: prelude `define`s land where program code can see them, exactly like
- *      today's bootstrap `apply()` does, without re-running `lower()`'s bind loop (already
- *      baked into the vocabulary map — no double-bind).
- *   3. Seal → `CompiledResolutionChain` → `Capabilities` → `Resolver`, and `assembleRun` for
- *      the `RunContext` (the SAME memoized vocabulary — `assembleRun` re-fetches, not rebuilds).
- *   4. The SAME per-form evaluation loop `execState`'s ambient path runs.
+ *   2. A scratch chain frame seeded from `Vocabulary.map` ONLY (never `preludeOnly`, never a
+ *      prelude `define` — both are per-run/discarded, Stage B2) — sealed straight away. This IS
+ *      the user-facing resolution surface program code runs against.
+ *   3. `assembleRun` — mints the `RunContext` AND runs the PER-RUN PRELUDE PASS against it (see
+ *      `env/assemble-run.ts`'s own header for the full model): every capability in this tuple's
+ *      closure that declares a `.spec.prelude` runs it, exactly once, THIS run, before program
+ *      code evaluates. (`assembleRun` re-fetches the SAME memoized `Vocabulary` this function
+ *      already built — never rebuilds.)
+ *   4. `CompiledResolutionChain` → `Capabilities` → `Resolver`, then the SAME per-form evaluation
+ *      loop `execState`'s ambient path runs.
  *
  * NOT covered (deliberately — see `ExecOptions.vocabularyPath`'s own doc): `ambient`/`program`/
  * `runCtx` reuse, `override`, static validation (`staticValidation`), shadow mode (`irLineage`).
@@ -822,21 +835,23 @@ async function execStateViaVocabulary(code: string | SchemeValue, options: ExecO
 
   const vocabulary = await buildVocabulary(capabilities, config, capabilityEvalScheme);
 
-  // The scratch chain frame — seeded from the vocabulary map, then this tuple's preludes
-  // evaluated straight into it (deps-first — `Vocabulary.preludes`' own order), so a
-  // capability's prelude `define`s are visible to program code exactly like today's bootstrap
-  // apply() target. Discarded after sealing; nothing about it survives past this call.
+  // The scratch chain frame — seeded from the vocabulary map ONLY. `preludeOnly` names and any
+  // prelude `(define …)` are Stage B2's PER-RUN, DISCARDED prelude scope's business
+  // (`assembleRun`, below) — neither belongs on the user-facing resolution surface.
   const chainFrame = mintFrame(user_env, "exec-vocabulary");
   for (const [name, value] of vocabulary.map) bindValue(chainFrame, name, value);
-  for (const { text } of vocabulary.preludes) await capabilityEvalScheme(chainFrame, text);
   const chain = sealResolutionChain(chainFrame);
 
   const lexicalScope = scope ?? LexicalScope.for(defaultLexicalRoot());
   const runResolver = new Resolver(lexicalScope.env, new Capabilities(chainFrame, chain));
+  // `assembleRun` is THE ONE place preludes run on the vocabulary path (Stage B2) — it mints the
+  // RunContext THEN runs the per-run prelude pass against it, so a prelude's resource-touching
+  // verb spawns/reads THIS run's bag.
   const runCtx = await assembleRun({
     capabilities,
     config,
     evalScheme: capabilityEvalScheme,
+    evalPrelude: preludeEvalScheme,
     strict,
     heapBudget,
     freezeRosettaReturns,
