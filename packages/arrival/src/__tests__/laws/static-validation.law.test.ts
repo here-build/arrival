@@ -53,8 +53,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import * as sz from "../../common/scheme-zod.js";
-import { EnvCapability, type SymbolDeclaration } from "../../common/capability.js";
-import { symbol } from "../../common/symbol.js";
+import { EnvCapability } from "../../common/capability.js";
 import { exec, parse } from "../../eval/generator-exec.js";
 import { CompiledResolutionChain } from "../../eval/CompiledResolutionChain.js";
 import { DoorProcedure } from "../../values/primitives/ACallable.js";
@@ -80,51 +79,33 @@ const door = (name: string, reason: string, cause?: DoorSymbolDef["cause"]): Doo
 
 /** A loader-shaped fixture (mirrors `arrival/loader`'s `fs` posture the way
  *  degradation.law.test.ts's fixture does — no cross-package dep on the real loader):
- *  satisfied `fs` binds no-op natives; absent `fs` under `degradation: "doors"` mints
- *  cause-carrying doors for the SAME two verbs, both citing `fs`. */
+ *  both verbs declare `requiresConfig: ["fs"]`, so a satisfied `fs` binds the no-op natives
+ *  and an absent `fs` auto-mints cause-carrying doors citing `fs` — the same auto-door path
+ *  the real loader rides now that the builder-form arm (manual `degradation.door(...)`) is
+ *  retired. */
 // Widened to `EnvCapability<any, any>` — the same declared-type idiom
-// degradation.law.test.ts uses: the constructor infers <never, never> from a
-// resource-less spec, which fails variance into ExecOptions.capabilities.
+// degradation.law.test.ts uses: inference from a resource-less spec otherwise
+// fails variance into ExecOptions.capabilities.
 function loaderLike(name: string, onProbe: () => void): EnvCapability<any, any> {
-  return new EnvCapability<any, any>(name, {
+  return EnvCapability.define(name, {
     configuration: {
       fs: z.custom<{ readFile: (p: string) => Promise<string> }>((v) => v !== null && typeof v === "object").optional(),
     },
-    symbols: ({ configuration, degradation }) => {
-      const defs: Record<string, SymbolDeclaration> = {
-        "probe!": symbol.native`probe!: JS-side effect counter`({ input: [], output: [sz.value] }, () => {
-          onProbe();
-          return nil;
-        }),
-      };
-      if (configuration.fs !== undefined) {
-        defs["require"] = symbol.native`require: no-op (satisfied fixture)`(
-          { input: [sz.value], output: [sz.value] },
-          () => nil,
-        );
-        defs["require/extension"] = symbol.native`require/extension: no-op (satisfied fixture)`(
-          { input: [sz.value], output: [sz.value] },
-          () => nil,
-        );
-      } else if (degradation.active) {
-        defs["require"] = degradation.door(
-          "require",
-          ["fs"],
-          "loads a file via a filesystem this assembly was not given",
-        );
-        defs["require/extension"] = degradation.door(
-          "require/extension",
-          ["fs"],
-          "registers a loader extension via the same absent filesystem",
-        );
-      }
-      return defs;
-    },
+    symbols: (symbol) => ({
+      "probe!": symbol.native`probe!: JS-side effect counter`({ input: [], output: [sz.value] }, () => {
+        onProbe();
+        return nil;
+      }),
+      require: symbol.native`require: no-op (satisfied fixture)`(
+        { input: [sz.value], output: [sz.value], requiresConfig: ["fs"] },
+        () => nil,
+      ),
+      "require/extension": symbol.native`require/extension: no-op (satisfied fixture)`(
+        { input: [sz.value], output: [sz.value], requiresConfig: ["fs"] },
+        () => nil,
+      ),
+    }),
   });
-  // (no trailing cast needed: `new EnvCapability<any, any>(...)` above already
-  // returns `EnvCapability<any, any>`, matching this function's declared return
-  // type — a stale `as unknown as EnvCapability<never, never>` used to sit here
-  // from before the `<any, any>` widening landed.)
 }
 
 // ============================================================================

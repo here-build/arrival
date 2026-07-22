@@ -38,7 +38,7 @@ subclassed. A capability is a value, not a class hierarchy.
 **The lowering chain is: module singleton → `EnvPack` → assembled env.** `spec` is the
 authoring form. `EnvCapability.lower({ evalScheme, config, degradation })` validates the
 config against the `configuration` schemas, turns each resource declaration into a
-ref-counted `ResourceCell`, computes the (possibly builder-derived) `symbols` record once,
+ref-counted `ResourceCell`, reads the (always literal — the builder arm is retired) `symbols` record,
 and returns a `LoweredPack` — an `EnvPack` whose `apply(env)` wires the symbols
 (membrane-wrapped) and evaluates the prelude. The kernel then C3-linearizes a set of packs
 and applies each once (§ASSEMBLY). The DAG is the authoring form; the assembled env is the
@@ -60,9 +60,10 @@ The five keys are the entire surface:
   reading the parsed config.
 - `prelude` — scheme bootstrap (`define-macro` + `define`s) evaluated into the env on apply
   (§PRELUDE). Shrinking as capabilities migrate their text blob to declared `symbol.define`s.
-- `symbols` — the verbs, as baked `symbol.*` declarations (§SYMBOL-KINDS), given either as a
-  plain record or as a *builder* `(activation) => record` that closes per-env config and
-  resource `Ref`s into each verb.
+- `symbols` — the verbs, as baked `symbol.*` declarations (§SYMBOL-KINDS), always a plain
+  record (the `EnvCapability.define` callback evaluates eagerly to one; the old *builder*
+  `(activation) => record` arm is retired — impls read `this.configuration`/`this.resources`
+  at dispatch instead of closing over an activation).
 - `deps` — the DAG edges; a dep edge IS the grant.
 
 **Enforcement sites:** `common/capability.ts`, `common/kernel.ts`, `common/scheme-env.ts`,
@@ -451,8 +452,8 @@ feature (`set!`, `call/cc`, the mutators) is *declared capability data*: a `symb
 door bound like any other symbol, which the ordinary lookup walk resolves and fires. The unbound
 wall's typo suggestions come from *this chain's actual vocabulary* (`allBoundNames`), never a
 hardcoded roster. Absence is meaningful: a name the env did not bind is a door the capability
-chose not to open (a `preludeOnly` symbol at runtime, a builder-form withhold; §LOADER's
-`require` itself now stays BOUND and doors on missing config instead — §DEGRADATION-D2).
+chose not to open (a `preludeOnly` symbol at runtime; §LOADER's `require` itself stays BOUND
+and doors on missing config instead — §DEGRADATION-D2).
 
 **`global_env`/`user_env` are `ResolvingAmbient` roots, born through the minters.** Both are
 resolver-capable (the two producer classes of §PRELUDE register here); both seal, at the end of
@@ -520,23 +521,20 @@ false, no capability's behavior changes unless it explicitly consults `.door(...
 one fact restated at five sites in the code, stated authoritatively once here: **`forbid` mode
 changes nothing; it only records what is missing.**
 
-**Program-scoped callers opt into `"doors"`, and only then does absence become a teaching door.**
-Under `"doors"`, a capability whose `symbols` builder consults `Activation.degradation` may trade
-a manual `if (x !== undefined)` withhold for a *cause-carrying* door: instead of the symbol being
-absent, it binds a `DoorSymbolDef` naming its owner and the missing config key that would satisfy
-it. The assembly's `degraded` list then enumerates every capability that lowered degraded — a host
-reads it instead of probing symbols one by one.
+**Absence becomes a teaching door through `Contract.requiresConfig` — mode-independently (D2).**
+A verb declaring its enabling keys in `requiresConfig` binds a *cause-carrying* door when they
+are absent: instead of the symbol being missing, it binds a `DoorSymbolDef` naming its owner and
+the missing config key that would satisfy it — under either mode (the builder-form path that
+made this a `"doors"`-only, hand-minted trade is retired). The assembly's `degraded` list then
+enumerates every capability that lowered degraded — a host reads it instead of probing symbols
+one by one.
 
-**Withhold-by-absence and door-mode are the *same* posture under two modes — unified here.** A
-builder-form capability that withholds a verb when its config is absent and a capability that
-mints a degradation door name the *same* condition; the only difference is the mode. Under
-`forbid`, a builder's absence stays silent absence — the verb is simply not bound, and the
-program's call to it is a plain unbound variable (§HERMETIC: an absent name is a capability's
-choice). Under `doors`, the identical absence binds a cause-carrying door instead. **Never
-withhold by silently omitting a symbol from the record when a cause could be carried; declare the
-gate as the verb's `requiresConfig` (D2 — mode-independent, the `.define`-form posture: loader's
-`require` doors on its `[["fs", "loader"]]` any-of group under EITHER mode) or, in a legacy
-builder, lower with `degradation: "doors"` so the absence names its own cause.**
+**Withhold-by-absence is retired; the door IS the posture.** The builder-form capability that
+could withhold a verb when its config was absent is gone with the builder arm — a config-gated
+verb is always enumerated and doors on its missing keys via `Contract.requiresConfig` (D2 —
+mode-independent: loader's `require` doors on its `[["fs", "loader"]]` any-of group under EITHER
+mode). **Never withhold by silently omitting a symbol from the record when a cause could be
+carried; declare the gate as the verb's `requiresConfig` so the absence names its own cause.**
 
 **Permanent omission and degradation are distinct causes on the same door type.** A
 `notImplemented` door is a *permanent design omission* (`set!`, `call/cc`, the mutators — R7RS

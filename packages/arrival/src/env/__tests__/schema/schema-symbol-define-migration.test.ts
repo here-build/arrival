@@ -34,7 +34,6 @@ import { mintFrame } from "../../AmbientRuntime.js";
 
 import { exec, initBridge } from "../../../index.js";
 import { global_env } from "../../env-roots.js";
-import { buildDegradationInfo } from "../../../common/degradation.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
 import { schemaCapability } from "../../schema/schema.js";
 import type { AEntity } from "../../../common/symbol.js";
@@ -48,14 +47,9 @@ const capabilities = [schemaCapability];
 const evalScheme = (env: unknown, src: unknown): unknown =>
   exec(src as string, { env: env as ResolvingAmbient, skipBootstrapWait: true });
 
+// `spec.symbols` IS the record (the builder-form arm is retired).
 function resolveSymbols(): Record<string, SymbolDeclaration> {
-  const { symbols } = schemaCapability.spec;
-  if (typeof symbols !== "function") return symbols ?? {};
-  return symbols({
-    configuration: {},
-    resources: {},
-    degradation: buildDegradationInfo("arrival/schema", "forbid", []),
-  }) as Record<string, SymbolDeclaration>;
+  return schemaCapability.spec.symbols ?? {};
 }
 
 const S_SYMBOLS = [
@@ -132,10 +126,9 @@ describe("arrival/schema — the §2.1 bake FV law passes standalone (deps edge 
 
 describe("arrival/schema — wire-format byte-equivalence (the load-bearing invariant)", () => {
   it("(s/object (s/field name string) (s/field occupation string)) — arrival-chain's own fixture, byte-for-byte", async () => {
-    const [result] = await exec(
-      '(s/object (s/field "name" "string") (s/field "occupation" "string"))',
-      { capabilities },
-    );
+    const [result] = await exec('(s/object (s/field "name" "string") (s/field "occupation" "string"))', {
+      capabilities,
+    });
     expect(JSON.stringify(result)).toBe('["object",["name","string"],["occupation","string"]]');
   });
 
@@ -144,19 +137,16 @@ describe("arrival/schema — wire-format byte-equivalence (the load-bearing inva
     expect(JSON.stringify(result)).toBe('["object"]');
   });
 
-  it("(s/array \"string\") — bare-string element, no s/string() wrapper", async () => {
+  it('(s/array "string") — bare-string element, no s/string() wrapper', async () => {
     const [result] = await exec('(s/array "string")', { capabilities });
     expect(JSON.stringify(result)).toBe('["array","string"]');
   });
 
   it("nested (s/array (s/object ...)) — array-of-objects", async () => {
-    const [result] = await exec(
-      '(s/array (s/object (s/field "name" "string") (s/field "bucket" (s/enum "A" "B"))))',
-      { capabilities },
-    );
-    expect(JSON.stringify(result)).toBe(
-      '["array",["object",["name","string"],["bucket",["enum","A","B"]]]]',
-    );
+    const [result] = await exec('(s/array (s/object (s/field "name" "string") (s/field "bucket" (s/enum "A" "B"))))', {
+      capabilities,
+    });
+    expect(JSON.stringify(result)).toBe('["array",["object",["name","string"],["bucket",["enum","A","B"]]]]');
   });
 
   it('(s/enum "A" "B" "C" "D")', async () => {
@@ -164,12 +154,12 @@ describe("arrival/schema — wire-format byte-equivalence (the load-bearing inva
     expect(JSON.stringify(result)).toBe('["enum","A","B","C","D"]');
   });
 
-  it("(s/optional \"string\") — bare-string /optional suffix", async () => {
-    const [result] = await exec('(s/optional (s/string))', { capabilities });
+  it('(s/optional "string") — bare-string /optional suffix', async () => {
+    const [result] = await exec("(s/optional (s/string))", { capabilities });
     expect(result).toBe("string/optional");
   });
 
-  it("(s/optional (s/enum \"A\" \"B\")) — list-headed /optional suffix, cdr untouched", async () => {
+  it('(s/optional (s/enum "A" "B")) — list-headed /optional suffix, cdr untouched', async () => {
     const [result] = await exec('(s/optional (s/enum "A" "B"))', { capabilities });
     expect(JSON.stringify(result)).toBe('["enum/optional","A","B"]');
   });
@@ -190,10 +180,9 @@ describe("arrival/schema — wire-format byte-equivalence (the load-bearing inva
   });
 
   it("s/field/object composite with a description (the 3-arg _composite branch)", async () => {
-    const [result] = await exec(
-      '(s/field/object "owner" "who owns it" (s/object (s/field "name" (s/string))))',
-      { capabilities },
-    );
+    const [result] = await exec('(s/field/object "owner" "who owns it" (s/object (s/field "name" (s/string))))', {
+      capabilities,
+    });
     expect(JSON.stringify(result)).toBe('["owner",["object",["name","string"]],"who owns it"]');
   });
 

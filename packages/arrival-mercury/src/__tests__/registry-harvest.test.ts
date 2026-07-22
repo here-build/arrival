@@ -64,14 +64,16 @@ describe("emitRegistryOf over the real oracle ambient", () => {
     expect(registry.lookup("infer/chat/system")?.emit).toBeDefined();
   });
 
-  it("ambient harvest resolves activation-dependent builders; the same roster BARE doors loudly", () => {
-    // The assembled DAG contains real activation-dependent builder idioms —
-    // `arrival/data`'s top-level `configuration.data ?? inert` value capture,
-    // `arrival/loader`'s withholding-by-absence key set. Through the ambient they
-    // harvest against the REAL activations (resolvable ⇒ resolved); handed the same
-    // roster WITHOUT the assembly, the phantom activation's static-rules door fires.
+  it("ambient harvest and bare-roster harvest BOTH succeed — no builder-form capability remains in the DAG", () => {
+    // The Stage-6 cleanup migrated every capability in the real oracle DAG off the
+    // builder-form `symbols` (config now reaches impls via `this.configuration` at
+    // dispatch), so a bare-roster harvest no longer trips the phantom activation's
+    // static-rules poison — there is nothing activation-dependent left to resolve.
+    // The poison-door mechanism itself stays covered by the synthetic fixtures in
+    // the "dry-harvest of builder-form capabilities" describe below (it still
+    // defends against type-erased/out-of-repo specs handing the harvest a builder).
     expect(() => emitRegistryOf(session.ambient)).not.toThrow();
-    expect(() => emitRegistryOf(session.ambient.capabilities)).toThrow(/configuration\.\w+[\s\S]*outside an impl body/);
+    expect(() => emitRegistryOf(session.ambient.capabilities)).not.toThrow();
   });
 
   it("is deterministic across two harvests of the same roster", () => {

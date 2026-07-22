@@ -21,10 +21,8 @@ import type { AEntity } from "../../../common/symbol.js";
 // `scheme/core`'s `symbols` is a plain object (no config/resources builder), but realize
 // through the same builder-tolerant shape the polyglot precision test uses, so this stays
 // correct if core ever grows a builder.
-const symbolsSpec = core.spec.symbols;
-const symbols = (
-  typeof symbolsSpec === "function" ? symbolsSpec({ configuration: {}, resources: {} } as never) : (symbolsSpec ?? {})
-) as Record<string, AEntity>;
+// `spec.symbols` IS the record (the builder-form arm is retired).
+const symbols = (core.spec.symbols ?? {}) as Record<string, AEntity>;
 
 function def(name: string): AEntity {
   const d = symbols[name];

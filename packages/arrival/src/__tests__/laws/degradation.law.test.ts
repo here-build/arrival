@@ -22,13 +22,16 @@
  *   "optional" — the structural check (`instanceof ZodOptional | ZodDefault`) that keeps
  *   this module from silently degrading a key the author never marked `.optional()`.
  *
- * LAW 2 ("doors" mode lowers to a cause-carrying door-set): an absent OPTIONAL enabling key
- *   consulted via `Activation.degradation` binds a `DoorProcedure` whose firing message
- *   teaches "provide X to enable it" — never a silent withhold.
+ * LAW 2 (an absent optional enabling key lowers to a cause-carrying door): a verb declaring
+ *   the key in its `Contract.requiresConfig` binds a `DoorProcedure` whose firing message
+ *   teaches "provide X to enable it" — never a silent withhold. MODE-INDEPENDENT (D2): the
+ *   auto-door mints under `"forbid"` too — the Stage-6 cleanup retired the builder-form
+ *   `symbols` arm, and with it the mode-gated manual `degradation.door(...)` posture this
+ *   law used to exercise (the fixture now declares `requiresConfig: ["fs"]` instead).
  *
  * LAW 3 (degraded list surfaced): `AssembledEnv.degraded` enumerates every capability that
- *   lowered degraded (capability name + the missing `needs`); empty under `"forbid"` (the
- *   default — no capability's `.active` is ever true there).
+ *   lowered degraded (capability name + the missing `needs`) — under EITHER mode, matching
+ *   the auto-door's own mode-independence.
  *
  * LAW 4 (invalid config still throws in BOTH modes): present-but-wrong-shaped config is a
  *   `schema.parse` throw unconditionally — degradation only ever narrows ABSENCE.
@@ -48,10 +51,9 @@ import { z } from "zod";
 // declares both a capability's `configuration` (JS zod) and a native's contract (scheme-zod).
 import * as sz from "../../common/scheme-zod.js";
 
-import { EnvCapability, type SymbolDeclaration } from "../../common/capability.js";
+import { EnvCapability } from "../../common/capability.js";
 import { assembleEnv } from "../../common/kernel.js";
 import { missingOptionalKeys } from "../../common/degradation.js";
-import { symbol } from "../../common/symbol.js";
 import { DoorProcedure } from "../../values/primitives/ACallable.js";
 import { PurityError } from "../../errors.js";
 import { nil } from "../../index.js";
@@ -129,42 +131,38 @@ describe("LAW 4 — present-but-invalid config throws in BOTH modes (degradation
 
 /** A small fixture with ONE optional-enabling key, mirroring `arrival/loader`'s `fs` shape
  *  (a real predicate + `.optional()`) closely enough to exercise the mechanism without
- *  depending on the (downstream, cross-package) real loader capability. */
+ *  depending on the (downstream, cross-package) real loader capability. The verb declares
+ *  `requiresConfig: ["fs"]` — the auto-door path, the ONE way an absent key gates a verb now
+ *  that the builder-form arm (manual, mode-gated `degradation.door(...)`) is retired. */
 function fixtureCapability(name: string): EnvCapability<any, any> {
-  return new EnvCapability(name, {
+  return EnvCapability.define(name, {
     configuration: {
       fs: z
         .custom<{
           readFile: (p: string) => Promise<string>;
-        }>((v): v is { readFile: (p: string) => Promise<string> } => v !== null && typeof v === "object" && typeof (v as { readFile?: unknown }).readFile === "function", "fs must expose readFile(path)")
+        }>(
+          (v): v is { readFile: (p: string) => Promise<string> } =>
+            v !== null && typeof v === "object" && typeof (v as { readFile?: unknown }).readFile === "function",
+          "fs must expose readFile(path)",
+        )
         .optional(),
     },
-    symbols: ({ configuration, degradation }) => {
-      const defs: Record<string, SymbolDeclaration> = {};
-      if (configuration.fs !== undefined) {
-        defs["fixture/verb"] = symbol.native`fixture/verb: reads via the fs`(
-          { input: [], output: [sz.value] },
-          () => nil,
-        );
-      } else if (degradation.active) {
-        defs["fixture/verb"] = degradation.door(
-          "fixture/verb",
-          ["fs"],
-          'reads via a filesystem this capability was not given. Provide "fs" to enable it.',
-        );
-      }
-      return defs;
-    },
+    symbols: (symbol) => ({
+      "fixture/verb": symbol.native`fixture/verb: reads via the fs`(
+        { input: [], output: [sz.value], requiresConfig: ["fs"] },
+        () => nil,
+      ),
+    }),
   });
 }
 
-describe("LAW 2 — 'doors' mode lowers an absent optional-enabling key to a cause-carrying door", () => {
-  it("under the default ('forbid') mode, the key stays withheld — no symbol at all (byte-identical to pre-W2)", async () => {
+describe("LAW 2 — an absent optional-enabling key lowers to a cause-carrying door (mode-independent D2)", () => {
+  it("under the default ('forbid') mode the auto-door binds all the same — requiresConfig is not mode-gated", async () => {
     const { env, bound } = recordingEnv();
     await fixtureCapability("test/degradation-fixture-forbid")
       .lower({ config: {} })
       .apply(env, undefined as never);
-    expect(bound.has("fixture/verb")).toBe(false);
+    expect(bound.get("fixture/verb")).toBeInstanceOf(DoorProcedure);
   });
 
   it("under 'doors', the symbol BINDS as a door whose firing message teaches 'provide fs to enable it'", async () => {
@@ -183,7 +181,7 @@ describe("LAW 2 — 'doors' mode lowers an absent optional-enabling key to a cau
     expect(caught).toBeInstanceOf(PurityError);
     const err = caught as PurityError;
     expect(err.message).toBe(
-      'fixture/verb @ test/degradation-fixture-doors is not available.\n  Why: reads via a filesystem this capability was not given. Provide "fs" to enable it.',
+      "fixture/verb @ test/degradation-fixture-doors is not available.\n  Why: requires configuration `fs` — provide it to enable this verb. (reads via the fs)",
     );
     expect(err.owner).toBe("test/degradation-fixture-doors");
   });
@@ -198,12 +196,14 @@ describe("LAW 2 — 'doors' mode lowers an absent optional-enabling key to a cau
 });
 
 describe("LAW 3 — AssembledEnv.degraded enumerates every degraded capability", () => {
-  it("is empty under the default ('forbid') mode", async () => {
+  it("enumerates under the default ('forbid') mode too — the auto-door's misses are mode-independent", async () => {
     const base = mintFrame(sandboxedEnv, "degradation-law-forbid");
     const assembled = await assembleEnv(base, [
       fixtureCapability("test/degradation-assembled-forbid").lower({ config: {} }),
     ]);
-    expect(assembled.degraded).toEqual([]);
+    expect(assembled.degraded).toEqual([
+      { capability: "test/degradation-assembled-forbid", needs: [{ kind: "configuration", key: "fs" }] },
+    ]);
   });
 
   it("carries {capability, needs} for a capability that lowered degraded under 'doors'", async () => {

@@ -33,7 +33,6 @@ import { mintFrame } from "../../AmbientRuntime.js";
 import { exec, execState, initBridge, type ExecOptions } from "../../../index.js";
 import { AString } from "../../../values/primitives/AString.js";
 import { global_env } from "../../env-roots.js";
-import { buildDegradationInfo } from "../../../common/degradation.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
 import { overridableCapability } from "../../overridable/overridable.js";
 import type { AEntity, DefineSyntaxSymbolDef } from "../../../common/symbol.js";
@@ -47,17 +46,10 @@ const capabilities = [overridableCapability];
 const evalScheme = (env: unknown, src: unknown): unknown =>
   exec(src as string, { env: env as ResolvingAmbient, skipBootstrapWait: true });
 
-// Resolves the pack's builder-form `symbols(activation)` the exact same way `lower()` itself
-// does internally (capability.ts:244) — a REAL `Activation` (`buildDegradationInfo` is the same
-// constructor `lower()` calls), not a synthetic cast, so this stays honest through a real type.
+// `spec.symbols` IS the record (the builder-form arm is retired; a define-form spec carries
+// the eagerly-evaluated literal), so reading it needs no activation.
 function resolveSymbols(): Record<string, SymbolDeclaration> {
-  const { symbols } = overridableCapability.spec;
-  if (typeof symbols !== "function") return symbols ?? {};
-  return symbols({
-    configuration: { params: {} },
-    resources: {},
-    degradation: buildDegradationInfo("arrival/overridable", "forbid", []),
-  }) as Record<string, SymbolDeclaration>;
+  return overridableCapability.spec.symbols ?? {};
 }
 
 describe("arrival/overridable — structural: no prelude field, define-syntax kind, rosetta untouched", () => {
@@ -108,18 +100,22 @@ describe("arrival/overridable — the §2.1 bake FV law is out of scope for defi
 
 describe("arrival/overridable — end-to-end through the ONE consumer door, post-migration", () => {
   it("a host-supplied override still wins over the in-form default, and validates", async () => {
-    const result = (await exec(`(define/overridable city (s/string) "Berlin") city`, {
-      capabilities,
-      config: { params: { city: "Paris" } },
-    })).at(-1);
+    const result = (
+      await exec(`(define/overridable city (s/string) "Berlin") city`, {
+        capabilities,
+        config: { params: { city: "Paris" } },
+      })
+    ).at(-1);
     expect(result).toBe("Paris");
   });
 
   it("default fallback still fires (and validates) when no override is supplied", async () => {
-    const result = (await exec(`(define/overridable city (s/string) "Berlin") city`, {
-      capabilities,
-      config: { params: {} },
-    })).at(-1);
+    const result = (
+      await exec(`(define/overridable city (s/string) "Berlin") city`, {
+        capabilities,
+        config: { params: {} },
+      })
+    ).at(-1);
     expect(result).toBe("Berlin");
   });
 
@@ -139,28 +135,30 @@ describe("arrival/overridable — a teaching-door message survives the migration
         capabilities,
         config: { params: { age: "not-a-number" } },
       }),
-    ).rejects.toThrow(
-      /define\/overridable age: expected number, got "not-a-number" \(from an environment override\)/,
-    );
+    ).rejects.toThrow(/define\/overridable age: expected number, got "not-a-number" \(from an environment override\)/);
   });
 });
 
 describe("arrival/overridable — the §3.4 macro firewall: `name`'s formal position never false-positives", () => {
-  it("`define/overridable`'s binding NAME validates clean under staticValidation: \"on\" (the false positive the ternary closes)", async () => {
-    const result = (await exec(`(define/overridable city (s/string) "Berlin") city`, {
-      capabilities,
-      config: { params: {} },
-      staticValidation: "on",
-    })).at(-1);
+  it('`define/overridable`\'s binding NAME validates clean under staticValidation: "on" (the false positive the ternary closes)', async () => {
+    const result = (
+      await exec(`(define/overridable city (s/string) "Berlin") city`, {
+        capabilities,
+        config: { params: {} },
+        staticValidation: "on",
+      })
+    ).at(-1);
     expect(result).toBe("Berlin");
   });
 
-  it("an override still resolves clean under staticValidation: \"on\"", async () => {
-    const result = (await exec(`(define/overridable city (s/string) "Berlin") city`, {
-      capabilities,
-      config: { params: { city: "Paris" } },
-      staticValidation: "on",
-    })).at(-1);
+  it('an override still resolves clean under staticValidation: "on"', async () => {
+    const result = (
+      await exec(`(define/overridable city (s/string) "Berlin") city`, {
+        capabilities,
+        config: { params: { city: "Paris" } },
+        staticValidation: "on",
+      })
+    ).at(-1);
     expect(result).toBe("Paris");
   });
 

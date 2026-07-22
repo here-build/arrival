@@ -9,10 +9,8 @@ import { signatureOf } from "../../../type-layer/schema-to-ts.js";
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim();
 
-const symbolsSpec = polyglotClojure.spec.symbols;
-const symbols = (
-  typeof symbolsSpec === "function" ? symbolsSpec({ configuration: {}, resources: {} } as never) : (symbolsSpec ?? {})
-) as Record<string, AEntity>;
+// `spec.symbols` IS the record (the builder-form arm is retired).
+const symbols = (polyglotClojure.spec.symbols ?? {}) as Record<string, AEntity>;
 
 function defineDef(name: string) {
   const def = symbols[name];

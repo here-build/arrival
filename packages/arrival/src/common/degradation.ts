@@ -77,28 +77,26 @@ export function missingOptionalKeys(
   return missing;
 }
 
-/** What a `symbols` builder sees on `Activation.degradation` — computed once at `lower()`
- *  from `spec.configuration`'s declared-optional keys vs. the supplied config. A capability
- *  that never reads this field is simply unaffected: the narrowing is opt-in PER CAPABILITY,
- *  never retroactive over a builder that doesn't consult it (a builder using a bare
- *  `if (x !== undefined)` withhold check today keeps withholding tomorrow, under either
- *  mode, until it's migrated to consult `.door(...)` — see loader-capability.ts). */
+/** The degradation view every `Activation` carries — computed once at `lower()` from
+ *  `spec.configuration`'s declared-optional keys vs. the supplied config. Its ONE in-repo
+ *  `.door(...)` caller is the `requiresConfig` auto-door in `common/capability.ts`'s bind
+ *  loop (the builder-form `symbols` arm that used to hand-mint doors off this interface is
+ *  retired — a verb's config gate is declared as `Contract.requiresConfig`, loader's
+ *  `require` being the worked example with its `[["fs", "loader"]]` any-of group). The
+ *  `mode`/`missingKeys`/`active` fields remain as the informational surface hosts and
+ *  describe-time readers inspect. */
 export interface DegradationInfo {
   readonly mode: DegradationMode;
   /** Every declared-optional config key this capability's activation is missing —
-   *  informational. A `symbols` builder decides for ITSELF which subset gates which verb
-   *  (loader's `require` needs `fs` OR `loader` — a disjunction a flat "missing" list can't
-   *  express on its own — so the builder names the relevant subset explicitly when calling
-   *  `.door(name, needs, reason)` below, rather than this field being read as gospel for
-   *  every symbol uniformly). */
+   *  informational (which subset gates which VERB is the verb's own `requiresConfig`
+   *  declaration, not this flat list). */
   readonly missingKeys: readonly string[];
-  /** `true` iff `mode === "doors"` AND `missingKeys` is non-empty — the one boolean a
-   *  `symbols` builder gates on before minting a door instead of binding normally. */
+  /** `true` iff `mode === "doors"` AND `missingKeys` is non-empty — informational now that
+   *  the auto-door mints mode-independently (D2). */
   readonly active: boolean;
-  /** Mint a `DoorSymbolDef` causally attributing `name` to THIS capability + `needs` (a
-   *  subset of `missingKeys` the caller names as relevant to `name` specifically — the
-   *  causal chain end-to-end: reference → door → owner → missing key). Callers gate on
-   *  `.active` first; this stays a pure value constructor, defined unconditionally. */
+  /** Mint a `DoorSymbolDef` causally attributing `name` to THIS capability + `needs` (the
+   *  causal chain end-to-end: reference → door → owner → missing key). Called by the
+   *  `requiresConfig` auto-door; a pure value constructor, defined unconditionally. */
   door(name: string, needs: readonly string[], reason: string): DoorSymbolDef;
 }
 

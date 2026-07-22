@@ -104,10 +104,9 @@ export interface Activation<C extends ZodMap, R extends Record<string, Resource<
   readonly configuration: InferCfg<C>;
   readonly resources: RefsOf<R>;
   /** Door-set degradation (`./degradation.js`'s `DegradationInfo`). Present on EVERY activation;
-   *  under `"forbid"` (the default) it is purely informational, and a builder-form `symbols` MAY,
-   *  under `"doors"`, destructure it to trade a manual `if (x !== undefined)` withhold for a
-   *  cause-carrying door — model in docs/environments.md §DEGRADATION; migrated shape in
-   *  `@inhuman.tools/arrival/loader`'s `require`/`require/extension`. */
+   *  informational to authors (the builder-form `symbols` that used to hand-mint doors off it
+   *  is retired — config-gating a verb is `Contract.requiresConfig` now, whose auto-door calls
+   *  this same `.door(...)` internally) — model in docs/environments.md §DEGRADATION. */
   readonly degradation: DegradationInfo;
 }
 
@@ -258,13 +257,17 @@ const requiresConfigReason = (missing: readonly (string | readonly string[])[], 
   return `requires configuration ${keysClause} — provide ${pronoun} to enable this verb.${docClause}`;
 };
 
-/** A `symbols` record, or a BUILDER computing it from the activation (per-env config).
- *  The builder form is how a config-bearing capability closes host resolvers into its baked
- *  verbs (`arrivalInferCapability`, `arrivalDataCapability`, …) without riding them on `this` —
- *  or (legacy shape) how a helper-delegating pack used to express symbols via `captureSymbols`. */
-export type SymbolsSpec<C extends ZodMap, R extends Record<string, Resource<unknown>>> =
-  | (Record<string, SymbolDeclaration> & ThisType<Activation<C, R>>)
-  | ((activation: Activation<C, R>) => Record<string, SymbolDeclaration>);
+/** A `symbols` record. The BUILDER form (`(activation) => Record<…>`) is RETIRED (Stage-6
+ *  cleanup): a config-bearing capability authors through `EnvCapability.define`, whose impls
+ *  read `this.configuration`/`this.resources` at dispatch, and config-gates a verb via
+ *  `Contract.requiresConfig` (the auto-door) instead of conditional enumeration. The
+ *  `ThisType<Activation>` overlay remains for the legacy `{fn}`-record arm
+ *  (`McpEnvCapability`'s downstream population — see `SymbolDeclaration`'s doc). */
+export type SymbolsSpec<C extends ZodMap, R extends Record<string, Resource<unknown>>> = Record<
+  string,
+  SymbolDeclaration
+> &
+  ThisType<Activation<C, R>>;
 
 export interface CapabilitySpec<C extends ZodMap, R extends Record<string, Resource<unknown>>> {
   /** zod schemas for per-env config; values are supplied + validated at `lower()`. */
@@ -287,10 +290,9 @@ export interface CapabilitySpec<C extends ZodMap, R extends Record<string, Resou
    *  still load-bearing for `McpEnvCapability`'s downstream population — see
    *  `SymbolDeclaration`'s doc) a `Record<name, RosettaConfig>` whose `fn` reads `this`
    *  (`this.configuration.*` / `this.resources.*.live`), with `this` typed as `Activation<C,R>`
-   *  (ThisType, inferred). A config-bearing BAKED capability instead uses the BUILDER form
-   *  (`(activation) => ({...})`) to close a host resolver from `configuration` into each verb's
-   *  impl — a baked rosetta's `this` is the per-call INVOCATION context
-   *  (`this.invocation`/`this.abortSignal`), not the activation, so config can't ride `this` there. */
+   *  (ThisType, inferred). A config-bearing BAKED capability authors through
+   *  `EnvCapability.define` (impls read `this.configuration` at dispatch; the retired
+   *  builder form `(activation) => ({...})` is no longer part of this type). */
   symbols?: SymbolsSpec<C, R>;
 }
 
@@ -345,7 +347,7 @@ export function collectSymbolDefines(caps: readonly EnvCapability[], seen: Set<E
       if (depDefines !== "") parts.push(depDefines);
     }
     const symbols = cap.spec.symbols;
-    if (symbols === undefined || typeof symbols === "function") continue; // builder-fn: needs an Activation — skip
+    if (symbols === undefined) continue;
     const prefix = cap.spec.symbolPrefix ?? "";
     for (const [key, def] of Object.entries(symbols)) {
       if (def !== null && typeof def === "object" && "kind" in def && def.kind === "define") {
@@ -357,12 +359,14 @@ export function collectSymbolDefines(caps: readonly EnvCapability[], seen: Set<E
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EnvCapability.define — Stage 1c (docs/execution.md §CALLCTX): the FLIPPED authoring API,
-// COEXISTING with `new EnvCapability(name, spec)` (below) — no existing capability migrates.
+// EnvCapability.define — Stage 1c (docs/execution.md §CALLCTX): the FLIPPED authoring API, THE
+// authoring path (the Stage-6 cleanup migrated every site; `new EnvCapability(name, spec)`
+// below remains only for the legacy `{fn}`-record arm — McpEnvCapability's downstream
+// population — and its subclass).
 //
-// The OLD `symbols` builder-form closes an `activation` BUILDER-ARG (`(activation) => ({...})`)
-// over each verb's impl; the impl then reads config/resources from THAT CLOSURE, never `this`
-// (a baked rosetta/native's `this` is the per-call INVOCATION, not the activation — see
+// The RETIRED `symbols` builder-form closed an `activation` BUILDER-ARG (`(activation) =>
+// ({...})`) over each verb's impl; the impl then read config/resources from THAT CLOSURE, never
+// `this` (a baked rosetta/native's `this` is the per-call INVOCATION, not the activation — see
 // `CapabilitySpec.symbols`'s own doc above). The FLIPPED shape inverts this: `symbols` receives
 // an injected `(symbol, z)` factory pair — the SAME `symbol.rosetta`/`native`/… namespace
 // (`./symbols/index.js`) + scheme-zod — typed so each impl's `this.configuration`/
@@ -403,23 +407,19 @@ export type ImplThis<Config, Resources> = CallCtx & {
  *  projection every baked impl already type-checks against), so a `symbol.rosetta`/`native`
  *  impl authored through the injected factory infers BYTE-IDENTICAL arg/return types to the
  *  module-singleton factories — only `this` differs. */
-type ImplWithThis<
-  I extends VectorSpec,
-  O extends VectorSpec,
-  Rest extends RestSpec,
-  F extends Face,
-  This,
-> = (this: This, ...args: DecodedArgsWithRest<I, Rest, F>) => MaybePromise<DecodedReturn<O, F>>;
+type ImplWithThis<I extends VectorSpec, O extends VectorSpec, Rest extends RestSpec, F extends Face, This> = (
+  this: This,
+  ...args: DecodedArgsWithRest<I, Rest, F>
+) => MaybePromise<DecodedReturn<O, F>>;
 
 /** The injected `symbol.rosetta` — byte-identical to the module-singleton `rosetta()` factory
  *  (`./symbols/rosetta.js`) except the impl's `this` is {@link ImplThis}`<Config,Resources>`
  *  instead of the bare `CallCtx` every OTHER call site sees. */
 export interface RosettaTag<Config, Resources> {
-  (tpl: TemplateStringsArray, ...sub: (string | number)[]): <
-    const I extends VectorSpec,
-    const O extends VectorSpec,
-    const Rest extends RestSpec = undefined,
-  >(
+  (
+    tpl: TemplateStringsArray,
+    ...sub: (string | number)[]
+  ): <const I extends VectorSpec, const O extends VectorSpec, const Rest extends RestSpec = undefined>(
     contract: Contract<I, O, Rest>,
     impl: ImplWithThis<I, O, Rest, "js", ImplThis<Config, Resources>>,
     opts?: BakeRuntimeOpts,
@@ -430,11 +430,10 @@ export interface RosettaTag<Config, Resources> {
  *  {@link RosettaTag} bears to `rosetta()`; projects the SCHEME face (`"scheme"`), matching
  *  `native()`'s own `Impl<…, "scheme">`. */
 export interface NativeTag<Config, Resources> {
-  (tpl: TemplateStringsArray, ...sub: unknown[]): <
-    const I extends VectorSpec,
-    const O extends VectorSpec,
-    const Rest extends RestSpec = undefined,
-  >(
+  (
+    tpl: TemplateStringsArray,
+    ...sub: unknown[]
+  ): <const I extends VectorSpec, const O extends VectorSpec, const Rest extends RestSpec = undefined>(
     contract: Contract<I, O, Rest>,
     impl: ImplWithThis<I, O, Rest, "scheme", ImplThis<Config, Resources>>,
     opts?: { metadata?: MetadataRecord },
@@ -619,11 +618,9 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
     }
     const activation = { configuration, resources: cells, degradation } as unknown as Activation<C, R>;
 
-    // Computed HERE (not inside apply()): the builder-form `symbols` takes ONLY `activation`
-    // (never `env`/`ctx` — the type contract), which is fully known by this point, exactly
-    // like `resources`/`configuration` already are. Computing it once, eagerly, lets
-    // `degraded` (below) inspect what this lower() actually produced instead of guessing.
-    const symbolsRec = typeof spec.symbols === "function" ? spec.symbols(activation) : (spec.symbols ?? {});
+    // The builder-form `symbols` arm (`typeof spec.symbols === "function"`) is RETIRED —
+    // the record is the record (a define-form spec carries the eagerly-evaluated literal).
+    const symbolsRec = spec.symbols ?? {};
     // Door-set degradation's OWN surfacing — degraded capabilities are ENUMERABLE: scan
     // the computed record for doors this capability minted via `degradation.door(...)`,
     // MERGED with the requiresConfig auto-door misses (bound as DoorProcedures below without
@@ -653,8 +650,10 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
     // `["arrival/get-resources"]`, single-flighted + collapsed there) — see RunContext.ts. So the
     // impl adapter is just the bare `(args, callCtx) => rawRun.apply(callCtx, args)`: `rawRun`
     // reads `this.resources` off the `callCtx` the dispatch already enriched.
-    const bakedImpl = (rawRun: (this: CallCtx, ...args: unknown[]) => Promise<unknown>): CallableImpl =>
-      (args, callCtx) => rawRun.apply(callCtx, args) as Promise<SchemeValue>;
+    const bakedImpl =
+      (rawRun: (this: CallCtx, ...args: unknown[]) => Promise<unknown>): CallableImpl =>
+      (args, callCtx) =>
+        rawRun.apply(callCtx, args) as Promise<SchemeValue>;
     // Whether a NON-native baked verb of this capability reads its `this.resources` from the run
     // store (its `associateCapability(..., readsResources)`): true iff the capability produces a
     // per-run bag. `native` verbs are gated separately (`nativeReadsRunResources` — false in the
@@ -849,9 +848,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 // (for a sequence that reads it) is enriched onto the `callCtx` at dispatch from the
                 // run's own `capabilityResources` store — no bind-time gate wraps the impl.
                 const rawRun = def.run as (this: unknown, ...args: unknown[]) => Promise<unknown>;
-                const impl: CallableImpl = bakedImpl(
-                  rawRun as (this: CallCtx, ...args: unknown[]) => Promise<unknown>,
-                );
+                const impl: CallableImpl = bakedImpl(rawRun as (this: CallCtx, ...args: unknown[]) => Promise<unknown>);
                 const proc = new ANativeProcedure({
                   name: verb,
                   arity: { min: 0, max: null }, // see ARITY above
@@ -910,9 +907,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 // (this `run` is already the complete ctx-aware wrapper, unlike the legacy
                 // bare-fn arm's raw `sym.fn`, which bindRosetta wraps for the first time).
                 const rawRun = def.run as (this: unknown, ...args: unknown[]) => Promise<unknown>;
-                const impl: CallableImpl = bakedImpl(
-                  rawRun as (this: CallCtx, ...args: unknown[]) => Promise<unknown>,
-                );
+                const impl: CallableImpl = bakedImpl(rawRun as (this: CallCtx, ...args: unknown[]) => Promise<unknown>);
                 const proc = new ARosettaProcedure({
                   name: verb,
                   arity: { min: 0, max: null }, // see ARITY above
@@ -1032,10 +1027,9 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
   private _exportsPromise?: Promise<ReadonlySet<string>>;
 
   /** `EnvCapability.exports` — DERIVED, memoized: every statically-enumerable name
-   *  this capability contributes to a shared env — prefixed `spec.symbols` keys (a
-   *  builder-form `symbols` is NOT statically enumerable — a LIMIT, contributes
-   *  nothing here; a pre-assembly consumer needing full fidelity there degrades to
-   *  assembled-mode) ∪ macro-aware `define`/`define-macro`/`define-syntax` names
+   *  this capability contributes to a shared env — prefixed `spec.symbols` keys
+   *  (always statically enumerable now: the builder-form `symbols` arm, the one
+   *  non-enumerable shape, is retired) ∪ macro-aware `define`/`define-macro`/`define-syntax` names
    *  parsed from `spec.prelude` (the migration-interim arm, shrinking toward nothing
    *  as capabilities move their `prelude` text blob to declared `symbol.define`s,
    *  pack by pack). Consumed by `symbol.define`'s bake-time FV law

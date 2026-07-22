@@ -57,7 +57,7 @@ export interface CapabilityLike {
 
 /** The slice of `CapabilitySpec` the `exports` computation (below) needs. */
 export interface ExportableSpec {
-  readonly symbols?: unknown; // a plain record is statically enumerable; a builder fn is not (a LIMIT)
+  readonly symbols?: unknown; // always a plain record now (the builder-fn arm is retired); the typeof guard below stays as defense against type-erased specs
   readonly symbolPrefix?: string;
   readonly prelude?: string;
 }
@@ -201,13 +201,9 @@ function synthesizeDefine(name: string, body: SchemeValue): SchemeValue {
   ) {
     const formals = body.cdr.car;
     const bodyForms = body.cdr.cdr;
-    return new APair(new ASymbol("define"),
-      new APair(new APair(nameSym, formals), bodyForms),
-    );
+    return new APair(new ASymbol("define"), new APair(new APair(nameSym, formals), bodyForms));
   }
-  return new APair(new ASymbol("define"),
-    new APair(nameSym, new APair(body, nil)),
-  );
+  return new APair(new ASymbol("define"), new APair(nameSym, new APair(body, nil)));
 }
 
 /** Every `EnvCapability` reachable from `roots` (deduped by identity — a diamond dep
@@ -264,8 +260,9 @@ function defineHeadNameOf(form: unknown): string | null {
   return null;
 }
 
-/** `EnvCapability.exports`: prefixed `spec.symbols` keys (builder-form is not
- *  statically enumerable — LIMIT, contributes nothing here) ∪ macro-aware define
+/** `EnvCapability.exports`: prefixed `spec.symbols` keys (always statically enumerable
+ *  now — the builder-form arm is retired; the typeof guard below only defends against
+ *  a type-erased spec handing a function) ∪ macro-aware define
  *  names parsed from `spec.prelude` (the migration-interim arm; shrinks toward nothing
  *  as capabilities move their `prelude` text blob to declared `symbol.define`s, pack
  *  by pack). Async + memoized by the CALLER (`EnvCapability.exports()` itself) —
@@ -417,9 +414,7 @@ function buildDefineProcedure(verb: string, def: DefineSymbolDef, closureValue: 
         // real Promise at runtime — `env/r7rs/lists.ts`'s callers rely on exactly
         // that) — `Promise.resolve(...)` makes the awaited expression honestly
         // Thenable either way, settled or already a value.
-        const result: unknown = await Promise.resolve(
-          call_function(closure, args as SchemeValue[], { runCtx }),
-        );
+        const result: unknown = await Promise.resolve(call_function(closure, args as SchemeValue[], { runCtx }));
         if (def.validate) {
           const resultVector: readonly unknown[] = def.singleOut ? [result] : (result as readonly unknown[]);
           z.decode(def.out, resultVector);
@@ -448,9 +443,7 @@ function buildMacro(verb: string, def: DefineSyntaxSymbolDef, closureValue: unkn
       // its live `EvalContext.runCtx`. A define-syntax fexpr body therefore runs with the
       // INVOKING run's real context (its meter, cache, signal), whether that run is a
       // user exec or the bake-time `evalScheme` exec (which mints a real RunContext too).
-      return Promise.resolve(
-        call_function(closure, argForms, { runCtx: evalArgs.runCtx }),
-      ) as Promise<SchemeValue>;
+      return Promise.resolve(call_function(closure, argForms, { runCtx: evalArgs.runCtx })) as Promise<SchemeValue>;
     },
     def.doc,
   );
@@ -572,7 +565,9 @@ export async function bindCapabilityDefines(args: BindCapabilityDefinesArgs): Pr
   }
   for (let i = 0; i < entries.length; i++) {
     const [verb, def] = entries[i];
-    const value = lambdaValueByDef.has(def) ? lambdaValueByDef.get(def) : await evaluateBody(scope, evalScheme, def.body);
+    const value = lambdaValueByDef.has(def)
+      ? lambdaValueByDef.get(def)
+      : await evaluateBody(scope, evalScheme, def.body);
     if (def.kind === "define-syntax") {
       bindTarget(def).set(verb, buildMacro(verb, def, value));
       continue;

@@ -37,10 +37,8 @@ const norm = (s: string) => s.replace(/\s+/g, " ").trim();
 // `symbols` is a builder (activation) => Record<string, AEntity> for this capability —
 // call it with an empty (unused) activation shape; polyglot's symbols builder never reads
 // `this.configuration`/`this.resources` (no config/resources declared on this capability).
-const symbolsSpec = polyglot.spec.symbols;
-const symbols = (
-  typeof symbolsSpec === "function" ? symbolsSpec({ configuration: {}, resources: {} } as never) : (symbolsSpec ?? {})
-) as Record<string, AEntity>;
+// `spec.symbols` IS the record (the builder-form arm is retired).
+const symbols = (polyglot.spec.symbols ?? {}) as Record<string, AEntity>;
 
 function nativeDef(name: string) {
   const def = symbols[name];
