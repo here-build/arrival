@@ -33,7 +33,7 @@ import type { RosettaFunction } from "../membrane/rosetta.js";
 // Two producers only — this legacy `SymbolDeclaration` bind arm and `provenance/replay.ts`'s
 // playback frame; a third would be suspect.
 import { bindRosetta, bindValue, AmbientRuntime, type AmbientValue, isAmbientRuntime } from "../env/AmbientRuntime.js";
-import { CallCtx, type CacheClass, type CallbackRoles, type ProvenanceRole } from "./symbols/_bake.js";
+import { associateActivation, CallCtx, type CacheClass, type CallbackRoles, type ProvenanceRole } from "./symbols/_bake.js";
 import { type SchemeValue } from "../values/types.js";
 import { AliasTargetError, AmbientShapeError, PreludeArmingError } from "../errors.js";
 import {
@@ -443,6 +443,11 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 if (def.callbackRoles !== undefined) {
                   (proc as { callbackRoles?: CallbackRoles }).callbackRoles = def.callbackRoles;
                 }
+                // ACTIVATION ASSOCIATION (Stage 1b, docs/execution.md §CALLCTX): key THIS bound
+                // value to its own capability's activation, so a real dispatch (evaluator.ts) can
+                // enrich the `CallCtx` it builds with `configuration`/`resources` — a PARALLEL
+                // channel to the legacy outer-closure/builder-form read, not a replacement.
+                associateActivation(proc, activation.configuration, activation.resources);
                 bindTarget(def).set(verb, proc);
                 break;
               }
@@ -481,6 +486,8 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 if (def.callbackRoles !== undefined) {
                   (proc as { callbackRoles?: CallbackRoles }).callbackRoles = def.callbackRoles;
                 }
+                // ACTIVATION ASSOCIATION (Stage 1b) — see the `native` case's comment above.
+                associateActivation(proc, activation.configuration, activation.resources);
                 bindTarget(def).set(verb, proc);
                 break;
               }
@@ -527,6 +534,8 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 if (def.callbackRoles !== undefined) {
                   (proc as { callbackRoles?: CallbackRoles }).callbackRoles = def.callbackRoles;
                 }
+                // ACTIVATION ASSOCIATION (Stage 1b) — see the `native` case's comment above.
+                associateActivation(proc, activation.configuration, activation.resources);
                 bindTarget(def).set(verb, proc);
                 break;
               }

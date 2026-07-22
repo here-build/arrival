@@ -2038,9 +2038,13 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
 
   // Built ONCE here — the invocation this dispatch site actually holds — and threaded WHOLE
   // through the apply term (callable branch) or as `this` (builtin branch) below, rather than
-  // reconstructed downstream from ambient state.
+  // reconstructed downstream from ambient state. `proc` is passed as the resolved value (Stage
+  // 1b, docs/execution.md §CALLCTX) so `makeCallCtx` enriches `callCtx` with that capability's
+  // `configuration`/`resources` when `common/capability.ts` associated one at bind time — a
+  // plain WeakMap miss (no-op) for every callable with no activation (lambdas, resource-less
+  // capabilities' procs, …).
   const dynSite = ctx.currentInvocation;
-  const callCtx = makeCallCtx(ctx.runCtx, dynSite as InvocationLike | undefined);
+  const callCtx = makeCallCtx(ctx.runCtx, dynSite as InvocationLike | undefined, undefined, proc);
 
   // A callable VALUE dispatches through its apply term. An ALambda in tail position
   // hands back a Bounce so a self-recursive `=>` collapses (TCO); an ANativeProcedure/
@@ -2882,8 +2886,12 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
     const dynSite = ctx.currentInvocation;
     // Built ONCE here — the invocation this dispatch site actually holds — and threaded WHOLE
     // through the apply term (callable branch) or as `this` (bare-fn branch) below, rather than
-    // reconstructed downstream from ambient state.
-    const callCtx = makeCallCtx(ctx.runCtx, dynSite as InvocationLike | undefined);
+    // reconstructed downstream from ambient state. `fn` is passed as the resolved value (Stage
+    // 1b, docs/execution.md §CALLCTX) so `makeCallCtx` enriches `callCtx` with that capability's
+    // `configuration`/`resources` when `common/capability.ts` associated one at bind time — a
+    // plain WeakMap miss (no-op) for every callable with no activation (lambdas, resource-less
+    // capabilities' procs, the bare-fn registry survivors, …).
+    const callCtx = makeCallCtx(ctx.runCtx, dynSite as InvocationLike | undefined, undefined, fn);
     const __savedDynamicCallSite = currentDynamicCallSite();
     setDynamicCallSite(dynSite);
     const canBounce = is_lambda(fn);

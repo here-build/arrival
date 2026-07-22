@@ -16,7 +16,7 @@
 import * as z from "../scheme-zod.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { type RunContext } from "../../run/RunContext.js";
-import { type CallCtx, makeCallCtx, testCallCtx } from "../../run/CallCtx.js";
+import { type CallCtx, associateActivation, makeCallCtx, testCallCtx } from "../../run/CallCtx.js";
 import { Macro } from "../../eval/Macro.js";
 import { ZodType, ZodUnion } from "zod";
 import { CacheClassShapeError, KeywordPairingError, ProvenanceRoleShapeError } from "../../errors.js";
@@ -278,8 +278,12 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest exten
 // (ACallable.ts → scheme-zod.ts → _bake.ts) that can leave a `z.instanceof(...)` codec's
 // captured class permanently undefined depending on which path enters first. Re-exported
 // here (not merely imported) so `_bake.js` importers resolve it from this module.
+// `associateActivation` (Stage 1b) rides the same re-export: `common/capability.ts` (the bind
+// loop that populates it) and `eval/evaluator.ts` (the dispatch sites that read it via
+// `makeCallCtx`'s `resolvedValue` param) both already funnel their `CallCtx` import through
+// this module.
 export type { CallCtx };
-export { makeCallCtx, testCallCtx };
+export { associateActivation, makeCallCtx, testCallCtx };
 
 /** The impl a contract demands: decoded args in, decoded return (or a promise) out.
  *  `DecodedArgsWithRest` strips `readonly` (`-readonly` mapped tuple) so a `const`-inferred
