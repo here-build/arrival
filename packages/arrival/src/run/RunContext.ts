@@ -1,5 +1,5 @@
 /**
- * RunContext — the per-run handle, minted once per `exec()` by `makeRunContext` and
+ * RunContext — the per-run handle, minted once per `exec()` by `new RunContext(...)` and
  * threaded explicitly through ops as `runCtx`. The run's identity: state CONSTANT for one
  * run yet DIFFERING between concurrent runs.
  *
@@ -49,7 +49,10 @@ export interface HeapMeter {
   max: number;
 }
 
-export interface RunContext {
+/** Mint a fresh per-run context for one `exec()`. The single place a RunContext is born. Its
+ *  `capabilityResources` store starts empty and is filled lazily on first dispatch of a
+ *  resource-bearing verb (see {@link CapabilityResourceStore} and CallCtx.ts's makeCallCtx). */
+export class RunContext {
   /** R7RS-strict nil-projection (`car`/`cdr` of nil throws) vs tolerant (yields nil). */
   readonly strict: boolean;
   /** Per-run allocation bound; `undefined` ⇒ unbounded (default — only sandbox/agent runs opt in). */
@@ -76,9 +79,9 @@ export interface RunContext {
   /** The run's display channel (note-sink.ts) — where the MCP runner's `display` affordance records
    *  what a model asked to see. `undefined` ⇒ no display verb is bound (arrival binds none). */
   readonly display: DisplaySink | undefined;
-  /** Origin discriminant. `"parse"` marks the parse-time family (`PARSE_CTX`/`makeParseCtx`):
-   *  run-neutral like CONSTANT_CTX, but a stated fact rather than a fallback. Absent on live-run
-   *  ctxs and CONSTANT_CTX. */
+  /** Origin discriminant. `"parse"` marks the parse-time family (`PARSE_CTX`/`makeParseCtx`,
+   *  the {@link ParseContext} subclass): run-neutral like CONSTANT_CTX, but a stated fact rather
+   *  than a fallback. Absent on live-run ctxs and CONSTANT_CTX. */
   readonly origin?: "parse";
   /** Source identity for parse-minted values — the `SourceLocation` the Parser computes per datum.
    *  Present only on the parse family, and `undefined` there for synthesized/location-less values.
@@ -91,45 +94,49 @@ export interface RunContext {
    *  producer (the bare-`env` exec path, CONSTANT_CTX, PARSE_CTX) — a resource-reading verb under
    *  such a run sees `this.resources === undefined`, same as a resource-less capability. */
   readonly capabilityResources?: CapabilityResourceStore;
+
+  constructor(
+    opts: {
+      strict?: boolean;
+      heapBudget?: number;
+      freezeRosettaReturns?: boolean;
+      signal?: AbortSignal;
+      cache?: RunCache;
+      effects?: EffectLog;
+      reads?: ReadGuard;
+      notes?: NoteSink;
+      display?: DisplaySink;
+    } = {},
+    /** internal-only: `true` for the run-NEUTRAL singletons (CONSTANT_CTX, the ParseContext
+     *  family) — they get no capabilityResources store (see that field's doc). Never pass this
+     *  from an ordinary mint site; it exists only so CONSTANT_CTX/ParseContext can share this
+     *  constructor's defaulting logic instead of duplicating it. */
+    _noResourceStore = false,
+  ) {
+    this.strict = opts.strict ?? false;
+    this.heapMeter = opts.heapBudget === undefined ? undefined : { used: 0, max: opts.heapBudget };
+    this.freezeRosettaReturns = opts.freezeRosettaReturns ?? true;
+    this.signal = opts.signal;
+    this.cache = opts.cache;
+    this.effects = opts.effects;
+    this.reads = opts.reads;
+    this.notes = opts.notes;
+    this.display = opts.display;
+    if (!_noResourceStore) {
+      this.capabilityResources = new WeakMap<object, unknown>();
+    }
+  }
+
   /** STAGE 2 (run-lifecycle.ts): tears down whatever ended up scoped to THIS RunContext (a
-   *  capability's per-run resources), so `await using runCtx = makeRunContext(...)` disposes it at
+   *  capability's per-run resources), so `await using runCtx = new RunContext(...)` disposes it at
    *  scope exit. Delegates to {@link disposeRunContext} — the SAME idempotent function a REPL host
    *  or `exec()`'s owned-runCtx `finally` calls explicitly, so all three teardown paths share one
-   *  guard. Present only on RunContexts minted by `makeRunContext` — `CONSTANT_CTX`/`PARSE_CTX` are
-   *  shared, run-neutral singletons nothing ever disposes. */
-  readonly [Symbol.asyncDispose]?: () => Promise<void>;
-}
-
-/** Mint a fresh per-run context for one `exec()`. The single place a RunContext is born. Its
- *  `capabilityResources` store starts empty and is filled lazily on first dispatch of a
- *  resource-bearing verb (see {@link CapabilityResourceStore} and CallCtx.ts's makeCallCtx). */
-export function makeRunContext(
-  opts: {
-    strict?: boolean;
-    heapBudget?: number;
-    freezeRosettaReturns?: boolean;
-    signal?: AbortSignal;
-    cache?: RunCache;
-    effects?: EffectLog;
-    reads?: ReadGuard;
-    notes?: NoteSink;
-    display?: DisplaySink;
-  } = {},
-): RunContext {
-  const ctx: RunContext = {
-    strict: opts.strict ?? false,
-    heapMeter: opts.heapBudget === undefined ? undefined : { used: 0, max: opts.heapBudget },
-    freezeRosettaReturns: opts.freezeRosettaReturns ?? true,
-    signal: opts.signal,
-    cache: opts.cache,
-    effects: opts.effects,
-    reads: opts.reads,
-    notes: opts.notes,
-    display: opts.display,
-    capabilityResources: new WeakMap<object, unknown>(),
-    [Symbol.asyncDispose]: () => disposeRunContext(ctx),
-  };
-  return ctx;
+   *  guard. A uniform prototype method — `CONSTANT_CTX`/`PARSE_CTX` inherit it too, but
+   *  `disposeRunContext` is registry-keyed and idempotent, so disposing a singleton nothing ever
+   *  registered against is simply a no-op. */
+  async [Symbol.asyncDispose](): Promise<void> {
+    return disposeRunContext(this);
+  }
 }
 
 /**
@@ -139,17 +146,7 @@ export function makeRunContext(
  * `strict=false`, no meter, all five channels `undefined` — nobody is listening, so a value
  * minted here can never carry one run's state into another.
  */
-export const CONSTANT_CTX: RunContext = Object.freeze({
-  strict: false,
-  heapMeter: undefined,
-  freezeRosettaReturns: true,
-  signal: undefined,
-  notes: undefined,
-  display: undefined,
-  cache: undefined,
-  effects: undefined,
-  reads: undefined,
-});
+export const CONSTANT_CTX: RunContext = Object.freeze(new RunContext({}, true));
 
 /**
  * The parse-origin context family (docs/execution.md §CTX-SPECIES) — CONSTANT_CTX plus
@@ -162,19 +159,21 @@ export const CONSTANT_CTX: RunContext = Object.freeze({
  * shared interned instance are mutually exclusive). Sound because eq?/eqv?/equals compare
  * `__name__`, never reference.
  */
-export interface ParseContext extends RunContext {
+export class ParseContext extends RunContext {
   readonly origin: "parse";
   readonly location: SourceLocation | undefined;
+
+  constructor(location: SourceLocation | undefined) {
+    super({}, true);
+    this.origin = "parse";
+    this.location = location;
+  }
 }
 
 /** The shared LOCATION-LESS parse ctx — for synthesized or sourceless parse values
  *  (`makeParseCtx(undefined)` returns this singleton; no per-node allocation when
  *  there is no location to carry). */
-export const PARSE_CTX: ParseContext = Object.freeze({
-  ...CONSTANT_CTX,
-  origin: "parse" as const,
-  location: undefined,
-});
+export const PARSE_CTX: ParseContext = Object.freeze(new ParseContext(undefined));
 
 /**
  * Mint the parse ctx for one parsed node. Location-bearing nodes get a small frozen
@@ -183,7 +182,7 @@ export const PARSE_CTX: ParseContext = Object.freeze({
  */
 export function makeParseCtx(location: SourceLocation | undefined): ParseContext {
   if (location === undefined) return PARSE_CTX;
-  return Object.freeze({ ...CONSTANT_CTX, origin: "parse" as const, location });
+  return Object.freeze(new ParseContext(location));
 }
 
 /** Narrowing read for the parse family: "was v minted by the reader, and where" — a door

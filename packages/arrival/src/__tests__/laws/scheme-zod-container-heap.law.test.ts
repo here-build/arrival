@@ -22,7 +22,7 @@
  */
 import { describe, expect, it } from "vitest";
 import * as z from "../../common/scheme-zod.js";
-import { CONSTANT_CTX, makeRunContext } from "../../run/RunContext.js";
+import { CONSTANT_CTX, RunContext } from "../../run/RunContext.js";
 import { APair } from "../../values/primitives/APair.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { ADict } from "../../values/primitives/ADict.js";
@@ -31,7 +31,7 @@ import type { AListAlike, SchemeValue } from "../../values/types.js";
 
 const TIGHT_BUDGET = 50;
 
-function schemeExactList(n: number, ctx = makeRunContext({ heapBudget: TIGHT_BUDGET })): AListAlike {
+function schemeExactList(n: number, ctx = new RunContext({ heapBudget: TIGHT_BUDGET })): AListAlike {
   const elements: SchemeValue[] = Array.from({ length: n }, (_, i) => new AExact(i));
   return APair.fromArray(ctx, elements, false);
 }
@@ -41,13 +41,13 @@ function schemeExactList(n: number, ctx = makeRunContext({ heapBudget: TIGHT_BUD
 // ambient/active run-context phase restores metering; un-skip and re-verify then.
 describe.skip("LAW — list codec DECODE (spineToArray) charges the operand's own heap meter", () => {
   it("decoding a large list arg under a tight budget dies on the budget door", () => {
-    const ctx = makeRunContext({ heapBudget: TIGHT_BUDGET });
+    const ctx = new RunContext({ heapBudget: TIGHT_BUDGET });
     const big = schemeExactList(500, ctx);
     expect(() => z.decode(z.list(z.integer), big)).toThrow(/heap budget exceeded/);
   });
 
   it("decoding a small list under the SAME tight budget is unaffected (normal-size crossings survive)", () => {
-    const ctx = makeRunContext({ heapBudget: TIGHT_BUDGET });
+    const ctx = new RunContext({ heapBudget: TIGHT_BUDGET });
     const small = schemeExactList(3, ctx);
     expect(z.decode(z.list(z.integer), small)).toEqual([0, 1, 2]);
   });
@@ -61,33 +61,33 @@ describe.skip("LAW — list codec DECODE (spineToArray) charges the operand's ow
 // TODO(ctx-elimination): see the DECODE law above — same per-operand metering, restored later.
 describe.skip("LAW — list/vector/dict codec ENCODE mints under the crossing's own run, heap-charged", () => {
   it("encoding a large array into a list under a tight budget dies on the budget door", () => {
-    const ctx = makeRunContext({ heapBudget: TIGHT_BUDGET });
+    const ctx = new RunContext({ heapBudget: TIGHT_BUDGET });
     const elements: SchemeValue[] = Array.from({ length: 500 }, (_, i) => new AExact(i));
     expect(() => z.encode(z.list(z.value), elements)).toThrow(/heap budget exceeded/);
   });
 
   it("encoding a small array into a list under the SAME tight budget is unaffected", () => {
-    const ctx = makeRunContext({ heapBudget: TIGHT_BUDGET });
+    const ctx = new RunContext({ heapBudget: TIGHT_BUDGET });
     const elements: SchemeValue[] = [new AExact(1), new AExact(2)];
     const result = z.encode(z.list(z.value), elements);
     expect(result).toBeInstanceOf(APair);
   });
 
   it("encoding a large array into a vector under a tight budget dies on the budget door", () => {
-    const ctx = makeRunContext({ heapBudget: TIGHT_BUDGET });
+    const ctx = new RunContext({ heapBudget: TIGHT_BUDGET });
     const elements: SchemeValue[] = Array.from({ length: 500 }, (_, i) => new AExact(i));
     expect(() => z.encode(z.vector(z.value), elements)).toThrow(/heap budget exceeded/);
   });
 
   it("encoding a large record into a dict under a tight budget dies on the budget door", () => {
-    const ctx = makeRunContext({ heapBudget: TIGHT_BUDGET });
+    const ctx = new RunContext({ heapBudget: TIGHT_BUDGET });
     const rec: Record<string, SchemeValue> = {};
     for (let i = 0; i < 500; i++) rec[`k${i}`] = new AExact(i);
     expect(() => z.encode(z.dict(), rec)).toThrow(/heap budget exceeded/);
   });
 
   it("decoding a large dict under a tight budget ALSO dies on the budget door (the key-walk, not just the mint)", () => {
-    const ctx = makeRunContext({ heapBudget: TIGHT_BUDGET });
+    const ctx = new RunContext({ heapBudget: TIGHT_BUDGET });
     // Keys/values minted under CONSTANT_CTX (ASymbol interning charges its OWN heap on
     // construction — unrelated to this law) — the ADict CONTAINER itself is built directly
     // under the tight `ctx`, so this test isolates the DECODE-side (key-walk) charge, which

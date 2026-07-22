@@ -28,7 +28,7 @@ the SECOND meaning of "replay" — γ over frozen ingress).
 cross between them.** A Cloudflare Durable Object shares one JS isolate across every request
 it serves. Two `exec()` calls interleaved on that isolate must not see each other's strict
 mode, allocation meter, cache, or effect log. The charter: **run-state is DATA-LOCAL** —
-minted once per `exec()` by `makeRunContext`, carried on `AValue.ctx` (every value built
+minted once per `exec()` by `new RunContext(...)`, carried on `AValue.ctx` (every value built
 during the run holds the SAME `RunContext` reference), read off the threaded context at the
 one hermetic point, never off an ambient singleton.
 
@@ -56,7 +56,7 @@ The test for where a fact belongs: does it vary between concurrent runs (→ Run
 Three `RunContext` species exist; only the first bears run-state, and the charter (§1) rests
 on the other two being run-NEUTRAL.
 
-- **Live-run** — minted by `makeRunContext` per `exec()`. Carries strict/meter/signal and any
+- **Live-run** — minted by `new RunContext(...)` per `exec()`. Carries strict/meter/signal and any
   armed subset of the five channels. This is the only species a run mutates through (the meter's
   `used`) and the only one whose channels are non-`undefined`.
 - **`CONSTANT_CTX`** — the frozen, run-neutral context carried by values that OUTLIVE any run:
@@ -93,10 +93,10 @@ carry any subset — they are siblings, none a field of another.
 **One reader.** All five are read off `this.runCtx.<channel>` at the baked rosetta `run`
 wrapper — the single hermetic point (§10). No other site consults them; a facility's whole
 armed/off behavior is decided by whether the host passed a non-`undefined` value into
-`makeRunContext`.
+`new RunContext(...)`.
 
 **One arming surface, stated once.** `ExecOptions` (`cache`/`effects`/`reads`/`notes`/`display`)
-is the public door: a field set rides `makeRunContext` onto the matching `RunContext` channel;
+is the public door: a field set rides `new RunContext(...)` onto the matching `RunContext` channel;
 a field omitted leaves it `undefined`. The per-channel `ExecOptions` field docs and the
 `run/*` file headers describe the SAME wiring from two ends — the option is the entry, the
 channel is the landing. There is no third landing and no transformation between them.

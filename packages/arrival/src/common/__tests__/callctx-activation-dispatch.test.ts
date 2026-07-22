@@ -21,7 +21,7 @@ import { port, type Resource } from "../resources.js";
 import { exec } from "../../eval/generator-exec.js";
 import { freshEnv } from "../../__tests__/_fresh-env.js";
 import type { CallCtx } from "../../run/CallCtx.js";
-import { makeRunContext } from "../../run/RunContext.js";
+import { RunContext } from "../../run/RunContext.js";
 
 interface Shout {
   up(s: string): string;
@@ -81,7 +81,7 @@ describe("CallCtx activation dispatch (Stage 1b)", () => {
     const env = await freshEnv();
     await greeter.lower({ config: { tag: "ok" } }).apply(env, undefined as never);
 
-    const runCtx = makeRunContext({});
+    const runCtx = new RunContext({});
     const [first] = await exec('(greet "a")', { env, runCtx });
     const [second] = await exec('(greet "b")', { env, runCtx });
     expect(first).toBe("ok:A");

@@ -28,7 +28,7 @@ import run, { evaluate } from "../eval/evaluator.js";
 import { Resolver } from "../eval/Resolver.js";
 import { Capabilities } from "../eval/Capabilities.js";
 import { user_env } from "../env/env-roots.js";
-import { makeRunContext } from "../run/RunContext.js";
+import { RunContext } from "../run/RunContext.js";
 import { freshEnv } from "../__tests__/_fresh-env.js";
 import type { AmbientRuntime } from "../env/AmbientRuntime.js";
 import type { SchemeValue } from "../values/types.js";
@@ -73,7 +73,7 @@ describe("exec seam overhead — one evaluator, three measurement layers", () =>
 
   it("layer 3 — run(evaluate(ast)): bare trampoline, resolver + runCtx built ONCE outside the loop", async () => {
     const resolver = new Resolver(env);
-    const runCtx = makeRunContext({});
+    const runCtx = new RunContext({});
     const start = performance.now();
     for (let i = 0; i < ITERATIONS; i++) {
       const result = await run(evaluate(ast, { resolver, runCtx }));
@@ -129,7 +129,7 @@ describe("exec seam overhead — one evaluator, three measurement layers", () =>
     report("exec(source) — 100-level nesting", 100, performance.now() - fullSeamStart);
 
     const resolver = new Resolver(env);
-    const runCtx = makeRunContext({});
+    const runCtx = new RunContext({});
     const bareStart = performance.now();
     for (let i = 0; i < 100; i++) {
       const result = await run(evaluate(nestedAst, { resolver, runCtx }));

@@ -74,11 +74,11 @@ export { ADict, type DictLiteralNode } from "./values/primitives/ADict.js";
 // `is_callable_value` is its guard.
 export { applyCallback, type ACallable } from "./values/primitives/ACallable.js";
 export { is_callable_value } from "./values/value-guards.js";
-export { CONSTANT_CTX, makeRunContext, type RunContext, type HeapMeter } from "./run/RunContext.js";
+export { CONSTANT_CTX, RunContext, type HeapMeter } from "./run/RunContext.js";
 // STAGE 2 — the explicit RunContext teardown path (docs/execution.md §HERMETIC): a REPL host
 // that reused a RunContext across passes (`exec(code, { runCtx })`) calls this at session end
 // to tear down whatever capability resources (`common/resources.ts`'s `runScoped`) accrued
-// against it. `await using`ing a `makeRunContext()`-minted RunContext calls the SAME function
+// against it. `await using`ing a `new RunContext(...)`-minted RunContext calls the SAME function
 // via its `[Symbol.asyncDispose]`; a self-minted (non-reused) RunContext is disposed
 // automatically by `exec()`'s own `finally` — this export is for the REUSE case only.
 export { disposeRunContext } from "./run/run-lifecycle.js";

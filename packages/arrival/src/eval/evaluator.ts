@@ -281,7 +281,7 @@ export interface EvalContext {
    * `strict` (the `{ ...ctx }` spreads).
    *
    * REQUIRED: both mint sites (generator-exec.ts's `exec`/`execExpr`, via
-   * `makeRunContext`) always set it, and every derived `EvalContext` is a
+   * `new RunContext(...)`) always set it, and every derived `EvalContext` is a
    * `{ ...ctx }` spread — so an absent `runCtx` could only mean a hand-built literal
    * skipping the real run, never a legitimate state. Required rather than
    * `ctx.runCtx ?? CONSTANT_CTX`-defaulted because that default silently drops the

@@ -19,7 +19,7 @@ import { describe, it, expect } from "vitest";
 import * as z from "../../common/scheme-zod.js";
 import { symbol, testCallCtx } from "../../common/symbol.js";
 import { exec } from "../../eval/generator-exec.js";
-import { makeRunContext } from "../../run/RunContext.js";
+import { RunContext } from "../../run/RunContext.js";
 import { MemoryRunCache } from "../../run/run-cache.js";
 import { MemoryEffectLog, burst, BurstDrainError, type EffectEntry } from "../../run/effect-log.js";
 import { AExact } from "../../values/primitives/AExact.js";
@@ -42,7 +42,7 @@ function sinkDef(name: string) {
 }
 
 const ctxWithEffects = (effects: MemoryEffectLog, cache?: MemoryRunCache) =>
-  testCallCtx({ runCtx: makeRunContext({ effects, cache }) });
+  testCallCtx({ runCtx: new RunContext({ effects, cache }) });
 
 describe("EffectLog — the burst arm at the wrapper (W1)", () => {
   it("a sink enqueues and returns void during a prime run — the impl NEVER fires", async () => {
@@ -87,7 +87,7 @@ describe("EffectLog — the burst arm at the wrapper (W1)", () => {
     const { def, fires } = sinkDef("effect-log-replay");
     // Record a tombstone the ordinary way (no effects log — today's landed path).
     const record = new MemoryRunCache("record");
-    await def.run.call(testCallCtx({ runCtx: makeRunContext({ cache: record }) }), num(3));
+    await def.run.call(testCallCtx({ runCtx: new RunContext({ cache: record }) }), num(3));
     expect(fires()).toBe(1);
 
     // Replay with an effect log ALSO present: burst arm must be skipped because

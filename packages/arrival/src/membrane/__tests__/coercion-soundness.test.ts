@@ -32,7 +32,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { CONSTANT_CTX, makeRunContext } from "../../run/RunContext.js";
+import { CONSTANT_CTX, RunContext } from "../../run/RunContext.js";
 import { PortabilityError } from "../../errors.js";
 import { initBridge } from "../../index.js";
 import { APair } from "../../values/primitives/APair.js";
@@ -292,7 +292,7 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
   it("car(AJSArray): loose projects index 0 WITH its box; strict throws (a vector is not a pair)", async () => {
     expect(tf("car") in mkArr()).toBe(true);
     expect(provOf(await force(mkArr()[tf("car")](CONSTANT_CTX)))).toEqual([ARR_ORIGIN]);
-    expect(() => mkArr()[tf("car")](makeRunContext({ strict: true }))).toThrow(PortabilityError);
+    expect(() => mkArr()[tf("car")](new RunContext({ strict: true }))).toThrow(PortabilityError);
   });
   it("cdr(Pair): the tail spine carries the remaining element's box", async () => {
     expect(elemProvs(await force(mkPair()[tf("cdr")]()))).toEqual([[101]]);
@@ -300,7 +300,7 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
   it("cdr(AJSArray): loose returns the rest as a vector (boxes preserved); strict throws", async () => {
     expect(tf("cdr") in mkArr()).toBe(true);
     expect(elemProvs(await force(mkArr()[tf("cdr")](CONSTANT_CTX)))).toEqual([[ARR_ORIGIN]]);
-    expect(() => mkArr()[tf("cdr")](makeRunContext({ strict: true }))).toThrow(PortabilityError);
+    expect(() => mkArr()[tf("cdr")](new RunContext({ strict: true }))).toThrow(PortabilityError);
   });
   it("assoc(key, alist): the matched pair's key + value boxes both survive", async () => {
     const alist = new APair(new APair(el("k", 100), el("v", 101)), nil);
@@ -315,7 +315,7 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
   it("car(SchemeVector): loose projects index 0 WITH its box; strict throws [DR4 — not a pair]", () => {
     expect(tf("car") in mkVec()).toBe(true);
     expect(provOf(mkVec()[tf("car")](CONSTANT_CTX))).toEqual([100]);
-    expect(() => mkVec()[tf("car")](makeRunContext({ strict: true }))).toThrow(PortabilityError);
+    expect(() => mkVec()[tf("car")](new RunContext({ strict: true }))).toThrow(PortabilityError);
   });
   // RESOLVED (was CONTESTED): reduce delegates to the materialized vector, like map.
   it("reduce(AJSArray) folds the borrowed elements via a vector [RESOLVED]", async () => {
@@ -403,7 +403,7 @@ describe("vector? / vector-ref dispatch via the tagless protocol (no instanceof 
 // (SRFI-132 accepts vectors). Generalizes ANil's car/cdr nil-tolerance.
 // ════════════════════════════════════════════════════════════════════════════
 describe("strict mode gates generic list-ops on a vector (loose tolerates, strict explains)", () => {
-  const strict = makeRunContext({ strict: true });
+  const strict = new RunContext({ strict: true });
   it("map(vector): loose works; strict throws PortabilityError pointing at vector-map", async () => {
     // loose tolerates: the box-preserving Functor returns a fresh AVector — getting a value
     // back at all is the "loose works" signal.

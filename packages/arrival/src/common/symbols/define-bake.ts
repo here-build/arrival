@@ -310,7 +310,7 @@ async function evaluateBody(
 // `symbol.define` call — because `evalLambda`'s runner (evaluator.ts) ALWAYS evaluates a
 // lambda's body against its DEFINITION-TIME `ctx.runCtx`, never the call-time one
 // (call-time runCtx threading is a separate, later concern). Every `evalScheme` call
-// mints a FRESH `RunContext` (`generator-exec.ts`'s `exec()` → `makeRunContext()`) — so
+// mints a FRESH `RunContext` (`generator-exec.ts`'s `exec()` → `new RunContext(...)`) — so
 // evaluating N sibling `symbol.define` bodies through N SEPARATE `evalScheme` calls (one
 // `evaluateBody` call each) bakes N SIBLING ALambdas each closed over a DIFFERENT
 // RunContext identity, permanently unable to share a WeakMap-keyed slot with each other

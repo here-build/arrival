@@ -12,7 +12,7 @@
  * string-tokenize thread their own `this.runCtx`).
  *
  * Mirrors seq-op-runctx-threading.law.test.ts's method: construct a REAL
- * `makeRunContext` (distinguishable from CONSTANT_CTX by `heapMeter` — CONSTANT_CTX's
+ * `new RunContext(...)` (distinguishable from CONSTANT_CTX by `heapMeter` — CONSTANT_CTX's
  * is always `undefined`), bind it via the sanctioned `testCallCtx` test door
  * (CallCtx.ts), and record the `this.runCtx` a plain-`function` probe (never an arrow
  * — the audit's §0 "arrow-fn trap") observes when SRFI-13's `applyCallback` seam
@@ -21,7 +21,7 @@
 import { describe, expect, it } from "vitest";
 import srfi13 from "../../env/srfi/srfi-13.js";
 import { testCallCtx } from "../../common/symbol.js";
-import { makeRunContext, CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
+import { RunContext, CONSTANT_CTX } from "../../run/RunContext.js";
 import { AString } from "../../values/primitives/AString.js";
 import type { EnvCapability } from "../../common/capability.js";
 
@@ -37,7 +37,7 @@ const SRFI13_OPS = opsOf(srfi13);
 
 /** A live, real run's ctx — `heapMeter` is DEFINED, unlike CONSTANT_CTX's permanent
  *  `undefined`. Distinguishing the two is the whole law. */
-const liveCtx: RunContext = makeRunContext({ heapBudget: 1_000_000 });
+const liveCtx: RunContext = new RunContext({ heapBudget: 1_000_000 });
 
 /** Records the `this.runCtx` a raw-function criterion predicate observes. A `function`
  *  declaration — never an arrow — so `this` is actually reachable. */

@@ -13,7 +13,7 @@
 // real createRosettaWrapper tests use — no full evaluator needed to prove the wiring.
 
 import { describe, expect, it } from "vitest";
-import { CONSTANT_CTX, makeRunContext, type RunContext } from "../../run/RunContext.js";
+import { CONSTANT_CTX, RunContext } from "../../run/RunContext.js";
 
 import { EnvCapability } from "../capability.js";
 import { symbol, makeCallCtx, type RosettaSymbolDef, type CallCtx } from "../symbol.js";
@@ -174,7 +174,7 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
 
     // runCtx carrying a (not-yet-aborted) AbortSignal — the shape a real exec() mints.
     const ac = new AbortController();
-    const runCtx = makeRunContext({ signal: ac.signal });
+    const runCtx = new RunContext({ signal: ac.signal });
     const out = (await invoke(verb, { runCtx }, new AString("x"))) as AString;
     expect(out["arrival/toJS"]()).toBe("x:live"); // signal present, not aborted
 
@@ -201,7 +201,7 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
     ac.abort();
     const withCtx = (await invoke(
       verb,
-      { runCtx: makeRunContext({ signal: ac.signal }) },
+      { runCtx: new RunContext({ signal: ac.signal }) },
       new AString("world"),
     )) as AInexact;
     expect(withCtx.real).toBe(5);

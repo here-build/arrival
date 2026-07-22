@@ -176,7 +176,7 @@ function mark_cycles(pair: APair<any, any>): void {
  * cannot be constructed immutably (a self-referential spine has no construction order), so the
  * three knot-tying consumers — `clone` (this file), the reader's datum-label resolution
  * (`Parser._resolve_pair`), and syntax-rules' ellipsis surgery on its private copies — patch
- * through HERE, each use a named reviewable act (the `makeRunContext` pattern: one designed
+ * through HERE, each use a named reviewable act (the RunContext-minting pattern: one designed
  * door, never ad-hoc mutation). The ugly name IS the fence; not exported from the package index.
  */
 export function __tieKnot(pair: AListAlike, slot: "car" | "cdr", v: SchemeValue): void {

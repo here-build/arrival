@@ -12,7 +12,7 @@
  * Two teardown paths, by design:
  *   EXPLICIT — a caller (a plain `exec()` that minted its own RunContext, or a REPL host closing
  *     its session) calls {@link disposeRunContext} directly, or `await using`s a RunContext
- *     minted via `makeRunContext` (its `[Symbol.asyncDispose]` delegates here).
+ *     minted via `new RunContext(...)` (its `[Symbol.asyncDispose]` delegates here).
  *   BACKSTOP — a RunContext dropped without either (a REPL abandoned mid-session, a test that
  *     forgets to dispose) is still torn down once its last reference is collected, via a
  *     `FinalizationRegistry`. Best-effort by spec (GC timing is never guaranteed), so it exists
@@ -84,7 +84,7 @@ export function onRunContextDispose(runCtx: RunContext, teardown: Teardown): voi
  *  per-run resource) or already disposed (explicit dispose racing the backstop, or a second
  *  explicit call) is a no-op. This is the ONE function every teardown path funnels through:
  *  `exec()`'s owned-runCtx `finally` (generator-exec.ts), a REPL host's explicit session close,
- *  and a RunContext's own `[Symbol.asyncDispose]` (`makeRunContext`, RunContext.ts) all call
+ *  and a RunContext's own `[Symbol.asyncDispose]` (RunContext.ts's prototype method) all call
  *  this, never re-implement the guard. */
 export async function disposeRunContext(runCtx: RunContext): Promise<void> {
   const lifecycle = lifecycles.get(runCtx);

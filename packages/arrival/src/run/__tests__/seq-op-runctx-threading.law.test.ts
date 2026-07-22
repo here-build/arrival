@@ -26,7 +26,7 @@
  * FIRST OPERAND's `.ctx`, not `this.runCtx`) — confounding this fix with the (separate,
  * out-of-cluster) `env/r7rs/lists.ts` `cons`/`list` ctx-dropping bug.
  *
- * Instead: construct an APair/AVector directly under a REAL `makeRunContext` (distinguishable
+ * Instead: construct an APair/AVector directly under a REAL `new RunContext(...)` (distinguishable
  * from CONSTANT_CTX by `heapMeter` — CONSTANT_CTX's is always `undefined`), pass a plain JS
  * `function` (never an arrow — arrows structurally can't read `this`, the exact "arrow-fn
  * trap" the audit's §0 names) as the callback, and record the `this.runCtx` it observes
@@ -39,11 +39,11 @@ import { APair } from "../../values/primitives/APair.js";
 import { AVector } from "../../values/primitives/AVector.js";
 import { nil } from "../../values/primitives/ANil.js";
 import { AExact } from "../../values/primitives/AExact.js";
-import { makeRunContext, CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
+import { RunContext, CONSTANT_CTX } from "../../run/RunContext.js";
 
 /** A live, real run's ctx — `heapMeter` is DEFINED (`{ used, max }`), unlike CONSTANT_CTX's
  *  permanent `undefined`. Distinguishing the two is the whole law. */
-const liveCtx: RunContext = makeRunContext({ heapBudget: 1_000_000 });
+const liveCtx: RunContext = new RunContext({ heapBudget: 1_000_000 });
 
 /** Records the `this.runCtx` a raw-function callback observes. A `function` declaration —
  *  never an arrow — so `this` is actually reachable (the audit's §0 arrow-fn trap). */
@@ -101,7 +101,7 @@ describe("W1 seq-op ctx threading — AVector map/filter/reduce thread the invoc
   // Loose mode (no `strict`): AVector's map/filter/reduce strict-gate BEFORE reaching the
   // callback ("R7RS map/filter/reduce operate on lists; a vector is not a list") — the
   // confession this test regresses against is only reachable in loose mode. `liveCtx` above
-  // is already loose (`makeRunContext`'s `strict` defaults to `false`).
+  // is already loose (`RunContext`'s `strict` defaults to `false`).
   it("map: callback observes the passed liveCtx, not CONSTANT_CTX", async () => {
     const vec = new AVector([one, two]);
     const probe = makeProbe();

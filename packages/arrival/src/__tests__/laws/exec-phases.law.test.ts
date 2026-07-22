@@ -27,7 +27,7 @@ import { LexicalScope } from "../../eval/LexicalScope.js";
 import { parseProgram, validateAgainstAmbient } from "../../eval/exec-phases.js";
 import { assembleAmbient, exec, execState } from "../../eval/generator-exec.js";
 import { user_env } from "../../env/env-roots.js";
-import { makeRunContext } from "../../run/RunContext.js";
+import { RunContext } from "../../run/RunContext.js";
 import { disposeRunContext } from "../../run/run-lifecycle.js";
 
 /** A spy-instrumented port: counts acquisitions + teardowns. */
@@ -94,7 +94,7 @@ describe("ownership table (§3.3) — phase 5 disposes exactly what the call ass
     // RunContext, not by ambient — warm reuse across passes follows RunContext continuity
     // (a REPL's ONE session), not merely "the ambient was reused." Threading the SAME runCtx
     // through both calls is the designed REPL idiom (`ExecOptions.runCtx`).
-    const runCtx = makeRunContext({});
+    const runCtx = new RunContext({});
     const [a] = await exec(`(spy/touch)`, { ambient, runCtx });
     const [b] = await exec(`(spy/touch)`, { ambient, runCtx });
     expect([a, b]).toEqual(["touched", "touched"]);
@@ -109,7 +109,7 @@ describe("ownership table (§3.3) — phase 5 disposes exactly what the call ass
     expect(counts.disposed).toBe(1);
     await disposeRunContext(runCtx);
     expect(counts.disposed).toBe(1); // single-flight — idempotent
-    // `await using` support: both the ambient AND a `makeRunContext()`-minted RunContext are
+    // `await using` support: both the ambient AND a `new RunContext()`-minted RunContext are
     // AsyncDisposable by construction.
     expect(typeof ambient[Symbol.asyncDispose]).toBe("function");
     expect(typeof runCtx[Symbol.asyncDispose]).toBe("function");

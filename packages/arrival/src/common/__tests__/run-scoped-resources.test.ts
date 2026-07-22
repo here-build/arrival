@@ -23,7 +23,7 @@ import * as sz from "../scheme-zod.js";
 import { port, type Resource } from "../resources.js";
 import { exec } from "../../eval/generator-exec.js";
 import { freshEnv } from "../../__tests__/_fresh-env.js";
-import { makeRunContext } from "../../run/RunContext.js";
+import { RunContext } from "../../run/RunContext.js";
 import { disposeRunContext } from "../../run/run-lifecycle.js";
 import type { CallCtx } from "../../run/CallCtx.js";
 
@@ -63,7 +63,7 @@ describe("Stage 2 — per-RunContext capability resources", () => {
       const { capability, counts } = spyCapability();
       const env = await freshEnv();
       await capability.lower({}).apply(env, undefined as never);
-      const runCtx = makeRunContext({});
+      const runCtx = new RunContext({});
 
       const [out] = await exec("(spy/touch)", { env, runCtx });
       expect(out).toBe("live");
@@ -82,12 +82,12 @@ describe("Stage 2 — per-RunContext capability resources", () => {
       const env = await freshEnv();
       await capability.lower({}).apply(env, undefined as never);
 
-      const sessionRunCtx = makeRunContext({});
+      const sessionRunCtx = new RunContext({});
       await exec("(spy/touch)", { env, runCtx: sessionRunCtx }); // pass 1
       await exec("(spy/touch)", { env, runCtx: sessionRunCtx }); // pass 2 — REPL continuity
       expect(counts.acquired).toBe(1); // single-flight across passes of ONE RunContext
 
-      const otherRunCtx = makeRunContext({});
+      const otherRunCtx = new RunContext({});
       await exec("(spy/touch)", { env, runCtx: otherRunCtx }); // a DIFFERENT session
       expect(counts.acquired).toBe(2); // per-run isolation — a fresh spawn, not a shared one
 
@@ -162,7 +162,7 @@ describe("Stage 2 — per-RunContext capability resources", () => {
       const { capability, counts } = spyDefined();
       const env = await freshEnv();
       await capability.lower({}).apply(env, undefined as never);
-      const runCtx = makeRunContext({});
+      const runCtx = new RunContext({});
 
       const [out] = await exec('(cache/put "k" "v")', { env, runCtx });
       expect(out).toBe("v");
@@ -180,13 +180,13 @@ describe("Stage 2 — per-RunContext capability resources", () => {
       const env = await freshEnv();
       await capability.lower({}).apply(env, undefined as never);
 
-      const sessionRunCtx = makeRunContext({});
+      const sessionRunCtx = new RunContext({});
       await exec('(cache/put "k1" "v1")', { env, runCtx: sessionRunCtx }); // pass 1: write
       const [stillThere] = await exec('(cache/get "k1")', { env, runCtx: sessionRunCtx }); // pass 2: read, no write
       expect(stillThere).toBe("v1"); // the SAME Map survived across passes of ONE RunContext
       expect(counts.spawned).toBe(1); // one bag for the whole session
 
-      const otherRunCtx = makeRunContext({});
+      const otherRunCtx = new RunContext({});
       const [fresh] = await exec('(cache/get "k1")', { env, runCtx: otherRunCtx });
       expect(fresh).toBe("MISS"); // a DIFFERENT Map — nothing carried over
       expect(counts.spawned).toBe(2);

@@ -37,7 +37,7 @@ import {
   type AssembledAmbient,
   type ParsedProgram,
 } from "./exec-phases.js";
-import { makeRunContext, type RunContext } from "../run/RunContext.js";
+import { RunContext } from "../run/RunContext.js";
 import { disposeRunContext } from "../run/run-lifecycle.js";
 import type { DisplaySink, NoteSink } from "../run/note-sink.js";
 import type { RunCache } from "../run/run-cache.js";
@@ -277,7 +277,7 @@ export interface ExecOptions {
    * of the per-call disposal a bare `exec(code)` performs (see the module's `execState`
    * `finally` — a self-minted RunContext is disposed at THIS call's end; a reused one is
    * disposed only when the caller ends the session, via `disposeRunContext(runCtx)` or
-   * `await using` a `makeRunContext()`-minted one). Honored on BOTH the cut and GLASS (`env`)
+   * `await using` a `new RunContext(...)`-minted one). Honored on BOTH the cut and GLASS (`env`)
    * paths — unlike `capabilities`/`scope`/`ambient`, glass has its own live env but still needs
    * a RunContext, so glass callers get the same continuity option.
    */
@@ -347,7 +347,7 @@ export interface ExecOptions {
    */
   heapBudget?: number;
   /**
-   * THE RUN CACHE (run/run-cache.ts). When set, rides `makeRunContext` onto the run's
+   * THE RUN CACHE (run/run-cache.ts). When set, rides `new RunContext(...)` onto the run's
    * `RunContext.cache` and every baked rosetta penetration is intercepted at the decode/fire
    * chokepoint per the mode law (docs/execution.md §MODE-LAW). Unset ⇒ no interception (inert).
    * The cache is a RUN-level entity: session identity (epoch/roster/configDigest validity) is the
@@ -355,7 +355,7 @@ export interface ExecOptions {
    */
   cache?: RunCache;
   /**
-   * THE EFFECT LOG (run/effect-log.ts). When set, rides `makeRunContext` onto the run's
+   * THE EFFECT LOG (run/effect-log.ts). When set, rides `new RunContext(...)` onto the run's
    * `RunContext.effects`, arming the burst gather (docs/execution.md §BURST): a `sink` penetration
    * during a PRIME run enqueues and returns `undefined` instead of firing. A SIBLING of `cache`,
    * not a field on it: pass `effects` alone to gather sinks with no `RunCache` at all, or alongside
@@ -365,7 +365,7 @@ export interface ExecOptions {
    */
   effects?: EffectLog;
   /**
-   * THE READ GUARD (run/read-guard.ts). When set, rides `makeRunContext` onto the run's
+   * THE READ GUARD (run/read-guard.ts). When set, rides `new RunContext(...)` onto the run's
    * `RunContext.reads`, arming the read-tracking region + the read∩write deferral guard
    * (docs/execution.md §READ-GUARD) that the phase-4 loop below drives per top-level form. Unset ⇒
    * no tracking, no guard. A `reads` with no `writeSetOf` armed (host tracks reads but can't
@@ -628,7 +628,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
       runResolver = new Resolver(actualEnv);
       runCtx =
         passedRunCtx ??
-        makeRunContext({
+        new RunContext({
           strict: strict ?? false,
           heapBudget,
           freezeRosettaReturns,
@@ -902,7 +902,7 @@ export async function execExpr(
   // check: it has no per-form LOOP to hang either on (unlike execState's), and its callers
   // (require, prelude eval) are sub-program plumbing, not the top-level prime run the guard
   // targets. A caller wiring a real burst run through execState gets both.
-  const runCtx = makeRunContext({ signal, heapBudget, cache, effects, reads });
+  const runCtx = new RunContext({ signal, heapBudget, cache, effects, reads });
 
   try {
     // Top-level form evaluates to a value, never a bare expander — seal it.

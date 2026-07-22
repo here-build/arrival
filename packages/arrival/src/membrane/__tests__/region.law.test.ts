@@ -32,7 +32,7 @@ import * as z from "../../common/scheme-zod.js";
 import { schemeToJs } from "../rosetta.js";
 import { ANativeProcedure } from "../../values/primitives/ACallable.js";
 import { closeRegionScope, openRegionScope, withRegionScope } from "../region-scope.js";
-import { CONSTANT_CTX, makeRunContext } from "../../run/RunContext.js";
+import { CONSTANT_CTX, RunContext } from "../../run/RunContext.js";
 import type { SchemeValue } from "../../values/types.js";
 import { exec, execState } from "../../eval/generator-exec.js";
 import { EvalTrace, type Invocation } from "../../provenance/trace.js";
@@ -86,7 +86,7 @@ describe("a reverse lambda is region-bound to its invocation", () => {
 
   it("run abort cancels in-flight re-entries via the scope's derived signal", async () => {
     const controller = new AbortController();
-    const runCtx = makeRunContext({ signal: controller.signal });
+    const runCtx = new RunContext({ signal: controller.signal });
     const scope = openRegionScope({ runCtx, dynSite: undefined });
     const wrapper = withRegionScope(
       scope,

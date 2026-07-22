@@ -22,7 +22,7 @@ import * as z from "../../common/scheme-zod.js";
 import { symbol, testCallCtx } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { exec } from "../../eval/generator-exec.js";
-import { makeRunContext, CONSTANT_CTX } from "../../run/RunContext.js";
+import { RunContext, CONSTANT_CTX } from "../../run/RunContext.js";
 import { MemoryRunCache, canonicalJson, runCacheKey } from "../../run/run-cache.js";
 import { AExact } from "../../values/primitives/AExact.js";
 
@@ -74,7 +74,7 @@ function viewDef(name: string, impl?: (n: number) => Promise<number> | number) {
   return { def, fires: () => fires };
 }
 
-const ctxWith = (cache: MemoryRunCache) => testCallCtx({ runCtx: makeRunContext({ cache }) });
+const ctxWith = (cache: MemoryRunCache) => testCallCtx({ runCtx: new RunContext({ cache }) });
 
 describe("single-flight (D1) + eviction — at the wrapper", () => {
   it("concurrent identical `view` penetrations share ONE impl call", async () => {
