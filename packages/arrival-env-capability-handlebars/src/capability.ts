@@ -9,16 +9,11 @@
  * Compiler: Contract.emit → RuntimeRef; RUNTIME_MANIFEST maps those symbols to
  * this package's `/runtime` subpath (the mercury reference example).
  */
-import { EnvCapability, jsToScheme, parseGenerator as parse, schemeToJsUntyped, symbol, z } from "@inhuman.tools/arrival";
+import { EnvCapability, jsToScheme, parseGenerator as parse, schemeToJsUntyped } from "@inhuman.tools/arrival";
 import { Call, type EmitRule, type R } from "@inhuman.tools/arrival/emit";
 import { arrivalLoaderCapability, type ContentResolver } from "@inhuman.tools/arrival/loader";
 
-import {
-  asCompiledTemplate,
-  compileTemplate,
-  renderTemplateCall,
-  runCompiledTemplate,
-} from "./compile.js";
+import { asCompiledTemplate, compileTemplate, renderTemplateCall, runCompiledTemplate } from "./compile.js";
 import { hbsContentsToSchemeSource } from "./scheme.js";
 
 /** Emit as RuntimeRef(shim) — mercury materializes via RUNTIME_MANIFEST pkg rows. */
@@ -26,23 +21,24 @@ const runtimeEmit = (verb: string): EmitRule<R> => ({
   call: (args, ctx) => Call(ctx.runtime(verb), args),
 });
 
-export const arrivalHandlebarsCapability = new EnvCapability("arrival/handlebars", {
+export const arrivalHandlebarsCapability = EnvCapability.define("arrival/handlebars", {
   // Loader first in C3: prelude calls require/register-extension (preludeOnly on loader).
   deps: [arrivalLoaderCapability],
-  symbols: {
-    "template/handlebars": symbol.rosetta`template/handlebars: renders a handlebars template source string against the given args`(
-      {
-        input: [z.string, z.value],
-        type: "(source: string, args: unknown): string",
-        output: [z.string],
-        provenance: "pipe",
-        emit: runtimeEmit("template/handlebars"),
-      },
-      (source, args) => {
-        const a = schemeToJsUntyped(args, {});
-        return renderTemplateCall(source, Array.isArray(a) ? a : [a]);
-      },
-    ),
+  symbols: (symbol, z) => ({
+    "template/handlebars":
+      symbol.rosetta`template/handlebars: renders a handlebars template source string against the given args`(
+        {
+          input: [z.string, z.value],
+          type: "(source: string, args: unknown): string",
+          output: [z.string],
+          provenance: "pipe",
+          emit: runtimeEmit("template/handlebars"),
+        },
+        (source, args) => {
+          const a = schemeToJsUntyped(args, {});
+          return renderTemplateCall(source, Array.isArray(a) ? a : [a]);
+        },
+      ),
     "ext/handlebars/resolve": {
       value: (async (contents) => ({
         kind: "eval" as const,
@@ -74,7 +70,7 @@ export const arrivalHandlebarsCapability = new EnvCapability("arrival/handlebars
         return runCompiledTemplate(asCompiledTemplate(schemeToJsUntyped(compiledRaw, {})), Array.isArray(a) ? a : [a]);
       },
     ),
-  },
+  }),
   // Bare symbol — require/register-extension is a MACRO (unevaluated name).
   prelude: `(require/register-extension ".hbs" ext/handlebars/resolve)`,
 });

@@ -9,49 +9,45 @@
 // shaping (`sqlParams`) is imported straight from `sql-effect.ts` — one shaping
 // implementation, one registration site.
 
-import { EnvCapability, schemeToJs, symbol, z, type SchemeValue } from "@inhuman.tools/arrival";
+import { EnvCapability, schemeToJs, z, type SchemeValue } from "@inhuman.tools/arrival";
 
 import { type SqlEffectResolver, inertSqlResolver, sqlParams } from "./sql-effect.js";
 
-/** The per-call invocation-`this` this verb reads: the `{ currentInvocation }` carrier forwarded
- *  to the host resolver (mirrors `arrivalInferCapability`'s `InferInvocation` in env-infer's
- *  `infer.ts` — same seam shape, ctx arrives via `this`, not a param). */
-interface SqlInvocation {
-  readonly invocation: { currentInvocation: unknown };
-}
-
-export const arrivalSqlCapability = new EnvCapability("arrival/sql", {
+export const arrivalSqlCapability = EnvCapability.define("arrival/sql", {
   // Structural validator (not bare `z.custom<T>()`): a resolver is a fn seam — assert callable so a
   // malformed host wiring fails loud at lower() rather than at the first sql effect.
   configuration: { sql: z.custom<SqlEffectResolver>((v) => typeof v === "function").optional() },
-  // BUILDER form: the host `sql` resolver arrives via the activation closure — a baked rosetta is
-  // bound raw (`this` is the invocation-context, NOT the activation), so config can't ride `this`.
-  // VARIADIC identity input (`z.array(z.value)`) keeps the legacy ARITY TOLERANCE (params
+  // FLIPPED form (EnvCapability.define): this `symbols` callback runs EAGERLY, ONCE, at define()
+  // time — config-independent — so the host `sql` resolver can't be resolved out here. The impl
+  // re-reads it from `this.configuration.sql` at REAL DISPATCH instead (the injected
+  // `symbol.rosetta`'s typed `this` — `this.invocation` rides the same CallCtx channel it always
+  // did). VARIADIC identity input (`z.array(z.value)`) keeps the legacy ARITY TOLERANCE (params
   // may be omitted). Each arg is `schemeToJs`'d explicitly inside the impl — byte-identical to the
   // legacy generic membrane's automatic `schemeToJs` pass every `defineRosetta` arg went through.
   // The verb is a `symbol.rosetta` SOURCE (no `pure` ⇒ mints a fresh provenance point at the
   // membrane crossing, exactly as the former `withContext` rosettas did).
-  symbols: ({ configuration }) => {
-    const resolve = configuration.sql ?? inertSqlResolver;
-
-    return {
-      "sql/query": symbol.rosetta`sql/query: executes a sql query via the sql effect resolver`(
-        { input: z.array(z.value), output: [z.value], type: "(label: string, query: string, params?: unknown): unknown" },
-        // Boundary assert: the resolver returns unknown by design (host data); the z.value
-        // contract demands SchemeValue — asserted at the verb table, same as arrival-reflect.
-        function (this: SqlInvocation, ...args: unknown[]) {
-          // Boundary narrow: the verb table receives raw scheme args (unknown[]); schemeToJs's
-          // honest signature demands SchemeValue — asserted once at the destructure, same as
-          // the impl-level `as never` this table already carries.
-          const [label, query, params] = args as (SchemeValue | undefined)[];
-          return resolve(this.invocation, {
-            kind: "sql",
-            label: String(schemeToJs(label, {})),
-            query: String(schemeToJs(query, {})),
-            params: sqlParams(schemeToJs(params, {})),
-          });
-        } as never,
-      ),
-    };
-  },
+  symbols: (symbol) => ({
+    "sql/query": symbol.rosetta`sql/query: executes a sql query via the sql effect resolver`(
+      { input: z.array(z.value), output: [z.value], type: "(label: string, query: string, params?: unknown): unknown" },
+      // Boundary assert: the resolver returns unknown by design (host data); the z.value
+      // contract demands SchemeValue — asserted at the verb table, same as arrival-reflect.
+      function (...args: unknown[]) {
+        const resolve = this.configuration.sql ?? inertSqlResolver;
+        // Boundary narrow: the verb table receives raw scheme args (unknown[]); schemeToJs's
+        // honest signature demands SchemeValue — asserted once at the destructure, same as
+        // the boundary-assert return cast below.
+        const [label, query, params] = args as (SchemeValue | undefined)[];
+        // Boundary assert: the resolver returns `Promise<unknown>` by design (host data); the
+        // z.value contract demands `MaybePromise<SchemeValue>` — asserted at the return, same
+        // as arrival-reflect (kept narrow to the return value so the impl's `this` still
+        // contextually infers as `ImplThis<Config, Resources>` off the injected `symbol.rosetta`).
+        return resolve(this.invocation, {
+          kind: "sql",
+          label: String(schemeToJs(label, {})),
+          query: String(schemeToJs(query, {})),
+          params: sqlParams(schemeToJs(params, {})),
+        }) as Promise<SchemeValue>;
+      },
+    ),
+  }),
 });

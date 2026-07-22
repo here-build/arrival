@@ -47,10 +47,12 @@ const typeYaml: RequireTypeProvider = (source) => {
  *  which the editor never builds) and cannot carry a type provider through itself. */
 export const yamlHandler: ExtensionHandler = { resolve: resolveYaml, type: typeYaml };
 
-export const arrivalYamlCapability = new EnvCapability("ext/yaml", {
+export const arrivalYamlCapability = EnvCapability.define("ext/yaml", {
   // Loader first in C3: prelude calls require/register-extension (preludeOnly on loader).
   deps: [arrivalLoaderCapability],
-  symbols: { "ext/yaml/resolve": { value: resolveYaml } },
+  // No symbol/z use here — this capability's sole symbol is a raw `{ value }` resolver,
+  // never a `symbol.rosetta`/`native` def — so the injected factory pair is unused.
+  symbols: () => ({ "ext/yaml/resolve": { value: resolveYaml } }),
   // Bare symbol — `require/register-extension` is a MACRO so the resolver name is
   // unevaluated (no String(fn) registry poison). Strings still work for compat.
   prelude: `

@@ -110,15 +110,15 @@ function bypassFormsOf(qualifiedName: string, toolParts: ReadonlyMap<string, Too
  *  once. Remembers the env-side map (server.ts / python bridge via `_meta`).
  *
  *  Every registered form is indexed by both its raw spelling (an exact-lookup hit) and
-  *  its `normalizeSymbolName` canonicalization (a hyphen/underscore/case-drifted hit).
-  *  Consumers look up the raw name first, then normalize — an exact match is never
-  *  second-guessed by an unrelated fuzzy tie.
-  *
-  *  A target set of size 1 is "unique" unless its canonical spelling also names a
-  *  bound GLOBAL symbol that is not one of the tools (a builtin, an `s/*` validator,
-  *  or a previously-`define`d name) — that's a global-symbol collision, downgrades to
-  *  "ambiguous" (the verdict's `globalCollision` names the offending symbol). A target set
-  *  of size > 1 is always "ambiguous". */
+ *  its `normalizeSymbolName` canonicalization (a hyphen/underscore/case-drifted hit).
+ *  Consumers look up the raw name first, then normalize — an exact match is never
+ *  second-guessed by an unrelated fuzzy tie.
+ *
+ *  A target set of size 1 is "unique" unless its canonical spelling also names a
+ *  bound GLOBAL symbol that is not one of the tools (a builtin, an `s/*` validator,
+ *  or a previously-`define`d name) — that's a global-symbol collision, downgrades to
+ *  "ambiguous" (the verdict's `globalCollision` names the offending symbol). A target set
+ *  of size > 1 is always "ambiguous". */
 export function buildBypassResolution(
   toolParts: ReadonlyMap<string, ToolIdentityParts>,
   globalBoundNames: readonly string[],
@@ -469,8 +469,7 @@ function rosettaDef(
         // If the tool DECLARES this param an object and the value crossed as an alist-shaped array,
         // read it as the slot says — see `alistShapedObject` above. Everything else is untouched.
         const crossed = schemeToJs(decoded[p.name] as SchemeValue);
-        const jsValue =
-          p.schema?.type === "object" ? (alistShapedObject(crossed) ?? crossed) : crossed;
+        const jsValue = p.schema?.type === "object" ? (alistShapedObject(crossed) ?? crossed) : crossed;
         if (mode !== "off" && !isAttested(decoded[p.name])) {
           if (mode === "required") throw new Error(attestationErrorMessage(p, jsValue));
           unattested.push(`:${p.name}`);
@@ -544,7 +543,13 @@ export async function buildManifoldEnv(
       symbols[qualifiedName] = rosettaDef(qualifiedName, tool, signature, mode, options.tracker, options.argsTracker);
     }
   }
-  const capability = new EnvCapability("manifold", { symbols });
+  // `symbols` is already a fully-computed record by this point (validators + normalizers +
+  // host extensions + the per-tool binding loop above) — the injected `(symbol, z)` pair is
+  // unused here on purpose: every `symbol.rosetta`/`z.*` use in this file lives in the
+  // standalone `validatorDef`/`normalizerDef`/`rosettaDef` helpers above, which read the
+  // module-level `@inhuman.tools/arrival/symbol` / `@inhuman.tools/arrival/scheme-zod`
+  // imports directly (they're called from more than one place, not just this callback).
+  const capability = EnvCapability.define("manifold", { symbols: () => symbols });
   const ambient = await assembleAmbient({ capabilities: [capability] });
   const scope = LexicalScope.fresh("manifold");
   toolSchemasByAmbient.set(ambient, toolSchemas);

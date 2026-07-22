@@ -39,10 +39,12 @@ const typeToml: RequireTypeProvider = (source) => {
 /** See `ext-yaml.ts`'s `yamlHandler` — the exact same bundling rationale. */
 export const tomlHandler: ExtensionHandler = { resolve: resolveToml, type: typeToml };
 
-export const arrivalTomlCapability = new EnvCapability("ext/toml", {
+export const arrivalTomlCapability = EnvCapability.define("ext/toml", {
   // Loader first in C3: prelude calls require/register-extension (preludeOnly on loader).
   deps: [arrivalLoaderCapability],
-  symbols: { [RESOLVE]: { value: resolveToml } },
+  // No symbol/z use here — this capability's sole symbol is a raw `{ value }` resolver,
+  // never a `symbol.rosetta`/`native` def — so the injected factory pair is unused.
+  symbols: () => ({ [RESOLVE]: { value: resolveToml } }),
   // Bare symbol — `require/register-extension` is a MACRO (unevaluated resolver name).
   prelude: `(require/register-extension ".toml" ${RESOLVE})`,
 });

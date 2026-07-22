@@ -32,10 +32,6 @@ import { z } from "zod";
 
 import { TypeTagError } from "../../errors.js";
 import { EnvCapability } from "../../common/capability.js";
-import { symbol, type CallCtx } from "../../common/symbol.js";
-// Only the identity carrier `sz.value` is needed — the verb decodes/encodes manually via
-// schemeToJs/jsToScheme. NOT `sz.symbol` for `name`; see that param's comment.
-import * as sz from "../../common/scheme-zod.js";
 import { jsToScheme, schemeToJs } from "../../membrane/rosetta.js";
 import { stripOptionalSuffix, tagToJsonSchema } from "../../common/schema-tag.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
@@ -79,7 +75,7 @@ function describeValue(value: unknown): string {
   }
 }
 
-export const overridableCapability = new EnvCapability("arrival/overridable", {
+export const overridableCapability = EnvCapability.define("arrival/overridable", {
   // config-less lower MUST succeed: a consumer assembling without params still gets the
   // capability, and every in-form default then fires, validated as an override would be.
   configuration: { params: z.record(z.string(), z.unknown()).default({}) },
@@ -87,20 +83,24 @@ export const overridableCapability = new EnvCapability("arrival/overridable", {
   // unquoted, so `(s/enum "a" "b")` is CALLED in the same env before the rosetta sees it.
   // Declaring the dep binds it wherever this capability is applied, root-set or not.
   deps: [schemaCapability],
-  symbols: ({ configuration }) => ({
+  symbols: (symbol, sz) => ({
     "overridable/resolve":
       symbol.rosetta`overridable/resolve: resolves a parameter, preferring a host override over the form default (validated against the declared type)`(
         // `name` stays `sz.value` (the raw ASymbol), NOT `sz.symbol`: sz.symbol decodes to an
         // opaque host JS symbol whose toString prints the wrapper description, not the bare
         // name. Errors name the binding, so read the ASymbol directly via `.literal()`.
-        { input: [sz.value, sz.value, sz.value], output: [sz.value], type: "(name: symbol, type: string|list, default: any): any" },
-        function (this: CallCtx, nameSym, typeTag, defaultVal) {
+        {
+          input: [sz.value, sz.value, sz.value],
+          output: [sz.value],
+          type: "(name: symbol, type: string|list, default: any): any",
+        },
+        function (nameSym, typeTag, defaultVal) {
           const bindingName = (nameSym as ASymbol).literal();
           const jsTag = schemeToJs(typeTag);
           const zodType = lowerTag(jsTag, bindingName);
 
-          const hasOverride = Object.prototype.hasOwnProperty.call(configuration.params, bindingName);
-          const raw = hasOverride ? configuration.params[bindingName] : schemeToJs(defaultVal);
+          const hasOverride = Object.prototype.hasOwnProperty.call(this.configuration.params, bindingName);
+          const raw = hasOverride ? this.configuration.params[bindingName] : schemeToJs(defaultVal);
           const source = hasOverride ? "an environment override" : "the in-form default";
 
           const outcome = zodType.safeParse(raw);

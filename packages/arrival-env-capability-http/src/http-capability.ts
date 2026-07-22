@@ -9,54 +9,47 @@
 // shaping (`httpOptions`) is imported straight from `http-effect.ts` — one shaping
 // implementation, one registration site.
 
-import { EnvCapability, schemeToJs, symbol, z, type SchemeValue } from "@inhuman.tools/arrival";
+import { EnvCapability, schemeToJs, z, type SchemeValue } from "@inhuman.tools/arrival";
 
-import {
-  type HttpEffectResolver,
-  type HttpMethod,
-  httpOptions,
-  inertHttpResolver,
-} from "./http-effect.js";
+import { type HttpEffectResolver, type HttpMethod, httpOptions, inertHttpResolver } from "./http-effect.js";
 
-/** The per-call invocation-`this` these verbs read: the `{ currentInvocation }` carrier forwarded
- *  to the host resolver (mirrors `arrivalInferCapability`'s `InferInvocation` in env-infer's
- *  `infer.ts` — same seam shape, ctx arrives via `this`, not a param). */
-interface HttpInvocation {
-  readonly invocation: { currentInvocation: unknown };
-}
-
-export const arrivalHttpCapability = new EnvCapability("arrival/http", {
+export const arrivalHttpCapability = EnvCapability.define("arrival/http", {
   // Structural validator (not bare `z.custom<T>()`): a resolver is a fn seam — assert callable so a
   // malformed host wiring fails loud at lower() rather than at the first http effect.
   configuration: { http: z.custom<HttpEffectResolver>((v) => typeof v === "function").optional() },
-  // BUILDER form: the host `http` resolver arrives via the activation closure — a baked rosetta is
-  // bound raw (`this` is the invocation-context, NOT the activation), so config can't ride `this`.
-  // VARIADIC identity input (`z.array(z.value)`) keeps the legacy ARITY TOLERANCE (opts
+  // FLIPPED form (EnvCapability.define): this `symbols` callback runs EAGERLY, ONCE, at define()
+  // time — config-independent — so the host `http` resolver can't be resolved out here. Each impl
+  // re-reads it from `this.configuration.http` at REAL DISPATCH instead (the injected
+  // `symbol.rosetta`'s typed `this` — `this.invocation` rides the same CallCtx channel it always
+  // did). VARIADIC identity input (`z.array(z.value)`) keeps the legacy ARITY TOLERANCE (opts
   // may be omitted). Each arg is `schemeToJs`'d explicitly inside the impl — byte-identical to the
   // legacy generic membrane's automatic `schemeToJs` pass every `defineRosetta` arg went through.
   // Each verb is a `symbol.rosetta` SOURCE (no `pure` ⇒ mints a fresh provenance point at the
   // membrane crossing, exactly as the former `withContext` rosettas did).
-  symbols: ({ configuration }) => {
-    const resolve = configuration.http ?? inertHttpResolver;
-
+  symbols: (symbol) => {
     const httpVerb = (method: HttpMethod, name: "http/get" | "http/post") =>
       symbol.rosetta`${name}: performs an ${method} request via the http effect resolver`(
         { input: z.array(z.value), output: [z.value], type: "(label: string, path: string, opts?: unknown): unknown" },
         // Boundary assert: the resolver returns unknown by design (host data); the z.value
         // contract demands SchemeValue — asserted at the verb table, same as arrival-reflect.
-        function (this: HttpInvocation, ...args: unknown[]) {
+        function (...args: unknown[]) {
+          const resolve = this.configuration.http ?? inertHttpResolver;
           // Boundary narrow: the verb table receives raw scheme args (unknown[]); schemeToJs's
           // honest signature demands SchemeValue — asserted once at the destructure, same as
-          // the impl-level `as never` this table already carries.
+          // the boundary-assert return cast below.
           const [label, path, opts] = args as (SchemeValue | undefined)[];
+          // Boundary assert: the resolver returns `Promise<unknown>` by design (host data); the
+          // z.value contract demands `MaybePromise<SchemeValue>` — asserted at the return, same
+          // as arrival-reflect (kept narrow to the return value so the impl's `this` still
+          // contextually infers as `ImplThis<Config, Resources>` off the injected `symbol.rosetta`).
           return resolve(this.invocation, {
             kind: "http",
             method,
             label: String(schemeToJs(label, {})),
             path: String(schemeToJs(path, {})),
             ...httpOptions(method, schemeToJs(opts, {})),
-          });
-        } as never,
+          }) as Promise<SchemeValue>;
+        },
       );
 
     return {
