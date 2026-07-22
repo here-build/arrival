@@ -102,7 +102,7 @@ import {
   SpecialFormShapeError,
   type SourceLocation,
 } from "../errors.js";
-import { is_callable, is_false, is_function, is_macro, is_promise } from "./guards.js";
+import { is_callable, is_expandable, is_false, is_function, is_macro, is_promise } from "./guards.js";
 import { is_applyable, is_callable_value, is_lambda } from "../values/value-guards.js";
 import { applyCallback, ALambda, type CallResult } from "../values/primitives/ACallable.js";
 import { makeCallCtx, type CallCtx } from "../common/symbols/_bake.js";
@@ -145,7 +145,7 @@ import { ADict, foldKeyName, isDictShaped, type DictKey } from "../values/primit
 // The reader's dict grammar — quasiquote re-instantiates READER literals, so the
 // evaluator legitimately reaches into the reader layer for the re-mint.
 import { makeDictLiteralNode } from "../reader/dict-grammar.js";
-import { tf } from "../values/tagless-final.js";
+import { tf, TF_EXPAND } from "../values/tagless-final.js";
 
 // ============================================================================
 // Error Handling with Stack Traces
@@ -2841,7 +2841,7 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
   }
 
   // Operator position admits a value (procedure) OR — when the head is a symbol resolving
-  // to one — a `Macro`/`Syntax` expander (split below by `is_function`/`is_macro`). A
+  // to one — a `Macro`/`Syntax` expander (split below by `is_expandable`/`is_applyable`). A
   // computed head (pair) or a literal head can only be a value: macros are not first-class.
   let fn: SchemeValue | Macro | Syntax;
   if (first instanceof APair) {
@@ -2863,10 +2863,71 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
     fn = first;
   }
 
-  // Check what kind of callable we have. A callable VALUE (ANativeProcedure — a first-class
-  // AValue, not a bare fn) enters the same block: it shares the arg-eval / bounce plumbing,
-  // and only the invocation primitive below branches (its apply term vs Reflect.apply).
-  if ((is_function(fn) || is_callable_value(fn) || is_applyable(fn)) && !is_macro(fn)) {
+  // RAW-ARG discipline FIRST (V's gate order: keyword → macro-expand → apply → non-callable):
+  // a head carrying the `TF_EXPAND` term is a macro/syntax transformer — it consumes UNEVALUATED
+  // operands and hands back a replacement FORM. Dispatched STRUCTURALLY (`is_expandable`), not by
+  // `instanceof Macro | Syntax`, so a value's calling discipline travels with its terms, not its
+  // class. A computed head (pair) or a literal head can only be a value; macros are not first-class.
+  if (is_expandable(fn)) {
+    const useResolver = ctxResolver(ctx);
+    const evalArgs = {
+      // The macro's `this` is the use-site LEXICAL frame (a define-macro fexpr body runs with
+      // `env` as `this`; see Macro.invoke). Sourced FROM the resolver so `env`/`resolver` stay
+      // structurally synced, not coincidentally equal.
+      env: useResolver.env,
+      // The use-site resolver — the def-time Resolver a `Syntax` captures is what hygiene
+      // actually consults; this is the call-site one.
+      resolver: useResolver,
+      dynamic_env: ctx.dynamic_env,
+      use_dynamic: ctx.use_dynamic,
+      error: ctx.error,
+      // So the syntax-rules expander reads its `debug` option from ctx.
+      runCtx: ctx.runCtx,
+    };
+
+    // Uniform expansion — the `TF_EXPAND` term reconciles both transformer SHAPES into one
+    // `{ expr, scope? }`: a `Syntax` supplies the hygiene `scope` (and matches the FULL `code`,
+    // its keyword occupying the pattern's first slot); a define-macro fexpr omits `scope` (and
+    // consumes the keyword-stripped `code.cdr`) — the term itself carries that code-vs-rest
+    // off-by-one (src/__tests__/syntax-rules-arity-offbyone.test.ts), so the gate need not.
+    const expansion = fn[TF_EXPAND](code, evalArgs);
+    // `expr` may be a promise (an async define-macro `__fn__`); await before evaluating.
+    let expr = expansion.expr;
+    if (is_promise(expr)) {
+      expr = yield expr;
+    }
+
+    // Data-marked expansion is literal data — no further evaluation.
+    if (is_data_marked(expr)) {
+      return expr;
+    }
+
+    // A hygiene `scope` (Syntax) evaluates the transcription in a fresh Resolver over that scope,
+    // still resolving builtins through the run's capability base (thread evalArgs.resolver's
+    // capabilities, NOT a glass re-derivation from the null-rooted merge env — under glass same
+    // globalRoot ⇒ byte-identical, D3). A scope-less expansion (fexpr) evaluates in the use-site
+    // ctx. Either way the expansion takes the PARENT's tail flag: a TCO-critical form rewritten
+    // through a macro (`when` → `(if test body)`) must keep its tail position, so form-returning
+    // gives a tail-position macro the same O(1) TCO as a special form (a transformer is Exp→Exp;
+    // it must never evaluate inside itself). A tail call is never a JS promise, so the post-yield
+    // promise check collapses past it safely.
+    const expansionCtx: EvalContext = expansion.scope
+      ? { ...ctx, resolver: new Resolver(expansion.scope, evalArgs.resolver.capabilities) }
+      : ctx;
+    let result = yield { call: evaluate(expr, expansionCtx), tail: true };
+    if (is_promise(result)) {
+      result = yield result;
+    }
+    return result;
+  }
+
+  // EVAL-ARG discipline: a head carrying `tf("apply")` (or a bare JS fn) is a procedure — its
+  // operands evaluate first. `is_applyable` subsumes the nominal `is_callable_value` (every
+  // ACallable declares the apply term), so the gate needs only `is_function || is_applyable`;
+  // the macro case already returned above (no `!is_macro` guard needed). A callable VALUE
+  // (ANativeProcedure — a first-class AValue, not a bare fn) enters the same block: it shares the
+  // arg-eval / bounce plumbing, and only the invocation primitive below branches (apply vs Reflect).
+  if (is_function(fn) || is_applyable(fn)) {
     const argsResult = yield { call: evaluateArgs(rest, nonTailCtx) };
     // evaluateArgs's generator return type is `unknown` at this yield site; narrow.
     invariant(Array.isArray(argsResult), "evaluateArgs must return array");
@@ -2948,81 +3009,6 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
 
     if (is_promise(result)) {
       return yield result;
-    }
-    return result;
-  }
-
-  if (is_macro(fn)) {
-    const useResolver = ctxResolver(ctx);
-    const evalArgs = {
-      // The macro's `this` is the use-site LEXICAL frame (a define-macro fexpr body
-      // runs with `env` as `this`; see Macro.invoke). Sourced FROM the resolver so
-      // `env`/`resolver` stay structurally synced, not coincidentally equal.
-      env: useResolver.env,
-      // The use-site resolver — the def-time Resolver a `Syntax` captures is what
-      // hygiene actually consults; this is the call-site one.
-      resolver: useResolver,
-      dynamic_env: ctx.dynamic_env,
-      use_dynamic: ctx.use_dynamic,
-      error: ctx.error,
-      // So the syntax-rules expander reads its `debug` option from ctx.
-      runCtx: ctx.runCtx,
-    };
-
-    // is_macro narrowed fn to Macro | Syntax; the is_syntax branch below splits them
-    // by their HONEST return shapes: Syntax.expand -> { expr, scope } (a form +
-    // hygiene scope), Macro.invoke -> SchemeValue (a form). No flag toggles the shape.
-    //
-    // `is_syntax(fn) ? code : rest`: syntax-rules patterns carry a keyword slot as their
-    // FIRST element, so the matcher (extract_patterns) needs the FULL form (`code`);
-    // define-macro fexprs want the keyword-stripped `rest`. Passing `rest` to both makes
-    // the keyword consume the first arg — an off-by-one breaking fixed-arity matching,
-    // arity discrimination, and ellipsis. See src/__tests__/syntax-rules-arity-offbyone.test.ts.
-    //
-    // STILL OPEN (deferred, tracked as the vector-pattern `it.fails` block): syntax-rules
-    // VECTOR patterns need a SchemeVector unwrap in matcher/expander; dotted-tail-after-
-    // ellipsis template, `_`-wildcard binding, let-syntax recursive hygiene.
-    //
-    // syntax-rules (Syntax) is FORM-RETURNING: `expand` returns `{ expr, scope }` (form +
-    // hygiene scope) with NO nested evaluation, yielded into THIS trampoline in tail
-    // position. A NESTED `run()` would nest one host-stack frame per iteration of a
-    // tail-looping macro and overflow; form-returning gives a tail-position macro the same
-    // O(1) TCO as a special form (a transformer is Exp→Exp; it must never evaluate inside itself).
-    if (fn instanceof Syntax) {
-      const expanded = fn.expand(code, evalArgs);
-      // The expansion evaluates in its hygiene scope (`expanded.scope`) but resolves
-      // builtins through the run's capability base — thread evalArgs.resolver's
-      // capabilities, NOT a glass re-derivation from the (post-cut: null-rooted) merge
-      // env. Under glass same globalRoot ⇒ byte-identical. (D3)
-      return yield {
-        call: evaluate(expanded.expr, {
-          ...ctx,
-          resolver: new Resolver(expanded.scope, evalArgs.resolver.capabilities),
-        }),
-        tail: true,
-      };
-    }
-
-    // ── define-macro (fexpr): invoke returns a FORM; evaluate it (already tail-proper) ──
-    let expansion = fn.invoke(rest, evalArgs, false);
-
-    if (is_promise(expansion)) {
-      expansion = yield expansion;
-    }
-
-    // Data-marked expansion needs no further evaluation.
-    if (is_data_marked(expansion)) {
-      return expansion;
-    }
-
-    // The expansion takes the PARENT's tail flag: a macro invoked in tail position must
-    // make its expansion tail too, else rewriting a TCO-critical form through a macro
-    // (e.g. `when` → `(if test body)`) silently loses TCO at the rewrite boundary. Mark
-    // pass-through so the collapse reaches through this dispatch (a tail call is never a
-    // JS promise, so the post-yield promise check is safe to collapse past).
-    let result = yield { call: evaluate(expansion, ctx), tail: true };
-    if (is_promise(result)) {
-      result = yield result;
     }
     return result;
   }

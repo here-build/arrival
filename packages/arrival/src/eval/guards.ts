@@ -33,7 +33,7 @@ export function is_macro(o: unknown): o is Macro | Syntax {
 // discipline travels with the value's terms, not its class. (`Syntax.Parameter`, the SRFI-139
 // wrapper, carries no term and is not a call head — it falls through to the non-callable door,
 // as it always structurally should.)
-export function is_expandable(o: unknown): boolean {
+export function is_expandable(o: unknown): o is Macro | Syntax {
   return typeof (o as Record<PropertyKey, unknown> | null | undefined)?.[TF_EXPAND] === "function";
 }
 
