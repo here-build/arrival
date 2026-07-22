@@ -24,7 +24,7 @@
  * dict-literal syntax business entirely.
  */
 import { CLASS } from "../../well-known-symbols.js";
-import { CONSTANT_CTX, isParseCtx, type RunContext } from "../../run/RunContext.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { egressContainerProxy } from "../../membrane/egress-proxy.js";
 import { APair } from "./APair.js";
@@ -175,13 +175,12 @@ export class ADict extends AValue {
    * E-DICT-DUP-KEY on any static-key collision before this ever runs, so ADict's own
    * constructor invariant (no duplicate fold-name) is trivially satisfied.
    *
-   * `ctx` discriminates the two mouths: the READER passes a parse ctx (the `{`'s
-   * SourceLocation, threaded straight onto the minted ADict's own `.location` — see
-   * AValue.ts); the evaluator's quasiquote re-instantiation defaults to CONSTANT_CTX
-   * (deferred: threading its live `ctx.runCtx` — until then the default leaves that path's
-   * source identity unset, exactly as when unthreaded).
+   * `loc` discriminates the two mouths: the READER passes the `{`'s own SourceLocation,
+   * threaded straight onto the minted ADict's own `.location` (see AValue.ts); the
+   * evaluator's quasiquote re-instantiation omits it, leaving that path's source
+   * identity unset, exactly as when unthreaded.
    */
-  static fromLiteralForms(forms: readonly SchemeValue[], ctx: RunContext = CONSTANT_CTX): DictLiteralNode {
+  static fromLiteralForms(forms: readonly SchemeValue[], loc?: SourceLocation): DictLiteralNode {
     const pairs: Array<readonly [DictKey, SchemeValue]> = [];
     for (let i = 0; i + 1 < forms.length; i += 2) {
       const keyDatum = forms[i];
@@ -189,12 +188,7 @@ export class ADict extends AValue {
         pairs.push([keyDatum, forms[i + 1]]);
       }
     }
-    return new ADict(
-      pairs,
-      EMPTY_PROVENANCE,
-      isParseCtx(ctx) ? ctx.location : undefined,
-      forms,
-    ) as DictLiteralNode;
+    return new ADict(pairs, EMPTY_PROVENANCE, loc, forms) as DictLiteralNode;
   }
 
   /** The only accessor reachable from `@`/`dict-ref` today — those primitives only

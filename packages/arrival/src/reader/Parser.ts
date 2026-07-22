@@ -29,7 +29,6 @@
  * Reader extensions (the quote family, the `specials` registry) expand at PARSE time.
  */
 import { DatumReference } from "./DatumReference.js";
-import { makeParseCtx } from "../run/RunContext.js";
 import { foldcase_string } from "./foldcase.js";
 import * as specials from "./specials.js";
 import { is_nil } from "../eval/guards.js";
@@ -477,13 +476,13 @@ export class Parser {
         "E-DICT-ODD-ARITY",
       );
     }
-    return ADict.fromLiteralForms(elements, makeParseCtx(loc));
+    return ADict.fromLiteralForms(elements, loc);
   }
 
   async read_value(loc?: SourceLocation) {
     const token = await this.read();
     invariant(token !== eof, "Parser: Expected token eof found");
-    return parse_argument(token, this._strict, makeParseCtx(loc));
+    return parse_argument(token, this._strict, loc);
   }
 
   is_comment(token: string) {

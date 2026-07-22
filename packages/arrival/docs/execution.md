@@ -51,10 +51,10 @@ The test for where a fact belongs: does it vary between concurrent runs (→ Run
 
 *Enforcement sites: `run/RunContext.ts`, `heap-budget.ts`, `eval/generator-exec.ts`.*
 
-## 2. CTX-SPECIES — live, constant, parse
+## 2. CTX-SPECIES — live, constant
 
-Three `RunContext` species exist; only the first bears run-state, and the charter (§1) rests
-on the other two being run-NEUTRAL.
+Two `RunContext` species exist; only the first bears run-state, and the charter (§1) rests
+on the other being run-NEUTRAL.
 
 - **Live-run** — minted by `new RunContext(...)` per `exec()`. Carries strict/meter/signal and any
   armed subset of the five channels. This is the only species a run mutates through (the meter's
@@ -64,15 +64,17 @@ on the other two being run-NEUTRAL.
   everything constructed at bootstrap before a run exists. `strict=false`, no meter, **all five
   channels `undefined`** — and that is correct, not a gap: a note or effect is addressed to ONE
   run, so a context outliving every run has nowhere to put one. **Nobody is listening.**
-- **Parse family** (`PARSE_CTX` / `makeParseCtx`, `origin: "parse"`) — run-neutral like
-  `CONSTANT_CTX`, but carrying the `SourceLocation` the Parser computes per datum. For leaf
-  literals (symbols, strings, numbers, chars, vectors) this ctx channel is their FIRST and only
-  source identity (only `APair` has a location slot). Run-neutral is a STATED fact here
-  (`origin: "parse"`), not a fallback — a parsed value minted before a run can never carry one
-  run's state into another.
 
-Because the constant and parse species are run-neutral by charter, a value minted before or
-outside a run drops the channels — never a leak.
+Because the constant species is run-neutral by charter, a value minted before or outside a run
+drops the channels — never a leak.
+
+**Parse-time source identity is not a ctx species.** It used to be (a retired `ParseContext`
+subclass / `PARSE_CTX` / `makeParseCtx`): a one-hop envelope the Parser minted per datum purely
+to hand a `SourceLocation` to the leaf minter one call later, which unwrapped `.location` and
+stamped it on the value — the ctx itself was discarded immediately after and nothing else ever
+read `origin` or a ctx's `.location`. It is now a plain `loc?: SourceLocation` argument threaded
+directly from the Parser through `parse_argument`/`ADict.fromLiteralForms` to the leaf mints,
+landing on the VALUE's own `.location` field (AValue) — no ctx involved, and no third species.
 
 *Enforcement sites: `run/RunContext.ts`.*
 

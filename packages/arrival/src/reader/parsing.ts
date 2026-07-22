@@ -2,7 +2,7 @@
 // prefixes), string literals, characters, and symbols. No I/O, no lexer state — given a token string,
 // returns the boxed value. Numeric-grammar helpers originate from the LIPS reader.
 import invariant from "tiny-invariant";
-import { CONSTANT_CTX, isParseCtx, type RunContext } from "../run/RunContext.js";
+import { CONSTANT_CTX } from "../run/RunContext.js";
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
@@ -11,7 +11,7 @@ import { AInexact } from "../values/primitives/AInexact.js";
 import { EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
 import { complexDoor } from "../values/numbers.js";
 import { mintExact } from "../values/mint-numeric.js";
-import { ParseError, strictGate } from "../errors.js";
+import { ParseError, strictGate, type SourceLocation } from "../errors.js";
 import {
   char_re,
   complex_re,
@@ -140,16 +140,15 @@ function num_pre_parse(arg: string): {
 }
 
 // The exported numeric parsers are DUAL-USE (the reader's leaf path AND the live
-// `string->number` in env/r7rs/strings.ts) — hence the optional trailing `ctx`: the
-// reader passes its parse ctx (source identity for the literal); the runtime caller
-// omits it and defaults to CONSTANT_CTX (deferred: threading its own ctx).
-export function parse_rational(arg: string, radix = 10, ctx: RunContext = CONSTANT_CTX): AExact | AInexact {
+// `string->number` in env/r7rs/strings.ts) — hence the optional trailing `loc`: the
+// reader passes the literal's own source span; the runtime caller omits it (a
+// runtime-computed number has no source span of its own).
+export function parse_rational(arg: string, radix = 10, loc?: SourceLocation): AExact | AInexact {
   const parse = num_pre_parse(arg);
   const parts = parse.number!.split("/");
   const r = parse.radix || radix;
   const numBig = parseBigInt(parts[0], r);
   const denomBig = parseBigInt(parts[1], r);
-  const loc = isParseCtx(ctx) ? ctx.location : undefined;
   if (parse.inexact) {
     return new AInexact(Number(numBig) / Number(denomBig), EMPTY_PROVENANCE, loc);
   }
@@ -157,7 +156,7 @@ export function parse_rational(arg: string, radix = 10, ctx: RunContext = CONSTA
   // must throw, not fall through to `parse_symbol` —
   // docs/design-history/arrival-one-number-rework.md §1's named hazard).
   return mintExact(
-    ctx,
+    CONSTANT_CTX,
     toSafeExactComponent(numBig, arg),
     toSafeExactComponent(denomBig, arg),
     undefined,
@@ -166,17 +165,23 @@ export function parse_rational(arg: string, radix = 10, ctx: RunContext = CONSTA
   );
 }
 
-export function parse_integer(arg: string, radix = 10, ctx: RunContext = CONSTANT_CTX): AExact | AInexact {
+export function parse_integer(arg: string, radix = 10, loc?: SourceLocation): AExact | AInexact {
   const parse = num_pre_parse(arg);
   const r = parse.radix || radix;
-  const loc = isParseCtx(ctx) ? ctx.location : undefined;
   if (parse.inexact) {
     return new AInexact(Number.parseInt(parse.number!, r), EMPTY_PROVENANCE, loc);
   }
-  return mintExact(ctx, toSafeExactComponent(parseBigInt(parse.number!, r), arg), 1, undefined, "parse integer", loc);
+  return mintExact(
+    CONSTANT_CTX,
+    toSafeExactComponent(parseBigInt(parse.number!, r), arg),
+    1,
+    undefined,
+    "parse integer",
+    loc,
+  );
 }
 
-function parse_character(arg: string, ctx: RunContext): ACharacter {
+function parse_character(arg: string, loc?: SourceLocation): ACharacter {
   let m = arg.match(/#\\x([0-9a-f]+)$/i);
   let char: string | undefined;
   if (m) {
@@ -189,21 +194,20 @@ function parse_character(arg: string, ctx: RunContext): ACharacter {
     }
   }
   invariant(char !== undefined, `Parse: invalid character in ${arg}`);
-  return new ACharacter(char, EMPTY_PROVENANCE, isParseCtx(ctx) ? ctx.location : undefined);
+  return new ACharacter(char, EMPTY_PROVENANCE, loc);
 }
 
 function string_to_float(str: string): number {
   return Number.parseFloat(str);
 }
 
-export function parse_float(arg: string, ctx: RunContext = CONSTANT_CTX): AExact | AInexact {
+export function parse_float(arg: string, loc?: SourceLocation): AExact | AInexact {
   const parse = num_pre_parse(arg);
   const value = string_to_float(parse.number!);
   const simple_number = (parse.number!.match(/\.0$/) || !/\./.test(parse.number!)) && !/e/i.test(parse.number!);
-  const loc = isParseCtx(ctx) ? ctx.location : undefined;
   if (!parse.inexact) {
     if (parse.exact && simple_number) {
-      return mintExact(ctx, assertSafeExactComponent(Math.round(value), arg), 1, undefined, "parse float", loc);
+      return mintExact(CONSTANT_CTX, assertSafeExactComponent(Math.round(value), arg), 1, undefined, "parse float", loc);
     }
     // An EXPONENT numeral (e.g. "1e2") defaults to INEXACT regardless of magnitude
     // (R7RS §7.1.1: only a decimal-point-free, exponent-free numeral defaults exact) —
@@ -217,7 +221,7 @@ export function parse_float(arg: string, ctx: RunContext = CONSTANT_CTX): AExact
   if (parse.exact) {
     const floatVal = value;
     if (Number.isInteger(floatVal)) {
-      return mintExact(ctx, assertSafeExactComponent(Math.round(floatVal), arg), 1, undefined, "parse float", loc);
+      return mintExact(CONSTANT_CTX, assertSafeExactComponent(Math.round(floatVal), arg), 1, undefined, "parse float", loc);
     }
     const str = floatVal.toString();
     const decimalIndex = str.indexOf(".");
@@ -227,7 +231,7 @@ export function parse_float(arg: string, ctx: RunContext = CONSTANT_CTX): AExact
       const num = Number(str.replace(".", "").replace("-", ""));
       const sign = floatVal < 0 ? -1 : 1;
       return mintExact(
-        ctx,
+        CONSTANT_CTX,
         assertSafeExactComponent(sign * num, arg),
         assertSafeExactComponent(denom, arg),
         undefined,
@@ -235,7 +239,7 @@ export function parse_float(arg: string, ctx: RunContext = CONSTANT_CTX): AExact
         loc,
       );
     }
-    return mintExact(ctx, assertSafeExactComponent(Math.round(floatVal), arg), 1, undefined, "parse float", loc);
+    return mintExact(CONSTANT_CTX, assertSafeExactComponent(Math.round(floatVal), arg), 1, undefined, "parse float", loc);
   }
   return new AInexact(value, EMPTY_PROVENANCE, loc);
 }
@@ -250,7 +254,7 @@ export function parse_complex(_arg: string, _radix = 10): AExact | AInexact {
   return complexDoor();
 }
 
-function parse_string(string: string, ctx: RunContext): AString {
+function parse_string(string: string, loc?: SourceLocation): AString {
   // handle non JSON escapes and skip unicode escape \u (even partial)
   string = string
     .replaceAll(/\\x([0-9a-f]+);/gi, function (_, hex) {
@@ -271,7 +275,7 @@ function parse_string(string: string, ctx: RunContext): AString {
     throw new ParseError(`Invalid string literal, unclosed: ${m[2]}`, undefined, "E-STRING-UNCLOSED");
   }
   try {
-    const str = new AString(JSON.parse(string), EMPTY_PROVENANCE, isParseCtx(ctx) ? ctx.location : undefined);
+    const str = new AString(JSON.parse(string), EMPTY_PROVENANCE, loc);
     str.freeze();
     return str;
   } catch (error) {
@@ -356,7 +360,7 @@ function splitBarSegments(token: string): { text: string; quoted: boolean }[] {
   return segments;
 }
 
-function parse_symbol(arg: string, ctx: RunContext): ASymbol {
+function parse_symbol(arg: string): ASymbol {
   if (!arg.includes("|")) {
     return new ASymbol(arg);
   }
@@ -391,7 +395,7 @@ const constants: Record<string, SchemeValue> = {
 // Constants first, then string, then the `#`-prefixed family (char), then the numeric tower;
 // anything that falls through is a symbol. Order matters — the cheap `Object.hasOwn` and prefix tests
 // gate the expensive numeric regexes.
-export function parse_argument(arg: string, strict = false, ctx: RunContext = CONSTANT_CTX): SchemeValue {
+export function parse_argument(arg: string, strict = false, loc?: SourceLocation): SchemeValue {
   // Strict (the R7RS portability control) rejects the loose-mode `#void`/`#null`
   // reader literals — a program that writes them is not portable to a stock Scheme.
   // The VALUES (void/nil) still exist; only the non-standard readable LITERAL is gated.
@@ -401,41 +405,41 @@ export function parse_argument(arg: string, strict = false, ctx: RunContext = CO
       { op: "reader-literal", rule: `\`${arg}' has no R7RS reader syntax — it is a loose-mode-only literal` },
     );
   }
-  // Constants stay SHARED singletons (#t/#f/±inf/nan) — deliberately outside the parse-ctx
-  // family: per-occurrence identity would break the shared-by-reference-forever design.
+  // Constants stay SHARED singletons (#t/#f/±inf/nan) — deliberately location-less:
+  // per-occurrence identity would break the shared-by-reference-forever design.
   if (Object.hasOwn(constants, arg)) {
     return constants[arg];
   }
   if (/^"[\s\S]*"$/.test(arg)) {
-    return parse_string(arg, ctx);
+    return parse_string(arg, loc);
   } else if (arg[0] === "#") {
     if (char_re.test(arg)) {
-      return parse_character(arg, ctx);
+      return parse_character(arg, loc);
     }
     // characters with more than one codepoint
     const m = arg.match(/#\\(.+)/);
     if (m && ucs2decode(m[1]).length === 1) {
-      return parse_character(arg, ctx);
+      return parse_character(arg, loc);
     }
   }
   if (/[0-9a-f]|[+-]i/i.test(arg)) {
     if (arg.match(int_re)) {
-      return parse_integer(arg, 10, ctx);
+      return parse_integer(arg, 10, loc);
     } else if (float_re.test(arg)) {
-      return parse_float(arg, ctx);
+      return parse_float(arg, loc);
     } else if (arg.match(rational_re)) {
-      return parse_rational(arg, 10, ctx);
+      return parse_rational(arg, 10, loc);
     } else if (arg.match(complex_re)) {
       return parse_complex(arg);
     }
   }
   if (/^#[iexobd]/.test(arg)) throw new ParseError(`Invalid numeric constant: ${arg}`, undefined, "E-NUMERIC-CONSTANT");
-  // SYMBOLS deliberately stay OFF the parse-ctx channel (CONSTANT_CTX, byte-identical
-  // interning): ASymbol's flyweight table is keyed BY ctx, so a per-occurrence parse ctx
-  // would mint per-occurrence instances — and raw reference identity on interned symbols
-  // is load-bearing: memq/assq compare with `===` (env/r7rs/lists.ts), and the specials
-  // quote-family table shares instances with parsed source through the CONSTANT_CTX
-  // table. Deferred: per-occurrence symbol spans are blocked on those `===` sites
-  // delegating to `eq()` (structural-equal.ts, the codebase's own name-comparing eq?).
-  return parse_symbol(arg, CONSTANT_CTX);
+  // SYMBOLS deliberately stay LOCATION-LESS (byte-identical interning off CONSTANT_CTX's
+  // flyweight table): a per-occurrence span would mint per-occurrence instances — and raw
+  // reference identity on interned symbols is load-bearing: memq/assq compare with `===`
+  // (env/r7rs/lists.ts), and the specials quote-family table shares instances with parsed
+  // source through that same table. Deferred: per-occurrence symbol spans are blocked on
+  // those `===` sites delegating to `eq()` (structural-equal.ts, the codebase's own
+  // name-comparing eq?).
+  return parse_symbol(arg);
 }

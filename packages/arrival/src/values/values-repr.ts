@@ -130,11 +130,11 @@ function isPendingDatum(value: SchemeValue | PromiseLike<SchemeValue>): value is
 // falls straight to the identity return).
 // AmbientRuntime.get does not call this — a raw JS scalar found in env storage is an
 // invariant DOOR there, never a silent re-box. Remaining callers are the reader/
-// parse-time and pending-entry settle paths (PARSE_CTX territory) + the public barrel.
+// parse-time and pending-entry settle paths + the public barrel.
 // ----------------------------------------------------------------------
-// `ctx` is the caller's identity claim for the minted box (a parse ctx on parse-time
-// settle paths, a live runCtx where one is in hand); the CONSTANT_CTX default keeps
-// existing callers (pending-entry settle, the public barrel) byte-identical.
+// `ctx` is the caller's identity claim for the minted box (a live runCtx where one is
+// in hand); the CONSTANT_CTX default keeps existing callers (pending-entry settle, the
+// public barrel) byte-identical.
 export function box(object: unknown, ctx: RunContext = CONSTANT_CTX): SchemeValue {
   switch (typeof object) {
     case "string":

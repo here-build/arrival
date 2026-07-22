@@ -8,7 +8,7 @@
  * type itself is unchanged and stays the currency of every `runCtx` op parameter below.
  *
  * The model this type realizes — why run-state is DATA-LOCAL (hermetic exec on one shared
- * isolate), the three ctx species (live-run / CONSTANT_CTX / parse), and the five channels'
+ * isolate), the two ctx species (live-run / CONSTANT_CTX), and the five channels'
  * arm-subset-wise `X | undefined ⇒ facility off` rule — is docs/execution.md §HERMETIC,
  * §CTX-SPECIES, §CHANNELS. This file is their enforcement site; the per-field docs below are
  * the landings those sections name.
@@ -17,13 +17,21 @@
  * (→ a global singleton — nil/#t/#f/eof carry no run-state, car-of-nil reads strict off the
  * threaded context), or within one run by call depth (→ a dynamic-extent holder — the
  * exception-handler stack, the call-site)? Only the first belongs on RunContext.
+ *
+ * NOTE — parse-time source identity does NOT live here. It used to (the retired
+ * `ParseContext`/`PARSE_CTX`/`makeParseCtx` family: a one-hop envelope the Parser minted
+ * per datum, wrapping a `SourceLocation` purely to hand it to the leaf minter one call
+ * later, which unwrapped `.location` and stamped it on the value — ctx discarded
+ * immediately after). Nothing else ever read `origin` or a ctx's `.location`, so the
+ * envelope was retired: a `SourceLocation` now threads as a plain `loc?: SourceLocation`
+ * argument straight from the Parser to `parse_argument`/`ADict.fromLiteralForms` to the
+ * leaf mints, landing on the VALUE's own `.location` field (AValue) — no ctx involved.
  */
 
 import type { RunCache } from "./run-cache.js";
 import type { DisplaySink, NoteSink } from "./note-sink.js";
 import type { EffectLog } from "./effect-log.js";
 import type { ReadGuard } from "./read-guard.js";
-import type { SourceLocation } from "../errors.js";
 import { disposeRunContext } from "./run-lifecycle.js";
 
 /** The per-run, per-CAPABILITY resource store (1d) — a capability's lazily-produced `Resources`
@@ -79,19 +87,10 @@ export class RunContext {
   /** The run's display channel (note-sink.ts) — where the MCP runner's `display` affordance records
    *  what a model asked to see. `undefined` ⇒ no display verb is bound (arrival binds none). */
   readonly display: DisplaySink | undefined;
-  /** Origin discriminant. `"parse"` marks the parse-time family (`PARSE_CTX`/`makeParseCtx`,
-   *  the {@link ParseContext} subclass): run-neutral like CONSTANT_CTX, but a stated fact rather
-   *  than a fallback. Absent on live-run ctxs and CONSTANT_CTX. */
-  readonly origin?: "parse";
-  /** Source identity for parse-minted values — the `SourceLocation` the Parser computes per datum.
-   *  Present only on the parse family, and `undefined` there for synthesized/location-less values.
-   *  Leaf literals (no location slot) get source identity through here alone; `APair.setLocation`
-   *  is a derived MIRROR the Parser also writes, so `[LOCATION]`-slot readers stay untouched. */
-  readonly location?: SourceLocation;
   /** 1d: this run's per-capability resource store (see {@link CapabilityResourceStore}). The
    *  `arrival/tagless-final/apply` dispatch wrapper (via makeCallCtx) reads a value's resources
    *  from here, keyed by the value's owning capability. `undefined` on a RunContext minted with no
-   *  producer (the bare-`env` exec path, CONSTANT_CTX, PARSE_CTX) — a resource-reading verb under
+   *  producer (the bare-`env` exec path, CONSTANT_CTX) — a resource-reading verb under
    *  such a run sees `this.resources === undefined`, same as a resource-less capability. */
   readonly capabilityResources?: CapabilityResourceStore;
 
@@ -107,10 +106,10 @@ export class RunContext {
       notes?: NoteSink;
       display?: DisplaySink;
     } = {},
-    /** internal-only: `true` for the run-NEUTRAL singletons (CONSTANT_CTX, the ParseContext
-     *  family) — they get no capabilityResources store (see that field's doc). Never pass this
-     *  from an ordinary mint site; it exists only so CONSTANT_CTX/ParseContext can share this
-     *  constructor's defaulting logic instead of duplicating it. */
+    /** internal-only: `true` for the run-NEUTRAL singleton (CONSTANT_CTX) — it gets no
+     *  capabilityResources store (see that field's doc). Never pass this from an ordinary
+     *  mint site; it exists only so CONSTANT_CTX can share this constructor's defaulting
+     *  logic instead of duplicating it. */
     _noResourceStore = false,
   ) {
     this.strict = opts.strict ?? false;
@@ -131,7 +130,7 @@ export class RunContext {
    *  capability's per-run resources), so `await using runCtx = new RunContext(...)` disposes it at
    *  scope exit. Delegates to {@link disposeRunContext} — the SAME idempotent function a REPL host
    *  or `exec()`'s owned-runCtx `finally` calls explicitly, so all three teardown paths share one
-   *  guard. A uniform prototype method — `CONSTANT_CTX`/`PARSE_CTX` inherit it too, but
+   *  guard. A uniform prototype method — `CONSTANT_CTX` inherits it too, but
    *  `disposeRunContext` is registry-keyed and idempotent, so disposing a singleton nothing ever
    *  registered against is simply a no-op. */
   async [Symbol.asyncDispose](): Promise<void> {
@@ -147,46 +146,3 @@ export class RunContext {
  * minted here can never carry one run's state into another.
  */
 export const CONSTANT_CTX: RunContext = Object.freeze(new RunContext({}, true));
-
-/**
- * The parse-origin context family (docs/execution.md §CTX-SPECIES) — CONSTANT_CTX plus
- * `origin: "parse"` and the per-datum `SourceLocation`, which for leaf literals (symbols,
- * strings, numbers, chars, vectors, bytevectors, dicts) is their FIRST source identity (only
- * APair has a location slot; every other node kind's source identity lives on the ctx channel).
- *
- * CODE CONSEQUENCE: per-node ctxs mean parsed symbols no longer share CONSTANT_CTX's flyweight
- * intern table — each occurrence is its own instance (per-occurrence source identity and a
- * shared interned instance are mutually exclusive). Sound because eq?/eqv?/equals compare
- * `__name__`, never reference.
- */
-export class ParseContext extends RunContext {
-  readonly origin: "parse";
-  readonly location: SourceLocation | undefined;
-
-  constructor(location: SourceLocation | undefined) {
-    super({}, true);
-    this.origin = "parse";
-    this.location = location;
-  }
-}
-
-/** The shared LOCATION-LESS parse ctx — for synthesized or sourceless parse values
- *  (`makeParseCtx(undefined)` returns this singleton; no per-node allocation when
- *  there is no location to carry). */
-export const PARSE_CTX: ParseContext = Object.freeze(new ParseContext(undefined));
-
-/**
- * Mint the parse ctx for one parsed node. Location-bearing nodes get a small frozen
- * per-node ctx (frozen because parsed AST — and therefore its ctx — is shared across
- * runs); location-less ones share the `PARSE_CTX` singleton.
- */
-export function makeParseCtx(location: SourceLocation | undefined): ParseContext {
-  if (location === undefined) return PARSE_CTX;
-  return Object.freeze(new ParseContext(location));
-}
-
-/** Narrowing read for the parse family: "was v minted by the reader, and where" — a door
- *  can point at the exact leaf via `ctx.location`. */
-export function isParseCtx(ctx: RunContext): ctx is ParseContext {
-  return ctx.origin === "parse";
-}
