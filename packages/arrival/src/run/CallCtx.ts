@@ -151,6 +151,28 @@ function resolveCapabilityResources(runCtx: RunContext, capability: object): unk
 }
 
 /**
+ * The sanctioned door for a caller OUTSIDE a real verb dispatch that still needs to reach a
+ * capability's per-run resource bag — currently arrival/loader's `require/register-extension`
+ * preludeOnly MACRO (loader/loader-extensions.ts). A macro is `TF_EXPAND`-dispatched
+ * (`Macro.invoke`), never through `makeCallCtx`, so it never gets a `this.resources` of its
+ * own — but it receives `ctx.runCtx` (`MacroInvokeContext.runCtx`, threaded by the evaluator at
+ * every macro-expand site), which is enough to reach the SAME bag a real dispatch of the owning
+ * capability's OTHER verbs would read as `this.resources` moments later — one bag, one cache,
+ * never a second divergent store. Delegates to the exact get-or-produce logic `makeCallCtx`
+ * itself uses ({@link resolveCapabilityResources}) — a cache MISS lazily spawns the bag (calling
+ * `capability["arrival/get-resources"]`) and a cache HIT returns the same reference a prior
+ * `this.resources` read (or a prior call here) already produced.
+ *
+ * Callers on a run with no per-capability configuration table (`runCtx.capabilityConfigurations`
+ * undefined — the bare-`env` glass path with no ambient behind it) MUST check for that first:
+ * a capability whose `resources` factory destructures its config unconditionally will throw
+ * when handed `undefined` here, same as any other resource-producing call under such a run.
+ */
+export function getCapabilityResources(runCtx: RunContext, capability: object): unknown {
+  return resolveCapabilityResources(runCtx, capability);
+}
+
+/**
  * The sanctioned DIRECT-CALL door (docs/execution.md §CALLCTX): tests and host code invoking a
  * verb impl/wrapper outside a real dispatch (`run.call(testCallCtx(), …args)`) build a REAL
  * `CallCtx` over `CONSTANT_CTX` here rather than leaning on `this` optionality — `CONSTANT_CTX`

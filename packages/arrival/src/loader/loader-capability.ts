@@ -44,7 +44,14 @@ import invariant from "tiny-invariant";
 import { RequireCycleError, RequireResolverError } from "../errors.js";
 
 import { bindValue, AmbientRuntime, type AmbientValue, mintFrame, isAmbientRuntime } from "../env/AmbientRuntime.js";
-import { lookupExtensionResolver, makeRegisterExtensionMacro } from "./loader-extensions.js";
+import {
+  legacyExtensionRegistry,
+  lookupExtensionResolverIn,
+  makeRegisterExtensionMacro,
+  type ExtensionResolverRegistry,
+} from "./loader-extensions.js";
+import type { RunContext } from "../run/RunContext.js";
+import { getCapabilityResources } from "../run/CallCtx.js";
 import {
   dataToScheme,
   dirOf,
@@ -126,6 +133,14 @@ interface LoaderRunResources {
    *  `undefined` only when neither key is armed — unreachable from `require`'s impl, whose
    *  `requiresConfig` door already gated that case at bind. */
   readonly loader: Loader | undefined;
+  /** STAGE B4 — THIS run's file-suffix → resolver-verb-name registry (§LOADER's original
+   *  resource-registry design, restored): fresh, EMPTY per RunContext (this factory runs once
+   *  per run), populated ONLY from a prelude via `require/register-extension` (preludeOnly —
+   *  post-prelude registration is lexically impossible, by construction). Read by `require`'s
+   *  own impl (below) and written by the registration macro — see `loaderRegistryOf`, this
+   *  file, and loader-extensions.ts's header for the vocabulary-path-vs-legacy-ambient-path
+   *  split this field only ever answers the FORMER half of. */
+  readonly extensionResolvers: ExtensionResolverRegistry;
   /** The per-live-env `RuntimeAssembler` backing `(require/extension …)`. The assembler binds to
    *  the LIVE env, which the resource meets only at call time (ctx channel), so it is created
    *  lazily on first touch. Idempotent per env identity (one lowered capability normally applies
@@ -136,6 +151,30 @@ interface LoaderRunResources {
   notifiedRequireCache: boolean;
   notifiedAssembler: RuntimeAssembler<RunEnv> | undefined;
   [Symbol.asyncDispose](): Promise<void>;
+}
+
+/** Which extension-resolver registry a given `runCtx` implies (STAGE B4) — the ONE decision
+ *  point `require`'s lookup and `require/register-extension`'s write both defer to, so they can
+ *  never disagree:
+ *   - `runCtx.vocabulary !== undefined` ⇒ this run was minted by `env/assemble-run.ts`'s
+ *     `assembleRun` (the vocabulary path, the exec default) — its prelude pass threads THIS
+ *     SAME `runCtx` through every prelude form (`generator-exec.ts`'s `preludeEvalScheme`), so
+ *     a registration during the prelude and a `require` dispatch during program code both
+ *     resolve `this`'s / `ctx.runCtx`'s resources off the identical `RunContext`. Read (or
+ *     lazily spawn, on first touch) THIS run's own `LoaderRunResources.extensionResolvers` bag
+ *     via `getCapabilityResources` — the SAME get-or-produce cache a real dispatch's
+ *     `this.resources` would hit.
+ *   - otherwise (ambient/glass) ⇒ this run's prelude — if any ran at all — baked at
+ *     ASSEMBLY time (`lower()`/`assembleEnv`), through a throwaway internal RunContext with no
+ *     `capabilityConfigurations` table; calling `getCapabilityResources` under such a run would
+ *     throw (the resources factory destructures `config` unconditionally). Fall back to the
+ *     legacy process-global table (`loader-extensions.ts`'s `legacyExtensionRegistry`) —
+ *     BYTE-IDENTICAL to pre-B4 behavior: same table, same lifetime, same tests. See
+ *     loader-extensions.ts's file header for why this bridge cannot (yet) become per-run too. */
+function loaderRegistryOf(runCtx: RunContext): ExtensionResolverRegistry {
+  if (runCtx.vocabulary === undefined) return legacyExtensionRegistry();
+  const resources = getCapabilityResources(runCtx, arrivalLoaderCapability) as LoaderRunResources;
+  return resources.extensionResolvers;
 }
 
 // Explicit `<any, any>`: TS's declaration-emit (this package builds `--build`/composite) can't
@@ -201,6 +240,7 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
         dirStack: [(config as { dirname?: string }).dirname ?? ""],
       },
       loader: loader ?? (fs ? makeFsLoader(fs) : undefined),
+      extensionResolvers: new Map(),
       getOrCreateAssembler(env: RunEnv): RuntimeAssembler<RunEnv> {
         if (assembler === undefined || boundEnv !== env) {
           assembler = createRuntimeAssembler(env);
@@ -222,11 +262,15 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
   symbols: (symbol) => ({
     // Assembly-time-only MACRO (§LOADER / §PRELUDE): callable from every later-applied
     // capability's prelude, unbound everywhere at runtime. MACRO so the resolver name is
-    // unevaluated — see makeRegisterExtensionMacro.
+    // unevaluated — see makeRegisterExtensionMacro. `loaderRegistryOf` is referenced here
+    // (module scope, this capability's OWN definition) before `arrivalLoaderCapability`'s
+    // `const` binding finishes initializing — safe: the reference resolves lazily, inside a
+    // closure `loaderRegistryOf` returns, not invoked until a REAL macro expansion long after
+    // module load completes (ordinary forward-closure-over-const, not a TDZ read).
     "require/register-extension": {
       kind: "macro" as const,
       name: "require/register-extension",
-      macro: makeRegisterExtensionMacro(),
+      macro: makeRegisterExtensionMacro(loaderRegistryOf),
       preludeOnly: true,
     },
 
@@ -303,14 +347,15 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
           const load = (async (): Promise<{ value: SchemeVal }> => {
             const contents = await loader.read(path);
             // Registry overlay: a capability-registered resolver for this suffix wins over the
-            // loader's built-in table. The registry stores the resolver verb's NAME (process-
-            // global), resolved against THIS env (late-bind), so a resource-armed resolver (e.g.
-            // `.prompt` → `prompt/compile`) uses THIS env's resource. If the suffix is registered
-            // but the verb is NOT bound in this env (a scope that didn't root the owning
-            // capability), resolution FALLS THROUGH to the built-in table; once a suffix is
-            // removed from `defaultResolvers`, that fallthrough errors (no handler), which IS the
-            // scoping guarantee (you must root the capability).
-            const resolverName = lookupExtensionResolver(path);
+            // loader's built-in table. The registry stores the resolver verb's NAME — THIS run's
+            // own bag on the vocabulary path, the legacy process-global table otherwise
+            // (`loaderRegistryOf`, above) — resolved against THIS env (late-bind), so a
+            // resource-armed resolver (e.g. `.prompt` → `prompt/compile`) uses THIS env's
+            // resource. If the suffix is registered but the verb is NOT bound in this env (a
+            // scope that didn't root the owning capability), resolution FALLS THROUGH to the
+            // built-in table; once a suffix is removed from `defaultResolvers`, that fallthrough
+            // errors (no handler), which IS the scoping guarantee (you must root the capability).
+            const resolverName = lookupExtensionResolverIn(loaderRegistryOf(this.runCtx), path);
             // The COMPOSED lookup (scope ?? capabilities), non-throwing: a capability-registered
             // resolver verb lives on the capability base under the cut, where an env-chain-only
             // read (`env.get`) would miss it.
@@ -463,7 +508,7 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
             "require/extension: the run env is not an arrival AmbientRuntime — a mid-run prelude scope must be minted off a real frame to receive bindings.",
           );
           const preludeScope = mintFrame(env, `prelude/${name}`);
-          bindValue(preludeScope, "require/register-extension", makeRegisterExtensionMacro());
+          bindValue(preludeScope, "require/register-extension", makeRegisterExtensionMacro(loaderRegistryOf));
           await assembler.require(pack, {
             // The kernel's bind-target face over the same frame (PreludeBindTarget is the
             // `.set`-only shim shape; the frame does not carry `set`).
