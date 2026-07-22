@@ -1,46 +1,32 @@
 /**
  * Public `exec`/`parse` entry: bridges the reader (leaf reader/parse.ts,
- * upstream-LIPS-derived) to the generator evaluator. Self-bootstraps the
- * runtime on first use, drives each top-level form through `run()`.
+ * upstream-LIPS-derived) to the generator evaluator. Every run resolves through the
+ * self-hosted `Vocabulary` (env/vocabulary.ts + env/base-roster.ts, Stage C Cut 2's THE
+ * LINCHPIN) — there is no realm-parented ambient anymore (Stage C Cut 3b: the massacre —
+ * docs/plans/stage-c-corpse-deletion.md). Drives each top-level form through `run()`.
  *
  * Usage:
  *   import { exec } from "./generator-exec.js";
  *   const results = await exec("(+ 1 2 3)");  // Returns [6]
- *   const results = await exec("(+ 1 2)", { env: myEnv });
+ *   const results = await exec("(+ 1 2)", { capabilities: [myCapability] });
  */
 
-import { AmbientRuntime, mintFrame, mintPlainFrame, isAmbientRuntime, bindValue } from "../env/AmbientRuntime.js";
-import { user_env, global_env } from "../env/env-roots.js";
+import { AmbientRuntime, mintPlainFrame, isAmbientRuntime, bindValue } from "../env/AmbientRuntime.js";
 import { buildVocabulary, type Vocabulary } from "../env/vocabulary.js";
 import { assembleRun } from "../env/assemble-run.js";
 import { BASE_ROSTER } from "../env/base-roster.js";
+import { inferenceEnv } from "../env/inference-env.js";
 import run, { evaluate, expectValue, type EvalTap } from "./evaluator.js";
 import { ArrivalError, AmbientShapeError, isHostRuntimeBug, OutputContractError } from "../errors.js";
 import { Resolver } from "./Resolver.js";
 import { Capabilities } from "./Capabilities.js";
 import { LexicalScope } from "./LexicalScope.js";
-import { assembleEnv, type AssembledEnv } from "../common/kernel.js";
 import { sealResolutionChain, type CompiledResolutionChain } from "./CompiledResolutionChain.js";
 import { StaticValidationError } from "../static-validation/validate-program.js";
-import type { DegradationMode } from "../common/degradation.js";
 import type { EnvCapability } from "../common/capability.js";
-import { overridableCapability } from "../env/overridable/overridable.js";
 import type { EvalPreludeInto, EvalSchemeInto, SchemeEnv } from "../common/scheme-env.js";
-import invariant from "tiny-invariant";
 import { parse as readerParse } from "../reader/parse.js";
-import { assertShadowCone } from "../provenance/lineage-shadow.js";
-import { type LineageNode } from "../provenance/lineage.js";
-import {
-  ambientBase,
-  classifyProgram,
-  instantiate,
-  makeAssembledAmbient,
-  parseProgram,
-  validateAgainstAmbient,
-  validateAgainstResolution,
-  type AssembledAmbient,
-  type ParsedProgram,
-} from "./exec-phases.js";
+import { parseProgram, validateAgainstResolution, type ParsedProgram } from "./exec-phases.js";
 import { RunContext } from "../run/RunContext.js";
 import { disposeRunContext } from "../run/run-lifecycle.js";
 import type { DisplaySink, NoteSink } from "../run/note-sink.js";
@@ -59,167 +45,61 @@ import { toJS } from "../membrane/membrane.js";
 // DI needed here.
 
 /**
- * Realm-cached lexical root for DEFAULT (no-env) exec — null-rooted scratch frame
- * where top-level `define`s land, CUT from the capability base. Builtins resolve
- * through the assembled Resolver (`scope.lookup ?? capabilities.lookup`), NOT this
- * env's `__parent__` chain (it has none). Cached as a realm singleton so default
- * defines ACCUMULATE across exec calls (matches pre-cut `user_env` accumulation).
- * Custom-env (`{ env }`) callers never touch it. Lazy: identity is a leaf (no env-roots cycle).
+ * INTERNAL BAKE SEAM (Stage C Cut 3b) — NOT reachable through the public `ExecOptions`
+ * surface (the retired `env` glass option's replacement, scoped down to exactly what
+ * survives it needing). Evaluate parsed `source` directly against `frame`: a `Resolver`
+ * wrapping `frame` alone composes `capabilities = new Capabilities(frame)` (Resolver.ts's
+ * own glass-shaped constructor branch), so defines land in `frame` and builtins resolve up
+ * its OWN `__parent__` chain — exactly the walk the retired glass gate gave a caller-held
+ * live env, minus the public surface.
+ *
+ * The two production seams that still need a literal live-frame bake: `buildVocabulary`'s
+ * Pass-2 `symbol.define`/`defineSyntax` evaluator (`capabilityEvalScheme`, below — `frame` is
+ * `vocabulary.ts`'s own null-rooted `bakeEnv` scratch frame) and `assembleRun`'s per-run
+ * prelude pass (`preludeEvalScheme`, below — `frame` is `assemble-run.ts`'s own discarded
+ * `preludeScope`). Neither needs a bootstrap gate: both ARE (or follow) the self-hosted
+ * vocabulary build already, never the retired realm bootstrap.
+ *
+ * `runCtx` reused verbatim when supplied (the prelude pass threads its own run's handle so a
+ * resource-touching prelude verb spawns/reads THAT run's bag); absent (the define-bake
+ * evalScheme, which has no run at all) ⇒ a throwaway one is minted and disposed here.
  */
-let _defaultLexicalRoot: AmbientRuntime | undefined;
-function defaultLexicalRoot(): AmbientRuntime {
-  return (_defaultLexicalRoot ??= mintPlainFrame("user-program"));
+export async function execInFrame(source: string, frame: AmbientRuntime, runCtx?: RunContext): Promise<unknown[]> {
+  const program = await parseProgram(source);
+  const runResolver = new Resolver(frame);
+  const ownRunCtx = runCtx === undefined;
+  const actualRunCtx = runCtx ?? new RunContext({ strict: false });
+  try {
+    const results: SchemeValue[] = [];
+    for (const expr of program.forms) {
+      const result = expectValue(
+        await run(evaluate(expr, { resolver: runResolver, strict: false, runCtx: actualRunCtx }), {}),
+      );
+      results.push(result);
+    }
+    return results.map((v) => toJS(v));
+  } finally {
+    if (ownRunCtx) await disposeRunContext(actualRunCtx);
+  }
 }
 
-/**
- * Realm-cached runtime bootstrap (lazy base assembly, driven by `exec`).
- *
- * `??=` assigns the in-flight promise synchronously, so the cache IS the once-only
- * guard (a re-entrant prelude exec sees the same settled/in-flight promise).
- *
- * Two steps, order-significant:
- *   1. NATIVE_PACKS (value-domain clusters + numeric + error-object predicates)
- *      onto global_env — symbol-only, no prelude (no evalScheme).
- *   2. BASE_PACKS (.scm stdlib: core/macros/polyglot/r7rs/srfi, `nil` among them)
- *      onto user_env. A base-pack prelude may call a native primitive (`+`,
- *      `string-length`), which resolves user_env → global_env, so natives in
- *      step 1 must already be live.
- *
- * Pack rosters are dynamic imports: BASE_PACKS/polyglot transitively pull the
- * evaluator (membrane), so a static import here would close a module-eval cycle.
- * Awaited exactly once (promise-cached); free after warm-up.
- *
- * `skipBootstrapWait: true` on the prelude evalScheme: those execs ARE this
- * assembly, so they must not re-enter the gate (would await the promise they
- * are part of — deadlock).
- */
-let _baseAssembled: Promise<void> | undefined;
-/** The realm base's own `AssembledEnv` handle (the user_env BASE_PACKS assembly) — retained
- *  so `defaultAmbient()` below can carry the HONEST composition record (order/degraded/
- *  activations) instead of a synthesized facade. Never disposed — realm-scoped by design. */
-let _baseAssembledEnv: AssembledEnv<SchemeEnv> | undefined;
-export function ensureBaseAssembled(): Promise<void> {
-  return (_baseAssembled ??= (async () => {
-    // Populated entirely by assembled packs below (NATIVE_PACKS + BASE_PACKS).
-    // Dynamic import only (by design, no static importer) so the package can
-    // declare `sideEffects: false`.
-    const { NATIVE_PACKS } = await import("../env/native-packs.js");
-    const { BASE_PACKS } = await import("../env/base-packs.js");
-    await assembleEnv(
-      global_env,
-      NATIVE_PACKS.map((pack) => pack.lower()),
-    );
-    _baseAssembledEnv = await assembleEnv<SchemeEnv>(
-      user_env,
-      BASE_PACKS.map((pack) => pack.lower({ evalScheme: preludeExec })),
-    );
-    // THE SEAL: the bake ends here — the shared ambient base compiles into its frozen
-    // CompiledResolutionChain (zero live resolvers ⇒ one flat Map), which every default-path
-    // exec resolves through via `Capabilities.assembled(user_env)` (same memoized artifact).
-    // Post-seal the ambient artifact has no write surface; REPL accumulation rides the mutable
-    // session frame ABOVE it (`defaultLexicalRoot`), and glass callers keep their live env
-    // walk. The chain's `hash` is the content-address hook the provenance track's baked-env
-    // hash slot consumes.
-    sealResolutionChain(user_env);
-  })());
-}
-
-// The ONE prelude evalScheme (injected into base-pack assembly above AND `exec({
-// capabilities })` assembly below). `skipBootstrapWait`: those execs ARE / follow the
-// bootstrap, so they must not (re-)await the bootstrap promise (deadlock / redundant).
-//
-// `env` arrives as the structural `SchemeEnv` the pack machinery is typed against, but every
-// assembly this module drives targets a concrete env (the env-roots `ResolvingAmbient`s or a
-// `mintFrame` child of one), and `exec`'s `{ env }` option takes the concrete class. Plain
-// `AmbientRuntime` does not implement `SchemeEnv` (registerResolver lives on
-// `ResolvingAmbient` — see AmbientRuntime.ts), so narrow on the runtime fact (instanceof)
-// rather than casting.
-const preludeExec = (env: SchemeEnv, src: string): Promise<unknown[]> => {
-  if (!isAmbientRuntime(env)) throw new AmbientShapeError("prelude evalScheme", "expected a concrete AmbientRuntime");
-  return exec(src, { env, skipBootstrapWait: true });
-};
-const capabilityEvalScheme: EvalSchemeInto = preludeExec;
-
-// Stage B2's PER-RUN prelude evalScheme (env/assemble-run.ts's `AssembleRunOptions.evalPrelude`)
-// — the SAME `skipBootstrapWait`/`isAmbientRuntime` posture as `preludeExec` above, PLUS the
-// run's own `runCtx` threaded through (`exec`'s glass path: `runCtx` set ⇒ `runCtxOwned` is
-// false ⇒ exec's own `finally` never disposes it — the SAME RunContext `assembleRun` mints and
-// returns to its caller keeps flowing straight through every prelude form's dispatch).
-const preludeEvalScheme: EvalPreludeInto = (env, src, runCtx) => {
-  if (!isAmbientRuntime(env)) throw new AmbientShapeError("prelude evalScheme", "expected a concrete AmbientRuntime");
-  return exec(src, { env, runCtx, skipBootstrapWait: true });
+// The ONE build-time evalScheme — injected into `buildVocabulary`'s Pass-2 `symbol.define`/
+// `defineSyntax` bake (env/vocabulary.ts's `processCapability`, threaded through this module's
+// own `execStateViaVocabulary`/`execExpr` calls to `buildVocabulary`). Build-time: shared across
+// every run of a given tuple, no `runCtx` to carry (mirrors the retired `preludeExec`'s role,
+// minus the bootstrap gate — `execInFrame` needs none).
+const capabilityEvalScheme: EvalSchemeInto = (env, source) => {
+  if (!isAmbientRuntime(env)) throw new AmbientShapeError("capability define-bake", "expected a concrete AmbientRuntime");
+  return execInFrame(source, env);
 };
 
-/** Phase-2 assembly options — see {@link assembleAmbient}. */
-export interface AssembleAmbientOptions {
-  /** Capability packs assembled onto the standard base (`user_env → global_env`) —
-   *  same semantics as `ExecOptions.capabilities`. Empty/absent ⇒ a bare (but still
-   *  ownable/disposable) child of the standard base. */
-  capabilities?: readonly EnvCapability[];
-  /** The ONE shared config bag handed to every capability's `lower()` — see
-   *  `ExecOptions.config`. */
-  config?: object;
-  /** Door-set degradation mode for the lowering (see common/degradation.ts). exec's
-   *  `staticValidation: "on"` path assembles with `"doors"`. */
-  degradation?: DegradationMode;
-  /** Default per-run allocation budget POLICY for runs on this ambient —
-   *  `ExecOptions.heapBudget` wins per call. See `AssembledAmbient.heapBudget`. */
-  heapBudget?: number;
-}
-
-/**
- * PHASE 2, public (export home = the `/env` subpath): assemble the ambient once, reuse across
- * N runs — `exec(code, { ambient })` — and dispose deliberately (`await using` works: the
- * product is an `AsyncDisposable`). A fresh `user_env` child with the supplied capabilities
- * assembled on top (AUGMENTING the standard base, never replacing it; fresh child per assembly
- * = no cross-call bleed), sealed, returning the HANDLE instead of dropping it: `dispose()`
- * runs the kernel's pack disposers AND every lowered pack's resource wind-down.
- */
-export async function assembleAmbient(opts: AssembleAmbientOptions = {}): Promise<AssembledAmbient> {
-  await ensureBaseAssembled();
-  const capabilities = opts.capabilities ?? [];
-  const base = mintFrame(user_env, "exec-capabilities");
-  const lowered = capabilities.map((c) =>
-    c.lower({ evalScheme: capabilityEvalScheme, config: opts.config, degradation: opts.degradation }),
-  );
-  const assembled = await assembleEnv<SchemeEnv>(base, lowered);
-  // Seal the per-assembly baked base — `Capabilities.assembled(base)` (via `instantiate`)
-  // reuses this artifact (memoized per env), so every run on this ambient resolves through
-  // the frozen chain.
-  const chain = sealResolutionChain(base);
-  return makeAssembledAmbient({
-    base,
-    capabilities,
-    assembled,
-    lowered,
-    chain,
-    heapBudget: opts.heapBudget,
-    disposable: true,
-  });
-}
-
-/**
- * The DEFAULT ambient — the realm-memoized product over the standard assembled base
- * (`user_env → global_env`). Stage C Cut 2: a PLAIN bare `exec(code)` no longer resolves
- * through this (it rides the self-hosted vocabulary path, `execStateViaVocabulary`'s degenerate
- * `BASE_ROSTER`-only tuple, instead) — this remains the phase-2 value a KEEP-LEGACY bare-ish exec
- * resolves through (e.g. `exec(code, { override })` with no `capabilities`: `execState`'s router
- * sends it to `execStateViaAmbient`, whose own no-`capabilities`/no-`passedAmbient` branch falls
- * here). NEVER disposed (realm-scoped by design — `disposable: false` makes `dispose()` a
- * documented no-op), exactly the ownership table's "realm default" row.
- */
-let _defaultAmbient: AssembledAmbient | undefined;
-function defaultAmbient(): AssembledAmbient {
-  invariant(_baseAssembledEnv !== undefined, "defaultAmbient: bootstrap has not completed");
-  return (_defaultAmbient ??= makeAssembledAmbient({
-    base: user_env,
-    capabilities: [],
-    assembled: _baseAssembledEnv,
-    lowered: [],
-    chain: sealResolutionChain(user_env),
-    disposable: false,
-  }));
-}
+// The PER-RUN prelude evalScheme (env/assemble-run.ts's `AssembleRunOptions.evalPrelude`) —
+// carries THIS run's own `runCtx` through, so a resource-touching prelude verb (the loader's
+// extension registry, a preludeOnly registration verb) spawns/reads THIS run's bag.
+const preludeEvalScheme: EvalPreludeInto = (env, source, runCtx) => {
+  if (!isAmbientRuntime(env)) throw new AmbientShapeError("prelude evalScheme", "expected a concrete AmbientRuntime");
+  return execInFrame(source, env, runCtx);
+};
 
 export interface ExecOptions {
   /** The run's MODEL-FACING NOTE CHANNEL (run/note-sink.ts). Rides onto `RunContext.notes`, the
@@ -231,21 +111,10 @@ export interface ExecOptions {
    *  seam a HOST uses to offer one without the language acquiring an IO surface. */
   display?: DisplaySink;
   /**
-   * GLASS — custom base env. When set, the resolver wraps it directly: defines land in it,
-   * builtins resolve up its `__parent__` chain. Takes precedence over `capabilities`/`scope`
-   * (the cut refinements); use `env` OR the cut options.
-   *
-   * Typed `SchemeEnv`, not the concrete `AmbientRuntime`, so external glass callers type
-   * against the exported structural contract. Narrows back to `AmbientRuntime` (`instanceof`,
-   * the `preludeExec` precedent above) at the one seam below that needs the concrete frame class.
-   */
-  env?: SchemeEnv;
-  /**
-   * THE CUT, capability-refined. EnvCapability packs assembled onto the standard
-   * base (`user_env → global_env`) for THIS run (inference-plane nil-compat, an
-   * MCP/infer capability, etc.) instead of the bare default base. Assembled per
-   * call onto a fresh `user_env` child (no cross-call bleed). Ignored when `env`
-   * (glass) is set.
+   * EnvCapability packs assembled onto the self-hosted base (`env/base-roster.ts`'s
+   * `BASE_ROSTER`, folded in automatically — see `execStateViaVocabulary`'s own doc) for THIS
+   * run. A bare `exec(code)` is the DEGENERATE case of the same tuple (`capabilities` empty,
+   * the closure is just `BASE_ROSTER`).
    */
   capabilities?: readonly EnvCapability[];
   /**
@@ -261,62 +130,31 @@ export interface ExecOptions {
    */
   config?: object;
   /**
-   * SEAMLESS PARAMETER INJECTION for `define/overridable`. Sugar over the cut: when
-   * set, `arrival/overridable` is appended to this run's `capabilities` (identity-deduped
-   * by the kernel if already listed) and this record is merged into
-   * `config.params` (override wins key-wise). The program declares the parameter,
-   * its s/* type, and its default; the host supplies the value; `overridable/resolve`
-   * validates WHOEVER supplied it and boxes it at the membrane — no `jsToScheme`,
-   * no `env.set` at the call site:
-   *
-   *     await exec(`(define/overridable users (s/array (s/object …)) (list))
-   *                 (map transform users)`,
-   *                { override: { users: [john, mary] } });
-   *
-   * Ignored when `env` (glass) is set — same posture as `capabilities`/`scope`.
-   */
-  override?: Record<string, unknown>;
-  /**
-   * THE CUT, scope-refined. Lexical root the run's top-level `define`s land in.
-   * Pass a persistent {@link LexicalScope} (`LexicalScope.for(env)`) across calls
-   * for REPL-style multi-step accumulation, instead of the per-call default scope
-   * (a FRESH, isolated root on the vocabulary path — `execStateViaVocabulary`'s
-   * `LexicalScope.fresh()`, Stage C Cut 2; the realm-cached `defaultLexicalRoot()`
-   * scratch frame on the legacy ambient path). Builtins still resolve through the
-   * capability base (composed `scope.lookup ?? capabilities.lookup`). Ignored when
-   * `env` (glass) is set.
+   * Lexical root the run's top-level `define`s land in. Pass a persistent
+   * {@link LexicalScope} (`LexicalScope.for(env)` / `LexicalScope.fresh()`) across calls
+   * for REPL-style multi-step accumulation, instead of the per-call default (a FRESH,
+   * isolated root — `LexicalScope.fresh()`). Builtins still resolve through the capability
+   * base (composed `scope.lookup ?? capabilities.lookup`).
    */
   scope?: LexicalScope;
   /**
    * REUSE an existing RunContext (REPL continuity) instead of minting a fresh one for this
-   * call — the Stage-2 counterpart to `scope`/`ambient` above: a REPL spawns ONE RunContext
-   * (capture it off a prior call's `ExecState.runCtx`) and threads it through every later pass,
-   * so pass-scoped capability resources (`common/resources.ts`'s `runScoped` — a database
-   * handle, a require cache, …) survive between passes instead of respawning each call, exactly
-   * like `scope`'s accumulating defines already do.
+   * call: a REPL spawns ONE RunContext (capture it off a prior call's `ExecState.runCtx`) and
+   * threads it through every later pass, so pass-scoped capability resources
+   * (`common/resources.ts`'s `runScoped` — a database handle, a require cache, …) survive
+   * between passes instead of respawning each call, exactly like `scope`'s accumulating
+   * defines already do.
    *
-   * CALLER-owned, same posture as `ambient`: exec will NOT dispose it. Passing this OPTS OUT
-   * of the per-call disposal a bare `exec(code)` performs (see the module's `execState`
-   * `finally` — a self-minted RunContext is disposed at THIS call's end; a reused one is
-   * disposed only when the caller ends the session, via `disposeRunContext(runCtx)` or
-   * `await using` a `new RunContext(...)`-minted one). Honored on BOTH the cut and GLASS (`env`)
-   * paths — unlike `capabilities`/`scope`/`ambient`, glass has its own live env but still needs
-   * a RunContext, so glass callers get the same continuity option. Also honored by {@link execExpr}
-   * (Stage C Cut 1) — its own single-form sub-program plumbing (require's module-eval loop,
-   * prelude eval) threads the requiring run's LIVE `runCtx` through, rather than always minting a
-   * fresh vocabulary-less one; see that function's own doc for the full contract.
+   * CALLER-owned: exec will NOT dispose it. Passing this OPTS OUT of the per-call disposal a
+   * bare `exec(code)` performs (see the module's `execState` `finally` — a self-minted
+   * RunContext is disposed at THIS call's end; a reused one is disposed only when the caller
+   * ends the session, via `disposeRunContext(runCtx)` or `await using` a `new RunContext(...)`-
+   * minted one). Also honored by {@link execExpr} — its own single-form sub-program plumbing
+   * (require's module-eval loop, prelude eval) threads the requiring run's LIVE `runCtx`
+   * through, rather than always minting a fresh standalone one; see that function's own doc
+   * for the full contract.
    */
   runCtx?: RunContext;
-  /**
-   * PHASE-2 OVERRIDE: a pre-assembled ambient — skip assembly entirely. CALLER-owned: exec
-   * will NOT dispose it (the DO-rehydration / MCP-session warm-reuse idiom — assemble once via
-   * {@link assembleAmbient}, run N times, dispose deliberately / `await using`). Takes
-   * precedence over `capabilities`/`config` (assembly inputs are meaningless when assembly is
-   * skipped; `override` still needs a live overridable capability on the AMBIENT, so pass it
-   * to `assembleAmbient` instead). Ignored when `env` (glass) is set — same posture as every
-   * cut refinement.
-   */
-  ambient?: AssembledAmbient;
   /**
    * PHASE-1 OVERRIDE: a pre-parsed program — skip the reader (the parse-once-run-many idiom,
    * {@link parseProgram}). When set, the `code` argument is ignored. The program's READER
@@ -327,13 +165,9 @@ export interface ExecOptions {
   /**
    * MODULE-EVAL RESOLVER PASSTHROUGH (COMPLEX tier — consumed by {@link execExpr}
    * only; `exec`/`execState` ignore it). Evaluate through an EXISTING composed
-   * `Resolver` instead of constructing one from `env`. THE seam `(require …)`
+   * `Resolver` instead of building one from the default base. THE seam `(require …)`
    * (src/loader/) uses: a required module's forms must resolve through the SAME
-   * scope+capability composition as the requiring program — cut: null-rooted
-   * lexical root + assembled capability base; glass: the live base-linked env.
-   * Reconstructing from an env alone drops the capability half under the cut
-   * (the stdlib lives on the base, so module code would see `string-append`
-   * unbound). Takes precedence over `env` in `execExpr`. Obtained via the
+   * scope+capability composition as the requiring program. Obtained via the
    * evaluator's `currentRunResolver()` back-channel at the require apply boundary.
    */
   resolver?: Resolver;
@@ -447,59 +281,13 @@ export interface ExecOptions {
    * DEFAULT — `"off"` (opt-in). The `exec` PRIMITIVE stays opt-in because it is the low-level
    * building block the door/purity/typo LAW suites and internal provisioning evals use to
    * exercise RUNTIME behavior: a global default flip here conflates that primitive with the
-   * program-scoped production ENTRY points and turns ~313 law/behavior assertions across 14
-   * suites into parse-phase throws, several of them deliberate runtime invariants
-   * (door-fires-at-apply, typo-at-runtime), not stale pins. Strictness is CALLER-scoped
-   * instead — the production entry points (DiscoveryTool.call, runProgram) opt IN by passing
-   * `"on"`, their own wiring, NOT a flip of this primitive's default. GLASS (`env`) runs never
-   * validate regardless — a live, embedder-mutable frame chain has no seal, so the pass makes
-   * no claims there; the runtime doors remain the backstop.
-   *
-   * STRICTNESS CAVEAT: dead-branch references — `(if #f (missing) 42)` — REPORT under `"on"`
-   * although they run today; dead references are drift, and this knob is the opt-out.
+   * program-scoped production ENTRY points and turns law/behavior assertions across the suite
+   * into parse-phase throws, several of them deliberate runtime invariants (door-fires-at-apply,
+   * typo-at-runtime), not stale pins. Strictness is CALLER-scoped instead — the production entry
+   * points (DiscoveryTool.call, runProgram) opt IN by passing `"on"`, their own wiring, NOT a
+   * flip of this primitive's default.
    */
   staticValidation?: "on" | "off";
-  /**
-   * Internal: set by the bootstrap's own prelude evals (`ensureBaseAssembled`'s
-   * evalScheme) to bypass the bootstrap gate below — awaiting
-   * `ensureBaseAssembled` there would deadlock (the prelude eval IS part of the
-   * realm-cached promise it would be waiting on).
-   */
-  skipBootstrapWait?: boolean;
-  /**
-   * DEPRECATED / no-op (docs/plans/stage-b-runcontext-absorbs-assembly.md, Stage B3). Used to
-   * opt a `{ capabilities }` run INTO the vocabulary path (B1/B2); as of B3 the router
-   * (`execState`'s own doc) routes every vocabulary-eligible run there BY DEFAULT, so this
-   * flag no longer changes anything — setting it `true`/`false`/omitting it all resolve
-   * identically. Kept only so B1/B2-era call sites that set it explicitly keep compiling;
-   * new code should not set it.
-   */
-  vocabularyPath?: boolean;
-  /**
-   * SHADOW MODE. When set, after each top-level form is evaluated, the static lineage
-   * `fullCone` (provenance/lineage.ts) is computed and ASSERTED equal to the form's UNTAPPED
-   * eager `result.provenance`. A divergence throws `ProvenanceShadowDivergence`. Read-only
-   * cross-check of the static classifier against the live engine — does NOT alter evaluation;
-   * flag-OFF is inert, as the skeleton build + assert are gated entirely behind this flag.
-   * Asserts `fullCone` only (never `countCone`, which diverges by design — the minimal cone).
-   * Forms outside shadow's provable set are skipped + recorded, not asserted.
-   *
-   * NAME CAVEAT: the `ir`-prefix is borrowed (from the studio's `--ir-*`
-   * compile-erased-superset markers) and is a MISFIT here — this flag toggles shadow/dual-run
-   * VALIDATION, it does not lower an authoring superset to spec. Read it as
-   * "validate-static-lineage," not an IR feature. (Eventual public name: `--ir-lineage`.)
-   */
-  irLineage?: boolean;
-  /**
-   * Rosetta-IN (provenance-MINTING) op names for `classifierFromEnv` when
-   * `irLineage` is on (the documented explicit seam — the env has no source
-   * registry yet). DEFAULT empty ⇒ the SOURCE-FREE provable scope: untapped eager
-   * eval does not mint at sources (the mint is tap-gated, rosetta.ts:453, falling
-   * back to input provenance), so a declared-source program's untapped result need
-   * not match a `{kind:source}` skeleton — shadow is scoped to source-free programs
-   * where it genuinely matches. Pass a set only when extending shadow knowingly.
-   */
-  irLineageSources?: Iterable<string>;
 }
 
 /**
@@ -517,354 +305,33 @@ export interface ExecState {
    * accepts. When the caller passed `scope`, this IS that object (identity holds via
    * `LexicalScope.for`'s per-env memoization); when not, it wraps the run's
    * `lexicalRoot` so a follow-up `execState(code, { scope })` continues the session.
-   * Glass-env runs (`env` option set) have no cut scope — `scope` is the wrapper over
-   * that env's exec frame.
    */
   readonly scope: LexicalScope;
   /** The per-run hermetic handle (strict / heap meter / signal). */
   readonly runCtx: RunContext;
-  /**
-   * The ambient this run resolved through (phase-2 product) — the session handle a
-   * COMPLEX-tier caller continues on (`execState(code, { ambient, scope })`). Absent on GLASS
-   * runs (`env` set — no product by design). CAUTION on `{ capabilities }` runs: exec OWNED
-   * that ambient and disposed it at run end; the handle stays inspectable (catalog reads spec
-   * data; a resource re-spawns on touch), but reuse-after-dispose is off-contract — a caller
-   * wanting warm reuse assembles once and passes `{ ambient }`.
-   */
-  readonly ambient?: AssembledAmbient;
-}
-
-/**
- * Parse and execute Scheme code using the generator-based evaluator — the COMPLEX
- * tier (see {@link ExecState}). THE ROUTER (Stage C Cut 2 — THE LINCHPIN,
- * docs/plans/stage-c-corpse-deletion.md): EVERY run without a glass `env` and without one of the
- * KEEP-LEGACY asks below — `{ capabilities }` runs AND a bare `exec(code)` alike — resolves
- * through {@link execStateViaVocabulary} (the self-hosted, memoized `Vocabulary` + `assembleRun`,
- * `env/vocabulary.ts`/`env/assemble-run.ts`/`env/base-roster.ts`) BY DEFAULT. A bare exec is now
- * the DEGENERATE case of the same tuple (`capabilities` empty, the closure is just
- * `BASE_ROSTER`) — the pre-Cut-2 "cheapest row on the ownership table" reasoning for keeping it
- * on the ambient path is VOID per V's ruling (the Sonnet-scout deadlock was a local-perspective
- * artifact; ambient/global scope are separate species, and a realm-parented default base was the
- * legacy sin, not a cost optimization worth preserving). Only the KEEP-LEGACY set below resolves
- * through {@link execStateViaAmbient} — the original three-phase `lower()`/`assembleEnv`/
- * `instantiate` path, UNCHANGED this cut (it dies in Cut 3).
- *
- * KEEP-LEGACY set — a run still rides the ambient path when it requests one of these (each
- * gated on the option's own presence, not a blanket flag):
- *
- *   • `env` (glass) — never vocabulary-eligible; a live embedder frame has no bake to skip.
- *   • `ambient` — a CALLER-HELD `AssembledAmbient` (the MCP runner's warm-reuse idiom,
- *     `arrival-mcp`'s `DiscoveryTool`). An ambient may carry legacy `{ fn }` capabilities
- *     (`McpEnvCapability`) the vocabulary builder refuses outright, and its shape (chain +
- *     activations + disposable pack closure) has no vocabulary-path equivalent to convert
- *     into — a dedicated MCP-runner follow-up migrates this call site itself, at which point
- *     it stops passing `ambient` and starts relying on the tuple memo (`buildVocabulary`/
- *     `assembleRun`, exported off `/env`) directly — see this module's own
- *     `execStateViaVocabulary` doc.
- *   • `override` (`define/overridable` sugar) — NOT migrated this stage (deliberately, per
- *     the plan): stays on the ambient path, whose `effectiveCapabilities`/`effectiveConfig`
- *     computation below already handles it. A later stage may fold the sugar into the
- *     vocabulary branch directly (it is pure capability/config wrangling, not an
- *     ambient-shaped dependency) — deferred rather than risked here.
- *   • `irLineage` (shadow mode) — `classifyProgram`/`assertShadowCone`'s wiring is pinned
- *     against the AMBIENT's post-augmentation base (`ambientBase(ambient)`); dies in Stage C
- *     with the rest of the ambient/glass legacy surface rather than being re-verified here.
- *
- * `staticValidation`/`runCtx` reuse/`program` (precompiled) ARE served on the vocabulary
- * branch (see `execStateViaVocabulary`'s own doc) — they are not in the KEEP-LEGACY set.
- *
- * ISOLATION (Cut 2): a run's top-level `define`s land in a FRESH, per-call lexical root unless
- * the caller passes `scope` (or reuses `runCtx`) explicitly — see `execStateViaVocabulary`'s own
- * doc for why the pre-Cut-2 realm-cached `defaultLexicalRoot()` sharing (which this router used
- * to inherit for bare execs via the ambient path) does not carry over.
- *
- * `ExecOptions.vocabularyPath` is now a DEPRECATED no-op: every run this router would route to
- * `execStateViaVocabulary` on its own already does so, flag or not; the flag survives only so a
- * caller that explicitly opted in during B1/B2 keeps compiling.
- */
-export async function execState(code: string | SchemeValue, options: ExecOptions = {}): Promise<ExecState> {
-  const legacyOnlyConsumer = options.ambient !== undefined || options.override !== undefined || options.irLineage !== undefined;
-  if (options.env === undefined && !legacyOnlyConsumer) {
-    return execStateViaVocabulary(code, options);
-  }
-  return execStateViaAmbient(code, options);
-}
-
-/**
- * THE AMBIENT PATH — `lower()`/`assembleEnv`/`instantiate`'s three-phase ambient, unchanged
- * since before Stage B. `execState` (the router, above) delegates here for glass runs, bare
- * (no-`capabilities`) runs, and the KEEP-LEGACY set documented on the router.
- *
- * @param code - String of Scheme code or pre-parsed SchemeValue
- * @param options - Optional environment and dynamic binding options
- * @returns Promise<ExecState> - boxed results + the run's scope/runCtx handles
- */
-async function execStateViaAmbient(code: string | SchemeValue, options: ExecOptions = {}): Promise<ExecState> {
-  const {
-    env,
-    capabilities,
-    config,
-    override,
-    scope,
-    runCtx: passedRunCtx,
-    ambient: passedAmbient,
-    program: passedProgram,
-    dynamic_env,
-    use_dynamic,
-    tap,
-    nodeFilter,
-    signal,
-    budgetMs,
-    heapBudget,
-    cache,
-    effects,
-    reads,
-    notes,
-    display,
-    strict,
-    freezeRosettaReturns,
-    staticValidation,
-    skipBootstrapWait,
-    irLineage,
-  } = options;
-  // Default env = env-roots leaf `user_env` (arrival's interaction scope,
-  // `mintFrame(global_env, "user-env")`), sourced STATICALLY so this entry never
-  // imports the stdlib monolith. Bootstrap gate below drives population:
-  // `ensureBaseAssembled` assembles native packs + the `.scm` base.
-  const actualEnv = env ?? user_env;
-  // SchemeEnv → AmbientRuntime: `user_env` is always concrete, so this only narrows
-  // anything on the GLASS path (`env` set) — but every consumer below (Resolver,
-  // Capabilities.assembled, classifierFromEnv, sealResolutionChain) needs the
-  // concrete frame regardless of path, so the check sits right here, at the seam,
-  // same honest-instanceof posture as `preludeExec` above (not a cast — a runtime fact).
-  if (!isAmbientRuntime(actualEnv)) throw new AmbientShapeError("exec", "glass `env` must be a concrete AmbientRuntime");
-
-  // Lazy self-init the runtime bootstrap (native packs + .scm base), so embedders
-  // never trigger it manually. `ensureBaseAssembled` is realm-cached (one
-  // in-flight/settled promise): first exec assembles, every later exec awaits the
-  // same settled promise — no half-assembled env observable. `skipBootstrapWait` is
-  // the one exception: a base-pack prelude eval IS the bootstrap and must not
-  // await its own promise.
-  if (!skipBootstrapWait) await ensureBaseAssembled();
-
-  // ── PHASE 1 — parse (or reuse a pre-parsed `ParsedProgram`). The READER strict mode is
-  // stamped as a program identity fact; the RUN strict mode stays on `runCtx` below — one
-  // option, two declared landings.
-  const program = passedProgram ?? (await parseProgram(code, { strict }));
-
-  // ── PHASE 2 — the ambient. THE EXEC SEAM: glass-for-custom-env (NO phase product — a glass
-  // caller holds a live frame; exec makes no claims about it), cut-for-default, refined by
-  // capabilities/scope/ambient. `env` wins over every cut refinement. THE OWNERSHIP RULE
-  // (phase 5): `owned` = THIS call assembled it — per-call `{ capabilities }` assemblies are
-  // disposed in the `finally` below: `onDispose` teardowns + resource wind-downs fire at run
-  // end, every run, including throw paths. A caller wanting warm reuse across runs uses the
-  // designed idiom instead: `assembleAmbient` once, pass `{ ambient }`, which exec never
-  // disposes. The realm default is never disposed (realm-scoped memo by design); glass has no
-  // handle at all.
-  let ambient: AssembledAmbient | undefined;
-  let owned = false;
-  // STAGE 2 (docs/execution.md §HERMETIC): mirrors `ambient`/`owned` above — `runCtxOwned` =
-  // THIS call minted its own RunContext (`passedRunCtx` unset), so its capability resources
-  // (`common/resources.ts`'s `runScoped`) are torn down in the `finally` below, at THIS call's
-  // end. A caller-supplied `runCtx` (REPL continuity) is never disposed here — the caller's own
-  // session-end teardown (`disposeRunContext`/`await using`) owns it. A SEPARATE outer binding
-  // from the try-block-local `runCtx` below (not just `let runCtx` hoisted out here): a
-  // TypeScript closure (`runForm`, further down) captures an outer `let` at its WIDENED
-  // declared type, not the type narrowed at the closure's definition site — keeping the
-  // try-block's own `runCtx: RunContext` un-widened avoids re-annotating every one of its
-  // reads with a redundant non-null assertion.
-  let mintedRunCtx: RunContext | undefined;
-  const runCtxOwned = passedRunCtx === undefined;
-  const validating = env === undefined && staticValidation === "on";
-  if (env === undefined) {
-    // `override` sugar (ExecOptions.override): append the overridable capability
-    // (kernel identity-dedup makes a caller-listed copy harmless) and merge the
-    // record into the shared bag's `params` slice, override winning key-wise.
-    // Everything downstream sees a plain capabilities+config run.
-    const effectiveCapabilities =
-      override !== undefined ? [...(capabilities ?? []), overridableCapability] : capabilities;
-    const effectiveConfig =
-      override !== undefined
-        ? { ...config, params: { ...(config as { params?: Record<string, unknown> } | undefined)?.params, ...override } }
-        : config;
-    if (passedAmbient !== undefined) {
-      ambient = passedAmbient; // reuse — skip assembly; CALLER-owned (never disposed here)
-    } else if (effectiveCapabilities !== undefined) {
-      // A program-scoped run that opted into the validation pass also opts its capability
-      // lowering into doors — an absent OPTIONAL enabling key binds a cause-carrying door for
-      // the validator to report ON, instead of withholding.
-      ambient = await assembleAmbient({
-        capabilities: effectiveCapabilities,
-        config: effectiveConfig,
-        degradation: validating ? "doors" : undefined,
-      });
-      owned = true; // disposed in the `finally` below (PHASE 5)
-    } else {
-      ambient = defaultAmbient(); // the realm-scoped memo — ownership row "never"
-    }
-  }
-
-  try {
-    // ── PHASE 3 — instantiate: scope OBTAINED (caller-passed for REPL continuity, else the
-    // realm-cached ACCUMULATING scratch root — REPL semantics preserved exactly); only `runCtx`
-    // is minted fresh (per-run). Its allocation meter spans the whole exec and every value built
-    // in the run carries the same `runCtx` (docs/execution.md §BUDGETS, §HERMETIC).
-    let runResolver: Resolver;
-    let runCtx: RunContext;
-    if (env !== undefined) {
-      // GLASS — resolver wraps the live env; defines land in it; builtins resolve up its
-      // base-linked chain. The validation pass is not offered here (no seal ⇒ no claims); the
-      // runtime doors (unbound-variable throw + suggestions, PurityError) remain the backstop.
-      runResolver = new Resolver(actualEnv);
-      runCtx =
-        passedRunCtx ??
-        new RunContext({
-          strict: strict ?? false,
-          heapBudget,
-          freezeRosettaReturns,
-          signal,
-          cache,
-          effects,
-          reads,
-          notes,
-          display,
-        });
-      mintedRunCtx = runCtx;
-    } else {
-      const lexicalScope = scope ?? LexicalScope.for(defaultLexicalRoot());
-      // ── PHASE 2.5 — static validation: validate AFTER parse, BEFORE the first form
-      // evaluates — the complete list, one throw, zero side effects fired.
-      if (validating) {
-        const diagnostics = validateAgainstAmbient(program, ambient!, lexicalScope);
-        if (diagnostics.some((d) => d.severity === "error")) throw new StaticValidationError(diagnostics);
-      }
-      const instance = instantiate(ambient!, {
-        scope: lexicalScope,
-        strict,
-        heapBudget,
-        freezeRosettaReturns,
-        signal,
-        cache,
-        effects,
-        reads,
-        notes,
-        display,
-        runCtx: passedRunCtx,
-      });
-      runResolver = instance.resolver;
-      runCtx = instance.runCtx;
-      mintedRunCtx = runCtx;
-    }
-
-    // ── PHASE 2.5 — SHADOW MODE, classify@load: one static lineage skeleton per form, BEFORE
-    // evaluation. Pure (classify runs no eval); gated entirely behind the flag so flag-OFF is
-    // inert. Classified against the POST-AUGMENTATION base, so a `{ capabilities }` run's
-    // capability-declared provenance roles are visible to the skeleton (glass keeps classifying
-    // against its own live env, as always).
-    const classifierBase = ambient !== undefined ? ambientBase(ambient) : actualEnv;
-    let shadowSkeletons: LineageNode[] | undefined;
-    if (irLineage) {
-      shadowSkeletons = classifyProgram(program, classifierBase);
-    }
-
-    // ── PHASE 4 — execute. Evaluate each form in sequence. The budget (deadline + heap meter)
-    // spans the WHOLE exec call — all top-level forms share one bound, so a hang split across
-    // forms is still caught (docs/execution.md §BUDGETS, "meter span differs by entry"). Defines
-    // land in the resolver's lexical env; the meter lives on `runCtx` only, never on the frame.
-    const results: SchemeValue[] = [];
-    const forms = program.forms;
-    const start = budgetMs === undefined ? 0 : performance.now();
-    for (let i = 0; i < forms.length; i++) {
-      const expr = forms[i];
-      const remaining = budgetMs === undefined ? undefined : budgetMs - (performance.now() - start);
-      // wrapOperator contract: run() wraps every non-ArrivalError — including the
-      // TypeError wrapOperator throws to name operator + arg types — in an
-      // ArrivalError, masking both the TypeError class and its membrane cause.
-      // Surface the original TypeError so the user-visible error shape survives.
-      let result: SchemeValue;
-      // THE READ-TRACKING REGION (docs/execution.md §READ-GUARD): one top-level form is the region
-      // unit. `runForm` is the plain (untracked) evaluation; when `runCtx.reads` is armed, the
-      // host's tracker wraps it so its substrate observes this form's reads. Absent ⇒ `runForm()`
-      // runs directly (untracked).
-      const runForm = () =>
-        run(
-          evaluate(expr, {
-            resolver: runResolver,
-            dynamic_env,
-            use_dynamic,
-            tap,
-            nodeFilter,
-            signal,
-            // Default false ⇒ tolerant nil-projection; car/cdr dispatch reads ctx.strict.
-            strict: strict ?? false,
-            runCtx,
-          }),
-          { signal, budgetMs: remaining },
-        );
-      try {
-        // Top-level form evaluates to a value, never a bare expander — seal it.
-        result = expectValue(await (runCtx.reads ? runCtx.reads.tracker.region(runForm) : runForm()));
-      } catch (e) {
-        if (e instanceof ArrivalError && e.cause instanceof TypeError && !isHostRuntimeBug(e.cause)) throw e.cause;
-        throw e;
-      }
-      results.push(result);
-
-      // THE GUARD CHECK: after each form, for a PRIME run gathering effects — the same
-      // `cache?.mode !== "replay"` gate the burst arm uses, so a fold never trips it — run
-      // `checkReadWriteGuard` over the effects gathered so far vs the reads observed so far
-      // (docs/execution.md §READ-GUARD; guard region = EXECUTION only). A clean run, or one
-      // missing `reads`/`effects` or with `writeSetOf` unarmed, is a no-op.
-      if (runCtx.reads !== undefined && runCtx.effects !== undefined && runCtx.cache?.mode !== "replay") {
-        checkReadWriteGuard(runCtx.effects.entries, runCtx.reads.tracker.log, runCtx.reads.writeSetOf);
-      }
-
-      // SHADOW MODE — the assert. Compare static fullCone against this form's UNTAPPED eager
-      // `result.provenance` (no tap installed). In-scope divergence throws
-      // ProvenanceShadowDivergence; a macro-head / keyword-projection form abstains (returns a
-      // skip reason we discard — it is outside the classifier's model, so shadow does not
-      // assert it). Behind the flag — never runs flag-OFF.
-      if (irLineage && shadowSkeletons) {
-        assertShadowCone(shadowSkeletons[i], expr, result, classifierBase, String(expr));
-      }
-    }
-
-    // ── PHASE 6 — return (the two-tier cut; `ambient` is the additive session handle —
-    // absent on glass runs, which have no product by design).
-    return { values: results, scope: runResolver.scope, runCtx, ambient };
-  } finally {
-    // ── PHASE 5 — the pipeline's OWN step: dispose exactly what THIS call assembled/minted.
-    // Fires on success AND throw paths (validation errors included). `runCtxOwned` mirrors
-    // `owned`: a self-minted RunContext's per-run capability resources (`common/resources.ts`'s
-    // `runScoped`) are torn down at THIS call's end, same as today's per-call resource lifetime;
-    // a caller-supplied (REPL-continued) `runCtx` is left alone for the caller's own session-end
-    // teardown. `mintedRunCtx` may be unset if a throw happened before phase 3 ever ran.
-    if (owned) await ambient!.dispose();
-    if (runCtxOwned && mintedRunCtx !== undefined) await disposeRunContext(mintedRunCtx);
-  }
 }
 
 /**
  * STAGE C CUT 2 — THE SHARED SEALED CHAIN, memoized ONCE per {@link Vocabulary} OBJECT (a
  * `WeakMap` so it's GC'd with the tuple's own memo entry, `env/vocabulary.ts`'s `buildVocabulary`
- * memo). Base symbols are now ordinary members of the tuple's own map (`BASE_ROSTER` folded in by
- * `execStateViaVocabulary`, below), so this bind loop is ~10x bigger than pre-Cut-2 — too costly
- * to repeat on every run (the suite alone drives thousands of execs). Building it here, ONCE,
- * amortizes that cost across every run sharing the tuple.
+ * memo). Base symbols are ordinary members of the tuple's own map (`BASE_ROSTER` folded in by
+ * `execStateViaVocabulary`, below), so this bind loop is sizable — too costly to repeat on every
+ * run (the suite alone drives thousands of execs). Building it here, ONCE, amortizes that cost
+ * across every run sharing the tuple.
  *
  * `chainFrame` is NULL-ROOTED — the ambient species (THE CORNERSTONE: "I exist before program
- * start and I'm static," never attributed to any run) — never parented on `user_env`/
- * `global_env`: this is exactly what makes the vocabulary path self-hosting instead of a
- * realm-parented child. It exists only to satisfy `sealResolutionChain`'s frame-shaped input;
- * once sealed, `chain` is the only artifact that matters, and `chainFrame` itself is never
- * touched again by any run (nothing binds into it after this).
+ * start and I'm static," never attributed to any run) — never parented on anything: this is
+ * exactly what makes the vocabulary path self-hosting instead of a realm-parented child. It
+ * exists only to satisfy `sealResolutionChain`'s frame-shaped input; once sealed, `chain` is the
+ * only artifact that matters, and `chainFrame` itself is never touched again by any run (nothing
+ * binds into it after this).
  *
- * Per-run cost is now just: obtain the run's OWN lexical scope (a fresh root, or a caller-passed
+ * Per-run cost is just: obtain the run's OWN lexical scope (a fresh root, or a caller-passed
  * `scope`/reused `runCtx` for continuity) and wrap this SHARED `{ chainFrame, chain }` in a fresh
  * `Capabilities` instance — `Resolver` composes `scope.lookup ?? capabilities.lookup` as two
  * genuinely separate fields (Resolver.ts), never a frame-parenting relationship, so NOTHING a run
  * does — a `define`, a `require` — ever writes into `chainFrame`: only its READ side (`chain`) is
- * shared. See the Cut-2 law suite's "shared-chain purity" gate for the executable proof.
+ * shared.
  */
 const sealedChainByVocabulary = new WeakMap<
   Vocabulary,
@@ -886,11 +353,14 @@ function sealedVocabularyChain(vocabulary: Vocabulary): {
 }
 
 /**
- * THE DEFAULT for every non-glass, non-KEEP-LEGACY run — a bare `exec(code)` AND a
- * `{ capabilities }` run alike (`execState`'s router, above, delegates here). Resolves through
- * `env/vocabulary.ts`'s memoized, SELF-HOSTED `Vocabulary` instead of
- * `lower()`/`assembleEnv`/`instantiate`'s three-phase ambient — no `ensureBaseAssembled`, no
- * `user_env`/`global_env` reference anywhere in this function:
+ * Parse and execute Scheme code using the generator-based evaluator — the COMPLEX
+ * tier (see {@link ExecState}). THE ROUTER COLLAPSE (Stage C Cut 3b, "the massacre" —
+ * docs/plans/stage-c-corpse-deletion.md): EVERY run resolves through the self-hosted,
+ * memoized `Vocabulary` (`env/vocabulary.ts`/`env/assemble-run.ts`/`env/base-roster.ts`) — a
+ * bare `exec(code)` AND a `{ capabilities }` run alike. There is no second (ambient/glass)
+ * path anymore: `execStateViaAmbient`/`instantiate`/`assembleAmbient`/the realm singletons all
+ * died with this cut (see the ledger for the corpse list) — no `ensureBaseAssembled`, no
+ * `user_env`/`global_env` reference anywhere in this module.
  *
  *   1. THE FOLD (Stage C Cut 2, THE LINCHPIN) — `effectiveCapabilities = [...capabilities,
  *      ...BASE_ROSTER]` (`env/base-roster.ts`): the caller's own capabilities FIRST, the base
@@ -898,50 +368,34 @@ function sealedVocabularyChain(vocabulary: Vocabulary): {
  *      `deps` edge between an unrelated user capability and a base pack, C3's root-list tie-break
  *      decides who's processed (bound) FIRST in the deps-first apply walk. Base LAST in the root
  *      list ⇒ LOWEST precedence ⇒ processed FIRST (its bindings exist before ANY user
- *      capability's OWN `symbol.define` bakes, exactly the availability `define-bake.ts`'s
- *      `KEYWORD_SYNTAX_BASELINE` comment describes as "for free"); user capabilities FIRST in the
- *      root list ⇒ HIGHEST precedence ⇒ processed LAST ⇒ WIN a same-name conflict against a base
- *      pack — matching the legacy ambient path's own child-wins union
- *      (`CompiledResolutionChain.ts`'s `compileResolutionChain`, where a run's own capabilities
- *      frame was always the CLOSER, overwriting layer).
+ *      capability's OWN `symbol.define` bakes); user capabilities FIRST in the root list ⇒
+ *      HIGHEST precedence ⇒ processed LAST ⇒ WIN a same-name conflict against a base pack.
  *   2. `buildVocabulary` — C3 walk over `effectiveCapabilities`, doors, config validation,
  *      define-bake (ONCE per tuple, memoized by closure identity — a bare exec's tuple IS
  *      `BASE_ROSTER` alone, so every bare exec in the process hits the SAME memoized build).
  *   3. `sealedVocabularyChain` (above) — the shared, memoized `{ chainFrame, chain }` for this
  *      tuple, built ONCE, reused across every run sharing it.
  *   3.5. STATIC VALIDATION (`staticValidation: "on"`) — `validateAgainstResolution` over THIS
- *      chain + `vocabulary.degraded` (the vocabulary-path counterpart of `validateAgainstAmbient`;
- *      see exec-phases.ts). Runs BEFORE `assembleRun` (below), so an error-tier diagnostic throws
- *      `StaticValidationError` with ZERO prelude effects fired either — strictly stronger than
- *      the ambient path's own "zero side effects" claim, whose prelude already ran during
- *      assembly, before its own validation check.
+ *      chain + `vocabulary.degraded`. Runs BEFORE `assembleRun` (below), so an error-tier
+ *      diagnostic throws `StaticValidationError` with ZERO prelude effects fired either.
  *   4. `assembleRun` — mints the `RunContext` (or REUSES `ExecOptions.runCtx` — see
  *      `env/assemble-run.ts`'s own header for the tuple-identity invariant) AND runs the
  *      PER-RUN PRELUDE PASS against it (fresh mint only): every capability in this tuple's
  *      closure that declares a `.spec.prelude` runs it, exactly once, THIS run, before program
- *      code evaluates. (`assembleRun` re-fetches the SAME memoized `Vocabulary` this function
- *      already built, over the SAME `effectiveCapabilities` — never rebuilds.)
- *   5. `Capabilities` (wrapping the shared chain) → `Resolver`, then the SAME per-form evaluation
- *      loop the ambient path (`execStateViaAmbient`) runs.
+ *      code evaluates.
+ *   5. `Capabilities` (wrapping the shared chain) → `Resolver`, then the per-form evaluation loop.
  *
  * ISOLATION: a run's top-level `define`s land in `scope`'s env when the caller passes one (REPL
- * continuity), else a FRESH, per-call, null-rooted scope (`LexicalScope.fresh()`) — NOT the
- * realm-cached `defaultLexicalRoot()` the ambient path still uses. Two separate bare execs no
- * longer share top-level defines (the probed pre-Cut-2 behavior — see the ledger's Cut-2 report
- * for the callers this broke and how they were fixed): per the cornerstone, that sharing was the
- * legacy sin (a mutable realm frame playing double duty), not a feature worth preserving once the
- * vocabulary path stops depending on the realm at all. A caller wanting cross-call continuity
- * passes `scope` (or reuses `runCtx`) explicitly — the same sanctioned channel `ExecOptions.scope`
- * already documents.
+ * continuity), else a FRESH, per-call, null-rooted scope (`LexicalScope.fresh()`). Two separate
+ * bare execs do not share top-level defines (per the cornerstone: a mutable realm frame playing
+ * double duty was the legacy sin, not a feature worth preserving). A caller wanting cross-call
+ * continuity passes `scope` (or reuses `runCtx`) explicitly.
  *
- * KEEP-LEGACY (never reaches this function — see `execState`'s router doc for the full list +
- * rationale): `env` (glass), `ambient` (caller-held `AssembledAmbient`), `override`, `irLineage`
- * (shadow mode). A capability whose record contains a legacy `{ fn }` entry throws
- * `VocabularyLegacyCapabilityError` (`buildVocabulary`'s own refusal) — this branch does not fall
- * back silently; a caller not in the KEEP-LEGACY set is asserting its capability set is
- * vocabulary-eligible.
+ * A capability whose record contains a legacy `{ fn }` entry throws
+ * `VocabularyLegacyCapabilityError` (`buildVocabulary`'s own refusal) — this function does not
+ * fall back silently; a caller is asserting its capability set is vocabulary-eligible.
  */
-async function execStateViaVocabulary(code: string | SchemeValue, options: ExecOptions): Promise<ExecState> {
+export async function execState(code: string | SchemeValue, options: ExecOptions = {}): Promise<ExecState> {
   const {
     capabilities,
     config,
@@ -978,20 +432,19 @@ async function execStateViaVocabulary(code: string | SchemeValue, options: ExecO
   // caller opts into continuity via `scope` (or `runCtx` reuse, threaded to `assembleRun` below).
   const lexicalScope = scope ?? LexicalScope.fresh();
 
-  // ── STATIC VALIDATION — AFTER the chain seals, BEFORE `assembleRun`'s prelude pass runs: see
-  // this function's own doc for why validating here (rather than after, mirroring the ambient
-  // path's ordering) is the STRONGER "zero side effects" reading.
+  // ── STATIC VALIDATION — AFTER the chain seals, BEFORE `assembleRun`'s prelude pass runs, so
+  // an error-tier diagnostic throws with ZERO prelude effects fired.
   if (staticValidation === "on") {
     const diagnostics = validateAgainstResolution(program, chain, vocabulary.degraded, lexicalScope);
     if (diagnostics.some((d) => d.severity === "error")) throw new StaticValidationError(diagnostics);
   }
 
   const runResolver = new Resolver(lexicalScope.env, new Capabilities(chainFrame, chain));
-  // `assembleRun` is THE ONE place preludes run on the vocabulary path — it mints the RunContext
-  // THEN runs the per-run prelude pass against it, so a prelude's resource-touching verb
-  // spawns/reads THIS run's bag. `runCtx: passedRunCtx` — REUSE (REPL continuity) when supplied;
-  // `assembleRun` enforces the tuple-identity invariant and skips re-preluding on a match (see its
-  // own header). `capabilities: effectiveCapabilities` — the SAME fold, so `assembleRun`'s own
+  // `assembleRun` is THE ONE place preludes run — it mints the RunContext THEN runs the per-run
+  // prelude pass against it, so a prelude's resource-touching verb spawns/reads THIS run's bag.
+  // `runCtx: passedRunCtx` — REUSE (REPL continuity) when supplied; `assembleRun` enforces the
+  // tuple-identity invariant and skips re-preluding on a match (see its own header).
+  // `capabilities: effectiveCapabilities` — the SAME fold, so `assembleRun`'s own
   // `buildVocabulary` call hits the SAME memoized `Vocabulary` this function already built.
   const runCtxOwned = passedRunCtx === undefined;
   const runCtx = await assembleRun({
@@ -1047,9 +500,8 @@ async function execStateViaVocabulary(code: string | SchemeValue, options: ExecO
     }
     return { values: results, scope: runResolver.scope, runCtx };
   } finally {
-    // Stage B3: only THIS call's own (freshly-minted) RunContext is disposed here — a reused
-    // `passedRunCtx` (REPL continuity) is the caller's own session-end teardown, same ownership
-    // rule the ambient path's `runCtxOwned` already enforces.
+    // Only THIS call's own (freshly-minted) RunContext is disposed here — a reused
+    // `passedRunCtx` (REPL continuity) is the caller's own session-end teardown.
     if (runCtxOwned) await disposeRunContext(runCtx);
   }
 }
@@ -1161,17 +613,24 @@ export async function parse(code: string, source?: string): Promise<SchemeValue[
  * `signal`, its per-run extension registry (`loader-capability.ts`'s `loaderRegistryOf` keys off
  * `runCtx.vocabulary`) — reused verbatim, never re-minted, and left for the CALLER to dispose
  * (same ownership posture `execState`'s `runCtxOwned` already documents). Absent ⇒ standalone
- * throwaway run: a fresh vocabulary-less `RunContext` is minted from the scalar options below and
- * disposed here, at THIS call's end — the byte-compatible legacy behavior. `require`'s module-eval
- * loop (loader-capability.ts) threads the requiring run's LIVE `runCtx` so a nested `(require …)`
- * inside a `.scm` module resolves through the SAME run (and, on the vocabulary path, the SAME
- * per-run extension registry) as its parent — instead of silently falling to the process-global
- * legacy table.
+ * throwaway run.
+ *
+ * STAGE C CUT 3b — the standalone default is now VOCABULARY-BEARING (previously a vocabulary-
+ * less `new RunContext(...)`, the "realm-cached `defaultLexicalRoot()` + `Capabilities.assembled
+ * (user_env)`" glass-adjacent shape): with no `resolver` and no `runCtx` supplied, this mints the
+ * degenerate `BASE_ROSTER` tuple (the SAME memoized `Vocabulary`/`sealedVocabularyChain` a bare
+ * `execState(code)` shares) via `assembleRun`, so the standalone run carries a real `vocabulary`
+ * — which is what makes `loader-capability.ts`'s `loaderRegistryOf`'s "no vocabulary" arm
+ * genuinely unreachable from any sanctioned call path (a bare `execExpr` used to be the one
+ * exception; it no longer is).
+ *
+ * `require`'s module-eval loop (loader-capability.ts) threads the requiring run's LIVE `runCtx`
+ * so a nested `(require …)` inside a `.scm` module resolves through the SAME run (and the SAME
+ * per-run extension registry) as its parent — instead of falling to a vocabulary-less standalone.
  */
 export async function execExpr(
   expr: SchemeValue,
   {
-    env,
     resolver,
     dynamic_env,
     use_dynamic,
@@ -1183,44 +642,33 @@ export async function execExpr(
     cache,
     effects,
     reads,
-    skipBootstrapWait,
     runCtx: passedRunCtx,
   }: ExecOptions = {},
 ): Promise<SchemeValue> {
-  const actualEnv = env ?? user_env;
-  // Same honest SchemeEnv → AmbientRuntime narrow as execState's seam above.
-  if (!isAmbientRuntime(actualEnv)) throw new AmbientShapeError("execExpr", "glass `env` must be a concrete AmbientRuntime");
-
-  // See exec(): realm-cached lazy bootstrap, awaited once.
-  if (!skipBootstrapWait) await ensureBaseAssembled();
-
-  // THE EXEC SEAM (see exec): an explicit `resolver` (the module-eval passthrough —
-  // ExecOptions.resolver) is reused verbatim, so a `(require …)`d module's forms keep
-  // the requiring run's scope+capability composition; else glass for custom env, the
-  // cut for default (fresh null-rooted lexicalRoot + assembled base).
-  const runResolver =
-    resolver ??
-    (env !== undefined
-      ? new Resolver(actualEnv)
-      : new Resolver(defaultLexicalRoot(), Capabilities.assembled(actualEnv)));
-
-  // Stage C Cut 1: REUSE a passed-in `runCtx` (a required module's own `execExpr(form, {
-  // resolver, runCtx })` call — loader-capability.ts's module-eval loop threads the requiring
-  // run's LIVE handle) instead of always minting a fresh, vocabulary-less one. A required-module
-  // impl reading `this.runCtx.signal` (CallCtx) then sees the SAME abort signal as the requiring
-  // program, the SAME meter, the SAME vocabulary/extension-registry — nested `(require …)`
-  // resolves per-run, not against the process-global legacy table (`loaderRegistryOf`). Absent
-  // `runCtx` ⇒ mint fresh (mirrors exec()) — this expression's own throwaway run: `heapBudget`
-  // bounds THIS expression's allocations (a per-form meter; deferred: a cumulative multi-form
-  // bound needs a shared RunContext no caller can inject yet). `reads` rides the handle for
-  // consistency with `cache`/`effects` (a required module's rosetta penetrations still stamp
-  // `enqueuedAtReadClock` through the SAME chokepoint — see run-cache.ts), but this single-form
-  // entry does not itself wrap a region or run the guard check: it has no per-form LOOP to hang
-  // either on (unlike execState's), and its callers (require, prelude eval) are sub-program
-  // plumbing, not the top-level prime run the guard targets. A caller wiring a real burst run
-  // through execState gets both.
   const runCtxOwned = passedRunCtx === undefined;
-  const runCtx = passedRunCtx ?? new RunContext({ signal, heapBudget, cache, effects, reads });
+  // STANDALONE DEFAULT — the degenerate BASE_ROSTER tuple (see this function's own doc), minted
+  // regardless of whether `resolver` is supplied: a passed-`resolver` caller (the module-eval /
+  // prelude passthrough) threads its OWN `runCtx` alongside it on every sanctioned call path
+  // (loader-capability.ts always threads both), so this only ever mints fresh when BOTH are
+  // absent — a bare `execExpr(expr)` call.
+  const runCtx =
+    passedRunCtx ??
+    (await assembleRun({
+      capabilities: BASE_ROSTER,
+      evalScheme: capabilityEvalScheme,
+      evalPrelude: preludeEvalScheme,
+      heapBudget,
+      signal,
+      cache,
+      effects,
+      reads,
+    }));
+  let runResolver = resolver;
+  if (runResolver === undefined) {
+    const vocabulary = await buildVocabulary(BASE_ROSTER, undefined, capabilityEvalScheme);
+    const { chainFrame, chain } = sealedVocabularyChain(vocabulary);
+    runResolver = new Resolver(LexicalScope.fresh().env, new Capabilities(chainFrame, chain));
+  }
   // The run axis is the SOURCE OF TRUTH once a runCtx exists (mirrors the call-time-ctx discipline,
   // evaluator.ts's lambda `runner` — `bodyCtx.signal = callCtx.runCtx.signal`): a freshly-minted
   // runCtx's `.signal` is exactly the `signal` option above, so this is byte-compatible when
@@ -1248,10 +696,152 @@ export async function execExpr(
     if (e instanceof ArrivalError && e.cause instanceof TypeError) throw e.cause;
     throw e;
   } finally {
-    // A passed-in `runCtx` (Stage C Cut 1: the require/prelude-eval passthrough) is CALLER-owned —
-    // same posture `execState`'s `runCtxOwned` already documents — so only a runCtx THIS call
-    // minted itself is torn down here; a reused one is disposed only when the caller ends its own
-    // run/session.
+    // A passed-in `runCtx` is CALLER-owned — same posture `execState`'s `runCtxOwned` already
+    // documents — so only a runCtx THIS call minted itself is torn down here.
+    if (runCtxOwned) await disposeRunContext(runCtx);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// INTERNAL LIVE-FRAME SEAM (Stage C Cut 3b) — NOT part of the public `ExecOptions` surface, NOT
+// barrel-exported from index.ts. The retired public `env` (glass) option's narrow replacement
+// for the one class of caller that still legitimately needs it: a test harness that mints its
+// OWN live `AmbientRuntime` frame (often a child of `inferenceEnv`, below), binds bespoke
+// rosettas/resolvers onto it by hand, and evaluates code directly against that frame — rather
+// than declaring a proper `EnvCapability` and going through `{ capabilities }`. Production code
+// (this module's own `execState`/`exec`/`execExpr` above) never uses this seam.
+//
+// `ExecOptionsOverFrame` is `ExecOptions` plus a REQUIRED `env` — never optional, so a caller
+// reaching this seam is always explicit about it (no accidental fallthrough from the vocabulary
+// path). Mirrors the retired `execStateViaAmbient`'s own glass branch byte-for-byte (phase 3:
+// build a resolver straight over `env` + mint/reuse a `RunContext`; phase 4: the same per-form
+// loop) — minus the ambient-assembly phase, which a glass caller never had anyway.
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+
+export type ExecOptionsOverFrame = ExecOptions & { readonly env: SchemeEnv };
+
+/**
+ * Lazily bind the full self-hosted `BASE_ROSTER` vocabulary flatly onto {@link inferenceEnv},
+ * once (memoized) — mirrors the retired realm bootstrap's "empty at mint, filled before first
+ * genuine use" contract, scoped to this one internal test-compat frame. Idempotent-cheap to call
+ * unconditionally (every `*OverFrame` entry does): a frame unrelated to `inferenceEnv` (e.g. a
+ * fully hand-rolled, parent-less test env) is unaffected — this only ever touches `inferenceEnv`
+ * itself.
+ */
+let _inferenceEnvPopulated: Promise<void> | undefined;
+export function ensureInferenceEnvPopulated(): Promise<void> {
+  return (_inferenceEnvPopulated ??= (async () => {
+    const vocabulary = await buildVocabulary(BASE_ROSTER, undefined, capabilityEvalScheme);
+    for (const [name, value] of vocabulary.map) bindValue(inferenceEnv, name, value);
+  })());
+}
+
+/**
+ * COMPLEX tier over a caller-held live frame — see this section's own header. `env`'s
+ * `__parent__` chain resolves builtins (the glass `Resolver(env)` composition, Resolver.ts);
+ * `scope`/`runCtx` reuse are honored exactly like the vocabulary path's `execState`.
+ */
+export async function execStateOverFrame(code: string | SchemeValue, options: ExecOptionsOverFrame): Promise<ExecState> {
+  const {
+    env,
+    scope,
+    runCtx: passedRunCtx,
+    program: passedProgram,
+    dynamic_env,
+    use_dynamic,
+    tap,
+    nodeFilter,
+    signal,
+    budgetMs,
+    heapBudget,
+    cache,
+    effects,
+    reads,
+    notes,
+    display,
+    strict,
+    freezeRosettaReturns,
+  } = options;
+  if (!isAmbientRuntime(env)) throw new AmbientShapeError("execStateOverFrame", "expected a concrete AmbientRuntime");
+  await ensureInferenceEnvPopulated();
+
+  const program = passedProgram ?? (await parseProgram(code, { strict }));
+  const runResolver = scope !== undefined ? new Resolver(scope.env) : new Resolver(env);
+  const runCtxOwned = passedRunCtx === undefined;
+  const runCtx =
+    passedRunCtx ??
+    new RunContext({ strict: strict ?? false, heapBudget, freezeRosettaReturns, signal, cache, effects, reads, notes, display });
+
+  try {
+    const results: SchemeValue[] = [];
+    const forms = program.forms;
+    const start = budgetMs === undefined ? 0 : performance.now();
+    for (let i = 0; i < forms.length; i++) {
+      const expr = forms[i];
+      const remaining = budgetMs === undefined ? undefined : budgetMs - (performance.now() - start);
+      let result: SchemeValue;
+      const runForm = () =>
+        run(
+          evaluate(expr, {
+            resolver: runResolver,
+            dynamic_env,
+            use_dynamic,
+            tap,
+            nodeFilter,
+            signal,
+            strict: strict ?? false,
+            runCtx,
+          }),
+          { signal, budgetMs: remaining },
+        );
+      try {
+        result = expectValue(await (runCtx.reads ? runCtx.reads.tracker.region(runForm) : runForm()));
+      } catch (e) {
+        if (e instanceof ArrivalError && e.cause instanceof TypeError && !isHostRuntimeBug(e.cause)) throw e.cause;
+        throw e;
+      }
+      results.push(result);
+
+      if (runCtx.reads !== undefined && runCtx.effects !== undefined && runCtx.cache?.mode !== "replay") {
+        checkReadWriteGuard(runCtx.effects.entries, runCtx.reads.tracker.log, runCtx.reads.writeSetOf);
+      }
+    }
+    return { values: results, scope: runResolver.scope, runCtx };
+  } finally {
+    if (runCtxOwned) await disposeRunContext(runCtx);
+  }
+}
+
+/** SIMPLE tier over a caller-held live frame — see this section's own header. Delegates to
+ *  {@link execStateOverFrame} and unwraps through {@link toJS}, mirroring `exec`. */
+export async function execOverFrame(code: string | SchemeValue, options: ExecOptionsOverFrame): Promise<readonly unknown[]> {
+  const state = await execStateOverFrame(code, options);
+  return state.values.map((v) => toJS(v));
+}
+
+/** Single-form COMPLEX tier over a caller-held live frame — mirrors `execExpr`, minus the
+ *  standalone-default machinery (a caller reaching this seam always holds a real frame). */
+export async function execExprOverFrame(
+  expr: SchemeValue,
+  { env, dynamic_env, use_dynamic, tap, nodeFilter, signal, budgetMs, heapBudget, cache, effects, reads, runCtx: passedRunCtx }: ExecOptionsOverFrame,
+): Promise<SchemeValue> {
+  if (!isAmbientRuntime(env)) throw new AmbientShapeError("execExprOverFrame", "expected a concrete AmbientRuntime");
+  await ensureInferenceEnvPopulated();
+  const runResolver = new Resolver(env);
+  const runCtxOwned = passedRunCtx === undefined;
+  const runCtx = passedRunCtx ?? new RunContext({ signal, heapBudget, cache, effects, reads });
+  const runSignal = runCtx.signal;
+  try {
+    return expectValue(
+      await run(
+        evaluate(expr, { resolver: runResolver, dynamic_env, use_dynamic, tap, nodeFilter, signal: runSignal, runCtx }),
+        { signal: runSignal, budgetMs },
+      ),
+    );
+  } catch (e) {
+    if (e instanceof ArrivalError && e.cause instanceof TypeError) throw e.cause;
+    throw e;
+  } finally {
     if (runCtxOwned) await disposeRunContext(runCtx);
   }
 }

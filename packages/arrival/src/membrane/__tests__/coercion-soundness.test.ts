@@ -34,7 +34,6 @@
 import { describe, it, expect } from "vitest";
 import { CONSTANT_CTX, RunContext } from "../../run/RunContext.js";
 import { PortabilityError } from "../../errors.js";
-import { initBridge } from "../../index.js";
 import { APair } from "../../values/primitives/APair.js";
 import { ABool } from "../../values/primitives/ABool.js";
 import { AVector } from "../../values/primitives/AVector.js";
@@ -45,7 +44,7 @@ import vectorsCap from "../../env/r7rs/vectors.js";
 import { vector, value } from "../../common/scheme-zod.js";
 import type { EnvCapability } from "../../common/capability.js";
 import { nil } from "../../values/primitives/ANil.js";
-import { provOf } from "../../provenance/lineage-shadow.js";
+import { provOf } from "../../provenance/lineage.js";
 import { tf } from "../../values/tagless-final.js";
 import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
 import { harvestContracts } from "../../__tests__/_symbols-harvest.js";
@@ -55,7 +54,6 @@ import { harvestContracts } from "../../__tests__/_symbols-harvest.js";
 // the oracle ON for the file's lifetime.
 requireEagerOracle();
 
-await initBridge();
 // Source op fns FROM THE CAPABILITY's inlined `symbols` (the bare *_OPS map was
 // inlined into the constructor; the capability default export is the single
 // declaration site). These packs are all the record form of `spec.symbols`.

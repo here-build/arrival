@@ -48,7 +48,7 @@ import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { describe, it, expect } from "vitest";
 import { APair } from "../../values/primitives/APair.js";
 import { AValue } from "../../values/primitives/AValue.js";
-import { provOf } from "../../provenance/lineage-shadow.js";
+import { provOf } from "../../provenance/lineage.js";
 import { sStr, runRaw } from "../../__tests__/_lineage-test-helpers.js";
 
 // provenance of the result

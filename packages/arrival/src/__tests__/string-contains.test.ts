@@ -13,8 +13,7 @@
 
 import { describe, it, expect } from "vitest";
 import { CONSTANT_CTX } from "../run/RunContext.js";
-import { initBridge } from "../index.js";
-import { exec, execState } from "../eval/generator-exec.js";
+import { execOverFrame, execStateOverFrame } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../env/inference-env.js";
 import { AString } from "../values/primitives/AString.js";
 import { AExact } from "../values/primitives/AExact.js";
@@ -35,20 +34,18 @@ const js = (x: unknown) => (x instanceof AValue ? x["arrival/toJS"]() : x);
 
 describe("string-contains? — boolean predicate", () => {
   it("true when present, false when absent", async () => {
-    await initBridge();
     const env = mintFrame(inferenceEnv, "string-contains-pred");
-    const [hit] = await exec('(string-contains? "research-Alloy.docx" "Alloy")', { env });
-    const [miss] = await exec('(string-contains? "spoolsv.exe" "Alloy")', { env });
+    const [hit] = await execOverFrame('(string-contains? "research-Alloy.docx" "Alloy")', { env });
+    const [miss] = await execOverFrame('(string-contains? "spoolsv.exe" "Alloy")', { env });
     expect(js(hit)).toBe(true);
     expect(js(miss)).toBe(false);
   });
 
   it("carries the provenance of the searched string (grounded decision)", async () => {
-    await initBridge();
     const env = mintFrame(inferenceEnv, "string-contains-pred-prov");
     bindValue(env, "name", stamped("Alloy.exe", 7));
     // execState (COMPLEX tier): asserts box discipline directly (RULINGS.md R1).
-    const [r] = (await execState('(string-contains? name "Alloy")', { env })).values;
+    const [r] = (await execStateOverFrame('(string-contains? name "Alloy")', { env })).values;
     expect(r).toBeInstanceOf(AValue);
     expect(sorted((r as AValue).provenance as Set<number>)).toEqual([7]);
   });
@@ -56,18 +53,16 @@ describe("string-contains? — boolean predicate", () => {
 
 describe("string-contains — SRFI-13 index-or-#f", () => {
   it("returns the index of the first occurrence", async () => {
-    await initBridge();
     const env = mintFrame(inferenceEnv, "string-contains-idx");
-    const [r] = (await execState('(string-contains "abcAlloy" "Alloy")', { env })).values;
+    const [r] = (await execStateOverFrame('(string-contains "abcAlloy" "Alloy")', { env })).values;
     expect(r).toBeInstanceOf(AExact);
     expect(js(r)).toBe(3);
   });
 
   it("returns #f when absent (still truthy-correct: 0 is a real index)", async () => {
-    await initBridge();
     const env = mintFrame(inferenceEnv, "string-contains-miss");
-    const [miss] = await exec('(string-contains "abc" "Alloy")', { env });
-    const [zero] = await exec('(string-contains "Alloy" "Alloy")', { env });
+    const [miss] = await execOverFrame('(string-contains "abc" "Alloy")', { env });
+    const [zero] = await execOverFrame('(string-contains "Alloy" "Alloy")', { env });
     expect(js(miss)).toBe(false);
     expect(js(zero)).toBe(0); // index 0 — truthy in Scheme, #f is the only false
   });

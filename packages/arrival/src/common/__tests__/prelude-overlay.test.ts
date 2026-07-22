@@ -16,7 +16,7 @@
 import { describe, expect, it } from "vitest";
 import { mintFrame, type ResolvingAmbient } from "../../env/AmbientRuntime.js";
 
-import { exec } from "../../index.js";
+import { execOverFrame as exec } from "../../eval/generator-exec.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
 import { assembleEnv, type EnvPack } from "../kernel.js";

@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeAll } from "vitest";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
-import { exec } from "../../../eval/generator-exec.js";
+import { execOverFrame as exec } from "../../../eval/generator-exec.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
 
 /**

@@ -1,32 +1,46 @@
 /**
  * LAW — the exec PHASE PRODUCTS (exec-phases-and-dynamic-metadata.md Part III).
- * `exec` = the literal composition of the phases; these rows pin:
+ * STAGE C CUT 3b (docs/plans/stage-c-corpse-deletion.md) retired the ambient-phase products
+ * (`assembleAmbient`/`AssembledAmbient`/`validateAgainstAmbient`/glass) along with the ambient
+ * path itself; this file re-pins what survives on the self-hosted vocabulary path
+ * (`exec`/`execState`, both routing through `env/vocabulary.ts`/`env/assemble-run.ts`) and drops
+ * the rows that pinned the deleted machinery specifically (see each describe block for what
+ * changed and why):
  *
- *   • the §3.3 OWNERSHIP TABLE, row by row (phase 5 — dispose exactly what the call
- *     assembled): per-call `{ capabilities }` teardown at run end INCLUDING throw
- *     paths (the fixed dispose-drop site #4 — the pinned behavior change, leak →
- *     teardown); caller-owned `{ ambient }` never disposed by exec; the realm default
- *     never disposed at all; glass carries no product.
- *   • AMBIENT REUSE — assemble once, run many: scope ⊥ ambient (defines ride the scope, not
- *     the ambient). STAGE 2 (docs/execution.md §HERMETIC): a baked verb's resources no longer
- *     warm across runs just because the AMBIENT was reused — they're keyed by RunContext, so
- *     warmth follows a REPL's RunContext continuity (`ExecOptions.runCtx`) instead; two runs
- *     on one reused ambient with no shared runCtx spawn independently (per-run isolation).
- *   • PARSE-ONCE-RUN-MANY — one `ParsedProgram`, N runs, same results; the reader
- *     mode is a stamped program identity fact.
- *   • VALIDATION WITHOUT EXECUTION — phases 1+2+2.5, zero side effects fired.
+ *   • the OWNERSHIP TABLE, row by row (phase 5 — dispose exactly what the call minted): a
+ *     per-call `{ capabilities }` run tears its own RunContext (and every capability resource
+ *     spawned against it) down at run end INCLUDING throw paths; a caller-supplied `runCtx`
+ *     (REPL continuity) is never disposed by exec.
+ *   • RUNCTX REUSE — resources are keyed by RunContext (docs/execution.md §HERMETIC), not by
+ *     any ambient/tuple identity: warmth follows a REPL's RunContext continuity
+ *     (`ExecOptions.runCtx`); two runs with no shared runCtx spawn independently.
+ *   • PARSE-ONCE-RUN-MANY — one `ParsedProgram`, N runs, same results; the reader mode is a
+ *     stamped program identity fact.
+ *   • VALIDATION WITHOUT EXECUTION — `staticValidation: "on"` throws `StaticValidationError`
+ *     (carrying the complete diagnostic list) before the first form ever evaluates — zero side
+ *     effects fired.
+ *
+ * DROPPED (no vocabulary-path equivalent — see docs/plans/stage-c-corpse-deletion.md's Cut 3b
+ * status entry): the realm-default `ExecState.ambient` row (`ExecState` carries no `ambient`
+ * field at all anymore — ownership of "the shared default" was the legacy realm singleton's own
+ * concept, and the cornerstone rules that legacy sin out); the glass "`ExecState.ambient` is
+ * absent" row (glass itself is gone — `ExecOptions` has no `env`); `assembleAmbient({ heapBudget
+ * })`'s AMBIENT-LEVEL default heapBudget policy (only the per-call `ExecOptions.heapBudget`
+ * survives — there is no ambient object left to carry a policy default on).
  */
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../env/AmbientRuntime.js";
 
 import { EnvCapability } from "../../common/capability.js";
 import type { Resource } from "../../common/resources.js";
 import * as z from "../../common/scheme-zod.js";
 import { symbol } from "../../common/symbol.js";
 import { LexicalScope } from "../../eval/LexicalScope.js";
-import { parseProgram, validateAgainstAmbient } from "../../eval/exec-phases.js";
-import { assembleAmbient, exec, execState } from "../../eval/generator-exec.js";
-import { user_env } from "../../env/env-roots.js";
+import { parseProgram } from "../../eval/exec-phases.js";
+import { exec, execState, execInFrame } from "../../eval/generator-exec.js";
+import { assembleRun } from "../../env/assemble-run.js";
+import { BASE_ROSTER } from "../../env/base-roster.js";
+import { isAmbientRuntime } from "../../env/AmbientRuntime.js";
+import { StaticValidationError } from "../../static-validation/validate-program.js";
 import { RunContext } from "../../run/RunContext.js";
 import { disposeRunContext } from "../../run/run-lifecycle.js";
 
@@ -71,13 +85,26 @@ function spyCapability() {
   return { capability, counts };
 }
 
-describe("ownership table (§3.3) — phase 5 disposes exactly what the call assembled", () => {
-  it("per-call { capabilities }: resource teardown fires at run end (drop site #4 fixed)", async () => {
+/** The same `isAmbientRuntime`-narrowed bake seam generator-exec.ts's own private
+ *  `capabilityEvalScheme`/`preludeEvalScheme` use — `spyCapability()` declares neither
+ *  `symbol.define` nor a prelude, so neither ever actually fires; required only to satisfy
+ *  `AssembleRunOptions`' shape when this file mints a shareable RunContext directly. */
+const testEvalScheme = (env: unknown, source: string): Promise<unknown[]> => {
+  if (!isAmbientRuntime(env)) throw new Error("expected a concrete AmbientRuntime");
+  return execInFrame(source, env);
+};
+const testEvalPrelude = (env: unknown, source: string, ctx: Parameters<typeof execInFrame>[2]): Promise<unknown[]> => {
+  if (!isAmbientRuntime(env)) throw new Error("expected a concrete AmbientRuntime");
+  return execInFrame(source, env, ctx);
+};
+
+describe("ownership table — phase 5 disposes exactly what the call minted", () => {
+  it("per-call { capabilities }: resource teardown fires at run end", async () => {
     const { capability, counts } = spyCapability();
     const [out] = await exec(`(spy/touch)`, { capabilities: [capability] });
     expect(out).toBe("touched");
     expect(counts.acquired).toBe(1); // the verb's first touch spawned it
-    expect(counts.disposed).toBe(1); // exec OWNED the assembly — wind-down fired in finally
+    expect(counts.disposed).toBe(1); // exec OWNED its self-minted RunContext — wind-down fired
   });
 
   it("per-call { capabilities }: teardown fires on the THROW path too", async () => {
@@ -87,100 +114,51 @@ describe("ownership table (§3.3) — phase 5 disposes exactly what the call ass
     expect(counts.disposed).toBe(1); // finally — teardown on every exit, not just success
   });
 
-  it("caller-owned { ambient }: exec never disposes; ambient.dispose() is the caller's, idempotent", async () => {
+  it("caller-supplied runCtx: exec never disposes it; resources warm across passes SHARING it", async () => {
     const { capability, counts } = spyCapability();
-    const ambient = await assembleAmbient({ capabilities: [capability] });
-    // STAGE 2 (docs/execution.md §HERMETIC): a capability's resources are now keyed by
-    // RunContext, not by ambient — warm reuse across passes follows RunContext continuity
-    // (a REPL's ONE session), not merely "the ambient was reused." Threading the SAME runCtx
-    // through both calls is the designed REPL idiom (`ExecOptions.runCtx`).
-    const runCtx = new RunContext({});
-    const [a] = await exec(`(spy/touch)`, { ambient, runCtx });
-    const [b] = await exec(`(spy/touch)`, { ambient, runCtx });
+    // Minted OUTSIDE any exec call (the designed REPL idiom): a caller-owned RunContext survives
+    // across passes, threaded back in via `ExecOptions.runCtx` on every one.
+    // `exec`'s own internal fold is `[...capabilities, ...BASE_ROSTER]` (env/base-roster.ts) —
+    // a pre-mint wanting to interoperate with its `runCtx` reuse must fold the SAME roster in,
+    // so the tuple-identity check (`assembleRun`'s own header) matches.
+    const runCtx = await assembleRun({
+      capabilities: [capability, ...BASE_ROSTER],
+      evalScheme: testEvalScheme,
+      evalPrelude: testEvalPrelude,
+    });
+    const [a] = await exec(`(spy/touch)`, { capabilities: [capability], runCtx });
+    const [b] = await exec(`(spy/touch)`, { capabilities: [capability], runCtx });
     expect([a, b]).toEqual(["touched", "touched"]);
     expect(counts.acquired).toBe(1); // warm reuse — spawned once, shared across passes of ONE RunContext
-    expect(counts.disposed).toBe(0); // exec did NOT dispose a caller-owned ambient NOR a caller-supplied runCtx
-    await ambient.dispose();
-    expect(counts.disposed).toBe(0); // STAGE 2: resource lifetime rides the RunContext, not the ambient —
-    // disposing the ambient alone no longer tears a baked verb's resources down.
-    await ambient.dispose();
-    expect(counts.disposed).toBe(0); // still untouched — idempotent no-op for THIS resource
+    expect(counts.disposed).toBe(0); // exec did NOT dispose a caller-supplied runCtx
     await disposeRunContext(runCtx); // the caller's own deliberate session end
     expect(counts.disposed).toBe(1);
     await disposeRunContext(runCtx);
     expect(counts.disposed).toBe(1); // single-flight — idempotent
-    // `await using` support: both the ambient AND a `new RunContext()`-minted RunContext are
-    // AsyncDisposable by construction.
-    expect(typeof ambient[Symbol.asyncDispose]).toBe("function");
+    // `await using` support: a `new RunContext()`-minted RunContext is AsyncDisposable by
+    // construction (`assembleRun` returns the same class).
     expect(typeof runCtx[Symbol.asyncDispose]).toBe("function");
   });
 
-  it("two SEPARATE exec() calls on a reused ambient, with NO runCtx continuity, spawn TWICE — Stage 2's per-run isolation", async () => {
+  it("two SEPARATE exec() calls with NO runCtx continuity spawn TWICE — per-run isolation", async () => {
     const { capability, counts } = spyCapability();
-    const ambient = await assembleAmbient({ capabilities: [capability] });
-    const [a] = await exec(`(spy/touch)`, { ambient }); // mints + disposes its OWN runCtx
-    const [b] = await exec(`(spy/touch)`, { ambient }); // a SECOND, unrelated runCtx
+    const [a] = await exec(`(spy/touch)`, { capabilities: [capability] }); // mints + disposes its OWN runCtx
+    const [b] = await exec(`(spy/touch)`, { capabilities: [capability] }); // a SECOND, unrelated runCtx
     expect([a, b]).toEqual(["touched", "touched"]);
     expect(counts.acquired).toBe(2); // no shared RunContext ⇒ no shared resource
     expect(counts.disposed).toBe(2); // each call's self-minted runCtx tore its own spawn down
-    await ambient.dispose();
-  });
-
-  it("the realm default: ExecState.ambient present; dispose() is a documented no-op", async () => {
-    // Stage C Cut 2: a PLAIN bare `execState(code)` now rides the self-hosted vocabulary path
-    // (`ExecState.ambient` is ABSENT there — see `execStateViaVocabulary`'s own doc; a bare exec
-    // is the degenerate `BASE_ROSTER`-only tuple, no ambient product at all). Reaching the realm
-    // DEFAULT ambient this test pins requires one of the KEEP-LEGACY asks (`execState`'s router
-    // doc) even with no `capabilities` — `irLineage: false` is SET (not `undefined`) but falsy,
-    // forcing the ambient route without turning shadow mode on or changing anything else.
-    const first = await execState(`(+ 1 2)`, { irLineage: false });
-    expect(first.ambient).toBeDefined();
-    await first.ambient!.dispose(); // realm-scoped by design — must NOT tear the base down
-    const [stillWorks] = await exec(`(+ 20 22)`, { irLineage: false });
-    expect(stillWorks).toBe(42);
-    // The realm memo: two default runs share ONE ambient identity.
-    const second = await execState(`(+ 1 1)`, { irLineage: false });
-    expect(second.ambient).toBe(first.ambient);
-  });
-
-  it("glass { env }: no phase product — ExecState.ambient is absent (§3.4)", async () => {
-    const state = await execState(`(+ 1 2)`, { env: mintFrame(user_env, "law/glass") });
-    expect(state.ambient).toBeUndefined();
   });
 });
 
-describe("ambient reuse — assemble once, run many (§3.5)", () => {
-  it("scope ⊥ ambient: defines ride the scope; fresh scopes on one ambient stay isolated", async () => {
+describe("scope reuse — REPL continuity without any ambient handle", () => {
+  it("defines ride the scope: fresh scopes with the SAME capabilities stay isolated", async () => {
     const { capability } = spyCapability();
-    const ambient = await assembleAmbient({ capabilities: [capability] });
-    try {
-      const a = LexicalScope.fresh("law/session-a");
-      await exec(`(define x 41)`, { ambient, scope: a });
-      const [cont] = await exec(`(+ x 1)`, { ambient, scope: a }); // same scope — REPL continuity
-      expect(cont).toBe(42);
-      const b = LexicalScope.fresh("law/session-b");
-      await expect(exec(`x`, { ambient, scope: b })).rejects.toThrow(/x/); // other scope — unbound
-    } finally {
-      await ambient.dispose();
-    }
-  });
-
-  it("ambient.heapBudget is POLICY (the default), the per-run option wins (§3.1)", async () => {
-    const ambient = await assembleAmbient({ heapBudget: 100 });
-    const big = `'(${Array.from({ length: 500 }, (_, i) => i).join(" ")})`;
-    try {
-      // The ambient default bounds the run: a sequence-op pass over 500 elements trips
-      // the 100-cell policy (the same charge point heap-budget-sequence-ops.test.ts pins).
-      await expect(exec(`(map (lambda (x) x) ${big})`, { ambient })).rejects.toThrow(/heap budget exceeded/);
-      // The per-run option WINS over the ambient policy.
-      const [ok] = await exec<[number]>(`(length (map (lambda (x) x) ${big}))`, {
-        ambient,
-        heapBudget: 1_000_000,
-      });
-      expect(ok).toBe(500);
-    } finally {
-      await ambient.dispose();
-    }
+    const a = LexicalScope.fresh("law/session-a");
+    await exec(`(define x 41)`, { capabilities: [capability], scope: a });
+    const [cont] = await exec(`(+ x 1)`, { capabilities: [capability], scope: a }); // same scope — REPL continuity
+    expect(cont).toBe(42);
+    const b = LexicalScope.fresh("law/session-b");
+    await expect(exec(`x`, { capabilities: [capability], scope: b })).rejects.toThrow(/x/); // other scope — unbound
   });
 });
 
@@ -196,18 +174,22 @@ describe("parse-once-run-many (§3.5)", () => {
   });
 });
 
-describe("validation without execution (§3.5) — phases 1+2+2.5, stop", () => {
-  it("diagnostics computed against the ambient's sealed chain; nothing runs", async () => {
+describe("validation without execution (§3.5) — the complete diagnostic list, zero side effects", () => {
+  it("StaticValidationError carries every diagnostic; nothing runs", async () => {
     const { capability, counts } = spyCapability();
-    const ambient = await assembleAmbient({ capabilities: [capability] });
+    let caught: unknown;
     try {
-      const program = await parseProgram(`(spy/touch) (definitely-not-bound-anywhere 1)`);
-      const diagnostics = validateAgainstAmbient(program, ambient, LexicalScope.fresh());
-      expect(diagnostics.some((d) => d.severity === "error")).toBe(true); // the unbound ref reported
-      expect(diagnostics.some((d) => d.message.includes("definitely-not-bound-anywhere"))).toBe(true);
-      expect(counts.acquired).toBe(0); // ZERO side effects fired — no eval, no resource touch
-    } finally {
-      await ambient.dispose();
+      await execState(`(spy/touch) (definitely-not-bound-anywhere 1)`, {
+        capabilities: [capability],
+        staticValidation: "on",
+      });
+    } catch (e) {
+      caught = e;
     }
+    expect(caught).toBeInstanceOf(StaticValidationError);
+    const diagnostics = (caught as StaticValidationError).diagnostics;
+    expect(diagnostics.some((d) => d.severity === "error")).toBe(true); // the unbound ref reported
+    expect(diagnostics.some((d) => d.message.includes("definitely-not-bound-anywhere"))).toBe(true);
+    expect(counts.acquired).toBe(0); // ZERO side effects fired — no eval, no resource touch
   });
 });

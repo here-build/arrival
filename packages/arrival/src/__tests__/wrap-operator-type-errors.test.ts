@@ -13,10 +13,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { initBridge } from "../index.js";
 import { exec } from "../eval/generator-exec.js";
 
-await initBridge();
 
 describe("wrapOperator: type-error provenance (audit #42)", () => {
   it("(* 0 \"\") names the operator + arg types", async () => {

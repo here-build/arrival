@@ -16,8 +16,9 @@
 import { describe, expect, it } from "vitest";
 
 import { EnvCapability } from "../../common/capability.js";
-import { exec, execState, ensureBaseAssembled } from "../../eval/generator-exec.js";
+import { exec, execState, execInFrame } from "../../eval/generator-exec.js";
 import { assembleRun } from "../../env/assemble-run.js";
+import { isAmbientRuntime } from "../../env/AmbientRuntime.js";
 import type { EvalPreludeInto, EvalSchemeInto } from "../../common/scheme-env.js";
 import { schemeToJs } from "../../membrane/rosetta.js";
 import type { SchemeValue } from "../../values/types.js";
@@ -34,11 +35,18 @@ const files = (table: Record<string, string>) =>
     return hit;
   });
 
-/** The REAL evalScheme/evalPrelude — mirrors `generator-exec.ts`'s own
+/** The REAL evalScheme/evalPrelude — mirrors `generator-exec.ts`'s own private
  *  `capabilityEvalScheme`/`preludeEvalScheme` (see `env/__tests__/assemble-run.test.ts`, same
- *  idiom). */
-const realEvalScheme: EvalSchemeInto = (env, src) => exec(src, { env, skipBootstrapWait: true });
-const realEvalPrelude: EvalPreludeInto = (env, src, runCtx) => exec(src, { env, runCtx, skipBootstrapWait: true });
+ *  idiom): both route through the internal bake seam (`execInFrame`), never the public exec
+ *  surface. */
+const realEvalScheme: EvalSchemeInto = (env, src) => {
+  if (!isAmbientRuntime(env)) throw new Error("expected a concrete AmbientRuntime");
+  return execInFrame(src, env);
+};
+const realEvalPrelude: EvalPreludeInto = (env, src, runCtx) => {
+  if (!isAmbientRuntime(env)) throw new Error("expected a concrete AmbientRuntime");
+  return execInFrame(src, env, runCtx);
+};
 
 /** A minimal ext-style capability — the SAME resolver shape ext-yaml/ext-toml/handlebars use in
  *  production (a `symbol.native` resolver + a prelude registering it by name), minus a real
@@ -67,7 +75,6 @@ describe("loader extension registry — vocabulary path (Stage B4)", () => {
   });
 
   it("PER-RUN LAW: a fresh RunContext of the SAME tuple gets a FRESH, independently-populated registry", async () => {
-    await ensureBaseAssembled();
     const ext = makeUpperExtCapability("test/ext-upper-freshness", ".upperfresh", "test/upper-resolve-freshness");
 
     const runA = await assembleRun({ capabilities: [ext], evalScheme: realEvalScheme, evalPrelude: realEvalPrelude });
@@ -100,7 +107,6 @@ describe("loader extension registry — vocabulary path (Stage B4)", () => {
   });
 
   it("DIAMOND LAW: two capabilities sharing one ext-registering dependency yield ONE registry, no spurious conflict", async () => {
-    await ensureBaseAssembled();
     const shared = makeUpperExtCapability("test/ext-diamond-shared", ".diamond", "test/diamond-resolve");
     const left = EnvCapability.define("test/ext-diamond-left", { deps: [shared], symbols: () => ({}) });
     const right = EnvCapability.define("test/ext-diamond-right", { deps: [shared], symbols: () => ({}) });

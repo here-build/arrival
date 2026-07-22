@@ -13,16 +13,17 @@
 // match them by `.literal()` (the un-renamed name), not the renamed symbol description.
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../env/AmbientRuntime.js";
-import { exec, schemeToJs } from "../../index.js";
+import { schemeToJs } from "../../index.js";
+import { execOverFrame as exec } from "../../eval/generator-exec.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
 
-const val = (rs: unknown[]) => schemeToJs(rs[rs.length - 1] as never, {});
+const val = (rs: readonly unknown[]) => schemeToJs(rs[rs.length - 1] as never, {});
 // `exec` (RULINGS.md R1) now returns the plain-JS unwrap: a symbol's toJS is
 // apostrophe-prefixed (ASymbol's documented, deferred opaque-exit marker —
 // still design-pending — unchanged by this migration, only newly VISIBLE
 // through exec's exit instead of a boxed `.toString()`).
-const repr = (rs: unknown[]) => String(rs[rs.length - 1]);
+const repr = (rs: readonly unknown[]) => String(rs[rs.length - 1]);
 
 describe("cond/case/when/unless — special forms that are first-class keywords", () => {
   it("alias a control form: (define c cond) → c IS cond", async () => {

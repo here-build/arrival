@@ -15,11 +15,12 @@
 // exactly the hygiene-renamed path the fix targets.
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../env/AmbientRuntime.js";
-import { exec, schemeToJs } from "../../index.js";
+import { schemeToJs } from "../../index.js";
+import { execOverFrame as exec } from "../../eval/generator-exec.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
 
-const val = (rs: unknown[]) => schemeToJs(rs[rs.length - 1] as never, {});
+const val = (rs: readonly unknown[]) => schemeToJs(rs[rs.length - 1] as never, {});
 
 describe("do/while/try/define-macro — hygiene-renamed heads resolve via symbol.keyword", () => {
   it("user syntax-rules macro expanding to `do` resolves the keyword", async () => {

@@ -12,17 +12,15 @@
 // entirely.
 //
 // CONFIGURATION RELOCATION (the association→run-table move): `this.configuration` now
-// resolves off `runCtx.capabilityConfigurations`, filled ONCE at `instantiate()` from the
-// AMBIENT a run was instantiated against (`eval/exec-phases.ts`) — never from the bind-time
-// association anymore. That table is built by walking `ambient.capabilities`/`.activations`,
-// so a dispatch only sees a capability's configuration when the RUN was instantiated through
-// the `{ capabilities, config }` (or `{ ambient }`) exec path. A bare-`env` glass exec (no
-// ambient at all) carries no such table BY DESIGN — same posture RunContext.ts documents for
-// `capabilityResources` on a producer-less run — so these tests exercise the sanctioned
-// ambient path (`exec(code, { capabilities, config })`), not a manual
-// `capability.lower(...).apply(env, ...)` + `exec(code, { env })` bind-then-glass-exec, which
-// would now see `this.configuration === undefined` (documented in `run/RunContext.ts`'s
-// `capabilityConfigurations` field doc and `docs/execution.md` §CALLCTX).
+// resolves off `runCtx.capabilityConfigurations`, filled ONCE at `assembleRun` mint time from
+// the tuple's own `Vocabulary.configsByCapability` (env/vocabulary.ts) — never from the bind-
+// time association anymore. So a dispatch sees a capability's configuration whenever the RUN
+// was assembled through the self-hosted vocabulary path (`exec(code, { capabilities, config })`
+// — every sanctioned exec entry, Stage C Cut 3b). The INTERNAL live-frame seam
+// (`execOverFrame`/`execStateOverFrame`, generator-exec.ts's non-public glass replacement)
+// mints a bare `RunContext` with NO such table at all — same posture `run/RunContext.ts`
+// documents for `capabilityResources` on a producer-less run — which is what the "no
+// associated activation" test below exercises on purpose.
 import { describe, expect, it } from "vitest";
 
 import { z } from "zod";
@@ -31,12 +29,26 @@ import { EnvCapability } from "../capability.js";
 import { symbol } from "../symbol.js";
 import * as sz from "../scheme-zod.js";
 import { port, type Resource } from "../resources.js";
-import { assembleAmbient, exec } from "../../eval/generator-exec.js";
-import { instantiate } from "../../eval/exec-phases.js";
-import { LexicalScope } from "../../eval/LexicalScope.js";
+import { exec, execOverFrame, execInFrame } from "../../eval/generator-exec.js";
+import { assembleRun } from "../../env/assemble-run.js";
+import { BASE_ROSTER } from "../../env/base-roster.js";
+import { isAmbientRuntime } from "../../env/AmbientRuntime.js";
 import { freshEnv } from "../../__tests__/_fresh-env.js";
 import { disposeRunContext } from "../../run/run-lifecycle.js";
 import type { CallCtx } from "../../run/CallCtx.js";
+
+/** The same `isAmbientRuntime`-narrowed bake seam generator-exec.ts's own private
+ *  `capabilityEvalScheme`/`preludeEvalScheme` use — this capability declares neither
+ *  `symbol.define` nor a prelude, so neither ever actually fires; the shape is required only to
+ *  satisfy `AssembleRunOptions`. */
+const testEvalScheme = (env: unknown, source: string): Promise<unknown[]> => {
+  if (!isAmbientRuntime(env)) throw new Error("expected a concrete AmbientRuntime");
+  return execInFrame(source, env);
+};
+const testEvalPrelude = (env: unknown, source: string, ctx: Parameters<typeof execInFrame>[2]): Promise<unknown[]> => {
+  if (!isAmbientRuntime(env)) throw new Error("expected a concrete AmbientRuntime");
+  return execInFrame(source, env, ctx);
+};
 
 interface Shout {
   up(s: string): string;
@@ -86,31 +98,36 @@ describe("CallCtx activation dispatch (Stage 1b)", () => {
 
   // INVARIANT (STAGE 2, docs/execution.md §HERMETIC): `this.resources.<key>.live` is populated
   // from a cell keyed by RunContext, not by ambient/env — reused (single-flight, no re-spawn)
-  // across passes that SHARE a RunContext (a REPL's one session, `ExecOptions.runCtx`), fresh
-  // for a DIFFERENT one. Two bare `exec()` calls with no runCtx passthrough each mint (and
-  // dispose) their OWN RunContext, so they get their OWN spawn — see the sibling `it` below for
-  // that per-run-isolation half. Sharing a table-bearing RunContext across passes means minting
-  // it OUTSIDE exec entirely — `assembleAmbient` + `instantiate` directly, the CALLER-owned idiom
-  // `ExecState.ambient`'s own doc names ("a caller wanting warm reuse assembles once and passes
-  // `{ ambient }`") — a bare `exec(code, { capabilities, config })` call OWNS and DISPOSES both
-  // its ambient and its self-minted RunContext at that call's own end (see `execState`'s
-  // `finally`), so capturing `state.runCtx`/`state.ambient` off a first SUCH call and reusing them
-  // in a second would touch an already-disposed pair; a `runCtx` a caller instead builds via a raw
-  // `new RunContext({})` (never routed through `instantiate`) carries no
-  // `capabilityConfigurations` table at all — neither shortcut threads the table live.
+  // across passes that SHARE a RunContext (a REPL's one session), fresh for a DIFFERENT one. Two
+  // bare `exec()` calls with no runCtx passthrough each mint (and dispose) their OWN RunContext,
+  // so they get their OWN spawn — see the sibling `it` below for that per-run-isolation half.
+  // Sharing a RunContext across passes means minting it OUTSIDE any exec call — `assembleRun`
+  // directly (env/assemble-run.ts), the SAME entry `execState` itself calls, armed with the SAME
+  // `evalScheme`/`evalPrelude` bake seam (`execInFrame`) — then threading it through
+  // `ExecOptions.runCtx` on every pass, which opts each call OUT of owning/disposing it.
   it("threads a capability's `resources` onto `this` — same cell, same spawn-once lifecycle ACROSS PASSES SHARING ONE RunContext", async () => {
     shoutSpawns = 0;
-    const ambient = await assembleAmbient({ capabilities: [greeter], config: { tag: "ok" } });
-    const { runCtx } = instantiate(ambient, { scope: LexicalScope.fresh() });
+    // `exec`'s own internal fold is `[...capabilities, ...BASE_ROSTER]` (env/base-roster.ts) —
+    // a pre-mint wanting to interoperate with its `runCtx` reuse must fold the SAME roster in.
+    // `buildVocabulary`'s memo keys on `config` by REFERENCE identity, not deep equality — the
+    // SAME `config` object (not just an equal-shaped literal) must ride every call sharing this
+    // runCtx, or each call would rebuild a DIFFERENT memoized Vocabulary and trip the
+    // tuple-identity check below.
+    const config = { tag: "ok" };
+    const runCtx = await assembleRun({
+      capabilities: [greeter, ...BASE_ROSTER],
+      config,
+      evalScheme: testEvalScheme,
+      evalPrelude: testEvalPrelude,
+    });
     try {
-      const [first] = await exec('(greet "a")', { ambient, runCtx });
-      const [second] = await exec('(greet "b")', { ambient, runCtx });
+      const [first] = await exec('(greet "a")', { capabilities: [greeter], config, runCtx });
+      const [second] = await exec('(greet "b")', { capabilities: [greeter], config, runCtx });
       expect(first).toBe("ok:A");
       expect(second).toBe("ok:B");
       expect(shoutSpawns).toBe(1); // single-flight — dispatch reads the SAME cell, no re-spawn
     } finally {
       await disposeRunContext(runCtx);
-      await ambient.dispose();
     }
   });
 
@@ -126,14 +143,16 @@ describe("CallCtx activation dispatch (Stage 1b)", () => {
     expect(shoutSpawns).toBe(2); // two independent RunContexts ⇒ two independent spawns
   });
 
-  // INVARIANT: additive — a callable with NO associated activation (e.g. a base-pack native
-  // with no capability config/resources) dispatches exactly as before; `this.configuration`/
-  // `this.resources` are simply absent, never a crash or a stub value. Exercised over the
-  // GLASS (`{ env }`) path on purpose: a bare env carries no `capabilityConfigurations` table
-  // either, and a callable with no owning capability at all is unaffected by that either way.
+  // INVARIANT: additive — a callable with NO associated activation dispatches exactly as
+  // before; `this.configuration`/`this.resources` are simply absent, never a crash or a stub
+  // value. Exercised over the INTERNAL live-frame seam (`execOverFrame`) on purpose: unlike the
+  // vocabulary path (where every base builtin now has a real, if configless, owning capability —
+  // see this file's own header), a run minted over a bare frame carries no
+  // `capabilityConfigurations` table at all, so this is the one path that actually reproduces
+  // "no associated activation" for a builtin.
   it("is additive: a callable with no associated activation dispatches unaffected", async () => {
     const env = await freshEnv();
-    const [out] = await exec('(string-length "hello")', { env });
+    const [out] = await execOverFrame('(string-length "hello")', { env });
     expect(out).toBe(5);
   });
 });

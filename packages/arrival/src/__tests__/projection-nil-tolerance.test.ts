@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../env/AmbientRuntime.js";
-import { exec, execState } from "../eval/generator-exec.js";
+import { exec, execState, execOverFrame, execStateOverFrame } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../env/inference-env.js";
 import { is_nil, is_false } from "../eval/guards.js";
 import { ANil } from "../values/primitives/ANil.js";
@@ -33,13 +33,13 @@ import { ANil } from "../values/primitives/ANil.js";
 // track the run's strict bit identically. `run` exercises the inference env; the final block
 // pins that user_env behaves the same — strict drives it, not the env.
 const run = (code: string, strict: boolean) =>
-  exec(code, { env: mintFrame(inferenceEnv, "nil-tol"), strict });
+  execOverFrame(code, { env: mintFrame(inferenceEnv, "nil-tol"), strict });
 
 // execState (COMPLEX tier): the two `toBeInstanceOf(ANil)` cells below assert box
 // discipline directly (RULINGS.md R1) — `is_false`-based cells stay on the simple
 // `run`/`exec` above since `is_false` is representation-blind (raw `false` too).
 const runBoxed = (code: string, strict: boolean) =>
-  execState(code, { env: mintFrame(inferenceEnv, "nil-tol"), strict }).then((s) => s.values);
+  execStateOverFrame(code, { env: mintFrame(inferenceEnv, "nil-tol"), strict }).then((s) => s.values);
 
 // Args that are NEITHER a list/pair NOR the absent value -> type errors (throw in BOTH modes).
 // #f is included deliberately: it is a real boolean, NOT "absent", so projecting it is a type error.
@@ -100,10 +100,11 @@ describe("car/cdr on a vector — loose reads it list-like, strict throws", () =
   });
 });
 
-// The base env (user_env) shares the unified nil-projection — strict drives it, not the env.
-// (Was: "base stays strict regardless of mode" — the old two-car split. Now ONE algebra on the
-// term, so user_env tracks the run's strict exactly like the inference env above.)
-describe("base env (user_env) shares the unified nil-projection — strict drives it, not the env", () => {
+// The self-hosted vocabulary base (a bare exec, Stage C Cut 3b) shares the unified
+// nil-projection — strict drives it, not the env. (Was: "base stays strict regardless of
+// mode" — the old two-car split. Now ONE algebra on the term, so the base tracks the run's
+// strict exactly like the inference env above.)
+describe("the default base shares the unified nil-projection — strict drives it, not the env", () => {
   it("strict: (car '()) and (cdr '()) throw the R7RS pair typecheck", async () => {
     await expect(exec("(car '())", { strict: true })).rejects.toThrow();
     await expect(exec("(cdr '())", { strict: true })).rejects.toThrow();

@@ -7,7 +7,6 @@
  * `store/__tests__/ordinal-path.test.ts` — this file is the WIREFRAME-side hasher only.
  */
 import { describe, it, expect, beforeAll } from "vitest";
-import { initBridge } from "../../index.js";
 import { parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import type { Classifier, DeclaredRole } from "../lineage.js";
@@ -32,7 +31,6 @@ async function wf(code: string): Promise<WireframeProgram> {
 }
 
 beforeAll(async () => {
-  await initBridge();
 });
 
 describe("templateHash (§5 D3: spans STRIPPED — dedup and store identity)", () => {

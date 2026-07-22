@@ -20,7 +20,7 @@ import { freshEnv } from "../../_fresh-env.js";
 import type { ResolvingAmbient } from "../../../env/AmbientRuntime.js";
 import { assembleEnv } from "../../../common/kernel.js";
 import type { SchemeEnv } from "../../../common/scheme-env.js";
-import { exec } from "../../../eval/generator-exec.js";
+import { execOverFrame, execInFrame } from "../../../eval/generator-exec.js";
 import { ArrivalError } from "../../../errors.js";
 import { createChibiHarnessV2, type OutcomeSink, type StepOutcome } from "./harness-capability.js";
 import type { Manifest, Step, TestStep } from "./manifest.js";
@@ -66,8 +66,7 @@ export class CorpusRunner {
   static async create(manifest: Manifest): Promise<CorpusRunner> {
     const env = await freshEnv();
     const { capability, sink } = createChibiHarnessV2();
-    const evalScheme = (e: unknown, src: unknown): unknown =>
-      exec(src as string, { env: e as ResolvingAmbient, skipBootstrapWait: true });
+    const evalScheme = (e: unknown, src: unknown): unknown => execInFrame(src as string, e as ResolvingAmbient);
     await assembleEnv(env as unknown as SchemeEnv, [capability.lower({ evalScheme })]);
     return new CorpusRunner(env, sink, manifest);
   }
@@ -150,7 +149,7 @@ export class CorpusRunner {
 
   private async execSetup(step: SetupStep): Promise<void> {
     try {
-      await exec(step.text, { env: this.env, budgetMs: STEP_BUDGET_MS });
+      await execOverFrame(step.text, { env: this.env, budgetMs: STEP_BUDGET_MS });
       this.lastSetupFailure = undefined;
     } catch (e) {
       this.lastSetupFailure = { line: step.line, message: describeError(e) };
@@ -161,7 +160,7 @@ export class CorpusRunner {
 
   private async execStandaloneTest(step: TestStep): Promise<void> {
     try {
-      await exec(step.text, { env: this.env, budgetMs: STEP_BUDGET_MS });
+      await execOverFrame(step.text, { env: this.env, budgetMs: STEP_BUDGET_MS });
     } catch (e) {
       this.settled.set(step.index, this.classifyFormLevelThrow(e));
       return;
@@ -178,7 +177,7 @@ export class CorpusRunner {
   private async execBlock(step: BlockStep): Promise<void> {
     let abortedMessage: string | undefined;
     try {
-      await exec(step.text, { env: this.env, budgetMs: STEP_BUDGET_MS });
+      await execOverFrame(step.text, { env: this.env, budgetMs: STEP_BUDGET_MS });
     } catch (e) {
       abortedMessage = describeError(e);
     }

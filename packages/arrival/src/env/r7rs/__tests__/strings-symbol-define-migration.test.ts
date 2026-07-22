@@ -41,7 +41,7 @@
 //     ROW 2 note observes) — with zero such entries in this pack, both are
 //     vacuously satisfied, not merely untested.
 import { describe, expect, it } from "vitest";
-import { execState } from "../../../eval/generator-exec.js";
+import { execStateOverFrame as execState } from "../../../eval/generator-exec.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import type { AEntity } from "../../../common/symbol.js";
 import stringsPack from "../strings.js";

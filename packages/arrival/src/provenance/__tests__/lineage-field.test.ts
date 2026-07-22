@@ -23,7 +23,6 @@
  * untouched; its retirement is a later phase.
  */
 import { describe, it, expect } from "vitest";
-import { initBridge } from "../../index.js";
 import { parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import {
@@ -49,7 +48,6 @@ const C: Classifier = {
 };
 
 async function skeleton(src: string): Promise<LineageNode> {
-  await initBridge();
   const [ast] = await parse(src);
   return classify(ast, C); // STATIC — no execution
 }

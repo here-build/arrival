@@ -4,19 +4,16 @@
 //   • eof                       — the EOF singleton (values/primitives/EOF.ts)
 // `exec` is exported explicitly below from generator-exec — the canonical stack-safe path.
 //
-// `global_env` / `user_env` (env-roots.ts) are NOT barrel-exported — the two
-// native/interaction roots stay internal-only, no external consumers
-// (arrival-environment-privatization.md §II.3).
+// STAGE C CUT 3b retired the realm-singleton native/interaction roots (`global_env`/
+// `user_env`, env-roots.ts) and the inference-plane base env (`sandboxedEnv`,
+// inference-env.ts) along with the ambient path — there is no realm-parented env at all
+// anymore. The instance surface those roots once exposed (`.inherit` / `.set` /
+// `.defineRosetta`) decomposes into the declared doors:
+//   • host vocabulary            → `exec({ capabilities })`
+//   • a program's declared param → `define/overridable` (its own capability + config bag)
+//   • define accumulation        → `exec({ scope })` + `LexicalScope.fresh()`
 export { box, patch_value, quote } from "./values/values-repr.js";
 export { eof } from "./values/primitives/EOF.js";
-// `sandboxedEnv` (the inference-plane base env, env-roots' third root) is NOT
-// barrel-exported (arrival-environment-privatization.md §II.3); the identity boundary
-// holds internally (inference-env.ts). The instance surface it exposed
-// (`.inherit` / `.set` / `.defineRosetta`) decomposes into the declared doors:
-//   • host vocabulary            → `exec({ capabilities })` / `assembleAmbient` (`/env`)
-//   • a program's declared param → `define/overridable` + `exec({ override })`
-//   • define accumulation        → `exec({ scope })` + `LexicalScope.fresh()`
-//   • session/decomposed reuse   → `assembleAmbient` + `exec({ ambient, scope })`
 // Interop sealing — `@arrival.private` (+ `markInteropBoundary`) marks a class opaque to
 // a Scheme member-read (`(@ x :internal)` → nil). `markSandboxPrivate`/`markAsSandboxBoundary`
 // are deprecated aliases kept for cross-package consumers (arrival-chain).
@@ -118,10 +115,10 @@ export type { SchemeValue } from "./values/types.js";
 // out themselves today.
 export type { AList } from "./values/types.js";
 
-// No eager bootstrap. The runtime base assembles lazily on the first `exec` (the
-// realm-cached `ensureBaseAssembled`, exposed as `initBridge` below) — importing the
-// package doesn't fire an async assembly. Callers wanting the base warm early can
-// `await initBridge()`.
+// No eager bootstrap. Stage C Cut 3b retired the realm-cached ambient bootstrap
+// (`ensureBaseAssembled`/`initBridge`) along with the ambient path itself — the self-hosted
+// `Vocabulary` (env/vocabulary.ts) is built lazily, per tuple, memoized by capability-set
+// identity; importing the package doesn't fire any assembly at all.
 
 // Classes that may be needed for type checking or extension
 export { EOF as EOF } from "./values/primitives/EOF.js";
@@ -143,12 +140,9 @@ export { AExact } from "./values/primitives/AExact.js";
 export { AInexact } from "./values/primitives/AInexact.js";
 export { type ANumeric, parseNumber as parseNumber } from "./values/numbers.js";
 
-// `initBridge` is the stable public name for "ensure the runtime base is assembled"
-// (inhuman cli.ts and the smoke suites await it); it aliases the realm-cached
-// `ensureBaseAssembled`. `coerceNumeric` / `wrappedOps` re-surface from their real homes.
+// `coerceNumeric` / `wrappedOps` re-surface from their real homes.
 export { coerceNumeric } from "./values/op-helpers.js";
 export { wrappedOps } from "./env/r7rs/error-objects.js";
-export { ensureBaseAssembled as initBridge } from "./eval/generator-exec.js";
 
 // OFFENDING_VALUE (errors.ts) — symbol-keyed metadata a collection-type-error (take/
 // map/vector-ref/reduce/car/…) carries naming the value it refused because it wasn't a

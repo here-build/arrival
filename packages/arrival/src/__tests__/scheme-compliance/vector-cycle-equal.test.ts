@@ -24,7 +24,7 @@
 //     termination here.
 import { describe, expect, it } from "vitest";
 import { freshEnv } from "../_fresh-env.js";
-import { execState } from "../../eval/generator-exec.js";
+import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 
 const env = await freshEnv();
 // COMPLEX tier (execState): callers stringify the BOXED verdict (Scheme print

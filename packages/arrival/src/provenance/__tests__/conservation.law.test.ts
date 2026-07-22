@@ -40,7 +40,7 @@ import { AVector } from "../../values/primitives/AVector.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
-import { provOf } from "../../provenance/lineage-shadow.js";
+import { provOf } from "../../provenance/lineage.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { schemeToJs, type InvocationLike } from "../../membrane/rosetta.js";
 import { EnvCapability, type SymbolFactory } from "../../common/capability.js";

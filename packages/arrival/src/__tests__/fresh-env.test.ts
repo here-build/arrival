@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { freshEnv } from "./_fresh-env.js";
-import { exec, execState } from "../eval/generator-exec.js";
+import { execOverFrame as exec, execStateOverFrame as execState } from "../eval/generator-exec.js";
 import { schemeToJs } from "../membrane/rosetta.js";
 
 /**

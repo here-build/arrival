@@ -24,7 +24,7 @@ import invariant from "tiny-invariant";
 
 import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { AmbientRuntime, mintFrame } from "../../env/AmbientRuntime.js";
-import { execState } from "../../eval/generator-exec.js";
+import { execStateOverFrame } from "../../eval/generator-exec.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { schemeToJs } from "../../membrane/rosetta.js";
 import * as z from "../../common/scheme-zod.js";
@@ -236,7 +236,7 @@ export async function recordRun(
   setEmissionEnabled(true);
   let values: readonly SchemeValue[];
   try {
-    ({ values } = await execState(code, { env }));
+    ({ values } = await execStateOverFrame(code, { env }));
   } finally {
     setEmissionEnabled(false);
     setEagerProvenanceOracleEnabled(savedOracle);

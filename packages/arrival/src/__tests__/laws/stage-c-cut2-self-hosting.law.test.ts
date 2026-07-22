@@ -42,12 +42,7 @@ import { describe, expect, it } from "vitest";
 import { EnvCapability } from "../../common/capability.js";
 import { exec, execState } from "../../eval/generator-exec.js";
 import { LexicalScope } from "../../eval/LexicalScope.js";
-import { user_env } from "../../env/env-roots.js";
-// In-package test: the module-internal storage write (hermetic-Environment ruling — no public
-// set) — same convention `resolution-chain.law.test.ts` uses to poke a real root directly.
-import { bindValue } from "../../env/AmbientRuntime.js";
 import { schemeToJs } from "../../membrane/rosetta.js";
-import { AExact } from "../../values/primitives/AExact.js";
 
 describe("LAW 1 — bare exec rides the self-hosted vocabulary path", () => {
   it("execState(code) with no options has runCtx.vocabulary defined and resolves a base symbol", async () => {
@@ -103,12 +98,9 @@ describe("LAW 4 — self-hosted stdlib: one chain, no user_env parenting", () =>
     expect(stdlib).toEqual([1]);
   });
 
-  it("a uniquely-named value bound directly onto the real user_env is invisible to a vocabulary-path run", async () => {
-    // THE HONEST OBSERVABLE: if the vocabulary chain ever fell through to `user_env` (the
-    // legacy sin the cornerstone retires), this name would resolve. It does not — the sealed
-    // chain never walks a `user_env` parent at all; `BASE_ROSTER`'s own bind of the SAME base
-    // symbols is what a self-hosted run actually resolves through.
-    bindValue(user_env, "cut2-user-env-leak-witness", new AExact(999));
-    await expect(exec("cut2-user-env-leak-witness")).rejects.toThrow(/unbound/i);
-  });
+  // STAGE C CUT 3b: the "a value bound directly onto the real `user_env` is invisible" row is
+  // DROPPED — `user_env` (the realm singleton the cornerstone names as the legacy sin) is
+  // retired entirely, not merely unwalked. There is no longer a live frame to bind a leak
+  // witness onto at all, so the invariant this row probed is now true by construction (no
+  // parenting chain exists to leak through), not something a running program can still observe.
 });

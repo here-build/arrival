@@ -28,11 +28,12 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { ResolvingAmbient, mintPlainFrame, mintResolvingFrame } from "../../env/AmbientRuntime.js";
+import { ResolvingAmbient, mintPlainFrame, mintResolvingFrame, isAmbientRuntime } from "../../env/AmbientRuntime.js";
 import { compileResolutionChain, sealResolutionChain } from "../../eval/CompiledResolutionChain.js";
 import { assembleEnv, type EnvPack } from "../../common/kernel.js";
-import { ensureBaseAssembled } from "../../eval/generator-exec.js";
-import { user_env, global_env } from "../../env/env-roots.js";
+import { execInFrame } from "../../eval/generator-exec.js";
+import { buildVocabulary } from "../../env/vocabulary.js";
+import { BASE_ROSTER } from "../../env/base-roster.js";
 import { AExact } from "../../values/primitives/AExact.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
 import { bindValue } from "../../env/AmbientRuntime.js";
@@ -57,28 +58,34 @@ describe("CompiledResolutionChain — LAW 2: merge-at-seal", () => {
     expect(chain.names.has("nope")).toBe(false);
   });
 
-  it("THE IN-REPO REALITY: the bootstrapped base compiles to the degenerate ONE-flat-Map form", async () => {
-    // Stage C Cut 2: a bare `exec("1")` no longer forces this bootstrap (it rides the
-    // self-hosted vocabulary path — `user_env`/`global_env` are LEGACY-path machinery this law
-    // still pins directly). `ensureBaseAssembled` is the honest trigger either way.
-    await ensureBaseAssembled(); // force the realm bootstrap (bake + seal)
+  it("THE IN-REPO REALITY: the self-hosted BASE_ROSTER vocabulary compiles to the degenerate ONE-flat-Map form", async () => {
+    // STAGE C CUT 3b: the realm bootstrap (`ensureBaseAssembled`/`user_env`/`global_env`) is
+    // retired along with the ambient path entirely — a bare `exec("1")` rides the self-hosted
+    // vocabulary path exclusively now. Re-pinned here over the SAME shape `generator-exec.ts`'s
+    // own `execState` builds: a null-rooted scratch frame flat-bound from the memoized
+    // `Vocabulary.map`, then sealed — see that module's `sealedVocabularyChain`.
+    const evalScheme = (env: unknown, source: string): Promise<unknown[]> => {
+      if (!isAmbientRuntime(env)) throw new Error("expected a concrete AmbientRuntime");
+      return execInFrame(source, env);
+    };
+    const vocabulary = await buildVocabulary(BASE_ROSTER, undefined, evalScheme);
+    const chainFrame = mintResolvingFrame("resolution-chain-law-vocabulary");
+    for (const [name, value] of vocabulary.map) bindValue(chainFrame, name, value);
 
     // Zero live resolvers: no pack declares `spec.resolvers` (the contract is retired),
-    // and the kernel's preludeOnly overlay was dropped at seal (LAW 5) — verify on the
-    // real roots.
-    expect(user_env.resolverSpecs()).toHaveLength(0);
-    expect(global_env.resolverSpecs()).toHaveLength(0);
+    // and the kernel's preludeOnly overlay was dropped at seal (LAW 5).
+    expect(chainFrame.resolverSpecs()).toHaveLength(0);
 
-    const chain = sealResolutionChain(user_env);
+    const chain = sealResolutionChain(chainFrame);
     expect(chain.steps).toHaveLength(1);
     expect(chain.steps[0]).toBeInstanceOf(Map);
-    // The merged vocabulary spans BOTH roots: a native on global_env, a .scm define on user_env.
+    // The merged vocabulary spans the whole self-hosted base: a native, a .scm define.
     expect(chain.lookup("+")).toBeDefined();
     expect(chain.lookup("cons")).toBeDefined();
     expect(chain.lookup("definitely-not-bound-xyz")).toBeUndefined();
 
     // ONE artifact per baked base — the seal registry memoizes.
-    expect(sealResolutionChain(user_env)).toBe(chain);
+    expect(sealResolutionChain(chainFrame)).toBe(chain);
   });
 });
 

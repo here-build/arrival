@@ -26,7 +26,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { mintFrame, type ResolvingAmbient } from "../../env/AmbientRuntime.js";
 
-import { execState } from "../../eval/generator-exec.js";
+import { execStateOverFrame } from "../../eval/generator-exec.js";
 import { EvalTrace } from "../../provenance/trace.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { schemeToJs } from "../../membrane/rosetta.js";
@@ -104,7 +104,7 @@ describe("A. silent-region mode suppresses emission, never doors (§4 CHOSEN, ro
       await registerSource(env);
       const trace = new EvalTrace();
       const result = await withRecordCoordinateAsync(RECORD_COORD, mintSink, () =>
-        execState("(fetch-item)", { env, tap: trace }),
+        execStateOverFrame("(fetch-item)", { env, tap: trace }),
       );
       expect(schemeToJs(result.values[0], {})).toBe(42); // real program result, unaffected
     });
@@ -134,7 +134,7 @@ describe("A. silent-region mode suppresses emission, never doors (§4 CHOSEN, ro
     const env = mintFrame(inferenceEnv, "loud-mint");
     await registerSource(env);
     const trace = new EvalTrace();
-    await withRecordCoordinateAsync(RECORD_COORD, mintSink, () => execState("(fetch-item)", { env, tap: trace }));
+    await withRecordCoordinateAsync(RECORD_COORD, mintSink, () => execStateOverFrame("(fetch-item)", { env, tap: trace }));
 
     await Promise.resolve();
     await Promise.resolve();
@@ -171,7 +171,7 @@ describe("A. silent-region mode suppresses emission, never doors (§4 CHOSEN, ro
       await withRecordCoordinateAsync(
         { templateHash: "th-nested", ordinalPath: [9], regionEpoch: "e-nested" },
         freshMintSink,
-        () => execState("(fetch-item)", { env, tap: trace }),
+        () => execStateOverFrame("(fetch-item)", { env, tap: trace }),
       );
     });
 
@@ -332,7 +332,7 @@ describe("C. glass whole-program replay — the SAME silent discipline generaliz
     await registerSource(env1);
     const trace1 = new EvalTrace();
     const real = await withRecordCoordinateAsync(RECORD_COORD, sink, () =>
-      execState("(fetch-item)", { env: env1, tap: trace1 }),
+      execStateOverFrame("(fetch-item)", { env: env1, tap: trace1 }),
     );
     expect(schemeToJs(real.values[0], {})).toBe(42);
 
@@ -348,7 +348,7 @@ describe("C. glass whole-program replay — the SAME silent discipline generaliz
     await registerSource(env2);
     const trace2 = new EvalTrace();
     const replayed = await withSilentRegion(() =>
-      withRecordCoordinateAsync(RECORD_COORD, sink, () => execState("(fetch-item)", { env: env2, tap: trace2 })),
+      withRecordCoordinateAsync(RECORD_COORD, sink, () => execStateOverFrame("(fetch-item)", { env: env2, tap: trace2 })),
     );
     expect(schemeToJs(replayed.values[0], {})).toBe(42); // same behavior…
 

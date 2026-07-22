@@ -1,5 +1,6 @@
 // Unified SRFI palette — assemble each capability onto a real env and run one verb.
-import { exec, execState, schemeToJs } from "../../../index.js";
+import { schemeToJs } from "../../../index.js";
+import { execOverFrame, execStateOverFrame } from "../../../eval/generator-exec.js";
 import { mintFrame } from "../../AmbientRuntime.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
@@ -25,13 +26,13 @@ import {
   srfi235,
 } from "../index.js";
 
-const evalScheme = (e: SchemeEnv, src: string) => exec(src, { env: e as never });
+const evalScheme = (e: SchemeEnv, src: string) => execOverFrame(src, { env: e as never });
 
 /** Assemble one capability onto a fresh env; return a `(num src)` runner. */
 async function withCap(cap: { lower: (o: { evalScheme: typeof evalScheme }) => unknown }, name: string) {
   const env = mintFrame(sandboxedEnv, name);
   await assembleEnv(env as unknown as SchemeEnv, [cap.lower({ evalScheme }) as never]);
-  return async (src: string) => Number((await exec(src, { env }))[0]);
+  return async (src: string) => Number((await execOverFrame(src, { env }))[0]);
 }
 
 // INVARIANT: each of SRFI-1/13/43/189/128/26/8/2/235 assembles onto an env and its
@@ -64,7 +65,7 @@ describe("@inhuman.tools/arrival/srfi", () => {
   it("SRFI-8 receive is a multi-return purity door", async () => {
     const env = mintFrame(sandboxedEnv, "s8");
     await assembleEnv(env as unknown as SchemeEnv, [srfi8.lower({ evalScheme }) as never]);
-    await expect(exec("(receive 1 2)", { env })).rejects.toThrow(
+    await expect(execOverFrame("(receive 1 2)", { env })).rejects.toThrow(
       /multiple-value returns are omitted|continuation arity|not available/,
     );
   });
@@ -106,8 +107,8 @@ describe("@inhuman.tools/arrival/srfi-1 — positional accessors", () => {
   async function accEnv() {
     const env = mintFrame(sandboxedEnv, `s1acc-${Math.random().toString(36).slice(2)}`);
     await assembleEnv(env as unknown as SchemeEnv, [srfi1.lower({ evalScheme }) as never]);
-    const num = async (src: string) => Number((await exec(src, { env }))[0]);
-    const raw = (src: string) => exec(src, { env });
+    const num = async (src: string) => Number((await execOverFrame(src, { env }))[0]);
+    const raw = (src: string) => execOverFrame(src, { env });
     return { num, raw };
   }
 
@@ -228,7 +229,7 @@ describe("SRFI-95 sort — end-to-end behavior (previously uncovered via the bui
     const env = mintFrame(sandboxedEnv, `s95-${Math.random().toString(36).slice(2)}`);
     await assembleEnv(env as unknown as SchemeEnv, [srfi95.lower({ evalScheme }) as never]);
     // execState (COMPLEX tier): schemeToJs wants BOXED values — `exec` already unwraps.
-    return async (src: string) => (await execState(src, { env })).values;
+    return async (src: string) => (await execStateOverFrame(src, { env })).values;
   }
 
   // INVARIANT: sort with no comparator sorts a list by the elements' own total order,

@@ -30,9 +30,10 @@
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../AmbientRuntime.js";
 
-import { exec, execState, initBridge, LexicalScope, type ExecOptions } from "../../../index.js";
+import { exec, execState, LexicalScope, type ExecOptions } from "../../../index.js";
+import { execInFrame } from "../../../eval/generator-exec.js";
 import { AString } from "../../../values/primitives/AString.js";
-import { global_env } from "../../env-roots.js";
+import { nativeOnlyRoot } from "../../../__tests__/_fresh-env.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
 import { overridableCapability } from "../../overridable/overridable.js";
 import type { AEntity, DefineSyntaxSymbolDef } from "../../../common/symbol.js";
@@ -42,9 +43,9 @@ import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 const capabilities = [overridableCapability];
 
 // Local evalScheme, mirroring `_fresh-env.ts`'s own — used only by the standalone
-// lower()/apply() rows below (the FV-law regression pin), never by the exec() rows.
-const evalScheme = (env: unknown, src: unknown): unknown =>
-  exec(src as string, { env: env as ResolvingAmbient, skipBootstrapWait: true });
+// lower()/apply() rows below (the FV-law regression pin), never by the exec() rows. The
+// internal bake seam (Stage C Cut 3b), never the public exec surface.
+const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
 
 // `spec.symbols` IS the record (the builder-form arm is retired; a define-form spec carries
 // the eagerly-evaluated literal), so reading it needs no activation.
@@ -79,16 +80,14 @@ describe("arrival/overridable — structural: no prelude field, define-syntax ki
 
 describe("arrival/overridable — the §2.1 bake FV law is out of scope for defineSyntax (regression pin)", () => {
   it("lowers standalone (existing deps unchanged), never throws a bake FV/role door", async () => {
-    await initBridge();
-    const env = mintFrame(global_env, "overridable-standalone");
+    const env = mintFrame(await nativeOnlyRoot(), "overridable-standalone");
     await expect(
       overridableCapability.lower({ evalScheme, config: { params: {} } }).apply(env, undefined as never),
     ).resolves.not.toThrow();
   });
 
   it("never throws DefineLocalityError/DefineForwardReferenceError/ProvenanceRoleShapeError", async () => {
-    await initBridge();
-    const env = mintFrame(global_env, "overridable-fv-pin");
+    const env = mintFrame(await nativeOnlyRoot(), "overridable-fv-pin");
     try {
       await overridableCapability.lower({ evalScheme, config: { params: {} } }).apply(env, undefined as never);
     } catch (error) {

@@ -1,39 +1,49 @@
 // The file-type resolver registry behind (require/register-extension): by-name mapping,
-// longest-suffix match, idempotent register / conflict-throw, and the prelude-only stub.
-import { afterEach, describe, expect, it } from "vitest";
+// longest-suffix match, idempotent register / conflict-throw. STAGE C CUT 3b
+// (docs/plans/stage-c-corpse-deletion.md) retired the process-global convenience wrappers
+// (`registerExtension`/`lookupExtensionResolver`/`legacyExtensionRegistry`/
+// `__resetExtensionRegistryForTest`) along with the ambient path they bridged for — every run's
+// registry is now its OWN per-`RunContext` `Map` (`LoaderRunResources.extensionResolvers`,
+// loader-capability.ts). This file re-pins the SAME primitives (`registerExtensionIn`/
+// `lookupExtensionResolverIn`) directly against a fresh `Map` per test — no reset step needed,
+// since there is no shared table left to reset.
+import { describe, expect, it, beforeEach } from "vitest";
 
-import { __resetExtensionRegistryForTest, lookupExtensionResolver, registerExtension } from "../loader-extensions.js";
+import { lookupExtensionResolverIn, registerExtensionIn, type ExtensionResolverRegistry } from "../loader-extensions.js";
 
-afterEach(() => __resetExtensionRegistryForTest());
+let registry: ExtensionResolverRegistry;
+beforeEach(() => {
+  registry = new Map();
+});
 
-describe("registerExtension / lookupExtensionResolver", () => {
+describe("registerExtensionIn / lookupExtensionResolverIn", () => {
   it("maps a suffix to a resolver verb NAME and looks it up by path", () => {
-    registerExtension(".hbs", "handlebars/lambda");
-    expect(lookupExtensionResolver("templates/card.hbs")).toBe("handlebars/lambda");
-    expect(lookupExtensionResolver("data/x.json")).toBeUndefined();
+    registerExtensionIn(registry, ".hbs", "handlebars/lambda");
+    expect(lookupExtensionResolverIn(registry, "templates/card.hbs")).toBe("handlebars/lambda");
+    expect(lookupExtensionResolverIn(registry, "data/x.json")).toBeUndefined();
   });
 
   it("normalizes a dot-less suffix", () => {
-    registerExtension("toml", "toml/parse");
-    expect(lookupExtensionResolver("config.toml")).toBe("toml/parse");
+    registerExtensionIn(registry, "toml", "toml/parse");
+    expect(lookupExtensionResolverIn(registry, "config.toml")).toBe("toml/parse");
   });
 
   it("longest matching suffix wins (.spec.json beats .json)", () => {
-    registerExtension(".json", "data/json");
-    registerExtension(".spec.json", "spec/parse");
-    expect(lookupExtensionResolver("a.json")).toBe("data/json");
-    expect(lookupExtensionResolver("a.spec.json")).toBe("spec/parse");
+    registerExtensionIn(registry, ".json", "data/json");
+    registerExtensionIn(registry, ".spec.json", "spec/parse");
+    expect(lookupExtensionResolverIn(registry, "a.json")).toBe("data/json");
+    expect(lookupExtensionResolverIn(registry, "a.spec.json")).toBe("spec/parse");
   });
 
   it("re-registering the SAME mapping is an idempotent no-op", () => {
-    registerExtension(".prompt", "prompt/compile");
-    expect(() => registerExtension(".prompt", "prompt/compile")).not.toThrow();
-    expect(lookupExtensionResolver("x.prompt")).toBe("prompt/compile");
+    registerExtensionIn(registry, ".prompt", "prompt/compile");
+    expect(() => registerExtensionIn(registry, ".prompt", "prompt/compile")).not.toThrow();
+    expect(lookupExtensionResolverIn(registry, "x.prompt")).toBe("prompt/compile");
   });
 
   it("a CONFLICTING name for an already-claimed suffix throws", () => {
-    registerExtension(".prompt", "prompt/compile");
-    expect(() => registerExtension(".prompt", "other/compile")).toThrow(/already handled by "prompt\/compile"/);
+    registerExtensionIn(registry, ".prompt", "prompt/compile");
+    expect(() => registerExtensionIn(registry, ".prompt", "other/compile")).toThrow(/already handled by "prompt\/compile"/);
   });
 });
 

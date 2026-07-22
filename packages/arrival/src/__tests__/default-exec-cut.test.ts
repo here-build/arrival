@@ -22,13 +22,14 @@
  *   3. THE CUT (still true, unchanged): user defines never land on `user_env` — builtins still
  *      resolve through the self-hosted vocabulary's own chain, not a lexical write.
  *
- * Custom-env callers (arrival-chain/inhuman) stay glass and are covered by the rest of the suite.
+ * STAGE C CUT 3b: the public glass option (`ExecOptions.env`) this file's original header
+ * referenced is gone entirely — every caller, custom-env or not, is now on this same
+ * self-hosted vocabulary path.
  */
 import { describe, expect, it } from "vitest";
 
 import { exec, execState } from "../eval/generator-exec.js";
 import { LexicalScope } from "../eval/LexicalScope.js";
-import { user_env } from "../env/env-roots.js";
 import { schemeToJs } from "../membrane/rosetta.js";
 
 describe("default exec — Stage C Cut 2 isolation", () => {
@@ -54,12 +55,14 @@ describe("default exec — Stage C Cut 2 isolation", () => {
     await expect(exec("cut-runctx-only-witness", { runCtx: first.runCtx })).rejects.toThrow(/unbound/i);
   });
 
-  it("default-path defines do NOT land in user_env, builtins still resolve", async () => {
+  it("default-path defines land in a fresh per-call scope; builtins still resolve through the self-hosted vocabulary chain", async () => {
     await exec("(define cut-leak-witness 7)");
-    // The define landed in a fresh, null-rooted per-call scope — never the capability base.
-    expect(user_env.has("cut-leak-witness")).toBe(false);
-    // …yet a builtin still resolves — through the self-hosted vocabulary chain, not the
-    // lexical chain and not `user_env`.
+    // The define landed in a fresh, null-rooted per-call scope — invisible to a later,
+    // unrelated bare exec (the realm-singleton `user_env` this test used to probe against is
+    // gone entirely, Stage C Cut 3b — there is no shared capability-base frame left to check).
+    await expect(exec("cut-leak-witness")).rejects.toThrow(/unbound/i);
+    // …yet a builtin still resolves — through the self-hosted vocabulary chain, not any
+    // lexical write.
     const [sum] = (await execState("(+ 1 2)")).values;
     expect(schemeToJs(sum, {})).toBe(3);
   });

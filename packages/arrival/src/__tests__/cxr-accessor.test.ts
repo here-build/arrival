@@ -11,14 +11,15 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { exec, execState } from "../eval/generator-exec.js";
-import { global_env } from "../env/env-roots.js";
+import { execOverFrame as exec, execStateOverFrame as execState } from "../eval/generator-exec.js";
+import { nativeOnlyRoot } from "./_fresh-env.js";
 import { inferenceEnv } from "../env/inference-env.js";
 import { schemeToJs } from "../membrane/rosetta.js";
 import { ANil } from "../values/primitives/ANil.js";
+import type { ResolvingAmbient } from "../env/AmbientRuntime.js";
 
 const evalIn =
-  (env: typeof global_env) =>
+  (env: ResolvingAmbient) =>
   async (expr: string): Promise<unknown> =>
     // execState (COMPLEX tier): schemeToJs wants the BOXED value — `exec` already unwraps.
     schemeToJs((await execState(expr, { env })).values[0], {});
@@ -50,11 +51,16 @@ const CXR_CASES = [
 ] as const;
 
 // Run the SAME expressions through both roots. The kernel unfold is env-independent (no per-env
-// binding, no resolver), so global_env and inferenceEnv resolve the family identically. The list
-// INPUTS use quote literals (`'(…)`, reader-level) rather than `(list …)` so the data needs no env
-// binding either — `list` is a pack builtin (env/r7rs/lists.ts), bound on the assembled inference
-// root but NOT on bare global_env; quote keeps this test isolated to the cxr unfold it targets.
-for (const [label, env] of [["global_env", global_env], ["inferenceEnv", inferenceEnv]] as const) {
+// binding, no resolver), so a bare native-only root and inferenceEnv resolve the family
+// identically. The list INPUTS use quote literals (`'(…)`, reader-level) rather than `(list …)`
+// so the data needs no env binding either — `list` is a pack builtin (env/r7rs/lists.ts), bound
+// on the assembled inference root but NOT on the bare native-only root; quote keeps this test
+// isolated to the cxr unfold it targets.
+const roots: readonly [string, ResolvingAmbient][] = [
+  ["nativeOnlyRoot", await nativeOnlyRoot()],
+  ["inferenceEnv", inferenceEnv],
+];
+for (const [label, env] of roots) {
   describe(`c[ad]+r evaluation in ${label}`, () => {
     const run = evalIn(env);
 

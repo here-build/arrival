@@ -7,7 +7,6 @@
  * below, tagged.
  */
 import { describe, it, expect, beforeAll } from "vitest";
-import { initBridge } from "../../index.js";
 import { parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import type { Classifier, DeclaredRole } from "../lineage.js";
@@ -61,7 +60,6 @@ const kinds = (g: WireframeGraph): string[] => g.nodes.map((n) => n.kind);
 const wireTo = (g: WireframeGraph, slot: string): Wire | undefined => g.wires.find((w) => w.consumer.slot === slot);
 
 beforeAll(async () => {
-  await initBridge();
 });
 
 describe("Q8a builder core — the collapse rule (§1: maximal pure subgraphs fold to ONE wire)", () => {

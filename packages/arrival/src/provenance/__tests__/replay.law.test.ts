@@ -31,8 +31,7 @@ import * as fc from "fast-check";
 import { mintFrame } from "../../env/AmbientRuntime.js";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
-import { initBridge } from "../../index.js";
-import { execState, parse } from "../../eval/generator-exec.js";
+import { execState, execStateOverFrame, parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { schemeToJs } from "../../membrane/rosetta.js";
 import type { Classifier } from "../../provenance/lineage.js";
@@ -105,7 +104,6 @@ const PER_WIRE_CLASSES = new Set<CorpusEntry["klass"]>([
 ]);
 
 beforeAll(async () => {
-  await initBridge();
 });
 
 afterEach(() => {
@@ -286,7 +284,7 @@ describe("replay-nondeterminism (§4 R1 + §7: frozen-payload replay stable unde
 
     // The world mutates: the same ops now answer 1001, 1002, 1003.
     const mutatedCalls = new Map<string, number>();
-    const live = await execState(CODE, { env: await mutatedEnv(mutatedCalls) });
+    const live = await execStateOverFrame(CODE, { env: await mutatedEnv(mutatedCalls) });
     const liveNow = schemeToJs(live.values[live.values.length - 1], {});
     expect(liveNow).not.toEqual(run.egress); // the mutation is REAL — a live call answers differently now
 
@@ -319,8 +317,8 @@ describe("replay-nondeterminism (§4 R1 + §7: frozen-payload replay stable unde
     // even differ from EACH OTHER (the gensym/clock-shaped ops advance), which is
     // exactly why re-execution stability is excluded rather than merely weakened.
     const env = await mutatedEnv(mutatedCalls);
-    const live1 = schemeToJs((await execState(CODE, { env })).values[0], {});
-    const live2 = schemeToJs((await execState(CODE, { env })).values[0], {});
+    const live1 = schemeToJs((await execStateOverFrame(CODE, { env })).values[0], {});
+    const live2 = schemeToJs((await execStateOverFrame(CODE, { env })).values[0], {});
     expect(live1).not.toEqual(run.egress);
     expect(live2).not.toEqual(live1);
 

@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 import { theVoid } from "../values/primitives/AVoid.js";
-import { execExpr, execState, parse, type ExecOptions } from "../eval/generator-exec.js";
+import { execExpr, execState, execStateOverFrame, parse, type ExecOptions } from "../eval/generator-exec.js";
 import { ABool } from "../values/primitives/ABool.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AExact } from "../values/primitives/AExact.js";
@@ -316,7 +316,7 @@ describe("generator-exec", () => {
         log.push(String(tag.valueOf()));
         return nil;
       });
-      await exec(
+      await execStateOverFrame(
         `(try
            (log "body")
            (finally (log "finally")))`,
@@ -335,7 +335,7 @@ describe("generator-exec", () => {
         log.push(String(tag.valueOf()));
         return nil;
       });
-      await exec(
+      await execStateOverFrame(
         `(try
            (begin (log "body") (raise "error"))
            (catch (e) (log "catch"))

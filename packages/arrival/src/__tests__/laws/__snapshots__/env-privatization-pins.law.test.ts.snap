@@ -63,7 +63,6 @@ exports[`V0 pin — barrel surface > the full exported-name set is otherwise unc
   "fieldCone",
   "fieldResolve",
   "fullCone",
-  "initBridge",
   "is_callable_value",
   "jsToScheme",
   "markAsSandboxBoundary",

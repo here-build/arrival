@@ -19,7 +19,6 @@ import { AValue } from "../values/primitives/AValue.js";
 import { schemeToJs } from "../membrane/rosetta.js";
 import { WireLocalityError } from "../errors.js";
 import type { LexicalScope } from "../eval/LexicalScope.js";
-import type { AssembledAmbient } from "../eval/exec-phases.js";
 import type { SchemeValue } from "../values/types.js";
 
 import { buildSlice, writeForm, writeFormWith, defineNameOf, lastTopLevelForm } from "./slice.js";
@@ -59,22 +58,20 @@ export interface UnevalContainer {
 
 /** Build the `{result, meta, uneval}` container from a finished traced run. `result` is the run's
  *  final value as a raw AValue (provenance intact — NOT schemeToJs-peeled); `scope` is the post-run
- *  lexical scope (so the selector evaluates with the run's defines visible and `result` bound);
- *  `ambient` is the run's capability base (so the selector's heads — `car`, program verbs — resolve
- *  through the SAME composed resolution the run used; absent ⇒ the realm-default base); `trace` is
- *  the run's EvalTrace (so the selector's step records, and the slice can read the whole lineage).
- *  `source` is the original program text (the v1 program render). */
+ *  lexical scope (so the selector evaluates with the run's defines visible and `result` bound, and
+ *  — since Stage C Cut 3b — the selector's heads resolve through the SAME self-hosted base every
+ *  run shares, `execState`'s own `BASE_ROSTER` fold, not a caller-supplied ambient handle); `trace`
+ *  is the run's EvalTrace (so the selector's step records, and the slice can read the whole
+ *  lineage). `source` is the original program text (the v1 program render). */
 export function buildUneval(opts: {
-  // A finished run's continuation handles are exactly `ExecState.scope` + `ExecState.ambient`
-  // (equivalently `RunHandle.scope` + `RunHandle.ambient`): the container takes those two.
+  // A finished run's continuation handle is `ExecState.scope` (equivalently `RunHandle.scope`).
   scope: LexicalScope;
-  ambient?: AssembledAmbient;
   result: unknown;
   trace: EvalTrace;
   source: string;
   forms: readonly unknown[];
 }): UnevalContainer {
-  const { scope, ambient, result, trace, forms } = opts;
+  const { scope, result, trace, forms } = opts;
   // The run's OUTPUT expression (the last top-level form) is what produces `result`. The slice is
   // anchored on the symbols IT references, so the derivation of `result` is reproduced in full;
   // we then bind `result` to it and append the selector — the selector picks the effective value
@@ -104,7 +101,7 @@ export function buildUneval(opts: {
       const sel = await parse(selector);
       const lastForm = sel.at(-1);
       if (lastForm === undefined) throw new Error(`uneval: selector "${selector}" parsed to zero forms`);
-      const state = await execState(lastForm, { ambient, scope, tap: trace });
+      const state = await execState(lastForm, { scope, tap: trace });
       let v: unknown = state.values.at(-1);
       if (v != null && typeof (v as { then?: unknown }).then === "function") v = await (v as Promise<unknown>);
       const provenance = v instanceof AValue ? [...v.provenance] : [];

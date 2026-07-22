@@ -34,10 +34,8 @@
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../AmbientRuntime.js";
 import { EnvCapability } from "../../../common/capability.js";
-import { exec, execState } from "../../../eval/generator-exec.js";
-import { global_env } from "../../env-roots.js";
-import { initBridge } from "../../../index.js";
-import { freshEnv } from "../../../__tests__/_fresh-env.js";
+import { execOverFrame, execStateOverFrame, execInFrame } from "../../../eval/generator-exec.js";
+import { freshEnv, nativeOnlyRoot } from "../../../__tests__/_fresh-env.js";
 import { assembleEnv } from "../../../common/kernel.js";
 import { DefineLocalityError } from "../../../errors.js";
 import srfi235 from "../srfi-235.js";
@@ -47,38 +45,37 @@ import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 // Mirrors `_fresh-env.ts`'s own injected evalScheme — `skipBootstrapWait` because
 // these execs run against an env this suite is itself assembling/re-lowering onto,
 // not the shared realm-cached bootstrap.
-const evalScheme = (env: unknown, src: unknown): unknown =>
-  exec(src as string, { env: env as ResolvingAmbient, skipBootstrapWait: true });
+const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
 
 describe("scheme/srfi-235 — combinator behavior equivalence (semantic-equivalence gate, §4.2)", () => {
   it("complement: negates a predicate's result", async () => {
     const env = await freshEnv();
-    const [t] = await exec("((complement not) #t)", { env });
-    const [f] = await exec("((complement not) #f)", { env });
+    const [t] = await execOverFrame("((complement not) #t)", { env });
+    const [f] = await execOverFrame("((complement not) #f)", { env });
     expect(t).toBe(true); // (not #t) = #f, negated = #t
     expect(f).toBe(false); // (not #f) = #t, negated = #f
   });
 
   it("constantly: ignores every argument, always returns the closed-over value", async () => {
     const env = await freshEnv();
-    const [result] = await exec("((constantly 42) 1 2 3)", { env });
+    const [result] = await execOverFrame("((constantly 42) 1 2 3)", { env });
     expect(result).toBe(42);
   });
 
   it("always / never: SRFI-235 — ignore args, return #t / #f (not constantly)", async () => {
     const env = await freshEnv();
-    const [t] = await exec("(always 7 8 9)", { env });
-    const [f] = await exec("(never 7 8 9)", { env });
+    const [t] = await execOverFrame("(always 7 8 9)", { env });
+    const [f] = await execOverFrame("(never 7 8 9)", { env });
     expect(t).toBe(true);
     expect(f).toBe(false);
   });
 
   it("curry: accumulates args across calls until fn's min arity, then applies", async () => {
     const env = await freshEnv();
-    await exec("(define (add3 a b c) (+ a b c))", { env });
-    const [direct] = await exec("(curry add3 1 2 3)", { env }); // full arity in one call
-    const [partial3] = await exec("(((curry add3 1) 2) 3)", { env }); // one arg per call
-    const [partial2] = await exec("((curry add3 1 2) 3)", { env }); // two then one
+    await execOverFrame("(define (add3 a b c) (+ a b c))", { env });
+    const [direct] = await execOverFrame("(curry add3 1 2 3)", { env }); // full arity in one call
+    const [partial3] = await execOverFrame("(((curry add3 1) 2) 3)", { env }); // one arg per call
+    const [partial2] = await execOverFrame("((curry add3 1 2) 3)", { env }); // two then one
     expect(direct).toBe(6);
     expect(partial3).toBe(6);
     expect(partial2).toBe(6);
@@ -86,10 +83,10 @@ describe("scheme/srfi-235 — combinator behavior equivalence (semantic-equivale
 
   it("curry: an intermediate partial application is a real callable value, reusable", async () => {
     const env = await freshEnv();
-    await exec("(define (add2 a b) (+ a b))", { env });
-    await exec("(define add-five (curry add2 5))", { env });
-    const [a] = await exec("(add-five 1)", { env });
-    const [b] = await exec("(add-five 100)", { env });
+    await execOverFrame("(define (add2 a b) (+ a b))", { env });
+    await execOverFrame("(define add-five (curry add2 5))", { env });
+    const [a] = await execOverFrame("(add-five 1)", { env });
+    const [b] = await execOverFrame("(add-five 100)", { env });
     expect(a).toBe(6);
     expect(b).toBe(105);
   });
@@ -97,27 +94,24 @@ describe("scheme/srfi-235 — combinator behavior equivalence (semantic-equivale
 
 describe("scheme/srfi-235 — the dep edge is real (§2.1's undeclared-dep bug, now a declared edge)", () => {
   it("standalone .apply() (bypassing assembleEnv's C3 dep-walk) leaves deps UNAPPLIED — complement's `compose`/`not` are genuinely unbound, and the call fails with the teaching door", async () => {
-    await initBridge();
-    const env = mintFrame(global_env, "test-srfi235-standalone-unbound");
+    const env = mintFrame(await nativeOnlyRoot(), "test-srfi235-standalone-unbound");
     await srfi235.lower({ evalScheme }).apply(env, undefined as never);
-    await expect(execState("(complement not)", { env })).rejects.toThrow();
+    await expect(execStateOverFrame("(complement not)", { env })).rejects.toThrow();
   });
 
   it("bake itself succeeds even with deps unapplied — the FV law is a STATIC declared-`deps` check, not a runtime-binding probe", async () => {
-    await initBridge();
-    const env = mintFrame(global_env, "test-srfi235-standalone-bake-ok");
+    const env = mintFrame(await nativeOnlyRoot(), "test-srfi235-standalone-bake-ok");
     await expect(srfi235.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
   });
 
   it("assembleEnv (the real orchestration path — every production caller) DOES walk deps: complement/curry work standalone", async () => {
-    await initBridge();
-    const env = mintFrame(global_env, "test-srfi235-assembleEnv-ok") as unknown as SchemeEnv;
+    const env = mintFrame(await nativeOnlyRoot(), "test-srfi235-assembleEnv-ok") as unknown as SchemeEnv;
     await assembleEnv(env, [srfi235.lower({ evalScheme })]);
     const typedEnv = env as unknown as ResolvingAmbient;
-    const [complementResult] = await exec("((complement not) #t)", { env: typedEnv });
+    const [complementResult] = await execOverFrame("((complement not) #t)", { env: typedEnv });
     expect(complementResult).toBe(true);
-    await exec("(define (add1 a) (+ a 1))", { env: typedEnv });
-    const [curryResult] = await exec("((curry add1) 41)", { env: typedEnv });
+    await execOverFrame("(define (add1 a) (+ a 1))", { env: typedEnv });
+    const [curryResult] = await execOverFrame("((curry add1) 41)", { env: typedEnv });
     expect(curryResult).toBe(42);
   });
 });
@@ -125,19 +119,18 @@ describe("scheme/srfi-235 — the dep edge is real (§2.1's undeclared-dep bug, 
 describe("scheme/srfi-235 — contract ENFORCEMENT fires at the call boundary", () => {
   it("complement: a non-procedure argument is rejected before the body runs", async () => {
     const env = await freshEnv();
-    await expect(execState('(complement "not-a-procedure")', { env })).rejects.toThrow();
+    await expect(execStateOverFrame('(complement "not-a-procedure")', { env })).rejects.toThrow();
   });
 
   it("curry: a non-procedure `fn` is rejected before the body runs", async () => {
     const env = await freshEnv();
-    await expect(execState("(curry 5)", { env })).rejects.toThrow();
+    await expect(execStateOverFrame("(curry 5)", { env })).rejects.toThrow();
   });
 });
 
 describe("scheme/srfi-235 — the §2.1 bake FV law passes for this pack AS MIGRATED", () => {
   it("lowers cleanly with its declared deps — never DefineLocalityError", async () => {
-    await initBridge();
-    const env = mintFrame(global_env, "test-srfi235-fv-law-ok");
+    const env = mintFrame(await nativeOnlyRoot(), "test-srfi235-fv-law-ok");
     await expect(srfi235.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
   });
 

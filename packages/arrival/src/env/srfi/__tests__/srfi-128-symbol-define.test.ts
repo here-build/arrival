@@ -39,10 +39,8 @@
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../AmbientRuntime.js";
 import { EnvCapability } from "../../../common/capability.js";
-import { exec, execState } from "../../../eval/generator-exec.js";
-import { global_env } from "../../env-roots.js";
-import { initBridge } from "../../../index.js";
-import { freshEnv } from "../../../__tests__/_fresh-env.js";
+import { execOverFrame, execStateOverFrame, execInFrame } from "../../../eval/generator-exec.js";
+import { freshEnv, nativeOnlyRoot } from "../../../__tests__/_fresh-env.js";
 import { assembleEnv } from "../../../common/kernel.js";
 import { DefineLocalityError } from "../../../errors.js";
 import srfi128 from "../srfi-128.js";
@@ -52,21 +50,20 @@ import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 // Mirrors `_fresh-env.ts`'s own injected evalScheme — `skipBootstrapWait` because
 // these execs run against an env this suite is itself assembling/re-lowering onto,
 // not the shared realm-cached bootstrap.
-const evalScheme = (env: unknown, src: unknown): unknown =>
-  exec(src as string, { env: env as ResolvingAmbient, skipBootstrapWait: true });
+const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
 
 describe("scheme/srfi-128 — comparator behavior equivalence (semantic-equivalence gate, §4.2)", () => {
   it("make-comparator + comparator? + the three accessors", async () => {
     const env = await freshEnv();
-    const [isComparator] = await exec("(comparator? (make-comparator number? = <))", { env });
-    const [notComparator] = await exec("(comparator? 5)", { env });
+    const [isComparator] = await execOverFrame("(comparator? (make-comparator number? = <))", { env });
+    const [notComparator] = await execOverFrame("(comparator? 5)", { env });
     expect(isComparator).toBe(true);
     expect(notComparator).toBe(false);
 
-    await exec("(define c (make-comparator number? = <))", { env });
-    const [tt] = await exec("((comparator-type-test-predicate c) 3)", { env });
-    const [eq] = await exec("((comparator-equality-predicate c) 3 3)", { env });
-    const [lt] = await exec("((comparator-ordering-predicate c) 2 3)", { env });
+    await execOverFrame("(define c (make-comparator number? = <))", { env });
+    const [tt] = await execOverFrame("((comparator-type-test-predicate c) 3)", { env });
+    const [eq] = await execOverFrame("((comparator-equality-predicate c) 3 3)", { env });
+    const [lt] = await execOverFrame("((comparator-ordering-predicate c) 2 3)", { env });
     expect(tt).toBe(true);
     expect(eq).toBe(true);
     expect(lt).toBe(true);
@@ -74,18 +71,18 @@ describe("scheme/srfi-128 — comparator behavior equivalence (semantic-equivale
 
   it("the 4th (hash) arg to make-comparator is accepted and ignored", async () => {
     const env = await freshEnv();
-    const [ok] = await exec("(comparator? (make-comparator number? = < (lambda (x) 0)))", { env });
+    const [ok] = await execOverFrame("(comparator? (make-comparator number? = < (lambda (x) 0)))", { env });
     expect(ok).toBe(true);
   });
 
   it("=?/<?/>?/<=?/>=? chain across more than two arguments", async () => {
     const env = await freshEnv();
-    const [eqChain] = await exec("(=? (default-comparator) 1 1 1)", { env });
-    const [ltChain] = await exec("(<? (default-comparator) 1 2 3)", { env });
-    const [gtChain] = await exec("(>? (default-comparator) 3 2 1)", { env });
-    const [leChain] = await exec("(<=? (default-comparator) 1 1 2)", { env });
-    const [geChain] = await exec("(>=? (default-comparator) 2 2 1)", { env });
-    const [ltBroken] = await exec("(<? (default-comparator) 1 3 2)", { env });
+    const [eqChain] = await execOverFrame("(=? (default-comparator) 1 1 1)", { env });
+    const [ltChain] = await execOverFrame("(<? (default-comparator) 1 2 3)", { env });
+    const [gtChain] = await execOverFrame("(>? (default-comparator) 3 2 1)", { env });
+    const [leChain] = await execOverFrame("(<=? (default-comparator) 1 1 2)", { env });
+    const [geChain] = await execOverFrame("(>=? (default-comparator) 2 2 1)", { env });
+    const [ltBroken] = await execOverFrame("(<? (default-comparator) 1 3 2)", { env });
     expect(eqChain).toBe(true);
     expect(ltChain).toBe(true);
     expect(gtChain).toBe(true);
@@ -96,10 +93,10 @@ describe("scheme/srfi-128 — comparator behavior equivalence (semantic-equivale
 
   it("default-comparator's total order ranks by type first, then within-type — matches the baseline suite's cross-type case", async () => {
     const env = await freshEnv();
-    const [numBeforeStr] = await exec('(<? (default-comparator) 1 "a")', { env });
-    const [charBeforeStr] = await exec(`(<? (default-comparator) #\\a "aa")`, { env });
-    const [symBeforeNull] = await exec("(<? (default-comparator) 'sym '())", { env });
-    const [falseBeforeTrue] = await exec("(<? (default-comparator) #f #t)", { env });
+    const [numBeforeStr] = await execOverFrame('(<? (default-comparator) 1 "a")', { env });
+    const [charBeforeStr] = await execOverFrame(`(<? (default-comparator) #\\a "aa")`, { env });
+    const [symBeforeNull] = await execOverFrame("(<? (default-comparator) 'sym '())", { env });
+    const [falseBeforeTrue] = await execOverFrame("(<? (default-comparator) #f #t)", { env });
     expect(numBeforeStr).toBe(true);
     expect(charBeforeStr).toBe(true);
     expect(symBeforeNull).toBe(true);
@@ -108,14 +105,14 @@ describe("scheme/srfi-128 — comparator behavior equivalence (semantic-equivale
 
   it("comparator-hashable? is always #f — matches the baseline suite", async () => {
     const env = await freshEnv();
-    const [hashable] = await exec("(comparator-hashable? (default-comparator))", { env });
+    const [hashable] = await execOverFrame("(comparator-hashable? (default-comparator))", { env });
     expect(hashable).toBe(false);
   });
 
   it("make-default-comparator and default-comparator behave identically", async () => {
     const env = await freshEnv();
-    const [a] = await exec("(<? (make-default-comparator) 1 2)", { env });
-    const [b] = await exec("(<? (default-comparator) 1 2)", { env });
+    const [a] = await execOverFrame("(<? (make-default-comparator) 1 2)", { env });
+    const [b] = await execOverFrame("(<? (default-comparator) 1 2)", { env });
     expect(a).toBe(true);
     expect(b).toBe(true);
   });
@@ -123,35 +120,31 @@ describe("scheme/srfi-128 — comparator behavior equivalence (semantic-equivale
 
 describe("scheme/srfi-128 — the dep edge is real, both luck classes in one pack (§2.1's undeclared-dep bug class, now declared edges)", () => {
   it("standalone .apply() (deps unwalked): calls touching ONLY NATIVE_PACKS-sourced free names still resolve — the same two-phase-bootstrap luck srfi-43.ts's header names (equality/numeric/chars/strings are already on global_env post-initBridge)", async () => {
-    await initBridge();
-    const env = mintFrame(global_env, "test-srfi128-standalone-native-luck");
+    const env = mintFrame(await nativeOnlyRoot(), "test-srfi128-standalone-native-luck");
     await srfi128.lower({ evalScheme }).apply(env, undefined as never);
     // %type-rank's body reaches boolean?/number?/char?/string?/symbol?/null?/pair?
     // (all NATIVE_PACKS-sourced, via scheme/equality + scheme/numeric + scheme/chars)
     // and NOTHING from `list` — resolves via runtime chain lookup regardless of
     // whether `deps` was walked, exactly srfi-43's own luck-class demonstration.
-    await expect(execState('(%type-rank "a")', { env })).resolves.not.toThrow();
+    await expect(execStateOverFrame('(%type-rank "a")', { env })).resolves.not.toThrow();
   });
 
   it("standalone .apply() (deps unwalked): make-comparator genuinely fails — `list` is a BASE_PACKS-only name, absent from global_env, srfi-235's own luck class (NOT runtime luck)", async () => {
-    await initBridge();
-    const env = mintFrame(global_env, "test-srfi128-standalone-list-unbound");
+    const env = mintFrame(await nativeOnlyRoot(), "test-srfi128-standalone-list-unbound");
     await srfi128.lower({ evalScheme }).apply(env, undefined as never);
-    await expect(execState("(make-comparator number? = <)", { env })).rejects.toThrow();
+    await expect(execStateOverFrame("(make-comparator number? = <)", { env })).rejects.toThrow();
   });
 
   it("bake itself succeeds even with deps unapplied — the FV law is a STATIC declared-`deps` check, not a runtime-binding probe", async () => {
-    await initBridge();
-    const env = mintFrame(global_env, "test-srfi128-standalone-bake-ok");
+    const env = mintFrame(await nativeOnlyRoot(), "test-srfi128-standalone-bake-ok");
     await expect(srfi128.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
   });
 
   it("assembleEnv (the real orchestration path — every production caller) DOES walk deps: make-comparator works standalone", async () => {
-    await initBridge();
-    const env = mintFrame(global_env, "test-srfi128-assembleEnv-ok") as unknown as SchemeEnv;
+    const env = mintFrame(await nativeOnlyRoot(), "test-srfi128-assembleEnv-ok") as unknown as SchemeEnv;
     await assembleEnv(env, [srfi128.lower({ evalScheme })]);
     const typedEnv = env as unknown as ResolvingAmbient;
-    const [ok] = await exec("(comparator? (make-comparator number? = <))", { env: typedEnv });
+    const [ok] = await execOverFrame("(comparator? (make-comparator number? = <))", { env: typedEnv });
     expect(ok).toBe(true);
   });
 });
@@ -159,30 +152,29 @@ describe("scheme/srfi-128 — the dep edge is real, both luck classes in one pac
 describe("scheme/srfi-128 — contract ENFORCEMENT fires at the call boundary", () => {
   it("make-comparator: a non-procedure type-test is rejected before the body runs", async () => {
     const env = await freshEnv();
-    await expect(execState('(make-comparator "not-a-procedure" = <)', { env })).rejects.toThrow();
+    await expect(execStateOverFrame('(make-comparator "not-a-procedure" = <)', { env })).rejects.toThrow();
   });
 
   it("comparator-type-test-predicate: a non-comparator argument is rejected before the body runs", async () => {
     const env = await freshEnv();
-    await expect(execState("(comparator-type-test-predicate 5)", { env })).rejects.toThrow();
+    await expect(execStateOverFrame("(comparator-type-test-predicate 5)", { env })).rejects.toThrow();
   });
 
   it("comparator-ordering-predicate: a plain pair that isn't a well-formed comparator is rejected", async () => {
     const env = await freshEnv();
-    await expect(execState("(comparator-ordering-predicate (cons 1 2))", { env })).rejects.toThrow();
+    await expect(execStateOverFrame("(comparator-ordering-predicate (cons 1 2))", { env })).rejects.toThrow();
   });
 
   it("comparator? itself accepts ANY value without throwing — a predicate's contract, not a comparator's", async () => {
     const env = await freshEnv();
-    await expect(execState("(comparator? 5)", { env })).resolves.not.toThrow();
-    await expect(execState('(comparator? "hello")', { env })).resolves.not.toThrow();
+    await expect(execStateOverFrame("(comparator? 5)", { env })).resolves.not.toThrow();
+    await expect(execStateOverFrame('(comparator? "hello")', { env })).resolves.not.toThrow();
   });
 });
 
 describe("scheme/srfi-128 — the §2.1 bake FV law passes for this pack AS MIGRATED", () => {
   it("lowers cleanly with its declared deps — never DefineLocalityError", async () => {
-    await initBridge();
-    const env = mintFrame(global_env, "test-srfi128-fv-law-ok");
+    const env = mintFrame(await nativeOnlyRoot(), "test-srfi128-fv-law-ok");
     await expect(srfi128.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
   });
 

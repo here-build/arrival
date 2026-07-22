@@ -62,7 +62,6 @@ import { Macro } from "../../eval/Macro.js";
 import { nil } from "../../index.js";
 import { StaticValidationError, validateProgram } from "../../static-validation/validate-program.js";
 import { vocabularyFromChain } from "../../static-validation/vocabulary.js";
-import { freshEnv } from "../_fresh-env.js";
 import type { AmbientValue } from "../../env/AmbientRuntime.js";
 import type { DoorSymbolDef } from "../../common/symbols/_bake.js";
 import { PurityError } from "../../errors.js";
@@ -318,11 +317,9 @@ describe("LAW 7 — error-tier soundness: strict on dead branches (by design), w
     expect(validateProgram(forms, pure)[0].severity).toBe("error");
   });
 
-  it("GLASS ({env}) runs are never validated — no seal, no claims (§3.5)", async () => {
-    const env = await freshEnv();
-    const [result] = await exec("(if #f (never-defined-glass-name) 42)", { env, staticValidation: "on" });
-    expect(result).toBe(42);
-  });
+  // STAGE C CUT 3b: the "GLASS runs are never validated" row is DROPPED — the public glass
+  // option (`ExecOptions.env`) it pinned is retired entirely, not merely unvalidated; there is
+  // no glass path left to make a "no seal, no claims" claim about.
 
   it("keyword entries and cxr synth names resolve statically (no FP on `caddr`)", async () => {
     const [result] = await exec("(caddr (list 1 2 3))", { staticValidation: "on" });

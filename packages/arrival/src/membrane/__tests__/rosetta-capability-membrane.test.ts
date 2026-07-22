@@ -49,7 +49,7 @@ import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AString } from "../../values/primitives/AString.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { jsToScheme, schemeToJs, schemeToJsUntyped } from "../rosetta.js";
-import { exec } from "../../eval/generator-exec.js";
+import { execOverFrame } from "../../eval/generator-exec.js";
 import { testCallCtx } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { ARosettaProcedure } from "../../values/primitives/ACallable.js";
@@ -59,7 +59,7 @@ import type { SchemeValue } from "../../values/types.js";
 
 // Helper to unwrap exec results
 async function execOne(expr: string): Promise<any> {
-  const results = await exec(expr, { env: inferenceEnv });
+  const results = await execOverFrame(expr, { env: inferenceEnv });
   return results[0];
 }
 

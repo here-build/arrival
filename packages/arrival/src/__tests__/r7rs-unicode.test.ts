@@ -24,7 +24,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { exec, execState } from "../eval/generator-exec.js";
+import { execOverFrame as exec, execStateOverFrame as execState } from "../eval/generator-exec.js";
 import { freshEnv } from "./_fresh-env.js";
 
 const env = await freshEnv();

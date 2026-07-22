@@ -19,8 +19,6 @@ import { describe, expect, it } from "vitest";
 
 import { z as hostZod } from "zod";
 
-import { EnvCapability, type Activation } from "../../common/capability.js";
-import type { Resource } from "../../common/resources.js";
 import * as z from "../../common/scheme-zod.js";
 import {
   resolveMetadata,
@@ -29,7 +27,7 @@ import {
   type NativeSymbolDef,
   type RosettaSymbolDef,
 } from "../../common/symbol.js";
-import { assembleAmbient } from "../../eval/generator-exec.js";
+import type { Activation } from "../../common/capability.js";
 
 const zz = { string: z.string, number: z.number };
 
@@ -102,104 +100,11 @@ describe("resolveMetadata — the unit surface (fake activation, no assembly)", 
   });
 });
 
-describe("the ambient read path — describeSymbol/catalog resolve against the activation (§2.4)", () => {
-  function fixture() {
-    let fired = 0;
-    let acquired = 0;
-    const resource: Resource<{ dashboard: string }> = {
-      kind: "law/meta-port",
-      async acquire() {
-        acquired += 1;
-        return { dashboard: "42 users online", [Symbol.asyncDispose]: async () => {} };
-      },
-    };
-    const capability = new EnvCapability("law/metadata", {
-      // Configuration schemas are HOST-side plain zod (the config bag is JS data, not a
-      // membrane crossing) — the same split every real capability uses.
-      configuration: { greeting: hostZod.string().optional() },
-      resources: { port: resource },
-      symbols: {
-        "law/verb": symbol.rosetta`law/verb: a verb with a live description`(
-          { input: [], output: [zz.string] },
-          () => "ran",
-          {
-            metadata: {
-              description: "static description",
-              // Reads CONFIG off the activation — the declared channel, not a closure.
-              greetingLine: function (this: Activation<{ greeting: hostZod.ZodOptional<hostZod.ZodString> }, never>) {
-                fired += 1;
-                return this.configuration.greeting;
-              },
-              // Reads a RESOURCE off the activation — first read IS the first touch
-              // (the cell's own lazy single-flight; ruling 1's second half).
-              dashboard: async function (this: Activation<never, { port: Resource<{ dashboard: string }> }>) {
-                const live = await this.resources.port.get();
-                return live.dashboard;
-              },
-            },
-          },
-        ),
-      },
-    });
-    return { capability, counts: { fired: () => fired, acquired: () => acquired } };
-  }
-
-  it("ruling 1: assembly resolves NOTHING; a read resolves; a resource-touching field spawns on first read", async () => {
-    const { capability, counts } = fixture();
-    const ambient = await assembleAmbient({ capabilities: [capability], config: { greeting: "hello, actor" } });
-    try {
-      expect(counts.fired()).toBe(0); // lower()+assembleEnv fired no metadata fn
-      expect(counts.acquired()).toBe(0); // and spawned no resource for one either
-      const described = await ambient.describeSymbol("law/verb");
-      expect(described).toBeDefined();
-      expect(described!.kind).toBe("rosetta");
-      expect(described!.capability).toBe("law/metadata");
-      expect(described!.doc).toBe("a verb with a live description");
-      expect(described!.metadata.description).toBe("static description"); // static, verbatim
-      expect(described!.metadata.greetingLine).toBe("hello, actor"); // dynamic, config channel
-      expect(described!.metadata.dashboard).toBe("42 users online"); // dynamic, resource channel
-      expect([...described!.dynamicKeys].toSorted()).toEqual(["dashboard", "greetingLine"]);
-      expect(counts.acquired()).toBe(1); // the metadata read WAS the first touch
-    } finally {
-      await ambient.dispose();
-    }
-  });
-
-  it("ruling 2: per-read, no memo — two describes fire the field twice", async () => {
-    const { capability, counts } = fixture();
-    const ambient = await assembleAmbient({ capabilities: [capability], config: { greeting: "hi" } });
-    try {
-      await ambient.describeSymbol("law/verb");
-      await ambient.describeSymbol("law/verb");
-      expect(counts.fired()).toBe(2);
-    } finally {
-      await ambient.dispose();
-    }
-  });
-
-  it("catalog() — roster-ordered read over the same channel; unknown names describe as undefined", async () => {
-    const { capability } = fixture();
-    const ambient = await assembleAmbient({ capabilities: [capability], config: { greeting: "yo" } });
-    try {
-      const catalog = await ambient.catalog();
-      expect(catalog.map((entry) => entry.name)).toEqual(["law/verb"]);
-      expect(catalog[0].metadata.greetingLine).toBe("yo");
-      expect(await ambient.describeSymbol("no-such-verb")).toBeUndefined();
-    } finally {
-      await ambient.dispose();
-    }
-  });
-
-  it("ruling 3 on the ambient path: an absent optional key resolves undefined → static story only", async () => {
-    const { capability } = fixture();
-    const ambient = await assembleAmbient({ capabilities: [capability] }); // no greeting supplied
-    try {
-      const described = await ambient.describeSymbol("law/verb");
-      expect("greetingLine" in described!.metadata).toBe(false); // omitted, honestly
-      expect(described!.dynamicKeys).not.toContain("greetingLine"); // and NOT claimed dynamic
-      expect(described!.metadata.description).toBe("static description"); // the static sibling stands
-    } finally {
-      await ambient.dispose();
-    }
-  });
-});
+// STAGE C CUT 3b (docs/plans/stage-c-corpse-deletion.md) retired `AssembledAmbient` — the
+// `describeSymbol`/`catalog()` READ CHANNEL this describe block pinned (exec-phases.ts's
+// `rosterEntries`/`describeEntry` machinery) died with it, with no self-hosted-vocabulary-path
+// equivalent built in this cut. The `resolveMetadata`/`staticMetadata` UNIT surface above (which
+// this channel was itself a thin consumer of) still carries the three §2.3 rulings' full
+// coverage. Re-introducing a describe/catalog read surface over the vocabulary path — if wanted
+// — is Cut-4/MCP-rework territory (the same read channel `arrival-mcp`'s DiscoveryTool would
+// need), not this cut's.

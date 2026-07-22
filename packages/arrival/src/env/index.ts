@@ -5,13 +5,13 @@
 //
 //   • the CAPABILITY-DAG ASSEMBLY KERNEL (common/kernel.ts) — `assembleEnv`, packs,
 //     the runtime assembler, the assembly errors. The subpath's original face.
-//   • the EXEC PHASE PRODUCTS — `parseProgram` → `ParsedProgram` (phase 1),
-//     `assembleAmbient` → `AssembledAmbient` (phase 2, `AsyncDisposable`, carrying the
-//     `describeSymbol`/`catalog` metadata read surface — the describe-time read channel,
-//     common/symbols/metadata.ts DESCRIBE-TIME READ CHANNEL),
-//     `validateAgainstAmbient`/`classifyProgram` (the pure phase-2.5 passes), and the
-//     `ExecInstance` type (phase 3). `exec(code, { ambient, program, scope })` composes
-//     them; the barrel keeps only the simple cases.
+//   • the EXEC PHASE PRODUCTS — `parseProgram` → `ParsedProgram` (phase 1) and
+//     `validateAgainstResolution` (the pure phase-2.5 pass over a sealed resolution
+//     chain). STAGE C CUT 3b retired the ambient-phase products
+//     (`assembleAmbient`/`AssembledAmbient`/`validateAgainstAmbient`/`classifyProgram`/
+//     `classifierFromAmbient`/`ExecInstance`/`SymbolDescription`) along with the ambient
+//     path itself — `exec(code, { capabilities, program, scope })` composes what's left
+//     on the self-hosted vocabulary path (`buildVocabulary`/`assembleRun`, below).
 //
 // Everything is re-exported EXPLICITLY (no star) so the public surface of the subpath is
 // visible at this barrel — same convention as the package root.
@@ -40,29 +40,16 @@ export {
 export { type DegradedNeed, type DegradedCapability } from "../common/degradation.js";
 
 // ── the exec phase products ─────────────────────────────────────────────────────────────
-export {
-  parseProgram,
-  validateAgainstAmbient,
-  validateAgainstResolution,
-  classifyProgram,
-  classifierFromAmbient,
-  type ParsedProgram,
-  type AssembledAmbient,
-  type ExecInstance,
-  type SymbolDescription,
-} from "../eval/exec-phases.js";
-export { assembleAmbient, type AssembleAmbientOptions } from "../eval/generator-exec.js";
+export { parseProgram, validateAgainstResolution, type ParsedProgram } from "../eval/exec-phases.js";
 
 // ── Stage B — the Vocabulary artifact + assembleRun (docs/plans/stage-b-runcontext-absorbs-
-// assembly.md) — `exec(code, { capabilities, config })`'s DEFAULT resolution path (Stage B3).
-// Exported here so a caller wanting the `assembleAmbient`-style "assemble once, reuse across N
-// calls" idiom on this path can rely on the tuple memo directly instead of holding an
-// `AssembledAmbient` handle: `buildVocabulary` is memoized by (capability-set identity, config
-// identity), so calling it (or `exec`/`assembleRun`) repeatedly with the SAME capabilities/config
-// objects is a cache hit, not a rebuild — the "warm reuse" a caller like arrival-mcp's
-// `DiscoveryTool` gets from `assembleAmbient` today, without a disposable handle to manage (the
-// artifact is immutable; nothing to dispose). See generator-exec.ts's `execStateViaVocabulary`
-// for the production consumer.
+// assembly.md) — `exec(code, { capabilities, config })`'s ONLY resolution path since Stage C Cut
+// 3b retired the ambient path. Exported here so a caller wanting an "assemble once, reuse across
+// N calls" idiom can rely on the tuple memo directly: `buildVocabulary` is memoized by
+// (capability-set identity, config identity), so calling it (or `exec`/`assembleRun`) repeatedly
+// with the SAME capabilities/config objects is a cache hit, not a rebuild — the warm-reuse idiom,
+// with no disposable handle to manage (the artifact is immutable; nothing to dispose). See
+// generator-exec.ts's `execState` for the production consumer.
 export { buildVocabulary, type Vocabulary } from "./vocabulary.js";
 export { assembleRun, type AssembleRunOptions } from "./assemble-run.js";
 

@@ -11,7 +11,8 @@ import * as sz from "../../common/scheme-zod.js";
 import type { EvalSchemeInto } from "../../common/scheme-env.js";
 import { buildVocabulary } from "../vocabulary.js";
 import { assembleRun } from "../assemble-run.js";
-import { exec, ensureBaseAssembled } from "../../eval/generator-exec.js";
+import { exec, execInFrame } from "../../eval/generator-exec.js";
+import { isAmbientRuntime } from "../AmbientRuntime.js";
 import { toJS } from "../../membrane/membrane.js";
 import { ANativeProcedure, DoorProcedure } from "../../values/primitives/ACallable.js";
 import { PurityError, SymbolKeyMismatchError, VocabularyLegacyCapabilityError } from "../../errors.js";
@@ -24,8 +25,11 @@ import type { DefineSymbolDef } from "../../common/symbol.js";
 const noopEvalScheme: EvalSchemeInto = async () => undefined;
 
 /** The REAL evalScheme — required whenever a fixture declares a `symbol.define`, mirroring
- *  `generator-exec.ts`'s own `capabilityEvalScheme`. Requires `ensureBaseAssembled()` first. */
-const realEvalScheme: EvalSchemeInto = (env, src) => exec(src, { env, skipBootstrapWait: true });
+ *  `generator-exec.ts`'s own private `capabilityEvalScheme` (the internal bake seam). */
+const realEvalScheme: EvalSchemeInto = (env, src) => {
+  if (!isAmbientRuntime(env)) throw new Error("expected a concrete AmbientRuntime");
+  return execInFrame(src, env);
+};
 
 describe("buildVocabulary — C3 precedence", () => {
   // INVARIANT: a name declared by both a dep and its dependent resolves to the DEPENDENT's
@@ -126,7 +130,6 @@ describe("buildVocabulary — key===name violation", () => {
 describe("buildVocabulary — define bake products", () => {
   // INVARIANT: a `symbol.define` bakes into a real bound procedure in the map (Pass 2).
   it("bakes a symbol.define into a bound ANativeProcedure carrying its own contract", async () => {
-    await ensureBaseAssembled();
     const cap = EnvCapability.define("test/vocab-define-bake", {
       // `(lambda (x) x)` — its only "free" reference is `x`, bound by the lambda's own
       // formal, so this needs no `deps` edge at all (a real capability's arithmetic/list
@@ -221,7 +224,7 @@ describe("exec — vocabularyPath end-to-end integration", () => {
   // evaluator dispatch, resolved entirely through the vocabulary-backed chain; a requiresConfig
   // door fires (PurityError) when its config key is absent — the SAME degradation contract the
   // ambient path enforces, now proven end-to-end over the routed path.
-  it("routes exec(code, { capabilities, config, vocabularyPath: true }) through the Vocabulary", async () => {
+  it("routes exec(code, { capabilities, config }) through the Vocabulary", async () => {
     const cap = EnvCapability.define("test/vocab-exec-route", {
       configuration: {
         greeting: z.string(),
@@ -241,12 +244,11 @@ describe("exec — vocabularyPath end-to-end integration", () => {
     const [out] = await exec('(greet "world")', {
       capabilities: [cap],
       config: { greeting: "hi" },
-      vocabularyPath: true,
     });
     expect(out).toBe("hi world");
 
     await expect(
-      exec("(fixture/verb)", { capabilities: [cap], config: { greeting: "hi" }, vocabularyPath: true }),
+      exec("(fixture/verb)", { capabilities: [cap], config: { greeting: "hi" } }),
     ).rejects.toBeInstanceOf(PurityError);
   });
 });

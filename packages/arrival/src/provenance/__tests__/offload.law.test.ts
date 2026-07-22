@@ -24,7 +24,6 @@
  */
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
-import { initBridge } from "../../index.js";
 import { parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import type { Classifier } from "../../provenance/lineage.js";
@@ -86,7 +85,6 @@ async function buildFixture(): Promise<{
 }
 
 beforeAll(async () => {
-  await initBridge();
 });
 
 afterEach(() => {

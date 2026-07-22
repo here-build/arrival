@@ -10,7 +10,7 @@
 // character/symbol/number. The door is narrowed to CONTAINER/NIL kinds only (pair, nil,
 // vector, object, dict) — leaf/scalar kinds keep `String(x)`.
 import { describe, expect, it } from "vitest";
-import { execState } from "../eval/generator-exec.js";
+import { execStateOverFrame as execState } from "../eval/generator-exec.js";
 import { mintFrame } from "../env/AmbientRuntime.js";
 import { inferenceEnv } from "../env/inference-env.js";
 

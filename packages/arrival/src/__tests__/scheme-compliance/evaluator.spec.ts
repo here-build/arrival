@@ -16,7 +16,7 @@ import run from "../../eval/evaluator.js";
 // only by the tail-call optimization test, which exercises the trampoline's
 // cross-`run()` recursion shape and needs real `if`/`=`/`-` rather than the
 // minimal hand-rolled `env` above.
-import { execExpr, exec as execSource } from "../../eval/generator-exec.js";
+import { execExprOverFrame, exec as execSource } from "../../eval/generator-exec.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
@@ -31,7 +31,7 @@ import { bindValue } from "../../env/AmbientRuntime.js";
 
 describe("Generator Evaluator with Real LIPS Types", () => {
   // `ResolvingAmbient`, not the plain `AmbientRuntime` its raw evaluator-level content
-  // would otherwise need: `execExpr(code, { env })` types `env` as `SchemeEnv` (V2,
+  // would otherwise need: `execExprOverFrame(code, { env })` types `env` as `SchemeEnv` (V2,
   // arrival-environment-privatization.md §II.3/D2), which `ResolvingAmbient`
   // structurally satisfies and plain `AmbientRuntime` does not — a byte-identical stand-in
   // here (no resolver ever registered), see the file header for why this test builds a
@@ -158,25 +158,25 @@ describe("Generator Evaluator with Real LIPS Types", () => {
   describe("evaluate()", () => {
     // INVARIANT: self-evaluating atoms (exact number, string, nil) evaluate to themselves
     it("should evaluate atoms to themselves", async () => {
-      expect(await execExpr(new AExact(42), { env })).toEqual(new AExact(42));
+      expect(await execExprOverFrame(new AExact(42), { env })).toEqual(new AExact(42));
       const hello = new AString("hello");
-      expect(await execExpr(hello, { env })).toBe(hello);
-      expect(await execExpr(nil, { env })).toBe(nil);
+      expect(await execExprOverFrame(hello, { env })).toBe(hello);
+      expect(await execExprOverFrame(nil, { env })).toBe(nil);
     });
 
     // INVARIANT: symbol evaluation looks up the value bound in the environment
     it("should look up symbols in environment", async () => {
       bindValue(env, "x", new AExact(10));
       bindValue(env, "y", new AExact(20));
-      expect(await execExpr(new ASymbol("x"), { env })).toEqual(new AExact(10));
-      expect(await execExpr(new ASymbol("y"), { env })).toEqual(new AExact(20));
+      expect(await execExprOverFrame(new ASymbol("x"), { env })).toEqual(new AExact(10));
+      expect(await execExprOverFrame(new ASymbol("y"), { env })).toEqual(new AExact(20));
     });
 
     // INVARIANT: a function-call form evaluates operator and operands, then applies
     it("should evaluate simple function calls", async () => {
       // (+ 1 2 3)
       const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new AExact(1), new AExact(2), new AExact(3)], false);
-      const result = await execExpr(code, { env });
+      const result = await execExprOverFrame(code, { env });
       expect(result).toEqual(new AExact(6));
     });
 
@@ -184,7 +184,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
     it("should evaluate nested function calls", async () => {
       // (+ (* 2 3) (* 4 5))
       const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), APair.fromArray(CONSTANT_CTX, [new ASymbol("*"), new AExact(2), new AExact(3)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol("*"), new AExact(4), new AExact(5)], false)], false);
-      const result = await execExpr(code, { env });
+      const result = await execExprOverFrame(code, { env });
       expect(result).toEqual(new AExact(26)); // 6 + 20
     });
 
@@ -212,7 +212,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       });
 
       const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("async-add"), new AExact(10), new AExact(20)], false);
-      const result = await execExpr(code, { env });
+      const result = await execExprOverFrame(code, { env });
       // The bare-fn boxing seam (evaluator main apply arm) boxes the raw return — the
       // pre-seam raw-30 passthrough was the R1 leak, not the contract. This spec's
       // `execExpr` is the COMPLEX-tier form-at-a-time wrapper (no toJS exit), so the
@@ -227,7 +227,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should return its argument unevaluated", async () => {
         // (quote (1 2 3))
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("quote"), APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2), new AExact(3)], false)], false);
-        const result = (await execExpr(code, { env })) as APair<any, any>;
+        const result = (await execExprOverFrame(code, { env })) as APair<any, any>;
         expect(result.car).toEqual(new AExact(1));
         expect((result.cdr as APair<any, any>).car).toEqual(new AExact(2));
       });
@@ -236,7 +236,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should quote a symbol", async () => {
         // (quote x)
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("quote"), new ASymbol("x")], false);
-        const result = (await execExpr(code, { env })) as ASymbol;
+        const result = (await execExprOverFrame(code, { env })) as ASymbol;
         expect(result.__name__).toBe("x");
       });
     });
@@ -246,7 +246,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should return simple list unevaluated", async () => {
         // `(1 2 3)
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("quasiquote"), APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2), new AExact(3)], false)], false);
-        const result = (await execExpr(code, { env })) as APair<any, any>;
+        const result = (await execExprOverFrame(code, { env })) as APair<any, any>;
         expect(result.car).toEqual(new AExact(1));
       });
 
@@ -255,7 +255,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         // `(1 ,(+ 1 1) 3)
         bindValue(env, "x", new AExact(10));
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("quasiquote"), APair.fromArray(CONSTANT_CTX, [new AExact(1), APair.fromArray(CONSTANT_CTX, [new ASymbol("unquote"), new ASymbol("x")], false), new AExact(3)], false)], false);
-        const result = (await execExpr(code, { env })) as APair<any, any>;
+        const result = (await execExprOverFrame(code, { env })) as APair<any, any>;
         expect(result.car).toEqual(new AExact(1));
         expect((result.cdr as APair<any, any>).car).toEqual(new AExact(10));
         expect(((result.cdr as APair<any, any>).cdr as APair<any, any>).car).toEqual(new AExact(3));
@@ -269,7 +269,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
           new ASymbol("quasiquote"),
           APair.fromArray(CONSTANT_CTX, [new AExact(1), APair.fromArray(CONSTANT_CTX, [new ASymbol("unquote-splicing"), APair.fromArray(CONSTANT_CTX, [new ASymbol("list"), new AExact(2), new AExact(3)], false)], false), new AExact(4)], false),
         ], false);
-        const result = await execExpr(code, { env });
+        const result = await execExprOverFrame(code, { env });
         const arr = (result as APair<any, any>).to_array();
         expect(arr.length).toBe(4);
       });
@@ -285,14 +285,14 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should evaluate then branch when condition is nil (Scheme: only #f is false)", async () => {
         // (if () 1 2) - in R7RS Scheme, only #f is false, () is truthy
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("if"), nil, new AExact(1), new AExact(2)], false);
-        expect(await execExpr(code, { env })).toEqual(new AExact(1));
+        expect(await execExprOverFrame(code, { env })).toEqual(new AExact(1));
       });
 
       // INVARIANT: if with no else-branch returns the unspecified/void value when the test is false
       it("should return undefined when no else branch and condition is false", async () => {
         // (if #f 1)
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("if"), schemeFalse, new AExact(1)], false);
-        expect(await execExpr(code, { env })).toBe(theVoid);
+        expect(await execExprOverFrame(code, { env })).toBe(theVoid);
       });
 
       // INVARIANT: nested if expressions select the correct branch at each level
@@ -304,7 +304,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
           APair.fromArray(CONSTANT_CTX, [new ASymbol("if"), APair.fromArray(CONSTANT_CTX, [new ASymbol(">"), new AExact(3), new AExact(2)], false), new AExact(100), new AExact(200)], false),
           new AExact(300),
         ], false);
-        expect(await execExpr(code, { env })).toEqual(new AExact(100));
+        expect(await execExprOverFrame(code, { env })).toEqual(new AExact(100));
       });
     });
 
@@ -317,7 +317,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should return undefined for empty begin", async () => {
         // (begin)
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("begin")], false);
-        expect(await execExpr(code, { env })).toBe(theVoid);
+        expect(await execExprOverFrame(code, { env })).toBe(theVoid);
       });
 
       // INVARIANT: begin executes every expression for its side effects, in sequence
@@ -330,7 +330,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
 
         // (begin (inc!) (inc!) (inc!))
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("begin"), APair.fromArray(CONSTANT_CTX, [new ASymbol("inc!")], false), APair.fromArray(CONSTANT_CTX, [new ASymbol("inc!")], false), APair.fromArray(CONSTANT_CTX, [new ASymbol("inc!")], false)], false);
-        const result = await execExpr(code, { env });
+        const result = await execExprOverFrame(code, { env });
         expect(result).toEqual(new AExact(3));
         expect(sideEffect).toBe(3);
       });
@@ -342,7 +342,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should define a simple variable", async () => {
         // (define x 42)
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("define"), new ASymbol("x"), new AExact(42)], false);
-        await execExpr(code, { env });
+        await execExprOverFrame(code, { env });
         expect(env._lookupWithResolvers("x")).toEqual(new AExact(42));
       });
 
@@ -351,7 +351,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should evaluate the value expression", async () => {
         // (define x (+ 1 2))
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("define"), new ASymbol("x"), APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new AExact(1), new AExact(2)], false)], false);
-        await execExpr(code, { env });
+        await execExprOverFrame(code, { env });
         expect(env._lookupWithResolvers("x")).toEqual(new AExact(3));
       });
 
@@ -360,7 +360,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should define a function with shorthand syntax", async () => {
         // (define (add a b) (+ a b))
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("define"), APair.fromArray(CONSTANT_CTX, [new ASymbol("add"), new ASymbol("a"), new ASymbol("b")], false), APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new ASymbol("a"), new ASymbol("b")], false)], false);
-        await execExpr(code, { env });
+        await execExprOverFrame(code, { env });
         const add = env._lookupWithResolvers("add");
         // Scheme lambdas are ALambda values (callable-as-value) carrying a mutable __name__.
         expect(add).toBeInstanceOf(ALambda);
@@ -381,9 +381,9 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should capture closure environment", async () => {
         // (define a 10)
         // ((lambda (x) (+ a x)) 5)
-        await execExpr(APair.fromArray(CONSTANT_CTX, [new ASymbol("define"), new ASymbol("a"), new AExact(10)], false), { env });
+        await execExprOverFrame(APair.fromArray(CONSTANT_CTX, [new ASymbol("define"), new ASymbol("a"), new AExact(10)], false), { env });
         const code = APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol("lambda"), APair.fromArray(CONSTANT_CTX, [new ASymbol("x")], false), APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new ASymbol("a"), new ASymbol("x")], false)], false), new AExact(5)], false);
-        const result = await execExpr(code, { env });
+        const result = await execExprOverFrame(code, { env });
         expect(result).toEqual(new AExact(15));
       });
 
@@ -392,7 +392,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should handle rest parameters", async () => {
         // ((lambda args args) 1 2 3)
         const code = APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol("lambda"), new ASymbol("args"), new ASymbol("args")], false), new AExact(1), new AExact(2), new AExact(3)], false);
-        const result = (await execExpr(code, { env })) as APair<any, any>;
+        const result = (await execExprOverFrame(code, { env })) as APair<any, any>;
         expect(result.to_array()).toEqual([new AExact(1), new AExact(2), new AExact(3)]);
       });
     });
@@ -401,7 +401,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       // [P15 redundancy] DELETED (same sweep/rationale as if/begin/lambda above):
       // "bind variables in body" point-duplicated generator-exec.spec.ts's own
       // "should handle let bindings"; "named let for loops" point-duplicated
-      // generator-exec.spec.ts's dedicated "execExpr() - named let" describe (same
+      // generator-exec.spec.ts's dedicated "execExprOverFrame() - named let" describe (same
       // factorial-via-accumulator pattern). Kept parallel-binding-semantics (a
       // distinct scoping/shadowing invariant not covered by either).
       // INVARIANT: let uses parallel binding semantics — an init expression cannot
@@ -411,7 +411,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         bindValue(env, "x", new AExact(100));
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("let"), APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol("x"), new AExact(1)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol("y"), new ASymbol("x")], false)], false), new ASymbol("y")], false);
         // y should be 100 (outer x), not 1 (inner x)
-        expect(await execExpr(code, { env })).toEqual(new AExact(100));
+        expect(await execExprOverFrame(code, { env })).toEqual(new AExact(100));
       });
     });
 
@@ -426,7 +426,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should return true for empty and", async () => {
         // (and) ⇒ #t (R7RS §6.3): the boxed schemeTrue singleton IS the Scheme #t.
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("and")], false);
-        expect(await execExpr(code, { env })).toBe(schemeTrue);
+        expect(await execExprOverFrame(code, { env })).toBe(schemeTrue);
       });
 
       // INVARIANT: and short-circuits on the first #f without evaluating the rest
@@ -438,7 +438,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         });
         // (and #f (side-effect))
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("and"), schemeFalse, APair.fromArray(CONSTANT_CTX, [new ASymbol("side-effect")], false)], false);
-        expect(await execExpr(code, { env })).toBe(schemeFalse);
+        expect(await execExprOverFrame(code, { env })).toBe(schemeFalse);
         expect(called).toBe(false);
       });
 
@@ -446,7 +446,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should return last value if all true", async () => {
         // (and 1 2 3)
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("and"), new AExact(1), new AExact(2), new AExact(3)], false);
-        expect(await execExpr(code, { env })).toEqual(new AExact(3));
+        expect(await execExprOverFrame(code, { env })).toEqual(new AExact(3));
       });
     });
 
@@ -455,7 +455,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should return false for empty or", async () => {
         // (or) ⇒ #f (R7RS §6.3): the boxed schemeFalse singleton IS the Scheme #f.
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("or")], false);
-        expect(await execExpr(code, { env })).toBe(schemeFalse);
+        expect(await execExprOverFrame(code, { env })).toBe(schemeFalse);
       });
 
       // INVARIANT: or short-circuits on the first truthy value without evaluating the rest
@@ -467,7 +467,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         });
         // (or 1 (side-effect))
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("or"), new AExact(1), APair.fromArray(CONSTANT_CTX, [new ASymbol("side-effect")], false)], false);
-        expect(await execExpr(code, { env })).toEqual(new AExact(1));
+        expect(await execExprOverFrame(code, { env })).toEqual(new AExact(1));
         expect(called).toBe(false);
       });
 
@@ -475,7 +475,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should return last value if all false", async () => {
         // (or #f #f 0) - 0 is truthy in Scheme
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("or"), schemeFalse, schemeFalse, new AExact(0)], false);
-        expect(await execExpr(code, { env })).toEqual(new AExact(0));
+        expect(await execExprOverFrame(code, { env })).toEqual(new AExact(0));
       });
     });
 
@@ -494,7 +494,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
           APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(">"), new AExact(1), new AExact(2)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol("quote"), new ASymbol("no")], false)], false),
           APair.fromArray(CONSTANT_CTX, [new ASymbol("else"), APair.fromArray(CONSTANT_CTX, [new ASymbol("quote"), new ASymbol("yes")], false)], false),
         ], false);
-        const result = (await execExpr(code, { env })) as ASymbol;
+        const result = (await execExprOverFrame(code, { env })) as ASymbol;
         expect(result.__name__).toBe("yes");
       });
 
@@ -502,7 +502,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should return test value when no expressions", async () => {
         // (cond (5)) => 5
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("cond"), APair.fromArray(CONSTANT_CTX, [new AExact(5)], false)], false);
-        expect(await execExpr(code, { env })).toEqual(new AExact(5));
+        expect(await execExprOverFrame(code, { env })).toEqual(new AExact(5));
       });
 
       // INVARIANT: (test => proc) applies proc to the test's value when the test is truthy.
@@ -518,7 +518,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("cond"), APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new AExact(1), new AExact(2)], false), new ASymbol("=>"), new ASymbol("double")], false)], false);
         // The bare-fn boxing seam boxes the => builtin's raw return; this spec's
         // `execExpr` surfaces the box — unwrap to assert the value.
-        expect(((await execExpr(code, { env })) as AExact)["arrival/toJS"]()).toBe(6);
+        expect(((await execExprOverFrame(code, { env })) as AExact)["arrival/toJS"]()).toBe(6);
       });
     });
 
@@ -538,7 +538,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
           APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new AExact(2)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol("quote"), new ASymbol("two")], false)], false),
           APair.fromArray(CONSTANT_CTX, [new ASymbol("else"), APair.fromArray(CONSTANT_CTX, [new ASymbol("quote"), new ASymbol("other")], false)], false),
         ], false);
-        const result = (await execExpr(code, { env })) as ASymbol;
+        const result = (await execExprOverFrame(code, { env })) as ASymbol;
         expect(result.__name__).toBe("other");
       });
     });
@@ -548,14 +548,14 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should execute body when test is true", async () => {
         // (when #t 1 2 3)
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("when"), schemeTrue, new AExact(1), new AExact(2), new AExact(3)], false);
-        expect(await execExpr(code, { env })).toEqual(new AExact(3));
+        expect(await execExprOverFrame(code, { env })).toEqual(new AExact(3));
       });
 
       // INVARIANT: when returns the unspecified/void value when the test is false
       it("should return undefined when test is false", async () => {
         // (when #f 1 2 3)
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("when"), schemeFalse, new AExact(1), new AExact(2), new AExact(3)], false);
-        expect(await execExpr(code, { env })).toBe(theVoid);
+        expect(await execExprOverFrame(code, { env })).toBe(theVoid);
       });
     });
 
@@ -564,14 +564,14 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       it("should execute body when test is false", async () => {
         // (unless #f 1 2 3)
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("unless"), schemeFalse, new AExact(1), new AExact(2), new AExact(3)], false);
-        expect(await execExpr(code, { env })).toEqual(new AExact(3));
+        expect(await execExprOverFrame(code, { env })).toEqual(new AExact(3));
       });
 
       // INVARIANT: unless returns the unspecified/void value when the test is true
       it("should return undefined when test is true", async () => {
         // (unless #t 1 2 3)
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("unless"), schemeTrue, new AExact(1), new AExact(2), new AExact(3)], false);
-        expect(await execExpr(code, { env })).toBe(theVoid);
+        expect(await execExprOverFrame(code, { env })).toBe(theVoid);
       });
     });
 
@@ -585,7 +585,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
           APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol("i"), new AExact(0), APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new ASymbol("i"), new AExact(1)], false)], false)], false),
           APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(">="), new ASymbol("i"), new AExact(5)], false), new ASymbol("i")], false),
         ], false);
-        expect(await execExpr(code, { env })).toEqual(new AExact(5));
+        expect(await execExprOverFrame(code, { env })).toEqual(new AExact(5));
       });
 
       // INVARIANT: do executes the command body once per iteration for its side effects
@@ -602,7 +602,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
           APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(">="), new ASymbol("i"), new AExact(3)], false)], false),
           APair.fromArray(CONSTANT_CTX, [new ASymbol("inc!")], false),
         ], false);
-        await execExpr(code, { env });
+        await execExprOverFrame(code, { env });
         expect(count).toBe(3);
       });
     });
@@ -626,10 +626,10 @@ describe("Generator Evaluator with Real LIPS Types", () => {
             ], false),
           ], false),
         ], false);
-        await execExpr(defineMacro, { env });
+        await execExprOverFrame(defineMacro, { env });
 
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("my-when"), schemeTrue, new AExact(1), new AExact(2), new AExact(3)], false);
-        expect(await execExpr(code, { env })).toEqual(new AExact(3));
+        expect(await execExprOverFrame(code, { env })).toEqual(new AExact(3));
       });
     });
 
@@ -654,7 +654,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         // verified at the full-env layer in purity-doors.test.ts). The point at
         // THIS layer: delay no longer evaluates lazily; it is gone from the
         // special-form table.
-        await expect(execExpr(APair.fromArray(CONSTANT_CTX, [new ASymbol("delay"), APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new AExact(1), new AExact(2)], false)], false), { env })).rejects.toThrow();
+        await expect(execExprOverFrame(APair.fromArray(CONSTANT_CTX, [new ASymbol("delay"), APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new AExact(1), new AExact(2)], false)], false), { env })).rejects.toThrow();
       });
     });
   });
@@ -671,7 +671,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         code = APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new AExact(1), code], false);
       }
 
-      const result = await execExpr(code, { env });
+      const result = await execExprOverFrame(code, { env });
       expect(result).toEqual(new AExact(10001));
     });
 
@@ -685,7 +685,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
         code = APair.fromArray(CONSTANT_CTX, [new ASymbol("if"), schemeTrue, code, new AExact(0)], false);
       }
 
-      const result = await execExpr(code, { env });
+      const result = await execExprOverFrame(code, { env });
       expect(result).toEqual(new AExact(42));
     });
 

@@ -8,7 +8,6 @@
  * Q17 (query maturity) — this file exercises the MACHINERY Q8c actually lands.
  */
 import { describe, it, expect, beforeAll } from "vitest";
-import { initBridge } from "../../index.js";
 import { parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import type { Classifier, DeclaredRole } from "../lineage.js";
@@ -51,7 +50,6 @@ async function wf(code: string): Promise<WireframeProgram> {
 const wireTo = (g: WireframeGraph, slot: string): Wire | undefined => g.wires.find((w) => w.consumer.slot === slot);
 
 beforeAll(async () => {
-  await initBridge();
 });
 
 describe("factTagOf — the wire fact TAG (§2 A5: one edge species, a tag not a second kind)", () => {

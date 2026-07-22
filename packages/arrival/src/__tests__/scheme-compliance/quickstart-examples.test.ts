@@ -4,7 +4,8 @@ import { CONSTANT_CTX } from "../../run/RunContext.js";
  */
 
 import { describe, expect, it } from "vitest";
-import { exec, execState, jsToScheme, schemeToJs, schemeToJsUntyped } from "../../index.js";
+import { jsToScheme, schemeToJs, schemeToJsUntyped } from "../../index.js";
+import { execOverFrame as exec, execStateOverFrame as execState } from "../../eval/generator-exec.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
 import { EnvCapability } from "../../common/capability.js";

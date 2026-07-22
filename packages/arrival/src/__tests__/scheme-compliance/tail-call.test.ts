@@ -60,10 +60,10 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { execState } from "../../eval/generator-exec.js";
+import { execState, execStateOverFrame } from "../../eval/generator-exec.js";
 import { freshEnv } from "../_fresh-env.js";
 import { nil } from "../../values/primitives/ANil.js";
-import type { ExecOptions } from "../../eval/generator-exec.js";
+import type { ExecOptions, ExecOptionsOverFrame } from "../../eval/generator-exec.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
 import { bindValue } from "../../env/AmbientRuntime.js";
 
@@ -73,7 +73,13 @@ import { bindValue } from "../../env/AmbientRuntime.js";
  * assertions read the result's own Scheme-print `.toString()` ("done"/"#t"),
  * a boxed-state concern, not the SIMPLE tier's plain-JS exit.
  */
-async function execSource(src: string, options?: ExecOptions): Promise<readonly unknown[]> {
+// Dispatches to the internal live-frame seam when `options` carries an `env` (this file mixes
+// bare default-env calls with a couple of `freshEnv()`-scoped ones), else the ordinary
+// vocabulary-path `execState`.
+async function execSource(src: string, options?: ExecOptions | ExecOptionsOverFrame): Promise<readonly unknown[]> {
+  if (options && "env" in options && options.env !== undefined) {
+    return (await execStateOverFrame(src, options)).values;
+  }
   return (await execState(src, options)).values;
 }
 

@@ -1,7 +1,8 @@
 // polyglot-lisp pack — assemble onto a real env, then RUN the Common Lisp
 // idiom family. Split out of polyglot.test.ts (V, 2026-07-10 dialect split —
 // see polyglot.ts's header for the full rationale).
-import { execState, type ExecOptions } from "../../../index.js";
+import { execState as bareExecState } from "../../../index.js";
+import { execStateOverFrame, type ExecOptionsOverFrame } from "../../../eval/generator-exec.js";
 import { mintFrame } from "../../AmbientRuntime.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
@@ -11,8 +12,8 @@ import { describe, expect, it } from "vitest";
 
 import polyglotLisp from "../../polyglot/polyglot-lisp.js";
 
-async function exec(code: string, options?: ExecOptions) {
-  return (await execState(code, options)).values.slice();
+async function exec(code: string, options: ExecOptionsOverFrame) {
+  return (await execStateOverFrame(code, options)).values.slice();
 }
 
 describe("@inhuman.tools/arrival/polyglot-lisp", () => {
@@ -47,7 +48,7 @@ describe("@inhuman.tools/arrival/polyglot-lisp", () => {
 // Cross-dialect stdlib completion, default assembled env — polyglot-lisp ships
 // in BASE_PACKS in production, the same surface a model actually reaches.
 describe("@inhuman.tools/arrival/polyglot-lisp — stdlib completion (Bucket A)", () => {
-  const str = async (src: string) => String((await exec(src))[0]);
+  const str = async (src: string) => String((await bareExecState(src)).values[0]);
 
   it("mapcar (Common Lisp) — same arg order as R7RS map", async () => {
     expect(await str("(mapcar (lambda (x) (* x x)) (list 1 2 3))")).toBe("(1 4 9)");

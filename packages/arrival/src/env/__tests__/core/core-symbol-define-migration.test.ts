@@ -19,43 +19,39 @@
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../AmbientRuntime.js";
 import { EnvCapability } from "../../../common/capability.js";
-import { exec, execState } from "../../../eval/generator-exec.js";
-import { global_env } from "../../env-roots.js";
-import { initBridge } from "../../../index.js";
-import { freshEnv } from "../../../__tests__/_fresh-env.js";
+import { execOverFrame, execStateOverFrame, execInFrame } from "../../../eval/generator-exec.js";
+import { freshEnv, nativeOnlyRoot } from "../../../__tests__/_fresh-env.js";
 import { DefineLocalityError } from "../../../errors.js";
 import core from "../../core/core.js";
 
 // Mirrors every other migration suite's injected evalScheme (srfi-235/-43/-189's own
 // `__tests__/*-symbol-define.test.ts`).
-const evalScheme = (env: unknown, src: unknown): unknown =>
-  exec(src as string, { env: env as never, skipBootstrapWait: true });
+const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as never);
 
 describe("scheme/core — behavior equivalence (semantic-equivalence gate, §4.2)", () => {
   it("true / false: the canonical boolean constants", async () => {
     const env = await freshEnv();
-    const [t] = await exec("true", { env });
-    const [f] = await exec("false", { env });
+    const [t] = await execOverFrame("true", { env });
+    const [f] = await execOverFrame("false", { env });
     expect(t).toBe(true);
     expect(f).toBe(false);
   });
 
   it("NaN: the canonical not-a-number constant — a real, non-finite JS NaN", async () => {
     const env = await freshEnv();
-    const [n] = await exec("NaN", { env });
+    const [n] = await execOverFrame("NaN", { env });
     expect(Number.isNaN(n)).toBe(true);
   });
 
   it("single: DELETED (V ruling 2026-07-10, srfi alignment) — unbound, not silently-wrong", async () => {
     const env = await freshEnv();
-    await expect(execState("(single (list 'a))", { env })).rejects.toThrow(/Unbound variable/);
+    await expect(execStateOverFrame("(single (list 'a))", { env })).rejects.toThrow(/Unbound variable/);
   });
 });
 
 describe("scheme/core — the §2.1 bake FV locality law", () => {
   it("scheme/core lowers cleanly (dep-free since single's deletion) — never DefineLocalityError", async () => {
-    await initBridge();
-    const env = mintFrame(global_env, "test-core-fv-law-ok");
+    const env = mintFrame(await nativeOnlyRoot(), "test-core-fv-law-ok");
     await expect(core.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
   });
 
@@ -84,9 +80,9 @@ describe("scheme/core — the §2.1 bake FV locality law", () => {
 describe("scheme/core — constants validate ONCE at bake and bind a plain value (§1.2)", () => {
   it("true/false/NaN are bound as plain values, not procedures", async () => {
     const env = await freshEnv();
-    const [tType] = await exec("(procedure? true)", { env });
-    const [fType] = await exec("(procedure? false)", { env });
-    const [nType] = await exec("(procedure? NaN)", { env });
+    const [tType] = await execOverFrame("(procedure? true)", { env });
+    const [fType] = await execOverFrame("(procedure? false)", { env });
+    const [nType] = await execOverFrame("(procedure? NaN)", { env });
     expect(tType).toBe(false);
     expect(fType).toBe(false);
     expect(nType).toBe(false);

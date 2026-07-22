@@ -1,7 +1,8 @@
 // polyglot-clojure pack — assemble onto a real env, then RUN the threading
 // macros and the Clojure stdlib completion. Split out of polyglot.test.ts (V,
 // 2026-07-10 dialect split — see polyglot.ts's header for the full rationale).
-import { execState, type ExecOptions } from "../../../index.js";
+import { execState as bareExecState } from "../../../index.js";
+import { execStateOverFrame, type ExecOptionsOverFrame } from "../../../eval/generator-exec.js";
 import { mintFrame } from "../../AmbientRuntime.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
@@ -11,8 +12,8 @@ import { describe, expect, it } from "vitest";
 
 import polyglotClojure from "../../polyglot/polyglot-clojure.js";
 
-async function exec(code: string, options?: ExecOptions) {
-  return (await execState(code, options)).values.slice();
+async function exec(code: string, options: ExecOptionsOverFrame) {
+  return (await execStateOverFrame(code, options)).values.slice();
 }
 
 describe("@inhuman.tools/arrival/polyglot-clojure", () => {
@@ -59,7 +60,7 @@ describe("@inhuman.tools/arrival/polyglot-clojure", () => {
 // surface a model actually reaches. Sibling to env/polyglot/polyglot-stubs.ts, which doors
 // the symbols that genuinely can't be pure (IO/mutation/macro-only — println here).
 describe("@inhuman.tools/arrival/polyglot-clojure — stdlib completion (Bucket A)", () => {
-  const str = async (src: string) => String((await exec(src))[0]);
+  const str = async (src: string) => String((await bareExecState(src)).values[0]);
 
   it("str — concatenates the display form of every arg", async () => {
     expect(await str('(str "a" "b")')).toBe("ab");
@@ -102,7 +103,7 @@ describe("@inhuman.tools/arrival/polyglot-clojure — stdlib completion (Bucket 
   });
 
   it("mapv / filterv — map/filter with a vector result", async () => {
-    const isVector = async (src: string) => (await exec(src))[0];
+    const isVector = async (src: string) => (await bareExecState(src)).values[0];
     const v1 = (await isVector("(mapv (lambda (x) (* x x)) (list 1 2 3))")) as { constructor: { name: string } };
     expect(v1.constructor.name).toBe("AVector");
     expect(await str("(vector->list (mapv (lambda (x) (* x x)) (list 1 2 3)))")).toBe("(1 4 9)");

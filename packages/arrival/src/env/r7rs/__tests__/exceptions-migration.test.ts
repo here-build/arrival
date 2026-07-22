@@ -14,15 +14,15 @@
 // to check), and a couple of hand rows for the two regressions above so a future revert
 // of the workaround has a fast, local repro.
 import { describe, expect, it } from "vitest";
-import { execState, type ExecOptions } from "../../../eval/generator-exec.js";
+import { execStateOverFrame, type ExecOptionsOverFrame } from "../../../eval/generator-exec.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import type { SchemeValue } from "../../../values/types.js";
 import type { AEntity } from "../../../common/symbol.js";
 import exceptionsPack from "../exceptions.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
-async function exec(code: string, options?: ExecOptions): Promise<SchemeValue[]> {
-  return (await execState(code, options)).values.slice();
+async function exec(code: string, options: ExecOptionsOverFrame): Promise<SchemeValue[]> {
+  return (await execStateOverFrame(code, options)).values.slice();
 }
 
 const symbols = harvestContracts(exceptionsPack.spec.symbols);

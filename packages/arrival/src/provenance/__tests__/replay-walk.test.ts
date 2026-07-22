@@ -14,7 +14,6 @@
  *      generator can give you.
  */
 import { describe, expect, it, beforeAll } from "vitest";
-import { initBridge } from "../../index.js";
 import { parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import type { Classifier, DeclaredRole } from "../lineage.js";
@@ -42,7 +41,6 @@ async function wf(code: string) {
 }
 
 beforeAll(async () => {
-  await initBridge();
 });
 
 describe("walkGraphReplay — equivalence with replayGraphEgress", () => {

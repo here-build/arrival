@@ -4,7 +4,6 @@
 // to carry lineage; its own producers were throwing it away. utf8->string /
 // vector->string even returned RAW JS strings (provenance-blind escapees).
 import { describe, expect, it } from "vitest";
-import { initBridge } from "../../index.js";
 import bytevectorsCap from "../../env/r7rs/bytevectors.js";
 import vectorsCap from "../../env/r7rs/vectors.js";
 import type { EnvCapability } from "../../common/capability.js";
@@ -19,7 +18,6 @@ import { harvestContracts } from "../../__tests__/_symbols-harvest.js";
 // forced ON for this file's lifetime.
 requireEagerOracle();
 
-await initBridge();
 // Source op fns FROM THE CAPABILITY's inlined `symbols` (the bare *_OPS map was
 // inlined into the constructor; the capability default export is the single
 // declaration site). DUAL-ACCEPT the symbol shape (mirrors EnvCapability.lower()'s

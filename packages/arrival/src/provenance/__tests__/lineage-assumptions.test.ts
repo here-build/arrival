@@ -8,8 +8,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
-import { initBridge } from "../../index.js";
-import { execState } from "../../eval/generator-exec.js";
+import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { AVector } from "../../values/primitives/AVector.js";
@@ -17,7 +16,7 @@ import { APair } from "../../values/primitives/APair.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import type { SchemeValue } from "../../values/types.js";
 import { classify, fullCone, type Classifier } from "../../provenance/lineage.js";
-import { provOf } from "../../provenance/lineage-shadow.js";
+import { provOf } from "../../provenance/lineage.js";
 import { sStr, sNum, run, runRaw } from "../../__tests__/_lineage-test-helpers.js";
 import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
@@ -140,7 +139,6 @@ describe("NEXT-STEP assumptions (designed; unblock as the slices land)", () => {
   // surface special forms by shape; lineage-spike + golden-prov-special-forms
   // carry the full proof). These pin the headline closure here in the ledger.
   it("A4-classifier: classify() handles `let`/`if` (special forms), not just applications", async () => {
-    await initBridge();
     const C: Classifier = {
       roleOf: (op) => (["map", "filter"].includes(op) ? "fan" : undefined),
     };
@@ -157,7 +155,6 @@ describe("NEXT-STEP assumptions (designed; unblock as the slices land)", () => {
   });
 
   it("A21: classify() runs on the SURFACE ast — this engine dispatches special forms directly (no macro-expansion)", async () => {
-    await initBridge();
     const C: Classifier = { roleOf: () => undefined };
     // The evaluator's SPECIAL_FORMS dispatches `let` directly, so the parsed AST
     // head is still the literal `let` symbol (NOT desugared to a lambda
@@ -226,7 +223,6 @@ describe("v0.1 FINALIZATION GATES (G1–G7)", () => {
   // [impl-pinning] pins the CURRENT eager mechanism (grouping-fact stamp survives map,
   // drops on count/convert), not a behavioral guarantee — the static path may reshape this.
   it("G6-eager-golden(SchemeVector): a length-preserving vector-map PRESERVES the collection-level grouping fact; vector-length/vector->list drop to the bare scalar/Pair exactly as eager does (this map IS the G2 oracle)", async () => {
-    await initBridge();
     const mkVec = () => new AVector([sStr("a", 100), sStr("b", 101)], new Set([7]));
     const summary = (r: unknown) => ({ ctor: (r as { constructor?: { name?: string } })?.constructor?.name ?? typeof r, prov: provOf(r) });
     const oneShot = async (src: string): Promise<unknown> => {

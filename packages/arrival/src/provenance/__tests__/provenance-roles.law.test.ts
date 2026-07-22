@@ -48,7 +48,6 @@
  *     at runtime is now a first-class declared fact at bake time.
  */
 import { describe, it, expect } from "vitest";
-import { initBridge } from "../../index.js";
 import { parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import {
@@ -113,7 +112,6 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       "{pipe, fan, source, sink, transparent, loop, opaque} — pipe default for " +
       "native/sequence/tagless kinds, source default for rosetta",
     async () => {
-      await initBridge();
 
       // KIND DEFAULTS — no `provenance` in the contract; the factory resolves the
       // kind's default before the def is returned (`contract.provenance ?? "pipe"` /
@@ -246,7 +244,6 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       "declared role — an undeclared symbol is a build-time error, never a silent " +
       "default-to-opaque",
     async () => {
-      await initBridge();
 
       // The baked TYPE makes omission impossible: every callable-kind def
       // (`NativeSymbolDef`/`RosettaSymbolDef`/`SequenceSymbolDef`/`TaglessSymbolDef`/
@@ -366,7 +363,6 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       "`loop` → `binder{cycles}`; `sink`/`transparent` are declaration-layer facts " +
       "lowering to graph shapes, never a second parallel vocabulary (§2 EXCLUDED, panel C11)",
     async () => {
-      await initBridge();
       const C: Classifier = {
         roleOf: (op) =>
           op === "declared-loop"
@@ -417,7 +413,6 @@ describe("V2 — declaration-driven classifier (§2; PROVENANCE-PLAN.md Q3)", ()
       'merely bypassed (§2 EXCLUDED: "the key-taxonomy violation the P7 corollary ' +
       'exists to kill; every static interpreter reads the declared field")',
     async () => {
-      await initBridge();
       // Names picked to defeat any residual name-based guess — a "pure"-sounding name
       // declared `source`, and a name with no source-y hint declared `pipe`. If
       // classify() still consulted a name list (the retired heuristic) rather than
@@ -445,7 +440,6 @@ describe("V2 — declaration-driven classifier (§2; PROVENANCE-PLAN.md Q3)", ()
       'used to mark "opaque today (pending Q3\'s binder rewrite)": `(let loop ((a v1)) a)` ' +
       "flipped off that corpus's opaque count when this landed",
     async () => {
-      await initBridge();
       const C: Classifier = { roleOf: () => undefined };
 
       const [namedLetAst] = await parse(`(let loop ((a v1)) a)`);
@@ -634,7 +628,6 @@ describe("V4 — cone-traversal termination over cyclic binder nodes (§1; PROVE
       "cyclic loop-carried dependency never sends the walker into unbounded recursion " +
       "(the widening interplay Q8a′'s risk register names explicitly)",
     async () => {
-      await initBridge();
       const C: Classifier = { roleOf: (op) => (op === "src" ? "source" : undefined) };
       // A nested named-let (loop-in-loop, the outer's recur called from inside the
       // inner's arm) — deep and finite, but exactly the shape the risk register
@@ -673,7 +666,6 @@ describe("V4 — cone-traversal termination over cyclic binder nodes (§1; PROVE
       "them — a loop-heavy program never emits a record with no template (Q8a′ is a " +
       "HARD gate before Q11a for exactly this reason)",
     async () => {
-      await initBridge();
       const forms = await parse("(emit! (let loop ((i 0)) (if (> i 3) i (loop (+ i 1)))))");
       const C: Classifier = { roleOf: (op) => (op === "emit!" ? "sink" : undefined) };
       const p = buildWireframe(forms, { classifier: C, isBaseName: (n) => ["+", ">"].includes(n) });
@@ -700,7 +692,6 @@ describe("Q7 — program prelude: PURE-only membership, the REJECTED direction (
       '§1 EXCLUDED "port-reaching defines in the prelude — name indirection would ' +
       "smuggle sources into 'pure' wire bodies\")",
     async () => {
-      await initBridge();
       const C: Classifier = { roleOf: (op) => (op === "fetch-thing" ? "source" : undefined) };
       const forms = await parse(
         `(define (helper) (fetch-thing "https://example.invalid"))

@@ -248,12 +248,19 @@ describe("arrival/overridable — structured s/* forms: enum, object, optional",
   });
 });
 
-describe("ExecOptions.override — the seamless door (V 2026-07-10: 'no jsToScheme at all')", () => {
-  // No `capabilities`, no `config`, no `jsToScheme`, no `env.set` — the option
-  // appends arrival/overridable and merges the record into config.params.
-  it("override alone: the host value binds, boxed at the membrane, no ceremony", async () => {
+// STAGE C CUT 3b (docs/plans/stage-c-corpse-deletion.md) retired the `ExecOptions.override`
+// convenience wrapper ENTIRELY — not the underlying mechanism, just the "append
+// `overridableCapability` to `capabilities` and merge into `config.params`" sugar it used to
+// perform automatically. Every row below re-pins the SAME behavior through the sugar's own
+// underlying door: `{ capabilities: [overridableCapability], config: { params } }` — the
+// identical shape `execState`'s router already used to reach for the capability.
+describe("define/overridable through capabilities+config — the door the override sugar wrapped", () => {
+  // No manual `jsToScheme`, no `env.set` — the capability's own `overridable/resolve` verb
+  // boxes at the membrane, no ceremony.
+  it("a param binds, boxed at the membrane, no ceremony", async () => {
     const result = await exec(`(define/overridable city (s/string) "Berlin") city`, {
-      override: { city: "Paris" },
+      capabilities,
+      config: { params: { city: "Paris" } },
     });
     expect((result.at(-1) as AString)["arrival/toJS"]()).toBe("Paris");
   });
@@ -266,7 +273,7 @@ describe("ExecOptions.override — the seamless door (V 2026-07-10: 'no jsToSche
     const result = await exec(
       `(define/overridable users (s/array (s/object (s/field/string "name") (s/field/number "priority"))) '())
        (map (lambda (u) (@ u "name")) users)`,
-      { override: { users } },
+      { capabilities, config: { params: { users } } },
     );
     // The validated array crosses as a VECTOR (arrays ↔ vectors at the membrane),
     // so map returns a vector — read it back through the standard JS projection.
@@ -274,37 +281,25 @@ describe("ExecOptions.override — the seamless door (V 2026-07-10: 'no jsToSche
     expect(names).toEqual(["john", "mary"]);
   });
 
-  it("absent key ⇒ the in-form default fires (override is per-name, not all-or-nothing)", async () => {
+  it("absent key ⇒ the in-form default fires (a param is per-name, not all-or-nothing)", async () => {
     const result = await exec(
       `(define/overridable city (s/string) "Berlin")
        (define/overridable country (s/string) "Germany")
        (list city country)`,
-      { override: { city: "Paris" } },
+      { capabilities, config: { params: { city: "Paris" } } },
     );
     const list = result.at(-1) as APair<any, any>;
     expect(list.to_array().map((v) => (v as AString)["arrival/toJS"]())).toEqual(["Paris", "Germany"]);
   });
 
-  it("override validates against the declared type — same door as the config.params path", async () => {
+  it("a param validates against the declared type — same door as any other config.params value", async () => {
     await expect(
-      exec(`(define/overridable age (s/number) 30) age`, { override: { age: "not-a-number" } }),
+      exec(`(define/overridable age (s/number) 30) age`, {
+        capabilities,
+        config: { params: { age: "not-a-number" } },
+      }),
     ).rejects.toThrow(
       /define\/overridable age: expected number, got "not-a-number" \(from an environment override\)/,
     );
-  });
-
-  it("composes with explicit capabilities + config: override merges into params and wins key-wise", async () => {
-    const result = await exec(
-      `(define/overridable city (s/string) "Berlin")
-       (define/overridable country (s/string) "Germany")
-       (list city country)`,
-      {
-        capabilities, // caller ALSO lists the capability — kernel identity-dedup makes it harmless
-        config: { params: { city: "Madrid", country: "Spain" } },
-        override: { city: "Paris" },
-      },
-    );
-    const list = result.at(-1) as APair<any, any>;
-    expect(list.to_array().map((v) => (v as AString)["arrival/toJS"]())).toEqual(["Paris", "Spain"]);
   });
 });

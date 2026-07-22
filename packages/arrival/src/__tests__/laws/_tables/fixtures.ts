@@ -18,7 +18,7 @@
  * exactly what the F1 grid's conservation/box-discipline checks need to track.
  */
 import { freshEnv } from "../../_fresh-env.js";
-import { execState } from "../../../eval/generator-exec.js";
+import { execStateOverFrame } from "../../../eval/generator-exec.js";
 import { fromJS } from "../../../membrane/membrane.js";
 import { AValue } from "../../../values/primitives/AValue.js";
 import { APair } from "../../../values/primitives/APair.js";
@@ -134,7 +134,7 @@ export interface Minted {
  *  always `[1,2,3]` and never collide across assertions. */
 export async function mint3(carrier: CarrierRow): Promise<Minted> {
   const { env, mintedIds } = await withLawEnv();
-  const [value] = (await execState(carrier.mint3, { env })).values;
+  const [value] = (await execStateOverFrame(carrier.mint3, { env })).values;
   if (mintedIds.length !== 3) {
     throw new Error(`fixtures.ts mint3(${carrier.carrier}): expected 3 src mints, got ${mintedIds.length}`);
   }
@@ -157,9 +157,9 @@ export interface MintedPair {
  */
 export async function mint3Pair(carrier: CarrierRow): Promise<MintedPair> {
   const { env, mintedIds } = await withLawEnv();
-  const [a] = (await execState(carrier.mint3, { env })).values;
+  const [a] = (await execStateOverFrame(carrier.mint3, { env })).values;
   const idsA = [...mintedIds] as [number, number, number];
-  const [b] = (await execState(carrier.mint3, { env })).values;
+  const [b] = (await execStateOverFrame(carrier.mint3, { env })).values;
   const idsB = mintedIds.slice(idsA.length) as [number, number, number];
   return { env, a, b, idsA, idsB };
 }

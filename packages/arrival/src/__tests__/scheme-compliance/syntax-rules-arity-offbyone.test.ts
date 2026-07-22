@@ -18,7 +18,7 @@
 import { describe, expect, it } from "vitest";
 import { freshEnv } from "../_fresh-env.js";
 import { AVector } from "../../values/primitives/AVector.js";
-import { execState } from "../../eval/generator-exec.js";
+import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 
 const env = await freshEnv();
 

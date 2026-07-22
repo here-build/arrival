@@ -17,7 +17,6 @@
  * this law checks against hasn't drifted.
  */
 import { beforeAll, describe, expect, it } from "vitest";
-import { initBridge } from "../../index.js";
 import { parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import type { Classifier, DeclaredRole } from "../../provenance/lineage.js";
@@ -49,7 +48,6 @@ function outOfScope(): never {
 }
 
 beforeAll(async () => {
-  await initBridge();
 });
 
 /** The four evidence tiers, in the spec's own order (§5 A1 / §7: "the envelope enum

@@ -37,7 +37,7 @@
  */
 import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { AmbientRuntime, mintFrame } from "../../env/AmbientRuntime.js";
-import { execState } from "../../eval/generator-exec.js";
+import { execStateOverFrame } from "../../eval/generator-exec.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AValue } from "../../values/primitives/AValue.js";
@@ -151,7 +151,7 @@ export async function runEagerCone(
   setEagerProvenanceOracleEnabled(true);
   let values: readonly SchemeValue[];
   try {
-    ({ values } = await execState(code, { env }));
+    ({ values } = await execStateOverFrame(code, { env }));
   } finally {
     setEagerProvenanceOracleEnabled(savedOracle);
   }

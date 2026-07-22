@@ -15,20 +15,26 @@ import { EnvCapability } from "../../common/capability.js";
 import type { EvalPreludeInto, EvalSchemeInto } from "../../common/scheme-env.js";
 import { buildVocabulary } from "../vocabulary.js";
 import { assembleRun } from "../assemble-run.js";
-import { exec, ensureBaseAssembled } from "../../eval/generator-exec.js";
-import { bindValue, mintFrame } from "../AmbientRuntime.js";
-import { user_env } from "../env-roots.js";
+import { exec, execInFrame } from "../../eval/generator-exec.js";
+import { bindValue, mintResolvingFrame, isAmbientRuntime } from "../AmbientRuntime.js";
 import { UnboundVariableError } from "../../errors.js";
 import type { SchemeValue } from "../../values/types.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
 
 /** The REAL evalScheme, required whenever a fixture declares a `symbol.define` — mirrors
- *  `generator-exec.ts`'s own `capabilityEvalScheme`. */
-const realEvalScheme: EvalSchemeInto = (env, src) => exec(src, { env, skipBootstrapWait: true });
+ *  `generator-exec.ts`'s own private `capabilityEvalScheme`: the internal bake seam, never the
+ *  public exec surface. */
+const realEvalScheme: EvalSchemeInto = (env, src) => {
+  if (!isAmbientRuntime(env)) throw new Error("expected a concrete AmbientRuntime");
+  return execInFrame(src, env);
+};
 
-/** The REAL per-run prelude evalScheme — mirrors `generator-exec.ts`'s own `preludeEvalScheme`:
- *  threads THIS run's `runCtx` through every prelude form's dispatch. */
-const realEvalPrelude: EvalPreludeInto = (env, src, runCtx) => exec(src, { env, runCtx, skipBootstrapWait: true });
+/** The REAL per-run prelude evalScheme — mirrors `generator-exec.ts`'s own private
+ *  `preludeEvalScheme`: threads THIS run's `runCtx` through every prelude form's dispatch. */
+const realEvalPrelude: EvalPreludeInto = (env, src, runCtx) => {
+  if (!isAmbientRuntime(env)) throw new Error("expected a concrete AmbientRuntime");
+  return execInFrame(src, env, runCtx);
+};
 
 describe("assembleRun — the diamond-DAG single-execution-per-run law", () => {
   // INVARIANT: a capability reachable through two DAG edges (left/right, both depending on the
@@ -36,7 +42,6 @@ describe("assembleRun — the diamond-DAG single-execution-per-run law", () => {
   // own collection dedup (B1) is what makes this fall out of a single pass, not a separate
   // execution-side dedup mechanism.
   it("a capability reachable via two DAG edges runs its prelude ONCE per run; a second run gets its own fresh count", async () => {
-    await ensureBaseAssembled();
     const shared = EnvCapability.define("test/prelude-diamond-shared", {
       resources: (): { count: number } => ({ count: 0 }),
       prelude: "(prelude/bump!)",
@@ -82,7 +87,6 @@ describe("assembleRun — registration-conflict door as the execution-dedup dete
   // execution-dedup regression would do) MUST hit the door — this is the detector the spec
   // calls for.
   it("a normal run registers once; manually re-running the prelude text against the same runCtx doors", async () => {
-    await ensureBaseAssembled();
     const registry = EnvCapability.define("test/prelude-registry", {
       resources: (): { keys: Set<string> } => ({ keys: new Set() }),
       prelude: '(registry/register! "yaml")',
@@ -109,7 +113,7 @@ describe("assembleRun — registration-conflict door as the execution-dedup dete
     // preludeOnly overlaid on a fresh discarded frame) and run the SAME prelude text AGAIN
     // against the SAME runCtx.
     const vocab = await buildVocabulary([registry], undefined, realEvalScheme);
-    const preludeScope = mintFrame(user_env, "test-simulated-regression");
+    const preludeScope = mintResolvingFrame("test-simulated-regression");
     for (const [name, value] of vocab.map) bindValue(preludeScope, name, value);
     for (const [name, value] of vocab.preludeOnly) bindValue(preludeScope, name, value);
 
@@ -127,7 +131,7 @@ describe("assembleRun — prelude `(define …)` is discarded, never leaks into 
       symbols: () => ({}),
     });
 
-    await expect(exec("leaked", { capabilities: [cap], vocabularyPath: true })).rejects.toBeInstanceOf(
+    await expect(exec("leaked", { capabilities: [cap] })).rejects.toBeInstanceOf(
       UnboundVariableError,
     );
   });
@@ -151,12 +155,11 @@ describe("assembleRun — preludeOnly overlay: invisible from user code, visible
       }),
     });
     await expect(
-      exec("(prelude-only/secret)", { capabilities: [cap], vocabularyPath: true }),
+      exec("(prelude-only/secret)", { capabilities: [cap] }),
     ).rejects.toBeInstanceOf(UnboundVariableError);
   });
 
   it("(b)+(c) visible from the prelude; a prelude-minted closure over it keeps working from user code", async () => {
-    await ensureBaseAssembled();
     // `store-closure!`/`run-stored-closure` are NATIVE (not rosetta, not `symbol.define`):
     //  - not ROSETTA — a `sz.procedure()`-decoded wrapper is REGION-BOUND (invocable only while
     //    the exporting call is still running, per docs/membrane.md §REGION), the wrong tool for a
@@ -201,7 +204,7 @@ describe("assembleRun — preludeOnly overlay: invisible from user code, visible
     // `run-stored-closure` is an ORDINARY (non-preludeOnly) verb — resolvable from user code —
     // yet its stored closure still resolves `prelude-only/secret`, a name user code itself
     // cannot see directly (proven by the sibling test above): pure lexical capture.
-    const [out] = await exec("(run-stored-closure)", { capabilities: [cap], vocabularyPath: true });
+    const [out] = await exec("(run-stored-closure)", { capabilities: [cap] });
     expect(out).toBe("SECRET-42");
   });
 });
@@ -211,7 +214,6 @@ describe("assembleRun — per-run effect freshness", () => {
   // memoized Vocabulary but get INDEPENDENT prelude effects — a fresh resource bag each time,
   // never accumulating across runs.
   it("two assembleRun calls from one tuple get independent resource state", async () => {
-    await ensureBaseAssembled();
     const cap = EnvCapability.define("test/prelude-freshness", {
       resources: (): { count: number } => ({ count: 0 }),
       prelude: "(prelude/bump!)",

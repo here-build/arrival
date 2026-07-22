@@ -10,7 +10,6 @@
  * reads the role off it), proving the classifier follows the DECLARATION alone.
  */
 import { describe, it, expect } from "vitest";
-import { initBridge } from "../../index.js";
 import { parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { classify, fullCone, type DeclaredRole, type LineageNode } from "../../provenance/lineage.js";
@@ -30,7 +29,6 @@ const node = async (src: string, e: ReturnType<typeof env>): Promise<LineageNode
 
 describe("classifierFromEnv — reads the declared `.provenanceRole` off the bound value", () => {
   it("a declared `pipe` propagates; a declared `source` mints, regardless of NAME", async () => {
-    await initBridge();
     const e = env();
     // Names picked to defeat any residual name-based guess — a "pure"-sounding name
     // declared `source`, and a name with no semantic hint declared `pipe`.
@@ -47,7 +45,6 @@ describe("classifierFromEnv — reads the declared `.provenanceRole` off the bou
   });
 
   it("the declared role is visible through env inheritance (chain-walk is env.get's, not the classifier's)", async () => {
-    await initBridge();
     const parent = env();
     bindValue(parent, "dedent", declared("pipe"));
     const child = mintFrame(parent, "cfe-child");
@@ -57,7 +54,6 @@ describe("classifierFromEnv — reads the declared `.provenanceRole` off the bou
   });
 
   it("declared `fan`: map/filter classify to a fan (map length-preserving, filter not)", async () => {
-    await initBridge();
     const e = env();
     bindValue(e, "infer-x", declared("source"));
     bindValue(e, "map", declared("fan"));
@@ -76,7 +72,6 @@ describe("classifierFromEnv — reads the declared `.provenanceRole` off the bou
   });
 
   it("an UNDECLARED name (no `.provenanceRole` at all — an unbound name or a plain Scheme lambda) classifies as a pure application, never a source or opaque", async () => {
-    await initBridge();
     const e = env();
     const n = await node("(* val1 (+ 1 val2))", e); // "*"/"+" carry no declared role in this bare test env
     expect(n.kind).toBe("merge");
@@ -84,7 +79,6 @@ describe("classifierFromEnv — reads the declared `.provenanceRole` off the bou
   });
 
   it("declared `sink`/`transparent`/`opaque` reach their matching graph-layer kinds", async () => {
-    await initBridge();
     const e = env();
     bindValue(e, "log!", declared("sink"));
     bindValue(e, "passthrough", declared("transparent"));

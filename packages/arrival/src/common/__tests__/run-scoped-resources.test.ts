@@ -21,7 +21,7 @@ import { EnvCapability } from "../capability.js";
 import { symbol } from "../symbol.js";
 import * as sz from "../scheme-zod.js";
 import { port, type Resource } from "../resources.js";
-import { exec } from "../../eval/generator-exec.js";
+import { execOverFrame } from "../../eval/generator-exec.js";
 import { freshEnv } from "../../__tests__/_fresh-env.js";
 import { RunContext } from "../../run/RunContext.js";
 import { disposeRunContext } from "../../run/run-lifecycle.js";
@@ -65,7 +65,7 @@ describe("Stage 2 — per-RunContext capability resources", () => {
       await capability.lower({}).apply(env, undefined as never);
       const runCtx = new RunContext({});
 
-      const [out] = await exec("(spy/touch)", { env, runCtx });
+      const [out] = await execOverFrame("(spy/touch)", { env, runCtx });
       expect(out).toBe("live");
       expect(counts.acquired).toBe(1);
       expect(counts.disposed).toBe(0); // still live — the RunContext hasn't ended yet
@@ -83,12 +83,12 @@ describe("Stage 2 — per-RunContext capability resources", () => {
       await capability.lower({}).apply(env, undefined as never);
 
       const sessionRunCtx = new RunContext({});
-      await exec("(spy/touch)", { env, runCtx: sessionRunCtx }); // pass 1
-      await exec("(spy/touch)", { env, runCtx: sessionRunCtx }); // pass 2 — REPL continuity
+      await execOverFrame("(spy/touch)", { env, runCtx: sessionRunCtx }); // pass 1
+      await execOverFrame("(spy/touch)", { env, runCtx: sessionRunCtx }); // pass 2 — REPL continuity
       expect(counts.acquired).toBe(1); // single-flight across passes of ONE RunContext
 
       const otherRunCtx = new RunContext({});
-      await exec("(spy/touch)", { env, runCtx: otherRunCtx }); // a DIFFERENT session
+      await execOverFrame("(spy/touch)", { env, runCtx: otherRunCtx }); // a DIFFERENT session
       expect(counts.acquired).toBe(2); // per-run isolation — a fresh spawn, not a shared one
 
       await disposeRunContext(sessionRunCtx);
@@ -113,7 +113,7 @@ describe("Stage 2 — per-RunContext capability resources", () => {
       const env = await freshEnv();
       await capability.lower({}).apply(env, undefined as never);
 
-      const [out] = await exec("(plain/touch)", { env });
+      const [out] = await execOverFrame("(plain/touch)", { env });
       expect(out).toBe("plain:0");
     });
   });
@@ -164,7 +164,7 @@ describe("Stage 2 — per-RunContext capability resources", () => {
       await capability.lower({}).apply(env, undefined as never);
       const runCtx = new RunContext({});
 
-      const [out] = await exec('(cache/put "k" "v")', { env, runCtx });
+      const [out] = await execOverFrame('(cache/put "k" "v")', { env, runCtx });
       expect(out).toBe("v");
       expect(counts.spawned).toBe(1);
       expect(counts.disposed).toBe(0);
@@ -181,13 +181,13 @@ describe("Stage 2 — per-RunContext capability resources", () => {
       await capability.lower({}).apply(env, undefined as never);
 
       const sessionRunCtx = new RunContext({});
-      await exec('(cache/put "k1" "v1")', { env, runCtx: sessionRunCtx }); // pass 1: write
-      const [stillThere] = await exec('(cache/get "k1")', { env, runCtx: sessionRunCtx }); // pass 2: read, no write
+      await execOverFrame('(cache/put "k1" "v1")', { env, runCtx: sessionRunCtx }); // pass 1: write
+      const [stillThere] = await execOverFrame('(cache/get "k1")', { env, runCtx: sessionRunCtx }); // pass 2: read, no write
       expect(stillThere).toBe("v1"); // the SAME Map survived across passes of ONE RunContext
       expect(counts.spawned).toBe(1); // one bag for the whole session
 
       const otherRunCtx = new RunContext({});
-      const [fresh] = await exec('(cache/get "k1")', { env, runCtx: otherRunCtx });
+      const [fresh] = await execOverFrame('(cache/get "k1")', { env, runCtx: otherRunCtx });
       expect(fresh).toBe("MISS"); // a DIFFERENT Map — nothing carried over
       expect(counts.spawned).toBe(2);
 

@@ -18,7 +18,7 @@
 
 import { describe, expect, it, beforeAll } from "vitest";
 import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
-import { execState } from "../../eval/generator-exec.js";
+import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { freshEnv } from "../../__tests__/_fresh-env.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AString } from "../../values/primitives/AString.js";

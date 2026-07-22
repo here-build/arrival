@@ -21,8 +21,7 @@
 import * as fc from "fast-check";
 import { mintFrame } from "../../env/AmbientRuntime.js";
 import { describe, it, expect, beforeAll } from "vitest";
-import { initBridge } from "../../index.js";
-import { parse, exec, execState } from "../../eval/generator-exec.js";
+import { parse, exec, execState, execStateOverFrame } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import type { Classifier, DeclaredRole } from "../../provenance/lineage.js";
 import { classifyProgramPrelude, buildPreludeSource } from "../../provenance/prelude.js";
@@ -61,7 +60,6 @@ async function wf(code: string) {
 }
 
 beforeAll(async () => {
-  await initBridge();
 });
 
 describe("wire-locality (§1 CHOSEN: a wire is a closed arrival lambda) — FLIPPED at Q8a", () => {
@@ -307,7 +305,7 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
         const registry = new SourceRegistry();
         await registry.register(env, "src-a", num);
         await registry.register(env, "src-b", num);
-        const { values } = await execState(`(begin (emit! (src-a)) (src-b))`, { env });
+        const { values } = await execStateOverFrame(`(begin (emit! (src-a)) (src-b))`, { env });
         const eager = registry.opsOf(collapseProvenance(values[values.length - 1]));
 
         expect([...wireframe].sort()).toEqual([...eager].sort()); // fails: wireframe = {src-a, src-b}, eager = {src-b}
@@ -516,7 +514,6 @@ describe("Q7 — program prelude: a pure helper stays a REFERENCE, the positive 
       "calling define resolves through the SEALED chain at ordinary lookup — never as " +
       "an ingress payload (`hermeticEnv` is called with an EMPTY ingress bag below)",
     async () => {
-      await initBridge();
       const C: Classifier = { roleOf: () => undefined }; // no declared ports anywhere
       const forms = await parse(
         `(define (helper x) (+ x 1))

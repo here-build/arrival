@@ -27,10 +27,8 @@
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../AmbientRuntime.js";
 import { EnvCapability } from "../../../common/capability.js";
-import { exec, execState } from "../../../eval/generator-exec.js";
-import { global_env } from "../../env-roots.js";
-import { initBridge } from "../../../index.js";
-import { freshEnv } from "../../../__tests__/_fresh-env.js";
+import { exec, execState, execOverFrame, execStateOverFrame, execInFrame } from "../../../eval/generator-exec.js";
+import { freshEnv, nativeOnlyRoot } from "../../../__tests__/_fresh-env.js";
 import { assembleEnv } from "../../../common/kernel.js";
 import { DefineLocalityError } from "../../../errors.js";
 import { StaticValidationError } from "../../../static-validation/validate-program.js";
@@ -45,8 +43,7 @@ import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 // Mirrors `_fresh-env.ts`'s own injected evalScheme — `skipBootstrapWait` because
 // these execs run against an env this suite is itself assembling/re-lowering onto,
 // not the shared realm-cached bootstrap.
-const evalScheme = (env: unknown, src: unknown): unknown =>
-  exec(src as string, { env: env as ResolvingAmbient, skipBootstrapWait: true });
+const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
 
 type Defs = Record<string, { kind?: string; macroAttribute?: string; callable?: boolean }>;
 const coreDefs = polyglot.spec.symbols as Defs;
@@ -106,54 +103,49 @@ describe("scheme/polyglot-clojure — deps are real edges (§2.1 luck-into-struc
   // IMMEDIATELY on `comp`, before any lazy body (frequencies' `reduce`) is ever
   // reached.
   it("standalone .apply() of clojure ALONE fails immediately on comp's EAGER cross-capability alias, not on any lazy body", async () => {
-    await initBridge();
-    const env = mintFrame(global_env, "test-polyglot-clojure-standalone-unbound");
+    const env = mintFrame(await nativeOnlyRoot(), "test-polyglot-clojure-standalone-unbound");
     await expect(polyglotClojure.lower({ evalScheme }).apply(env, undefined as never)).rejects.toThrow(/compose/);
   });
 
   it("once compose is bound (core applied first), bake+apply succeed even with srfi-1 unapplied — the FV law is a STATIC declared-`deps` check, not a runtime-binding probe; the LAZY frequencies (needs srfi-1's reduce) only fails when CALLED", async () => {
-    await initBridge();
-    const env = mintFrame(global_env, "test-polyglot-clojure-standalone-bake-ok");
+    const env = mintFrame(await nativeOnlyRoot(), "test-polyglot-clojure-standalone-bake-ok");
     await polyglot.lower({ evalScheme }).apply(env, undefined as never); // core: binds compose
     await expect(polyglotClojure.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
     const typedEnv = env as unknown as ResolvingAmbient;
-    const [same] = await exec("(eq? comp compose)", { env: typedEnv }); // comp resolved — compose was bound
+    const [same] = await execOverFrame("(eq? comp compose)", { env: typedEnv }); // comp resolved — compose was bound
     expect(same).toBe(true);
     // frequencies' own natives (@/dict/%dict-set) bound standalone from core;
     // `repr`/`+`/`string?` are NATIVE_PACKS (global_env — the runtime-luck arm
     // srfi-43's suite documents); `reduce` is srfi-1's, bound only through the
     // dep walk — never applied here, so the LAZY body fails only when CALLED.
-    await expect(execState('(frequencies (list "a" "a"))', { env })).rejects.toThrow();
+    await expect(execStateOverFrame('(frequencies (list "a" "a"))', { env })).rejects.toThrow();
   });
 
   it("assembleEnv (the real orchestration path) walks deps: the srfi-1 reach works standalone", async () => {
-    await initBridge();
-    const env = mintFrame(global_env, "test-polyglot-clojure-assembleEnv-ok") as unknown as SchemeEnv;
+    const env = mintFrame(await nativeOnlyRoot(), "test-polyglot-clojure-assembleEnv-ok") as unknown as SchemeEnv;
     await assembleEnv(env, [polyglotClojure.lower({ evalScheme })]);
     const typedEnv = env as unknown as ResolvingAmbient;
-    const [freq] = await exec('(@ (frequencies (list "a" "b" "a")) "a")', { env: typedEnv }); // reduce (srfi-1)
+    const [freq] = await execOverFrame('(@ (frequencies (list "a" "b" "a")) "a")', { env: typedEnv }); // reduce (srfi-1)
     expect(Number(freq)).toBe(2);
   });
 });
 
 describe("scheme/polyglot-lisp — deps are real edges (§2.1 luck-into-structure)", () => {
   it("assembleEnv walks deps: the srfi-1 `filter` reach works standalone (no core dep needed)", async () => {
-    await initBridge();
-    const env = mintFrame(global_env, "test-polyglot-lisp-assembleEnv-ok") as unknown as SchemeEnv;
+    const env = mintFrame(await nativeOnlyRoot(), "test-polyglot-lisp-assembleEnv-ok") as unknown as SchemeEnv;
     await assembleEnv(env, [polyglotLisp.lower({ evalScheme })]);
     const typedEnv = env as unknown as ResolvingAmbient;
-    const [removed] = await exec("(remove-if (lambda (x) (> x 2)) (list 1 2 3 4))", { env: typedEnv }); // filter (srfi-1)
+    const [removed] = await execOverFrame("(remove-if (lambda (x) (> x 2)) (list 1 2 3 4))", { env: typedEnv }); // filter (srfi-1)
     expect(String(removed)).toContain("1");
   });
 });
 
 describe("scheme/polyglot-racket — deps are real edges (§2.1 luck-into-structure)", () => {
   it("assembleEnv walks deps: the exceptions `error` reach (via %dict-guard) works standalone", async () => {
-    await initBridge();
-    const env = mintFrame(global_env, "test-polyglot-racket-assembleEnv-ok") as unknown as SchemeEnv;
+    const env = mintFrame(await nativeOnlyRoot(), "test-polyglot-racket-assembleEnv-ok") as unknown as SchemeEnv;
     await assembleEnv(env, [polyglotRacket.lower({ evalScheme })]);
     const typedEnv = env as unknown as ResolvingAmbient;
-    await expect(execState('(dict-ref "not-a-dict" :a)', { env: typedEnv })).rejects.toThrow(
+    await expect(execStateOverFrame('(dict-ref "not-a-dict" :a)', { env: typedEnv })).rejects.toThrow(
       /dict-ref: expected a dict/, // error (exceptions) — the door composes through the dep edge
     );
   });
@@ -162,33 +154,33 @@ describe("scheme/polyglot-racket — deps are real edges (§2.1 luck-into-struct
 describe("scheme/polyglot family — contract ENFORCEMENT fires at the call boundary (§1.2 enforced-day-one)", () => {
   it("partial: a non-applicable `f` (neither callable nor symbol) is rejected before the body runs", async () => {
     const env = await freshEnv();
-    await expect(execState("(partial 5 1 2)", { env })).rejects.toThrow();
+    await expect(execStateOverFrame("(partial 5 1 2)", { env })).rejects.toThrow();
   });
 
   it("zipmap: a non-list `ks` is rejected at the boundary (z.list spine codec)", async () => {
     const env = await freshEnv();
-    await expect(execState("(zipmap 5 (list 1))", { env })).rejects.toThrow();
+    await expect(execStateOverFrame("(zipmap 5 (list 1))", { env })).rejects.toThrow();
   });
 
   it("update-in: a non-applicable updater is rejected", async () => {
     const env = await freshEnv();
-    await expect(execState("(update-in (dict :a 1) (list :a) 42)", { env })).rejects.toThrow();
+    await expect(execStateOverFrame("(update-in (dict :a 1) (list :a) 42)", { env })).rejects.toThrow();
   });
 
   it("the applicable union ADMITS keyword accessors — (compose :b :a) is the shared core's own documented idiom", async () => {
     const env = await freshEnv();
-    const [nested] = await exec("((compose :b :a) (dict :a (dict :b 7)))", { env });
+    const [nested] = await execOverFrame("((compose :b :a) (dict :a (dict :b 7)))", { env });
     expect(Number(nested)).toBe(7);
-    const [grouped] = await exec('(@ (group-by :kind (list (dict :kind "x") (dict :kind "x"))) "x")', { env });
+    const [grouped] = await execOverFrame('(@ (group-by :kind (list (dict :kind "x") (dict :kind "x"))) "x")', { env });
     expect(String(grouped)).toBeTruthy(); // a keyword accessor as group-by's f — applicable, not z.lambda
   });
 
   it("JUDGMENT PIN — the dict family's `d` stays z.value so polyglot-racket's %dict-guard TEACHING door survives (never preempted by a zod boundary error)", async () => {
     const env = await freshEnv();
-    await expect(execState("(dict-ref (list 1 2) :a)", { env })).rejects.toThrow(
+    await expect(execStateOverFrame("(dict-ref (list 1 2) :a)", { env })).rejects.toThrow(
       /dict-ref: expected a dict .* got a pair\/list.*use @ for an origin-agnostic read/,
     );
-    await expect(execState('(dict-count "nope")', { env })).rejects.toThrow(
+    await expect(execStateOverFrame('(dict-count "nope")', { env })).rejects.toThrow(
       /dict-count: expected a dict .* got a string/,
     );
   });
@@ -207,8 +199,7 @@ describe("scheme/polyglot family — the §2.1 bake FV law passes AS MIGRATED, p
     ["scheme/polyglot-lisp", polyglotLisp],
     ["scheme/polyglot-racket", polyglotRacket],
   ] as const)("%s lowers cleanly with its declared deps — never DefineLocalityError", async (_label, pack) => {
-    await initBridge();
-    const env = mintFrame(global_env, `test-fv-law-ok-${pack.name.replace(/\//g, "-")}`);
+    const env = mintFrame(await nativeOnlyRoot(), `test-fv-law-ok-${pack.name.replace(/\//g, "-")}`);
     await expect(pack.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
   });
 
@@ -241,11 +232,11 @@ describe("scheme/polyglot (core) — constants and shape (the eager aliases)", (
 
   it("the aliases bind the SAME procedure values (eager RHS sees the earlier sibling — §2.3 sequential-RHS)", async () => {
     const env = await freshEnv();
-    const [same] = await exec("(eq? comp compose)", { env });
+    const [same] = await execOverFrame("(eq? comp compose)", { env });
     expect(same).toBe(true);
-    const [flowSame] = await exec("(eq? flow pipe)", { env });
+    const [flowSame] = await execOverFrame("(eq? flow pipe)", { env });
     expect(flowSame).toBe(true);
-    const [nilIsEmpty] = await exec("(null? nil)", { env });
+    const [nilIsEmpty] = await execOverFrame("(null? nil)", { env });
     expect(nilIsEmpty).toBe(true);
   });
 });

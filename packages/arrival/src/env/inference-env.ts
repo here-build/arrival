@@ -1,20 +1,20 @@
-// The interaction scope, sourced from its true home (env-roots) — not laundered through
-// stdlib.ts. The frame mint is purely structural (no eager builtin read); native-root
-// population is owned by `ensureBaseAssembled`, so this module doesn't need to drag stdlib
-// into the import graph to be correct.
-import { mintFrame } from "./AmbientRuntime.js";
-import { user_env } from "./env-roots.js";
-
-// The inference-plane base env: the totalic environment where models author and evaluate
-// Scheme. NOT a security fence — no host-reaching verb (eval / load / set-obj! /
-// set-special! / new / instanceof) exists in the language at all, so non-existence fences
-// them, not a per-env block list. The only language-crossing door is the always-on
-// polyglot membrane (`@` / `@?` / `@keys` + the interop member-access policy).
+// inference-env.ts — STAGE C CUT 3b: the retired `user_env`-child inference-plane env is now a
+// resolver-capable ROOT frame carrying the SAME self-hosted `BASE_ROSTER` vocabulary every bare
+// `exec()` shares (env/vocabulary.ts's memoized `buildVocabulary`), instead of a live child of the
+// retired `user_env`/`global_env` realm singletons.
 //
-// This env INHERITS user_env (→ global_env), so the whole assembled base — numeric core,
-// R7RS exception verbs, every native cluster, the polyglot membrane, `nil` (the LIPS `'()`
-// alias, added in the polyglot base pack's prelude) — is reachable live by inheritance
-// (resolvers walk child→parent). No builtin copy, no allowlist projection needed: the full
-// env leaks nothing host-reaching, and inheritance has none of the load-order races a
-// snapshot-based allowlist would.
-export const inferenceEnv = mintFrame(user_env, "inference");
+// This is the "live inheritable base" internal callers `mintFrame(inferenceEnv, name)` a child
+// off, bind test-only rosettas onto, and evaluate through `execStateOverFrame`/`execOverFrame`/
+// `execExprOverFrame` (eval/generator-exec.ts's internal, non-`ExecOptions` live-frame seam — the
+// retired public glass option's narrow replacement for a caller that already holds a real frame
+// rather than a declarative capability set). NOT barrel-exported (the identity boundary holds
+// internally, same posture as before this cut).
+//
+// POPULATION IS LAZY, mirroring the retired realm bootstrap's own "empty at mint, filled before
+// first genuine use" contract: `mintFrame(inferenceEnv, …)` at test setup is always safe (a frame
+// mint is a cheap `__parent__` assignment, not a snapshot read) because nothing walks the parent
+// chain until an actual eval call, and every eval entry point that might touch this frame awaits
+// `ensureInferenceEnvPopulated` first (generator-exec.ts's `*OverFrame` family).
+import { mintResolvingFrame, type ResolvingAmbient } from "./AmbientRuntime.js";
+
+export const inferenceEnv: ResolvingAmbient = mintResolvingFrame("inference");

@@ -3,18 +3,15 @@
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../AmbientRuntime.js";
 import type { AEntity } from "../../../common/symbol.js";
-import { exec } from "../../../eval/generator-exec.js";
-import { global_env } from "../../env-roots.js";
-import { initBridge } from "../../../index.js";
+import { exec, execInFrame } from "../../../eval/generator-exec.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError, PurityError } from "../../../errors.js";
 import srfi8 from "../srfi-8.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 import { DoorProcedure } from "../../../values/primitives/ACallable.js";
-import { freshEnv } from "../../../__tests__/_fresh-env.js";
+import { freshEnv, nativeOnlyRoot } from "../../../__tests__/_fresh-env.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
-const evalScheme = (env: unknown, src: unknown): unknown =>
-  exec(src as string, { env: env as ResolvingAmbient, skipBootstrapWait: true });
+const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
 
 describe("scheme/srfi-8 — doors-only (all-or-nothing multi-return ban)", () => {
   it("receive is kind door", () => {
@@ -24,14 +21,12 @@ describe("scheme/srfi-8 — doors-only (all-or-nothing multi-return ban)", () =>
   });
 
   it("lowers standalone without bake FV errors", async () => {
-    await initBridge();
-    const env = mintFrame(global_env, "srfi-8-standalone");
+    const env = mintFrame(await nativeOnlyRoot(), "srfi-8-standalone");
     await expect(srfi8.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
   });
 
   it("never throws DefineLocalityError/DefineForwardReferenceError/ProvenanceRoleShapeError on lower", async () => {
-    await initBridge();
-    const env = mintFrame(global_env, "srfi-8-fv-pin");
+    const env = mintFrame(await nativeOnlyRoot(), "srfi-8-fv-pin");
     try {
       await srfi8.lower({ evalScheme }).apply(env, undefined as never);
     } catch (e) {

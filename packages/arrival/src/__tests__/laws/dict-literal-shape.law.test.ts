@@ -10,7 +10,7 @@
 // src/reader/__tests__/polyglot/curly-braces.spec.ts — not re-pinned here.
 import { describe, expect, it, beforeAll } from "vitest";
 import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
-import { execState } from "../../eval/generator-exec.js";
+import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { schemeToJs } from "../../membrane/rosetta.js";
 import { writeForm } from "../../provenance/slice.js";
 import { printValue } from "../../values/print.js";

@@ -12,7 +12,6 @@
  * still holds live spans before `hashGraph` strips them) already derived.
  */
 import { describe, expect, it, beforeAll } from "vitest";
-import { initBridge } from "../../../index.js";
 import { parse } from "../../../eval/generator-exec.js";
 import { inferenceEnv } from "../../../env/inference-env.js";
 import type { Classifier, DeclaredRole } from "../../lineage.js";
@@ -32,7 +31,6 @@ async function wf(code: string): Promise<WireframeProgram> {
 }
 
 beforeAll(async () => {
-  await initBridge();
 });
 
 describe("TemplateStoreFake — put/get round-trip (§5 C4)", () => {

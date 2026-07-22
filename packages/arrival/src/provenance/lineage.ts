@@ -13,9 +13,8 @@
  * `classify`/`fullCone`/`countCone`/`fieldCone`/`fieldResolve`/`stepKey`/`PathStep`/
  * `LineageNode` are exported from the package barrel and consumed cross-package by
  * the arrival-chain field-pin shadow (`lineage-field-shadow-corpus.test.ts`),
- * which asserts the static carrier reproduces the live runtime field pins;
- * lineage-shadow.ts wires the full-cone shadow in-package. Operates on real AST
- * nodes (Pair / SchemeSymbol from the reader); classify() runs no evaluation.
+ * which asserts the static carrier reproduces the live runtime field pins. Operates on
+ * real AST nodes (Pair / SchemeSymbol from the reader); classify() runs no evaluation.
  *
  * SPECIAL FORMS. `if`/`cond`/`let`/`let*`/`letrec`/`begin`/`and`/`or`/`lambda` are
  * dispatched DIRECTLY from `SPECIAL_FORMS` (eval/evaluator.ts) — never macro-
@@ -53,6 +52,7 @@
 import { is_pair } from "../values/value-guards.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { APair } from "../values/primitives/APair.js";
+import { AValue } from "../values/primitives/AValue.js";
 import type { SchemeValue } from "../values/types.js";
 
 /** Exhaustiveness guard for `LineageNode.kind` switches. The `never` parameter makes
@@ -815,6 +815,15 @@ export function countCone(n: LineageNode, b: Bindings): number[] {
   const out = new Set<number>();
   walk(n, b, out, { countOnly: true });
   return [...out].sort((a, z) => a - z);
+}
+
+/** Provenance ids on a value, sorted — `[]` for a non-AValue. The canonical UNTAPPED eager-stamp
+ *  reader (relocated here from the retired `lineage-shadow.ts`, Stage C Cut 3b — the shadow-mode
+ *  assert it once fed died with the `irLineage` flag, but this reader is genuinely shared: golden-
+ *  prov/checkpoint/conservation law suites use it to read a value's flat, eager `.provenance`
+ *  stamp, independent of shadow mode). */
+export function provOf(v: unknown): number[] {
+  return v instanceof AValue ? [...v.provenance].sort((a, b) => a - b) : [];
 }
 
 /** Two `PathStep`s address the same member. */

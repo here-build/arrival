@@ -52,27 +52,27 @@ import { LexicalScope, type SessionScope } from "../eval/LexicalScope.js";
 import type { EnvCapability } from "../common/capability.js";
 import type { EvalPreludeInto, EvalSchemeInto } from "../common/scheme-env.js";
 import { assembleRun } from "../env/assemble-run.js";
-import { exec, execState } from "../eval/generator-exec.js";
+import { execState, execInFrame } from "../eval/generator-exec.js";
 import type { RunContext } from "../run/RunContext.js";
 
 /** The evalScheme every basePack's OWN `symbol.define`/`defineSyntax` bake shares —
- *  mirrors `generator-exec.ts`'s private `capabilityEvalScheme` (re-derived from the
- *  public `exec`, rather than reaching around that module's own encapsulation).
- *  `skipBootstrapWait`: a replay's basePacks tuple is its OWN self-hosted vocabulary —
- *  this bake must never await (or trigger) the LEGACY realm bootstrap. */
+ *  mirrors `generator-exec.ts`'s own private `capabilityEvalScheme`: both route through the
+ *  SAME internal bake seam (`execInFrame`), never the public exec surface — a replay's
+ *  basePacks tuple is its OWN self-hosted vocabulary, so this bake needs no bootstrap gate at
+ *  all (there is no realm bootstrap left to await). */
 const replayEvalScheme: EvalSchemeInto = (env, source) => {
   invariant(isAmbientRuntime(env), "hermeticEnv: expected a concrete AmbientRuntime");
-  return exec(source, { env, skipBootstrapWait: true });
+  return execInFrame(source, env);
 };
 
 /** The evalPrelude every basePack's OWN `.spec.prelude` runs through (`assembleRun`'s
- *  per-run pass) — the SAME `skipBootstrapWait` posture, plus this run's own `runCtx`
- *  threaded through (mirrors `generator-exec.ts`'s private `preludeEvalScheme`). In
- *  practice `BASE_ROSTER` declares no prelude today (env/base-roster.ts's own doc), so
- *  this fires only for a caller-supplied basePack that declares one. */
+ *  per-run pass) — the SAME bake seam, plus this run's own `runCtx` threaded through (mirrors
+ *  `generator-exec.ts`'s own private `preludeEvalScheme`). In practice `BASE_ROSTER` declares
+ *  no prelude today (env/base-roster.ts's own doc), so this fires only for a caller-supplied
+ *  basePack that declares one. */
 const replayEvalPrelude: EvalPreludeInto = (env, source, runCtx) => {
   invariant(isAmbientRuntime(env), "hermeticEnv: expected a concrete AmbientRuntime");
-  return exec(source, { env, runCtx, skipBootstrapWait: true });
+  return execInFrame(source, env, runCtx);
 };
 
 /** Ingress bindings a replay supplies to the hermetic env — the recorded port payloads

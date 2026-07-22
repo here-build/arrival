@@ -12,7 +12,6 @@
  */
 
 import { describe, expect, it, beforeAll } from "vitest";
-import { initBridge } from "../../index.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 
 // The host-language verbs the sweep deleted at the source. The old
@@ -22,7 +21,6 @@ import { inferenceEnv } from "../../env/inference-env.js";
 const HOST_LANGUAGE_VERBS = ["eval", "load", "set-obj!", "set-special!", "new", "instanceof"] as const;
 
 beforeAll(async () => {
-  await initBridge();
   await import("../../index.js");
 });
 

@@ -24,7 +24,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../env/AmbientRuntime.js";
-import { exec, execState } from "../../eval/generator-exec.js";
+import { execOverFrame as exec, execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { APair } from "../../values/primitives/APair.js";
 

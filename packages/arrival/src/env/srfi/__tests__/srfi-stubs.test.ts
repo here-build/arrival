@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../AmbientRuntime.js";
-import { exec } from "../../../index.js";
+import { exec, execOverFrame } from "../../../eval/generator-exec.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
 import { assembleEnv } from "../../../common/kernel.js";
@@ -23,14 +23,14 @@ import { PurityError } from "../../../errors.js";
 import stubPack from "../srfi-stubs.js";
 
 /** Assemble the stub pack onto a fresh sandboxed env; return an exec bound to it. */
-async function withStubs(name: string): Promise<(src: string) => Promise<unknown[]>> {
+async function withStubs(name: string): Promise<(src: string) => Promise<readonly unknown[]>> {
   const env = mintFrame(sandboxedEnv, name);
   await assembleEnv(env as unknown as SchemeEnv, [stubPack.lower({}) as never]);
-  return (src: string) => exec(src, { env: env as never });
+  return (src: string) => execOverFrame(src, { env: env as never });
 }
 
 /** Run `src`; report whether a PurityError door fired (directly or via `.cause`) + its message. */
-async function fire(run: (src: string) => Promise<unknown[]>, src: string): Promise<{ door: boolean; message: string }> {
+async function fire(run: (src: string) => Promise<readonly unknown[]>, src: string): Promise<{ door: boolean; message: string }> {
   try {
     await run(src);
   } catch (e) {

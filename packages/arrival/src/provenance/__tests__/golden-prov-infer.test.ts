@@ -47,7 +47,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { AValue } from "../../values/primitives/AValue.js";
-import { provOf } from "../../provenance/lineage-shadow.js";
+import { provOf } from "../../provenance/lineage.js";
 import { sStr, runRaw, type EnvSetup } from "../../__tests__/_lineage-test-helpers.js";
 import { EnvCapability } from "../../common/capability.js";
 import { jsToScheme } from "../../membrane/rosetta.js";

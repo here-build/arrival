@@ -17,7 +17,7 @@
 import { describe, expect, it } from "vitest";
 import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
-import { exec, execState } from "../../eval/generator-exec.js";
+import { execOverFrame, execStateOverFrame, execInFrame } from "../../eval/generator-exec.js";
 import { freshEnv } from "../_fresh-env.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../errors.js";
 import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
@@ -26,8 +26,7 @@ import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 // `_fresh-env.ts`'s own (skipBootstrapWait: these execs run AFTER the shared bootstrap
 // that produced `env`, so re-awaiting it would be a redundant, already-settled promise,
 // not a deadlock — unlike the base-pack assembly's OWN prelude evalScheme).
-const evalScheme = (env: unknown, src: unknown): unknown =>
-  exec(src as string, { env: env as ResolvingAmbient, skipBootstrapWait: true });
+const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
 
 describe("symbol.define — bake round-trip, two-phase order, sequential-RHS, contract enforcement", () => {
   it("declares → assembles → calls: a define referencing a SAME-CAPABILITY rosetta sibling", async () => {
@@ -47,7 +46,7 @@ describe("symbol.define — bake round-trip, two-phase order, sequential-RHS, co
     });
     await cap.lower({ evalScheme }).apply(env, undefined as never);
 
-    const [result] = await exec(`(use-bump 41)`, { env });
+    const [result] = await execOverFrame(`(use-bump 41)`, { env });
     expect(result).toBe(42);
   });
 
@@ -65,7 +64,7 @@ describe("symbol.define — bake round-trip, two-phase order, sequential-RHS, co
     });
     await cap.lower({ evalScheme }).apply(env, undefined as never);
 
-    const [result] = await exec(`derived-value`, { env });
+    const [result] = await execOverFrame(`derived-value`, { env });
     expect(result).toBe(10);
   });
 
@@ -86,7 +85,7 @@ describe("symbol.define — bake round-trip, two-phase order, sequential-RHS, co
 
     // A STRING where a number is contracted — the scheme-face z.decode must reject it
     // before the underlying lambda ever runs.
-    await expect(execState(`(strict-add1 "not-a-number")`, { env })).rejects.toThrow();
+    await expect(execStateOverFrame(`(strict-add1 "not-a-number")`, { env })).rejects.toThrow();
   });
 
   it("`validate: false` skips the contract check (the cost valve, §1.2)", async () => {
@@ -103,7 +102,7 @@ describe("symbol.define — bake round-trip, two-phase order, sequential-RHS, co
     await cap.lower({ evalScheme }).apply(env, undefined as never);
     // Passing a STRING (not a number) does NOT throw at the contract boundary —
     // it flows straight through to the lambda, which just returns it unchanged.
-    const [result] = await exec(`(unchecked-echo "hello")`, { env });
+    const [result] = await execOverFrame(`(unchecked-echo "hello")`, { env });
     expect(result).toBe("hello");
   });
 
@@ -113,7 +112,7 @@ describe("symbol.define — bake round-trip, two-phase order, sequential-RHS, co
       symbols: (symbol, z) => ({ "the-answer": symbol.define`the-answer: a constant`(z.number, `42`) }),
     });
     await cap.lower({ evalScheme }).apply(env, undefined as never);
-    const [result] = await exec(`the-answer`, { env });
+    const [result] = await execOverFrame(`the-answer`, { env });
     expect(result).toBe(42);
   });
 });
@@ -236,7 +235,7 @@ describe("symbol.define — §2.3's eager-forward-reference door", () => {
       },
     });
     await cap.lower({ evalScheme }).apply(env, undefined as never);
-    const [result] = await exec(`(late-binder)`, { env });
+    const [result] = await execOverFrame(`(late-binder)`, { env });
     expect(result).toBe(7);
   });
 });
@@ -324,7 +323,7 @@ describe("symbol.defineSyntax — macro binds + expands (§1.5)", () => {
     });
     await cap.lower({ evalScheme }).apply(env, undefined as never);
 
-    const [result] = await exec(`(my-twice (bump!))`, { env });
+    const [result] = await execOverFrame(`(my-twice (bump!))`, { env });
     expect(calls).toBe(2); // the macro expanded to TWO calls, not one
     expect(result).toBe(2); // (begin 1 2) → the LAST call's value
   });

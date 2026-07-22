@@ -19,7 +19,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../env/AmbientRuntime.js";
-import { execState } from "../../eval/generator-exec.js";
+import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { EvalTrace } from "../../provenance/trace.js";
 import { APair } from "../../values/primitives/APair.js";

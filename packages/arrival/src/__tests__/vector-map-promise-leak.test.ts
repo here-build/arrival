@@ -9,7 +9,7 @@
 // awaits settled values.
 import { describe, expect, it } from "vitest";
 import { freshEnv } from "./_fresh-env.js";
-import { execState } from "../eval/generator-exec.js";
+import { execStateOverFrame as execState } from "../eval/generator-exec.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
 import { bindValue } from "../env/AmbientRuntime.js";
 

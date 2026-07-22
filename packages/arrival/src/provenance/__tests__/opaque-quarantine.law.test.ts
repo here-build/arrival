@@ -20,7 +20,6 @@
  * existence as Q5 having landed.
  */
 import { describe, expect, it } from "vitest";
-import { initBridge } from "../../index.js";
 import { parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { classify, countOpaqueNodes, type Classifier } from "../../provenance/lineage.js";
@@ -56,7 +55,6 @@ const CORPUS: readonly string[] = [
  *  inlined into the `it`) so Q6+ can import and assert against it without re-deriving
  *  the corpus-walk shape. */
 async function countOpaqueOverCorpus(corpus: readonly string[]): Promise<number> {
-  await initBridge();
   let total = 0;
   for (const src of corpus) {
     const [ast] = await parse(src);

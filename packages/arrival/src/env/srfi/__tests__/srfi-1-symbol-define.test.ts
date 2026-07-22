@@ -30,10 +30,8 @@
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../AmbientRuntime.js";
 import { EnvCapability } from "../../../common/capability.js";
-import { exec, execState } from "../../../eval/generator-exec.js";
-import { global_env } from "../../env-roots.js";
-import { initBridge } from "../../../index.js";
-import { freshEnv } from "../../../__tests__/_fresh-env.js";
+import { execOverFrame, execStateOverFrame, execInFrame } from "../../../eval/generator-exec.js";
+import { freshEnv, nativeOnlyRoot } from "../../../__tests__/_fresh-env.js";
 import { assembleEnv } from "../../../common/kernel.js";
 import { DefineLocalityError } from "../../../errors.js";
 import { BASE_PACKS } from "../../base-packs.js";
@@ -43,14 +41,13 @@ import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 import { printValue } from "../../../values/print.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
-// Mirrors `_fresh-env.ts`'s own injected evalScheme — `skipBootstrapWait` because
-// these execs run against an env this suite is itself assembling/re-lowering onto,
-// not the shared realm-cached bootstrap.
-const evalScheme = (env: unknown, src: unknown): unknown =>
-  exec(src as string, { env: env as ResolvingAmbient, skipBootstrapWait: true });
+// Mirrors `_fresh-env.ts`'s own injected evalScheme — the internal bake seam
+// (`execInFrame`), since these execs run against an env this suite is itself
+// assembling/re-lowering onto, not through the public exec surface at all.
+const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
 
-// COMPLEX tier (execState): stringifies the BOXED result (Scheme print format) —
-// needed for list-shaped results, where exec()'s SIMPLE-tier `toJS` unwrap egresses
+// COMPLEX tier (execStateOverFrame): stringifies the BOXED result (Scheme print format) —
+// needed for list-shaped results, where the SIMPLE-tier `toJS` unwrap egresses
 // an R9 lazy proxy rather than a plain comparable value (mirrors
 // src/__tests__/srfi.test.ts's own `run` helper).
 //
@@ -62,7 +59,7 @@ const evalScheme = (env: unknown, src: unknown): unknown =>
 // result falls through to `Object.prototype.toString` ("[object Object]") — `printValue`
 // is the representation-blind printer every value (list OR vector) actually answers.
 async function printed(env: ResolvingAmbient, src: string): Promise<string> {
-  const { values: r } = await execState(src, { env });
+  const { values: r } = await execStateOverFrame(src, { env });
   const x = r[r.length - 1] as unknown;
   return printValue(x);
 }
@@ -104,28 +101,28 @@ describe("scheme/srfi-1 — behavior equivalence (§4.2 gate), weighted toward t
 
   it("first…tenth walk through %list-nth (named-let normalized) and keep the teaching error", async () => {
     const env = await freshEnv();
-    const [first] = await exec("(first '(1 2 3))", { env });
-    const [tenth] = await exec("(tenth '(1 2 3 4 5 6 7 8 9 10))", { env });
+    const [first] = await execOverFrame("(first '(1 2 3))", { env });
+    const [tenth] = await execOverFrame("(tenth '(1 2 3 4 5 6 7 8 9 10))", { env });
     expect(first).toBe(1);
     expect(tenth).toBe(10);
     // '() passes the listAlike boundary DELIBERATELY so %list-nth's message stays
     // the error surface (srfi-1.ts's first…tenth comment) — not a zod rejection.
-    await expect(execState("(first '())", { env })).rejects.toThrow(/first: list has no elements/);
-    await expect(execState("(third '(1 2))", { env })).rejects.toThrow(/third: list has fewer than 3 elements/);
+    await expect(execStateOverFrame("(first '())", { env })).rejects.toThrow(/first: list has no elements/);
+    await expect(execStateOverFrame("(third '(1 2))", { env })).rejects.toThrow(/third: list has fewer than 3 elements/);
   });
 
   it("any? / every? / some / %any-null? (named-let normalized) — HONEST #t/#f results, vacuous truths, parallel lists (2026-07-13 ruling: bare any/every are SRFI value-returning now — see the dedicated describe block below)", async () => {
     const env = await freshEnv();
-    const [someT] = await exec("(some odd? '(2 4 5))", { env });
-    const [someF] = await exec("(some odd? '(2 4 6))", { env });
-    const [someEmpty] = await exec("(some odd? '())", { env });
-    const [anyQT] = await exec("(any? odd? '(2 4 5))", { env });
-    const [anyQF] = await exec("(any? odd? '(2 4 6))", { env });
-    const [anyQEmpty] = await exec("(any? odd? '())", { env });
-    const [everyQT] = await exec("(every? odd? '(1 3 5))", { env });
-    const [everyQF] = await exec("(every? odd? '(1 3 4))", { env });
-    const [everyQEmpty] = await exec("(every? odd? '())", { env });
-    const [parallel] = await exec("(some (lambda (a b) (= (+ a b) 5)) '(1 2 3) '(9 3 9))", { env });
+    const [someT] = await execOverFrame("(some odd? '(2 4 5))", { env });
+    const [someF] = await execOverFrame("(some odd? '(2 4 6))", { env });
+    const [someEmpty] = await execOverFrame("(some odd? '())", { env });
+    const [anyQT] = await execOverFrame("(any? odd? '(2 4 5))", { env });
+    const [anyQF] = await execOverFrame("(any? odd? '(2 4 6))", { env });
+    const [anyQEmpty] = await execOverFrame("(any? odd? '())", { env });
+    const [everyQT] = await execOverFrame("(every? odd? '(1 3 5))", { env });
+    const [everyQF] = await execOverFrame("(every? odd? '(1 3 4))", { env });
+    const [everyQEmpty] = await execOverFrame("(every? odd? '())", { env });
+    const [parallel] = await execOverFrame("(some (lambda (a b) (= (+ a b) 5)) '(1 2 3) '(9 3 9))", { env });
     expect(someT).toBe(true);
     expect(someF).toBe(false);
     expect(someEmpty).toBe(false);
@@ -144,20 +141,20 @@ describe("scheme/srfi-1 — behavior equivalence (§4.2 gate), weighted toward t
     // matched (key . value) pair, and that pair IS any's return value.
     expect(await printed(env, "(any (lambda (x) (assv x '((1 . a)))) '(0 1))")).toBe("(1 . a)");
     // any: no element's result is truthy → #f, same shape as any?/some.
-    const [anyMiss] = await exec("(any odd? '(2 4))", { env });
+    const [anyMiss] = await execOverFrame("(any odd? '(2 4))", { env });
     expect(anyMiss).toBe(false);
     // every: once every element-tuple is truthy, the LAST predicate result wins —
     // (* 2 2) = 4 is the value every returns, not #t.
-    const [everyLast] = await exec("(every (lambda (x) (* x 2)) '(1 2))", { env });
+    const [everyLast] = await execOverFrame("(every (lambda (x) (* x 2)) '(1 2))", { env });
     expect(everyLast).toBe(4);
     // every: a predicate that only ever answers #t/#f (odd?) still surfaces that
     // #t/#f as the LAST result — every and every? coincide for boolean-only preds.
-    const [everyBoolLast] = await exec("(every odd? '(1 3 5))", { env });
+    const [everyBoolLast] = await execOverFrame("(every odd? '(1 3 5))", { env });
     expect(everyBoolLast).toBe(true);
     // empty-list rows: any is #f (no element to be truthy); every is #t (vacuous
     // truth, same base case as every?).
-    const [anyEmpty] = await exec("(any odd? '())", { env });
-    const [everyEmpty] = await exec("(every odd? '())", { env });
+    const [anyEmpty] = await execOverFrame("(any odd? '())", { env });
+    const [everyEmpty] = await execOverFrame("(every odd? '())", { env });
     expect(anyEmpty).toBe(false);
     expect(everyEmpty).toBe(true);
     // R7RS truthiness (only #f is false — arrival's own fix, commits c16dfd2ef7):
@@ -178,10 +175,10 @@ describe("scheme/srfi-1 — behavior equivalence (§4.2 gate), weighted toward t
     expect(await printed(env, "(take-while even? '(2 4 6 1 8))")).toBe("(2 4 6)");
     expect(await printed(env, "(drop-while even? '(2 4 6 1 8))")).toBe("(1 8)");
     expect(await printed(env, "(find-tail odd? '(2 4 5 6))")).toBe("(5 6)");
-    const [noTail] = await exec("(find-tail odd? '(2 4 6))", { env });
+    const [noTail] = await execOverFrame("(find-tail odd? '(2 4 6))", { env });
     expect(noTail).toBe(false);
-    const [idx] = await exec("(list-index odd? '(2 4 5 6))", { env });
-    const [noIdx] = await exec("(list-index odd? '(2 4 6))", { env });
+    const [idx] = await execOverFrame("(list-index odd? '(2 4 5 6))", { env });
+    const [noIdx] = await execOverFrame("(list-index odd? '(2 4 6))", { env });
     expect(idx).toBe(2);
     expect(noIdx).toBe(false);
     expect(await printed(env, "(unfold (lambda (x) (if (< x 4) (cons x (+ x 1)) #f)) 1)")).toBe("(1 2 3)");
@@ -201,34 +198,34 @@ describe("scheme/srfi-1 — behavior equivalence (§4.2 gate), weighted toward t
   it("fold-right / reduce-right / concatenate / append-reverse / append-map / filter-map / count", async () => {
     const env = await freshEnv();
     expect(await printed(env, "(fold-right cons '() '(1 2 3))")).toBe("(1 2 3)");
-    const [rr] = await exec("(reduce-right - 0 '(2 3 4))", { env });
+    const [rr] = await execOverFrame("(reduce-right - 0 '(2 3 4))", { env });
     expect(rr).toBe(3); // (- 2 (- 3 4))
-    const [rrEmpty] = await exec("(reduce-right - 42 '())", { env });
+    const [rrEmpty] = await execOverFrame("(reduce-right - 42 '())", { env });
     expect(rrEmpty).toBe(42);
     expect(await printed(env, "(concatenate '((1 2) () (3)))")).toBe("(1 2 3)");
     expect(await printed(env, "(append-reverse '(3 2 1) '(4 5))")).toBe("(1 2 3 4 5)");
     expect(await printed(env, "(append-map (lambda (x) (list x x)) '(1 2))")).toBe("(1 1 2 2)");
     expect(await printed(env, "(filter-map (lambda (x) (if (odd? x) (* x 10) #f)) '(1 2 3))")).toBe("(10 30)");
-    const [c] = await exec("(count odd? '(1 2 3 4 5))", { env });
+    const [c] = await execOverFrame("(count odd? '(1 2 3 4 5))", { env });
     expect(c).toBe(3);
   });
 
   it("last / last-pair / first? / first-or / length+", async () => {
     const env = await freshEnv();
-    const [last] = await exec("(last '(1 2 3))", { env });
+    const [last] = await execOverFrame("(last '(1 2 3))", { env });
     expect(last).toBe(3);
     expect(await printed(env, "(last-pair '(1 2 3))")).toBe("(3)");
     // first?'s falsy-on-empty contract is THE load-bearing semantics (file header)
-    const [fq] = await exec("(first? '())", { env });
-    const [fqVal] = await exec("(first? '(7))", { env });
-    const [fqNonList] = await exec("(first? 5)", { env });
-    const [fo] = await exec("(first-or '() 9)", { env });
+    const [fq] = await execOverFrame("(first? '())", { env });
+    const [fqVal] = await execOverFrame("(first? '(7))", { env });
+    const [fqNonList] = await execOverFrame("(first? 5)", { env });
+    const [fo] = await execOverFrame("(first-or '() 9)", { env });
     expect(fq).toBe(false);
     expect(fqVal).toBe(7);
     expect(fqNonList).toBe(false); // z.value input: TOTAL tolerance is the contract
     expect(fo).toBe(9);
-    const [len] = await exec("(length+ '(1 2 3))", { env });
-    const [lenDotted] = await exec("(length+ '(1 2 . 3))", { env });
+    const [len] = await execOverFrame("(length+ '(1 2 3))", { env });
+    const [lenDotted] = await execOverFrame("(length+ '(1 2 . 3))", { env });
     expect(len).toBe(3);
     expect(lenDotted).toBe(2); // counts pairs up to the dotted tail — prelude-era behavior, preserved
   });
@@ -245,23 +242,21 @@ describe("scheme/srfi-1 — two-list products (single value; multi-return is doo
 
 describe("scheme/srfi-1 — the dep edges are real (§2.1's undeclared-dep bug class, now declared)", () => {
   it("standalone .apply() (bypassing assembleEnv's C3 dep-walk): a BASE_PACKS-only name genuinely fails unbound — the srfi-189 shape of the luck, not srfi-43's", async () => {
-    await initBridge();
-    const env = mintFrame(global_env, "test-srfi1-standalone-unbound");
+    const env = mintFrame(await nativeOnlyRoot(), "test-srfi1-standalone-unbound");
     await srfi1.lower({ evalScheme }).apply(env, undefined as never);
-    // NATIVE_PACKS names exist on global_env — BASE_PACKS-only (`cons`/`list` @ lists,
+    // Native clusters exist on a nativeOnlyRoot — BASE_PACKS-only (`cons`/`list` @ lists,
     // `error` @ exceptions) do not without assembleEnv. partition uses `list`/`cons`.
-    await expect(execState("(partition odd? '(1 2))", { env: env as unknown as ResolvingAmbient })).rejects.toThrow(
+    await expect(execStateOverFrame("(partition odd? '(1 2))", { env: env as unknown as ResolvingAmbient })).rejects.toThrow(
       /Unbound variable/,
     );
   });
 
   it("assembleEnv (the real orchestration path — every production caller) walks deps: everything works standalone", async () => {
-    await initBridge();
-    const env = mintFrame(global_env, "test-srfi1-assembleEnv-ok") as unknown as SchemeEnv;
+    const env = mintFrame(await nativeOnlyRoot(), "test-srfi1-assembleEnv-ok") as unknown as SchemeEnv;
     await assembleEnv(env, [srfi1.lower({ evalScheme })]);
     const typedEnv = env as unknown as ResolvingAmbient;
     expect(await printed(typedEnv, "(partition odd? '(1 2 3))")).toBe("((1 3) (2))");
-    const [second] = await exec("(second '(1 2 3))", { env: typedEnv });
+    const [second] = await execOverFrame("(second '(1 2 3))", { env: typedEnv });
     expect(second).toBe(2);
   });
 });
@@ -269,29 +264,28 @@ describe("scheme/srfi-1 — the dep edges are real (§2.1's undeclared-dep bug c
 describe("scheme/srfi-1 — contract ENFORCEMENT fires at the call boundary (cold entries)", () => {
   it("delete-duplicates: a non-list is rejected before the body runs", async () => {
     const env = await freshEnv();
-    await expect(execState('(delete-duplicates "not-a-list")', { env })).rejects.toThrow();
+    await expect(execStateOverFrame('(delete-duplicates "not-a-list")', { env })).rejects.toThrow();
   });
 
   it("fold-right: a non-procedure f is rejected before the body runs", async () => {
     const env = await freshEnv();
-    await expect(execState('(fold-right "not-a-procedure" 0 (list 1 2))', { env })).rejects.toThrow();
+    await expect(execStateOverFrame('(fold-right "not-a-procedure" 0 (list 1 2))', { env })).rejects.toThrow();
   });
 
   it("length+: a non-list is rejected before the body runs", async () => {
     const env = await freshEnv();
-    await expect(execState("(length+ 42)", { env })).rejects.toThrow();
+    await expect(execStateOverFrame("(length+ 42)", { env })).rejects.toThrow();
   });
 
   it("last-pair: '() is now a boundary rejection (z.pair — SRFI's non-empty domain), the §4.2 sanctioned error-surface move off loose-cdr luck", async () => {
     const env = await freshEnv();
-    await expect(execState("(last-pair '())", { env })).rejects.toThrow();
+    await expect(execStateOverFrame("(last-pair '())", { env })).rejects.toThrow();
   });
 });
 
 describe("scheme/srfi-1 — the §2.1 bake FV law passes AS MIGRATED", () => {
   it("lowers cleanly with its declared deps — never DefineLocalityError", async () => {
-    await initBridge();
-    const env = mintFrame(global_env, "test-srfi1-fv-law-ok");
+    const env = mintFrame(await nativeOnlyRoot(), "test-srfi1-fv-law-ok");
     await expect(srfi1.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
   });
 
@@ -329,13 +323,13 @@ describe("scheme/srfi-1 — implement-or-door + the any?/every?/some split (2026
     const env = await freshEnv();
     // A predicate returning a non-#t truthy VALUE makes the split concrete: any
     // propagates that value; any?/some collapse it to the honest #t.
-    const [a] = await exec("(any (lambda (x) (if (odd? x) 99 #f)) '(2 4 5))", { env });
-    const [anyQ] = await exec("(any? odd? '(2 4 5))", { env });
-    const [s] = await exec("(some odd? '(2 4 5))", { env });
+    const [a] = await execOverFrame("(any (lambda (x) (if (odd? x) 99 #f)) '(2 4 5))", { env });
+    const [anyQ] = await execOverFrame("(any? odd? '(2 4 5))", { env });
+    const [s] = await execOverFrame("(some odd? '(2 4 5))", { env });
     expect(a).toBe(99);
     expect(anyQ).toBe(true);
     expect(s).toBe(true);
-    const [none] = await exec("(any odd? '(2 4))", { env });
+    const [none] = await execOverFrame("(any odd? '(2 4))", { env });
     expect(none).toBe(false);
   });
 

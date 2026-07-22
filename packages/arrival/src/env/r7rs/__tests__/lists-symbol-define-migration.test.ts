@@ -57,7 +57,7 @@ import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeEr
 import { DoorProcedure } from "../../../values/primitives/ACallable.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import { BASE_PACKS } from "../../base-packs.js";
-import { exec } from "../../../eval/generator-exec.js";
+import { execOverFrame as exec } from "../../../eval/generator-exec.js";
 import type { AEntity, DoorSymbolDef } from "../../../common/symbol.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 

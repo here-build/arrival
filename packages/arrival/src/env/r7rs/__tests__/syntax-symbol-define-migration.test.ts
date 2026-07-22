@@ -63,7 +63,7 @@
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../AmbientRuntime.js";
 import syntaxPack from "../syntax.js";
-import { exec } from "../../../eval/generator-exec.js";
+import { execOverFrame as exec } from "../../../eval/generator-exec.js";
 import { StaticValidationError } from "../../../static-validation/validate-program.js";
 import { Macro } from "../../../eval/Macro.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";

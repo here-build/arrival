@@ -11,16 +11,17 @@
 // the literal symbol with no post-eval, O(depth)-composing fixup.
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../env/AmbientRuntime.js";
-import { execState, schemeToJs } from "../../index.js";
+import { schemeToJs } from "../../index.js";
+import { execStateOverFrame, type ExecOptionsOverFrame } from "../../eval/generator-exec.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
 
-// COMPLEX tier (execState, not exec): `repr` stringifies the BOXED result
+// COMPLEX tier (execStateOverFrame, not exec): `repr` stringifies the BOXED result
 // (Scheme print format, e.g. list "(alpha beta gamma)", bare symbol "pos") —
 // a boxed-state read, not the SIMPLE tier's plain-JS exit (whose symbol/list
 // unwrap shapes would make these assertions unreadable — RULINGS.md R1).
-const exec = async (src: string, options: Parameters<typeof execState>[1]) =>
-  (await execState(src, options)).values.slice();
+const exec = async (src: string, options: ExecOptionsOverFrame) =>
+  (await execStateOverFrame(src, options)).values.slice();
 const val = (rs: unknown[]) => schemeToJs(rs[rs.length - 1] as never, {});
 const repr = (rs: unknown[]) => String(rs[rs.length - 1]);
 

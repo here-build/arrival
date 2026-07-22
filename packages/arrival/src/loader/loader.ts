@@ -25,10 +25,9 @@ import { RunResolverUnreachableError, RequirePathError } from "../errors.js";
 
 export type MaybePromise<T> = T | Promise<T>;
 
-/** The run env the verbs evaluate module forms into — typed `SchemeEnv` (the same type
- *  `ExecOptions.env` takes), never the package-internal `AmbientRuntime` class. Every real
- *  caller's env is a base-linked live one (the prelude-scope mint in loader-capability.ts,
- *  `execExpr(form, { env })` there too). */
+/** The run env the verbs evaluate module forms into — typed `SchemeEnv`, never the
+ *  package-internal `AmbientRuntime` class. Every real caller's env is a base-linked live one
+ *  (the prelude-scope mint in loader-capability.ts's `require/extension`). */
 export type RunEnv = SchemeEnv;
 
 /** A scheme value, derived from the public `execExpr` (the concrete union is not on
@@ -43,14 +42,14 @@ export type SchemeVal = Awaited<ReturnType<typeof execExpr>>;
  *  the verb reaches its resolution context as an ANativeProcedure, whose apply term threads
  *  ONLY `runCtx` (run-constant data — a resolver cannot ride it; see evaluator.ts's holder doc).
  *
- *  WHY the resolver and not just its env (the cut-path fix): under `exec({ capabilities })`
- *  the run resolves through `Resolver(lexicalRoot, capabilityBase)` — the lexical frame is
- *  null-rooted and the stdlib lives on the capability base. A required module's forms
- *  evaluated against the ENV alone (`execExpr({ env })` reconstructs a glass resolver over
- *  it) lose that base, so module code couldn't see `string-append`. Evaluating through THIS
- *  resolver (`execExpr({ resolver })`, loader-capability.ts) keeps cut and glass identical:
- *  defines still spill into the same lexical frame (`resolver.env` — `define` binds there),
- *  and builtins resolve exactly as they do for the requiring program.
+ *  WHY the resolver and not just its env: under `exec({ capabilities })` the run resolves
+ *  through `Resolver(lexicalRoot, capabilityBase)` — the lexical frame is null-rooted and the
+ *  stdlib lives on the capability base. A required module's forms evaluated against the ENV
+ *  alone (reconstructing a resolver from a bare frame) would lose that base, so module code
+ *  couldn't see `string-append`. Evaluating through THIS resolver (`execExpr({ resolver })`,
+ *  loader-capability.ts) keeps a required module's resolution identical to the requiring
+ *  program's: defines still spill into the same lexical frame (`resolver.env` — `define` binds
+ *  there), and builtins resolve exactly as they do for the requiring program.
  *
  *  `ctx` is accepted (and ignored) for the verb declarations' `this: CallCtx` convention: the
  *  flat `CallCtx` (`{ runCtx, invocation }`) carries no resolver, so the back-channel is the

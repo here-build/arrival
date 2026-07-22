@@ -11,8 +11,7 @@
 import { describe, it, expect } from "vitest";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
-import { initBridge } from "../../index.js";
-import { execState } from "../../eval/generator-exec.js";
+import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AVector } from "../../values/primitives/AVector.js";
@@ -75,7 +74,6 @@ describe("collapseProvenance — sound over every structured carrier", () => {
 
 describe("string-append / join carry deep collapse-provenance end-to-end", () => {
   it("join over a list of stamped values keeps every point", async () => {
-    await initBridge();
     const env = mintFrame(inferenceEnv, "collapse-prov-join");
     bindValue(env, "a", stamped("alpha", 1));
     bindValue(env, "b", stamped("beta", 2));
@@ -86,7 +84,6 @@ describe("string-append / join carry deep collapse-provenance end-to-end", () =>
   });
 
   it("string-append over a nested collapse keeps every point", async () => {
-    await initBridge();
     const env = mintFrame(inferenceEnv, "collapse-prov-append");
     bindValue(env, "a", stamped("alpha", 1));
     bindValue(env, "b", stamped("beta", 2));

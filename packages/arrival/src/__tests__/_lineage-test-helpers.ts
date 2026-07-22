@@ -5,8 +5,8 @@
  * authoring; the parent dedupes at integration" — this IS that dedupe.
  *
  * SCOPE BOUNDARY. `provOf` is NOT here — it is exported canonically from the
- * PRODUCTION module `../provenance/lineage-shadow` (the shadow assert needs it at
- * runtime), so every test imports it from there to keep ONE definition. This file
+ * PRODUCTION module `../provenance/lineage` (Stage C Cut 3b relocated it there from the
+ * retired `lineage-shadow.ts`), so every test imports it from there to keep ONE definition. This file
  * holds only the test-fixture helpers that have no production home: the stamped-
  * value constructors (`sStr`/`sNum`) and the run-a-program-collect-provenance
  * drivers (`runRaw`/`run`). Test-SPECIFIC fixtures (strs/nums/triple/el/…) stay
@@ -22,14 +22,13 @@
  * .apply(env, …)` is async, unlike the legacy `defineRosetta` call it replaced.
  */
 import * as z from "../common/scheme-zod.js";
-import { initBridge } from "../index.js";
 import { CONSTANT_CTX } from "../run/RunContext.js";
-import { execState } from "../eval/generator-exec.js";
+import { execStateOverFrame } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../env/inference-env.js";
 import type { AString } from "../values/primitives/AString.js";
 import type { AValue } from "../values/primitives/AValue.js";
 import { jsToScheme } from "../membrane/rosetta.js";
-import { provOf } from "../provenance/lineage-shadow.js";
+import { provOf } from "../provenance/lineage.js";
 import type { AmbientRuntime } from "../env/AmbientRuntime.js";
 import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../values/op-helpers.js";
 import type { SchemeValue } from "../values/types.js";
@@ -74,14 +73,13 @@ export async function runRaw(
   binds: Record<string, unknown> = {},
   setup?: EnvSetup,
 ): Promise<SchemeValue | undefined> {
-  await initBridge();
   const env = mintFrame(inferenceEnv, `lin-test-${seq++}`);
   await setup?.(env);
   for (const [k, v] of Object.entries(binds)) bindValue(env, k, jsToScheme(CONSTANT_CTX, v));
   const savedOracle = isEagerProvenanceOracleEnabled();
   setEagerProvenanceOracleEnabled(true);
   try {
-    const [r] = (await execState(src, { env })).values;
+    const [r] = (await execStateOverFrame(src, { env })).values;
     return r;
   } finally {
     setEagerProvenanceOracleEnabled(savedOracle);

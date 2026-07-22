@@ -1,7 +1,8 @@
 // polyglot-racket pack — assemble onto a real env, then RUN the threading-alias
 // macros and the dict accessor family. Split out of polyglot.test.ts (V,
 // 2026-07-10 dialect split — see polyglot.ts's header for the full rationale).
-import { execState, type ExecOptions } from "../../../index.js";
+import { execState as bareExecState } from "../../../index.js";
+import { execStateOverFrame, type ExecOptionsOverFrame } from "../../../eval/generator-exec.js";
 import { mintFrame } from "../../AmbientRuntime.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
@@ -11,8 +12,8 @@ import { describe, expect, it } from "vitest";
 
 import polyglotRacket from "../../polyglot/polyglot-racket.js";
 
-async function exec(code: string, options?: ExecOptions) {
-  return (await execState(code, options)).values.slice();
+async function exec(code: string, options: ExecOptionsOverFrame) {
+  return (await execStateOverFrame(code, options)).values.slice();
 }
 
 describe("@inhuman.tools/arrival/polyglot-racket", () => {
@@ -66,8 +67,8 @@ describe("@inhuman.tools/arrival/polyglot-racket", () => {
 // the dict shape, unlike @'s origin-agnostic read) real bindings, not stubs.
 // Default assembled env — polyglot-racket ships in BASE_PACKS in production.
 describe("@inhuman.tools/arrival/polyglot-racket — dict accessor family (Bucket A)", () => {
-  const str = async (src: string) => String((await exec(src))[0]);
-  const raw = (src: string) => exec(src);
+  const str = async (src: string) => String((await bareExecState(src)).values[0]);
+  const raw = async (src: string) => (await bareExecState(src)).values;
 
   it("dict-ref — reads by keyword, symbol, or string key, identically", async () => {
     expect(await str('(dict-ref (dict :a 1) :a)')).toBe("1");

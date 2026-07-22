@@ -32,10 +32,8 @@ import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../AmbientRuntime.js";
 import { type AEntity } from "../../../common/symbol.js";
 import { EnvCapability } from "../../../common/capability.js";
-import { exec } from "../../../eval/generator-exec.js";
-import { global_env } from "../../env-roots.js";
-import { initBridge } from "../../../index.js";
-import { freshEnv } from "../../../__tests__/_fresh-env.js";
+import { exec, execOverFrame, execInFrame } from "../../../eval/generator-exec.js";
+import { freshEnv, nativeOnlyRoot } from "../../../__tests__/_fresh-env.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
 import srfi26 from "../srfi-26.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
@@ -44,8 +42,7 @@ import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 // Mirrors `_fresh-env.ts`'s own injected evalScheme — `skipBootstrapWait` because
 // these execs run against an env this suite is itself assembling/re-lowering onto,
 // not the shared realm-cached bootstrap.
-const evalScheme = (env: unknown, src: unknown): unknown =>
-  exec(src as string, { env: env as ResolvingAmbient, skipBootstrapWait: true });
+const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
 
 describe("scheme/srfi-26 — cut/cute expansion equivalence (semantic-equivalence gate, §4.2)", () => {
   it("cut: builds a positional-slot closure — `(cut cons <> 1)` applied to 0", async () => {
@@ -85,20 +82,20 @@ describe("scheme/srfi-26 — cut/cute expansion equivalence (semantic-equivalenc
 
     // cut: (bump!) is NOT a slot — it stays in the lambda body, re-evaluating per call.
     calls = 0;
-    await exec("(define cut-closure (cut list (bump!) <>))", { env });
+    await execOverFrame("(define cut-closure (cut list (bump!) <>))", { env });
     expect(calls).toBe(0); // building the closure does not itself call bump!
-    await exec("(cut-closure 1)", { env });
-    await exec("(cut-closure 2)", { env });
+    await execOverFrame("(cut-closure 1)", { env });
+    await execOverFrame("(cut-closure 2)", { env });
     expect(calls).toBe(2); // once PER CALL
 
     // cute: (bump!) is lifted into a `let` around the lambda — evaluates ONCE, at
     // specialization time (when the closure is built), never again per call. This
     // is SRFI-26's entire reason cute exists.
     calls = 0;
-    await exec("(define cute-closure (cute list (bump!) <>))", { env });
+    await execOverFrame("(define cute-closure (cute list (bump!) <>))", { env });
     expect(calls).toBe(1); // specialization itself ran the expensive expr, once
-    await exec("(cute-closure 1)", { env });
-    await exec("(cute-closure 2)", { env });
+    await execOverFrame("(cute-closure 1)", { env });
+    await execOverFrame("(cute-closure 2)", { env });
     expect(calls).toBe(1); // still just once — never re-runs per call
   });
 });
@@ -133,14 +130,12 @@ describe("scheme/srfi-26 — the contract-enforcement row: cut/cute are contract
 
 describe("scheme/srfi-26 — the §2.1 bake FV law passes (lowered standalone, zero declared deps)", () => {
   it("lowers cleanly with NO deps declared — never DefineLocalityError/DefineForwardReferenceError/ProvenanceRoleShapeError", async () => {
-    await initBridge();
-    const env = mintFrame(global_env, "test-srfi-26-fv-law");
+    const env = mintFrame(await nativeOnlyRoot(), "test-srfi-26-fv-law");
     await expect(srfi26.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
   });
 
   it("(regression pin) none of the FV/forward-ref/role drift doors fire for this pack's real bake", async () => {
-    await initBridge();
-    const env = mintFrame(global_env, "test-srfi-26-fv-law-2");
+    const env = mintFrame(await nativeOnlyRoot(), "test-srfi-26-fv-law-2");
     try {
       await srfi26.lower({ evalScheme }).apply(env, undefined as never);
     } catch (error) {

@@ -14,7 +14,7 @@ import { CONSTANT_CTX } from "../run/RunContext.js";
 
 import { describe, expect, it } from "vitest";
 import { inferenceEnv } from "../env/inference-env.js";
-import { exec } from "../eval/generator-exec.js";
+import { execOverFrame as exec } from "../eval/generator-exec.js";
 import { jsToScheme, schemeToJs } from "../membrane/rosetta.js";
 import { EnvCapability } from "../common/capability.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).

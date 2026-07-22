@@ -37,7 +37,6 @@ import { schemeToJs } from "../../membrane/rosetta.js";
 import type { SchemeValue } from "../../values/types.js";
 import { arrivalLoaderCapability } from "../../loader/loader-capability.js";
 import { loaderFromResolver } from "../../loader/loader.js";
-import { legacyExtensionRegistry, __resetExtensionRegistryForTest } from "../../loader/loader-extensions.js";
 
 const plain = (v: unknown): unknown => schemeToJs(v as SchemeValue, {});
 
@@ -65,8 +64,7 @@ function makeUpperExtCapability(name: string, suffix: string, resolverName: stri
 }
 
 describe("LAW 1 — nested require (inside a required .scm module) resolves via the RUN's own per-run registry", () => {
-  it("does not fall to the process-global legacy table, which stays untouched", async () => {
-    __resetExtensionRegistryForTest();
+  it("does not fall to a process-global legacy table (Stage C Cut 3b: there is no longer one to fall to)", async () => {
     const ext = makeUpperExtCapability("test/ext-upper-nested", ".nestedupper", "test/upper-resolve-nested");
 
     const results = await exec(`(require "outer-nested.scm")`, {
@@ -85,17 +83,11 @@ describe("LAW 1 — nested require (inside a required .scm module) resolves via 
     // `this.runCtx.vocabulary` off execExpr's freshly-minted, vocabulary-less RunContext for
     // the nested call ⇒ always the (empty) legacy table ⇒ "no-resolver" throws here instead).
     expect(results.length).toBeGreaterThan(0);
-
-    // The process-global legacy table was never written to — registration went into THIS run's
-    // OWN per-run bag (via the prelude, always runCtx-correct even pre-fix) and the nested
-    // require's LOOKUP now correctly reads that same bag instead of the shared global one.
-    expect(legacyExtensionRegistry().size).toBe(0);
   });
 });
 
 describe("LAW 2 — cross-run isolation holds one require-frame deeper", () => {
   it("a separate run's nested require cannot see a suffix a DIFFERENT run registered", async () => {
-    __resetExtensionRegistryForTest();
     const extA = makeUpperExtCapability("test/ext-upper-nested-iso-a", ".nestediso", "test/upper-resolve-nested-iso-a");
 
     await exec(`(require "outer-iso-a.scm")`, {

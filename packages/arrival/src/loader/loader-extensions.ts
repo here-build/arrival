@@ -21,22 +21,18 @@
 //     function, and String(fn) becomes the registry key". It is NEVER bound into the runtime
 //     env. A running program therefore CANNOT teach the loader a new file type mid-run.
 //
-// STAGE B4 (docs archaeology: stage-b-runcontext-absorbs-assembly.md) — TWO registries, ONE
-// set of primitives:
-//   • the VOCABULARY path (assembleRun, the exec default) registers into THIS RUN'S OWN
-//     `LoaderRunResources.extensionResolvers` bag (loader-capability.ts) — a fresh, empty `Map`
-//     per RunContext, populated only from a prelude (§PRELUDE), never leaking across runs.
-//   • the LEGACY AMBIENT path (`lower()`/`assembleEnv`, `arrival-chain`'s `buildArrivalEnv`)
-//     keeps registering into the PROCESS-GLOBAL `RESOLVERS` table below, UNCHANGED — its
-//     prelude bakes ONCE at ambient-assembly time, through a throwaway internal RunContext
-//     structurally disconnected from any later per-call RunContext (`instantiate` mints a
-//     fresh one per call), so a genuinely per-RunContext resource cannot bridge assembly-time
-//     registration to call-time `require` on that path; the process-global table is what makes
-//     that bridge possible today, and Stage B4 does not disturb it (KEEP-LEGACY; dies in Stage C).
-//   `makeRegisterExtensionMacro`'s caller (loader-capability.ts) decides, PER macro-invocation,
-//   which registry `ctx.runCtx` implies — `registerExtensionIn`/`lookupExtensionResolverIn`
-//   are the shared, registry-agnostic primitives both arms run through, so the conflict door
-//   (`ExtensionSuffixConflictError`) and the longest-suffix match are byte-identical either way.
+// STAGE C CUT 3b (docs/plans/stage-c-corpse-deletion.md) — ONE registry, ONE set of
+// primitives: every run (the self-hosted vocabulary path, the exec default and now the ONLY
+// path) registers into THIS RUN'S OWN `LoaderRunResources.extensionResolvers` bag
+// (loader-capability.ts) — a fresh, empty `Map` per RunContext, populated only from a prelude
+// (§PRELUDE), never leaking across runs. The retired LEGACY AMBIENT path's process-global
+// `RESOLVERS` table (and its convenience wrappers `registerExtension`/`lookupExtensionResolver`/
+// `legacyExtensionRegistry`) died with the ambient path itself — `loaderRegistryOf`
+// (loader-capability.ts) no longer has a fallback arm to route to.
+//   `makeRegisterExtensionMacro`'s caller (loader-capability.ts) resolves `ctx.runCtx`'s OWN
+//   per-run bag — `registerExtensionIn`/`lookupExtensionResolverIn` are the shared primitives
+//   both the registration macro and `require`'s lookup run through, so the conflict door
+//   (`ExtensionSuffixConflictError`) and the longest-suffix match are unaffected by this cut.
 
 import { ExtensionSuffixConflictError } from "../errors.js";
 import { Macro } from "../eval/Macro.js";
@@ -49,8 +45,8 @@ import type { SchemeValue } from "../values/types.js";
 import type { RunContext } from "../run/RunContext.js";
 import invariant from "tiny-invariant";
 
-/** ext-suffix (e.g. `".prompt"`) → the NAME of the resolver verb that handles it. Shared shape
- *  for BOTH the per-run (vocabulary-path) bag and the legacy process-global table below. */
+/** ext-suffix (e.g. `".prompt"`) → the NAME of the resolver verb that handles it. The per-run
+ *  (vocabulary-path) bag's shape (`LoaderRunResources.extensionResolvers`, loader-capability.ts). */
 export type ExtensionResolverRegistry = Map<string, string>;
 
 /** Coerce a name argument (string, AString, ASymbol, or (quote SYMBOL)) to the bound verb name. */
@@ -113,33 +109,6 @@ export function lookupExtensionResolverIn(registry: ExtensionResolverRegistry, p
   return best;
 }
 
-/** ext-suffix → resolver-verb-name, the LEGACY-AMBIENT-PATH table (see this module's header) —
- *  process-global + idempotent: the same (suffix, name) re-registers as a no-op across runs
- *  (the same capabilities always register the same names); a DIFFERENT name for an
- *  already-claimed suffix conflicts (`registerExtensionIn`'s own door). */
-const RESOLVERS: ExtensionResolverRegistry = new Map();
-
-/** Legacy-path convenience wrapper — registers into the process-global {@link RESOLVERS}
- *  table directly. Kept for existing direct callers/tests; `registerExtensionIn` is the
- *  registry-agnostic primitive both paths now share. */
-export function registerExtension(ext: unknown, resolverName: unknown): void {
-  registerExtensionIn(RESOLVERS, ext, resolverName);
-}
-
-/** Legacy-path convenience wrapper — looks up in the process-global {@link RESOLVERS} table
- *  directly. See `registerExtension`'s own doc. */
-export function lookupExtensionResolver(path: string): string | undefined {
-  return lookupExtensionResolverIn(RESOLVERS, path);
-}
-
-/** The legacy-ambient-path registry itself, for `loader-capability.ts`'s fallback: a
- *  vocabulary-path run (`runCtx.vocabulary !== undefined`) registers into/reads its OWN
- *  `LoaderRunResources.extensionResolvers` bag; every other run (ambient/glass) falls back to
- *  THIS shared table — byte-identical to today's process-global behavior. */
-export function legacyExtensionRegistry(): ExtensionResolverRegistry {
-  return RESOLVERS;
-}
-
 /**
  * The MACRO body of `require/register-extension` — shared by bootstrap (capability symbols)
  * and mid-run (`require/extension`'s discarded prelude child). Args are UNEVALUATED forms:
@@ -148,11 +117,10 @@ export function legacyExtensionRegistry(): ExtensionResolverRegistry {
  *   (require/register-extension ".prompt" 'ext/prompt/resolve)   ; quote still ok
  * Side-effects the registry `resolveRegistry(ctx.runCtx)` names; expands to nil (effect form).
  * `resolveRegistry` is the caller's (loader-capability.ts's) decision of WHICH registry this
- * particular invocation's `runCtx` implies (per-run resource bag vs the legacy global table) —
- * see this module's header for the full model. `ctx.runCtx` rides `MacroInvokeContext` (the
- * evaluator threads it at every macro-expand site, `evaluator.ts`'s `evalArgs.runCtx`), so this
- * macro reaches it WITHOUT ever going through `makeCallCtx` (macros are `TF_EXPAND`-dispatched,
- * never `this.resources`-bearing).
+ * particular invocation's `runCtx` implies — see this module's header for the full model.
+ * `ctx.runCtx` rides `MacroInvokeContext` (the evaluator threads it at every macro-expand site,
+ * `evaluator.ts`'s `evalArgs.runCtx`), so this macro reaches it WITHOUT ever going through
+ * `makeCallCtx` (macros are `TF_EXPAND`-dispatched, never `this.resources`-bearing).
  */
 export function makeRegisterExtensionMacro(resolveRegistry: (runCtx: RunContext) => ExtensionResolverRegistry): Macro {
   return new Macro(
@@ -166,11 +134,6 @@ export function makeRegisterExtensionMacro(resolveRegistry: (runCtx: RunContext)
       registerExtensionIn(resolveRegistry(ctx.runCtx), suffixForm, nameForm);
       return nil;
     },
-    "registers a file extension resolver used by require (assembly time only; unevaluated resolver name; per-run on the vocabulary path, process-global on the legacy ambient path)",
+    "registers a file extension resolver used by require (assembly time only; unevaluated resolver name; per-run)",
   );
-}
-
-/** Test-only: clear the process-global (legacy-ambient-path) registry between cases. */
-export function __resetExtensionRegistryForTest(): void {
-  RESOLVERS.clear();
 }

@@ -41,7 +41,7 @@
 import { describe, expect, it } from "vitest";
 
 import { mintFrame } from "../env/AmbientRuntime.js";
-import { execState } from "../eval/generator-exec.js";
+import { execStateOverFrame as execState } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../env/inference-env.js";
 import { schemeToJs } from "../index.js";
 import { jsToScheme } from "../membrane/rosetta.js";

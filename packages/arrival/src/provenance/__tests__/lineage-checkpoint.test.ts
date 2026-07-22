@@ -13,13 +13,12 @@ import { CONSTANT_CTX } from "../../run/RunContext.js";
  * STOP before building the IR. It doesn't fail.
  */
 import { describe, it, expect } from "vitest";
-import { initBridge } from "../../index.js";
 import { parse } from "../../eval/generator-exec.js";
-import { execState } from "../../eval/generator-exec.js";
+import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { APair } from "../../values/primitives/APair.js";
 import { classify, fullCone, type Classifier, type LineageNode } from "../../provenance/lineage.js";
-import { provOf } from "../../provenance/lineage-shadow.js";
+import { provOf } from "../../provenance/lineage.js";
 import { sStr } from "../../__tests__/_lineage-test-helpers.js";
 import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
@@ -66,7 +65,6 @@ function countNodes(n: LineageNode): number {
 
 describe("lineage checkpoint — runtime stamping derives the SAME cone (correctness)", () => {
   it("lineage full-cone == the eager interpreter's provenance, for (length (list a b c))", async () => {
-    await initBridge();
     const env = mintFrame(inferenceEnv, "lin-correct");
     bindValue(env, "a", sStr("a", 100));
     bindValue(env, "b", sStr("b", 101));
@@ -102,7 +100,6 @@ describe("lineage checkpoint — the static skeleton is constant in N (eager ret
   // O(1) today — that's the next describe block below, the it.todo this checkpoint
   // used to leave open.
   async function eagerProvSize(n: number): Promise<number> {
-    await initBridge();
     const env = mintFrame(inferenceEnv, `lin-scale-${n}`);
     const names: string[] = [];
     for (let i = 0; i < n; i++) {
@@ -122,7 +119,6 @@ describe("lineage checkpoint — the static skeleton is constant in N (eager ret
   });
 
   it("the static lineage skeleton node-count is CONSTANT — independent of N", async () => {
-    await initBridge();
     const [ast] = await parse(`(length (map f xs))`);
     const nodes = countNodes(classify(ast, C)); // Pipe(length) -> Fan(f) -> Leaf(xs)
     expect(nodes).toBeLessThanOrEqual(4); // O(AST), constant in N (NOT a total-memory claim — see scope note)
@@ -140,7 +136,6 @@ describe("lineage checkpoint — C4 ALREADY achieves O(1) for the UNMINTED fan-o
   // needs the wireframe's symbolic fact-wire for the like-for-like win; this is the naive
   // strategy's own free win.
   async function unmintedFanProvSize(n: number): Promise<number> {
-    await initBridge();
     const env = mintFrame(inferenceEnv, `lin-scale-unminted-${n}`);
     const xs = APair.fromArray(
       CONSTANT_CTX,

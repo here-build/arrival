@@ -1,23 +1,30 @@
 /**
  * LAW (V0→V5) — the environment-privatization design.
- * Pinned surface, updated at the V5 atomic cut (D5 hard delete executed):
+ * Pinned surface, updated at the V5 atomic cut (D5 hard delete executed); re-pinned again at
+ * STAGE C CUT 3b (docs/plans/stage-c-corpse-deletion.md, "the massacre"), which retired the
+ * PUBLIC glass option (`ExecOptions.env`) and the `override` sugar ENTIRELY — not a retype, a
+ * full removal:
  *
  *   1. Barrel surface pin — `global_env`/`env` are GONE (V1's zero-consumer cut);
  *      `sandboxedEnv` is GONE (V5's atomic cut — every external consumer migrated to
- *      `capabilities`/`override`/`scope`/`assembleAmbient` in the same wave);
- *      `LexicalScope.fresh` exists (V1's one new API); `SessionScope` names the
- *      refinement it mints (root frame carries the structural SchemeEnv contract —
- *      the V4 session products type against it). The barrel exports ZERO AmbientRuntime
- *      instances; `rosettaTypesOf` deliberately SURVIVES this cut (WO-1 territory —
- *      rosetta-registry-dissolution.md owns its death, keyed now on scope frames).
- *   2. Glass byte-identity — a custom `{ env }` run still resolves/defines exactly as
- *      before the `ExecOptions.env: SchemeEnv` retype (D2): glass remains a designed
- *      mode for embedder-held frames (in-package: the inference-env internal module;
- *      externally an env can no longer be MINTED, only held over from an owned frame).
- *   3. override+scope value-injection parity — the census's own migration-target claim
- *      (§II.1's table: `env.set(name, jsToScheme(ctx, dataValue))` → `override`) is
- *      pinned as an actual equality: both paths must produce identical values AND
- *      identical provenance (both fold through `jsToScheme(CONSTANT_CTX, …)` —
+ *      `capabilities`/`scope` in the same wave); `LexicalScope.fresh` exists (V1's one new
+ *      API); `SessionScope` names the refinement it mints (root frame carries the structural
+ *      SchemeEnv contract — the V4 session products type against it). The barrel exports ZERO
+ *      AmbientRuntime instances; `rosettaTypesOf` deliberately SURVIVES this cut (WO-1
+ *      territory — rosetta-registry-dissolution.md owns its death, keyed now on scope frames).
+ *   2. Glass byte-identity — DROPPED (Cut 3b): `ExecOptions.env` no longer exists at all, so
+ *      there is nothing left to pin byte-identity against. The internal live-frame seam
+ *      (`execStateOverFrame`/`execOverFrame`, generator-exec.ts) is the narrow, non-public
+ *      replacement the internal `inference-env.ts` test harnesses use; it is not part of the
+ *      environment-privatization census this file pins.
+ *   3. write-into-scope + override VALUE-INJECTION parity — the census's original claim
+ *      (§II.1's table: `env.set(name, jsToScheme(ctx, dataValue))` → `override`) is re-pinned
+ *      against the surviving mechanisms: a direct `bindValue` onto a `LexicalScope.fresh()`
+ *      root (the module-internal write door, unchanged by this cut) vs `define/overridable` +
+ *      a plain `{ capabilities: [overridableCapability], config: { params } }` run (the
+ *      `override` sugar's own underlying capability, still fully present — only the
+ *      `ExecOptions.override` CONVENIENCE wrapper died). Both paths must produce identical
+ *      values AND identical provenance (both fold through `jsToScheme(CONSTANT_CTX, …)` —
  *      `overridable/resolve`'s own implementation, env/overridable/overridable.ts — so a
  *      divergence here would mean the two "run-neutral value" doors disagree).
  */
@@ -29,6 +36,7 @@ import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
 import { jsToScheme } from "../../membrane/rosetta.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AValue } from "../../values/primitives/AValue.js";
+import { overridableCapability } from "../../env/overridable/overridable.js";
 // In-package test: internal-module access (AmbientRuntime is not barrel-exported).
 import { AmbientRuntime, mintFrame } from "../../env/AmbientRuntime.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
@@ -63,52 +71,28 @@ describe("V0 pin — barrel surface", () => {
   });
 });
 
-describe("V0 pin — glass byte-identity (ExecOptions.env retype is type-only, D2)", () => {
-  it("a custom env still resolves builtins through its OWN chain and defines land directly in it — the glass posture generator-exec.ts documents", async () => {
-    const base = mintFrame(sandboxedEnv, "glass-pin-basic");
-    const [sum] = await exec("(+ 1 2)", { env: base });
-    expect(sum).toBe(3);
-
-    await exec("(define answer 41)", { env: base });
-    const [next] = await exec("(+ answer 1)", { env: base });
-    expect(next).toBe(42);
-
-    // The define landed ON the glass env itself — no hidden cut/session-frame
-    // indirection (byte-identical to pre-cut glass, generator-exec.ts's own
-    // "GLASS — the resolver wraps it directly" comment).
-    expect(base.get("answer", { throwError: false })).toBeDefined();
-  });
-
-  it("execState's glass posture is unaffected — session `scope` wraps the SAME glass env across calls", async () => {
-    const base = mintFrame(sandboxedEnv, "glass-pin-session");
-    await execState("(define greeting \"hi\")", { env: base });
-    const { values } = await execState("(string-append greeting \" there\")", { env: base });
-    expect(values[0]).toBeInstanceOf(AValue);
-  });
-});
-
-describe("V0 pin — override+scope value-injection parity", () => {
-  it("the internal write (bindValue + jsToScheme) and define/overridable + override produce IDENTICAL values", async () => {
+describe("write-into-scope + override VALUE-INJECTION parity", () => {
+  it("the internal write (bindValue + jsToScheme) and define/overridable + a capability config produce IDENTICAL values", async () => {
     const users = [
       { id: "alice", priority: 15 },
       { id: "bob", priority: 5 },
     ];
 
-    // The manual membrane path — the pre-override idiom, now reachable only through the
-    // module-internal `bindValue` (V7: the public `env.set` is hard-deleted; this row keeps
-    // pinning that the ONE remaining write door and `override` mint identical values).
-    const manualEnv = mintFrame(sandboxedEnv, "parity-manual");
-    bindValue(manualEnv, "users", jsToScheme(CONSTANT_CTX, users, {}));
-    const { values: manualValues } = await execState(
-      `(map (lambda (u) (:id u)) users)`,
-      { env: manualEnv },
-    );
+    // The manual membrane path — reachable only through the module-internal `bindValue` (V7:
+    // the public `env.set` is hard-deleted) onto a plain `LexicalScope.fresh()` root — no glass
+    // needed at all, since `bindValue` writes onto ANY concrete frame the vocabulary path's
+    // `scope` option accepts.
+    const manualScope = LexicalScope.fresh("parity-manual");
+    bindValue(manualScope.env, "users", jsToScheme(CONSTANT_CTX, users, {}));
+    const { values: manualValues } = await execState(`(map (lambda (u) (:id u)) users)`, { scope: manualScope });
 
-    // The declared-parameter path (`override`, the census's migration target).
+    // The declared-parameter path — `define/overridable` + the overridable capability's OWN
+    // config bag (the `ExecOptions.override` sugar's underlying mechanism, unaffected by that
+    // sugar's retirement).
     const { values: declaredValues } = await execState(
       `(define/overridable users (s/array (s/object (s/field/string "id") (s/field/number "priority"))) '())
        (map (lambda (u) (:id u)) users)`,
-      { override: { users } },
+      { capabilities: [overridableCapability], config: { params: { users } } },
     );
     const declaredResult = declaredValues.at(-1);
     const manualResult = manualValues.at(-1);
@@ -122,14 +106,14 @@ describe("V0 pin — override+scope value-injection parity", () => {
   it("...and IDENTICAL provenance — both paths mint through jsToScheme(CONSTANT_CTX, …), so both are provenance-empty (run-neutral)", async () => {
     const priority = 15;
 
-    const manualEnv = mintFrame(sandboxedEnv, "parity-provenance-manual");
-    bindValue(manualEnv, "priority", jsToScheme(CONSTANT_CTX, priority, {}));
-    const { values: manualValues } = await execState(`(* priority 2)`, { env: manualEnv });
+    const manualScope = LexicalScope.fresh("parity-provenance-manual");
+    bindValue(manualScope.env, "priority", jsToScheme(CONSTANT_CTX, priority, {}));
+    const { values: manualValues } = await execState(`(* priority 2)`, { scope: manualScope });
 
     const { values: declaredValues } = await execState(
       `(define/overridable priority (s/number) 0)
        (* priority 2)`,
-      { override: { priority } },
+      { capabilities: [overridableCapability], config: { params: { priority } } },
     );
 
     const manualResult = manualValues.at(-1);

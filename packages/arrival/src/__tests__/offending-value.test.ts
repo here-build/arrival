@@ -14,7 +14,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { execState } from "../eval/generator-exec.js";
+import { execStateOverFrame } from "../eval/generator-exec.js";
 import { attachOffendingValue, offendingValueOf } from "../errors.js";
 import { AString } from "../values/primitives/AString.js";
 import { schemeToJs } from "../membrane/rosetta.js";
@@ -25,7 +25,7 @@ import { freshEnv } from "./_fresh-env.js";
  *  {@link offendingValueOf} off it, not just its message. */
 async function catchEval(env: Awaited<ReturnType<typeof freshEnv>>, src: string): Promise<unknown> {
   try {
-    await execState(src, { env });
+    await execStateOverFrame(src, { env });
     throw new Error(`expected ${JSON.stringify(src)} to throw, it didn't`);
   } catch (e) {
     return e;

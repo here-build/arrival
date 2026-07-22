@@ -31,7 +31,6 @@
  *   path with the taken arm, NOT a node that discards the predicate.
  */
 import { describe, it, expect } from "vitest";
-import { initBridge } from "../../index.js";
 import { parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { classify, fullCone, type Classifier } from "../../provenance/lineage.js";
@@ -45,7 +44,6 @@ const C: Classifier = {
 
 /** fullCone of the STATIC lineage tree for `src` under leaf bindings `b` (no eval). */
 async function staticCone(src: string, b: Record<string, readonly number[]>): Promise<number[]> {
-  await initBridge();
   const [ast] = await parse(src);
   return fullCone(classify(ast, C), b);
 }
@@ -234,7 +232,6 @@ describe("GATE G2 (static lineage == eager golden on special forms) — W1", () 
   // arms. Every captured `if` golden has literal non-taken arms, so the
   // conservative static cone coincides exactly with the eager taken-arm cone.
   it("A4-mux: `if` classifies to a `mux` whose cone = predicate ∪ arms (predicate NOT dropped)", async () => {
-    await initBridge();
     const [ast] = await parse(`(if (< 0 (* x x)) 99 -1)`);
     const node = classify(ast, C);
     expect(node.kind).toBe("mux"); // not an application, not a dropped-predicate node
@@ -289,7 +286,6 @@ describe("GATE G2 (static lineage == eager golden on special forms) — W1", () 
   // they are never macro-expanded to applications. The "macro-expanded" premise
   // does not apply; the surface-form handling above IS the resolution.
   it("A21: classify() handles SURFACE special forms directly (this engine does NOT macro-expand them)", async () => {
-    await initBridge();
     // `let` is a SPECIAL_FORMS entry, so the parsed AST head is still the literal
     // `let` symbol (no lambda-application desugaring) — and classify() handles it.
     const [ast] = await parse(`(let ((foo v1)) (* v1 foo))`);

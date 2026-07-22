@@ -21,32 +21,32 @@
 // offers when explicitly ASKED for it via `:key`, never general shape-sniffing.
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../env/AmbientRuntime.js";
-import { exec, execState } from "../eval/generator-exec.js";
+import { execOverFrame, execStateOverFrame } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../env/inference-env.js";
 import { CONSTANT_CTX } from "../run/RunContext.js";
 import { jsToScheme } from "../membrane/rosetta.js";
 
 async function execOneBoxed(expr: string, env = inferenceEnv): Promise<any> {
-  const { values } = await execState(expr, { env });
+  const { values } = await execStateOverFrame(expr, { env });
   return values[0];
 }
 
 describe("B2 — :key on a leaf receiver (no member protocol) throws, naming the kind", () => {
   it('(:title "some string") throws, names "string", and routes to (detect-parse s)', async () => {
-    await expect(exec('(:title "some string")', { env: mintFrame(inferenceEnv, "kw-leaf-string") })).rejects.toThrow(
+    await expect(execOverFrame('(:title "some string")', { env: mintFrame(inferenceEnv, "kw-leaf-string") })).rejects.toThrow(
       /string/i,
     );
-    await expect(exec('(:title "some string")', { env: mintFrame(inferenceEnv, "kw-leaf-string-2") })).rejects.toThrow(
+    await expect(execOverFrame('(:title "some string")', { env: mintFrame(inferenceEnv, "kw-leaf-string-2") })).rejects.toThrow(
       /detect-parse/i,
     );
   });
 
   it("(:title 5) throws — a number has no members either", async () => {
-    await expect(exec("(:title 5)", { env: mintFrame(inferenceEnv, "kw-leaf-number") })).rejects.toThrow(/number/i);
+    await expect(execOverFrame("(:title 5)", { env: mintFrame(inferenceEnv, "kw-leaf-number") })).rejects.toThrow(/number/i);
   });
 
   it("(:title #t) throws — a boolean has no members either", async () => {
-    await expect(exec("(:title #t)", { env: mintFrame(inferenceEnv, "kw-leaf-bool") })).rejects.toThrow(/bool/i);
+    await expect(execOverFrame("(:title #t)", { env: mintFrame(inferenceEnv, "kw-leaf-bool") })).rejects.toThrow(/bool/i);
   });
 });
 

@@ -21,7 +21,6 @@
 import * as fc from "fast-check";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { initBridge } from "../index.js";
 import { exec } from "../eval/generator-exec.js";
 
 // wrappedOps don't get installed automatically just by importing exec —
@@ -30,7 +29,6 @@ import { exec } from "../eval/generator-exec.js";
 // unbound-variable whitelist branch, never actually exercising the
 // arithmetic dispatch. See bridge.ts:236 war story.
 beforeAll(async () => {
-  await initBridge();
 });
 
 /**

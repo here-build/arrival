@@ -45,9 +45,8 @@ import { schemeTrue, schemeFalse } from "../../values/primitives/ABool.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { fromJs } from "../../membrane/boxing.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
-import { execState } from "../../eval/generator-exec.js";
+import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
-import { initBridge } from "../../index.js";
 import { jsToScheme } from "../../membrane/rosetta.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
 import { bindValue, mintFrame } from "../../env/AmbientRuntime.js";
@@ -102,7 +101,6 @@ describe("Q20b — eager-oracle demotion (@ledger: Q20b — LANDED)", () => {
   // ─────────────────────────────────────────────────────────────────────────────
   it("W4 — a real program run with DEFAULT flags accumulates ZERO stamps end-to-end", async () => {
     expect(isEagerProvenanceOracleEnabled()).toBe(false); // untouched — this run rides the true default
-    await initBridge();
     const env = mintFrame(inferenceEnv, "w4-accumulation-death");
     bindValue(env, "a", jsToScheme(CONSTANT_CTX, 10, {}, new Set([100])));
     bindValue(env, "b", jsToScheme(CONSTANT_CTX, 20, {}, new Set([200])));

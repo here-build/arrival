@@ -10,7 +10,7 @@
 // kwargs-rejection.ts's `issueLines`, keyed on ARG INDEX not kwarg NAME), wired into
 // rosetta.ts's positional decode arm via try/catch(ZodError).
 import { describe, expect, it } from "vitest";
-import { execState } from "../eval/generator-exec.js";
+import { execStateOverFrame as execState } from "../eval/generator-exec.js";
 import { mintFrame } from "../env/AmbientRuntime.js";
 import { inferenceEnv } from "../env/inference-env.js";
 

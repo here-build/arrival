@@ -15,8 +15,7 @@
 
 import { describe, it, expect } from "vitest";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
-import { initBridge } from "../../../index.js";
-import { exec, execState } from "../../../eval/generator-exec.js";
+import { execOverFrame, execStateOverFrame, execInFrame } from "../../../eval/generator-exec.js";
 import { inferenceEnv } from "../../inference-env.js";
 import { AString } from "../../../values/primitives/AString.js";
 import { AValue } from "../../../values/primitives/AValue.js";
@@ -36,20 +35,18 @@ const js = (x: unknown) => (x instanceof AValue ? x["arrival/toJS"]() : x);
 
 let seq = 0;
 async function run(src: string, bindings: Record<string, AString> = {}): Promise<unknown> {
-  await initBridge();
   const env = mintFrame(inferenceEnv, `srfi-13-${seq++}`);
   for (const [k, v] of Object.entries(bindings)) bindValue(env, k, v);
-  const [r] = await exec(src, { env });
+  const [r] = await execOverFrame(src, { env });
   return r;
 }
 
 // execState (COMPLEX tier): the "carries the provenance" cells below assert box
 // discipline directly (`toBeInstanceOf(AValue)`, `.provenance` — RULINGS.md R1).
 async function runBoxed(src: string, bindings: Record<string, AString> = {}): Promise<unknown> {
-  await initBridge();
   const env = mintFrame(inferenceEnv, `srfi-13-${seq++}`);
   for (const [k, v] of Object.entries(bindings)) bindValue(env, k, v);
-  const [r] = (await execState(src, { env })).values;
+  const [r] = (await execStateOverFrame(src, { env })).values;
   return r;
 }
 

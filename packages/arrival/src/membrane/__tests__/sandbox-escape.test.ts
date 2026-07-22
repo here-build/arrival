@@ -21,8 +21,7 @@
 
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
-import { initBridge } from "../../index.js";
-import { exec, execState } from "../../eval/generator-exec.js";
+import { execOverFrame, execStateOverFrame } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import {
   INTEROP_BOUNDARY,
@@ -34,7 +33,7 @@ import { AString } from "../../values/primitives/AString.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { jsToScheme } from "../rosetta.js";
-import { exec as gexec } from "../../eval/generator-exec.js";
+import { execOverFrame as gexec } from "../../eval/generator-exec.js";
 import { tf } from "../../values/tagless-final.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
 import { bindValue } from "../../env/AmbientRuntime.js";
@@ -71,12 +70,11 @@ describe("CRITICAL: sandbox escape vectors", () => {
   // actual assertion is just "Unbound." Harmless, but the title pins a stale internal
   // narrative rather than current behavior. Left as a regression guard that `eval` stays gone.
   it("eval defaults to sandbox env, NOT global, when no env arg", async () => {
-    await initBridge();
     // `+` is NOT in inferenceEnv directly (sandbox uses scheme arithmetic).
     // eval no longer exists at all — the host-language sweep deleted it from
     // wrappedOps — so the eval-escape path is closed at the source; the throw is
     // Unbound on `eval` itself, not on `+`.
-    await expect(exec("(eval (quote +))", { env: inferenceEnv })).rejects.toThrow(/Unbound/);
+    await expect(execOverFrame("(eval (quote +))", { env: inferenceEnv })).rejects.toThrow(/Unbound/);
   });
 
   /**
@@ -85,13 +83,12 @@ describe("CRITICAL: sandbox escape vectors", () => {
    * lookup but escaped values are still callable.
    */
   it("eval-escaped function cannot be invoked to perform host computation", async () => {
-    await initBridge();
     // Build a sandbox program that pulls + via eval and applies it.
     // Historically returned 5 (eval-escape worked). Now: throws Unbound at the
     // eval site — eval no longer exists, so the very first form `(eval ...)`
     // fails to resolve.
     await expect(
-      exec(`((eval (quote +)) 2 3)`, { env: inferenceEnv })
+      execOverFrame(`((eval (quote +)) 2 3)`, { env: inferenceEnv })
     ).rejects.toThrow(/Unbound/);
   });
 
@@ -103,14 +100,13 @@ describe("CRITICAL: sandbox escape vectors", () => {
    * reach and nothing to reach it with.
    */
   it("host-language verbs cannot be reached via eval", async () => {
-    await initBridge();
     // `eval` no longer exists, so the lookup of `eval` in the head position
     // fails before the inner name is even quoted. The error is Unbound on
     // `eval` — and the inner names don't exist either, so the security
     // invariant ("host-language verb not reachable") holds doubly.
     for (const forbidden of ["load", "set-obj!", "new", "instanceof"]) {
       await expect(
-        exec(`(eval (quote ${forbidden}))`, { env: inferenceEnv }),
+        execOverFrame(`(eval (quote ${forbidden}))`, { env: inferenceEnv }),
         `${forbidden} must not be reachable via eval-escape`
       ).rejects.toThrow(/Unbound/);
     }
@@ -174,7 +170,7 @@ describe("CRITICAL: sandbox escape vectors", () => {
 // no-member-protocol door takes.
 async function pluck(src: string): Promise<unknown> {
   try {
-    const [v] = await exec(src, { env: inferenceEnv });
+    const [v] = await execOverFrame(src, { env: inferenceEnv });
     return v;
   } catch (e) {
     return e; // a throw is a safe, non-leaking outcome too
@@ -183,14 +179,12 @@ async function pluck(src: string): Promise<unknown> {
 
 describe("CRITICAL: accessor isolation leaks", () => {
   it(":keyword plucking 'constructor' off a lambda does not leak Function", async () => {
-    await initBridge();
     const fromLambda = await pluck("(:constructor (lambda (x) x))");
     // Pre-fix: === Function (RCE primitive). Post-fix: a door (throws) — either way, never Function.
     expect(fromLambda).not.toBe(Function);
   });
 
   it(":keyword plucking '__proto__' / 'prototype' off a lambda is blocked", async () => {
-    await initBridge();
     const proto = await pluck("(:prototype (lambda (x) x))");
     const dunder = await pluck("(:__proto__ (lambda (x) x))");
     expect(proto).not.toBe(Function.prototype);
@@ -218,11 +212,10 @@ describe("CRITICAL: accessor isolation leaks", () => {
   });
 
   it("benign :keyword and dot access on a plain object still resolve", async () => {
-    await initBridge();
     // Guard against over-blocking: legitimate own-property access must keep
     // working through both paths after the isolation is applied.
     bindValue(inferenceEnv, "__probe_obj", jsToScheme(CONSTANT_CTX, { name: "maya", nested: { city: "lisbon" } }));
-    const [byKeyword] = await exec("(:name __probe_obj)", { env: inferenceEnv });
+    const [byKeyword] = await execOverFrame("(:name __probe_obj)", { env: inferenceEnv });
     expect(String(byKeyword)).toBe("maya");
   });
 });
@@ -255,11 +248,10 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
   // requested length 100000000 exceeds allocation limit 16777216" — teaches the op name,
   // the requested count, and the cap (P5). Assert that shape, not just "it threw fast".
   it("(make-string 1e8 ...) errors fast with the cap-policy TAUGHT message, not an engine RangeError", async () => {
-    await initBridge();
     const start = Date.now();
     let err: Error | undefined;
     try {
-      await exec("(make-string 100000000 #\\x)", { env: inferenceEnv });
+      await execOverFrame("(make-string 100000000 #\\x)", { env: inferenceEnv });
     } catch (e) {
       err = e as Error;
     }
@@ -282,11 +274,10 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
   // message — "make-vector: requested length 100000000 exceeds allocation limit
   // 16777216" (same `assertAllocatable` policy shared with make-string).
   it("(make-vector 1e8 ...) errors fast with the cap-policy TAUGHT message, not an engine RangeError", async () => {
-    await initBridge();
     const start = Date.now();
     let err: Error | undefined;
     try {
-      await exec("(make-vector 100000000 #f)", { env: inferenceEnv });
+      await execOverFrame("(make-vector 100000000 #f)", { env: inferenceEnv });
     } catch (e) {
       err = e as Error;
     }
@@ -312,7 +303,6 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
    * its public API and the .failing marker can be removed.
    */
   it("infinite loop is bounded by a wall-clock budget (budgetMs)", async () => {
-    await initBridge();
     // The budget lives on the GENERATOR-EXEC trampoline (`run()` in
     // evaluator.ts), which is the path the actual sandbox/MCP runtime uses
     // (arrival-chain's loader calls `execGeneratorExpr`). The file-level `exec`
@@ -365,11 +355,10 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
   // depth exceeded 2000 at 1:2000" — already teaches the depth cap and position. Assert
   // that positive shape.
   it("deeply-nested input throws a graceful parse error naming the nesting-depth cap, not stack overflow", async () => {
-    await initBridge();
     const deep = "(".repeat(10000) + "1" + ")".repeat(10000);
     let err: Error | undefined;
     try {
-      await exec(deep, { env: inferenceEnv });
+      await execOverFrame(deep, { env: inferenceEnv });
     } catch (e) {
       err = e as Error;
     }
@@ -398,7 +387,6 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
   // boolean, and never throws — no native "circular structure"/JSON error). Commit to that
   // one behavior.
   it("(equal? a b) on cyclic structures returns the boxed #f, never a native JSON error", async () => {
-    await initBridge();
     const a: Record<string, unknown> = {};
     a.self = a;
     const b: Record<string, unknown> = {};
@@ -409,7 +397,7 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
     // execState (COMPLEX tier): the test name asserts the BOXED `#f` verdict
     // specifically (RULINGS.md R1) — `exec`'s plain-JS exit would give the raw
     // `false` this test is explicitly distinguishing itself from.
-    const [result] = (await execState("(equal? __cyc_a __cyc_b)", { env: inferenceEnv })).values;
+    const [result] = (await execStateOverFrame("(equal? __cyc_a __cyc_b)", { env: inferenceEnv })).values;
     expect(String(result)).toBe("#f");
   });
 });
@@ -434,8 +422,7 @@ describe("registry poisoning vectors", () => {
    * land without also wrapping it.
    */
   it("AValue is NOT reachable from sandbox via direct lookup", async () => {
-    await initBridge();
-    await expect(exec("AValue", { env: inferenceEnv })).rejects.toThrow(/Unbound/);
+    await expect(execOverFrame("AValue", { env: inferenceEnv })).rejects.toThrow(/Unbound/);
   });
 
   /**
@@ -443,8 +430,7 @@ describe("registry poisoning vectors", () => {
    * this pin remains valid — AValue should never be exported.
    */
   it("AValue is NOT reachable from sandbox via (eval (quote AValue))", async () => {
-    await initBridge();
-    await expect(exec("(eval (quote AValue))", { env: inferenceEnv })).rejects.toThrow(/Unbound/);
+    await expect(execOverFrame("(eval (quote AValue))", { env: inferenceEnv })).rejects.toThrow(/Unbound/);
   });
 
   /**

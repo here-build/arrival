@@ -5,7 +5,8 @@
 // — see polyglot.ts's header for the full split rationale. This file keeps only
 // what stays in the shared core: @/@?/@keys/dict, nil, compose/pipe/flow,
 // %interleave.
-import { execState, type ExecOptions } from "../../../index.js";
+import { exec as bareExec } from "../../../index.js";
+import { execStateOverFrame, type ExecOptionsOverFrame } from "../../../eval/generator-exec.js";
 import { mintFrame } from "../../AmbientRuntime.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
@@ -18,10 +19,11 @@ import polyglot from "../../polyglot/polyglot.js";
 // This whole file stringifies the BOXED result's Scheme print form (list "(1 4 9)")
 // and checks box discipline directly (`.constructor.name === "AVector"`) — a
 // boxed-state concern (RULINGS.md R1), not the SIMPLE tier's plain-JS exit. Local
-// `exec` shadows the barrel export with the COMPLEX tier (execState) so every call
-// site below is unchanged and still reads the boxed SchemeValue[] it always did.
-async function exec(code: string, options?: ExecOptions) {
-  return (await execState(code, options)).values.slice();
+// `exec` shadows the barrel export with the COMPLEX tier (execStateOverFrame) so every
+// call site passing its own `env` is unchanged and still reads the boxed SchemeValue[]
+// it always did.
+async function exec(code: string, options: ExecOptionsOverFrame) {
+  return (await execStateOverFrame(code, options)).values.slice();
 }
 
 describe("@inhuman.tools/arrival/polyglot (shared core)", () => {
@@ -81,7 +83,7 @@ describe("@inhuman.tools/arrival/polyglot — nil (LIPS dialect alias, shared)",
   it("nil is the empty list", async () => {
     // `(if …)` normalizes over the boxed-ABool representation (same convention
     // the sibling dialect test files use for boolean-verdict assertions).
-    const [truthy] = await exec('(if (null? nil) "yes" "no")');
+    const [truthy] = await bareExec('(if (null? nil) "yes" "no")');
     expect(String(truthy)).toBe("yes");
   });
 });

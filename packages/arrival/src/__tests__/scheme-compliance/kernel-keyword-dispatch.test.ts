@@ -11,7 +11,8 @@
 // macro-cut pass, once every special form is a keyword marker).
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../env/AmbientRuntime.js";
-import { execState, schemeToJs } from "../../index.js";
+import { schemeToJs } from "../../index.js";
+import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
 
