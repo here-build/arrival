@@ -29,7 +29,7 @@ import { LexicalScope } from "./LexicalScope.js";
 import { Resolver } from "./Resolver.js";
 import type { CompiledResolutionChain } from "./CompiledResolutionChain.js";
 import type { AssembledEnv } from "../common/kernel.js";
-import type { Activation, EnvCapability, LoweredPack, SymbolDeclaration } from "../common/capability.js";
+import { contractOf, type Activation, type EnvCapability, type LoweredPack, type SymbolDeclaration } from "../common/capability.js";
 import type { DegradedCapability } from "../common/degradation.js";
 import type { SchemeEnv } from "../common/scheme-env.js";
 import type { AEntity, ProvenanceRole } from "../common/symbols/_bake.js";
@@ -90,7 +90,7 @@ export async function parseProgram(
  *  contract-derived and spec-owned; `metadata` is the extension bag. The READ surface
  *  unifies them without moving them. */
 export interface SymbolDescription {
-  /** The bound name (capability `symbolPrefix` applied). */
+  /** The bound name. */
   readonly name: string;
   readonly kind: AEntity["kind"];
   /** The OWNING capability's name (nearest roster winner under C3 last-write-wins). */
@@ -279,11 +279,11 @@ interface RosterEntry {
   readonly def: AEntity;
 }
 
-const isBakedEntity = (def: SymbolDeclaration): def is AEntity =>
-  typeof def === "object" && def !== null && "kind" in def && typeof (def as { kind: unknown }).kind === "string";
-
 /** Deps-first / self-last walk (matching C3 apply precedence): a nearer capability's
- *  entry OVERWRITES a dep's on a name clash — same last-write-wins the assembly binds. */
+ *  entry OVERWRITES a dep's on a name clash — same last-write-wins the assembly binds.
+ *  Stage A2: `contractOf` (common/capability.ts) is the shared read-side seam every
+ *  describe/catalog/harvest reader now dispatches through — a minted A-value's CONTRACT
+ *  rides `.contract`/`.door` on it, not a bare `kind`-tagged record anymore. */
 function rosterEntries(capabilities: readonly EnvCapability[]): Map<string, RosterEntry> {
   const out = new Map<string, RosterEntry>();
   const seen = new Set<EnvCapability>();
@@ -300,9 +300,9 @@ function rosterEntries(capabilities: readonly EnvCapability[]): Map<string, Rost
       // the same LIMIT `EnvCapability.exports()` documents.)
       return;
     }
-    const prefix = cap.spec.symbolPrefix ?? "";
     for (const [name, def] of Object.entries(symbols)) {
-      if (isBakedEntity(def)) out.set(prefix + name, { capability: cap.name, def });
+      const entity = contractOf(def);
+      if (entity !== undefined) out.set(name, { capability: cap.name, def: entity });
     }
   };
   for (const cap of capabilities) visit(cap);

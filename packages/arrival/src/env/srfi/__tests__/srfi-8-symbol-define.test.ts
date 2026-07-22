@@ -11,13 +11,14 @@ import srfi8 from "../srfi-8.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 import { DoorProcedure } from "../../../values/primitives/ACallable.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
+import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
 const evalScheme = (env: unknown, src: unknown): unknown =>
   exec(src as string, { env: env as ResolvingAmbient, skipBootstrapWait: true });
 
 describe("scheme/srfi-8 — doors-only (all-or-nothing multi-return ban)", () => {
   it("receive is kind door", () => {
-    const symbols = srfi8.spec.symbols as Record<string, AEntity>;
+    const symbols = harvestContracts(srfi8.spec.symbols);
     expect(Object.keys(symbols)).toEqual(["receive"]);
     expect(symbols.receive?.kind).toBe("door");
   });

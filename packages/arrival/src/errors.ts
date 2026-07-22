@@ -1007,6 +1007,36 @@ export class AliasTargetError extends ArrivalError {
   }
 }
 
+/** A capability's `symbols` record binds a minted `symbol.*` value (native/rosetta/
+ *  sequence/tagless/tagless-guard/door/keyword) under a record KEY that doesn't match
+ *  the value's OWN name (the tagged-template head every factory parses at mint time,
+ *  `common/symbols/_bake.ts`'s `parseNameDoc`). The key is the record's own identity —
+ *  `common/capability.ts`'s bind loop reads it to compute `verb = prefix + key` — so a
+ *  mismatch means the bound verb and the value's self-reported identity (its `.contract
+ *  .name`/`.door.name`/`.name`) permanently disagree, silently, for every diagnostic that
+ *  reads the value's own name back (a door's `PurityError`, a lineage trace, `env.get(op)
+ *  .name` introspection). Declaration-time authoring bug, not a runtime condition — the
+ *  fix is renaming the record key (or the template head) to match, never a rebind. */
+export class SymbolKeyMismatchError extends ArrivalError {
+  public readonly name = "SymbolKeyMismatchError";
+  readonly "arrival/error-category": ErrorClass = "other";
+
+  constructor(
+    public readonly capabilityName: string,
+    /** The `symbols` record key this value was declared under. */
+    public readonly recordKey: string,
+    /** The value's own mint-time name (its tagged-template head). */
+    public readonly mintedName: string,
+  ) {
+    super(
+      `capability "${capabilityName}": symbol declared under record key "${recordKey}" carries a different ` +
+        `own name ("${mintedName}") — the \`symbols\` record key must match the value's tagged-template head ` +
+        `exactly (e.g. \`{ ${mintedName}: symbol.native\`${mintedName}: …\`(...) }\`), so the bound verb and the ` +
+        `value's self-reported identity never disagree.`,
+    );
+  }
+}
+
 /** A capability declares `symbols.prelude` (scheme source to evaluate at apply
  *  time) but `lower()` was never handed an `evalScheme` — nothing can run the
  *  prelude text. `common/capability.ts`. */

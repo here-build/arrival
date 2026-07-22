@@ -31,9 +31,8 @@ if the stdlib is expressible as capabilities, a consumer's tools are too.
 
 **A capability is a MODULE SINGLETON.** `export default new EnvCapability(name, spec)`, one
 `new` per package. It is **inheritance-free** — the contribution surface is a *closed
-taxonomy* of five spec keys (`configuration`, `resources`, `prelude`, `symbols`, `deps`,
-plus the `symbolPrefix`/`resolvers` refinements), configured by composition, never
-subclassed. A capability is a value, not a class hierarchy.
+taxonomy* of five spec keys (`configuration`, `resources`, `prelude`, `symbols`, `deps`),
+configured by composition, never subclassed. A capability is a value, not a class hierarchy.
 
 **The lowering chain is: module singleton → `EnvPack` → assembled env.** `spec` is the
 authoring form. `EnvCapability.lower({ evalScheme, config, degradation })` validates the

@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { EnvCapability } from "@inhuman.tools/arrival/capability";
 import type { EmitRule } from "@inhuman.tools/arrival/emit";
-import { symbol } from "@inhuman.tools/arrival/symbol";
+import { symbol, withContractFields } from "@inhuman.tools/arrival/symbol";
 
 import { openOracleSession, type OracleSession } from "../registry/greenfield-session.js";
 import { emitRegistryOf } from "../registry/index.js";
@@ -194,10 +194,12 @@ describe("row shape and precedence", () => {
     expect(ruled?.emit).toBe(rule); // carried by REFERENCE, never cloned
   });
 
-  it("carries narrows spread directly onto a contract-less tagless-guard def (self-witnessing)", () => {
+  it("carries narrows stamped directly onto a contract-less tagless-guard def (self-witnessing)", () => {
     const cap = EnvCapability.define("test/self-witness", {
       symbols: (sym) => ({
-        "my-pred?": { ...sym.taglessGuard`my-pred?: test predicate`, narrows: { witness: "my-pred?" } },
+        "my-pred?": withContractFields(sym.taglessGuard`my-pred?: test predicate`, {
+          narrows: { witness: "my-pred?" },
+        }),
       }),
     });
     const row = emitRegistryOf([cap]).lookup("my-pred?");
@@ -217,10 +219,9 @@ describe("row shape and precedence", () => {
     expect(row?.emit).toBeUndefined();
   });
 
-  it("applies symbolPrefix to row keys and row.symbol alike", () => {
+  it("harvests a namespaced verb under its own explicit name (symbolPrefix retired — a subject-scoped pack spells the namespace into each verb's own name directly)", () => {
     const cap = EnvCapability.define("test/prefixed", {
-      symbolPrefix: "proc/",
-      symbols: (sym) => ({ list: sym.taglessGuard`list: t` }),
+      symbols: (sym) => ({ "proc/list": sym.taglessGuard`proc/list: t` }),
     });
     const registry = emitRegistryOf([cap]);
     expect(registry.lookup("list")).toBeUndefined();
@@ -265,10 +266,9 @@ describe("Law N — the witness-registry red build", () => {
   it("throws when a narrows row names a witness absent from the harvested set", () => {
     const cap = EnvCapability.define("test/bad-witness", {
       symbols: (sym) => ({
-        "my-pred?": {
-          ...sym.taglessGuard`my-pred?: test predicate`,
+        "my-pred?": withContractFields(sym.taglessGuard`my-pred?: test predicate`, {
           narrows: { witness: "never-declared-anywhere" },
-        },
+        }),
       }),
     });
     expect(() => emitRegistryOf([cap])).toThrow(/Law N[\s\S]*"my-pred\?"[\s\S]*"never-declared-anywhere"/);
@@ -280,7 +280,7 @@ describe("Law N — the witness-registry red build", () => {
     });
     const narrowsCap = EnvCapability.define("test/narrows-owner", {
       symbols: (sym) => ({
-        "my-pred?": { ...sym.taglessGuard`my-pred?: t`, narrows: { witness: "pair-proof" } },
+        "my-pred?": withContractFields(sym.taglessGuard`my-pred?: t`, { narrows: { witness: "pair-proof" } }),
       }),
     });
     const registry = emitRegistryOf([witnessCap, narrowsCap]);

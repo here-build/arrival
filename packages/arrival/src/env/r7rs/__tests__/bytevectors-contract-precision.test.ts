@@ -18,8 +18,9 @@ import { ABytevector } from "../../../values/primitives/ABytevector.js";
 import { AExact } from "../../../values/primitives/AExact.js";
 import { AString } from "../../../values/primitives/AString.js";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
+import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
-const symbols = bytevectorsPack.spec.symbols as Record<string, AEntity>;
+const symbols = harvestContracts(bytevectorsPack.spec.symbols);
 
 function nativeDef(name: string) {
   const def = symbols[name];

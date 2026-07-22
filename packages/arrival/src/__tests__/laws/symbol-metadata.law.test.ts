@@ -22,10 +22,23 @@ import { z as hostZod } from "zod";
 import { EnvCapability, type Activation } from "../../common/capability.js";
 import type { Resource } from "../../common/resources.js";
 import * as z from "../../common/scheme-zod.js";
-import { resolveMetadata, staticMetadata, symbol } from "../../common/symbol.js";
+import {
+  resolveMetadata,
+  staticMetadata,
+  symbol,
+  type NativeSymbolDef,
+  type RosettaSymbolDef,
+} from "../../common/symbol.js";
 import { assembleAmbient } from "../../eval/generator-exec.js";
 
 const zz = { string: z.string, number: z.number };
+
+/** Test-only cast — see symbol.test.ts's own copy of this helper for the full rationale
+ *  (Stage A2: `symbol.native`/`symbol.rosetta` mint the value directly; the metadata bag
+ *  rides `.contract` on it). */
+function contractOf<T>(v: { contract: unknown }): T {
+  return v.contract as T;
+}
 
 describe("factory stamping — the metadata bag reaches the def (the closed drop)", () => {
   it("symbol.rosetta stamps opts.metadata onto the def; dynamic fields stay UN-invoked at bake", () => {
@@ -39,8 +52,8 @@ describe("factory stamping — the metadata bag reaches the def (the closed drop
         },
       },
     });
-    expect(def.metadata?.description).toBe("static text");
-    expect(typeof def.metadata?.dynamicDescription).toBe("function"); // the discriminant
+    expect(contractOf<RosettaSymbolDef>(def).metadata?.description).toBe("static text");
+    expect(typeof contractOf<RosettaSymbolDef>(def).metadata?.dynamicDescription).toBe("function"); // the discriminant
     expect(fired).toBe(0); // bake resolved NOTHING
   });
 
@@ -48,7 +61,7 @@ describe("factory stamping — the metadata bag reaches the def (the closed drop
     const def = symbol.native`law/meta-native: doc`({ input: [zz.number], output: [zz.number] }, (n) => n, {
       metadata: { docUrl: "https://example.test" },
     });
-    expect(def.metadata?.docUrl).toBe("https://example.test");
+    expect(contractOf<NativeSymbolDef>(def).metadata?.docUrl).toBe("https://example.test");
   });
 
   it("staticMetadata — the §2.1 enumerable static subset, total at module load (zero assembly)", () => {

@@ -20,8 +20,9 @@ import type { AEntity } from "../../../common/symbol.js";
 import type { EmitCtx } from "../../../emit/emit-rule.js";
 import { Bin, Binding, Call, Lit, Method, Ref, Un, type R } from "../../../emit/residual-lite.js";
 import numericPack from "../numeric.js";
+import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
-const symbols = numericPack.spec.symbols as Record<string, AEntity>;
+const symbols = harvestContracts(numericPack.spec.symbols);
 
 function nativeDef(name: string) {
   const def = symbols[name];

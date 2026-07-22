@@ -10,8 +10,8 @@
  * activation when harvesting an assembly, against the phantom `dryActivation`
  * for a bare capability list (see `emitRegistryOf`'s doc for the split) — and
  * keeps walking. Everything else — deps-first visit order, identity dedup,
- * `symbolPrefix`, last-write-wins on a name clash — matches the roster walk
- * (and therefore C3 apply precedence) deliberately.
+ * last-write-wins on a name clash — matches the roster walk (and therefore C3
+ * apply precedence) deliberately.
  *
  * Placement note: the component spec drafted this module inside arrival core
  * (`src/emit/registry.ts`); the constitution's §4.5 layering ("the compiler
@@ -19,7 +19,7 @@
  * — arrival core keeps only the pure `EmitRule`/`EmitCtx`/`TypeFacts` types
  * and the Contract fields themselves.
  */
-import type { Activation, EnvCapability, SymbolDeclaration } from "@inhuman.tools/arrival/capability";
+import { contractOf, type Activation, type EnvCapability, type SymbolDeclaration } from "@inhuman.tools/arrival/capability";
 import type { EmitRule, RefPolicy } from "@inhuman.tools/arrival/emit";
 import type { AssembledAmbient } from "@inhuman.tools/arrival/env";
 import type { AEntity, CacheClass, ProvenanceRole } from "@inhuman.tools/arrival/symbol";
@@ -30,7 +30,7 @@ import { dryActivation } from "./dry-activation.js";
  *  §"The harvest API", widened by the wave plan with `symbol`/`provenance`/`cacheClass`
  *  so the engine's optimization gates read the same row). */
 export interface EmitRegistryRow {
-  /** The bound name (capability `symbolPrefix` applied) — also the registry key. */
+  /** The bound name — also the registry key. */
   readonly symbol: string;
   /** Owning capability name — diagnostics ("«kernel»"-style synthetic owners allowed). */
   readonly capability: string;
@@ -63,16 +63,6 @@ export interface EmitRegistry {
   /** Every DECLARED name. */
   readonly names: ReadonlySet<string>;
 }
-
-/** A baked `symbol.*` def carries a string `kind` discriminant; `alias` never binds
- *  directly (it stands in for a sibling's already-baked def) and legacy arms (bare fn /
- *  rosetta-config / `{value}`) carry no `kind` at all — none of them can carry `.emit`. */
-const isBakedEntityLike = (def: SymbolDeclaration): def is AEntity =>
-  typeof def === "object" &&
-  def !== null &&
-  "kind" in def &&
-  typeof (def as { kind: unknown }).kind === "string" &&
-  (def as { kind: string }).kind !== "alias";
 
 /** The per-entry harvest→row conversion. The compiler-facing fields are FLATTENED
  *  top-level properties on the baked def (exactly like `cacheClass`/`type` — never a
@@ -189,11 +179,15 @@ export function emitRegistryOf(source: readonly EnvCapability[] | AssembledAmbie
     seen.add(cap);
     for (const dep of cap.spec.deps ?? []) visit(dep); // deps-first — mirrors C3 apply precedence
     const rec = harvestSymbolsRec(cap, activations?.get(cap.name));
-    const prefix = cap.spec.symbolPrefix ?? "";
     for (const [name, rawDef] of Object.entries(rec)) {
-      if (!isBakedEntityLike(rawDef)) continue; // legacy {fn}/{value}/alias arms — no `.emit` possible
-      const bound = prefix + name;
-      rows.set(bound, toRow(cap.name, bound, rawDef)); // self OVERWRITES a dep's same-name row
+      // Stage A2 (arrival core, 2026-07-22): the symbol.* factories mint the runtime
+      // A-value directly now — `contractOf` (the shared read-side seam every describe/
+      // catalog/harvest reader dispatches through) pulls the AEntity CONTRACT off
+      // `.contract`/`.door`, `undefined` for the legacy {fn}/{value}/alias arms (no
+      // `.emit` possible either way).
+      const entity = contractOf(rawDef);
+      if (entity === undefined) continue;
+      rows.set(name, toRow(cap.name, name, entity)); // self OVERWRITES a dep's same-name row
     }
   };
   for (const cap of capabilities) visit(cap);

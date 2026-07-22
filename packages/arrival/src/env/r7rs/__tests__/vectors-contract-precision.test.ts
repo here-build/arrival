@@ -25,8 +25,9 @@ import type { AEntity } from "../../../common/symbol.js";
 import { AVector } from "../../../values/primitives/AVector.js";
 import { AExact } from "../../../values/primitives/AExact.js";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
+import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
-const symbols = vectorsPack.spec.symbols as Record<string, AEntity>;
+const symbols = harvestContracts(vectorsPack.spec.symbols);
 
 function nativeDef(name: string) {
   const def = symbols[name];

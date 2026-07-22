@@ -37,6 +37,7 @@ import { APair } from "../../values/primitives/APair.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import { tf } from "../../values/tagless-final.js";
 import { AExact } from "../../values/primitives/AExact.js";
+import { harvestContracts } from "../_symbols-harvest.js";
 
 // A nil clone carrying non-empty provenance — exactly what
 // `restrictControlFlowProvenance` (evaluator.ts) hands back when an `if` arm resolves
@@ -49,7 +50,9 @@ const cloneNil = (origin = 42) => nil.withProvenance(new Set<number>([origin]));
 // fallback for any entry not yet on the symbol.* API.
 const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
   Object.fromEntries(
-    Object.entries(cap.spec.symbols as Record<string, { impl?: unknown; value?: unknown }>)
+    // Stage A2: the CONTRACT (native's raw `.impl`) rides `.contract` on the minted
+    // ANativeProcedure now — `harvestContracts` pulls it off (the shared read-side seam).
+    Object.entries(harvestContracts(cap.spec.symbols) as Record<string, { impl?: unknown; value?: unknown }>)
       .map(([k, v]) => [k, v.impl ?? v.value] as const)
       .filter((entry): entry is [string, (...a: any[]) => any] => typeof entry[1] === "function"),
   );

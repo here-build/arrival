@@ -15,6 +15,7 @@
 
 import * as z from "../scheme-zod.js";
 import { AValue } from "../../values/primitives/AValue.js";
+import { type ANativeProcedure } from "../../values/primitives/ACallable.js";
 import { type RunContext } from "../../run/RunContext.js";
 import { type CallCtx, associateCapability, makeCallCtx, testCallCtx } from "../../run/CallCtx.js";
 import { Macro } from "../../eval/Macro.js";
@@ -707,14 +708,23 @@ export interface DefineSyntaxSymbolDef {
 
 /** A raw VALUE binding, discriminated (`symbol.value` — the successor of the retired
  *  untagged `{ value }` SymbolDeclaration arm): a host constant bound by name, never a
- *  scheme call target. No contract; the bind arm boxes a bare JS leaf via `bindValue`'s
- *  fromJS tail and passes a pre-boxed scheme value through. The harvest and every other
- *  contract reader skip it (nothing to harvest — data, not a verb). */
+ *  scheme call target.
+ *
+ *  Stage A2 (2026-07-22, gap-a ruling): the factory boxes the payload at DEFINE time and
+ *  stamps THIS record onto the minted/boxed value's OWN `.contract` (own, non-enumerable,
+ *  define-once — `value.ts`'s own doc has the full stamping contract) — the SAME slot
+ *  every other kind rides, so `contractOf()` (common/capability.ts) picks it up uniformly
+ *  and the harvest/registry regains PRESENCE for data constants (`kind: "value"`, no
+ *  `emit`/`narrows`/`cacheClass`/`provenance` — those stay absent, exactly like a door/
+ *  keyword/macro's own harvest row). `value` itself is NOT carried on this record — the
+ *  box IS the value; a reader wanting the payload reads the value itself, not a nested
+ *  field describing it (the "no interim representation" law). Optional only for a
+ *  primitive leaf too narrow to carry a hidden property (a `bigint` box — see value.ts). */
 export interface ValueSymbolDef {
   readonly kind: "value";
   readonly name: string;
   readonly doc?: string;
-  readonly value: unknown;
+  readonly value?: unknown;
   readonly metadata?: MetadataRecord;
 }
 
@@ -1122,11 +1132,34 @@ export function extractCallbackRoles(
  *  CONSTRUCTION, not by leniency). Roles align with the op's callable args in call order.
  *  The one live use is the acc-chain marker: srfi-1's `reduce` declares `["accumulator"]`
  *  — the "fold declares acc chain" case, the chained track-composition operator's source. */
-export function withCallbackRoles<D extends TaglessSymbolDef | TaglessGuardSymbolDef>(
-  def: D,
-  callbackRoles: readonly CallbackRole[],
-): D {
-  return { ...def, callbackRoles };
+export function withCallbackRoles(value: ANativeProcedure, callbackRoles: readonly CallbackRole[]): ANativeProcedure {
+  // Stage A2: `tagless()`/`taglessGuard()` now mint the ANativeProcedure directly, so there
+  // is no plain def record left to spread-clone — stamp the SAME instance in place (the same
+  // "stamp a resolved axis onto the bound value" convention every OTHER kind's callbackRoles/
+  // cacheClass/provenanceRole already follows at mint time). Also mirrors the resolved def's
+  // OWN `.contract.callbackRoles` so a reader consulting the contract sees the same answer.
+  (value as { callbackRoles?: CallbackRoles }).callbackRoles = callbackRoles;
+  (value.contract as { callbackRoles?: CallbackRoles }).callbackRoles = callbackRoles;
+  return value;
+}
+
+/** DECLARATION-SITE channel for the compiler-facing fields (`type`/`emit`/`narrows`/
+ *  `refPolicy`) on a CONTRACT-LESS kind (tagless/tagless-guard): their factory takes no
+ *  `Contract` param (see `TaglessSymbolDef`/`TaglessGuardSymbolDef`'s own docs), so these
+ *  fields have always landed by declaration-site spread — `{ ...symbol.tagless\`x\`, type:
+ *  … }`. Stage A2: the factory mints an `ANativeProcedure` directly now (no plain def left
+ *  to spread-clone — spreading an ANativeProcedure instance would drop its private `#impl`
+ *  and prototype methods), so this stamps the SAME fields onto `.contract` IN PLACE instead
+ *  — the one seam every reader (`schema-to-ts.ts`'s `signatureOf`, the mercury harvest) was
+ *  already consulting `.contract` for. Mirrors `withCallbackRoles`'s mutate-in-place shape;
+ *  returns the SAME value for chaining (`withContractFields(withCallbackRoles(symbol.tagless\`x\`,
+ *  […]), { type })` reads either order). */
+export function withContractFields(
+  value: ANativeProcedure,
+  fields: Partial<Pick<TaglessSymbolDef | TaglessGuardSymbolDef, "type" | "emit" | "narrows" | "refPolicy">>,
+): ANativeProcedure {
+  Object.assign(value.contract as object, fields);
+  return value;
 }
 
 /** The ACC-CHAIN marker, read as data: chained composition — `egress(Tᵢ) → ingress(Tᵢ₊₁)`

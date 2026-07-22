@@ -46,9 +46,10 @@ import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import type { AEntity } from "../../../common/symbol.js";
 import stringsPack from "../strings.js";
 import srfi13Pack from "../../srfi/srfi-13.js";
+import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
-const stringsSymbols = stringsPack.spec.symbols as Record<string, AEntity>;
-const srfi13Symbols = srfi13Pack.spec.symbols as Record<string, AEntity>;
+const stringsSymbols = harvestContracts(stringsPack.spec.symbols);
+const srfi13Symbols = harvestContracts(srfi13Pack.spec.symbols);
 
 describe("ROW 1 — structural: scheme/strings was never prelude-carrying, and stays that way", () => {
   it("the capability declares no prelude field", () => {

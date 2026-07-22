@@ -58,7 +58,14 @@
 // recursion never re-crosses the boundary (one cold decode per outer call). %list-nth /
 // %any-null? / %some / %any / %every / %every-value / zip use that idiom. take/drop are
 // tagless dispatchers. validate:false unused — evidence-gated only.
-import { type CallCtx, type MaybePromise, makeCallCtx, resolveMethod, withCallbackRoles } from "../../common/symbol.js";
+import {
+  type CallCtx,
+  type MaybePromise,
+  makeCallCtx,
+  resolveMethod,
+  withCallbackRoles,
+  withContractFields,
+} from "../../common/symbol.js";
 import dedent from "dedent";
 import { EnvCapability } from "../../common/capability.js";
 import type { EmitCtx, EmitRule } from "../../emit/emit-rule.js";
@@ -343,15 +350,14 @@ export default EnvCapability.define("scheme/srfi-1", {
       // def is contract-less (shapeless `z.array(z.value)` in), so declaration is the ONLY
       // channel — `withCallbackRoles`, not a Contract field.
       reduce: withCallbackRoles(
-        {
-          ...symbol.tagless`reduce: left fold in scheme convention fn(element, acc); ridentity if empty`,
+        withContractFields(symbol.tagless`reduce: left fold in scheme convention fn(element, acc); ridentity if empty`, {
           type: dedent`
           {
             <T, A>(f: (element: T, acc: A) => A, ridentity: A, xs: List<T>): A;
             <T, A>(f: (element: T, acc: A) => A, ridentity: A, xs: readonly T[]): A;
           }
         `,
-        },
+        }),
         ["accumulator"],
       ),
       // fold — SRFI-1's bare LEFT fold is deliberately NOT bound under this name: `reduce`
@@ -399,29 +405,33 @@ export default EnvCapability.define("scheme/srfi-1", {
       // loud rather than a silent '(). pred's role is "control": a selector deciding
       // prefix membership, the same override reasoning as `filter`'s callbackRoles above.
       "take-while": withCallbackRoles(
-        {
-          ...symbol.tagless`take-while: longest prefix of xs satisfying pred, in xs's own representation (list→fresh list, vector→fresh vector)`,
-          type: dedent`
+        withContractFields(
+          symbol.tagless`take-while: longest prefix of xs satisfying pred, in xs's own representation (list→fresh list, vector→fresh vector)`,
+          {
+            type: dedent`
           {
             <T>(p: (x: T) => unknown, xs: List<T>): List<T>;
             <T>(p: (x: T) => unknown, xs: readonly T[]): readonly T[];
           }
         `,
-        },
+          },
+        ),
         ["control"],
       ),
       // drop-while — the take-while remainder, same receiver-last/term-owns-algebra/loud-
       // crash reasoning as take-while directly above (see that comment).
       "drop-while": withCallbackRoles(
-        {
-          ...symbol.tagless`drop-while: xs with the take-while prefix removed, in xs's own representation (list: a shared tail of xs)`,
-          type: dedent`
+        withContractFields(
+          symbol.tagless`drop-while: xs with the take-while prefix removed, in xs's own representation (list: a shared tail of xs)`,
+          {
+            type: dedent`
           {
             <T>(p: (x: T) => unknown, xs: List<T>): List<T>;
             <T>(p: (x: T) => unknown, xs: readonly T[]): readonly T[];
           }
         `,
-        },
+          },
+        ),
         ["control"],
       ),
 

@@ -361,7 +361,11 @@ describe("symbol.sequence — impl args/return typed via SpecInfer-built Decoded
         return args[1];
       },
     );
-    expectTypeOf(def.kind).toEqualTypeOf<"sequence">();
+    // Stage A2: `symbol.sequence` mints the ANativeProcedure directly now (kind lives on
+    // `.contract`, per D1) — the value's OWN `.kind` is the ACallable discriminant
+    // ("procedure"), not the contract's "sequence".
+    expectTypeOf(def.kind).toEqualTypeOf<"procedure">();
+    expectTypeOf((def.contract as { kind: string }).kind).toEqualTypeOf<string>();
   });
 
   test("wrong-typed impl must NOT compile — args[0] is a Pair, annotating it string is wrong", () => {

@@ -19,11 +19,19 @@
  */
 import { describe, it, expect, beforeAll } from "vitest";
 import * as z from "../../common/scheme-zod.js";
-import { symbol, type CacheClass } from "../../common/symbol.js";
+import { symbol, type CacheClass, type NativeSymbolDef, type RosettaSymbolDef, type SequenceSymbolDef } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { CacheClassShapeError, ProvenanceRoleShapeError } from "../../errors.js";
 import { freshEnv } from "../../__tests__/_fresh-env.js";
 import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
+
+/** Test-only cast: pull a minted value's `.contract` (typed `unknown` on the class — see
+ *  ACallable.ts) back to its known CONTRACT shape, for direct introspection. Stage A2:
+ *  `symbol.native`/`symbol.rosetta`/`symbol.sequence` mint the runtime A-value directly now;
+ *  the def they used to RETURN rides `.contract` on it. */
+function contractOf<T>(v: { contract: unknown }): T {
+  return v.contract as T;
+}
 
 describe("cache class — declaration + resolution (never derived, absent = regenerateable)", () => {
   it("a declared `view` on a serializable contract resolves onto the baked def", () => {
@@ -31,7 +39,7 @@ describe("cache class — declaration + resolution (never derived, absent = rege
       { input: [z.string], output: [z.string], cacheClass: "view" },
       (s) => s.toUpperCase(),
     );
-    expect(def.cacheClass).toBe("view");
+    expect(contractOf<RosettaSymbolDef>(def).cacheClass).toBe("view");
   });
 
   it("a declared `pure` resolves onto the baked def — ungated (z.value slots allowed)", () => {
@@ -39,22 +47,24 @@ describe("cache class — declaration + resolution (never derived, absent = rege
       { input: z.array(z.value), output: [z.value], cacheClass: "pure" },
       (v) => v,
     );
-    expect(def.cacheClass).toBe("pure");
+    expect(contractOf<RosettaSymbolDef>(def).cacheClass).toBe("pure");
   });
 
   it("an undeclared verb carries NO cache class — regenerateable is the safe default, never a resolved kind-default", () => {
     const def = symbol.rosetta`cc-undeclared: `({ input: [z.string], output: [z.string] }, (s) => s);
-    expect(def.cacheClass).toBeUndefined();
+    expect(contractOf<RosettaSymbolDef>(def).cacheClass).toBeUndefined();
   });
 
   it("native/sequence carry the same declaration channel (the field rides every Contract-bearing kind)", () => {
     expect(
-      symbol.native`cc-native-view: `({ input: [z.string], output: [z.string], cacheClass: "view" }, (s) => s)
-        .cacheClass,
+      contractOf<NativeSymbolDef>(
+        symbol.native`cc-native-view: `({ input: [z.string], output: [z.string], cacheClass: "view" }, (s) => s),
+      ).cacheClass,
     ).toBe("view");
     expect(
-      symbol.sequence`cc-seq-view: `({ input: [z.string], output: [z.string], cacheClass: "view" }, (args) => args[0])
-        .cacheClass,
+      contractOf<SequenceSymbolDef>(
+        symbol.sequence`cc-seq-view: `({ input: [z.string], output: [z.string], cacheClass: "view" }, (args) => args[0]),
+      ).cacheClass,
     ).toBe("view");
   });
 });
@@ -94,18 +104,22 @@ describe("the `view` shape gate — a cache entry must serialize (bake-time door
     ).toThrow(CacheClassShapeError);
     // The serializable-kwargs counterpart passes.
     expect(
-      symbol.rosetta`cc-view-kwargs-ok: `(
-        { input: [], inputRest: { name: z.string }, output: [z.string], cacheClass: "view" },
-        (kw: { name: string }) => kw.name,
+      contractOf<RosettaSymbolDef>(
+        symbol.rosetta`cc-view-kwargs-ok: `(
+          { input: [], inputRest: { name: z.string }, output: [z.string], cacheClass: "view" },
+          (kw: { name: string }) => kw.name,
+        ),
       ).cacheClass,
     ).toBe("view");
   });
 
   it("`pure` has NO shape gate — the exact contract a view is rejected for bakes fine as pure", () => {
     expect(
-      symbol.rosetta`cc-pure-ungated: `(
-        { input: [z.lambda, z.value], output: [z.value], cacheClass: "pure" },
-        (_f, v) => v,
+      contractOf<RosettaSymbolDef>(
+        symbol.rosetta`cc-pure-ungated: `(
+          { input: [z.lambda, z.value], output: [z.value], cacheClass: "pure" },
+          (_f, v) => v,
+        ),
       ).cacheClass,
     ).toBe("pure");
   });
@@ -120,13 +134,17 @@ describe("the `sink` gate — void-family output (the tombstone-skip's soundness
 
   it("a `sink` with a void-family output passes — [] and [z.undefinedResult] both read as no-egress", () => {
     expect(
-      symbol.rosetta`cc-sink-void: `(
-        { input: [z.string], output: [z.undefinedResult], provenance: "sink" },
-        () => undefined,
+      contractOf<RosettaSymbolDef>(
+        symbol.rosetta`cc-sink-void: `(
+          { input: [z.string], output: [z.undefinedResult], provenance: "sink" },
+          () => undefined,
+        ),
       ).provenance,
     ).toBe("sink");
     expect(
-      symbol.native`cc-sink-empty: `({ input: [z.value], output: [], provenance: "sink" }, (): [] => []).provenance,
+      contractOf<NativeSymbolDef>(
+        symbol.native`cc-sink-empty: `({ input: [z.value], output: [], provenance: "sink" }, (): [] => []),
+      ).provenance,
     ).toBe("sink");
   });
 });
@@ -137,8 +155,8 @@ describe("lineage ⊥ cache — the infer coexistence law (Ruling B)", () => {
       { input: z.array(z.value), output: [z.value], cacheClass: "pure" },
       (v) => v,
     );
-    expect(def.provenance).toBe("source"); // lineage: mints (the result is new information)
-    expect(def.cacheClass).toBe("pure"); // cache: regenerateable by contractual determinism
+    expect(contractOf<RosettaSymbolDef>(def).provenance).toBe("source"); // lineage: mints (the result is new information)
+    expect(contractOf<RosettaSymbolDef>(def).cacheClass).toBe("pure"); // cache: regenerateable by contractual determinism
   });
 
   it("a `view` cache class leaves a DECLARED lineage role untouched", () => {
@@ -146,8 +164,8 @@ describe("lineage ⊥ cache — the infer coexistence law (Ruling B)", () => {
       { input: [z.string], output: [z.string], provenance: "pipe", cacheClass: "view" },
       (s) => s,
     );
-    expect(def.provenance).toBe("pipe");
-    expect(def.cacheClass).toBe("view");
+    expect(contractOf<RosettaSymbolDef>(def).provenance).toBe("pipe");
+    expect(contractOf<RosettaSymbolDef>(def).cacheClass).toBe("view");
   });
 
   it('the legacy-equivalent row: a `provenance: "pipe"` rosetta with NO cache class stays exactly that — the new field never rewrites the migrated legacy `pure: true` → pipe mapping', () => {
@@ -155,8 +173,8 @@ describe("lineage ⊥ cache — the infer coexistence law (Ruling B)", () => {
       { input: [z.string], output: [z.string], provenance: "pipe" },
       (s) => s,
     );
-    expect(def.provenance).toBe("pipe");
-    expect(def.cacheClass).toBeUndefined();
+    expect(contractOf<RosettaSymbolDef>(def).provenance).toBe("pipe");
+    expect(contractOf<RosettaSymbolDef>(def).cacheClass).toBeUndefined();
   });
 });
 

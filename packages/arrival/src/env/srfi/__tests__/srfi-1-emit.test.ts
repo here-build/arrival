@@ -29,8 +29,9 @@ import type { AEntity } from "../../../common/symbol.js";
 import type { EmitCtx } from "../../../emit/emit-rule.js";
 import { Arrow, Bin, Binding, Call, Lit, Method, Ref, type R } from "../../../emit/residual-lite.js";
 import srfi1Pack from "../srfi-1.js";
+import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
-const symbols = srfi1Pack.spec.symbols as Record<string, AEntity>;
+const symbols = harvestContracts(srfi1Pack.spec.symbols);
 
 /** `filter` is declared via `symbol.sequence` (not `symbol.native`) — its own def kind
  *  (matching lists.ts's `map`, the sibling HOF this rule is modeled after). */

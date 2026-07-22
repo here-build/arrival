@@ -26,12 +26,17 @@ import type {
   DecodedReturn,
   DefineSymbolDef,
   DefineSyntaxSymbolDef,
+  DoorCause,
   DoorSymbolDef,
+  MacroSymbolDef,
   MaybePromise,
   MetadataRecord,
   NativeSymbolDef,
   RestSpec,
   RosettaSymbolDef,
+  SequenceSymbolDef,
+  TaglessGuardSymbolDef,
+  TaglessSymbolDef,
   VectorSpec,
 } from "./symbol.js";
 // The REAL `symbol` namespace + scheme-zod — `EnvCapability.define`'s injected `(symbol, z)`
@@ -47,29 +52,16 @@ import * as schemeZod from "./scheme-zod.js";
 import { bindCapabilityDefines, computeCapabilityExports } from "./symbols/define-bake.js";
 import type { AliasSymbolDef } from "./symbols/alias.js";
 import { AKernelKeyword } from "../values/AKernelKeyword.js";
-import {
-  ANativeProcedure,
-  ARosettaProcedure,
-  DoorProcedure,
-  type CallableImpl,
-} from "../values/primitives/ACallable.js";
+import { ANativeProcedure, ARosettaProcedure, DoorProcedure } from "../values/primitives/ACallable.js";
 import type { RosettaFunction } from "../membrane/rosetta.js";
 // `bindRosetta`: the internal rosetta wiring (its retirement ledger lives in AmbientRuntime.ts).
 // Two producers only — this legacy `SymbolDeclaration` bind arm and `provenance/replay.ts`'s
 // playback frame; a third would be suspect.
 import { bindRosetta, bindValue, AmbientRuntime, type AmbientValue, isAmbientRuntime } from "../env/AmbientRuntime.js";
-import {
-  associateCapability,
-  CallCtx,
-  type CacheClass,
-  type CallbackRoles,
-  type Face,
-  type ProvenanceRole,
-} from "./symbols/_bake.js";
+import { associateCapability, CallCtx, type Face } from "./symbols/_bake.js";
 import type { RunContext } from "../run/RunContext.js";
 import { onRunContextDispose } from "../run/run-lifecycle.js";
-import { type SchemeValue } from "../values/types.js";
-import { AliasTargetError, AmbientShapeError, PreludeArmingError } from "../errors.js";
+import { AliasTargetError, AmbientShapeError, PreludeArmingError, SymbolKeyMismatchError } from "../errors.js";
 import {
   buildDegradationInfo,
   collectDegraded,
@@ -113,11 +105,19 @@ export interface Activation<C extends ZodMap, R extends Record<string, Resource<
 
 type Fn = (...args: any[]) => unknown;
 
-/** A symbol is one of TWO families (collapsing toward ONE — `AEntity`):
+/** A symbol is one of TWO families (collapsing toward ONE — the minted A-VALUE):
  *
- *  • the BAKED `AEntity` from the symbol.* API (`{ kind: "native" | "rosetta" | "door" | … }`)
- *    — dispatched by `kind` in apply(). The ONLY form every pack in the arrival packages
- *    declares, and the union's target: every other arm is scheduled to dissolve into it.
+ *  • Stage A2 (2026-07-22): the symbol.* FACTORIES now mint the runtime A-value directly —
+ *    `symbol.native`/`sequence`/`tagless`/`tagless-guard` → `ANativeProcedure`, `rosetta` →
+ *    `ARosettaProcedure`, `door`/`notImplemented` → `DoorProcedure`, `keyword` →
+ *    `AKernelKeyword`, `value` → the boxed `AmbientValue` itself. Every one of these is
+ *    already `instanceof AValue` (or a raw `AmbientValue` leaf for `value`'s bigint/
+ *    Promise/binary passthrough cases) — `AmbientValue` alone covers the whole family, so
+ *    it's the ONE arm below (dispatched by `instanceof` in apply(), not by a `kind` tag —
+ *    see the per-kind cases). `symbol.define`/`symbol.defineSyntax` are the two-phase
+ *    carve-out (their scheme body doesn't evaluate until `apply()`'s Pass 2 runs) and
+ *    `symbol.macro` hands over an already-built `Macro` — all THREE stay plain, `kind`-
+ *    tagged declarative records, dispatched exactly as before.
  *  • the LEGACY rosetta-config form (`{ fn, withContext, type, options }`) — `fn` reads
  *    `this: Activation` (bound at wire time). Load-bearing OUTSIDE arrival:
  *    `McpEnvCapability`'s whole inline-annotation design (MCP `description`/`inputSchema`
@@ -125,51 +125,85 @@ type Fn = (...args: any[]) => unknown;
  *    servers author verbs this way. Deleting it needs McpEnvCapability's annotation-lifting
  *    to move to baked-symbol splicing first (the postponed MCP rework) — NOT dead code.
  *
- *  RETIRED arms (Stage-6 collapse, 2026-07-22): the bare-`Fn` shorthand (was the ThisType
- *  method channel — author `{ fn }` explicitly instead) and the raw `{ value }` binding
- *  (was the loader-resolver escape hatch — a resolver is an ordinary `symbol.native` verb;
- *  `applyCallback` dispatches its apply term exactly as it called the bare fn).
+ *  Named `SymbolDeclaration`, not `SymbolDef`: the wider authoring shape a `symbols` record
+ *  entry can literally BE, vs. `symbol.js`'s narrower `AEntity` (now a CONTRACT-data type only
+ *  — it rides `.contract`/`.door` on a minted value, no longer a record traveling on its own).
  *
- *  Named `SymbolDeclaration`, not `SymbolDef`, to stay distinct from `symbol.js`'s `AEntity` —
- *  the wider authoring shape vs. the narrower baked/discriminated result (`AEntity` is one arm
- *  of this union, not a synonym for it).
+ *  `AliasSymbolDef` (`symbol.alias`) is a FIFTH arm: it never binds directly (see the
+ *  apply-loop resolution below) — it only ever stands in for a sibling entry's already-baked
+ *  value.
  *
- *  `AliasSymbolDef` (`symbol.alias`) is a FOURTH arm, distinct from `AEntity`: it never binds
- *  directly (see the apply-loop resolution below) — it only ever stands in for a sibling
- *  entry's already-baked def. */
+ *  RETIREMENT PIN: `Exclude<AmbientValue, Fn>`, not bare `AmbientValue` — `AmbientValue`'s
+ *  own `AProcedure` member (values/types.ts) is STRUCTURALLY a bare callable
+ *  (`(this, ...args) => Result | …`), the exact shape the Stage-6 bare-`Fn` authoring arm
+ *  retired (a capability declaring `symbols: { foo: someFn }` directly, bypassing both the
+ *  symbol.* factories and the surviving `{ fn }` wrapper). `symbol.value`'s factory itself
+ *  never MINTS a bare function (see value.ts: `isSchemeValue` passthrough or `fromJS`,
+ *  neither of which produces one) — this `Exclude` keeps that true at the TYPE level too,
+ *  matching `capability.test-d.ts`'s retirement pin. The runtime fallback below doors
+ *  loudly on the (should-be-unreachable) case a mis-authored capability hands one anyway. */
 export type SymbolDeclaration =
-  | AEntity
+  | Exclude<AmbientValue, Fn>
+  | MacroSymbolDef
+  | DefineSymbolDef
+  | DefineSyntaxSymbolDef
   | (Omit<RosettaSpec, "fn"> & { fn: Fn })
   | AliasSymbolDef;
-
-/** A baked symbol.* def carries a literal `kind` discriminant — the cut that separates the
- *  target form from every legacy shape. */
-const isBakedDef = (m: SymbolDeclaration): m is AEntity =>
-  typeof m === "object" &&
-  m !== null &&
-  "kind" in m &&
-  ((m as { kind: unknown }).kind === "native" ||
-    (m as { kind: unknown }).kind === "rosetta" ||
-    (m as { kind: unknown }).kind === "tagless" ||
-    (m as { kind: unknown }).kind === "tagless-guard" ||
-    (m as { kind: unknown }).kind === "sequence" ||
-    (m as { kind: unknown }).kind === "door" ||
-    (m as { kind: unknown }).kind === "keyword" ||
-    (m as { kind: unknown }).kind === "macro" ||
-    (m as { kind: unknown }).kind === "define" ||
-    (m as { kind: unknown }).kind === "define-syntax" ||
-    (m as { kind: unknown }).kind === "value");
 
 // ── LEGACY-form guard — see `SymbolDeclaration`'s doc for why this one stays ─────────────
 const isSymbolSpec = (m: SymbolDeclaration): m is Omit<RosettaSpec, "fn"> & { fn: Fn } =>
   typeof m === "object" && m !== null && "fn" in m;
 
 /** `symbol.alias`'s marker — see `alias.ts`'s header for the full dissolution-semantics
- *  contract. Checked BEFORE `isBakedDef` in the apply loop (its `kind` — `"alias"` — is
- *  deliberately outside `AEntity`'s discriminant set, so `isBakedDef` alone would never
- *  recognize it and it would fall through to the legacy `{ fn }`-guessing arm instead). */
+ *  contract. Checked BEFORE every other dispatch in the apply loop (its `kind` — `"alias"` —
+ *  is deliberately outside both the minted-value family and the three surviving declarative
+ *  kinds, so it would otherwise fall through to the legacy `{ fn }`-guessing arm instead). */
 const isAliasDef = (m: SymbolDeclaration): m is AliasSymbolDef =>
   typeof m === "object" && m !== null && (m as { kind?: unknown }).kind === "alias";
+
+/** The three SURVIVING declarative record kinds — `symbol.define`/`symbol.defineSyntax` (the
+ *  two-phase carve-out) and `symbol.macro` (already hands over a real `Macro`, but stays a
+ *  `{kind, name, macro}` record so `preludeOnly` routing has somewhere to live). Every OTHER
+ *  kind mints its A-value directly now (see `SymbolDeclaration`'s doc), so a plain object
+ *  carrying one of these three `kind` tags is unambiguous — none of the minted classes'
+ *  OWN `.kind` field (`"procedure"`/`"keyword"`/an ordinary scheme-value kind) collides with
+ *  `"define"`/`"define-syntax"`/`"macro"`. */
+const isDeclarativeDef = (
+  m: SymbolDeclaration,
+): m is MacroSymbolDef | DefineSymbolDef | DefineSyntaxSymbolDef =>
+  typeof m === "object" &&
+  m !== null &&
+  "kind" in m &&
+  ((m as { kind: unknown }).kind === "macro" ||
+    (m as { kind: unknown }).kind === "define" ||
+    (m as { kind: unknown }).kind === "define-syntax");
+
+/** Stage A2 READ-SIDE seam: extract a `SymbolDeclaration` entry's `AEntity` CONTRACT view, for
+ *  read-only introspection consumers (the describe/catalog roster in `eval/exec-phases.ts`, the
+ *  type-lens harvest in `type-layer/prelude.ts`/`schema-to-ts.ts`, the mercury registry harvest)
+ *  that used to walk a `symbols` record expecting each entry to BE its own `AEntity` record.
+ *  Since the symbol.* factories now mint the runtime A-value directly (see `SymbolDeclaration`'s
+ *  doc), those readers dispatch by `instanceof` here exactly like the bind loop above, pulling
+ *  the SAME `.contract`/`.door` data the bind loop reads per-assembly — never invoking anything
+ *  (a value is inert until applied; this is a pure, dry projection). `undefined` for an entry
+ *  with no contract to show: `symbol.alias` (resolve the target first), the legacy `{ fn }` arm,
+ *  and the narrow bigint-leaf gap `symbol.value`'s own factory documents (a JS primitive can't
+ *  carry a hidden property to stamp).
+ *
+ *  gap-a ruling (2026-07-22): `symbol.value` stamps its OWN `{kind:"value",name,doc}` onto the
+ *  minted/boxed value's `.contract` too (own, non-enumerable, define-once — see `value.ts`),
+ *  the SAME slot every other kind rides — so the generic `"contract" in def` fallback below
+ *  picks it up uniformly, with no per-kind special-casing here. */
+export function contractOf(def: SymbolDeclaration): AEntity | undefined {
+  if (def instanceof DoorProcedure) return def.door;
+  if (def instanceof ANativeProcedure || def instanceof ARosettaProcedure) return def.contract as AEntity;
+  if (def instanceof AKernelKeyword) return { kind: "keyword", name: def.name };
+  if (isDeclarativeDef(def)) return def;
+  if (typeof def === "object" && def !== null && "contract" in def) {
+    return (def as { contract?: AEntity }).contract;
+  }
+  return undefined;
+}
 
 /** Stage 3 auto-derive gate (`Contract.requiresConfig`, `./symbols/_bake.js`): the declared
  *  keys ABSENT from this activation's validated `configuration` — `undefined` when the def
@@ -205,15 +239,18 @@ const requiresConfigNeeds = (missing: readonly (string | readonly string[])[]): 
  *  reads the same misses straight off the baked defs, and `lower()` merges the two views. */
 const collectRequiresConfigDegraded = (
   capabilityName: string,
-  symbolsRec: Record<string, unknown>,
+  symbolsRec: Record<string, SymbolDeclaration>,
   configuration: Record<string, unknown>,
 ): DegradedCapability | undefined => {
   const seen = new Set<string>();
   const needs: DegradedNeed[] = [];
-  for (const def of Object.values(symbolsRec)) {
-    if (typeof def !== "object" || def === null) continue;
-    const rc = (def as { requiresConfig?: readonly (string | readonly string[])[] }).requiresConfig;
-    const missing = missingRequiresConfig(rc, configuration);
+  for (const rawDef of Object.values(symbolsRec)) {
+    // Stage A2: `requiresConfig` rides `.contract` on a minted native/rosetta value now
+    // (never a top-level field on the value itself) — `contractOf` is the shared read-side
+    // seam every describe/catalog/harvest reader already dispatches through.
+    const entity = contractOf(rawDef);
+    if (entity === undefined || !("requiresConfig" in entity)) continue;
+    const missing = missingRequiresConfig(entity.requiresConfig, configuration);
     if (missing === undefined) continue;
     for (const key of requiresConfigNeeds(missing)) {
       if (seen.has(key)) continue;
@@ -272,12 +309,6 @@ export interface CapabilitySpec<C extends ZodMap, R extends Record<string, Resou
   resources?: { [K in keyof R]: R[K] | ((cfg: InferCfg<C>) => R[K]) };
   /** scheme bootstrap (`define-macro` + `define`s), eval'd into env on apply. */
   prelude?: string;
-  /** an optional namespace prepended to every `symbols` KEY at apply time, so a
-   *  subject-scoped pack registers BARE names (`pslist`, `netscan`) and declares its
-   *  namespace ONCE here (`"process/"`). The prefix is the capability's identity made
-   *  legible in the binding name — it does not touch the prelude (which addresses its own
-   *  defines). Does NOT apply to deps (each declares its own). */
-  symbolPrefix?: string;
   /** DAG edges = capability grants. */
   deps?: readonly EnvCapability[];
   /** the verbs this capability exposes — baked `symbol.native`/`symbol.rosetta`/… declarations
@@ -316,7 +347,7 @@ export function collectPrelude(caps: readonly EnvCapability[], seen: Set<EnvCapa
 /** Serialize a capability DAG's scheme-bodied `symbol.define`s as `(define <verb> <body>)`
  *  source — the type-lens compile-path counterpart to {@link collectPrelude}'s `prelude:`
  *  strings. A `symbol.define`'s `body` is its RHS EXPRESSION (`(lambda () "string")` for
- *  `s/string`), bound at runtime under `symbolPrefix + key` (see `apply()`'s Pass-2 loop).
+ *  `s/string`), bound at runtime under its own record key (see `apply()`'s Pass-2 loop).
  *  Emitting the SAME `(define verb body)` lets a type-lens infer each symbol's type FROM ITS
  *  OWN BODY, so the runtime binding and the editor type derive from one source — no
  *  hand-authored `.d.ts`, no editorial subset (the drift trap {@link collectPrelude} warns of,
@@ -343,10 +374,9 @@ export function collectSymbolDefines(caps: readonly EnvCapability[], seen: Set<E
     }
     const symbols = cap.spec.symbols;
     if (symbols === undefined) continue;
-    const prefix = cap.spec.symbolPrefix ?? "";
     for (const [key, def] of Object.entries(symbols)) {
       if (def !== null && typeof def === "object" && "kind" in def && def.kind === "define") {
-        parts.push(`(define ${prefix + key} ${(def as DefineSymbolDef).body})`);
+        parts.push(`(define ${key} ${(def as DefineSymbolDef).body})`);
       }
     }
   }
@@ -418,7 +448,7 @@ export interface RosettaTag<Config, Resources> {
     contract: Contract<I, O, Rest>,
     impl: ImplWithThis<I, O, Rest, "js", ImplThis<Config, Resources>>,
     opts?: BakeRuntimeOpts,
-  ) => RosettaSymbolDef;
+  ) => ARosettaProcedure;
 }
 
 /** The injected `symbol.native` — same relationship to `native()` (`./symbols/native.js`) as
@@ -432,7 +462,7 @@ export interface NativeTag<Config, Resources> {
     contract: Contract<I, O, Rest>,
     impl: ImplWithThis<I, O, Rest, "scheme", ImplThis<Config, Resources>>,
     opts?: { metadata?: MetadataRecord },
-  ) => NativeSymbolDef;
+  ) => ANativeProcedure;
 }
 
 /** The factory `EnvCapability.define`'s `symbols` callback is invoked with. `rosetta`/`native`
@@ -467,14 +497,13 @@ function makeSymbolFactory<Config, Resources>(): SymbolFactory<Config, Resources
 }
 
 /** `EnvCapability.define`'s spec — the flipped shape. See the section header above for the
- *  full model; `configuration`/`prelude`/`symbolPrefix`/`deps` are byte-identical to
- *  `CapabilitySpec`'s own fields (reused, not re-declared). */
+ *  full model; `configuration`/`prelude`/`deps` are byte-identical to `CapabilitySpec`'s own
+ *  fields (reused, not re-declared). */
 export interface DefineCapabilitySpec<Shape extends ZodMap, Resources> {
   readonly configuration?: Shape;
   /** ONE factory over the validated config — see the section header's Resources note. */
   readonly resources?: (config: InferCfg<Shape>) => Resources;
   readonly prelude?: string;
-  readonly symbolPrefix?: string;
   readonly deps?: readonly EnvCapability[];
   /** Invoked EAGERLY, ONCE, at `define()` time — see the section header. */
   readonly symbols: (
@@ -546,7 +575,6 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
       {
         configuration: defSpec.configuration,
         prelude: defSpec.prelude,
-        symbolPrefix: defSpec.symbolPrefix,
         deps: defSpec.deps,
         symbols: symbolsRec,
       },
@@ -644,13 +672,10 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
     // plus define-form native) no longer ride a bind-time `runScoped` gate wrapped into the impl.
     // A real dispatch's `CallCtx` already carries `this.resources`, fetched at `makeCallCtx` from
     // the run's own `capabilityResources` store (keyed by THIS capability, produced lazily by
-    // `["arrival/get-resources"]`, single-flighted + collapsed there) — see RunContext.ts. So the
-    // impl adapter is just the bare `(args, callCtx) => rawRun.apply(callCtx, args)`: `rawRun`
-    // reads `this.resources` off the `callCtx` the dispatch already enriched.
-    const bakedImpl =
-      (rawRun: (this: CallCtx, ...args: unknown[]) => Promise<unknown>): CallableImpl =>
-      (args, callCtx) =>
-        rawRun.apply(callCtx, args) as Promise<SchemeValue>;
+    // `["arrival/get-resources"]`, single-flighted + collapsed there) — see RunContext.ts. Stage
+    // A2: the impl adapter (`(args, callCtx) => rawRun.apply(callCtx, args)`) now lives INSIDE each
+    // factory (native.ts/rosetta.ts/sequence.ts/tagless.ts/taglessGuard.ts), minted once at bake —
+    // this file no longer builds it.
     // Whether a NON-native baked verb of this capability reads its `this.resources` from the run
     // store (its `associateCapability(..., readsResources)`): true iff the capability produces a
     // per-run bag. `native` verbs are gated separately (`nativeReadsRunResources` — false in the
@@ -709,7 +734,6 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
         // apply outside any assembly), fall back to `env` so the symbol is never silently dropped.
         const bindTarget = (def: AEntity): PreludeBindTarget =>
           "preludeOnly" in def && def.preludeOnly ? (ctx?.preludeScope ?? envTarget) : envTarget;
-        const prefix = spec.symbolPrefix ?? "";
         // Two-phase binding (docs/environments.md §PRELUDE): symbol.define/symbol.defineSyntax entries
         // are collected here (in declaration order — JS object-key insertion order) and
         // evaluated+bound in Pass 2, AFTER every other kind. `ownNames` is the letrec* NAME
@@ -718,7 +742,10 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
         const defineEntries: [string, DefineSymbolDef | DefineSyntaxSymbolDef][] = [];
         const ownNames = new Set<string>();
         for (const [name, rawDef] of Object.entries(symbolsRec)) {
-          const verb = prefix + name;
+          // `symbolPrefix` retired (2026-07-22): it had exactly one author across the whole
+          // codebase — a mercury test fixture — never a production capability; the bound
+          // verb is simply the record key now.
+          const verb = name;
           ownNames.add(verb);
 
           // symbol.alias dissolution: substitute the TARGET's already-baked def in place of
@@ -729,277 +756,229 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
           // capability's own record, or itself an alias (no chains), is a declaration bug and
           // doors loudly rather than silently binding nothing.
           let def: SymbolDeclaration = rawDef;
-          if (isAliasDef(rawDef)) {
-            const targetDef = symbolsRec[rawDef.target];
+          // KEY-NAME MISMATCH gate (SymbolKeyMismatchError, below): deliberately SKIPPED for
+          // an alias-resolved entry — dissolution is a duplicate binding of a SIBLING's
+          // value under a DIFFERENT name BY DESIGN (`symbol.alias`'s whole point), so the
+          // resolved value's own mint-time name legitimately disagrees with `name` (the
+          // alias's OWN record key) here.
+          const viaAlias = isAliasDef(rawDef);
+          if (viaAlias) {
+            const targetDef = symbolsRec[(rawDef as AliasSymbolDef).target];
             if (targetDef === undefined) {
-              throw new AliasTargetError(capabilityName, name, rawDef.target, "missing-target");
+              throw new AliasTargetError(capabilityName, name, (rawDef as AliasSymbolDef).target, "missing-target");
             }
             if (isAliasDef(targetDef)) {
-              throw new AliasTargetError(capabilityName, name, rawDef.target, "chained-alias");
+              throw new AliasTargetError(capabilityName, name, (rawDef as AliasSymbolDef).target, "chained-alias");
             }
             def = targetDef;
           }
 
-          if (isBakedDef(def) && (def.kind === "define" || def.kind === "define-syntax")) {
-            defineEntries.push([verb, def]);
+          if (isDeclarativeDef(def)) {
+            if (def.kind === "define" || def.kind === "define-syntax") {
+              defineEntries.push([verb, def]);
+              continue;
+            }
+            // "macro": a non-evaluating MACRO form: bind the raw transformer (Macro/Syntax)
+            // as-is. Not arg-evaluating (native/rosetta) nor evaluator-dispatched (keyword) —
+            // the generic is_macro/is_syntax eval hook expands it. Home of syntax-rules +
+            // preludeOnly assembly macros (`require/register-extension`). Routes through
+            // `bindTarget` so `preludeOnly: true` lands on the assembly overlay.
+            bindTarget(def).set(verb, def.macro);
             continue;
           }
 
-          // ── BAKED symbol.* forms — dispatch by kind (the target path) ────────────────
+          // ── STAGE A2: symbol.* factories mint the A-VALUE directly — dispatch by
+          // `instanceof`, not a `kind` tag (see `SymbolDeclaration`'s doc above). Each
+          // branch's CONTRACT data rides `.contract` (native/rosetta/sequence/tagless/
+          // tagless-guard) or `.door` (door); a KEY-NAME mismatch between the record's own
+          // entry and the value's mint-time identity doors (SymbolKeyMismatchError) instead
+          // of silently drifting — every kind here carries enough self-identity to check it
+          // EXCEPT the final `value`-kind catch-all (a boxed leaf carries no declaration-
+          // site name).
           //
-          // Three rules generate the per-kind bodies below; each case cites them by name.
+          //   ARITY — `arity: { min: 0, max: null }` (minted at bake, in the factory) is
+          //     introspection-only in this cut; the kinds self-check. Tighten from
+          //     `contract.in` when the MCP/type-lens surface consumes it.
           //
-          //   ARITY — `arity: { min: 0, max: null }` everywhere is introspection-only in this
-          //     cut; the kinds self-check. Tighten from `def.in` when the MCP/type-lens surface
-          //     consumes it.
+          //   PROVENANCE / CACHE-CLASS / CALLBACK-ROLES — stamped by the FACTORY at MINT
+          //   time now (native.ts/rosetta.ts/sequence.ts/tagless.ts/taglessGuard.ts), not
+          //   here; this loop only still reads `contract.requiresConfig`/`contract
+          //   .preludeOnly` (config/assembly-scope concerns that genuinely vary PER
+          //   `lower()` call) and performs OWNER ASSOCIATION.
           //
-          //   PROVENANCE STAMP — every constructed proc is stamped with the RESOLVED provenance
-          //     role (`provenanceRole = def.provenance`) plus, when declared, `callbackRoles` and
-          //     `cacheClass`. The lineage classifier and wireframe builder read all three OFF THE
-          //     BOUND VALUE via `env.get(op)`, never a duck-read. Cache class is Ruling A (the
-          //     CACHE axis, lineage-independent), stamped only when declared (absent =
-          //     regenerateable); tagless/tagless-guard are contract-less, so only `sequence`
-          //     among the run-kinds has a cacheClass channel.
-          //
-          //   BOUNDARY CAST — a kind's `run`/`impl` produces scheme values by construction; TS
-          //     sees only `unknown`. The `as … SchemeValue` narrows are that one seam — the same
-          //     one rosetta.ts's `rawImpl` crosses (evaluator.ts's `ctx.currentInvocation as
-          //     InvocationLike | undefined` is the sibling cast at the dispatch sites that BUILD
-          //     the `callCtx` this file now only consumes).
-          if (isBakedDef(def)) {
-            switch (def.kind) {
-              case "native": {
-                // STAGE 3 AUTO-DERIVED DOOR (`Contract.requiresConfig`, ./symbols/_bake.js) —
-                // read UNCONDITIONALLY, before the ordinary bind: an absent declared key mints
-                // a cause-carrying DoorProcedure for this verb instead, via the SAME
-                // `DegradationInfo.door` builder a manual builder-form `symbols` calls by hand
-                // (`activation.degradation`, always defined — see its own doc). No mode gate:
-                // fires under `"forbid"` too, closing the pre-Stage-3 gap where this reached
-                // for a bare-required config key and threw a ZodError at `schema.parse` instead.
-                const missingNative = missingRequiresConfig(
-                  def.requiresConfig,
-                  activation.configuration as Record<string, unknown>,
-                );
-                if (missingNative !== undefined) {
-                  bindTarget(def).set(
-                    verb,
-                    new DoorProcedure(
-                      activation.degradation.door(
-                        verb,
-                        requiresConfigNeeds(missingNative),
-                        requiresConfigReason(missingNative, def.doc),
-                      ),
+          //   OWNER ASSOCIATION is now called on a value that may be a SHARED SINGLETON
+          //   across every `lower()` call of this module-singleton capability (the factory
+          //   mints it ONCE, at `symbols` — record-literal evaluation time) — harmless:
+          //   `associateCapability` is idempotent for a repeat call under the SAME owning
+          //   capability (`run/CallCtx.ts`'s own doc), so re-associating the same value on
+          //   every apply() of the same capability is a no-op past the first.
+          if (def instanceof ANativeProcedure) {
+            // Unifies native/sequence/tagless/tagless-guard — all four mint this SAME
+            // class (D1: kind lives on the contract, not the runtime class);
+            // `contract.kind` tells them apart for the two things that still differ per
+            // assembly: the requiresConfig gate (native only — sequence/tagless/
+            // tagless-guard contracts carry no such field) and which readsResources
+            // answer applies.
+            const contract = def.contract as
+              | NativeSymbolDef
+              | SequenceSymbolDef
+              | TaglessSymbolDef
+              | TaglessGuardSymbolDef;
+            if (!viaAlias && contract.name !== name) throw new SymbolKeyMismatchError(capabilityName, name, contract.name);
+            if (contract.kind === "native") {
+              // STAGE 3 AUTO-DERIVED DOOR (`Contract.requiresConfig`, ./symbols/_bake.js) —
+              // read UNCONDITIONALLY, before the ordinary bind: an absent declared key mints
+              // a cause-carrying DoorProcedure for this verb instead, via the SAME
+              // `DegradationInfo.door` builder a manual builder-form `symbols` calls by hand
+              // (`activation.degradation`, always defined — see its own doc). No mode gate:
+              // fires under `"forbid"` too, closing the pre-Stage-3 gap where this reached
+              // for a bare-required config key and threw a ZodError at `schema.parse` instead.
+              const missingNative = missingRequiresConfig(
+                contract.requiresConfig,
+                activation.configuration as Record<string, unknown>,
+              );
+              if (missingNative !== undefined) {
+                bindTarget(contract).set(
+                  verb,
+                  new DoorProcedure(
+                    activation.degradation.door(
+                      verb,
+                      requiresConfigNeeds(missingNative),
+                      requiresConfigReason(missingNative, contract.doc),
                     ),
-                  );
-                  break;
-                }
-                // native (§SYMBOL-KINDS): bind a first-class ANativeProcedure, invoked through its
-                // `arrival/tagless-final/apply` term. The impl adapts the term surface
-                // `(args, callCtx)` to the host impl, which reads run-state off `this: CallCtx` —
-                // the apply term now hands the impl the SAME whole `callCtx` dispatch built (no
-                // reconstruction here), so no `this=undefined` crash from a HOF-invoked native.
-                const hostImpl = def.impl as (this: CallCtx, ...a: unknown[]) => unknown;
-                const proc = new ANativeProcedure({
-                  name: verb,
-                  arity: { min: 0, max: null }, // see ARITY above
-                  contract: def,
-                  // 1d: a base/constructor `native` binds `readsResources: false` (below), so its
-                  // `this.resources` stays unpopulated — `arrival/loader` (the one production
-                  // capability combining `spec.resources` with a `native` def) reads its resources
-                  // through its BUILDER-form closure, never `this.resources`, and triggering the run
-                  // store here would double-spawn. A define()-form native flips this on
-                  // (`nativeReadsRunResources`), reading its bag off `this.resources` like its
-                  // sibling rosetta. The impl is the bare adapter either way.
-                  impl: (args, callCtx) => hostImpl.apply(callCtx, args) as SchemeValue,
-                });
-                // PROVENANCE STAMP (see above). A native value-op is provenance-transparent —
-                // a pure transform, never a source.
-                (proc as { provenanceRole?: ProvenanceRole }).provenanceRole = def.provenance;
-                if (def.cacheClass !== undefined) {
-                  (proc as { cacheClass?: CacheClass }).cacheClass = def.cacheClass;
-                }
-                if (def.callbackRoles !== undefined) {
-                  (proc as { callbackRoles?: CallbackRoles }).callbackRoles = def.callbackRoles;
-                }
-                // OWNER ASSOCIATION (1d, docs/execution.md §CALLCTX): key THIS bound value to its
-                // OWNING CAPABILITY (object identity), so a real dispatch (evaluator.ts, via
-                // makeCallCtx) enriches the `CallCtx` it builds — `configuration` resolves at
-                // dispatch off the RUN now (`runCtx.capabilityConfigurations`), never carried
-                // here. `readsResources` is FALSE for a base/constructor native (the legacy arm —
-                // see `nativeReadsRunResources`'s doc); triggering the run store here would
-                // double-spawn. `EnvCapability.define`'s form flips this via
-                // `nativeReadsRunResources()`.
-                associateCapability(proc, ownerCapability, nativeReadsResources);
-                bindTarget(def).set(verb, proc);
-                break;
-              }
-              case "sequence":
-              case "tagless":
-              case "tagless-guard": {
-                // `run` is the complete ctx-aware wrapper, bound as a first-class
-                // ANativeProcedure invoked through the `arrival/tagless-final/apply` term (P1:
-                // no bare JS functions in env value space — a value is a term both interpreters
-                // can execute). These three kinds read ONLY `this.runCtx`, and the apply term now
-                // hands the impl the SAME whole `callCtx` dispatch built — no reconstruction here;
-                // their `.run` shares the call SHAPE but not a common `this` type (tagless/
-                // tagless-guard declare none) — hence the BOUNDARY CAST below. 1d: `this.resources`
-                // (for a sequence that reads it) is enriched onto the `callCtx` at dispatch from the
-                // run's own `capabilityResources` store — no bind-time gate wraps the impl.
-                const rawRun = def.run as (this: unknown, ...args: unknown[]) => Promise<unknown>;
-                const impl: CallableImpl = bakedImpl(rawRun as (this: CallCtx, ...args: unknown[]) => Promise<unknown>);
-                const proc = new ANativeProcedure({
-                  name: verb,
-                  arity: { min: 0, max: null }, // see ARITY above
-                  contract: def,
-                  impl,
-                });
-                // PROVENANCE STAMP (see above). All three kinds resolve `.provenance` at bake
-                // time; callback roles are bake-extracted for `sequence`, `withCallbackRoles`-
-                // declared for tagless (e.g. reduce's acc-chain marker).
-                (proc as { provenanceRole?: ProvenanceRole }).provenanceRole = def.provenance;
-                if (def.kind === "sequence" && def.cacheClass !== undefined) {
-                  (proc as { cacheClass?: CacheClass }).cacheClass = def.cacheClass;
-                }
-                if (def.callbackRoles !== undefined) {
-                  (proc as { callbackRoles?: CallbackRoles }).callbackRoles = def.callbackRoles;
-                }
-                // OWNER ASSOCIATION (1d) — see the `native` case's comment. A non-native baked
-                // verb reads `this.resources` from the run store iff the capability produces a bag.
-                associateCapability(proc, ownerCapability, bakedReadsResources);
-                bindTarget(def).set(verb, proc);
-                break;
-              }
-              case "rosetta": {
-                // STAGE 3 AUTO-DERIVED DOOR — same gate as the `native` case above, see its
-                // comment for the full model; `def.doc` here is the rosetta verb's own doc string.
-                const missingRosetta = missingRequiresConfig(
-                  def.requiresConfig,
-                  activation.configuration as Record<string, unknown>,
+                  ),
                 );
-                if (missingRosetta !== undefined) {
-                  bindTarget(def).set(
-                    verb,
-                    new DoorProcedure(
-                      activation.degradation.door(
-                        verb,
-                        requiresConfigNeeds(missingRosetta),
-                        requiresConfigReason(missingRosetta, def.doc),
-                      ),
-                    ),
-                  );
-                  break;
-                }
-                // The per-call INVOCATION now reaches the wrapper directly through the whole
-                // `callCtx` the apply term dispatches with — built ONCE at the real call site
-                // (the evaluator's dispatch, rosetta.ts's `callableToHostFn`, …) and threaded
-                // WHOLE through apply → here, never reconstructed from ambient state. A
-                // SOURCE rosetta's fresh-point mint (`pointProvenance` off the invocation) works
-                // through the apply term exactly as it does through the legacy bare-fn path
-                // (which received `makeCallCtx(ctx.runCtx, ctx.currentInvocation)` as `this`). A
-                // caller with no live invocation (a direct-JS call, or a dispatcher that only
-                // holds a bare `runCtx`) hands down `makeCallCtx(runCtx)` — invocation undefined
-                // — matching the legacy path's own fallback. conservation.law's seal-laundering
-                // rows gate this equivalence.
-                //
-                // Bind via `set`, NOT bindRosetta — that would double-wrap the membrane
-                // (this `run` is already the complete ctx-aware wrapper, unlike the legacy
-                // bare-fn arm's raw `sym.fn`, which bindRosetta wraps for the first time).
-                const rawRun = def.run as (this: unknown, ...args: unknown[]) => Promise<unknown>;
-                const impl: CallableImpl = bakedImpl(rawRun as (this: CallCtx, ...args: unknown[]) => Promise<unknown>);
-                const proc = new ARosettaProcedure({
-                  name: verb,
-                  arity: { min: 0, max: null }, // see ARITY above
-                  contract: def,
-                  // `strategy` is opaque (`unknown`, "until stage 3") — carries the resolved
-                  // role, not a `{ pure: boolean }` shape.
-                  strategy: { provenance: def.provenance },
-                  impl,
-                });
-                // PROVENANCE STAMP (see above). Cache class has two co-equal readers:
-                // `env.get(op).cacheClass` (the declared downstream surface) and the bake-closure
-                // copy inside the `run` wrapper that the run-cache interception reads — same value.
-                (proc as { provenanceRole?: ProvenanceRole }).provenanceRole = def.provenance;
-                if (def.cacheClass !== undefined) {
-                  (proc as { cacheClass?: CacheClass }).cacheClass = def.cacheClass;
-                }
-                if (def.callbackRoles !== undefined) {
-                  (proc as { callbackRoles?: CallbackRoles }).callbackRoles = def.callbackRoles;
-                }
-                // OWNER ASSOCIATION (1d) — see the `native` case's comment. A rosetta reads
-                // `this.resources` from the run store iff the capability produces a bag.
-                associateCapability(proc, ownerCapability, bakedReadsResources);
-                bindTarget(def).set(verb, proc);
-                break;
+                continue;
               }
-              case "door": {
-                // errors-as-doors: an OMITTED verb. Bind an INTROSPECTABLE DoorProcedure —
-                // the causal-chain UX's first link. `def.cause` is stamped HERE when a
-                // `symbol.notImplemented` door carries none (the factory can't know its own
-                // capability — see notImplemented.ts): owner = this capability's OWN `name`,
-                // needs = [] (a permanent design omission, never caused by an absent
-                // config/dep — a non-empty `needs` is the door-set-degradation kind; see
-                // `DoorCause`'s doc in _bake.ts for the full needs-scope rule). A door that
-                // already carries a cause passes through unchanged. Firing still throws the
-                // same teaching `PurityError` (DoorProcedure's own doc) — `PurityError.
-                // feature`/`.owner` — the routing/telemetry keys, mirroring core.ts's
-                // %purity-door → PurityError.
-                const doorDef: DoorSymbolDef = def.cause
-                  ? def
-                  : { ...def, cause: { owner: capabilityName, needs: [] } };
-                // Routes through `bindTarget`, same as every other kind (a `preludeOnly`
-                // door — none exist yet, but the field is real on `DoorSymbolDef` now —
-                // binds into the assembly's prelude scope, not the runtime env).
-                bindTarget(def).set(verb, new DoorProcedure(doorDef));
-                break;
-              }
-              case "keyword":
-                // kernel KEYWORD: bind the first-class marker the evaluator dispatches on.
-                // Resolving a call head to this VALUE → SPECIAL_FORMS[def.name] (the dual of
-                // cxr): the special form is aliasable + lexically shadowable, unlike the
-                // name-matched-before-lookup table it replaces.
-                bindValue(env, verb, new AKernelKeyword(def.name));
-                break;
-              case "macro":
-                // A non-evaluating MACRO form: bind the raw transformer (Macro/Syntax) as-is.
-                // Not arg-evaluating (native/rosetta) nor evaluator-dispatched (keyword) — the
-                // generic is_macro/is_syntax eval hook expands it. Home of syntax-rules +
-                // preludeOnly assembly macros (`require/register-extension`). Routes through
-                // `bindTarget` so `preludeOnly: true` lands on the assembly overlay.
-                bindTarget(def).set(verb, def.macro);
-                break;
-              case "value":
-                // Discriminated raw DATA binding (`symbol.value` — successor of the retired
-                // untagged `{ value }` arm): bound via `bindValue` so a bare JS leaf is boxed
-                // by its fromJS tail and a pre-boxed scheme value passes through. Never a
-                // scheme call target.
-                bindValue(env, verb, def.value as AmbientValue);
-                break;
+              // OWNER ASSOCIATION (1d, docs/execution.md §CALLCTX): key THIS bound value to its
+              // OWNING CAPABILITY (object identity), so a real dispatch (evaluator.ts, via
+              // makeCallCtx) enriches the `CallCtx` it builds — `configuration` resolves at
+              // dispatch off the RUN now (`runCtx.capabilityConfigurations`), never carried
+              // here. `readsResources` is FALSE for a base/constructor native (the legacy arm —
+              // see `nativeReadsRunResources`'s doc); triggering the run store here would
+              // double-spawn. `EnvCapability.define`'s form flips this via
+              // `nativeReadsRunResources()`.
+              associateCapability(def, ownerCapability, nativeReadsResources);
+              bindTarget(contract).set(verb, def);
+              continue;
             }
+            // sequence / tagless / tagless-guard: no requiresConfig channel on these
+            // contracts. OWNER ASSOCIATION (1d) — see the `native` arm's comment. A
+            // non-native baked verb reads `this.resources` from the run store iff the
+            // capability produces a bag.
+            associateCapability(def, ownerCapability, bakedReadsResources);
+            bindTarget(contract).set(verb, def);
+            continue;
+          }
+          if (def instanceof ARosettaProcedure) {
+            const contract = def.contract as RosettaSymbolDef;
+            if (!viaAlias && contract.name !== name) throw new SymbolKeyMismatchError(capabilityName, name, contract.name);
+            // STAGE 3 AUTO-DERIVED DOOR — same gate as the `native` arm above; `contract.doc`
+            // is the rosetta verb's own doc string.
+            const missingRosetta = missingRequiresConfig(
+              contract.requiresConfig,
+              activation.configuration as Record<string, unknown>,
+            );
+            if (missingRosetta !== undefined) {
+              bindTarget(contract).set(
+                verb,
+                new DoorProcedure(
+                  activation.degradation.door(
+                    verb,
+                    requiresConfigNeeds(missingRosetta),
+                    requiresConfigReason(missingRosetta, contract.doc),
+                  ),
+                ),
+              );
+              continue;
+            }
+            // OWNER ASSOCIATION (1d) — see the `native` arm's comment. A rosetta reads
+            // `this.resources` from the run store iff the capability produces a bag.
+            associateCapability(def, ownerCapability, bakedReadsResources);
+            bindTarget(contract).set(verb, def);
+            continue;
+          }
+          if (def instanceof DoorProcedure) {
+            if (!viaAlias && def.door.name !== name) throw new SymbolKeyMismatchError(capabilityName, name, def.door.name);
+            // errors-as-doors: an OMITTED verb. `def.door.cause` is stamped HERE, IN PLACE,
+            // the first time this (shared, module-singleton) DoorProcedure is bound — the
+            // factory (`notImplemented.ts`) can't know its own owning capability at mint
+            // time. owner = this capability's OWN `name`, needs = [] (a permanent design
+            // omission, never caused by an absent config/dep — a non-empty `needs` is the
+            // door-set-degradation kind; see `DoorCause`'s doc in _bake.ts for the full
+            // needs-scope rule). Idempotent: a later `lower()` of the SAME capability sees
+            // `cause` already set and skips — a door bound instead via `requiresConfig`'s
+            // auto-door path above mints its OWN fresh DoorProcedure per assembly, so it
+            // never reaches here at all. Firing still throws the same teaching `PurityError`
+            // (DoorProcedure's own doc) — `PurityError.feature`/`.owner` — the
+            // routing/telemetry keys, mirroring core.ts's %purity-door → PurityError.
+            if (def.door.cause === undefined) {
+              (def.door as { cause?: DoorCause }).cause = { owner: capabilityName, needs: [] };
+            }
+            // Routes through `bindTarget`, same as every other kind (a `preludeOnly` door —
+            // none exist yet, but the field is real on `DoorSymbolDef` now — binds into the
+            // assembly's prelude scope, not the runtime env).
+            bindTarget(def.door).set(verb, def);
+            continue;
+          }
+          if (def instanceof AKernelKeyword) {
+            // kernel KEYWORD: bind the first-class marker the evaluator dispatches on.
+            // Resolving a call head to this VALUE → SPECIAL_FORMS[def.name] (the dual of
+            // cxr): the special form is aliasable + lexically shadowable, unlike the
+            // name-matched-before-lookup table it replaces.
+            if (!viaAlias && def.name !== name) throw new SymbolKeyMismatchError(capabilityName, name, def.name);
+            bindValue(env, verb, def);
             continue;
           }
 
           // ── LEGACY {fn}-record arm — still McpEnvCapability's downstream authoring shape
-          // (the retired bare-`Fn` and `{ value }` arms used to land here / just above — see
-          // `SymbolDeclaration`'s doc). Anything else reaching this point is a type-erased
-          // violation; the guard keeps the error legible.
+          // (the retired bare-`Fn` and untagged `{ value }` arms used to land here — see
+          // `SymbolDeclaration`'s doc).
+          if (isSymbolSpec(def)) {
+            const sym = def;
+            const bound = (sym.fn as Fn).bind(activation);
+            // Same activation-spawn middleware as `ensureSpawned` above — first touch gates on it.
+            const gated =
+              cellList.length === 0
+                ? bound
+                : async (...args: unknown[]) => {
+                    await ensureSpawned();
+                    return bound(...args);
+                  };
+            // `bindRosetta` (AmbientRuntime.ts): wrap via createRosettaWrapper, bind, stamp
+            // `rosettaTypesOf` when `.type` is declared and `env` is genuinely an
+            // `AmbientRuntime` (never a test mock).
+            bindRosetta(env, verb, { ...sym, fn: gated } as RosettaFunction);
+            continue;
+          }
+
+          // RETIREMENT DOOR: a bare function reaching here is the Stage-6-retired bare-`Fn`
+          // authoring arm (`symbols: { foo: someFn }`, bypassing both the symbol.* factories
+          // and the surviving `{ fn }` wrapper) — `SymbolDeclaration`'s own type excludes it
+          // (see that type's doc), so this is a type-erased/stale-dist violation, not a
+          // reachable path for a type-checked capability. Doors loudly rather than silently
+          // admitting it through `bindValue`'s function carve-out (which exists for OTHER
+          // internal producers — bindRosetta's wrapper, the evaluator's catch-frame Error
+          // bind — never a raw `symbols` record entry).
           invariant(
-            isSymbolSpec(def),
-            `EnvCapability "${capabilityName}": symbol "${verb}" is neither a baked symbol.* def nor a legacy { fn } record — the bare-Fn and { value } arms are retired.`,
+            typeof def !== "function",
+            `EnvCapability "${capabilityName}": symbol "${verb}" is a bare function — the bare-Fn authoring arm is retired; declare it as \`{ fn }\` (the surviving legacy arm) or a baked symbol.* def.`,
           );
-          const sym = def;
-          const bound = (sym.fn as Fn).bind(activation);
-          // Same activation-spawn middleware as `ensureSpawned` above — first touch gates on it.
-          const gated =
-            cellList.length === 0
-              ? bound
-              : async (...args: unknown[]) => {
-                  await ensureSpawned();
-                  return bound(...args);
-                };
-          // `bindRosetta` (AmbientRuntime.ts): wrap via createRosettaWrapper, bind, stamp
-          // `rosettaTypesOf` when `.type` is declared and `env` is genuinely an
-          // `AmbientRuntime` (never a test mock).
-          bindRosetta(env, verb, { ...sym, fn: gated } as RosettaFunction);
+
+          // ── `symbol.value` — the ONLY remaining minted shape: a raw DATA binding (never a
+          // scheme call target), already boxed at MINT time (value.ts's own `fromJS` tail —
+          // successor of the retired untagged `{ value }` arm). gap-a ruling (2026-07-22):
+          // the factory now stamps `{kind:"value",name,doc}` onto the box's own `.contract`
+          // too (own, non-enumerable, define-once — value.ts), so the SAME key-name check
+          // every other kind runs applies here as well via `contractOf` — absent only for
+          // the narrow bigint-leaf gap (a primitive can't carry a hidden property). No
+          // requiresConfig/preludeOnly channel — bound straight through `bindValue`, exactly
+          // as before (a bare JS leaf or a pre-boxed scheme value alike).
+          const valueEntity = contractOf(def);
+          if (!viaAlias && valueEntity !== undefined && valueEntity.name !== name) {
+            throw new SymbolKeyMismatchError(capabilityName, name, valueEntity.name);
+          }
+          bindValue(env, verb, def as AmbientValue);
         }
         if (spec.prelude !== undefined) {
           if (opts.evalScheme === undefined) throw new PreludeArmingError(name);

@@ -16,9 +16,10 @@
 import { describe, expect, it } from "vitest";
 import srfi95Pack from "../srfi-95.js";
 import { AEntity } from "../../../common/symbols/_bake.js";
+import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
 function symbolsOf(pack: { spec: { symbols?: unknown } }): Record<string, AEntity> {
-  return pack.spec.symbols as Record<string, AEntity>;
+  return harvestContracts(pack.spec.symbols);
 }
 
 function contractDef(pack: { spec: { symbols?: unknown } }, name: string) {

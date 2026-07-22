@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import * as z from "../../../common/scheme-zod.js";
 import { ZodTuple, type ZodOptional, type ZodTypeAny } from "zod";
 import type { SequenceSymbolDef } from "../../../common/symbol.js";
+import type { ANativeProcedure } from "../../../values/primitives/ACallable.js";
 
 import {
   allSrfi,
@@ -174,8 +175,10 @@ describe("@inhuman.tools/arrival/srfi-1 — positional accessors", () => {
 function bakedSort(): SequenceSymbolDef {
   const symbols = srfi95.spec.symbols;
   // srfi-95.ts declares `symbols` as a plain record (not the activation-builder function
-  // form), and `sort` as `symbol.sequence` — both verified by reading the source.
-  return (symbols as Record<string, SequenceSymbolDef>).sort;
+  // form), and `sort` as `symbol.sequence` — both verified by reading the source. Stage A2:
+  // `symbol.sequence` mints the ANativeProcedure directly now — its CONTRACT (the
+  // SequenceSymbolDef this test introspects) rides `.contract` on it.
+  return (symbols as Record<string, ANativeProcedure>).sort.contract as SequenceSymbolDef;
 }
 
 /** `.def` (schemas.d.ts's `ZodType` interface) is public on every zod schema, but its

@@ -2,10 +2,14 @@
 // types live in ./_bake.js. docs/environments.md §SYMBOL-KINDS — the `sequence` row (ctx-aware
 // op: impl gets scheme args + the run's RunContext, for kernel-logic-bearing ops).
 
+import { ANativeProcedure } from "../../values/primitives/ACallable.js";
+import { type SchemeValue } from "../../values/types.js";
 import {
   assertCacheClassShape,
   assertProvenanceRoleShape,
   extractCallbackRoles,
+  type CacheClass,
+  type CallbackRoles,
   CallCtx,
   type Contract,
   DecodedArgs,
@@ -14,6 +18,7 @@ import {
   normalizeVector,
   parseNameDoc,
   type MetadataRecord,
+  type ProvenanceRole,
   type SequenceImpl,
   type SequenceSymbolDef,
   type VectorSpec,
@@ -29,7 +34,7 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
     contract: Contract<I, O>,
     impl: SequenceImpl<I, O>,
     opts: { metadata?: MetadataRecord } = {},
-  ): SequenceSymbolDef => {
+  ): ANativeProcedure => {
     const inSchema = normalizeVector(contract.input);
     const outSchema = normalizeVector(contract.output);
     // Resolve the declared role (default "pipe" — see Contract.provenance); capability.ts
@@ -44,7 +49,7 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
     // Per-lambda-arm callback roles: shape extraction + the declared override, drift-door
     // checked — see extractCallbackRoles in _bake.ts.
     const callbackRoles = extractCallbackRoles(name, provenance, inSchema, outSchema, contract.callbackRoles);
-    return {
+    const def: SequenceSymbolDef = {
       kind: "sequence",
       name,
       doc,
@@ -68,5 +73,19 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
       // The extension bag — data only; dynamic fields resolve at read time, never at bake.
       metadata: opts.metadata,
     };
+    // Stage A2 — mint the ANativeProcedure directly (sequence shares native's class per D1:
+    // kind lives on the CONTRACT, not the runtime class). `run` is the complete ctx-aware
+    // wrapper the bind loop used to adapt via `bakedImpl`.
+    const rawRun = def.run as (this: CallCtx, ...args: unknown[]) => Promise<unknown>;
+    const proc = new ANativeProcedure({
+      name,
+      arity: { min: 0, max: null },
+      contract: def,
+      impl: (args, callCtx) => rawRun.apply(callCtx, args) as Promise<SchemeValue>,
+    });
+    (proc as { provenanceRole?: ProvenanceRole }).provenanceRole = provenance;
+    if (cacheClass !== undefined) (proc as { cacheClass?: CacheClass }).cacheClass = cacheClass;
+    if (callbackRoles !== undefined) (proc as { callbackRoles?: CallbackRoles }).callbackRoles = callbackRoles;
+    return proc;
   };
 }

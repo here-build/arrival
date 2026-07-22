@@ -32,10 +32,10 @@ import { describe, expect, it } from "vitest";
 import { exec } from "../../index.js";
 import { PurityError } from "../../errors.js";
 import { BASE_PACKS } from "../../env/base-packs.js";
+import { contractOf } from "../../common/capability.js";
 
 /** Every `symbol.notImplemented` door declared by a BASE_PACKS capability, as
- *  {name, reason, pack} with the pack's `symbolPrefix` applied (none of today's base
- *  packs set one, but the read honors the declaration shape). Builder-form `symbols`
+ *  {name, reason, pack}. Builder-form `symbols`
  *  (a per-activation function) can't be enumerated statically and is skipped — no
  *  base pack uses it; if one ever does, the anti-vacuity floor below still holds for
  *  the static population. */
@@ -44,10 +44,13 @@ function declaredDoors(): { name: string; reason: string; pack: string }[] {
   for (const cap of BASE_PACKS) {
     const symbols = cap.spec.symbols;
     if (symbols === undefined || typeof symbols === "function") continue;
-    const prefix = cap.spec.symbolPrefix ?? "";
-    for (const [key, def] of Object.entries(symbols)) {
-      if (typeof def === "object" && def !== null && "kind" in def && def.kind === "door") {
-        doors.push({ name: `${prefix}${key}`, reason: def.reason, pack: cap.name });
+    for (const [key, rawDef] of Object.entries(symbols)) {
+      // Stage A2: `symbol.notImplemented` mints a DoorProcedure directly now — `contractOf`
+      // (common/capability.ts) is the shared read-side seam every describe/catalog/harvest
+      // reader dispatches through to pull a minted value's CONTRACT (here, `.door`).
+      const entity = contractOf(rawDef);
+      if (entity !== undefined && entity.kind === "door") {
+        doors.push({ name: key, reason: entity.reason, pack: cap.name });
       }
     }
   }

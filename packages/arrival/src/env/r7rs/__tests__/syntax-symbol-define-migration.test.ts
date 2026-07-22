@@ -68,8 +68,9 @@ import { StaticValidationError } from "../../../static-validation/validate-progr
 import { Macro } from "../../../eval/Macro.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import type { AEntity, DefineSyntaxSymbolDef } from "../../../common/symbol.js";
+import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
-const symbols = syntaxPack.spec.symbols as Record<string, AEntity>;
+const symbols = harvestContracts(syntaxPack.spec.symbols);
 
 function defineSyntaxDef(name: string): DefineSyntaxSymbolDef {
   const def = symbols[name];

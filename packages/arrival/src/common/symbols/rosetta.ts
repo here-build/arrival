@@ -17,12 +17,16 @@ import { jsToScheme } from "../../membrane/rosetta.js";
 import { penetrateThroughCache } from "../../run/run-cache.js";
 import { closeRegionScope, openRegionScope, withRegionScope } from "../../membrane/region-scope.js";
 import { is_callable_value } from "../../values/value-guards.js";
+import { ARosettaProcedure } from "../../values/primitives/ACallable.js";
+import { type SchemeValue } from "../../values/types.js";
 import {
   assertCacheClassShape,
   assertProvenanceRoleShape,
   contractMayCarryCallable,
   extractCallbackRoles,
   type BakeRuntimeOpts,
+  type CacheClass,
+  type CallbackRoles,
   CallCtx,
   collectKwargsObject,
   type Contract,
@@ -31,6 +35,7 @@ import {
   normalizeInputVector,
   normalizeVector,
   parseNameDoc,
+  type ProvenanceRole,
   type RestSpec,
   type RosettaSymbolDef,
   topLevelSchemas,
@@ -109,7 +114,7 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
     contract: Contract<I, O, Rest>,
     impl: Impl<I, O, Rest>,
     opts: BakeRuntimeOpts = {},
-  ): RosettaSymbolDef => {
+  ): ARosettaProcedure => {
     const inSchema = normalizeInputVector(contract.input, contract.inputRest);
     const outSchema = normalizeVector(contract.output);
     const singleOut = isSingleOutput(contract.output);
@@ -382,7 +387,7 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       });
     };
 
-    return {
+    const def: RosettaSymbolDef = {
       kind: "rosetta",
       name,
       doc,
@@ -407,5 +412,21 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       // resolveMetadata).
       metadata: opts.metadata,
     };
+    // Stage A2 — mint the A-VALUE directly; `.contract` carries the def every downstream
+    // reader (schema-to-ts, the mercury harvest, capability.ts's requiresConfig/preludeOnly
+    // gates) used to read straight off the record. `strategy` stays the resolved-role bag
+    // the bind loop used to build (opaque until stage 3, per ACallable.ts's own doc).
+    const rawRun = def.run as (this: CallCtx, ...args: unknown[]) => Promise<unknown>;
+    const proc = new ARosettaProcedure({
+      name,
+      arity: { min: 0, max: null },
+      contract: def,
+      strategy: { provenance: def.provenance },
+      impl: (args, callCtx) => rawRun.apply(callCtx, args) as Promise<SchemeValue>,
+    });
+    (proc as { provenanceRole?: ProvenanceRole }).provenanceRole = provenance;
+    if (cacheClass !== undefined) (proc as { cacheClass?: CacheClass }).cacheClass = cacheClass;
+    if (callbackRoles !== undefined) (proc as { callbackRoles?: CallbackRoles }).callbackRoles = callbackRoles;
+    return proc;
   };
 }

@@ -7,8 +7,13 @@ import lists from "../../env/r7rs/lists.js";
 import vectors from "../../env/r7rs/vectors.js";
 import strings from "../../env/r7rs/strings.js";
 import srfi1 from "../../env/srfi/srfi-1.js";
+import { harvestContracts } from "../../__tests__/_symbols-harvest.js";
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim();
+// Stage A2: pull the AEntity CONTRACT off each pack's minted `spec.symbols` entries —
+// the shared read-side seam (`harvestContracts`/`contractOf`), same as every other
+// harvest/contract-precision suite.
+const contractsOf = (pack: { spec: { symbols?: unknown } }) => harvestContracts(pack.spec.symbols);
 
 const MAP = dedent`
   {
@@ -117,25 +122,25 @@ function infer(hofSig: string, bindings: string, call: string): string {
 
 describe("harvested HOF signatures are faithful generics (inline dedent)", () => {
   it("map", () => {
-    expect(norm(signatureOf((lists.spec.symbols as any).map))).toBe(norm(MAP));
+    expect(norm(signatureOf(contractsOf(lists).map))).toBe(norm(MAP));
   });
   it("filter", () => {
-    expect(norm(signatureOf((srfi1.spec.symbols as any).filter))).toBe(norm(FILTER));
+    expect(norm(signatureOf(contractsOf(srfi1).filter))).toBe(norm(FILTER));
   });
   it("reduce", () => {
-    expect(norm(signatureOf((srfi1.spec.symbols as any).reduce))).toBe(norm(REDUCE));
+    expect(norm(signatureOf(contractsOf(srfi1).reduce))).toBe(norm(REDUCE));
   });
   it("find", () => {
-    expect(norm(signatureOf((srfi1.spec.symbols as any).find))).toBe(norm(FIND));
+    expect(norm(signatureOf(contractsOf(srfi1).find))).toBe(norm(FIND));
   });
   it("vector-map", () => {
-    expect(norm(signatureOf((vectors.spec.symbols as any)["vector-map"]))).toBe(norm(VECTOR_MAP));
+    expect(norm(signatureOf(contractsOf(vectors)["vector-map"]))).toBe(norm(VECTOR_MAP));
   });
   it("string-map", () => {
-    expect(norm(signatureOf((strings.spec.symbols as any)["string-map"]))).toBe(norm(STRING_MAP));
+    expect(norm(signatureOf(contractsOf(strings)["string-map"]))).toBe(norm(STRING_MAP));
   });
   it("take-while", () => {
-    expect(norm(signatureOf((srfi1.spec.symbols as any)["take-while"]))).toBe(norm(TAKE_WHILE));
+    expect(norm(signatureOf(contractsOf(srfi1)["take-while"]))).toBe(norm(TAKE_WHILE));
   });
 });
 

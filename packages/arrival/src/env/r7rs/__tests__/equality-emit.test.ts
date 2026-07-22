@@ -25,8 +25,9 @@ import type { AEntity } from "../../../common/symbol.js";
 import type { EmitCtx } from "../../../emit/emit-rule.js";
 import { Binding, Bin, Call, Lit, Member, Ref, Un, type R } from "../../../emit/residual-lite.js";
 import equalityPack from "../equality.js";
+import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
-const symbols = equalityPack.spec.symbols as Record<string, AEntity>;
+const symbols = harvestContracts(equalityPack.spec.symbols);
 
 function anyDef(name: string): AEntity {
   const def = symbols[name];

@@ -31,14 +31,16 @@ import type { AEntity } from "../../../common/symbol.js";
 import { signatureOf } from "../../../type-layer/schema-to-ts.js";
 import { ADict } from "../../../values/primitives/ADict.js";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
+import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim();
 
 // `symbols` is a builder (activation) => Record<string, AEntity> for this capability —
 // call it with an empty (unused) activation shape; polyglot's symbols builder never reads
 // `this.configuration`/`this.resources` (no config/resources declared on this capability).
-// `spec.symbols` IS the record (the builder-form arm is retired).
-const symbols = (polyglot.spec.symbols ?? {}) as Record<string, AEntity>;
+// `spec.symbols` IS the record (the builder-form arm is retired). Stage A2: each entry is
+// now a minted A-value — `harvestContracts` pulls the AEntity CONTRACT off each one.
+const symbols = harvestContracts(polyglot.spec.symbols ?? {});
 
 function nativeDef(name: string) {
   const def = symbols[name];

@@ -39,6 +39,7 @@ import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
 import srfi26 from "../srfi-26.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
+import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
 // Mirrors `_fresh-env.ts`'s own injected evalScheme — `skipBootstrapWait` because
 // these execs run against an env this suite is itself assembling/re-lowering onto,
@@ -104,7 +105,7 @@ describe("scheme/srfi-26 — cut/cute expansion equivalence (semantic-equivalenc
 
 describe("scheme/srfi-26 — the contract-enforcement row: cut/cute are contract-FREE by design (§1.1)", () => {
   it("both baked defs are `define-syntax` kind — no `in`/`out` contract vector exists to enforce", () => {
-    const symbols = srfi26.spec.symbols as Record<string, AEntity>;
+    const symbols = harvestContracts(srfi26.spec.symbols);
     for (const name of ["cut", "cute"]) {
       const def = symbols[name];
       expect(def, `srfi-26 pack: no symbol named ${name}`).toBeDefined();

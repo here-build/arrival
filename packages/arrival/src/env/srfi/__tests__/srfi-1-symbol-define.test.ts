@@ -41,6 +41,7 @@ import srfi1 from "../srfi-1.js";
 import type { SchemeEnv } from "../../../common/scheme-env.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 import { printValue } from "../../../values/print.js";
+import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
 // Mirrors `_fresh-env.ts`'s own injected evalScheme — `skipBootstrapWait` because
 // these execs run against an env this suite is itself assembling/re-lowering onto,
@@ -339,7 +340,9 @@ describe("scheme/srfi-1 — implement-or-door + the any?/every?/some split (2026
   });
 
   it("linear-update and pure-unshipped names are doors, not silent absences", () => {
-    const symbols = srfi1.spec.symbols as Record<string, { kind?: string }>;
+    // Stage A2: each entry is now a minted A-value — `harvestContracts` pulls the AEntity
+    // CONTRACT (still carrying `.kind`) off each one.
+    const symbols = harvestContracts(srfi1.spec.symbols);
     for (const name of ["take!", "filter!", "reverse!", "xcons", "lset-union", "car+cdr", "split-at"] as const) {
       expect(symbols[name]?.kind, name).toBe("door");
     }

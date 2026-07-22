@@ -28,7 +28,13 @@ import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
-import { symbol, testCallCtx } from "../symbol.js";
+import { symbol, testCallCtx, type RosettaSymbolDef } from "../symbol.js";
+
+/** Test-only cast — see symbol.test.ts's own copy of this helper for the full rationale
+ *  (Stage A2: `symbol.rosetta` mints the ARosettaProcedure directly; `.run` rides `.contract`). */
+function rosettaContract(v: { contract: unknown }): RosettaSymbolDef {
+  return v.contract as RosettaSymbolDef;
+}
 import * as z from "../scheme-zod.js";
 import { EnvCapability } from "../capability.js";
 
@@ -45,7 +51,7 @@ describe("z.kwargs runtime — UNIT (direct def.run, manually-built pluck pairs)
       { input: [], inputRest: { a: z.string, b: z.number.optional() }, output: [z.string] },
       (args) => `${args.a}:${args.b}`,
     );
-    const out = await def.run.call(testCallCtx(), pluck("a"), new AString("Ada"), pluck("b"), new AExact(5));
+    const out = await rosettaContract(def).run.call(testCallCtx(), pluck("a"), new AString("Ada"), pluck("b"), new AExact(5));
     expect((out as AString)["arrival/toJS"]()).toBe("Ada:5");
   });
 
@@ -56,7 +62,7 @@ describe("z.kwargs runtime — UNIT (direct def.run, manually-built pluck pairs)
       { input: [], inputRest: { a: z.string, b: z.number.optional() }, output: [z.string] },
       (args) => `${args.a}:${args.b}`,
     );
-    const out = await def.run.call(testCallCtx(), pluck("b"), new AExact(5), pluck("a"), new AString("Ada"));
+    const out = await rosettaContract(def).run.call(testCallCtx(), pluck("b"), new AExact(5), pluck("a"), new AString("Ada"));
     // NOTE: pairs must stay `:key value` (key first) — this call shows the TWO PAIRS in
     // swapped ORDER (the `:b` pair before the `:a` pair), not a swapped key/value.
     expect((out as AString)["arrival/toJS"]()).toBe("Ada:5");
@@ -67,7 +73,9 @@ describe("z.kwargs runtime — INTEGRATION ((tool :k v …) through a real env +
   let env: ResolvingAmbient;
   beforeAll(async () => {
     env = await freshEnv();
-    const greet = symbol.rosetta`greet: kwargs greeting`(
+    // Record key must match the value's own mint-time name (Stage A2's
+    // SymbolKeyMismatchError, common/capability.ts) — "kw-greet" both ways.
+    const greet = symbol.rosetta`kw-greet: kwargs greeting`(
       { input: [], inputRest: { a: z.string, b: z.number.optional() }, output: [z.string] },
       (args) => `${args.a}:${args.b}`,
     );

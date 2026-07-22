@@ -18,8 +18,9 @@ import { describe, expect, it } from "vitest";
 import srfi13 from "../srfi-13.js";
 import type { AEntity } from "../../../common/symbol.js";
 import { signatureOf } from "../../../type-layer/schema-to-ts.js";
+import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
-const symbols = srfi13.spec.symbols as Record<string, AEntity>;
+const symbols = harvestContracts(srfi13.spec.symbols);
 function def(name: string): AEntity {
   const d = symbols[name];
   if (d === undefined) throw new Error(`srfi-13 pack: no symbol named ${name}`);

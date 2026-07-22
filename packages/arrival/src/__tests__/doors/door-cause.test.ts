@@ -22,7 +22,10 @@ import { ResolvingAmbient, mintResolvingFrame } from "../../env/AmbientRuntime.j
 
 describe("DoorProcedure — the introspectable door binding (unit, no capability/env)", () => {
   it("exposes `.door` — the baked DoorSymbolDef — for static readers", () => {
-    const def = symbol.notImplemented`stub: a teaching stub`;
+    // Stage A2: `symbol.notImplemented` mints the DoorProcedure directly now; extract the
+    // baked DoorSymbolDef off `.door` to exercise the CLASS in isolation (this suite's own
+    // point — constructing a fresh DoorProcedure from a raw DoorSymbolDef).
+    const def = symbol.notImplemented`stub: a teaching stub`.door;
     const proc = new DoorProcedure(def);
     expect(proc.door).toBe(def);
     // A door is a genuine callable value (it has an apply term) — is_callable_value
@@ -31,12 +34,12 @@ describe("DoorProcedure — the introspectable door binding (unit, no capability
   });
 
   it("resolves like any other value — constructing/holding a DoorProcedure never throws (only APPLY does)", () => {
-    const def = symbol.notImplemented`stub: a teaching stub`;
+    const def = symbol.notImplemented`stub: a teaching stub`.door;
     expect(() => new DoorProcedure(def)).not.toThrow();
   });
 
   it("PurityError is BYTE-COMPATIBLE for a cause-less door: same message/owner as pre-W0", () => {
-    const def = symbol.notImplemented`stub: a teaching stub`;
+    const def = symbol.notImplemented`stub: a teaching stub`.door;
     expect(def.cause).toBeUndefined();
     const proc = new DoorProcedure(def);
     let caught: unknown;
@@ -54,7 +57,7 @@ describe("DoorProcedure — the introspectable door binding (unit, no capability
   });
 
   it("a CAUSED door leads its message with `name @ owner` (never a raw hash) and carries cause.owner as `.owner`", () => {
-    const raw = symbol.notImplemented`stub: a teaching stub`;
+    const raw = symbol.notImplemented`stub: a teaching stub`.door;
     const def = { ...raw, cause: { owner: "test/pack", needs: [] } };
     const proc = new DoorProcedure(def);
     let caught: unknown;
@@ -70,7 +73,7 @@ describe("DoorProcedure — the introspectable door binding (unit, no capability
   });
 
   it("fires UNCONDITIONALLY — no args needed, matches the pre-DoorProcedure closure's 0-arg call shape", () => {
-    const def = symbol.notImplemented`stub: a teaching stub`;
+    const def = symbol.notImplemented`stub: a teaching stub`.door;
     const proc = new DoorProcedure(def);
     expect(() => proc["arrival/tagless-final/apply"]()).toThrow(PurityError);
   });
@@ -125,10 +128,13 @@ describe("common/capability.ts's door bind arm — cause DERIVED from the owning
   it("a door constructed with its OWN cause already set passes through unchanged (the degradation-minted door path, not touched here)", async () => {
     const cap = EnvCapability.define("test/door-cap-3", {
       symbols: (symbol) => {
-        const preCaused = {
-          ...symbol.notImplemented`stub: a teaching stub`,
+        // A door minted with its OWN cause already set — construct a fresh DoorProcedure
+        // over a pre-caused DoorSymbolDef (mirrors a degradation-minted door, which also
+        // arrives at the bind loop already carrying a cause).
+        const preCaused = new DoorProcedure({
+          ...symbol.notImplemented`stub: a teaching stub`.door,
           cause: { owner: "elsewhere/pack", needs: [] },
-        };
+        });
         return { stub: preCaused };
       },
     });

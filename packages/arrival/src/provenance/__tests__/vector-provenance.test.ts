@@ -12,6 +12,7 @@ import { ABytevector } from "../../values/primitives/ABytevector.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AVector } from "../../values/primitives/AVector.js";
 import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
+import { harvestContracts } from "../../__tests__/_symbols-harvest.js";
 
 // Q20b: every assertion below calls a raw native op fn directly — still routes
 // through op-helpers.ts's withInputProvenance internally, so it needs the oracle
@@ -28,11 +29,9 @@ await initBridge();
 const opFn = (v: { kind?: string; impl?: (...a: any[]) => any; value?: (...a: any[]) => any }) =>
   v && v.kind === "native" ? v.impl! : v.value!;
 const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
-  Object.fromEntries(
-    Object.entries(cap.spec.symbols as Record<string, { kind?: string; impl?: (...a: any[]) => any; value?: (...a: any[]) => any }>).map(
-      ([k, v]) => [k, opFn(v)],
-    ),
-  );
+  // Stage A2: the CONTRACT (native's raw `.impl`) rides `.contract` on the minted
+  // ANativeProcedure now — `harvestContracts` (the shared read-side seam) pulls it off.
+  Object.fromEntries(Object.entries(harvestContracts(cap.spec.symbols)).map(([k, v]) => [k, opFn(v as never)]));
 // The vector/bytevector primitives now live in their value-domain cluster packs
 // (carved out of the old `wrappedOps` monolith); these are the exact fns assembled
 // onto global_env.

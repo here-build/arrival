@@ -12,7 +12,7 @@
 // arrow. The harvest stays one-directional (defs → prelude text), entirely in this package.
 
 import { escapeName, isTsIdentifier } from "./name-escape.js";
-import type { AEntity } from "../common/symbol.js";
+import { contractOf, type SymbolDeclaration } from "../common/capability.js";
 import { signatureOf } from "./schema-to-ts.js";
 import { CARRIERS_TEXT } from "./carriers-text.generated.js";
 
@@ -62,14 +62,23 @@ export function assemblePreludeFromSignatures(
 }
 
 /**
- * Assemble the ambient prelude for a set of `[name, AEntity]` grant tools. Thin wrapper over
- * `assemblePreludeFromSignatures`: harvests each def's arrow signature via `signatureOf`, then
+ * Assemble the ambient prelude for a set of `[name, SymbolDeclaration]` grant tools. Thin
+ * wrapper over `assemblePreludeFromSignatures`: pulls each entry's `AEntity` CONTRACT via
+ * `contractOf` (Stage A2 — the symbol.* factories mint the runtime A-value directly now;
+ * `common/capability.ts`'s `contractOf` is the shared read-side seam every describe/catalog/
+ * harvest reader dispatches through), harvests its arrow signature via `signatureOf`, then
  * delegates assembly. A door/macro/keyword harvests as `never` (not callable) — `signatureOf`'s
- * own contract.
+ * own contract. An entry with NO contract to show (`symbol.alias`'s unresolved marker, the
+ * legacy `{ fn }` arm, `symbol.value`'s raw boxed data) is silently skipped — nothing to
+ * declare a signature for.
  */
 export function assembleHarvestedPrelude(
-  entries: Iterable<readonly [name: string, def: AEntity]>,
+  entries: Iterable<readonly [name: string, def: SymbolDeclaration]>,
 ): HarvestedPrelude {
-  const sigEntries = Array.from(entries, ([name, def]): readonly [string, string] => [name, signatureOf(def)]);
+  const sigEntries: [string, string][] = [];
+  for (const [name, def] of entries) {
+    const entity = contractOf(def);
+    if (entity !== undefined) sigEntries.push([name, signatureOf(entity)]);
+  }
   return assemblePreludeFromSignatures(sigEntries);
 }

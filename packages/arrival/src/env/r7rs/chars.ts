@@ -13,7 +13,7 @@ import dedent from "dedent";
 import unicodeProperties from "unicode-properties";
 import invariant from "tiny-invariant";
 
-import { type CallCtx } from "../../common/symbol.js";
+import { withContractFields, type CallCtx } from "../../common/symbol.js";
 import { charValue, coerceNumeric, deriveOrd, schemeBool as bool } from "../../values/op-helpers.js";
 import { schemeFalse, schemeTrue } from "../../values/primitives/ABool.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
@@ -24,15 +24,14 @@ import { EnvCapability } from "../../common/capability.js";
 export default EnvCapability.define("scheme/chars", {
   symbols: (symbol, z) => ({
     // Char harvest image is string (single-char); no separate ambient Char carrier.
-    "char?": {
-      ...symbol.taglessGuard`char?: #t iff obj is a character`,
+    "char?": withContractFields(symbol.taglessGuard`char?: #t iff obj is a character`, {
       type: dedent`
           {
             (x: unknown): x is string;
             <T>(x: T): x is Extract<T, string>;
           }
         `,
-    },
+    }),
 
     "char=?": symbol.native`char=?: typed equivalence over characters`(
       { input: [], inputRest: z.char, output: [z.boolean] },

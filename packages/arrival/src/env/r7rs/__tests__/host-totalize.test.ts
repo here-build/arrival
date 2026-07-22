@@ -6,8 +6,9 @@ import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import type { AEntity } from "../../../common/symbol.js";
 import { PurityError } from "../../../errors.js";
 import { DoorProcedure } from "../../../values/primitives/ACallable.js";
+import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
-const symbols = hostPack.spec.symbols as Record<string, AEntity>;
+const symbols = harvestContracts(hostPack.spec.symbols);
 
 const door = async (src: string) => {
   try {

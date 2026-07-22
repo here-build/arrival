@@ -21,7 +21,7 @@
 
 import dedent from "dedent";
 import { applyCallback } from "../../values/primitives/ACallable.js";
-import { CallCtx } from "../../common/symbols/_bake.js";
+import { CallCtx, withContractFields } from "../../common/symbols/_bake.js";
 import { ctxOf } from "../../values/primitives/AValue.js";
 import { AVector } from "../../values/primitives/AVector.js";
 import { AJSArray } from "../../membrane/AJSArray.js";
@@ -121,8 +121,7 @@ export default EnvCapability.define("scheme/vectors", {
     // boxed SchemeVector and a borrowed AJSArray return #t; everything else declares no such
     // method, so the guard's graceful default (#f) is the answer. No `instanceof AVector`
     // reach-around in the builtin (the Family-2 "reached around the box" dissolution).
-    "vector?": {
-      ...symbol.taglessGuard`vector?: #t iff obj is a vector`,
+    "vector?": withContractFields(symbol.taglessGuard`vector?: #t iff obj is a vector`, {
       // Dual guard: unknown → readonly unknown[]; Extract preserves element types.
       type: dedent`
           {
@@ -130,7 +129,7 @@ export default EnvCapability.define("scheme/vectors", {
             <T>(x: T): x is Extract<T, readonly any[]>;
           }
         `,
-    },
+    }),
 
     "vector-length": symbol.native`vector-length: number of elements in vec`(
       {

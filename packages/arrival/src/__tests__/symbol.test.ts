@@ -20,8 +20,17 @@ import { AString } from "../values/primitives/AString.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
 import { nil } from "../values/primitives/ANil.js";
+import type { NativeSymbolDef, RosettaSymbolDef } from "../common/symbol.js";
 
 const { symbol } = arrival;
+
+/** Test-only cast: pull a minted value's `.contract` (typed `unknown` on the class — see
+ *  ACallable.ts) back to its known CONTRACT shape, for direct introspection — this whole
+ *  suite's point. Stage A2: `symbol.native`/`symbol.rosetta` mint the ANativeProcedure/
+ *  ARosettaProcedure directly now; the def they used to RETURN rides `.contract` on it. */
+function contractOf<T>(v: { contract: unknown }): T {
+  return v.contract as T;
+}
 
 describe("symbol.native — scheme-identity, no validation", () => {
   it("infers the impl arg+return as SCHEME VALUES from identity schemas", () => {
@@ -35,9 +44,11 @@ describe("symbol.native — scheme-identity, no validation", () => {
         return p;
       },
     );
-    expect(def.kind).toBe("native");
-    expect(def.name).toBe("pair-id");
-    expect(def.doc).toBe("identity on a pair");
+    // Stage A2: `symbol.native` mints the ANativeProcedure directly — the CONTRACT
+    // (kind/name/doc/impl/…) rides `.contract` on it now.
+    expect(contractOf<NativeSymbolDef | RosettaSymbolDef>(def).kind).toBe("native");
+    expect(contractOf<NativeSymbolDef | RosettaSymbolDef>(def).name).toBe("pair-id");
+    expect(contractOf<NativeSymbolDef>(def).doc).toBe("identity on a pair");
   });
 
   it("runs the impl on the raw scheme term with NO decode/validate", () => {
@@ -46,8 +57,10 @@ describe("symbol.native — scheme-identity, no validation", () => {
       (p) => p.car as AString,
     );
     const arg = new APair(new AString("hello"), nil);
-    // native.impl is the binding itself — it receives the scheme value directly.
-    const out = def.impl(arg);
+    // native.contract.impl is the raw host fn — it receives the scheme value directly
+    // (the ANativeProcedure's own `arrival/tagless-final/apply` term is the args/callCtx
+    // adapter around it; this is the pre-adaptation impl the factory closed over).
+    const out = contractOf<NativeSymbolDef>(def).impl(arg);
     expect(out).toBeInstanceOf(AString);
     expect((out as AString)["arrival/toJS"]()).toBe("hello");
   });
@@ -56,7 +69,7 @@ describe("symbol.native — scheme-identity, no validation", () => {
     const def = symbol.native`as-is: passthrough`({ input: [z.pair], output: [z.pair] }, (p) => p);
     // A NON-Pair would fail a zod parse, but native never parses — it just runs.
     const notAPair = { car: 1, cdr: 2 } as unknown as APair<any, any>;
-    expect(() => def.impl(notAPair)).not.toThrow();
+    expect(() => contractOf<NativeSymbolDef>(def).impl(notAPair)).not.toThrow();
   });
 });
 
@@ -69,8 +82,8 @@ describe("symbol.rosetta — JS-land, codec decode/encode", () => {
         return s.length;
       },
     );
-    expect(def.kind).toBe("rosetta");
-    expect(def.name).toBe("strlen");
+    expect(contractOf<NativeSymbolDef | RosettaSymbolDef>(def).kind).toBe("rosetta");
+    expect(contractOf<NativeSymbolDef | RosettaSymbolDef>(def).name).toBe("strlen");
   });
 
   it("decodes scheme args → JS, runs impl, encodes return → scheme", async () => {
@@ -78,7 +91,7 @@ describe("symbol.rosetta — JS-land, codec decode/encode", () => {
       { input: [z.string], output: [z.number] },
       (s) => s.length,
     );
-    const out = await def.run.call(testCallCtx(), new AString("hello"));
+    const out = await contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), new AString("hello"));
     // output codec is z.number → encode(number) = SchemeInexact (the chosen float type).
     expect(out).toBeInstanceOf(AInexact);
     expect((out as AInexact).real).toBe(5);
@@ -90,7 +103,7 @@ describe("symbol.rosetta — JS-land, codec decode/encode", () => {
       (s) => s.length,
     );
     // A SchemeExact is not a SchemeString → the z.string codec's instanceof guard doors.
-    await expect(def.run.call(testCallCtx(), new AExact(3))).rejects.toThrow();
+    await expect(contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), new AExact(3))).rejects.toThrow();
   });
 
   it("can SKIP validation (trusted call site) but still runs the codec transform", async () => {
@@ -99,7 +112,7 @@ describe("symbol.rosetta — JS-land, codec decode/encode", () => {
       (s) => s,
       { validate: false },
     );
-    const out = await def.run.call(testCallCtx(), new AString("x"));
+    const out = await contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), new AString("x"));
     expect(out).toBeInstanceOf(AString);
     expect((out as AString)["arrival/toJS"]()).toBe("x");
   });
@@ -112,7 +125,7 @@ describe("symbol.rosetta — JS-land, codec decode/encode", () => {
         return s.toUpperCase();
       },
     );
-    const out = await def.run.call(testCallCtx(), new AString("hi"));
+    const out = await contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), new AString("hi"));
     expect((out as AString)["arrival/toJS"]()).toBe("HI");
   });
 });
@@ -129,7 +142,7 @@ describe("`this: CallCtx` is mandatory (R-CTX-3) — misuse THROWS, never silent
       { input: [z.string], output: [z.number] },
       (s) => s.length,
     );
-    await expect(Reflect.apply(def.run, undefined, [new AString("hello")])).rejects.toThrow();
+    await expect(Reflect.apply(contractOf<RosettaSymbolDef>(def).run, undefined, [new AString("hello")])).rejects.toThrow();
   });
 
   it("an ad hoc `{}` receiver (missing runCtx/invocation) throws the same way", async () => {
@@ -137,7 +150,7 @@ describe("`this: CallCtx` is mandatory (R-CTX-3) — misuse THROWS, never silent
       { input: [z.string], output: [z.number] },
       (s) => s.length,
     );
-    await expect(Reflect.apply(def.run, {}, [new AString("hello")])).rejects.toThrow();
+    await expect(Reflect.apply(contractOf<RosettaSymbolDef>(def).run, {}, [new AString("hello")])).rejects.toThrow();
   });
 
   it("testCallCtx() is a real CallCtx — the sanctioned idiom never doors", async () => {
@@ -145,7 +158,7 @@ describe("`this: CallCtx` is mandatory (R-CTX-3) — misuse THROWS, never silent
       { input: [z.string], output: [z.number] },
       (s) => s.length,
     );
-    const out = await def.run.call(testCallCtx(), new AString("hello"));
+    const out = await contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), new AString("hello"));
     expect((out as AInexact).real).toBe(5);
   });
 });
@@ -154,9 +167,9 @@ describe("the number codec FAMILY — exactness + range + JS-type declared by th
   describe("z.number ↔ JS number (encode → inexact)", () => {
     it("decodes a safe-integer exact and a float inexact to JS number", async () => {
       const def = symbol.rosetta`dbl: double`({ input: [z.number], output: [z.number] }, (n) => n * 2);
-      const fromExact = await def.run.call(testCallCtx(), new AExact(21));
+      const fromExact = await contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), new AExact(21));
       expect((fromExact as AInexact).real).toBe(42);
-      const fromInexact = await def.run.call(testCallCtx(), new AInexact(1.5));
+      const fromInexact = await contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), new AInexact(1.5));
       expect((fromInexact as AInexact).real).toBe(3);
     });
 
@@ -171,14 +184,14 @@ describe("the number codec FAMILY — exactness + range + JS-type declared by th
 
     it("DOORS a non-integer exact rational", async () => {
       const def = symbol.rosetta`idn2: identity number`({ input: [z.number], output: [z.number] }, (n) => n);
-      await expect(def.run.call(testCallCtx(), new AExact(1, 3))).rejects.toThrow(/faithful JS number|rational/i);
+      await expect(contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), new AExact(1, 3))).rejects.toThrow(/faithful JS number|rational/i);
     });
   });
 
   describe("z.integer ↔ JS number constrained to safe ints (encode → exact)", () => {
     it("decodes a safe int and encodes the return as EXACT", async () => {
       const def = symbol.rosetta`inc: increment`({ input: [z.integer], output: [z.integer] }, (n) => n + 1);
-      const out = await def.run.call(testCallCtx(), new AExact(41));
+      const out = await contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), new AExact(41));
       expect(out).toBeInstanceOf(AExact);
       expect((out as AExact).num).toBe(42);
       expect((out as AExact).denom).toBe(1);
@@ -186,7 +199,7 @@ describe("the number codec FAMILY — exactness + range + JS-type declared by th
 
     it("DOORS a non-safe-integer inexact input", async () => {
       const def = symbol.rosetta`idi: identity int`({ input: [z.integer], output: [z.integer] }, (n) => n);
-      await expect(def.run.call(testCallCtx(), new AInexact(1.5))).rejects.toThrow(/safe integer/i);
+      await expect(contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), new AInexact(1.5))).rejects.toThrow(/safe integer/i);
     });
   });
 
@@ -208,7 +221,7 @@ describe("the number codec FAMILY — exactness + range + JS-type declared by th
       // codec's encode arm is where this now doors, not construction of the input.
       const def = symbol.rosetta`bigid: identity bigint`({ input: [z.bigint], output: [z.bigint] }, (n) => n + 1n);
       const maxSafe = new AExact(Number.MAX_SAFE_INTEGER);
-      await expect(def.run.call(testCallCtx(), maxSafe)).rejects.toThrow(/safe-integer/i);
+      await expect(contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), maxSafe)).rejects.toThrow(/safe-integer/i);
     });
 
     it("infers the impl arg as bigint", () => {
@@ -220,7 +233,7 @@ describe("the number codec FAMILY — exactness + range + JS-type declared by th
 
     it("round-trips a SMALL bigint → scheme → bigint (safe-int only)", async () => {
       const def = symbol.rosetta`bid: bigint identity`({ input: [z.bigint], output: [z.bigint] }, (n) => n);
-      const out = (await def.run.call(testCallCtx(), new AExact(7))) as AExact;
+      const out = (await contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), new AExact(7))) as AExact;
       // re-decode the encoded scheme value through the same codec
       const back = z.decode(z.bigint, out);
       expect(back).toBe(7n);
@@ -234,7 +247,7 @@ describe("variadic + multiple values", () => {
       { input: z.array(z.number), output: [z.number] },
       (...ns: number[]) => ns.reduce((a, b) => a + b, 0),
     );
-    const out = await def.run.call(testCallCtx(), new AExact(1), new AExact(2), new AExact(3));
+    const out = await contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), new AExact(1), new AExact(2), new AExact(3));
     expect((out as AInexact).real).toBe(6);
   });
 
@@ -243,7 +256,7 @@ describe("variadic + multiple values", () => {
       { input: [z.string], output: z.array(z.string) },
       (s) => [s, s],
     );
-    const out = await def.run.call(testCallCtx(), new AString("a"));
+    const out = await contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), new AString("a"));
     // encode of z.array(z.string) → a JS array of SchemeStrings (the values-vector).
     expect(Array.isArray(out)).toBe(true);
     const vec = out as AString[];
@@ -253,11 +266,13 @@ describe("variadic + multiple values", () => {
 });
 
 describe("symbol.notImplemented — errors-as-doors", () => {
-  it("bakes a door carrying name + teaching reason", () => {
+  it("mints a DoorProcedure carrying name + teaching reason", () => {
+    // Stage A2: `symbol.notImplemented` mints the DoorProcedure directly — the CONTRACT
+    // (kind/name/reason/cause) rides `.door` on it now.
     const def = symbol.notImplemented`set!: set! mutates — violates value provenance (R7RS §4.1.6 omitted)`;
-    expect(def.kind).toBe("door");
-    expect(def.name).toBe("set!");
-    expect(def.reason).toMatch(/mutates/);
+    expect(def.door.kind).toBe("door");
+    expect(def.door.name).toBe("set!");
+    expect(def.door.reason).toMatch(/mutates/);
   });
 
   // DoorCause (docs/design-history/symbol-define-static-program-validation.md §3.3) — signature/
@@ -267,18 +282,18 @@ describe("symbol.notImplemented — errors-as-doors", () => {
   // arm stamps `cause` separately, at apply.
   it("bakes NO `cause` — the factory has no owning capability to stamp yet", () => {
     const def = symbol.notImplemented`stub: a teaching stub`;
-    expect(def.cause).toBeUndefined();
+    expect(def.door.cause).toBeUndefined();
   });
 });
 
 describe("name/doc parsing", () => {
   it("splits on the first colon; trims; tolerates a missing colon", () => {
     const withColon = symbol.notImplemented`a: b: c`;
-    expect(withColon.name).toBe("a");
-    expect(withColon.reason).toBe("b: c");
+    expect(withColon.door.name).toBe("a");
+    expect(withColon.door.reason).toBe("b: c");
     const noColon = symbol.notImplemented`bare-name`;
-    expect(noColon.name).toBe("bare-name");
-    expect(noColon.reason).toBe("");
+    expect(noColon.door.name).toBe("bare-name");
+    expect(noColon.door.reason).toBe("");
   });
 });
 

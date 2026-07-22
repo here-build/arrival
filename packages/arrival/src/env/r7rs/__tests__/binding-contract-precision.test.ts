@@ -4,8 +4,9 @@
 import { describe, expect, it } from "vitest";
 import bindingPack from "../binding.js";
 import type { AEntity } from "../../../common/symbol.js";
+import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
-const symbols = bindingPack.spec.symbols as Record<string, AEntity>;
+const symbols = harvestContracts(bindingPack.spec.symbols);
 
 const DOOR_NAMES = ["set!", "values", "call-with-values", "let-values", "let*-values", "define-values"] as const;
 

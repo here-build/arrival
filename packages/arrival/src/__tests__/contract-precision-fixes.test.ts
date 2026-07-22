@@ -29,11 +29,12 @@ import { ASymbol } from "../values/primitives/ASymbol.js";
 import { ABool } from "../values/primitives/ABool.js";
 import { CONSTANT_CTX } from "../run/RunContext.js";
 import { AExact } from "../values/primitives/AExact.js";
+import { harvestContracts } from "./_symbols-harvest.js";
 
 /** A pack's `.spec.symbols` map, generically — mirrors numeric-contract-precision.test.ts's
- *  `numericPack.spec.symbols as Record<string, AEntity>` access pattern. */
+ *  `harvestContracts(numericPack.spec.symbols)` access pattern. */
 function symbolsOf(pack: { spec: { symbols?: unknown } }): Record<string, AEntity> {
-  return pack.spec.symbols as Record<string, AEntity>;
+  return harvestContracts(pack.spec.symbols);
 }
 
 /** Resolve a named symbol and narrow it to a contract-bearing def (native or sequence —

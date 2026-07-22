@@ -24,12 +24,15 @@ import { testCallCtx } from "../../common/symbol.js";
 import { RunContext, CONSTANT_CTX } from "../../run/RunContext.js";
 import { AString } from "../../values/primitives/AString.js";
 import type { EnvCapability } from "../../common/capability.js";
+import { harvestContracts } from "../../__tests__/_symbols-harvest.js";
 
 /** Same extraction idiom as identity.law.test.ts's `opsOf`: pull the raw impl fn off
- *  a `symbol.native`/`symbol.rosetta` entry in the capability's inlined `symbols`. */
+ *  a `symbol.native`/`symbol.rosetta` entry in the capability's inlined `symbols` —
+ *  Stage A2: the CONTRACT (carrying `.impl`) rides `.contract` on the minted value now,
+ *  pulled off via `harvestContracts` (the shared read-side seam). */
 const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
   Object.fromEntries(
-    Object.entries(cap.spec.symbols as Record<string, { impl?: unknown; value?: unknown }>)
+    Object.entries(harvestContracts(cap.spec.symbols) as Record<string, { impl?: unknown; value?: unknown }>)
       .map(([k, v]) => [k, v.impl ?? v.value] as const)
       .filter((entry): entry is [string, (...a: any[]) => any] => typeof entry[1] === "function"),
   );

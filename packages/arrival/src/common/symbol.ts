@@ -68,7 +68,7 @@ export { makeCallCtx, testCallCtx } from "./symbols/_bake.js";
 // acc-chain marker rides it); `declaresAccChain` is the data-read for the chained
 // track-composition operator (spec §3); `extractCallbackRoles` is surfaced for the
 // law suite (the factories call it internally at bake).
-export { withCallbackRoles, declaresAccChain, extractCallbackRoles } from "./symbols/_bake.js";
+export { withCallbackRoles, withContractFields, declaresAccChain, extractCallbackRoles } from "./symbols/_bake.js";
 
 // Re-export the generic form for convenience when using metadata.
 export type { RosettaSymbolDef as RosettaSymbolDefWithMeta } from "./symbols/_bake.js";

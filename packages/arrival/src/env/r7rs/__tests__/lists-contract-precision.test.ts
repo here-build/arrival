@@ -36,8 +36,9 @@ import { AString } from "../../../values/primitives/AString.js";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { schemeFalse } from "../../../values/primitives/ABool.js";
 import type { SchemeValue } from "../../../values/types.js";
+import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
-const symbols = listsPack.spec.symbols as Record<string, AEntity>;
+const symbols = harvestContracts(listsPack.spec.symbols);
 
 function nativeDef(name: string) {
   const def = symbols[name];

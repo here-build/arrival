@@ -59,8 +59,9 @@ import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import { BASE_PACKS } from "../../base-packs.js";
 import { exec } from "../../../eval/generator-exec.js";
 import type { AEntity, DoorSymbolDef } from "../../../common/symbol.js";
+import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
-const symbols = listsPack.spec.symbols as Record<string, AEntity>;
+const symbols = harvestContracts(listsPack.spec.symbols);
 
 const DOOR_NAMES = ["set-car!", "set-cdr!", "append!", "list-set!"] as const;
 

@@ -23,7 +23,7 @@
 
 import { AJSArray } from "../../membrane/AJSArray.js";
 import dedent from "dedent";
-import { type CallCtx } from "../../common/symbol.js";
+import { withContractFields, type CallCtx } from "../../common/symbol.js";
 import { ABool, schemeFalse, schemeTrue } from "../../values/primitives/ABool.js";
 import { AJSObject } from "../../membrane/AJSObject.js";
 import { ADict, isDictShaped } from "../../values/primitives/ADict.js";
@@ -315,22 +315,21 @@ export default EnvCapability.define("scheme/equality", {
 
     // `(pair? x)` asks the receiver's own `arrival/tagless-final/pair?` (APair answers #t); the
     // guard's graceful default (#f) covers everything else — no `instanceof APair` reach-around.
-    "pair?": {
-      ...symbol.taglessGuard`pair?: #t iff obj is a pair (cons cell)`,
+    "pair?": withContractFields(symbol.taglessGuard`pair?: #t iff obj is a pair (cons cell)`, {
       type: dedent`
           {
             (x: unknown): x is Pair<unknown, unknown>;
             <T>(x: T): x is Extract<T, Pair<any, any>>;
           }
         `,
-      // Compiler-facing (constitution §4.1) — the Phase-2 relocation drill. Declaration-
-      // site spread (a tagless-guard def has no `Contract` param to thread these
-      // through — see `TaglessGuardSymbolDef.emit`/`.narrows` in _bake.ts). `pair?` is
-      // its own Law-N witness — its runtime behavior PROVES the narrowing.
+      // Compiler-facing (constitution §4.1) — the Phase-2 relocation drill. Stamped onto
+      // `.contract` in place now (a tagless-guard def has no `Contract` param to thread
+      // these through — see `TaglessGuardSymbolDef.emit`/`.narrows` in _bake.ts). `pair?`
+      // is its own Law-N witness — its runtime behavior PROVES the narrowing.
       emit: pairQEmitRule,
       narrows: { witness: "pair?" },
       refPolicy: "eta",
-    },
+    }),
 
     "null?": symbol.native`null?: empty-list test`(
       {
@@ -398,15 +397,14 @@ export default EnvCapability.define("scheme/equality", {
     ),
 
     // Symbol prints as string in the harvest image (no separate ambient Symbol carrier).
-    "symbol?": {
-      ...symbol.taglessGuard`symbol?: #t iff obj is an interned symbol`,
+    "symbol?": withContractFields(symbol.taglessGuard`symbol?: #t iff obj is an interned symbol`, {
       type: dedent`
           {
             (x: unknown): x is string;
             <T>(x: T): x is Extract<T, string>;
           }
         `,
-    },
+    }),
 
     // `dict?` — Racket's dict predicate, the missing counterpart to our native `{…}` /
     // `(dict …)` open-key map (polyglot.ts). We ship the type but had no predicate for

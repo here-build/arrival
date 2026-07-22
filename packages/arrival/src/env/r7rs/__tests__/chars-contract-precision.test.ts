@@ -23,8 +23,9 @@ import charsPack from "../chars.js";
 import type { AEntity } from "../../../common/symbol.js";
 import { ACharacter } from "../../../values/primitives/ACharacter.js";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
+import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
-const symbols = charsPack.spec.symbols as Record<string, AEntity>;
+const symbols = harvestContracts(charsPack.spec.symbols);
 
 function nativeDef(name: string) {
   const def = symbols[name];

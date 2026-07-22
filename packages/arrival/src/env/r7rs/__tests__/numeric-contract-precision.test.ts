@@ -34,8 +34,9 @@ import { AExact } from "../../../values/primitives/AExact.js";
 import { AInexact } from "../../../values/primitives/AInexact.js";
 import { APair } from "../../../values/primitives/APair.js";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
+import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
-const symbols = numericPack.spec.symbols as Record<string, AEntity>;
+const symbols = harvestContracts(numericPack.spec.symbols);
 
 function nativeDef(name: string) {
   const def = symbols[name];

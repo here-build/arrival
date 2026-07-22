@@ -51,8 +51,8 @@ import {
 import { setEmissionEnabled } from "../../provenance/store/emit.js";
 import type { Payload } from "../../provenance/store/interfaces.js";
 import type { EmittedWire, WireframeGraph } from "../../provenance/wireframe/types.js";
-import { type RosettaSymbolDef } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
+import { ARosettaProcedure } from "../../values/primitives/ACallable.js";
 import { prospectiveSourceCone } from "../../__tests__/provenance/w1-harness.js";
 import {
   CORPUS_BASE_NAMES,
@@ -256,7 +256,7 @@ describe("replay-nondeterminism (§4 R1 + §7: frozen-payload replay stable unde
     const env = mintFrame(inferenceEnv, "q16-mutated-world");
     await EnvCapability.define("test/mutated-world", {
       symbols: (symbol, z) => {
-        const symbols: Record<string, RosettaSymbolDef> = {};
+        const symbols: Record<string, ARosettaProcedure> = {};
         for (const op of Object.keys(SOURCES)) {
           symbols[op] = symbol.rosetta`${op}: mutated-world source (offset +1000)`(
             { input: [], output: [z.number] },

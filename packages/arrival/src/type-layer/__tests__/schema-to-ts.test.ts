@@ -4,8 +4,16 @@
 // sampled native def, a rosetta def, and a multiple-values output.
 import { describe, expect, it } from "vitest";
 import * as z from "../../common/scheme-zod.js";
-import { symbol } from "../../common/symbol.js";
+import { symbol, withContractFields } from "../../common/symbol.js";
+import { contractOf } from "../../common/capability.js";
 import { printType, signatureOf, sTagToTsType } from "../schema-to-ts.js";
+
+/** Test-only cast — `signatureOf` reads an `AEntity` CONTRACT; Stage A2's factories mint
+ *  the runtime A-value directly, so pull the contract off it via the shared read-side
+ *  seam (`common/capability.ts`'s `contractOf`) before handing it to the printer. */
+function sig(def: Parameters<typeof contractOf>[0]): string {
+  return signatureOf(contractOf(def)!);
+}
 
 describe("printType — native identity primitives (scheme primitive → plain-TS image)", () => {
   // REBASELINE (fe2c848ee7, 2026-07-08): `z.pair` is now `cons(value, value)` — a real codec
@@ -185,7 +193,7 @@ describe("signatureOf — the args-vector → function-signature composer", () =
       { input: [z.value], output: [z.value], type: "(ip: SchemeIP) => SchemeIP" },
       (a) => a,
     );
-    expect(signatureOf(def)).toBe("(ip: SchemeIP) => SchemeIP");
+    expect(sig(def)).toBe("(ip: SchemeIP) => SchemeIP");
   });
 
   // INVARIANT: `?` type predicates harvest as dual type-guards (unknown arm + Extract arm).
@@ -196,17 +204,14 @@ describe("signatureOf — the args-vector → function-signature composer", () =
       { input: [z.value], output: [z.boolean], type: dual },
       () => true,
     );
-    expect(signatureOf(def)).toBe(dual);
+    expect(sig(def)).toBe(dual);
   });
 
   it("honors a dual type-guard `type` on a taglessGuard type predicate", () => {
     const dual =
       "{ (x: unknown): x is readonly unknown[]; <T>(x: T): x is Extract<T, readonly any[]>; }";
-    const def = {
-      ...symbol.taglessGuard`vector?: proof`,
-      type: dual,
-    };
-    expect(signatureOf(def)).toBe(dual);
+    const def = withContractFields(symbol.taglessGuard`vector?: proof`, { type: dual });
+    expect(sig(def)).toBe(dual);
   });
 
   // INVARIANT: a native def composes as scheme-value args with a synchronous (non-Promise) return.
@@ -215,7 +220,7 @@ describe("signatureOf — the args-vector → function-signature composer", () =
       { input: [z.pair, z.pair], output: [z.pair] },
       (a) => a,
     );
-    expect(signatureOf(def)).toBe(
+    expect(sig(def)).toBe(
       "(a: Pair<unknown, unknown>, b: Pair<unknown, unknown>) => Pair<unknown, unknown>",
     );
   });
@@ -226,7 +231,7 @@ describe("signatureOf — the args-vector → function-signature composer", () =
       { input: [z.string, z.number], output: [z.string] },
       (s) => s,
     );
-    expect(signatureOf(def)).toBe("(a: string, b: number) => Promise<string>");
+    expect(sig(def)).toBe("(a: string, b: number) => Promise<string>");
   });
 
   // INVARIANT: a multi-value rosetta output composes as a tuple inside Promise.
@@ -235,7 +240,7 @@ describe("signatureOf — the args-vector → function-signature composer", () =
       { input: [z.number], output: [z.number, z.number] },
       (n) => [n, n] as [number, number],
     );
-    expect(signatureOf(def)).toBe("(a: number) => Promise<[number, number]>");
+    expect(sig(def)).toBe("(a: number) => Promise<[number, number]>");
   });
 
   // INVARIANT: a multi-value native output composes as a bare (sync) tuple.
@@ -244,7 +249,7 @@ describe("signatureOf — the args-vector → function-signature composer", () =
       { input: [z.pair], output: [z.pair, z.pair] },
       (p) => [p, p] as [typeof p, typeof p],
     );
-    expect(signatureOf(def)).toBe(
+    expect(sig(def)).toBe(
       "(a: Pair<unknown, unknown>) => [Pair<unknown, unknown>, Pair<unknown, unknown>]",
     );
   });
@@ -255,7 +260,7 @@ describe("signatureOf — the args-vector → function-signature composer", () =
       { input: z.array(z.number), output: [z.number] },
       (...ns: number[]) => ns.reduce((a, b) => a + b, 0),
     );
-    expect(signatureOf(def)).toBe("(...args: number[]) => Promise<number>");
+    expect(sig(def)).toBe("(...args: number[]) => Promise<number>");
   });
 
   // INVARIANT: a 0-arg contract composes as "()".
@@ -264,13 +269,13 @@ describe("signatureOf — the args-vector → function-signature composer", () =
       { input: [], output: [z.number] },
       () => Date.now(),
     );
-    expect(signatureOf(def)).toBe("() => Promise<number>");
+    expect(sig(def)).toBe("() => Promise<number>");
   });
 
   // INVARIANT: a notImplemented/door def renders its signature as "never" (not callable).
   it("renders an omitted-verb door as 'never' (not callable)", () => {
     const def = symbol.notImplemented`eval: arbitrary evaluation is a door`;
-    expect(signatureOf(def)).toBe("never");
+    expect(sig(def)).toBe("never");
   });
 
   // INVARIANT: a kwargs (inputRest object) input composes as a single plain-object parameter
@@ -280,7 +285,7 @@ describe("signatureOf — the args-vector → function-signature composer", () =
       { input: [], inputRest: { name: z.string, mode: z.enum(["fast", "scenic"]).optional() }, output: [z.string] },
       () => "",
     );
-    expect(signatureOf(def)).toBe(
+    expect(sig(def)).toBe(
       '(a: { name: string; mode?: ("fast" | "scenic") | undefined }) => Promise<string>',
     );
   });

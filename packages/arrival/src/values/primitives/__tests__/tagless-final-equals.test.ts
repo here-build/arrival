@@ -27,6 +27,7 @@ import listsCap from "../../../env/r7rs/lists.js";
 import type { EnvCapability } from "../../../common/capability.js";
 import type { AList, AListAlike, SchemeValue } from "../../types.js";
 import { tf } from "../../tagless-final.js";
+import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // B2 — arrival/tagless-final/equals as a totalic, cycle-safe, tagless-final Setoid.
@@ -56,14 +57,13 @@ import { tf } from "../../tagless-final.js";
 // declaration site). These packs are all the record form of `spec.symbols`.
 const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
   Object.fromEntries(
-    // Migrated packs expose `symbol.native` defs (`{ kind: "native", impl }`); the legacy
-    // `{ value }` form is the fallback for any entry not yet on the symbol.* API. Entries
-    // resolving to neither (no `impl`, no `value`) are DROPPED so the record's values are
-    // honestly all-functions — the op-helpers below call them as such.
-    Object.entries(
-      cap.spec.symbols as Record<string, { impl?: (...a: any[]) => any; value?: (...a: any[]) => any }>,
-    ).flatMap(([k, v]) => {
-      const op = v.impl ?? v.value;
+    // Stage A2: the CONTRACT (native's raw `.impl`) rides `.contract` on the minted
+    // ANativeProcedure now; `harvestContracts` pulls it off (the shared read-side seam).
+    // The legacy `{ value }` form is the fallback for any entry not yet on the symbol.*
+    // API. Entries resolving to neither (no `impl`, no `value`) are DROPPED so the
+    // record's values are honestly all-functions — the op-helpers below call them as such.
+    Object.entries(harvestContracts(cap.spec.symbols)).flatMap(([k, v]) => {
+      const op = (v as { impl?: (...a: any[]) => any; value?: (...a: any[]) => any }).impl ?? (v as { value?: (...a: any[]) => any }).value;
       return op ? [[k, op] as const] : [];
     }),
   );

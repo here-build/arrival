@@ -8,6 +8,8 @@ import { signatureOf } from "../schema-to-ts.js";
 import equality from "../../env/r7rs/equality.js";
 import vectors from "../../env/r7rs/vectors.js";
 import { symbol } from "../../common/symbol.js";
+import { contractOf } from "../../common/capability.js";
+import { harvestContracts } from "../../__tests__/_symbols-harvest.js";
 import * as z from "../../common/scheme-zod.js";
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim();
@@ -89,16 +91,16 @@ function narrowedType(opts: { guardSig: string; inputType: string }): string {
 
 describe("harvested list?/pair?/vector? signatures are dual guards (inline dedent)", () => {
   it("list?", () => {
-    const def = (equality.spec.symbols as Record<string, unknown>)["list?"];
-    expect(norm(signatureOf(def as never))).toBe(norm(LIST_DUAL));
+    const def = harvestContracts(equality.spec.symbols)["list?"];
+    expect(norm(signatureOf(def))).toBe(norm(LIST_DUAL));
   });
   it("pair?", () => {
-    const def = (equality.spec.symbols as Record<string, unknown>)["pair?"];
-    expect(norm(signatureOf(def as never))).toBe(norm(PAIR_DUAL));
+    const def = harvestContracts(equality.spec.symbols)["pair?"];
+    expect(norm(signatureOf(def))).toBe(norm(PAIR_DUAL));
   });
   it("vector?", () => {
-    const def = (vectors.spec.symbols as Record<string, unknown>)["vector?"];
-    expect(norm(signatureOf(def as never))).toBe(norm(VECTOR_DUAL));
+    const def = harvestContracts(vectors.spec.symbols)["vector?"];
+    expect(norm(signatureOf(def))).toBe(norm(VECTOR_DUAL));
   });
 });
 
@@ -151,6 +153,6 @@ describe("dual guard control-flow narrowing (lens-critical)", () => {
       { input: [z.value], output: [z.boolean], type: LIST_DUAL },
       () => true,
     );
-    expect(norm(signatureOf(def))).toBe(norm(LIST_DUAL));
+    expect(norm(signatureOf(contractOf(def)!))).toBe(norm(LIST_DUAL));
   });
 });

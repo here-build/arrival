@@ -71,6 +71,20 @@ import {
   type ProvenanceRole,
 } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
+import type {
+  NativeSymbolDef,
+  RosettaSymbolDef,
+  SequenceSymbolDef,
+  TaglessGuardSymbolDef,
+  TaglessSymbolDef,
+} from "../../common/symbol.js";
+
+/** Test-only cast: pull a minted value's `.contract` (typed `unknown` on the class — see
+ *  ACallable.ts) back to its known CONTRACT shape. Stage A2: the factories mint the
+ *  runtime A-value directly now; the def they used to RETURN rides `.contract` on it. */
+function contractOf<T>(v: { contract: unknown }): T {
+  return v.contract as T;
+}
 import { ProvenanceRoleShapeError, PreludeMembershipError } from "../../errors.js";
 import { classifyProgramPrelude, assertPreludeEligible } from "../../provenance/prelude.js";
 import { freshEnv } from "../../__tests__/_fresh-env.js";
@@ -82,11 +96,12 @@ import strings from "../../env/r7rs/strings.js";
 import vectors from "../../env/r7rs/vectors.js";
 import binding from "../../env/r7rs/binding.js";
 import equality from "../../env/r7rs/equality.js";
+import { harvestContracts } from "../../__tests__/_symbols-harvest.js";
 
 /** Resolved callback roles off a pack's REAL exported def (the data plane Q3/Q8a read) —
  *  same `.spec.symbols` access idiom as the `*-contract-precision.test.ts` files. */
 function rolesOf(pack: { spec: { symbols?: unknown } }, name: string): CallbackRoles | undefined {
-  const d = (pack.spec.symbols as Record<string, AEntity>)[name];
+  const d = (harvestContracts(pack.spec.symbols))[name];
   if (d === undefined) throw new Error(`pack has no symbol named ${name}`);
   return "callbackRoles" in d ? d.callbackRoles : undefined;
 }
@@ -104,17 +119,29 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       // kind's default before the def is returned (`contract.provenance ?? "pipe"` /
       // `?? "source"` in native.ts/rosetta.ts/sequence.ts; tagless.ts/taglessGuard.ts
       // hardcode "pipe" — no `Contract` channel exists to override it at all).
-      expect(symbol.native`v1-default-native: `({ input: [z.value], output: [z.value] }, (v) => v).provenance).toBe(
-        "pipe",
-      );
-      expect(symbol.rosetta`v1-default-rosetta: `({ input: [z.string], output: [z.string] }, (s) => s).provenance).toBe(
-        "source",
-      );
+      // Stage A2: `contractOf` pulls the baked CONTRACT (`.provenance: ProvenanceRole`)
+      // off the minted value — reading `.provenance` DIRECTLY on the value would instead
+      // hit `AValue`'s OWN `provenance: ReadonlySet<number>` field (the lineage-marker
+      // set every scheme value carries), a same-named but semantically unrelated field.
       expect(
-        symbol.sequence`v1-default-sequence: `({ input: [z.value], output: [z.value] }, (args) => args[0]).provenance,
+        contractOf<NativeSymbolDef>(
+          symbol.native`v1-default-native: `({ input: [z.value], output: [z.value] }, (v) => v),
+        ).provenance,
       ).toBe("pipe");
-      expect(symbol.tagless`v1-default-tagless: `.provenance).toBe("pipe");
-      expect(symbol.taglessGuard`v1-default-taglessguard: `.provenance).toBe("pipe");
+      expect(
+        contractOf<RosettaSymbolDef>(
+          symbol.rosetta`v1-default-rosetta: `({ input: [z.string], output: [z.string] }, (s) => s),
+        ).provenance,
+      ).toBe("source");
+      expect(
+        contractOf<SequenceSymbolDef>(
+          symbol.sequence`v1-default-sequence: `({ input: [z.value], output: [z.value] }, (args) => args[0]),
+        ).provenance,
+      ).toBe("pipe");
+      expect(contractOf<TaglessSymbolDef>(symbol.tagless`v1-default-tagless: `).provenance).toBe("pipe");
+      expect(
+        contractOf<TaglessGuardSymbolDef>(symbol.taglessGuard`v1-default-taglessguard: `).provenance,
+      ).toBe("pipe");
 
       // THE SEVEN-ROLE VOCABULARY — every member is a real, declarable role;
       // exercised where `assertProvenanceRoleShape` (_bake.ts) constrains the shape
@@ -122,29 +149,48 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       // z.lambda input arm — the two SHAPE-decidable checks) and freely where it
       // doesn't (pipe/source/loop/opaque carry no shape constraint at all).
       expect(
-        symbol.native`v1-role-pipe: `({ input: [z.value], output: [z.value], provenance: "pipe" }, (v) => v).provenance,
+        contractOf<NativeSymbolDef>(
+          symbol.native`v1-role-pipe: `({ input: [z.value], output: [z.value], provenance: "pipe" }, (v) => v),
+        ).provenance,
       ).toBe("pipe");
       expect(
-        symbol.native`v1-role-fan: `({ input: [z.lambda, z.value], output: [z.value], provenance: "fan" }, (f, v) => v)
-          .provenance,
+        contractOf<NativeSymbolDef>(
+          symbol.native`v1-role-fan: `(
+            { input: [z.lambda, z.value], output: [z.value], provenance: "fan" },
+            (f, v) => v,
+          ),
+        ).provenance,
       ).toBe("fan");
       expect(
-        symbol.rosetta`v1-role-source: `({ input: [z.string], output: [z.string], provenance: "source" }, (s) => s)
-          .provenance,
+        contractOf<RosettaSymbolDef>(
+          symbol.rosetta`v1-role-source: `(
+            { input: [z.string], output: [z.string], provenance: "source" },
+            (s) => s,
+          ),
+        ).provenance,
       ).toBe("source");
       expect(
-        symbol.native`v1-role-loop: `({ input: [z.value], output: [z.value], provenance: "loop" }, (v) => v).provenance,
+        contractOf<NativeSymbolDef>(
+          symbol.native`v1-role-loop: `({ input: [z.value], output: [z.value], provenance: "loop" }, (v) => v),
+        ).provenance,
       ).toBe("loop");
       expect(
-        symbol.native`v1-role-opaque: `({ input: [z.value], output: [z.value], provenance: "opaque" }, (v) => v)
-          .provenance,
+        contractOf<NativeSymbolDef>(
+          symbol.native`v1-role-opaque: `({ input: [z.value], output: [z.value], provenance: "opaque" }, (v) => v),
+        ).provenance,
       ).toBe("opaque");
       expect(
-        symbol.native`v1-role-sink: `({ input: [z.value], output: [], provenance: "sink" }, (): [] => []).provenance,
+        contractOf<NativeSymbolDef>(
+          symbol.native`v1-role-sink: `({ input: [z.value], output: [], provenance: "sink" }, (): [] => []),
+        ).provenance,
       ).toBe("sink");
       expect(
-        symbol.native`v1-role-transparent: `({ input: [z.value], output: [], provenance: "transparent" }, (): [] => [])
-          .provenance,
+        contractOf<NativeSymbolDef>(
+          symbol.native`v1-role-transparent: `(
+            { input: [z.value], output: [], provenance: "transparent" },
+            (): [] => [],
+          ),
+        ).provenance,
       ).toBe("transparent");
 
       // TYPE-LEVEL: `Contract.provenance` types as `ProvenanceRole | undefined` — a
@@ -211,12 +257,16 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       // omission," never a runtime silent default — and never, in particular, a
       // silent default TO `"opaque"` (which is its own explicit role, reached only
       // when actually declared).
+      // Stage A2: each factory now mints the runtime A-value directly — `contractOf`
+      // pulls the baked CONTRACT (still non-optional `provenance`) back off it.
       const defs: { provenance: ProvenanceRole }[] = [
-        symbol.native`v1-complete-native: `({ input: [z.value], output: [z.value] }, (v) => v),
-        symbol.rosetta`v1-complete-rosetta: `({ input: [z.string], output: [z.string] }, (s) => s),
-        symbol.sequence`v1-complete-sequence: `({ input: [z.value], output: [z.value] }, (args) => args[0]),
-        symbol.tagless`v1-complete-tagless: `,
-        symbol.taglessGuard`v1-complete-taglessguard: `,
+        contractOf(symbol.native`v1-complete-native: `({ input: [z.value], output: [z.value] }, (v) => v)),
+        contractOf(symbol.rosetta`v1-complete-rosetta: `({ input: [z.string], output: [z.string] }, (s) => s)),
+        contractOf(
+          symbol.sequence`v1-complete-sequence: `({ input: [z.value], output: [z.value] }, (args) => args[0]),
+        ),
+        contractOf(symbol.tagless`v1-complete-tagless: `),
+        contractOf(symbol.taglessGuard`v1-complete-taglessguard: `),
       ];
       for (const def of defs) {
         expect(typeof def.provenance).toBe("string");
@@ -268,9 +318,11 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       ).toThrow(ProvenanceRoleShapeError);
       // Consistent counterpart — a truly zero-item output vector passes.
       expect(
-        symbol.native`v1-drift-sink-ok: sink with no egress wire`(
-          { input: [z.value], output: [], provenance: "sink" },
-          (): [] => [],
+        contractOf<NativeSymbolDef>(
+          symbol.native`v1-drift-sink-ok: sink with no egress wire`(
+            { input: [z.value], output: [], provenance: "sink" },
+            (): [] => [],
+          ),
         ).provenance,
       ).toBe("sink");
 
@@ -284,9 +336,11 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       ).toThrow(ProvenanceRoleShapeError);
       // Consistent counterpart — a lambda arm present passes.
       expect(
-        symbol.native`v1-drift-fan-ok: fan with a proc to apply`(
-          { input: [z.lambda, z.value], output: [z.value], provenance: "fan" },
-          (f, v) => v,
+        contractOf<NativeSymbolDef>(
+          symbol.native`v1-drift-fan-ok: fan with a proc to apply`(
+            { input: [z.lambda, z.value], output: [z.value], provenance: "fan" },
+            (f, v) => v,
+          ),
         ).provenance,
       ).toBe("fan");
 
@@ -482,9 +536,11 @@ describe("V2-Q4 — callback-role drift door + acc chain + stamp path (§2/§3; 
       ).toThrow(ProvenanceRoleShapeError);
       // Agreeing with the DECIDED arm passes — declaration may restate shape.
       expect(
-        symbol.native`q4-ok-effect: declared effect under void egress`(
-          { input: [z.lambda], output: [z.undefinedResult], callbackRoles: ["effect"] },
-          () => theVoid,
+        contractOf<NativeSymbolDef>(
+          symbol.native`q4-ok-effect: declared effect under void egress`(
+            { input: [z.lambda], output: [z.undefinedResult], callbackRoles: ["effect"] },
+            () => theVoid,
+          ),
         ).callbackRoles,
       ).toEqual(["effect"]);
       // Phantom callback: roles declared with NO z.lambda arm to carry them → door.
@@ -504,9 +560,11 @@ describe("V2-Q4 — callback-role drift door + acc chain + stamp path (§2/§3; 
       // Overriding the fan DEFAULT (element-transformer) to control does NOT door —
       // filter's exact shape; the default yields to declaration.
       expect(
-        symbol.native`q4-fan-override: fan default overridden to control`(
-          { input: [z.lambda, z.value], output: [z.value], provenance: "fan", callbackRoles: ["control"] },
-          (f, v) => v,
+        contractOf<NativeSymbolDef>(
+          symbol.native`q4-fan-override: fan default overridden to control`(
+            { input: [z.lambda, z.value], output: [z.value], provenance: "fan", callbackRoles: ["control"] },
+            (f, v) => v,
+          ),
         ).callbackRoles,
       ).toEqual(["control"]);
     },
@@ -526,10 +584,12 @@ describe("V2-Q4 — callback-role drift door + acc chain + stamp path (§2/§3; 
       expect(declaresAccChain(rolesOf(lists, "map"))).toBe(false);
       expect(declaresAccChain(rolesOf(srfi1, "filter"))).toBe(false);
       expect(declaresAccChain(undefined)).toBe(false);
-      // withCallbackRoles is non-mutating declaration sugar: the def carries the roles.
+      // withCallbackRoles stamps the roles onto the minted value (+ its `.contract`) in
+      // place — Stage A2's mutate-in-place sugar (the shapeless tagless contract has no
+      // Contract param to thread a declaration through).
       const marked = withCallbackRoles(symbol.tagless`q4-fold: synthetic fold`, ["accumulator"]);
-      expect(marked.callbackRoles).toEqual(["accumulator"]);
-      expect(declaresAccChain(marked.callbackRoles)).toBe(true);
+      expect(contractOf<TaglessSymbolDef>(marked).callbackRoles).toEqual(["accumulator"]);
+      expect(declaresAccChain(contractOf<TaglessSymbolDef>(marked).callbackRoles)).toBe(true);
     },
   );
 

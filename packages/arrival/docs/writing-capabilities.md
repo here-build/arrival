@@ -148,7 +148,8 @@ not just the throw.
 - **Verbs by role intent, not implementation** — `stock-level`, not `query-inventory-db`. The
   materialization can change; the intent is the durable name. Kebab-case, `?` suffix for predicates.
 - Capability names are `domain/thing` — the door's cause owner and the assembly's audit key, so make it
-  legible. Subject-scoped packs declare the namespace once via `symbolPrefix` and keep the record keys
-  bare.
+  legible. Subject-scoped packs spell the namespace directly into each verb's own record key
+  (`"process/list": symbol.native\`process/list: …\`(...)` — `symbolPrefix` was retired 2026-07-22,
+  test-only and never a production author).
 - The doc line after `name: ` is the agent-facing catalog entry — prompt text; budget it like prompt
   text, warnings inline (`(irreversible)`).

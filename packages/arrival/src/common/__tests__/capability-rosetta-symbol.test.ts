@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX, RunContext } from "../../run/RunContext.js";
 
 import { EnvCapability } from "../capability.js";
-import { symbol, makeCallCtx, type RosettaSymbolDef, type CallCtx } from "../symbol.js";
+import { symbol, makeCallCtx, type CallCtx } from "../symbol.js";
 import * as z from "../scheme-zod.js";
 import { ResolvingAmbient, mintResolvingFrame } from "../../env/AmbientRuntime.js";
 import { AString } from "../../values/primitives/AString.js";
@@ -54,8 +54,15 @@ function invocationWithId(id: number): { invocation: InvocationLike; marked: () 
   return { invocation, marked: () => didMark };
 }
 
-async function wireRosetta(def: RosettaSymbolDef): Promise<ARosettaProcedure> {
-  const cap = EnvCapability.define("test/rosetta", { symbols: () => ({ verb: def }) });
+async function wireRosetta(def: ARosettaProcedure): Promise<ARosettaProcedure> {
+  // Stage A2's key-name gate (SymbolKeyMismatchError, common/capability.ts) demands the
+  // record key match the value's own mint-time name — bind it under ITS OWN name, then
+  // `symbol.alias` it to the harness's stable "verb" accessor (the alias arm is exempt
+  // from the gate by design: dissolution is a duplicate binding under a DIFFERENT name).
+  const name = (def.contract as { name: string }).name;
+  const cap = EnvCapability.define("test/rosetta", {
+    symbols: (symbol) => ({ [name]: def, verb: symbol.alias`${name}` }),
+  });
   const { env, verbs } = recordingEnv();
   await cap.lower({}).apply(env, undefined as never);
   expect(verbs.verb).toBeInstanceOf(ARosettaProcedure); // the binder-cut bind shape itself

@@ -20,6 +20,15 @@
 import { describe, it, expect } from "vitest";
 import * as z from "../../common/scheme-zod.js";
 import { symbol, testCallCtx } from "../../common/symbol.js";
+
+/** Test-only cast: pull a minted ARosettaProcedure\'s `.contract` (typed `unknown` on the
+ *  class) back to its RosettaSymbolDef shape, for direct `.run` invocation — Stage A2\'s
+ *  `symbol.rosetta` mints the ARosettaProcedure directly; the def it used to RETURN rides
+ *  `.contract` on it. */
+import type { RosettaSymbolDef } from "../../common/symbol.js";
+function rosettaContract(v: { contract: unknown }): RosettaSymbolDef {
+  return v.contract as RosettaSymbolDef;
+}
 import { EnvCapability } from "../../common/capability.js";
 import { exec } from "../../eval/generator-exec.js";
 import { RunContext, CONSTANT_CTX } from "../../run/RunContext.js";
@@ -84,7 +93,7 @@ describe("single-flight (D1) + eviction — at the wrapper", () => {
     });
     const cache = new MemoryRunCache("record");
     const ctx = ctxWith(cache);
-    const [a, b] = await Promise.all([def.run.call(ctx, num(21)), def.run.call(ctx, num(21))]);
+    const [a, b] = await Promise.all([rosettaContract(def).run.call(ctx, num(21)), rosettaContract(def).run.call(ctx, num(21))]);
     expect(fires()).toBe(1); // ONE rosetta call, two consumers
     expect(a).toBeDefined();
     expect(b).toBeDefined();
@@ -103,7 +112,7 @@ describe("single-flight (D1) + eviction — at the wrapper", () => {
     );
     const cache = new MemoryRunCache("record");
     const ctx = ctxWith(cache);
-    await Promise.all([def.run.call(ctx, num(1)), def.run.call(ctx, num(1))]);
+    await Promise.all([rosettaContract(def).run.call(ctx, num(1)), rosettaContract(def).run.call(ctx, num(1))]);
     expect(fires).toBe(1);
     expect(cache.entries.size).toBe(0); // pure is NEVER persisted — recovery = re-call
   });
@@ -120,7 +129,7 @@ describe("single-flight (D1) + eviction — at the wrapper", () => {
     );
     const cache = new MemoryRunCache("record");
     const ctx = ctxWith(cache);
-    await Promise.all([def.run.call(ctx, num(7)), def.run.call(ctx, num(7))]);
+    await Promise.all([rosettaContract(def).run.call(ctx, num(7)), rosettaContract(def).run.call(ctx, num(7))]);
     expect(fires).toBe(2); // two effects, always — no single-flight for sinks
     expect(cache.entries.size).toBe(1); // one tombstone (single-slot LWW)
   });
@@ -133,9 +142,9 @@ describe("single-flight (D1) + eviction — at the wrapper", () => {
     });
     const cache = new MemoryRunCache("record");
     const ctx = ctxWith(cache);
-    await expect(def.run.call(ctx, num(21))).rejects.toThrow("transient");
+    await expect(rosettaContract(def).run.call(ctx, num(21))).rejects.toThrow("transient");
     expect(cache.entries.size).toBe(0); // rejections are NEVER cached
-    await def.run.call(ctx, num(21)); // the retry fires fresh
+    await rosettaContract(def).run.call(ctx, num(21)); // the retry fires fresh
     expect(fires()).toBe(2);
     expect(cache.entries.size).toBe(1); // only the SETTLED entry serialized
   });
@@ -145,8 +154,8 @@ describe("single-flight (D1) + eviction — at the wrapper", () => {
     const { def, fires } = viewDef("rc-view-overwrite", () => ++stamp);
     const cache = new MemoryRunCache("record");
     const ctx = ctxWith(cache);
-    await def.run.call(ctx, num(21));
-    await def.run.call(ctx, num(21)); // identical penetration, SEQUENTIAL — a settled entry never suppresses a live fire
+    await rosettaContract(def).run.call(ctx, num(21));
+    await rosettaContract(def).run.call(ctx, num(21)); // identical penetration, SEQUENTIAL — a settled entry never suppresses a live fire
     expect(fires()).toBe(2);
     const [entry] = [...cache.entries.values()];
     expect(entry).toEqual({ kind: "value", value: 2 }); // last write won the slot

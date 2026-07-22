@@ -48,8 +48,9 @@ import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeEr
 import { DoorProcedure } from "../../../values/primitives/ACallable.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import type { AEntity, DoorSymbolDef } from "../../../common/symbol.js";
+import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
-const symbols = controlPack.spec.symbols as Record<string, AEntity>;
+const symbols = harvestContracts(controlPack.spec.symbols);
 
 // The pack's exact door population, name-for-name — every ROW below is scoped to
 // precisely this set so a future addition/removal is forced through every row.

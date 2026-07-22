@@ -17,12 +17,14 @@ import { describe, expect, it } from "vitest";
 import core from "../../core/core.js";
 import { signatureOf } from "../../../type-layer/schema-to-ts.js";
 import type { AEntity } from "../../../common/symbol.js";
+import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
 // `scheme/core`'s `symbols` is a plain object (no config/resources builder), but realize
 // through the same builder-tolerant shape the polyglot precision test uses, so this stays
 // correct if core ever grows a builder.
-// `spec.symbols` IS the record (the builder-form arm is retired).
-const symbols = (core.spec.symbols ?? {}) as Record<string, AEntity>;
+// `spec.symbols` IS the record (the builder-form arm is retired). Stage A2: each entry is
+// now a minted A-value — `harvestContracts` pulls the AEntity CONTRACT off each one.
+const symbols = harvestContracts(core.spec.symbols ?? {});
 
 function def(name: string): AEntity {
   const d = symbols[name];

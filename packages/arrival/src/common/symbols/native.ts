@@ -7,6 +7,8 @@
 // wrong-typed impl is a COMPILE error — that inference is the load-bearing proof.
 
 import { buildSlotAdopter } from "../../membrane/adopt-spine.js";
+import { ANativeProcedure } from "../../values/primitives/ACallable.js";
+import { type SchemeValue } from "../../values/types.js";
 import {
   assertCacheClassShape,
   assertProvenanceRoleShape,
@@ -14,10 +16,14 @@ import {
   normalizeInputVector,
   normalizeVector,
   parseNameDoc,
+  type CacheClass,
+  type CallbackRoles,
+  type CallCtx,
   type Contract,
   type Impl,
   type MetadataRecord,
   type NativeSymbolDef,
+  type ProvenanceRole,
   type RestSpec,
   type VectorSpec,
 } from "./_bake.js";
@@ -33,7 +39,7 @@ export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
     contract: Contract<I, O, Rest>,
     impl: Impl<I, O, Rest, "scheme">,
     opts: { metadata?: MetadataRecord } = {},
-  ): NativeSymbolDef => {
+  ): ANativeProcedure => {
     const inSchema = normalizeInputVector(contract.input, contract.inputRest);
     const outSchema = normalizeVector(contract.output);
     // Default "pipe" — see Contract.provenance (kind-default table + how capability.ts stamps
@@ -54,7 +60,7 @@ export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
     // impls field-read `.car` — a borrowed array has none, so they'd silently read `undefined`.
     // Computed once at bake, `undefined` when no slot adopts — a verb with no list args pays nothing.
     const adoptArgs = buildSlotAdopter(contract.input, contract.inputRest);
-    return {
+    const def: NativeSymbolDef = {
       kind: "native",
       name,
       doc,
@@ -81,5 +87,27 @@ export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
       // The extension bag — data only; dynamic fields resolve at read time, never at bake.
       metadata: opts.metadata,
     };
+    // Stage A2 — the factory mints the A-VALUE directly (not a plain def record):
+    // `common/capability.ts`'s bind loop used to build this ANativeProcedure itself, off a
+    // returned NativeSymbolDef; the def now rides `.contract` on the value it used to
+    // construct FROM, and the bind loop's per-kind construction arm is gone (`contract`,
+    // `requiresConfig`'s config-gate + `preludeOnly` routing are the only things it still
+    // reads off `.contract` per-assembly). The impl adapter (`(args, callCtx) =>
+    // hostImpl.apply(callCtx, args)`) is the SAME one the bind loop used to build.
+    const hostImpl = def.impl as (this: CallCtx, ...a: unknown[]) => unknown;
+    const proc = new ANativeProcedure({
+      name,
+      arity: { min: 0, max: null },
+      contract: def,
+      impl: (args, callCtx) => hostImpl.apply(callCtx, args) as SchemeValue,
+    });
+    // PROVENANCE STAMP — every constructed proc carries its RESOLVED provenance role plus,
+    // when declared, callbackRoles/cacheClass; the lineage classifier + wireframe builder
+    // read all three off the BOUND VALUE via `env.get(op)`, never a duck-read (unchanged
+    // from the bind loop's own stamping, just moved to mint time).
+    (proc as { provenanceRole?: ProvenanceRole }).provenanceRole = provenance;
+    if (cacheClass !== undefined) (proc as { cacheClass?: CacheClass }).cacheClass = cacheClass;
+    if (callbackRoles !== undefined) (proc as { callbackRoles?: CallbackRoles }).callbackRoles = callbackRoles;
+    return proc;
   };
 }

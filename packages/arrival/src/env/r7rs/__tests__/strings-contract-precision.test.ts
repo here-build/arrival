@@ -45,8 +45,9 @@ import { ACharacter } from "../../../values/primitives/ACharacter.js";
 import { APair } from "../../../values/primitives/APair.js";
 import { nil } from "../../../values/primitives/ANil.js";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
+import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
-const symbols = stringsPack.spec.symbols as Record<string, AEntity>;
+const symbols = harvestContracts(stringsPack.spec.symbols);
 
 function nativeDef(name: string) {
   const def = symbols[name];

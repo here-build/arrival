@@ -58,7 +58,6 @@ export interface CapabilityLike {
 /** The slice of `CapabilitySpec` the `exports` computation (below) needs. */
 export interface ExportableSpec {
   readonly symbols?: unknown; // always a plain record now (the builder-fn arm is retired); the typeof guard below stays as defense against type-erased specs
-  readonly symbolPrefix?: string;
   readonly prelude?: string;
 }
 
@@ -168,11 +167,10 @@ function formsOf(code: unknown): SchemeValue[] {
 
 /** Synthesize the shape `classifyProgramPrelude` (`provenance/prelude.ts`) expects
  *  (it extracts name+body from a REAL top-level define form; a `symbol.define`'s
- *  own body is just the RHS). `name` here is the BOUND verb (prefixed, if the
- *  capability declares `symbolPrefix`) — matching what a SIBLING define's body
- *  actually calls at runtime through the shared env, so the fixpoint's reference
- *  closure (`referencedSymbols`, over the WHOLE synthesized form including `name`
- *  itself) lines up with real call sites.
+ *  own body is just the RHS). `name` here is the BOUND verb (the record key) —
+ *  matching what a SIBLING define's body actually calls at runtime through the
+ *  shared env, so the fixpoint's reference closure (`referencedSymbols`, over the
+ *  WHOLE synthesized form including `name` itself) lines up with real call sites.
  *
  *  TWO shapes, matching `defineBodyOf`'s (prelude.ts) own two arms — NOT a uniform
  *  `(define name body)`: a callable's `body` IS `(lambda formals …)`, and
@@ -260,8 +258,8 @@ function defineHeadNameOf(form: unknown): string | null {
   return null;
 }
 
-/** `EnvCapability.exports`: prefixed `spec.symbols` keys (always statically enumerable
- *  now — the builder-form arm is retired; the typeof guard below only defends against
+/** `EnvCapability.exports`: `spec.symbols` keys (always statically enumerable now —
+ *  the builder-form arm is retired; the typeof guard below only defends against
  *  a type-erased spec handing a function) ∪ macro-aware define
  *  names parsed from `spec.prelude` (the migration-interim arm; shrinks toward nothing
  *  as capabilities move their `prelude` text blob to declared `symbol.define`s, pack
@@ -269,9 +267,8 @@ function defineHeadNameOf(form: unknown): string | null {
  *  parsing is inherently async, so this can never be a real synchronous getter. */
 export async function computeCapabilityExports(spec: ExportableSpec): Promise<ReadonlySet<string>> {
   const names = new Set<string>();
-  const prefix = spec.symbolPrefix ?? "";
   if (typeof spec.symbols !== "function") {
-    for (const key of Object.keys((spec.symbols as Record<string, unknown> | undefined) ?? {})) names.add(prefix + key);
+    for (const key of Object.keys((spec.symbols as Record<string, unknown> | undefined) ?? {})) names.add(key);
   }
   if (spec.prelude !== undefined) {
     for (const n of await macroAwareDefineNames(spec.prelude)) names.add(n);

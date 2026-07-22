@@ -19,12 +19,13 @@ import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import type { SchemeValue } from "../../../values/types.js";
 import type { AEntity } from "../../../common/symbol.js";
 import exceptionsPack from "../exceptions.js";
+import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
 async function exec(code: string, options?: ExecOptions): Promise<SchemeValue[]> {
   return (await execState(code, options)).values.slice();
 }
 
-const symbols = exceptionsPack.spec.symbols as Record<string, AEntity>;
+const symbols = harvestContracts(exceptionsPack.spec.symbols);
 
 function defineDef(name: string) {
   const def = symbols[name];

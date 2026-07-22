@@ -36,7 +36,7 @@ import { global_env } from "../../env-roots.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
 import { overridableCapability } from "../../overridable/overridable.js";
 import type { AEntity, DefineSyntaxSymbolDef } from "../../../common/symbol.js";
-import type { SymbolDeclaration } from "../../../common/capability.js";
+import { contractOf, type SymbolDeclaration } from "../../../common/capability.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 
 const capabilities = [overridableCapability];
@@ -63,11 +63,13 @@ describe("arrival/overridable — structural: no prelude field, define-syntax ki
   });
 
   it("`overridable/resolve` stays a `rosetta` entry with its `in`/`out` contract intact (never migrated)", () => {
-    const def = resolveSymbols()["overridable/resolve"] as AEntity & { in?: unknown; out?: unknown };
+    // Stage A2: `overridable/resolve` mints an ARosettaProcedure directly now — its
+    // CONTRACT (still `kind: "rosetta"`, still carrying `in`/`out`) rides `.contract`.
+    const def = contractOf(resolveSymbols()["overridable/resolve"]) as (AEntity & { in?: unknown; out?: unknown }) | undefined;
     expect(def).toBeDefined();
-    expect(def.kind).toBe("rosetta");
-    expect(def.in).toBeDefined();
-    expect(def.out).toBeDefined();
+    expect(def!.kind).toBe("rosetta");
+    expect(def!.in).toBeDefined();
+    expect(def!.out).toBeDefined();
   });
 
   it("the capability declares no `prelude` field", () => {

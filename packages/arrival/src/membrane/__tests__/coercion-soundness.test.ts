@@ -48,6 +48,7 @@ import { nil } from "../../values/primitives/ANil.js";
 import { provOf } from "../../provenance/lineage-shadow.js";
 import { tf } from "../../values/tagless-final.js";
 import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
+import { harvestContracts } from "../../__tests__/_symbols-harvest.js";
 
 // Q20b: this file calls carrier ops (map/filter/length/sort) directly against
 // pre-stamped fixtures, which route through op-helpers.ts's accumulation — force
@@ -60,10 +61,11 @@ await initBridge();
 // declaration site). These packs are all the record form of `spec.symbols`.
 const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
   Object.fromEntries(
-    Object.entries(
-      cap.spec.symbols as Record<string, { impl?: (...a: any[]) => any; value?: (...a: any[]) => any }>,
-    )
-      .map(([k, v]) => [k, v.impl ?? v.value] as const)
+    Object.entries(harvestContracts(cap.spec.symbols))
+      // Stage A2: the CONTRACT (native's raw `.impl`) rides `.contract` on the minted
+      // ANativeProcedure now, pulled off via `harvestContracts`/`contractOf` (the shared
+      // read-side seam) — same `v.impl ?? v.value` idiom as before, just off the contract.
+      .map(([k, v]) => [k, (v as { impl?: (...a: any[]) => any; value?: (...a: any[]) => any }).impl ?? (v as { value?: (...a: any[]) => any }).value] as const)
       // A def may carry neither `impl` nor `value` (a baked bare-`Fn` def) — that's
       // not a callable op for this test's purposes, so drop it rather than admit an
       // `undefined` into the op map (honest narrowing, not a cast over the union).
@@ -332,7 +334,7 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
 // SchemeVector and a borrowed AJSArray answer; a non-vector gracefully #f (vector?)
 // or throws (vector-ref). This is the Family-2 "reached around the box" dissolution.
 // ════════════════════════════════════════════════════════════════════════════
-const vectorSymbols = vectorsCap.spec.symbols as Record<
+const vectorSymbols = harvestContracts(vectorsCap.spec.symbols) as Record<
   string,
   { run?: (...a: unknown[]) => unknown; impl?: (...a: unknown[]) => unknown }
 >;

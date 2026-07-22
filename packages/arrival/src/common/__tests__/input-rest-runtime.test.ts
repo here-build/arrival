@@ -23,7 +23,13 @@ import { freshEnv } from "../../__tests__/_fresh-env.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
-import { symbol, testCallCtx } from "../symbol.js";
+import { symbol, testCallCtx, type RosettaSymbolDef } from "../symbol.js";
+
+/** Test-only cast — see symbol.test.ts's own copy of this helper for the full rationale
+ *  (Stage A2: `symbol.rosetta` mints the ARosettaProcedure directly; `.run` rides `.contract`). */
+function rosettaContract(v: { contract: unknown }): RosettaSymbolDef {
+  return v.contract as RosettaSymbolDef;
+}
 import { normalizeInputVector } from "../symbols/_bake.js";
 import * as z from "../scheme-zod.js";
 import { EnvCapability } from "../capability.js";
@@ -35,7 +41,7 @@ describe("Contract.inputRest runtime — UNIT (direct def.run): a fixed head + v
       { input: [z.string], inputRest: z.number, output: [z.string] },
       (head: string, ...rest: number[]) => `${head}:${rest.length}:${rest.join(",")}`,
     );
-    const out = await def.run.call(testCallCtx(), new AString("h"));
+    const out = await rosettaContract(def).run.call(testCallCtx(), new AString("h"));
     expect((out as AString)["arrival/toJS"]()).toBe("h:0:");
   });
 
@@ -46,7 +52,7 @@ describe("Contract.inputRest runtime — UNIT (direct def.run): a fixed head + v
       { input: [z.string], inputRest: z.number, output: [z.string] },
       (head: string, ...rest: number[]) => `${head}:${rest.length}:${rest.join(",")}`,
     );
-    const out = await def.run.call(testCallCtx(), new AString("h"), new AInexact(1), new AInexact(2));
+    const out = await rosettaContract(def).run.call(testCallCtx(), new AString("h"), new AInexact(1), new AInexact(2));
     expect((out as AString)["arrival/toJS"]()).toBe("h:2:1,2");
   });
 
@@ -56,7 +62,7 @@ describe("Contract.inputRest runtime — UNIT (direct def.run): a fixed head + v
       { input: [z.string], inputRest: z.number, output: [z.string] },
       (head: string, ...rest: number[]) => `${head}:${rest.length}:${rest.join(",")}`,
     );
-    const out = await def.run.call(testCallCtx(), new AString("h"), new AInexact(1), new AInexact(2), new AInexact(3));
+    const out = await rosettaContract(def).run.call(testCallCtx(), new AString("h"), new AInexact(1), new AInexact(2), new AInexact(3));
     expect((out as AString)["arrival/toJS"]()).toBe("h:3:1,2,3");
   });
 });
