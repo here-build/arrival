@@ -328,6 +328,9 @@ export function signatureOf(def: AEntity): string {
   if (def.kind === "door" || def.kind === "keyword" || def.kind === "macro" || def.kind === "define-syntax") {
     return "never";
   }
+  // A `symbol.value` raw DATA binding carries no contract at all — nothing to derive a
+  // signature from (the value is host-supplied, its shape undeclared). Loose by design.
+  if (def.kind === "value") return "unknown";
   // Author-asserted `type` override (Contract.type on native/rosetta/sequence/define, or
   // TaglessGuardSymbolDef.type on type-predicate guards). Present ⇒ final for the harvest;
   // absent ⇒ derive from in/out. `"type" in def` so pure-tagless (no field) falls through.

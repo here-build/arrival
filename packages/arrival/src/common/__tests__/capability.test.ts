@@ -22,31 +22,37 @@ const echoResource: Resource<Echo> = {
 };
 
 // THE inline declaration: no annotation on `this` anywhere below.
-// NOTE (B4 audit, 2026-07-09; updated 2026-07-11 — defineRosetta hard-delete):
-// `symbols.describe` below is deliberately a BARE method (the legacy `SymbolDeclaration`
-// authoring shape, capability.ts's `isSymbolSpec`/`bindRosetta` arm) — it's the only path
-// today that binds `this` to the per-env `Activation` (config + resources), which is
-// exactly what this suite proves. Not stale debt: this arm is confirmed load-bearing
-// (McpEnvCapability's whole authoring model + every live downstream consumer) and is NOT
-// scheduled to retire by the reverse-membrane migration (B1-B3) — see the ledger's
-// "defineRosetta legacy arm authoring form" row (gate: McpEnvCapability annotation-lifting).
-// What DID retire (2026-07-11) is the public `AmbientRuntime.defineRosetta` method itself —
-// `capability.ts` now wires this arm through the internal `bindRosetta` (AmbientRuntime.ts),
-// which still runs every bound verb through `createRosettaWrapper` exactly as before, so
-// `verbs.describe` below is the real rosetta-wrapped procedure (a scheme-calling-convention
-// async fn expecting a `CallCtx` receiver), not the raw activation-bound method — see
-// `recordingEnv`'s doc and the `invoke` helper.
+// NOTE (B4 audit, 2026-07-09; updated 2026-07-22 — SymbolDeclaration collapse):
+// `symbols.describe` below is deliberately the legacy `{ fn }` RECORD (capability.ts's
+// `isSymbolSpec`/`bindRosetta` arm) — the one path that binds `fn`'s `this` to the per-env
+// `Activation` (config + resources), which is exactly what this suite proves. Not stale
+// debt: this arm is confirmed load-bearing (McpEnvCapability's whole authoring model + the
+// here.build discovery servers) and retires only with the postponed MCP rework. What DID
+// retire (2026-07-22) is the bare-METHOD shorthand this fixture used to author — the
+// `| Fn` union arm and its `ThisType<Activation>` inference channel are gone, so `fn`
+// annotates its `this` explicitly now. `capability.ts` wires this arm through the internal
+// `bindRosetta` (AmbientRuntime.ts) → `createRosettaWrapper`, so `verbs.describe` below is
+// the real rosetta-wrapped procedure (a scheme-calling-convention async fn expecting a
+// `CallCtx` receiver), not the raw activation-bound fn — see `recordingEnv`'s doc and the
+// `invoke` helper.
 const net = new EnvCapability("net", {
   configuration: { context: z.enum(["browser", "node", "bun"]), retries: z.number().default(3) },
   resources: { sock: echoResource },
   symbols: {
-    // SYNC in resource access: the env accessor pre-spawned `sock` before this ran.
-    describe(msg: string) {
-      // INFERENCE PROOF: these would not type-check if ThisType/zod weren't wired.
-      const ctx: "browser" | "node" | "bun" = this.configuration.context;
-      const retries: number = this.configuration.retries;
-      const sock = this.resources.sock.live; // Echo, inferred, SYNC (pre-spawned)
-      return `${ctx}/${retries}:${sock.echo(msg)}`;
+    describe: {
+      // SYNC in resource access: the env accessor pre-spawned `sock` before this ran.
+      fn(
+        this: {
+          configuration: { context: "browser" | "node" | "bun"; retries: number };
+          resources: { sock: { live: Echo } };
+        },
+        msg: string,
+      ) {
+        const ctx: "browser" | "node" | "bun" = this.configuration.context;
+        const retries: number = this.configuration.retries;
+        const sock = this.resources.sock.live; // Echo, SYNC (pre-spawned)
+        return `${ctx}/${retries}:${sock.echo(msg)}`;
+      },
     },
   },
 });

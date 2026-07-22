@@ -11,7 +11,7 @@
  */
 import { EnvCapability, jsToScheme, parseGenerator as parse, schemeToJsUntyped } from "@inhuman.tools/arrival";
 import { Call, type EmitRule, type R } from "@inhuman.tools/arrival/emit";
-import { arrivalLoaderCapability, type ContentResolver } from "@inhuman.tools/arrival/loader";
+import { arrivalLoaderCapability } from "@inhuman.tools/arrival/loader";
 
 import { asCompiledTemplate, compileTemplate, renderTemplateCall, runCompiledTemplate } from "./compile.js";
 import { hbsContentsToSchemeSource } from "./scheme.js";
@@ -39,12 +39,16 @@ export const arrivalHandlebarsCapability = EnvCapability.define("arrival/handleb
           return renderTemplateCall(source, Array.isArray(a) ? a : [a]);
         },
       ),
-    "ext/handlebars/resolve": {
-      value: (async (contents) => ({
+    // The loader-registry resolver as an ordinary native verb (the raw `{ value }` arm is
+    // retired): `require` dispatches its apply term with `(contents, {path}) → ResolverResult`,
+    // raw either way (a native never marshals).
+    "ext/handlebars/resolve": symbol.native`ext/handlebars/resolve: resolves .hbs module contents to a ResolverResult (loader registry verb)`(
+      { input: [z.value, z.value], output: [z.value] },
+      (async (contents: unknown) => ({
         kind: "eval" as const,
         forms: await parse(hbsContentsToSchemeSource(String(contents))),
-      })) satisfies ContentResolver,
-    },
+      })) as never,
+    ),
     "handlebars/parse": symbol.rosetta`handlebars/parse: compiles a handlebars template source once (cached by source)`(
       {
         input: [z.string],

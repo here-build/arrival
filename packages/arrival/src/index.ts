@@ -207,6 +207,7 @@ export { EnvCapability } from "./common/capability.js";
 export { assembleEnv } from "./common/kernel.js";
 export { symbol } from "./common/symbol.js";
 export type { RosettaSymbolDef } from "./common/symbol.js";
+export type { SymbolDeclaration } from "./common/capability.js";
 export * as z from "./common/scheme-zod.js";
 
 // Reader lexer entry. `tokenize(source, true)` lifts source into `{ token, col, offset, line }`

@@ -41,6 +41,7 @@ import type {
 // callback — no cycle: `./symbols/index.js` and `./scheme-zod.js` sit BELOW this file in the
 // dependency direction already (capability.ts imports `./symbols/_bake.js`/`ACallable.js`,
 // which these modules also reach; neither imports back up to `capability.ts`).
+import invariant from "tiny-invariant";
 import * as symbolFactories from "./symbols/index.js";
 import * as schemeZod from "./scheme-zod.js";
 import { bindCapabilityDefines, computeCapabilityExports } from "./symbols/define-bake.js";
@@ -112,25 +113,22 @@ export interface Activation<C extends ZodMap, R extends Record<string, Resource<
 
 type Fn = (...args: any[]) => unknown;
 
-/** A symbol is one of THREE families:
+/** A symbol is one of TWO families (collapsing toward ONE — `AEntity`):
  *
  *  • the BAKED `AEntity` from the symbol.* API (`{ kind: "native" | "rosetta" | "door" | … }`)
  *    — dispatched by `kind` in apply(). The ONLY form every pack in the arrival packages
- *    declares.
- *  • a raw VALUE binding (`{ value }`) — a PERMANENT, deliberate arm, not a migration remnant.
- *    Reserved for the CALLABLE RULE's one true exception: a binding `require`'s loader
- *    machinery resolves and calls directly in JS-land, never through the scheme evaluator (no
- *    rosetta marshal makes sense for a value that's never a scheme call target) —
- *    `packs/ext-yaml.ts` / `packs/ext-toml.ts`'s `ext/yaml/resolve`-shaped bindings are the
- *    known holders.
- *  • a LEGACY form — a bare fn, or a rosetta config (`{ fn, withContext, type, options }`) —
- *    read `this` (`ThisType<Activation<C,R>>`, bound at wire time). Gone from `foundations/
- *    arrival/**` itself, but load-bearing OUTSIDE it: `McpEnvCapability`'s whole
- *    inline-annotation design (MCP `description`/`inputSchema` spliced onto the same object as
- *    `fn`) is built on it, and every downstream capability (here.build's `saas/server/
- *    {arrival,mcp}`, inhuman's `saas/mcp`, the `sift-submission/mcp/packs/*` forensics catalog)
- *    still authors verbs this way. Deleting this arm needs McpEnvCapability's annotation-lifting
- *    to move to baked-symbol splicing first — a separate migration; NOT dead code.
+ *    declares, and the union's target: every other arm is scheduled to dissolve into it.
+ *  • the LEGACY rosetta-config form (`{ fn, withContext, type, options }`) — `fn` reads
+ *    `this: Activation` (bound at wire time). Load-bearing OUTSIDE arrival:
+ *    `McpEnvCapability`'s whole inline-annotation design (MCP `description`/`inputSchema`
+ *    spliced onto the same object as `fn`) is built on it, and the here.build discovery
+ *    servers author verbs this way. Deleting it needs McpEnvCapability's annotation-lifting
+ *    to move to baked-symbol splicing first (the postponed MCP rework) — NOT dead code.
+ *
+ *  RETIRED arms (Stage-6 collapse, 2026-07-22): the bare-`Fn` shorthand (was the ThisType
+ *  method channel — author `{ fn }` explicitly instead) and the raw `{ value }` binding
+ *  (was the loader-resolver escape hatch — a resolver is an ordinary `symbol.native` verb;
+ *  `applyCallback` dispatches its apply term exactly as it called the bare fn).
  *
  *  Named `SymbolDeclaration`, not `SymbolDef`, to stay distinct from `symbol.js`'s `AEntity` —
  *  the wider authoring shape vs. the narrower baked/discriminated result (`AEntity` is one arm
@@ -141,9 +139,7 @@ type Fn = (...args: any[]) => unknown;
  *  entry's already-baked def. */
 export type SymbolDeclaration =
   | AEntity
-  | Fn
   | (Omit<RosettaSpec, "fn"> & { fn: Fn })
-  | { value: unknown }
   | AliasSymbolDef;
 
 /** A baked symbol.* def carries a literal `kind` discriminant — the cut that separates the
@@ -161,11 +157,10 @@ const isBakedDef = (m: SymbolDeclaration): m is AEntity =>
     (m as { kind: unknown }).kind === "keyword" ||
     (m as { kind: unknown }).kind === "macro" ||
     (m as { kind: unknown }).kind === "define" ||
-    (m as { kind: unknown }).kind === "define-syntax");
+    (m as { kind: unknown }).kind === "define-syntax" ||
+    (m as { kind: unknown }).kind === "value");
 
-// ── LEGACY-form guards — see `SymbolDeclaration`'s doc for why these stay ────────────────
-const isValueDef = (m: SymbolDeclaration): m is { value: unknown } =>
-  typeof m === "object" && m !== null && "value" in m;
+// ── LEGACY-form guard — see `SymbolDeclaration`'s doc for why this one stays ─────────────
 const isSymbolSpec = (m: SymbolDeclaration): m is Omit<RosettaSpec, "fn"> & { fn: Fn } =>
   typeof m === "object" && m !== null && "fn" in m;
 
@@ -459,6 +454,7 @@ export interface SymbolFactory<Config, Resources> {
   readonly alias: typeof symbolFactories.alias;
   readonly define: typeof symbolFactories.define;
   readonly defineSyntax: typeof symbolFactories.defineSyntax;
+  readonly value: typeof symbolFactories.value;
 }
 
 /** Build the injected `symbol` factory for one `define()` call: the REAL `./symbols/index.js`
@@ -970,18 +966,26 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 // `bindTarget` so `preludeOnly: true` lands on the assembly overlay.
                 bindTarget(def).set(verb, def.macro);
                 break;
+              case "value":
+                // Discriminated raw DATA binding (`symbol.value` — successor of the retired
+                // untagged `{ value }` arm): bound via `bindValue` so a bare JS leaf is boxed
+                // by its fromJS tail and a pre-boxed scheme value passes through. Never a
+                // scheme call target.
+                bindValue(env, verb, def.value as AmbientValue);
+                break;
             }
             continue;
           }
 
-          // ── the raw-value arm (see `SymbolDeclaration`'s doc) ────────────────────────
-          if (isValueDef(def)) {
-            bindValue(env, verb, def.value as AmbientValue); // raw binding (boxed by bindValue's fromJS tail when it is a bare JS leaf) — a `require`-resolved value, never a scheme call target
-            continue;
-          }
-
-          // ── LEGACY forms — still McpEnvCapability's downstream authoring shape ──────
-          const sym = isSymbolSpec(def) ? def : { fn: def };
+          // ── LEGACY {fn}-record arm — still McpEnvCapability's downstream authoring shape
+          // (the retired bare-`Fn` and `{ value }` arms used to land here / just above — see
+          // `SymbolDeclaration`'s doc). Anything else reaching this point is a type-erased
+          // violation; the guard keeps the error legible.
+          invariant(
+            isSymbolSpec(def),
+            `EnvCapability "${capabilityName}": symbol "${verb}" is neither a baked symbol.* def nor a legacy { fn } record — the bare-Fn and { value } arms are retired.`,
+          );
+          const sym = def;
           const bound = (sym.fn as Fn).bind(activation);
           // Same activation-spawn middleware as `ensureSpawned` above — first touch gates on it.
           const gated =

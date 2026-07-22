@@ -239,18 +239,23 @@ describe("row shape and precedence", () => {
     expect(registry.lookup("x")?.capability).toBe("test/self");
   });
 
-  it("skips the legacy arms — {value}, bare fn, alias — without minting rows", () => {
+  it("skips alias + the legacy {fn} record; a symbol.value def harvests as a contract-less row", () => {
+    // The untagged `{ value }` and bare-fn arms are RETIRED from SymbolDeclaration — data
+    // constants author as `symbol.value` (a baked kind: harvests a row, but with no
+    // emit/contract fields to carry); the `{ fn }` record survives for the postponed MCP
+    // surface and stays kind-less, so the harvest still skips it.
     const cap = new EnvCapability("test/legacy", {
       symbols: {
-        boxed: { value: 42 },
-        bare: () => 42,
+        boxed: symbol.value`boxed: data constant`(42),
+        wrapped: { fn: () => 42 },
         aka: symbol.alias`real-name`,
         real: symbol.taglessGuard`real: t`,
       },
     });
     const registry = emitRegistryOf([cap]);
-    expect(registry.lookup("boxed")).toBeUndefined();
-    expect(registry.lookup("bare")).toBeUndefined();
+    expect(registry.lookup("boxed")?.kind).toBe("value");
+    expect(registry.lookup("boxed")?.emit).toBeUndefined();
+    expect(registry.lookup("wrapped")).toBeUndefined();
     expect(registry.lookup("aka")).toBeUndefined();
     expect(registry.lookup("real")).toBeDefined();
   });

@@ -19,8 +19,9 @@ import {
 
 const RESOLVE = "ext/toml/resolve";
 
-/** `.toml` → `{ kind: "value" }` DATA. Bound as `{ value }` so `require` gets the raw
- *  fn back and calls it `(contents, {path}) → ResolverResult`. */
+/** `.toml` → `{ kind: "value" }` DATA. Bound as a `symbol.native` verb (the raw `{ value }`
+ *  arm is retired — see ext-yaml.ts's `resolveYaml` note): `require` dispatches its apply
+ *  term with `(contents, {path}) → ResolverResult`, raw either way. */
 const resolveToml: ContentResolver = (contents) => ({
   kind: "value",
   value: normalizeToJson(parseToml(String(contents))),
@@ -42,9 +43,12 @@ export const tomlHandler: ExtensionHandler = { resolve: resolveToml, type: typeT
 export const arrivalTomlCapability = EnvCapability.define("ext/toml", {
   // Loader first in C3: prelude calls require/register-extension (preludeOnly on loader).
   deps: [arrivalLoaderCapability],
-  // No symbol/z use here — this capability's sole symbol is a raw `{ value }` resolver,
-  // never a `symbol.rosetta`/`native` def — so the injected factory pair is unused.
-  symbols: () => ({ [RESOLVE]: { value: resolveToml } }),
+  symbols: (symbol, z) => ({
+    [RESOLVE]: symbol.native`ext/toml/resolve: resolves .toml module contents to a ResolverResult (loader registry verb)`(
+      { input: [z.value, z.value], output: [z.value] },
+      resolveToml as never,
+    ),
+  }),
   // Bare symbol — `require/register-extension` is a MACRO (unevaluated resolver name).
   prelude: `(require/register-extension ".toml" ${RESOLVE})`,
 });

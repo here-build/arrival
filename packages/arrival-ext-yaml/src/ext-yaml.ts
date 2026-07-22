@@ -19,8 +19,10 @@ import {
 import { parse as parseYaml } from "yaml";
 
 /** `.yaml`/`.yml` → `{ kind: "value" }` DATA (never a callable — the CALLABLE RULE's
- *  easy half). Bound as `{ value }` so `require` gets the raw fn back (no rosetta
- *  marshalling) and calls it `(contents, {path}) → ResolverResult`. */
+ *  easy half). Bound as a `symbol.native` verb (the raw `{ value }` arm is retired):
+ *  `require`'s registered-resolver path dispatches its apply term through `applyCallback`
+ *  with `(contents, {path}) → ResolverResult`, args and return raw either way (a native
+ *  never marshals). */
 const resolveYaml: ContentResolver = (contents) => ({
   kind: "value",
   value: normalizeToJson(parseYaml(String(contents))),
@@ -50,9 +52,12 @@ export const yamlHandler: ExtensionHandler = { resolve: resolveYaml, type: typeY
 export const arrivalYamlCapability = EnvCapability.define("ext/yaml", {
   // Loader first in C3: prelude calls require/register-extension (preludeOnly on loader).
   deps: [arrivalLoaderCapability],
-  // No symbol/z use here — this capability's sole symbol is a raw `{ value }` resolver,
-  // never a `symbol.rosetta`/`native` def — so the injected factory pair is unused.
-  symbols: () => ({ "ext/yaml/resolve": { value: resolveYaml } }),
+  symbols: (symbol, z) => ({
+    "ext/yaml/resolve": symbol.native`ext/yaml/resolve: resolves .yaml/.yml module contents to a ResolverResult (loader registry verb)`(
+      { input: [z.value, z.value], output: [z.value] },
+      resolveYaml as never,
+    ),
+  }),
   // Bare symbol — `require/register-extension` is a MACRO so the resolver name is
   // unevaluated (no String(fn) registry poison). Strings still work for compat.
   prelude: `

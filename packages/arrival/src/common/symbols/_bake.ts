@@ -705,6 +705,19 @@ export interface DefineSyntaxSymbolDef {
   readonly metadata?: MetadataRecord;
 }
 
+/** A raw VALUE binding, discriminated (`symbol.value` — the successor of the retired
+ *  untagged `{ value }` SymbolDeclaration arm): a host constant bound by name, never a
+ *  scheme call target. No contract; the bind arm boxes a bare JS leaf via `bindValue`'s
+ *  fromJS tail and passes a pre-boxed scheme value through. The harvest and every other
+ *  contract reader skip it (nothing to harvest — data, not a verb). */
+export interface ValueSymbolDef {
+  readonly kind: "value";
+  readonly name: string;
+  readonly doc?: string;
+  readonly value: unknown;
+  readonly metadata?: MetadataRecord;
+}
+
 export type AEntity =
   | NativeSymbolDef
   | RosettaSymbolDef
@@ -715,7 +728,8 @@ export type AEntity =
   | KeywordSymbolDef
   | MacroSymbolDef
   | DefineSymbolDef
-  | DefineSyntaxSymbolDef;
+  | DefineSyntaxSymbolDef
+  | ValueSymbolDef;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. Internals — name/doc parsing + vector normalization

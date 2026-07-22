@@ -22,6 +22,7 @@
 //   define        a scheme-bodied value/procedure declaration carrying a real contract
 //   defineSyntax  a scheme-bodied macro/expander declaration
 //   alias         a duplicate binding of an existing symbol under a new name
+//   value         a raw host DATA binding, discriminated (never a scheme call target)
 
 export { native } from "./native.js";
 export { rosetta } from "./rosetta.js";
@@ -33,3 +34,4 @@ export { keyword } from "./keyword.js";
 export { macro } from "./macro.js";
 export { define, defineSyntax } from "./define.js";
 export { alias } from "./alias.js";
+export { value } from "./value.js";

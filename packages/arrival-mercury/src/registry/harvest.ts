@@ -113,9 +113,15 @@ function harvestSymbolsRec(cap: EnvCapability, activation: Activation<any, any> 
   const key: unknown = activation ?? PHANTOM;
   const hit = harvestCache.get(cap);
   if (hit !== undefined && hit.key === key) return hit.rec;
+  // The builder-form `symbols` arm is RETIRED from SymbolDeclaration's own type — this
+  // typeof branch survives as pure DEFENSE against a type-erased/stale-dist spec handing
+  // the harvest a builder (the phantom-activation poison discipline, constitution §4.5),
+  // hence the cast at this one seam.
   const rec =
     typeof cap.spec.symbols === "function"
-      ? cap.spec.symbols(activation ?? dryActivation(cap.name))
+      ? (cap.spec.symbols as unknown as (activation: unknown) => Record<string, SymbolDeclaration>)(
+          activation ?? dryActivation(cap.name),
+        )
       : (cap.spec.symbols ?? {});
   harvestCache.set(cap, { key, rec });
   return rec;

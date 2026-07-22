@@ -229,11 +229,12 @@ describe("exec with proper environment", () => {
   });
 
   it("should support environment variables", async () => {
-    // Host-supplied values enter as CAPABILITY data (`{ value }` symbol defs) — the
-    // hermetic-Environment ruling retired the JS-side `env.set` write surface.
+    // Host-supplied values enter as CAPABILITY data (`symbol.value` defs — the untagged
+    // `{ value }` arm is retired) — the hermetic-Environment ruling retired the JS-side
+    // `env.set` write surface.
     const scope = LexicalScope.fresh("test");
     await EnvCapability.define("serializer-test/env-vars", {
-      symbols: () => ({ x: { value: 10 }, y: { value: 20 } }),
+      symbols: (symbol) => ({ x: symbol.value`x: test constant`(10), y: symbol.value`y: test constant`(20) }),
     })
       .lower({})
       .apply(scope.env, undefined as never);

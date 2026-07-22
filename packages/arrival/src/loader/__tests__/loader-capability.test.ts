@@ -105,13 +105,16 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
   });
 
   it("require/register-extension: callable from a DEPENDENT capability's prelude via plain assembleEnv; unbound from user code", async () => {
-    // An ext-style capability, exactly like ext/yaml: a `{ value }` resolver + a prelude that
-    // registers the suffix by name. No overlay wiring anywhere — the kernel supplies the scope.
+    // An ext-style capability, exactly like ext/yaml: a `symbol.native` resolver verb (the
+    // `{ value }` raw-binding arm is retired — a resolver is an ordinary verb; the loader's
+    // `applyCallback` dispatches its apply term) + a prelude that registers the suffix by
+    // name. No overlay wiring anywhere — the kernel supplies the scope.
     const extCap = EnvCapability.define("test/ext-upper", {
-      symbols: () => ({
-        "test/upper-resolve": {
-          value: (contents: unknown) => ({ kind: "value", value: String(contents).toUpperCase() }),
-        },
+      symbols: (symbol, z) => ({
+        "test/upper-resolve": symbol.native`test/upper-resolve: uppercases module contents (ResolverResult value kind)`(
+          { input: [z.value, z.value], output: [z.value] },
+          (contents: unknown) => ({ kind: "value", value: String(contents).toUpperCase() }) as never,
+        ),
       }),
       prelude: `(require/register-extension ".upper" "test/upper-resolve")`,
     });
