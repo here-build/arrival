@@ -181,6 +181,32 @@ const isSymbolSpec = (m: SymbolDeclaration): m is Omit<RosettaSpec, "fn"> & { fn
 const isAliasDef = (m: SymbolDeclaration): m is AliasSymbolDef =>
   typeof m === "object" && m !== null && (m as { kind?: unknown }).kind === "alias";
 
+/** Stage 3 auto-derive gate (`Contract.requiresConfig`, `./symbols/_bake.js`): the declared
+ *  keys ABSENT from this activation's validated `configuration` — `undefined` when the def
+ *  declares no `requiresConfig` or every declared key is present (the zero-cost, overwhelming-
+ *  majority path). Read UNCONDITIONALLY by the `native`/`rosetta` bind arms below — no
+ *  builder-form, no `degradation:"doors"` gate; see the field's own doc for the D2 departure
+ *  this closes (a bare-required config key used to fail-close at `schema.parse`, before any
+ *  program graph existed to statically explain WHY). */
+const missingRequiresConfig = (
+  requiresConfig: readonly string[] | undefined,
+  configuration: Record<string, unknown>,
+): readonly string[] | undefined => {
+  if (requiresConfig === undefined || requiresConfig.length === 0) return undefined;
+  const missing = requiresConfig.filter((key) => configuration[key] === undefined);
+  return missing.length === 0 ? undefined : missing;
+};
+
+/** The auto-derived door's teaching reason — same "provide X to enable it" register
+ *  `degradation.ts`'s hand-authored `.door(name, needs, reason)` callers write by hand, minted
+ *  here mechanically from the declaring verb's OWN `doc` instead. */
+const requiresConfigReason = (missing: readonly string[], doc: string | undefined): string => {
+  const keysClause = missing.map((key) => `\`${key}\``).join(", ");
+  const pronoun = missing.length === 1 ? "it" : "them";
+  const docClause = doc === undefined ? "" : ` (${doc})`;
+  return `requires configuration ${keysClause} — provide ${pronoun} to enable this verb.${docClause}`;
+};
+
 /** A `symbols` record, or a BUILDER computing it from the activation (per-env config).
  *  The builder form is how a config-bearing capability closes host resolvers into its baked
  *  verbs (`arrivalInferCapability`, `arrivalDataCapability`, …) without riding them on `this` —
@@ -668,6 +694,26 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
           if (isBakedDef(def)) {
             switch (def.kind) {
               case "native": {
+                // STAGE 3 AUTO-DERIVED DOOR (`Contract.requiresConfig`, ./symbols/_bake.js) —
+                // read UNCONDITIONALLY, before the ordinary bind: an absent declared key mints
+                // a cause-carrying DoorProcedure for this verb instead, via the SAME
+                // `DegradationInfo.door` builder a manual builder-form `symbols` calls by hand
+                // (`activation.degradation`, always defined — see its own doc). No mode gate:
+                // fires under `"forbid"` too, closing the pre-Stage-3 gap where this reached
+                // for a bare-required config key and threw a ZodError at `schema.parse` instead.
+                const missingNative = missingRequiresConfig(
+                  def.requiresConfig,
+                  activation.configuration as Record<string, unknown>,
+                );
+                if (missingNative !== undefined) {
+                  bindTarget(def).set(
+                    verb,
+                    new DoorProcedure(
+                      activation.degradation.door(verb, missingNative, requiresConfigReason(missingNative, def.doc)),
+                    ),
+                  );
+                  break;
+                }
                 // native (§SYMBOL-KINDS): bind a first-class ANativeProcedure, invoked through its
                 // `arrival/tagless-final/apply` term. The impl adapts the term surface
                 // `(args, callCtx)` to the host impl, which reads run-state off `this: CallCtx` —
@@ -748,6 +794,21 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 break;
               }
               case "rosetta": {
+                // STAGE 3 AUTO-DERIVED DOOR — same gate as the `native` case above, see its
+                // comment for the full model; `def.doc` here is the rosetta verb's own doc string.
+                const missingRosetta = missingRequiresConfig(
+                  def.requiresConfig,
+                  activation.configuration as Record<string, unknown>,
+                );
+                if (missingRosetta !== undefined) {
+                  bindTarget(def).set(
+                    verb,
+                    new DoorProcedure(
+                      activation.degradation.door(verb, missingRosetta, requiresConfigReason(missingRosetta, def.doc)),
+                    ),
+                  );
+                  break;
+                }
                 // The per-call INVOCATION now reaches the wrapper directly through the whole
                 // `callCtx` the apply term dispatches with — built ONCE at the real call site
                 // (the evaluator's dispatch, rosetta.ts's `callableToHostFn`, …) and threaded

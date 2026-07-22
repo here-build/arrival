@@ -395,6 +395,7 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       callbackRoles,
       type: contract.type,
       preludeOnly: contract.preludeOnly,
+      requiresConfig: contract.requiresConfig,
       // Compiler-facing fields — carried through AUTHORED, inert to the interpreter; the
       // harvest row resolves refPolicy's "shim" default. See Contract.emit/narrows/refPolicy.
       emit: contract.emit,

@@ -253,6 +253,31 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest exten
    *  A prelude bridges a preludeOnly value to runtime by capturing the call's RESULT in an
    *  ordinary define, never the verb itself. */
   readonly preludeOnly?: boolean;
+  /** KIND-AGNOSTIC (native/rosetta). Config keys this verb needs to be CALLABLE — the
+   *  auto-derive gap-closer (docs/environments.md §DEGRADATION-D2): `common/capability.ts`'s
+   *  bind loop reads this UNCONDITIONALLY (no builder-form, no `degradation:"doors"` gate) and,
+   *  when any declared key is absent from the activation's validated `configuration`, binds a
+   *  cause-carrying `DoorProcedure` for this verb INSTEAD of the real value — via
+   *  `activation.degradation.door(verb, missingKeys, reason)` (`./degradation.js`), the SAME
+   *  `DoorCause` shape a builder-form `symbols` mints by hand, just minted for free from a
+   *  DECLARATION rather than an `if (x !== undefined)` branch.
+   *
+   *  DEPARTURE D2 (named, not silent — see `degradation.ts`'s file-header note on "required
+   *  config always stays fail-closed"): a key named here should be authored `.optional()` (or
+   *  `.default()`) at the capability's `configuration` schema, NOT left bare-required. A
+   *  bare-required key still throws at `schema.parse` before any door ever gets a chance to
+   *  mint — this field does not (and cannot) rescue that path; it only ever fires for a key
+   *  that `schema.parse` already let through absent. `degradation.ts`'s `missingOptionalKeys`
+   *  structural check (`instanceof ZodOptional | ZodDefault`) is what keeps the two views
+   *  agreeing: a `requiresConfig`-named key that is genuinely optional at the schema shows up
+   *  there too, so `AssembledEnv.degraded`'s informational surface and this verb-scoped gate
+   *  are reading the SAME "absent" fact from two angles, never a contradiction.
+   *
+   *  Absent ⇒ the verb binds unconditionally (byte-identical to today) — zero cost, the
+   *  overwhelming majority. Additive: a capability using the manual builder-form `.door(...)`
+   *  path keeps working unchanged; this is an ADDITIONAL way to mint a door, not a
+   *  replacement. */
+  readonly requiresConfig?: readonly string[];
   /** The idiomatic-residual rewrite for the compiler (the fifth reader of this record —
    *  constitution §4.1). Absent ⇒ the fallback ladder's rung 3 (the RuntimeRef shim);
    *  silence is impossible by construction (§4.2). STATIC data by law: a builder-form
@@ -320,6 +345,9 @@ export interface NativeSymbolDef {
   readonly type?: string;
   /** See `Contract.preludeOnly`. */
   readonly preludeOnly?: boolean;
+  /** See `Contract.requiresConfig` — carried through verbatim; `capability.ts`'s bind loop
+   *  reads it off THIS def to auto-mint a config-gated door. */
+  readonly requiresConfig?: readonly string[];
   /** RESOLVED provenance role (`contract.provenance ?? "pipe"` — see `Contract.provenance`).
    *  Non-optional: `native()` always resolves the default before baking. */
   readonly provenance: ProvenanceRole;
@@ -380,6 +408,8 @@ export interface RosettaSymbolDef<
   readonly type?: string;
   /** See `Contract.preludeOnly`. */
   readonly preludeOnly?: boolean;
+  /** See `Contract.requiresConfig` — carried through verbatim; see `NativeSymbolDef.requiresConfig`. */
+  readonly requiresConfig?: readonly string[];
   /** See `NativeSymbolDef.emit`. */
   readonly emit?: EmitRule;
   /** See `Contract.narrows`. */

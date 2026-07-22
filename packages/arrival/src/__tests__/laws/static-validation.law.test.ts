@@ -38,6 +38,17 @@
  *    capability-facing `ResolverSpec`/`EnvCapability.resolvers` contract had zero live
  *    users, `CompiledResolutionChain` is now unconditionally the flat-map form, and
  *    `hasImpureResolver` is permanently `false` — unbound-symbol is ERROR, full stop.
+ *
+ *  LAW 8 (Stage 3 — the auto-derived config gate, `Contract.requiresConfig`): a
+ *    `symbol.rosetta` verb declaring `requiresConfig` binds a cause-carrying door,
+ *    UNCONDITIONALLY (no `degradation:"doors"` opt-in needed — this is a DIFFERENT
+ *    mechanism from LAW 1's builder-form `.door(...)`, closing the gap where a bare-
+ *    required config key used to throw a ZodError at `lower()`'s `schema.parse` before
+ *    any program graph existed to statically explain WHY). Absent the declared key: the
+ *    static pass reports `missing-configuration` naming the key and the verb, without
+ *    executing anything, and a direct (unvalidated) call throws the door's teaching
+ *    `PurityError`. Present: the verb binds real and runs, byte-identical to a plain
+ *    contract with no `requiresConfig` at all.
  */
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
@@ -55,6 +66,7 @@ import { vocabularyFromChain } from "../../static-validation/vocabulary.js";
 import { freshEnv } from "../_fresh-env.js";
 import type { AmbientValue } from "../../env/AmbientRuntime.js";
 import type { DoorSymbolDef } from "../../common/symbols/_bake.js";
+import { PurityError } from "../../errors.js";
 
 // ── Fixture helpers ────────────────────────────────────────────────────────────────
 
@@ -342,5 +354,96 @@ describe("LAW 7 — error-tier soundness: strict on dead branches (by design), w
     const vocab = vocabularyFromChain(chainOf({ plain, stamped }));
     expect(vocab.lookupStatic("plain")).toEqual({ kind: "macro", macroAttribute: "opaque" });
     expect(vocab.lookupStatic("stamped")).toEqual({ kind: "macro", macroAttribute: "expression" });
+  });
+});
+
+// ============================================================================
+// LAW 8 — Stage 3: the auto-derived config door (`Contract.requiresConfig`)
+// ============================================================================
+
+/** A `symbol.rosetta` verb declaring `requiresConfig: ["fs"]` against an OPTIONAL `fs`
+ *  configuration key — a literal (non-builder) `symbols` record, deliberately: the point
+ *  of Stage 3 is that `capability.ts`'s bind loop reads `def.requiresConfig` off the
+ *  ALREADY-BAKED def regardless of which authoring shape produced it, so no
+ *  `({configuration, degradation}) => ({...})` builder / `degradation.door(...)` call is
+ *  written by hand here at all — the door mints itself. */
+function requiresConfigCapability(name: string, onRun: () => void): EnvCapability<any, any> {
+  return new EnvCapability<any, any>(name, {
+    configuration: {
+      fs: z.custom<{ readFile: (p: string) => Promise<string> }>((v) => v !== null && typeof v === "object").optional(),
+    },
+    symbols: {
+      "fs/read": symbol.rosetta`fs/read: reads a path via the configured filesystem`(
+        { input: [sz.string], output: [sz.string], requiresConfig: ["fs"] },
+        async (path: string) => {
+          onRun();
+          return path.toUpperCase();
+        },
+      ),
+    },
+  });
+}
+
+describe("LAW 8 — Stage 3: `requiresConfig` auto-mints a cause-carrying door, unconditionally", () => {
+  const program = '(fs/read "hi")';
+
+  it("WITHOUT fs: validateProgram reports missing-configuration naming `fs` + `fs/read`, zero side effects", async () => {
+    let hits = 0;
+    const cap = requiresConfigCapability("test/sv-requires-config", () => hits++);
+    let caught: unknown;
+    try {
+      await exec(program, { capabilities: [cap], config: {}, staticValidation: "on" });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(StaticValidationError);
+    const err = caught as StaticValidationError;
+    expect(err.diagnostics).toHaveLength(1);
+    const [d] = err.diagnostics;
+    expect(d.code).toBe("missing-configuration");
+    expect(d.severity).toBe("error");
+    expect(d.sites.map((s) => s.symbol)).toEqual(["fs/read"]);
+    expect(d.cause).toEqual({ owner: "test/sv-requires-config", needs: [{ kind: "configuration", key: "fs" }] });
+    expect(hits).toBe(0); // never executed — parse-phase throw, exactly like LAW 1
+  });
+
+  it("WITHOUT fs: no mode opt-in needed — this fires even though NO `degradation` mode was requested", async () => {
+    // `degradation` defaults to "forbid" whenever unset — LAW 1/2's builder-form `.door(...)`
+    // path stays silent under it (degradation.law.test.ts LAW 2). `requiresConfig` is a
+    // DIFFERENT, unconditional mechanism: the door mints regardless.
+    const cap = requiresConfigCapability("test/sv-requires-config-no-mode", () => {});
+    await expect(exec(program, { capabilities: [cap], config: {}, staticValidation: "on" })).rejects.toThrow(
+      StaticValidationError,
+    );
+  });
+
+  it("WITHOUT fs: bypassing static validation, a direct call throws the door's teaching PurityError", async () => {
+    const cap = requiresConfigCapability("test/sv-requires-config-direct", () => {});
+    let caught: unknown;
+    try {
+      await exec(program, { capabilities: [cap], config: {} }); // staticValidation left off — reaches the door at runtime
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(PurityError);
+    const err = caught as PurityError;
+    expect(err.message).toBe(
+      "fs/read @ test/sv-requires-config-direct is not available.\n" +
+        "  Why: requires configuration `fs` — provide it to enable this verb. " +
+        "(reads a path via the configured filesystem)",
+    );
+    expect(err.owner).toBe("test/sv-requires-config-direct");
+  });
+
+  it("WITH fs: the verb binds real and runs — byte-identical to a plain contract with no requiresConfig", async () => {
+    let hits = 0;
+    const cap = requiresConfigCapability("test/sv-requires-config-satisfied", () => hits++);
+    const results = await exec(program, {
+      capabilities: [cap],
+      config: { fs: { readFile: async () => "" } },
+      staticValidation: "on",
+    });
+    expect(results[results.length - 1]).toBe("HI");
+    expect(hits).toBe(1);
   });
 });

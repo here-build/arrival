@@ -69,6 +69,7 @@ export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
           }) as typeof impl,
       type: contract.type,
       preludeOnly: contract.preludeOnly,
+      requiresConfig: contract.requiresConfig,
       provenance,
       cacheClass,
       callbackRoles,

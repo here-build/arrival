@@ -20,6 +20,19 @@
 // folds (structurally, uninterpreted) into `AssembledEnv.degraded` — defined HERE (the
 // degradation-domain module), imported TYPE-ONLY by kernel.ts so the env-agnostic core
 // never gains a runtime dependency on this module.
+//
+// DEPARTURE D2 (named, not silent — Stage 3, `Contract.requiresConfig` in
+// `./symbols/_bake.js`): line 15's "required config always stays fail-closed" is about a key
+// with NO `.optional()`/`.default()` wrapper — that stays a `schema.parse` throw, unconditional,
+// unchanged. D2 is the ADDITIONAL, per-VERB case: a key a capability author wraps `.optional()`
+// (so `schema.parse` succeeds absent) but names in some verb's `requiresConfig` is no longer
+// "silently withheld, unless a builder hand-writes a `.door(...)` check" — `common/capability.ts`'s
+// bind loop reads `requiresConfig` UNCONDITIONALLY (independent of `degradation`'s `"forbid"` vs
+// `"doors"` mode — this door mints under EITHER) and auto-mints the SAME `DoorCause` shape via
+// `DegradationInfo.door` below. The two views agree by construction: a `requiresConfig`-named key
+// is, by D2's own authoring rule, always `.optional()`/`.default()`-wrapped, so it is exactly the
+// set `missingOptionalKeys` already reports — this module needed no new "is it optional" check,
+// only a new, unconditional CALLER of the same `.door()` builder.
 
 import { z } from "zod";
 import type { DoorCause, DoorSymbolDef } from "./symbols/_bake.js";
