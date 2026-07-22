@@ -18,7 +18,31 @@ import { z } from "zod";
 import type { EnvPack, PackContext, PreludeBindTarget } from "./kernel.js";
 import { type Ref, type Resource, ResourceCell, spinUpAll, windDownAll } from "./resources.js";
 import type { EvalSchemeInto, RosettaSpec, SchemeEnv } from "./scheme-env.js";
-import type { AEntity, DefineSymbolDef, DefineSyntaxSymbolDef, DoorSymbolDef } from "./symbol.js";
+import type {
+  AEntity,
+  BakeRuntimeOpts,
+  Contract,
+  DecodedArgsWithRest,
+  DecodedReturn,
+  DefineSymbolDef,
+  DefineSyntaxSymbolDef,
+  DoorSymbolDef,
+  MaybePromise,
+  MetadataRecord,
+  NativeSymbolDef,
+  RestSpec,
+  RosettaSymbolDef,
+  VectorSpec,
+} from "./symbol.js";
+// The REAL `symbol` namespace + scheme-zod — `EnvCapability.define`'s injected `(symbol, z)`
+// factory pair (Stage 1c, see the section ahead of the class). Value imports (not type-only):
+// `makeSymbolFactory` casts the namespace ITSELF at the boundary, and `z` below (renamed from
+// this module's OWN scoped `schemeZod` alias) is handed straight to a capability's `symbols`
+// callback — no cycle: `./symbols/index.js` and `./scheme-zod.js` sit BELOW this file in the
+// dependency direction already (capability.ts imports `./symbols/_bake.js`/`ACallable.js`,
+// which these modules also reach; neither imports back up to `capability.ts`).
+import * as symbolFactories from "./symbols/index.js";
+import * as schemeZod from "./scheme-zod.js";
 import { bindCapabilityDefines, computeCapabilityExports } from "./symbols/define-bake.js";
 import type { AliasSymbolDef } from "./symbols/alias.js";
 import { Keyword } from "../values/Keyword.js";
@@ -33,7 +57,14 @@ import type { RosettaFunction } from "../membrane/rosetta.js";
 // Two producers only — this legacy `SymbolDeclaration` bind arm and `provenance/replay.ts`'s
 // playback frame; a third would be suspect.
 import { bindRosetta, bindValue, AmbientRuntime, type AmbientValue, isAmbientRuntime } from "../env/AmbientRuntime.js";
-import { associateActivation, CallCtx, type CacheClass, type CallbackRoles, type ProvenanceRole } from "./symbols/_bake.js";
+import {
+  associateActivation,
+  CallCtx,
+  type CacheClass,
+  type CallbackRoles,
+  type Face,
+  type ProvenanceRole,
+} from "./symbols/_bake.js";
 import { type SchemeValue } from "../values/types.js";
 import { AliasTargetError, AmbientShapeError, PreludeArmingError } from "../errors.js";
 import {
@@ -240,6 +271,135 @@ export function collectSymbolDefines(caps: readonly EnvCapability[], seen: Set<E
   return parts.join("\n");
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// EnvCapability.define — Stage 1c (docs/execution.md §CALLCTX): the FLIPPED authoring API,
+// COEXISTING with `new EnvCapability(name, spec)` (below) — no existing capability migrates.
+//
+// The OLD `symbols` builder-form closes an `activation` BUILDER-ARG (`(activation) => ({...})`)
+// over each verb's impl; the impl then reads config/resources from THAT CLOSURE, never `this`
+// (a baked rosetta/native's `this` is the per-call INVOCATION, not the activation — see
+// `CapabilitySpec.symbols`'s own doc above). The FLIPPED shape inverts this: `symbols` receives
+// an injected `(symbol, z)` factory pair — the SAME `symbol.rosetta`/`native`/… namespace
+// (`./symbols/index.js`) + scheme-zod — typed so each impl's `this.configuration`/
+// `this.resources` are the DECLARED `Config`/`Resources`, not `unknown`, and reads them off
+// `this` at REAL DISPATCH, riding the Stage 1b `associateActivation`/`CallCtx` channel every
+// baked def (native/rosetta/sequence) already carries. `symbols` is invoked EAGERLY, ONCE, at
+// `define()` time — the record it returns doesn't depend on any per-env config, exactly like
+// the OLD literal-record form; only an IMPL BODY'S runtime read of `this.configuration`/
+// `.resources` is per-dispatch.
+//
+// Resources: `spec.resources` here is ONE factory over the validated config
+// (`(config) => Resources`), not the OLD per-key `Record<string, Resource<H>>` map
+// (`resources: { shout: shoutResource }`) `new EnvCapability(...)` still uses — a simpler,
+// NOT lifecycle-managed bag (no acquire/wind-down/resume), computed once per `lower()` call.
+// `lower()` ITSELF stays completely untouched (this migration's own bound) — its
+// `cells`/`ResourceCell` production, degradation, and def→value binding are exactly as they
+// are for `new EnvCapability(...)`. A `define()`-authored capability declares NO old-style
+// `spec.resources` (so `lower()` produces empty cells for it) and instead RE-STAMPS
+// `associateActivation` on its own already-bound procs right after `apply()` runs — reading
+// them back through the `SchemeEnv` accessor (`env.get`, the same read-face every OTHER
+// consumer uses), never poking `lower()`'s internals. See `DefinedEnvCapability` below.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** The `this` every impl declared through {@link EnvCapability.define}'s injected `symbol`
+ *  factory is invoked with — `CallCtx` (run/CallCtx.ts) narrowed so `configuration`/
+ *  `resources` (Stage 1b: `unknown`, optional, on the runtime carrier) are the capability's
+ *  OWN declared `Config`/`Resources`, not `unknown`. An AUTHORING-LAYER type overlay ONLY —
+ *  the runtime `CallCtx` fields stay `unknown`; this narrowing is applied ONCE, at the
+ *  `SymbolFactory` boundary (`makeSymbolFactory`'s cast below) — the one sanctioned narrowing
+ *  for this channel, mirroring the membrane's own single-cast boundary. */
+export type ImplThis<Config, Resources> = CallCtx & {
+  readonly configuration: Config;
+  readonly resources: Resources;
+};
+
+/** `Impl` (`./symbols/_bake.js`) with its `this` parameterized instead of pinned to `CallCtx` —
+ *  same decoded-args/return shape (`DecodedArgsWithRest`/`DecodedReturn`, the SAME face
+ *  projection every baked impl already type-checks against), so a `symbol.rosetta`/`native`
+ *  impl authored through the injected factory infers BYTE-IDENTICAL arg/return types to the
+ *  module-singleton factories — only `this` differs. */
+type ImplWithThis<
+  I extends VectorSpec,
+  O extends VectorSpec,
+  Rest extends RestSpec,
+  F extends Face,
+  This,
+> = (this: This, ...args: DecodedArgsWithRest<I, Rest, F>) => MaybePromise<DecodedReturn<O, F>>;
+
+/** The injected `symbol.rosetta` — byte-identical to the module-singleton `rosetta()` factory
+ *  (`./symbols/rosetta.js`) except the impl's `this` is {@link ImplThis}`<Config,Resources>`
+ *  instead of the bare `CallCtx` every OTHER call site sees. */
+export interface RosettaTag<Config, Resources> {
+  (tpl: TemplateStringsArray, ...sub: (string | number)[]): <
+    const I extends VectorSpec,
+    const O extends VectorSpec,
+    const Rest extends RestSpec = undefined,
+  >(
+    contract: Contract<I, O, Rest>,
+    impl: ImplWithThis<I, O, Rest, "js", ImplThis<Config, Resources>>,
+    opts?: BakeRuntimeOpts,
+  ) => RosettaSymbolDef;
+}
+
+/** The injected `symbol.native` — same relationship to `native()` (`./symbols/native.js`) as
+ *  {@link RosettaTag} bears to `rosetta()`; projects the SCHEME face (`"scheme"`), matching
+ *  `native()`'s own `Impl<…, "scheme">`. */
+export interface NativeTag<Config, Resources> {
+  (tpl: TemplateStringsArray, ...sub: unknown[]): <
+    const I extends VectorSpec,
+    const O extends VectorSpec,
+    const Rest extends RestSpec = undefined,
+  >(
+    contract: Contract<I, O, Rest>,
+    impl: ImplWithThis<I, O, Rest, "scheme", ImplThis<Config, Resources>>,
+    opts?: { metadata?: MetadataRecord },
+  ) => NativeSymbolDef;
+}
+
+/** The factory `EnvCapability.define`'s `symbols` callback is invoked with. `rosetta`/`native`
+ *  carry the `Config`/`Resources`-typed `this` overlay ({@link RosettaTag}/{@link NativeTag});
+ *  every other tag is byte-identical to its module-singleton (`./symbols/index.js`) — none of
+ *  `sequence`/`tagless`/`taglessGuard`/`notImplemented`/`keyword`/`macro`/`alias` read
+ *  config/resources off `this` (sequence's impl takes `(args, runCtx)` positionally; the rest
+ *  carry no author impl at all), so they need no overlay. */
+export interface SymbolFactory<Config, Resources> {
+  readonly rosetta: RosettaTag<Config, Resources>;
+  readonly native: NativeTag<Config, Resources>;
+  readonly sequence: typeof symbolFactories.sequence;
+  readonly tagless: typeof symbolFactories.tagless;
+  readonly taglessGuard: typeof symbolFactories.taglessGuard;
+  readonly notImplemented: typeof symbolFactories.notImplemented;
+  readonly keyword: typeof symbolFactories.keyword;
+  readonly macro: typeof symbolFactories.macro;
+  readonly alias: typeof symbolFactories.alias;
+}
+
+/** Build the injected `symbol` factory for one `define()` call: the REAL `./symbols/index.js`
+ *  namespace, cast ONCE to the `Config`/`Resources`-typed {@link SymbolFactory} — the sanctioned
+ *  narrowing {@link ImplThis}'s doc points at. No wrapping at runtime: `rosetta`/`native` are the
+ *  SAME functions every hand-authored capability calls; only the TYPE seen by the `symbols`
+ *  callback's impls differs. */
+function makeSymbolFactory<Config, Resources>(): SymbolFactory<Config, Resources> {
+  return symbolFactories as unknown as SymbolFactory<Config, Resources>;
+}
+
+/** `EnvCapability.define`'s spec — the flipped shape. See the section header above for the
+ *  full model; `configuration`/`prelude`/`symbolPrefix`/`deps` are byte-identical to
+ *  `CapabilitySpec`'s own fields (reused, not re-declared). */
+export interface DefineCapabilitySpec<Shape extends ZodMap, Resources> {
+  readonly configuration?: Shape;
+  /** ONE factory over the validated config — see the section header's Resources note. */
+  readonly resources?: (config: InferCfg<Shape>) => Resources;
+  readonly prelude?: string;
+  readonly symbolPrefix?: string;
+  readonly deps?: readonly EnvCapability[];
+  /** Invoked EAGERLY, ONCE, at `define()` time — see the section header. */
+  readonly symbols: (
+    symbol: SymbolFactory<InferCfg<Shape>, Resources>,
+    z: typeof schemeZod,
+  ) => Record<string, SymbolDeclaration>;
+}
+
 /** A configured, lowerable env capability. The default export of every palette pack. */
 
 export class EnvCapability<C extends ZodMap = any, R extends Record<string, Resource<unknown>> = any> {
@@ -247,6 +407,33 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
     readonly name: string,
     readonly spec: CapabilitySpec<C, R>,
   ) {}
+
+  /** The flipped authoring entry point — see the section immediately above this class for the
+   *  full model. Builds the SAME `CapabilitySpec` shape the constructor above consumes (a
+   *  plain literal `symbols` record — `lower()` cannot tell the two paths apart, and never
+   *  changes), so `lower()` itself needs no edits. Returns a {@link DefinedEnvCapability} (a
+   *  thin, internal subclass) so its OWN `resources` factory can re-stamp
+   *  `associateActivation` after `apply()` — see that class's doc. */
+  static define<Shape extends ZodMap = Record<string, never>, Resources = Record<string, never>>(
+    name: string,
+    defSpec: DefineCapabilitySpec<Shape, Resources>,
+  ): EnvCapability<Shape, Record<string, never>> {
+    const symbolFactory = makeSymbolFactory<InferCfg<Shape>, Resources>();
+    const symbolsRec = defSpec.symbols(symbolFactory, schemeZod);
+    return new DefinedEnvCapability<Shape, Resources>(
+      name,
+      {
+        configuration: defSpec.configuration,
+        prelude: defSpec.prelude,
+        symbolPrefix: defSpec.symbolPrefix,
+        deps: defSpec.deps,
+        symbols: symbolsRec,
+      },
+      defSpec.resources,
+      Object.keys(symbolsRec),
+      defSpec.symbolPrefix ?? "",
+    );
+  }
 
   /** Lower to a kernel `EnvPack`. `evalScheme` runs the prelude (required iff a prelude
    *  exists); `config` is validated against the `configuration` schemas.
@@ -647,5 +834,49 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
   exports(): Promise<ReadonlySet<string>> {
     this._exportsPromise ??= computeCapabilityExports(this.spec);
     return this._exportsPromise;
+  }
+}
+
+/** The runtime half of `EnvCapability.define` (Stage 1c) — see the section immediately above
+ *  the class, and `define()`'s own doc, for the full model. A THIN subclass that never touches
+ *  `lower()`'s own body: `super.lower(opts)` runs completely unmodified (same `cells`/
+ *  `ResourceCell` production, same degradation, same def→value binding as `new
+ *  EnvCapability(...)`), and only THEN — because this capability declared no old-style
+ *  `spec.resources`, so `super.lower()`'s cells are empty for it — re-stamps
+ *  `associateActivation` (Stage 1b, `./symbols/_bake.js`) on the already-bound procs with the
+ *  REAL `Resources` bag its own `resources(config)` factory produced, read back BY NAME
+ *  through the `SchemeEnv` accessor (`env.get`, the same read-face every other consumer
+ *  uses — never a `lower()`/`apply()` edit). Internal: never exported; constructed only by
+ *  `EnvCapability.define`. */
+class DefinedEnvCapability<Shape extends ZodMap, Resources> extends EnvCapability<Shape, Record<string, never>> {
+  constructor(
+    name: string,
+    spec: CapabilitySpec<Shape, Record<string, never>>,
+    private readonly resourcesFactory: ((config: InferCfg<Shape>) => Resources) | undefined,
+    private readonly symbolKeys: readonly string[],
+    private readonly prefix: string,
+  ) {
+    super(name, spec);
+  }
+
+  override lower(
+    opts: { evalScheme?: EvalSchemeInto; config?: Partial<InferCfg<Shape>>; degradation?: DegradationMode } = {},
+  ): LoweredPack {
+    const pack = super.lower(opts);
+    const { resourcesFactory } = this;
+    if (resourcesFactory === undefined) return pack; // no `resources` factory declared — nothing to re-stamp
+    const config = pack.activation.configuration as InferCfg<Shape>;
+    const resources = resourcesFactory(config);
+    const { symbolKeys, prefix } = this;
+    return {
+      ...pack,
+      apply: async (env: SchemeEnv, ctx?: PackContext<SchemeEnv>): Promise<void> => {
+        await pack.apply(env, ctx as PackContext<SchemeEnv>);
+        for (const key of symbolKeys) {
+          const bound: unknown = env.get(prefix + key, { throwError: false });
+          if (typeof bound === "object" && bound !== null) associateActivation(bound, config, resources);
+        }
+      },
+    };
   }
 }
