@@ -28,10 +28,9 @@
 // call/cc + parameters + delay. promise? doored with its constructors (nothing to test).
 
 import { EnvCapability } from "../../common/capability.js";
-import { symbol } from "../../common/symbol.js";
 
-export default new EnvCapability("scheme/r7rs/control", {
-  symbols: {
+export default EnvCapability.define("scheme/r7rs/control", {
+  symbols: (symbol) => ({
     // §6.10 First-class continuations — non-local re-entry severs construction-site grounding.
     "call/cc": symbol.notImplemented`call/cc: first-class continuations are omitted from arrival by design — non-local re-entry severs value provenance, leaving no single construction site to root lineage at; for early exit use guard / raise (R7RS §6.11, supported)`,
     "call-with-current-continuation": symbol.notImplemented`call-with-current-continuation: first-class continuations are omitted from arrival by design — non-local re-entry severs value provenance, leaving no single construction site to root lineage at; for early exit use guard / raise (R7RS §6.11, supported)`,
@@ -47,5 +46,5 @@ export default new EnvCapability("scheme/r7rs/control", {
     "make-promise": symbol.notImplemented`make-promise: delayed evaluation is omitted from arrival by design — it defers a value's identity to force-time and the dynamic extent alive then, not to where it was constructed; compute the value where you need it`,
     "delay-force": symbol.notImplemented`delay-force: delayed evaluation is omitted from arrival by design — it defers a value's identity to force-time and the dynamic extent alive then, not to where it was constructed; compute the value where you need it`,
     "promise?": symbol.notImplemented`promise?: delayed evaluation is omitted from arrival by design — with delay/force/make-promise/delay-force all doored (§4.2.5), no promise value can exist to test; there is nothing for this predicate to recognize`,
-  },
+  }),
 });

@@ -36,7 +36,6 @@
 // pack doors only SRFI-numbered omissions — so the two add, never double-bind.
 
 import { EnvCapability } from "../../common/capability.js";
-import { symbol } from "../../common/symbol.js";
 
 // ── 1. SRFI-69 / SRFI-125 hash tables ────────────────────────────────────────
 // The true alternative is the native `dict`: an immutable open-key map. Build with
@@ -77,8 +76,8 @@ const SET_REASON =
 const STRING_PORT_REASON =
   "call-with-input-string is not implemented — string ports are omitted from arrival by design (R7RS §6.13.2 / SRFI-6), the same omission r7rs/host.ts's open-input-string door names; the string you would read through the port IS the value you already have, so operate on it directly with string-ref / string->list / string-split / string-index instead of reading it back through a port";
 
-export default new EnvCapability("scheme/srfi-stubs", {
-  symbols: {
+export default EnvCapability.define("scheme/srfi-stubs", {
+  symbols: (symbol) => ({
     // 1. SRFI-69 / SRFI-125 hash tables
     "make-hash-table": symbol.notImplemented`make-hash-table: ${HASH_TABLE_REASON}`,
     "hash-table?": symbol.notImplemented`hash-table?: ${HASH_TABLE_REASON}`,
@@ -129,5 +128,5 @@ export default new EnvCapability("scheme/srfi-stubs", {
 
     // 8. String ports (mirrors host.ts's port omission)
     "call-with-input-string": symbol.notImplemented`call-with-input-string: ${STRING_PORT_REASON}`,
-  },
+  }),
 });

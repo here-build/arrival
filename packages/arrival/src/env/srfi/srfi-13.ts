@@ -38,10 +38,16 @@ import dedent from "dedent";
 import { type } from "../../utils/typecheck.js";
 import { type RunContext } from "../../run/RunContext.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
-import * as z from "../../common/scheme-zod.js";
-import { symbol, type CallCtx, makeCallCtx } from "../../common/symbol.js";
+import { type CallCtx, makeCallCtx } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
-import { assertAllocatable, charValue, schemeBool, stringValue, toIndex, withInputProvenance } from "../../values/op-helpers.js";
+import {
+  assertAllocatable,
+  charValue,
+  schemeBool,
+  stringValue,
+  toIndex,
+  withInputProvenance,
+} from "../../values/op-helpers.js";
 import { type ABool } from "../../values/primitives/ABool.js";
 import { collapseProvenance, taintString } from "../../provenance/provenance-collapse.js";
 import { AString } from "../../values/primitives/AString.js";
@@ -63,8 +69,7 @@ const SHARED =
   "shared-text substrings are not part of this sandbox — strings are independent values; use string-copy / substring / string-append / string-concatenate pure twins";
 const START_END =
   "optional start/end parse helpers are omitted — arrival's SRFI-13 ops take whole strings; slice first with substring / string-copy";
-const KMP =
-  "low-level KMP search machinery is not shipped; use string-contains / string-index";
+const KMP = "low-level KMP search machinery is not shipped; use string-contains / string-index";
 const CMP =
   "SRFI-13 comparison names without ? are not bound — use R7RS string=? / string<? / string-ci=? family (scheme/strings + equality)";
 const SUBSET =
@@ -145,10 +150,6 @@ const DOORS = {
   "string-delete":
     "build compositionally: (list->string (remove pred (string->list s))) using remove (SRFI-1), string->list and list->string (R7RS)",
 } as const satisfies Record<string, string>;
-
-const DOOR_SYMBOLS = Object.fromEntries(
-  Object.entries(DOORS).map(([name, reason]) => [name, symbol.notImplemented`${name}: ${reason}`]),
-);
 
 // ── criterion machinery ──────────────────────────────────────────────────────
 // SRFI-13 criteria: we honestly support a CHAR (equality) or a ONE-ARG PREDICATE
@@ -233,8 +234,8 @@ function sliceImpl(name: string, pick: (chars: string[], k: number) => string[])
   };
 }
 
-export default new EnvCapability("scheme/srfi-13", {
-  symbols: {
+export default EnvCapability.define("scheme/srfi-13", {
+  symbols: (symbol, z) => ({
     "string-null?": symbol.native`string-null?: #t iff the string is empty (SRFI-13)`(
       { input: [z.string], output: [z.boolean] },
       function (this: CallCtx, str: unknown): ABool {
@@ -260,31 +261,36 @@ export default new EnvCapability("scheme/srfi-13", {
     // Index-or-#f, like string-contains (#f is the ONLY false value — index 0 is truthy).
     "string-index":
       symbol.native`string-index: index of the first char matching a char or one-arg predicate, or #f (SRFI-13; no charsets)`(
-        { input: [z.string, z.value], output: [z.union([z.exact, z.boolean])], type: dedent`
+        {
+          input: [z.string, z.value],
+          output: [z.union([z.exact, z.boolean])],
+          type: dedent`
           {
             (s: string, criterion: string | ((c: string) => unknown)): number | false;
           }
-        ` },
+        `,
+        },
         function (this: CallCtx, str: unknown, criterion: unknown): AExact | ABool | Promise<AExact | ABool> {
           const chars = [...stringValue(str)];
           const runCtx = this.runCtx;
           return afterFlags(criterionFlags(criterion, chars, runCtx), (f) => {
             const i = f.indexOf(true);
-            return withInputProvenance(
-              [str, criterion],
-              i === -1 ? schemeBool(false) : new AExact(i),
-            );
+            return withInputProvenance([str, criterion], i === -1 ? schemeBool(false) : new AExact(i));
           });
         },
       ),
 
     "string-count":
       symbol.native`string-count: how many chars match a char or one-arg predicate (SRFI-13; no charsets)`(
-        { input: [z.string, z.value], output: [z.exact], type: dedent`
+        {
+          input: [z.string, z.value],
+          output: [z.exact],
+          type: dedent`
           {
             (s: string, criterion: string | ((c: string) => unknown)): number;
           }
-        ` },
+        `,
+        },
         function (this: CallCtx, str: unknown, criterion: unknown): AExact | Promise<AExact> {
           const chars = [...stringValue(str)];
           const runCtx = this.runCtx;
@@ -297,41 +303,57 @@ export default new EnvCapability("scheme/srfi-13", {
 
     "string-take":
       symbol.native`string-take: the first n characters of the string; n out of range is an error (SRFI-13)`(
-        { input: [z.string, z.schemeNumber], output: [z.string], type: dedent`
+        {
+          input: [z.string, z.schemeNumber],
+          output: [z.string],
+          type: dedent`
           {
             (s: string, n: number): string;
           }
-        ` },
+        `,
+        },
         sliceImpl("string-take", (chars, k) => chars.slice(0, k)),
       ),
 
     "string-drop":
       symbol.native`string-drop: the string without its first n characters; n out of range is an error (SRFI-13)`(
-        { input: [z.string, z.schemeNumber], output: [z.string], type: dedent`
+        {
+          input: [z.string, z.schemeNumber],
+          output: [z.string],
+          type: dedent`
           {
             (s: string, n: number): string;
           }
-        ` },
+        `,
+        },
         sliceImpl("string-drop", (chars, k) => chars.slice(k)),
       ),
 
     "string-take-right":
       symbol.native`string-take-right: the last n characters of the string; n out of range is an error (SRFI-13)`(
-        { input: [z.string, z.schemeNumber], output: [z.string], type: dedent`
+        {
+          input: [z.string, z.schemeNumber],
+          output: [z.string],
+          type: dedent`
           {
             (s: string, n: number): string;
           }
-        ` },
+        `,
+        },
         sliceImpl("string-take-right", (chars, k) => chars.slice(chars.length - k)),
       ),
 
     "string-drop-right":
       symbol.native`string-drop-right: the string without its last n characters; n out of range is an error (SRFI-13)`(
-        { input: [z.string, z.schemeNumber], output: [z.string], type: dedent`
+        {
+          input: [z.string, z.schemeNumber],
+          output: [z.string],
+          type: dedent`
           {
             (s: string, n: number): string;
           }
-        ` },
+        `,
+        },
         sliceImpl("string-drop-right", (chars, k) => chars.slice(0, chars.length - k)),
       ),
 
@@ -501,6 +523,8 @@ export default new EnvCapability("scheme/srfi-13", {
 
     // Official SRFI-13 names not live above — purity / subset doors (see DOORS).
     // string-filter lives here so the pack owns the full index.
-    ...DOOR_SYMBOLS,
-  },
+    ...Object.fromEntries(
+      Object.entries(DOORS).map(([name, reason]) => [name, symbol.notImplemented`${name}: ${reason}`]),
+    ),
+  }),
 });

@@ -2,7 +2,6 @@
 // Pure inference plane: no ports, no ambient system. implement-or-door totalized.
 // call-with-input-string lives in srfi-stubs (SRFI-6).
 import { EnvCapability } from "../../common/capability.js";
-import { symbol } from "../../common/symbol.js";
 
 const IO =
   "ports & IO are omitted from arrival by design — it is a pure inference plane with no IO surface; an ambient read/write has no value-construction site for provenance. Return the value from your dataflow instead of streaming it out";
@@ -79,8 +78,9 @@ const DOORS = {
 
 export const HOST_DOOR_NAMES = Object.keys(DOORS) as (keyof typeof DOORS)[];
 
-const symbols = Object.fromEntries(
-  Object.entries(DOORS).map(([name, reason]) => [name, symbol.notImplemented`${name}: ${reason}`]),
-);
-
-export default new EnvCapability("scheme/r7rs/host", { symbols });
+export default EnvCapability.define("scheme/r7rs/host", {
+  symbols: (symbol) =>
+    Object.fromEntries(
+      Object.entries(DOORS).map(([name, reason]) => [name, symbol.notImplemented`${name}: ${reason}`]),
+    ),
+});

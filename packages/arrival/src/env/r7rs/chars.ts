@@ -13,8 +13,7 @@ import dedent from "dedent";
 import unicodeProperties from "unicode-properties";
 import invariant from "tiny-invariant";
 
-import * as z from "../../common/scheme-zod.js";
-import { symbol, type CallCtx } from "../../common/symbol.js";
+import { type CallCtx } from "../../common/symbol.js";
 import { charValue, coerceNumeric, deriveOrd, schemeBool as bool } from "../../values/op-helpers.js";
 import { schemeFalse, schemeTrue } from "../../values/primitives/ABool.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
@@ -22,8 +21,8 @@ import { AExact } from "../../values/primitives/AExact.js";
 import { ACharacter } from "../../values/primitives/ACharacter.js";
 import { EnvCapability } from "../../common/capability.js";
 
-export default new EnvCapability("scheme/chars", {
-  symbols: {
+export default EnvCapability.define("scheme/chars", {
+  symbols: (symbol, z) => ({
     // Char harvest image is string (single-char); no separate ambient Char carrier.
     "char?": {
       ...symbol.taglessGuard`char?: #t iff obj is a character`,
@@ -192,21 +191,23 @@ export default new EnvCapability("scheme/chars", {
         if (numericValue === null) return schemeFalse;
         // The scheme face of the numeric arm: exact for integers (digits), inexact for the
         // rare fractional numeric values (vulgar-fraction No characters).
-        return Number.isInteger(numericValue)
-          ? new AExact(numericValue)
-          : new AInexact(numericValue);
+        return Number.isInteger(numericValue) ? new AExact(numericValue) : new AInexact(numericValue);
       },
     ),
 
     // Case conversion
     "char-upcase": symbol.native`char-upcase: uppercase form of the character`(
       { input: [z.char], output: [z.char] },
-      function (this: CallCtx, char) { return new ACharacter(charValue(char).toUpperCase()); },
+      function (this: CallCtx, char) {
+        return new ACharacter(charValue(char).toUpperCase());
+      },
     ),
 
     "char-downcase": symbol.native`char-downcase: lowercase form of the character`(
       { input: [z.char], output: [z.char] },
-      function (this: CallCtx, char) { return new ACharacter(charValue(char).toLowerCase()); },
+      function (this: CallCtx, char) {
+        return new ACharacter(charValue(char).toLowerCase());
+      },
     ),
 
     "char-foldcase": symbol.native`char-foldcase: case-folded form of the character`(
@@ -256,5 +257,5 @@ export default new EnvCapability("scheme/chars", {
         return new ACharacter(String.fromCodePoint(code));
       },
     ),
-  },
+  }),
 });

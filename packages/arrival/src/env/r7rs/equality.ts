@@ -21,10 +21,9 @@
  * already binds them.)
  */
 
-import * as z from "../../common/scheme-zod.js";
 import { AJSArray } from "../../membrane/AJSArray.js";
 import dedent from "dedent";
-import { symbol, type CallCtx } from "../../common/symbol.js";
+import { type CallCtx } from "../../common/symbol.js";
 import { ABool, schemeFalse, schemeTrue } from "../../values/primitives/ABool.js";
 import { AJSObject } from "../../membrane/AJSObject.js";
 import { ADict, isDictShaped } from "../../values/primitives/ADict.js";
@@ -98,18 +97,14 @@ const provesArray = (f: { list?: true; pair?: true; nonEmptyList?: true } | unde
 const nullQEmitRule: EmitRule<R> = {
   call: (args, ctx) => {
     const [xs] = exactly(ctx, "null?", args, 1);
-    return provesArray(ctx.argFacts[0])
-      ? Bin("===", Member(xs!, "length"), Lit(0))
-      : Call(ctx.runtime("null?"), [xs!]);
+    return provesArray(ctx.argFacts[0]) ? Bin("===", Member(xs!, "length"), Lit(0)) : Call(ctx.runtime("null?"), [xs!]);
   },
 };
 
 const pairQEmitRule: EmitRule<R> = {
   call: (args, ctx) => {
     const [xs] = exactly(ctx, "pair?", args, 1);
-    return provesArray(ctx.argFacts[0])
-      ? Bin(">", Member(xs!, "length"), Lit(0))
-      : Call(ctx.runtime("pair?"), [xs!]);
+    return provesArray(ctx.argFacts[0]) ? Bin(">", Member(xs!, "length"), Lit(0)) : Call(ctx.runtime("pair?"), [xs!]);
   },
 };
 
@@ -146,8 +141,8 @@ const equalQEmitRule: EmitRule<R> = {
   },
 };
 
-export default new EnvCapability("scheme/equality", {
-  symbols: {
+export default EnvCapability.define("scheme/equality", {
+  symbols: (symbol, z) => ({
     // R7RS 6.3 Booleans
     "boolean=?": symbol.native`boolean=?: typed equivalence over booleans`(
       // Input stays z.value (representation-blind), NOT z.boolean — the impl's own unwrap()
@@ -175,8 +170,7 @@ export default new EnvCapability("scheme/equality", {
         };
         const first = unwrap(bools[0]);
         if (first === undefined) return schemeFalse;
-        return new ABool(bools.every((b) => unwrap(b) === first),
-        );
+        return new ABool(bools.every((b) => unwrap(b) === first));
       },
     ),
 
@@ -194,8 +188,7 @@ export default new EnvCapability("scheme/equality", {
         const first = syms[0];
         if (!(first instanceof ASymbol)) return schemeFalse;
         const firstName = first.__name__;
-        return new ABool(syms.every((s) => s instanceof ASymbol && s.__name__ === firstName),
-        );
+        return new ABool(syms.every((s) => s instanceof ASymbol && s.__name__ === firstName));
       },
     ),
 
@@ -226,15 +219,21 @@ export default new EnvCapability("scheme/equality", {
 
     "procedure?": symbol.native`procedure?: callable, excluding macros`(
       // Total type predicate: any value in, #f on non-callables. Dual type-guard harvest.
-      { input: [z.value], output: [z.boolean], type: dedent`
+      {
+        input: [z.value],
+        output: [z.boolean],
+        type: dedent`
           {
             (x: unknown): x is (...args: unknown[]) => unknown;
             <T>(x: T): x is Extract<T, (...args: unknown[]) => unknown>;
           }
-        ` },
+        `,
+      },
       // A procedure is any callable EXCEPT a macro — this includes a membrane SchemeJSFunction
       // (typeof "object"), which the old `typeof obj === "function"` test wrongly excluded.
-      function (this: CallCtx, obj) { return new ABool(is_callable(obj) && !is_macro(obj)); },
+      function (this: CallCtx, obj) {
+        return new ABool(is_callable(obj) && !is_macro(obj));
+      },
     ),
 
     // `repr` — the scheme surface of the value→string PRINT protocol (values/print.ts:
@@ -245,7 +244,9 @@ export default new EnvCapability("scheme/equality", {
     // `printValue` has no write-mode flag. Matches the current 1-arg behavior.)
     repr: symbol.native`repr: render a value to its external representation string`(
       { input: [z.value], output: [z.string] },
-      function (this: CallCtx, obj) { return new AString(printValue(obj)); },
+      function (this: CallCtx, obj) {
+        return new AString(printValue(obj));
+      },
     ),
 
     // R8 mint (RULINGS.md R8): a verdict derived from lineage carries it — stamped
@@ -255,7 +256,9 @@ export default new EnvCapability("scheme/equality", {
       // Compiler-facing (constitution §4.1) — the primitive-proven gate (see
       // `equalQEmitRule`'s own doc comment above for the full soundness argument).
       { input: [z.value, z.value], output: [z.boolean], emit: equalQEmitRule },
-      function (this: CallCtx, a, b) { return mintVerdict([a, b], structuralEqual(a, b)); },
+      function (this: CallCtx, a, b) {
+        return mintVerdict([a, b], structuralEqual(a, b));
+      },
     ),
 
     // R7RS 6.1 equivalence — the pointer/scalar-grade identity predicates. `eqv?`
@@ -264,12 +267,16 @@ export default new EnvCapability("scheme/equality", {
     // the single comparison home in `structural-equal.ts`.
     "eq?": symbol.native`eq?: pointer/scalar-grade identity`(
       { input: [z.value, z.value], output: [z.boolean] },
-      function (this: CallCtx, x, y) { return mintVerdict([x, y], eq(x, y)); },
+      function (this: CallCtx, x, y) {
+        return mintVerdict([x, y], eq(x, y));
+      },
     ),
 
     "eqv?": symbol.native`eqv?: eq? plus explicit number/char equality`(
       { input: [z.value, z.value], output: [z.boolean] },
-      function (this: CallCtx, x, y) { return mintVerdict([x, y], eqv(x, y)); },
+      function (this: CallCtx, x, y) {
+        return mintVerdict([x, y], eqv(x, y));
+      },
     ),
 
     // R7RS 6.3 — logical negation. This native pack binds onto global_env BEFORE
@@ -281,7 +288,9 @@ export default new EnvCapability("scheme/equality", {
       // R7RS: only #f is falsy. Post-L1 `#f` parses to `SchemeBool(false)`
       // (a truthy object in JS), so `!value` would wrongly return false here.
       // `is_false` is the canonical scheme-falsy predicate (`guards.ts`).
-      function (this: CallCtx, value) { return bool(is_false(value)); },
+      function (this: CallCtx, value) {
+        return bool(is_false(value));
+      },
     ),
 
     // ── R7RS type predicates ──────────────────────────────────────────────────
@@ -289,13 +298,19 @@ export default new EnvCapability("scheme/equality", {
     // Harvest: dual type-guards (inline type:) — unknown arm + Extract arm so
     // `string | List<number>` keeps List<number> after list?, not List<unknown>.
     "string?": symbol.native`string?: boxed-or-raw string test`(
-      { input: [z.value], output: [z.boolean], type: dedent`
+      {
+        input: [z.value],
+        output: [z.boolean],
+        type: dedent`
           {
             (x: unknown): x is string;
             <T>(x: T): x is Extract<T, string>;
           }
-        ` },
-      function (this: CallCtx, obj) { return bool(obj instanceof AString); },
+        `,
+      },
+      function (this: CallCtx, obj) {
+        return bool(obj instanceof AString);
+      },
     ),
 
     // `(pair? x)` asks the receiver's own `arrival/tagless-final/pair?` (APair answers #t); the
@@ -365,15 +380,21 @@ export default new EnvCapability("scheme/equality", {
     ),
 
     "boolean?": symbol.native`boolean?: boxed-or-raw boolean test`(
-      { input: [z.value], output: [z.boolean], type: dedent`
+      {
+        input: [z.value],
+        output: [z.boolean],
+        type: dedent`
           {
             (x: unknown): x is boolean;
             <T>(x: T): x is Extract<T, boolean>;
           }
-        ` },
+        `,
+      },
       // L1 boxes parser literals as SchemeBool — JS `typeof` no longer catches them.
       // Mirrors the `number?` / `string?` pattern of accepting both raw and boxed forms.
-      function (this: CallCtx, obj) { return bool(obj instanceof ABool); },
+      function (this: CallCtx, obj) {
+        return bool(obj instanceof ABool);
+      },
     ),
 
     // Symbol prints as string in the harvest image (no separate ambient Symbol carrier).
@@ -398,22 +419,32 @@ export default new EnvCapability("scheme/equality", {
     // non-object foreign value is not a dict.
     "dict?":
       symbol.native`dict?: #t iff obj is a dict — a native open-key record ({…} / (dict …)), not a list, string, vector, or foreign class instance`(
-        { input: [z.value], output: [z.boolean], type: dedent`
+        {
+          input: [z.value],
+          output: [z.boolean],
+          type: dedent`
           {
             (x: unknown): x is Record<string, unknown>;
             <T>(x: T): x is Extract<T, Record<string, unknown>>;
           }
-        ` },
-        function (this: CallCtx, obj): ABool { return new ABool(obj instanceof AJSObject || obj instanceof ADict); },
+        `,
+        },
+        function (this: CallCtx, obj): ABool {
+          return new ABool(obj instanceof AJSObject || obj instanceof ADict);
+        },
       ),
 
     "list?": symbol.native`list?: proper-list test (cycle-safe)`(
-      { input: [z.value], output: [z.boolean], type: dedent`
+      {
+        input: [z.value],
+        output: [z.boolean],
+        type: dedent`
           {
             (x: unknown): x is List<unknown>;
             <T>(x: T): x is Extract<T, List<any>>;
           }
-        ` },
+        `,
+      },
       // A circular list is NOT a proper list (R7RS); detect runtime cycles too
       // (have_cycles below only catches reader #0= cycles).
       function (this: CallCtx, obj) {
@@ -435,5 +466,5 @@ export default new EnvCapability("scheme/equality", {
         }
       },
     ),
-  },
+  }),
 });

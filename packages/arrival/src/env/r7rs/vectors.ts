@@ -19,12 +19,10 @@
  * \`__tests__/vectors-contract-precision.test.ts\` / \`vectors.test-d.ts\`).
  */
 
-import * as z from "../../common/scheme-zod.js";
 import dedent from "dedent";
 import { applyCallback } from "../../values/primitives/ACallable.js";
 import { CallCtx } from "../../common/symbols/_bake.js";
 import { ctxOf } from "../../values/primitives/AValue.js";
-import { symbol } from "../../common/symbol.js";
 import { AVector } from "../../values/primitives/AVector.js";
 import { AJSArray } from "../../membrane/AJSArray.js";
 import { type AVoid, theVoid } from "../../values/primitives/AVoid.js";
@@ -49,8 +47,8 @@ import { EnvCapability } from "../../common/capability.js";
 import { attachOffendingValue } from "../../errors.js";
 import { tf } from "../../values/tagless-final.js";
 
-export default new EnvCapability("scheme/vectors", {
-  symbols: {
+export default EnvCapability.define("scheme/vectors", {
+  symbols: (symbol, z) => ({
     "make-vector": symbol.native`make-vector: a vector of length k, each slot fill`(
       {
         input: [z.schemeNumber, z.value.optional()],
@@ -374,5 +372,5 @@ export default new EnvCapability("scheme/vectors", {
         return theVoid;
       },
     ),
-  },
+  }),
 });

@@ -54,27 +54,29 @@
 // have, not a behavior change from opaque.
 
 import { EnvCapability } from "../../common/capability.js";
-import { symbol } from "../../common/symbol.js";
 
 /** scheme/r7rs/syntax — the R7RS macro-binding forms as guardless value-binding aliases. */
-export default new EnvCapability("scheme/r7rs/syntax", {
-  symbols: {
-    "define-syntax": symbol.defineSyntax`define-syntax: (define-syntax name expr) — R7RS §5.3, bind a transformer at top scope. Exact alias of \`define\` — arrival's transformers are first-class values, not a separate namespace.`(
-      `(lambda (name expr)
+export default EnvCapability.define("scheme/r7rs/syntax", {
+  symbols: (symbol) => ({
+    "define-syntax":
+      symbol.defineSyntax`define-syntax: (define-syntax name expr) — R7RS §5.3, bind a transformer at top scope. Exact alias of \`define\` — arrival's transformers are first-class values, not a separate namespace.`(
+        `(lambda (name expr)
          \`(define ,name ,expr))`,
-      { macroAttribute: "binder" },
-    ),
+        { macroAttribute: "binder" },
+      ),
 
-    "let-syntax": symbol.defineSyntax`let-syntax: (let-syntax ((name transformer) …) body …) — R7RS §4.3.1, bind transformers locally, non-recursively. Exact alias of \`let\` — non-recursive scoping falls out of let's own scoping math.`(
-      `(lambda (vars . body)
+    "let-syntax":
+      symbol.defineSyntax`let-syntax: (let-syntax ((name transformer) …) body …) — R7RS §4.3.1, bind transformers locally, non-recursively. Exact alias of \`let\` — non-recursive scoping falls out of let's own scoping math.`(
+        `(lambda (vars . body)
          \`(let ,vars ,@body))`,
-      { macroAttribute: "binder" },
-    ),
+        { macroAttribute: "binder" },
+      ),
 
-    "letrec-syntax": symbol.defineSyntax`letrec-syntax: (letrec-syntax ((name transformer) …) body …) — R7RS §4.3.1, bind transformers locally, allowing mutual self-reference. Exact alias of \`letrec\` — recursive scoping falls out of letrec's own scoping math.`(
-      `(lambda (vars . body)
+    "letrec-syntax":
+      symbol.defineSyntax`letrec-syntax: (letrec-syntax ((name transformer) …) body …) — R7RS §4.3.1, bind transformers locally, allowing mutual self-reference. Exact alias of \`letrec\` — recursive scoping falls out of letrec's own scoping math.`(
+        `(lambda (vars . body)
          \`(letrec ,vars ,@body))`,
-      { macroAttribute: "binder" },
-    ),
-  },
+        { macroAttribute: "binder" },
+      ),
+  }),
 });

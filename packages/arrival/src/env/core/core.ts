@@ -22,15 +22,13 @@
 // but are keyworded too, so no hygiene-renamed head ever misses dispatch.
 
 import { EnvCapability } from "../../common/capability.js";
-import * as z from "../../common/scheme-zod.js";
-import { symbol } from "../../common/symbol.js";
 import { gensym } from "../../values/values-repr.js";
 
-export default new EnvCapability("scheme/core", {
+export default EnvCapability.define("scheme/core", {
   // gensym resolves at macro-EXPANSION time; the floor (assembled first) binds it where
   // every consumer reaches it, including inference's cut/cute in initBridge, which reads
   // gensym off the post-assembly user_env chain.
-  symbols: {
+  symbols: (symbol, z) => ({
     // Kernel keywords — see the preamble for why every special form is keyworded.
     lambda: symbol.keyword`lambda: create an anonymous procedure`,
     define: symbol.keyword`define: bind a name in the current scope`,
@@ -76,5 +74,5 @@ export default new EnvCapability("scheme/core", {
       z.looseNumber,
       `+nan.0`,
     ),
-  },
+  }),
 });

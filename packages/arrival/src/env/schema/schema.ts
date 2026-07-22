@@ -35,8 +35,6 @@
 // bodies reach — each a declared deps edge. car/cdr need no edge — the resolver-synth c[ad]+r
 // family resolves them unconditionally.
 import { EnvCapability } from "../../common/capability.js";
-import { symbol } from "../../common/symbol.js";
-import * as z from "../../common/scheme-zod.js";
 import lists from "../r7rs/lists.js";
 import equality from "../r7rs/equality.js";
 import strings from "../r7rs/strings.js";
@@ -49,99 +47,110 @@ import exceptions from "../r7rs/exceptions.js";
 // arbitrarily recursive and no body here reads past that one level. Shared by s/optional and
 // s/array's element; s/field's `type` and s/field/_composite's `rest` forward opaquely, so they
 // stay z.value, not tag.
-const tag = z.union([z.string, z.cons(z.string, z.value)]);
-
-// The s/field-shape output every s/field* body returns: two fixed heads (name, type) then a
-// string tail. Over-approximates (tolerates >1 trailing desc, none produced) rather than under —
-// never rejecting a value a body returns.
-const fieldShape = z.list([z.string, z.value], z.string);
-
-export const schemaCapability = new EnvCapability("arrival/schema", {
+export const schemaCapability = EnvCapability.define("arrival/schema", {
   deps: [lists, equality, strings, numeric, exceptions],
-  symbols: {
-    "s/object": symbol.define`s/object: an object type tag from field-tag entries — (s/object (s/field name type)...)`(
-      { input: z.array(z.value), output: [z.list([z.string], z.value)] },
-      `(lambda fields (cons "object" fields))`,
-    ),
+  symbols: (symbol, z) => {
+    const tag = z.union([z.string, z.cons(z.string, z.value)]);
+    // The s/field-shape output every s/field* body returns: two fixed heads (name, type) then a
+    // string tail. Over-approximates (tolerates >1 trailing desc, none produced) rather than under —
+    // never rejecting a value a body returns.
+    const fieldShape = z.list([z.string, z.value], z.string);
+    return {
+      "s/object":
+        symbol.define`s/object: an object type tag from field-tag entries — (s/object (s/field name type)...)`(
+          { input: z.array(z.value), output: [z.list([z.string], z.value)] },
+          `(lambda fields (cons "object" fields))`,
+        ),
 
-    "s/array": symbol.define`s/array: an array type tag whose elements are all shaped by element — (s/array tag)`(
-      { input: [tag], output: [z.list([z.string, z.value])] },
-      `(lambda (element) (list "array" element))`,
-    ),
+      "s/array": symbol.define`s/array: an array type tag whose elements are all shaped by element — (s/array tag)`(
+        { input: [tag], output: [z.list([z.string, z.value])] },
+        `(lambda (element) (list "array" element))`,
+      ),
 
-    "s/enum": symbol.define`s/enum: an enum type tag over the given literal values — (s/enum value...)`(
-      { input: z.array(z.value), output: [z.list([z.string], z.value)] },
-      `(lambda values (cons "enum" values))`,
-    ),
+      "s/enum": symbol.define`s/enum: an enum type tag over the given literal values — (s/enum value...)`(
+        { input: z.array(z.value), output: [z.list([z.string], z.value)] },
+        `(lambda values (cons "enum" values))`,
+      ),
 
-    // The `/optional` compositor: marks a tag's HEAD so the object-field lowering
-    // (tagToJsonSchema) drops that field from `required`. Composes onto ANY tag, bare ("string"
-    // → "string/optional") or list-headed (("enum" …) → ("enum/optional" …)) — one bounded
-    // suffix, not a chain. Meaningful only on an object field's tag.
-    "s/optional": symbol.define`s/optional: mark a tag's head /optional — meaningful only on an object field's tag`(
-      { input: [tag], output: [tag] },
-      `(lambda (tag)
+      // The `/optional` compositor: marks a tag's HEAD so the object-field lowering
+      // (tagToJsonSchema) drops that field from `required`. Composes onto ANY tag, bare ("string"
+      // → "string/optional") or list-headed (("enum" …) → ("enum/optional" …)) — one bounded
+      // suffix, not a chain. Meaningful only on an object field's tag.
+      "s/optional": symbol.define`s/optional: mark a tag's head /optional — meaningful only on an object field's tag`(
+        { input: [tag], output: [tag] },
+        `(lambda (tag)
          (if (pair? tag)
              (cons (string-append (car tag) "/optional") (cdr tag))
              (string-append tag "/optional")))`,
-    ),
+      ),
 
-    "s/field": symbol.define`s/field: (name type [description]) — an object field entry for s/object`(
-      { input: [z.string, z.value], inputRest: z.string, output: [fieldShape] },
-      `(lambda (name type . desc)
+      "s/field": symbol.define`s/field: (name type [description]) — an object field entry for s/object`(
+        { input: [z.string, z.value], inputRest: z.string, output: [fieldShape] },
+        `(lambda (name type . desc)
          (if (null? desc) (list name type) (list name type (car desc))))`,
-    ),
+      ),
 
-    // Top-level scalar constructors — leaf primitives spelled as s/* calls so a bare
-    // "string"/"number"/"integer"/"boolean" literal never has to appear in authored code. Each
-    // lowers to the SAME bare string tagToJsonSchema understands — authoring surface, not a new representation.
-    "s/string": symbol.define`s/string: the "string" scalar type tag`({ input: [], output: [z.string] }, `(lambda () "string")`),
-    "s/number": symbol.define`s/number: the "number" scalar type tag`({ input: [], output: [z.string] }, `(lambda () "number")`),
-    "s/integer": symbol.define`s/integer: the "integer" scalar type tag`(
-      { input: [], output: [z.string] },
-      `(lambda () "integer")`,
-    ),
-    "s/boolean": symbol.define`s/boolean: the "boolean" scalar type tag`(
-      { input: [], output: [z.string] },
-      `(lambda () "boolean")`,
-    ),
+      // Top-level scalar constructors — leaf primitives spelled as s/* calls so a bare
+      // "string"/"number"/"integer"/"boolean" literal never has to appear in authored code. Each
+      // lowers to the SAME bare string tagToJsonSchema understands — authoring surface, not a new representation.
+      "s/string": symbol.define`s/string: the "string" scalar type tag`(
+        { input: [], output: [z.string] },
+        `(lambda () "string")`,
+      ),
+      "s/number": symbol.define`s/number: the "number" scalar type tag`(
+        { input: [], output: [z.string] },
+        `(lambda () "number")`,
+      ),
+      "s/integer": symbol.define`s/integer: the "integer" scalar type tag`(
+        { input: [], output: [z.string] },
+        `(lambda () "integer")`,
+      ),
+      "s/boolean": symbol.define`s/boolean: the "boolean" scalar type tag`(
+        { input: [], output: [z.string] },
+        `(lambda () "boolean")`,
+      ),
 
-    "s/field/string": symbol.define`s/field/string: (s/field name "string" [description...]) shortcut`(
-      { input: [z.string], inputRest: z.string, output: [fieldShape] },
-      `(lambda (name . rest) (apply s/field (cons name (cons "string" rest))))`,
-    ),
-    "s/field/number": symbol.define`s/field/number: (s/field name "number" [description...]) shortcut`(
-      { input: [z.string], inputRest: z.string, output: [fieldShape] },
-      `(lambda (name . rest) (apply s/field (cons name (cons "number" rest))))`,
-    ),
-    "s/field/integer": symbol.define`s/field/integer: (s/field name "integer" [description...]) shortcut`(
-      { input: [z.string], inputRest: z.string, output: [fieldShape] },
-      `(lambda (name . rest) (apply s/field (cons name (cons "integer" rest))))`,
-    ),
-    "s/field/boolean": symbol.define`s/field/boolean: (s/field name "boolean" [description...]) shortcut`(
-      { input: [z.string], inputRest: z.string, output: [fieldShape] },
-      `(lambda (name . rest) (apply s/field (cons name (cons "boolean" rest))))`,
-    ),
+      "s/field/string": symbol.define`s/field/string: (s/field name "string" [description...]) shortcut`(
+        { input: [z.string], inputRest: z.string, output: [fieldShape] },
+        `(lambda (name . rest) (apply s/field (cons name (cons "string" rest))))`,
+      ),
+      "s/field/number": symbol.define`s/field/number: (s/field name "number" [description...]) shortcut`(
+        { input: [z.string], inputRest: z.string, output: [fieldShape] },
+        `(lambda (name . rest) (apply s/field (cons name (cons "number" rest))))`,
+      ),
+      "s/field/integer": symbol.define`s/field/integer: (s/field name "integer" [description...]) shortcut`(
+        { input: [z.string], inputRest: z.string, output: [fieldShape] },
+        `(lambda (name . rest) (apply s/field (cons name (cons "integer" rest))))`,
+      ),
+      "s/field/boolean": symbol.define`s/field/boolean: (s/field name "boolean" [description...]) shortcut`(
+        { input: [z.string], inputRest: z.string, output: [fieldShape] },
+        `(lambda (name . rest) (apply s/field (cons name (cons "boolean" rest))))`,
+      ),
 
-    "s/field/_composite": symbol.define`s/field/_composite: (name config) or (name desc config) — shared dispatcher for the composite s/field/<type> shortcuts`(
-      { input: [z.string], inputRest: z.value, output: [fieldShape] },
-      `(lambda (name . rest)
+      "s/field/_composite":
+        symbol.define`s/field/_composite: (name config) or (name desc config) — shared dispatcher for the composite s/field/<type> shortcuts`(
+          { input: [z.string], inputRest: z.value, output: [fieldShape] },
+          `(lambda (name . rest)
          (cond ((= (length rest) 1) (s/field name (car rest)))
                ((= (length rest) 2) (s/field name (cadr rest) (car rest)))
                (else (error "s/field/composite: expected (name config) or (name desc config)"))))`,
-    ),
+        ),
 
-    "s/field/object": symbol.define`s/field/object: (s/field name (s/object ...)) / (s/field name description (s/object ...)) shortcut`(
-      { input: z.array(z.value), output: [fieldShape] },
-      `(lambda args (apply s/field/_composite args))`,
-    ),
-    "s/field/array": symbol.define`s/field/array: (s/field name (s/array ...)) / (s/field name description (s/array ...)) shortcut`(
-      { input: z.array(z.value), output: [fieldShape] },
-      `(lambda args (apply s/field/_composite args))`,
-    ),
-    "s/field/enum": symbol.define`s/field/enum: (s/field name (s/enum ...)) / (s/field name description (s/enum ...)) shortcut`(
-      { input: z.array(z.value), output: [fieldShape] },
-      `(lambda args (apply s/field/_composite args))`,
-    ),
+      "s/field/object":
+        symbol.define`s/field/object: (s/field name (s/object ...)) / (s/field name description (s/object ...)) shortcut`(
+          { input: z.array(z.value), output: [fieldShape] },
+          `(lambda args (apply s/field/_composite args))`,
+        ),
+      "s/field/array":
+        symbol.define`s/field/array: (s/field name (s/array ...)) / (s/field name description (s/array ...)) shortcut`(
+          { input: z.array(z.value), output: [fieldShape] },
+          `(lambda args (apply s/field/_composite args))`,
+        ),
+      "s/field/enum":
+        symbol.define`s/field/enum: (s/field name (s/enum ...)) / (s/field name description (s/enum ...)) shortcut`(
+          { input: z.array(z.value), output: [fieldShape] },
+          `(lambda args (apply s/field/_composite args))`,
+        ),
+    };
   },
 });

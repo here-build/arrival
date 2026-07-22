@@ -32,8 +32,7 @@ import { type RunContext } from "../../run/RunContext.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
 import { CallCtx } from "../../common/symbols/_bake.js";
 
-import * as z from "../../common/scheme-zod.js";
-import { type MaybePromise, resolveMethod, symbol } from "../../common/symbol.js";
+import { type MaybePromise, resolveMethod } from "../../common/symbol.js";
 import { withInputProvenance } from "../../values/op-helpers.js";
 import { schemeFalse } from "../../values/primitives/ABool.js";
 import invariant from "tiny-invariant";
@@ -63,7 +62,21 @@ import type { AList, AListAlike, AProcedure, SchemeValue } from "../../values/ty
 // back from this tree): the compiler-facing rule surface a Contract may carry.
 // Constitution §4.1/§4.5 (arrival-ts-transpiler-design.md) + registry-emit.md.
 import type { EmitCtx, EmitRule } from "../../emit/emit-rule.js";
-import { ArrayLit, Arrow, Bin, Call, Index, Lit, Member, Method, Ref, Spread, type Binding, type BinOp, type R } from "../../emit/residual-lite.js";
+import {
+  ArrayLit,
+  Arrow,
+  Bin,
+  Call,
+  Index,
+  Lit,
+  Member,
+  Method,
+  Ref,
+  Spread,
+  type Binding,
+  type BinOp,
+  type R,
+} from "../../emit/residual-lite.js";
 
 // A JS value used as a Scheme procedure IS the SchemeValue function member
 // `(...args: SchemeValue[]) => SchemeValue` (types.ts). `is_function`/`typeof`
@@ -352,7 +365,10 @@ const consEmitRule: EmitRule<R> = {
 // this rule's concern (it recognizes the `.map` shape structurally, post-emission).
 const mapEmitRule: EmitRule<R> = {
   call: (args, ctx) => {
-    if (args.length < 2) ctx.door(`\`map\` wants a function and at least one list, got ${args.length} argument${args.length === 1 ? "" : "s"}`);
+    if (args.length < 2)
+      ctx.door(
+        `\`map\` wants a function and at least one list, got ${args.length} argument${args.length === 1 ? "" : "s"}`,
+      );
     const [f, ...lists] = args;
     if (lists.length === 1) return Method(lists[0]!, "map", [f!]);
     const el = freshBinding(ctx, "item");
@@ -427,8 +443,8 @@ const listRefEmitRule: EmitRule<R> = {
   },
 };
 
-export default new EnvCapability("scheme/lists", {
-  symbols: {
+export default EnvCapability.define("scheme/lists", {
+  symbols: (symbol, z) => ({
     // R7RS 6.10 — map. A combinator: ONE list dispatches to the operand's own arrival/tagless-final/
     // map (Pair preserves boxes; Vector strips boxes) — the term owns the
     // algebra + its eval strategy; SEVERAL lists is a zip (multiListMap). ctx-aware for runCtx.
@@ -537,7 +553,9 @@ export default new EnvCapability("scheme/lists", {
       },
       // A constructor: unions both inputs' provenance over the produced cell
       // (parallel to make-list / list, which stamp only the produced Pair).
-      function (this: CallCtx, car, cdr) { return withInputProvenance([car, cdr], new APair(car as SchemeValue, cdr as SchemeValue)); },
+      function (this: CallCtx, car, cdr) {
+        return withInputProvenance([car, cdr], new APair(car as SchemeValue, cdr as SchemeValue));
+      },
     ),
 
     // R7RS 6.4 — `list` builds a proper list of its arguments. A constructor, so —
@@ -943,7 +961,8 @@ export default new EnvCapability("scheme/lists", {
           // Same seam-routing as member above — `compare` is a callable VALUE when
           // user-supplied, invoked via `call_function`, not a raw JS call. Its result may
           // be a boxed SchemeBool post-L1 (a truthy JS object) → route through is_false.
-          if (pair instanceof APair && !is_false(call_function(compare, [obj, pair.car], { runCtx: this.runCtx }))) return pair;
+          if (pair instanceof APair && !is_false(call_function(compare, [obj, pair.car], { runCtx: this.runCtx })))
+            return pair;
           current = current.cdr;
         }
         return schemeFalse;
@@ -1051,12 +1070,16 @@ export default new EnvCapability("scheme/lists", {
       // `reverse` above (pair|nil only; its raw-array branch is gone), nth keeps its
       // array branch, so a pair|nil narrowing would be dishonest here (it would
       // silently exclude that real array path).
-      { input: [z.schemeNumber, z.value], output: [z.value], type: dedent`
+      {
+        input: [z.schemeNumber, z.value],
+        output: [z.value],
+        type: dedent`
           {
             <T>(index: number, list: List<T>): T | null;
             <T>(index: number, list: readonly T[]): T | null;
           }
-        ` },
+        `,
+      },
       function (this: CallCtx, index, obj) {
         // `index` is a Scheme/JS number; coerce the count to a primitive (a boxed
         // AExact resolves through valueOf), exactly as the bare `count < index` did.
@@ -1085,5 +1108,5 @@ export default new EnvCapability("scheme/lists", {
         }
       },
     ),
-  },
+  }),
 });

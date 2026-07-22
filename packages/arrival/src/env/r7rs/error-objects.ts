@@ -19,8 +19,7 @@
 
 import { R7RSError, R7RSFileError, R7RSReadError } from "../../errors.js";
 import { EnvCapability } from "../../common/capability.js";
-import { symbol, type CallCtx } from "../../common/symbol.js";
-import * as z from "../../common/scheme-zod.js";
+import { type CallCtx } from "../../common/symbol.js";
 import { APair } from "../../values/primitives/APair.js";
 import { nil } from "../../values/primitives/ANil.js";
 import { type ABool } from "../../values/primitives/ABool.js";
@@ -65,8 +64,8 @@ export const wrappedOps = {
  *  Every input is representation-blind (`z.value`, matching each verb's own
  *  `unknown`-typed param) except the genuinely-boolean/string returns, which get the
  *  concrete codec so the contract documents them honestly. */
-export default new EnvCapability("scheme/exceptions", {
-  symbols: {
+export default EnvCapability.define("scheme/exceptions", {
+  symbols: (symbol, z) => ({
     "error-object?": symbol.native`error-object?: #t iff obj is an R7RS error object`(
       { input: [z.value], output: [z.boolean] },
       wrappedOps["error-object?"],
@@ -87,5 +86,5 @@ export default new EnvCapability("scheme/exceptions", {
       { input: [z.value], output: [z.boolean] },
       wrappedOps["file-error?"],
     ),
-  },
+  }),
 });

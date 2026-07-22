@@ -11,16 +11,15 @@
 // type error, never a silent coercion.
 //
 // SINGLE SOURCE: `srfi/index.ts` adds this to `allSrfi`, so `base-packs.ts` assembles it.
-import * as z from "../../common/scheme-zod.js";
 import dedent from "dedent";
-import { resolveMethod, symbol, type MaybePromise } from "../../common/symbol.js";
+import { resolveMethod, type MaybePromise } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { attachOffendingValue } from "../../errors.js";
 import { tf } from "../../values/tagless-final.js";
 import type { SchemeValue } from "../../values/types.js";
 
-export default new EnvCapability("scheme/srfi-95", {
-  symbols: {
+export default EnvCapability.define("scheme/srfi-95", {
+  symbols: (symbol, z) => ({
     sort: symbol.sequence`sort: a sorted sequence (list→list, vector→vector); default order is the elements' own ≤; comparator is a SRFI-95 less?`(
       {
         // seq: representation-blind at the SCHEME level (any receiver answering the
@@ -75,5 +74,5 @@ export default new EnvCapability("scheme/srfi-95", {
         return m.call(seq, comparator, runCtx) as MaybePromise<SchemeValue>;
       },
     ),
-  },
+  }),
 });

@@ -55,18 +55,16 @@
 //     rejects at the contract boundary, not with a raw scheme apply-error deep
 //     inside the call.
 import { EnvCapability } from "../../common/capability.js";
-import { symbol } from "../../common/symbol.js";
-import * as z from "../../common/scheme-zod.js";
 import equality from "../r7rs/equality.js";
 import exceptions from "../r7rs/exceptions.js";
 import lists from "../r7rs/lists.js";
 
-export default new EnvCapability("scheme/srfi-189", {
+export default EnvCapability.define("scheme/srfi-189", {
   // See the file header's DEPS note — deps order agrees with base-packs.ts's
   // tail-block order (exceptions before lists) so the two C3 merge inputs never
   // contradict.
   deps: [equality, exceptions, lists],
-  symbols: {
+  symbols: (symbol, z) => ({
     // ── constructors ──────────────────────────────────────────────────────────
     just: symbol.define`just: SRFI-189 — wrap x as a Just (the present/success case of Maybe)`(
       { input: [z.value], output: [z.value] },
@@ -176,5 +174,5 @@ export default new EnvCapability("scheme/srfi-189", {
                ((right? e) (left (car (cdr e))))
                (else (error "either-swap: not an Either"))))`,
     ),
-  },
+  }),
 });

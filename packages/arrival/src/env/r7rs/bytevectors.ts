@@ -15,24 +15,27 @@
  * classifies ANY value.
  */
 
-import * as z from "../../common/scheme-zod.js";
 import dedent from "dedent";
-import { symbol, type CallCtx } from "../../common/symbol.js";
+import { type CallCtx } from "../../common/symbol.js";
 import { ABytevector } from "../../values/primitives/ABytevector.js";
 import { AString } from "../../values/primitives/AString.js";
 import { asBytevector, schemeBool, stringValue, toIndex, withInputProvenance } from "../../values/op-helpers.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { EnvCapability } from "../../common/capability.js";
 
-export default new EnvCapability("scheme/bytevectors", {
-  symbols: {
+export default EnvCapability.define("scheme/bytevectors", {
+  symbols: (symbol, z) => ({
     "bytevector?": symbol.native`bytevector?: #t iff the object is a bytevector (boxed or raw binary)`(
-      { input: [z.value], output: [z.boolean], type: dedent`
+      {
+        input: [z.value],
+        output: [z.boolean],
+        type: dedent`
           {
             (x: unknown): x is Uint8Array;
             <T>(x: T): x is Extract<T, Uint8Array>;
           }
-        ` },
+        `,
+      },
       function (this: CallCtx, obj) {
         // Polymorphic by design: scheme producers mint SchemeBytevector, but raw
         // binary legitimately flows from FFI through the membrane unboxed (it
@@ -68,17 +71,23 @@ export default new EnvCapability("scheme/bytevectors", {
       // toIndex(b) below, exactly like make-bytevector's byte/k args — z.schemeNumber
       // is that same op's own precedent for "this slot is a scheme number".
       { input: [], inputRest: z.schemeNumber, output: [z.bytevector] },
-      function (this: CallCtx, ...bytes) { return withInputProvenance(bytes, new ABytevector(new Uint8Array(bytes.map(toIndex)))); },
+      function (this: CallCtx, ...bytes) {
+        return withInputProvenance(bytes, new ABytevector(new Uint8Array(bytes.map(toIndex))));
+      },
     ),
 
     "bytevector-length": symbol.native`bytevector-length: number of bytes in the bytevector`(
       { input: [z.bytevector], output: [z.number] },
-      function (this: CallCtx, bv) { return new AExact(asBytevector(bv, "bytevector-length").byteLength); },
+      function (this: CallCtx, bv) {
+        return new AExact(asBytevector(bv, "bytevector-length").byteLength);
+      },
     ),
 
     "bytevector-u8-ref": symbol.native`bytevector-u8-ref: the byte at index k`(
       { input: [z.bytevector, z.schemeNumber], output: [z.number] },
-      function (this: CallCtx, bv, k) { return new AExact(asBytevector(bv, "bytevector-u8-ref")[toIndex(k)]!); },
+      function (this: CallCtx, bv, k) {
+        return new AExact(asBytevector(bv, "bytevector-u8-ref")[toIndex(k)]!);
+      },
     ),
 
     // ── PURITY DOORS — bytevector mutators OMITTED by design (R7RS §6.9) ─────────
@@ -94,7 +103,8 @@ export default new EnvCapability("scheme/bytevectors", {
         const view = asBytevector(bv, "bytevector-copy");
         return withInputProvenance(
           [bv],
-          new ABytevector(view.slice(start === undefined ? 0 : toIndex(start), end === undefined ? view.byteLength : toIndex(end)),
+          new ABytevector(
+            view.slice(start === undefined ? 0 : toIndex(start), end === undefined ? view.byteLength : toIndex(end)),
           ),
         );
       },
@@ -125,7 +135,8 @@ export default new EnvCapability("scheme/bytevectors", {
         const view = asBytevector(bv, "utf8->string");
         return withInputProvenance(
           [bv],
-          new AString(new TextDecoder("utf-8").decode(
+          new AString(
+            new TextDecoder("utf-8").decode(
               view.subarray(
                 start === undefined ? 0 : toIndex(start),
                 end === undefined ? view.byteLength : toIndex(end),
@@ -141,12 +152,13 @@ export default new EnvCapability("scheme/bytevectors", {
         const s_str = stringValue(str);
         return withInputProvenance(
           [str],
-          new ABytevector(new TextEncoder().encode(
+          new ABytevector(
+            new TextEncoder().encode(
               s_str.slice(start === undefined ? 0 : toIndex(start), end === undefined ? s_str.length : toIndex(end)),
             ),
           ),
         );
       },
     ),
-  },
+  }),
 });

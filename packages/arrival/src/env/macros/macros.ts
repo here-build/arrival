@@ -13,7 +13,6 @@
 // identity root.
 
 import { EnvCapability } from "../../common/capability.js";
-import { symbol } from "../../common/symbol.js";
 import { Syntax } from "../../eval/Syntax.js";
 import { bindValue, AmbientRuntime, mintFrame } from "../AmbientRuntime.js";
 import { extract_patterns, restore_data_gensyms, transform_syntax } from "../../eval/syntax-rules.js";
@@ -25,8 +24,8 @@ import type { MacroInvokeContext } from "../../eval/Macro.js";
 import type { SchemeValue } from "../../values/types.js";
 import { ANil } from "../../values/primitives/ANil.js";
 
-export default new EnvCapability("scheme/macros", {
-  symbols: {
+export default EnvCapability.define("scheme/macros", {
+  symbols: (symbol) => ({
     "syntax-rules": symbol.macro`syntax-rules`(function (
       this: AmbientRuntime,
       macro: SchemeValue,
@@ -160,5 +159,5 @@ export default new EnvCapability("scheme/macros", {
       syntax.__code__ = macro;
       return syntax;
     }),
-  },
+  }),
 });

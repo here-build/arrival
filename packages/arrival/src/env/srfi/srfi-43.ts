@@ -33,21 +33,23 @@
 //     ABool) — `z.boolean`, not the looser value-or-false union the search ops need.
 import { EnvCapability } from "../../common/capability.js";
 import dedent from "dedent";
-import { symbol } from "../../common/symbol.js";
-import * as z from "../../common/scheme-zod.js";
 import equality from "../r7rs/equality.js";
 import numeric from "../r7rs/numeric.js";
 import vectors from "../r7rs/vectors.js";
 
-export default new EnvCapability("scheme/srfi-43", {
+export default EnvCapability.define("scheme/srfi-43", {
   deps: [equality, numeric, vectors],
-  symbols: {
+  symbols: (symbol, z) => ({
     "vector-fold": symbol.define`vector-fold: left fold over a vector — (kons acc elt) folded across indices 0..n-1`(
-      { input: [z.lambda, z.value, z.vector(z.value)], output: [z.value], type: dedent`
+      {
+        input: [z.lambda, z.value, z.vector(z.value)],
+        output: [z.value],
+        type: dedent`
           {
             <T, A>(kons: (acc: A, elt: T) => A, knil: A, vec: readonly T[]): A;
           }
-        ` },
+        `,
+      },
       `(lambda (kons knil vec)
          (let ((n (vector-length vec)))
            (let loop ((i 0) (acc knil))
@@ -55,24 +57,33 @@ export default new EnvCapability("scheme/srfi-43", {
                  (loop (+ i 1) (kons acc (vector-ref vec i)))))))`,
     ),
 
-    "vector-fold-right": symbol.define`vector-fold-right: right fold over a vector — (kons acc elt) across indices n-1..0`(
-      { input: [z.lambda, z.value, z.vector(z.value)], output: [z.value], type: dedent`
+    "vector-fold-right":
+      symbol.define`vector-fold-right: right fold over a vector — (kons acc elt) across indices n-1..0`(
+        {
+          input: [z.lambda, z.value, z.vector(z.value)],
+          output: [z.value],
+          type: dedent`
           {
             <T, A>(kons: (acc: A, elt: T) => A, knil: A, vec: readonly T[]): A;
           }
-        ` },
-      `(lambda (kons knil vec)
+        `,
+        },
+        `(lambda (kons knil vec)
          (let loop ((i (- (vector-length vec) 1)) (acc knil))
            (if (< i 0) acc
                (loop (- i 1) (kons acc (vector-ref vec i))))))`,
-    ),
+      ),
 
     "vector-count": symbol.define`vector-count: number of indices where (pred elt) is truthy`(
-      { input: [z.lambda, z.vector(z.value)], output: [z.exact], type: dedent`
+      {
+        input: [z.lambda, z.vector(z.value)],
+        output: [z.exact],
+        type: dedent`
           {
             <T>(pred: (elt: T) => unknown, vec: readonly T[]): number;
           }
-        ` },
+        `,
+      },
       `(lambda (pred vec)
          (let ((n (vector-length vec)))
            (let loop ((i 0) (c 0))
@@ -161,5 +172,5 @@ export default new EnvCapability("scheme/srfi-43", {
                          ((= i (- n 1)) r)
                          (else (loop (+ i 1)))))))))`,
     ),
-  },
+  }),
 });

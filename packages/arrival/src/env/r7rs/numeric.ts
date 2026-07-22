@@ -23,7 +23,7 @@ import invariant from "tiny-invariant";
 // `TypeError.invariant` is a global augmentation — import explicitly so correctness
 // doesn't depend on load order.
 import "@here.build/error-invariant";
-import { symbol, type Contract, type RestSpec, type VectorSpec } from "../../common/symbol.js";
+import { type Contract, type RestSpec, type VectorSpec } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import type { EmitCtx, EmitRule } from "../../emit/emit-rule.js";
 import { Bin, Binding, Call, Lit, Method, Ref, Un, type BinOp, type R } from "../../emit/residual-lite.js";
@@ -195,7 +195,6 @@ function nativeTypePredicate(name: string, predicate: (n: ANumeric) => boolean):
   Object.defineProperty(fn, "name", { value: name });
   return fn;
 }
-
 
 // ════════════════════════════════════════════════════════════════════════════
 // Operator implementations — fn bodies.
@@ -424,11 +423,23 @@ function schemeExpt(base: ANumeric, power: ANumeric): ANumeric {
   if (base instanceof AExact && power instanceof AExact && power.denom === 1) {
     const n = power.num;
     if (n >= 0) {
-      return mintExact(CONSTANT_CTX, checkedPow(base.num, n, "expt"), checkedPow(base.denom, n, "expt"), undefined, "expt");
+      return mintExact(
+        CONSTANT_CTX,
+        checkedPow(base.num, n, "expt"),
+        checkedPow(base.denom, n, "expt"),
+        undefined,
+        "expt",
+      );
     }
     invariant(base.num !== 0, "expt: division by zero (0 raised to a negative power)");
     const m = -n;
-    return mintExact(CONSTANT_CTX, checkedPow(base.denom, m, "expt"), checkedPow(base.num, m, "expt"), undefined, "expt");
+    return mintExact(
+      CONSTANT_CTX,
+      checkedPow(base.denom, m, "expt"),
+      checkedPow(base.num, m, "expt"),
+      undefined,
+      "expt",
+    );
   }
   return new AInexact(Math.pow(toReal(base), toReal(power)));
 }
@@ -692,7 +703,6 @@ const BITWISE_DOOR =
 // SAME Contract shape (`contractFromSpec(spec)`) while passing the shared impl ref.
 // `arithmeticShiftSpec` also consumed by `>>`/`<<` inline ops.
 // ════════════════════════════════════════════════════════════════════════════
-
 
 const exptSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: schemeExpt };
 const remainderSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: remainderFn };
@@ -967,13 +977,29 @@ const quotientSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.sch
 const moduloSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: moduloFn };
 const floorQuotientSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: floorQuotientFn };
 const floorRemainderSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: floorRemainderFn };
-const truncateQuotientSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: truncateQuotientFn };
-const truncateRemainderSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: truncateRemainderFn };
+const truncateQuotientSpec: NumSpec = {
+  in: [z.schemeNumber, z.schemeNumber],
+  out: z.schemeNumber,
+  fn: truncateQuotientFn,
+};
+const truncateRemainderSpec: NumSpec = {
+  in: [z.schemeNumber, z.schemeNumber],
+  out: z.schemeNumber,
+  fn: truncateRemainderFn,
+};
 const numeratorSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: numeratorFn };
 const denominatorSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: denominatorFn };
 const squareSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: squareFn };
-const makeRectangularSpec: NumSpec = { in: [z.looseNumber, z.looseNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
-const makePolarSpec: NumSpec = { in: [z.looseNumber, z.looseNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
+const makeRectangularSpec: NumSpec = {
+  in: [z.looseNumber, z.looseNumber],
+  out: z.schemeNumber,
+  fn: (): ANumeric => complexDoor(),
+};
+const makePolarSpec: NumSpec = {
+  in: [z.looseNumber, z.looseNumber],
+  out: z.schemeNumber,
+  fn: (): ANumeric => complexDoor(),
+};
 const realPartSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
 const imagPartSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
 const magnitudeSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
@@ -1287,8 +1313,11 @@ const zeroEmitRule: EmitRule<R> = {
   },
 };
 
-export default new EnvCapability("scheme/numeric", {
-  symbols: {
+export default EnvCapability.define("scheme/numeric", {
+  // `z` stays a module import here: this pack builds its `NumSpec` contract table and
+  // `z.ZodTypeAny` type positions at module scope (the injected `z` param only exists
+  // inside this callback), so only `symbol` needs injecting.
+  symbols: (symbol) => ({
     // ── Arithmetic ──────────────────────────────────────────────────────────────
     "+": symbol.native`+: variadic sum (0 with no args)`(
       { ...contractFromSpec(addSpec), emit: plusEmitRule },
@@ -1534,10 +1563,13 @@ export default new EnvCapability("scheme/numeric", {
     // R8 mint: boxes + forwards the operand's provenance (see nativeTypePredicate's doc
     // for why an unboxed native return is a P4 violation). Rest-param shape matches Impl's
     // variadic contract — no arity-erasing cast needed.
-    "number?": symbol.native`number?: #t for any number`(NUMBER_GUARD, function (this: CallCtx, ...args: unknown[]): ABool {
-      const [value] = args;
-      return mintVerdict([value], isSchemeNumber(value));
-    }),
+    "number?": symbol.native`number?: #t for any number`(
+      NUMBER_GUARD,
+      function (this: CallCtx, ...args: unknown[]): ABool {
+        const [value] = args;
+        return mintVerdict([value], isSchemeNumber(value));
+      },
+    ),
     "1+": symbol.native`1+: increment by one`(
       ONE_ARG_NUM_OUTPUT_CONTRACT,
       onePlusFn as (...args: unknown[]) => unknown,
@@ -1565,5 +1597,5 @@ export default new EnvCapability("scheme/numeric", {
       NUMBER_TO_STRING_CONTRACT,
       numberToStringFn as (...args: unknown[]) => unknown,
     ),
-  },
+  }),
 });

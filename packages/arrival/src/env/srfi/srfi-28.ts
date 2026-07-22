@@ -36,9 +36,8 @@
 // the arrival printer, being display-only, differs from R7RS `write`). Non-string args
 // render identically under `~a` and `~s`.
 
-import { symbol, type CallCtx } from "../../common/symbol.js";
+import { type CallCtx } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
-import * as z from "../../common/scheme-zod.js";
 import { stringValue, isSchemeNumber } from "../../values/op-helpers.js";
 import { collapseProvenance, taintString } from "../../provenance/provenance-collapse.js";
 import { printValue } from "../../values/print.js";
@@ -56,7 +55,7 @@ const isHashF = (v: unknown): boolean => v === false || (v instanceof ABool && v
 // The only IO effect a wrong destination would name — kept in the tone of r7rs/host.ts's
 // IO doors: arrival is a pure inference plane, so streaming out has no construction-site.
 const DEST_REASON =
-  "format here is string-only: it returns the formatted string. A #t or port destination would stream to a port, but arrival ships no IO surface (it is a pure inference plane). Use (format #f ...) or (format \"...\" ...) to GET the string, then return it from your dataflow";
+  'format here is string-only: it returns the formatted string. A #t or port destination would stream to a port, but arrival ships no IO surface (it is a pure inference plane). Use (format #f ...) or (format "..." ...) to GET the string, then return it from your dataflow';
 
 const SUPPORTED =
   "~a (display) ~s (write) ~d (decimal) ~F / ~w,dF (fixed-point, e.g. ~,2f) ~% (newline) ~~ (literal tilde)";
@@ -84,8 +83,8 @@ class FormatError extends ArrivalError {
   readonly "arrival/error-category": ErrorClass = "other";
 }
 
-export default new EnvCapability("scheme/srfi-28", {
-  symbols: {
+export default EnvCapability.define("scheme/srfi-28", {
+  symbols: (symbol, z) => ({
     format:
       symbol.native`format: fills a format string using ~ directives and returns the resulting string (SRFI-28/48); supports (format fmt arg ...) and (format #f fmt ...)`(
         // Contract: a FIXED head + an `inputRest` variadic tail (the rosetta idiom —
@@ -122,10 +121,7 @@ export default new EnvCapability("scheme/srfi-28", {
             provInputs = [head, ...tail];
           } else if (isHashF(head)) {
             if (tail.length === 0 || !isStringLike(tail[0])) {
-              throw new FormatError(
-                "format: (format #f fmt arg ...) needs a format string as its second argument",
-                [],
-              );
+              throw new FormatError("format: (format #f fmt arg ...) needs a format string as its second argument", []);
             }
             fmtValue = tail[0];
             rest = tail.slice(1);
@@ -239,5 +235,5 @@ export default new EnvCapability("scheme/srfi-28", {
           return taintString(out, collapseProvenance(...provInputs));
         },
       ),
-  },
+  }),
 });

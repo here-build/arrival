@@ -46,10 +46,9 @@
 // name outside SPECIAL_FORMS ∪ KEYWORD_SYNTAX + the r7rs primitives every
 // capability gets through universal `core`/`r7rs` rooting).
 import { EnvCapability } from "../../common/capability.js";
-import { symbol } from "../../common/symbol.js";
 
-export default new EnvCapability("scheme/srfi-26", {
-  symbols: {
+export default EnvCapability.define("scheme/srfi-26", {
+  symbols: (symbol) => ({
     cut: symbol.defineSyntax`cut: specialize parameters without currying (SRFI-26). \`<>\` is a positional slot, \`<...>\` a (final) rest slot — \`(cut f a <>)\` builds (lambda (g) (f a g)); \`(cut f <...>)\` builds (lambda (. g) (apply f g)). Non-slot subexpressions stay in the body and re-evaluate on every call (contrast cute). Slot params are gensym'd so a non-slot expr referencing a same-named variable can't be captured.`(
       `(lambda items
          (let loop ((items items) (params '()) (call '()) (restp #f))
@@ -81,5 +80,5 @@ export default new EnvCapability("scheme/srfi-26", {
              (else (let ((t (gensym))) (loop (cdr items) params (cons t call) (cons (list t (car items)) binds) restp))))))`,
       { macroAttribute: "opaque" },
     ),
-  },
+  }),
 });

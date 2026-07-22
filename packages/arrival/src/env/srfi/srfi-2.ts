@@ -16,12 +16,12 @@
 // reader/matcher's inability to parse R7RS's own `(define-syntax …)` special
 // form doesn't apply here.
 import { EnvCapability } from "../../common/capability.js";
-import { symbol } from "../../common/symbol.js";
 
-export default new EnvCapability("scheme/srfi-2", {
-  symbols: {
-    "and-let*": symbol.defineSyntax`and-let*: sequential AND with binding (SRFI-2). Claw (var expr) binds+tests var; claw (expr) is a bare guard; a bare symbol tests itself. Any #f short-circuits the whole form to #f; otherwise the value is the body (or #t when there is no body).`(
-      `(lambda (claws . body)
+export default EnvCapability.define("scheme/srfi-2", {
+  symbols: (symbol) => ({
+    "and-let*":
+      symbol.defineSyntax`and-let*: sequential AND with binding (SRFI-2). Claw (var expr) binds+tests var; claw (expr) is a bare guard; a bare symbol tests itself. Any #f short-circuits the whole form to #f; otherwise the value is the body (or #t when there is no body).`(
+        `(lambda (claws . body)
          (if (null? claws)
              (if (null? body) #t \`(begin ,@body))
              (let ((claw (car claws)) (rest (cdr claws)))
@@ -33,7 +33,7 @@ export default new EnvCapability("scheme/srfi-2", {
                   \`(if ,(car claw) (and-let* ,rest ,@body) #f))
                  (else
                   \`(if ,claw (and-let* ,rest ,@body) #f))))))`,
-      { macroAttribute: "binder" },
-    ),
-  },
+        { macroAttribute: "binder" },
+      ),
+  }),
 });

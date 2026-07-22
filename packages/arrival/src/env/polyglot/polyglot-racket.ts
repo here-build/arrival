@@ -50,8 +50,6 @@
 // dependencies) — see base-packs.ts's own header.
 
 import { EnvCapability } from "../../common/capability.js";
-import { symbol } from "../../common/symbol.js";
-import * as z from "../../common/scheme-zod.js";
 import polyglotClojure from "./polyglot-clojure.js";
 import polyglot from "./polyglot.js";
 import equality from "../r7rs/equality.js";
@@ -60,9 +58,9 @@ import vectors from "../r7rs/vectors.js";
 import lists from "../r7rs/lists.js";
 import exceptions from "../r7rs/exceptions.js";
 
-export default new EnvCapability("scheme/polyglot-racket", {
+export default EnvCapability.define("scheme/polyglot-racket", {
   deps: [polyglotClojure, polyglot, equality, numeric, exceptions, vectors, lists],
-  symbols: {
+  symbols: (symbol, z) => ({
     // ═══════════════════════════════════════════════════════════════════════════
     // THREADING MACROS (Racket ~> ~>>) — aliases expanding to Clojure's -> ->>
     // ═══════════════════════════════════════════════════════════════════════════
@@ -79,9 +77,10 @@ export default new EnvCapability("scheme/polyglot-racket", {
     // RACKET — dict accessor family (Racket's dict library) — grain-completion
     // ═══════════════════════════════════════════════════════════════════════════
     // %dict-guard — internal: the dict? guard shared by the whole family below.
-    "%dict-guard": symbol.define`%dict-guard: the dict? teaching guard shared by the dict-* family — returns d when dict-shaped, else throws the fact+why+action door (private helper)`(
-      { input: [z.string, z.value], output: [z.dict()] },
-      `(lambda (who d)
+    "%dict-guard":
+      symbol.define`%dict-guard: the dict? teaching guard shared by the dict-* family — returns d when dict-shaped, else throws the fact+why+action door (private helper)`(
+        { input: [z.string, z.value], output: [z.dict()] },
+        `(lambda (who d)
          (if (dict? d)
              d
              (error (str who ": expected a dict (native {…} / (dict …) record), got "
@@ -95,7 +94,7 @@ export default new EnvCapability("scheme/polyglot-racket", {
                          " — " who " guards the dict shape so a wrong-shaped argument "
                          "fails loudly instead of silently reading nil; use @ for an "
                          "origin-agnostic read across dict/array/foreign values instead"))))`,
-    ),
+      ),
     // dict-ref — Racket: read the value at key, with an optional failure-result
     // when key is missing. Same missing-key convention as get-in/@ (nil when no
     // default is given — NOT a second convention); key may be a keyword (:key), a
@@ -103,14 +102,15 @@ export default new EnvCapability("scheme/polyglot-racket", {
     // bare `@` nil-check) distinguishes "key truly missing" from "key present with
     // a nil/'() value" before falling back. The optional default rides inputRest
     // (0-or-1 rest arg — the scheme rest-parameter shape).
-    "dict-ref": symbol.define`dict-ref: Racket — the value at key in d, or the optional default (nil when absent and no default); keys normalize like @/:key`(
-      { input: [z.value, z.value], inputRest: z.value, output: [z.value] },
-      `(lambda (d key . default)
+    "dict-ref":
+      symbol.define`dict-ref: Racket — the value at key in d, or the optional default (nil when absent and no default); keys normalize like @/:key`(
+        { input: [z.value, z.value], inputRest: z.value, output: [z.value] },
+        `(lambda (d key . default)
          (%dict-guard "dict-ref" d)
          (if (@? d key)
              (@ d key)
              (if (null? default) nil (car default))))`,
-    ),
+      ),
     // dict-has-key? — Racket: #t iff key resolves in d. A dict-guarded alias of @?
     // (whose verdict is the boxed schemeBool — hence a real z.boolean output).
     "dict-has-key?": symbol.define`dict-has-key?: Racket — #t iff key resolves in d; a dict-guarded alias of @?`(
@@ -124,12 +124,13 @@ export default new EnvCapability("scheme/polyglot-racket", {
     // %dict-set's comment in polyglot-clojure.ts) — so this lifts it via
     // vector->list once, the same move %dict-set already makes. Elements are the
     // boxed AString keys `@keys` mints → z.list(z.string).
-    "dict-keys": symbol.define`dict-keys: Racket — d's own keys as a proper scheme list (the @keys array lifted via vector->list)`(
-      { input: [z.value], output: [z.list(z.string)] },
-      `(lambda (d)
+    "dict-keys":
+      symbol.define`dict-keys: Racket — d's own keys as a proper scheme list (the @keys array lifted via vector->list)`(
+        { input: [z.value], output: [z.list(z.string)] },
+        `(lambda (d)
          (%dict-guard "dict-keys" d)
          (vector->list (@keys d)))`,
-    ),
+      ),
     // dict-values — Racket: the value at each of d's keys, in dict-keys order.
     "dict-values": symbol.define`dict-values: Racket — the value at each of d's keys, in dict-keys order`(
       { input: [z.value], output: [z.list()] },
@@ -147,21 +148,23 @@ export default new EnvCapability("scheme/polyglot-racket", {
     ),
     // dict->alist — d's entries as an alist of (key . value) pairs, in dict-keys
     // order. The inverse of alist->dict.
-    "dict->alist": symbol.define`dict->alist: d's entries as an alist of (key . value) pairs, in dict-keys order — the inverse of alist->dict`(
-      { input: [z.value], output: [z.list(z.pair)] },
-      `(lambda (d)
+    "dict->alist":
+      symbol.define`dict->alist: d's entries as an alist of (key . value) pairs, in dict-keys order — the inverse of alist->dict`(
+        { input: [z.value], output: [z.list(z.pair)] },
+        `(lambda (d)
          (%dict-guard "dict->alist" d)
          (map (lambda (k) (cons k (@ d k))) (dict-keys d)))`,
-    ),
+      ),
     // alist->dict — the inverse of dict->alist: build a dict from an alist of
     // (key . value) pairs. Each key may be a keyword/symbol/string — the same
     // normalization `dict` itself already applies to its own :key args. The one
     // dict-family input that IS a real typed spine: a proper list of pairs.
-    "alist->dict": symbol.define`alist->dict: build a dict from an alist of (key . value) pairs — the inverse of dict->alist; keys normalize like dict's own`(
-      { input: [z.list(z.pair)], output: [z.dict()] },
-      `(lambda (alist)
+    "alist->dict":
+      symbol.define`alist->dict: build a dict from an alist of (key . value) pairs — the inverse of dict->alist; keys normalize like dict's own`(
+        { input: [z.list(z.pair)], output: [z.dict()] },
+        `(lambda (alist)
          (apply dict (%interleave (map car alist) (map cdr alist))))`,
-    ),
+      ),
     // dict-set / dict-update — DOORS, not functions. This env is immutable, and
     // a "set"/"update" VERB reads as in-place mutation: a pure implementation
     // returning a new dict is a trap — the model believes it mutated d, nothing
@@ -170,23 +173,25 @@ export default new EnvCapability("scheme/polyglot-racket", {
     // SRFI-69 hash-table immutable-redirect stubs. SHAPELESS contracts (one line
     // each): the body unconditionally throws, so no input shape is ever
     // consumed and no output is ever produced — a fixed contract would be fiction.
-    "dict-set": symbol.define`dict-set: a teaching DOOR — dicts are immutable here; build a NEW dict via assoc-in and bind it`(
-      { input: [], inputRest: z.value, output: [z.value] },
-      `(lambda _args
+    "dict-set":
+      symbol.define`dict-set: a teaching DOOR — dicts are immutable here; build a NEW dict via assoc-in and bind it`(
+        { input: [], inputRest: z.value, output: [z.value] },
+        `(lambda _args
          (error (str "dict-set is not provided — dicts are immutable here, and a 'set' "
                      "verb implies in-place mutation, which never happens. Build a NEW "
                      "dict and bind it: (define d2 (assoc-in d (list :key) value)) — "
                      "the original d is unchanged.")))`,
-    ),
-    "dict-update": symbol.define`dict-update: a teaching DOOR — dicts are immutable here; build a NEW dict via update-in and bind it`(
-      { input: [], inputRest: z.value, output: [z.value] },
-      `(lambda _args
+      ),
+    "dict-update":
+      symbol.define`dict-update: a teaching DOOR — dicts are immutable here; build a NEW dict via update-in and bind it`(
+        { input: [], inputRest: z.value, output: [z.value] },
+        `(lambda _args
          (error (str "dict-update is not provided — dicts are immutable here, and an "
                      "'update' verb implies in-place mutation, which never happens. "
                      "Build a NEW dict and bind it: "
                      "(define d2 (update-in d (list :key) updater)) — "
                      "the original d is unchanged.")))`,
-    ),
+      ),
 
     // ═══════════════════════════════════════════════════════════════════════════
     // GUILE / EMACS LISP — accessor-name alias (rides with the dict family)
@@ -195,10 +200,11 @@ export default new EnvCapability("scheme/polyglot-racket", {
     // the threading family — a model reaches for whichever accessor name it
     // already knows) — an alias of dict-ref, not a second read convention. Mirrors
     // dict-ref's contract exactly (including the z.value door-preserving d).
-    "assoc-ref": symbol.define`assoc-ref: Guile/Emacs Lisp — read by key with an optional default; an alias of dict-ref, not a second read convention`(
-      { input: [z.value, z.value], inputRest: z.value, output: [z.value] },
-      `(lambda (d key . default)
+    "assoc-ref":
+      symbol.define`assoc-ref: Guile/Emacs Lisp — read by key with an optional default; an alias of dict-ref, not a second read convention`(
+        { input: [z.value, z.value], inputRest: z.value, output: [z.value] },
+        `(lambda (d key . default)
          (apply dict-ref (cons d (cons key default))))`,
-    ),
-  },
+      ),
+  }),
 });

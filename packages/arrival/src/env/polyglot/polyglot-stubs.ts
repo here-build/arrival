@@ -48,7 +48,6 @@
 // symbols, same as srfi-stubs.ts.
 
 import { EnvCapability } from "../../common/capability.js";
-import { symbol } from "../../common/symbol.js";
 
 // Mirrors srfi-stubs.ts's HASH_TABLE_REASON verbatim (same design omission —
 // dicts are native & immutable — reached via a different dialect's name for the
@@ -62,8 +61,8 @@ const HASH_LIBRARY_REASON =
 const IO_REASON =
   "output is omitted from arrival by design — ambient IO has no construction-site to root a value's lineage at, the same reason random/date are omitted (see srfi-stubs.ts); return the value instead of printing it, it flows to the caller directly";
 
-export default new EnvCapability("scheme/polyglot-stubs", {
-  symbols: {
+export default EnvCapability.define("scheme/polyglot-stubs", {
+  symbols: (symbol) => ({
     // ═══════════════════════════════════════════════════════════════════════════
     // SHARED — not any one dialect's idiom
     // ═══════════════════════════════════════════════════════════════════════════
@@ -102,5 +101,5 @@ export default new EnvCapability("scheme/polyglot-stubs", {
     "hash-ref": symbol.notImplemented`hash-ref: ${HASH_LIBRARY_REASON}`,
     "for/list": symbol.notImplemented`for/list: for/list is not implemented — Racket's iteration-comprehension macro (binding clauses like ([x lst]) over a body) has no direct equivalent here; use (map (lambda (x) body) lst) instead`,
     "for/fold": symbol.notImplemented`for/fold: for/fold is not implemented — Racket's accumulating-iteration macro has no direct equivalent here; use (reduce (lambda (x acc) body) initial lst) instead (see env/polyglot-clojure.ts's frequencies/group-by for worked examples)`,
-  },
+  }),
 });
