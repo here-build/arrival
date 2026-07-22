@@ -3,13 +3,16 @@
 // `(require/extension …)` / `(require/register-extension …)` are declared here; all their
 // per-run state lives on the capability's own axes (configuration + resources), nothing wired
 // imperatively, nothing pushed OUT through callbacks. §LOADER states the model in full: `fs`
-// IS configuration and `require` binds IFF a loader is derivable (bundled-but-inert without
-// `fs`, a program's `(require …)` a plain unbound variable otherwise); run state IS resources
-// (`requireCache` — the single-flight module cache whose `windDown()` clears between runs;
-// `assembler` — the per-live-env `RuntimeAssembler` whose `asyncDispose` tears extensions back
-// out); `require/register-extension` is a `preludeOnly` macro that must apply BEFORE the preludes
-// calling it (last in the root set, lowest precedence ⇒ applied first, or the ext capabilities
-// dep on it).
+// IS configuration and `require` is ALWAYS ENUMERATED, gated by `requiresConfig` — without a
+// derivable loader it binds a cause-carrying DoorProcedure naming `fs`/`loader` (the Stage-3
+// auto-door: a program's `(require …)` under a loaderless env is a STATIC
+// "missing-configuration" diagnostic, not an unbound variable); run state IS resources
+// (the per-RunContext bag below: the single-flight require session — a fresh bag per
+// RunContext IS the "clear the cache between runs" reset — plus the per-live-env
+// `RuntimeAssembler` whose `[Symbol.asyncDispose]` tears extensions back out at run
+// teardown); `require/register-extension` is a `preludeOnly` macro that must apply BEFORE the
+// preludes calling it (last in the root set, lowest precedence ⇒ applied first, or the ext
+// capabilities dep on it).
 //
 // LOCAL to this site — the transitional COMPAT bridge §LOADER does not cover:
 //   ⚠ `configuration.onRequireCache` and `configuration.onExtensionAssembler` REMAIN as receivers
@@ -17,8 +20,11 @@
 //     (arrival-chain, run-program.ts) DISCARDS the `LoweredPack`s it lowers (returns only the
 //     assembled `env`), so its consumers (`run-traced.ts`'s shared kernel; `chain-env.ts`'s
 //     `ChainEnvironment`) have NO handle to `windDown()/resume()`. Until `buildArrivalEnv` threads
-//     the pack out, these two receivers bridge the SAME underlying resource state (a `peek()`-clear
-//     for the cache; the live assembler for dispose-folding). They delete the day the pack is
+//     the pack out, these two receivers bridge the SAME underlying resource state (an in-place
+//     clearer for the session cache; the live assembler for dispose-folding). Both fire LAZILY,
+//     from inside the verb impls, re-firing once per run-resources bag (the flipped `.define`
+//     form has no per-lower builder to fire from) — every consumer just stores the latest
+//     callback into a slot, so per-run re-fire is drop-in. They delete the day the pack is
 //     surfaced — the resources are already the single source of truth.
 //
 // The configuration slice mirrors `BuildArrivalEnvOpts`' loader-facing fields, so the ONE shared
@@ -28,10 +34,8 @@
 
 import type { EvalTap } from "../eval/evaluator.js";
 import { execExpr } from "../eval/generator-exec.js";
-import { EnvCapability, type SymbolDeclaration } from "../common/capability.js";
+import { EnvCapability } from "../common/capability.js";
 import { createRuntimeAssembler, type EnvPack, type RuntimeAssembler } from "../common/kernel.js";
-import { port, type Resource } from "../common/resources.js";
-import { type CallCtx, symbol } from "../common/symbol.js";
 import * as z from "../common/scheme-zod.js";
 import { applyCallback } from "../values/primitives/ACallable.js";
 import { is_callable_value } from "../values/value-guards.js";
@@ -42,7 +46,6 @@ import { RequireCycleError, RequireResolverError } from "../errors.js";
 import { bindValue, AmbientRuntime, type AmbientValue, mintFrame, isAmbientRuntime } from "../env/AmbientRuntime.js";
 import { lookupExtensionResolver, makeRegisterExtensionMacro } from "./loader-extensions.js";
 import {
-  type ContentResolver,
   dataToScheme,
   dirOf,
   type FsReadLike,
@@ -55,7 +58,6 @@ import {
   runResolverOf,
   type SchemeVal,
 } from "./loader.js";
-
 
 /** Resolve a `(require/extension :name)` argument to the bare extension name. A keyword
  *  (`:sql`) is a self-evaluating symbol (arrival's keyword-tagless-apply.md) that stringifies
@@ -80,12 +82,12 @@ const isLoader = (v: unknown): v is Loader =>
   typeof (v as Loader).read === "function" &&
   (v as Loader).resolvers instanceof Map;
 
+// ── resources: the capability's per-RunContext state ────────────────────────────────────────────
 
-// ── resources: the capability's lifecycle-bearing per-run state ─────────────────────────────────
-
-/** The single-flight module cache + the `.scm` cycle/loading bookkeeping, as ONE session. Modeled as
- *  a `Resource` so its lifecycle is the resource lifecycle: `windDown()` drops the handle, and the
- *  next `(require …)` re-acquires a FRESH (empty) session — i.e. "clear the cache between runs". */
+/** The single-flight module cache + the `.scm` cycle/loading bookkeeping, as ONE session. A
+ *  FRESH session is minted per RunContext (the `.define` resources factory runs once per run) —
+ *  dropping the bag at run teardown IS the reset, so "clear the cache between runs" needs no
+ *  lifecycle verbs. */
 interface RequireSession {
   /** Each resolved path loads EXACTLY ONCE; every later require — sequential repeat OR concurrent
    *  sibling — awaits that one promise. */
@@ -114,26 +116,36 @@ interface RequireSession {
   readonly dirStack: string[];
 }
 
-
-/** Holds the per-live-env `RuntimeAssembler` backing `(require/extension …)`. The assembler binds to
- *  the LIVE env, which the resource meets only at call time (ctx channel), so it is created lazily
- *  by `getOrCreate` rather than in `acquire`. The resource's `asyncDispose` IS the assembler's
- *  `dispose()`, so winding the pack down tears every runtime-applied extension back out. */
-interface AssemblerHolder {
-  /** The assembler for `env`, created on first touch. Idempotent per env identity (one lowered
-   *  capability normally applies to exactly one env; a re-applied lower re-creates for the new env). */
-  getOrCreate(env: RunEnv): RuntimeAssembler<RunEnv>;
+/** The per-RunContext resources bag `this.resources` carries into every loader verb. Built once
+ *  per run by the `.define` resources factory below; `[Symbol.asyncDispose]` (the assembler's
+ *  `dispose()`, folding every runtime-applied extension back out) runs at RunContext teardown. */
+interface LoaderRunResources {
+  /** This run's require session — fresh per RunContext (see `RequireSession`). */
+  readonly session: RequireSession;
+  /** The loader derived ONCE per run from config (`loader` wins over `fs`-derived);
+   *  `undefined` only when neither key is armed — unreachable from `require`'s impl, whose
+   *  `requiresConfig` door already gated that case at bind. */
+  readonly loader: Loader | undefined;
+  /** The per-live-env `RuntimeAssembler` backing `(require/extension …)`. The assembler binds to
+   *  the LIVE env, which the resource meets only at call time (ctx channel), so it is created
+   *  lazily on first touch. Idempotent per env identity (one lowered capability normally applies
+   *  to exactly one env; a re-applied lower re-creates for the new env). */
+  getOrCreateAssembler(env: RunEnv): RuntimeAssembler<RunEnv>;
+  /** ⚠ COMPAT one-shot latches for the two receivers (see the file header) — per-run, so each
+   *  fresh RunContext re-notifies its host slot exactly once. */
+  notifiedRequireCache: boolean;
+  notifiedAssembler: RuntimeAssembler<RunEnv> | undefined;
+  [Symbol.asyncDispose](): Promise<void>;
 }
 
-
 // Explicit `<any, any>`: TS's declaration-emit (this package builds `--build`/composite) can't
-// portably NAME the inferred config/resource type without referencing arrival's internal
+// portably NAME the inferred config type without referencing arrival's internal
 // `AmbientRuntime` (RunEnv's root) across the package boundary. No consumer reads `.configuration`/
 // `.resources` off this export from outside `loader-capability.ts` itself (every external use is
 // `arrivalLoaderCapability.lower({...})`, generic-erased already) — so widening the export's own
-// generics costs nothing real; the `symbols` builder body above is still checked against the
-// REAL inferred shapes at the `new EnvCapability(...)` call site below, unaffected by this annotation.
-export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapability("arrival/loader", {
+// generics costs nothing real; the `symbols` callback body is still checked against the REAL
+// inferred shapes at the `EnvCapability.define(...)` call site below, unaffected by this annotation.
+export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.define("arrival/loader", {
   configuration: {
     /** PRIMARY: the raw read-capable filesystem arming `(require …)`. The capability derives its own
      *  `Loader` from this (`makeFsLoader`) — no host `makeFsLoader` step. */
@@ -142,111 +154,93 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
      *  resolvers into the table (arrival-chain's `.yaml`/`.toml` handlers). */
     loader: z.custom<Loader>(isLoader, "loader must have resolve()/read()/resolvers:Map").optional(),
     /** Tap for `require`d module internals (the host's trace). */
-    tap: z.custom<EvalTap>((v: unknown): v is EvalTap =>
-      v !== null && typeof v === "object" && typeof (v as EvalTap).enter === "function", "tap must implement EvalTap.enter()").optional(),
+    tap: z
+      .custom<EvalTap>(
+        (v: unknown): v is EvalTap => v !== null && typeof v === "object" && typeof (v as EvalTap).enter === "function",
+        "tap must implement EvalTap.enter()",
+      )
+      .optional(),
     /** Base dir for resolving relative `(require …)` — the entry module's dirname. Seeds the
-     *  `requireCache` resource's initial `dirStack`. (`z.custom` + typeof, not `z.string()`: the
+     *  per-run session's initial `dirStack`. (`z.custom` + typeof, not `z.string()`: the
      *  scheme-zod `z.string` export is a scheme AString CODEC, not the plain JS-string schema.) */
     dirname: z.custom<string>((v) => typeof v === "string", "dirname must be a string").optional(),
     /** Host-armed registry of named extension packs for `(require/extension :name)`.
-     *  Absent ⇒ the verb is absent (unbound-symbol, same withholding posture). */
+     *  Absent ⇒ the verb DOORS (its `requiresConfig` names this key — same static-gate posture
+     *  as `require`'s own fs/loader door). */
     extensionRegistry: z
       .custom<ReadonlyMap<string, EnvPack<RunEnv>>>((v) => v instanceof Map, "extensionRegistry must be a Map")
       .optional(),
-    /** ⚠ COMPAT receiver (see header) — bridges the `requireCache` resource until `buildArrivalEnv`
-     *  surfaces the `LoweredPack`. Hands the host an in-place clearer of the live session's cache. */
+    /** ⚠ COMPAT receiver (see header) — bridges the require session until `buildArrivalEnv`
+     *  surfaces the `LoweredPack`. Hands the host an in-place clearer of the live session's cache;
+     *  fires lazily at each run's first `(require …)` dispatch. */
     onRequireCache: z
-      .custom<(clearRequireCache: () => void) => void>((v) => typeof v === "function", "onRequireCache must be a function")
+      .custom<
+        (clearRequireCache: () => void) => void
+      >((v) => typeof v === "function", "onRequireCache must be a function")
       .optional(),
-    /** ⚠ COMPAT receiver (see header) — bridges the `assembler` resource until `buildArrivalEnv`
+    /** ⚠ COMPAT receiver (see header) — bridges the assembler resource until `buildArrivalEnv`
      *  surfaces the `LoweredPack`. Fires with the live `RuntimeAssembler` for dispose-folding. */
     onExtensionAssembler: z
-      .custom<(assembler: RuntimeAssembler<RunEnv>) => void>(
-        (v) => typeof v === "function",
-        "onExtensionAssembler must be a function",
-      )
+      .custom<
+        (assembler: RuntimeAssembler<RunEnv>) => void
+      >((v) => typeof v === "function", "onExtensionAssembler must be a function")
       .optional(),
   },
-  resources: {
-    requireCache: (cfg: { dirname?: string }): Resource<RequireSession> => ({
-      kind: "arrival/require-session",
-      // In-memory session: dropping the handle IS the reset (windDown ⇒ fresh empty session next touch),
-      // so the closer only clears for hygiene. No external port to close.
-      acquire: async () =>
-        port<RequireSession>(
-          { inflight: new Map(), evaluating: new Set(), loadingStack: [], dirStack: [cfg.dirname ?? ""] },
-          (): void => {
-            /* no external handle; the drop-and-re-acquire cycle is the reset */
-          },
-        ),
-    }),
-    assembler: (): Resource<AssemblerHolder> => ({
-      kind: "arrival/require-extension-assembler",
-      acquire: async () => {
-        let assembler: RuntimeAssembler<RunEnv> | undefined;
-        let boundEnv: RunEnv | undefined;
-        return port<AssemblerHolder>(
-          {
-            getOrCreate(env: RunEnv): RuntimeAssembler<RunEnv> {
-              if (assembler === undefined || boundEnv !== env) {
-                assembler = createRuntimeAssembler(env);
-                boundEnv = env;
-              }
-              return assembler;
-            },
-          },
-          async (): Promise<void> => {
-            await assembler?.dispose();
-          },
-        );
+  /** One bag per RunContext (docs/execution.md §HERMETIC): the require session, the config-derived
+   *  loader, and the lazily-created per-env assembler — whose `dispose()` IS the bag's
+   *  `[Symbol.asyncDispose]`, so winding the run down tears every runtime-applied extension out. */
+  resources: (config): LoaderRunResources => {
+    const { fs, loader } = config as { fs?: FsReadLike; loader?: Loader; dirname?: string };
+    let assembler: RuntimeAssembler<RunEnv> | undefined;
+    let boundEnv: RunEnv | undefined;
+    return {
+      session: {
+        inflight: new Map(),
+        evaluating: new Set(),
+        loadingStack: [],
+        dirStack: [(config as { dirname?: string }).dirname ?? ""],
       },
-    }),
-  },
-  // BUILDER form: the verbs close over per-lower `configuration` + `resources` (the requireCache /
-  // assembler Refs), constructed once per apply.
-  symbols: ({ configuration, resources, degradation }) => {
-    // Destructure INSIDE (not in the param): the body also reads `configuration`/`resources`
-    // wholesale (onRequireCache compat bridge, extensionRegistry gate, the requireCache/assembler
-    // Refs) — an inline param destructure would unbind the objects themselves.
-    const { fs, loader = fs ? makeFsLoader(fs) : undefined, tap } = configuration;
-    void tap;
-    const { requireCache, assembler } = resources;
-    void requireCache;
-    void assembler;
-    const defs: Record<string, SymbolDeclaration> = {
-      // Assembly-time-only MACRO (§LOADER / §PRELUDE): callable from every later-applied
-      // capability's prelude, unbound everywhere at runtime. MACRO so the resolver name is
-      // unevaluated — see makeRegisterExtensionMacro.
-      "require/register-extension": {
-        kind: "macro" as const,
-        name: "require/register-extension",
-        macro: makeRegisterExtensionMacro(),
-        preludeOnly: true,
+      loader: loader ?? (fs ? makeFsLoader(fs) : undefined),
+      getOrCreateAssembler(env: RunEnv): RuntimeAssembler<RunEnv> {
+        if (assembler === undefined || boundEnv !== env) {
+          assembler = createRuntimeAssembler(env);
+          boundEnv = env;
+        }
+        return assembler;
+      },
+      notifiedRequireCache: false,
+      notifiedAssembler: undefined,
+      async [Symbol.asyncDispose](): Promise<void> {
+        await assembler?.dispose();
       },
     };
+  },
+  // FLIPPED form (`EnvCapability.define`): the symbol record is STATIC — every verb is always
+  // enumerated; config-gating rides each contract's `requiresConfig` (the Stage-3 auto-door)
+  // instead of conditional `defs["x"] = …` enumeration, and impls read
+  // `this.configuration`/`this.resources` at dispatch.
+  symbols: (symbol) => ({
+    // Assembly-time-only MACRO (§LOADER / §PRELUDE): callable from every later-applied
+    // capability's prelude, unbound everywhere at runtime. MACRO so the resolver name is
+    // unevaluated — see makeRegisterExtensionMacro.
+    "require/register-extension": {
+      kind: "macro" as const,
+      name: "require/register-extension",
+      macro: makeRegisterExtensionMacro(),
+      preludeOnly: true,
+    },
 
-    // Door-set degradation (§DEGRADATION): under `degradation: "doors"`, an absent
-    // `fs`/`loader` does not WITHHOLD `require` entirely — it binds a cause-carrying door
-    // instead, teaching "provide fs (or loader) to enable it". Under the default `"forbid"`
-    // mode (`degradation.active` false) this branch never fires — the withhold is
-    // byte-identical.
-    if (loader === undefined && degradation.active) {
-      defs["require"] = degradation.door(
-        "require",
-        ["fs", "loader"],
-        'loads a module by specifier and returns its value or spills its defines into the environment. Provide "fs" (or a pre-built "loader") to enable it.',
-      );
-    }
-
-    if (loader !== undefined) {
-      // ⚠ COMPAT bridge (see header): hand the host an in-place clearer of the LIVE session's cache.
-      // `peek()` late-binds to whatever session is spawned (undefined = not yet loaded = nothing to
-      // clear). The designed channel is `LoweredPack.windDown()`; this stays only until the pack is
-      // surfaced to `buildArrivalEnv`'s consumers.
-      configuration.onRequireCache?.(() => resources.requireCache.peek()?.inflight.clear());
-
-      defs["require"] = symbol.native`require: loads a module by specifier and returns its value or spills its defines into the environment`(
-        { input: [z.value], output: [z.value] },
+    require:
+      symbol.native`require: loads a module by specifier and returns its value or spills its defines into the environment`(
+        {
+          input: [z.value],
+          output: [z.value],
+          // ANY-OF door gate (the disjunctive `requiresConfig` form): `require` is callable
+          // while EITHER `fs` (the loader is derived) or a pre-built `loader` is armed; with
+          // both absent it binds a DoorProcedure naming the pair — the static gate's
+          // "missing-configuration" diagnostic replaces the old unbound-variable withholding.
+          requiresConfig: [["fs", "loader"]],
+        },
         // RAW-BOUND `{ value }`-style native, never rosetta-wrapped — §LOADER (no provenance
         // mint: `(define run-x (require "x.prompt"))` returns a CALLABLE, the data is born when
         // the proc is INVOKED; no return marshal: an `eval` module's scheme lambda survives
@@ -263,14 +257,38 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
         // during its OWN evaluation, so the cycle guard is scoped to it; value/eval modules
         // (`.json`, `.hbs`, capability-registered types like `.prompt`) are require-graph
         // leaves and cannot cycle.
-        async function (this: CallCtx, ...args: unknown[]): Promise<SchemeVal> {
+        async function (...args: unknown[]): Promise<SchemeVal> {
+          const resources = this.resources as LoaderRunResources | undefined;
+          // The run-resources bag rides `RunContext.capabilityResources` (1d) — absent only on a
+          // bare-env dispatch that never went through `instantiate`'s mint site, which no loader
+          // consumer path does (require needs a real run).
+          invariant(
+            resources !== undefined,
+            "require: no run resources — dispatched outside a resource-armed RunContext.",
+          );
+          const { session, loader } = resources;
+          // The `requiresConfig` door above already gated the both-absent case at bind — this
+          // narrow is for TS and for the (impossible by construction) bare-env dispatch.
+          invariant(
+            loader !== undefined,
+            "require: no loader derivable — the fs/loader door should have bound instead.",
+          );
+          // ⚠ COMPAT bridge (see header): hand the host an in-place clearer of THIS run's
+          // session cache, once per run-resources bag. The designed channel is
+          // `LoweredPack.windDown()`; this stays only until the pack is surfaced to
+          // `buildArrivalEnv`'s consumers.
+          if (!resources.notifiedRequireCache) {
+            resources.notifiedRequireCache = true;
+            (this.configuration as { onRequireCache?: (clear: () => void) => void }).onRequireCache?.(() =>
+              session.inflight.clear(),
+            );
+          }
+          const { tap } = this.configuration as { tap?: EvalTap };
           // The COMPOSED resolver, not just its env (see runResolverOf, loader.ts): module
           // forms evaluate through it, and the registered-resolver lookup walks it, so builtins
           // and capability verbs resolve identically under cut and glass.
           const resolver = runResolverOf(this, "require");
-          // The single-flight cache + cycle/loading bookkeeping (the requireCache resource).
-          // `.get()` single-flights: concurrent requires (the `map` fan-out) share ONE session.
-          const { inflight, evaluating, loadingStack, dirStack } = await resources.requireCache.get();
+          const { inflight, evaluating, loadingStack, dirStack } = session;
           const specifierArg = args[0];
           const path = await loader.resolve(String(specifierArg), dirStack.at(-1)!);
 
@@ -383,32 +401,21 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
             throw error;
           }
         },
-      );
-    }
+      ),
 
-    // Same door-set degradation posture as `require` above, for the `extensionRegistry`-gated
-    // verb: absent registry + "doors" mode ⇒ a cause-carrying door naming `extensionRegistry`
-    // instead of withholding the symbol entirely.
-    if (configuration.extensionRegistry === undefined && degradation.active) {
-      defs["require/extension"] = degradation.door(
-        "require/extension",
-        ["extensionRegistry"],
-        'applies a host-registered extension pack (by :name) to the current env. Provide "extensionRegistry" to enable it.',
-      );
-    }
-
-    if (configuration.extensionRegistry !== undefined) {
-      const { extensionRegistry, onExtensionAssembler } = configuration;
-      // Track the last assembler notified to the compat receiver, so a fresh assembler after a
-      // windDown+resume re-notifies instead of firing only once.
-      let notifiedAssembler: RuntimeAssembler<RunEnv> | undefined;
-
-      defs["require/extension"] = symbol.native`require/extension: applies a host-registered extension pack (by :name) to the current env`(
-        { input: [z.value], output: [z.value] },
+    "require/extension":
+      symbol.native`require/extension: applies a host-registered extension pack (by :name) to the current env`(
+        {
+          input: [z.value],
+          output: [z.value],
+          // Same static-gate posture as `require`'s fs/loader door: absent registry ⇒ a
+          // cause-carrying door naming `extensionRegistry` instead of withholding the symbol.
+          requiresConfig: ["extensionRegistry"],
+        },
         // RAW-BOUND, `__withCtx` — no rosetta wrapper, no marshal (same as `require`, §LOADER).
         // Resolves the name, applies the registered pack (and its deps) to the live env through
-        // the per-env `RuntimeAssembler` (held by the `assembler` resource — created lazily on
-        // first call; its `asyncDispose` folds `dispose()` into pack teardown), and returns
+        // the per-env `RuntimeAssembler` (held by the run-resources bag — created lazily on
+        // first call; the bag's `asyncDispose` folds `dispose()` into run teardown), and returns
         // unspecified: the capability's symbols are now live. Absent name ⇒ teaching error.
         //
         // The mid-run child scope `C'` is §LOADER / §PRELUDE (bootstrap's phase-gated prelude
@@ -418,16 +425,31 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
         // miss on `C'` falling through to `liveEnv`; never linked in, dropped when the call
         // resolves — so the applied pack's own prelude `define`s are lost with `C'`, only its
         // DECLARED `symbols` reach the live env).
-        async function (this: CallCtx, ...args: unknown[]): Promise<SchemeVal> {
+        async function (...args: unknown[]): Promise<SchemeVal> {
+          const resources = this.resources as LoaderRunResources | undefined;
+          invariant(
+            resources !== undefined,
+            "require/extension: no run resources — dispatched outside a resource-armed RunContext.",
+          );
+          const { extensionRegistry, onExtensionAssembler } = this.configuration as {
+            extensionRegistry?: ReadonlyMap<string, EnvPack<RunEnv>>;
+            onExtensionAssembler?: (assembler: RuntimeAssembler<RunEnv>) => void;
+          };
+          // The `requiresConfig` door already gated the absent-registry case at bind.
+          invariant(
+            extensionRegistry !== undefined,
+            "require/extension: no extensionRegistry — the config door should have bound instead.",
+          );
           const env = runEnvOf(this, "require/extension");
           const name = extensionName(args[0]);
           const pack = extensionRegistry.get(name);
           RequireResolverError.invariant(pack !== undefined, "no-extension", name, [...extensionRegistry.keys()]);
-          const assembler = (await resources.assembler.get()).getOrCreate(env);
+          const assembler = resources.getOrCreateAssembler(env);
           // ⚠ COMPAT bridge (see header): hand a lifecycle owner the live assembler so it can fold
           // `dispose()` into its own teardown, until it can reach `LoweredPack.windDown()` instead.
-          if (assembler !== notifiedAssembler) {
-            notifiedAssembler = assembler;
+          // Re-notifies when a fresh assembler replaces a disposed one (per-run bag tracking).
+          if (assembler !== resources.notifiedAssembler) {
+            resources.notifiedAssembler = assembler;
             onExtensionAssembler?.(assembler);
           }
           // A discarded child scope, seeded with register-extension so the applied pack's prelude
@@ -453,9 +475,6 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = new EnvCapabilit
           });
           return theVoid; // applied for effect; the pack's symbols are now bound on the env
         },
-      );
-    }
-
-    return defs;
-  },
+      ),
+  }),
 });

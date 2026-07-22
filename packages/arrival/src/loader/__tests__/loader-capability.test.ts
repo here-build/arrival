@@ -1,18 +1,19 @@
 // loader-capability.test.ts — `arrivalLoaderCapability`: the module system as a declarative
-// EnvCapability. Proves the three postures against a REAL env + assembleEnv + exec:
-//   1. capability withholding by absence — no `loader` config ⇒ lower succeeds, `require` is
-//      simply unbound (same for `require/extension` without a registry);
+// EnvCapability. Proves the postures against a REAL env + assembleEnv + exec:
+//   1. door by absence (the Stage-6 `.define` posture — `Contract.requiresConfig`, D2): no
+//      `fs`/`loader` config ⇒ lower succeeds and `require` binds a cause-carrying
+//      DoorProcedure teaching "provide `fs` or `loader`" — the auto-derived door mints under
+//      EITHER degradation mode (requiresConfig is read unconditionally), replacing the old
+//      unbound-variable withholding (same for `require/extension` without a registry, naming
+//      `extensionRegistry`). `require`'s gate is the DISJUNCTIVE requiresConfig form
+//      (`[["fs", "loader"]]` — any-of).
 //   2. an armed loader resolves data + spills `.scm` defines into the RUN env (the ctx-read
 //      env — raw-bound `symbol.native`);
 //   3. `require/register-extension` is the capability's `preludeOnly` symbol: callable from a
 //      DEPENDENT capability's prelude during plain `assembleEnv` (the kernel's phase-gated
 //      prelude scope — no caller wiring), a plain unbound-variable error from user code.
-//   4. door-set degradation (design doc symbol-define-static-program-validation.md §3.7):
-//      under `degradation: "doors"`, postures 1's two withholds instead bind a cause-carrying
-//      door teaching "provide fs/loader (or extensionRegistry) to enable it". Posture 1's OWN
-//      tests are UNCHANGED — they don't pass `degradation`, so they exercise the default
-//      `"forbid"` mode, byte-identical to pre-W2 (verified: still green, still "Unbound
-//      variable" — the posture only changes for a caller that opts in).
+//   4. `AssembledEnv.degraded` enumerates the missing keys (design doc
+//      symbol-define-static-program-validation.md §3.7) under `degradation: "doors"`.
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -76,14 +77,18 @@ const files = (table: Record<string, string>) =>
   });
 
 describe("arrivalLoaderCapability — the declarative module system", () => {
-  it("withholding by absence: a config-less lower succeeds and `require` is unbound", async () => {
+  it("door by absence: a config-less lower succeeds and `require` binds the fs-or-loader door", async () => {
     const env = await assembled({});
-    await expect(exec(`(require "x.json")`, { env })).rejects.toThrow(/Unbound variable/);
+    await expect(exec(`(require "x.json")`, { env })).rejects.toThrow(
+      /require @ arrival\/loader is not available.*requires configuration `fs` or `loader` — provide one of them/s,
+    );
   });
 
-  it("withholding by absence: no extensionRegistry ⇒ `require/extension` is unbound", async () => {
+  it("door by absence: no extensionRegistry ⇒ `require/extension` binds a door naming it", async () => {
     const env = await assembled({ loader: files({}) });
-    await expect(exec(`(require/extension :sql)`, { env })).rejects.toThrow(/Unbound variable/);
+    await expect(exec(`(require/extension :sql)`, { env })).rejects.toThrow(
+      /require\/extension @ arrival\/loader is not available.*requires configuration `extensionRegistry`/s,
+    );
   });
 
   it("an armed loader resolves a data module (raw scheme args + no return marshal)", async () => {
@@ -145,18 +150,18 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
     expect(applies).toBe(1);
   });
 
-  describe("door-set degradation (degradation: \"doors\") — the withhold-by-absence posture above, opted into a door instead", () => {
-    it("no fs/loader + \"doors\": `require` teaches 'provide fs/loader to enable it' instead of Unbound variable", async () => {
+  describe("door-set degradation — the auto-derived requiresConfig doors, mode-independent (D2)", () => {
+    it("no fs/loader + \"doors\": `require` teaches the fs-or-loader disjunction", async () => {
       const env = await assembled({}, [], "doors");
       await expect(exec(`(require "x.json")`, { env })).rejects.toThrow(
-        /require @ arrival\/loader is not available.*Provide "fs" \(or a pre-built "loader"\) to enable it\./s,
+        /require @ arrival\/loader is not available.*requires configuration `fs` or `loader` — provide one of them to enable this verb\./s,
       );
     });
 
     it("no extensionRegistry + \"doors\": `require/extension` teaches the same, naming extensionRegistry", async () => {
       const env = await assembled({ loader: files({}) }, [], "doors");
       await expect(exec(`(require/extension :sql)`, { env })).rejects.toThrow(
-        /require\/extension @ arrival\/loader is not available.*Provide "extensionRegistry" to enable it\./s,
+        /require\/extension @ arrival\/loader is not available.*requires configuration `extensionRegistry` — provide it to enable this verb\./s,
       );
     });
 
@@ -181,10 +186,10 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
       expect(cfg).toMatchObject({ name: "world" });
     });
 
-    it("under the default (\"forbid\") mode, behavior is BYTE-IDENTICAL to pre-W2 — still a plain Unbound variable", async () => {
+    it("under the default (\"forbid\") mode the door mints all the same — requiresConfig is mode-independent", async () => {
       const env = await assembled({});
-      await expect(exec(`(require "x.json")`, { env })).rejects.toThrow(/Unbound variable/);
-      await expect(exec(`(require "x.json")`, { env })).rejects.not.toThrow(/PurityError|is not available/);
+      await expect(exec(`(require "x.json")`, { env })).rejects.toThrow(/is not available/);
+      await expect(exec(`(require "x.json")`, { env })).rejects.not.toThrow(/Unbound variable|PurityError/);
     });
   });
 

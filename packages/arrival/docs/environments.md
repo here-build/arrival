@@ -451,7 +451,8 @@ feature (`set!`, `call/cc`, the mutators) is *declared capability data*: a `symb
 door bound like any other symbol, which the ordinary lookup walk resolves and fires. The unbound
 wall's typo suggestions come from *this chain's actual vocabulary* (`allBoundNames`), never a
 hardcoded roster. Absence is meaningful: a name the env did not bind is a door the capability
-chose not to open (§LOADER's `require`).
+chose not to open (a `preludeOnly` symbol at runtime, a builder-form withhold; §LOADER's
+`require` itself now stays BOUND and doors on missing config instead — §DEGRADATION-D2).
 
 **`global_env`/`user_env` are `ResolvingAmbient` roots, born through the minters.** Both are
 resolver-capable (the two producer classes of §PRELUDE register here); both seal, at the end of
@@ -527,13 +528,15 @@ it. The assembly's `degraded` list then enumerates every capability that lowered
 reads it instead of probing symbols one by one.
 
 **Withhold-by-absence and door-mode are the *same* posture under two modes — unified here.** A
-capability that withholds a verb when its config is absent (loader's `require` with no `fs`) and a
-capability that mints a degradation door name the *same* condition; the only difference is the
-mode. Under `forbid`, absence stays silent absence — the verb is simply not bound, and the
+builder-form capability that withholds a verb when its config is absent and a capability that
+mints a degradation door name the *same* condition; the only difference is the mode. Under
+`forbid`, a builder's absence stays silent absence — the verb is simply not bound, and the
 program's call to it is a plain unbound variable (§HERMETIC: an absent name is a capability's
 choice). Under `doors`, the identical absence binds a cause-carrying door instead. **Never
-withhold by silently omitting a symbol from the record when a cause could be carried; lower with
-`degradation: "doors"` so the absence names its own cause.**
+withhold by silently omitting a symbol from the record when a cause could be carried; declare the
+gate as the verb's `requiresConfig` (D2 — mode-independent, the `.define`-form posture: loader's
+`require` doors on its `[["fs", "loader"]]` any-of group under EITHER mode) or, in a legacy
+builder, lower with `degradation: "doors"` so the absence names its own cause.**
 
 **Permanent omission and degradation are distinct causes on the same door type.** A
 `notImplemented` door is a *permanent design omission* (`set!`, `call/cc`, the mutators — R7RS
@@ -561,23 +564,27 @@ every axis of the machine at once.** `(require …)`, `(require/extension …)`,
 capability's own axes, so nothing is wired imperatively and nothing is pushed out through
 callbacks.
 
-**`fs` IS configuration, and `require` is present iff a loader is derivable.** The primary
-surface is `configuration.fs` — a raw read-capable filesystem; the capability derives its own
-`Loader` internally (`makeFsLoader`). A pre-built `configuration.loader` is accepted and *wins*
-over `fs`, for the one thing `fs` cannot express: a caller injecting custom resolvers (the
-`.yaml`/`.toml` handlers arrival-chain threads). **`require` binds only when a loader is
-derivable** (from `fs` or `loader`): a loader-less env has no `require` symbol at all, so a
-program's `(require …)` is a plain unbound variable, not a policed call (§HERMETIC:
-withholding-by-absence; §DEGRADATION: under `"doors"` the same absence binds a cause-carrying
-door naming `fs`/`loader` instead). This is "bundled but inert without `fs`" made structural: the
-verb is authored in the capability, but its *presence* is derived from configuration.
+**`fs` IS configuration, and `require` is ALWAYS ENUMERATED — gated by a disjunctive
+`requiresConfig` door.** The primary surface is `configuration.fs` — a raw read-capable
+filesystem; the capability derives its own `Loader` internally (`makeFsLoader`). A pre-built
+`configuration.loader` is accepted and *wins* over `fs`, for the one thing `fs` cannot express: a
+caller injecting custom resolvers (the `.yaml`/`.toml` handlers arrival-chain threads).
+**`require` is callable when a loader is derivable** (from `fs` or `loader`); with neither armed
+it binds a cause-carrying `DoorProcedure` via the auto-derived `requiresConfig: [["fs",
+"loader"]]` gate (§DEGRADATION-D2 — the any-of GROUP form: satisfied while at least one key is
+present), so a loaderless program's `(require …)` is a STATIC "missing-configuration" diagnostic
+teaching "provide `fs` or `loader`", not an unbound variable. (This supersedes the earlier
+withholding-by-absence posture: the verb's *presence* is now static — the `.define` symbol record
+is config-independent — and only its *callability* is config-derived. The door mints under either
+degradation mode; `AssembledEnv.degraded` enumerates the same misses.) "Bundled but inert without
+`fs`" stays structural — the door IS the inertness, made legible.
 
-**Run state IS resources, not stashed callbacks.** The two pieces of lifecycle-bearing per-run
-state are capability-owned `Resource`s (§RESOURCES): `requireCache` (the single-flight module
-cache + cycle bookkeeping — its `windDown()` drops the session so the next touch re-acquires a
-fresh empty one, which *is* "clear the cache between runs"), and `assembler` (the per-live-env
-`RuntimeAssembler` backing `(require/extension …)` — its `asyncDispose` is `assembler.dispose()`,
-so winding the pack down tears every runtime-applied extension back out).
+**Run state IS resources, not stashed callbacks.** The lifecycle-bearing per-run state is the
+capability's per-`RunContext` resources bag (§RESOURCES, the `.define` factory form): the
+single-flight require session (module cache + cycle bookkeeping — a FRESH bag is minted per
+`RunContext`, so run teardown *is* "clear the cache between runs") and the per-live-env
+`RuntimeAssembler` backing `(require/extension …)` — the bag's `[Symbol.asyncDispose]` is
+`assembler.dispose()`, so winding the run down tears every runtime-applied extension back out.
 
 **`require` and `require/extension` are RAW-BOUND `{ value }`-style natives, deliberately not
 rosetta-wrapped.** `require` returns a callable for `(define run-x (require "x.prompt"))` — the
