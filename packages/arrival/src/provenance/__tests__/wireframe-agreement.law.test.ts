@@ -27,6 +27,7 @@ import { inferenceEnv } from "../../env/inference-env.js";
 import type { Classifier, DeclaredRole } from "../../provenance/lineage.js";
 import { classifyProgramPrelude, buildPreludeSource } from "../../provenance/prelude.js";
 import { hermeticEnv } from "../../provenance/hermetic-env.js";
+import { BASE_ROSTER } from "../../env/base-roster.js";
 import { buildWireframe } from "../../provenance/wireframe/builder.js";
 import { freeVars } from "../../provenance/wireframe/free-vars.js";
 import type { WireframeGraph } from "../../provenance/wireframe/types.js";
@@ -110,9 +111,11 @@ describe("wire-locality (§1 CHOSEN: a wire is a closed arrival lambda) — FLIP
       expect(w.paramRefs).toEqual([{ kind: "slot", name: "x" }]);
 
       // γ = apply in the hermetic env (§4): the wire resolves `inc` through the
-      // SEALED base+prelude chain — proof the reference needed no payload.
-      const env = await hermeticEnv([], p.prelude.source);
-      const [result] = (await execState(`(${w.source} 41)`, { env, skipBootstrapWait: true })).values;
+      // vocabulary+prelude scope — proof the reference needed no payload.
+      const base = await hermeticEnv([...BASE_ROSTER], p.prelude.source);
+      const [result] = (
+        await execState(`(${w.source} 41)`, { capabilities: base.capabilities, config: base.config, scope: base.scope, runCtx: base.runCtx })
+      ).values;
       expect(schemeToJs(result)).toBe(42);
     },
   );
@@ -525,13 +528,15 @@ describe("Q7 — program prelude: a pure helper stays a REFERENCE, the positive 
       expect(membership.wireframe.size).toBe(0);
 
       const prelude = buildPreludeSource(forms, membership);
-      const env = await hermeticEnv([], prelude);
-      const [result] = (await execState("(caller 41)", { env, skipBootstrapWait: true })).values;
+      const base = await hermeticEnv([...BASE_ROSTER], prelude);
+      const [result] = (
+        await execState("(caller 41)", { capabilities: base.capabilities, config: base.config, scope: base.scope, runCtx: base.runCtx })
+      ).values;
       expect(schemeToJs(result)).toBe(42);
 
-      // `helper` is a REAL bound name resolved through the sealed base chain — not
+      // `helper` is a REAL bound name resolved through the root scope — not
       // something the (empty) ingress bag carried.
-      expect(env.get("helper", { throwError: false })).toBeDefined();
+      expect(base.scope.env.get("helper", { throwError: false })).toBeDefined();
     },
   );
 });

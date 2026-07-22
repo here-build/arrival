@@ -33,12 +33,13 @@
  *      over the same inputs — a divergence between the two node switches is a bug
  *      in this file, never an acceptable drift.
  */
-import type { AmbientValue, ResolvingAmbient } from "../env/AmbientRuntime.js";
+import type { AmbientValue } from "../env/AmbientRuntime.js";
+import { BASE_ROSTER } from "../env/base-roster.js";
 import type { SchemeValue } from "../values/types.js";
 import type { EnvCapability } from "../common/capability.js";
 import { withSilentRegion } from "../membrane/region-scope.js";
 import { applyWireInEnv } from "./gamma.js";
-import { hermeticEnv, type IngressBindings } from "./hermetic-env.js";
+import { hermeticEnv, type HermeticEnv, type IngressBindings } from "./hermetic-env.js";
 import { boxPayload, FrozenMints, ReplayScopeError, withUnionedProvenance, type ReplayedValue } from "./replay.js";
 import { schemeToJs } from "../membrane/rosetta.js";
 import type { EmittedWire, Wire, WireframeGraph, WireframeProgram } from "./wireframe/types.js";
@@ -87,7 +88,7 @@ function wireFor(graph: WireframeGraph, node: number, slot: string): Wire {
  *  owns; a fresh `cache` per recursive `template-ref`/graph descent, exactly as
  *  `replayGraphIn` builds a fresh `nodeMemo` per recursive call). */
 async function* nodeValueStep(
-  base: ResolvingAmbient,
+  base: HermeticEnv,
   program: WireframeProgram,
   graph: WireframeGraph,
   frozen: FrozenMints,
@@ -208,7 +209,7 @@ async function* nodeValueStep(
  *  YIELD the result before returning it — the single point every external
  *  `for await` pull actually observes. */
 async function* gammaWireStep(
-  base: ResolvingAmbient,
+  base: HermeticEnv,
   program: WireframeProgram,
   graph: WireframeGraph,
   frozen: FrozenMints,
@@ -242,7 +243,7 @@ async function* gammaWireStep(
 }
 
 async function* graphEgressStep(
-  base: ResolvingAmbient,
+  base: HermeticEnv,
   program: WireframeProgram,
   graph: WireframeGraph,
   frozen: FrozenMints,
@@ -283,7 +284,9 @@ async function* graphEgressStep(
 export async function* walkGraphReplay(opts: ReplayWalkOptions): AsyncGenerator<ReplayWalkStep, ReplayedValue> {
   const { program, frozen, decisions, slots = {}, basePacks = [], config } = opts;
   const graph = opts.graph ?? program.main;
-  const base = await withSilentRegion(() => hermeticEnv(basePacks, program.prelude.source, {}, config));
+  // THE STANDARD-BASE FOLD — this call site's own responsibility, not `hermeticEnv`'s
+  // (see that module's own header; `replay.ts`'s `replayGraphEgress` mirrors this).
+  const base = await withSilentRegion(() => hermeticEnv([...basePacks, ...BASE_ROSTER], program.prelude.source, {}, config));
   const boxed = yield* graphEgressStep(base, program, graph, frozen, slots, decisions);
   return { boxed, value: schemeToJs(boxed, {}) };
 }

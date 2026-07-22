@@ -393,14 +393,16 @@ export class ResolvingAmbient extends AmbientRuntime implements SchemeEnv {
  * The live callers, all inside the membrane:
  *   • ROOT LAYERING — `env-roots.ts` (`user_env` off `global_env`) and
  *     `inference-env.ts` (the inference identity boundary);
- *   • ASSEMBLY — `generator-exec.ts`'s per-assembly `exec-capabilities` base and
- *     `provenance/hermetic-env.ts`'s replay base (both inside the designed doors
- *     `assembleAmbient`/`hermeticEnv`; the mint is those doors' internal step);
+ *   • ASSEMBLY — `generator-exec.ts`'s per-assembly `exec-capabilities` base (inside
+ *     the designed door `assembleAmbient`; the mint is that door's internal step);
  *   • the EVALUATOR's frame chain — `Resolver.child` / the merge frame
  *     (`env/macros/macros.ts`, bindings record shared BY REFERENCE — the merge-frame
- *     contract) / `LexicalScope.child`;
- *   • REPLAY INGRESS — per-wire/per-playback frames above a sealed hermetic base
- *     (`provenance/gamma.ts`, `provenance/replay.ts`, `provenance/hermetic-env.ts`).
+ *     contract) / `LexicalScope.child` — the LATTER is also how provenance replay
+ *     mints its own per-wire/per-playback frames above `hermetic-env.ts`'s vocabulary
+ *     scope (`gamma.ts`'s `applyWireInEnv`, `replay.ts`'s playback frame): Stage C Cut
+ *     3 rebuilt hermetic replay over the self-hosted vocabulary path, so those
+ *     modules no longer call this function directly — they go through
+ *     `LexicalScope.child`, same as any other session-scoped frame birth.
  */
 export function mintFrame(
   parent: ResolvingAmbient,

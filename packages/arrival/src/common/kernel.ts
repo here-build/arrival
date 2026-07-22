@@ -223,7 +223,7 @@ let bakeOverlaySeq = 0;
  *
  * The kernel stays env-agnostic, so the SEALED ARTIFACT — the `CompiledResolutionChain`
  * (eval/CompiledResolutionChain.ts) — is compiled by the scheme-side assembly call sites
- * (generator-exec's `ensureBaseAssembled`/`assembleCapabilityBase` call
+ * (generator-exec's `ensureBaseAssembled`/`assembleAmbient` call
  * `sealResolutionChain(base)` right after this resolves).
  */
 export async function assembleEnv<E>(base: E, roots: readonly EnvPack<E>[]): Promise<AssembledEnv<E>> {

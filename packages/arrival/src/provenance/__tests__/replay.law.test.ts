@@ -39,6 +39,7 @@ import type { Classifier } from "../../provenance/lineage.js";
 import { buildWireframe } from "../../provenance/wireframe/builder.js";
 import { freeVars } from "../../provenance/wireframe/free-vars.js";
 import { hermeticEnv } from "../../provenance/hermetic-env.js";
+import { BASE_ROSTER } from "../../env/base-roster.js";
 import {
   FrozenMints,
   ReplayScopeError,
@@ -49,6 +50,7 @@ import {
   replayProgramWithPlayback,
 } from "../../provenance/replay.js";
 import { setEmissionEnabled } from "../../provenance/store/emit.js";
+import { UnboundVariableError } from "../../errors.js";
 import type { Payload } from "../../provenance/store/interfaces.js";
 import type { EmittedWire, WireframeGraph } from "../../provenance/wireframe/types.js";
 import { EnvCapability } from "../../common/capability.js";
@@ -176,15 +178,17 @@ describe("wire-γ (§4 CHOSEN: the frame is abstract interpretation, loop-free s
     }
     expect(wiresChecked).toBeGreaterThan(0);
 
-    // (2) the replay env is source-free: γ can only answer from frozen ingress.
+    // (2) the replay env is source-free: γ can only answer from frozen ingress. Checked
+    // against the FULL resolution surface (vocabulary + scope), not just the scope
+    // frame's own bindings — an unbound reference is the structural proof.
     const program = await wfCorpus(`(+ (src-a) 1)`);
-    const env = await hermeticEnv([], program.prelude.source);
+    const base = await hermeticEnv([...BASE_ROSTER], program.prelude.source);
     for (const op of Object.keys(CORPUS_ROLES)) {
       if (CORPUS_ROLES[op] === "source") {
-        expect(
-          env.get(op, { throwError: false }),
+        await expect(
+          execState(op, { capabilities: base.capabilities, config: base.config, scope: base.scope, runCtx: base.runCtx }),
           `"${op}" must NOT resolve in the hermetic replay env`,
-        ).toBeUndefined();
+        ).rejects.toThrow(UnboundVariableError);
       }
     }
   });
@@ -295,9 +299,11 @@ describe("replay-nondeterminism (§4 R1 + §7: frozen-payload replay stable unde
 
     // R1's mechanism, asserted structurally: the hermetic replay env binds NO live
     // source at all — re-invocation is unrepresentable, not merely avoided.
-    const env = await hermeticEnv([], program.prelude.source);
+    const base = await hermeticEnv([...BASE_ROSTER], program.prelude.source);
     for (const op of Object.keys(SOURCES)) {
-      expect(env.get(op, { throwError: false })).toBeUndefined();
+      await expect(
+        execState(op, { capabilities: base.capabilities, config: base.config, scope: base.scope, runCtx: base.runCtx }),
+      ).rejects.toThrow(UnboundVariableError);
     }
   });
 

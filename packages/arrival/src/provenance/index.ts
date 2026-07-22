@@ -88,7 +88,7 @@ export {
   reachesPort,
   type PreludeMembership,
 } from "./prelude.js";
-export { hermeticEnv, type IngressBindings } from "./hermetic-env.js";
+export { hermeticEnv, type HermeticEnv, type IngressBindings } from "./hermetic-env.js";
 export { hermeticApply, type HermeticApplyOptions } from "./gamma.js";
 
 // ── Replay drivers — the "every crossing answered from the recorded payload stream" claim,

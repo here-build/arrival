@@ -132,7 +132,7 @@ export function compileResolutionChain(base: AmbientRuntime): CompiledResolution
 // ── The seal registry ────────────────────────────────────────────────────────────────
 //
 // ONE chain per baked base (realm-shared memo, GC'd with the env). Assembly call sites
-// (generator-exec's `ensureBaseAssembled` / `assembleCapabilityBase`) call this at bake
+// (generator-exec's `ensureBaseAssembled` / `assembleAmbient`) call this at bake
 // end — the explicit SEAL; `Capabilities.assembled` calls it too, so an assembled base
 // reaching the exec seam by any route resolves through the same artifact.
 const sealedChains = new WeakMap<AmbientRuntime, CompiledResolutionChain>();

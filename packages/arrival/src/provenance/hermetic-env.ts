@@ -1,37 +1,45 @@
 /**
  * THE HERMETIC ASSEMBLER RECIPE: replay = γ = `apply` of the wire lambda to recorded
- * ingress in a hermetic env (base packs + program prelude + ingress bindings via the
- * env-capability assembler). A NAMED COMPOSITION of primitives already at HEAD —
- * `assembleEnv`/`EnvCapability`/`schemePacks` — not new assembly machinery.
+ * ingress in a hermetic env, executed under region discipline. STAGE C CUT 3 — rebuilt
+ * over the SELF-HOSTED VOCABULARY path (`env/vocabulary.ts`/`env/assemble-run.ts`) instead
+ * of the retired `lower()`/`assembleEnv`/`schemePacks` capability-lowering trio. A NAMED
+ * COMPOSITION of primitives already at HEAD — `assembleRun`/`execState`/`LexicalScope` —
+ * not new assembly machinery.
  *
- * SHAPE, mirroring `eval/generator-exec.ts`'s private `assembleCapabilityBase` (the
- * exact pattern `exec({ capabilities })` already builds for a per-call capability-
- * augmented base — hermetic replay envs likewise assemble fresh and never touch that
- * shared frame):
+ * SHAPE:
  *
- *   1. a FRESH `mintFrame(user_env)` child — isolation (no cross-replay bleed), while
- *      still inheriting the standard assembled base (`user_env → global_env`) for free;
- *   2. `basePacks` (the program's OWN capabilities — mcp/infer/…, if the original run
- *      used any) lowered and set as the prelude pack's `deps` — so the kernel applies
- *      them in C3 (dependency) order and a dependency's macros/defs are present before
- *      the prelude's bootstrap runs (the bootstrap sequence falls out of the DAG, not a
- *      hand-maintained order; `common/scheme-env.ts`). This is why the prelude pack
- *      declares them as deps rather than relying on array-order incidence;
- *   3. the PRELUDE pack: `schemePacks`' `bootstrap` field evaluates the joined
- *      pure-define source (`prelude.ts`'s `buildPreludeSource`) — landing every pure
- *      define as an ORDINARY BINDING on the same `base` env every pack applies onto
- *      (never the assembly-time-only `preludeOnly` overlay: a wire replayed later must
- *      resolve these names at ordinary lookup time, not just during the bake);
- *   4. SEALED (`sealResolutionChain`) — T2's content-address hook needs no separate
- *      wiring: the prelude's define names already merged into `base.__env__` by step 3,
- *      so they are already part of whatever `compileResolutionChain` walks and hashes
- *      (`CompiledResolutionChain.hash`, FNV-1a over the merged vocabulary's sorted
- *      names) — exactly like any base capability's own symbols;
- *   5. ingress bindings land as a FRAME ABOVE the sealed base (mirrors `env-roots.ts`'s
- *      "session frame above the chain" for top-level user defines) — the sealed
- *      artifact has no write surface, and per-replay ingress values are exactly the
- *      un-baked, per-call data that frame is for; they are never folded into the baked
- *      chain itself.
+ *   1. `assembleRun` mints the run's `RunContext` over `basePacks`' OWN vocabulary tuple
+ *      — `basePacks` are the FUNCTION ARGUMENT (the tape decides the roster): this
+ *      module never folds `BASE_ROSTER` itself. A caller wanting the standard base
+ *      available (every production caller today — `gamma.ts`/`replay.ts`/
+ *      `replay-walk.ts`) folds it into `basePacks` at ITS OWN call site before reaching
+ *      here (env/base-roster.ts's own doc: the self-hosting fold is the ENTRY POINT's
+ *      responsibility, never baked into `assembleRun`/`buildVocabulary` — this module is
+ *      just another such entry point, not a third place that fold lives);
+ *   2. a FRESH `LexicalScope.fresh()` root — isolation (no cross-replay bleed), the
+ *      top-level LEXICAL scope species (THE CORNERSTONE) a replayed program's own
+ *      defines land in, never the ambient/vocabulary map itself;
+ *   3. the PRELUDE — `prelude.ts`'s `buildPreludeSource`, the joined SOURCE of the
+ *      program's PURE top-level defines — evaluated as ORDINARY top-level code via
+ *      `execState(prelude, { capabilities: basePacks, config, scope, runCtx })`, landing
+ *      every pure define as a REAL binding directly in the root scope (never a
+ *      discarded per-run overlay, unlike `assembleRun`'s OWN capability-prelude pass):
+ *      on the legacy path the prelude pack's bootstrap ran via `assembleEnv` straight
+ *      into the shared `base` frame every wire application resolved through, so a wire
+ *      body referencing a prelude-defined name resolved it as an ordinary binding — the
+ *      replayed program's own code (and every wire γ'd against this scope) must keep
+ *      seeing exactly that, so the discard `assembleRun`'s per-run prelude pass performs
+ *      for CAPABILITY preludes would be the WRONG discipline here; binding into the
+ *      persistent root scope is the one that preserves it;
+ *   4. ingress bindings (the recorded port/slot payloads a wire's parameters resolve
+ *      to) land directly in the SAME root scope, AFTER the prelude runs — the
+ *      un-baked, per-call data `hermeticApply`'s single-shot application needs visible
+ *      to it; a caller `γ`-ing MANY wires against ONE shared base (`gamma.ts`'s
+ *      `applyWireInEnv`, replay.ts's per-node walk) instead mints a FRESH CHILD scope
+ *      per wire and binds THAT wire's ingress there, so wires never see each other's
+ *      bindings — this module's own `ingress` parameter is for the single-shot case
+ *      only (`hermeticApply`); the shared-base callers pass `{}` here and do their own
+ *      per-wire child-scope binding.
  *
  * Callers MUST partition with `prelude.ts`'s `classifyProgramPrelude` /
  * `assertPreludeEligible` first — a port-reaching define must never reach `prelude`
@@ -39,23 +47,32 @@
  */
 import invariant from "tiny-invariant";
 
-import { bindValue, AmbientRuntime, type AmbientValue, mintFrame, type ResolvingAmbient, isAmbientRuntime } from "../env/AmbientRuntime.js";
-import { user_env } from "../env/env-roots.js";
-import { assembleEnv, type EnvPack } from "../common/kernel.js";
-import { schemePacks, type EvalSchemeInto, type SchemeEnv } from "../common/scheme-env.js";
+import { bindValue, isAmbientRuntime, type AmbientValue } from "../env/AmbientRuntime.js";
+import { LexicalScope, type SessionScope } from "../eval/LexicalScope.js";
 import type { EnvCapability } from "../common/capability.js";
-import { sealResolutionChain } from "../eval/CompiledResolutionChain.js";
-import { ensureBaseAssembled, exec } from "../eval/generator-exec.js";
+import type { EvalPreludeInto, EvalSchemeInto } from "../common/scheme-env.js";
+import { assembleRun } from "../env/assemble-run.js";
+import { exec, execState } from "../eval/generator-exec.js";
+import type { RunContext } from "../run/RunContext.js";
 
-/** The ONE evalScheme every pack in this assembly shares — mirrors
- *  `generator-exec.ts`'s private `capabilityEvalScheme` (re-derived from the public
- *  `exec`, rather than reaching around that module's own encapsulation).
- *  `skipBootstrapWait`: `hermeticEnv` already awaits `ensureBaseAssembled` itself
- *  before this ever runs — a nested prelude eval must not re-await the (already
- *  settled) realm bootstrap promise. */
+/** The evalScheme every basePack's OWN `symbol.define`/`defineSyntax` bake shares —
+ *  mirrors `generator-exec.ts`'s private `capabilityEvalScheme` (re-derived from the
+ *  public `exec`, rather than reaching around that module's own encapsulation).
+ *  `skipBootstrapWait`: a replay's basePacks tuple is its OWN self-hosted vocabulary —
+ *  this bake must never await (or trigger) the LEGACY realm bootstrap. */
 const replayEvalScheme: EvalSchemeInto = (env, source) => {
   invariant(isAmbientRuntime(env), "hermeticEnv: expected a concrete AmbientRuntime");
   return exec(source, { env, skipBootstrapWait: true });
+};
+
+/** The evalPrelude every basePack's OWN `.spec.prelude` runs through (`assembleRun`'s
+ *  per-run pass) — the SAME `skipBootstrapWait` posture, plus this run's own `runCtx`
+ *  threaded through (mirrors `generator-exec.ts`'s private `preludeEvalScheme`). In
+ *  practice `BASE_ROSTER` declares no prelude today (env/base-roster.ts's own doc), so
+ *  this fires only for a caller-supplied basePack that declares one. */
+const replayEvalPrelude: EvalPreludeInto = (env, source, runCtx) => {
+  invariant(isAmbientRuntime(env), "hermeticEnv: expected a concrete AmbientRuntime");
+  return exec(source, { env, runCtx, skipBootstrapWait: true });
 };
 
 /** Ingress bindings a replay supplies to the hermetic env — the recorded port payloads
@@ -65,38 +82,58 @@ const replayEvalScheme: EvalSchemeInto = (env, source) => {
 export type IngressBindings = Readonly<Record<string, AmbientValue>>;
 
 /**
- * Build the hermetic replay env: base packs + program prelude + ingress bindings.
- * `basePacks` are the program's own capabilities (mcp/infer/…), assembled
- * atop the standard base; `prelude` is the joined SOURCE of the program's PURE
- * top-level defines (`prelude.ts`'s `buildPreludeSource` — never a port-reaching
- * define, per that module's partition); `ingress` are the recorded payloads a
- * replayed wire's parameters bind to, landing in a frame ABOVE the sealed base.
+ * The hermetic replay handle: the run's `RunContext` (reused verbatim across every
+ * γ application a caller performs against this base — `assembleRun`'s tuple-identity
+ * invariant is what makes that reuse sound) plus the root `LexicalScope` a replayed
+ * program's / wire's own defines land in. `capabilities`/`config` are threaded back so a
+ * caller driving MULTIPLE subsequent `execState`/`exec` calls against this SAME base
+ * (`gamma.ts`'s `applyWireInEnv`, replay.ts's per-node walk) can repeat the IDENTICAL
+ * tuple — required for `assembleRun`'s reuse check to keep matching (see that module's
+ * own header on the tuple-identity invariant).
+ */
+export interface HermeticEnv {
+  readonly runCtx: RunContext;
+  readonly scope: SessionScope;
+  readonly capabilities: readonly EnvCapability[];
+  readonly config?: object;
+}
+
+/**
+ * Build the hermetic replay env: `basePacks`' own vocabulary + program prelude +
+ * ingress bindings, over a fresh session `RunContext`/`LexicalScope` pair. `basePacks`
+ * are the program's own capabilities (mcp/infer/…) — see this module's own header for
+ * why `BASE_ROSTER` is never folded in here; `prelude` is the joined SOURCE of the
+ * program's PURE top-level defines (`prelude.ts`'s `buildPreludeSource` — never a
+ * port-reaching define, per that module's partition); `ingress` are the recorded
+ * payloads a replayed wire's parameters bind to, landing in the SAME root scope,
+ * AFTER the prelude runs (so an ingress name wins over a same-named prelude define,
+ * mirroring the legacy "ingress frame ABOVE the sealed base" precedence).
  */
 export async function hermeticEnv(
   basePacks: readonly EnvCapability[],
   prelude: string,
   ingress: IngressBindings = {},
   config?: object,
-): Promise<ResolvingAmbient> {
-  await ensureBaseAssembled(); // the standard base (`user_env → global_env`) is live + sealed
-  const base = mintFrame(user_env, "provenance-hermetic-replay");
-  const loweredBase: EnvPack<SchemeEnv>[] = basePacks.map((c) => c.lower({ evalScheme: replayEvalScheme, config }));
-  const preludePack = schemePacks(replayEvalScheme)({
-    name: "provenance/hermetic-prelude",
-    deps: loweredBase,
-    bootstrap: prelude,
+): Promise<HermeticEnv> {
+  // Mint the run's OWN RunContext directly (never through `execState`, which would own
+  // — and dispose — a self-minted RunContext at ITS call's end): this handle must
+  // outlive the prelude eval below and every later γ application a caller performs
+  // against it.
+  const runCtx = await assembleRun({
+    capabilities: basePacks,
+    config,
+    evalScheme: replayEvalScheme,
+    evalPrelude: replayEvalPrelude,
   });
-  await assembleEnv(base, [preludePack]);
-  // THE SEAL: the prelude's defines already landed in `base.__env__` above —
-  // sealing here just compiles the now-complete chain; no separate hash hook needed.
-  sealResolutionChain(base);
-  // Internal frame-mint for the ingress layer (module-internal `mintFrame` + `bindValue`,
-  // the replay-ingress arm of the monadic-birth ruling). FUTURE SHAPE, if this ever earns
-  // its own door: a small internal "replay pack" — recorded ingress values as a capability
-  // contribution assembled above the sealed base. Not built now: ingress frames are
-  // per-replay, deliberately ABOVE the seal (never baked), and cheap — a full
-  // assemble+seal per wire would inflate replay for zero isolation gain.
-  const frame = mintFrame(base, "provenance-ingress");
-  for (const [name, value] of Object.entries(ingress)) bindValue(frame, name, value);
-  return frame;
+  const scope = LexicalScope.fresh("provenance-hermetic-replay");
+  // THE PRELUDE, as ORDINARY top-level code — see this module's own header for why a
+  // real (non-discarded) binding into `scope` is the discipline this replays: reusing
+  // `runCtx` here (never a self-minted one) means this call never disposes it.
+  if (prelude.length > 0) {
+    await execState(prelude, { capabilities: basePacks, config, scope, runCtx });
+  }
+  // THE INGRESS — bound directly into the same root scope, AFTER the prelude, so an
+  // ingress name takes precedence on a collision (see this module's own header).
+  for (const [name, value] of Object.entries(ingress)) bindValue(scope.env, name, value);
+  return { runCtx, scope, capabilities: basePacks, config };
 }

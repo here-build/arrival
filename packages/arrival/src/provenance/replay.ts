@@ -52,7 +52,8 @@
  *      stable FROM. Refusal-with-route, never a wrong value.
  */
 import { execState } from "../eval/generator-exec.js";
-import { bindRosetta, mintFrame, type AmbientValue, type ResolvingAmbient } from "../env/AmbientRuntime.js";
+import { bindRosetta, type AmbientValue } from "../env/AmbientRuntime.js";
+import { BASE_ROSTER } from "../env/base-roster.js";
 import { collapseProvenance } from "./provenance-collapse.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { jsToScheme, schemeToJs } from "../membrane/rosetta.js";
@@ -61,7 +62,7 @@ import { withSilentRegion } from "../membrane/region-scope.js";
 import type { SchemeValue } from "../values/types.js";
 import type { EnvCapability } from "../common/capability.js";
 import { applyWireInEnv } from "./gamma.js";
-import { hermeticEnv, type IngressBindings } from "./hermetic-env.js";
+import { hermeticEnv, type HermeticEnv, type IngressBindings } from "./hermetic-env.js";
 import { foldRegionStream } from "./store/fold.js";
 import type { Payload, PayloadStore, ProvenanceStore } from "./store/interfaces.js";
 import type { MintRecord } from "./store/records.js";
@@ -176,7 +177,10 @@ export async function replayGraphEgress(opts: ReplayGraphOptions): Promise<Repla
   const { program, frozen, decisions, slots = {}, basePacks = [], config } = opts;
   const graph = opts.graph ?? program.main;
   return withSilentRegion(async () => {
-    const base = await hermeticEnv(basePacks, program.prelude.source, {}, config);
+    // THE STANDARD-BASE FOLD — this call site's own responsibility, not
+    // `hermeticEnv`'s (see that module's own header); see gamma.ts's `hermeticApply`
+    // for the identical fold and its rationale.
+    const base = await hermeticEnv([...basePacks, ...BASE_ROSTER], program.prelude.source, {}, config);
     const boxed = await replayGraphIn(base, program, graph, frozen, slots, decisions);
     return { boxed, value: schemeToJs(boxed, {}) };
   });
@@ -184,7 +188,7 @@ export async function replayGraphEgress(opts: ReplayGraphOptions): Promise<Repla
 
 /** The recursive walk `replayGraphEgress` wraps (shared base env, one silent region). */
 async function replayGraphIn(
-  base: ResolvingAmbient,
+  base: HermeticEnv,
   program: WireframeProgram,
   graph: WireframeGraph,
   frozen: FrozenMints,
@@ -350,11 +354,12 @@ export interface PlaybackReplayOptions {
 export async function replayProgramWithPlayback(opts: PlaybackReplayOptions): Promise<ReplayedValue> {
   const { source, playback, basePacks = [], config } = opts;
   return withSilentRegion(async () => {
-    const base = await hermeticEnv(basePacks, "", {}, config);
-    const frame = mintFrame(base, "provenance-playback");
+    // THE STANDARD-BASE FOLD — see `replayGraphEgress`'s own comment.
+    const base = await hermeticEnv([...basePacks, ...BASE_ROSTER], "", {}, config);
+    const playbackScope = base.scope.child("provenance-playback");
     for (const [op, payloads] of playback) {
       const queue = [...payloads];
-      bindRosetta(frame, op, {
+      bindRosetta(playbackScope.env, op, {
         fn: () => {
           const next = queue.shift();
           if (next === undefined) {
@@ -368,7 +373,12 @@ export async function replayProgramWithPlayback(opts: PlaybackReplayOptions): Pr
         },
       });
     }
-    const state = await execState(source, { env: frame, skipBootstrapWait: true });
+    const state = await execState(source, {
+      capabilities: base.capabilities,
+      config: base.config,
+      scope: playbackScope,
+      runCtx: base.runCtx,
+    });
     const boxed = state.values.at(-1);
     if (boxed === undefined) {
       throw new ReplayScopeError("port", "program", "the program evaluated zero forms — nothing to replay");
@@ -450,7 +460,8 @@ export async function replayBetweenRecords(opts: ReplayBetweenRecordsOptions): P
   const mints = stream.filter((r): r is MintRecord => r.kind === "mint");
 
   return withSilentRegion(async () => {
-    const base = await hermeticEnv(basePacks, prelude, {}, config);
+    // THE STANDARD-BASE FOLD — see `replayGraphEgress`'s own comment.
+    const base = await hermeticEnv([...basePacks, ...BASE_ROSTER], prelude, {}, config);
     const steps: ReplayStep[] = [];
     let acc: SchemeValue = initial;
     for (const record of mints) {
