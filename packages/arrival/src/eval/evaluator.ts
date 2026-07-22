@@ -1441,9 +1441,13 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // The runner — the lambda body, INJECTED into the ALambda value (the value layer
   // names no evaluator symbol; same seam `Macro` uses). `canBounce` drives the bounce
   // protocol (preamble): true ⇒ hand back the body generator as a Bounce; false ⇒ run
-  // to completion for a JS/HOF caller. The body evaluates against the DEFINITION-time
-  // ctx — the accepted `runCtx` is unused (call-time runCtx threading is a later cut).
-  const runner = (values: SchemeValue[], _callCtx: CallCtx, canBounce: boolean): CallResult => {
+  // to completion for a JS/HOF caller. The LEXICAL axis stays definition-time (that is
+  // what a closure IS — `closureResolver` captured the minting scope); only the RUN axis
+  // swaps to the CALLING run at invocation (`callCtx.runCtx`: meter, strict, channels,
+  // config/resources, signal, cache). tf/apply is the sole meeting point of immutable
+  // description and run state, and must hand over the PRESENT — so `bodyCtx` takes its
+  // resolver/dynamic frame from def-time `ctx` but its runCtx/strict/signal from `callCtx`.
+  const runner = (values: SchemeValue[], callCtx: CallCtx, canBounce: boolean): CallResult => {
     const callResolver = closureResolver.child("lambda", "lambda");
     let argNode: SchemeValue = args;
     let i = 0;
@@ -1453,9 +1457,10 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       i++;
       argNode = argNode.cdr;
     }
-    // Rest arg: (lambda (a b . rest) …)
+    // Rest arg: (lambda (a b . rest) …) — allocate against the CALLER's meter (the run
+    // axis this invocation charges), not the def-time run's.
     if (argNode instanceof ASymbol) {
-      bindValue(callResolver.env, argNode, APair.fromArray(ctx.runCtx, values.slice(i), false));
+      bindValue(callResolver.env, argNode, APair.fromArray(callCtx.runCtx, values.slice(i), false));
     }
     // Dynamic call site: the caller (evaluatePair / wrapLambdaValue) set the holder just before
     // invoking; else fall back to the lexical ctx's invocation. Read here in the synchronous
@@ -1463,9 +1468,20 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     const dynamicInv = currentDynamicCallSite() ?? ctx.currentInvocation;
     // Lambda body starts in tail position (preamble TAIL PROPAGATION): tail=true here
     // propagates through evalBegin/evalIf/… to the terminal body expr.
-    const bodyCtx: EvalContext = { ...ctx, resolver: callResolver, currentInvocation: dynamicInv, tail: true };
+    const bodyCtx: EvalContext = {
+      ...ctx,
+      resolver: callResolver,
+      currentInvocation: dynamicInv,
+      tail: true,
+      // Run axis (call-time): swap the run and its flat EvalContext mirrors. Everything
+      // else on `ctx` (resolver already overridden, dynamic_env/tap/error/_stack) is the
+      // lexical/observability axis and stays def-time.
+      runCtx: callCtx.runCtx,
+      strict: callCtx.runCtx.strict,
+      signal: callCtx.runCtx.signal,
+    };
     if (canBounce) return makeBounce(evalBegin(body, bodyCtx));
-    return run(evalBegin(body, bodyCtx), { signal: ctx.signal });
+    return run(evalBegin(body, bodyCtx), { signal: callCtx.runCtx.signal });
   };
 
   // Positional parameter names + arity (introspection + tracer↔param-slot correlation).
@@ -1786,7 +1802,7 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     // before any TICK check runs (the budget can't rescue an overflow in await
     // machinery). The `run(...)` fallback (HOF escape, `canBounce` false) forwards
     // `signal`; the bounce path inherits the outer ctx's signal directly.
-    const runner = (values: SchemeValue[], _callCtx: CallCtx, canBounce: boolean): CallResult => {
+    const runner = (values: SchemeValue[], callCtx: CallCtx, canBounce: boolean): CallResult => {
       const loopResolver = letResolver.child("named-let", "named-let");
 
       for (const [i, param] of params.entries()) {
@@ -1801,12 +1817,18 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
         // Named-let body is tail w.r.t. the `(loop ...)` call site (preamble TAIL
         // PROPAGATION) — this is what makes `(loop (+ i 1))` tail-dispatch.
         tail: true,
+        // Run axis (call-time): the loop lambda is a real ALambda, so a cross-run
+        // `(loop …)` swaps the run and its flat mirrors like evalLambda above; the
+        // lexical `letResolver` stays def-time.
+        runCtx: callCtx.runCtx,
+        strict: callCtx.runCtx.strict,
+        signal: callCtx.runCtx.signal,
       };
       if (canBounce) {
         return makeBounce(evalBegin(body, bodyCtx));
       }
       return run(evalBegin(body, bodyCtx), {
-        signal: ctx.signal,
+        signal: callCtx.runCtx.signal,
       });
     };
 
