@@ -1,7 +1,23 @@
 import { CLASS } from "../well-known-symbols.js";
+import { TF_EXPAND } from "../values/tagless-final.js";
 import type { RunContext } from "../run/RunContext.js";
 import type { SchemeValue } from "../values/types.js";
+import type { APair } from "../values/primitives/APair.js";
+import type { AmbientRuntime } from "../env/AmbientRuntime.js";
 import type { Resolver } from "./Resolver.js";
+
+/**
+ * The uniform result of the `TF_EXPAND` term — a transcribed FORM plus, for a hygienic
+ * transformer, the scope it must evaluate in. `Syntax.expand` always supplies `scope`
+ * (its `MacroExpansion`); a `Macro` fexpr never does (its expansion evaluates in the
+ * use-site resolver). `expr` may be a promise at runtime — a define-macro `__fn__` can
+ * be async — which the evaluator awaits before evaluating (the term stays a thin sync
+ * wrapper; the trampoline owns the await).
+ */
+export interface Expansion {
+  expr: SchemeValue;
+  scope?: AmbientRuntime;
+}
 
 export interface MacroInvokeContext {
   env: unknown;
@@ -61,6 +77,15 @@ export class Macro {
   // `env` as `this`; `macro_expand` lets a macro recursively expand its own output.
   invoke(code: unknown, { env, ...rest }: MacroInvokeContext, macro_expand: boolean = false): SchemeValue {
     return this.__fn__.call(env, code, { ...rest, macro_expand }, this.__name__) as SchemeValue;
+  }
+
+  // RAW-ARG dispatch term (the head gate reads it via `is_expandable`). A fexpr consumes the
+  // keyword-STRIPPED operands (`code.cdr` — the `rest` the evaluator historically split off),
+  // and produces a scope-less `Expansion` (it evaluates in the use-site resolver). `Syntax`
+  // carries the sibling term returning `{ expr, scope }`. Kept a thin sync wrapper: the
+  // possibly-async `invoke` result rides `expr` and the trampoline awaits it.
+  [TF_EXPAND](code: APair<SchemeValue, SchemeValue>, ctx: MacroInvokeContext): Expansion {
+    return { expr: this.invoke(code.cdr, ctx, false) };
   }
 
   toString(): string {

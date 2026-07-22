@@ -33,3 +33,12 @@ export type TaglessOp = StripTaglessPrefix<keyof AValue>;
 export function tf<K extends TaglessOp>(name: K): `${TaglessPrefix}${K}` {
   return `${TAGLESS_PREFIX}${name}`;
 }
+
+/** The ONE control-form term that lives in the tagless namespace but is NOT an `AValue` op.
+ *  It marks the RAW-ARG calling discipline (a macro: unevaluated operands → a replacement form)
+ *  the way `tf("apply")` marks the EVAL-ARG discipline (a procedure). It is spelled here for
+ *  namespace consistency, but declared as a standalone constant — NOT via `tf()`/`TaglessOp` —
+ *  because its carriers (`Macro`/`Syntax`, eval/) are control forms OUTSIDE `SchemeValue`, not
+ *  `AValue`s: a macro is never a first-class value, so its dispatch term must not widen the
+ *  value algebra. The evaluator's head gate reads it structurally via `is_expandable`. */
+export const TF_EXPAND = `${TAGLESS_PREFIX}expand` as const;

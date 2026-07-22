@@ -1,7 +1,9 @@
 import { CLASS } from "../well-known-symbols.js";
+import { TF_EXPAND } from "../values/tagless-final.js";
 import type { AmbientRuntime } from "../env/AmbientRuntime.js";
 import type { SchemeValue } from "../values/types.js";
-import type { MacroInvokeContext } from "./Macro.js";
+import type { Expansion, MacroInvokeContext } from "./Macro.js";
+import type { APair } from "../values/primitives/APair.js";
 import type { Resolver } from "./Resolver.js";
 
 type SyntaxLike = Syntax | Function;
@@ -93,6 +95,15 @@ export class Syntax {
       defResolver: this.__resolver__,
     };
     return this.__fn__.call(env, code, args, this.__name__ || "syntax") as MacroExpansion;
+  }
+
+  // RAW-ARG dispatch term (the head gate reads it via `is_expandable`). A `syntax-rules`
+  // transformer matches against the FULL form (`code` — its keyword occupies the pattern's
+  // first slot), so unlike `Macro`'s term it forwards `code` intact, not `code.cdr`. Returns
+  // `{ expr, scope }`: the transcribed form plus the hygiene scope it evaluates in — the
+  // `scope` half `Macro`'s scope-less `Expansion` omits.
+  [TF_EXPAND](code: APair<SchemeValue, SchemeValue>, ctx: MacroInvokeContext): Expansion {
+    return this.expand(code, ctx);
   }
 
   toString(): string {

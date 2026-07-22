@@ -1,5 +1,6 @@
 import { Macro } from "./Macro.js";
 import { Syntax } from "./Syntax.js";
+import { TF_EXPAND } from "../values/tagless-final.js";
 // Leaf value-kernel predicates live in value-guards.ts (no AmbientRuntime/Macro dep) so
 // Pair.ts can import them without pulling in the evaluator world; re-exported here so a
 // `from "./guards.js"` call site resolves them unchanged.
@@ -24,6 +25,16 @@ export function is_int(value: unknown): value is number {
 // Syntax` — see evaluator.ts.
 export function is_macro(o: unknown): o is Macro | Syntax {
   return o instanceof Macro || o instanceof Syntax || o instanceof Syntax.Parameter;
+}
+
+// Structural RAW-ARG discipline: any head carrying the `TF_EXPAND` term (a `Macro` or a
+// `Syntax`) — the expand-time counterpart to `is_applyable`'s EVAL-ARG `tf("apply")` check.
+// The head gate dispatches on THIS, not on `instanceof Macro | Syntax`, so a value's calling
+// discipline travels with the value's terms, not its class. (`Syntax.Parameter`, the SRFI-139
+// wrapper, carries no term and is not a call head — it falls through to the non-callable door,
+// as it always structurally should.)
+export function is_expandable(o: unknown): boolean {
+  return typeof (o as Record<PropertyKey, unknown> | null | undefined)?.[TF_EXPAND] === "function";
 }
 
 export function is_promise(o: unknown): o is Promise<unknown> {
