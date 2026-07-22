@@ -21,7 +21,7 @@ import { Values } from "../values/primitives/Values.js";
 import { R7RSError, UnrecognizedCrossingError, AsyncCrossingError } from "../errors.js";
 import { is_promise } from "../eval/guards.js";
 import { is_callable_value } from "../values/value-guards.js";
-import { applyCallback, type ACallable } from "../values/primitives/ACallable.js";
+import { applyCallback, _installCallableMarshal, type ACallable } from "../values/primitives/ACallable.js";
 import { type AUnwrap, type AWrap, type EgressMode, type SchemeBounceMarker, type SchemeValue } from "../values/types.js";
 import invariant from "tiny-invariant";
 import {
@@ -623,3 +623,13 @@ export const createRosettaWrapper = ({ fn, options = {}, pure = false }: Rosetta
     }
   };
 };
+
+// ── Callable-toJS marshal install (module init) ─────────────────────────────────────────────
+// ACallable's `arrival/toJS` builds its host-callable reverse-membrane wrapper through these
+// two crossings, but cannot import this module (the scheme-zod init cycle its preamble
+// documents) — so the seam is injected here, once, at membrane load. Default-options crossings
+// only; the mode-keyed, region-disciplined projection stays `callableToHostFn` above.
+_installCallableMarshal({
+  jsToScheme: (runCtx, value) => jsToScheme(runCtx, value, {}),
+  schemeToJs: (value) => schemeToJsUntyped(value),
+});

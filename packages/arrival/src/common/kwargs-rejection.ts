@@ -22,6 +22,7 @@
 import { ZodError, ZodType, type ZodRawShape } from "zod";
 import * as z from "./scheme-zod.js";
 import { AValue } from "../values/primitives/AValue.js";
+import { is_callable_value } from "../values/value-guards.js";
 import { ArrivalError, type ErrorClass } from "../errors.js";
 import { suggestFromVocabulary } from "../unbound-variable.js";
 
@@ -43,9 +44,12 @@ function kindOf(v: unknown): string {
 }
 
 /** The JS face of a value for previewing — an AValue projects through its own
- *  `arrival/toJS` protocol (never throws into the door path). */
+ *  `arrival/toJS` protocol (never throws into the door path). A CALLABLE previews
+ *  through `arrival/print` instead: its toJS is the reverse-membrane host fn (a real
+ *  crossing, not a face), and previewing must display, never cross. */
 function faceOf(v: unknown): unknown {
   if (v instanceof AValue) {
+    if (is_callable_value(v)) return v["arrival/print"]();
     try {
       return v["arrival/toJS"]();
     } catch {

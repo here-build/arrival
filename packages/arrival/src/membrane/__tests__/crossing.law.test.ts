@@ -922,7 +922,7 @@ describe("egress membrane exit — the two modes and their identity laws", () =>
     expect(viaToJS).toBe(viaRosetta);
   });
 
-  it("depth ≥ 2: the innermost callable crosses as fn under membrane, as string under bare", () => {
+  it("depth ≥ 2: the innermost callable crosses as a host FN under membrane AND bare (toJS is the membrane)", async () => {
     const inner = dictOf([["f", native("deep")]]);
     const outerDict = dictOf([["inner", inner]]);
     const outerVec = new AVector([inner]);
@@ -930,10 +930,12 @@ describe("egress membrane exit — the two modes and their identity laws", () =>
     expect(typeof viaDict.inner.f).toBe("function");
     const viaVec = schemeToJs(outerVec) as ReadonlyArray<{ f: unknown }>;
     expect(typeof viaVec[0].f).toBe("function");
-    // Bare protocol (serialization — what hostFace/faceOf call): string at every depth.
+    // Bare protocol answers the SAME faithful crossing (previously the print string —
+    // the display/membrane conflation this law now pins the fix of). Display is
+    // `arrival/print`'s job; a callable's toJS is host-callable at every depth.
     const bare = outerDict["arrival/toJS"]() as { inner: { f: unknown } };
-    expect(typeof bare.inner.f).toBe("string");
-    expect(bare.inner.f).toMatch(/^#<procedure/);
+    expect(typeof bare.inner.f).toBe("function");
+    expect((bare.inner.f as () => unknown)()).toBe(7);
   });
 
   // "nested forceBigInt: options reach container elements (the sibling defect, fixed)"
@@ -977,20 +979,22 @@ describe("egress membrane exit — the two modes and their identity laws", () =>
     expect(detached).not.toBe(proxyB);
   });
 
-  it("serialization law: bare toJS on a callable-bearing dict yields the print string", () => {
+  it("crossing law: bare toJS on a callable-bearing dict yields a host FN (display is print's job)", async () => {
     const d = dictOf([["f", native("ser")]]);
     const bare = d["arrival/toJS"]() as Record<string, unknown>;
-    expect(typeof bare.f).toBe("string");
-    expect(bare.f).toMatch(/^#<procedure/);
+    expect(typeof bare.f).toBe("function");
+    expect((bare.f as () => unknown)()).toBe(7);
+    // The display face did not move — it lives on `arrival/print`, unchanged.
+    expect(native("ser")["arrival/print"]()).toMatch(/^#<procedure:/);
   });
 
-  it("ADict pending entry settling to a callable: membrane → function, bare → string", async () => {
+  it("ADict pending entry settling to a callable: host FN through BOTH exits", async () => {
     const membraneDict = dictOf([["f", Promise.resolve<SchemeValue>(native("pend-m"))]]);
     const viaMembrane = schemeToJs(membraneDict) as Record<string, unknown>;
     expect(typeof (await viaMembrane.f)).toBe("function");
     const bareDict = dictOf([["f", Promise.resolve<SchemeValue>(native("pend-b"))]]);
     const viaBare = bareDict["arrival/toJS"]() as Record<string, unknown>;
-    expect(typeof (await viaBare.f)).toBe("string");
+    expect(typeof (await viaBare.f)).toBe("function");
   });
 
   it("wrapper cache is (callable, scope)-keyed: repeated egress in the same scope shares a wrapper (identity-stable; the old mem:0/mem:1 comparison retired with forceBigInt)", () => {
