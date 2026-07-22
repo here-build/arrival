@@ -387,9 +387,10 @@ export interface NativeTag<Config, Resources> {
 /** The factory `EnvCapability.define`'s `symbols` callback is invoked with. `rosetta`/`native`
  *  carry the `Config`/`Resources`-typed `this` overlay ({@link RosettaTag}/{@link NativeTag});
  *  every other tag is byte-identical to its module-singleton (`./symbols/index.js`) — none of
- *  `sequence`/`tagless`/`taglessGuard`/`notImplemented`/`keyword`/`macro`/`alias` read
- *  config/resources off `this` (sequence's impl takes `(args, runCtx)` positionally; the rest
- *  carry no author impl at all), so they need no overlay. */
+ *  `sequence`/`tagless`/`taglessGuard`/`notImplemented`/`keyword`/`macro`/`alias`/`define`/
+ *  `defineSyntax` read config/resources off `this` (sequence's impl takes `(args, runCtx)`
+ *  positionally; `define`/`defineSyntax` carry a two-phase scheme body, not a JS `this`-reading
+ *  impl; the rest carry no author impl at all), so they need no overlay. */
 export interface SymbolFactory<Config, Resources> {
   readonly rosetta: RosettaTag<Config, Resources>;
   readonly native: NativeTag<Config, Resources>;
@@ -400,6 +401,8 @@ export interface SymbolFactory<Config, Resources> {
   readonly keyword: typeof symbolFactories.keyword;
   readonly macro: typeof symbolFactories.macro;
   readonly alias: typeof symbolFactories.alias;
+  readonly define: typeof symbolFactories.define;
+  readonly defineSyntax: typeof symbolFactories.defineSyntax;
 }
 
 /** Build the injected `symbol` factory for one `define()` call: the REAL `./symbols/index.js`
