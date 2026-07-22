@@ -127,13 +127,19 @@ describe("ownership table (§3.3) — phase 5 disposes exactly what the call ass
   });
 
   it("the realm default: ExecState.ambient present; dispose() is a documented no-op", async () => {
-    const first = await execState(`(+ 1 2)`);
+    // Stage C Cut 2: a PLAIN bare `execState(code)` now rides the self-hosted vocabulary path
+    // (`ExecState.ambient` is ABSENT there — see `execStateViaVocabulary`'s own doc; a bare exec
+    // is the degenerate `BASE_ROSTER`-only tuple, no ambient product at all). Reaching the realm
+    // DEFAULT ambient this test pins requires one of the KEEP-LEGACY asks (`execState`'s router
+    // doc) even with no `capabilities` — `irLineage: false` is SET (not `undefined`) but falsy,
+    // forcing the ambient route without turning shadow mode on or changing anything else.
+    const first = await execState(`(+ 1 2)`, { irLineage: false });
     expect(first.ambient).toBeDefined();
     await first.ambient!.dispose(); // realm-scoped by design — must NOT tear the base down
-    const [stillWorks] = await exec(`(+ 20 22)`);
+    const [stillWorks] = await exec(`(+ 20 22)`, { irLineage: false });
     expect(stillWorks).toBe(42);
     // The realm memo: two default runs share ONE ambient identity.
-    const second = await execState(`(+ 1 1)`);
+    const second = await execState(`(+ 1 1)`, { irLineage: false });
     expect(second.ambient).toBe(first.ambient);
   });
 

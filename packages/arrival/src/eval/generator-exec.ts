@@ -11,15 +11,16 @@
 
 import { AmbientRuntime, mintFrame, mintPlainFrame, isAmbientRuntime, bindValue } from "../env/AmbientRuntime.js";
 import { user_env, global_env } from "../env/env-roots.js";
-import { buildVocabulary } from "../env/vocabulary.js";
+import { buildVocabulary, type Vocabulary } from "../env/vocabulary.js";
 import { assembleRun } from "../env/assemble-run.js";
+import { BASE_ROSTER } from "../env/base-roster.js";
 import run, { evaluate, expectValue, type EvalTap } from "./evaluator.js";
 import { ArrivalError, AmbientShapeError, isHostRuntimeBug, OutputContractError } from "../errors.js";
 import { Resolver } from "./Resolver.js";
 import { Capabilities } from "./Capabilities.js";
 import { LexicalScope } from "./LexicalScope.js";
 import { assembleEnv, type AssembledEnv } from "../common/kernel.js";
-import { sealResolutionChain } from "./CompiledResolutionChain.js";
+import { sealResolutionChain, type CompiledResolutionChain } from "./CompiledResolutionChain.js";
 import { StaticValidationError } from "../static-validation/validate-program.js";
 import type { DegradationMode } from "../common/degradation.js";
 import type { EnvCapability } from "../common/capability.js";
@@ -199,8 +200,12 @@ export async function assembleAmbient(opts: AssembleAmbientOptions = {}): Promis
 
 /**
  * The DEFAULT ambient — the realm-memoized product over the standard assembled base
- * (`user_env → global_env`), the phase-2 value a bare `exec(code)` resolves through.
- * NEVER disposed (realm-scoped by design — `disposable: false` makes `dispose()` a
+ * (`user_env → global_env`). Stage C Cut 2: a PLAIN bare `exec(code)` no longer resolves
+ * through this (it rides the self-hosted vocabulary path, `execStateViaVocabulary`'s degenerate
+ * `BASE_ROSTER`-only tuple, instead) — this remains the phase-2 value a KEEP-LEGACY bare-ish exec
+ * resolves through (e.g. `exec(code, { override })` with no `capabilities`: `execState`'s router
+ * sends it to `execStateViaAmbient`, whose own no-`capabilities`/no-`passedAmbient` branch falls
+ * here). NEVER disposed (realm-scoped by design — `disposable: false` makes `dispose()` a
  * documented no-op), exactly the ownership table's "realm default" row.
  */
 let _defaultAmbient: AssembledAmbient | undefined;
@@ -274,9 +279,12 @@ export interface ExecOptions {
   /**
    * THE CUT, scope-refined. Lexical root the run's top-level `define`s land in.
    * Pass a persistent {@link LexicalScope} (`LexicalScope.for(env)`) across calls
-   * for REPL-style multi-step accumulation, instead of the realm-cached default
-   * scratch frame. Builtins still resolve through the capability base (composed
-   * `scope.lookup ?? capabilities.lookup`). Ignored when `env` (glass) is set.
+   * for REPL-style multi-step accumulation, instead of the per-call default scope
+   * (a FRESH, isolated root on the vocabulary path — `execStateViaVocabulary`'s
+   * `LexicalScope.fresh()`, Stage C Cut 2; the realm-cached `defaultLexicalRoot()`
+   * scratch frame on the legacy ambient path). Builtins still resolve through the
+   * capability base (composed `scope.lookup ?? capabilities.lookup`). Ignored when
+   * `env` (glass) is set.
    */
   scope?: LexicalScope;
   /**
@@ -528,25 +536,31 @@ export interface ExecState {
 
 /**
  * Parse and execute Scheme code using the generator-based evaluator — the COMPLEX
- * tier (see {@link ExecState}). THE ROUTER (Stage B3): a `{ capabilities }` run — the branch
- * every real session takes — resolves through {@link execStateViaVocabulary} (the memoized
- * `Vocabulary` + `assembleRun`, `env/vocabulary.ts`/`env/assemble-run.ts`) BY DEFAULT; every
- * other shape (glass `env`, no `capabilities` at all, or one of the KEEP-LEGACY consumers
- * below) resolves through {@link execStateViaAmbient} — the original three-phase
- * `lower()`/`assembleEnv`/`instantiate` path, UNCHANGED.
+ * tier (see {@link ExecState}). THE ROUTER (Stage C Cut 2 — THE LINCHPIN,
+ * docs/plans/stage-c-corpse-deletion.md): EVERY run without a glass `env` and without one of the
+ * KEEP-LEGACY asks below — `{ capabilities }` runs AND a bare `exec(code)` alike — resolves
+ * through {@link execStateViaVocabulary} (the self-hosted, memoized `Vocabulary` + `assembleRun`,
+ * `env/vocabulary.ts`/`env/assemble-run.ts`/`env/base-roster.ts`) BY DEFAULT. A bare exec is now
+ * the DEGENERATE case of the same tuple (`capabilities` empty, the closure is just
+ * `BASE_ROSTER`) — the pre-Cut-2 "cheapest row on the ownership table" reasoning for keeping it
+ * on the ambient path is VOID per V's ruling (the Sonnet-scout deadlock was a local-perspective
+ * artifact; ambient/global scope are separate species, and a realm-parented default base was the
+ * legacy sin, not a cost optimization worth preserving). Only the KEEP-LEGACY set below resolves
+ * through {@link execStateViaAmbient} — the original three-phase `lower()`/`assembleEnv`/
+ * `instantiate` path, UNCHANGED this cut (it dies in Cut 3).
  *
- * KEEP-LEGACY set — a `{ capabilities }` run still rides the ambient path when it ALSO
- * requests one of these (each gated on the option's own presence, not a blanket flag):
+ * KEEP-LEGACY set — a run still rides the ambient path when it requests one of these (each
+ * gated on the option's own presence, not a blanket flag):
  *
  *   • `env` (glass) — never vocabulary-eligible; a live embedder frame has no bake to skip.
  *   • `ambient` — a CALLER-HELD `AssembledAmbient` (the MCP runner's warm-reuse idiom,
  *     `arrival-mcp`'s `DiscoveryTool`). An ambient may carry legacy `{ fn }` capabilities
  *     (`McpEnvCapability`) the vocabulary builder refuses outright, and its shape (chain +
  *     activations + disposable pack closure) has no vocabulary-path equivalent to convert
- *     into — Stage C (or a dedicated MCP-runner follow-up) migrates this call site itself,
- *     at which point it stops passing `ambient` and starts relying on the tuple memo
- *     (`buildVocabulary`/`assembleRun`, exported off `/env`) directly — see this module's own
- *     `execStateViaVocabulary` doc and the Stage-B plan's "ambient-reuse pattern" section.
+ *     into — a dedicated MCP-runner follow-up migrates this call site itself, at which point
+ *     it stops passing `ambient` and starts relying on the tuple memo (`buildVocabulary`/
+ *     `assembleRun`, exported off `/env`) directly — see this module's own
+ *     `execStateViaVocabulary` doc.
  *   • `override` (`define/overridable` sugar) — NOT migrated this stage (deliberately, per
  *     the plan): stays on the ambient path, whose `effectiveCapabilities`/`effectiveConfig`
  *     computation below already handles it. A later stage may fold the sugar into the
@@ -559,19 +573,18 @@ export interface ExecState {
  * `staticValidation`/`runCtx` reuse/`program` (precompiled) ARE served on the vocabulary
  * branch (see `execStateViaVocabulary`'s own doc) — they are not in the KEEP-LEGACY set.
  *
- * A bare `exec(code)` (no `capabilities`, no `env`) stays on the ambient path too — it
- * resolves through the realm-scoped, never-disposed `defaultAmbient()` singleton already,
- * the cheapest row on the ownership table; rerouting it would add vocabulary-tuple-memo
- * machinery (even a trivially-cached empty build) for a case the goal statement doesn't
- * name ("the branch every real session takes" is the `{ capabilities }` branch).
+ * ISOLATION (Cut 2): a run's top-level `define`s land in a FRESH, per-call lexical root unless
+ * the caller passes `scope` (or reuses `runCtx`) explicitly — see `execStateViaVocabulary`'s own
+ * doc for why the pre-Cut-2 realm-cached `defaultLexicalRoot()` sharing (which this router used
+ * to inherit for bare execs via the ambient path) does not carry over.
  *
- * `ExecOptions.vocabularyPath` is now a DEPRECATED no-op: every capability-bearing run this
- * router would route to `execStateViaVocabulary` on its own already does so, flag or not; the
- * flag survives only so a caller that explicitly opted in during B1/B2 keeps compiling.
+ * `ExecOptions.vocabularyPath` is now a DEPRECATED no-op: every run this router would route to
+ * `execStateViaVocabulary` on its own already does so, flag or not; the flag survives only so a
+ * caller that explicitly opted in during B1/B2 keeps compiling.
  */
 export async function execState(code: string | SchemeValue, options: ExecOptions = {}): Promise<ExecState> {
   const legacyOnlyConsumer = options.ambient !== undefined || options.override !== undefined || options.irLineage !== undefined;
-  if (options.env === undefined && options.capabilities !== undefined && !legacyOnlyConsumer) {
+  if (options.env === undefined && !legacyOnlyConsumer) {
     return execStateViaVocabulary(code, options);
   }
   return execStateViaAmbient(code, options);
@@ -832,35 +845,101 @@ async function execStateViaAmbient(code: string | SchemeValue, options: ExecOpti
 }
 
 /**
- * Stage B3's DEFAULT for `{ capabilities }` execs (`execState`'s router, above, delegates here
- * unless one of the KEEP-LEGACY consumers is present). Resolves through `env/vocabulary.ts`'s
- * memoized `Vocabulary` instead of `lower()`/`assembleEnv`/`instantiate`'s three-phase ambient:
+ * STAGE C CUT 2 — THE SHARED SEALED CHAIN, memoized ONCE per {@link Vocabulary} OBJECT (a
+ * `WeakMap` so it's GC'd with the tuple's own memo entry, `env/vocabulary.ts`'s `buildVocabulary`
+ * memo). Base symbols are now ordinary members of the tuple's own map (`BASE_ROSTER` folded in by
+ * `execStateViaVocabulary`, below), so this bind loop is ~10x bigger than pre-Cut-2 — too costly
+ * to repeat on every run (the suite alone drives thousands of execs). Building it here, ONCE,
+ * amortizes that cost across every run sharing the tuple.
  *
- *   1. `buildVocabulary` — C3 walk, doors, config validation, define-bake (ONCE per tuple).
- *   2. A scratch chain frame seeded from `Vocabulary.map` ONLY (never `preludeOnly`, never a
- *      prelude `define` — both are per-run/discarded, Stage B2) — sealed straight away. This IS
- *      the user-facing resolution surface program code runs against.
- *   2.5. STATIC VALIDATION (`staticValidation: "on"`, Stage B3) — `validateAgainstResolution`
- *      over THIS chain + `vocabulary.degraded` (the vocabulary-path counterpart of
- *      `validateAgainstAmbient`; see exec-phases.ts). Runs BEFORE `assembleRun` (below), so an
- *      error-tier diagnostic throws `StaticValidationError` with ZERO prelude effects fired
- *      either — strictly stronger than the ambient path's own "zero side effects" claim, whose
- *      prelude already ran during assembly, before its own validation check.
- *   3. `assembleRun` — mints the `RunContext` (or REUSES `ExecOptions.runCtx`, Stage B3 — see
+ * `chainFrame` is NULL-ROOTED — the ambient species (THE CORNERSTONE: "I exist before program
+ * start and I'm static," never attributed to any run) — never parented on `user_env`/
+ * `global_env`: this is exactly what makes the vocabulary path self-hosting instead of a
+ * realm-parented child. It exists only to satisfy `sealResolutionChain`'s frame-shaped input;
+ * once sealed, `chain` is the only artifact that matters, and `chainFrame` itself is never
+ * touched again by any run (nothing binds into it after this).
+ *
+ * Per-run cost is now just: obtain the run's OWN lexical scope (a fresh root, or a caller-passed
+ * `scope`/reused `runCtx` for continuity) and wrap this SHARED `{ chainFrame, chain }` in a fresh
+ * `Capabilities` instance — `Resolver` composes `scope.lookup ?? capabilities.lookup` as two
+ * genuinely separate fields (Resolver.ts), never a frame-parenting relationship, so NOTHING a run
+ * does — a `define`, a `require` — ever writes into `chainFrame`: only its READ side (`chain`) is
+ * shared. See the Cut-2 law suite's "shared-chain purity" gate for the executable proof.
+ */
+const sealedChainByVocabulary = new WeakMap<
+  Vocabulary,
+  { readonly chainFrame: AmbientRuntime; readonly chain: CompiledResolutionChain }
+>();
+function sealedVocabularyChain(vocabulary: Vocabulary): {
+  readonly chainFrame: AmbientRuntime;
+  readonly chain: CompiledResolutionChain;
+} {
+  let sealed = sealedChainByVocabulary.get(vocabulary);
+  if (sealed === undefined) {
+    const chainFrame = mintPlainFrame("exec-vocabulary");
+    for (const [name, value] of vocabulary.map) bindValue(chainFrame, name, value);
+    const chain = sealResolutionChain(chainFrame);
+    sealed = Object.freeze({ chainFrame, chain });
+    sealedChainByVocabulary.set(vocabulary, sealed);
+  }
+  return sealed;
+}
+
+/**
+ * THE DEFAULT for every non-glass, non-KEEP-LEGACY run — a bare `exec(code)` AND a
+ * `{ capabilities }` run alike (`execState`'s router, above, delegates here). Resolves through
+ * `env/vocabulary.ts`'s memoized, SELF-HOSTED `Vocabulary` instead of
+ * `lower()`/`assembleEnv`/`instantiate`'s three-phase ambient — no `ensureBaseAssembled`, no
+ * `user_env`/`global_env` reference anywhere in this function:
+ *
+ *   1. THE FOLD (Stage C Cut 2, THE LINCHPIN) — `effectiveCapabilities = [...capabilities,
+ *      ...BASE_ROSTER]` (`env/base-roster.ts`): the caller's own capabilities FIRST, the base
+ *      stdlib LAST. Order matters and is not arbitrary — see `base-roster.ts`'s own doc: with no
+ *      `deps` edge between an unrelated user capability and a base pack, C3's root-list tie-break
+ *      decides who's processed (bound) FIRST in the deps-first apply walk. Base LAST in the root
+ *      list ⇒ LOWEST precedence ⇒ processed FIRST (its bindings exist before ANY user
+ *      capability's OWN `symbol.define` bakes, exactly the availability `define-bake.ts`'s
+ *      `KEYWORD_SYNTAX_BASELINE` comment describes as "for free"); user capabilities FIRST in the
+ *      root list ⇒ HIGHEST precedence ⇒ processed LAST ⇒ WIN a same-name conflict against a base
+ *      pack — matching the legacy ambient path's own child-wins union
+ *      (`CompiledResolutionChain.ts`'s `compileResolutionChain`, where a run's own capabilities
+ *      frame was always the CLOSER, overwriting layer).
+ *   2. `buildVocabulary` — C3 walk over `effectiveCapabilities`, doors, config validation,
+ *      define-bake (ONCE per tuple, memoized by closure identity — a bare exec's tuple IS
+ *      `BASE_ROSTER` alone, so every bare exec in the process hits the SAME memoized build).
+ *   3. `sealedVocabularyChain` (above) — the shared, memoized `{ chainFrame, chain }` for this
+ *      tuple, built ONCE, reused across every run sharing it.
+ *   3.5. STATIC VALIDATION (`staticValidation: "on"`) — `validateAgainstResolution` over THIS
+ *      chain + `vocabulary.degraded` (the vocabulary-path counterpart of `validateAgainstAmbient`;
+ *      see exec-phases.ts). Runs BEFORE `assembleRun` (below), so an error-tier diagnostic throws
+ *      `StaticValidationError` with ZERO prelude effects fired either — strictly stronger than
+ *      the ambient path's own "zero side effects" claim, whose prelude already ran during
+ *      assembly, before its own validation check.
+ *   4. `assembleRun` — mints the `RunContext` (or REUSES `ExecOptions.runCtx` — see
  *      `env/assemble-run.ts`'s own header for the tuple-identity invariant) AND runs the
  *      PER-RUN PRELUDE PASS against it (fresh mint only): every capability in this tuple's
  *      closure that declares a `.spec.prelude` runs it, exactly once, THIS run, before program
  *      code evaluates. (`assembleRun` re-fetches the SAME memoized `Vocabulary` this function
- *      already built — never rebuilds.)
- *   4. `CompiledResolutionChain` → `Capabilities` → `Resolver`, then the SAME per-form evaluation
+ *      already built, over the SAME `effectiveCapabilities` — never rebuilds.)
+ *   5. `Capabilities` (wrapping the shared chain) → `Resolver`, then the SAME per-form evaluation
  *      loop the ambient path (`execStateViaAmbient`) runs.
+ *
+ * ISOLATION: a run's top-level `define`s land in `scope`'s env when the caller passes one (REPL
+ * continuity), else a FRESH, per-call, null-rooted scope (`LexicalScope.fresh()`) — NOT the
+ * realm-cached `defaultLexicalRoot()` the ambient path still uses. Two separate bare execs no
+ * longer share top-level defines (the probed pre-Cut-2 behavior — see the ledger's Cut-2 report
+ * for the callers this broke and how they were fixed): per the cornerstone, that sharing was the
+ * legacy sin (a mutable realm frame playing double duty), not a feature worth preserving once the
+ * vocabulary path stops depending on the realm at all. A caller wanting cross-call continuity
+ * passes `scope` (or reuses `runCtx`) explicitly — the same sanctioned channel `ExecOptions.scope`
+ * already documents.
  *
  * KEEP-LEGACY (never reaches this function — see `execState`'s router doc for the full list +
  * rationale): `env` (glass), `ambient` (caller-held `AssembledAmbient`), `override`, `irLineage`
  * (shadow mode). A capability whose record contains a legacy `{ fn }` entry throws
  * `VocabularyLegacyCapabilityError` (`buildVocabulary`'s own refusal) — this branch does not fall
- * back silently; a `{ capabilities }` caller not in the KEEP-LEGACY set is asserting its
- * capability set is vocabulary-eligible.
+ * back silently; a caller not in the KEEP-LEGACY set is asserting its capability set is
+ * vocabulary-eligible.
  */
 async function execStateViaVocabulary(code: string | SchemeValue, options: ExecOptions): Promise<ExecState> {
   const {
@@ -885,39 +964,38 @@ async function execStateViaVocabulary(code: string | SchemeValue, options: ExecO
     freezeRosettaReturns,
     staticValidation,
   } = options;
-  invariant(capabilities !== undefined, "execStateViaVocabulary requires ExecOptions.capabilities");
 
-  await ensureBaseAssembled();
   const program = passedProgram ?? (await parseProgram(code, { strict }));
 
-  const vocabulary = await buildVocabulary(capabilities, config, capabilityEvalScheme);
+  // THE FOLD — see this function's own doc for the ordering rationale. `capabilities` may be
+  // absent (a bare exec): the degenerate tuple is `BASE_ROSTER` alone.
+  const effectiveCapabilities = [...(capabilities ?? []), ...BASE_ROSTER];
 
-  // The scratch chain frame — seeded from the vocabulary map ONLY. `preludeOnly` names and any
-  // prelude `(define …)` are Stage B2's PER-RUN, DISCARDED prelude scope's business
-  // (`assembleRun`, below) — neither belongs on the user-facing resolution surface.
-  const chainFrame = mintFrame(user_env, "exec-vocabulary");
-  for (const [name, value] of vocabulary.map) bindValue(chainFrame, name, value);
-  const chain = sealResolutionChain(chainFrame);
+  const vocabulary = await buildVocabulary(effectiveCapabilities, config, capabilityEvalScheme);
+  const { chainFrame, chain } = sealedVocabularyChain(vocabulary);
 
-  const lexicalScope = scope ?? LexicalScope.for(defaultLexicalRoot());
+  // ISOLATION (see this function's own doc) — a fresh, null-rooted scope per call unless the
+  // caller opts into continuity via `scope` (or `runCtx` reuse, threaded to `assembleRun` below).
+  const lexicalScope = scope ?? LexicalScope.fresh();
 
-  // ── STATIC VALIDATION (Stage B3) — AFTER the chain seals, BEFORE `assembleRun`'s prelude
-  // pass runs: see this function's own doc for why validating here (rather than after,
-  // mirroring the ambient path's ordering) is the STRONGER "zero side effects" reading.
+  // ── STATIC VALIDATION — AFTER the chain seals, BEFORE `assembleRun`'s prelude pass runs: see
+  // this function's own doc for why validating here (rather than after, mirroring the ambient
+  // path's ordering) is the STRONGER "zero side effects" reading.
   if (staticValidation === "on") {
     const diagnostics = validateAgainstResolution(program, chain, vocabulary.degraded, lexicalScope);
     if (diagnostics.some((d) => d.severity === "error")) throw new StaticValidationError(diagnostics);
   }
 
   const runResolver = new Resolver(lexicalScope.env, new Capabilities(chainFrame, chain));
-  // `assembleRun` is THE ONE place preludes run on the vocabulary path (Stage B2) — it mints the
-  // RunContext THEN runs the per-run prelude pass against it, so a prelude's resource-touching
-  // verb spawns/reads THIS run's bag. Stage B3: `runCtx: passedRunCtx` — REUSE (REPL
-  // continuity) when supplied; `assembleRun` enforces the tuple-identity invariant and skips
-  // re-preluding on a match (see its own header).
+  // `assembleRun` is THE ONE place preludes run on the vocabulary path — it mints the RunContext
+  // THEN runs the per-run prelude pass against it, so a prelude's resource-touching verb
+  // spawns/reads THIS run's bag. `runCtx: passedRunCtx` — REUSE (REPL continuity) when supplied;
+  // `assembleRun` enforces the tuple-identity invariant and skips re-preluding on a match (see its
+  // own header). `capabilities: effectiveCapabilities` — the SAME fold, so `assembleRun`'s own
+  // `buildVocabulary` call hits the SAME memoized `Vocabulary` this function already built.
   const runCtxOwned = passedRunCtx === undefined;
   const runCtx = await assembleRun({
-    capabilities,
+    capabilities: effectiveCapabilities,
     config,
     evalScheme: capabilityEvalScheme,
     evalPrelude: preludeEvalScheme,

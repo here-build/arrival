@@ -31,7 +31,7 @@ import { describe, expect, it } from "vitest";
 import { ResolvingAmbient, mintPlainFrame, mintResolvingFrame } from "../../env/AmbientRuntime.js";
 import { compileResolutionChain, sealResolutionChain } from "../../eval/CompiledResolutionChain.js";
 import { assembleEnv, type EnvPack } from "../../common/kernel.js";
-import { exec } from "../../eval/generator-exec.js";
+import { ensureBaseAssembled } from "../../eval/generator-exec.js";
 import { user_env, global_env } from "../../env/env-roots.js";
 import { AExact } from "../../values/primitives/AExact.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
@@ -58,7 +58,10 @@ describe("CompiledResolutionChain — LAW 2: merge-at-seal", () => {
   });
 
   it("THE IN-REPO REALITY: the bootstrapped base compiles to the degenerate ONE-flat-Map form", async () => {
-    await exec("1"); // force the realm bootstrap (bake + seal)
+    // Stage C Cut 2: a bare `exec("1")` no longer forces this bootstrap (it rides the
+    // self-hosted vocabulary path — `user_env`/`global_env` are LEGACY-path machinery this law
+    // still pins directly). `ensureBaseAssembled` is the honest trigger either way.
+    await ensureBaseAssembled(); // force the realm bootstrap (bake + seal)
 
     // Zero live resolvers: no pack declares `spec.resolvers` (the contract is retired),
     // and the kernel's preludeOnly overlay was dropped at seal (LAW 5) — verify on the

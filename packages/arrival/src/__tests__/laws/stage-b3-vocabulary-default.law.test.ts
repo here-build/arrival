@@ -35,6 +35,7 @@ import type { EvalPreludeInto, EvalSchemeInto } from "../../common/scheme-env.js
 import { assembleAmbient, ensureBaseAssembled, exec, execState } from "../../eval/generator-exec.js";
 import { LexicalScope } from "../../eval/LexicalScope.js";
 import { assembleRun } from "../../env/assemble-run.js";
+import { BASE_ROSTER } from "../../env/base-roster.js";
 import { disposeRunContext } from "../../run/run-lifecycle.js";
 import { RunContext } from "../../run/RunContext.js";
 import { PurityError, RunContextVocabularyMismatchError } from "../../errors.js";
@@ -140,8 +141,17 @@ describe("LAW 2 — runCtx reuse: tuple-identity invariant", () => {
     const config = {};
 
     // The REPL idiom: pre-mint via the now-exported `assembleRun` (the vocabulary-path
-    // counterpart of `new RunContext(...)`), then thread it through every pass.
-    const runCtx = await assembleRun({ capabilities, config, evalScheme: realEvalScheme, evalPrelude: realEvalPrelude });
+    // counterpart of `new RunContext(...)`), then thread it through every pass. Stage C Cut 2:
+    // `execState`'s own `execStateViaVocabulary` folds `BASE_ROSTER` (env/base-roster.ts) into
+    // its EFFECTIVE capabilities before calling `assembleRun` — a REUSED `runCtx`'s
+    // tuple-identity check (`assembleRun`'s own header) compares against THAT tuple, so a
+    // pre-mint wanting to interoperate with `execState`'s reuse must fold the SAME roster in.
+    const runCtx = await assembleRun({
+      capabilities: [...capabilities, ...BASE_ROSTER],
+      config,
+      evalScheme: realEvalScheme,
+      evalPrelude: realEvalPrelude,
+    });
     expect(bumps).toBe(1); // the pre-mint's own prelude pass
 
     try {

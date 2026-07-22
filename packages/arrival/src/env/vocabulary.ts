@@ -10,12 +10,22 @@
 // evaluates REAL scheme source (`evalScheme(scope, "(define tmp <body>)")`) and reads the result
 // back via `scope.get(tempName)` — an actual interpreter round-trip, not a pure computation, and
 // the classifier it runs (`env.get(op, {throwError:false})`) reads whatever's ALREADY bound.
-// Bootstrap assembly (`assembleEnv`) gets this for free because every capability binds onto the
-// SAME shared live frame; this module mints ONE scratch `AmbientRuntime` child of the standard
-// base (`user_env`) and mirrors every bind (Pass 1 AND Pass 2) into it AS WELL AS into the
-// Vocabulary's own maps, so scheme evaluation sees exactly what the live-apply model would have
-// bound by this point in the C3 walk — then discards the scratch frame once the build finishes
-// (nothing about it survives; the Vocabulary maps are the only artifact).
+//
+// STAGE C CUT 2 — SELF-CONTAINED, NOT `user_env`-parented: `bakeEnv` is a NULL-ROOTED scratch
+// frame (`mintResolvingFrame`, no parent) — it resolves against THIS BUILD's own static core, not
+// the legacy realm base. This is safe because the caller now folds `BASE_ROSTER` (env/base-
+// roster.ts) into `capabilities` BEFORE calling `buildVocabulary` (see `generator-exec.ts`'s
+// `execStateViaVocabulary`): the base stdlib is an ordinary member of THIS tuple's own C3 closure,
+// baked deps-first in the SAME loop below, so by the time a dependent capability's `symbol.define`
+// bakes, every name it may reference — its own declared `deps`, OR a base-roster name available
+// "for free" (define-bake.ts's `KEYWORD_SYNTAX_BASELINE` allowlist) — is ALREADY a direct
+// binding on `bakeEnv` (mirrored in by every earlier capability's own Pass 1 + Pass 2, below).
+// Nothing about a live parent-chain fallback is needed or wanted: the cornerstone (ambient ≠
+// lexical/global scope) forbids parenting this bake artifact on `user_env` at all — `bakeEnv`
+// mirrors every bind (Pass 1 AND Pass 2) into it AS WELL AS into the Vocabulary's own maps, so
+// scheme evaluation sees exactly what THIS tuple's own C3 walk has bound by this point — then
+// discards the scratch frame once the build finishes (nothing about it survives; the Vocabulary
+// maps are the only artifact).
 //
 // MEMO: keyed on the FULL transitive closure (deps included, not just the caller's root list) —
 // two calls whose closures land on the same capability OBJECTS (regardless of root-list order or
@@ -79,8 +89,7 @@ import {
   VocabularyCapabilityConflictError,
   VocabularyLegacyCapabilityError,
 } from "../errors.js";
-import { bindValue, mintFrame, type AmbientValue, type ResolvingAmbient } from "./AmbientRuntime.js";
-import { user_env } from "./env-roots.js";
+import { bindValue, mintResolvingFrame, type AmbientValue, type ResolvingAmbient } from "./AmbientRuntime.js";
 
 /** One symbol vocabulary, built ONCE per (capability-set, config) tuple — see the module
  *  header. Every content is either an immutable minted value or a baked closure over the
@@ -379,10 +388,12 @@ async function buildFresh(
   const configsByCapability = new Map<object, unknown>();
   const degradedByName = new Map<string, DegradedCapability | undefined>();
   const preludes: { capability: EnvCapability; text: string }[] = [];
-  // The scratch bake frame — see the module header. Parented on the standard base so a
-  // capability's scheme bodies (`symbol.define`, preludes) resolve builtins exactly like a
-  // real assembly does. Discarded once this build finishes; nothing about it survives.
-  const bakeEnv: ResolvingAmbient = mintFrame(user_env, "vocabulary-bake");
+  // The scratch bake frame — see the module header. NULL-ROOTED (Stage C Cut 2): a capability's
+  // scheme bodies (`symbol.define`, preludes) resolve against THIS build's own static core (every
+  // earlier-processed capability in the SAME deps-first loop below, base roster included when the
+  // caller folds it in), never a parent-chain fallback onto `user_env`. Discarded once this build
+  // finishes; nothing about it survives.
+  const bakeEnv: ResolvingAmbient = mintResolvingFrame("vocabulary-bake");
 
   // Deps-first (self overwrites dep) — mirrors `assembleEnv`'s own `order.toReversed()` apply
   // walk; each capability is processed FULLY (Pass 1 + Pass 2) before the next, so a dependent's

@@ -47,8 +47,21 @@ import exceptions from "../r7rs/exceptions.js";
 // arbitrarily recursive and no body here reads past that one level. Shared by s/optional and
 // s/array's element; s/field's `type` and s/field/_composite's `rest` forward opaquely, so they
 // stay z.value, not tag.
+// DEPS ORDER (Stage C Cut 2): `equality, numeric, exceptions, strings, lists` — matching the
+// partial order every BASE_PACKS member reaching these same nodes already agrees on (`equality`
+// before `numeric` before `scheme/r7rs/exceptions` before `strings` before `lists` last — the
+// chain `scheme/polyglot-racket`'s own dep-closure establishes over `scheme/polyglot-clojure`'s:
+// racket declares `exceptions` ahead of `vectors`/`lists`, clojure — reached transitively through
+// racket's `deps: [polyglotClojure, …]` — places `strings` between `numeric` and `vectors`, so
+// the ALREADY-WORKING merge fixes `exceptions` before `strings`). This capability's own SET of
+// deps is unchanged; only the array's ORDER moved, because Cut 2's self-hosted vocabulary tuple
+// now C3-linearizes THIS capability together with the base roster in ONE closure walk
+// (`env/base-roster.ts`) — under the legacy ambient path this capability's deps were linearized
+// in ISOLATION (a separate `assembleEnv` call from the base bootstrap), so no other pack's
+// opinion about relative precedence among these shared nodes was ever in the same merge to
+// conflict with.
 export const schemaCapability = EnvCapability.define("arrival/schema", {
-  deps: [lists, equality, strings, numeric, exceptions],
+  deps: [equality, numeric, exceptions, strings, lists],
   symbols: (symbol, z) => {
     const tag = z.union([z.string, z.cons(z.string, z.value)]);
     // The s/field-shape output every s/field* body returns: two fixed heads (name, type) then a

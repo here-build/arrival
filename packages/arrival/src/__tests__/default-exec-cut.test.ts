@@ -1,34 +1,65 @@
 /**
  * Ejection P3 3b.3 step 5 — the FLIP witnesses for the DEFAULT (no-env) exec path.
  *
- * Post-cut, default `exec(code)` resolves through `new Resolver(lexicalRoot,
- * Capabilities.assembled(user_env))`: top-level user `define`s land in a realm-cached,
- * null-rooted `lexicalRoot` (CUT from the base), while builtins resolve through the assembled
- * base. Two properties this must preserve / establish:
- *   1. cross-exec persistence — default defines accumulate across calls (the realm cache), as
- *      they did when they landed in the shared `user_env`.
- *   2. the cut — those defines do NOT leak into `user_env`, yet builtins still resolve.
+ * Stage C Cut 2 (docs/plans/stage-c-corpse-deletion.md, "THE LINCHPIN") supersedes this file's
+ * ORIGINAL premise: a bare `exec(code)` no longer resolves through `new Resolver(lexicalRoot,
+ * Capabilities.assembled(user_env))` (the realm-parented ambient) — it rides the SELF-HOSTED
+ * vocabulary path (`execStateViaVocabulary`, `eval/generator-exec.ts`), the degenerate tuple
+ * `buildVocabulary(BASE_ROSTER)` (`env/base-roster.ts`). THE CORNERSTONE (ledger): ambient and
+ * global/lexical scope are separate SPECIES — a mutable realm frame playing double duty (defines
+ * ACCUMULATING across unrelated bare-exec calls, purely because they happened to share one
+ * process-wide singleton) was the legacy sin this cut retires, not a feature worth preserving.
+ *
+ * Two properties this file now pins instead:
+ *   1. ISOLATION — two SEPARATE bare `exec` calls do NOT share top-level defines (each gets its
+ *      own fresh, null-rooted scope, `LexicalScope.fresh()`) — the direct behavioral flip from
+ *      this file's original "cross-exec persistence" pin (verified failing against the pre-Cut-2
+ *      build as this cut's own probe: `(define x 1)` in one bare exec WAS visible to a second,
+ *      unrelated bare exec).
+ *   2. CONTINUITY — a caller wanting REPL-style accumulation across calls passes `scope`
+ *      explicitly (`ExecOptions.scope`, `LexicalScope.for(env)`/`LexicalScope.fresh()`) — the
+ *      sanctioned channel, unaffected by the isolation change.
+ *   3. THE CUT (still true, unchanged): user defines never land on `user_env` — builtins still
+ *      resolve through the self-hosted vocabulary's own chain, not a lexical write.
+ *
  * Custom-env callers (arrival-chain/inhuman) stay glass and are covered by the rest of the suite.
  */
 import { describe, expect, it } from "vitest";
 
 import { exec, execState } from "../eval/generator-exec.js";
+import { LexicalScope } from "../eval/LexicalScope.js";
 import { user_env } from "../env/env-roots.js";
 import { schemeToJs } from "../membrane/rosetta.js";
 
-describe("default exec — the 3b.3 cut", () => {
-  it("default-path defines persist across exec calls (realm-cached lexical root)", async () => {
-    await exec("(define cut-persist-witness 41)");
-    // execState (COMPLEX tier): schemeToJs wants the BOXED value — `exec` already unwraps.
-    const [v] = (await execState("(+ cut-persist-witness 1)")).values;
-    expect(schemeToJs(v, {})).toBe(42);
+describe("default exec — Stage C Cut 2 isolation", () => {
+  it("two SEPARATE bare exec calls do NOT share top-level defines (no cross-exec leakage)", async () => {
+    await exec("(define cut-isolation-witness 41)");
+    // A second, unrelated bare exec — its own fresh scope, per `execStateViaVocabulary`'s
+    // ISOLATION law — never sees the first call's define.
+    await expect(exec("cut-isolation-witness")).rejects.toThrow(/unbound/i);
+  });
+
+  it("continuity via an explicit `scope` still works (the sanctioned REPL channel)", async () => {
+    const scope = LexicalScope.fresh();
+    await exec("(define cut-continuity-witness 41)", { scope });
+    const [v] = await exec("(+ cut-continuity-witness 1)", { scope });
+    expect(v).toBe(42);
+  });
+
+  it("continuity via a reused `runCtx` alone (no `scope`) does NOT share top-level defines — only", async () => {
+    // `runCtx` reuse threads capability RESOURCES (a database handle, a require cache — see
+    // `ExecOptions.runCtx`'s own doc); it is not a lexical-continuity channel. Only `scope`
+    // is. Documented here so the distinction is a pinned fact, not tribal knowledge.
+    const first = await execState("(define cut-runctx-only-witness 41)");
+    await expect(exec("cut-runctx-only-witness", { runCtx: first.runCtx })).rejects.toThrow(/unbound/i);
   });
 
   it("default-path defines do NOT land in user_env, builtins still resolve", async () => {
     await exec("(define cut-leak-witness 7)");
-    // The define landed in the null-rooted lexicalRoot, NOT the capability base.
+    // The define landed in a fresh, null-rooted per-call scope — never the capability base.
     expect(user_env.has("cut-leak-witness")).toBe(false);
-    // …yet a builtin still resolves — through the assembled base, not the lexical chain.
+    // …yet a builtin still resolves — through the self-hosted vocabulary chain, not the
+    // lexical chain and not `user_env`.
     const [sum] = (await execState("(+ 1 2)")).values;
     expect(schemeToJs(sum, {})).toBe(3);
   });

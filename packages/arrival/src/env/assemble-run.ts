@@ -18,14 +18,16 @@
 //      store empty — so a prelude form dispatched in step 3 already has a REAL run to touch
 //      resources against (a prelude registering into the loader's extension registry spawns
 //      that registry INTO THIS RUN, not a bystander's).
-//   3. THE PRELUDE PASS: a fresh, DISCARDED prelude scope (`mintFrame(user_env, …)` — same base
-//      composition `generator-exec.ts`'s vocabulary-path branch uses for its own chain frame, so
-//      base-pack builtins a prelude relies on — `+`, `string-length`, … — still resolve), seeded
-//      with the preludeOnly overlay (assembly-time-only names, visible ONLY here) THEN the main
-//      vocabulary map, evaluated via `opts.evalPrelude` — carrying THIS run's `runCtx` — for
-//      every `{capability, text}` pair, C3 order. A `(define …)` a prelude form runs lands in
-//      THIS scope and is DISCARDED with it (never leaks into user-facing resolution); a CLOSURE
-//      a prelude mints keeps its lexical captures regardless (ordinary closure semantics — see
+//   3. THE PRELUDE PASS: a fresh, DISCARDED prelude scope (NULL-ROOTED — Stage C Cut 2, the same
+//      self-contained posture `vocabulary.ts`'s own `bakeEnv` uses), seeded with the preludeOnly
+//      overlay (assembly-time-only names, visible ONLY here) THEN the main vocabulary map (which
+//      now includes `BASE_ROSTER` when the caller folds it in — see `generator-exec.ts`'s
+//      `execStateViaVocabulary` — so base-pack builtins a prelude relies on, `+`/`string-length`/…,
+//      still resolve, as ordinary members of THIS scope, never via a parent-chain fallback),
+//      evaluated via `opts.evalPrelude` — carrying THIS run's `runCtx` — for every
+//      `{capability, text}` pair, C3 order. A `(define …)` a prelude form runs lands in THIS
+//      scope and is DISCARDED with it (never leaks into user-facing resolution); a CLOSURE a
+//      prelude mints keeps its lexical captures regardless (ordinary closure semantics — see
 //      `EvalPreludeInto`'s own doc and the law suite, `env/__tests__/assemble-run.test.ts`).
 //   4. Return the prelude-completed `RunContext` — the caller (generator-exec.ts's vocabulary
 //      route) builds the user-facing resolution chain from the SAME `Vocabulary.map`, separately,
@@ -58,8 +60,7 @@ import type { EffectLog } from "../run/effect-log.js";
 import type { ReadGuard } from "../run/read-guard.js";
 import { RunContext } from "../run/RunContext.js";
 import { buildVocabulary } from "./vocabulary.js";
-import { bindValue, mintFrame } from "./AmbientRuntime.js";
-import { user_env } from "./env-roots.js";
+import { bindValue, mintResolvingFrame } from "./AmbientRuntime.js";
 import { RunContextVocabularyMismatchError } from "../errors.js";
 import invariant from "tiny-invariant";
 
@@ -139,14 +140,16 @@ export async function assembleRun(opts: AssembleRunOptions): Promise<RunContext>
       opts.evalPrelude !== undefined,
       "assembleRun: this tuple's capabilities declare a prelude — AssembleRunOptions.evalPrelude is required",
     );
-    // A fresh, DISCARDED-per-run frame — never reused, never returned. Composed exactly like
-    // `generator-exec.ts`'s vocabulary-path chain frame (`mintFrame(user_env, …)`), so base-pack
-    // builtins a prelude relies on (`+`, `string-length`, …) still resolve via `user_env`'s own
-    // `__parent__` chain. preludeOnly bound AFTER the main map: the two maps are DISJOINT by
+    // A fresh, DISCARDED-per-run frame — never reused, never returned. NULL-ROOTED (Stage C Cut
+    // 2, matching `vocabulary.ts`'s own `bakeEnv`): base-pack builtins a prelude relies on (`+`,
+    // `string-length`, …) resolve because `BASE_ROSTER` is now an ordinary member of THIS tuple's
+    // own `Vocabulary.map` (the caller folds it in — see `generator-exec.ts`'s
+    // `execStateViaVocabulary`), bound into this scope by the loop below, never via a parent-chain
+    // fallback onto `user_env`. preludeOnly bound AFTER the main map: the two maps are DISJOINT by
     // construction (`vocabulary.ts`'s `makeBindTarget` routes each name into EXACTLY one), so
     // this is not an override — it simply completes the prelude's own visibility (main + the
     // assembly-time-only overlay), matching §PRELUDE's "resolves exactly as a real binding would".
-    const preludeScope = mintFrame(user_env, "assemble-run-prelude");
+    const preludeScope = mintResolvingFrame("assemble-run-prelude");
     for (const [name, value] of vocabulary.map) bindValue(preludeScope, name, value);
     for (const [name, value] of vocabulary.preludeOnly) bindValue(preludeScope, name, value);
     for (const { text } of vocabulary.preludes) {
