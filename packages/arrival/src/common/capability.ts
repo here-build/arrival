@@ -517,17 +517,18 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
   }
 
   /** 1d: does this capability produce a per-run resource bag (gating a verb's `readsResources`)?
-   *  Base: it declares `spec.resources`. `native` verbs bind `false` regardless (their resources,
-   *  when any, are read through the capability's own builder closure, never `this.resources`). */
+   *  Base: it declares `spec.resources`. `native` verbs bind `false` regardless (see
+   *  `nativeReadsRunResources`). */
   protected producesRunResources(): boolean {
     return Object.keys(this.spec.resources ?? {}).length > 0;
   }
 
   /** 1d: does a `native` verb of this capability read `this.resources` from the run store? Base:
-   *  NO — a constructor/builder-form native reaches resources through its own closure over
-   *  `Activation` (e.g. arrival/loader), never `this.resources`, so triggering the store here
-   *  would double-spawn. `EnvCapability.define`'s form overrides this to `true` (its injected
-   *  `native` factory's whole point is a `this.resources`-reading impl). */
+   *  NO — the base-ctor path is the LEGACY arm (the `{fn}`-record shape + its subject-tests;
+   *  every production native now authors through `.define`, the loader included since its
+   *  Stage-6 migration), and a legacy native never reads `this.resources` — triggering the
+   *  store here would double-spawn. `EnvCapability.define`'s form overrides this to `true`
+   *  (its injected `native` factory's whole point is a `this.resources`-reading impl). */
   protected nativeReadsRunResources(): boolean {
     return false;
   }
@@ -827,10 +828,10 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 // OWNER ASSOCIATION (1d, docs/execution.md §CALLCTX): key THIS bound value to its
                 // OWNING CAPABILITY (object identity) + assembly `configuration`, so a real dispatch
                 // (evaluator.ts, via makeCallCtx) enriches the `CallCtx` it builds. `readsResources`
-                // is FALSE for a base/constructor native — its resources, when any, are read through
-                // the capability's own builder closure (arrival/loader), never `this.resources`, so
-                // triggering the run store here would double-spawn. `EnvCapability.define`'s form
-                // flips this via `nativeReadsRunResources()`.
+                // is FALSE for a base/constructor native (the legacy arm — see
+                // `nativeReadsRunResources`'s doc); triggering the run store here would
+                // double-spawn. `EnvCapability.define`'s form flips this via
+                // `nativeReadsRunResources()`.
                 associateCapability(proc, ownerCapability, activation.configuration, nativeReadsResources);
                 bindTarget(def).set(verb, proc);
                 break;
