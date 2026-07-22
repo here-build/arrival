@@ -8,7 +8,8 @@
  * `carrySpan`), hence the `withLocation` override below. Cyclic spines (reader datum
  * labels, the `__tieKnot` door — `set-cdr!` is a notImplemented stub, values are frozen by
  * design) are detected actively by `isCircularList` (Floyd's), which keeps spine-walking
- * builtins from spinning. The class is an interop boundary (see the note on `[CLASS]` below).
+ * builtins from spinning. The class is an interop boundary (see the note below — covered by
+ * the nominal `instanceof AValue` FAMILY RULE in interop-access.ts, no per-class stamp).
  *
  * Lineage: a cons-list is the free monoid over its elements; the Fantasy Land
  * instances below (Functor/Foldable/Traversable/Chain/Monoid/Semigroup —
@@ -16,7 +17,7 @@
  * is trampolined style (Ganz, Friedman & Wand, "Trampolined Style", ICFP 1999);
  * cycle detection is Floyd's tortoise-and-hare.
  */
-import { CLASS, CYCLES, DATA, REF } from "../../well-known-symbols.js";
+import { CYCLES, DATA, REF } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import { makeCallCtx } from "../../run/CallCtx.js";
 import { applyCallback } from "./ACallable.js";
@@ -217,8 +218,8 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // Interop boundary: a cons cell's rich prototype (match/fromArray/toArray, the cycle/ref
   // helpers) and metadata symbols (__data__/__location__) are otherwise reachable from any held
   // Pair via symbol-to-field auto-resolution — the ref-tracking helpers especially would leak
-  // host-side identity comparisons. This marker stops the prototype walk at Pair.
-  static [CLASS] = "pair";
+  // host-side identity comparisons. `instanceof AValue` (the nominal FAMILY RULE in
+  // interop-access.ts) stops the prototype walk at Pair — no per-class stamp needed.
   readonly kind = "pair" as const;
   [DATA]?: boolean;
   [CYCLES]?: { car?: string | AListAlike; cdr?: string | AListAlike };
@@ -1105,10 +1106,10 @@ export interface BorrowedArray {
 }
 
 export class AJSArrayList extends APair<SchemeValue, SchemeValue> {
-  // Interop-boundary brand (the family rule in `isInteropBoundary`): an own [CLASS] static makes
-  // this an arrival value class, so the prototype walk stops here and the view's host-side
-  // internals (`owner`, `offset`) are never reachable from scheme via member auto-resolution.
-  static [CLASS] = "js-array-list";
+  // Interop-boundary (the nominal family rule in `isInteropBoundary`): AJSArrayList extends
+  // APair extends AValue, so `instanceof AValue` already stops the prototype walk here — the
+  // view's host-side internals (`owner`, `offset`) are never reachable from scheme via member
+  // auto-resolution. No per-class stamp needed.
 
   // `kind` stays "pair" (inherited). The kind IS the chart: this value's identity is the spine.
 

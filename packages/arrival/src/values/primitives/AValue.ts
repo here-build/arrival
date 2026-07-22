@@ -50,7 +50,7 @@ export function ctxOf(x: SchemeValue, fallback: RunContext = CONSTANT_CTX): RunC
 export type AKind =
   | "string"
   | "number"
-  | "bool"
+  | "boolean"
   | "pair"
   | "nil"
   | "symbol"
@@ -195,6 +195,20 @@ export abstract class AValue {
   ["arrival/provenanceChildren"](): Iterable<unknown> {
     return EMPTY_CHILDREN;
   }
+
+  /**
+   * The value-layer's downward-readable "is this a macro?" answer — `is_macro_value`
+   * (value-guards.ts) reads this field so the lineage shadow-cone skip can test
+   * "is this a macro?" with no value→eval runtime edge. Declared HERE, on the value
+   * kernel's own base, purely for the protocol's typing home: `Macro` and `Syntax` (+
+   * `Syntax.Parameter`) live OUTSIDE the AValue hierarchy by design (a fexpr/transformer
+   * is not a self-evaluating datum), so no class ever inherits this declaration — it is
+   * set directly on those three classes as an OWN field, structurally satisfying this
+   * type. A duck/brand test, not `instanceof`: a forged `{ ["arrival/is-macro"]: true }`
+   * would pass, which is acceptable for the shadow-cone skip (see `is_macro_value`'s own
+   * doc comment for why a false positive there is harmless).
+   */
+  readonly ["arrival/is-macro"]?: boolean;
 
   // ── The tagless-final algebra — declared OPTIONAL on AValue, the single source of truth ──────
   // Every AValue (and subclass) MAY carry these `arrival/tagless-final/<op>` members; an entity
@@ -410,9 +424,11 @@ export function pointProvenance(callId: number): ReadonlySet<number> {
 // ============================================================================
 // INTEROP BOUNDARY (defensive on the abstract base): `accessMember`'s symbol-to-field
 // auto-resolution walks the prototype chain of any object reachable from inference-plane
-// scheme. Concrete subtypes are covered by the FAMILY RULE in interop-access.ts (own
-// `[CLASS]` brand on the constructor = boundary) — they carry no per-class stamp anymore.
-// The abstract base keeps this ONE explicit stamp as the defensive belt: a future
-// CLASS-less subtype's walk still stops here, so exposure degrades to "blocked at
-// AValue.prototype" rather than "exposed."
+// scheme. Concrete subtypes are covered by the nominal FAMILY RULE in interop-access.ts
+// (`proto === AValue.prototype || proto instanceof AValue` covers the whole hierarchy in
+// one check) — they carry no per-class stamp anymore. The abstract base keeps this ONE
+// explicit `static [INTEROP_BOUNDARY] = true` stamp as the defensive belt too: even without
+// the `instanceof` check, a subtype's walk would still stop at AValue.prototype itself
+// (caught by the class-level marker further down in `isInteropBoundary`), so exposure
+// degrades to "blocked at AValue.prototype" rather than "exposed."
 // ============================================================================

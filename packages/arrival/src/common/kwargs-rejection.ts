@@ -23,7 +23,6 @@ import { ZodError, ZodType, type ZodRawShape } from "zod";
 import * as z from "./scheme-zod.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { ArrivalError, type ErrorClass } from "../errors.js";
-import { CLASS } from "../well-known-symbols.js";
 import { suggestFromVocabulary } from "../unbound-variable.js";
 
 /** Same convention as arrival-manifold bind.ts's `previewOf` (design doc §2.5). */
@@ -134,7 +133,8 @@ export function formatKwargsRejection(qualifiedName: string, problems: readonly 
  *  mcp-substrate own-decode clue family parses `:<param> —` line heads off it) is
  *  mechanism-local, not a leaf-safe general fact. */
 export class KwargsRejectionError extends ArrivalError {
-  static [CLASS] = "kwargs-rejection-error";
+  // Interop boundary: covered by the nominal `instanceof ArrivalError` family rule
+  // in interop-access.ts — no per-class stamp needed.
   public readonly name = "KwargsRejectionError";
   readonly "arrival/error-category": ErrorClass = "other";
 

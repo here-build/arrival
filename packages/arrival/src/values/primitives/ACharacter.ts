@@ -2,7 +2,6 @@
  * SchemeCharacter — R7RS character type. Carries the `characters` named-character
  * table it is backed by.
  */
-import { CLASS } from "../../well-known-symbols.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { isSchemeString, type SchemeStringLike } from "../types.js";
 import invariant from "tiny-invariant";
@@ -56,7 +55,6 @@ const characters: Record<string, string> = {
 export { characters };
 
 export class ACharacter extends AValue {
-  static [CLASS] = "character";
   // Named character mappings
   static readonly __names__: Record<string, string> = characters;
   static readonly __rev_names__: Record<string, string> = (() => {

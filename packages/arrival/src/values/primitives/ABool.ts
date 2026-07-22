@@ -1,4 +1,3 @@
-import { CLASS } from "../../well-known-symbols.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 
 /**
@@ -8,8 +7,12 @@ import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
  * pattern.
  */
 export class ABool extends AValue {
-  static [CLASS] = "boolean";
-  readonly kind = "bool" as const;
+  // "boolean", not "bool" — the retired `static [CLASS]` brand said "boolean" and every
+  // error text built on it (typeErrorMessage's "expected a boolean, got …" phrasing) keeps
+  // saying "boolean", so `kind` was renamed to match rather than the reverse (see
+  // AValue.ts's ValueKind union, provenance/slice.ts, and arrival-overridable-lens's
+  // schema-fold.ts for the other readers this rename touched).
+  readonly kind = "boolean" as const;
 
   constructor(
     public readonly value: boolean,
@@ -51,6 +54,6 @@ export const schemeFalse = new ABool(false);
 // INTEROP BOUNDARY: ABool's prototype is narrow today, but `schemeTrue`/`schemeFalse` are
 // heavily reused singletons — any future helper grafted onto the prototype would reach every
 // Boolean-valued response from the inference plane. The FAMILY RULE in interop-access.ts
-// (own `[CLASS]` brand on the constructor = boundary; no per-class stamp) keeps the
-// inherited surface blocked.
+// (`instanceof AValue` covers the whole value hierarchy in one check; no per-class stamp)
+// keeps the inherited surface blocked.
 // ============================================================================

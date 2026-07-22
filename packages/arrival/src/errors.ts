@@ -1,7 +1,11 @@
 // -------------------------------------------------------------------------
 // :: errors.ts — the single home for every arrival Error subclass.
 //
-// Kept a runtime LEAF: the only runtime import is the well-known-symbol brands.
+// Kept a runtime LEAF: this module has NO runtime imports at all (the retired
+// `static [CLASS]` brand was the one well-known-symbol runtime dependency; the
+// interop-boundary mechanism now lives entirely on the READER side, in
+// interop-access.ts's `instanceof ArrivalError`/`instanceof R7RSError`/…
+// checks, so this file needs nothing back from it).
 // value-guards.js is NOT safe to depend on here — it imports the whole primitive
 // class barrel as VALUES, so an `errors.ts → value-guards` edge would eagerly
 // initialize AString/AExact/AInexact/ACharacter/APair/… at module-load, before
@@ -13,7 +17,6 @@
 // StackFrame / SchemeValue are TYPE-only (erased), so a value term can throw any of
 // these without dragging the evaluator world in.
 // -------------------------------------------------------------------------
-import { CLASS } from "./well-known-symbols.js";
 import type { StackFrame } from "./eval/evaluator.js";
 import type { SchemeValue } from "./values/types.js";
 
@@ -48,8 +51,9 @@ export function formatLocation(loc: SourceLocation): string {
 
 /** Thrown for unterminated expressions (unclosed strings, parentheses, etc). */
 export class Unterminated extends Error {
-  /** Type identity for CLASS-brand readers (`type()`), same convention as ArrivalError below. */
-  static [CLASS] = "unterminated";
+  /** Interop boundary: covered by the `instanceof Unterminated` arm in
+   *  interop-access.ts's `isInteropBoundary` (Unterminated/ParseError/EvalError/
+   *  R7RSError predate ArrivalError, so each gets its own explicit arm there). */
 
   /** The `ConstructorParameters`-typed static invariant (the errors-as-doors idiom):
    *  `X.invariant(cond, ...factsMatchingX'sCtor)` throws the RECEIVER, never a bare
@@ -75,8 +79,8 @@ export class Unterminated extends Error {
 }
 
 export class ParseError extends Error {
-  /** Type identity for CLASS-brand readers (`type()`), same convention as ArrivalError below. */
-  static [CLASS] = "parse-error";
+  /** Interop boundary: covered by the `instanceof ParseError` arm in
+   *  interop-access.ts's `isInteropBoundary` (see the note on Unterminated above). */
 
   /** See `Unterminated.invariant` above — same idiom, repeated per non-`ArrivalError` root. */
   static invariant<T extends new (...args: any) => any>(
@@ -101,8 +105,8 @@ export class ParseError extends Error {
 }
 
 export class EvalError extends Error {
-  /** Type identity for CLASS-brand readers (`type()`), same convention as ArrivalError below. */
-  static [CLASS] = "eval-error";
+  /** Interop boundary: covered by the `instanceof EvalError` arm in
+   *  interop-access.ts's `isInteropBoundary` (see the note on Unterminated above). */
 
   location?: SourceLocation;
   code?: unknown;
@@ -178,7 +182,10 @@ function readLocation(code: SchemeValue): SourceLocation | undefined {
 }
 
 export abstract class ArrivalError extends Error {
-  static [CLASS] = "arrival-error";
+  // Interop boundary: covered by the nominal `instanceof ArrivalError` family rule
+  // in interop-access.ts (every concrete subclass's prototype answers `instanceof
+  // ArrivalError`, so the whole hierarchy is a boundary in one check — no per-class
+  // stamp needed).
   public readonly name: string = "ArrivalError";
 
   /** Every concrete `ArrivalError` subclass names its own {@link ErrorClass} — a
@@ -267,7 +274,6 @@ export function isHostRuntimeBug(e: unknown): boolean {
 // already carries — no constructor override.
 // -------------------------------------------------------------------------
 export class BudgetExceededError extends ArrivalError {
-  static [CLASS] = "budget-exceeded-error";
   public readonly name = "BudgetExceededError";
   readonly "arrival/error-category": ErrorClass = "other";
 }
@@ -281,7 +287,6 @@ export class BudgetExceededError extends ArrivalError {
 // door in the pack owning that part of the spec, which throws this when reached.
 // -------------------------------------------------------------------------
 export class PurityError extends ArrivalError {
-  static [CLASS] = "purity-error";
   public readonly owner: string;
   public readonly name = "PurityError";
   readonly "arrival/error-category": ErrorClass = "prohibited-dynamics";
@@ -308,7 +313,6 @@ export class PurityError extends ArrivalError {
 // user can test portability. `strictGate` is the single home for the per-method gate.
 // -------------------------------------------------------------------------
 export class PortabilityError extends ArrivalError {
-  static [CLASS] = "portability-error";
   public readonly name = "PortabilityError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -346,7 +350,6 @@ export function strictGate(
 // JS body that fans while declared `pipe` is consistent-but-wrong and invisible to shape.
 // -------------------------------------------------------------------------
 export class ProvenanceRoleShapeError extends ArrivalError {
-  static [CLASS] = "provenance-role-shape-error";
   public readonly name = "ProvenanceRoleShapeError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -375,7 +378,6 @@ export class ProvenanceRoleShapeError extends ArrivalError {
 // is persisted; the author's way out of this door is declaring `pure` (or nothing).
 // -------------------------------------------------------------------------
 export class CacheClassShapeError extends ArrivalError {
-  static [CLASS] = "cache-class-shape-error";
   public readonly name = "CacheClassShapeError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -411,8 +413,9 @@ export class InteropAccessError extends Error {
 
 /** R7RS error object — errors created by the `error` procedure. */
 export class R7RSError extends Error {
-  /** Type identity for CLASS-brand readers (`type()`), same convention as ArrivalError above. */
-  static [CLASS] = "r7rs-error";
+  /** Interop boundary: covered by the `instanceof R7RSError` arm in
+   *  interop-access.ts's `isInteropBoundary` (see the note on Unterminated above) —
+   *  R7RSReadError/R7RSFileError inherit the boundary through it too. */
 
   readonly irritants: unknown[];
   readonly name: string = "R7RSError";
@@ -513,7 +516,6 @@ export class ResourceNotLiveError extends Error {
 // a bare rejection.
 // -------------------------------------------------------------------------
 export class PreludeMembershipError extends ArrivalError {
-  static [CLASS] = "prelude-membership-error";
   public readonly name = "PreludeMembershipError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -538,7 +540,6 @@ export class PreludeMembershipError extends ArrivalError {
 // never a captured value).
 // -------------------------------------------------------------------------
 export class WireLocalityError extends ArrivalError {
-  static [CLASS] = "wire-locality-error";
   public readonly name = "WireLocalityError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -564,7 +565,6 @@ export class WireLocalityError extends ArrivalError {
 // converts into a bake-time door instead of assembly-order luck.
 // -------------------------------------------------------------------------
 export class DefineLocalityError extends ArrivalError {
-  static [CLASS] = "define-locality-error";
   public readonly name = "DefineLocalityError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -590,7 +590,6 @@ export class DefineLocalityError extends ArrivalError {
 // eval-time crash.
 // -------------------------------------------------------------------------
 export class DefineForwardReferenceError extends ArrivalError {
-  static [CLASS] = "define-forward-reference-error";
   public readonly name = "DefineForwardReferenceError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -633,7 +632,6 @@ export class DefineForwardReferenceError extends ArrivalError {
  *  always at the WRITER/resolver, never the read site (`AmbientRuntime.ts`'s
  *  `assertNotRawInStorage`/`assertResolvedBinding`). */
 export class RawCrossingError extends ArrivalError {
-  static [CLASS] = "raw-crossing-error";
   public readonly name = "RawCrossingError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -665,7 +663,6 @@ export class RawCrossingError extends ArrivalError {
  *  representation to a JS caller expecting a plain value (P5, docs/PRINCIPLES.md).
  *  Terminal-passthrough door: every `AValue` subclass needs an explicit branch. */
 export class UnrecognizedCrossingError extends ArrivalError {
-  static [CLASS] = "unrecognized-crossing-error";
   public readonly name = "UnrecognizedCrossingError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -687,7 +684,6 @@ export class UnrecognizedCrossingError extends ArrivalError {
  *  settles lazily on first read). A raw Promise in scheme space would be an
  *  opaque, unawaitable leak (P5, docs/PRINCIPLES.md). */
 export class AsyncCrossingError extends ArrivalError {
-  static [CLASS] = "async-crossing-error";
   public readonly name = "AsyncCrossingError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -708,7 +704,6 @@ export class AsyncCrossingError extends ArrivalError {
  *  of the membrane it stands on; the value should be used/passed through directly,
  *  never re-crossed. */
 export class RedundantCrossingError extends ArrivalError {
-  static [CLASS] = "redundant-crossing-error";
   public readonly name = "RedundantCrossingError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -731,7 +726,6 @@ export class RedundantCrossingError extends ArrivalError {
  *  region-bound to the calling symbol; a persistent handler needs an explicit
  *  capability granting a DETACHED scope. */
 export class RegionEscapeError extends ArrivalError {
-  static [CLASS] = "region-escape-error";
   public readonly name = "RegionEscapeError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -749,7 +743,6 @@ export class RegionEscapeError extends ArrivalError {
  *  reverse-lambda re-entries it started were still in flight. Every re-entry
  *  started during a call must settle (resolve or reject) before that call returns. */
 export class RegionIncompleteError extends ArrivalError {
-  static [CLASS] = "region-incomplete-error";
   public readonly name = "RegionIncompleteError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -785,7 +778,6 @@ export class RegionIncompleteError extends ArrivalError {
  *  under `.cause` (vocabulary-suggestions.law.test.ts's LIVE `.enriched` law pins
  *  this). */
 export class UnboundVariableError extends ArrivalError {
-  static [CLASS] = "unbound-variable-error";
   public readonly name = "UnboundVariableError";
   readonly "arrival/error-category": ErrorClass = "unbound-variable";
   /** Agent/MCP-facing wording (same hint, different frame — see unbound-variable.ts). */
@@ -823,7 +815,6 @@ export class UnboundVariableError extends ArrivalError {
  *  a reference) — echoing the string's own content back reads like the tool
  *  itself failed, so this variant names the cure (drop the quotes) instead. */
 export class NotCallableError extends ArrivalError {
-  static [CLASS] = "not-callable-error";
   public readonly name = "NotCallableError";
   readonly "arrival/error-category": ErrorClass = "type-mismatch";
 
@@ -849,7 +840,6 @@ export class NotCallableError extends ArrivalError {
  *  scope, or the internal-only RegExp face number-parsing/syntax-rules patterns
  *  use) — `eval/evaluator.ts#resolvedBindingOrThrow`. */
 export class ResolvedNonValueError extends ArrivalError {
-  static [CLASS] = "resolved-non-value-error";
   public readonly name = "ResolvedNonValueError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -881,7 +871,6 @@ export class ResolvedNonValueError extends ArrivalError {
 // carry no corpus code, and backfilling one per form is deferred).
 // -------------------------------------------------------------------------
 export class SpecialFormShapeError extends ArrivalError {
-  static [CLASS] = "special-form-shape-error";
   public readonly name = "SpecialFormShapeError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -907,7 +896,6 @@ export class SpecialFormShapeError extends ArrivalError {
  *  forms at all, or its last value doesn't satisfy the declared schema. The
  *  outbound twin of define/overridable's inbound validation. */
 export class OutputContractError extends ArrivalError {
-  static [CLASS] = "output-contract-error";
   public readonly name = "OutputContractError";
   readonly "arrival/error-category": ErrorClass = "type-mismatch";
 
@@ -935,7 +923,6 @@ export class OutputContractError extends ArrivalError {
  *  value, or an `inputRest` variadic tail declared over a non-tuple `input`
  *  (no well-defined prefix length to split at). */
 export class KeywordPairingError extends ArrivalError {
-  static [CLASS] = "keyword-pairing-error";
   public readonly name = "KeywordPairingError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -957,7 +944,6 @@ export class KeywordPairingError extends ArrivalError {
 /** A `schema/object` tagged-list field isn't the `(name type)`/`(name type
  *  description)` shape the JSON-Schema lowering (`common/schema-tag.ts`) requires. */
 export class SchemaFieldShapeError extends ArrivalError {
-  static [CLASS] = "schema-field-shape-error";
   public readonly name = "SchemaFieldShapeError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -974,7 +960,6 @@ export class SchemaFieldShapeError extends ArrivalError {
  *  throw in `common/scheme-zod.ts` self-documents that; this class gives them
  *  one shared identity instead of ad hoc `Error`/`TypeError`. */
 export class CodecFidelityError extends ArrivalError {
-  static [CLASS] = "codec-fidelity-error";
   public readonly name = "CodecFidelityError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -998,7 +983,6 @@ export class CodecFidelityError extends ArrivalError {
  *  SAME capability's own `symbols` record (an alias only dissolves to a sibling),
  *  or its target is itself another alias (chains aren't supported). */
 export class AliasTargetError extends ArrivalError {
-  static [CLASS] = "alias-target-error";
   public readonly name = "AliasTargetError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -1027,7 +1011,6 @@ export class AliasTargetError extends ArrivalError {
  *  time) but `lower()` was never handed an `evalScheme` — nothing can run the
  *  prelude text. `common/capability.ts`. */
 export class PreludeArmingError extends ArrivalError {
-  static [CLASS] = "prelude-arming-error";
   public readonly name = "PreludeArmingError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -1044,7 +1027,6 @@ export class PreludeArmingError extends ArrivalError {
  *  kept as free text (not further split into facts) because the four sites'
  *  phrasing genuinely differs in shape, not just in filled-in values. */
 export class AmbientShapeError extends ArrivalError {
-  static [CLASS] = "ambient-shape-error";
   public readonly name = "AmbientShapeError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -1068,7 +1050,6 @@ export class AmbientShapeError extends ArrivalError {
  *  so no run resolver was published for it to read (`loader/loader.ts`'s
  *  `runResolverOf`). Direct JS calls must go through `exec`/`execExpr`. */
 export class RunResolverUnreachableError extends ArrivalError {
-  static [CLASS] = "run-resolver-unreachable-error";
   public readonly name = "RunResolverUnreachableError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -1084,7 +1065,6 @@ export class RunResolverUnreachableError extends ArrivalError {
  *  `normalizePath`): a NUL byte in a path segment, or a `..` that would escape
  *  above the project root. */
 export class RequirePathError extends ArrivalError {
-  static [CLASS] = "require-path-error";
   public readonly name = "RequirePathError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -1105,7 +1085,6 @@ export class RequirePathError extends ArrivalError {
  *  actively evaluating (not merely a settled cache hit or a concurrent sibling)
  *  can cycle. */
 export class RequireCycleError extends ArrivalError {
-  static [CLASS] = "require-cycle-error";
   public readonly name = "RequireCycleError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -1118,7 +1097,6 @@ export class RequireCycleError extends ArrivalError {
  *  capability-registered resolver matches its suffix), or no ARMED extension for
  *  a requested `:name` (`loader/loader-capability.ts`). */
 export class RequireResolverError extends ArrivalError {
-  static [CLASS] = "require-resolver-error";
   public readonly name = "RequireResolverError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -1146,7 +1124,6 @@ export class RequireResolverError extends ArrivalError {
  *  exactly one resolver; last-write-wins would silently pick one at random
  *  assembly-order. */
 export class ExtensionSuffixConflictError extends ArrivalError {
-  static [CLASS] = "extension-suffix-conflict-error";
   public readonly name = "ExtensionSuffixConflictError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -1173,7 +1150,6 @@ export class ExtensionSuffixConflictError extends ArrivalError {
  *  (a param a replay driver forgot to supply), named at γ's own boundary instead
  *  of surfacing as an opaque unbound-variable error three calls deep in `exec`. */
 export class IngressBindingError extends ArrivalError {
-  static [CLASS] = "ingress-binding-error";
   public readonly name = "IngressBindingError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -1194,7 +1170,6 @@ export class IngressBindingError extends ArrivalError {
  *  rejected loudly rather than rendered wrong; there is no older format to
  *  migrate from yet. */
 export class TraceArtifactVersionError extends ArrivalError {
-  static [CLASS] = "trace-artifact-version-error";
   public readonly name = "TraceArtifactVersionError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -1214,7 +1189,6 @@ export class TraceArtifactVersionError extends ArrivalError {
  *  contained rather than an unhandled crash. Run aborts with a partial trace
  *  instead of OOMing the isolate or freezing the canvas. */
 export class TraceBudgetError extends ArrivalError {
-  static [CLASS] = "trace-budget-error";
   public readonly name = "TraceBudgetError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -1247,7 +1221,6 @@ export class TraceBudgetError extends ArrivalError {
  *  lte` (no natural order, e.g. a bare pair) — `values/op-helpers.ts`. Supply an
  *  explicit comparator instead of relying on the default total order. */
 export class ComparatorRequiredError extends ArrivalError {
-  static [CLASS] = "comparator-required-error";
   public readonly name = "ComparatorRequiredError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -1263,7 +1236,6 @@ export class ComparatorRequiredError extends ArrivalError {
  *  `real-part`/`imag-part`/`magnitude`/`angle` all door here (`values/numbers.ts`'s
  *  `complexDoor`) rather than silently misparsing. */
 export class ComplexNumberError extends ArrivalError {
-  static [CLASS] = "complex-number-error";
   public readonly name = "ComplexNumberError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -1278,7 +1250,6 @@ export class ComplexNumberError extends ArrivalError {
  *  not-callable doors note in evaluator.ts for why `invariant`'s "Invariant
  *  failed: " prefix reads wrong for a program mistake. */
 export class TaglessProtocolError extends ArrivalError {
-  static [CLASS] = "tagless-protocol-error";
   public readonly name = "TaglessProtocolError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -1324,7 +1295,6 @@ export class ProvenanceShadowDivergence extends Error {
 // its own declared type at `overridable/resolve` ("value-mismatch"). `env/overridable/overridable.ts`.
 // -------------------------------------------------------------------------
 export class TypeTagError extends ArrivalError {
-  static [CLASS] = "type-tag-error";
   public readonly name = "TypeTagError";
   readonly "arrival/error-category": ErrorClass = "other";
 
@@ -1365,7 +1335,6 @@ export class TypeTagError extends ArrivalError {
 // exists, the sibling verb that actually concatenates it (`env/r7rs/lists.ts`).
 // -------------------------------------------------------------------------
 export class CarrierMismatchError extends ArrivalError {
-  static [CLASS] = "carrier-mismatch-error";
   public readonly name = "CarrierMismatchError";
   readonly "arrival/error-category": ErrorClass = "other";
 

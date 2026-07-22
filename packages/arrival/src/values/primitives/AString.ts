@@ -5,7 +5,6 @@
 // runtime-enforced mutation guard.
 // Lineage: R7RS-small §6.7 strings; the representation-blind Setoid + Functor/
 // Semigroup/Monoid/Applicative are Fantasy Land (fantasyland/fantasy-land).
-import { CLASS } from "../../well-known-symbols.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import type { ANumeric } from "../numbers.js";
 import { ACharacter } from "./ACharacter.js";
@@ -16,7 +15,6 @@ type StringLike = string | AString | { valueOf(): string };
 type NumberLike = number | ANumeric | { valueOf(): number };
 
 export class AString extends AValue {
-  static [CLASS] = "string";
   readonly kind = "string" as const;
 
   __string__: string;
@@ -217,9 +215,10 @@ export class AString extends AValue {
 // any future graft (e.g. a method that returns the underlying object) becomes an
 // exfiltration vector.
 //
-// The FAMILY RULE in interop-access.ts (own `[CLASS]` brand on the constructor = boundary;
-// no per-class stamp) makes `isInteropBoundary(proto)` return true when the prototype-chain
-// walk in `accessMember` reaches the AString prototype, blocking the inherited surface. Own
+// The nominal FAMILY RULE in interop-access.ts (`instanceof AValue` covers the whole value
+// hierarchy in one check; no per-class stamp) makes `isInteropBoundary(proto)` return true
+// when the prototype-chain walk in `accessMember` reaches the AString prototype, blocking
+// the inherited surface. Own
 // properties remain accessible (the fast path is untouched) — correct because grafted
 // methods are own, so the boundary only blocks future inherited additions, not the current
 // intended API. Defense-in-depth via the AValue base's explicit stamp.

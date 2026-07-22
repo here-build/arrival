@@ -10,11 +10,11 @@
  * is never in TDZ.
  *
  * INTEROP BOUNDARY: the member-access walk stops at this prototype (before it can reach
- * `source` or the delegated vector) via the arrival-family rule in interop-access.ts —
- * any class carrying the own `[CLASS]` brand is a boundary; no per-class stamp needed.
+ * `source` or the delegated vector) via the nominal arrival-family rule in
+ * interop-access.ts — `instanceof AValue` covers the whole value hierarchy in one
+ * check; no per-class stamp needed.
  */
 
-import { CLASS } from "../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
 import { attestDeep, freshIfSingleton, isAttested } from "../values/attestation.js";
 import { AValue, EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
@@ -69,7 +69,6 @@ const pendingCells = new WeakMap<AJSArray<any>, Map<number | string, SchemeValue
  * out raw without materializing.)
  */
 export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends AValue {
-  static [CLASS] = "js-array";
   readonly kind = "vector" as const;
 
   // The borrowed source materialized into an owned vector — lazy + cached (the delegation

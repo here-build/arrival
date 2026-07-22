@@ -1,4 +1,3 @@
-import { CLASS } from "../well-known-symbols.js";
 import { type ResolverSpec, type SchemeEnv } from "../common/scheme-env.js";
 import type { EOF } from "../values/primitives/EOF.js";
 import { AString } from "../values/primitives/AString.js";
@@ -15,6 +14,7 @@ import type { RunContext } from "../run/RunContext.js";
 import { rosettaTypesOf } from "./env-registries.js";
 import { unboundVariableError } from "../unbound-variable.js";
 import { RawCrossingError } from "../errors.js";
+import { INTEROP_BOUNDARY } from "../membrane/interop-access.js";
 
 // -------------------------------------------------------------------------
 // :: Type definitions for AmbientRuntime bindings
@@ -93,7 +93,16 @@ export let mintResolvingFrame!: (
  * evaluator, and the replay ingress reach them; nothing else does).
  */
 export class AmbientRuntime {
-  static [CLASS] = "environment";
+  // Interop boundary: AmbientRuntime sits outside the AValue/ArrivalError families
+  // the FAMILY RULEs in interop-access.ts cover, so it carries its own explicit
+  // stamp (inherited by ResolvingAmbient through ordinary static inheritance).
+  static [INTEROP_BOUNDARY] = true;
+  // Module-dup-robust brand for `isAmbientRuntime` below — a plain STRING key
+  // (not a `Symbol.for`/class-identity check), so it survives module duplication
+  // (Vite dev serving a module at `?t=<hmr>`/`/@fs`/`.vite/deps` as a DISTINCT
+  // module instance makes `instanceof AmbientRuntime` spuriously fail across
+  // copies — see `isAmbientRuntime`'s own doc comment).
+  static ["arrival/is-environment"] = true;
 
   protected constructor(
     // `string | symbol`: a merge-frame's identity IS `Symbol.for("merge")`
@@ -446,13 +455,14 @@ export function bindRosetta(env: AmbientRuntime, name: string, config: RosettaFu
  * `x instanceof AmbientRuntime`. In the browser (Vite dev serves a module at `?t=<hmr>`,
  * `/@fs`, and `.vite/deps` as DISTINCT module instances) an env built by one copy of the
  * class is NOT `instanceof` another copy's class, so an instanceof guard spuriously
- * rejects a real frame (`AmbientShapeError`). The static `[CLASS] = "environment"` brand is keyed by
- * the STRING `"arrival/class"` (well-known-symbols.ts) — a string key is universal across
- * module copies, and it's inherited by `ResolvingAmbient`, so reading it off the value's
+ * rejects a real frame (`AmbientShapeError`). The static `["arrival/is-environment"] = true`
+ * marker is keyed by a plain STRING — universal across module copies (unlike class
+ * identity, or even a module-local `Symbol`) — and it's inherited by `ResolvingAmbient`
+ * through ordinary static-property inheritance, so reading it off the value's
  * constructor recognizes any real frame regardless of which module instance minted it.
  */
 export function isAmbientRuntime(value: unknown): value is AmbientRuntime {
   if (typeof value !== "object" || value === null) return false;
   const ctor: unknown = Reflect.get(value, "constructor");
-  return typeof ctor === "function" && Reflect.get(ctor, CLASS) === "environment";
+  return typeof ctor === "function" && Reflect.get(ctor, "arrival/is-environment") === true;
 }

@@ -72,7 +72,7 @@ function shadowSkipReason(form: SchemeValue, env: AmbientRuntime): ShadowSkip | 
 
   // A genuine macro head (a user/library macro that expands to something classify
   // cannot see statically): out of scope. The static classifier never expands.
-  // `is_macro_value` reads the macro classes' `[CLASS]` brand off `constructor`
+  // `is_macro_value` reads the macro classes' own `["arrival/is-macro"]` field
   // (value-guards.ts) — a downward, eval-import-free test, so no value→eval edge.
   const bound = env.get(op, { throwError: false });
   if (is_macro_value(bound)) return { kind: "macro-head", op };

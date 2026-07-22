@@ -1,7 +1,7 @@
-import { CLASS } from "../well-known-symbols.js";
 import type { AmbientRuntime, AmbientValue } from "../env/AmbientRuntime.js";
 import type { RunContext } from "../run/RunContext.js";
 import { type CompiledResolutionChain, sealResolutionChain } from "./CompiledResolutionChain.js";
+import { INTEROP_BOUNDARY } from "../membrane/interop-access.js";
 
 /**
  * The CAPABILITY base — the builtins/preludes/host-supplied resolvers a run is
@@ -21,7 +21,10 @@ import { type CompiledResolutionChain, sealResolutionChain } from "./CompiledRes
  * and `refFrame` (does the base OWN this name).
  */
 export class Capabilities {
-  static [CLASS] = "capabilities";
+  // Interop boundary: Capabilities sits outside the AValue/ArrivalError families
+  // the FAMILY RULEs in interop-access.ts cover, so it carries its own explicit
+  // stamp.
+  static [INTEROP_BOUNDARY] = true;
 
   /**
    * ASSEMBLED mode only — the sealed ambient artifact this base resolves through.

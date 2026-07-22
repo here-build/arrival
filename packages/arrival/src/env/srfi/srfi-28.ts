@@ -44,7 +44,6 @@ import { printValue } from "../../values/print.js";
 import { AString } from "../../values/primitives/AString.js";
 import { ABool } from "../../values/primitives/ABool.js";
 import { ArrivalError, type ErrorClass } from "../../errors.js";
-import { CLASS } from "../../well-known-symbols.js";
 
 /** A scheme string value (boxed AString, or a raw JS string on the odd pre-box path). */
 const isStringLike = (v: unknown): v is AString | string => v instanceof AString || typeof v === "string";
@@ -78,7 +77,8 @@ const writeOf = (arg: unknown): string => {
  *  file owns the format-string grammar these messages describe, so the class lives
  *  beside it rather than duplicating that context in the shared leaf. */
 class FormatError extends ArrivalError {
-  static [CLASS] = "format-error";
+  // Interop boundary: covered by the nominal `instanceof ArrivalError` family rule
+  // in interop-access.ts — no per-class stamp needed.
   public readonly name = "FormatError";
   readonly "arrival/error-category": ErrorClass = "other";
 }

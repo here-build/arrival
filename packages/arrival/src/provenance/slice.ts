@@ -151,7 +151,7 @@ function writeDatum(node: unknown, seen: Set<unknown>, sub?: (n: unknown) => str
       return writeNumber(node);
     case "symbol":
     case "character":
-    case "bool":
+    case "boolean":
     case "nil":
       return String(node); // each round-trips: name / #\c / #t#f / ()
     default:

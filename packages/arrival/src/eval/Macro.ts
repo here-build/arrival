@@ -1,5 +1,5 @@
-import { CLASS } from "../well-known-symbols.js";
 import { TF_EXPAND } from "../values/tagless-final.js";
+import { INTEROP_BOUNDARY } from "../membrane/interop-access.js";
 import type { RunContext } from "../run/RunContext.js";
 import type { SchemeValue } from "../values/types.js";
 import type { APair } from "../values/primitives/APair.js";
@@ -46,7 +46,14 @@ export interface MacroInvokeContext {
  * function application", 2010).
  */
 export class Macro {
-  static [CLASS] = "macro";
+  // Interop boundary: Macro sits outside the AValue/ArrivalError families the
+  // FAMILY RULEs in interop-access.ts cover, so it carries its own explicit stamp
+  // (membrane.ts's `is_macro_value` dispatch means a Macro CAN reach the interop
+  // read path via a resolved env value).
+  static [INTEROP_BOUNDARY] = true;
+  // The value-layer's downward-readable macro identity (AValue.ts's protocol slot) —
+  // read by `is_macro_value` (value-guards.ts) with no value→eval runtime edge.
+  readonly ["arrival/is-macro"] = true;
 
   __name__: string;
   __fn__: Function;

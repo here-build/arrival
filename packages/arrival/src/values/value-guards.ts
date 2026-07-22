@@ -18,7 +18,6 @@ import { APair } from "./primitives/APair.js";
 import { ANil } from "./primitives/ANil.js";
 import { ACharacter } from "./primitives/ACharacter.js";
 import { ALambda, ANativeProcedure, ARosettaProcedure, DoorProcedure, type ACallable } from "./primitives/ACallable.js";
-import { CLASS } from "../well-known-symbols.js";
 import { tf } from "./tagless-final.js";
 // Type-only — narrows the brand result to the evaluator's macro/syntax types so
 // `is_macro_value` stays signature-compatible with eval/guards' `is_macro`. An
@@ -70,26 +69,23 @@ export const is_native = (obj: unknown): obj is AString | ACharacter | AExact | 
 
 /**
  * `is_macro` WITHOUT an import edge into the evaluator. A Macro / Syntax /
- * Syntax.Parameter each carry a stable `static [CLASS]` brand ("macro" /
- * "syntax" / "syntax-parameter" — eval/Macro.ts, eval/Syntax.ts),
- * read here off `constructor[CLASS]` exactly as utils/typecheck.ts does.
- * The brand is the value layer's downward-readable identity for the macro
- * classes, so the lineage shadow-cone skip can test "is this a macro?" with no
- * value→eval runtime edge.
+ * Syntax.Parameter each carry an own `readonly ["arrival/is-macro"] = true` field
+ * (eval/Macro.ts, eval/Syntax.ts) — the value layer's downward-readable protocol
+ * slot (declared on AValue.ts for the protocol's typing home, though none of the
+ * three macro classes extends AValue), read here structurally so the lineage
+ * shadow-cone skip can test "is this a macro?" with no value→eval runtime edge.
  *
- * This is a duck/brand test, not `instanceof`: a forged `{ constructor: { [CLASS]:
- * "macro" } }` would pass. That is acceptable for the shadow-cone skip — the
+ * This is a duck/structural test, not `instanceof`: a forged `{ "arrival/is-macro":
+ * true }` would pass. That is acceptable for the shadow-cone skip — the
  * input is a value resolved from the run env (`env.get(op)`), never attacker
  * data, and the only consequence of a false positive is recording a top-level
  * form as macro-headed (out-of-scope-for-shadow), never a soundness break in the
- * emitted program. The brand set mirrors eval/guards' `is_macro` arms 1:1.
+ * emitted program. The field mirrors eval/guards' `is_macro` arms 1:1 (Macro,
+ * Syntax, and Syntax.Parameter all set it).
  */
-const MACRO_CLASS_BRANDS: ReadonlySet<string> = new Set(["macro", "syntax", "syntax-parameter"]);
 export function is_macro_value(o: unknown): o is Macro | Syntax {
   if (o === null || (typeof o !== "object" && typeof o !== "function")) return false;
-  const ctor = (o as { constructor?: { [CLASS]?: unknown } }).constructor;
-  const brand = ctor?.[CLASS];
-  return typeof brand === "string" && MACRO_CLASS_BRANDS.has(brand);
+  return (o as { ["arrival/is-macro"]?: unknown })["arrival/is-macro"] === true;
 }
 
 // Pure structural predicates (no value-kernel deps at all). They live here

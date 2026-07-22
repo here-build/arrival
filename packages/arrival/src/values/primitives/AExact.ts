@@ -16,7 +16,6 @@
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
-import { CLASS } from "../../well-known-symbols.js";
 import { schemeCompare } from "../numbers.js";
 import { AInexact } from "./AInexact.js";
 import type { SourceLocation } from "../../errors.js";
@@ -30,7 +29,6 @@ import {
 } from "../mint-numeric.js";
 
 export class AExact extends AValue {
-  static [CLASS] = "number";
   readonly kind = "number" as const;
 
   readonly num: number;

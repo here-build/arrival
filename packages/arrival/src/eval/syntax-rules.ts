@@ -43,6 +43,7 @@ import type { Resolver } from "./Resolver.js";
 import type { Capabilities } from "./Capabilities.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
+import { AValue } from "../values/primitives/AValue.js";
 import { Macro } from "./Macro.js";
 import { APair, __tieKnot } from "../values/primitives/APair.js";
 import { Syntax } from "./Syntax.js";
@@ -52,8 +53,19 @@ import { ANil, nil } from "../values/primitives/ANil.js";
 import { type } from "../utils/typecheck.js";
 import { gensym, hidden_prop, is_atom, is_gensym, quote } from "../values/values-repr.js";
 
+// The type()-vs-kind fold for same_atom's discriminator: `a` is always a boxed AValue
+// atom here (the `is_atom` guard at the call site restricts it), but `b` (the code
+// fragment being matched) can still be a raw JS string/RegExp — same_atom's own arms
+// below handle those. Reading `.kind` directly (skipping type()'s membrane arms /
+// foreign fallback, neither of which an atom ever needs) is the "kind-equality"
+// collapse: AExact and AInexact both carry kind "number", so `(= 1 1.0)`-shaped literal
+// comparisons collapse correctly without a numeric-tower special case.
+function atomKind(x: unknown): string {
+  return x instanceof AValue ? x.kind : type(x);
+}
+
 function same_atom(a, b) {
-  if (type(a) !== type(b)) {
+  if (atomKind(a) !== atomKind(b)) {
     return false;
   }
   if (!is_atom(a)) {

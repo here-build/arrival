@@ -5,14 +5,12 @@
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
-import { CLASS } from "../../well-known-symbols.js";
 import { complexDoor, schemeCompare } from "../numbers.js";
 import { AExact } from "./AExact.js";
 import { mintExact } from "../mint-numeric.js";
 import type { SourceLocation } from "../../errors.js";
 
 export class AInexact extends AValue {
-  static [CLASS] = "number";
   readonly kind = "number" as const;
 
   readonly real: number;

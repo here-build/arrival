@@ -9,27 +9,22 @@
 // symbol registry so an unrelated `Symbol.for("data")` elsewhere can never
 // collide. The one exception is LOCATION — see its note.
 //
-// CLASS is the other exception, in the opposite direction (key taxonomy,
-// docs/PRINCIPLES.md P7 corollary): it is an ALGEBRA INSTRUCTION KEY, not a
-// metadata slot, so it is a plain STRING (`"arrival/class"`), not a
-// `Symbol.for` registry entry — every static interpreter (type lens, oracle,
-// lineage classifier, trace, MCP harvest) consumes instruction names as data,
-// and a symbol would privilege the runtime pair. This is the sibling
-// convention to `arrival/tagless-final/*` and `arrival/toJS`/`arrival/print`,
-// which are also string-keyed directly on the value classes (see
-// `values/tagless-final.ts`). It lives in this file (rather than beside
-// those) only because it long predates the taxonomy split; a forged own data
-// key named `"arrival/class"` on a borrowed JS object is DATA, never
-// protocol — the membrane never reads a wrapped source's own keys as
-// instructions (the forgery-guard law, `membrane/__tests__/crossing.law.test.ts`).
-
-/**
- * STRING tag identifying a value class, read via `constructor[CLASS]`
- * (`utils/typecheck.ts`, `values/value-guards.ts`). Both the KEY and the
- * VALUE are plain strings: the key is always `"arrival/class"`, the value is
- * the per-class tag ("pair" / "vector" / …).
- */
-export const CLASS = "arrival/class";
+// RETIRED: `CLASS` (`export const CLASS = "arrival/class"`) used to live here as
+// the ONE plain-STRING exception (key taxonomy, docs/PRINCIPLES.md P7 corollary)
+// — an ALGEBRA INSTRUCTION KEY read via `constructor[CLASS]` off ~28 classes'
+// `static [CLASS] = "<name>"`. It has been fully replaced by three nominal
+// mechanisms, one per consumer: `is_macro_value` (values/value-guards.ts) now
+// reads an own `["arrival/is-macro"]` field Macro/Syntax/Syntax.Parameter set
+// directly; `isInteropBoundary` (membrane/interop-access.ts) now uses
+// `instanceof AValue` / `instanceof ArrivalError` family checks (plus explicit
+// `static [INTEROP_BOUNDARY] = true` stamps on the handful of classes outside
+// both families); and `type()` (utils/typecheck.ts) now reads each AValue's own
+// `kind` field (with explicit membrane arms for AJSArray/AJSObject, whose `kind`
+// deliberately diverges from their membrane role). A forged own data key named
+// `"arrival/class"` on a borrowed JS object was always DATA, never protocol — the
+// membrane never reads a wrapped source's own keys as instructions (the
+// forgery-guard law, `membrane/__tests__/crossing.law.test.ts`, still pins this
+// for the retired string).
 
 /**
  * Marks a value as quoted data (`(quote …)` output) so the evaluator treats a

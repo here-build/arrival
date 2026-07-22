@@ -23,7 +23,6 @@
  * genuinely foreign, with no prior Scheme lineage to lose — it has exited the
  * dict-literal syntax business entirely.
  */
-import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { egressContainerProxy } from "../../membrane/egress-proxy.js";
@@ -101,7 +100,6 @@ export function isDictShaped(source: unknown): boolean {
 }
 
 export class ADict extends AValue {
-  static [CLASS] = "dict";
   readonly kind = "dict" as const;
 
   /** `{…}` reader-literal marker: the FLAT, validated form sequence (keys then values,

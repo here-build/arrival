@@ -12,7 +12,6 @@
  * Lineage: R7RS-small §6.9 bytevectors; the Setoid/Ord/Semigroup instances are
  * Fantasy Land (fantasyland/fantasy-land).
  */
-import { CLASS } from "../../well-known-symbols.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { withInputProvenance } from "../op-helpers.js";
 import type { SourceLocation } from "../../errors.js";
@@ -49,7 +48,6 @@ function toUint8(source: BytevectorSource): Uint8Array {
 }
 
 export class ABytevector extends AValue {
-  static [CLASS] = "bytevector";
   readonly kind = "bytevector" as const;
 
   readonly __bytevector__: Uint8Array;
@@ -163,6 +161,6 @@ export class ABytevector extends AValue {
 // ============================================================================
 // Same rationale as AString (AString.ts): block inherited-method exposure
 // when interop symbol-to-field resolution walks the prototype chain — via the
-// FAMILY RULE in interop-access.ts (own `[CLASS]` brand on the constructor =
-// boundary; no per-class stamp). Own properties (the algebra methods) remain
-// the intended API.
+// nominal FAMILY RULE in interop-access.ts (`instanceof AValue` covers the whole
+// value hierarchy in one check; no per-class stamp). Own properties (the algebra
+// methods) remain the intended API.

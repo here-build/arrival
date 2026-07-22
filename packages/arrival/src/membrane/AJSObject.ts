@@ -9,12 +9,11 @@
  *
  * INTEROP BOUNDARY: this wrapper IS the JS↔Scheme membrane. get/set/has/delete/keys route
  * through accessMember for the WRAPPED value, but the wrapper's own prototype is reachable
- * via symbol-to-field auto-resolution; the arrival-family rule in interop-access.ts (own
- * `[CLASS]` brand on the constructor = boundary) stops the prototype walk here so sandbox
- * code can't read `get`/`toString` to reach `source`.
+ * via symbol-to-field auto-resolution; the nominal arrival-family rule in interop-access.ts
+ * (`instanceof AValue` covers the whole value hierarchy in one check) stops the prototype
+ * walk here so sandbox code can't read `get`/`toString` to reach `source`.
  */
 
-import { CLASS } from "../well-known-symbols.js";
 import { CONSTANT_CTX } from "../run/RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
 import { nil } from "../values/primitives/ANil.js";
@@ -54,7 +53,6 @@ export function foldMemberName(key: SchemeValue | string): string {
  * All property access is sandboxed — see interop-access.ts for the security model.
  */
 export class AJSObject extends AValue {
-  static [CLASS] = "js-object";
   readonly kind = "object" as const;
 
   constructor(
@@ -221,8 +219,8 @@ export class AJSObject extends AValue {
     return "#<js-object>";
   }
 
-  // Delegates to toString — matches the printer's CLASS-name path
-  // (static [CLASS] = "js-object" → `#<js-object>`).
+  // Delegates to toString — the fixed "#<js-object>" literal, mirroring type()'s
+  // explicit `instanceof AJSObject` membrane arm (utils/typecheck.ts).
   ["arrival/print"](): string {
     return this.toString();
   }

@@ -60,7 +60,7 @@ const kindOf = (v: unknown): unknown => (v !== null && typeof v === "object" && 
  *  reader already tags these literally at `kind`. */
 function literalAtom(node: unknown): { ok: true; value: string | number | boolean } | { ok: false } {
   const kind = kindOf(node);
-  if (kind === "string" || kind === "number" || kind === "bool") {
+  if (kind === "string" || kind === "number" || kind === "boolean") {
     return { ok: true, value: schemeToJsUntyped(node, {}) as string | number | boolean };
   }
   return { ok: false };

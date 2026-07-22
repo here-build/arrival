@@ -16,11 +16,9 @@
  * our non-standard surface for it — the readable `#void` literal — is rejected. The
  * value class itself is mode-agnostic; the divergence lives at the reader.
  */
-import { CLASS } from "../../well-known-symbols.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 
 export class AVoid extends AValue {
-  static [CLASS] = "void";
   readonly kind = "void" as const;
 
   constructor(provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {

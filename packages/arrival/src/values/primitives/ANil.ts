@@ -7,14 +7,12 @@
  * file loads first, so no late-bound constructor injection is needed.
  */
 import { type SchemeValue } from "../types.js";
-import { CLASS } from "../../well-known-symbols.js";
 import { type RunContext } from "../../run/RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { APair } from "./APair.js";
 import { AExact } from "./AExact.js";
 
 export class ANil extends AValue {
-  static [CLASS] = "nil";
   readonly kind = "nil" as const;
 
   constructor(provenance: ReadonlySet<number> = EMPTY_PROVENANCE) {

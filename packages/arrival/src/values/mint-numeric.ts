@@ -21,7 +21,6 @@
 // module-eval/class-definition time, so the cycle never observes a not-yet-initialized
 // binding.
 import { ArrivalError, type ErrorClass, type SourceLocation } from "../errors.js";
-import { CLASS } from "../well-known-symbols.js";
 import { AExact } from "./primitives/AExact.js";
 import { AInexact } from "./primitives/AInexact.js";
 import { EMPTY_PROVENANCE } from "./primitives/AValue.js";
@@ -40,7 +39,8 @@ import type { ANumeric } from "./numbers.js";
  * event (§2.0) — only when a NUMERATOR or DENOMINATOR component itself would overflow.
  */
 export class ExactOverflowError extends ArrivalError {
-  static [CLASS] = "exact-overflow-error";
+  // Interop boundary: covered by the nominal `instanceof ArrivalError` family rule
+  // in interop-access.ts — no per-class stamp needed.
   public readonly name = "ExactOverflowError";
   readonly "arrival/error-category": ErrorClass = "exact-overflow";
 

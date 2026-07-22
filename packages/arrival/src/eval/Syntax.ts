@@ -1,5 +1,5 @@
-import { CLASS } from "../well-known-symbols.js";
 import { TF_EXPAND } from "../values/tagless-final.js";
+import { INTEROP_BOUNDARY } from "../membrane/interop-access.js";
 import type { AmbientRuntime } from "../env/AmbientRuntime.js";
 import type { SchemeValue } from "../values/types.js";
 import type { Expansion, MacroInvokeContext } from "./Macro.js";
@@ -30,11 +30,20 @@ interface MacroExpansion {
  * "Macros That Work", POPL 1991); the nested `Parameter` is SRFI-139 syntax parameters.
  */
 export class Syntax {
-  static [CLASS] = "syntax";
+  // Interop boundary: Syntax sits outside the AValue/ArrivalError families the FAMILY
+  // RULEs in interop-access.ts cover, so it carries its own explicit stamp (same
+  // reasoning as Macro.ts).
+  static [INTEROP_BOUNDARY] = true;
+  // The value-layer's downward-readable macro identity (AValue.ts's protocol slot) —
+  // `is_macro_value` (value-guards.ts) treats a Syntax as a macro too.
+  readonly ["arrival/is-macro"] = true;
   static __merge_env__ = Symbol.for("merge");
   // SRFI-139
   static Parameter = class SyntaxParameter {
-    static [CLASS] = "syntax-parameter";
+    static [INTEROP_BOUNDARY] = true;
+    // MACRO_CLASS_BRANDS (the retired CLASS mechanism) counted "syntax-parameter" as
+    // macro-headed too — preserve that: `is_macro_value` must still answer true here.
+    readonly ["arrival/is-macro"] = true;
 
     _syntax!: SyntaxLike; // Definite assignment - set via Object.defineProperty
     constructor(syntax: SyntaxLike) {

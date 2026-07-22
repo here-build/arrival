@@ -1,4 +1,3 @@
-import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import type { CallCtx } from "../../run/CallCtx.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
@@ -48,7 +47,6 @@ function isKeywordName(name: string): name is string {
 }
 
 export class ASymbol extends AValue {
-  static [CLASS] = "symbol";
   // Interning is per run context — see `internTables` / `internTableFor` above.
   /** Special symbol markers. `literal` is `unique symbol`-typed (the `Symbol.for` registry
    *  value is unchanged) so the gensym literal slot can be a DECLARED computed field below —
@@ -262,8 +260,8 @@ function is_gensym(symbol: unknown): boolean {
 // INTEROP BOUNDARY: ASymbol tracks gensym metadata via well-known symbols (`literal`
 // is the live one; `object` is a write-only legacy carrier — dotted-path resolution was
 // ruled out, so nothing reads it); symbol-to-field auto-resolution would otherwise expose
-// any class- or prototype-level property to inference-plane scheme. The FAMILY RULE in
-// interop-access.ts (own `[CLASS]` brand on the constructor = boundary; no per-class stamp)
-// blocks inherited-property access on instances. Interning lives in the module-scope
+// any class- or prototype-level property to inference-plane scheme. The nominal FAMILY RULE
+// in interop-access.ts (`instanceof AValue` covers the whole value hierarchy in one check;
+// no per-class stamp) blocks inherited-property access on instances. Interning lives in the module-scope
 // `internTables` WeakMap (not a class member), so it isn't symbol-field reachable at all.
 // ============================================================================

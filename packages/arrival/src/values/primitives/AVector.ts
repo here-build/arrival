@@ -14,7 +14,6 @@
  * Lineage: R7RS-small §6.8 vectors; the Setoid/Semigroup/Functor/Filterable/
  * Foldable instances are Fantasy Land (fantasyland/fantasy-land).
  */
-import { CLASS } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import { makeCallCtx } from "../../run/CallCtx.js";
 import { applyCallback } from "./ACallable.js";
@@ -46,7 +45,6 @@ import type { SourceLocation } from "../../errors.js";
 const LOWERED_LITERAL = new WeakMap<AVector, APair<SchemeValue, SchemeValue>>();
 
 export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
-  static [CLASS] = "vector";
   readonly kind = "vector" as const;
 
   /** `[…]` reader-literal marker: the evaluator, meeting this node in CODE position,
@@ -455,7 +453,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
 
 // ============================================================================
 // INTEROP BOUNDARY: same rationale as AString/ABytevector — inherited-method exposure is
-// blocked when interop symbol-to-field resolution walks the prototype chain, via the FAMILY
-// RULE in interop-access.ts (own `[CLASS]` brand on the constructor = boundary; no per-class
-// stamp).
+// blocked when interop symbol-to-field resolution walks the prototype chain, via the nominal
+// FAMILY RULE in interop-access.ts (`instanceof AValue` covers the whole value hierarchy in
+// one check; no per-class stamp).
 // ============================================================================

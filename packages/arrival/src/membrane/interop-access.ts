@@ -25,8 +25,14 @@
  *    honest home until a third caller forces the cut.
  * 2. THE PRIVACY BRAND — INTEROP_BOUNDARY + markInteropBoundary/@arrival.private:
  *    the opt-in for HOST classes (arrival-chain re-exports it). Arrival's own value
- *    family does not stamp per-class: the family rule inside `isInteropBoundary`
- *    (own `[CLASS]` brand on the constructor = boundary) covers every primitive.
+ *    family does not stamp per-class: the nominal family rule inside
+ *    `isInteropBoundary` (`instanceof AValue`) covers every primitive in one check,
+ *    and the sibling `instanceof ArrivalError` rule covers the structured-error
+ *    hierarchy the same way. Classes outside both families (Macro, Syntax,
+ *    AmbientRuntime, LexicalScope, Capabilities, EOF, Values, Unterminated,
+ *    ParseError, EvalError) carry an explicit `static [INTEROP_BOUNDARY] = true`
+ *    stamp (or, for the three errors.ts classes that predate ArrivalError, an
+ *    explicit `instanceof` arm here — see the walk below).
  *
  * Lineage: GraalVM Truffle InteropLibrary (Würthinger et al. 2013/2017);
  * object-capability membrane (Miller, "Robust Composition", 2006).
@@ -36,12 +42,15 @@
 // used throughout this module (side-effect import).
 import "@here.build/error-invariant";
 
-import { InteropAccessError } from "../errors.js";
-// The arrival value-family brand (a plain string key, P7 taxonomy) — used by the
-// family rule in `isInteropBoundary`: any class carrying an OWN `[CLASS]` static is
-// an arrival value class, hence a boundary. well-known-symbols.ts is a constants
-// leaf (zero imports), so this stays cycle-free.
-import { CLASS } from "../well-known-symbols.js";
+import { InteropAccessError, ArrivalError, Unterminated, ParseError, EvalError, R7RSError } from "../errors.js";
+// The two nominal families the boundary walk recognizes in one shot apiece:
+// every AValue subclass (the value kernel) and every ArrivalError subclass (the
+// structured-error hierarchy). Importing AValue here is a benign two-file cycle —
+// AValue.ts already imports INTEROP_BOUNDARY from this module (its own defensive
+// stamp), and membrane already imports the value family elsewhere (AJSObject/
+// AJSArray extend AValue from within this same directory). Importing errors.ts is
+// not new at all — InteropAccessError already came from here.
+import { AValue } from "../values/primitives/AValue.js";
 
 // ============================================================================
 // Interop Boundary Marker
@@ -212,26 +221,44 @@ export function isInteropBoundary(proto: object | null): boolean {
     return true;
   }
 
-  // ARRIVAL FAMILY RULE: a prototype whose OWN-descriptor constructor carries an
-  // OWN `[CLASS]` brand ("arrival/class", the P7 string-key taxonomy) is an arrival
-  // value class — always a boundary. Because this check is hasOwnProperty-based, a
-  // per-class `static [INTEROP_BOUNDARY] = true` stamp would need repeating on every
-  // subclass; the CLASS brand covers the whole family in one rule instead, and no
-  // primitive carries the boundary import.
-  // Forgery direction is harmless: a borrowed class self-stamping `[CLASS]` only
-  // SEALS itself — the same privacy `@arrival.private` grants deliberately. (The F1
-  // forgery-guard concern — data keys masquerading as protocol on VALUES — doesn't
-  // apply: this reads a constructor during a privacy walk, and the failure mode is
-  // more privacy, not less.)
-  {
-    const ctor = Reflect.getOwnPropertyDescriptor(proto, "constructor")?.value;
-    if (
-      typeof ctor === "function" &&
-      Object.prototype.hasOwnProperty.call(ctor, CLASS)
-    ) {
-      boundaryCache.set(proto, true);
-      return true;
-    }
+  // ARRIVAL FAMILY RULE: the whole AValue hierarchy is a boundary in one check.
+  // Every value class's prototype sits in AValue's own prototype chain (a subclass
+  // IS an AValue-chain object), so `instanceof` covers ACharacter/AString/APair/…
+  // uniformly with no per-class stamp. The explicit `===` arm is required
+  // separately: `AValue.prototype instanceof AValue` is always false (`instanceof`
+  // walks the chain STARTING ABOVE the receiver, so a class's own prototype object
+  // never answers `instanceof` itself) — this is why AValue.ts additionally keeps
+  // its own `static [INTEROP_BOUNDARY] = true` stamp as a defensive belt, caught by
+  // the class-level marker check further below.
+  if (proto === AValue.prototype || proto instanceof AValue) {
+    boundaryCache.set(proto, true);
+    return true;
+  }
+
+  // Same nominal-family shape for the structured-error hierarchy: every branded
+  // error subclass (BudgetExceededError, UnboundVariableError, KwargsRejectionError,
+  // …) extends ArrivalError, so `instanceof ArrivalError` covers the whole set in
+  // one check. The errors.ts classes that predate ArrivalError (Unterminated,
+  // ParseError, EvalError, R7RSError — they extend Error directly) get their own
+  // explicit arm; R7RSError's own subclasses (R7RSReadError/R7RSFileError, never
+  // themselves branded) pick up the boundary too via `instanceof`, a strictly safe
+  // over-approximation (more privacy, not less — see the forgery-direction note above).
+  if (proto === ArrivalError.prototype || proto instanceof ArrivalError) {
+    boundaryCache.set(proto, true);
+    return true;
+  }
+  if (
+    proto === Unterminated.prototype ||
+    proto instanceof Unterminated ||
+    proto === ParseError.prototype ||
+    proto instanceof ParseError ||
+    proto === EvalError.prototype ||
+    proto instanceof EvalError ||
+    proto === R7RSError.prototype ||
+    proto instanceof R7RSError
+  ) {
+    boundaryCache.set(proto, true);
+    return true;
   }
 
   // Explicit marker on the prototype itself. hasOwnProperty, not `in` — don't

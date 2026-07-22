@@ -1,14 +1,17 @@
 import { theVoid } from "./AVoid.js";
-import { CLASS } from "../../well-known-symbols.js";
+import { INTEROP_BOUNDARY } from "../../membrane/interop-access.js";
 import type { SchemeValue } from "../types.js";
 
 // The carrier for `(values …)`: a distinct wrapper, not a plain value, so a
 // multiple-values return is distinguishable from a single value that happens
 // to be a collection.
 export class Values {
-  /** Type identity for CLASS-brand readers (`type()` in utils/typecheck): Values sits
-   *  outside the AValue hierarchy, so without a brand it needs a bespoke arm there. */
-  static [CLASS] = "values";
+  /** Interop boundary: Values sits outside the AValue hierarchy the FAMILY RULE in
+   *  interop-access.ts covers, so it carries its own explicit stamp. `type()` (utils/
+   *  typecheck.ts) no longer has a brand to report for Values either — it falls to
+   *  the `foreign:Values` rung, an accepted behavior change (no test pins the old
+   *  "values" text). */
+  static [INTEROP_BOUNDARY] = true;
 
   __values__: SchemeValue[];
 

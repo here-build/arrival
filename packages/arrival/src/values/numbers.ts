@@ -16,7 +16,6 @@
  * misparsed. complex? still answers #t for every real (real ⊂ complex by spec —
  * the predicate stays total; only the imaginary axis is gone).
  */
-import { CLASS } from "../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./primitives/AValue.js";
@@ -250,10 +249,11 @@ export function isInteger(n: unknown): n is AExact | bigint | number {
 // isRational/isReal getters + arithmetic protocol) on their prototypes. Numeric
 // values are the densest object population in any inference computation, and
 // symbol-to-field auto-resolution makes each number a potential probe point
-// into the host numeric tower. The FAMILY RULE in interop-access.ts (own
-// `[CLASS]` brand on the constructor = boundary; no per-class stamp) restricts
-// interop member-access to own properties (num/denom for exact, real for
-// inexact) — the intended data surface — blocking the tower-internals methods.
+// into the host numeric tower. The nominal FAMILY RULE in interop-access.ts
+// (`instanceof AValue` covers the whole value hierarchy in one check; no
+// per-class stamp) restricts interop member-access to own properties (num/denom
+// for exact, real for inexact) — the intended data surface — blocking the
+// tower-internals methods.
 // The arithmetic ops scheme code actually uses (`+`, `*`, `floor`, …) live in
 // env bindings, not on these prototypes.
 // ============================================================================

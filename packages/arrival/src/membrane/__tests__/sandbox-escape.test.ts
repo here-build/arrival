@@ -133,9 +133,10 @@ describe("CRITICAL: sandbox escape vectors", () => {
    */
   it("SchemeString is a sandbox boundary", async () => {
     // The INVARIANT (walk stops at the prototype), not the mechanism: per-class
-    // INTEROP_BOUNDARY stamps were replaced by the arrival-family rule in
-    // interop-access.ts (own [CLASS] brand on the constructor = boundary), so the
-    // checker's verdict is the thing to pin — plus the behavioral consequence.
+    // INTEROP_BOUNDARY stamps were replaced by the nominal family rule in
+    // interop-access.ts (`instanceof AValue` covers the whole value hierarchy in
+    // one check), so the checker's verdict is the thing to pin — plus the
+    // behavioral consequence.
     expect(isInteropBoundary(AString.prototype)).toBe(true);
     // Behavioral half: a grafted String.prototype method is NOT reachable through
     // the member walk on an AString instance.

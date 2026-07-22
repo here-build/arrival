@@ -132,7 +132,7 @@ import { AVector } from "../values/primitives/AVector.js";
 import { Macro } from "./Macro.js";
 import { Syntax } from "./Syntax.js";
 import { APair } from "../values/primitives/APair.js";
-import { CLASS, DATA } from "../well-known-symbols.js";
+import { DATA } from "../well-known-symbols.js";
 import { AListAlike, type SchemeBounceMarker, type SchemeValue } from "../values/types.js";
 import { ANil, nil } from "../values/primitives/ANil.js";
 import { AKernelKeyword } from "../values/AKernelKeyword.js";
@@ -749,7 +749,8 @@ const rawRaisedValues = new WeakMap<ArrivalError, SchemeValue>();
  *  raise: `cause instanceof R7RSError` ⇒ `"user-error"`), else `"other"` — the
  *  same cause-forwarding shape as `ArrivalError`'s own `get stack()` above. */
 class ForeignThrowError extends ArrivalError {
-  static [CLASS] = "foreign-throw-error";
+  // Interop boundary: covered by the nominal `instanceof ArrivalError` family rule
+  // in interop-access.ts — no per-class stamp needed.
   public readonly name = "ForeignThrowError";
   readonly "arrival/error-category": ErrorClass;
 

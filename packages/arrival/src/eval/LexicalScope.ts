@@ -1,7 +1,7 @@
-import { CLASS } from "../well-known-symbols.js";
 import { AmbientRuntime, mintFrame, mintResolvingFrame, ResolvingAmbient } from "../env/AmbientRuntime.js";
 import type { AmbientValue } from "../env/AmbientRuntime.js";
 import type { RunContext } from "../run/RunContext.js";
+import { INTEROP_BOUNDARY } from "../membrane/interop-access.js";
 
 /**
  * The LEXICAL binding chain — let/lambda/letrec/do/catch frames, the names a
@@ -30,7 +30,10 @@ const MERGE_SCOPE: symbol = Symbol.for("merge"); // ≡ Syntax.__merge_env__ (re
 const wrappers = new WeakMap<AmbientRuntime, LexicalScope>();
 
 export class LexicalScope<E extends AmbientRuntime = AmbientRuntime> {
-  static [CLASS] = "lexical-scope";
+  // Interop boundary: LexicalScope sits outside the AValue/ArrivalError families
+  // the FAMILY RULEs in interop-access.ts cover, so it carries its own explicit
+  // stamp.
+  static [INTEROP_BOUNDARY] = true;
 
   /** The memoized wrapper for `env` (see {@link wrappers}). */
   static for<E extends AmbientRuntime>(env: E): LexicalScope<E> {

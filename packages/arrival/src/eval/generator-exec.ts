@@ -50,8 +50,9 @@ import type { output as ZodOutputOf, ZodType } from "../common/scheme-zod.js";
 import type { AListAlike, SchemeValue } from "../values/types.js";
 import { toJS } from "../membrane/membrane.js";
 
-// `is_macro_value` (value-guards.ts) reads the macro classes' `[CLASS]` brand
-// directly — downward, eval-import-free. No runtime DI needed here.
+// `is_macro_value` (value-guards.ts) reads the macro classes' own
+// `["arrival/is-macro"]` field directly — downward, eval-import-free. No runtime
+// DI needed here.
 
 /**
  * Realm-cached lexical root for DEFAULT (no-env) exec — null-rooted scratch frame
