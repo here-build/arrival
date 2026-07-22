@@ -293,7 +293,10 @@ export interface ExecOptions {
    * disposed only when the caller ends the session, via `disposeRunContext(runCtx)` or
    * `await using` a `new RunContext(...)`-minted one). Honored on BOTH the cut and GLASS (`env`)
    * paths — unlike `capabilities`/`scope`/`ambient`, glass has its own live env but still needs
-   * a RunContext, so glass callers get the same continuity option.
+   * a RunContext, so glass callers get the same continuity option. Also honored by {@link execExpr}
+   * (Stage C Cut 1) — its own single-form sub-program plumbing (require's module-eval loop,
+   * prelude eval) threads the requiring run's LIVE `runCtx` through, rather than always minting a
+   * fresh vocabulary-less one; see that function's own doc for the full contract.
    */
   runCtx?: RunContext;
   /**
@@ -1074,6 +1077,18 @@ export async function parse(code: string, source?: string): Promise<SchemeValue[
  * Execute a single pre-parsed expression. COMPLEX tier — the internal form-at-a-time entry
  * (require, prelude eval); returns one boxed SchemeValue, never unwrapped. Use this when
  * you've already parsed the code.
+ *
+ * `ExecOptions.runCtx` CONTRACT (Stage C, Cut 1): supplied ⇒ evaluate WITHIN that run — its
+ * `vocabulary`/`degraded`/`capabilityConfigurations`, its meter (`heapMeter`), its `strict`, its
+ * `signal`, its per-run extension registry (`loader-capability.ts`'s `loaderRegistryOf` keys off
+ * `runCtx.vocabulary`) — reused verbatim, never re-minted, and left for the CALLER to dispose
+ * (same ownership posture `execState`'s `runCtxOwned` already documents). Absent ⇒ standalone
+ * throwaway run: a fresh vocabulary-less `RunContext` is minted from the scalar options below and
+ * disposed here, at THIS call's end — the byte-compatible legacy behavior. `require`'s module-eval
+ * loop (loader-capability.ts) threads the requiring run's LIVE `runCtx` so a nested `(require …)`
+ * inside a `.scm` module resolves through the SAME run (and, on the vocabulary path, the SAME
+ * per-run extension registry) as its parent — instead of silently falling to the process-global
+ * legacy table.
  */
 export async function execExpr(
   expr: SchemeValue,
@@ -1091,6 +1106,7 @@ export async function execExpr(
     effects,
     reads,
     skipBootstrapWait,
+    runCtx: passedRunCtx,
   }: ExecOptions = {},
 ): Promise<SchemeValue> {
   const actualEnv = env ?? user_env;
@@ -1110,18 +1126,29 @@ export async function execExpr(
       ? new Resolver(actualEnv)
       : new Resolver(defaultLexicalRoot(), Capabilities.assembled(actualEnv)));
 
-  // Mint a per-run handle here too (mirrors exec()) — a required-module impl reading
-  // `this.runCtx.signal` (CallCtx) sees the SAME abort signal `ctx.signal` carries, and the
-  // handler-stack WeakMap (exceptions.ts) keys off this run rather than a shared fallback
-  // bucket. `heapBudget` bounds THIS expression's allocations (a per-form meter). deferred: a
-  // cumulative multi-form bound needs a shared RunContext no caller can inject yet.
-  // `reads` rides the handle for consistency with `cache`/`effects` (a required module's rosetta
-  // penetrations still stamp `enqueuedAtReadClock` through the SAME chokepoint — see
-  // run-cache.ts), but this single-form entry does not itself wrap a region or run the guard
-  // check: it has no per-form LOOP to hang either on (unlike execState's), and its callers
-  // (require, prelude eval) are sub-program plumbing, not the top-level prime run the guard
-  // targets. A caller wiring a real burst run through execState gets both.
-  const runCtx = new RunContext({ signal, heapBudget, cache, effects, reads });
+  // Stage C Cut 1: REUSE a passed-in `runCtx` (a required module's own `execExpr(form, {
+  // resolver, runCtx })` call — loader-capability.ts's module-eval loop threads the requiring
+  // run's LIVE handle) instead of always minting a fresh, vocabulary-less one. A required-module
+  // impl reading `this.runCtx.signal` (CallCtx) then sees the SAME abort signal as the requiring
+  // program, the SAME meter, the SAME vocabulary/extension-registry — nested `(require …)`
+  // resolves per-run, not against the process-global legacy table (`loaderRegistryOf`). Absent
+  // `runCtx` ⇒ mint fresh (mirrors exec()) — this expression's own throwaway run: `heapBudget`
+  // bounds THIS expression's allocations (a per-form meter; deferred: a cumulative multi-form
+  // bound needs a shared RunContext no caller can inject yet). `reads` rides the handle for
+  // consistency with `cache`/`effects` (a required module's rosetta penetrations still stamp
+  // `enqueuedAtReadClock` through the SAME chokepoint — see run-cache.ts), but this single-form
+  // entry does not itself wrap a region or run the guard check: it has no per-form LOOP to hang
+  // either on (unlike execState's), and its callers (require, prelude eval) are sub-program
+  // plumbing, not the top-level prime run the guard targets. A caller wiring a real burst run
+  // through execState gets both.
+  const runCtxOwned = passedRunCtx === undefined;
+  const runCtx = passedRunCtx ?? new RunContext({ signal, heapBudget, cache, effects, reads });
+  // The run axis is the SOURCE OF TRUTH once a runCtx exists (mirrors the call-time-ctx discipline,
+  // evaluator.ts's lambda `runner` — `bodyCtx.signal = callCtx.runCtx.signal`): a freshly-minted
+  // runCtx's `.signal` is exactly the `signal` option above, so this is byte-compatible when
+  // `runCtx` is absent, and correctly authoritative (over a stray separate `signal` option) when
+  // it's supplied.
+  const runSignal = runCtx.signal;
 
   try {
     // Top-level form evaluates to a value, never a bare expander — seal it.
@@ -1133,20 +1160,20 @@ export async function execExpr(
           use_dynamic,
           tap,
           nodeFilter,
-          signal,
+          signal: runSignal,
           runCtx,
         }),
-        { signal, budgetMs },
+        { signal: runSignal, budgetMs },
       ),
     );
   } catch (e) {
     if (e instanceof ArrivalError && e.cause instanceof TypeError) throw e.cause;
     throw e;
   } finally {
-    // This `runCtx` is ALWAYS private to this one call (no `ExecOptions.runCtx` passthrough
-    // here — `execExpr` is sub-program plumbing, never a REPL's top-level entry), so nothing
-    // else will ever dispose it; tear its per-run capability resources down now rather than
-    // leaving them to the GC backstop (`run/run-lifecycle.ts`).
-    await disposeRunContext(runCtx);
+    // A passed-in `runCtx` (Stage C Cut 1: the require/prelude-eval passthrough) is CALLER-owned —
+    // same posture `execState`'s `runCtxOwned` already documents — so only a runCtx THIS call
+    // minted itself is torn down here; a reused one is disposed only when the caller ends its own
+    // run/session.
+    if (runCtxOwned) await disposeRunContext(runCtx);
   }
 }

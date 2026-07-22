@@ -409,7 +409,14 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
                 // (`resolver.env`), builtins keep resolving through the same capability base.
                 // `execExpr({ env })` here would rebuild a GLASS resolver over the frame env —
                 // which under the cut is null-rooted, so module code lost the stdlib.
-                for (const form of result.forms) value = await execExpr(form, { resolver, tap });
+                //
+                // `runCtx: this.runCtx` (Stage C Cut 1): thread the requiring run's LIVE handle too,
+                // not just its resolver — else `execExpr` mints a fresh, vocabulary-less RunContext
+                // and a NESTED `(require …)` inside THIS module resolves `loaderRegistryOf` against
+                // the process-global legacy table even when the outer run is on the vocabulary path
+                // with its own per-run extension registry. Same run ⇒ same vocabulary, same meter,
+                // same extension registry, for every level of require nesting.
+                for (const form of result.forms) value = await execExpr(form, { resolver, tap, runCtx: this.runCtx });
               } finally {
                 if (isLoad) {
                   loadingStack.pop();
