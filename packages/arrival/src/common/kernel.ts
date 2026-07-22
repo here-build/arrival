@@ -27,6 +27,10 @@ import {
   AssemblePackError,
   AssemblePackTimeoutError,
 } from "../errors.js";
+// The shared C3 (Python MRO) core (Stage B1) — extracted so `env/vocabulary.ts`'s
+// EnvCapability-DAG walk reuses the SAME algorithm instead of forking it. This module keeps
+// throwing its OWN error types (below) via the hooks `linearizeDag` calls back into.
+import { linearizeDag } from "./dag-linearize.js";
 
 /** A capability contribution to an env. Identity = (name, config). `deps` are the DAG edges. */
 export interface EnvPack<E = unknown> {
@@ -124,97 +128,6 @@ function configEqual(a: unknown, b: unknown): boolean {
   return ka.every((k) => configEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
 }
 
-/** DFS the dep DAG from roots: collect packs by name, detect cycles (3-color), check config dedup. */
-function closure<E>(roots: readonly EnvPack<E>[]): Map<string, EnvPack<E>> {
-  const byName = new Map<string, EnvPack<E>>();
-  const GRAY = 1,
-    BLACK = 2;
-  const color = new Map<string, number>();
-  const stack: string[] = [];
-
-  const visit = (pack: EnvPack<E>): void => {
-    const seen = byName.get(pack.name);
-    if (seen !== undefined && !configEqual(seen.config, pack.config)) throw new AssembleConfigConflictError(pack.name);
-    if (color.get(pack.name) === BLACK) return; // already fully visited
-    if (color.get(pack.name) === GRAY) {
-      const from = stack.indexOf(pack.name);
-      throw new AssembleCycleError([...stack.slice(from), pack.name]);
-    }
-    color.set(pack.name, GRAY);
-    stack.push(pack.name);
-    byName.set(pack.name, pack);
-    for (const dep of pack.deps ?? []) visit(dep);
-    stack.pop();
-    color.set(pack.name, BLACK);
-  };
-
-  for (const r of roots) visit(r);
-  return byName;
-}
-
-/** C3 linearization (Python MRO) over the deduped pack graph. Returns names, highest precedence
- *  first. `merge` repeatedly takes a "good head" (a head appearing in no list's tail). */
-function c3Linearize<E>(roots: readonly EnvPack<E>[], byName: Map<string, EnvPack<E>>): string[] {
-  const memo = new Map<string, string[]>();
-
-  const lin = (name: string): string[] => {
-    const cached = memo.get(name);
-    if (cached) return cached;
-    const pack = byName.get(name)!;
-    // Dedupe dep NAMES: two same-name deps (or a pack listing one dep twice) are one node after
-    // identity-dedup, so the linearization lists must carry it once — else the [deps] list holds a
-    // duplicate that has no valid C3 "good head" (it appears in its own tail).
-    const deps = [...new Set((pack.deps ?? []).map((d) => d.name))];
-    const lists: string[][] = [...deps.map((d) => lin(d)), [...deps]];
-    const merged = merge(lists, name);
-    const result = [name, ...merged];
-    memo.set(name, result);
-    return result;
-  };
-
-  // A synthetic top depending on all roots gives the total order; drop the synthetic head.
-  const rootNames = [...new Set(roots.map((r) => r.name))];
-  const top = merge([...rootNames.map((n) => lin(n)), [...rootNames]], "<assembly-root>");
-  return dedupeStable(top);
-}
-
-/** A "good head" for C3 merge: the first list-head that appears in no list's TAIL (non-head
- *  position). Returns undefined when none exists (an inconsistent hierarchy). */
-function findGoodHead(work: string[][]): string | undefined {
-  for (const list of work) {
-    const candidate = list[0];
-    const inSomeTail = work.some((l) => l.slice(1).includes(candidate));
-    if (!inSomeTail) return candidate;
-  }
-  return undefined;
-}
-
-function merge(lists: string[][], owner: string): string[] {
-  const out: string[] = [];
-  const work = lists.map((l) => [...l]).filter((l) => l.length > 0);
-  while (work.length > 0) {
-    const head = findGoodHead(work);
-    if (head === undefined) throw new AssembleLinearizationError(owner);
-    out.push(head);
-    for (let i = work.length - 1; i >= 0; i--) {
-      if (work[i][0] === head) work[i].shift();
-      if (work[i].length === 0) work.splice(i, 1);
-    }
-  }
-  return out;
-}
-
-function dedupeStable(names: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const n of names)
-    if (!seen.has(n)) {
-      seen.add(n);
-      out.push(n);
-    }
-  return out;
-}
-
 function withTimeout<T>(p: Promise<T> | T, ms: number, name: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
   const timeout = new Promise<never>((_resolve, reject) => {
@@ -224,11 +137,23 @@ function withTimeout<T>(p: Promise<T> | T, ms: number, name: string): Promise<T>
 }
 
 /** Shared core for both assemblers: closure + cycle-detect + dedup + C3 linearization. Returns
- *  the apply order (highest precedence first) and the deduped packs by name. */
+ *  the apply order (highest precedence first) and the deduped packs by name. Delegates the
+ *  actual walk to `dag-linearize.ts`'s domain-agnostic core (Stage B1 extraction — the same
+ *  algorithm `env/vocabulary.ts`'s `buildVocabulary` now reuses for the EnvCapability DAG),
+ *  supplying EnvPack's OWN identity rule (config equality, not object identity) and error
+ *  types via the hooks. */
 function linearize<E>(roots: readonly EnvPack<E>[]): { order: string[]; byName: Map<string, EnvPack<E>> } {
-  const byName = closure(roots);
-  const order = c3Linearize(roots, byName);
-  return { order, byName };
+  return linearizeDag(roots, {
+    onRevisit: (existing, candidate) => {
+      if (!configEqual(existing.config, candidate.config)) throw new AssembleConfigConflictError(candidate.name);
+    },
+    onCycle: (path) => {
+      throw new AssembleCycleError(path);
+    },
+    onInconsistent: (owner) => {
+      throw new AssembleLinearizationError(owner);
+    },
+  });
 }
 
 function makeCtx<E>(

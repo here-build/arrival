@@ -151,14 +151,14 @@ export type SymbolDeclaration =
   | AliasSymbolDef;
 
 // ── LEGACY-form guard — see `SymbolDeclaration`'s doc for why this one stays ─────────────
-const isSymbolSpec = (m: SymbolDeclaration): m is Omit<RosettaSpec, "fn"> & { fn: Fn } =>
+export const isSymbolSpec = (m: SymbolDeclaration): m is Omit<RosettaSpec, "fn"> & { fn: Fn } =>
   typeof m === "object" && m !== null && "fn" in m;
 
 /** `symbol.alias`'s marker — see `alias.ts`'s header for the full dissolution-semantics
  *  contract. Checked BEFORE every other dispatch in the apply loop (its `kind` — `"alias"` —
  *  is deliberately outside both the minted-value family and the three surviving declarative
  *  kinds, so it would otherwise fall through to the legacy `{ fn }`-guessing arm instead). */
-const isAliasDef = (m: SymbolDeclaration): m is AliasSymbolDef =>
+export const isAliasDef = (m: SymbolDeclaration): m is AliasSymbolDef =>
   typeof m === "object" && m !== null && (m as { kind?: unknown }).kind === "alias";
 
 /** The three SURVIVING declarative record kinds — `symbol.define`/`symbol.defineSyntax` (the
@@ -168,7 +168,7 @@ const isAliasDef = (m: SymbolDeclaration): m is AliasSymbolDef =>
  *  carrying one of these three `kind` tags is unambiguous — none of the minted classes'
  *  OWN `.kind` field (`"procedure"`/`"keyword"`/an ordinary scheme-value kind) collides with
  *  `"define"`/`"define-syntax"`/`"macro"`. */
-const isDeclarativeDef = (
+export const isDeclarativeDef = (
   m: SymbolDeclaration,
 ): m is MacroSymbolDef | DefineSymbolDef | DefineSyntaxSymbolDef =>
   typeof m === "object" &&
@@ -212,7 +212,7 @@ export function contractOf(def: SymbolDeclaration): AEntity | undefined {
  *  builder-form, no `degradation:"doors"` gate; see the field's own doc for the D2 departure
  *  this closes (a bare-required config key used to fail-close at `schema.parse`, before any
  *  program graph existed to statically explain WHY). */
-const missingRequiresConfig = (
+export const missingRequiresConfig = (
   requiresConfig: readonly (string | readonly string[])[] | undefined,
   configuration: Record<string, unknown>,
 ): readonly (string | readonly string[])[] | undefined => {
@@ -229,7 +229,7 @@ const missingRequiresConfig = (
 /** The keys a door's `cause.needs` carries for a missing set — group entries flattened
  *  (each key in an any-of group is a real enabling key; the either-of semantics live in the
  *  reason text, `cause.needs` stays the flat `configuration`-key list every reader expects). */
-const requiresConfigNeeds = (missing: readonly (string | readonly string[])[]): readonly string[] =>
+export const requiresConfigNeeds = (missing: readonly (string | readonly string[])[]): readonly string[] =>
   missing.flatMap((entry) => (typeof entry === "string" ? [entry] : [...entry]));
 
 /** Auto-door misses surfaced for `AssembledEnv.degraded`: the bind loop below mints
@@ -237,7 +237,7 @@ const requiresConfigNeeds = (missing: readonly (string | readonly string[])[]): 
  *  into `symbolsRec`, so `collectDegraded`'s record scan (built for the builder-form
  *  `degradation.door(...)` path, which does write defs) can't see them — this sibling scan
  *  reads the same misses straight off the baked defs, and `lower()` merges the two views. */
-const collectRequiresConfigDegraded = (
+export const collectRequiresConfigDegraded = (
   capabilityName: string,
   symbolsRec: Record<string, SymbolDeclaration>,
   configuration: Record<string, unknown>,
@@ -263,7 +263,7 @@ const collectRequiresConfigDegraded = (
 
 /** Merge the two degraded views (builder-door record scan + requiresConfig def scan),
  *  deduped by need key; `undefined` when both are. */
-const mergeDegraded = (
+export const mergeDegraded = (
   a: DegradedCapability | undefined,
   b: DegradedCapability | undefined,
 ): DegradedCapability | undefined => {
@@ -280,7 +280,7 @@ const mergeDegraded = (
  *  `degradation.ts`'s hand-authored `.door(name, needs, reason)` callers write by hand, minted
  *  here mechanically from the declaring verb's OWN `doc` instead. An any-of group renders as
  *  "`fs` or `loader`" with a "one of them" pronoun, keeping the disjunction legible. */
-const requiresConfigReason = (missing: readonly (string | readonly string[])[], doc: string | undefined): string => {
+export const requiresConfigReason = (missing: readonly (string | readonly string[])[], doc: string | undefined): string => {
   const keysClause = missing
     .map((entry) => (typeof entry === "string" ? `\`${entry}\`` : entry.map((key) => `\`${key}\``).join(" or ")))
     .join(", ");
@@ -520,6 +520,17 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
     readonly spec: CapabilitySpec<C, R>,
   ) {}
 
+  /** Structural DAG-node view — Stage B1's `dag-linearize.ts` shared C3 core (env/
+   *  vocabulary.ts's `buildVocabulary`) walks `{name, deps}` generically; a capability's OWN
+   *  dep edges live at `spec.deps` (the authoring field), never at this top level, so this
+   *  getter is the ONE place they surface there too. Delegates, never duplicates — `spec.deps`
+   *  stays the single source; nothing else should read `.deps` off a capability instead of
+   *  `.spec.deps` (this exists only to satisfy the generic `DagNode` shape structurally AND
+   *  at runtime). */
+  get deps(): readonly EnvCapability<any, any>[] | undefined {
+    return this.spec.deps;
+  }
+
   /** 1d: this capability's PER-RUN resource producer — the run's `capabilityResources` store
    *  (RunContext.ts) calls it at most once per `RunContext` (the DefaultedWeakMap semaphore),
    *  keyed on this capability object. Returns the resource bag for THIS run — the base form's
@@ -544,7 +555,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
   /** 1d: does this capability produce a per-run resource bag (gating a verb's `readsResources`)?
    *  Base: it declares `spec.resources`. `native` verbs bind `false` regardless (see
    *  `nativeReadsRunResources`). */
-  protected producesRunResources(): boolean {
+  producesRunResources(): boolean {
     return Object.keys(this.spec.resources ?? {}).length > 0;
   }
 
@@ -554,7 +565,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
    *  Stage-6 migration), and a legacy native never reads `this.resources` — triggering the
    *  store here would double-spawn. `EnvCapability.define`'s form overrides this to `true`
    *  (its injected `native` factory's whole point is a `this.resources`-reading impl). */
-  protected nativeReadsRunResources(): boolean {
+  nativeReadsRunResources(): boolean {
     return false;
   }
 
@@ -1066,11 +1077,11 @@ class DefinedEnvCapability<Shape extends ZodMap, Resources> extends EnvCapabilit
     return bag;
   }
 
-  protected override producesRunResources(): boolean {
+  override producesRunResources(): boolean {
     return this.resourcesFactory !== undefined;
   }
 
-  protected override nativeReadsRunResources(): boolean {
+  override nativeReadsRunResources(): boolean {
     return this.resourcesFactory !== undefined;
   }
 }

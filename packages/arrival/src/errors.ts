@@ -491,6 +491,37 @@ export class AssemblePackTimeoutError extends Error {
 }
 
 // -------------------------------------------------------------------------
+// :: Vocabulary-artifact errors (Stage B1, env/vocabulary.ts's `buildVocabulary`) — the
+// capability-DAG counterpart to the two env-pack errors above (same C3 core, a different
+// domain's identity check).
+// -------------------------------------------------------------------------
+export class VocabularyCapabilityConflictError extends Error {
+  constructor(public readonly capabilityName: string) {
+    super(
+      `two DIFFERENT EnvCapability objects both declare the name "${capabilityName}" — one name must ` +
+        `identify one capability object across a DAG. Rename one of them, or confirm both call sites ` +
+        `import the SAME module-singleton instance.`,
+    );
+    this.name = "VocabularyCapabilityConflictError";
+  }
+}
+export class VocabularyLegacyCapabilityError extends Error {
+  constructor(
+    public readonly capabilityName: string,
+    public readonly verb: string,
+  ) {
+    super(
+      `capability "${capabilityName}" declares "${verb}" as a legacy \`{ fn }\` record — the vocabulary ` +
+        `builder (Stage B1) only mints from the symbol.* factory / define/defineSyntax/alias family. ` +
+        `Legacy \`{ fn }\` capabilities (McpEnvCapability's authoring shape) stay on the old lower()/ ` +
+        `assembleEnv path — pass this capability to \`exec\`/\`assembleAmbient\` without opting into the ` +
+        `vocabulary path.`,
+    );
+    this.name = "VocabularyLegacyCapabilityError";
+  }
+}
+
+// -------------------------------------------------------------------------
 // :: ResourceNotLiveError — a resource touched before the env accessor spawned it.
 // -------------------------------------------------------------------------
 export class ResourceNotLiveError extends Error {

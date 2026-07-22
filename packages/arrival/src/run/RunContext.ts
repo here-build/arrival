@@ -123,6 +123,18 @@ export class RunContext {
    *  `makeCallCtx` (CallCtx.ts) then leaves `this.configuration` `undefined` too, same posture as
    *  a capability with no configuration schema at all. */
   readonly capabilityConfigurations?: CapabilityConfigurationTable;
+  /** Stage B1 (docs/plans/stage-b-runcontext-absorbs-assembly.md) — the {@link
+   *  Vocabulary.map | Vocabulary}'s flat name→value artifact this run resolves through, when
+   *  minted via `env/assemble-run.ts`'s `assembleRun`. Kept OPAQUE here (`unknown`, not the real
+   *  `AmbientValue`) so this LEAF file never imports the env layer — `env/vocabulary.ts` and its
+   *  consumers narrow the type at their own boundary. `undefined` for every OTHER mint site
+   *  (the ambient/glass paths, `execExpr`, CONSTANT_CTX) — a run built the old way carries no
+   *  vocabulary handle at all. */
+  readonly vocabulary?: ReadonlyMap<string, unknown>;
+  /** Stage B1 — this run's tuple's degraded-capability list (the SAME shape `Vocabulary
+   *  .degraded`/`AssembledEnv.degraded` carry), opaque here for the identical reason
+   *  `vocabulary` is. `undefined` off the vocabulary path. */
+  readonly degraded?: readonly unknown[];
 
   constructor(
     opts: {
@@ -139,6 +151,12 @@ export class RunContext {
        *  the one production caller, passing the table it built by walking the ambient's
        *  capability DAG. Every other mint site (glass, `execExpr`, CONSTANT_CTX) omits it. */
       capabilityConfigurations?: CapabilityConfigurationTable;
+      /** Stage B1 — see the field's own doc above. Supplied by `env/assemble-run.ts`'s
+       *  `assembleRun` only. */
+      vocabulary?: ReadonlyMap<string, unknown>;
+      /** Stage B1 — see the field's own doc above. Supplied by `env/assemble-run.ts`'s
+       *  `assembleRun` only. */
+      degraded?: readonly unknown[];
     } = {},
     /** internal-only: `true` for the run-NEUTRAL singleton (CONSTANT_CTX) — it gets no
      *  capabilityResources store (see that field's doc). Never pass this from an ordinary
@@ -156,6 +174,8 @@ export class RunContext {
     this.notes = opts.notes;
     this.display = opts.display;
     this.capabilityConfigurations = opts.capabilityConfigurations;
+    this.vocabulary = opts.vocabulary;
+    this.degraded = opts.degraded;
     if (!_noResourceStore) {
       this.capabilityResources = new WeakMap<object, unknown>();
     }

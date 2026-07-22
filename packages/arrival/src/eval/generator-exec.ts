@@ -9,8 +9,10 @@
  *   const results = await exec("(+ 1 2)", { env: myEnv });
  */
 
-import { AmbientRuntime, mintFrame, mintPlainFrame, isAmbientRuntime } from "../env/AmbientRuntime.js";
+import { AmbientRuntime, mintFrame, mintPlainFrame, isAmbientRuntime, bindValue } from "../env/AmbientRuntime.js";
 import { user_env, global_env } from "../env/env-roots.js";
+import { buildVocabulary } from "../env/vocabulary.js";
+import { assembleRun } from "../env/assemble-run.js";
 import run, { evaluate, expectValue, type EvalTap } from "./evaluator.js";
 import { ArrivalError, AmbientShapeError, isHostRuntimeBug, OutputContractError } from "../errors.js";
 import { Resolver } from "./Resolver.js";
@@ -443,6 +445,18 @@ export interface ExecOptions {
    */
   skipBootstrapWait?: boolean;
   /**
+   * INTERNAL / Stage-B1 EXPERIMENTAL (docs/plans/stage-b-runcontext-absorbs-assembly.md) —
+   * NOT a supported public option. When `true` (and `capabilities` is set, `env`/`ambient`
+   * are NOT), routes this run through `env/vocabulary.ts`'s `buildVocabulary` +
+   * `env/assemble-run.ts`'s `assembleRun` instead of `lower()`/`assembleEnv`/`instantiate`'s
+   * ambient — see `execStateViaVocabulary` below for the exact narrowed subset this covers
+   * (no `ambient`/`program`/`runCtx` reuse, no static validation, no shadow mode — B1 proves
+   * the resolution + config/door plumbing works end-to-end; B3 migrates the full surface).
+   * Every OTHER caller of `exec`/`execState` is completely unaffected — this flag defaults
+   * `undefined`/`false` and the ordinary ambient path is untouched.
+   */
+  vocabularyPath?: boolean;
+  /**
    * SHADOW MODE. When set, after each top-level form is evaluated, the static lineage
    * `fullCone` (provenance/lineage.ts) is computed and ASSERTED equal to the form's UNTAPPED
    * eager `result.provenance`. A divergence throws `ProvenanceShadowDivergence`. Read-only
@@ -511,6 +525,10 @@ export interface ExecState {
  * @returns Promise<ExecState> - boxed results + the run's scope/runCtx handles
  */
 export async function execState(code: string | SchemeValue, options: ExecOptions = {}): Promise<ExecState> {
+  // Stage-B1 EXPERIMENTAL routing (see `ExecOptions.vocabularyPath`'s own doc) — a completely
+  // SEPARATE branch so the ordinary ambient path below (every other caller) is untouched.
+  if (options.vocabularyPath === true) return execStateViaVocabulary(code, options);
+
   const {
     env,
     capabilities,
@@ -752,6 +770,121 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     // teardown. `mintedRunCtx` may be unset if a throw happened before phase 3 ever ran.
     if (owned) await ambient!.dispose();
     if (runCtxOwned && mintedRunCtx !== undefined) await disposeRunContext(mintedRunCtx);
+  }
+}
+
+/**
+ * Stage-B1 EXPERIMENTAL — `execState`'s `ExecOptions.vocabularyPath` branch. A NARROWED subset
+ * of `execState`'s ordinary `{ capabilities }` path, resolving through `env/vocabulary.ts`'s
+ * memoized `Vocabulary` instead of `lower()`/`assembleEnv`/`instantiate`'s three-phase ambient:
+ *
+ *   1. `buildVocabulary` — C3 walk, doors, config validation, define-bake (ONCE per tuple).
+ *   2. A scratch chain frame seeded from `Vocabulary.map`, then this tuple's `Vocabulary
+ *      .preludes` evaluated OLD-STYLE (deps-first, straight into the SAME frame) — the B1
+ *      equivalence step: prelude `define`s land where program code can see them, exactly like
+ *      today's bootstrap `apply()` does, without re-running `lower()`'s bind loop (already
+ *      baked into the vocabulary map — no double-bind).
+ *   3. Seal → `CompiledResolutionChain` → `Capabilities` → `Resolver`, and `assembleRun` for
+ *      the `RunContext` (the SAME memoized vocabulary — `assembleRun` re-fetches, not rebuilds).
+ *   4. The SAME per-form evaluation loop `execState`'s ambient path runs.
+ *
+ * NOT covered (deliberately — see `ExecOptions.vocabularyPath`'s own doc): `ambient`/`program`/
+ * `runCtx` reuse, `override`, static validation (`staticValidation`), shadow mode (`irLineage`).
+ * A capability whose record contains a legacy `{ fn }` entry throws `VocabularyLegacyCapabilityError`
+ * (`buildVocabulary`'s own refusal) — this experimental branch does not fall back silently; a
+ * caller opting in is asserting its capability set is vocabulary-eligible.
+ */
+async function execStateViaVocabulary(code: string | SchemeValue, options: ExecOptions): Promise<ExecState> {
+  const {
+    capabilities,
+    config,
+    scope,
+    program: passedProgram,
+    dynamic_env,
+    use_dynamic,
+    tap,
+    nodeFilter,
+    signal,
+    budgetMs,
+    heapBudget,
+    cache,
+    effects,
+    reads,
+    notes,
+    display,
+    strict,
+    freezeRosettaReturns,
+  } = options;
+  invariant(capabilities !== undefined, "ExecOptions.vocabularyPath requires ExecOptions.capabilities");
+
+  await ensureBaseAssembled();
+  const program = passedProgram ?? (await parseProgram(code, { strict }));
+
+  const vocabulary = await buildVocabulary(capabilities, config, capabilityEvalScheme);
+
+  // The scratch chain frame — seeded from the vocabulary map, then this tuple's preludes
+  // evaluated straight into it (deps-first — `Vocabulary.preludes`' own order), so a
+  // capability's prelude `define`s are visible to program code exactly like today's bootstrap
+  // apply() target. Discarded after sealing; nothing about it survives past this call.
+  const chainFrame = mintFrame(user_env, "exec-vocabulary");
+  for (const [name, value] of vocabulary.map) bindValue(chainFrame, name, value);
+  for (const { text } of vocabulary.preludes) await capabilityEvalScheme(chainFrame, text);
+  const chain = sealResolutionChain(chainFrame);
+
+  const lexicalScope = scope ?? LexicalScope.for(defaultLexicalRoot());
+  const runResolver = new Resolver(lexicalScope.env, new Capabilities(chainFrame, chain));
+  const runCtx = await assembleRun({
+    capabilities,
+    config,
+    evalScheme: capabilityEvalScheme,
+    strict,
+    heapBudget,
+    freezeRosettaReturns,
+    signal,
+    cache,
+    effects,
+    reads,
+    notes,
+    display,
+  });
+
+  try {
+    const results: SchemeValue[] = [];
+    const forms = program.forms;
+    const start = budgetMs === undefined ? 0 : performance.now();
+    for (let i = 0; i < forms.length; i++) {
+      const expr = forms[i];
+      const remaining = budgetMs === undefined ? undefined : budgetMs - (performance.now() - start);
+      let result: SchemeValue;
+      const runForm = () =>
+        run(
+          evaluate(expr, {
+            resolver: runResolver,
+            dynamic_env,
+            use_dynamic,
+            tap,
+            nodeFilter,
+            signal,
+            strict: strict ?? false,
+            runCtx,
+          }),
+          { signal, budgetMs: remaining },
+        );
+      try {
+        result = expectValue(await (runCtx.reads ? runCtx.reads.tracker.region(runForm) : runForm()));
+      } catch (e) {
+        if (e instanceof ArrivalError && e.cause instanceof TypeError && !isHostRuntimeBug(e.cause)) throw e.cause;
+        throw e;
+      }
+      results.push(result);
+
+      if (runCtx.reads !== undefined && runCtx.effects !== undefined && runCtx.cache?.mode !== "replay") {
+        checkReadWriteGuard(runCtx.effects.entries, runCtx.reads.tracker.log, runCtx.reads.writeSetOf);
+      }
+    }
+    return { values: results, scope: runResolver.scope, runCtx };
+  } finally {
+    await disposeRunContext(runCtx);
   }
 }
 
