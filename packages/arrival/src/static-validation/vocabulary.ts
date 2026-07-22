@@ -26,7 +26,7 @@
 
 import type { CompiledResolutionChain } from "../eval/CompiledResolutionChain.js";
 import { DoorProcedure } from "../values/primitives/ACallable.js";
-import { Keyword } from "../values/Keyword.js";
+import { AKernelKeyword } from "../values/AKernelKeyword.js";
 import { Macro } from "../eval/Macro.js";
 import { is_macro_value } from "../values/value-guards.js";
 import { KEYWORD_SYNTAX_BASELINE } from "../common/symbols/define-bake.js";
@@ -62,7 +62,7 @@ const CXR_RE = /^c[ad]+r$/;
 /** Classify a resolved binding VALUE into its static vocabulary entry. */
 function classifyBoundValue(value: unknown): VocabularyEntry {
   if (value instanceof DoorProcedure) return { kind: "door", door: value.door };
-  if (value instanceof Keyword) return { kind: "keyword" };
+  if (value instanceof AKernelKeyword) return { kind: "keyword" };
   if (value instanceof Macro) return { kind: "macro", macroAttribute: value.macroAttribute ?? "opaque" };
   // Brand-recognized macro shapes that don't extend Macro (Syntax / syntax-parameter):
   // no declared attribute channel — "opaque", the safe under-report default.

@@ -14,7 +14,7 @@
 //
 // Every evaluator special form (SPECIAL_FORMS) is also a keyword, for two reasons:
 // (1) first-class value-carried dispatch — `(define => lambda)` aliases the form,
-// lexical shadowing un-specials it (the dual of cxr; see values/Keyword.ts);
+// lexical shadowing un-specials it (the dual of cxr; see values/AKernelKeyword.ts);
 // (2) hygiene resolves a renamed template head (`if` → `#:if`) by copying the
 // original name's ENV VALUE (syntax-rules.ts rename()), and a name-only special
 // form has no env value for a user macro expanding to it to resolve. cond / case /

@@ -5,7 +5,7 @@
 import { parseNameDoc, type KeywordSymbolDef } from "./_bake.js";
 
 /** kernel KEYWORD — a special form made first-class. No contract/impl: the template
- *  carries only `name: doc`; `lower()` binds `new Keyword(name)`, and the evaluator
+ *  carries only `name: doc`; the bake loop binds `new AKernelKeyword(name)`, and the evaluator
  *  dispatches `SPECIAL_FORMS[name]` on the resolved marker. */
 export function keyword(tpl: TemplateStringsArray, ...sub: unknown[]): KeywordSymbolDef {
   const { name, doc } = parseNameDoc(tpl, sub);

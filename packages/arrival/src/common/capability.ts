@@ -45,7 +45,7 @@ import * as symbolFactories from "./symbols/index.js";
 import * as schemeZod from "./scheme-zod.js";
 import { bindCapabilityDefines, computeCapabilityExports } from "./symbols/define-bake.js";
 import type { AliasSymbolDef } from "./symbols/alias.js";
-import { Keyword } from "../values/Keyword.js";
+import { AKernelKeyword } from "../values/AKernelKeyword.js";
 import {
   ANativeProcedure,
   ARosettaProcedure,
@@ -891,7 +891,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 // Resolving a call head to this VALUE → SPECIAL_FORMS[def.name] (the dual of
                 // cxr): the special form is aliasable + lexically shadowable, unlike the
                 // name-matched-before-lookup table it replaces.
-                bindValue(env, verb, new Keyword(def.name));
+                bindValue(env, verb, new AKernelKeyword(def.name));
                 break;
               case "macro":
                 // A non-evaluating MACRO form: bind the raw transformer (Macro/Syntax) as-is.

@@ -36,7 +36,7 @@ import { Syntax } from "../eval/Syntax.js";
 import { type SchemeValue } from "../values/types.js";
 import { type ACallable } from "../values/primitives/ACallable.js";
 import { ANil } from "../values/primitives/ANil.js";
-import { Keyword } from "../values/Keyword.js";
+import { AKernelKeyword } from "../values/AKernelKeyword.js";
 // AJSArray/AJSObject import jsToScheme from rosetta.ts directly — a benign runtime
 // cycle, safe because jsToScheme is a hoisted `export function` (see the AJSArray.ts
 // / AJSObject.ts headers).
@@ -56,7 +56,7 @@ import { ACharacter } from "../values/primitives/ACharacter.js";
 
 /**
  * The closed union of "already scheme, don't re-wrap" types: every wrapper class,
- * native scheme type, special-form head (Macro/Syntax/Keyword), env, promise, and
+ * native scheme type, special-form head (Macro/Syntax/AKernelKeyword), env, promise, and
  * a bare `Function` (the quarantined `env.defineRosetta` legacy authoring arm — see
  * capability.ts — still binds a bare host function into value space). A SUPERSET of
  * the value-intent `SchemeValue` union — the JS→Scheme boundary legitimately
@@ -86,7 +86,7 @@ export type BoxedSchemeValue =
   | Syntax
   | LambdaContext
   | AmbientRuntime
-  | Keyword
+  | AKernelKeyword
   | ACallable
   | Function;
 
@@ -120,7 +120,7 @@ type FromJSResult = BoxedSchemeValue | Uint8Array | ArrayBuffer | DataView | Pro
 export function isSchemeValue(value: unknown): value is BoxedSchemeValue {
   switch (true) {
     // Recognition is `instanceof AValue` (RULINGS.md) — every wrapper/native
-    // Scheme term, including ANil, Keyword, AVoid, and the callable
+    // Scheme term, including ANil, AKernelKeyword, AVoid, and the callable
     // primitives, derives from AValue. This is structural, not enumerative: a new
     // AValue subclass is recognized for free, closing the class of "omitted from
     // the switch" gaps that a hand-maintained case list invites.

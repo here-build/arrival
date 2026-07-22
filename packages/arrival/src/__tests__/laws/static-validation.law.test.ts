@@ -58,7 +58,7 @@ import { symbol } from "../../common/symbol.js";
 import { exec, parse } from "../../eval/generator-exec.js";
 import { CompiledResolutionChain } from "../../eval/CompiledResolutionChain.js";
 import { DoorProcedure } from "../../values/primitives/ACallable.js";
-import { Keyword } from "../../values/Keyword.js";
+import { AKernelKeyword } from "../../values/AKernelKeyword.js";
 import { Macro } from "../../eval/Macro.js";
 import { nil } from "../../index.js";
 import { StaticValidationError, validateProgram } from "../../static-validation/validate-program.js";
@@ -342,8 +342,8 @@ describe("LAW 7 — error-tier soundness: strict on dead branches (by design), w
     const vocab = vocabularyFromChain(chainOf({}));
     const diagnostics = validateProgram(await parse("(while #f #f)"), vocab);
     expect(diagnostics).toEqual([]);
-    // …and a Keyword VALUE classifies as keyword, not a plain value:
-    const withKw = vocabularyFromChain(chainOf({ "my-form": new Keyword("my-form") }));
+    // …and an AKernelKeyword VALUE classifies as keyword, not a plain value:
+    const withKw = vocabularyFromChain(chainOf({ "my-form": new AKernelKeyword("my-form") }));
     expect(withKw.lookupStatic("my-form")).toEqual({ kind: "keyword" });
   });
 

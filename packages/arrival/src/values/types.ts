@@ -24,7 +24,7 @@ import type { AJSObject } from "../membrane/AJSObject.js";
 import type { ADict } from "./primitives/ADict.js";
 import type { EOF } from "./primitives/EOF.js";
 import type { Values } from "./primitives/Values.js";
-import type { Keyword } from "./Keyword.js";
+import type { AKernelKeyword } from "./AKernelKeyword.js";
 // A caught condition reaching `(catch (e) …)` is an R7RS error object —
 // `error-object?` is exactly `obj instanceof R7RSError` (env/r7rs/error-objects.ts).
 // `import type` keeps this erased at runtime, so the mutual edge with errors.ts
@@ -100,7 +100,7 @@ export type SchemeValue =
   | AJSArray
   | AJSObject
   | ADict
-  | Keyword
+  | AKernelKeyword
   | EOF
   | Values
   // A caught R7RS condition object, bound as the catch variable.

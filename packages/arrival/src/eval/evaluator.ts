@@ -135,7 +135,7 @@ import { APair } from "../values/primitives/APair.js";
 import { CLASS, DATA } from "../well-known-symbols.js";
 import { AListAlike, type SchemeBounceMarker, type SchemeValue } from "../values/types.js";
 import { ANil, nil } from "../values/primitives/ANil.js";
-import { Keyword } from "../values/Keyword.js";
+import { AKernelKeyword } from "../values/AKernelKeyword.js";
 import { AString } from "../values/primitives/AString.js";
 // AJSObject here is ONLY the genuinely-foreign borrowed-JS wrapper face (notCallableError's
 // dict-shaped-borrow check below). The `{…}` dict-literal NODE face — its detection
@@ -2814,7 +2814,7 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
   // it to its own terminal sub-expression.
   const nonTailCtx: EvalContext = ctx.tail ? { ...ctx, tail: false } : ctx;
 
-  // Special-form dispatch, VALUE-FIRST: a head resolving to a Keyword marker dispatches
+  // Special-form dispatch, VALUE-FIRST: a head resolving to an AKernelKeyword marker dispatches
   // the handler by the marker's NAME, so special-ness travels with the VALUE (aliasable
   // via `(define => lambda)`). The string-keyed fallback (`symbol_name`) stays for two
   // INDEPENDENT reasons, not as a migration path (every form IS keyword-bound in core.ts):
@@ -2829,10 +2829,10 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
   // Resolve via the RAW binding key (`first.__name__`), the SAME key env_get uses, so a
   // hygiene-renamed gensym head resolves identically: a gensym's `__name__` JS-symbol key
   // differs from its string description, so a description lookup would miss and try to CALL
-  // the resolved Keyword. `symbol_name` stays only the fallback key (bootstrap/shadowing).
+  // the resolved AKernelKeyword. `symbol_name` stays only the fallback key (bootstrap/shadowing).
   if (first instanceof ASymbol) {
     const resolved = ctxResolver(ctx).lookup(first.__name__, ctx.runCtx);
-    const handler = resolved instanceof Keyword ? SPECIAL_FORMS[resolved.name] : SPECIAL_FORMS[symbol_name(first)];
+    const handler = resolved instanceof AKernelKeyword ? SPECIAL_FORMS[resolved.name] : SPECIAL_FORMS[symbol_name(first)];
     if (handler) {
       // Pass-through dispatch — the special form's result IS this Pair's result; tail so a
       // tail call from its terminal expression collapses this frame too.

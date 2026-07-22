@@ -567,7 +567,7 @@ export interface DoorSymbolDef {
   readonly metadata?: MetadataRecord;
 }
 
-/** A kernel KEYWORD: special form, made first-class. `lower()` binds `new Keyword(name)`; the
+/** A kernel KEYWORD: special form, made first-class. The bake loop binds `new AKernelKeyword(name)`; the
  *  evaluator resolves a call head through the env and dispatches `SPECIAL_FORMS[name]` when it
  *  resolves to that marker — aliasable + lexically shadowable (the dual of cxr). */
 export interface KeywordSymbolDef {
