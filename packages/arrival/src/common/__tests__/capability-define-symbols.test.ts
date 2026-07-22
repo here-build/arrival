@@ -9,12 +9,20 @@
 // `this.resources` are inferred contextually as the capability's OWN declared `Config`/
 // `Resources` (the load-bearing proof `ImplThis`/`RosettaTag` exist for). The second `it` below
 // is a NEGATIVE assertion: a mistyped `this.configuration.<key>` must fail to typecheck.
+//
+// CONFIGURATION RELOCATION: `this.configuration` (and the `resources` factory it feeds, below)
+// now resolves off the RUN's `capabilityConfigurations` table, filled at `instantiate()` from
+// the ambient a run assembled — never from the bind-time association. The dispatch `it` below
+// exercises the sanctioned `exec(code, { capabilities, config })` ambient path rather than a
+// manual `capability.lower(...).apply(env, ...)` + `exec(code, { env })` bind-then-glass-exec,
+// which would now see `this.configuration === undefined` (documented in `run/RunContext.ts`'s
+// `capabilityConfigurations` field doc) — the SAME posture a resource-less capability already
+// has, and the same one `callctx-activation-dispatch.test.ts` documents at its own header.
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
 import { EnvCapability } from "../capability.js";
 import { exec } from "../../eval/generator-exec.js";
-import { freshEnv } from "../../__tests__/_fresh-env.js";
 
 interface Shout {
   shout(s: string): string;
@@ -41,10 +49,7 @@ const greeter = EnvCapability.define("test/define-greeter", {
 
 describe("EnvCapability.define (Stage 1c)", () => {
   it("threads typed configuration + resources onto `this` at real evaluator dispatch", async () => {
-    const env = await freshEnv();
-    await greeter.lower({ config: { key: "hi" } }).apply(env, undefined as never);
-
-    const [out] = await exec('(greet "yo")', { env });
+    const [out] = await exec('(greet "yo")', { capabilities: [greeter], config: { key: "hi" } });
     expect(out).toBe("hi:YO");
   });
 

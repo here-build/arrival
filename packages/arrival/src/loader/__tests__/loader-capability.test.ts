@@ -31,24 +31,41 @@ import { bindValue, AmbientRuntime, mintFrame } from "../../env/AmbientRuntime.j
 import { __resetExtensionRegistryForTest } from "../loader-extensions.js";
 import { arrivalLoaderCapability } from "../loader-capability.js";
 import { loaderFromResolver } from "../loader.js";
+import { RunContext } from "../../run/RunContext.js";
 
 const evalScheme = (e: SchemeEnv, src: string) => exec(src, { env: e as never });
 
 afterEach(() => __resetExtensionRegistryForTest());
 
-/** Assemble the loader capability (plus any `extra` packs) onto a fresh sandboxed child.
- *  `degradation` defaults to unset (⇒ `"forbid"`, byte-identical to pre-W2 withhold).
- *  UNCHANGED return shape (bare env) — every existing call site keeps working untouched;
- *  `assembledWithDegraded` below is the (new, additive) sibling that also hands back
- *  `AssembledEnv.degraded` for the tests that need it. */
-async function assembled(config: object, extra: readonly EnvCapability[] = [], degradation?: "forbid" | "doors") {
+/** Assemble the loader capability (plus any `extra` packs) onto a fresh sandboxed child —
+ *  testing the capability/`assembleEnv` layer directly, deliberately independent of exec's
+ *  ambient orchestration (the "CUT mode" describe block at the bottom covers that seam).
+ *
+ *  CONFIGURATION RELOCATION: an armed loader's `require` reads `this.resources` off the RUN
+ *  now (`runCtx.capabilityConfigurations` feeds `["arrival/get-resources"]`), never off the
+ *  bind-time association — so a bare `exec(code, { env })` against this helper's `base` would
+ *  see `this.configuration`/`this.resources` undefined (no ambient ever instantiated this
+ *  env's run). Since this helper deliberately bypasses `assembleAmbient`/`instantiate`
+ *  (the point of testing `assembleEnv` directly), it builds the SAME table `instantiate` would
+ *  have — capability object → its OWN `lower()`-validated configuration — and hands back a
+ *  `runCtx` pre-armed with it; every `exec(code, { env, runCtx })` call site below threads it
+ *  through. */
+async function assembled(
+  config: object,
+  extra: readonly EnvCapability[] = [],
+  degradation?: "forbid" | "doors",
+): Promise<{ env: SchemeEnv; runCtx: RunContext }> {
   const base = mintFrame(sandboxedEnv, "loader-capability-test");
   // The loader capability LAST (lowest precedence ⇒ applied first), the slot loader-core held —
   // so its preludeOnly register-extension is in the assembly's prelude scope before any
   // dependent capability's prelude evaluates.
-  const packs = [...extra, arrivalLoaderCapability].map((c) => c.lower({ evalScheme, config, degradation }));
+  const capabilities = [...extra, arrivalLoaderCapability];
+  const packs = capabilities.map((c) => c.lower({ evalScheme, config, degradation }));
   await assembleEnv<SchemeEnv>(base as unknown as SchemeEnv, packs as never);
-  return base;
+  const capabilityConfigurations = new Map<object, unknown>(
+    capabilities.map((cap, i) => [cap, packs[i].activation.configuration]),
+  );
+  return { env: base, runCtx: new RunContext({ capabilityConfigurations }) };
 }
 
 /** Same assembly, but surfaces `AssembledEnv.degraded` too (§3.7's enumerable-degraded-list
@@ -78,29 +95,29 @@ const files = (table: Record<string, string>) =>
 
 describe("arrivalLoaderCapability — the declarative module system", () => {
   it("door by absence: a config-less lower succeeds and `require` binds the fs-or-loader door", async () => {
-    const env = await assembled({});
-    await expect(exec(`(require "x.json")`, { env })).rejects.toThrow(
+    const { env, runCtx } = await assembled({});
+    await expect(exec(`(require "x.json")`, { env, runCtx })).rejects.toThrow(
       /require @ arrival\/loader is not available.*requires configuration `fs` or `loader` — provide one of them/s,
     );
   });
 
   it("door by absence: no extensionRegistry ⇒ `require/extension` binds a door naming it", async () => {
-    const env = await assembled({ loader: files({}) });
-    await expect(exec(`(require/extension :sql)`, { env })).rejects.toThrow(
+    const { env, runCtx } = await assembled({ loader: files({}) });
+    await expect(exec(`(require/extension :sql)`, { env, runCtx })).rejects.toThrow(
       /require\/extension @ arrival\/loader is not available.*requires configuration `extensionRegistry`/s,
     );
   });
 
   it("an armed loader resolves a data module (raw scheme args + no return marshal)", async () => {
-    const env = await assembled({ loader: files({ "cfg.json": `{"name":"world"}` }) });
-    const results = await exec(`(define cfg (require "cfg.json")) (assoc "irrelevant" (list)) cfg`, { env });
+    const { env, runCtx } = await assembled({ loader: files({ "cfg.json": `{"name":"world"}` }) });
+    const results = await exec(`(define cfg (require "cfg.json")) (assoc "irrelevant" (list)) cfg`, { env, runCtx });
     const cfg = plain(results.at(-1)) as Record<string, unknown>;
     expect(cfg).toMatchObject({ name: "world" });
   });
 
   it("a .scm require spills its defines into the RUN env (the ctx-read frame)", async () => {
-    const env = await assembled({ loader: files({ "lib.scm": `(define lib-answer 41)` }) });
-    const results = await exec(`(require "lib.scm") (+ lib-answer 1)`, { env });
+    const { env, runCtx } = await assembled({ loader: files({ "lib.scm": `(define lib-answer 41)` }) });
+    const results = await exec(`(require "lib.scm") (+ lib-answer 1)`, { env, runCtx });
     expect(Number(results.at(-1))).toBe(42);
   });
 
@@ -118,12 +135,14 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
       }),
       prelude: `(require/register-extension ".upper" "test/upper-resolve")`,
     });
-    const env = await assembled({ loader: files({ "shout.upper": "hello" }) }, [extCap]);
+    const { env, runCtx } = await assembled({ loader: files({ "shout.upper": "hello" }) }, [extCap]);
     // The prelude registration took: a `.upper` require resolves through the by-name registry.
-    const results = await exec(`(require "shout.upper")`, { env });
+    const results = await exec(`(require "shout.upper")`, { env, runCtx });
     expect(plain(results.at(-1))).toBe("HELLO");
     // And the verb itself is assembly-time-only.
-    await expect(exec(`(require/register-extension ".x" "nope")`, { env })).rejects.toThrow(/Unbound variable/);
+    await expect(exec(`(require/register-extension ".x" "nope")`, { env, runCtx })).rejects.toThrow(
+      /Unbound variable/,
+    );
   });
 
   it("(require/extension :name) applies a registry pack onto the live env, idempotently", async () => {
@@ -144,23 +163,26 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
         },
       ],
     ]);
-    const env = await assembled({ loader: files({}), extensionRegistry: registry });
-    const results = await exec(`(require/extension :greeter) (require/extension :greeter) (greeting-of)`, { env });
+    const { env, runCtx } = await assembled({ loader: files({}), extensionRegistry: registry });
+    const results = await exec(`(require/extension :greeter) (require/extension :greeter) (greeting-of)`, {
+      env,
+      runCtx,
+    });
     expect(plain(results.at(-1))).toBe("hi");
     expect(applies).toBe(1);
   });
 
   describe("door-set degradation — the auto-derived requiresConfig doors, mode-independent (D2)", () => {
     it('no fs/loader + "doors": `require` teaches the fs-or-loader disjunction', async () => {
-      const env = await assembled({}, [], "doors");
-      await expect(exec(`(require "x.json")`, { env })).rejects.toThrow(
+      const { env, runCtx } = await assembled({}, [], "doors");
+      await expect(exec(`(require "x.json")`, { env, runCtx })).rejects.toThrow(
         /require @ arrival\/loader is not available.*requires configuration `fs` or `loader` — provide one of them to enable this verb\./s,
       );
     });
 
     it('no extensionRegistry + "doors": `require/extension` teaches the same, naming extensionRegistry', async () => {
-      const env = await assembled({ loader: files({}) }, [], "doors");
-      await expect(exec(`(require/extension :sql)`, { env })).rejects.toThrow(
+      const { env, runCtx } = await assembled({ loader: files({}) }, [], "doors");
+      await expect(exec(`(require/extension :sql)`, { env, runCtx })).rejects.toThrow(
         /require\/extension @ arrival\/loader is not available.*requires configuration `extensionRegistry` — provide it to enable this verb\./s,
       );
     });
@@ -180,16 +202,16 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
     });
 
     it('an armed loader is NOT degraded — `require` binds for real, even under "doors" mode', async () => {
-      const env = await assembled({ loader: files({ "cfg.json": `{"name":"world"}` }) }, [], "doors");
-      const results = await exec(`(require "cfg.json")`, { env });
+      const { env, runCtx } = await assembled({ loader: files({ "cfg.json": `{"name":"world"}` }) }, [], "doors");
+      const results = await exec(`(require "cfg.json")`, { env, runCtx });
       const cfg = plain(results.at(-1)) as Record<string, unknown>;
       expect(cfg).toMatchObject({ name: "world" });
     });
 
     it('under the default ("forbid") mode the door mints all the same — requiresConfig is mode-independent', async () => {
-      const env = await assembled({});
-      await expect(exec(`(require "x.json")`, { env })).rejects.toThrow(/is not available/);
-      await expect(exec(`(require "x.json")`, { env })).rejects.not.toThrow(/Unbound variable|PurityError/);
+      const { env, runCtx } = await assembled({});
+      await expect(exec(`(require "x.json")`, { env, runCtx })).rejects.toThrow(/is not available/);
+      await expect(exec(`(require "x.json")`, { env, runCtx })).rejects.not.toThrow(/Unbound variable|PurityError/);
     });
   });
 

@@ -822,13 +822,14 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                   (proc as { callbackRoles?: CallbackRoles }).callbackRoles = def.callbackRoles;
                 }
                 // OWNER ASSOCIATION (1d, docs/execution.md §CALLCTX): key THIS bound value to its
-                // OWNING CAPABILITY (object identity) + assembly `configuration`, so a real dispatch
-                // (evaluator.ts, via makeCallCtx) enriches the `CallCtx` it builds. `readsResources`
-                // is FALSE for a base/constructor native (the legacy arm — see
-                // `nativeReadsRunResources`'s doc); triggering the run store here would
+                // OWNING CAPABILITY (object identity), so a real dispatch (evaluator.ts, via
+                // makeCallCtx) enriches the `CallCtx` it builds — `configuration` resolves at
+                // dispatch off the RUN now (`runCtx.capabilityConfigurations`), never carried
+                // here. `readsResources` is FALSE for a base/constructor native (the legacy arm —
+                // see `nativeReadsRunResources`'s doc); triggering the run store here would
                 // double-spawn. `EnvCapability.define`'s form flips this via
                 // `nativeReadsRunResources()`.
-                associateCapability(proc, ownerCapability, activation.configuration, nativeReadsResources);
+                associateCapability(proc, ownerCapability, nativeReadsResources);
                 bindTarget(def).set(verb, proc);
                 break;
               }
@@ -864,7 +865,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 }
                 // OWNER ASSOCIATION (1d) — see the `native` case's comment. A non-native baked
                 // verb reads `this.resources` from the run store iff the capability produces a bag.
-                associateCapability(proc, ownerCapability, activation.configuration, bakedReadsResources);
+                associateCapability(proc, ownerCapability, bakedReadsResources);
                 bindTarget(def).set(verb, proc);
                 break;
               }
@@ -926,7 +927,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                 }
                 // OWNER ASSOCIATION (1d) — see the `native` case's comment. A rosetta reads
                 // `this.resources` from the run store iff the capability produces a bag.
-                associateCapability(proc, ownerCapability, activation.configuration, bakedReadsResources);
+                associateCapability(proc, ownerCapability, bakedReadsResources);
                 bindTarget(def).set(verb, proc);
                 break;
               }

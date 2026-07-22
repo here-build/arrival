@@ -50,6 +50,29 @@ import { disposeRunContext } from "./run-lifecycle.js";
  *  job (its `get-resources` registers `onRunContextDispose`), not the store's. */
 export type CapabilityResourceStore = WeakMap<object, unknown>;
 
+/** The per-run, per-CAPABILITY validated CONFIGURATION table (the relocation this same axis's
+ *  RESOURCES already underwent, above) — capability object → its assembly's validated
+ *  configuration, scoped to THIS RunContext. Opaque `object` keys, same as
+ *  {@link CapabilityResourceStore}, so this leaf file never imports the capability layer.
+ *
+ *  Unlike the resource store, this table is FILLED ONCE, EAGERLY, at mint (`eval/exec-phases.ts`'s
+ *  `instantiate`, from the ambient's `capabilities` + `activations`) — never lazily grown at
+ *  dispatch. A plain `ReadonlyMap` is enough (the full capability roster is known and finite the
+ *  moment a RunContext is minted against an ambient); reused-`runCtx` REPL passes and a run minted
+ *  with no ambient to read (the bare-`env` glass path, `execExpr`, CONSTANT_CTX) simply carry no
+ *  table.
+ *
+ *  Read by `makeCallCtx` (CallCtx.ts) at every dispatch of a value with an
+ *  `associateCapability`-registered owner: `runCtx.capabilityConfigurations?.get(capability)`
+ *  becomes `this.configuration`, and the SAME lookup feeds `resolveCapabilityResources`'s call to
+ *  the capability's `["arrival/get-resources"]` — one source of truth for both channels. The
+ *  motivating reason this axis moved off the bind-time association (docs/execution.md §CALLCTX):
+ *  a symbol factory that mints ONE value at `define()` time for EVERY assembly of a capability
+ *  cannot carry per-assembly config on a value-keyed WeakMap (a second assembly's config would
+ *  silently clobber the first's); keying by THE RUN — which genuinely differs per assembly —
+ *  cannot collide. */
+export type CapabilityConfigurationTable = ReadonlyMap<object, unknown>;
+
 /** Per-run allocation meter. The reference is fixed for the run; `used` is incremented
  *  in place as cells materialize. */
 export interface HeapMeter {
@@ -93,6 +116,13 @@ export class RunContext {
    *  producer (the bare-`env` exec path, CONSTANT_CTX) — a resource-reading verb under
    *  such a run sees `this.resources === undefined`, same as a resource-less capability. */
   readonly capabilityResources?: CapabilityResourceStore;
+  /** This run's per-capability CONFIGURATION table (see {@link CapabilityConfigurationTable}).
+   *  Filled ONCE at construction from `opts.capabilityConfigurations` — never grown later, unlike
+   *  `capabilityResources`. `undefined` when the caller supplies none, which is every mint site
+   *  with no ambient to read it from (the bare-`env` glass exec path, `execExpr`, CONSTANT_CTX) —
+   *  `makeCallCtx` (CallCtx.ts) then leaves `this.configuration` `undefined` too, same posture as
+   *  a capability with no configuration schema at all. */
+  readonly capabilityConfigurations?: CapabilityConfigurationTable;
 
   constructor(
     opts: {
@@ -105,6 +135,10 @@ export class RunContext {
       reads?: ReadGuard;
       notes?: NoteSink;
       display?: DisplaySink;
+      /** The CONFIGURATION relocation's supply seam — `eval/exec-phases.ts`'s `instantiate` is
+       *  the one production caller, passing the table it built by walking the ambient's
+       *  capability DAG. Every other mint site (glass, `execExpr`, CONSTANT_CTX) omits it. */
+      capabilityConfigurations?: CapabilityConfigurationTable;
     } = {},
     /** internal-only: `true` for the run-NEUTRAL singleton (CONSTANT_CTX) — it gets no
      *  capabilityResources store (see that field's doc). Never pass this from an ordinary
@@ -121,6 +155,7 @@ export class RunContext {
     this.reads = opts.reads;
     this.notes = opts.notes;
     this.display = opts.display;
+    this.capabilityConfigurations = opts.capabilityConfigurations;
     if (!_noResourceStore) {
       this.capabilityResources = new WeakMap<object, unknown>();
     }

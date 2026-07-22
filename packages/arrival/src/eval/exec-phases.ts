@@ -309,6 +309,34 @@ function rosterEntries(capabilities: readonly EnvCapability[]): Map<string, Rost
   return out;
 }
 
+/** Phase 3's capability → validated-CONFIGURATION table builder (the CONFIGURATION relocation,
+ *  docs/execution.md §CALLCTX): walks the SAME dep-first DAG {@link rosterEntries} does (a
+ *  dependency's own config must be reachable too — its bound values carry the SAME
+ *  {@link associateCapability} channel as a root capability's), deduped by capability OBJECT
+ *  identity (a diamond-shaped dep graph must not visit a shared dep twice), and reads each
+ *  capability's validated configuration off `ambient.activations` — keyed by NAME there
+ *  ({@link AssembledEnv.activations}, `common/kernel.ts`'s `assembleEnv` folds EVERY applied
+ *  pack's activation into it, root or dep, so a dep capability's name always resolves). A
+ *  capability whose activation never landed (a plain kernel pack with no `Activation` at all —
+ *  never an `EnvCapability`) is silently absent from the table; `makeCallCtx` treats an absent
+ *  entry exactly like an absent table. */
+function capabilityConfigurationTable(
+  capabilities: readonly EnvCapability[],
+  activations: ReadonlyMap<string, Activation<any, any>>,
+): Map<object, unknown> {
+  const out = new Map<object, unknown>();
+  const seen = new Set<EnvCapability>();
+  const visit = (cap: EnvCapability): void => {
+    if (seen.has(cap)) return;
+    seen.add(cap);
+    for (const dep of cap.spec.deps ?? []) visit(dep);
+    const activation = activations.get(cap.name);
+    if (activation !== undefined) out.set(cap, activation.configuration);
+  };
+  for (const cap of capabilities) visit(cap);
+  return out;
+}
+
 async function describeEntry(
   name: string,
   entry: RosterEntry,
@@ -396,7 +424,14 @@ export interface ExecInstance {
  *  the Stage-2 capability-resource lifetime rides — docs/execution.md §HERMETIC). `heapBudget`
  *  resolves per-run option → ambient policy → unbounded, and is IGNORED when `runCtx` is
  *  reused (a reused RunContext already carries its own meter — re-deriving one here would
- *  silently fork the budget mid-session). */
+ *  silently fork the budget mid-session).
+ *
+ *  CONFIGURATION (docs/execution.md §CALLCTX): a FRESH mint here also builds this run's
+ *  `capabilityConfigurations` table ({@link capabilityConfigurationTable}) from `ambient`'s own
+ *  `capabilities` + `activations` — the run-side channel a dispatch reads `this.configuration`
+ *  off, replacing the old bind-time association. A REUSED `runCtx` (the `opts.runCtx` branch)
+ *  builds NO new table — it already carries the one its OWN originating `instantiate` call
+ *  built, and REPL continuity means every pass shares that same run/table pair. */
 export function instantiate(
   ambient: AssembledAmbient,
   opts: {
@@ -430,6 +465,7 @@ export function instantiate(
       // or the model-facing channels arrive empty on the ambient path.
       notes: opts.notes,
       display: opts.display,
+      capabilityConfigurations: capabilityConfigurationTable(ambient.capabilities, ambient.activations),
     });
   const resolver = new Resolver(opts.scope.env, Capabilities.assembled(ambientBase(ambient)));
   return { ambient, scope: resolver.scope, runCtx, resolver };

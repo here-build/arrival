@@ -138,7 +138,48 @@ by a verb called through `testCallCtx()` carries no run-state, exactly as intend
 harness, and the moment production code reaches for `CONSTANT_CTX` at a dispatch site, that is
 the bug this door's existence localizes.
 
-*Enforcement sites: `run/CallCtx.ts`.*
+**`configuration`/`resources` resolve RUN-SIDE, off a value's owning capability — never off the
+bind-time association.** `common/capability.ts`'s bind loop calls `associateCapability(value,
+capability, readsResources)` once per bound native/rosetta/sequence/tagless(-guard) proc — the
+association answers ONLY "who owns this value, and does it read resources at all" (both define-
+time constants), never "under which assembly". At dispatch, `makeCallCtx` (`run/CallCtx.ts`)
+looks the owning capability up in TWO run-scoped tables:
+
+- `runCtx.capabilityConfigurations` — the validated per-assembly configuration, a plain
+  `ReadonlyMap<object, unknown>` filled ONCE, eagerly, when a RunContext is minted against an
+  ambient (`eval/exec-phases.ts`'s `instantiate`, walking `ambient.capabilities`/`.activations`
+  — deps included, deduped by capability identity). `this.configuration` is that lookup,
+  verbatim.
+- `runCtx.capabilityResources` — unchanged in spirit (§1d's per-run resource store), except its
+  configuration feed is now the SAME table lookup instead of a parameter carried on the
+  association.
+
+**Why this axis moved off the value-keyed association.** A symbol factory that mints ONE value
+at `define()` time to serve EVERY assembly of a capability cannot carry per-assembly
+configuration on a `WeakMap<value, config>` — a second assembly's `lower()` would silently
+clobber the first's entry for the SAME shared value. Keying by the RUN instead — the thing that
+genuinely differs per assembly, one RunContext per `exec()` — cannot collide: two concurrent
+runs against the same shared value each carry their own table.
+
+**The consequence, deliberate.** A RunContext minted with no ambient to read — the bare-`env`
+GLASS exec path, `execExpr`, `CONSTANT_CTX` — carries no `capabilityConfigurations` table, so a
+dispatch there sees `this.configuration === undefined`, the SAME posture a capability with no
+configuration schema at all already has (and the SAME posture `capabilityResources` already
+documents for that path). A caller that bound capabilities directly onto a bare env
+(`capability.lower(...).apply(env, ...)`, bypassing `assembleAmbient`) and then dispatches
+through `exec(code, { env })` gets no configuration either — the sanctioned path threads
+`{ capabilities, config }` (or a pre-assembled `{ ambient }`) through `exec`, or builds the same
+table by hand and hands it to a caller-owned `RunContext({ capabilityConfigurations })` when
+testing the capability/`assembleEnv` layer directly (see `loader/__tests__/loader-capability
+.test.ts`'s `assembled()` helper for the pattern). A REUSED `runCtx` (`ExecOptions.runCtx`, REPL
+continuity) carries whatever table its OWN originating `instantiate` call built — a fresh
+`new RunContext(...)` a caller mints by hand outside `instantiate` carries none, so sharing a
+table-bearing `runCtx` across passes means minting it via `assembleAmbient` + `instantiate`
+directly (CALLER-owned, never disposed by `exec`), not capturing `ExecState.runCtx`/`.ambient`
+off a bare `{ capabilities }` call — `exec` disposes BOTH of those at that call's own end.
+
+*Enforcement sites: `run/CallCtx.ts`, `run/RunContext.ts` (`capabilityConfigurations`),
+`eval/exec-phases.ts` (`instantiate`, `capabilityConfigurationTable`).*
 
 ## 5. BUDGETS — three bounds, first to fire wins
 
