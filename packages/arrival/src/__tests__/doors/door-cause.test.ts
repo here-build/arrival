@@ -15,7 +15,7 @@
 import { describe, expect, it } from "vitest";
 import { symbol } from "../../common/symbol.js";
 import { DoorProcedure } from "../../values/primitives/ACallable.js";
-import { is_callable_value, is_door_procedure } from "../../values/value-guards.js";
+import { is_callable_value } from "../../values/value-guards.js";
 import { PurityError } from "../../errors.js";
 import { EnvCapability } from "../../common/capability.js";
 import { ResolvingAmbient, mintResolvingFrame } from "../../env/AmbientRuntime.js";
@@ -25,7 +25,6 @@ describe("DoorProcedure — the introspectable door binding (unit, no capability
     const def = symbol.notImplemented`stub: a teaching stub`;
     const proc = new DoorProcedure(def);
     expect(proc.door).toBe(def);
-    expect(is_door_procedure(proc)).toBe(true);
     // A door is a genuine callable value (it has an apply term) — is_callable_value
     // must recognize it too, or `=>`/z.lambda-typed call sites would mis-dispatch it.
     expect(is_callable_value(proc)).toBe(true);

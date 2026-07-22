@@ -47,6 +47,8 @@ export function is_promise(o: unknown): o is Promise<unknown> {
 // A procedure: a JS function (native builtins / rosettas are bare functions; a Scheme
 // lambda is an ALambda value — see is_callable_value — never a branded bare function) or
 // a macro. No borrowed-JS-function wrapper exists — docs/membrane.md §VOID-RULE.
+// `is_function(o) ||` is the bare-fn survivor arm — a P1 membrane-leak witness; retires
+// when raw fns leave env value space.
 export function is_callable(o: unknown): boolean {
   return is_function(o) || is_macro(o) || is_callable_value(o);
 }

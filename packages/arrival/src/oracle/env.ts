@@ -16,24 +16,24 @@
 import type { AmbientRuntime } from "../env/AmbientRuntime.js";
 import type { Macro } from "../eval/Macro.js";
 import type { Syntax } from "../eval/Syntax.js";
-import { is_callable_value } from "../values/value-guards.js";
+import { is_applyable } from "../values/value-guards.js";
 import type { OracleEnv } from "./contract.js";
 import type { OracleEnvΣ } from "./sigma.js";
 
 /** True iff a bound value can be a form head — the three callable shapes, tested WITHOUT a runtime
  *  edge into the evaluator:
  *    1. a JS function (every arrival primitive + bare-fn binding);
- *    2. a callable-as-value class (`is_callable_value`, a values/value-guards.ts leaf — the tagless-
+ *    2. a callable-as-value class (`is_applyable`, a values/value-guards.ts leaf — the tagless-
  *       final procedures a capability's `symbol.rosetta`/`symbol.native` declarations bind);
  *    3. a Macro / Syntax special-form head (`if`, `let`, `quote`, syntax-rules macros).
  *  Macro/Syntax are matched by walking the prototype chain's constructor NAMES, not by importing the
  *  class (a Syntax-extends-Macro subclass is caught too). The Macro/Syntax imports are `import type`,
- *  erased at compile; `is_callable_value` is a value-kernel leaf — so the oracle keeps zero runtime
+ *  erased at compile; `is_applyable` is a value-kernel leaf — so the oracle keeps zero runtime
  *  edge into the evaluator. */
 function isCallableValue(value: unknown): value is Function | Macro | Syntax {
   if (value === undefined || value === null) return false;
   if (typeof value === "function") return true;
-  if (is_callable_value(value)) return true;
+  if (is_applyable(value)) return true;
   let proto: object | null = Object.getPrototypeOf(value as object);
   while (proto) {
     const name = (proto.constructor as { name?: string } | undefined)?.name;

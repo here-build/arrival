@@ -39,7 +39,7 @@ import invariant from "tiny-invariant";
 import { APair, concatPair, isCircularList } from "../../values/primitives/APair.js";
 import { ctxOf } from "../../values/primitives/AValue.js";
 import { is_false, is_function, is_promise } from "../../eval/guards.js";
-import { is_callable_value } from "../../values/value-guards.js";
+import { is_applyable } from "../../values/value-guards.js";
 import { type, typeErrorMessage } from "../../utils/typecheck.js";
 import { heapBudgetMessage } from "../../heap-budget.js";
 import { ArrivalError, attachOffendingValue, CarrierMismatchError } from "../../errors.js";
@@ -83,6 +83,7 @@ import {
 // over `unknown` only yield the bare `Function` type, which lacks the call
 // signature `call_function`/`apply` need — this refines the predicate to the
 // procedure shape the union already names.
+// bare-fn survivor arm — a P1 membrane-leak witness; retires when raw fns leave env value space.
 const is_callable = (o: unknown): o is (...args: SchemeValue[]) => SchemeValue => is_function(o);
 
 // `member`/`assoc`'s optional `compare` decodes to the z.lambda scheme face
@@ -244,7 +245,7 @@ function mapImpl(
   // as a type-level assertion so `call_function` sees a shape it can invoke. Callable
   // VALUES (ANativeProcedure — e.g. the kernel-synthesized cxr accessors — /ALambda)
   // are first-class here: `call_function` routes them through the applyCallback seam.
-  invariant(is_callable(fn) || is_callable_value(fn), `map: the first argument is not a procedure`);
+  invariant(is_callable(fn) || is_applyable(fn), `map: the first argument is not a procedure`);
   const is_list = isProperList;
   for (const [i, arg] of lists.entries()) {
     // detect cycles
@@ -261,7 +262,10 @@ function mapImpl(
   const results: SchemeValue[] = [];
   for (let i = 0; i < length; i++) {
     const args = arrays.map((arr: SchemeValue[]) => arr[i]);
-    results.push(call_function(fn, args, { runCtx }));
+    // `is_applyable` (unlike the retired `is_callable_value` disjunct above) is structural,
+    // not a type guard, so the preceding invariant no longer narrows `fn` — the runtime check
+    // already confirmed callability; bridge the static gap with `call_function`'s own param type.
+    results.push(call_function(fn as Parameters<typeof call_function>[0], args, { runCtx }));
   }
 
   const hasPromises = results.some(is_promise);

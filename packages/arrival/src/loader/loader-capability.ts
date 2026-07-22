@@ -38,7 +38,7 @@ import { EnvCapability } from "../common/capability.js";
 import { createRuntimeAssembler, type EnvPack, type RuntimeAssembler } from "../common/kernel.js";
 import * as z from "../common/scheme-zod.js";
 import { applyCallback } from "../values/primitives/ACallable.js";
-import { is_callable_value } from "../values/value-guards.js";
+import { is_applyable } from "../values/value-guards.js";
 import { theVoid } from "../values/primitives/AVoid.js";
 import invariant from "tiny-invariant";
 import { RequireCycleError, RequireResolverError } from "../errors.js";
@@ -319,7 +319,7 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
             // A bound verb is a callable VALUE (ANativeProcedure), not `typeof === "function"` —
             // dispatch through the ONE invocation seam (`applyCallback`), which handles both the
             // value's apply term and a legacy bare fn.
-            if (typeof registered === "function" || is_callable_value(registered)) {
+            if (typeof registered === "function" || is_applyable(registered)) {
               // applyCallback's CallResult (SchemeValue | SchemeBounceMarker | Promise<SchemeValue>)
               // doesn't structurally overlap ResolverResult — a registered resolver verb is never
               // invoked in tail position, so a SchemeBounceMarker genuinely can't reach here; the

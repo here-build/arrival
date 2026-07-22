@@ -103,7 +103,7 @@ import {
   type SourceLocation,
 } from "../errors.js";
 import { is_callable, is_expandable, is_false, is_function, is_macro, is_promise } from "./guards.js";
-import { is_applyable, is_callable_value, is_lambda } from "../values/value-guards.js";
+import { is_applyable, is_lambda } from "../values/value-guards.js";
 import { applyCallback, ALambda, type CallResult } from "../values/primitives/ACallable.js";
 import { makeCallCtx, type CallCtx } from "../common/symbols/_bake.js";
 import type { InvocationLike } from "../membrane/rosetta.js";
@@ -2049,7 +2049,9 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
   // hands back a Bounce so a self-recursive `=>` collapses (TCO); an ANativeProcedure/
   // ARosettaProcedure returns a value/promise (canBounce ignored). Every
   // scheme-authored lambda (including named-let's loop binding) is a callable VALUE.
-  if (is_callable_value(proc)) {
+  // `is_applyable` subsumes the nominal `is_callable_value` here (every ACallable
+  // declares the apply term this arm dispatches through).
+  if (is_applyable(proc)) {
     const __savedDynamicCallSite = currentDynamicCallSite();
     setDynamicCallSite(dynSite);
     let r: CallResult;
@@ -2066,6 +2068,7 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
   }
 
   // Builtins: direct apply (no Scheme body to tail into).
+  // bare-fn survivor arm — a P1 membrane-leak witness; retires when raw fns leave env value space.
   SpecialFormShapeError.invariant(is_function(proc), "=>", "requires a procedure");
   // The bare-fn callable surface is heterogeneous (metadata-bearing `AProcedure`, plain
   // bare-fn) with no single call signature, so invoke reflectively — `Reflect.apply`
@@ -2856,7 +2859,7 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
       ctx.tap?.onSymbolResolved?.(ctx.currentInvocation ?? null, first, fn);
     }
   } else {
-    if (!is_function(first) && !is_callable_value(first)) {
+    if (!is_function(first) && !is_applyable(first)) {
       throw nonCallableHeadError(first);
     }
     fn = first;
@@ -2926,6 +2929,8 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
   // the macro case already returned above (no `!is_macro` guard needed). A callable VALUE
   // (ANativeProcedure — a first-class AValue, not a bare fn) enters the same block: it shares the
   // arg-eval / bounce plumbing, and only the invocation primitive below branches (apply vs Reflect).
+  // `is_function(fn) ||` is the bare-fn survivor arm — a P1 membrane-leak witness; retires when
+  // raw fns leave env value space (is_applyable alone would then suffice).
   if (is_function(fn) || is_applyable(fn)) {
     const argsResult = yield { call: evaluateArgs(rest, nonTailCtx) };
     // evaluateArgs's generator return type is `unknown` at this yield site; narrow.
@@ -2971,7 +2976,7 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
       // canBounce=false (the HOF-callback contract). A bare fn keeps the legacy
       // `this: CallCtx` apply.
       result =
-        is_callable_value(fn) || is_applyable(fn)
+        is_applyable(fn)
           ? (fn[tf("apply")](wrappedArgs, callCtx, canBounce) as SchemeValue)
           : // Only the plain-JS-function case remains (the ternary excluded the other two
             // the outer gate admits). Its result boxes through the membrane: this bare-fn

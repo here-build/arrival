@@ -96,7 +96,7 @@ export function is_macro_value(o: unknown): o is Macro | Syntax {
 // rather than in guards.ts so leaf utilities (e.g. utils/typecheck.ts) can
 // import them without reaching guards.ts and, through it, AmbientRuntime/Macro.
 export function is_function(o: unknown): o is Function {
-  return typeof o === "function" && "bind" in o && typeof o.bind === "function";
+  return typeof o === "function";
 }
 
 // Callable-as-value guards. `instanceof` is evaluated at call time, so importing
@@ -104,16 +104,6 @@ export function is_function(o: unknown): o is Function {
 // bare-fn `is_callable`/`is_macro` (eval/guards.js) coexist until the migration retires them.
 export function is_lambda(o: unknown): o is ALambda {
   return o instanceof ALambda;
-}
-/** A host-JS primitive callable — native (contour) OR rosetta (membrane). */
-export function is_procedure(o: unknown): o is ANativeProcedure | ARosettaProcedure {
-  return o instanceof ANativeProcedure || o instanceof ARosettaProcedure;
-}
-/** A bound DOOR (errors-as-doors — `symbol.notImplemented`) — resolves like any other
- *  binding, throws its teaching `PurityError` only on application. See `DoorProcedure`'s
- *  own doc (ACallable.ts) for why it's a real callable value, not a bare closure. */
-export function is_door_procedure(o: unknown): o is DoorProcedure {
-  return o instanceof DoorProcedure;
 }
 /** Any callable value — a lambda, a host-JS primitive, or a door. */
 export function is_callable_value(o: unknown): o is ACallable {
