@@ -1,15 +1,20 @@
-// run-scoped-resources.test.ts — STAGE 2 (docs/execution.md §HERMETIC): capability resources
-// keyed by RunContext, spawned lazily on first touch, reused across REPL passes that SHARE a
-// RunContext, disposed exactly once at that RunContext's end — never per-exec-pass, never
-// ambient-wide. Covers BOTH resource paths (`common/capability.ts`'s header names them):
+// run-scoped-resources.test.ts — 1d (docs/execution.md §HERMETIC): capability resources keyed by
+// RunContext in the run's own `capabilityResources` store, produced on first dispatch of a
+// resource-bearing verb via the capability's `["arrival/get-resources"]`, spawned lazily per cell
+// on `.get()`, reused across REPL passes that SHARE a RunContext, disposed exactly once at that
+// RunContext's end — never per-exec-pass, never ambient-wide. Covers BOTH resource shapes:
 //
-//   • the CONSTRUCTOR path — `new EnvCapability(name, { resources: {...} })`, a baked verb's
-//     `this.resources.<key>.live/.get()` (the `gateResources` wrapper).
-//   • the DEFINE path — `EnvCapability.define(name, { resources: (config) => Resources })`,
-//     a baked verb's `this.resources` as the WHOLE authored bag (`gateDefinedResources`).
+//   • the CONSTRUCTOR path — `new EnvCapability(name, { resources: {...} })`, a baked verb reading
+//     `this.resources.<key>.get()` (a per-run `ResourceCell` record; lazy per-cell acquire).
+//   • the DEFINE path — `EnvCapability.define(name, { resources: (config) => Resources })`, a baked
+//     verb reading `this.resources` as the WHOLE authored bag (synchronous — the factory is sync).
+//
+// `.live` (sync spawned handle) is NOT a baked-path read anymore: the eager pre-spawn gate that
+// backed it is retired, so baked impls acquire via async `.get()`. `.live` survives on the legacy
+// `{ fn }` / describe-time channel (`activation.resources` + `ensureSpawned`), covered elsewhere.
 //
 // `capability.test.ts` / `callctx-activation-dispatch.test.ts` / `capability-define-symbols
-// .test.ts` cover the AUTHORING/inference surface; this file is Stage 2's own lifecycle proof.
+// .test.ts` cover the AUTHORING/inference surface; this file is the resource-lifecycle proof.
 import { describe, expect, it } from "vitest";
 
 import { EnvCapability } from "../capability.js";
@@ -40,9 +45,13 @@ describe("Stage 2 — per-RunContext capability resources", () => {
         symbols: {
           "spy/touch": symbol.rosetta`spy/touch: read the spy port's tag`(
             { input: [], output: [sz.string] },
-            function (this: CallCtx): string {
-              const res = this.resources as { port: { live: { tag: string } } } | undefined;
-              return res?.port.live.tag ?? "NO-RESOURCE";
+            // 1d: baked verbs read run resources via async `.get()` (lazy per-cell spawn) — the
+            // pre-spawn gate that made a sync `.live` read possible is gone. `.live` survives only
+            // on the legacy `{ fn }` / describe-time channel (`activation.resources`), not here.
+            async function (this: CallCtx): Promise<string> {
+              const res = this.resources as { port: { get(): Promise<{ tag: string }> } } | undefined;
+              if (res === undefined) return "NO-RESOURCE";
+              return (await res.port.get()).tag;
             },
           ),
         },

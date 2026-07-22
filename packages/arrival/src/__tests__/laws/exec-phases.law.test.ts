@@ -56,9 +56,16 @@ function spyCapability() {
   const capability = new EnvCapability("law/exec-phases-spy", {
     resources: { port: resource },
     symbols: {
-      // A plain verb — the capability owns a cell, so the binder's `ensureSpawned`
-      // middleware spawns the port on first call (the designed first-touch gate).
-      "spy/touch": symbol.rosetta`spy/touch: read the spy port's tag`({ input: [], output: [z.string] }, () => "touched"),
+      // 1d: resources are lazy — a verb spawns the port by READING it (async `.get()`), not by
+      // mere symbol touch (the eager pre-spawn gate is retired). Reading here is what drives the
+      // acquire/dispose the ownership laws below assert.
+      "spy/touch": symbol.rosetta`spy/touch: read the spy port's tag`(
+        { input: [], output: [z.string] },
+        async function (this: { resources?: { port: { get(): Promise<{ tag: string }> } } }): Promise<string> {
+          await this.resources!.port.get();
+          return "touched";
+        },
+      ),
     },
   });
   return { capability, counts };

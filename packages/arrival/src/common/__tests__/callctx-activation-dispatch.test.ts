@@ -45,11 +45,13 @@ const greeter = new EnvCapability("test/greeter-activation", {
   symbols: {
     greet: symbol.rosetta`greet: tag + shout the message, reading this call's activation off CallCtx`(
       { input: [sz.string], output: [sz.string] },
-      function (this: CallCtx, s: string): string {
+      // 1d: `this.resources.<key>` is read via async `.get()` (lazy per-cell spawn). `this.
+      // configuration` stays synchronous (per-assembly, carried on the association).
+      async function (this: CallCtx, s: string): Promise<string> {
         const cfg = this.configuration as { tag: string } | undefined;
-        const res = this.resources as { shout: { live: Shout } } | undefined;
+        const res = this.resources as { shout: { get(): Promise<Shout> } } | undefined;
         if (cfg === undefined || res === undefined) return `NO-ACTIVATION:${s}`;
-        return `${cfg.tag}:${res.shout.live.up(s)}`;
+        return `${cfg.tag}:${(await res.shout.get()).up(s)}`;
       },
     ),
   },

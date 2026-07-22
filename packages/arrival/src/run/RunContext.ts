@@ -26,6 +26,22 @@ import type { ReadGuard } from "./read-guard.js";
 import type { SourceLocation } from "../errors.js";
 import { disposeRunContext } from "./run-lifecycle.js";
 
+/** The per-run, per-CAPABILITY resource store (1d) — a capability's lazily-produced `Resources`
+ *  bag, keyed by the owning EnvCapability object, scoped to THIS RunContext (survives REPL passes
+ *  that reuse it; a different RunContext gets its own). The key is opaque (`object`) so this leaf
+ *  file never imports the capability layer.
+ *
+ *  Filled by `makeCallCtx` (CallCtx.ts) on first dispatch of a resource-bearing verb — a plain
+ *  `WeakMap` get-or-compute: absent ⇒ call the owning capability's `["arrival/get-resources"]`
+ *  (fed the per-assembly config the association carries) and store the result — a plain bag (sync
+ *  `resources` factory) or a pending Promise (a real async acquire). Because JS runs one dispatch
+ *  at a time, the `has`-then-`set` IS the semaphore: every later dispatch — including concurrent
+ *  `map`/`filter` fan-out that only interleaves at `await` points — sees the stored value/promise
+ *  and never spawns a second acquire. A pending bag is REPLACED in-slot by its resolved value on
+ *  settle (the collapse), so warm reads are plain and microtask-free. Disposal is the capability's
+ *  job (its `get-resources` registers `onRunContextDispose`), not the store's. */
+export type CapabilityResourceStore = WeakMap<object, unknown>;
+
 /** Per-run allocation meter. The reference is fixed for the run; `used` is incremented
  *  in place as cells materialize. */
 export interface HeapMeter {
@@ -69,17 +85,24 @@ export interface RunContext {
    *  Leaf literals (no location slot) get source identity through here alone; `APair.setLocation`
    *  is a derived MIRROR the Parser also writes, so `[LOCATION]`-slot readers stay untouched. */
   readonly location?: SourceLocation;
+  /** 1d: this run's per-capability resource store (see {@link CapabilityResourceStore}). The
+   *  `arrival/tagless-final/apply` dispatch wrapper (via makeCallCtx) reads a value's resources
+   *  from here, keyed by the value's owning capability. `undefined` on a RunContext minted with no
+   *  producer (the bare-`env` exec path, CONSTANT_CTX, PARSE_CTX) — a resource-reading verb under
+   *  such a run sees `this.resources === undefined`, same as a resource-less capability. */
+  readonly capabilityResources?: CapabilityResourceStore;
   /** STAGE 2 (run-lifecycle.ts): tears down whatever ended up scoped to THIS RunContext (a
-   *  capability's per-run resources — `common/resources.ts`'s `runScoped`), so `await using
-   *  runCtx = makeRunContext(...)` disposes it at scope exit. Delegates to
-   *  {@link disposeRunContext} — the SAME idempotent function a REPL host or `exec()`'s owned-
-   *  runCtx `finally` calls explicitly, so all three teardown paths share one guard. Present
-   *  only on RunContexts minted by `makeRunContext` — `CONSTANT_CTX`/`PARSE_CTX` are shared,
-   *  run-neutral singletons nothing ever disposes. */
+   *  capability's per-run resources), so `await using runCtx = makeRunContext(...)` disposes it at
+   *  scope exit. Delegates to {@link disposeRunContext} — the SAME idempotent function a REPL host
+   *  or `exec()`'s owned-runCtx `finally` calls explicitly, so all three teardown paths share one
+   *  guard. Present only on RunContexts minted by `makeRunContext` — `CONSTANT_CTX`/`PARSE_CTX` are
+   *  shared, run-neutral singletons nothing ever disposes. */
   readonly [Symbol.asyncDispose]?: () => Promise<void>;
 }
 
-/** Mint a fresh per-run context for one `exec()`. The single place a RunContext is born. */
+/** Mint a fresh per-run context for one `exec()`. The single place a RunContext is born. Its
+ *  `capabilityResources` store starts empty and is filled lazily on first dispatch of a
+ *  resource-bearing verb (see {@link CapabilityResourceStore} and CallCtx.ts's makeCallCtx). */
 export function makeRunContext(
   opts: {
     strict?: boolean;
@@ -103,6 +126,7 @@ export function makeRunContext(
     reads: opts.reads,
     notes: opts.notes,
     display: opts.display,
+    capabilityResources: new WeakMap<object, unknown>(),
     [Symbol.asyncDispose]: () => disposeRunContext(ctx),
   };
   return ctx;

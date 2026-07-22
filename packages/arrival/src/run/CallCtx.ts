@@ -36,22 +36,47 @@ export interface CallCtx {
   readonly resources?: unknown;
 }
 
-/** The value → capability-activation association (Stage 1b): `common/capability.ts`'s
- *  per-symbol bind loop calls {@link associateActivation} ONCE, at BIND time, keyed on the
- *  bound callable VALUE itself (ANativeProcedure/ARosettaProcedure/…) — never its name (a
- *  value can be re-exported/aliased under several names; the value's identity is what a real
- *  dispatch actually holds by the time it reaches {@link makeCallCtx}). A `WeakMap` — not a
- *  field on the value — keeps `common/capability.ts`'s activation type OUT of this leaf file
- *  (importing `Activation` here would reopen the very cycle this file's header note exists to
- *  avoid) and lets an unbound value (a lambda, a bare-fn registry survivor, a resource-less
- *  capability's proc that never called `associateActivation`) cost a plain WeakMap miss —
- *  nothing paid on that hot path. */
-const activationByValue = new WeakMap<object, { readonly configuration: unknown; readonly resources: unknown }>();
+/** The value → owning-capability association (1d): `common/capability.ts`'s per-symbol bind loop
+ *  calls {@link associateCapability} ONCE, at BIND time, keyed on the bound callable VALUE itself
+ *  (ANativeProcedure/ARosettaProcedure/…) — never its name (a value can be re-exported/aliased
+ *  under several names; the value's identity is what a real dispatch actually holds by the time it
+ *  reaches {@link makeCallCtx}).
+ *
+ *  Payload: the owning `capability` (opaque `object` — importing `EnvCapability` here would reopen
+ *  the cycle this file's header note exists to avoid) plus the per-ASSEMBLY validated
+ *  `configuration` (known at bind, constant across the run). RESOURCES are deliberately NOT here:
+ *  they are per-RunContext, produced lazily on demand, and read at dispatch off
+ *  `runCtx.capabilityResources.get(capability)` (see makeCallCtx) — the store the RunContext owns,
+ *  keyed by this same capability object. A `WeakMap` — not a field on the value — keeps the
+ *  capability type out of this leaf file and lets an unbound value (a lambda, a resource-less
+ *  survivor) cost a plain miss. */
+const capabilityByValue = new WeakMap<
+  object,
+  { readonly capability: object; readonly configuration: unknown; readonly readsResources: boolean }
+>();
 
-/** Record `value`'s capability activation — called from `common/capability.ts`'s bind loop,
- *  once per bound native/rosetta/sequence/tagless(-guard) proc, right after construction. */
-export function associateActivation(value: object, configuration: unknown, resources: unknown): void {
-  activationByValue.set(value, { configuration, resources });
+/** Record `value`'s owning capability + assembly config — called from `common/capability.ts`'s
+ *  bind loop, once per bound native/rosetta/sequence/tagless(-guard) proc, right after
+ *  construction. Re-attributing an ALREADY-bound value to a DIFFERENT capability is a declaration
+ *  bug (a symbol belongs to exactly one owner) and throws; an idempotent re-bind under the SAME
+ *  capability (same value re-run through the loop) is allowed.
+ *
+ *  `readsResources` gates whether this value's `this.resources` is fetched from the run's
+ *  per-capability store (see makeCallCtx). `true` for the per-run-resource consumers (define-form
+ *  symbols; constructor-form sequence/tagless/tagless-guard/rosetta). `false` for constructor-form
+ *  `native` (its resources, when any, are read through the capability's own builder closure — e.g.
+ *  arrival/loader — never `this.resources`; triggering the store here would DOUBLE-spawn them). */
+export function associateCapability(
+  value: object,
+  capability: object,
+  configuration: unknown,
+  readsResources: boolean,
+): void {
+  const existing = capabilityByValue.get(value);
+  if (existing !== undefined && existing.capability !== capability) {
+    throw new Error("associateCapability: value already owned by a different capability");
+  }
+  capabilityByValue.set(value, { capability, configuration, readsResources });
 }
 
 /** Build the `this` every callable body (native/rosetta/tagless/tagless-guard/sequence impl,
@@ -60,27 +85,55 @@ export function associateActivation(value: object, configuration: unknown, resou
  *  latent-hazard rule, docs/execution.md §CALLCTX); `testCallCtx()` is the sanctioned door for
  *  CONSTANT_CTX under test.
  *
- * `resolvedValue` (Stage 1b, optional): the callable VALUE this dispatch is about to invoke —
- * passed ONLY by the real evaluator dispatch sites (evaluator.ts's `evaluatePair`/
- * `applyArrowProc`), which actually hold the resolved value at the point they build this
- * `CallCtx`. When it carries an {@link associateActivation}-registered activation, this
- * enriches the returned `CallCtx` with that activation's `configuration`/`resources` — every
- * OTHER call site (APair.map's callback seam, srfi-1/13's HOF seams, op-helpers, the membrane)
- * omits it and pays nothing beyond the `undefined` check. */
+ * `resolvedValue` (1d, optional): the callable VALUE this dispatch is about to invoke — passed
+ * ONLY by the real evaluator dispatch sites (evaluator.ts's `evaluatePair`/`applyArrowProc`),
+ * which actually hold the resolved value at the point they build this `CallCtx`. When it carries
+ * an {@link associateCapability}-registered owner, this enriches the returned `CallCtx` with the
+ * assembly `configuration` and the run's resources for that capability — the latter fetched from
+ * `runCtx.capabilityResources.get(capability)`, which lazily produces (and thereafter reuses) the
+ * bag for THIS run. That fetch is a MaybePromise: a `resources` bag whose acquire is still in
+ * flight arrives as a Promise the impl (or the interpreter) resolves; a warm one is a plain value.
+ * Every OTHER call site (APair.map's callback seam, srfi-1/13's HOF seams, op-helpers, the
+ * membrane) omits `resolvedValue` and pays nothing beyond the `undefined` check. */
 export function makeCallCtx(
   runCtx: RunContext,
   currentInvocation?: InvocationLike,
   argProvenance?: readonly ReadonlySet<number>[],
   resolvedValue?: unknown,
 ): CallCtx {
-  const activation =
-    typeof resolvedValue === "object" && resolvedValue !== null ? activationByValue.get(resolvedValue) : undefined;
+  const owner =
+    typeof resolvedValue === "object" && resolvedValue !== null ? capabilityByValue.get(resolvedValue) : undefined;
   return {
     runCtx,
     invocation: { currentInvocation },
     argProvenance,
-    ...(activation !== undefined ? { configuration: activation.configuration, resources: activation.resources } : {}),
+    ...(owner !== undefined
+      ? {
+          configuration: owner.configuration,
+          resources: owner.readsResources ? resolveCapabilityResources(runCtx, owner.capability, owner.configuration) : undefined,
+        }
+      : {}),
   };
+}
+
+/** Fetch (producing + caching on first touch) a capability's `Resources` bag for `runCtx`, keyed
+ *  by the capability in the run's own `capabilityResources` store. A plain get-or-compute: on a
+ *  miss, call the capability's `["arrival/get-resources"]` (fed the per-assembly `configuration`
+ *  the association carries) and store the result; a pending bag is replaced in-slot by its
+ *  resolved value on settle. Called structurally (no capability-layer import) — the leaf boundary
+ *  this file guards. The `has`-then-`set` is a sound semaphore under JS's single-dispatch model
+ *  (see {@link CapabilityResourceStore}); a run with no store (CONSTANT_CTX) yields `undefined`. */
+function resolveCapabilityResources(runCtx: RunContext, capability: object, configuration: unknown): unknown {
+  const store = runCtx.capabilityResources;
+  if (store === undefined) return undefined;
+  if (!store.has(capability)) {
+    const produced = (
+      capability as { ["arrival/get-resources"](runCtx: RunContext, configuration: unknown): unknown }
+    )["arrival/get-resources"](runCtx, configuration);
+    store.set(capability, produced);
+    if (produced instanceof Promise) void produced.then((resolved) => store.set(capability, resolved));
+  }
+  return store.get(capability);
 }
 
 /**
