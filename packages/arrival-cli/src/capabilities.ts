@@ -116,7 +116,7 @@ export async function loadCapabilityModule(specifier: string, baseDir: string): 
       `arrival: ${specifier} is not a capability module — it has ${seen}.\n` +
         `Expected one or more EnvCapability exports, e.g.\n` +
         `  import { EnvCapability } from "@inhuman.tools/arrival/capability";\n` +
-        `  export default new EnvCapability("my/capability", { symbols: { … } });`,
+        `  export default EnvCapability.define("my/capability", { symbols: (symbol, z) => ({ … }) });`,
     );
   }
   return found;
