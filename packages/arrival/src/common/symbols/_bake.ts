@@ -276,8 +276,15 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest exten
    *  Absent ⇒ the verb binds unconditionally (byte-identical to today) — zero cost, the
    *  overwhelming majority. Additive: a capability using the manual builder-form `.door(...)`
    *  path keeps working unchanged; this is an ADDITIONAL way to mint a door, not a
-   *  replacement. */
-  readonly requiresConfig?: readonly string[];
+   *  replacement.
+   *
+   *  DISJUNCTION: an entry may itself be a key GROUP (`readonly string[]`) meaning ANY-OF —
+   *  the entry is satisfied while at least one of its keys is present, and doors only when
+   *  EVERY key in the group is absent (loader's `require` needs `fs` OR `loader` — the case
+   *  a flat conjunctive list can't express). A minted door's `cause.needs` carries the
+   *  group's keys flattened (each one is a real enabling key); the teaching reason renders
+   *  the group as "`fs` or `loader`" so the either-of semantics stay legible. */
+  readonly requiresConfig?: readonly (string | readonly string[])[];
   /** The idiomatic-residual rewrite for the compiler (the fifth reader of this record —
    *  constitution §4.1). Absent ⇒ the fallback ladder's rung 3 (the RuntimeRef shim);
    *  silence is impossible by construction (§4.2). STATIC data by law: a builder-form
@@ -346,7 +353,7 @@ export interface NativeSymbolDef {
   readonly preludeOnly?: boolean;
   /** See `Contract.requiresConfig` — carried through verbatim; `capability.ts`'s bind loop
    *  reads it off THIS def to auto-mint a config-gated door. */
-  readonly requiresConfig?: readonly string[];
+  readonly requiresConfig?: readonly (string | readonly string[])[];
   /** RESOLVED provenance role (`contract.provenance ?? "pipe"` — see `Contract.provenance`).
    *  Non-optional: `native()` always resolves the default before baking. */
   readonly provenance: ProvenanceRole;
@@ -408,7 +415,7 @@ export interface RosettaSymbolDef<
   /** See `Contract.preludeOnly`. */
   readonly preludeOnly?: boolean;
   /** See `Contract.requiresConfig` — carried through verbatim; see `NativeSymbolDef.requiresConfig`. */
-  readonly requiresConfig?: readonly string[];
+  readonly requiresConfig?: readonly (string | readonly string[])[];
   /** See `NativeSymbolDef.emit`. */
   readonly emit?: EmitRule;
   /** See `Contract.narrows`. */

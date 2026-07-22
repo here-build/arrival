@@ -75,6 +75,8 @@ import {
   missingOptionalKeys,
   type DegradationInfo,
   type DegradationMode,
+  type DegradedCapability,
+  type DegradedNeed,
 } from "./degradation.js";
 
 /** An `EnvPack` that also carries its resource lifecycle (wind-down = pause; resume
@@ -183,20 +185,75 @@ const isAliasDef = (m: SymbolDeclaration): m is AliasSymbolDef =>
  *  this closes (a bare-required config key used to fail-close at `schema.parse`, before any
  *  program graph existed to statically explain WHY). */
 const missingRequiresConfig = (
-  requiresConfig: readonly string[] | undefined,
+  requiresConfig: readonly (string | readonly string[])[] | undefined,
   configuration: Record<string, unknown>,
-): readonly string[] | undefined => {
+): readonly (string | readonly string[])[] | undefined => {
   if (requiresConfig === undefined || requiresConfig.length === 0) return undefined;
-  const missing = requiresConfig.filter((key) => configuration[key] === undefined);
+  // A group entry (`readonly string[]`) is ANY-OF: missing only when EVERY key is absent.
+  const missing = requiresConfig.filter((entry) =>
+    typeof entry === "string"
+      ? configuration[entry] === undefined
+      : entry.every((key) => configuration[key] === undefined),
+  );
   return missing.length === 0 ? undefined : missing;
+};
+
+/** The keys a door's `cause.needs` carries for a missing set — group entries flattened
+ *  (each key in an any-of group is a real enabling key; the either-of semantics live in the
+ *  reason text, `cause.needs` stays the flat `configuration`-key list every reader expects). */
+const requiresConfigNeeds = (missing: readonly (string | readonly string[])[]): readonly string[] =>
+  missing.flatMap((entry) => (typeof entry === "string" ? [entry] : [...entry]));
+
+/** Auto-door misses surfaced for `AssembledEnv.degraded`: the bind loop below mints
+ *  `requiresConfig` doors as bound `DoorProcedure`s WITHOUT writing a `DoorSymbolDef` back
+ *  into `symbolsRec`, so `collectDegraded`'s record scan (built for the builder-form
+ *  `degradation.door(...)` path, which does write defs) can't see them — this sibling scan
+ *  reads the same misses straight off the baked defs, and `lower()` merges the two views. */
+const collectRequiresConfigDegraded = (
+  capabilityName: string,
+  symbolsRec: Record<string, unknown>,
+  configuration: Record<string, unknown>,
+): DegradedCapability | undefined => {
+  const seen = new Set<string>();
+  const needs: DegradedNeed[] = [];
+  for (const def of Object.values(symbolsRec)) {
+    if (typeof def !== "object" || def === null) continue;
+    const rc = (def as { requiresConfig?: readonly (string | readonly string[])[] }).requiresConfig;
+    const missing = missingRequiresConfig(rc, configuration);
+    if (missing === undefined) continue;
+    for (const key of requiresConfigNeeds(missing)) {
+      if (seen.has(key)) continue;
+      seen.add(key);
+      needs.push({ kind: "configuration", key });
+    }
+  }
+  return needs.length === 0 ? undefined : { capability: capabilityName, needs };
+};
+
+/** Merge the two degraded views (builder-door record scan + requiresConfig def scan),
+ *  deduped by need key; `undefined` when both are. */
+const mergeDegraded = (
+  a: DegradedCapability | undefined,
+  b: DegradedCapability | undefined,
+): DegradedCapability | undefined => {
+  if (a === undefined) return b;
+  if (b === undefined) return a;
+  const seen = new Set(a.needs.map((need) => `${need.kind}:${need.key}`));
+  return {
+    capability: a.capability,
+    needs: [...a.needs, ...b.needs.filter((need) => !seen.has(`${need.kind}:${need.key}`))],
+  };
 };
 
 /** The auto-derived door's teaching reason — same "provide X to enable it" register
  *  `degradation.ts`'s hand-authored `.door(name, needs, reason)` callers write by hand, minted
- *  here mechanically from the declaring verb's OWN `doc` instead. */
-const requiresConfigReason = (missing: readonly string[], doc: string | undefined): string => {
-  const keysClause = missing.map((key) => `\`${key}\``).join(", ");
-  const pronoun = missing.length === 1 ? "it" : "them";
+ *  here mechanically from the declaring verb's OWN `doc` instead. An any-of group renders as
+ *  "`fs` or `loader`" with a "one of them" pronoun, keeping the disjunction legible. */
+const requiresConfigReason = (missing: readonly (string | readonly string[])[], doc: string | undefined): string => {
+  const keysClause = missing
+    .map((entry) => (typeof entry === "string" ? `\`${entry}\`` : entry.map((key) => `\`${key}\``).join(" or ")))
+    .join(", ");
+  const pronoun = missing.length === 1 ? (typeof missing[0] === "string" ? "it" : "one of them") : "them";
   const docClause = doc === undefined ? "" : ` (${doc})`;
   return `requires configuration ${keysClause} — provide ${pronoun} to enable this verb.${docClause}`;
 };
@@ -569,9 +626,14 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
     const symbolsRec = typeof spec.symbols === "function" ? spec.symbols(activation) : (spec.symbols ?? {});
     // Door-set degradation's OWN surfacing — degraded capabilities are ENUMERABLE: scan
     // the computed record for doors this capability minted via `degradation.door(...)`,
-    // folded into the returned pack's `degraded` field — `assembleEnv` (kernel.ts)
-    // aggregates it into `AssembledEnv.degraded`, uninterpreted.
-    const degraded = collectDegraded(capabilityName, symbolsRec);
+    // MERGED with the requiresConfig auto-door misses (bound as DoorProcedures below without
+    // a record entry — see `collectRequiresConfigDegraded`), folded into the returned pack's
+    // `degraded` field — `assembleEnv` (kernel.ts) aggregates it into `AssembledEnv.degraded`,
+    // uninterpreted.
+    const degraded = mergeDegraded(
+      collectDegraded(capabilityName, symbolsRec),
+      collectRequiresConfigDegraded(capabilityName, symbolsRec, configuration as Record<string, unknown>),
+    );
 
     // First touch of ANY of this capability's symbols spawns ALL its resources
     // (single-flight), BEFORE the method body runs — so methods read `this.resources
@@ -726,7 +788,11 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                   bindTarget(def).set(
                     verb,
                     new DoorProcedure(
-                      activation.degradation.door(verb, missingNative, requiresConfigReason(missingNative, def.doc)),
+                      activation.degradation.door(
+                        verb,
+                        requiresConfigNeeds(missingNative),
+                        requiresConfigReason(missingNative, def.doc),
+                      ),
                     ),
                   );
                   break;
@@ -819,7 +885,11 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
                   bindTarget(def).set(
                     verb,
                     new DoorProcedure(
-                      activation.degradation.door(verb, missingRosetta, requiresConfigReason(missingRosetta, def.doc)),
+                      activation.degradation.door(
+                        verb,
+                        requiresConfigNeeds(missingRosetta),
+                        requiresConfigReason(missingRosetta, def.doc),
+                      ),
                     ),
                   );
                   break;
