@@ -26,8 +26,6 @@
 //      the pack family's own documented idiom, which a bare `z.lambda` would reject.
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../AmbientRuntime.js";
-import * as z from "../../../common/scheme-zod.js";
-import { symbol } from "../../../common/symbol.js";
 import { EnvCapability } from "../../../common/capability.js";
 import { exec, execState } from "../../../eval/generator-exec.js";
 import { global_env } from "../../env-roots.js";
@@ -57,12 +55,12 @@ const lispDefs = polyglotLisp.spec.symbols as Defs;
 const racketDefs = polyglotRacket.spec.symbols as Defs;
 
 describe("scheme/polyglot-clojure & scheme/polyglot-racket — the FIRST production expression attribution (§3.4)", () => {
-  it.each(["->", "->>"] as const)("%s (polyglot-clojure) declares macroAttribute: \"expression\"", (name) => {
+  it.each(["->", "->>"] as const)('%s (polyglot-clojure) declares macroAttribute: "expression"', (name) => {
     expect(clojureDefs[name]?.kind).toBe("define-syntax");
     expect(clojureDefs[name]?.macroAttribute).toBe("expression");
   });
 
-  it.each(["~>", "~>>"] as const)("%s (polyglot-racket) declares macroAttribute: \"expression\"", (name) => {
+  it.each(["~>", "~>>"] as const)('%s (polyglot-racket) declares macroAttribute: "expression"', (name) => {
     expect(racketDefs[name]?.kind).toBe("define-syntax");
     expect(racketDefs[name]?.macroAttribute).toBe("expression");
   });
@@ -87,7 +85,7 @@ describe("scheme/polyglot-clojure & scheme/polyglot-racket — the FIRST product
     // Keyword accessors in thread position never enter the FV walk (keyword-shaped
     // names are excluded by construction, §3.5) — the pack family's flagship idiom
     // stays clean.
-    const [b] = await exec('(->> (dict :a (dict :b 2)) :a :b)', { staticValidation: "on" });
+    const [b] = await exec("(->> (dict :a (dict :b 2)) :a :b)", { staticValidation: "on" });
     expect(b).toBe(2);
     const [c] = await exec("(~>> 5 (- 20))", { staticValidation: "on" });
     expect(c).toBe(15);
@@ -190,7 +188,9 @@ describe("scheme/polyglot family — contract ENFORCEMENT fires at the call boun
     await expect(execState("(dict-ref (list 1 2) :a)", { env })).rejects.toThrow(
       /dict-ref: expected a dict .* got a pair\/list.*use @ for an origin-agnostic read/,
     );
-    await expect(execState('(dict-count "nope")', { env })).rejects.toThrow(/dict-count: expected a dict .* got a string/);
+    await expect(execState('(dict-count "nope")', { env })).rejects.toThrow(
+      /dict-count: expected a dict .* got a string/,
+    );
   });
 });
 
@@ -214,12 +214,14 @@ describe("scheme/polyglot family — the §2.1 bake FV law passes AS MIGRATED, p
 
   it("(regression pin) a LOCAL reproduction of the PRE-FIX shape — a `reduce`/`filter`-reaching body with NO declared deps — throws DefineLocalityError", async () => {
     const env = await freshEnv();
-    const undeclaredFrequencies = symbol.define`bad-frequencies: reproduces the pre-migration polyglot luck (no declared dep on srfi-1's reduce)`(
-      { input: [z.value], output: [z.value] },
-      `(lambda (coll) (reduce (lambda (x acc) (+ acc 1)) 0 coll))`,
-    );
-    const undeclaredCap = new EnvCapability("test/polyglot-pre-fix-repro", {
-      symbols: { "bad-frequencies": undeclaredFrequencies },
+    const undeclaredCap = EnvCapability.define("test/polyglot-pre-fix-repro", {
+      symbols: (symbol, z) => ({
+        "bad-frequencies":
+          symbol.define`bad-frequencies: reproduces the pre-migration polyglot luck (no declared dep on srfi-1's reduce)`(
+            { input: [z.value], output: [z.value] },
+            `(lambda (coll) (reduce (lambda (x acc) (+ acc 1)) 0 coll))`,
+          ),
+      }),
     });
     await expect(undeclaredCap.lower({ evalScheme }).apply(env, undefined as never)).rejects.toThrow(
       DefineLocalityError,

@@ -38,8 +38,6 @@
 //      that the bug this migration fixes was real and is now caught.
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../AmbientRuntime.js";
-import * as z from "../../../common/scheme-zod.js";
-import { symbol } from "../../../common/symbol.js";
 import { EnvCapability } from "../../../common/capability.js";
 import { exec, execState } from "../../../eval/generator-exec.js";
 import { global_env } from "../../env-roots.js";
@@ -60,10 +58,7 @@ const evalScheme = (env: unknown, src: unknown): unknown =>
 describe("scheme/srfi-128 — comparator behavior equivalence (semantic-equivalence gate, §4.2)", () => {
   it("make-comparator + comparator? + the three accessors", async () => {
     const env = await freshEnv();
-    const [isComparator] = await exec(
-      "(comparator? (make-comparator number? = <))",
-      { env },
-    );
+    const [isComparator] = await exec("(comparator? (make-comparator number? = <))", { env });
     const [notComparator] = await exec("(comparator? 5)", { env });
     expect(isComparator).toBe(true);
     expect(notComparator).toBe(false);
@@ -193,14 +188,16 @@ describe("scheme/srfi-128 — the §2.1 bake FV law passes for this pack AS MIGR
 
   it("(regression pin) a LOCAL reproduction of the PRE-FIX shape — the same `list` free reference with NO declared deps — throws DefineLocalityError: the bug this migration fixes was real", async () => {
     const env = await freshEnv();
-    const undeclaredMakeComparator = symbol.define`bad-make-comparator: reproduces the pre-migration srfi-128 bug (no declared dep on list)`(
-      { input: [z.lambda, z.lambda, z.lambda], output: [z.list([z.symbol, z.lambda, z.lambda, z.lambda])] },
-      `(lambda (type-test equality ordering) (list 'comparator type-test equality ordering))`,
-    );
     // Deliberately NO `deps` field — this is the exact shape srfi-128.ts had before
     // this migration (a bare `prelude` text blob, no dep declaration possible at all).
-    const undeclaredCap = new EnvCapability("test/srfi-128-pre-fix-repro", {
-      symbols: { "bad-make-comparator": undeclaredMakeComparator },
+    const undeclaredCap = EnvCapability.define("test/srfi-128-pre-fix-repro", {
+      symbols: (symbol, z) => ({
+        "bad-make-comparator":
+          symbol.define`bad-make-comparator: reproduces the pre-migration srfi-128 bug (no declared dep on list)`(
+            { input: [z.lambda, z.lambda, z.lambda], output: [z.list([z.symbol, z.lambda, z.lambda, z.lambda])] },
+            `(lambda (type-test equality ordering) (list 'comparator type-test equality ordering))`,
+          ),
+      }),
     });
     await expect(undeclaredCap.lower({ evalScheme }).apply(env, undefined as never)).rejects.toThrow(
       DefineLocalityError,

@@ -16,19 +16,19 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { EnvCapability, execState, schemeToJs, symbol, z } from "../../index.js";
+import { EnvCapability, execState, schemeToJs } from "../../index.js";
 import { EvalTrace } from "../../provenance/index.js";
 
 /** One provenance-source tool that mints a large string — the retained-value shape a
  *  multi-MB tool response actually takes. */
 function bigTextCapability(size: number) {
-  return new EnvCapability("test/big-text", {
-    symbols: {
+  return EnvCapability.define("test/big-text", {
+    symbols: (symbol, z) => ({
       "big-text": symbol.rosetta`big-text: a tool response big enough to matter for byte accounting`(
         { input: [], output: [z.string], provenance: "source" },
         async () => "x".repeat(size),
       ),
-    },
+    }),
   });
 }
 
@@ -84,8 +84,8 @@ describe("EvalTrace.stats() / .points() / .clear() — explicit provenance GC", 
   it("clear() is guarded — throws if called while an invocation is still running", async () => {
     const trace = new EvalTrace();
     let threw = false;
-    const guarded = new EnvCapability("test/guarded", {
-      symbols: {
+    const guarded = EnvCapability.define("test/guarded", {
+      symbols: (symbol, z) => ({
         "mid-run": symbol.rosetta`mid-run: calls clear() on its OWN still-open trace mid-call`(
           { input: [], output: [z.string], provenance: "source" },
           async () => {
@@ -97,7 +97,7 @@ describe("EvalTrace.stats() / .points() / .clear() — explicit provenance GC", 
             return "ok";
           },
         ),
-      },
+      }),
     });
     const { values } = await execState(`(mid-run)`, { capabilities: [guarded], tap: trace });
     expect(schemeToJs(values[0], {})).toBe("ok");

@@ -30,7 +30,7 @@ import { nil } from "../../values/primitives/ANil.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AJSObject } from "../AJSObject.js";
 import { type SchemeValue } from "../../values/types.js";
-import { EnvCapability, symbol, z } from "../../index.js";
+import { EnvCapability } from "../../index.js";
 
 describe("error-object exit arm (value position)", () => {
   it("make-error-object as a final form exits as a same-class host Error", async () => {
@@ -99,15 +99,15 @@ describe("host Error inbound — stack collapses to absent", () => {
   });
 
   it("the whole path: Error → borrowed wrapper → @ → nil at the exec boundary", async () => {
-    const errCap = new EnvCapability("test/host-error", {
-      symbols: {
+    const errCap = EnvCapability.define("test/host-error", {
+      symbols: (symbol, z) => ({
         "host-error": symbol.rosetta`host-error: a host Error object`(
           { input: [], output: [z.value] },
           // The impl returns a raw host Error, which crosses BORROWED (AJSObject
           // wrapper) — the cast names the post-crossing truth the borrow performs.
           async () => new Error("host-boom") as unknown as SchemeValue,
         ),
-      },
+      }),
     });
     // nil is the empty list — assert in Scheme coordinates (`null?`), not by exit shape.
     const [stackIsNil] = await exec(`(null? (@ (host-error) "stack"))`, { capabilities: [errCap] });

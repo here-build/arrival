@@ -9,11 +9,11 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { deepProvenance, EnvCapability, execState, schemeToJs, symbol, z } from "../../index.js";
+import { deepProvenance, EnvCapability, execState, schemeToJs } from "../../index.js";
 import { EvalTrace } from "../../provenance/index.js";
 
-const weather = new EnvCapability("test/weather", {
-  symbols: {
+const weather = EnvCapability.define("test/weather", {
+  symbols: (symbol, z) => ({
     "forecast-for": symbol.rosetta`forecast-for: the current forecast for a city`(
       { input: [z.string], output: [z.string], provenance: "source" },
       async (city) => `cloudy in ${city}`,
@@ -22,7 +22,7 @@ const weather = new EnvCapability("test/weather", {
       { input: [], output: [z.string], provenance: "source" },
       async () => "evil.exe",
     ),
-  },
+  }),
 });
 
 describe("EvalTrace.toolNameFor — deepProvenance ordinals resolve to verb names", () => {

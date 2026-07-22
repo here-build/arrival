@@ -21,17 +21,12 @@ import { exec } from "../../index.js";
 import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
 import { assembleEnv, type EnvPack } from "../kernel.js";
 import { EnvCapability } from "../capability.js";
-import { symbol } from "../symbol.js";
-import * as z from "../scheme-zod.js";
 import type { SchemeEnv } from "../scheme-env.js";
 
 const evalScheme = (e: SchemeEnv, src: string) => exec(src, { env: e as never });
 
 /** Plain assembly onto a fresh sandboxed child — the kernel supplies the prelude scope. */
-async function assemble(
-  base: ResolvingAmbient,
-  packs: readonly EnvPack<SchemeEnv>[],
-): Promise<ResolvingAmbient> {
+async function assemble(base: ResolvingAmbient, packs: readonly EnvPack<SchemeEnv>[]): Promise<ResolvingAmbient> {
   await assembleEnv<SchemeEnv>(base as unknown as SchemeEnv, packs);
   return base;
 }
@@ -43,17 +38,17 @@ describe("preludeOnly — the kernel's phase-gated prelude scope (design §1.3)"
     // Capability A contributes a preludeOnly rosetta. Capability B (deps on A) calls it from
     // its OWN prelude, recording the call as an observable side effect via a runtime-bound sink.
     const calls: string[] = [];
-    const capA = new EnvCapability("test/overlay-a", {
-      symbols: {
+    const capA = EnvCapability.define("test/overlay-a", {
+      symbols: (symbol, z) => ({
         "overlay/greet": symbol.rosetta`overlay/greet: prelude-only greeting verb`(
           { input: [z.string], output: [z.string], preludeOnly: true },
           (name) => `hello ${name}`,
         ),
-      },
+      }),
     });
-    const capB = new EnvCapability("test/overlay-b", {
+    const capB = EnvCapability.define("test/overlay-b", {
       deps: [capA],
-      symbols: {
+      symbols: (symbol, z) => ({
         "sink/record": symbol.rosetta`sink/record: record a call for the test to observe`(
           { input: [z.string], output: [z.string] },
           (s) => {
@@ -61,7 +56,7 @@ describe("preludeOnly — the kernel's phase-gated prelude scope (design §1.3)"
             return s;
           },
         ),
-      },
+      }),
       // B's prelude calls A's preludeOnly verb (visible because A applied first — C3 dep
       // order — and the assembly's resolver answers from the shared Map) and forwards the
       // result to a RUNTIME-bound sink.
@@ -80,8 +75,9 @@ describe("preludeOnly — the kernel's phase-gated prelude scope (design §1.3)"
 
   // INVARIANT: an ordinary prelude `define` lands in the runtime env, observable after assembly.
   it("an ordinary prelude `define` still lands in the runtime env (fact 1 — now trivially, no overlay)", async () => {
-    const cap = new EnvCapability("test/overlay-define", {
+    const cap = EnvCapability.define("test/overlay-define", {
       prelude: `(define overlay-defined-value 42)`,
+      symbols: () => ({}),
     });
     const base = mintFrame(sandboxedEnv, "overlay-test-2");
     const env = await assemble(base, [cap.lower({ evalScheme }) as never]);
@@ -93,19 +89,19 @@ describe("preludeOnly — the kernel's phase-gated prelude scope (design §1.3)"
   // INVARIANT: the prelude scope accumulates across a chain of dependents in C3 order — a shared
   // Map, not rebuilt per capability.
   it("the prelude scope ACCUMULATES: A's preludeOnly verb is visible to a chain of TWO dependents via C3 order", async () => {
-    const capA = new EnvCapability("test/overlay-chain-a", {
-      symbols: {
+    const capA = EnvCapability.define("test/overlay-chain-a", {
+      symbols: (symbol, z) => ({
         "chain/base-secret": symbol.rosetta`chain/base-secret: preludeOnly value contributed by A`(
           { input: [], output: [z.number], preludeOnly: true },
           () => 7,
         ),
-      },
+      }),
     });
     // B deps on A, records what it saw at prelude-eval time.
     const bSeen: number[] = [];
-    const capB = new EnvCapability("test/overlay-chain-b", {
+    const capB = EnvCapability.define("test/overlay-chain-b", {
       deps: [capA],
-      symbols: {
+      symbols: (symbol, z) => ({
         "chain/note": symbol.rosetta`chain/note: record a number seen during B's prelude`(
           { input: [z.number], output: [z.number] },
           (n) => {
@@ -113,15 +109,15 @@ describe("preludeOnly — the kernel's phase-gated prelude scope (design §1.3)"
             return n;
           },
         ),
-      },
+      }),
       prelude: `(chain/note (chain/base-secret))`,
     });
     // C deps on B (transitively on A) — proves the prelude scope is the SAME shared Map across
     // the whole assembly, not re-built per-capability.
     const cSeen: number[] = [];
-    const capC = new EnvCapability("test/overlay-chain-c", {
+    const capC = EnvCapability.define("test/overlay-chain-c", {
       deps: [capB],
-      symbols: {
+      symbols: (symbol, z) => ({
         "chain/note-c": symbol.rosetta`chain/note-c: record a number seen during C's prelude`(
           { input: [z.number], output: [z.number] },
           (n) => {
@@ -129,7 +125,7 @@ describe("preludeOnly — the kernel's phase-gated prelude scope (design §1.3)"
             return n;
           },
         ),
-      },
+      }),
       prelude: `(chain/note-c (chain/base-secret))`,
     });
 
@@ -143,13 +139,13 @@ describe("preludeOnly — the kernel's phase-gated prelude scope (design §1.3)"
   // INVARIANT: a lambda defined by a prelude cannot reach a preludeOnly verb at runtime — only
   // capturing the call's result bridges to runtime, never the verb itself.
   it("THE CONTRACT: a lambda DEFINED BY a prelude cannot reach the preludeOnly verb at runtime — capture the RESULT, not the verb", async () => {
-    const cap = new EnvCapability("test/overlay-closure", {
-      symbols: {
+    const cap = EnvCapability.define("test/overlay-closure", {
+      symbols: (symbol, z) => ({
         "closure/secret": symbol.rosetta`closure/secret: preludeOnly source`(
           { input: [], output: [z.number], preludeOnly: true },
           () => 99,
         ),
-      },
+      }),
       // Two preludes-in-one: the WRONG bridge (a lambda naming the verb — resolves nothing at
       // runtime) and the RIGHT bridge (capture the call's result at assembly time).
       prelude: `

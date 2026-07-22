@@ -25,8 +25,6 @@ import {
   initBridge,
   LexicalScope,
   nil,
-  symbol,
-  z,
 } from "@inhuman.tools/arrival";
 import { attestDeep } from "@inhuman.tools/arrival/attestation";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -42,16 +40,20 @@ let seq = 0;
  *  reverse-chain's output form derives from the trace itself (`lastTopLevelForm`),
  *  not a second, identity-mismatched parse of `source`.
  *
- *  Test-local `EnvCapability` (`symbol.rosetta` — the `env.defineRosetta` migration
- *  target): a plain typed `z.string → z.string` contract, no escape hatch needed. */
+ *  Test-local `EnvCapability` (`EnvCapability.define`'s injected `symbol.rosetta` — the
+ *  `env.defineRosetta` migration target): a plain typed `z.string → z.string` contract, no
+ *  escape hatch needed. */
 async function run(source: string) {
   await initBridge();
   const scope = LexicalScope.fresh(`verdict-test-${seq++}`);
-  const evidenceRead = symbol.rosetta`evidence-read: deterministic Rosetta-IN fixture source`(
-    { input: [z.string], output: [z.string] },
-    (q) => `SRC:${q}`,
-  );
-  await new EnvCapability("test/evidence-read", { symbols: { "evidence-read": evidenceRead } })
+  await EnvCapability.define("test/evidence-read", {
+    symbols: (symbol, z) => ({
+      "evidence-read": symbol.rosetta`evidence-read: deterministic Rosetta-IN fixture source`(
+        { input: [z.string], output: [z.string] },
+        (q) => `SRC:${q}`,
+      ),
+    }),
+  })
     .lower({})
     .apply(scope.env, undefined as never);
   const trace = new EvalTrace();

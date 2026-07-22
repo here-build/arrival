@@ -33,19 +33,13 @@ import { execState, parse } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../env/inference-env.js";
 import { mintFrame, type ResolvingAmbient } from "../env/AmbientRuntime.js";
 import { EnvCapability } from "../common/capability.js";
-import { symbol } from "../common/symbol.js";
-import * as z from "../common/scheme-zod.js";
 import { schemeToJs } from "../membrane/rosetta.js";
 import type { EvalTap } from "../eval/evaluator.js";
 import type { Classifier, DeclaredRole } from "../provenance/lineage.js";
 import { buildWireframe } from "../provenance/wireframe/builder.js";
 import { hashGraph, rootOrdinalPath, siteHash, siteOf } from "../provenance/wireframe/hash.js";
 import { scopeId } from "../provenance/scope-id.js";
-import {
-  withRecordCoordinateAsync,
-  type EmissionSink,
-  type RecordCoordinate,
-} from "../eval/provenance-hooks.js";
+import { withRecordCoordinateAsync, type EmissionSink, type RecordCoordinate } from "../eval/provenance-hooks.js";
 import { PayloadStoreFake, ProvenanceStoreFake, setEmissionEnabled } from "../provenance/store/index.js";
 import { APair } from "../values/primitives/APair.js";
 import type { AListAlike } from "../values/types.js";
@@ -64,11 +58,11 @@ const EPOCH = "spike-epoch-0";
 const PROGRAM = "(+ (* 2 3) (fetch-item))";
 
 async function registerSource(env: ResolvingAmbient): Promise<void> {
-  const fetchItem = symbol.rosetta`fetch-item: a zero-arg numeric source`(
-    { input: [], output: [z.number] },
-    () => 42,
-  );
-  await new EnvCapability("spike/fetch-item", { symbols: { "fetch-item": fetchItem } })
+  await EnvCapability.define("spike/fetch-item", {
+    symbols: (symbol, z) => ({
+      "fetch-item": symbol.rosetta`fetch-item: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 42),
+    }),
+  })
     .lower({})
     .apply(env, undefined as never);
 }
@@ -127,8 +121,7 @@ describe("walking-driver spike: skeleton from parse, meat from the live walk", (
 
     const enters: string[] = [];
     const tap = thinDriverTap(enters);
-    const nodeFilter = (node: AListAlike): boolean =>
-      node instanceof APair && designatedSpans.has(scopeId(node));
+    const nodeFilter = (node: AListAlike): boolean => node instanceof APair && designatedSpans.has(scopeId(node));
 
     // ── 3. WALK — execute the SAME parsed form the skeleton was built from ────
     const result = await withRecordCoordinateAsync(coordinate, sink, () =>

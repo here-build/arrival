@@ -50,7 +50,7 @@ describe("EnvCapability.lower().apply() — routing preludeOnly symbols onto ctx
       { input: [z.string], output: [z.string], preludeOnly: true },
       (s) => s,
     );
-    const cap = new EnvCapability("test/prelude-only", { symbols: { "prelude-only/verb": def } });
+    const cap = EnvCapability.define("test/prelude-only", { symbols: () => ({ "prelude-only/verb": def }) });
     const { env: runtimeEnv, verbs: runtimeVerbs } = recordingEnv("runtime");
     const { overlay, verbs: overlayVerbs } = recordingOverlay();
     const ctx: PackContext<SchemeEnv> = { onDispose: () => undefined, order: [], preludeScope: overlay };
@@ -68,7 +68,7 @@ describe("EnvCapability.lower().apply() — routing preludeOnly symbols onto ctx
       { input: [z.string], output: [z.string] },
       (s) => s,
     );
-    const cap = new EnvCapability("test/ordinary", { symbols: { "ordinary/verb": def } });
+    const cap = EnvCapability.define("test/ordinary", { symbols: () => ({ "ordinary/verb": def }) });
     const { env: runtimeEnv, verbs: runtimeVerbs } = recordingEnv("runtime");
     const { overlay, verbs: overlayVerbs } = recordingOverlay();
     const ctx: PackContext<SchemeEnv> = { onDispose: () => undefined, order: [], preludeScope: overlay };
@@ -88,7 +88,9 @@ describe("EnvCapability.lower().apply() — routing preludeOnly symbols onto ctx
       { input: [z.string], output: [z.string], preludeOnly: true },
       (s) => s,
     );
-    const cap = new EnvCapability("test/prelude-only-no-overlay", { symbols: { "prelude-only/no-overlay": def } });
+    const cap = EnvCapability.define("test/prelude-only-no-overlay", {
+      symbols: () => ({ "prelude-only/no-overlay": def }),
+    });
     const { env: runtimeEnv, verbs: runtimeVerbs } = recordingEnv("runtime");
 
     await cap.lower({}).apply(runtimeEnv, { onDispose: () => undefined, order: [] });
@@ -103,7 +105,9 @@ describe("EnvCapability.lower().apply() — routing preludeOnly symbols onto ctx
       { input: [z.string], output: [z.string], preludeOnly: true },
       (s) => s,
     );
-    const cap = new EnvCapability("test/prelude-only-native", { symbols: { "prelude-only/native-verb": def } });
+    const cap = EnvCapability.define("test/prelude-only-native", {
+      symbols: () => ({ "prelude-only/native-verb": def }),
+    });
     const { env: runtimeEnv, verbs: runtimeVerbs } = recordingEnv("runtime");
     const { overlay, verbs: overlayVerbs } = recordingOverlay();
     const ctx: PackContext<SchemeEnv> = { onDispose: () => undefined, order: [], preludeScope: overlay };

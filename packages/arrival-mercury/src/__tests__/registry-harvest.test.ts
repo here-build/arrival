@@ -9,7 +9,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { EnvCapability } from "@inhuman.tools/arrival/capability";
 import type { EmitRule } from "@inhuman.tools/arrival/emit";
-import * as z from "@inhuman.tools/arrival/scheme-zod";
 import { symbol } from "@inhuman.tools/arrival/symbol";
 
 import { openOracleSession, type OracleSession } from "../registry/greenfield-session.js";
@@ -31,7 +30,14 @@ describe("emitRegistryOf over the real oracle ambient", () => {
     // proof that neither resources nor impls were touched (test-plan row 2).
     const registry = emitRegistryOf(session.ambient);
     expect(registry.names.size).toBeGreaterThan(50);
-    for (const name of ["infer", "infer/chat", "infer/chat/system", "infer/chat/user", "infer/chat/assistant", "pair?"]) {
+    for (const name of [
+      "infer",
+      "infer/chat",
+      "infer/chat/system",
+      "infer/chat/user",
+      "infer/chat/assistant",
+      "pair?",
+    ]) {
       expect(registry.lookup(name), name).toBeDefined();
     }
     const infer = registry.lookup("infer");
@@ -65,9 +71,7 @@ describe("emitRegistryOf over the real oracle ambient", () => {
     // harvest against the REAL activations (resolvable ⇒ resolved); handed the same
     // roster WITHOUT the assembly, the phantom activation's static-rules door fires.
     expect(() => emitRegistryOf(session.ambient)).not.toThrow();
-    expect(() => emitRegistryOf(session.ambient.capabilities)).toThrow(
-      /configuration\.\w+[\s\S]*outside an impl body/,
-    );
+    expect(() => emitRegistryOf(session.ambient.capabilities)).toThrow(/configuration\.\w+[\s\S]*outside an impl body/);
   });
 
   it("is deterministic across two harvests of the same roster", () => {
@@ -154,8 +158,8 @@ describe("dry-harvest of builder-form capabilities (the static-rules discipline)
         return { s: symbol.taglessGuard`s: shared` };
       },
     });
-    const a = new EnvCapability("test/diamond-a", { deps: [shared], symbols: {} });
-    const b = new EnvCapability("test/diamond-b", { deps: [shared], symbols: {} });
+    const a = EnvCapability.define("test/diamond-a", { deps: [shared], symbols: () => ({}) });
+    const b = EnvCapability.define("test/diamond-b", { deps: [shared], symbols: () => ({}) });
     emitRegistryOf([a, b]); // diamond: the seen-set dedups within one walk
     emitRegistryOf([a, b]); // the WeakMap dedups across walks
     expect(invocations).toBe(1);
@@ -165,10 +169,10 @@ describe("dry-harvest of builder-form capabilities (the static-rules discipline)
 describe("row shape and precedence", () => {
   it("resolves refPolicy's default, carries authored emit/narrows/refPolicy off a Contract", () => {
     const rule: EmitRule = { call: (args) => args[0] };
-    const cap = new EnvCapability("test/fields", {
-      symbols: {
-        plain: symbol.native`plain: identity`({ input: [z.value], output: [z.value] }, (x) => x),
-        ruled: symbol.native`ruled: identity with a rule`(
+    const cap = EnvCapability.define("test/fields", {
+      symbols: (sym, z) => ({
+        plain: sym.native`plain: identity`({ input: [z.value], output: [z.value] }, (x) => x),
+        ruled: sym.native`ruled: identity with a rule`(
           {
             input: [z.value],
             output: [z.value],
@@ -178,7 +182,7 @@ describe("row shape and precedence", () => {
           },
           (x) => x,
         ),
-      },
+      }),
     });
     const registry = emitRegistryOf([cap]);
     expect(registry.lookup("plain")).toMatchObject({ kind: "native", refPolicy: "shim" });
@@ -189,18 +193,18 @@ describe("row shape and precedence", () => {
   });
 
   it("carries narrows spread directly onto a contract-less tagless-guard def (self-witnessing)", () => {
-    const cap = new EnvCapability("test/self-witness", {
-      symbols: {
-        "my-pred?": { ...symbol.taglessGuard`my-pred?: test predicate`, narrows: { witness: "my-pred?" } },
-      },
+    const cap = EnvCapability.define("test/self-witness", {
+      symbols: (sym) => ({
+        "my-pred?": { ...sym.taglessGuard`my-pred?: test predicate`, narrows: { witness: "my-pred?" } },
+      }),
     });
     const row = emitRegistryOf([cap]).lookup("my-pred?");
     expect(row?.narrows).toEqual({ witness: "my-pred?" });
   });
 
   it("harvests door rows with the teaching reason (never an emit)", () => {
-    const cap = new EnvCapability("test/doors", {
-      symbols: { "call/cc": symbol.notImplemented`call/cc: prohibited-dynamics — arrival is immutable` },
+    const cap = EnvCapability.define("test/doors", {
+      symbols: (sym) => ({ "call/cc": sym.notImplemented`call/cc: prohibited-dynamics — arrival is immutable` }),
     });
     const row = emitRegistryOf([cap]).lookup("call/cc");
     expect(row).toMatchObject({
@@ -212,9 +216,9 @@ describe("row shape and precedence", () => {
   });
 
   it("applies symbolPrefix to row keys and row.symbol alike", () => {
-    const cap = new EnvCapability("test/prefixed", {
+    const cap = EnvCapability.define("test/prefixed", {
       symbolPrefix: "proc/",
-      symbols: { list: symbol.taglessGuard`list: t` },
+      symbols: (sym) => ({ list: sym.taglessGuard`list: t` }),
     });
     const registry = emitRegistryOf([cap]);
     expect(registry.lookup("list")).toBeUndefined();
@@ -222,12 +226,12 @@ describe("row shape and precedence", () => {
   });
 
   it("dep-declared names lose to the dependent's own (deps-first, last-write-wins)", () => {
-    const dep = new EnvCapability("test/dep", {
-      symbols: { x: symbol.taglessGuard`x: dep version` },
+    const dep = EnvCapability.define("test/dep", {
+      symbols: (sym) => ({ x: sym.taglessGuard`x: dep version` }),
     });
-    const self = new EnvCapability("test/self", {
+    const self = EnvCapability.define("test/self", {
       deps: [dep],
-      symbols: { x: symbol.taglessGuard`x: self version` },
+      symbols: (sym) => ({ x: sym.taglessGuard`x: self version` }),
     });
     const registry = emitRegistryOf([dep, self]);
     expect(registry.lookup("x")?.capability).toBe("test/self");
@@ -252,27 +256,25 @@ describe("row shape and precedence", () => {
 
 describe("Law N — the witness-registry red build", () => {
   it("throws when a narrows row names a witness absent from the harvested set", () => {
-    const cap = new EnvCapability("test/bad-witness", {
-      symbols: {
+    const cap = EnvCapability.define("test/bad-witness", {
+      symbols: (sym) => ({
         "my-pred?": {
-          ...symbol.taglessGuard`my-pred?: test predicate`,
+          ...sym.taglessGuard`my-pred?: test predicate`,
           narrows: { witness: "never-declared-anywhere" },
         },
-      },
+      }),
     });
-    expect(() => emitRegistryOf([cap])).toThrow(
-      /Law N[\s\S]*"my-pred\?"[\s\S]*"never-declared-anywhere"/,
-    );
+    expect(() => emitRegistryOf([cap])).toThrow(/Law N[\s\S]*"my-pred\?"[\s\S]*"never-declared-anywhere"/);
   });
 
   it("passes when the witness is declared by ANOTHER capability in the same assembly", () => {
-    const witnessCap = new EnvCapability("test/witness-owner", {
-      symbols: { "pair-proof": symbol.taglessGuard`pair-proof: t` },
+    const witnessCap = EnvCapability.define("test/witness-owner", {
+      symbols: (sym) => ({ "pair-proof": sym.taglessGuard`pair-proof: t` }),
     });
-    const narrowsCap = new EnvCapability("test/narrows-owner", {
-      symbols: {
-        "my-pred?": { ...symbol.taglessGuard`my-pred?: t`, narrows: { witness: "pair-proof" } },
-      },
+    const narrowsCap = EnvCapability.define("test/narrows-owner", {
+      symbols: (sym) => ({
+        "my-pred?": { ...sym.taglessGuard`my-pred?: t`, narrows: { witness: "pair-proof" } },
+      }),
     });
     const registry = emitRegistryOf([witnessCap, narrowsCap]);
     expect(registry.lookup("my-pred?")?.narrows).toEqual({ witness: "pair-proof" });

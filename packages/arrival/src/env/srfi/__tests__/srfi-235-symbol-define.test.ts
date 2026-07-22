@@ -33,8 +33,6 @@
 //      migration fixes was real and is now caught, not merely worked around.
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../AmbientRuntime.js";
-import * as z from "../../../common/scheme-zod.js";
-import { symbol } from "../../../common/symbol.js";
 import { EnvCapability } from "../../../common/capability.js";
 import { exec, execState } from "../../../eval/generator-exec.js";
 import { global_env } from "../../env-roots.js";
@@ -132,7 +130,7 @@ describe("scheme/srfi-235 — contract ENFORCEMENT fires at the call boundary", 
 
   it("curry: a non-procedure `fn` is rejected before the body runs", async () => {
     const env = await freshEnv();
-    await expect(execState('(curry 5)', { env })).rejects.toThrow();
+    await expect(execState("(curry 5)", { env })).rejects.toThrow();
   });
 });
 
@@ -145,14 +143,16 @@ describe("scheme/srfi-235 — the §2.1 bake FV law passes for this pack AS MIGR
 
   it("(regression pin) a LOCAL reproduction of the PRE-FIX shape — the same `compose`/`not` bodies with NO declared deps — throws DefineLocalityError: the bug this migration fixes was real", async () => {
     const env = await freshEnv();
-    const undeclaredComplement = symbol.define`bad-complement: reproduces the pre-migration srfi-235 bug (no declared dep on compose/not)`(
-      { input: [z.lambda], output: [z.lambda] },
-      `(lambda (fn) (compose not fn))`,
-    );
     // Deliberately NO `deps` field — this is the exact shape srfi-235.ts had before
     // this migration (a bare `symbols` record with no dep declaration).
-    const undeclaredCap = new EnvCapability("test/srfi-235-pre-fix-repro", {
-      symbols: { "bad-complement": undeclaredComplement },
+    const undeclaredCap = EnvCapability.define("test/srfi-235-pre-fix-repro", {
+      symbols: (symbol, z) => ({
+        "bad-complement":
+          symbol.define`bad-complement: reproduces the pre-migration srfi-235 bug (no declared dep on compose/not)`(
+            { input: [z.lambda], output: [z.lambda] },
+            `(lambda (fn) (compose not fn))`,
+          ),
+      }),
     });
     await expect(undeclaredCap.lower({ evalScheme }).apply(env, undefined as never)).rejects.toThrow(
       DefineLocalityError,

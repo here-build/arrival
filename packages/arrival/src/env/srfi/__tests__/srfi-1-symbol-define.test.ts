@@ -29,8 +29,6 @@
 //      unshipped names are doors.
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../AmbientRuntime.js";
-import * as z from "../../../common/scheme-zod.js";
-import { symbol } from "../../../common/symbol.js";
 import { EnvCapability } from "../../../common/capability.js";
 import { exec, execState } from "../../../eval/generator-exec.js";
 import { global_env } from "../../env-roots.js";
@@ -298,12 +296,14 @@ describe("scheme/srfi-1 — the §2.1 bake FV law passes AS MIGRATED", () => {
 
   it("(regression pin) a LOCAL repro of the PRE-FIX shape — a free `values` reference with NO declared deps — throws DefineLocalityError: the luck this migration converts into structure was real", async () => {
     const env = await freshEnv();
-    const undeclaredSpan = symbol.define`bad-span: reproduces the pre-migration srfi-1 bug (free values reference, no declared dep on scheme/binding)`(
-      { input: [z.lambda, z.union([z.pair, z.nil])], output: [z.values] },
-      `(lambda (pred xs) (values xs xs))`,
-    );
-    const undeclaredCap = new EnvCapability("test/srfi-1-pre-fix-repro", {
-      symbols: { "bad-span": undeclaredSpan },
+    const undeclaredCap = EnvCapability.define("test/srfi-1-pre-fix-repro", {
+      symbols: (symbol, z) => ({
+        "bad-span":
+          symbol.define`bad-span: reproduces the pre-migration srfi-1 bug (free values reference, no declared dep on scheme/binding)`(
+            { input: [z.lambda, z.union([z.pair, z.nil])], output: [z.values] },
+            `(lambda (pred xs) (values xs xs))`,
+          ),
+      }),
     });
     await expect(undeclaredCap.lower({ evalScheme }).apply(env, undefined as never)).rejects.toThrow(
       DefineLocalityError,

@@ -42,7 +42,6 @@ import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import * as z from "../../common/scheme-zod.js";
-import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { reachableNodes } from "../../provenance/wireframe/loops.js";
 import type { WireframeGraph, WireframeProgram } from "../../provenance/wireframe/types.js";
@@ -90,26 +89,31 @@ export class SourceRegistry {
    *  (golden-prov-infer.test.ts's `inferSources` rationale, restated). */
   async register(env: AmbientRuntime, op: string, shape: SourceShape): Promise<void> {
     const mint = this.mint.bind(this);
-    const impl = symbol.rosetta`${op}: W1 harness fake Rosetta-IN source`(
-      { input: [], inputRest: z.value, output: [z.value] },
-      (..._args: unknown[]): unknown => {
-        if (shape === "num") {
-          const id = mint(op);
-          return stampedNum(id, id);
-        }
-        if (shape === "str") {
-          const id = mint(op);
-          return stampedStr(`${op}#${id}`, id);
-        }
-        const out: Record<string, unknown> = {};
-        for (const field of shape.dict) {
-          const id = mint(op);
-          out[field] = stampedStr(`${op}.${field}#${id}`, id);
-        }
-        return out;
-      },
-    );
-    await new EnvCapability(`test/w1-source-${op}`, { symbols: { [op]: impl } }).lower({}).apply(env, undefined as never);
+    await EnvCapability.define(`test/w1-source-${op}`, {
+      symbols: (symbol) => ({
+        [op]: symbol.rosetta`${op}: W1 harness fake Rosetta-IN source`(
+          { input: [], inputRest: z.value, output: [z.value] },
+          (..._args: unknown[]): unknown => {
+            if (shape === "num") {
+              const id = mint(op);
+              return stampedNum(id, id);
+            }
+            if (shape === "str") {
+              const id = mint(op);
+              return stampedStr(`${op}#${id}`, id);
+            }
+            const out: Record<string, unknown> = {};
+            for (const field of shape.dict) {
+              const id = mint(op);
+              out[field] = stampedStr(`${op}.${field}#${id}`, id);
+            }
+            return out;
+          },
+        ),
+      }),
+    })
+      .lower({})
+      .apply(env, undefined as never);
   }
 
   /** Project a set of numeric provenance ids back to the set of declared source op

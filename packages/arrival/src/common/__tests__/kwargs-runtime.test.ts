@@ -45,13 +45,7 @@ describe("z.kwargs runtime — UNIT (direct def.run, manually-built pluck pairs)
       { input: [], inputRest: { a: z.string, b: z.number.optional() }, output: [z.string] },
       (args) => `${args.a}:${args.b}`,
     );
-    const out = await def.run.call(
-      testCallCtx(),
-      pluck("a"),
-      new AString("Ada"),
-      pluck("b"),
-      new AExact(5),
-    );
+    const out = await def.run.call(testCallCtx(), pluck("a"), new AString("Ada"), pluck("b"), new AExact(5));
     expect((out as AString)["arrival/toJS"]()).toBe("Ada:5");
   });
 
@@ -62,13 +56,7 @@ describe("z.kwargs runtime — UNIT (direct def.run, manually-built pluck pairs)
       { input: [], inputRest: { a: z.string, b: z.number.optional() }, output: [z.string] },
       (args) => `${args.a}:${args.b}`,
     );
-    const out = await def.run.call(
-      testCallCtx(),
-      pluck("b"),
-      new AExact(5),
-      pluck("a"),
-      new AString("Ada"),
-    );
+    const out = await def.run.call(testCallCtx(), pluck("b"), new AExact(5), pluck("a"), new AString("Ada"));
     // NOTE: pairs must stay `:key value` (key first) — this call shows the TWO PAIRS in
     // swapped ORDER (the `:b` pair before the `:a` pair), not a swapped key/value.
     expect((out as AString)["arrival/toJS"]()).toBe("Ada:5");
@@ -87,10 +75,9 @@ describe("z.kwargs runtime — INTEGRATION ((tool :k v …) through a real env +
     // binds an ARosettaProcedure, not a bare fn) rather than a raw `env.set(name, def.run)`
     // bare-fn bypass — the ledger's "bare-fn env.set harness wiring" row (replacedBy:
     // "EnvCapability-wired fixtures") retires with this fixture.
-    await new EnvCapability("test/kwargs-runtime", { symbols: { "kw-greet": greet } }).lower({}).apply(
-      env,
-      undefined as never,
-    );
+    await EnvCapability.define("test/kwargs-runtime", { symbols: () => ({ "kw-greet": greet }) })
+      .lower({})
+      .apply(env, undefined as never);
   });
 
   // INVARIANT: a real scheme `(tool :a v :b v2)` call invokes the impl with the constructed
@@ -115,12 +102,15 @@ describe("z.kwargs runtime — INTEGRATION ((tool :k v …) through a real env +
     expect((out as AString)["arrival/toJS"]()).toBe("Ada:undefined");
   });
 
-  it("a required kwarg missing DOORS cleanly — a per-FIELD validation error (path incl. :a), not the " +
-    "pre-fix cryptic \"expected object, received array\" mismatch", async () => {
-    // Verified pre-fix (RED): the thrown ZodError's message was `"expected object, received array"`
-    // (the WHOLE args array failing the object schema, no field-level detail — decoding an array
-    // against an object schema). Post-fix the kwargs humanizer (common/kwargs-rejection.ts,
-    // args-error-reporting-v2.md §2.5) names the missing key in the frozen grammar.
-    await expect(exec(`(kw-greet)`, { env })).rejects.toThrow(/:a — missing \(required\)/);
-  });
+  it(
+    "a required kwarg missing DOORS cleanly — a per-FIELD validation error (path incl. :a), not the " +
+      'pre-fix cryptic "expected object, received array" mismatch',
+    async () => {
+      // Verified pre-fix (RED): the thrown ZodError's message was `"expected object, received array"`
+      // (the WHOLE args array failing the object schema, no field-level detail — decoding an array
+      // against an object schema). Post-fix the kwargs humanizer (common/kwargs-rejection.ts,
+      // args-error-reporting-v2.md §2.5) names the missing key in the frozen grammar.
+      await expect(exec(`(kw-greet)`, { env })).rejects.toThrow(/:a — missing \(required\)/);
+    },
+  );
 });

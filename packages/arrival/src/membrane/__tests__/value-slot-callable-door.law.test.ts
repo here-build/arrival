@@ -15,23 +15,20 @@
  * throws a teaching door instead of silently marshaling under a scope that may already be gone.
  */
 import { describe, expect, it } from "vitest";
-import * as z from "../../common/scheme-zod.js";
-import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { exec } from "../../eval/generator-exec.js";
-import type { CallCtx } from "../../run/CallCtx.js";
 
 describe("the z.value-callable door", () => {
   it("a bare z.value slot receiving a lambda throws the teaching door, steering to z.procedure", async () => {
-    const cap = new EnvCapability("test/value-slot-callable-door", {
-      symbols: {
+    const cap = EnvCapability.define("test/value-slot-callable-door", {
+      symbols: (symbol, z) => ({
         "echo-value": symbol.rosetta`echo-value: hands its raw z.value arg back untouched`(
           { input: [z.value], output: [z.value] },
-          function (this: CallCtx, v: unknown) {
+          function (v: unknown) {
             return v;
           },
         ),
-      },
+      }),
     });
 
     await expect(exec("(echo-value (lambda (x) x))", { capabilities: [cap] })).rejects.toThrow(
@@ -41,15 +38,15 @@ describe("the z.value-callable door", () => {
   });
 
   it("the SAME verb called with a non-callable value works — the door is callable-specific, not a value ban", async () => {
-    const cap = new EnvCapability("test/value-slot-non-callable-ok", {
-      symbols: {
+    const cap = EnvCapability.define("test/value-slot-non-callable-ok", {
+      symbols: (symbol, z) => ({
         "echo-value": symbol.rosetta`echo-value: hands its raw z.value arg back untouched`(
           { input: [z.value], output: [z.value] },
-          function (this: CallCtx, v: unknown) {
+          function (v: unknown) {
             return v;
           },
         ),
-      },
+      }),
     });
 
     const [result] = await exec("(echo-value 42)", { capabilities: [cap] });
@@ -58,17 +55,17 @@ describe("the z.value-callable door", () => {
 
   it("a z.procedure slot with a lambda works — the correct door is unaffected", async () => {
     let called = false;
-    const cap = new EnvCapability("test/procedure-slot-lambda-ok", {
-      symbols: {
+    const cap = EnvCapability.define("test/procedure-slot-lambda-ok", {
+      symbols: (symbol, z) => ({
         "call-it": symbol.rosetta`call-it: invokes the procedure arg once`(
           { input: [z.procedure()], output: [z.undefinedResult] },
-          async function (this: CallCtx, fn: (...args: unknown[]) => unknown) {
+          async function (fn: (...args: unknown[]) => unknown) {
             await fn(41);
             called = true;
             return undefined;
           },
         ),
-      },
+      }),
     });
 
     await exec("(call-it (lambda (x) (+ x 1)))", { capabilities: [cap] });
@@ -76,15 +73,15 @@ describe("the z.value-callable door", () => {
   });
 
   it("a kwargs z.value field receiving a lambda also throws the door, naming the keyword", async () => {
-    const cap = new EnvCapability("test/value-slot-kwargs-door", {
-      symbols: {
+    const cap = EnvCapability.define("test/value-slot-kwargs-door", {
+      symbols: (symbol, z) => ({
         "echo-kwargs": symbol.rosetta`echo-kwargs: hands its raw kwargs value back untouched`(
           { input: [], inputRest: { v: z.value }, output: [z.value] },
-          function (this: CallCtx, args: { v: unknown }) {
+          function (args: { v: unknown }) {
             return args.v;
           },
         ),
-      },
+      }),
     });
 
     await expect(exec("(echo-kwargs :v (lambda (x) x))", { capabilities: [cap] })).rejects.toThrow(
@@ -93,15 +90,15 @@ describe("the z.value-callable door", () => {
   });
 
   it("a kwargs z.value field receiving a non-callable value still works", async () => {
-    const cap = new EnvCapability("test/value-slot-kwargs-ok", {
-      symbols: {
+    const cap = EnvCapability.define("test/value-slot-kwargs-ok", {
+      symbols: (symbol, z) => ({
         "echo-kwargs": symbol.rosetta`echo-kwargs: hands its raw kwargs value back untouched`(
           { input: [], inputRest: { v: z.value }, output: [z.value] },
-          function (this: CallCtx, args: { v: unknown }) {
+          function (args: { v: unknown }) {
             return args.v;
           },
         ),
-      },
+      }),
     });
 
     const [result] = await exec('(echo-kwargs :v "hello")', { capabilities: [cap] });

@@ -37,8 +37,6 @@
 //      `(car …)`/`(cdr …)` can walk, never a decoded JS array leaking through.
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../AmbientRuntime.js";
-import * as z from "../../../common/scheme-zod.js";
-import { symbol } from "../../../common/symbol.js";
 import { EnvCapability } from "../../../common/capability.js";
 import { exec, execState } from "../../../eval/generator-exec.js";
 import { global_env } from "../../env-roots.js";
@@ -266,14 +264,16 @@ describe("scheme/srfi-189 — the §2.1 bake FV law passes for this pack AS MIGR
 
   it("(regression pin) a LOCAL reproduction of the PRE-FIX shape — the same `list` free reference with NO declared deps — throws DefineLocalityError: the bug this migration fixes was real", async () => {
     const env = await freshEnv();
-    const undeclaredJust = symbol.define`bad-just: reproduces the pre-migration srfi-189 bug (no declared dep on scheme/lists' list)`(
-      { input: [z.value], output: [z.value] },
-      `(lambda (x) (list 'just x))`,
-    );
     // Deliberately NO `deps` field — this is the exact shape srfi-189.ts had before
     // this migration (a bare `prelude` string with no dep declaration at all).
-    const undeclaredCap = new EnvCapability("test/srfi-189-pre-fix-repro", {
-      symbols: { "bad-just": undeclaredJust },
+    const undeclaredCap = EnvCapability.define("test/srfi-189-pre-fix-repro", {
+      symbols: (symbol, z) => ({
+        "bad-just":
+          symbol.define`bad-just: reproduces the pre-migration srfi-189 bug (no declared dep on scheme/lists' list)`(
+            { input: [z.value], output: [z.value] },
+            `(lambda (x) (list 'just x))`,
+          ),
+      }),
     });
     await expect(undeclaredCap.lower({ evalScheme }).apply(env, undefined as never)).rejects.toThrow(
       DefineLocalityError,

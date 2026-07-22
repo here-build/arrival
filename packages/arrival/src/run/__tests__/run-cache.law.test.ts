@@ -158,8 +158,8 @@ describe("single-flight (D1) + eviction — at the wrapper", () => {
 /** One capability with all four classes, each around its own spy. */
 function fixture() {
   const counts = { view: 0, pure: 0, sink: 0, plain: 0 };
-  const cap = new EnvCapability("test/run-cache", {
-    symbols: {
+  const cap = EnvCapability.define("test/run-cache", {
+    symbols: (symbol, z) => ({
       peek: symbol.rosetta`peek: a boundary snapshot`(
         { input: [z.number], output: [z.number], cacheClass: "view" },
         (n: number) => {
@@ -185,7 +185,7 @@ function fixture() {
         counts.plain++;
         return n - 1;
       }),
-    },
+    }),
   });
   return { cap, counts };
 }

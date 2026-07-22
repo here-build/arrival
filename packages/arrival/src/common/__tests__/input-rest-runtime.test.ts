@@ -46,12 +46,7 @@ describe("Contract.inputRest runtime — UNIT (direct def.run): a fixed head + v
       { input: [z.string], inputRest: z.number, output: [z.string] },
       (head: string, ...rest: number[]) => `${head}:${rest.length}:${rest.join(",")}`,
     );
-    const out = await def.run.call(
-      testCallCtx(),
-      new AString("h"),
-      new AInexact(1),
-      new AInexact(2),
-    );
+    const out = await def.run.call(testCallCtx(), new AString("h"), new AInexact(1), new AInexact(2));
     expect((out as AString)["arrival/toJS"]()).toBe("h:2:1,2");
   });
 
@@ -61,13 +56,7 @@ describe("Contract.inputRest runtime — UNIT (direct def.run): a fixed head + v
       { input: [z.string], inputRest: z.number, output: [z.string] },
       (head: string, ...rest: number[]) => `${head}:${rest.length}:${rest.join(",")}`,
     );
-    const out = await def.run.call(
-      testCallCtx(),
-      new AString("h"),
-      new AInexact(1),
-      new AInexact(2),
-      new AInexact(3),
-    );
+    const out = await def.run.call(testCallCtx(), new AString("h"), new AInexact(1), new AInexact(2), new AInexact(3));
     expect((out as AString)["arrival/toJS"]()).toBe("h:3:1,2,3");
   });
 });
@@ -84,10 +73,9 @@ describe("Contract.inputRest runtime — INTEGRATION ((tool head r1 r2 …) thro
     // binds an ARosettaProcedure, not a bare fn) rather than a raw `env.set(name, def.run)`
     // bare-fn bypass — the ledger's "bare-fn env.set harness wiring" row (replacedBy:
     // "EnvCapability-wired fixtures") retires with this fixture.
-    await new EnvCapability("test/input-rest-runtime", { symbols: { headtail } }).lower({}).apply(
-      env,
-      undefined as never,
-    );
+    await EnvCapability.define("test/input-rest-runtime", { symbols: () => ({ headtail }) })
+      .lower({})
+      .apply(env, undefined as never);
   });
 
   // INVARIANT: a real scheme call with a 0-length tail reaches the impl correctly through exec.

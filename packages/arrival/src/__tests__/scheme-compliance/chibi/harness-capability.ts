@@ -27,8 +27,7 @@
 // derives section nesting structurally at collection time, so these forms become
 // `section-begin`/`section-end` steps the runner never executes — no runtime group-stack is
 // needed (unlike v1's `js-test-begin`/`js-test-end`).
-import * as z from "../../../common/scheme-zod.js";
-import { symbol, testCallCtx } from "../../../common/symbol.js";
+import { testCallCtx } from "../../../common/symbol.js";
 import { EnvCapability } from "../../../common/capability.js";
 import { applyCallback } from "../../../values/primitives/ACallable.js";
 import { ABool } from "../../../values/primitives/ABool.js";
@@ -41,7 +40,12 @@ export type OutcomePhase = "expected-eval" | "actual-eval" | "compare";
 export type StepOutcome =
   | { kind: "pass" }
   | { kind: "fail"; expectedRepr: string; actualRepr: string }
-  | { kind: "error"; phase: OutcomePhase | "budget" | "block-aborted" | "setup-failed"; message: string; atLine?: number };
+  | {
+      kind: "error";
+      phase: OutcomePhase | "budget" | "block-aborted" | "setup-failed";
+      message: string;
+      atLine?: number;
+    };
 
 /** Outcomes accumulated by `js-run-test` calls since the last `drain()`. One `exec()` call may
  *  produce several (a block form containing k nested `(test …)` calls fires js-run-test k
@@ -56,8 +60,8 @@ export function createChibiHarnessV2(): { capability: EnvCapability; sink: Outco
   const queue: StepOutcome[] = [];
   let comparator: unknown; // the scheme `chibi-test-equal?` lambda, fetched once (see prelude)
 
-  const capability = new EnvCapability("test/harness-v2", {
-    symbols: {
+  const capability = EnvCapability.define("test/harness-v2", {
+    symbols: (symbol, z) => ({
       // The comparator lambda registers itself here once, at prelude end — see the module
       // header. `z.lambda` is type-level only for a native def (native impls receive raw
       // scheme values, unvalidated; see common/symbols/native.ts) — the runtime value is the
@@ -74,38 +78,41 @@ export function createChibiHarnessV2(): { capability: EnvCapability; sink: Outco
       // EITHER is attributed to the right phase), then compare the two BOXED results entirely
       // in scheme. Only the boolean verdict crosses back (§5); reprs are computed here (failure
       // only) via the class-owned print protocol, never `String(...)`.
-      "js-run-test": symbol.native`js-run-test: run expected/actual thunks, compare via the scheme comparator, sink the outcome`(
-        { input: [z.value, z.lambda, z.lambda], output: [z.undefinedResult] },
-        async (_name, expectedThunk, actualThunk): Promise<AVoid> => {
-          let expected: SchemeValue;
-          try {
-            expected = (await applyCallback(expectedThunk, [], testCallCtx())) as SchemeValue;
-          } catch (e) {
-            queue.push({ kind: "error", phase: "expected-eval", message: describeError(e) });
-            return theVoid;
-          }
-          let actual: SchemeValue;
-          try {
-            actual = (await applyCallback(actualThunk, [], testCallCtx())) as SchemeValue;
-          } catch (e) {
-            queue.push({ kind: "error", phase: "actual-eval", message: describeError(e) });
-            return theVoid;
-          }
-          try {
-            if (comparator === undefined) {
-              throw new Error("chibi harness v2: comparator not registered (prelude did not run js-register-comparator)");
+      "js-run-test":
+        symbol.native`js-run-test: run expected/actual thunks, compare via the scheme comparator, sink the outcome`(
+          { input: [z.value, z.lambda, z.lambda], output: [z.undefinedResult] },
+          async (_name, expectedThunk, actualThunk): Promise<AVoid> => {
+            let expected: SchemeValue;
+            try {
+              expected = (await applyCallback(expectedThunk, [], testCallCtx())) as SchemeValue;
+            } catch (e) {
+              queue.push({ kind: "error", phase: "expected-eval", message: describeError(e) });
+              return theVoid;
             }
-            const verdict = await applyCallback(comparator, [expected, actual], testCallCtx());
-            const pass = verdict instanceof ABool ? verdict.value : Boolean(verdict);
-            if (pass) queue.push({ kind: "pass" });
-            else queue.push({ kind: "fail", expectedRepr: printValue(expected), actualRepr: printValue(actual) });
-          } catch (e) {
-            queue.push({ kind: "error", phase: "compare", message: describeError(e) });
-          }
-          return theVoid;
-        },
-      ),
-    },
+            let actual: SchemeValue;
+            try {
+              actual = (await applyCallback(actualThunk, [], testCallCtx())) as SchemeValue;
+            } catch (e) {
+              queue.push({ kind: "error", phase: "actual-eval", message: describeError(e) });
+              return theVoid;
+            }
+            try {
+              if (comparator === undefined) {
+                throw new Error(
+                  "chibi harness v2: comparator not registered (prelude did not run js-register-comparator)",
+                );
+              }
+              const verdict = await applyCallback(comparator, [expected, actual], testCallCtx());
+              const pass = verdict instanceof ABool ? verdict.value : Boolean(verdict);
+              if (pass) queue.push({ kind: "pass" });
+              else queue.push({ kind: "fail", expectedRepr: printValue(expected), actualRepr: printValue(actual) });
+            } catch (e) {
+              queue.push({ kind: "error", phase: "compare", message: describeError(e) });
+            }
+            return theVoid;
+          },
+        ),
+    }),
 
     prelude: `
     ;; The comparator — chibi's approximate float equality, structurally recursive over

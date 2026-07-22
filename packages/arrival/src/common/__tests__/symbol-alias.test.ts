@@ -12,22 +12,19 @@ import { execState } from "../../eval/generator-exec.js";
 import { freshEnv } from "../../__tests__/_fresh-env.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
-import { symbol } from "../symbol.js";
-import * as z from "../scheme-zod.js";
 import { EnvCapability } from "../capability.js";
 
 describe("symbol.alias — resolves to the SAME symbol under a new name", () => {
   let env: ResolvingAmbient;
   beforeAll(async () => {
     env = await freshEnv();
-    const shout = symbol.rosetta`shout: upcase a string`({ input: [z.string], output: [z.string] }, (s) =>
-      s.toUpperCase(),
-    );
-    await new EnvCapability("test/alias-basic", {
-      symbols: {
-        shout,
+    await EnvCapability.define("test/alias-basic", {
+      symbols: (symbol, z) => ({
+        shout: symbol.rosetta`shout: upcase a string`({ input: [z.string], output: [z.string] }, (s) =>
+          s.toUpperCase(),
+        ),
         yell: symbol.alias`shout`,
-      },
+      }),
     })
       .lower({})
       .apply(env, undefined as never);
@@ -56,9 +53,11 @@ describe("symbol.alias — resolves to the SAME symbol under a new name", () => 
 describe("symbol.alias — numeric args flow through the target's own codecs", () => {
   it("an alias to a rosetta verb decodes/encodes exactly like the target", async () => {
     const env2 = await freshEnv();
-    const inc = symbol.rosetta`inc: add one`({ input: [z.number], output: [z.number] }, (n) => n + 1);
-    await new EnvCapability("test/alias-numeric", {
-      symbols: { inc, "inc-alias": symbol.alias`inc` },
+    await EnvCapability.define("test/alias-numeric", {
+      symbols: (symbol, z) => ({
+        inc: symbol.rosetta`inc: add one`({ input: [z.number], output: [z.number] }, (n) => n + 1),
+        "inc-alias": symbol.alias`inc`,
+      }),
     })
       .lower({})
       .apply(env2, undefined as never);
@@ -70,8 +69,8 @@ describe("symbol.alias — numeric args flow through the target's own codecs", (
 describe("symbol.alias — bake/assembly errors (errors-as-doors, teaching text)", () => {
   it("a target absent from the SAME capability's own `symbols` record doors at assembly", async () => {
     const env3 = await freshEnv();
-    const cap = new EnvCapability("test/alias-missing-target", {
-      symbols: { ghost: symbol.alias`does-not-exist` },
+    const cap = EnvCapability.define("test/alias-missing-target", {
+      symbols: (symbol) => ({ ghost: symbol.alias`does-not-exist` }),
     });
     let caught: unknown;
     try {
@@ -86,13 +85,12 @@ describe("symbol.alias — bake/assembly errors (errors-as-doors, teaching text)
 
   it("aliasing another alias (a chain) doors — alias directly to the real symbol", async () => {
     const env4 = await freshEnv();
-    const original = symbol.rosetta`orig: identity`({ input: [z.string], output: [z.string] }, (s) => s);
-    const cap = new EnvCapability("test/alias-chain", {
-      symbols: {
-        orig: original,
+    const cap = EnvCapability.define("test/alias-chain", {
+      symbols: (symbol, z) => ({
+        orig: symbol.rosetta`orig: identity`({ input: [z.string], output: [z.string] }, (s) => s),
         first: symbol.alias`orig`,
         second: symbol.alias`first`,
-      },
+      }),
     });
     await expect(cap.lower({}).apply(env4, undefined as never)).rejects.toThrow(/alias chains are not supported/);
   });

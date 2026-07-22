@@ -23,8 +23,6 @@
  *     and never calls the guard, no matter what the program does
  */
 import { describe, it, expect } from "vitest";
-import * as z from "../../common/scheme-zod.js";
-import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { exec } from "../../eval/generator-exec.js";
 import { MemoryRunCache } from "../../run/run-cache.js";
@@ -112,8 +110,8 @@ describe("checkReadWriteGuard — the pure guard function (§2.4)", () => {
  *  through the SAME chokepoint that stamps `enqueuedAtReadClock`. */
 function makeCap(tracker: MemoryReadTracker) {
   let writeFires = 0;
-  const cap = new EnvCapability("test/read-guard", {
-    symbols: {
+  const cap = EnvCapability.define("test/read-guard", {
+    symbols: (symbol, z) => ({
       "read!": symbol.rosetta`read!: `({ input: [z.string], output: [z.undefinedResult] }, (key: string) => {
         tracker.record(key);
         return undefined;
@@ -125,7 +123,7 @@ function makeCap(tracker: MemoryReadTracker) {
           return undefined;
         },
       ),
-    },
+    }),
   });
   return { cap, writeFires: () => writeFires };
 }
@@ -153,7 +151,9 @@ describe("read-guard wired through exec (W2 glue: the eval-loop region + guard-c
     // that violated is the SAME key, one read after a zero-read enqueue. toMatchObject
     // (not toEqual): the entry also carries `rawArgs` (§5), an additive field this law
     // doesn't pin.
-    expect(effects.entries).toMatchObject([{ index: 0, verbName: "write!", decodedArgs: ["x"], enqueuedAtReadClock: 0 }]);
+    expect(effects.entries).toMatchObject([
+      { index: 0, verbName: "write!", decodedArgs: ["x"], enqueuedAtReadClock: 0 },
+    ]);
   });
 
   it("disjoint reads/writes — a write on one key, a read on another — passes clean", async () => {

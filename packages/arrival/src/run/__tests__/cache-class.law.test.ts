@@ -150,8 +150,11 @@ describe("lineage ⊥ cache — the infer coexistence law (Ruling B)", () => {
     expect(def.cacheClass).toBe("view");
   });
 
-  it("the legacy-equivalent row: a `provenance: \"pipe\"` rosetta with NO cache class stays exactly that — the new field never rewrites the migrated legacy `pure: true` → pipe mapping", () => {
-    const def = symbol.rosetta`cc-legacy-pipe: `({ input: [z.string], output: [z.string], provenance: "pipe" }, (s) => s);
+  it('the legacy-equivalent row: a `provenance: "pipe"` rosetta with NO cache class stays exactly that — the new field never rewrites the migrated legacy `pure: true` → pipe mapping', () => {
+    const def = symbol.rosetta`cc-legacy-pipe: `(
+      { input: [z.string], output: [z.string], provenance: "pipe" },
+      (s) => s,
+    );
     expect(def.provenance).toBe("pipe");
     expect(def.cacheClass).toBeUndefined();
   });
@@ -161,12 +164,12 @@ describe("stamping — the resolved class rides the provenanceRole rails onto th
   let env: ResolvingAmbient;
   beforeAll(async () => {
     env = await freshEnv();
-    await new EnvCapability("test/cache-class-stamp", {
-      symbols: {
+    await EnvCapability.define("test/cache-class-stamp", {
+      symbols: (symbol, z) => ({
         "cc/view": symbol.rosetta`cc/view: `({ input: [z.string], output: [z.string], cacheClass: "view" }, (s) => s),
         "cc/pure": symbol.rosetta`cc/pure: `({ input: [z.string], output: [z.string], cacheClass: "pure" }, (s) => s),
         "cc/plain": symbol.rosetta`cc/plain: `({ input: [z.string], output: [z.string] }, (s) => s),
-      },
+      }),
     })
       .lower({})
       .apply(env, undefined as never);

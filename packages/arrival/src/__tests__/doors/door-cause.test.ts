@@ -88,10 +88,10 @@ function recordingEnv(): { env: ResolvingAmbient; bound: { get(name: string): un
 
 describe("common/capability.ts's door bind arm — cause DERIVED from the owning capability", () => {
   it("stamps cause = { owner: <capability name>, needs: [] } for a notImplemented door with no cause of its own", async () => {
-    const cap = new EnvCapability("test/door-cap", {
-      symbols: {
+    const cap = EnvCapability.define("test/door-cap", {
+      symbols: (symbol) => ({
         stub: symbol.notImplemented`stub: a teaching stub`,
-      },
+      }),
     });
     const { env, bound } = recordingEnv();
     await cap.lower({}).apply(env, undefined as never);
@@ -103,10 +103,10 @@ describe("common/capability.ts's door bind arm — cause DERIVED from the owning
   });
 
   it("firing the bound door throws PurityError naming `name @ capability`", async () => {
-    const cap = new EnvCapability("test/door-cap-2", {
-      symbols: {
+    const cap = EnvCapability.define("test/door-cap-2", {
+      symbols: (symbol) => ({
         stub: symbol.notImplemented`stub: a teaching stub`,
-      },
+      }),
     });
     const { env, bound } = recordingEnv();
     await cap.lower({}).apply(env, undefined as never);
@@ -124,9 +124,14 @@ describe("common/capability.ts's door bind arm — cause DERIVED from the owning
   });
 
   it("a door constructed with its OWN cause already set passes through unchanged (the degradation-minted door path, not touched here)", async () => {
-    const preCaused = { ...symbol.notImplemented`stub: a teaching stub`, cause: { owner: "elsewhere/pack", needs: [] } };
-    const cap = new EnvCapability("test/door-cap-3", {
-      symbols: { stub: preCaused },
+    const cap = EnvCapability.define("test/door-cap-3", {
+      symbols: (symbol) => {
+        const preCaused = {
+          ...symbol.notImplemented`stub: a teaching stub`,
+          cause: { owner: "elsewhere/pack", needs: [] },
+        };
+        return { stub: preCaused };
+      },
     });
     const { env, bound } = recordingEnv();
     await cap.lower({}).apply(env, undefined as never);

@@ -124,7 +124,7 @@ describe("EnvCapability", () => {
   // INVARIANT: a method-less prelude-only capability requires an evalScheme function, rejecting with
   // "no evalScheme" when absent.
   it("a method-less, prelude capability needs evalScheme", async () => {
-    const cap = new EnvCapability("p", { prelude: "(define x 1)" });
+    const cap = EnvCapability.define("p", { prelude: "(define x 1)", symbols: () => ({}) });
     const evalScheme = vi.fn(async () => undefined);
     const { env } = recordingEnv();
     await cap.lower({ evalScheme }).apply(env, undefined as never);

@@ -55,7 +55,7 @@ function invocationWithId(id: number): { invocation: InvocationLike; marked: () 
 }
 
 async function wireRosetta(def: RosettaSymbolDef): Promise<ARosettaProcedure> {
-  const cap = new EnvCapability("test/rosetta", { symbols: { verb: def } });
+  const cap = EnvCapability.define("test/rosetta", { symbols: () => ({ verb: def }) });
   const { env, verbs } = recordingEnv();
   await cap.lower({}).apply(env, undefined as never);
   expect(verbs.verb).toBeInstanceOf(ARosettaProcedure); // the binder-cut bind shape itself
@@ -120,10 +120,9 @@ describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
   it("DEEP-STAMPS a structured (list) output — every element carries the minted origin", async () => {
     // A rosetta returning a JS array → a scheme list (Pair-chain). The mint must reach every
     // element (spec §5.3: element-only lineage), exactly like createRosettaWrapper's jsToScheme stamp.
-    const def = symbol.rosetta`split: chars of a string`(
-      { input: [z.string], output: [z.array(z.string)] },
-      (s) => [...s],
-    );
+    const def = symbol.rosetta`split: chars of a string`({ input: [z.string], output: [z.array(z.string)] }, (s) => [
+      ...s,
+    ]);
     const verb = await wireRosetta(def);
 
     const { invocation } = invocationWithId(7);

@@ -41,33 +41,29 @@ import { AValue } from "../../values/primitives/AValue.js";
 import { sStr, runRaw, type EnvSetup } from "../../__tests__/_lineage-test-helpers.js";
 import { ANil } from "../../values/primitives/ANil.js";
 import { APair } from "../../values/primitives/APair.js";
-import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
-import * as z from "../../common/scheme-zod.js";
 
 // Fixed mint ids — stand-ins for "whatever the membrane minted at this crossing".
 const MINT_A = 500;
 const MINT_B = 600;
 
-// Deterministic fake Rosetta-IN sources, wired via a test-local `EnvCapability`
-// (`symbol.rosetta` verbs — the `env.defineRosetta` migration target; see golden-
-// prov-infer.test.ts's `inferSources` for the full `z.value`-escape-hatch rationale:
-// it's what keeps a source fixture's ALREADY-stamped return value from being
-// re-encoded, so the mint id it carries survives untouched). Each ignores its arg
-// and returns an already-stamped value (the mint), so grounding is reproducible with
-// no model. Provenance role left at its "source" default (mint-on-invocation), same
-// as legacy `defineRosetta` with no `pure`.
+// Deterministic fake Rosetta-IN sources, wired via a test-local `EnvCapability`;
+// see golden-prov-infer.test.ts's `inferSources` for the full `z.value`-escape-hatch
+// rationale: it's what keeps a source fixture's ALREADY-stamped return value from
+// being re-encoded, so the mint id it carries survives untouched). Each ignores its
+// arg and returns an already-stamped value (the mint), so grounding is reproducible
+// with no model. Provenance role left at its "source" default (mint-on-invocation),
+// same as legacy `defineRosetta` with no `pure`.
 const sources: EnvSetup = async (env) => {
-  const sourceA = symbol.rosetta`source-a: fake Rosetta-IN source (A)`(
-    { input: [z.string], output: [z.value] },
-    () => sStr("SRC-A", MINT_A),
-  );
-  const sourceB = symbol.rosetta`source-b: fake Rosetta-IN source (B)`(
-    { input: [z.string], output: [z.value] },
-    () => sStr("SRC-B", MINT_B),
-  );
-  const cap = new EnvCapability("test/grounding-sources", {
-    symbols: { "source-a": sourceA, "source-b": sourceB },
+  const cap = EnvCapability.define("test/grounding-sources", {
+    symbols: (symbol, z) => ({
+      "source-a": symbol.rosetta`source-a: fake Rosetta-IN source (A)`({ input: [z.string], output: [z.value] }, () =>
+        sStr("SRC-A", MINT_A),
+      ),
+      "source-b": symbol.rosetta`source-b: fake Rosetta-IN source (B)`({ input: [z.string], output: [z.value] }, () =>
+        sStr("SRC-B", MINT_B),
+      ),
+    }),
   });
   await cap.lower({}).apply(env, undefined as never);
 };
@@ -131,7 +127,7 @@ describe("Gsec — scalar grounding (the per-value AValue.provenance substrate)"
 //     it is asserted LOUDLY, leaf by leaf, never via the union.
 // ─────────────────────────────────────────────────────────────────────────────
 describe("Gsec — partial fabrication is per-leaf distinguishable (the merge-barrier gate)", () => {
-  it("(list (source-a …) \"literal\") — grounded leaf size>0 AND literal leaf size===0", async () => {
+  it('(list (source-a …) "literal") — grounded leaf size>0 AND literal leaf size===0', async () => {
     // Mirrors sift's partial-fabrication probe `(list (:k (source)) "literal")`, in
     // PURE arrival. The structure's UNION is non-empty (it contains the source), so a
     // top-level / unioned read would call the whole thing grounded — that is exactly
@@ -146,7 +142,7 @@ describe("Gsec — partial fabrication is per-leaf distinguishable (the merge-ba
     expect(ungrounded).toHaveLength(1); // the literal leaf is UNGROUNDED — not laundered
   });
 
-  it("order-independent: (list \"literal\" (source-a …)) is still one-grounded-one-not", async () => {
+  it('order-independent: (list "literal" (source-a …)) is still one-grounded-one-not', async () => {
     // The same property must hold regardless of where the literal sits in the spine,
     // so the gate cannot be satisfied by a positional accident.
     const r = await runRaw(`(list "literal" (source-a "p"))`, {}, sources);

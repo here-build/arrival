@@ -110,8 +110,8 @@ describe("EffectLog — the burst arm at the wrapper (W1)", () => {
   it("wires through exec/ExecOptions.effects the same way ExecOptions.cache does", async () => {
     let fires = 0;
     const { EnvCapability } = await import("../../common/capability.js");
-    const cap = new EnvCapability("test/effect-log", {
-      symbols: {
+    const cap = EnvCapability.define("test/effect-log", {
+      symbols: (symbol, z) => ({
         "fire!": symbol.rosetta`fire!: an effect`(
           { input: [z.number], output: [z.undefinedResult], provenance: "sink" },
           (_n: number) => {
@@ -119,7 +119,7 @@ describe("EffectLog — the burst arm at the wrapper (W1)", () => {
             return undefined;
           },
         ),
-      },
+      }),
     });
     const effects = new MemoryEffectLog();
     const [result] = await exec("(fire! 1)", { capabilities: [cap], effects });

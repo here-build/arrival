@@ -19,8 +19,6 @@
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../AmbientRuntime.js";
 import { EnvCapability } from "../../../common/capability.js";
-import { symbol } from "../../../common/symbol.js";
-import * as z from "../../../common/scheme-zod.js";
 import { exec, execState } from "../../../eval/generator-exec.js";
 import { global_env } from "../../env-roots.js";
 import { initBridge } from "../../../index.js";
@@ -63,17 +61,19 @@ describe("scheme/core — the §2.1 bake FV locality law", () => {
 
   it("(regression pin) the live-catch shape — a scheme body calling pair?/not with NO declared deps — throws DefineLocalityError", async () => {
     const env = await freshEnv();
-    const undeclaredSingle = symbol.define`bad-single: reproduces the pre-migration scheme/core bug (no declared dep on pair?/not)`(
-      { input: [z.value], output: [z.boolean] },
-      `(lambda (list) (and (pair? list) (not (cdr list))))`,
-    );
     // Deliberately NO `deps` field — the exact shape `core.ts` had before the W4
     // migration (a bare `symbols` record with no dep declaration; `pair?`/`not`
     // resolved purely via the two-phase bootstrap's runtime guarantee, invisible to
     // the static FV law). The `single` symbol itself is deleted from scheme/core;
     // this pin keeps the LAW covered with a local reproduction.
-    const undeclaredCap = new EnvCapability("test/core-pre-fix-repro", {
-      symbols: { "bad-single": undeclaredSingle },
+    const undeclaredCap = EnvCapability.define("test/core-pre-fix-repro", {
+      symbols: (symbol, z) => ({
+        "bad-single":
+          symbol.define`bad-single: reproduces the pre-migration scheme/core bug (no declared dep on pair?/not)`(
+            { input: [z.value], output: [z.boolean] },
+            `(lambda (list) (and (pair? list) (not (cdr list))))`,
+          ),
+      }),
     });
     await expect(undeclaredCap.lower({ evalScheme }).apply(env, undefined as never)).rejects.toThrow(
       DefineLocalityError,

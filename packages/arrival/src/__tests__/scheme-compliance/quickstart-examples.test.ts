@@ -7,9 +7,7 @@ import { describe, expect, it } from "vitest";
 import { exec, execState, jsToScheme, schemeToJs, schemeToJsUntyped } from "../../index.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
-import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
-import * as z from "../../common/scheme-zod.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
 import { bindValue } from "../../env/AmbientRuntime.js";
 
@@ -32,11 +30,14 @@ describe("Quick Start Examples", () => {
     // the `env.defineRosetta` migration target). `z.list(z.number)` on both sides:
     // scheme proper-list ↔ JS `number[]`, decoded/encoded through the contract codecs
     // — JS arrays become Scheme lists automatically, same as the legacy fixture.
-    const doubleAll = symbol.rosetta`double-all: doubles every element of a numeric list`(
-      { input: [z.list(z.number)], output: [z.list(z.number)] },
-      (numbers) => numbers.map((x) => x * 2),
-    );
-    await new EnvCapability("test/double-all", { symbols: { "double-all": doubleAll } })
+    await EnvCapability.define("test/double-all", {
+      symbols: (symbol, z) => ({
+        "double-all": symbol.rosetta`double-all: doubles every element of a numeric list`(
+          { input: [z.list(z.number)], output: [z.list(z.number)] },
+          (numbers) => numbers.map((x) => x * 2),
+        ),
+      }),
+    })
       .lower({})
       .apply(sandboxedEnv, undefined as never);
 
@@ -57,14 +58,20 @@ describe("Quick Start Examples", () => {
     // hatch: "impl receives/returns raw scheme value, does its own schemeToJs/
     // jsToScheme" — scheme-zod.ts's own doc) and the impl does the conversion inline,
     // exactly what the legacy `defineRosetta` wrapper did automatically for every call.
-    const highPriorityUsers = symbol.rosetta`high-priority-users: filters users by priority`(
-      { input: [z.value], output: [z.value] },
-      (rawUsers) => {
-        const users = schemeToJsUntyped(rawUsers) as Array<{ id: string; priority: number }>;
-        return jsToScheme(CONSTANT_CTX, users.filter((u) => u.priority > 10));
-      },
-    );
-    await new EnvCapability("test/high-priority-users", { symbols: { "high-priority-users": highPriorityUsers } })
+    await EnvCapability.define("test/high-priority-users", {
+      symbols: (symbol, z) => ({
+        "high-priority-users": symbol.rosetta`high-priority-users: filters users by priority`(
+          { input: [z.value], output: [z.value] },
+          (rawUsers) => {
+            const users = schemeToJsUntyped(rawUsers) as Array<{ id: string; priority: number }>;
+            return jsToScheme(
+              CONSTANT_CTX,
+              users.filter((u) => u.priority > 10),
+            );
+          },
+        ),
+      }),
+    })
       .lower({})
       .apply(sandboxedEnv, undefined as never);
 

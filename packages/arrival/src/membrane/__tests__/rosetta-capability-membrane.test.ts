@@ -50,9 +50,8 @@ import { AString } from "../../values/primitives/AString.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { jsToScheme, schemeToJs, schemeToJsUntyped } from "../rosetta.js";
 import { exec } from "../../eval/generator-exec.js";
-import { symbol, testCallCtx } from "../../common/symbol.js";
+import { testCallCtx } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
-import * as z from "../../common/scheme-zod.js";
 import { ARosettaProcedure } from "../../values/primitives/ACallable.js";
 import { withDynamicCallSite } from "../../eval/dynamic-call-site.js";
 import { tf } from "../../values/tagless-final.js";
@@ -85,11 +84,14 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
     // INVARIANT: a capability-bound rosetta verb extends the environment with a callable
     // usable from scheme source.
     it("should extend environment with Rosetta functions", async () => {
-      const doubleAll = symbol.rosetta`double-all: doubles every element of a numeric list`(
-        { input: [z.list(z.number)], output: [z.list(z.number)] },
-        (numbers) => numbers.map((x) => x * 2),
-      );
-      await new EnvCapability("test/double-all", { symbols: { "double-all": doubleAll } })
+      await EnvCapability.define("test/double-all", {
+        symbols: (symbol, z) => ({
+          "double-all": symbol.rosetta`double-all: doubles every element of a numeric list`(
+            { input: [z.list(z.number)], output: [z.list(z.number)] },
+            (numbers) => numbers.map((x) => x * 2),
+          ),
+        }),
+      })
         .lower({})
         .apply(inferenceEnv, undefined as never);
 
@@ -105,16 +107,17 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
 
     // INVARIANT: multiple capability-bound rosetta verbs can be chained/composed from scheme source
     it("should handle multiple Rosetta functions", async () => {
-      const sumArray = symbol.rosetta`sum-array: sums a numeric list`(
-        { input: [z.list(z.number)], output: [z.number] },
-        (numbers) => numbers.reduce((a, b) => a + b, 0),
-      );
-      const filterEvens = symbol.rosetta`filter-evens: keeps the even elements of a numeric list`(
-        { input: [z.list(z.number)], output: [z.list(z.number)] },
-        (numbers) => numbers.filter((x) => x % 2 === 0),
-      );
-      await new EnvCapability("test/multi-rosetta", {
-        symbols: { "sum-array": sumArray, "filter-evens": filterEvens },
+      await EnvCapability.define("test/multi-rosetta", {
+        symbols: (symbol, z) => ({
+          "sum-array": symbol.rosetta`sum-array: sums a numeric list`(
+            { input: [z.list(z.number)], output: [z.number] },
+            (numbers) => numbers.reduce((a, b) => a + b, 0),
+          ),
+          "filter-evens": symbol.rosetta`filter-evens: keeps the even elements of a numeric list`(
+            { input: [z.list(z.number)], output: [z.list(z.number)] },
+            (numbers) => numbers.filter((x) => x % 2 === 0),
+          ),
+        }),
       })
         .lower({})
         .apply(inferenceEnv, undefined as never);
@@ -140,14 +143,20 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
       // final `jsToScheme(..., resultProvenance)` call over an ALREADY-boxed value at
       // matching (empty) provenance is an identity no-op, so this changes nothing at
       // runtime vs. handing back the raw array the way the legacy fn did.
-      const extractValues = symbol.rosetta`extract-values: plucks .value off every element`(
-        { input: [z.value], output: [z.value] },
-        (rawObjects) => {
-          const objects = schemeToJsUntyped(rawObjects) as Array<{ value: unknown }>;
-          return jsToScheme(CONSTANT_CTX, objects.map((obj) => obj.value));
-        },
-      );
-      await new EnvCapability("test/extract-values", { symbols: { "extract-values": extractValues } })
+      await EnvCapability.define("test/extract-values", {
+        symbols: (symbol, z) => ({
+          "extract-values": symbol.rosetta`extract-values: plucks .value off every element`(
+            { input: [z.value], output: [z.value] },
+            (rawObjects) => {
+              const objects = schemeToJsUntyped(rawObjects) as Array<{ value: unknown }>;
+              return jsToScheme(
+                CONSTANT_CTX,
+                objects.map((obj) => obj.value),
+              );
+            },
+          ),
+        }),
+      })
         .lower({})
         .apply(inferenceEnv, undefined as never);
 
@@ -176,18 +185,20 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
     // style property and results round-trip correctly
     it("should handle the MCP CSS filtering pattern", async () => {
       // This simulates the exact pattern we need for MCP
-      const filterByCssProperty = symbol.rosetta`filter-by-css-property: filters nodes whose style[property] === value`(
-        { input: [z.value, z.string, z.string], output: [z.value] },
-        (rawNodes, property, value) => {
-          const nodes = schemeToJsUntyped(rawNodes) as Array<{ style?: Record<string, string> }>;
-          return jsToScheme(
-            CONSTANT_CTX,
-            nodes.filter((node) => node.style && node.style[property] === value),
-          );
-        },
-      );
-      await new EnvCapability("test/filter-by-css-property", {
-        symbols: { "filter-by-css-property": filterByCssProperty },
+      await EnvCapability.define("test/filter-by-css-property", {
+        symbols: (symbol, z) => ({
+          "filter-by-css-property":
+            symbol.rosetta`filter-by-css-property: filters nodes whose style[property] === value`(
+              { input: [z.value, z.string, z.string], output: [z.value] },
+              (rawNodes, property, value) => {
+                const nodes = schemeToJsUntyped(rawNodes) as Array<{ style?: Record<string, string> }>;
+                return jsToScheme(
+                  CONSTANT_CTX,
+                  nodes.filter((node) => node.style && node.style[property] === value),
+                );
+              },
+            ),
+        }),
       })
         .lower({})
         .apply(inferenceEnv, undefined as never);
@@ -206,12 +217,7 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
       invariant(isRosettaVerb(verb), "filter-by-css-property must resolve to a bound rosetta verb");
       // The string args cross the membrane as real scheme values — the `z.string`
       // codec decodes them the same way a scheme-level call would.
-      const result = await invoke(
-        verb,
-        lipsNodes,
-        new AString("overflow"),
-        new AString("hidden"),
-      );
+      const result = await invoke(verb, lipsNodes, new AString("overflow"), new AString("hidden"));
 
       console.log("CSS filtering result:", result);
 
@@ -224,23 +230,26 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
     // INVARIANT: a rosetta verb can aggregate scheme-converted JS objects into a stats object
     // that round-trips correctly
     it("should create CSS statistics like the MCP server needs", async () => {
-      const cssPropertyStats = symbol.rosetta`css-property-stats: aggregates node style property:value counts`(
-        { input: [z.value], output: [z.value] },
-        (rawNodes) => {
-          const nodes = schemeToJsUntyped(rawNodes) as Array<{ style?: Record<string, string> }>;
-          const stats: Record<string, number> = {};
-          nodes.forEach((node) => {
-            if (node.style) {
-              Object.entries(node.style).forEach(([prop, value]) => {
-                const key = `${prop}:${value}`;
-                stats[key] = (stats[key] || 0) + 1;
+      await EnvCapability.define("test/css-property-stats", {
+        symbols: (symbol, z) => ({
+          "css-property-stats": symbol.rosetta`css-property-stats: aggregates node style property:value counts`(
+            { input: [z.value], output: [z.value] },
+            (rawNodes) => {
+              const nodes = schemeToJsUntyped(rawNodes) as Array<{ style?: Record<string, string> }>;
+              const stats: Record<string, number> = {};
+              nodes.forEach((node) => {
+                if (node.style) {
+                  Object.entries(node.style).forEach(([prop, value]) => {
+                    const key = `${prop}:${value}`;
+                    stats[key] = (stats[key] || 0) + 1;
+                  });
+                }
               });
-            }
-          });
-          return jsToScheme(CONSTANT_CTX, stats);
-        },
-      );
-      await new EnvCapability("test/css-property-stats", { symbols: { "css-property-stats": cssPropertyStats } })
+              return jsToScheme(CONSTANT_CTX, stats);
+            },
+          ),
+        }),
+      })
         .lower({})
         .apply(inferenceEnv, undefined as never);
 

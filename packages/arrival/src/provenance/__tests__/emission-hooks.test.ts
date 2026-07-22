@@ -25,9 +25,7 @@ import { inferenceEnv } from "../../env/inference-env.js";
 import { schemeToJs } from "../../membrane/rosetta.js";
 import { withRecordCoordinateAsync, type EmissionSink, type RecordCoordinate } from "../../eval/provenance-hooks.js";
 import { PayloadStoreFake, ProvenanceStoreFake, setEmissionEnabled } from "../../provenance/store/index.js";
-import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
-import * as z from "../../common/scheme-zod.js";
 
 const COORD: RecordCoordinate = { templateHash: "th-source", ordinalPath: [0], regionEpoch: "e0" };
 const REGION = "region-emission-hooks";
@@ -39,11 +37,14 @@ afterEach(() => {
 /** One rosetta source, mirroring `w1-harness.ts`'s `SourceRegistry.register("num")`
  *  shape (a fresh env, a plain synchronous numeric return — `createRosettaWrapper`
  *  wraps it into the async `mintsPoint` path regardless of the impl's own sync body).
- *  Test-local `EnvCapability` (`symbol.rosetta` — the `env.defineRosetta` migration
- *  target); a plain `z.number` output, same as `silent-region.test.ts`'s sibling. */
+ *  Test-local `EnvCapability`; a plain `z.number` output, same as
+ *  `silent-region.test.ts`'s sibling. */
 async function registerSource(env: ResolvingAmbient): Promise<void> {
-  const fetchItem = symbol.rosetta`fetch-item: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 42);
-  await new EnvCapability("test/fetch-item", { symbols: { "fetch-item": fetchItem } })
+  await EnvCapability.define("test/fetch-item", {
+    symbols: (symbol, z) => ({
+      "fetch-item": symbol.rosetta`fetch-item: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 42),
+    }),
+  })
     .lower({})
     .apply(env, undefined as never);
 }

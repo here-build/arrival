@@ -107,12 +107,12 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
   it("require/register-extension: callable from a DEPENDENT capability's prelude via plain assembleEnv; unbound from user code", async () => {
     // An ext-style capability, exactly like ext/yaml: a `{ value }` resolver + a prelude that
     // registers the suffix by name. No overlay wiring anywhere — the kernel supplies the scope.
-    const extCap = new EnvCapability("test/ext-upper", {
-      symbols: {
+    const extCap = EnvCapability.define("test/ext-upper", {
+      symbols: () => ({
         "test/upper-resolve": {
           value: (contents: unknown) => ({ kind: "value", value: String(contents).toUpperCase() }),
         },
-      },
+      }),
       prelude: `(require/register-extension ".upper" "test/upper-resolve")`,
     });
     const env = await assembled({ loader: files({ "shout.upper": "hello" }) }, [extCap]);
@@ -142,23 +142,20 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
       ],
     ]);
     const env = await assembled({ loader: files({}), extensionRegistry: registry });
-    const results = await exec(
-      `(require/extension :greeter) (require/extension :greeter) (greeting-of)`,
-      { env },
-    );
+    const results = await exec(`(require/extension :greeter) (require/extension :greeter) (greeting-of)`, { env });
     expect(plain(results.at(-1))).toBe("hi");
     expect(applies).toBe(1);
   });
 
   describe("door-set degradation — the auto-derived requiresConfig doors, mode-independent (D2)", () => {
-    it("no fs/loader + \"doors\": `require` teaches the fs-or-loader disjunction", async () => {
+    it('no fs/loader + "doors": `require` teaches the fs-or-loader disjunction', async () => {
       const env = await assembled({}, [], "doors");
       await expect(exec(`(require "x.json")`, { env })).rejects.toThrow(
         /require @ arrival\/loader is not available.*requires configuration `fs` or `loader` — provide one of them to enable this verb\./s,
       );
     });
 
-    it("no extensionRegistry + \"doors\": `require/extension` teaches the same, naming extensionRegistry", async () => {
+    it('no extensionRegistry + "doors": `require/extension` teaches the same, naming extensionRegistry', async () => {
       const env = await assembled({ loader: files({}) }, [], "doors");
       await expect(exec(`(require/extension :sql)`, { env })).rejects.toThrow(
         /require\/extension @ arrival\/loader is not available.*requires configuration `extensionRegistry` — provide it to enable this verb\./s,
@@ -179,14 +176,14 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
       ]);
     });
 
-    it("an armed loader is NOT degraded — `require` binds for real, even under \"doors\" mode", async () => {
+    it('an armed loader is NOT degraded — `require` binds for real, even under "doors" mode', async () => {
       const env = await assembled({ loader: files({ "cfg.json": `{"name":"world"}` }) }, [], "doors");
       const results = await exec(`(require "cfg.json")`, { env });
       const cfg = plain(results.at(-1)) as Record<string, unknown>;
       expect(cfg).toMatchObject({ name: "world" });
     });
 
-    it("under the default (\"forbid\") mode the door mints all the same — requiresConfig is mode-independent", async () => {
+    it('under the default ("forbid") mode the door mints all the same — requiresConfig is mode-independent', async () => {
       const env = await assembled({});
       await expect(exec(`(require "x.json")`, { env })).rejects.toThrow(/is not available/);
       await expect(exec(`(require "x.json")`, { env })).rejects.not.toThrow(/Unbound variable|PurityError/);

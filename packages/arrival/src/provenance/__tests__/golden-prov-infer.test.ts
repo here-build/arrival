@@ -49,9 +49,7 @@ import { describe, it, expect } from "vitest";
 import { AValue } from "../../values/primitives/AValue.js";
 import { provOf } from "../../provenance/lineage-shadow.js";
 import { sStr, runRaw, type EnvSetup } from "../../__tests__/_lineage-test-helpers.js";
-import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
-import * as z from "../../common/scheme-zod.js";
 import { jsToScheme } from "../../membrane/rosetta.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 
@@ -64,8 +62,8 @@ const FIELD_ID = 700; // infer-dict's `field` slot id
 const OTHER_ID = 701; // infer-dict's `other` slot id (must be PRUNED by the projection)
 
 // Register deterministic fake Rosetta-IN sources on the run env via a test-local
-// `EnvCapability` (`symbol.rosetta` verbs — the `env.defineRosetta` migration target).
-// Each fake source IGNORES its argument and returns an already-stamped value: this is
+// `EnvCapability`. Each fake source IGNORES its argument and returns an
+// already-stamped value: this is
 // the "data is born at the membrane" behavior — the result's provenance is the mint,
 // independent of the (literal) input. Mirrors lineage-assumptions.test.ts's own
 // capability-authored fixtures (`_lineage-test-helpers.ts`).
@@ -83,29 +81,30 @@ const OTHER_ID = 701; // infer-dict's `other` slot id (must be PRUNED by the pro
 // default (mint-on-invocation) — the same default legacy `defineRosetta` (no `pure`)
 // carried.
 const inferSources: EnvSetup = async (env) => {
-  // infer-x / infer-y: scalar sources, each minting a single fixed leaf.
-  const inferX = symbol.rosetta`infer-x: fake Rosetta-IN scalar source (X)`(
-    { input: [z.string], output: [z.value] },
-    () => sStr("RESULT-X", MINT_X),
-  );
-  const inferY = symbol.rosetta`infer-y: fake Rosetta-IN scalar source (Y)`(
-    { input: [z.string], output: [z.value] },
-    () => sStr("RESULT-Y", MINT_Y),
-  );
-  // infer-dict: a structured source whose fields carry DISTINCT per-field ids, so a
-  // field projection has something to narrow FROM (two ids) TO (one id). The raw
-  // `{ field, other }` object isn't itself a `SchemeValue` (TS needs one for a `z.value`
-  // slot) — `jsToScheme(CONSTANT_CTX, …)` at its default EMPTY provenance borrows it as
-  // an AJSObject WITHOUT touching the already-stamped field values (a shallow, lazy-
-  // entries wrap), so this pre-wrap is representationally a no-op vs. handing the raw
-  // object straight to `run()`'s own final `jsToScheme` call (which would otherwise do
-  // the identical borrow itself).
-  const inferDict = symbol.rosetta`infer-dict: fake Rosetta-IN structured source`(
-    { input: [z.string], output: [z.value] },
-    () => jsToScheme(CONSTANT_CTX, { field: sStr("FV", FIELD_ID), other: sStr("OV", OTHER_ID) }),
-  );
-  const cap = new EnvCapability("test/infer-sources", {
-    symbols: { "infer-x": inferX, "infer-y": inferY, "infer-dict": inferDict },
+  const cap = EnvCapability.define("test/infer-sources", {
+    symbols: (symbol, z) => ({
+      // infer-x / infer-y: scalar sources, each minting a single fixed leaf.
+      "infer-x": symbol.rosetta`infer-x: fake Rosetta-IN scalar source (X)`(
+        { input: [z.string], output: [z.value] },
+        () => sStr("RESULT-X", MINT_X),
+      ),
+      "infer-y": symbol.rosetta`infer-y: fake Rosetta-IN scalar source (Y)`(
+        { input: [z.string], output: [z.value] },
+        () => sStr("RESULT-Y", MINT_Y),
+      ),
+      // infer-dict: a structured source whose fields carry DISTINCT per-field ids, so a
+      // field projection has something to narrow FROM (two ids) TO (one id). The raw
+      // `{ field, other }` object isn't itself a `SchemeValue` (TS needs one for a `z.value`
+      // slot) — `jsToScheme(CONSTANT_CTX, …)` at its default EMPTY provenance borrows it as
+      // an AJSObject WITHOUT touching the already-stamped field values (a shallow, lazy-
+      // entries wrap), so this pre-wrap is representationally a no-op vs. handing the raw
+      // object straight to `run()`'s own final `jsToScheme` call (which would otherwise do
+      // the identical borrow itself).
+      "infer-dict": symbol.rosetta`infer-dict: fake Rosetta-IN structured source`(
+        { input: [z.string], output: [z.value] },
+        () => jsToScheme(CONSTANT_CTX, { field: sStr("FV", FIELD_ID), other: sStr("OV", OTHER_ID) }),
+      ),
+    }),
   });
   await cap.lower({}).apply(env, undefined as never);
 };
@@ -163,7 +162,7 @@ describe("GOLDEN (G2 oracle) — a pure pipe over the source PROPAGATES, never r
     `);
   });
 
-  it("(string-append \"pre-\" (infer-x …)): the literal prefix contributes no id — still the single mint", async () => {
+  it('(string-append "pre-" (infer-x …)): the literal prefix contributes no id — still the single mint', async () => {
     // One prov-bearing operand (the infer-x source) + a literal → still a PIPE, not a
     // merge: the literal is not a source (lineage-spike.test.ts pure-predicate case).
     expect({
@@ -222,7 +221,7 @@ describe("GOLDEN (G2 oracle) — a FIELD PROJECTION refines a point (narrows the
     `);
   });
 
-  it("(@ (infer-dict …) \"field\"): the @ member-read narrows identically to the keyword accessor", async () => {
+  it('(@ (infer-dict …) "field"): the @ member-read narrows identically to the keyword accessor', async () => {
     // The polyglot member-read `@` and the `:keyword` accessor are ONE member-read
     // over a dict (per the project's polyglot/membrane note); both must narrow the
     // cone to the projected field's id. Pinned so a rewrite can't diverge the two.

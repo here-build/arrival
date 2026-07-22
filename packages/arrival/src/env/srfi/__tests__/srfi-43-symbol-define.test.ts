@@ -29,8 +29,6 @@
 //      bug this migration fixes was real and is now caught, not merely worked around.
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../AmbientRuntime.js";
-import * as z from "../../../common/scheme-zod.js";
-import { symbol } from "../../../common/symbol.js";
 import { EnvCapability } from "../../../common/capability.js";
 import { exec, execState } from "../../../eval/generator-exec.js";
 import { global_env } from "../../env-roots.js";
@@ -162,14 +160,16 @@ describe("scheme/srfi-43 — the §2.1 bake FV law passes for this pack AS MIGRA
 
   it("(regression pin) a LOCAL reproduction of the PRE-FIX shape — the same `vector-length`/`vector-ref` free references with NO declared deps — throws DefineLocalityError: the bug this migration fixes was real", async () => {
     const env = await freshEnv();
-    const undeclaredVectorEmpty = symbol.define`bad-vector-empty?: reproduces the pre-migration srfi-43 bug (no declared dep on vector-length/scheme/numeric's =)`(
-      { input: [z.vector(z.value)], output: [z.boolean] },
-      `(lambda (vec) (= (vector-length vec) 0))`,
-    );
     // Deliberately NO `deps` field — this is the exact shape srfi-43.ts had before this
     // migration (a bare `symbols` record with no dep declaration).
-    const undeclaredCap = new EnvCapability("test/srfi-43-pre-fix-repro", {
-      symbols: { "bad-vector-empty?": undeclaredVectorEmpty },
+    const undeclaredCap = EnvCapability.define("test/srfi-43-pre-fix-repro", {
+      symbols: (symbol, z) => ({
+        "bad-vector-empty?":
+          symbol.define`bad-vector-empty?: reproduces the pre-migration srfi-43 bug (no declared dep on vector-length/scheme/numeric's =)`(
+            { input: [z.vector(z.value)], output: [z.boolean] },
+            `(lambda (vec) (= (vector-length vec) 0))`,
+          ),
+      }),
     });
     await expect(undeclaredCap.lower({ evalScheme }).apply(env, undefined as never)).rejects.toThrow(
       DefineLocalityError,

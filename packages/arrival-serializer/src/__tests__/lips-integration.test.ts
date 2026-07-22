@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { toSExprString } from "../serializer";
 // Import what we can from lips
-import { exec, AExact, EnvCapability, schemeToJs, AString, ASymbol, ANil, APair, LexicalScope } from "@inhuman.tools/arrival";
+import {
+  exec,
+  AExact,
+  EnvCapability,
+  schemeToJs,
+  AString,
+  ASymbol,
+  ANil,
+  APair,
+  LexicalScope,
+} from "@inhuman.tools/arrival";
 // Import custom matchers
 import "@inhuman.tools/arrival";
 
@@ -76,7 +86,7 @@ describe("LIPS Integration", () => {
       { expr: "#f", expected: "false" },
       { expr: '"hello world"', expected: `"hello world"` }, // R7RS double quotes — re-parses
       { expr: "'symbol-name", expected: "symbol-name" }, // Should be bare symbol
-      { expr: "()", expected: "(list nil)" } // edge case - keeping like that for now
+      { expr: "()", expected: "(list nil)" }, // edge case - keeping like that for now
     ];
 
     for (const { expr, expected } of tests) {
@@ -98,7 +108,7 @@ describe("LIPS Integration", () => {
       { expr: "(quote :hello)", desc: "quoted colon syntax" },
       { expr: "123456789012345678901234567890", desc: "very large number (bigint?)" },
       { expr: '"simple string"', desc: "simple string" },
-      { expr: '"string with \\"quotes\\""', desc: "string with quotes" }
+      { expr: '"string with \\"quotes\\""', desc: "string with quotes" },
     ];
 
     for (const { expr, desc } of tests) {
@@ -122,7 +132,7 @@ describe("LIPS Integration", () => {
     // Test special LIPS types
     const specialTests = [
       { expr: "#\\a", desc: "character" }, // LCharacter
-      { expr: "(values 1 2 3)", desc: "multiple values" } // Values
+      { expr: "(values 1 2 3)", desc: "multiple values" }, // Values
     ];
 
     for (const { expr, desc } of specialTests) {
@@ -212,10 +222,9 @@ describe("exec with proper environment", () => {
   });
 
   it("should have access to functional composition", async () => {
-    const result = schemeToJs(
-      await exec("((compose (lambda (x) (+ x 1)) (lambda (x) (+ x 1))) 5)"),
-      { forceBigInt: true }
-    )[0];
+    const result = schemeToJs(await exec("((compose (lambda (x) (+ x 1)) (lambda (x) (+ x 1))) 5)"), {
+      forceBigInt: true,
+    })[0];
     expect(result).toBe(7n);
   });
 
@@ -223,13 +232,12 @@ describe("exec with proper environment", () => {
     // Host-supplied values enter as CAPABILITY data (`{ value }` symbol defs) — the
     // hermetic-Environment ruling retired the JS-side `env.set` write surface.
     const scope = LexicalScope.fresh("test");
-    await new EnvCapability("serializer-test/env-vars", { symbols: { x: { value: 10 }, y: { value: 20 } } })
+    await EnvCapability.define("serializer-test/env-vars", {
+      symbols: () => ({ x: { value: 10 }, y: { value: 20 } }),
+    })
       .lower({})
       .apply(scope.env, undefined as never);
-    const result = schemeToJs(
-      await exec("(+ x y)", { scope }),
-      { forceBigInt: true }
-    )[0];
+    const result = schemeToJs(await exec("(+ x y)", { scope }), { forceBigInt: true })[0];
     expect(result).toBe(30n);
   });
 });

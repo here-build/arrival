@@ -51,7 +51,14 @@ import { describe, it, expect } from "vitest";
 import { initBridge } from "../../index.js";
 import { parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
-import { classify, fullCone, countCone, fieldCone, type Classifier, type DeclaredRole } from "../../provenance/lineage.js";
+import {
+  classify,
+  fullCone,
+  countCone,
+  fieldCone,
+  type Classifier,
+  type DeclaredRole,
+} from "../../provenance/lineage.js";
 import { classifierFromEnv } from "../../provenance/lineage-classifier-from-env.js";
 import { buildWireframe } from "../../provenance/wireframe/builder.js";
 import * as z from "../../common/scheme-zod.js";
@@ -100,12 +107,11 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       expect(symbol.native`v1-default-native: `({ input: [z.value], output: [z.value] }, (v) => v).provenance).toBe(
         "pipe",
       );
+      expect(symbol.rosetta`v1-default-rosetta: `({ input: [z.string], output: [z.string] }, (s) => s).provenance).toBe(
+        "source",
+      );
       expect(
-        symbol.rosetta`v1-default-rosetta: `({ input: [z.string], output: [z.string] }, (s) => s).provenance,
-      ).toBe("source");
-      expect(
-        symbol.sequence`v1-default-sequence: `({ input: [z.value], output: [z.value] }, (args) => args[0])
-          .provenance,
+        symbol.sequence`v1-default-sequence: `({ input: [z.value], output: [z.value] }, (args) => args[0]).provenance,
       ).toBe("pipe");
       expect(symbol.tagless`v1-default-tagless: `.provenance).toBe("pipe");
       expect(symbol.taglessGuard`v1-default-taglessguard: `.provenance).toBe("pipe");
@@ -116,22 +122,18 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       // z.lambda input arm — the two SHAPE-decidable checks) and freely where it
       // doesn't (pipe/source/loop/opaque carry no shape constraint at all).
       expect(
-        symbol.native`v1-role-pipe: `({ input: [z.value], output: [z.value], provenance: "pipe" }, (v) => v)
-          .provenance,
+        symbol.native`v1-role-pipe: `({ input: [z.value], output: [z.value], provenance: "pipe" }, (v) => v).provenance,
       ).toBe("pipe");
       expect(
-        symbol.native`v1-role-fan: `(
-          { input: [z.lambda, z.value], output: [z.value], provenance: "fan" },
-          (f, v) => v,
-        ).provenance,
+        symbol.native`v1-role-fan: `({ input: [z.lambda, z.value], output: [z.value], provenance: "fan" }, (f, v) => v)
+          .provenance,
       ).toBe("fan");
       expect(
         symbol.rosetta`v1-role-source: `({ input: [z.string], output: [z.string], provenance: "source" }, (s) => s)
           .provenance,
       ).toBe("source");
       expect(
-        symbol.native`v1-role-loop: `({ input: [z.value], output: [z.value], provenance: "loop" }, (v) => v)
-          .provenance,
+        symbol.native`v1-role-loop: `({ input: [z.value], output: [z.value], provenance: "loop" }, (v) => v).provenance,
       ).toBe("loop");
       expect(
         symbol.native`v1-role-opaque: `({ input: [z.value], output: [z.value], provenance: "opaque" }, (v) => v)
@@ -141,10 +143,8 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
         symbol.native`v1-role-sink: `({ input: [z.value], output: [], provenance: "sink" }, (): [] => []).provenance,
       ).toBe("sink");
       expect(
-        symbol.native`v1-role-transparent: `(
-          { input: [z.value], output: [], provenance: "transparent" },
-          (): [] => [],
-        ).provenance,
+        symbol.native`v1-role-transparent: `({ input: [z.value], output: [], provenance: "transparent" }, (): [] => [])
+          .provenance,
       ).toBe("transparent");
 
       // TYPE-LEVEL: `Contract.provenance` types as `ProvenanceRole | undefined` — a
@@ -163,8 +163,8 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
   // machinery does — see the note below).
   it.todo(
     "the two ad-hoc booleans `fanout?`/`pure?` are GONE, not merely deprecated — " +
-      "no declaration surface accepts them any more (§2 EXCLUDED: \"degenerate two-word " +
-      "fragment of this vocabulary; each had exactly two readers\")",
+      'no declaration surface accepts them any more (§2 EXCLUDED: "degenerate two-word ' +
+      'fragment of this vocabulary; each had exactly two readers")',
     // RESIDUAL FINDING (do not flip without either (a) retiring the legacy surface
     // below, or (b) narrowing this row's title to the `symbol.*` declaration surface
     // it actually verifies):
@@ -245,8 +245,8 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
     "drift-alarm door (assembly-time): a declared role inconsistent with its contract " +
       "shape (e.g. declared `pipe` but the z.lambda position/return shape implies `fan`) " +
       "trips the door at assembly time — CONTRADICTIONS only, never silent (§2 LIMIT: " +
-      "\"catches CONTRADICTIONS, not lies: a JS body that fans while declared pipe is " +
-      "consistent-but-wrong; contract shape cannot see JS bodies\")",
+      '"catches CONTRADICTIONS, not lies: a JS body that fans while declared pipe is ' +
+      'consistent-but-wrong; contract shape cannot see JS bodies")',
     () => {
       // The TWO shape-decidable contradictions `assertProvenanceRoleShape` actually
       // checks (_bake.ts) — both fire at BAKE (assembly) time, before any call site
@@ -360,8 +360,8 @@ describe("V2 — declaration-driven classifier (§2; PROVENANCE-PLAN.md Q3)", ()
   it(
     "the classifier reads ONLY the declared `provenance` role — the `isRosettaIn` " +
       "heuristic and the `.fanout` duck-read off a bound function are DELETED, not " +
-      "merely bypassed (§2 EXCLUDED: \"the key-taxonomy violation the P7 corollary " +
-      "exists to kill; every static interpreter reads the declared field\")",
+      'merely bypassed (§2 EXCLUDED: "the key-taxonomy violation the P7 corollary ' +
+      'exists to kill; every static interpreter reads the declared field")',
     async () => {
       await initBridge();
       // Names picked to defeat any residual name-based guess — a "pure"-sounding name
@@ -388,7 +388,7 @@ describe("V2 — declaration-driven classifier (§2; PROVENANCE-PLAN.md Q3)", ()
   it(
     "named-let and `do` loops classify as `loop` (lowering to `binder{cycles}`), " +
       "not `opaque` — this is the exact corpus row `laws/opaque-quarantine.law.test.ts` " +
-      "used to mark \"opaque today (pending Q3's binder rewrite)\": `(let loop ((a v1)) a)` " +
+      'used to mark "opaque today (pending Q3\'s binder rewrite)": `(let loop ((a v1)) a)` ' +
       "flipped off that corpus's opaque count when this landed",
     async () => {
       await initBridge();
@@ -552,11 +552,16 @@ describe("V2-Q4 — callback-role drift door + acc chain + stamp path (§2/§3; 
       expect(read("cons")).toBeUndefined();
       // The stamp seam is the REAL EnvCapability binder end-to-end for a fresh synthetic
       // def too (the kwargs-runtime fixture convention) — fan default rides the binding.
-      const def = symbol.native`q4-stamp: synthetic fan`(
-        { input: [z.lambda, z.value], output: [z.value], provenance: "fan" },
-        (f, v) => v,
-      );
-      await new EnvCapability("test/q4-stamp", { symbols: { "q4-stamp": def } }).lower({}).apply(env, undefined as never);
+      await EnvCapability.define("test/q4-stamp", {
+        symbols: (symbol, z) => ({
+          "q4-stamp": symbol.native`q4-stamp: synthetic fan`(
+            { input: [z.lambda, z.value], output: [z.value], provenance: "fan" },
+            (f, v) => v,
+          ),
+        }),
+      })
+        .lower({})
+        .apply(env, undefined as never);
       expect(read("q4-stamp")).toEqual(["element-transformer"]);
     },
   );
@@ -632,7 +637,7 @@ describe("Q7 — program prelude: PURE-only membership, the REJECTED direction (
       "touches the port itself, but REFERENCES the port-reaching helper by name, is " +
       "itself port-reaching — §1's fixpoint over the top-level call graph) — " +
       "`assertPreludeEligible` throws a teaching door naming the port (errors-as-doors; " +
-      "§1 EXCLUDED \"port-reaching defines in the prelude — name indirection would " +
+      '§1 EXCLUDED "port-reaching defines in the prelude — name indirection would ' +
       "smuggle sources into 'pure' wire bodies\")",
     async () => {
       await initBridge();

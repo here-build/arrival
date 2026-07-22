@@ -28,7 +28,6 @@ import { execState } from "../../eval/generator-exec.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { schemeToJs } from "../../membrane/rosetta.js";
 import * as z from "../../common/scheme-zod.js";
-import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { emitMint, setEmissionEnabled } from "../../provenance/store/emit.js";
@@ -106,71 +105,76 @@ export class RecordingRegistry {
    *  the boxed, already-stamped return crosses back out untouched via the output escape
    *  hatch. */
   async register(env: AmbientRuntime, op: string, shape: RecordingShape): Promise<void> {
-    const impl = symbol.rosetta`${op}: Q16 harness recording source`(
-      { input: [], inputRest: z.value, output: [z.value] },
-      // `any[]` rest param — the research-env.ts `buildResearchScope` boundary: a
-      // `z.value` slot decodes to the raw SchemeValue, and `schemeToJs`'s generic
-      // constraint (`T extends SchemeValue | null | undefined`) can't be satisfied by
-      // an `unknown`-typed rest param without a cast; `any` here is the SAME erasure
-      // `symbol.rosetta`'s own `rawImpl` boundary already performs one layer down.
-      async (...args: any[]): Promise<unknown> => {
-        args = args.map((a) => schemeToJs(a));
-        this.calls.set(op, (this.calls.get(op) ?? 0) + 1);
-        const callSeq = this.calls.get(op) ?? 1;
-        let boxed: unknown;
-        let peeled: unknown;
-        let stampIds: number[];
-        if (shape === "num") {
-          const id = this.mint(op);
-          boxed = stampedNum(id, id);
-          peeled = id;
-          stampIds = [id];
-        } else if (shape === "str") {
-          const id = this.mint(op);
-          peeled = `${op}#${id}`;
-          boxed = stampedStr(`${op}#${id}`, id);
-          stampIds = [id];
-        } else if (shape === "echo") {
-          const id = this.mint(op);
-          const arg = args[0];
-          invariant(typeof arg === "number", `q16 echo source "${op}" expects a numeric argument`);
-          boxed = stampedNum(arg, id);
-          peeled = arg;
-          stampIds = [id];
-        } else if ("dict" in shape) {
-          const out: Record<string, unknown> = {};
-          const peeledOut: Record<string, unknown> = {};
-          stampIds = [];
-          for (const field of shape.dict) {
-            const id = this.mint(op);
-            out[field] = stampedStr(`${op}.${field}#${id}`, id);
-            peeledOut[field] = `${op}.${field}#${id}`;
-            stampIds.push(id);
-          }
-          boxed = out;
-          peeled = peeledOut;
-        } else {
-          const id = this.mint(op);
-          peeled = shape.value(callSeq - 1);
-          boxed =
-            typeof peeled === "number"
-              ? stampedNum(peeled, id)
-              : stampedStr(String(peeled), id);
-          stampIds = [id];
-        }
-        const record = await emitMint({
-          store: this.store,
-          payloads: this.payloads,
-          regionId: this.regionId,
-          id: { templateHash: `q16:${op}`, ordinalPath: [this.ordinal++], regionEpoch: this.regionEpoch },
-          value: peeled,
-          stampIds,
-        });
-        invariant(record !== undefined, "q16 harness: emitMint no-oped — setEmissionEnabled(true) must wrap the record run");
-        return boxed;
-      },
-    );
-    await new EnvCapability(`test/q16-source-${op}`, { symbols: { [op]: impl } }).lower({}).apply(env, undefined as never);
+    await EnvCapability.define(`test/q16-source-${op}`, {
+      symbols: (symbol) => ({
+        [op]: symbol.rosetta`${op}: Q16 harness recording source`(
+          { input: [], inputRest: z.value, output: [z.value] },
+          // `any[]` rest param — the research-env.ts `buildResearchScope` boundary: a
+          // `z.value` slot decodes to the raw SchemeValue, and `schemeToJs`'s generic
+          // constraint (`T extends SchemeValue | null | undefined`) can't be satisfied by
+          // an `unknown`-typed rest param without a cast; `any` here is the SAME erasure
+          // `symbol.rosetta`'s own `rawImpl` boundary already performs one layer down.
+          async (...args: any[]): Promise<unknown> => {
+            args = args.map((a) => schemeToJs(a));
+            this.calls.set(op, (this.calls.get(op) ?? 0) + 1);
+            const callSeq = this.calls.get(op) ?? 1;
+            let boxed: unknown;
+            let peeled: unknown;
+            let stampIds: number[];
+            if (shape === "num") {
+              const id = this.mint(op);
+              boxed = stampedNum(id, id);
+              peeled = id;
+              stampIds = [id];
+            } else if (shape === "str") {
+              const id = this.mint(op);
+              peeled = `${op}#${id}`;
+              boxed = stampedStr(`${op}#${id}`, id);
+              stampIds = [id];
+            } else if (shape === "echo") {
+              const id = this.mint(op);
+              const arg = args[0];
+              invariant(typeof arg === "number", `q16 echo source "${op}" expects a numeric argument`);
+              boxed = stampedNum(arg, id);
+              peeled = arg;
+              stampIds = [id];
+            } else if ("dict" in shape) {
+              const out: Record<string, unknown> = {};
+              const peeledOut: Record<string, unknown> = {};
+              stampIds = [];
+              for (const field of shape.dict) {
+                const id = this.mint(op);
+                out[field] = stampedStr(`${op}.${field}#${id}`, id);
+                peeledOut[field] = `${op}.${field}#${id}`;
+                stampIds.push(id);
+              }
+              boxed = out;
+              peeled = peeledOut;
+            } else {
+              const id = this.mint(op);
+              peeled = shape.value(callSeq - 1);
+              boxed = typeof peeled === "number" ? stampedNum(peeled, id) : stampedStr(String(peeled), id);
+              stampIds = [id];
+            }
+            const record = await emitMint({
+              store: this.store,
+              payloads: this.payloads,
+              regionId: this.regionId,
+              id: { templateHash: `q16:${op}`, ordinalPath: [this.ordinal++], regionEpoch: this.regionEpoch },
+              value: peeled,
+              stampIds,
+            });
+            invariant(
+              record !== undefined,
+              "q16 harness: emitMint no-oped — setEmissionEnabled(true) must wrap the record run",
+            );
+            return boxed;
+          },
+        ),
+      }),
+    })
+      .lower({})
+      .apply(env, undefined as never);
   }
 }
 

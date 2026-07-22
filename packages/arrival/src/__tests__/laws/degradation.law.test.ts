@@ -78,9 +78,9 @@ function recordingEnv(): { env: ResolvingAmbient; bound: { get(name: string): un
 
 describe("LAW 1 — required-and-absent config throws regardless of degradation mode", () => {
   const requiredCap = () =>
-    new EnvCapability("test/degradation-required", {
+    EnvCapability.define("test/degradation-required", {
       configuration: { must: z.string() },
-      symbols: { stub: symbol.notImplemented`stub: unreachable — config validation throws first` },
+      symbols: (symbol) => ({ stub: symbol.notImplemented`stub: unreachable — config validation throws first` }),
     });
 
   it("throws under the default ('forbid') mode", () => {
@@ -109,9 +109,9 @@ describe("LAW 4 — present-but-invalid config throws in BOTH modes (degradation
   // test deliberately supplies type-checks without a cast — the runtime `schema.parse`
   // throw is the thing under test, not TS's own config-shape guard.
   const invalidCap = (): EnvCapability<any, any> =>
-    new EnvCapability("test/degradation-invalid", {
+    EnvCapability.define("test/degradation-invalid", {
       configuration: { n: z.number() },
-      symbols: { stub: symbol.notImplemented`stub: unreachable — config validation throws first` },
+      symbols: (symbol) => ({ stub: symbol.notImplemented`stub: unreachable — config validation throws first` }),
     });
 
   it("throws under 'forbid'", () => {
@@ -134,17 +134,18 @@ function fixtureCapability(name: string): EnvCapability<any, any> {
   return new EnvCapability(name, {
     configuration: {
       fs: z
-        .custom<{ readFile: (p: string) => Promise<string> }>(
-          (v): v is { readFile: (p: string) => Promise<string> } =>
-            v !== null && typeof v === "object" && typeof (v as { readFile?: unknown }).readFile === "function",
-          "fs must expose readFile(path)",
-        )
+        .custom<{
+          readFile: (p: string) => Promise<string>;
+        }>((v): v is { readFile: (p: string) => Promise<string> } => v !== null && typeof v === "object" && typeof (v as { readFile?: unknown }).readFile === "function", "fs must expose readFile(path)")
         .optional(),
     },
     symbols: ({ configuration, degradation }) => {
       const defs: Record<string, SymbolDeclaration> = {};
       if (configuration.fs !== undefined) {
-        defs["fixture/verb"] = symbol.native`fixture/verb: reads via the fs`({ input: [], output: [sz.value] }, () => nil);
+        defs["fixture/verb"] = symbol.native`fixture/verb: reads via the fs`(
+          { input: [], output: [sz.value] },
+          () => nil,
+        );
       } else if (degradation.active) {
         defs["fixture/verb"] = degradation.door(
           "fixture/verb",
@@ -160,13 +161,17 @@ function fixtureCapability(name: string): EnvCapability<any, any> {
 describe("LAW 2 — 'doors' mode lowers an absent optional-enabling key to a cause-carrying door", () => {
   it("under the default ('forbid') mode, the key stays withheld — no symbol at all (byte-identical to pre-W2)", async () => {
     const { env, bound } = recordingEnv();
-    await fixtureCapability("test/degradation-fixture-forbid").lower({ config: {} }).apply(env, undefined as never);
+    await fixtureCapability("test/degradation-fixture-forbid")
+      .lower({ config: {} })
+      .apply(env, undefined as never);
     expect(bound.has("fixture/verb")).toBe(false);
   });
 
   it("under 'doors', the symbol BINDS as a door whose firing message teaches 'provide fs to enable it'", async () => {
     const { env, bound } = recordingEnv();
-    await fixtureCapability("test/degradation-fixture-doors").lower({ config: {}, degradation: "doors" }).apply(env, undefined as never);
+    await fixtureCapability("test/degradation-fixture-doors")
+      .lower({ config: {}, degradation: "doors" })
+      .apply(env, undefined as never);
     const proc = bound.get("fixture/verb");
     expect(proc).toBeInstanceOf(DoorProcedure);
     let caught: unknown;
@@ -195,7 +200,9 @@ describe("LAW 2 — 'doors' mode lowers an absent optional-enabling key to a cau
 describe("LAW 3 — AssembledEnv.degraded enumerates every degraded capability", () => {
   it("is empty under the default ('forbid') mode", async () => {
     const base = mintFrame(sandboxedEnv, "degradation-law-forbid");
-    const assembled = await assembleEnv(base, [fixtureCapability("test/degradation-assembled-forbid").lower({ config: {} })]);
+    const assembled = await assembleEnv(base, [
+      fixtureCapability("test/degradation-assembled-forbid").lower({ config: {} }),
+    ]);
     expect(assembled.degraded).toEqual([]);
   });
 
@@ -228,14 +235,18 @@ describe("LAW 3 — AssembledEnv.degraded enumerates every degraded capability",
 describe("LAW 5 — a degradation-minted door is bound (typo-suggestible) and carries the full causal chain", () => {
   it("appears in allBoundNames() — the exact vocabulary suggestFromVocabulary's callers feed it (unbound-variable.ts)", async () => {
     const { env, bound } = recordingEnv();
-    await fixtureCapability("test/degradation-suggestible").lower({ config: {}, degradation: "doors" }).apply(env, undefined as never);
+    await fixtureCapability("test/degradation-suggestible")
+      .lower({ config: {}, degradation: "doors" })
+      .apply(env, undefined as never);
     expect(env.allBoundNames()).toContain("fixture/verb");
     expect(bound.get("fixture/verb")).toBeInstanceOf(DoorProcedure);
   });
 
   it("reference → door → owner → missing key: the whole chain reads off the bound value", async () => {
     const { env, bound } = recordingEnv();
-    await fixtureCapability("test/degradation-causal-chain").lower({ config: {}, degradation: "doors" }).apply(env, undefined as never);
+    await fixtureCapability("test/degradation-causal-chain")
+      .lower({ config: {}, degradation: "doors" })
+      .apply(env, undefined as never);
     // "reference": a lookup by name, exactly what a program's free-variable reference resolves to.
     const referenced = env.get("fixture/verb");
     expect(referenced).toBe(bound.get("fixture/verb"));

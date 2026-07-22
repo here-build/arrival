@@ -30,11 +30,7 @@ import { execState } from "../../eval/generator-exec.js";
 import { EvalTrace } from "../../provenance/trace.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { schemeToJs } from "../../membrane/rosetta.js";
-import {
-  withRecordCoordinateAsync,
-  type EmissionSink,
-  type RecordCoordinate,
-} from "../../eval/provenance-hooks.js";
+import { withRecordCoordinateAsync, type EmissionSink, type RecordCoordinate } from "../../eval/provenance-hooks.js";
 import {
   closeRegionScope,
   isSilentRegion,
@@ -52,9 +48,7 @@ import { AExact } from "../../values/primitives/AExact.js";
 import { PayloadStoreFake, ProvenanceStoreFake, setEmissionEnabled } from "../../provenance/store/index.js";
 import { hermeticApply } from "../../provenance/gamma.js";
 import type { EmittedWire } from "../../provenance/wireframe/types.js";
-import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
-import * as z from "../../common/scheme-zod.js";
 
 const TRACK_COORD: TrackCoordinate = { templateHash: "th-silent-track", ordinalPath: [0], regionEpoch: "e0" };
 const RECORD_COORD: RecordCoordinate = { templateHash: "th-silent-mint", ordinalPath: [0], regionEpoch: "e0" };
@@ -67,16 +61,24 @@ afterEach(() => {
 /** Same shape `region-events.test.ts` uses — a trivial echo, enough surface for
  *  open/close counting, indifferent to what it computes. */
 function makeEcho(): ANativeProcedure {
-  return new ANativeProcedure({ name: "echo", arity: { min: 1, max: 1 }, contract: undefined, impl: (args) => args[0] });
+  return new ANativeProcedure({
+    name: "echo",
+    arity: { min: 1, max: 1 },
+    contract: undefined,
+    impl: (args) => args[0],
+  });
 }
 
 /** Same shape `emission-hooks.test.ts` uses — one rosetta source, a real membrane
- *  crossing `notePotentialRosettaExit` can mint against. Test-local `EnvCapability`
- *  (`symbol.rosetta` — the `env.defineRosetta` migration target); a plain `z.number`
- *  output (the impl returns an ordinary JS number, no pre-stamped escape hatch needed). */
+ *  crossing `notePotentialRosettaExit` can mint against. Test-local `EnvCapability`;
+ *  a plain `z.number` output (the impl returns an ordinary JS number, no pre-stamped
+ *  escape hatch needed). */
 async function registerSource(env: ResolvingAmbient): Promise<void> {
-  const fetchItem = symbol.rosetta`fetch-item: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 42);
-  await new EnvCapability("test/fetch-item", { symbols: { "fetch-item": fetchItem } })
+  await EnvCapability.define("test/fetch-item", {
+    symbols: (symbol, z) => ({
+      "fetch-item": symbol.rosetta`fetch-item: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 42),
+    }),
+  })
     .lower({})
     .apply(env, undefined as never);
 }
@@ -312,9 +314,9 @@ describe("B. hermeticApply — γ = apply(wire, ingress) under a silent region (
   });
 
   it("a missing ingress binding for a declared wire param throws the teaching door, before ever reaching exec", async () => {
-    await expect(
-      hermeticApply({ wire: WIRE, ingress: {}, basePacks: [], prelude: PRELUDE }),
-    ).rejects.toThrow(/no ingress binding was supplied/);
+    await expect(hermeticApply({ wire: WIRE, ingress: {}, basePacks: [], prelude: PRELUDE })).rejects.toThrow(
+      /no ingress binding was supplied/,
+    );
   });
 });
 

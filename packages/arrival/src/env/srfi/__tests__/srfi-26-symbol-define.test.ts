@@ -30,8 +30,7 @@
 //      `(cut cons <> 1)` against the DEFAULT assembled base).
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../AmbientRuntime.js";
-import * as z from "../../../common/scheme-zod.js";
-import { symbol, type AEntity } from "../../../common/symbol.js";
+import { type AEntity } from "../../../common/symbol.js";
 import { EnvCapability } from "../../../common/capability.js";
 import { exec } from "../../../eval/generator-exec.js";
 import { global_env } from "../../env-roots.js";
@@ -76,8 +75,11 @@ describe("scheme/srfi-26 — cut/cute expansion equivalence (semantic-equivalenc
   it("cut re-evaluates a non-slot subexpression on EVERY call; cute evaluates it ONCE at specialization", async () => {
     const env = await freshEnv();
     let calls = 0;
-    const bump = symbol.rosetta`bump!: JS-side call counter`({ input: [], output: [z.number] }, () => ++calls);
-    const cap = new EnvCapability("test/srfi-26-cute-once", { symbols: { "bump!": bump } });
+    const cap = EnvCapability.define("test/srfi-26-cute-once", {
+      symbols: (symbol, z) => ({
+        "bump!": symbol.rosetta`bump!: JS-side call counter`({ input: [], output: [z.number] }, () => ++calls),
+      }),
+    });
     await cap.lower({ evalScheme }).apply(env, undefined as never);
 
     // cut: (bump!) is NOT a slot — it stays in the lambda body, re-evaluating per call.

@@ -98,13 +98,20 @@ function loaderLike(name: string, onProbe: () => void): EnvCapability<any, any> 
         }),
       };
       if (configuration.fs !== undefined) {
-        defs["require"] = symbol.native`require: no-op (satisfied fixture)`({ input: [sz.value], output: [sz.value] }, () => nil);
+        defs["require"] = symbol.native`require: no-op (satisfied fixture)`(
+          { input: [sz.value], output: [sz.value] },
+          () => nil,
+        );
         defs["require/extension"] = symbol.native`require/extension: no-op (satisfied fixture)`(
           { input: [sz.value], output: [sz.value] },
           () => nil,
         );
       } else if (degradation.active) {
-        defs["require"] = degradation.door("require", ["fs"], "loads a file via a filesystem this assembly was not given");
+        defs["require"] = degradation.door(
+          "require",
+          ["fs"],
+          "loads a file via a filesystem this assembly was not given",
+        );
         defs["require/extension"] = degradation.door(
           "require/extension",
           ["fs"],
@@ -125,7 +132,7 @@ function loaderLike(name: string, onProbe: () => void): EnvCapability<any, any> 
 // ============================================================================
 
 describe("LAW 1 — flagship: (require …) under a doors-degraded loader-less assembly", () => {
-  const program = ['(probe!)', '(require "a.scm")', '(require "b.scm")', '(require/extension ".toml")'].join("\n");
+  const program = ["(probe!)", '(require "a.scm")', '(require "b.scm")', '(require/extension ".toml")'].join("\n");
 
   it("throws ONE StaticValidationError at parse phase: one cure (fs), ALL sites, zero side effects", async () => {
     let hits = 0;
@@ -221,7 +228,7 @@ describe("LAW 3 — a program with 3 distinct problems yields 3 diagnostics in O
         }),
       }),
     );
-    const forms = await parse(['(list undefined-a)', '(require "x")', '(undefined-b)'].join("\n"));
+    const forms = await parse(["(list undefined-a)", '(require "x")', "(undefined-b)"].join("\n"));
     const diagnostics = validateProgram(forms, vocab);
     expect(diagnostics.map((d) => d.code)).toEqual(["unbound-symbol", "missing-configuration", "unbound-symbol"]);
     expect(diagnostics.map((d) => d.sites[0].symbol)).toEqual(["undefined-a", "require", "undefined-b"]);
@@ -236,7 +243,7 @@ describe("LAW 4 — macro firewall: binder formals and placeholder tokens never 
   // receive / let-values are purity doors (multi-return ban) — binder firewall for
   // those forms is retired with the live macros. and-let* remains the live binder pin.
 
-  it("`and-let*` claw-bound variables (srfi-2, migrated `macroAttribute: \"binder\"`) do not report — and the program runs", async () => {
+  it('`and-let*` claw-bound variables (srfi-2, migrated `macroAttribute: "binder"`) do not report — and the program runs', async () => {
     const [result] = await exec("(and-let* ((x 5) (y (* x 2))) (+ x y))", { staticValidation: "on" });
     expect(result).toBe(15);
     // The bare-guard claw shape (a claw whose car is itself a pair, no binding) —
@@ -249,14 +256,17 @@ describe("LAW 4 — macro firewall: binder formals and placeholder tokens never 
     await expect(exec("((cut cons <> 1) 0)", { staticValidation: "on" })).resolves.toBeDefined();
   });
 
-  it("the ternary is LIVE: an `\"expression\"`-attributed defineSyntax macro's arguments DO walk", async () => {
+  it('the ternary is LIVE: an `"expression"`-attributed defineSyntax macro\'s arguments DO walk', async () => {
     // Capabilities lower through exec's OWN injected evalScheme (assembleCapabilityBase)
     // — no fixture-side evalScheme needed, unlike suites that call `.apply()` directly.
-    const firstOf = symbol.defineSyntax`first-of: expands to its first argument form`("(lambda (a b) a)", {
-      macroAttribute: "expression",
+    const cap = EnvCapability.define("test/sv-ternary", {
+      symbols: (symbol) => ({
+        "first-of": symbol.defineSyntax`first-of: expands to its first argument form`("(lambda (a b) a)", {
+          macroAttribute: "expression",
+        }),
+        "first-of-opaque": symbol.defineSyntax`first-of-opaque: same expander, default attribute`("(lambda (a b) a)"),
+      }),
     });
-    const firstOfOpaque = symbol.defineSyntax`first-of-opaque: same expander, default attribute`("(lambda (a b) a)");
-    const cap = new EnvCapability("test/sv-ternary", { symbols: { "first-of": firstOf, "first-of-opaque": firstOfOpaque } });
 
     // "expression": the unbound second argument REPORTS at parse phase.
     await expect(exec("(first-of 1 never-bound-arg)", { capabilities: [cap], staticValidation: "on" })).rejects.toThrow(
@@ -368,11 +378,11 @@ describe("LAW 7 — error-tier soundness: strict on dead branches (by design), w
  *  `({configuration, degradation}) => ({...})` builder / `degradation.door(...)` call is
  *  written by hand here at all — the door mints itself. */
 function requiresConfigCapability(name: string, onRun: () => void): EnvCapability<any, any> {
-  return new EnvCapability<any, any>(name, {
+  return EnvCapability.define(name, {
     configuration: {
       fs: z.custom<{ readFile: (p: string) => Promise<string> }>((v) => v !== null && typeof v === "object").optional(),
     },
-    symbols: {
+    symbols: (symbol) => ({
       "fs/read": symbol.rosetta`fs/read: reads a path via the configured filesystem`(
         { input: [sz.string], output: [sz.string], requiresConfig: ["fs"] },
         async (path: string) => {
@@ -380,7 +390,7 @@ function requiresConfigCapability(name: string, onRun: () => void): EnvCapabilit
           return path.toUpperCase();
         },
       ),
-    },
+    }),
   });
 }
 

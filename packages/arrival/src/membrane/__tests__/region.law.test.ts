@@ -33,11 +33,9 @@ import { schemeToJs } from "../rosetta.js";
 import { ANativeProcedure } from "../../values/primitives/ACallable.js";
 import { closeRegionScope, openRegionScope, withRegionScope } from "../region-scope.js";
 import { CONSTANT_CTX, makeRunContext } from "../../run/RunContext.js";
-import type { CallCtx } from "../../run/CallCtx.js";
 import type { SchemeValue } from "../../values/types.js";
 import { exec, execState } from "../../eval/generator-exec.js";
 import { EvalTrace, type Invocation } from "../../provenance/trace.js";
-import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { MemoryEffectLog } from "../../run/effect-log.js";
 
@@ -124,8 +122,8 @@ describe("a reverse lambda is region-bound to its invocation", () => {
     // a `z.procedure()` arg's decode (scheme-zod.ts) closes over a REAL per-invocation scope
     // instead of falling back to the shared, never-closing `DETACHED_SCOPE`. This capability
     // verb declares exactly that slot, restoring the discipline this row exercises.
-    const cap = new EnvCapability("test/region-law-trace-nesting", {
-      symbols: {
+    const cap = EnvCapability.define("test/region-law-trace-nesting", {
+      symbols: (symbol, z) => ({
         "region-law-capture": symbol.rosetta`region-law-capture: `(
           { input: [z.procedure()], output: [z.undefinedResult] },
           // `this.invocation.currentInvocation` is the run wrapper's own receiver shape
@@ -135,7 +133,7 @@ describe("a reverse lambda is region-bound to its invocation", () => {
           // before the impl itself returns, keeps the re-entry INSIDE the exporting
           // invocation's open scope window — the region-bound contract this row is testing,
           // not a post-return escape (that's row 1's job).
-          async function (this: CallCtx, lambdaWrapper: (...args: unknown[]) => unknown) {
+          async function (lambdaWrapper: (...args: unknown[]) => unknown) {
             capturedInv = this.invocation.currentInvocation as Invocation | undefined;
             capturedWrapper = lambdaWrapper as (...a: unknown[]) => Promise<unknown>;
             before = trace.invocationLog.length;
@@ -143,7 +141,7 @@ describe("a reverse lambda is region-bound to its invocation", () => {
             return undefined;
           },
         ),
-      },
+      }),
     });
 
     await execState("(region-law-capture (lambda (x) (+ x 1)))", { capabilities: [cap], tap: trace });
@@ -213,8 +211,8 @@ describe("a reverse lambda is region-bound to its invocation", () => {
     // that live context down to "sink!"'s own `this.runCtx`.
     let sinkFires = 0;
     const effects = new MemoryEffectLog();
-    const cap = new EnvCapability("test/region-law-burst-bypass", {
-      symbols: {
+    const cap = EnvCapability.define("test/region-law-burst-bypass", {
+      symbols: (symbol, z) => ({
         "sink!": symbol.rosetta`sink!: an effect a lambda re-entry may reach`(
           { input: [z.number], output: [z.undefinedResult], provenance: "sink" },
           async (_n: number) => {
@@ -228,7 +226,7 @@ describe("a reverse lambda is region-bound to its invocation", () => {
             return undefined;
           },
         ),
-      },
+      }),
     });
 
     await exec("(call-with-lambda (lambda () (sink! 1)))", { capabilities: [cap], effects });

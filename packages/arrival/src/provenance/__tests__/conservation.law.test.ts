@@ -43,9 +43,9 @@ import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import { provOf } from "../../provenance/lineage-shadow.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { schemeToJs, type InvocationLike } from "../../membrane/rosetta.js";
-import { EnvCapability } from "../../common/capability.js";
-import { symbol, makeCallCtx, type RosettaSymbolDef } from "../../common/symbol.js";
-import * as z from "../../common/scheme-zod.js";
+import { EnvCapability, type SymbolFactory } from "../../common/capability.js";
+import { makeCallCtx, type RosettaSymbolDef } from "../../common/symbol.js";
+import type * as schemeZod from "../../common/scheme-zod.js";
 import { ResolvingAmbient, mintResolvingFrame } from "../../env/AmbientRuntime.js";
 import { ARosettaProcedure } from "../../values/primitives/ACallable.js";
 import { withDynamicCallSite } from "../../eval/dynamic-call-site.js";
@@ -298,8 +298,15 @@ function recordingEnv(): { env: ResolvingAmbient; verbs: Record<string, ARosetta
   return { env, verbs };
 }
 
-async function wireRosetta(def: RosettaSymbolDef): Promise<ARosettaProcedure> {
-  const cap = new EnvCapability("test/conservation-rosetta", { symbols: { verb: def } });
+async function wireRosetta(
+  makeDef: (
+    symbol: SymbolFactory<Record<string, never>, Record<string, never>>,
+    z: typeof schemeZod,
+  ) => RosettaSymbolDef,
+): Promise<ARosettaProcedure> {
+  const cap = EnvCapability.define("test/conservation-rosetta", {
+    symbols: (symbol, z) => ({ verb: makeDef(symbol, z) }),
+  });
   const { env, verbs } = recordingEnv();
   await cap.lower({}).apply(env, undefined as never);
   expect(verbs.verb).toBeInstanceOf(ARosettaProcedure); // the binder-cut bind shape itself
@@ -345,7 +352,10 @@ describe("conservation — every input id survives to the output or the trace", 
         const result = await runRaw(code, binds);
         const deep = collapseProvenance(result);
         for (const id of ids) {
-          expect(deep.has(id), `program ${code}\nexpected reachable id ${id}; deep-collapsed = ${[...deep].sort((a, b) => a - b).join(",")}`).toBe(true);
+          expect(
+            deep.has(id),
+            `program ${code}\nexpected reachable id ${id}; deep-collapsed = ${[...deep].sort((a, b) => a - b).join(",")}`,
+          ).toBe(true);
         }
       }),
       { numRuns: 50 },
@@ -358,64 +368,52 @@ describe("conservation — every input id survives to the output or the trace", 
   // `it.fails` to plain `it` — GAPS rows retired); A13 flipped GREEN at c27b2e8b62
   // (C1/C2/C4 — length reads container facts). G2 gate CLOSED; ledger row retired.
   describe("known violations — real gaps, ledgered, flip on the conservation repair", () => {
-    it(
-      "(append (list a) (list b)) — the rebuilt spine's OWN (flat) provenance is the union of both elements, matching cons' union-onto-container convention",
-      async () => {
-        // FIXED (conservation repair): the rebuilt spine's head cell is now stamped with the
-        // deep-collapsed union of both operands' elements (P10), matching the FLAT convention
-        // `cons` already honors ("(cons a b) — the cons cell carries the UNION of both
-        // elements") instead of relying on a deep walk downstream.
-        const r = await runRaw(`(append (list a) (list b))`, { a: sStr("a", 100), b: sStr("b", 200) });
-        expect(provOf(r)).toEqual([100, 200]);
-      },
-    );
+    it("(append (list a) (list b)) — the rebuilt spine's OWN (flat) provenance is the union of both elements, matching cons' union-onto-container convention", async () => {
+      // FIXED (conservation repair): the rebuilt spine's head cell is now stamped with the
+      // deep-collapsed union of both operands' elements (P10), matching the FLAT convention
+      // `cons` already honors ("(cons a b) — the cons cell carries the UNION of both
+      // elements") instead of relying on a deep walk downstream.
+      const r = await runRaw(`(append (list a) (list b))`, { a: sStr("a", 100), b: sStr("b", 200) });
+      expect(provOf(r)).toEqual([100, 200]);
+    });
 
-    it(
-      "(cdr (list a b)) — the tail spine's OWN (flat) provenance carries b's id, not empty",
-      async () => {
-        // FIXED (conservation repair): the projected tail sub-spine is now stamped with the
-        // deep-collapsed union of what it still reaches (P10) — cdr of a proper list carries
-        // its sub-spine's element ids at the FLAT level, matching cdr-of-cons' element
-        // projection instead of dropping to empty.
-        const r = await runRaw(`(cdr (list a b))`, { a: sStr("a", 100), b: sStr("b", 200) });
-        expect(provOf(r)).toEqual([200]);
-      },
-    );
+    it("(cdr (list a b)) — the tail spine's OWN (flat) provenance carries b's id, not empty", async () => {
+      // FIXED (conservation repair): the projected tail sub-spine is now stamped with the
+      // deep-collapsed union of what it still reaches (P10) — cdr of a proper list carries
+      // its sub-spine's element ids at the FLAT level, matching cdr-of-cons' element
+      // projection instead of dropping to empty.
+      const r = await runRaw(`(cdr (list a b))`, { a: sStr("a", 100), b: sStr("b", 200) });
+      expect(provOf(r)).toEqual([200]);
+    });
 
     // FIXED (C4 interim fix, docs/RULINGS.md R2 + execution-plan-wireframe.md
     // §7, the R2 container structural-facts batch). Was `@ledger: A13 count-cone
     // over-attribution`, `it.fails`.
-    it(
-      "(length (map id xs)) — the count's cone is the MINIMAL grouping fact (no per-element ids), not every element id [GATE: G2 — CLOSED]",
-      async () => {
-        // FIXED: `length` (values/primitives/{APair,AVector,AJSArray}.ts) now reads the
-        // CONTAINER's own flat grouping/length-fact stamp instead of deep-unioning every
-        // element it touched — a pure-map length depends only on the collection's
-        // CARDINALITY (the grouping fact), not on what each element became. `map` is
-        // length-PRESERVING, so it PROXIES the container's own stamp through unchanged
-        // (op-helpers.ts's `withInputProvenance`). This fixture mints no container-level
-        // "grouping" id at all (a plain `APair.fromArray` list, no Rosetta-IN crossing for
-        // the list itself), so the correct cone here is EMPTY — asserting the absence of
-        // the leak, matching golden-prov-fan.test.ts's now-green sibling row.
-        const xs = APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false);
-        const r = await runRaw(`(length (map (lambda (e) e) xs))`, { xs });
-        expect(provOf(r)).toEqual([]);
-      },
-    );
+    it("(length (map id xs)) — the count's cone is the MINIMAL grouping fact (no per-element ids), not every element id [GATE: G2 — CLOSED]", async () => {
+      // FIXED: `length` (values/primitives/{APair,AVector,AJSArray}.ts) now reads the
+      // CONTAINER's own flat grouping/length-fact stamp instead of deep-unioning every
+      // element it touched — a pure-map length depends only on the collection's
+      // CARDINALITY (the grouping fact), not on what each element became. `map` is
+      // length-PRESERVING, so it PROXIES the container's own stamp through unchanged
+      // (op-helpers.ts's `withInputProvenance`). This fixture mints no container-level
+      // "grouping" id at all (a plain `APair.fromArray` list, no Rosetta-IN crossing for
+      // the list itself), so the correct cone here is EMPTY — asserting the absence of
+      // the leak, matching golden-prov-fan.test.ts's now-green sibling row.
+      const xs = APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false);
+      const r = await runRaw(`(length (map (lambda (e) e) xs))`, { xs });
+      expect(provOf(r)).toEqual([]);
+    });
 
-    it(
-      "vector-map — mapped elements keep their ORIGINAL boxes, not fresh empty-provenance re-boxes (DR4)",
-      async () => {
-        // FIXED (DR4): `(map id (vector a b))` used to cross out to the auto-wrapping
-        // AJSArray, re-boxing elements from the RAW (unprovenanced) source on access —
-        // `elemProvs` came back `[[], []]`. AVector's map is now box-preserving (mirrors
-        // pair-map and vector-filter — P8's "one algebra, every carrier"), rebuilding a
-        // fresh AVector holding the SAME element boxes.
-        const r = await runRaw(`(map (lambda (e) e) (vector a b))`, { a: sStr("a", 100), b: sStr("b", 200) });
-        const vec = (r as { __vector__?: unknown[] }).__vector__ ?? [];
-        expect(vec.map((e) => provOf(e))).toEqual([[100], [200]]);
-      },
-    );
+    it("vector-map — mapped elements keep their ORIGINAL boxes, not fresh empty-provenance re-boxes (DR4)", async () => {
+      // FIXED (DR4): `(map id (vector a b))` used to cross out to the auto-wrapping
+      // AJSArray, re-boxing elements from the RAW (unprovenanced) source on access —
+      // `elemProvs` came back `[[], []]`. AVector's map is now box-preserving (mirrors
+      // pair-map and vector-filter — P8's "one algebra, every carrier"), rebuilding a
+      // fresh AVector holding the SAME element boxes.
+      const r = await runRaw(`(map (lambda (e) e) (vector a b))`, { a: sStr("a", 100), b: sStr("b", 200) });
+      const vec = (r as { __vector__?: unknown[] }).__vector__ ?? [];
+      expect(vec.map((e) => provOf(e))).toEqual([[100], [200]]);
+    });
   });
 
   // §3 — CONTAINER-BOX ROWS (R2 ruling, RULINGS.md; C1's law table, _tables/terms.ts's
@@ -435,8 +433,7 @@ describe("conservation — every input id survives to the output or the trace", 
   // box while Vector-sort preserves it"): both now PROXY identically.
   describe("container-box rows — PROXIED (map/sort) / PROVENANCED (filter), Pair and Vector agree (P8)", () => {
     const STAMP = new Set([7]);
-    const mkStampedPair = () =>
-      new APair(sStr("a", 100), new APair(sStr("b", 101), nil)).withProvenance(STAMP);
+    const mkStampedPair = () => new APair(sStr("a", 100), new APair(sStr("b", 101), nil)).withProvenance(STAMP);
     const mkStampedVector = () => new AVector([sStr("a", 100), sStr("b", 101)], STAMP);
     const idFn = (x: SchemeValue): SchemeValue => x;
     const keepAll = () => true;
@@ -450,7 +447,8 @@ describe("conservation — every input id survives to the output or the trace", 
     });
 
     it("sort PROXIES the container's own stamp through — Pair and Vector agree (the old divergence is closed)", async () => {
-      const cmp = (a: unknown, b: unknown) => String((a as AString).valueOf()).localeCompare(String((b as AString).valueOf()));
+      const cmp = (a: unknown, b: unknown) =>
+        String((a as AString).valueOf()).localeCompare(String((b as AString).valueOf()));
       const pairOut = mkStampedPair()[tf("sort")](cmp);
       const vecOut = mkStampedVector()[tf("sort")](cmp);
       expect(provOf(pairOut)).toEqual([7]);
@@ -504,11 +502,12 @@ describe("mint-at-edge — ids appear only at declared crossings", () => {
   it("a `pure: true` rosetta NEVER mints, even under a live invocation ctx (the seal-laundering guard)", async () => {
     // Mirrors capability-rosetta-symbol.test.ts's "pure: true FORWARDS input provenance
     // even WITH a ctx invocation" — restated here as the F2 mint-at-edge law's own row.
-    const def = symbol.rosetta`echo: identity string`(
-      { input: [z.string], output: [z.string], provenance: "pipe" },
-      (s: string) => s,
+    const verb = await wireRosetta((symbol, z) =>
+      symbol.rosetta`echo: identity string`(
+        { input: [z.string], output: [z.string], provenance: "pipe" },
+        (s: string) => s,
+      ),
     );
-    const verb = await wireRosetta(def);
     const { invocation, marked } = invocationWithId(42);
     const tagged = new AString("x", new Set([99]));
     const out = (await invoke(verb, { currentInvocation: invocation }, tagged)) as AString;
@@ -517,11 +516,9 @@ describe("mint-at-edge — ids appear only at declared crossings", () => {
   });
 
   it("a source rosetta mints EXACTLY ONE fresh point per crossing, independent of arguments (two calls → two distinct ids)", async () => {
-    const def = symbol.rosetta`strlen: length of a string`(
-      { input: [z.string], output: [z.number] },
-      (s: string) => s.length,
+    const verb = await wireRosetta((symbol, z) =>
+      symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s: string) => s.length),
     );
-    const verb = await wireRosetta(def);
     const call1 = invocationWithId(101);
     const call2 = invocationWithId(202);
     // SAME argument both times — only the invocation's own id should differ.

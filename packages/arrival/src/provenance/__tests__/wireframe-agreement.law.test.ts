@@ -35,10 +35,13 @@ import { scopeId } from "../../provenance/scope-id.js";
 import { schemeToJs } from "../../membrane/rosetta.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../../values/op-helpers.js";
-import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
-import * as z from "../../common/scheme-zod.js";
-import { SourceRegistry, runEagerCone, prospectiveSourceCone, type SourceShape } from "../../__tests__/provenance/w1-harness.js";
+import {
+  SourceRegistry,
+  runEagerCone,
+  prospectiveSourceCone,
+  type SourceShape,
+} from "../../__tests__/provenance/w1-harness.js";
 import { W1_CORPUS, CORPUS_ROLES, CORPUS_BASE_NAMES, genLinearProgram } from "../../__tests__/provenance/w1-corpus.js";
 
 const num: SourceShape = "num";
@@ -66,9 +69,7 @@ describe("wire-locality (§1 CHOSEN: a wire is a closed arrival lambda) — FLIP
     "FV(wire body) ⊆ params ∪ prelude-names — checked AT EMISSION by `uneval`'s lambda-" +
       "lifting; declared-vs-actual consumption drift is unrepresentable by construction",
     async () => {
-      const p = await wf(
-        "(define (inc n) (+ n 1))\n(let ((y (src-a))) (if (positive? y) (inc y) (+ y (src-a))))",
-      );
+      const p = await wf("(define (inc n) (+ n 1))\n(let ((y (src-a))) (if (positive? y) (inc y) (+ y (src-a))))");
       // POSITIVE direction: every emitted wire re-parses CLOSED — its lambda's free
       // variables are only prelude/base names (params are lambda-bound; ingress
       // that isn't a param cannot exist, so drift is unrepresentable).
@@ -89,9 +90,7 @@ describe("wire-locality (§1 CHOSEN: a wire is a closed arrival lambda) — FLIP
       // port-reaching define as a value is never minted; the door throws while the
       // builder assembles, not in a later audit pass.
       const violating = await parse("(define (helper x) (src-a x))\n(emit! helper)");
-      expect(() => buildWireframe(violating, { classifier: CLASSIFIER, isBaseName })).toThrow(
-        WireLocalityError,
-      );
+      expect(() => buildWireframe(violating, { classifier: CLASSIFIER, isBaseName })).toThrow(WireLocalityError);
     },
   );
 
@@ -99,8 +98,8 @@ describe("wire-locality (§1 CHOSEN: a wire is a closed arrival lambda) — FLIP
   it(
     "a wire body calling a pure prelude helper references it BY NAME — a captured " +
       "reference that resolves to a prelude or native name is NEVER carried as a " +
-      "payload (§1 EXCLUDED: \"helpers-as-ingress... a captured native would smuggle a " +
-      "JS function into the persisted wire\")",
+      'payload (§1 EXCLUDED: "helpers-as-ingress... a captured native would smuggle a ' +
+      'JS function into the persisted wire")',
     async () => {
       const p = await wf("(define (inc n) (+ n 1))\n(emit! (inc x))");
       expect(p.prelude.names.has("inc")).toBe(true);
@@ -122,7 +121,7 @@ describe("wire-locality (§1 CHOSEN: a wire is a closed arrival lambda) — FLIP
   it(
     "a JS closure is never a wire carrier — wires serialize as Pairs-with-spans (the " +
       "reader AST) under the tagless algebra, never as an ambient-referencing JS " +
-      "function (§1 EXCLUDED: \"not serializable, not content-addressable\")",
+      'function (§1 EXCLUDED: "not serializable, not content-addressable")',
     async () => {
       const p = await wf("(+ (src-a) k)");
       const w = p.main.wires.find((x) => x.consumer.slot === "out");
@@ -290,14 +289,16 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
         const wireframe = prospectiveSourceCone(program);
 
         const env = mintFrame(inferenceEnv, "w1-begin-finding");
-        // Test-local EnvCapability (`symbol.rosetta` — the `env.defineRosetta` migration
-        // target): identity passthrough, `z.value` on both sides (no transform, matching
-        // the legacy `fn: (x) => x` shape exactly).
-        const emitBang = symbol.rosetta`emit!: identity passthrough (sink echo)`(
-          { input: [z.value], output: [z.value] },
-          (x: unknown) => x,
-        );
-        await new EnvCapability("test/w1-begin-finding", { symbols: { "emit!": emitBang } })
+        // Test-local EnvCapability: identity passthrough, `z.value` on both sides (no
+        // transform, matching the legacy `fn: (x) => x` shape exactly).
+        await EnvCapability.define("test/w1-begin-finding", {
+          symbols: (symbol, z) => ({
+            "emit!": symbol.rosetta`emit!: identity passthrough (sink echo)`(
+              { input: [z.value], output: [z.value] },
+              (x: unknown) => x,
+            ),
+          }),
+        })
           .lower({})
           .apply(env, undefined as never);
         const registry = new SourceRegistry();
@@ -358,17 +359,14 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
     // `(let ((i inN) (acc inN)) acc)` with `inN` a NODE paramRef into `recur`,
     // putting everything the step expressions reach back in the result's cone.
     // @ledger: do-loop result clause unreachable from recur node — FLIPPED
-    it(
-      "(do ((i 0 (+ i 1)) (acc 0 (+ acc (fetch-item i)))) ((> i 3) acc)): wireframe cone equals eager's {fetch-item} — the result clause now wires back through the recur node",
-      async () => {
-        const code = `(do ((i 0 (+ i 1)) (acc 0 (+ acc (fetch-item i)))) ((> i 3) acc))`;
-        const registry = new SourceRegistry();
-        const eager = await runEagerCone(inferenceEnv, code, { "fetch-item": num }, registry);
-        const program = await wfCorpus(code);
-        const wireframe = prospectiveSourceCone(program);
-        expect([...wireframe].sort()).toEqual([...eager].sort());
-      },
-    );
+    it("(do ((i 0 (+ i 1)) (acc 0 (+ acc (fetch-item i)))) ((> i 3) acc)): wireframe cone equals eager's {fetch-item} — the result clause now wires back through the recur node", async () => {
+      const code = `(do ((i 0 (+ i 1)) (acc 0 (+ acc (fetch-item i)))) ((> i 3) acc))`;
+      const registry = new SourceRegistry();
+      const eager = await runEagerCone(inferenceEnv, code, { "fetch-item": num }, registry);
+      const program = await wfCorpus(code);
+      const wireframe = prospectiveSourceCone(program);
+      expect([...wireframe].sort()).toEqual([...eager].sort());
+    });
   });
 
   describe("FINDING (Q9) — first-class reference to a declared source bypasses string-based role dispatch (the A21 HOF hole) — FLIPPED by V's ruling (2026-07-10)", () => {
@@ -390,17 +388,14 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
     // judged port-free by materialNames' fixed point, and a let-ALIAS's own later
     // call site (`(let ((g fetch-item)) (g))`'s `(g)`) stays exactly as under-
     // designated as before — "do not chase aliases."
-    it(
-      "(define (call-source f) (f)) (call-source fetch-item): wireframe cone includes fetch-item (it fires at runtime) — the bare-argument occurrence is now designated",
-      async () => {
-        const code = `(define (call-source f) (f)) (call-source fetch-item)`;
-        const registry = new SourceRegistry();
-        const eager = await runEagerCone(inferenceEnv, code, { "fetch-item": num }, registry);
-        const program = await wfCorpus(code);
-        const wireframe = prospectiveSourceCone(program);
-        expect([...wireframe].sort()).toEqual([...eager].sort()); // both {fetch-item}
-      },
-    );
+    it("(define (call-source f) (f)) (call-source fetch-item): wireframe cone includes fetch-item (it fires at runtime) — the bare-argument occurrence is now designated", async () => {
+      const code = `(define (call-source f) (f)) (call-source fetch-item)`;
+      const registry = new SourceRegistry();
+      const eager = await runEagerCone(inferenceEnv, code, { "fetch-item": num }, registry);
+      const program = await wfCorpus(code);
+      const wireframe = prospectiveSourceCone(program);
+      expect([...wireframe].sort()).toEqual([...eager].sort()); // both {fetch-item}
+    });
   });
 
   describe("NEW FINDING (Q9) — field-shaped pure ops (car/cons chains) are not projection-aware, over-including a sibling source", () => {
